@@ -52,6 +52,22 @@ extension AutomationGraph {
     }
     try checkInputs(definitionNode, path)
     let role = try role(of: definitionNode, path)
+    if let days = definitionNode.retentionDays {
+      let coverage: AutomationCoverage? =
+        switch role {
+        case .fetch, .process: definitionNode.action.coverage ?? .newArrivals
+        case .judge, .report, .work, .sideEffect: nil
+        }
+      guard coverage == .newArrivals else {
+        throw .invalid(
+          "\(path).retentionDays: only a node whose coverage is newArrivals keeps events")
+      }
+      guard AutomationNode.retentionDaysRange.contains(days) else {
+        throw .invalid(
+          "\(path).retentionDays: must be \(AutomationNode.retentionDaysRange.lowerBound) to "
+            + "\(AutomationNode.retentionDaysRange.upperBound)")
+      }
+    }
     if role == .process, definitionNode.action.coverage == .currentSet {
       if let index = definitionNode.from.firstIndex(where: { $0.take != .all }) {
         throw .invalid(

@@ -33,18 +33,27 @@ extension WindowController {
     } else {
       return nil
     }
-    let home = store.homeIndex.map { workspaces[$0] }
     return ChromeNotification(
       notice: .automation(
         AutomationNotice(
           automationId: id, name: automation.name, text: line, failed: tone == .failed)),
-      settings: settingsStore.effective(override: home?.settingsOverride),
+      settings: homeSettings,
       systemNotification: notify == .notificationCenter
         ? SystemNotificationContent(
           identifier: Self.systemNotificationIdentifier(id, nodeId), title: automation.name,
           body: line,
           automationId: id)
         : nil)
+  }
+
+  /// Home の実効設定。自動化は workspace に属さないので、自動化の設定（知らせ・保持）はどれもこれを読む。
+  private var homeSettings: EffectiveSettings {
+    settingsStore.effective(override: store.homeIndex.flatMap { workspaces[$0].settingsOverride })
+  }
+
+  /// 今の保持の値（Home の実効設定から）。
+  var automationRetention: AutomationRetention {
+    AutomationRetention(homeSettings)
   }
 
   /// 「連絡 の出力の形式エラー（2 件）— agent が修正済み」。

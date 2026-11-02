@@ -100,7 +100,8 @@ struct AutomationGraph: Equatable {
           AutomationDefinition.Input(
             nodeKey: self.node(edge.from)?.key ?? "", take: edge.take, maxAgeHours: edge.maxAgeHours
           )
-        }, action: node.action, maxItems: node.entity.maxItems)
+        }, action: node.action, maxItems: node.entity.maxItems,
+        retentionDays: node.entity.retentionDays)
     }
   }
 

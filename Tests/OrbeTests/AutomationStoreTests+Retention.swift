@@ -39,9 +39,9 @@ extension AutomationStoreTests {
     try Self.fetch(XCTUnwrap(store), id, [Self.item("a")])
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
-    for n in 1...(AutomationNodeState.retainedRuns + 1) {
+    for n in 1...(AutomationRetention.standard.runCount + 1) {
       try Self.fetch(
-        XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
+        XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(Self.day * Double(n)))
     }
     store = nil
 
@@ -57,9 +57,9 @@ extension AutomationStoreTests {
     try Self.fetch(XCTUnwrap(store), id, [], outcome: Self.breached([Self.item("a")]))
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
-    for n in 1...(AutomationNodeState.retainedRuns + 1) {
+    for n in 1...(AutomationRetention.standard.runCount + 1) {
       try Self.fetch(
-        XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
+        XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(Self.day * Double(n)))
     }
     XCTAssertNotNil(store?.automation(id)?.state(key: "fetch").breach, "前提: 印の回が残る")
     store = nil
@@ -78,9 +78,9 @@ extension AutomationStoreTests {
     store?.holding = { AutomationHolding(rows: [.version(first)]) }
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
-    for n in 1...(AutomationNodeState.retainedRuns + 1) {
+    for n in 1...(AutomationRetention.standard.runCount + 1) {
       try Self.fetch(
-        XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
+        XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(Self.day * Double(n)))
     }
     store = nil
 
@@ -104,5 +104,58 @@ extension AutomationStoreTests {
     ] {
       XCTAssertEqual(try count(table), 0, table)
     }
+  }
+
+  /// 回の記録は「新しい方から回数の内」か「期間の内」のどちらかに入れば残り、値は確定のたびに今の保持の値を読む。
+  func testRunsAreKeptWithinTheCountOrTheDaysOfTheCurrentRetention() throws {
+    var retention = AutomationRetention(runCount: 2, runDays: 3, eventDays: 30)
+    var store: AutomationStore? = AutomationStore(
+      opening: AutomationPersistence.open(retention: { retention }))
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    func fetch(onDay day: Int) throws {
+      try Self.fetch(
+        XCTUnwrap(store), id, [], outcome: DesignSceneFixtures.failed("boom"),
+        at: Self.at.addingTimeInterval(Self.day * Double(day)))
+    }
+    func days() throws -> [Int] {
+      try XCTUnwrap(store).read { db in
+        try db.db.select(
+          """
+          SELECT r.started_at FROM runs r JOIN nodes n ON n.id = r.node_id WHERE n.key = 'fetch'
+          ORDER BY r.id
+          """, []
+        ) {
+          Int((AutomationPersistence.date($0.int64(at: 0)).timeIntervalSince(Self.at) / Self.day))
+        }
+      }
+    }
+    for day in 0...9 { try fetch(onDay: day) }
+    XCTAssertEqual(try days(), [6, 7, 8, 9], "3 日以内の回は回数を超えても残る")
+
+    retention.runDays = 1
+    try fetch(onDay: 10)
+    XCTAssertEqual(try days(), [9, 10], "変えた値は次の確定から効く")
+    store = nil
+  }
+
+  /// 出来事の流れのノードの `retentionDays` は、同じ id を同じ出来事とみなす窓を延ばす。書かないノードは全体の設定の日数。
+  func testANodesRetentionDaysWidensTheWindowOfTheSameEvent() throws {
+    let store = AutomationStore()
+    var long = Self.definition(coverage: .newArrivals)
+    long.nodes[0].retentionDays = 60
+    let kept = try store.create(long, now: Self.at).id
+    let plain = try store.create(Self.definition("既定", coverage: .newArrivals), now: Self.at).id
+    let later = Self.at.addingTimeInterval(40 * Self.day)
+    for id in [kept, plain] {
+      try Self.fetch(store, id, [Self.item("a")])
+      try Self.fetch(store, id, [Self.item("a")], at: later)
+    }
+
+    XCTAssertEqual(
+      store.automation(kept)?.state(key: "fetch").runs.first?.run?.result,
+      .fetch(fresh: 0, duplicates: 1), "60 日の内なので同じ出来事")
+    XCTAssertEqual(
+      store.automation(plain)?.state(key: "fetch").runs.first?.run?.result,
+      .fetch(fresh: 1, duplicates: 0), "既定の 30 日を過ぎたので新しい出来事")
   }
 }

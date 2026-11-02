@@ -110,6 +110,8 @@ extension ControlWireTests {
         "invalid notify: pass menuBar or notificationCenter"
       ),
       ("予定が無い", with("trigger", nil), "missing nodes[0].trigger"),
+      ("agent のモデルが無い", with("model", nil), "missing nodes[0].model"),
+      ("数でない出来事の日数", with("retentionDays", "long"), "invalid nodes[0].retentionDays"),
       (
         "ノードが 2 つの形", with("command", "gh api"),
         "invalid nodes[0]: pass either command (a shell command) or instruction (an agent)"

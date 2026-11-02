@@ -62,7 +62,7 @@ extension AutomationDatabase {
       WHERE node_id = ? AND created_at >= ? AND seq > ? AND seq <= ? ORDER BY seq
       """,
       [
-        p, Self.cutoff(now), .integer(Int64(all ? 0 : reading.read.event)),
+        p, try eventCutoff(of: up, now: now), .integer(Int64(all ? 0 : reading.read.event)),
         .integer(Int64(reading.ceiling.event)),
       ]
     ) { s in
@@ -164,7 +164,7 @@ extension AutomationDatabase {
         "SELECT count(*) FROM events WHERE node_id = ? AND seq > ? AND seq <= ? AND created_at >= ?",
         [
           .integer(Int64(up.rawValue)), .integer(Int64(from)), .integer(Int64(to)),
-          Self.cutoff(now),
+          try eventCutoff(of: up, now: now),
         ]
       ) { $0.int(at: 0) }.first ?? 0
     return to - from - alive

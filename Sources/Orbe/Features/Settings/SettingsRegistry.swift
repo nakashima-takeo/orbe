@@ -125,6 +125,11 @@ enum SettingsRegistry {
     return ""
   }
 
+  /// 数に単位を付けた値表示（回数「20回」・日数「7日」）。書式は L10n が持つ。
+  private static func countLabel(_ format: L10nKey) -> (SettingValue, LocalizationStore) -> String {
+    { v, store in if case .int(let n) = v { store.format(format, n) } else { "" } }
+  }
+
   /// カスタム音源 map の提示用 key（値域として縛らない＝parse は `CustomSoundSource` が 1 箇所で持つ）。
   private static let customSoundKeys = ["file", "name", "duration"]
 
@@ -138,7 +143,7 @@ enum SettingsRegistry {
   /// agent-state-icons〔gui.conf 非経由〕→ worktree-dir〔同〕→
   /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕→
   /// notification-sound-custom-done / -waiting / -waiting-same-as-done〔いずれも同〕→
-  /// menubar-notification-duration〔同〕）。
+  /// menubar-notification-duration〔同〕→ automation-run-retention-count / -days・-event-retention-days〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] = [
     SettingDescriptor(
@@ -322,6 +327,28 @@ enum SettingsRegistry {
       defaultValue: { .int(40) }, domain: .intRange(5...180, step: 5, unit: "s"),
       guiConf: nil,  // gui.conf 非経由（メニューバー chrome の尺で libghostty 設定ではない）
       display: secondsLabel, unsetPlaceholderKey: nil),
+    // 自動化の保持（`AutomationRetention`）。自動化は workspace に属さず、Home の実効値だけが効く。
+    SettingDescriptor(
+      id: .automationRunRetentionCount, key: "automation-run-retention-count",
+      labelKey: .settingsAutomationRunRetentionCount, activation: .stepper,
+      defaultValue: { .int(AutomationRetention.standard.runCount) },
+      domain: .intRange(AutomationRetention.runCountRange, step: 1, unit: "runs"),
+      guiConf: nil,  // gui.conf 非経由
+      display: countLabel(.settingsRunsValue), unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .automationRunRetentionDays, key: "automation-run-retention-days",
+      labelKey: .settingsAutomationRunRetentionDays, activation: .stepper,
+      defaultValue: { .int(AutomationRetention.standard.runDays) },
+      domain: .intRange(AutomationRetention.dayRange, step: 1, unit: "days"),
+      guiConf: nil,  // gui.conf 非経由
+      display: countLabel(.settingsDaysValue), unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .automationEventRetentionDays, key: "automation-event-retention-days",
+      labelKey: .settingsAutomationEventRetentionDays, activation: .stepper,
+      defaultValue: { .int(AutomationRetention.standard.eventDays) },
+      domain: .intRange(AutomationRetention.dayRange, step: 1, unit: "days"),
+      guiConf: nil,  // gui.conf 非経由
+      display: countLabel(.settingsDaysValue), unsetPlaceholderKey: nil),
   ]
 
   /// 取り込み済み音源の実体（`sounds/` 配下のファイル）を指す項目。参照集合 GC の契機判定が読む。
@@ -339,14 +366,15 @@ enum SettingsRegistry {
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// worktreeDir → notificationSound → 音量 → オン/オフ → メニューバー通知の表示時間）。
-  /// 背景関連・フォント関連・通知音関連をそれぞれ隣接させる。
+  /// worktreeDir → notificationSound → 音量 → オン/オフ → メニューバー通知の表示時間 → 自動化の保持 3 つ）。
+  /// 背景関連・フォント関連・通知音関連・自動化の保持をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
       .worktreeDir, .notificationSound, .notificationSoundVolume,
-      .notificationSoundEnabled, .menuBarNotificationDuration,
+      .notificationSoundEnabled, .menuBarNotificationDuration, .automationRunRetentionCount,
+      .automationRunRetentionDays, .automationEventRetentionDays,
     ].map { id in all.first { $0.id == id }! }
 
   static func descriptor(_ id: SettingID) -> SettingDescriptor { all.first { $0.id == id }! }

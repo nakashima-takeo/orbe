@@ -96,6 +96,30 @@ extension AutomationGraphTests {
     }
   }
 
+  /// 出来事の残す日数は、出来事の流れを出すノード（取得の newArrivals・性質を省いた処理）だけが 1〜365 で書ける。
+  func testRetentionDaysFitsOnlyANodeThatKeepsEvents() throws {
+    func events(_ days: Int) -> [AutomationDefinition.Node] {
+      changing(0) {
+        $0.action.coverage = .newArrivals
+        $0.retentionDays = days
+      }
+    }
+    for (label, definitionNodes, place) in [
+      ("今の集合の取得に出来事の日数", changing(0) { $0.retentionDays = 30 }, "nodes[0].retentionDays"),
+      ("行を出さないノードに出来事の日数", changing(1) { $0.retentionDays = 30 }, "nodes[1].retentionDays"),
+      ("出来事の日数が 0", events(0), "nodes[0].retentionDays"),
+      ("出来事の日数が 366", events(366), "nodes[0].retentionDays"),
+    ] {
+      assertRefused(definitionNodes, at: place, label)
+    }
+    var fetch = Self.fetch("f", .newArrivals)
+    fetch.retentionDays = 365
+    var process = Self.agent("p", from: ["f"], deliver: .nextNode)
+    process.retentionDays = 1
+    XCTAssertNoThrow(
+      try AutomationGraph.check([fetch, process, Self.agent("r", from: ["p"])]))
+  }
+
   /// agent が名指せるのは MCP のツールの完全名と `Bash(<コマンドの接頭>:*)` だけ。組み込み・サーバー単位・ワイルドカードを通すと、
   /// 外の文面に仕込まれた指示でファイルの書き込みや名指しの外のツールの呼び出しが起きうる。Read を名指すと許可の規則に入り、
   /// 作業ディレクトリの外まで読める。

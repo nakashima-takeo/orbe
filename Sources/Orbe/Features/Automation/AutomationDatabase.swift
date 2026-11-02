@@ -12,9 +12,12 @@ final class AutomationDatabase {
   }
 
   let db: SQLiteDatabase
+  /// 今の保持の値（掃除・出来事の見分け・読みのたびに読む）。
+  let retention: () -> AutomationRetention
 
-  init(_ db: SQLiteDatabase) {
+  init(_ db: SQLiteDatabase, retention: @escaping () -> AutomationRetention) {
     self.db = db
+    self.retention = retention
   }
 
   func transaction<T>(_ body: () throws -> T) throws -> T {
@@ -85,14 +88,15 @@ final class AutomationDatabase {
   ) throws -> AutomationNodeID {
     try db.run(
       """
-      INSERT INTO nodes (automation_id, position, key, name, trigger, max_items, def_id, added_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO nodes (automation_id, position, key, name, trigger, max_items, retention_days,
+        def_id, added_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       """,
       [
         .integer(Int64(automation)), .integer(Int64(position)), .text(definitionNode.key),
         .text(definitionNode.name),
         .text(try Self.encode(definitionNode.trigger)),
-        definitionNode.maxItems.map { .integer(Int64($0)) } ?? .null,
+        Self.integer(definitionNode.maxItems), Self.integer(definitionNode.retentionDays),
         .integer(Int64(defId.rawValue)), Self.instant(addedAt),
       ])
     return AutomationNodeID(Int(db.lastInsertRowID))
@@ -113,13 +117,14 @@ final class AutomationDatabase {
   ) throws {
     try db.run(
       """
-      UPDATE nodes SET position = ?, key = ?, name = ?, trigger = ?, max_items = ?, def_id = ?
+      UPDATE nodes SET position = ?, key = ?, name = ?, trigger = ?, max_items = ?,
+        retention_days = ?, def_id = ?
       WHERE id = ?
       """,
       [
         .integer(Int64(position)), .text(definitionNode.key), .text(definitionNode.name),
         .text(try Self.encode(definitionNode.trigger)),
-        definitionNode.maxItems.map { .integer(Int64($0)) } ?? .null,
+        Self.integer(definitionNode.maxItems), Self.integer(definitionNode.retentionDays),
         .integer(Int64(defId.rawValue)), .integer(Int64(nodeId.rawValue)),
       ])
   }
@@ -176,7 +181,7 @@ final class AutomationDatabase {
       throw AutomationError.unavailable("node \(nodeId) is missing from the database")
     }
     var state = AutomationNodeState(addedAt: AutomationPersistence.date(addedAt))
-    state.runs = try records(of: [nodeId], limit: AutomationNodeState.retainedRuns).map(\.record)
+    state.runs = try records(of: [nodeId], limit: AutomationNodeState.recentRuns).map(\.record)
     state.succeededAt = try succeededAt(of: nodeId)
     state.breach = try breachRecord(of: nodeId)
     state.liveLinks = try liveLinks(of: nodeId)
@@ -226,6 +231,10 @@ final class AutomationDatabase {
 
   static func text(_ text: String?) -> SQLiteValue {
     text.map { .text($0) } ?? .null
+  }
+
+  static func integer(_ value: Int?) -> SQLiteValue {
+    value.map { .integer(Int64($0)) } ?? .null
   }
 
   static func encode(_ value: some Encodable) throws -> String {

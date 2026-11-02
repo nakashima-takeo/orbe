@@ -78,8 +78,23 @@ final class AutomationNodeTests: OrbeTestCase {
     XCTAssertEqual(definitionNodes, expected)
     XCTAssertEqual(
       try AutomationWire.decoder.decode([AutomationDefinition.Node].self, from: written),
-      definitionNodes, "書いて読み直しても同じ値（省略したモデルは省略のまま）")
+      definitionNodes, "書いて読み直しても同じ値")
     XCTAssertEqual(from.first as? String, "gh", "取り方も古さの上限も省いた入力は鍵だけで書く")
+  }
+
+  /// 出来事の残す日数はノードの欄として読み、書き戻す。
+  func testRetentionDaysIsReadAndWrittenBack() throws {
+    let json = #"""
+      {"key": "dm", "name": "DM", "trigger": {"kind": "manual"}, "command": "dm",
+       "coverage": "newArrivals", "retentionDays": 60}
+      """#
+    let definitionNode = try AutomationWire.decoder.decode(
+      AutomationDefinition.Node.self, from: Data(json.utf8))
+    let written = try JSONSerialization.jsonObject(
+      with: try AutomationWire.encoder().encode(definitionNode))
+
+    XCTAssertEqual(definitionNode.retentionDays, 60)
+    XCTAssertEqual((written as? [String: Any])?["retentionDays"] as? Int, 60)
   }
 
   /// 形の誤りは読む時点で断り、誤りの場所（ノードの位置と欄）を持つ。制御 API はこの場所を `nodes[1].tools` の形で返す。

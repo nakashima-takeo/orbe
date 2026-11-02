@@ -56,6 +56,7 @@ extension AutomationDatabase {
       name            TEXT    NOT NULL,
       trigger         TEXT    NOT NULL,
       max_items       INTEGER CHECK (max_items > 0),
+      retention_days  INTEGER CHECK (retention_days > 0),
       def_id          INTEGER NOT NULL REFERENCES node_defs (id),
       added_at        INTEGER NOT NULL,
       removed_at      INTEGER,

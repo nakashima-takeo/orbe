@@ -82,7 +82,7 @@ enum AutomationCoverage: String {
 struct AutomationNodeState: Equatable {
   /// ノードを足した時刻。一度も回っていないノードの数え始め。
   var addedAt: Date
-  /// 直近の回の記録（新しい順に `retainedRuns` 件まで）。
+  /// 直近の回の記録（新しい順に `recentRuns` 件まで）。
   var runs: [AutomationRunRecord] = []
   /// 最新の成功した回の開始時刻。新着の流れの取得に目印として渡す。
   var succeededAt: Date?
@@ -93,7 +93,8 @@ struct AutomationNodeState: Equatable {
   /// 出す側の今有効な項目のリンク（取得の最新の結果）。
   var liveLinks: Set<String> = []
 
-  static let retainedRuns = 20
+  /// メモリに持つ直近の回の数（画面の実行履歴と帯の長さ）。DB に残す回の数は `AutomationRetention` が決める。
+  static let recentRuns = 20
 
   var lastRunAt: Date? { runs.first?.startedAt }
 

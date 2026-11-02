@@ -25,6 +25,8 @@ import Observation
   private(set) var unavailableError: AutomationError
   /// DB を使える。
   var available: Bool { database != nil }
+  /// 今の保持の値を返す関数（DB が持つ。写しの DB も同じ関数を使う）。使えないストアは既定の値。
+  var retention: () -> AutomationRetention { database?.retention ?? { .standard } }
   /// 運転中に使えなくなった（走らせ役が全ノードの予定を外す）。
   @ObservationIgnored var onUnavailable: () -> Void = {}
   /// 走っている回が確定まで使うもの（確定まで掃除から守る）。走らせ役が渡す。
@@ -296,7 +298,8 @@ extension AutomationStore {
       return AutomationStore(
         opening: .success(
           AutomationDatabase.Opened(
-            database: AutomationDatabase(database), memory: production.memory)))
+            database: AutomationDatabase(database, retention: production.retention),
+            memory: production.memory)))
     }
   }
 

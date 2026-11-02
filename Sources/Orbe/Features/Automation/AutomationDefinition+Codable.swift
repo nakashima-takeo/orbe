@@ -5,7 +5,7 @@ import Foundation
 /// ノードの欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
 extension AutomationDefinition.Node: Codable {
   private enum CodingKeys: String, CodingKey {
-    case id, key, name, trigger, from, maxItems
+    case id, key, name, trigger, from, maxItems, retentionDays
   }
 
   init(from decoder: Decoder) throws {
@@ -17,6 +17,7 @@ extension AutomationDefinition.Node: Codable {
     from = try c.decodeIfPresent([AutomationDefinition.Input].self, forKey: .from) ?? []
     action = try AutomationActionDef(from: decoder)
     maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems)
+    retentionDays = try c.decodeIfPresent(Int.self, forKey: .retentionDays)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -28,6 +29,7 @@ extension AutomationDefinition.Node: Codable {
     if !from.isEmpty { try c.encode(from, forKey: .from) }
     try action.encode(to: encoder)
     try c.encodeIfPresent(maxItems, forKey: .maxItems)
+    try c.encodeIfPresent(retentionDays, forKey: .retentionDays)
   }
 }
 

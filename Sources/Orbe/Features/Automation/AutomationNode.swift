@@ -61,9 +61,12 @@ struct AutomationNode: Equatable {
   var trigger: Trigger
   /// 受け手として 1 回に取る件数の上限。入力のあるノードだけが持てる。
   var maxItems: Int?
+  /// 出来事を残す日数。出来事の流れを出すノードだけが持てる。省略は設定の値（`AutomationRetention.eventDays`）。
+  var retentionDays: Int?
   var defId: AutomationNodeDefID
 
   static let keyLength = 1...32
+  static let retentionDaysRange = 1...365
 
   enum Trigger: Equatable {
     /// 間隔か cron 式。
@@ -82,8 +85,7 @@ extension AutomationNode {
   ) {
     self.init(
       id: id, key: definitionNode.key, name: definitionNode.name, trigger: definitionNode.trigger,
-      maxItems: definitionNode.maxItems,
-      defId: defId)
+      maxItems: definitionNode.maxItems, retentionDays: definitionNode.retentionDays, defId: defId)
   }
 }
 

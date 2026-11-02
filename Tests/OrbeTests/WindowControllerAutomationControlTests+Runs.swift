@@ -129,13 +129,13 @@ extension WindowControllerAutomationControlTests {
   }
 
   /// 過去の回は新しい順に `limit` 件ずつ読め、返した最後の記録の ID を `before` に渡すと続きが返る。ノードを指せばそのノードだけ。
-  /// ノードごとに残る回は 20 件。
+  /// 1 日ごとの回は、ノードごとに 20 件（既定の保持の回数。7 日以内の回はその内に入る）が残る。
   func testPastRunsArePagedNewestFirst() throws {
     let wc = try launch()
     let id = try set(wc, Self.definition())
     let start = Date()
     for n in 0..<25 {
-      let at = start.addingTimeInterval(TimeInterval(n))
+      let at = start.addingTimeInterval(TimeInterval(n * 86400))
       try wc.automationStore.record(
         id, nodeKey: "fetch", at: at, outcome: DesignSceneFixtures.fetched([]))
       try wc.automationStore.record(

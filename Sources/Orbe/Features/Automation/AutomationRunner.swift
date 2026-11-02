@@ -116,7 +116,7 @@ import Observation
   // MARK: - 定義の変異
 
   /// `id` が nil なら作り、あれば `version` を添えて書き換える。何をするかが変わったノードは走っている回を止めて載せ直し（結果は
-  /// 捨てる）、外したノードは外し、足したノードは足した時刻から数える。鍵・名前・予定・件数の上限・通知だけなら予定だけを
+  /// 捨てる）、外したノードは外し、足したノードは足した時刻から数える。鍵・名前・予定・件数の上限・出来事の日数・通知だけなら予定だけを
   /// 差し替える（走っている回は最後まで走る）。
   func set(_ id: Int?, version: Int? = nil, _ definition: AutomationDefinition)
     throws(AutomationError) -> Automation

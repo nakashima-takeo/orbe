@@ -230,20 +230,20 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertGreaterThan(try XCTUnwrap(reopened.proposals.first?.id), forgotten)
   }
 
-  /// 回の記録はノードごとに新しい 20 件を残し、それより古い回は消える。ただし最新の成功した回・外した印の回・残っている候補を
-  /// 出した回は消えない。開き直しても同じ。
+  /// 回の記録はノードごとに新しい 20 件か 7 日以内（既定の保持）のものを残し、どちらにも入らない回は消える。ただし最新の成功した
+  /// 回・外した印の回・残っている候補を出した回は消えない。開き直しても同じ。
   func testOldRunsAreSweptExceptTheOnesSomethingPointsAt() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
     let a = Self.item("a")
     try Self.fetch(XCTUnwrap(store), id, [a], outcome: Self.breached([a]))
     try Self.judge(XCTUnwrap(store), id, proposing: [a])
-    let count = AutomationNodeState.retainedRuns + 3
+    let count = AutomationRetention.standard.runCount + 3
     for n in 1...count {
       try Self.fetch(
         XCTUnwrap(store), id, [], outcome: DesignSceneFixtures.failed("boom"),
-        at: Self.at.addingTimeInterval(TimeInterval(60 * n)))
-      try Self.judge(XCTUnwrap(store), id, at: Self.at.addingTimeInterval(TimeInterval(60 * n)))
+        at: Self.at.addingTimeInterval(TimeInterval(86400 * n)))
+      try Self.judge(XCTUnwrap(store), id, at: Self.at.addingTimeInterval(TimeInterval(86400 * n)))
     }
     let fetches = try XCTUnwrap(store?.automation(id)?.state(key: "fetch"))
     store = nil
@@ -257,15 +257,15 @@ final class AutomationStoreTests: OrbeTestCase {
       "SELECT count(*) FROM runs r JOIN nodes n ON n.id = r.node_id WHERE n.key = 'judge'", []
     ) { $0.int(at: 0) }.first
 
-    XCTAssertEqual(fetches.runs.count, AutomationNodeState.retainedRuns)
+    XCTAssertEqual(fetches.runs.count, AutomationNodeState.recentRuns)
     XCTAssertEqual(
       kept,
-      [Self.at] + (4...count).map { Self.at.addingTimeInterval(TimeInterval(60 * $0)) },
+      [Self.at] + (4...count).map { Self.at.addingTimeInterval(TimeInterval(86400 * $0)) },
       "外した印の回で、最新の成功した回でもある最初の回は残る")
     XCTAssertEqual(fetches.succeededAt, Self.at)
     XCTAssertEqual(fetches.breach?.startedAt, Self.at)
     XCTAssertEqual(
-      judged, AutomationNodeState.retainedRuns + 1, "候補を出した回は 20 件の外でも残る")
+      judged, AutomationRetention.standard.runCount + 1, "候補を出した回は 20 件の外でも残る")
     XCTAssertEqual(AutomationStore().automation(id)?.state(key: "fetch").runs, fetches.runs)
   }
 
