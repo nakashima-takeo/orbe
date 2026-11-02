@@ -159,21 +159,17 @@ public enum ZoneTextLayout {
     let kerns: [Range<Int>: CGFloat]
   }
 
-  /// 余白を、Core Text が 1 つにまとめて組む字の塊の送りとして置く。余白なしで組んだ行のグリフの文字の位置から塊の
-  /// 区切りを取る。右の余白は見え方の右端のグリフの塊に、左の余白は見え方の左端のグリフのすぐ左に並ぶグリフの塊に送りを
-  /// 置く（すぐ左に字が無ければ行頭の余白）。送りは塊の最後のグリフの右に空きを作るので、左右は見た目で決まり、右から左の
-  /// 字でも余白は見え方の字の外に出る。余白が無ければ組まない。
+  /// 余白を、Core Text が 1 つにまとめて組む字の塊（→ `Clusters`）の送りとして置く。右の余白は見え方の右端のグリフの
+  /// 塊に、左の余白は見え方の左端のグリフのすぐ左に並ぶグリフの塊に送りを置く（すぐ左に字が無ければ行頭の余白）。送りは
+  /// 塊の最後のグリフの右に空きを作るので、左右は見た目で決まり、右から左の字でも余白は見え方の字の外に出る。余白が
+  /// 無ければ組まない。
   private static func padded(_ units: [UInt16], styles: [ZoneTextStyle]) -> Padded {
     let plain = attributed(units, styles: styles, kerns: [:])
     guard styles.contains(where: { $0.leadingPadding > 0 || $0.trailingPadding > 0 }) else {
       return Padded(string: plain, inset: 0, kerns: [:])
     }
     let glyphs = Self.glyphs(of: CTLineCreateWithAttributedString(plain))
-    let starts = Set(glyphs.map(\.offset)).sorted()
-    func cluster(of offset: Int) -> Range<Int> {
-      let index = starts.lastIndex { $0 <= offset } ?? 0
-      return starts[index]..<(index + 1 < starts.count ? starts[index + 1] : units.count)
-    }
+    let clusters = Clusters(glyphs, units)
     var kerns: [Range<Int>: CGFloat] = [:]
     var inset: CGFloat = 0
     for (index, style) in styles.enumerated() {
@@ -181,14 +177,15 @@ public enum ZoneTextLayout {
       if style.trailingPadding > 0,
         let right = own.max(by: { glyphs[$0].x.upperBound < glyphs[$1].x.upperBound })
       {
-        kerns[cluster(of: glyphs[right].offset), default: 0] += style.trailingPadding
+        kerns[clusters.range(containing: glyphs[right].offset), default: 0] += style.trailingPadding
       }
       if style.leadingPadding > 0,
         let left = own.min(by: { glyphs[$0].x.lowerBound < glyphs[$1].x.lowerBound })
       {
-        let own = cluster(of: glyphs[left].offset)
-        if let neighbour = glyphs[..<left].lastIndex(where: { !own.contains($0.offset) }) {
-          kerns[cluster(of: glyphs[neighbour].offset), default: 0] += style.leadingPadding
+        let leftCluster = clusters.range(containing: glyphs[left].offset)
+        if let neighbour = glyphs[..<left].lastIndex(where: { !leftCluster.contains($0.offset) }) {
+          kerns[clusters.range(containing: glyphs[neighbour].offset), default: 0] +=
+            style.leadingPadding
         } else {
           inset += style.leadingPadding
         }
@@ -197,6 +194,32 @@ public enum ZoneTextLayout {
     return Padded(
       string: kerns.isEmpty ? plain : attributed(units, styles: styles, kerns: kerns), inset: inset,
       kerns: kerns)
+  }
+
+  /// 字の塊の区切り——余白なしで組んだ行のグリフの文字の位置のうち、書記素の境に当たるもの。結合記号を基底と別のグリフで
+  /// 描く字体でも、記号は基底と同じ塊に入る。
+  private struct Clusters {
+    let starts: [Int]
+    let end: Int
+
+    init(_ glyphs: [Glyph], _ units: [UInt16]) {
+      var boundaries: Set<Int> = []
+      var position = 0
+      for character in String(decoding: units, as: UTF16.self) {
+        boundaries.insert(position)
+        position += character.utf16.count
+      }
+      starts = Set(glyphs.map(\.offset)).intersection(boundaries).sorted()
+      end = units.count
+    }
+
+    /// 文の位置 `offset` を含む塊（文の範囲）。
+    func range(containing offset: Int) -> Range<Int> {
+      guard let index = starts.lastIndex(where: { $0 <= offset }) else {
+        return 0..<(starts.first ?? end)
+      }
+      return starts[index]..<(index + 1 < starts.count ? starts[index + 1] : end)
+    }
   }
 
   /// 組んだ行のグリフ 1 つ——見え方（`styles` の添字）・文の位置・x 範囲（行の左端から。送りを含む）。
