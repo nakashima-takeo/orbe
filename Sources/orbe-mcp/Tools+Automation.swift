@@ -203,17 +203,23 @@ let automationTools: [[String: Any]] = [
     (
       "description",
       "自動化のノードを、本番を汚さずに試す（試走）。本番の DB の写しの上で本番と同じ流しを動かし、すぐ返る。結果は"
-        + " get_automation_trial で読む。DB には何も書かず、通知もしない。from（入口のノードの鍵）から to（行き先のノードの鍵）"
+        + "返る trial.trialId を get_automation_trial に渡して読む。DB には何も書かず、通知もしない。from（入口のノードの鍵）から to（行き先のノードの鍵）"
         + "への道の上のノードだけが動く。from を省けば入力の無いノードすべて、to を省けば入口から届く終わりのノードすべて。"
         + "副作用・仕事のノードは動かさず、渡るはずだった行を返す。取得は本当に走る。rows は入口が 1 つのときだけ与えられ、"
         + "取得の入口なら取った項目、入力のある入口なら溜まりに届いた行になる（判定の入口は断られる）。limit は各取得が"
         + "下流へ渡す新しい項目を先頭から N 行に絞る。同じ自動化の試走は 1 つで、始め直すと前の試走を止めて置き換える。"
+        + "definition を渡すと書く前の定義を試す（automationId と version も渡せば、その版からの書き換えとして）。"
     ),
     (
       "inputSchema",
       schema(
         [
-          "automationId": intProp("試す自動化"),
+          "automationId": intProp("試す自動化（definition だけなら新しい定義を試す）"),
+          "version": intProp("書き換えの元にした版（automationId と definition を渡すときは必須）"),
+          "definition": [
+            "type": "object",
+            "description": "書く前の定義（set_automation の definition と同じ形）",
+          ],
           "from": strArrayProp("入口のノードの鍵"),
           "to": strArrayProp("行き先のノードの鍵"),
           "rows": [
@@ -221,14 +227,15 @@ let automationTools: [[String: Any]] = [
             "description": "入口に与える行（JSON オブジェクト）",
           ],
           "limit": intProp("各取得が下流へ渡す新しい項目の上限"),
-        ], required: ["automationId"])
+        ])
     ),
   ]),
   obj([
     ("name", "get_automation_trial"),
     (
       "description",
-      "自動化の最新の試走を読む。ノードごとに state（waiting / running / done / held / untouched）と回の列を返す。"
+      "試走を試走の ID（try_automation の trial.trialId）で読む。"
+        + "ノードごとに state（waiting / running / done / held / untouched）と回の列を返す。"
         + "回は list_automations の runs と同じ形・同じ新しい順に、取得・処理は rows（下流へ渡す行）、判定は proposals と resolved を足す。"
         + "止めた副作用・仕事の回は held.rows（渡るはずだった行）だけ。wait: true なら試走の終わりまで待ち、"
         + "timeoutMs（既定 3600000・上限 86400000）を過ぎたらその時点の結果に timedOut:true を付けて返す。"
@@ -238,10 +245,10 @@ let automationTools: [[String: Any]] = [
       "inputSchema",
       schema(
         [
-          "automationId": intProp("試走を読む自動化"),
+          "trialId": intProp("読む試走（try_automation の trial.trialId）"),
           "wait": boolProp("true で試走の終わりまで待つ"),
           "timeoutMs": intProp("待つ上限 ミリ秒（既定 3600000）"),
-        ], required: ["automationId"])
+        ], required: ["trialId"])
     ),
   ]),
   obj([

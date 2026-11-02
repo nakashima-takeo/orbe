@@ -1,9 +1,14 @@
 import Foundation
 
-/// 試走の係。自動化ごとに高々 1 つの試走を、Orbe が終わるまでメモリに持つ。main で使う。
+/// 試走の係。試走に起動中だけの ID を振り、Orbe が終わるまでメモリに持つ。自動化を持ち主とする試走（保存した定義と直す定義）は
+/// 自動化ごとに 1 つ、新しい定義の試走は新しい方から `newDefinitionTrials` 個まで覚える。main で使う。
 final class AutomationTrials {
+  /// 覚えておく新しい定義の試走の数。
+  static let newDefinitionTrials = 10
+
   private let runner: AutomationRunner
   private var trials: [Int: AutomationTrial] = [:]
+  private var lastId = 0
   private var waiters: [Int: [Waiter]] = [:]
   private var nextWaiter = 0
 
@@ -17,35 +22,39 @@ final class AutomationTrials {
     self.runner = runner
   }
 
-  /// 試走を始める（すぐ返り、写しは後で進む）。同じ自動化の前の試走は止めて置き換える。
-  func start(_ id: Int, _ request: AutomationTrial.Request) throws(AutomationError)
-    -> AutomationTrial
+  /// 試走を始める（すぐ返り、写しは後で進む）。範囲と与えた行を始めるときの定義で確かめてから、同じ持ち主の前の試走を止めて
+  /// 置き換える（新しい定義の試走は、覚える数を超えた古いものを止めて忘れる）。
+  func start(_ target: AutomationTrial.Target, _ request: AutomationTrial.Request)
+    throws(AutomationError) -> AutomationTrial
   {
     guard runner.store.available else { throw runner.store.unavailableError }
-    let automation = runner.store.automations[try runner.store.index(id)]
+    let shape = try target.shape(in: runner.store)
     if let limit = request.limit, limit < 1 { throw .invalid("limit must be a positive integer") }
-    let range = try AutomationTrial.range(of: automation, request)
-    if let rows = request.rows {
-      _ = try AutomationTrial.given(rows, in: range, of: automation.graph)
+    let span = try AutomationTrial.span(of: shape, request)
+    if let rows = request.rows { _ = try AutomationTrial.given(rows, in: span, of: shape) }
+    if let owner = target.owner {
+      trials.values.filter { $0.target.owner == owner }.map(\.id).forEach(forget)
+    } else {
+      let ownerless = trials.values.filter { $0.target.owner == nil }.map(\.id).sorted()
+      ownerless.dropLast(Self.newDefinitionTrials - 1).forEach(forget)
     }
-    trials.removeValue(forKey: id)?.stop()
-    let onEnd: () -> Void = { [weak self] in self?.ended(id) }
+    lastId += 1
+    let id = lastId
     let trial = AutomationTrial(
-      automationId: id, request: request, range: range, production: runner, onEnd: onEnd)
+      id: id, target: target, request: request, keys: AutomationTrial.Keys(span, of: shape),
+      production: runner, onEnd: { [weak self] in self?.ended(id) })
     try trial.begin()
     trials[id] = trial
     return trial
   }
 
   func trial(_ id: Int) throws(AutomationError) -> AutomationTrial {
-    guard let trial = trials[id] else {
-      throw runner.store.automation(id) == nil ? .automationNotFound(id) : .trialNotFound(id)
-    }
+    guard let trial = trials[id] else { throw .trialNotFound(id) }
     return trial
   }
 
-  /// 試走の終わりまで待って返す。`timeout` が過ぎたら、その時点の試走を時間切れ（true）で返す。待つ間に置き換わったら新しい
-  /// 試走の終わりを待ち、自動化が消えたら `automationNotFound` を返す。
+  /// 試走の終わりまで待って返す。`timeout` が過ぎたら、その時点の試走を時間切れ（true）で返す。待つ間にその試走が止まって忘れられ
+  /// たら（置き換え・押し出し・自動化の削除）、知らない試走として返す。
   func wait(
     _ id: Int, timeout: DispatchTimeInterval,
     _ reply: @escaping (Result<AutomationTrial, AutomationError>, _ timedOut: Bool) -> Void
@@ -68,11 +77,16 @@ final class AutomationTrials {
     }
   }
 
-  /// 自動化を消した。試走を止めて忘れる。
-  func discard(_ id: Int) {
+  /// 自動化を消した。その自動化を持ち主とする試走を止めて忘れる。
+  func discard(_ automationId: Int) {
+    trials.values.filter { $0.target.owner == automationId }.map(\.id).forEach(forget)
+  }
+
+  /// 試走を止めて忘れ、待っている読み手には知らない試走として返す。
+  private func forget(_ id: Int) {
     trials.removeValue(forKey: id)?.stop()
     for waiter in waiters.removeValue(forKey: id) ?? [] {
-      waiter.reply(.failure(.automationNotFound(id)), false)
+      waiter.reply(.failure(.trialNotFound(id)), false)
     }
   }
 

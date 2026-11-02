@@ -3,7 +3,7 @@ import OrbeSessionLog
 
 /// 自動化の 9 動詞と、裏の agent の回の道具の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
 /// `AutomationTrials` に任せ、ここは書き込みの入口（定義を読み、書く定義の workspace の席が今の workspace を指すかを確かめ、ストアで
-/// 確かめる）を通し、応答の形を組む。
+/// 確かめる）と試す対象を組み、応答の形を組む。
 extension WindowController {
   /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
   func controlListAutomations() -> Result<Any, ControlError> {
@@ -27,7 +27,8 @@ extension WindowController {
     }
   }
 
-  /// 書き込みの入口。定義を読み、workspace の席を確かめ、ストアで確かめる。
+  /// 書き込みの入口（`set_automation` と、書く前の定義の `try_automation` が通る）。定義を読み、workspace の席を確かめ、ストアで
+  /// 確かめる——断りの集合と順番が両方の口で同じになる。
   private func checkedWrite(_ automationId: Int?, _ version: Int?, _ definition: [String: Any])
     throws(AutomationError) -> AutomationStore.CheckedWrite
   {
@@ -159,25 +160,42 @@ extension WindowController {
     return .success(["texts": reply.texts, "isError": reply.isError])
   }
 
-  func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
-    Any, ControlError
-  > {
+  func controlTryAutomation(
+    automationId: Int?, version: Int?, definition: [String: Any]?,
+    _ request: AutomationTrial.Request
+  ) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      ["trial": trialJSON(try automationTrials.start(automationId, request))]
+      let target = try trialTarget(automationId, version, definition)
+      return ["trial": trialJSON(try automationTrials.start(target, request))]
     }
   }
 
+  /// 試す対象: 定義が無ければ保存した定義、あれば書き込みの入口を通した書く前の定義（`automationId` があれば直す定義、無ければ
+  /// 新しい定義）。版は直す定義だけが持つ。
+  private func trialTarget(_ automationId: Int?, _ version: Int?, _ definition: [String: Any]?)
+    throws(AutomationError) -> AutomationTrial.Target
+  {
+    if version != nil, automationId == nil || definition == nil {
+      throw .invalid("version: pass it only with automationId and definition, to try a rewrite")
+    }
+    guard let definition else {
+      guard let automationId else { throw .invalid("missing automationId or definition") }
+      return .saved(automationId)
+    }
+    return .unsaved(try checkedWrite(automationId, version, definition))
+  }
+
   func controlAutomationTrial(
-    automationId: Int, wait: Bool, timeoutMs: Int,
+    trialId: Int, wait: Bool, timeoutMs: Int,
     completion: @escaping (Result<Any, ControlError>) -> Void
   ) {
     guard wait else {
       return completion(
         automationResult { () throws(AutomationError) in
-          ["trial": trialJSON(try automationTrials.trial(automationId))]
+          ["trial": trialJSON(try automationTrials.trial(trialId))]
         })
     }
-    automationTrials.wait(automationId, timeout: .milliseconds(timeoutMs)) { result, timedOut in
+    automationTrials.wait(trialId, timeout: .milliseconds(timeoutMs)) { result, timedOut in
       completion(
         self.automationResult { () throws(AutomationError) in
           var json: [String: Any] = ["trial": self.trialJSON(try result.get())]

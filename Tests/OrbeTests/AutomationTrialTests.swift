@@ -64,8 +64,12 @@ final class AutomationTrialTests: OrbeTestCase {
     "\(store.nodeId(id, key)):\(written)"
   }
 
+  func definition(_ definitionNodes: [AutomationDefinition.Node]) -> AutomationDefinition {
+    AutomationDefinition(name: "自動化", notify: nil, nodes: definitionNodes)
+  }
+
   func define(_ definitionNodes: [AutomationDefinition.Node]) throws -> Int {
-    try runner.set(nil, AutomationDefinition(name: "自動化", notify: nil, nodes: definitionNodes)).id
+    try runner.set(nil, definition(definitionNodes)).id
   }
 
   func calls(_ script: String) -> [Int] {
@@ -146,7 +150,7 @@ final class AutomationTrialTests: OrbeTestCase {
     let proposals = store.proposals
     let notices = recorded
 
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 2)
     finish("gh", fetched(["a", "b"]))
     waitCalls("p", 2)
@@ -191,7 +195,7 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(calls("y").count, 1, "前提: 本番の y が走っていて、読んだ位置はまだ進んでいない")
     let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
 
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     finish("gh", fetched([]))
     ended(trial)
@@ -219,7 +223,7 @@ final class AutomationTrialTests: OrbeTestCase {
         AutomationItem(id: "a", link: "https://example.com/a", body: "a", time: added)
       ]))
 
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     XCTAssertEqual(calls("judge"), [], "上流が終わる前に予定で回らない")
     finish("gh", fetched(["a", "b"]))
@@ -237,7 +241,7 @@ final class AutomationTrialTests: OrbeTestCase {
       fetch("gh"), definitionNode("p", from: ["gh"]),
       definitionNode("digest", from: ["p"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     finish("gh", fetched(["a"]))
     waitCalls("p", 1)
@@ -262,7 +266,7 @@ final class AutomationTrialTests: OrbeTestCase {
       fetch("gh"), fetch("backlog"),
       definitionNode("digest", .arrival, from: ["gh", "backlog"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("backlog", 1)
     finish("gh", fetched(["a"]))
     waitCalls("digest", 1)
@@ -285,7 +289,7 @@ final class AutomationTrialTests: OrbeTestCase {
       fetch("gh"), fetch("backlog"), definitionNode("p", .arrival, from: ["gh", "backlog"]),
       definitionNode("d", from: ["p"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init(from: ["gh", "backlog"], to: ["p"]))
+    let trial = try trials.start(.saved(id), .init(from: ["gh", "backlog"], to: ["p"]))
     waitCalls("backlog", 1)
     finish("gh", fetched(["a"]))
     waitCalls("p", 1)

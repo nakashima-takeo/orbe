@@ -92,6 +92,15 @@ struct AutomationGraph: Equatable {
     self.downstream = downstream
   }
 
+  /// 検証を通った形に組み直したもの（`init` の逆。各ノードの外の形は `definitionNodes`）。
+  var checked: [Checked] {
+    zip(definitionNodes, nodes).enumerated().map { index, pair in
+      Checked(
+        definitionNode: pair.0, role: pair.1.role, workspace: pair.1.workspace,
+        upstream: upstream[index])
+    }
+  }
+
   /// 外の形に組み直したもの（`from` は鍵で名指し、各ノードに ID を添える）。
   var definitionNodes: [AutomationDefinition.Node] {
     nodes.map { node in

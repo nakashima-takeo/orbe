@@ -2,10 +2,11 @@ import Foundation
 
 /// 試走——自動化のノードを、本番を汚さずに本番と同じ流しで動かし、ノードの回ごとの結果を集める 1 回。main で使う。
 ///
-/// 本番の DB を区切ってメモリの DB へ写し（`AutomationStore.Copy`）、写しの上に本番と同じ走らせ役を立てて、範囲の道だけを番人に
-/// 載せて流す。読む・確定・出す側の行・起こす決まり・結果の確かめは本番のコードのまま写しの上で動き、本番の DB には届かない。
-/// 本番の層は試走を知らない。試走の都合は、試走が自分の写しに掛ける操作（`AutomationTrial+Copy` と、走らせ役を立てる間だけ
-/// 写しの自動化を止めること）と、載せるノードの選び方だけで表す:
+/// 本番の DB を区切ってメモリの DB へ写し（`AutomationStore.Copy`）、書く前の定義なら写しのストアに本番と同じ書き込みを掛け
+/// （`Target`）、写しの上に本番と同じ走らせ役を立てて、範囲の道だけを番人に載せて流す。読む・確定・出す側の行・起こす決まり・
+/// 結果の確かめは本番のコードのまま写しの上で動き、本番の DB には届かない。本番の層は試走を知らない。試走の都合は、試走が
+/// 自分の写しに掛ける操作（書く前の定義の書き込み・`AutomationTrial+Copy`・走らせ役を立てる間だけ写しの自動化を止めること）と、
+/// 載せるノードの選び方だけで表す:
 ///
 /// - 副作用と仕事は止めるノードで、写しの上でも動かさない（載せない）。流しの終わりに、本番の読みで取るはずだった行を 1 回だけ
 ///   読んで返す。
@@ -33,9 +34,17 @@ final class AutomationTrial {
     var limit: Int?
   }
 
-  /// 解いた範囲。
+  /// 外の形の範囲（入口・行き先・道のノードの鍵）。
+  struct Keys {
+    let from: [String]
+    let to: [String]
+    let path: [String]
+  }
+
+  /// 写しの上の自動化で解いた範囲。
   struct Range {
-    let from: [AutomationNodeID]
+    /// 範囲を解いた写しの上の自動化（新しい定義では写しの中だけの ID）。
+    let automationId: Int
     let to: [AutomationNodeID]
     /// 道——入口のどれかの子孫か入口そのもので、行き先のどれかの祖先か行き先そのもののノード（定義の順）。
     let path: [AutomationGraph.Node]
@@ -47,10 +56,10 @@ final class AutomationTrial {
     }
   }
 
-  /// 与えた行: 書くノード（取得の入口ならその取得、入力のある入口ならただ 1 つの上流）と、その出力にする行。
+  /// 与えた行: 入口と書くノード（取得の入口ならその取得、入力のある入口ならただ 1 つの上流）の定義の順の位置と、その出力にする行。
   struct Given {
-    let entry: AutomationNodeID
-    let writer: AutomationNodeID
+    let entry: Int
+    let writer: Int
     let rows: [AutomationNodeRow]
 
     /// 取得の入口に与えたか（その取得は動かない）。
@@ -87,13 +96,17 @@ final class AutomationTrial {
     case judged(proposals: [AutomationNodePass.Proposal], resolved: [String])
   }
 
-  let automationId: Int
+  /// 試走の ID（起動中だけ。使い回さない）。
+  let id: Int
+  let target: Target
   let request: Request
   let startedAt: Date
-  /// 始めたときの定義で解き、写し終えた時点の定義で解き直す。
-  private(set) var range: Range
+  /// 外の形の範囲。始めたときの定義で解き、写しの上の自動化で解き直す。
+  private(set) var keys: Keys
+  /// 写しの上の自動化で解いた範囲（写しに書き終えてから）。
+  private(set) var range: Range?
   private(set) var endedAt: Date?
-  /// 流し切れずに終わった理由（写している間に範囲のノードが消えた・写しに掛ける操作が書けなかった など）。
+  /// 流し切れずに終わった理由（写している間に範囲のノードが消えた・本番の版が進んだ・写しに掛ける操作が書けなかった など）。
   private(set) var failure: String?
   /// ノードごとの回（本番の `runs` と同じく新しい順）。
   private(set) var passes: [AutomationNodeID: [Pass]] = [:]
@@ -112,14 +125,16 @@ final class AutomationTrial {
   private var completed = false
   private var stopped = false
 
-  /// `production` は本番の走らせ役（ストア・実行の係・時計・workspace を借りる）。`onEnd` は終わったときに 1 度だけ呼ぶ。
+  /// `keys` は始めたときの定義で解いた範囲。`production` は本番の走らせ役（ストア・実行の係・時計・workspace を借りる）。`onEnd` は
+  /// 終わったときに 1 度だけ呼ぶ。
   init(
-    automationId: Int, request: Request, range: Range, production: AutomationRunner,
+    id: Int, target: Target, request: Request, keys: Keys, production: AutomationRunner,
     onEnd: @escaping () -> Void
   ) {
-    self.automationId = automationId
+    self.id = id
+    self.target = target
     self.request = request
-    self.range = range
+    self.keys = keys
     self.production = production
     self.onEnd = onEnd
     startedAt = production.now()
@@ -130,15 +145,21 @@ final class AutomationTrial {
   /// 写している途中か。
   var preparing: Bool { copy != nil }
 
+  /// 範囲を写しの上で解く前（どのノードもまだ動いていない）のノードの進み。
+  var unresolvedState: NodeState { running ? .waiting : .untouched }
+
   func state(of nodeId: AutomationNodeID) -> NodeState {
+    guard let range else { return unresolvedState }
     if nodeId == givenFetch { return .given }
     if let node = range.path.first(where: { $0.id == nodeId }), Self.holds(node) {
       if running { return .waiting }
       return completed ? .held : .untouched
     }
     guard running else { return finalFlow?.isDone(nodeId) == true ? .done : .untouched }
-    if runner?.currentFlow(automationId, through: nodeId)?.isDone(nodeId) == true { return .done }
-    return runner?.isRunning(automationId, nodeId) == true ? .running : .waiting
+    if runner?.currentFlow(range.automationId, through: nodeId)?.isDone(nodeId) == true {
+      return .done
+    }
+    return runner?.isRunning(range.automationId, nodeId) == true ? .running : .waiting
   }
 
   /// 止めるノード（副作用・仕事）か。
@@ -181,17 +202,24 @@ final class AutomationTrial {
     }
   }
 
-  /// 写し終えた時点の定義で範囲を解き直し、行を与え、止めるノードと行を与えた取得の入口を除いた道を写しの上で流す。行き先は、範囲
-  /// の行き先のうち載せるノードと、止めるノードの上流で載せるノード。載せるノードが無ければ流さずに終える。
+  /// 写しの上の流す自動化（書く前の定義なら写しに本番と同じ書き込みを掛けたもの）で範囲を解き直し、行を与え、止めるノードと行を
+  /// 与えた取得の入口を除いた道を写しの上で流す。行き先は、範囲の行き先のうち載せるノードと、止めるノードの上流で載せるノード。
+  /// 載せるノードが無ければ流さずに終える。
   private func flow(on store: AutomationStore) throws(AutomationError) {
-    let id = automationId
-    guard let automation = store.automation(id) else { throw .automationNotFound(id) }
-    range = try Self.range(of: automation, request)
+    let automation = try target.automation(on: store, now: production.now())
+    let id = automation.id
+    let nodes = automation.graph.nodes
+    let shape = Shape(nodes: automation.graph.checked, owner: target.owner)
+    let span = try Self.span(of: shape, request)
+    let range = Range(
+      automationId: id, to: span.to.map { nodes[$0].id }, path: span.path.map { nodes[$0] })
+    keys = Keys(span, of: shape)
+    self.range = range
     var given: Given?
-    if let rows = request.rows { given = try Self.given(rows, in: range, of: automation.graph) }
+    if let rows = request.rows { given = try Self.given(rows, in: span, of: shape) }
     try store.unschedule(Set(range.path.map(\.id)), of: id, now: production.now())
     self.store = store
-    if let given, given.fetched { givenFetch = given.entry }
+    if let given, given.fetched { givenFetch = nodes[given.entry].id }
     let held = range.path.filter(Self.holds)
     let admitted = Set(range.path.map(\.id)).subtracting(held.map(\.id))
       .subtracting([givenFetch].compactMap { $0 })
@@ -219,12 +247,11 @@ final class AutomationTrial {
       runner = started
     }
     if let given {
+      let (entry, writer) = (nodes[given.entry].id, nodes[given.writer].id)
       let rows = request.limit.map { Array(given.rows.prefix($0)) } ?? given.rows
-      try store.give(rows, as: given.writer, of: id, at: production.now())
+      try store.give(rows, as: writer, of: id, at: production.now())
       if given.fetched {
-        passes[given.entry] = [
-          .given(try store.latestRows(of: given.entry, in: id, count: rows.count))
-        ]
+        passes[entry] = [.given(try store.latestRows(of: entry, in: id, count: rows.count))]
       }
     }
     guard let runner else { return finish(completed: true) }
@@ -235,12 +262,12 @@ final class AutomationTrial {
   /// `limit` で写しを絞る。判定は案を結果にする。
   private func recorded(_ record: AutomationPassRecord) {
     let nodeId = record.end.nodeId
-    guard !stopped, let store, let run = record.run,
+    guard !stopped, let store, let range, let run = record.run,
       let node = range.path.first(where: { $0.id == nodeId })
     else { return }
     let content: Content
     do throws(AutomationError) {
-      content = try self.content(of: node, run, record.end.outcome, in: store)
+      content = try self.content(of: node, run, record.end.outcome, in: range, store)
     } catch {
       return end(failure: error.message)
     }
@@ -249,7 +276,7 @@ final class AutomationTrial {
 
   private func content(
     of node: AutomationGraph.Node, _ run: AutomationNodeRun,
-    _ outcome: AutomationNodePass.Outcome, in store: AutomationStore
+    _ outcome: AutomationNodePass.Outcome, in range: Range, _ store: AutomationStore
   ) throws(AutomationError) -> Content {
     guard !run.failed else { return .none }
     switch run.result {
@@ -259,10 +286,10 @@ final class AutomationTrial {
         range.roots.contains(where: { $0.id == node.id })
       {
         try store.trim(
-          node.id, in: automationId, fresh: fresh, keeping: limit, now: production.now())
+          node.id, in: range.automationId, fresh: fresh, keeping: limit, now: production.now())
         count = limit
       }
-      return .rows(try store.latestRows(of: node.id, in: automationId, count: count))
+      return .rows(try store.latestRows(of: node.id, in: range.automationId, count: count))
     case .judge:
       guard case .succeeded(.judge(let proposals, let resolved), _, _) = outcome else {
         return .none
@@ -281,12 +308,12 @@ final class AutomationTrial {
 
   /// 流しの終わり。流し切ったら、止めるノードごとに本番の読み（位置は進めない）で取るはずだった行を読み、あれば結果にする。
   private func finish(completed: Bool) {
-    if completed, let store {
+    if completed, let store, let range {
       do throws(AutomationError) {
         for node in range.path where Self.holds(node) {
           guard
             let read = try store.read(
-              node.id, of: automationId, baseline: nil, now: production.now()),
+              node.id, of: range.automationId, baseline: nil, now: production.now()),
             !read.taken.isEmpty
           else { continue }
           passes[node.id] = [.held(read.taken.map(\.text))]

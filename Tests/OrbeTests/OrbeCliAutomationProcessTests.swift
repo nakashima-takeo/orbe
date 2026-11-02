@@ -11,8 +11,9 @@ import XCTest
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
 /// `proposals` の `automationId`、`set` の `definition`、`run` の `nodeKey`）はここでしか測れない。`resume` が
 /// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`--node` が `nodeKey` を落とすと、自動化ごと止まる。`run` が `nodeKey` を落とすと、指したノードの先まで流れる。
-/// `try` が範囲・行・limit を落とすと、AI が指したのと違う試走が黙って走る。`trial --wait` が時間切れを 0 で返すと、AI は
-/// 途中の結果を終わった結果と読む。`runs` が `nodeKey`・`before` を落とすと、AI は別のノードの回や同じページを続きと読む。
+/// `try` が範囲・行・limit・書く前の定義を落とすと、AI が指したのと違う試走が黙って走る。`try` が試走の ID を出さないと、
+/// `trial` で読めない。`trial --wait` が時間切れを 0 で返すと、AI は途中の結果を終わった結果と読む。`runs` が
+/// `nodeKey`・`before` を落とすと、AI は別のノードの回や同じページを続きと読む。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
@@ -241,25 +242,23 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       + #""deliver": "none", "command": "cat >/dev/null; touch '\#(marker.path)'"}]}"#
   }
 
-  /// `try` は与える行（`--stdin`。0 バイトは usage エラー）・limit・範囲を運び、`trial --wait` は試走の終わりまで待ってノードごとの結果を
-  /// 出す。副作用は走らず、渡るはずだった行の数が人向けの 1 行に出る。
+  /// `try` は与える行（`--rows` のファイル）・limit・範囲を運んで試走の ID を出し、`trial <trialId> --wait` は試走の終わりまで待って
+  /// ノードごとの結果を出す。副作用は走らず、渡るはずだった行の数が人向けの 1 行に出る。
   func testTryCarriesRowsLimitAndRangeAndTrialWaitsForTheResult() throws {
     let control = try startControlProcess()
     let marker = TestScratch.caseDir.appendingPathComponent("sent")
     let id = run(control, ["set"], stdin: trialDefinition(marker: marker))
-    let rows = ["b", "c"].map { (key: String) -> String in
+    let rows = TestScratch.caseDir.appendingPathComponent("rows.jsonl")
+    try ["b", "c"].map { (key: String) -> String in
       #"{"id":"\#(key)","link":"https://x.test/\#(key)","body":"\#(key)","#
         + #""time":"2026-01-01T00:00:00Z"}"#
-    }.joined(separator: "\n")
+    }.joined(separator: "\n").write(to: rows, atomically: true, encoding: .utf8)
 
-    XCTAssertEqual(
-      run(control, ["try", id, "--stdin", "--limit", "1"], stdin: rows),
-      "started a trial of automation \(id)")
-    let empty = control.orb(["automation", "try", id, "--stdin"], stdin: "")
-    XCTAssertEqual(empty.status, 2, empty.stderr)
-    XCTAssertTrue(empty.stderr.contains("--stdin got no input"), empty.stderr)
+    let trialId = run(control, ["try", id, "--rows", rows.path, "--limit", "1"])
+    XCTAssertNotNil(Int(trialId), trialId)
     let trial = try XCTUnwrap(
-      control.orbJSON(["automation", "trial", id, "--wait"])["trial"] as? [String: Any])
+      control.orbJSON(["automation", "trial", trialId, "--wait"])["trial"] as? [String: Any])
+    XCTAssertEqual(trial["automationId"] as? Int, Int(id))
     let nodes = try XCTUnwrap(trial["nodes"] as? [[String: Any]])
     func firstRun(_ key: String) -> [String: Any]? {
       (nodes.first { $0["key"] as? String == key }?["runs"] as? [[String: Any]])?.first
@@ -272,7 +271,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       "取得のノードの ID の接頭（新しい DB の最初のノード）")
     XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["1:b"])
     XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "副作用のコマンドは走らない")
-    let lines = run(control, ["trial", id]).split(separator: "\n")
+    let lines = run(control, ["trial", trialId]).split(separator: "\n")
     XCTAssertTrue(lines.contains("fetch\tgiven\tgiven 1 rows"), "\(lines)")
     XCTAssertEqual(lines.last, "send\theld\theld 1 rows")
 
@@ -281,6 +280,47 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
         as? [String: Any])
     XCTAssertEqual(ranged["from"] as? [String], ["note"])
     XCTAssertEqual(ranged["to"] as? [String], ["note"])
+    let unreadable = control.orb(["automation", "try", id, "--rows", rows.path + ".missing"])
+    XCTAssertEqual(unreadable.status, 2, unreadable.stderr)
+    XCTAssertTrue(unreadable.stderr.contains("--rows cannot read"), unreadable.stderr)
+  }
+
+  /// `try --definition` は標準入力の定義（`set` と同じ JSON）を書く前の定義として試す: `<id>` が無ければ新しい定義、あれば
+  /// `--version` からの書き換え。どちらも本番の自動化を変えない。定義の誤りは `set` と同じく control が断る（exit 1）。
+  func testTryDefinitionTriesTheDefinitionOnStdinWithoutWritingIt() throws {
+    let control = try startControlProcess()
+    let marker = TestScratch.caseDir.appendingPathComponent("sent")
+    let definition = trialDefinition(marker: marker)
+    let rows = TestScratch.caseDir.appendingPathComponent("rows.jsonl")
+    try #"{"id":"b","link":"https://x.test/b","body":"b","time":"2026-01-01T00:00:00Z"}"#
+      .write(to: rows, atomically: true, encoding: .utf8)
+
+    let new = run(control, ["try", "--definition", "--rows", rows.path], stdin: definition)
+    let tried = try XCTUnwrap(
+      control.orbJSON(["automation", "trial", new, "--wait"])["trial"] as? [String: Any])
+    XCTAssertNil(tried["automationId"])
+    XCTAssertNil(tried["failure"])
+    XCTAssertEqual(
+      (tried["nodes"] as? [[String: Any]])?.map { $0["key"] as? String }, ["fetch", "note", "send"])
+    XCTAssertTrue(control.target.automationStore.automations.isEmpty)
+
+    let id = run(control, ["set"], stdin: definition)
+    var listed = try XCTUnwrap(control.target.automationStore.automation(Int(id)!)?.definition)
+    listed.name = "直す"
+    let renamed = try XCTUnwrap(
+      String(bytes: AutomationWire.encoder().encode(listed), encoding: .utf8))
+    let rewrite = run(
+      control, ["try", id, "--version", "1", "--definition", "--rows", rows.path], stdin: renamed)
+    let rewritten = try XCTUnwrap(
+      control.orbJSON(["automation", "trial", rewrite, "--wait"])["trial"] as? [String: Any])
+    XCTAssertEqual(rewritten["automationId"] as? Int, Int(id))
+    XCTAssertNil(rewritten["failure"])
+    XCTAssertEqual(control.target.automationStore.automation(Int(id)!)?.name, "試す")
+    XCTAssertEqual(control.target.automationStore.automation(Int(id)!)?.version, 1)
+
+    let broken = control.orb(["automation", "try", "--definition"], stdin: #"{"name": "x"}"#)
+    XCTAssertEqual(broken.status, 1)
+    XCTAssertTrue(broken.stderr.contains("error -32602: missing nodes"), broken.stderr)
   }
 
   /// `trial --wait` は、試走が `--timeout-ms` までに終わらなければ exit 124。
@@ -289,14 +329,14 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     let id = run(
       control, ["set"],
       stdin: trialDefinition(marker: TestScratch.caseDir.appendingPathComponent("sent")))
-    _ = run(control, ["try", id])
+    let trialId = run(control, ["try", id])
 
-    let outcome = control.orb(["automation", "trial", id, "--wait", "--timeout-ms", "300"])
+    let outcome = control.orb(["automation", "trial", trialId, "--wait", "--timeout-ms", "300"])
     XCTAssertEqual(outcome.status, 124, outcome.stderr)
   }
 
   /// 数のオプションは、標準入力を読む前・socket に触れる前に usage エラー（2）で確かめる。`set` の `--version` は `<id>` と
-  /// 組みでだけ受ける。
+  /// 組みでだけ、`try` の `--version` は `<id>` と `--definition` の組みでだけ受け、`<id>` を直す `--definition` には `--version` が要る。
   ///
   /// 壊れると何が起きるか: `orb automation set 3 --version x` が端末で標準入力の終わりを待って止まる。`--version 0` が版の
   /// 食い違いとして返り、誤りの場所が伝わらない。`<id>` の無い `--version` が黙って捨てられ、書き換えのつもりで新しい自動化を
@@ -306,6 +346,11 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       (["set", "1", "--version", "x"], "--version requires a positive <n>"),
       (["set", "1", "--version", "0"], "--version requires a positive <n>"),
       (["set", "--version", "1"], "--version requires the <id>"),
+      (["try", "1", "--definition"], "requires --version"),
+      (["try", "--version", "1", "--definition"], "--version requires <id> and --definition"),
+      (["try", "1", "--version", "1"], "--version requires <id> and --definition"),
+      (["try"], "requires <id> or --definition"),
+      (["trial", "x"], "invalid trial id: x"),
       (["runs", "1", "--before", "x"], "--before requires a positive <recordId>"),
       (["runs", "1", "--limit", "0"], "--limit requires a positive <n>"),
     ] {

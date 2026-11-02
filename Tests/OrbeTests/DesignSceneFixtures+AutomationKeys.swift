@@ -126,16 +126,13 @@ extension Automation {
 extension AutomationTrial {
   /// ノードを鍵で指す（テスト）。
   func state(key: String) -> NodeState {
-    guard let nodeId = range.path.first(where: { $0.key == key })?.id else { return .untouched }
+    guard let nodeId = range?.path.first(where: { $0.key == key })?.id else {
+      return keys.path.contains(key) ? unresolvedState : .untouched
+    }
     return state(of: nodeId)
   }
 
   func passes(key: String) -> [Pass] {
-    range.path.first { $0.key == key }.flatMap { passes[$0.id] } ?? []
-  }
-
-  /// 行き先のノードの鍵。
-  var targetKeys: [String] {
-    range.to.compactMap { id in range.path.first { $0.id == id }?.key }
+    range?.path.first { $0.key == key }.flatMap { passes[$0.id] } ?? []
   }
 }

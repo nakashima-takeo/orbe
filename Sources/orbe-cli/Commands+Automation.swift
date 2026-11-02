@@ -11,8 +11,9 @@ let automationUsageLines = [
   "orb automation set [<id> --version <n>] [--json]   (definition JSON on stdin)",
   "orb automation run <id> [--node <key>] [--json]",
   "orb automation runs <id> [--node <key>] [--before <recordId>] [--limit <n>] [--json]",
-  "orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]",
-  "orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]",
+  "orb automation try (<id> | [<id> --version <n>] --definition) [--from <key>]... [--to <key>]..."
+    + " [--rows <path>] [--limit <n>] [--json]   (with --definition, definition JSON on stdin)",
+  "orb automation trial <trialId> [--wait] [--timeout-ms <ms>] [--json]",
   "orb automation pause <id> [--node <key>] [--json]",
   "orb automation resume <id> [--node <key>] [--json]",
   "orb automation rm <id> [--json]",
@@ -192,7 +193,10 @@ let automationUsage = """
   (schedules and arriving lines), not a running run or the run command;
   --node pauses one node. resume restarts it.
   try runs the nodes on a copy and returns at once (nothing saved or notified;
-  side effects are held). trial reads it per node; --wait exits 124 on timeout.
+  side effects are held), printing the trial id. With --definition it tries the
+  definition on stdin before writing it: new without <id>, a rewrite of <id> from
+  --version with it. --rows gives the entry node one JSON object per line of the
+  file. trial reads a trial by its id per node; --wait exits 124 on timeout.
   list prints one automation per line: id, state (active / paused /
   running), name, trigger, next run, last run (from the run record:
   fetched and new when it has a source, then proposed, the command's
@@ -320,12 +324,7 @@ private func automationSet(_ rest: [String]) -> Never {
   if id == nil, version != nil {
     usageDie("automation set --version requires the <id> of the automation to rewrite")
   }
-  let data = FileHandle.standardInput.readDataToEndOfFile()
-  guard !data.isEmpty else { usageDie("automation set reads the definition JSON from stdin") }
-  guard let definition = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-    usageDie("automation set: stdin is not a JSON object")
-  }
-  var params: [String: Any] = ["definition": definition]
+  var params: [String: Any] = ["definition": definitionFromStdin(verb: "set")]
   if let id { params["automationId"] = id }
   if let version { params["version"] = version }
   let result = callOrExit("set_automation", params)
@@ -380,6 +379,16 @@ private func automationSimple(_ rest: [String], verb: String, method: String, do
   let result = callOrExit(method, ["automationId": id])
   if wantJSON { printJSON(result) } else { print("\(done) \(id)") }
   exit(0)
+}
+
+/// 標準入力の定義の JSON オブジェクト（`set` と `try --definition`）。空・JSON オブジェクトでないのは usage エラー。
+func definitionFromStdin(verb: String) -> [String: Any] {
+  let data = FileHandle.standardInput.readDataToEndOfFile()
+  guard !data.isEmpty else { usageDie("automation \(verb) reads the definition JSON from stdin") }
+  guard let definition = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+    usageDie("automation \(verb): stdin is not a JSON object")
+  }
+  return definition
 }
 
 /// 位置引数の automation id（正の整数）。

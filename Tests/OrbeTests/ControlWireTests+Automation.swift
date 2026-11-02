@@ -25,7 +25,7 @@ extension ControlWireTests {
           "rows": [["id": "a", "link": "https://example.com/a"]], "limit": 3,
         ]
       ),
-      ("get_automation_trial", ["automationId": 2, "wait": true, "timeoutMs": 500]),
+      ("get_automation_trial", ["trialId": 2, "wait": true, "timeoutMs": 500]),
       ("run_tool", ["token": "t", "name": "read_run_rows", "arguments": ["offset": 50]]),
     ]
   }
@@ -157,7 +157,9 @@ extension ControlWireTests {
     XCTAssertEqual(fake.runTools.map { $0.arguments["limit"] as? Int }, [nil, 10])
   }
 
-  /// 試走の範囲は鍵の列、与える行は JSON オブジェクトの列で受け、1 要素 1 行の JSON にして運ぶ。待つ上限の既定は 1 時間。
+  /// 試走の範囲は鍵の列、与える行は JSON オブジェクトの列で受け、1 要素 1 行の JSON にして運ぶ。書く前の定義は外の形の JSON の
+  /// まま、版と共に運ぶ（自動化・版・定義の組み合わせと定義の読みは target が持つ）。試走は試走の ID で読み、待つ上限の既定は
+  /// 1 時間。
   func testTrialVerbsCarryTheirParams() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
@@ -165,6 +167,8 @@ extension ControlWireTests {
     for (index, params) in [
       ["automationId": 2, "from": "slack"], ["automationId": 2, "to": [1]],
       ["automationId": 2, "rows": ["a"]], ["automationId": 2, "limit": true],
+      ["automationId": "2"], ["version": true, "definition": definition],
+      ["definition": "{}"],
     ].enumerated() {
       XCTAssertEqual(
         errorCode(wire.request(id: index + 1, method: "try_automation", params: params)), -32602,
@@ -172,13 +176,16 @@ extension ControlWireTests {
     }
     XCTAssertEqual(
       errorCode(
-        wire.request(
-          id: 10, method: "get_automation_trial", params: ["automationId": 2, "wait": 1])),
+        wire.request(id: 10, method: "get_automation_trial", params: ["trialId": 2, "wait": 1])),
       -32602)
     XCTAssertEqual(
       errorCode(
         wire.request(
-          id: 11, method: "get_automation_trial", params: ["automationId": 2, "timeoutMs": 0])),
+          id: 11, method: "get_automation_trial", params: ["trialId": 2, "timeoutMs": 0])),
+      -32602)
+    XCTAssertEqual(
+      errorCode(
+        wire.request(id: 15, method: "get_automation_trial", params: ["automationId": 2])),
       -32602)
     XCTAssertTrue(fake.triedAutomations.isEmpty)
     XCTAssertTrue(fake.readTrials.isEmpty)
@@ -190,7 +197,11 @@ extension ControlWireTests {
         "rows": [["link": "https://example.com/a", "id": "a"]],
       ])
     _ = wire.request(id: 13, method: "try_automation", params: ["automationId": 3])
-    _ = wire.request(id: 14, method: "get_automation_trial", params: ["automationId": 2])
+    _ = wire.request(
+      id: 16, method: "try_automation",
+      params: ["automationId": 3, "version": 4, "definition": definition])
+    _ = wire.request(id: 17, method: "try_automation", params: ["definition": definition])
+    _ = wire.request(id: 14, method: "get_automation_trial", params: ["trialId": 2])
 
     XCTAssertEqual(
       fake.triedAutomations.map(\.request),
@@ -198,8 +209,14 @@ extension ControlWireTests {
         AutomationTrial.Request(
           from: ["slack"], to: nil, rows: [#"{"id":"a","link":"https://example.com/a"}"#],
           limit: nil),
-        AutomationTrial.Request(),
+        AutomationTrial.Request(), AutomationTrial.Request(), AutomationTrial.Request(),
       ])
+    XCTAssertEqual(fake.triedAutomations.map(\.automationId), [2, 3, 3, nil])
+    XCTAssertEqual(fake.triedAutomations.map(\.version), [nil, nil, 4, nil])
+    XCTAssertEqual(
+      fake.triedAutomations.map { $0.definition?["name"] as? String },
+      [nil, nil, "Slack: 自分宛", "Slack: 自分宛"])
+    XCTAssertEqual(fake.readTrials.last?.trialId, 2)
     XCTAssertEqual(fake.readTrials.last?.wait, false)
     XCTAssertEqual(fake.readTrials.last?.timeoutMs, WaitTimeout.promptDefaultMs)
   }

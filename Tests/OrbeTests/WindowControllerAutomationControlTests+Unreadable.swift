@@ -100,9 +100,10 @@ extension WindowControllerAutomationControlTests {
       "pause_automation": wc.controlPauseAutomation(automationId: 1, nodeKey: nil, paused: true),
       "delete_automation": wc.controlDeleteAutomation(automationId: 1),
       "list_automation_proposals": wc.controlListAutomationProposals(automationId: nil),
-      "try_automation": wc.controlTryAutomation(automationId: 1, AutomationTrial.Request()),
+      "try_automation": wc.controlTryAutomation(
+        automationId: 1, version: nil, definition: nil, AutomationTrial.Request()),
     ]
-    wc.controlAutomationTrial(automationId: 1, wait: false, timeoutMs: 0) {
+    wc.controlAutomationTrial(trialId: 1, wait: false, timeoutMs: 0) {
       answers["get_automation_trial"] = $0
     }
 

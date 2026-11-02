@@ -1,83 +1,130 @@
 import Foundation
 
-/// 試走の範囲と与えた行の読み。
+/// 試走の範囲と与えた行の読み。どちらも検証を通ったノード（`AutomationGraph.Checked`）の鍵と上流の位置で解く——書く前の定義は
+/// 足すノードに ID が無く、ID で引くグラフを組めないため。保存した自動化はグラフを同じ形に組み直して（`AutomationGraph.checked`）、
+/// 書く前の定義は確かめの結果のまま、同じ規則で解く。
 extension AutomationTrial {
-  /// 範囲を解く。知らないノードは `nodeNotFound`、どの行き先にも届かない入口・どの入口からも届かない行き先は `invalid`。
-  static func range(of automation: Automation, _ request: Request) throws(AutomationError) -> Range
-  {
-    let graph = automation.graph
-    func checked(_ keys: [String]?, _ name: String) throws(AutomationError)
-      -> [AutomationNodeID]?
-    {
+  /// 範囲を解く形: 定義の順の検証を通ったノードと、試走の持ち主の自動化（新しい定義の試走には無い）。
+  struct Shape {
+    let nodes: [AutomationGraph.Checked]
+    let owner: Int?
+  }
+
+  /// 位置で解いた範囲。
+  struct Span {
+    let from: [Int]
+    let to: [Int]
+    /// 道（定義の順）。
+    let path: [Int]
+  }
+
+  /// 範囲を解く。知らない鍵は、持ち主の自動化があればそのノードが無い（`nodeNotFound`）、無ければ定義の中の参照の誤り（`invalid`）。
+  /// どの行き先にも届かない入口・どの入口からも届かない行き先は `invalid`。
+  static func span(of shape: Shape, _ request: Request) throws(AutomationError) -> Span {
+    let nodes = shape.nodes
+    var downstream = Array(repeating: [Int](), count: nodes.count)
+    for (index, node) in nodes.enumerated() {
+      for input in node.upstream { downstream[input].append(index) }
+    }
+    func reach(_ starts: [Int], _ next: (Int) -> [Int]) -> Set<Int> {
+      var seen = Set(starts)
+      var pending = starts
+      while let index = pending.popLast() {
+        for neighbor in next(index) where seen.insert(neighbor).inserted {
+          pending.append(neighbor)
+        }
+      }
+      return seen
+    }
+    func below(_ positions: [Int]) -> Set<Int> { reach(positions) { downstream[$0] } }
+    func above(_ positions: [Int]) -> Set<Int> { reach(positions) { nodes[$0].upstream } }
+    func checked(_ keys: [String]?, _ name: String) throws(AutomationError) -> [Int]? {
       guard let keys else { return nil }
       guard !keys.isEmpty else { throw .invalid("\(name) must name at least one node") }
-      var ids: [AutomationNodeID] = []
-      for key in keys {
-        guard let node = graph.node(key: key) else { throw .nodeNotFound(automation.id, key) }
-        ids.append(node.id)
+      var positions: [Int] = []
+      for (index, key) in keys.enumerated() {
+        guard let position = nodes.firstIndex(where: { $0.key == key }) else {
+          guard let owner = shape.owner else {
+            throw .invalid("\(name)[\(index)]: unknown node \"\(key)\"")
+          }
+          throw .nodeNotFound(owner, key)
+        }
+        positions.append(position)
       }
-      return ids
-    }
-    func below(_ ids: [AutomationNodeID]) -> Set<AutomationNodeID> {
-      Set(ids + ids.flatMap { graph.descendants(of: $0).map(\.id) })
-    }
-    func above(_ ids: [AutomationNodeID]) -> Set<AutomationNodeID> {
-      Set(ids + ids.flatMap { graph.ancestors(of: $0).map(\.id) })
+      return positions
     }
     let from = try checked(request.from, "from")
     let to = try checked(request.to, "to")
-    let targets =
-      to ?? graph.ends.map(\.id).filter { from.map(below)?.contains($0) ?? true }
+    let reached = from.map(below)
+    let targets = to ?? nodes.indices.filter { nodes[$0].ends && reached?.contains($0) ?? true }
     let up = above(targets)
-    let entries =
-      from ?? graph.nodes.filter { $0.inputs.isEmpty && up.contains($0.id) }.map(\.id)
+    let entries = from ?? nodes.indices.filter { nodes[$0].upstream.isEmpty && up.contains($0) }
     let down = below(entries)
-    func key(_ id: AutomationNodeID) -> String { graph.node(id)?.key ?? "" }
-    for (index, id) in entries.enumerated() where !up.contains(id) {
-      throw .invalid("from[\(index)] \"\(key(id))\" reaches no node in to")
+    for (index, position) in entries.enumerated() where !up.contains(position) {
+      throw .invalid("from[\(index)] \"\(nodes[position].key)\" reaches no node in to")
     }
-    for (index, id) in targets.enumerated() where !down.contains(id) {
-      throw .invalid("to[\(index)] \"\(key(id))\" is not reached from any node in from")
+    for (index, position) in targets.enumerated() where !down.contains(position) {
+      throw .invalid(
+        "to[\(index)] \"\(nodes[position].key)\" is not reached from any node in from")
     }
-    return Range(
+    return Span(
       from: unique(entries), to: unique(targets),
-      path: graph.nodes.filter { up.contains($0.id) && down.contains($0.id) })
+      path: nodes.indices.filter { up.contains($0) && down.contains($0) })
   }
 
-  private static func unique(_ ids: [AutomationNodeID]) -> [AutomationNodeID] {
-    var seen = Set<AutomationNodeID>()
-    return ids.filter { seen.insert($0).inserted }
+  private static func unique(_ positions: [Int]) -> [Int] {
+    var seen = Set<Int>()
+    return positions.filter { seen.insert($0).inserted }
   }
 
   /// 与えた行を、道の根（ちょうど 1 つ）の役割に合わせて読む。取得は取得の読み方でその取得の出力に、入力のあるノードは文字列の
-  /// `id` を持つ行として受けてその上流の出力にする（上流がちょうど 1 つのときだけ）。
-  static func given(_ rows: [String], in range: Range, of graph: AutomationGraph)
-    throws(AutomationError) -> Given
+  /// `id` を持つ行として受けてその上流の出力にする（上流がちょうど 1 つのときだけ）。下流へ渡す id の接頭（書くノードの ID）を
+  /// 含めた大きさで確かめるが、書く前の定義の足すノードは ID がまだ無いので仮の 0 で測る（写しに書いた後に、振った ID で読み直す）。
+  static func given(_ rows: [String], in span: Span, of shape: Shape) throws(AutomationError)
+    -> Given
   {
-    let roots = range.roots
+    let path = Set(span.path)
+    let roots = span.path.filter { path.isDisjoint(with: shape.nodes[$0].upstream) }
     guard roots.count == 1, let entry = roots.first else {
       throw .invalid(
         "rows need exactly one entry node (a node with no input in the range); this range has "
-          + roots.map { "\"\($0.key)\"" }.joined(separator: ", "))
+          + roots.map { "\"\(shape.nodes[$0].key)\"" }.joined(separator: ", "))
     }
-    switch entry.role {
-    case .fetch:
-      var outputs = AutomationOutputs(.fetch(since: nil, reachesJudge: false), writer: entry.id)
+    let node = shape.nodes[entry]
+    func read(as input: AutomationNodePass.Input, writer: Int) throws(AutomationError) -> Given {
+      var outputs = AutomationOutputs(
+        input, writer: shape.nodes[writer].definitionNode.id ?? AutomationNodeID(0))
       let broken = outputs.put(rows.joined(separator: "\n"))
       guard broken.isEmpty else { throw .invalid("rows: \(broken[0].text)") }
-      return Given(entry: entry.id, writer: entry.id, rows: outputs.rows)
+      return Given(entry: entry, writer: writer, rows: outputs.rows)
+    }
+    switch node.role {
+    case .fetch:
+      return try read(as: .fetch(since: nil, reachesJudge: false), writer: entry)
     case .process, .judge, .report, .work, .sideEffect:
-      guard entry.inputs.count == 1, let upstream = entry.inputs.first?.from else {
-        let keys = entry.inputs.compactMap { graph.node($0.from)?.key }
+      guard node.upstream.count == 1, let upstream = node.upstream.first else {
+        let keys = node.upstream.map { "\"\(shape.nodes[$0].key)\"" }
         throw .invalid(
-          "rows: \"\(entry.key)\" has \(keys.count) inputs (\(keys.map { "\"\($0)\"" }.joined(separator: ", "))); "
+          "rows: \"\(node.key)\" has \(keys.count) inputs (\(keys.joined(separator: ", "))); "
             + "rows are given as the output of a single input, so give them to one of those nodes "
             + "(with from) instead")
       }
-      var outputs = AutomationOutputs(.process([], reachesJudge: false), writer: upstream)
-      let broken = outputs.put(rows.joined(separator: "\n"))
-      guard broken.isEmpty else { throw .invalid("rows: \(broken[0].text)") }
-      return Given(entry: entry.id, writer: upstream, rows: outputs.rows)
+      return try read(as: .process([], reachesJudge: false), writer: upstream)
     }
   }
+}
+
+extension AutomationTrial.Keys {
+  init(_ span: AutomationTrial.Span, of shape: AutomationTrial.Shape) {
+    from = span.from.map { shape.nodes[$0].key }
+    to = span.to.map { shape.nodes[$0].key }
+    path = span.path.map { shape.nodes[$0].key }
+  }
+}
+
+extension AutomationGraph.Checked {
+  fileprivate var key: String { definitionNode.key }
+
+  /// 終わりのノード（行き先が次のノードでない）。
+  fileprivate var ends: Bool { definitionNode.action.destination != .nextNode }
 }

@@ -211,7 +211,7 @@ enum AutomationError: Error, Equatable {
   case flowing(Int, String)
   /// 自動化の DB を使えない、または書けなかった。
   case unavailable(String)
-  /// その自動化の試走が無い。
+  /// その ID の試走が無い（置き換え・押し出し・自動化の削除で忘れた試走を含む）。
   case trialNotFound(Int)
   /// 送った版が今の版と違う（間に定義が変わった）。
   case versionMismatch(sent: Int, current: Int)
@@ -230,7 +230,7 @@ extension AutomationError {
     case .nodeNotFound(let id, let key): "node not found: \(key) in automation \(id)"
     case .flowing(let id, let key):
       "automation \(id): node \"\(key)\" is already in a running flow; wait until it finishes"
-    case .trialNotFound(let id): "no trial of automation \(id)"
+    case .trialNotFound(let id): "trial not found: \(id)"
     case .versionMismatch(let sent, let current):
       "version mismatch: sent \(sent), current \(current); read it again with list_automations"
     case .unreadable(let id, let reason):

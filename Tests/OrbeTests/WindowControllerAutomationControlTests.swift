@@ -317,7 +317,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
       try AutomationWire.decoder.decode(AutomationDefinition.self, from: data), stored)
   }
 
-  /// 試走は始めた応答で道の上のノードを並べ、待って読むとノードの回の結果を返す。自動化を消すと読めない。
+  /// 試走は始めた応答で試走の ID と道の上のノードを並べ、その ID で待って読むとノードの回の結果を返す。知らない ID と、自動化を
+  /// 消した後の ID は読めない。
   func testATrialStartsAtOnceAndReadsBackItsNodesWhenWaitedFor() throws {
     let wc = try launch()
     let id = try set(
@@ -332,20 +333,23 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         ]))
     let row = #"{"id":"a","link":"https://example.com/a","body":"a","time":"2026-10-10T09:00:00Z"}"#
     var none: Result<Any, ControlError>?
-    wc.controlAutomationTrial(automationId: id, wait: false, timeoutMs: 1) { none = $0 }
+    wc.controlAutomationTrial(trialId: 1, wait: false, timeoutMs: 1) { none = $0 }
     guard case .failure(let noTrial) = try XCTUnwrap(none) else { return XCTFail("試走が無いのに読めた") }
     XCTAssertEqual(noTrial.code, -32004)
-    XCTAssertEqual(noTrial.message, "no trial of automation \(id)")
+    XCTAssertEqual(noTrial.message, "trial not found: 1")
 
     let started = try success(
-      wc.controlTryAutomation(automationId: id, AutomationTrial.Request(rows: [row])))
+      wc.controlTryAutomation(
+        automationId: id, version: nil, definition: nil, AutomationTrial.Request(rows: [row])))
     let trial = try XCTUnwrap(started["trial"] as? [String: Any])
+    let trialId = try XCTUnwrap(trial["trialId"] as? Int)
+    XCTAssertEqual(trial["automationId"] as? Int, id)
     XCTAssertEqual(trial["preparing"] as? Bool, true)
     XCTAssertEqual(
       (trial["nodes"] as? [[String: Any]])?.map { $0["key"] as? String }, ["fetch", "send"])
 
     var reply: Result<Any, ControlError>?
-    wc.controlAutomationTrial(automationId: id, wait: true, timeoutMs: 5000) { reply = $0 }
+    wc.controlAutomationTrial(trialId: trialId, wait: true, timeoutMs: 5000) { reply = $0 }
     let deadline = Date().addingTimeInterval(5)
     while reply == nil && Date() < deadline {
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
@@ -366,7 +370,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
     _ = wc.controlDeleteAutomation(automationId: id)
     var gone: Result<Any, ControlError>?
-    wc.controlAutomationTrial(automationId: id, wait: false, timeoutMs: 1) { gone = $0 }
+    wc.controlAutomationTrial(trialId: trialId, wait: false, timeoutMs: 1) { gone = $0 }
     XCTAssertEqual(code(try XCTUnwrap(gone)), -32004)
   }
 }
