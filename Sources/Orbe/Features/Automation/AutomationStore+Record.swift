@@ -81,7 +81,7 @@ struct AutomationRecording {
         written = try db.writeEvents(of: end.nodeId, outputs, at: run.endedAt)
       }
       run.withdrawn = try memory.withdraw(
-        after: written.invalidated, lost: [end.nodeId: lost], db)
+        after: written.invalidated, lost: [end.nodeId: lost], db, now: run.endedAt)
       run.result =
         node.role == .fetch
         ? .fetch(fresh: written.fresh, duplicates: written.duplicates)
@@ -112,7 +112,10 @@ struct AutomationRecording {
     var dismissed: [AutomationDismissal] = []
     for proposal in proposals {
       let link = proposal.fields.link
-      if try db.noLongerCurrent(proposal.row, link: link, inputs: node.inputNodeIds) {
+      if try db.noLongerCurrent(
+        proposal.row, link: link, inputs: node.inputNodeIds,
+        now: TaskItem.storedInstant(end.endedAt))
+      {
         dismissed.append(AutomationDismissal(link: link, why: .noLongerCurrent))
         continue
       }

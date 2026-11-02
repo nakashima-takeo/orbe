@@ -137,14 +137,28 @@ extension AutomationDatabase {
     ) { (AutomationNodeID($0.int(at: 0)), $0.text(at: 1) ?? "") }
   }
 
-  /// 行 `row` を元にしたリンク `link` の候補が、今のものでなくなったか——元にした行か、その行が引き継ぎでたどる元の行のうち
-  /// 項目のどれかが無効で、候補を出した判定の入力（直接の上流のノード `inputs`）の今有効な項目にもリンクが無い。
-  func noLongerCurrent(_ row: AutomationRowRef, link: String, inputs: [AutomationNodeID]) throws
-    -> Bool
-  {
-    guard try lineage(of: row).contains(where: \.invalid) else { return false }
+  /// 行 `row` を元にしたリンク `link` の候補が、時刻 `now` に今のものでなくなったか——元にした行か、その行が引き継ぎでたどる元の
+  /// 行のうち項目のどれかが無効か、元にした行が残す期間を過ぎた出来事で、候補を出した判定の入力（直接の上流のノード `inputs`）の
+  /// 今有効な項目にもリンクが無い。
+  func noLongerCurrent(
+    _ row: AutomationRowRef, link: String, inputs: [AutomationNodeID], now: Date
+  ) throws -> Bool {
+    guard try lineage(of: row).contains(where: \.invalid) || expired(row, now: now) else {
+      return false
+    }
     for input in inputs where try liveLinks(of: input).contains(link) { return false }
     return true
+  }
+
+  /// 行が、時刻 `now` に残す期間を過ぎた出来事か。
+  private func expired(_ row: AutomationRowRef, now: Date) throws -> Bool {
+    guard case .event(let id) = row else { return false }
+    return
+      !(try db.select(
+        "SELECT 1 FROM events WHERE id = ? AND created_at < ?",
+        [.integer(Int64(id)), Self.cutoff(now)],
+        { _ in true }
+      ).isEmpty)
   }
 
   /// 引き継ぎをたどる 1 歩: 行を出したノードと、行が無効になった項目か。

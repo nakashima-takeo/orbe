@@ -76,8 +76,8 @@ extension AutomationStore {
       memory.automations.removeAll { $0.id == id }
       memory.automations.append(automation)
       memory.automations.sort { $0.id < $1.id }
-      try memory.withdraw(after: invalidated + rewired.invalidated, db)
-      try memory.withdraw(reviewing: rewired.reviewed, db)
+      try memory.withdraw(after: invalidated + rewired.invalidated, db, now: at)
+      try memory.withdraw(reviewing: rewired.reviewed, db, now: at)
       try memory.forgetUnheld(db, now: at)
       try memory.recount(id, db, now: at)
       return Replaced(

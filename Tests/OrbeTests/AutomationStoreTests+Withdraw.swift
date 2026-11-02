@@ -243,5 +243,11 @@ extension AutomationStoreTests {
 
     try store.record(id, nodeKey: "f2", at: later, outcome: DesignSceneFixtures.fetched([]))
     XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(
+      [
+        store.automation(id)?.state(key: "f2").runs.first?.run?.withdrawn,
+        try store.carried(id, "judge").withdrawn,
+      ],
+      [1, 0], "リンクを外した回に数え、判定の持ち越しには載せない")
   }
 }

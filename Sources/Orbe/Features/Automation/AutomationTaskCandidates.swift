@@ -60,9 +60,11 @@ extension AutomationMemory {
 
   /// 項目 `items` が無効になった・ノードの今有効な項目のリンク `lost` が抜けたので、下げる条件がそろった判断待ちの候補を下げ
   /// （忘れ）、下げた数を返す。見直すのは、読んだ行が `items` から引き継ぎで降りた行の候補と、`items` を出したノードか `lost` の
-  /// ノードを入力に持つ判定の、そのリンクの候補（版の更新でリンクだけが変わった項目も、前のリンクが `lost` に入る）。
+  /// ノードを入力に持つ判定の、そのリンクの候補（版の更新でリンクだけが変わった項目も、前のリンクが `lost` に入る）。`now` は
+  /// 変異の時刻（残す期間を過ぎた出来事も今のものでない行に数える）。
   @discardableResult mutating func withdraw(
-    after items: [Int], lost: [AutomationNodeID: Set<String>] = [:], _ db: AutomationDatabase
+    after items: [Int], lost: [AutomationNodeID: Set<String>] = [:], _ db: AutomationDatabase,
+    now: Date
   ) throws -> Int {
     guard !items.isEmpty || lost.contains(where: { !$0.value.isEmpty }) else { return 0 }
     var candidates = try db.openProposals(descendingFrom: items)
@@ -77,48 +79,46 @@ extension AutomationMemory {
         candidates += try db.openProposals(of: judge.id, links: links)
       }
     }
-    return try withdraw(candidates, db)
+    return try withdraw(candidates, db, now: now)
   }
 
   /// 判定のノード `judges` の判断待ちの候補のうち、下げる条件が既にそろった候補を下げる（忘れる）。書き換えで何をするかが変わった
   /// 判定（入力を変えた判定・直した読めない自動化の判定）に当てる。
-  mutating func withdraw(reviewing judges: [AutomationNodeID], _ db: AutomationDatabase) throws {
+  mutating func withdraw(
+    reviewing judges: [AutomationNodeID], _ db: AutomationDatabase, now: Date
+  ) throws {
     var candidates: [AutomationDatabase.OpenProposal] = []
     for judge in judges { candidates += try db.openProposals(of: judge) }
-    try withdraw(candidates, db)
+    try withdraw(candidates, db, now: now)
   }
 
-  /// 元にした出来事（判定が読んだ出来事）が残す期間を過ぎた判断待ちの候補を下げ（忘れ）、判定ごとの下げた数を返す。出来事は
-  /// 掃除で消える時に今のものでなくなる。判定の入力の今有効な項目にリンクがあれば下げない（ほかの下げ方と同じ歯止め）。
+  /// 元にした出来事（判定が読んだ出来事）が残す期間を過ぎた判断待ちの候補を下げ（忘れ）、判定ごとの下げた数を返す。回の無い
+  /// 契機（掃除）で下げる分。判定の入力の今有効な項目にリンクがあれば下げない（ほかの下げ方と同じ歯止め）。
   mutating func withdrawExpired(_ db: AutomationDatabase, now: Date) throws
     -> [AutomationNodeID: Int]
   {
-    let expired = try db.openProposals(readingEventsBefore: now)
-    let withdrawn = try withdraw(expired, db) { candidate, judge in
-      !(try judge.inputNodeIds.contains { try db.liveLinks(of: $0).contains(candidate.link) })
-    }
+    let withdrawn = try withdrawing(try db.openProposals(readingEventsBefore: now), db, now: now)
     return Dictionary(grouping: withdrawn, by: \.judge).mapValues(\.count)
   }
 
   /// 下げる条件を当て、満たす候補を忘れて数を返す。
   @discardableResult private mutating func withdraw(
-    _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase
+    _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase, now: Date
   ) throws -> Int {
-    try withdraw(candidates, db) { candidate, judge in
-      try db.noLongerCurrent(candidate.row, link: candidate.link, inputs: judge.inputNodeIds)
-    }.count
+    try withdrawing(candidates, db, now: now).count
   }
 
-  /// 候補のうち、判定のノードが今のノードで、`stale` が真の候補を忘れて返す。
-  private mutating func withdraw(
-    _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase,
-    stale: (AutomationDatabase.OpenProposal, AutomationGraph.Node) throws -> Bool
+  /// 候補のうち、判定のノードが今のノードで、時刻 `now` に下げる条件がそろった候補を忘れて返す。
+  private mutating func withdrawing(
+    _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase, now: Date
   ) throws -> [AutomationDatabase.OpenProposal] {
     var withdrawn: [Int: AutomationDatabase.OpenProposal] = [:]
     for candidate in candidates where withdrawn[candidate.id] == nil {
       guard
         let judge = automations.lazy.compactMap({ $0.graph.node(candidate.judge) }).first,
-        judge.role == .judge, try stale(candidate, judge)
+        judge.role == .judge,
+        try db.noLongerCurrent(
+          candidate.row, link: candidate.link, inputs: judge.inputNodeIds, now: now)
       else { continue }
       withdrawn[candidate.id] = candidate
     }
