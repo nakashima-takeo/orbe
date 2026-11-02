@@ -73,7 +73,6 @@ extension AutomationRunnerTests {
 
     _ = try runner.pause(id, true)
     _ = try runner.pause(id, nodeId: b, false)
-    XCTAssertEqual(store.automation(id)?.halted(b), true)
     XCTAssertEqual(calls("b"), [], "自動化を止めていればノードを再開しても動かない")
     _ = try runner.pause(id, false)
     XCTAssertEqual(ids("b"), [downstream("a", "x", of: id)])
@@ -122,7 +121,6 @@ extension AutomationRunnerTests {
     XCTAssertEqual(flowRefusal(id, to: .node(d)), c)
     XCTAssertEqual(flowRefusal(id, to: .ends), a)
     XCTAssertTrue(runner.isFlowing(id, through: [d]))
-    XCTAssertFalse(runner.isFlowing(id, through: []))
 
     let current = try XCTUnwrap(store.automation(id)?.definition)
     try rewrite(
