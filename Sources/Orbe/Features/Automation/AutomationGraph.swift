@@ -21,12 +21,6 @@ struct AutomationGraph: Equatable {
     var id: AutomationNodeID { entity.id }
     var key: String { entity.key }
 
-    /// 走るモデル（書かれた値）。コマンドは nil。
-    var model: String? {
-      guard case .agent(let agent) = action.method else { return nil }
-      return agent.model
-    }
-
     /// 省略を解いた上限（分）。
     var timeoutMinutes: Int {
       if let minutes = action.timeoutMinutes { return minutes }
@@ -36,13 +30,8 @@ struct AutomationGraph: Equatable {
       }
     }
 
-    /// 出力の性質を解いたもの。行を出すノード（取得・処理）だけが持ち、処理の省略は出来事の流れ。
-    var coverage: AutomationCoverage? {
-      switch role {
-      case .fetch, .process: action.coverage ?? .newArrivals
-      case .judge, .report, .work, .sideEffect: nil
-      }
-    }
+    /// 出力の性質を解いたもの（`AutomationNodeRole.coverage`）。
+    var coverage: AutomationCoverage? { role.coverage(action.coverage) }
 
     /// 入力のノード。
     var inputNodeIds: [AutomationNodeID] { inputs.map(\.from) }

@@ -128,4 +128,12 @@ enum AutomationNodeRole: Equatable {
   case work
   /// 何も渡さないコマンド。
   case sideEffect
+
+  /// 書かれた出力の性質を解く。行を出す役割（取得・処理）だけが持ち、処理の省略は出来事の流れ。
+  func coverage(_ written: AutomationCoverage?) -> AutomationCoverage? {
+    switch self {
+    case .fetch, .process: written ?? .newArrivals
+    case .judge, .report, .work, .sideEffect: nil
+    }
+  }
 }

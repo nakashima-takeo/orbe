@@ -107,8 +107,10 @@ extension L10n {
     .settingsSoundCustomSameAsDone: ("入力待ちも完了と同じ音", "Waiting Uses the Done Sound"),
     .settingsMenuBarNotificationDuration: ("メニューバー通知の表示時間", "Menu Bar Notification Duration"),
     .settingsSecondsValue: ("%lld秒", "%lld s"),
-    .settingsRunsValue: ("%lld回", "%lld runs"),
-    .settingsDaysValue: ("%lld日", "%lld days"),
+    .settingsRunsValueOne: ("%lld回", "%lld run"),
+    .settingsRunsValueOther: ("%lld回", "%lld runs"),
+    .settingsDaysValueOne: ("%lld日", "%lld day"),
+    .settingsDaysValueOther: ("%lld日", "%lld days"),
     .settingsAutomationRunRetentionCount: (
       "自動化の実行記録の保持回数", "Automation Run History Count"
     ),

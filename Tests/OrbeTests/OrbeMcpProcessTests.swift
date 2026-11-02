@@ -161,7 +161,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     XCTAssertTrue(
       description(try tool("list_automations")).contains(
         "新しい順に \(AutomationNodeState.recentRuns) 件まで。"),
-      "回の記録を残す件数を写す")
+      "メモリに持つ直近の回の数を写す")
   }
 
   /// `tools/list` に出る全ツールが control の method として通る。ブリッジはツール名をそのまま method 名へ

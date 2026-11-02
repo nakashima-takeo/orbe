@@ -195,7 +195,7 @@ extension DesignSceneFixtures {
   }
 }
 
-/// 見本『段の多い例』『一番単純な例』の自動化。段の多い例は取得と処理 2 つ（コマンド・既定のモデルの agent）と判定を持ち、
+/// 見本『段の多い例』『一番単純な例』の自動化。段の多い例は取得と処理 2 つ（コマンド・agent）と判定を持ち、
 /// 一番単純な例は取得と判定だけ。
 extension DesignSceneFixtures {
   static func boardStepsExample() -> AutomationSample {

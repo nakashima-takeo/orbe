@@ -119,14 +119,13 @@ struct AutomationNodePass {
         handle.stop()
       }
     case .agent(let agent):
-      guard let model = node.model else { preconditionFailure("an agent node has a model") }
       let session = AutomationRunSession(input, writer: node.id)
       let runSessions = self.runSessions
       let token = runSessions.open(session)
       let job = BackgroundJob(
         work: .agent(
           BackgroundAgentCall(
-            cli: agent.cli, model: model, tools: Self.tools(agent, input),
+            cli: agent.cli, model: agent.model, tools: Self.tools(agent, input),
             prompt: Self.prompt(
               node, agent.instruction, input, now: now(), timeZone: calendar().timeZone),
             orbe: BackgroundOrbeAccess(token: token, tools: session.tools.map(\.rawValue)))),

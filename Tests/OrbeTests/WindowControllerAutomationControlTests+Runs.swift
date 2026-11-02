@@ -188,4 +188,22 @@ extension WindowControllerAutomationControlTests {
       )["runs"] as? [[String: Any]])
     XCTAssertEqual(runs.count, 4, "最後の回から 3 日以内の 4 回が残る")
   }
+
+  /// 出来事の日数の設定も保持の値に届き、効くのは Home の実効値だけ（ほかの workspace の上書きは効かない）。
+  func testTheRetentionReadsTheEventDaysOfHome() throws {
+    let wc = try launch()
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.automationEventRetentionDays, 10))
+    XCTAssertEqual(wc.automationRetention.eventDays, 10)
+
+    let home = try XCTUnwrap(wc.store.homeIndex)
+    XCTAssertGreaterThan(wc.workspaces.count, 1, "前提: Home のほかに workspace がある")
+    var override = SettingsLayer()
+    override[SettingKeys.automationEventRetentionDays] = 60
+    for (index, workspace) in wc.workspaces.enumerated() where index != home {
+      workspace.settingsOverride = override
+    }
+    XCTAssertEqual(wc.automationRetention.eventDays, 10, "ほかの workspace の上書きは効かない")
+    wc.workspaces[home].settingsOverride = override
+    XCTAssertEqual(wc.automationRetention.eventDays, 60, "Home の上書きが効く")
+  }
 }

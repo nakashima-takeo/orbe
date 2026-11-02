@@ -181,7 +181,7 @@ enum TaskPaletteAutomationError: Equatable {
     let state: TaskPaletteAutomationShelfStatus.State? =
       runner.isFlowing(automation.id, through: reach)
       ? .refreshing
-      : automation.paused || judges.allSatisfy({ automation.halted($0.id) }) ? .paused : nil
+      : judges.allSatisfy({ automation.halted($0.id) }) ? .paused : nil
     return TaskPaletteAutomationShelfStatus(
       last: last.map { .init(at: $0.startedAt, failed: $0.failed) }, state: state)
   }

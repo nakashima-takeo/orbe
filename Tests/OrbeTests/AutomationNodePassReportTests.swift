@@ -10,7 +10,7 @@ import XCTest
 /// 末尾が利用者にも AI にも届かない。上限の無い文が `list_automations` の応答と制御ソケットの 1 行を膨らませる。仕事が
 /// 「何もしなかった」を言えない。
 final class AutomationNodePassReportTests: AutomationNodePassTestCase {
-  /// 字数の上限だった 2,000 字を超える、上限に収まる文。
+  /// 上限に収まる長い文。
   private static let long = String(repeating: "あ", count: 2_500)
   /// 64 KiB を超える文（UTF-8 で 3 バイトの字）。
   private static let tooLarge = String(

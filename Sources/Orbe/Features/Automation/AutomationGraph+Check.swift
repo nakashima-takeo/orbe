@@ -53,12 +53,7 @@ extension AutomationGraph {
     try checkInputs(definitionNode, path)
     let role = try role(of: definitionNode, path)
     if let days = definitionNode.retentionDays {
-      let coverage: AutomationCoverage? =
-        switch role {
-        case .fetch, .process: definitionNode.action.coverage ?? .newArrivals
-        case .judge, .report, .work, .sideEffect: nil
-        }
-      guard coverage == .newArrivals else {
+      guard role.coverage(definitionNode.action.coverage) == .newArrivals else {
         throw .invalid(
           "\(path).retentionDays: only a node whose coverage is newArrivals keeps events")
       }
