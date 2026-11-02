@@ -10,6 +10,8 @@ class AutomationNodePassTestCase: OrbeTestCase {
   var runSessions: AutomationRunSessions!
   var pass: AutomationNodePass!
   var outcomes: [AutomationNodePass.Outcome] = []
+  /// ノードの 1 回が読む今の workspace。
+  var workspaces = AutomationWorkspaces(all: [], home: nil)
   /// 最後に起こしたノードの鍵（失敗の英文を組む）。
   var startedKey = ""
 
@@ -18,13 +20,15 @@ class AutomationNodePassTestCase: OrbeTestCase {
     runSessions = AutomationRunSessions()
     pass = AutomationNodePass(
       run: jobs.run, now: { [unowned self] in now },
-      calendar: { Calendar(identifier: .gregorian) }, runSessions: runSessions)
+      calendar: { Calendar(identifier: .gregorian) }, runSessions: runSessions,
+      workspaces: { [unowned self] in workspaces })
   }
 
+  /// `workspace` はノードが走る workspace（検証が導く値。省けばノード自身の workspace）。
   @discardableResult
   func start(
     _ definitionNode: AutomationDefinition.Node, _ role: AutomationNodeRole,
-    _ input: AutomationNodePass.Input
+    _ input: AutomationNodePass.Input, workspace: UUID? = nil
   ) -> BackgroundRunHandle {
     startedKey = definitionNode.key
     let node = AutomationGraph.Node(
@@ -37,8 +41,13 @@ class AutomationNodePassTestCase: OrbeTestCase {
         AutomationNodeEdge(
           from: AutomationNodeID(100 + $0.offset), take: $0.element.take,
           maxAgeHours: $0.element.maxAgeHours)
-      }, role: role)
+      }, role: role, workspace: workspace ?? Self.ownWorkspace(definitionNode))
     return pass.start(node, input) { [unowned self] in outcomes.append($0) }
+  }
+
+  private static func ownWorkspace(_ definitionNode: AutomationDefinition.Node) -> UUID? {
+    guard case .command(let command) = definitionNode.action.method else { return nil }
+    return command.workspace
   }
 
   func item(_ id: String) -> AutomationItem {
@@ -128,7 +137,7 @@ class AutomationNodePassTestCase: OrbeTestCase {
 
   /// 判断待ちの候補も付け先も無い判定の選択肢。
   static let noChoices = AutomationJudgeChoices(
-    open: [], workspaces: AutomationWorkspaces(listed: [], home: nil))
+    open: [], workspaces: AutomationWorkspaces(all: [], home: nil))
 
   func judgeInput(_ ids: [String]) -> AutomationNodePass.Input {
     .judge(ids.map(linkedRow), choices: Self.noChoices)

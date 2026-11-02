@@ -79,6 +79,8 @@ struct BoardMapRow: Equatable {
 struct BoardAutomationDetailValue: Equatable {
   /// 「通知：メニューバー」。
   let notify: String
+  /// 「workspace：orbe」。自動化に workspace の設定が無ければ nil。
+  let workspace: String?
   /// 「次回 16:50」「手動」。止めていれば nil（見出しは一時停止中を出す）。
   let next: String?
   /// 直近の回の区分（全ノードを混ぜた新しい `stripLength` 回。古い回が左）。
@@ -92,10 +94,11 @@ struct BoardAutomationDetailValue: Equatable {
 }
 
 extension BoardAutomationDetailValue {
-  /// `running` はノードが走っているか、`open` はこの自動化の棚に出ている判断待ちの候補の数、`next` は次に予定で回る時刻。
+  /// `running` はノードが走っているか、`open` はこの自動化の棚に出ている判断待ちの候補の数、`next` は次に予定で回る時刻、
+  /// `workspaces` は描くときの今の workspace（自動化の workspace の名前を引く）。
   init(
     _ automation: Automation, text: AutomationText, running: (AutomationNodeID) -> Bool, open: Int,
-    next: Date?
+    next: Date?, workspaces: AutomationWorkspaces
   ) {
     let l10n = text.l10n
     let graph = automation.graph
@@ -134,9 +137,19 @@ extension BoardAutomationDetailValue {
     nodeCount = graph.nodes.count
     notify = l10n.format(
       .boardNotifyLine, l10n.string(automation.notify?.labelKey ?? .boardNotifyNone))
+    workspace = graph.workspace.map {
+      l10n.format(.boardWorkspaceLine, Self.workspace($0, workspaces, l10n))
+    }
     let summary = BoardAutomationSummary(automation, text: text, next: next)
     self.next = summary.next
     strip = automation.runs.prefix(Self.stripLength).reversed().map(BoardAutomationSummary.tone)
+  }
+
+  /// workspace の名前（描くときの今の名前）。今の workspace に無ければ「削除済み」。
+  static func workspace(
+    _ persistentId: UUID, _ workspaces: AutomationWorkspaces, _ l10n: LocalizationStore
+  ) -> String {
+    workspaces.workspace(persistentId)?.name ?? l10n.string(.boardWorkspaceRemoved)
   }
 
   /// 報告と作業の文の出し先（「メニューバー」）。役割の名前（報告・作業）は使わない。

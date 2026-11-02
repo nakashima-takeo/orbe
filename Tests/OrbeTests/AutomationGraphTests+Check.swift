@@ -12,7 +12,9 @@ extension AutomationGraphTests {
     _ definitionNodes: [AutomationDefinition.Node], at place: String, _ label: String,
     line: UInt = #line
   ) {
-    XCTAssertThrowsError(try AutomationGraph.check(definitionNodes), label, line: line) {
+    XCTAssertThrowsError(
+      try AutomationGraph.check(definitionNodes, workspace: nil), label, line: line
+    ) {
       guard case .invalid(let message) = $0 as? AutomationError else {
         return XCTFail("\(label): \($0)", line: line)
       }
@@ -41,8 +43,8 @@ extension AutomationGraphTests {
 
   /// ノード自身の欄だけで決まる規則は、そのノードの欄を指して断る。
   func testANodesOwnFieldsAreRefusedAtTheirPlace() {
-    let command = { (script: String, directory: String?) in
-      AutomationActionDef.Method.command(BackgroundCommand(script: script, directory: directory))
+    let command = { (script: String) in
+      AutomationActionDef.Method.command(AutomationNodeCommand(script: script, directory: nil))
     }
     for (label, definitionNodes, place) in [
       ("ノードが 0 個", [AutomationDefinition.Node](), "nodes"),
@@ -52,11 +54,7 @@ extension AutomationGraphTests {
       ("鍵に英数字以外", changing(1) { $0.key = "取得" }, "nodes[1].key"),
       ("名前が 2 行", changing(1) { $0.name = "a\nb" }, "nodes[1].name"),
       ("1 分未満の間隔", changing(0) { $0.trigger = .scheduled(.every(30)) }, "nodes[0].trigger"),
-      ("空のコマンド", changing(0) { $0.action.method = command(" ", nil) }, "nodes[0].command"),
-      (
-        "相対の作業ディレクトリ", changing(0) { $0.action.method = command("x", "tmp") },
-        "nodes[0].directory"
-      ),
+      ("空のコマンド", changing(0) { $0.action.method = command(" ") }, "nodes[0].command"),
       ("裏で回せない CLI", changingAgent { $0.cli = "codex" }, "nodes[1].agent"),
       ("知らない CLI", changingAgent { $0.cli = "nope" }, "nodes[1].agent"),
       ("空のモデル", changingAgent { $0.model = " " }, "nodes[1].model"),
@@ -111,14 +109,14 @@ extension AutomationGraphTests {
       assertRefused(working(tool), at: "nodes[0].tools", tool)
     }
     for tool in ["mcp__plugin_core_backlog__get_issues", "Bash(gh search prs:*)"] {
-      XCTAssertNoThrow(try AutomationGraph.check(working(tool)), tool)
+      XCTAssertNoThrow(try AutomationGraph.check(working(tool), workspace: nil), tool)
     }
   }
 
   /// ノードどうしの組み合わせの規則は、直すべきノードの欄を指して断る。
   func testCombinationsAreRefusedAtTheNodeToFix() {
     let unknown = [Self.fetch("f"), Self.agent("r", from: ["gh"])]
-    XCTAssertThrowsError(try AutomationGraph.check(unknown)) {
+    XCTAssertThrowsError(try AutomationGraph.check(unknown, workspace: nil)) {
       XCTAssertEqual($0 as? AutomationError, .invalid(#"nodes[1].from: unknown node "gh""#))
     }
 
@@ -168,11 +166,12 @@ extension AutomationGraphTests {
   /// 毎回すべてを取るつながりは判定へ至る道にも書ける（取得 → 今の集合の処理 → 判定、判定が毎回すべてを取る）。
   func testTakingAllMayReachAJudge() {
     XCTAssertNoThrow(
-      try AutomationGraph.check([
-        Self.fetch("f"),
-        Self.taking(
-          .all, Self.agent("p", from: ["f"], deliver: .nextNode, coverage: .currentSet)),
-        Self.taking(.all, Self.agent("j", from: ["p"], deliver: .taskCandidates)),
-      ]))
+      try AutomationGraph.check(
+        [
+          Self.fetch("f"),
+          Self.taking(
+            .all, Self.agent("p", from: ["f"], deliver: .nextNode, coverage: .currentSet)),
+          Self.taking(.all, Self.agent("j", from: ["p"], deliver: .taskCandidates)),
+        ], workspace: nil))
   }
 }

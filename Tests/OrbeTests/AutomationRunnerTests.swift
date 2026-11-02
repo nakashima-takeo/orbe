@@ -39,7 +39,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     }
     runner = AutomationRunner(
       store: store, scheduler: scheduler, run: jobs.run,
-      workspaces: { AutomationWorkspaces(listed: [], home: nil) },
+      workspaces: { AutomationWorkspaces(all: [], home: nil) },
       recorded: { [unowned self] record in
         recorded.append(
           store.automation(record.end.automationId)?.graph.node(record.end.nodeId)?.key ?? "?")

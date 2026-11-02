@@ -419,6 +419,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationEndStopped
   case automationEndAgentMissing
   case automationEndDirectoryMissing
+  case automationEndWorkspaceMissing
   case automationEndNotStarted
   case automationEndToolsUnavailable
   case automationFailNoReply
@@ -663,6 +664,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardFresh
   case boardNodeTimeout
   case boardNodeDirectory
+  case boardNodeWorkspace
+  case boardWorkspaceLine
+  case boardWorkspaceRemoved
   case boardNodeNext
   case boardNodeAgent
   case boardNodeDefaultModel

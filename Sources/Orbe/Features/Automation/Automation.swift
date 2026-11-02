@@ -1,6 +1,6 @@
 import Foundation
 
-/// 自動化 1 つ。自動化はノードではなく、名前・通知・止めた時刻・版の番号と、ノードとつながり（グラフ）で中身を表す。ノードごとの
+/// 自動化 1 つ。自動化はノードではなく、名前・通知・止めた時刻・版の番号と、ノードとつながりと workspace（グラフ）で中身を表す。ノードごとの
 /// 状態がグラフのノードとちょうど揃うことは `AutomationStore` が保証する。
 struct Automation: Equatable, Identifiable {
   /// 永続の短い整数。使い回さない。
@@ -11,7 +11,7 @@ struct Automation: Equatable, Identifiable {
   var graph: AutomationGraph
   /// 止めた時刻。止めているのは時刻による予定と起動時の起こしだけ。
   var pausedAt: Date?
-  /// 定義の版。名前・通知・ノード・つながりのどれかが変わるたびに 1 増える（古い定義からの書き換えを断る印）。
+  /// 定義の版。名前・通知・workspace・ノード・つながりのどれかが変わるたびに 1 増える（古い定義からの書き換えを断る印）。
   var version: Int
   let createdAt: Date
   /// ノードごとの状態。
@@ -21,7 +21,8 @@ struct Automation: Equatable, Identifiable {
 
   /// 外の形（ノードに ID を添える）。
   var definition: AutomationDefinition {
-    AutomationDefinition(name: name, notify: notify, nodes: graph.definitionNodes)
+    AutomationDefinition(
+      name: name, notify: notify, workspace: graph.workspace, nodes: graph.definitionNodes)
   }
 
   /// 判定のノードを持つか。タスク候補の棚はこれを持つ自動化の単位。

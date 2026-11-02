@@ -5,9 +5,10 @@ protocol ControlAutomationTarget: AnyObject {
   /// 自動化を ID 順に列挙する（list_automations）。使えないセッションでは -32000 と理由。
   func controlListAutomations() -> Result<Any, ControlError>
   /// 自動化を作るか書き換える（set_automation）。automationId が nil なら作る。書き換えは version が要り、違えば -32000。未知の
-  /// automationId は -32004。
+  /// automationId は -32004。定義は外の形の JSON のまま渡し、workspace の席を今の workspace で写してから読む（読めなければ
+  /// -32602）。
   func controlSetAutomation(
-    automationId: Int?, version: Int?, _ definition: AutomationDefinition
+    automationId: Int?, version: Int?, _ definition: [String: Any]
   ) -> Result<Any, ControlError>
   /// 回の記録を新しい順に 1 ページ読む（list_automation_runs）。
   func controlListAutomationRuns(automationId: Int, nodeKey: String?, before: Int?, limit: Int?)
@@ -143,7 +144,7 @@ private typealias AutomationBody = (ControlAutomationTarget, AutomationParams) t
     Any, ControlError
   >
 
-/// params の型検査。定義は `definition` の欄を保存と同じ形（`AutomationDefinition`）で読み、読めない箇所を -32602 の文に入れる。
+/// params の型検査。定義は `definition` の欄がオブジェクトであることだけを見る（中身は workspace の写しの後に domain 側が読む）。
 private struct AutomationParams {
   let params: [String: Any]
 
@@ -231,17 +232,13 @@ private struct AutomationParams {
     }
   }
 
-  func definition() throws(ControlError) -> AutomationDefinition {
+  func definition() throws(ControlError) -> [String: Any] {
     guard let raw = params["definition"] else {
       throw ControlError(code: -32602, message: "missing definition")
     }
     guard let object = raw as? [String: Any] else {
       throw ControlError(code: -32602, message: "invalid definition")
     }
-    do throws(AutomationError) {
-      return try AutomationDefinition.decode(object)
-    } catch {
-      throw ControlError(code: -32602, message: AutomationDatabase.reason(error))
-    }
+    return object
   }
 }

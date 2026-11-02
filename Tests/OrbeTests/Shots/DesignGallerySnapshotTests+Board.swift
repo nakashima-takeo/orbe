@@ -123,6 +123,32 @@ extension DesignGallerySnapshotTests {
     try renderBoardCronSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardMapSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardJudgeOutcomeSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardWorkspaceSnapshots(write: write)
+  }
+
+  /// コマンドのノードのカードの「workspace」の欄: 自動化から継いだ・ノードに書いた・ノードに書いた workspace を消した・継いだ
+  /// workspace を消した（最新の回は workspace が見つからずに失敗）。
+  private func renderBoardWorkspaceSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void
+  ) throws {
+    let size = NSSize(width: 1440, height: 844)
+    func card(_ name: String, _ nodeKey: String) -> BoardModel {
+      let runner = DesignSceneFixtures.automationRunner(
+        DesignSceneFixtures.boardWorkspaceSamples(),
+        workspaces: DesignSceneFixtures.boardWorkspaces)
+      let model = BoardModel(automation: BoardAutomationModel(runner: runner), parts: [.automation])
+      if let id = runner.store.automations.first(where: { $0.name == name })?.id {
+        model.automation.tap(id)
+      }
+      model.automation.enterMap()
+      model.automation.tapNode(key: nodeKey)
+      return model
+    }
+    try write("board_workspace_inherited.png", card("PR の確認", "prs"), .ja, size)
+    try write("board_workspace_inherited_en.png", card("PR の確認", "prs"), .en, size)
+    try write("board_workspace_own.png", card("PR の確認", "sync"), .ja, size)
+    try write("board_workspace_removed.png", card("PR の確認", "archive"), .ja, size)
+    try write("board_workspace_removed_inherited.png", card("旧リポジトリの掃除", "clean"), .ja, size)
   }
 
   /// 定義を読めない自動化（一覧の先頭の行と、名前・理由・「修正を依頼」だけの詳細）と、不明な記録（Slack の取得のカード）。

@@ -69,6 +69,7 @@ extension AutomationText {
     case .stopped: l10n.string(.automationEndStopped)
     case .agentMissing(let cli): l10n.format(.automationEndAgentMissing, cli)
     case .directoryMissing(let directory): l10n.format(.automationEndDirectoryMissing, directory)
+    case .workspaceMissing: l10n.string(.automationEndWorkspaceMissing)
     case .notStarted: l10n.string(.automationEndNotStarted)
     case .toolsUnavailable(let tools):
       l10n.format(
