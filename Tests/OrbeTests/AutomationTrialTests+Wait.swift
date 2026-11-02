@@ -8,8 +8,8 @@ import XCTest
 /// 読む。新しい定義の試走が互いに消し合う、または際限なく溜まる。終わりを待つ AI が時間切れまで返らない、または消した自動化の
 /// 試走を待ち続ける。
 extension AutomationTrialTests {
-  /// 同じ自動化で始め直すと前の試走の手段が止まり、前の試走の ID は知らない試走になる。前の ID で待っている読み手にも、新しい
-  /// 試走ではなく知らない試走として返る。
+  /// 同じ自動化で始め直すと（保存した定義の試走を直す定義で始め直しても）前の試走の手段が止まり、前の試走の ID は知らない試走に
+  /// なる。前の ID で待っている読み手にも、新しい試走ではなく知らない試走として返る。
   func testStartingAgainStopsTheRunningTrialAndForgetsItsId() throws {
     let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
     let first = try trials.start(.saved(id), .init())
@@ -17,7 +17,11 @@ extension AutomationTrialTests {
     var replies: [Result<AutomationTrial, AutomationError>] = []
     trials.wait(first.id, timeout: .seconds(10)) { result, _ in replies.append(result) }
 
-    let second = try trials.start(.saved(id), .init())
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.name = "直した"
+    let second = try trials.start(
+      .unsaved(try store.check(.replace(id, version: current.version, rewrite))), .init())
     XCTAssertEqual(jobs.stopped, [calls("gh")[0]])
     XCTAssertNotEqual(second.id, first.id)
     guard case .failure(let error) = replies.first, replies.count == 1 else {
@@ -59,8 +63,8 @@ extension AutomationTrialTests {
     XCTAssertEqual(reply?.0?.running, true)
   }
 
-  /// 自動化を消すと、その自動化の試走（保存した定義でも直す定義でも）の手段が止まり、終わりを待つ読み手には時間切れを待たずに
-  /// 知らない試走と返る。新しい定義の試走は消した自動化を持ち主にしないので続く。
+  /// 自動化を消すと、その自動化の試走の手段が止まり、終わりを待つ読み手には時間切れを待たずに知らない試走と返る。新しい定義の
+  /// 試走は消した自動化を持ち主にしないので続く。
   func testDeletingTheAutomationStopsItsTrialAndAnswersItsWaiters() throws {
     let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
     let trial = try trials.start(.saved(id), .init())
@@ -83,21 +87,32 @@ extension AutomationTrialTests {
     XCTAssertTrue(unsaved.running)
   }
 
-  /// 新しい定義の試走は互いに置き換えず、11 個目を始めると最も古いものが止まって忘れられる。自動化の試走は数に入らない。
+  /// 新しい定義の試走は互いに置き換えず、11 個目を始めると最も古いものが止まって忘れられ、その ID で待っている読み手には知らない
+  /// 試走として返る。自動化の試走は数に入らない。
   func testNewDefinitionTrialsKeepTheNewestTen() throws {
     let saved = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
     let savedTrial = try trials.start(.saved(saved), .init())
-    let new = try (0..<AutomationTrials.newDefinitionTrials + 1).map { _ in
-      try trials.start(
+    let startNew = {
+      try self.trials.start(
         .unsaved(
-          try store.check(
+          try self.store.check(
             .create(
-              definition([fetch("new"), definitionNode("r", from: ["new"], deliver: .report)])))),
+              self.definition([
+                self.fetch("new"), self.definitionNode("r", from: ["new"], deliver: .report),
+              ])))),
         .init())
     }
+    let oldest = try startNew()
+    waitCalls("new", 1)
+    var reply: Result<AutomationTrial, AutomationError>?
+    trials.wait(oldest.id, timeout: .seconds(10)) { result, _ in reply = result }
+    let new = try [oldest] + (0..<AutomationTrials.newDefinitionTrials).map { _ in try startNew() }
 
-    XCTAssertThrowsError(try trials.trial(new[0].id)) {
-      XCTAssertEqual($0 as? AutomationError, .trialNotFound(new[0].id))
+    XCTAssertEqual(jobs.stopped, [calls("new")[0]])
+    guard case .failure(let error) = reply else { return XCTFail("待つ読み手に返っていない") }
+    XCTAssertEqual(error, .trialNotFound(oldest.id))
+    XCTAssertThrowsError(try trials.trial(oldest.id)) {
+      XCTAssertEqual($0 as? AutomationError, .trialNotFound(oldest.id))
     }
     for trial in new.dropFirst() { XCTAssertTrue(try trials.trial(trial.id) === trial) }
     XCTAssertTrue(try trials.trial(savedTrial.id) === savedTrial)
