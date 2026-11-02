@@ -105,9 +105,10 @@ extension ScmPanelTests {
   func testAPendingArrowOpenIsDroppedWhenAttentionLeavesTheList() throws {
     let opened = try keysPanel()
     let list = ScmListSource(panel: panel)
+    let enter = RowListKey(action: .enter, isRepeat: false)
     let leaves: [(String, () -> Void)] = [
       ("列から焦点が外れた", { list.focusDidChange(false) }),
-      ("Enter", { list.perform(RowListKey(action: .enter, isRepeat: false), in: list.rows) }),
+      ("Enter", { list.perform(enter, in: self.panel.layout) }),
       ("パネルが隠れた", { self.panel.isShown = false }),
     ]
     for (name, leave) in leaves {
