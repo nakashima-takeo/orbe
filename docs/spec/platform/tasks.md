@@ -56,7 +56,7 @@ AI は待ちに「解ける条件」を付けられる——「PR #214 にレビ
 
 タスクは workspace を [workspace の ID](workspace.md#workspace-の-id) で指す。改名しても root path を変えても結び付きは切れず、同じ root の workspace が 2 つあっても取り違えない。外（API・CLI）にも同じ ID と今の名前で見せる。
 
-**解決できない参照は「workspace なし」として扱う**——「なし」の判定はこの 1 規則だけ。workspace を削除してもタスクの側は書き換えないので、削除済みの workspace を指すタスクは、表示・API・絞り込みのどれでも「なし」と区別がつかない（workspace の ID は使い回さない）。書き換えないのは、workspace 機能からタスクへの書き込み経路を作らないため、保存の時機がずれた状態（workspace は戻るのにタスクの結び付けだけ外れる）を作らないため、そして workspace 構成の退避物を戻せば結び付きも戻るようにするため。
+**解決できない参照は「workspace なし」として扱う**——「なし」の判定はこの 1 規則だけ。workspace を削除してもタスクの側は書き換えないので、削除済みの workspace を指すタスクは、表示・API・絞り込みのどれでも「なし」と区別がつかない（workspace の ID は使い回さない）。書き換えないのは、workspace 機能からタスクへの書き込み経路を作らないため、保存の時機がずれた状態（workspace は戻るのにタスクの結び付けだけ外れる）を作らないため、そして workspaces.json が壊れて退避した原本（[persistence](persistence.md#互換と破損時の退避)）を戻せば結び付きも戻るようにするため。
 
 agent がタブの中から workspace を指定せずに足したタスクは、**呼び出し元タブの workspace** に付く（[Home](workspace.md#home) のタブからなら Home）。タブの外から足したとき、および呼び出し元タブが分からないとき（タブの環境 `ORBE_TAB` を受け継がない MCP クライアント経由など → [api](../control/api.md)）は「なし」。明示的に「なし」を指定することもできる。CLI の `--workspace current` は前面の workspace を指し、呼び出し元タブの workspace とは限らない（[cli](../control/cli.md)）。
 
