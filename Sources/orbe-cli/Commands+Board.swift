@@ -18,8 +18,9 @@ let boardUsage = """
 
   The board is a screen of the workspace beside its tabs. Only a workspace
   with a board takes these commands (`orb ws list --json` shows hasBoard).
+  The board shows widgets, at most one of each kind.
   KINDS: automation (automations: the request field, the list and the
-  right pane). A board holds each kind at most once.
+  right pane).
   add appends the widget; adding a widget already there changes nothing.
   rm removes it; removing a widget not there changes nothing. Removing
   automation keeps the automations themselves (`orb automation list`).
