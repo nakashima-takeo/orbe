@@ -109,6 +109,12 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
     XCTAssertEqual(session.unread, [0], "断った読みは行を渡さない")
     _ = session.call("read_run_rows", [:])
 
+    let nothing = session.call("report_nothing", ["why": "無い", "reason": "x"])
+    XCTAssertTrue(nothing.isError)
+    XCTAssertEqual(nothing.texts, ["unknown argument reason; report_nothing takes only why."])
+    XCTAssertFalse(session.answered, "断った申告は受けない")
+    XCTAssertTrue(session.rejected.isEmpty, "申告の道具の断りは数えない")
+
     let put = session.call("put_rows", ["rows": [["id": "a"]], "items": [["id": "b"]]])
     XCTAssertTrue(put.isError)
     XCTAssertEqual(
@@ -118,11 +124,36 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
     XCTAssertEqual(
       session.rejected, [AutomationBrokenLine(line: nil, fault: .unknownArgument("items"))])
     XCTAssertTrue(session.refusedLast)
-    XCTAssertTrue(session.call("report_nothing", ["why": "無い", "reason": "x"]).isError)
-    XCTAssertEqual(session.rejected.count, 1, "申告の道具の断りは数えない")
 
     XCTAssertFalse(session.call("put_rows", ["rows": [["id": "a"]]]).isError)
     XCTAssertFalse(session.refusedLast)
+
+    let failing = AutomationRunSession(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
+    XCTAssertTrue(failing.call("report_error", ["what": "落ちた", "reason": "x"]).isError)
+    XCTAssertNil(failing.error, "断った失敗の申告は受けない")
+    XCTAssertTrue(failing.rejected.isEmpty)
+  }
+
+  /// 申告の道具の理由（`why`・`what`）は文字列でなければ、欠けても型が違っても数えずに断る——空の理由で受けると、回の記録と
+  /// 画面に何も無い理由・失敗の理由が残らない。
+  func testAReportWithoutAStringReasonIsRefused() {
+    let session = AutomationRunSession(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
+    for arguments in [[:], ["why": 1]] as [[String: Any]] {
+      XCTAssertEqual(
+        session.call("report_nothing", arguments).texts, ["Give why as a string."], "\(arguments)")
+    }
+    for arguments in [[:], ["what": NSNull()]] as [[String: Any]] {
+      XCTAssertEqual(
+        session.call("report_error", arguments).texts, ["Give what as a string."], "\(arguments)")
+    }
+    XCTAssertFalse(session.answered)
+    XCTAssertNil(session.error)
+    XCTAssertTrue(session.rejected.isEmpty, "申告の断りは数えない")
+
+    XCTAssertFalse(session.call("report_error", ["what": "落ちた"]).isError)
+    XCTAssertEqual(session.error, "落ちた")
   }
 
   /// 空の配列は断った結果に数えないので、勧めどおり report_nothing を呼べる。report_error を持たない役割には、断られた後の

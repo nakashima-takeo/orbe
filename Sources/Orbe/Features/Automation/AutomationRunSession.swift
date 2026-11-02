@@ -263,7 +263,8 @@ final class AutomationRunSession {
       return .refused(
         "Orbe refused results you gave in this run: fix them and give them again\(fallback).")
     }
-    nothing = (arguments["why"] as? String) ?? ""
+    guard let why = arguments["why"] as? String else { return .refused("Give why as a string.") }
+    nothing = why
     return .ok("Noted: nothing this time.")
   }
 
@@ -289,7 +290,8 @@ final class AutomationRunSession {
   }
 
   private func reportError(_ arguments: [String: Any]) -> Reply {
-    error = (arguments["what"] as? String) ?? ""
+    guard let what = arguments["what"] as? String else { return .refused("Give what as a string.") }
+    error = what
     return .ok("Noted: this run has failed.")
   }
 

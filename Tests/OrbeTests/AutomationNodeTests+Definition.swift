@@ -132,6 +132,15 @@ extension AutomationNodeTests {
         "unknown nodes[1].trigger.expression"
       ),
       (
+        "cron の予定に間隔の欄",
+        node("trigger", ["kind": "cron", "expression": "0 9 * * *", "minutes": 5]),
+        "unknown nodes[1].trigger.minutes"
+      ),
+      (
+        "手で回す予定に欄", node("trigger", ["kind": "manual", "expression": "0 9 * * *"]),
+        "unknown nodes[1].trigger.expression"
+      ),
+      (
         "届いたときの予定に欄", node("trigger", ["kind": "arrival", "minutes": 5]),
         "unknown nodes[1].trigger.minutes"
       ),
