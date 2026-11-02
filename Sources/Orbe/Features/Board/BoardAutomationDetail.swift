@@ -71,6 +71,12 @@ struct BoardAutomationDetail: View {
           .foregroundStyle(Color.theme.textPrimary)
           .frame(minHeight: Self.nameLine)
         notifyRow
+        if let workspace = detail.workspace {
+          Text(workspace)
+            .font(Font.theme.codeSmall)
+            .foregroundStyle(Color.theme.textMuted)
+            .frame(minHeight: Self.lastLine)
+        }
       }
       .fixedSize(horizontal: false, vertical: true)
       .frame(maxWidth: .infinity, alignment: .leading)

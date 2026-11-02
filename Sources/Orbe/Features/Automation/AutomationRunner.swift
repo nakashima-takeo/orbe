@@ -52,8 +52,8 @@ import Observation
   /// 自動化ごとの、流している途中の一巡（置くのは `flow`。道は互いに交わらない）。
   var flows: [Int: [AutomationFlow]] = [:]
 
-  /// `workspaces` はタスク候補の付け先にできる今の workspace。判定のノードにだけ渡す。`admits` は自動化の ID とノードの ID から、
-  /// 番人に載せるかを決める。
+  /// `workspaces` は今の workspace の写しの読み口（判定に見せる付け先と、コマンドの走る場所を引く）。`admits` は自動化の ID と
+  /// ノードの ID から、番人に載せるかを決める。
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
@@ -322,7 +322,8 @@ extension AutomationRunner {
     trigger.holding = AutomationHolding(
       rows: Set(read.map { $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) } ?? []),
       defs: [defId])
-    let pass = AutomationNodePass(run: run, now: now, calendar: calendar, runSessions: runSessions)
+    let pass = AutomationNodePass(
+      run: run, now: now, calendar: calendar, runSessions: runSessions, workspaces: workspaces)
     trigger.current = pass.start(node, input) { [weak self] outcome in
       guard let self, !trigger.cancelled else { return }
       ended(trigger, defId, read, startedAt, outcome)

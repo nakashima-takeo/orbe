@@ -314,7 +314,7 @@ final class FakeControlTarget: ControlTarget {
   }
 
   func controlSetAutomation(
-    automationId: Int?, version: Int?, _ definition: AutomationDefinition
+    automationId: Int?, version: Int?, _ definition: [String: Any]
   ) -> Result<
     Any, ControlError
   > {
@@ -380,9 +380,9 @@ final class FakeControlTarget: ControlTarget {
 struct FakeSetAutomation {
   let automationId: Int?
   let version: Int?
-  let definition: AutomationDefinition
+  let definition: [String: Any]
 
-  init(_ automationId: Int?, _ version: Int?, _ definition: AutomationDefinition) {
+  init(_ automationId: Int?, _ version: Int?, _ definition: [String: Any]) {
     self.automationId = automationId
     self.version = version
     self.definition = definition

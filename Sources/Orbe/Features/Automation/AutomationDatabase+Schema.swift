@@ -46,6 +46,7 @@ extension AutomationDatabase {
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       name       TEXT    NOT NULL,
       notify     TEXT CHECK (notify IN ('menuBar', 'notificationCenter')),
+      workspace  TEXT,
       paused_at  INTEGER,
       version    INTEGER NOT NULL CHECK (version >= 1),
       created_at INTEGER NOT NULL

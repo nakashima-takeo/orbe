@@ -39,7 +39,8 @@ final class AutomationNodeTests: OrbeTestCase {
       definitionNode(
         3, "gh", "GitHub", .scheduled(.every(600)),
         AutomationActionDef(
-          method: .command(BackgroundCommand(script: "gh search prs", directory: "/Users/me/repo")),
+          method: .command(
+            AutomationNodeCommand(script: "gh search prs", directory: "/Users/me/repo")),
           timeoutMinutes: nil, coverage: .currentSet, destination: .nextNode)),
       definitionNode(
         nil, "judge", "判定", .scheduled(.cron(try BackgroundCron("0 9 * * *"))),
@@ -59,7 +60,7 @@ final class AutomationNodeTests: OrbeTestCase {
         nil, "say", "知らせ", .arrival,
         from: [.init(nodeKey: "gh"), .init(nodeKey: "post", take: .all)],
         AutomationActionDef(
-          method: .command(BackgroundCommand(script: "say hi", directory: nil)),
+          method: .command(AutomationNodeCommand(script: "say hi", directory: nil)),
           timeoutMinutes: nil, coverage: nil, destination: .sideEffect)),
       definitionNode(
         nil, "sum", "まとめ", .arrival, from: [.init(nodeKey: "gh", take: .all)],

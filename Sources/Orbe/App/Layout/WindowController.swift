@@ -368,11 +368,10 @@ final class WindowController: NSObject, NSWindowDelegate {
 extension AutomationWorkspaces {
   /// 今の workspace の値。
   init(_ session: SessionStore) {
-    listed = session.workspaces.indices.filter { !session.isHome($0) }.map {
-      let ws = session.workspaces[$0]
-      return AutomationWorkspace(
-        id: ws.id, persistentId: ws.persistentId, name: ws.name, root: ws.rootPath)
-    }
-    home = session.homeIndex.map { session.workspaces[$0].id }
+    self.init(
+      all: session.workspaces.map {
+        AutomationWorkspace(
+          id: $0.id, persistentId: $0.persistentId, name: $0.name, root: $0.rootPath)
+      }, home: session.homeIndex.map { session.workspaces[$0].id })
   }
 }

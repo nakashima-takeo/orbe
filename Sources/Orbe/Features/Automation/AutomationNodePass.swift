@@ -15,6 +15,8 @@ struct AutomationNodePass {
   let calendar: () -> Calendar
   /// agent の回の相手を Orbe の MCP へ渡す帳面。
   let runSessions: AutomationRunSessions
+  /// 今の workspace の写しの読み口。コマンドを起こす直前に 1 度だけ読み、走る workspace を今の root に解く。
+  let workspaces: () -> AutomationWorkspaces
 
   /// ノードの役割の入力。ケースが役割と 1 対 1 に対応し、役割と食い違う入力は呼び手の誤り。取得と仕事のケースは行の席を
   /// 持たない——外から届いた文面を、ツールを持ちうる agent の依頼文へ型の上で運ばないため。
@@ -96,7 +98,8 @@ struct AutomationNodePass {
     case nothing(String)
   }
 
-  /// 手段を起こす。結果は main で 1 度だけ返る。返る手で止めると、走っている呼び出しを止め、結果は返らない。
+  /// 手段を起こす。結果は main で 1 度だけ返る（起こさずに失敗した回も、この呼び出しの中では返さず main の次の巡りで返す）。
+  /// 返る手で止めると、走っている呼び出しを止め、結果は返らない。
   func start(
     _ node: AutomationGraph.Node, _ input: Input, completion: @escaping (Outcome) -> Void
   ) -> BackgroundRunHandle {
@@ -106,8 +109,19 @@ struct AutomationNodePass {
     let handle: BackgroundRunHandle
     switch node.action.method {
     case .command(let command):
+      guard let resolved = Self.resolved(command, in: node.workspace, workspaces) else {
+        DispatchQueue.main.async {
+          guard !stopped else { return }
+          completion(
+            .failed(
+              .ended(detail: ""),
+              Execution(commandLine: command.script, ending: .workspaceMissing, count: 0),
+              breach: nil))
+        }
+        return BackgroundRunHandle { stopped = true }
+      }
       let job = BackgroundJob(
-        work: .command(command, Self.commandInput(node, input)),
+        work: .command(resolved, Self.commandInput(node, input)),
         limits: BackgroundLimits(
           elapsed: elapsed, idle: nil, output: BackgroundLimits.command.output,
           stderr: BackgroundLimits.command.stderr))
@@ -144,6 +158,24 @@ struct AutomationNodePass {
         handle.stop()
       }
     }
+  }
+
+  /// 走る workspace を今の root に解いたコマンド（作業ディレクトリは root からの相対パスをつないだ絶対パス）。workspace が効かない
+  /// コマンドは書いたまま。workspace が今無ければ nil。
+  private static func resolved(
+    _ command: AutomationNodeCommand, in workspace: UUID?,
+    _ workspaces: () -> AutomationWorkspaces
+  ) -> BackgroundCommand? {
+    guard let workspace else {
+      return BackgroundCommand(script: command.script, directory: command.directory)
+    }
+    guard let relative = command.directory else {
+      preconditionFailure("a node that runs in a workspace has a directory")
+    }
+    guard let root = workspaces().workspace(workspace)?.root else { return nil }
+    let directory = URL(fileURLWithPath: root, isDirectory: true)
+      .appendingPathComponent(relative).standardized.path
+    return BackgroundCommand(script: command.script, directory: directory)
   }
 
   static func execution(_ result: BackgroundRunResult, count: Int = 0) -> Execution {

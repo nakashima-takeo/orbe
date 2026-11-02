@@ -198,28 +198,6 @@ extension DesignSceneFixtures {
       source: nil)
   }
 
-  /// 番人もノードの回も止まった走らせ役。
-  static func automationRunner(_ samples: [AutomationSample] = []) -> AutomationRunner {
-    automationRunner(store: automationStore(samples))
-  }
-
-  /// `store` の上の、番人もノードの回も止まった走らせ役。
-  static func automationRunner(store: AutomationStore) -> AutomationRunner {
-    let scheduler = BackgroundScheduler { _, _ in BackgroundRunHandle {} }
-    scheduler.now = { automationNow }
-    scheduler.calendar = { taskCalendar }
-    scheduler.arm = { _, _ in {} }
-    let runner = AutomationRunner(
-      store: store, scheduler: scheduler,
-      run: { _, _ in BackgroundRunHandle {} },
-      workspaces: { AutomationWorkspaces(listed: [], home: nil) }, recorded: { _ in },
-      defined: { _, _ in }, deleted: { _, _ in })
-    runner.now = { automationNow }
-    runner.calendar = { taskCalendar }
-    runner.start()
-    return runner
-  }
-
   // MARK: - ノード
 
   /// 見本の cron のいつ。見本には正しい式だけを書く。
@@ -233,14 +211,15 @@ extension DesignSceneFixtures {
 
   nonisolated static func commandNode(
     _ key: String, _ name: String, _ trigger: AutomationNode.Trigger, from inputs: [String] = [],
-    script: String, directory: String? = nil, coverage: AutomationCoverage? = nil,
-    deliver: AutomationActionDef.Destination = .nextNode
+    script: String, workspace: UUID? = nil, directory: String? = nil,
+    coverage: AutomationCoverage? = nil, deliver: AutomationActionDef.Destination = .nextNode
   ) -> AutomationDefinition.Node {
     AutomationDefinition.Node(
       id: nil, key: key, name: name, trigger: trigger,
       from: inputs.map { AutomationDefinition.Input(nodeKey: $0) },
       action: AutomationActionDef(
-        method: .command(BackgroundCommand(script: script, directory: directory)),
+        method: .command(
+          AutomationNodeCommand(script: script, workspace: workspace, directory: directory)),
         timeoutMinutes: nil, coverage: coverage, destination: deliver), maxItems: nil)
   }
 

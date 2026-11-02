@@ -31,17 +31,27 @@ final class AutomationDatabase {
 
   // MARK: - 自動化
 
-  func insertAutomation(name: String, notify: AutomationNotify?, createdAt: Date) throws -> Int {
+  func insertAutomation(
+    name: String, notify: AutomationNotify?, workspace: UUID?, createdAt: Date
+  ) throws -> Int {
     try db.run(
-      "INSERT INTO automations (name, notify, version, created_at) VALUES (?, ?, 1, ?)",
-      [.text(name), Self.text(notify?.rawValue), Self.instant(createdAt)])
+      "INSERT INTO automations (name, notify, workspace, version, created_at) VALUES (?, ?, ?, 1, ?)",
+      [
+        .text(name), Self.text(notify?.rawValue), Self.text(workspace?.uuidString),
+        Self.instant(createdAt),
+      ])
     return Int(db.lastInsertRowID)
   }
 
-  func updateAutomation(_ id: Int, name: String, notify: AutomationNotify?, version: Int) throws {
+  func updateAutomation(
+    _ id: Int, name: String, notify: AutomationNotify?, workspace: UUID?, version: Int
+  ) throws {
     try db.run(
-      "UPDATE automations SET name = ?, notify = ?, version = ? WHERE id = ?",
-      [.text(name), Self.text(notify?.rawValue), .integer(Int64(version)), .integer(Int64(id))])
+      "UPDATE automations SET name = ?, notify = ?, workspace = ?, version = ? WHERE id = ?",
+      [
+        .text(name), Self.text(notify?.rawValue), Self.text(workspace?.uuidString),
+        .integer(Int64(version)), .integer(Int64(id)),
+      ])
   }
 
   func setPaused(_ id: Int, at: Date?) throws {

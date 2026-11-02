@@ -34,7 +34,7 @@ struct AutomationActionDef: Equatable {
   static let agentTimeoutMinutes = 10
 
   enum Method: Equatable {
-    case command(BackgroundCommand)
+    case command(AutomationNodeCommand)
     case agent(AutomationNodeAgent)
   }
 
@@ -103,6 +103,15 @@ enum AutomationTake: String, Hashable {
   case new
   /// 回ごとに、今有効な項目と残す期間の内の出来事のすべて。
   case all
+}
+
+/// ノードのコマンド。`/bin/sh -c` で走らせる。workspace が効くとき（ノードのか自動化の）`directory` は root からの相対パスで、
+/// 回の始めにその時点の root で解く。効かないときは絶対パスか省略（ホーム）。
+struct AutomationNodeCommand: Equatable {
+  var script: String
+  /// 走らせる workspace の `Workspace.persistentId`。省略は自動化の workspace を継ぐ。
+  var workspace: UUID?
+  var directory: String?
 }
 
 /// ノードの agent。

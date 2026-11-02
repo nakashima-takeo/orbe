@@ -7,8 +7,8 @@ enum BoardSegmentLook: Equatable {
   case emphasized
 }
 
-/// 選んだノードのカードの値。地図に出さないノードの中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・作業ディレクトリ・
-/// 回の記録）を出すのはここだけ。
+/// 選んだノードのカードの値。地図に出さないノードの中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・workspace・
+/// 作業ディレクトリ・回の記録）を出すのはここだけ。
 struct BoardAutomationNodeValue: Equatable {
   let id: AutomationNodeID
   let role: String
@@ -17,7 +17,8 @@ struct BoardAutomationNodeValue: Equatable {
   let state: BoardAutomationStanding.State?
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
-  /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・作業ディレクトリ・次回の順。ノードに無い項目は出さない。
+  /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・workspace・作業ディレクトリ・次回の順。ノードに無い項目は
+  /// 出さない。
   /// 出力先はノードの外の行き場所（タスク候補・報告の出し先など）だけで、後ろのノードへ渡す取得・処理には出さない。
   let facts: [Fact]
   /// 指示文かコマンド。
@@ -58,10 +59,11 @@ struct BoardAutomationNodeValue: Equatable {
 }
 
 extension BoardAutomationNodeValue {
-  /// `next` はノードが次に予定で回る時刻（実効で止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数。
+  /// `next` はノードが次に予定で回る時刻（実効で止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数、
+  /// `workspaces` は描くときの今の workspace（走る workspace の名前を引く）。
   init?(
     _ automation: Automation, nodeId: AutomationNodeID, text: AutomationText, running: Bool,
-    next: Date?, open: Int
+    next: Date?, open: Int, workspaces: AutomationWorkspaces
   ) {
     guard let node = automation.graph.node(nodeId) else { return nil }
     let l10n = text.l10n
@@ -75,7 +77,8 @@ extension BoardAutomationNodeValue {
     case .agent(let agent): body = agent.instruction
     case .command(let command): body = command.script
     }
-    facts = Self.facts(automation, node, text: text, next: next, open: open)
+    facts = Self.facts(
+      automation, node, text: text, Outside(next: next, open: open, workspaces: workspaces))
     breach = nodeState.breach.map { Self.breach($0, text: text) }
     lastText = Self.lastText(nodeState.runs, text: text)
     runs = BoardAutomationSummary.lines(nodeState.runs, node: node, text: text)
@@ -107,9 +110,16 @@ extension BoardAutomationNodeValue {
     return nil
   }
 
+  /// 項目が自動化の外から引く、描くときの値。
+  private struct Outside {
+    let next: Date?
+    let open: Int
+    let workspaces: AutomationWorkspaces
+  }
+
   private static func facts(
-    _ automation: Automation, _ node: AutomationGraph.Node, text: AutomationText, next: Date?,
-    open: Int
+    _ automation: Automation, _ node: AutomationGraph.Node, text: AutomationText,
+    _ outside: Outside
   ) -> [Fact] {
     let l10n = text.l10n
     let graph = automation.graph
@@ -142,7 +152,8 @@ extension BoardAutomationNodeValue {
     }
     switch action.destination {
     case .nextNode: break
-    case .taskCandidates: fact(.boardNodeDestination, l10n.format(.boardNodeTaskCandidates, open))
+    case .taskCandidates:
+      fact(.boardNodeDestination, l10n.format(.boardNodeTaskCandidates, outside.open))
     case .report:
       fact(.boardNodeDestination, BoardAutomationDetailValue.reports(automation.notify, l10n))
     case .sideEffect: fact(.boardNodeDestination, l10n.string(.boardNodeNothing))
@@ -151,13 +162,19 @@ extension BoardAutomationNodeValue {
       facts.append(pending(state.pending, maxItems: entity.maxItems, l10n))
     }
     fact(.boardNodeTimeout, l10n.format(.boardNodeMinutes, node.timeoutMinutes))
+    if let workspace = node.workspace {
+      fact(
+        .boardNodeWorkspace,
+        BoardAutomationDetailValue.workspace(workspace, outside.workspaces, l10n))
+    }
     if case .command(let command) = action.method, let directory = command.directory {
       fact(.boardNodeDirectory, directory)
     }
     if case .scheduled = entity.trigger {
       fact(
         .boardNodeNext,
-        automation.halted(node.id) ? l10n.string(.automationPaused) : next.map(text.stamp) ?? "")
+        automation.halted(node.id)
+          ? l10n.string(.automationPaused) : outside.next.map(text.stamp) ?? "")
     }
     return facts
   }

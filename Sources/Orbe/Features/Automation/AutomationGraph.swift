@@ -5,6 +5,8 @@ import Foundation
 struct AutomationGraph: Equatable {
   /// 定義の順（ノードの位置の順）。
   let nodes: [Node]
+  /// 自動化の workspace（`Workspace.persistentId`）。自分の workspace を書かないコマンドのノードが継ぐ。
+  let workspace: UUID?
   /// 位置ごとの、入力のノードの位置（`from` の中の順）。
   private let upstream: [[Int]]
   /// 位置ごとの、このノードを入力に名指すノードの位置。
@@ -17,6 +19,8 @@ struct AutomationGraph: Equatable {
     /// `from` の中の順。
     let inputs: [AutomationNodeEdge]
     let role: AutomationNodeRole
+    /// 走る workspace（コマンドのノードだけ。ノードの workspace か、無ければ自動化の workspace）。
+    let workspace: UUID?
 
     var id: AutomationNodeID { entity.id }
     var key: String { entity.key }
@@ -39,8 +43,13 @@ struct AutomationGraph: Equatable {
     /// 何をするか（省略を解いた動作と入力の集合）。書き換えで何をするかが変わったかはこれで比べる——省略していた値に既定と
     /// 同じ値を書き足しただけでは変わらない。
     var behavior: Behavior {
-      Behavior(
-        method: action.method, timeoutMinutes: timeoutMinutes, coverage: coverage,
+      var method = action.method
+      if case .command(var command) = method {
+        command.workspace = workspace
+        method = .command(command)
+      }
+      return Behavior(
+        method: method, timeoutMinutes: timeoutMinutes, coverage: coverage,
         destination: action.destination, inputs: Set(inputs))
     }
   }
@@ -54,23 +63,26 @@ struct AutomationGraph: Equatable {
     let inputs: Set<AutomationNodeEdge>
   }
 
-  /// 検証を通ったノードの外の形と、導いた役割と、入力のノードの位置。
+  /// 検証を通ったノードの外の形と、導いた役割・走る workspace と、入力のノードの位置。
   struct Checked: Equatable {
     let definitionNode: AutomationDefinition.Node
     let role: AutomationNodeRole
+    let workspace: UUID?
     let upstream: [Int]
   }
 
-  /// 検証を通った外の形に、ノードの実体（ID と使う定義の ID）を当てて組む。`entities` と `checked` は同じ順。
-  init(_ checked: [Checked], entities: [AutomationNode]) {
+  /// 検証を通った外の形に、ノードの実体（ID と使う定義の ID）を当てて組む。`entities` と `checked` は同じ順。`workspace` は検証に
+  /// 渡した自動化の workspace。
+  init(_ checked: [Checked], entities: [AutomationNode], workspace: UUID?) {
     precondition(checked.count == entities.count, "every checked node has an entity")
+    self.workspace = workspace
     nodes = zip(checked, entities).map { checked, entity in
       Node(
         entity: entity, action: checked.definitionNode.action,
         inputs: zip(checked.upstream, checked.definitionNode.from).map { index, input in
           AutomationNodeEdge(
             from: entities[index].id, take: input.take, maxAgeHours: input.maxAgeHours)
-        }, role: checked.role)
+        }, role: checked.role, workspace: checked.workspace)
     }
     upstream = checked.map(\.upstream)
     var downstream = Array(repeating: [Int](), count: checked.count)

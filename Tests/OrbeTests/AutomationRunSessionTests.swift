@@ -162,8 +162,10 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
         choices: AutomationJudgeChoices(
           open: [waiting],
           workspaces: AutomationWorkspaces(
-            listed: [AutomationWorkspace(id: 3, persistentId: UUID(), name: "orbe", root: "/src")],
-            home: 1))), writer: AutomationNodeID(1))
+            all: [
+              AutomationWorkspace(id: 1, persistentId: UUID(), name: "Home", root: "/state/home"),
+              AutomationWorkspace(id: 3, persistentId: UUID(), name: "orbe", root: "/src"),
+            ], home: 1))), writer: AutomationNodeID(1))
     _ = session.call("read_run_rows", [:])
 
     XCTAssertEqual(

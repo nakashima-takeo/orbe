@@ -3,12 +3,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の 9 動詞の params の語と型検査。定義は `definition` の欄を保存と同じ形で読み、読めない箇所を定義の中の場所付きで
-/// -32602 の文に入れる。値と組み合わせ（グラフ）の検証は target が持つ。
+/// 自動化の 9 動詞の params の語と型検査。定義は `definition` の欄がオブジェクトであることだけを見て、外の形の JSON のまま
+/// target へ運ぶ。定義の読みと値・組み合わせ（グラフ）の検証は target が持つ。
 ///
-/// 壊れると何が起きるか: ノードの書き忘れが形の上で通り、何もしない自動化ができる。ノードがコマンドと agent の両方の形を持っても
-/// 黙ってどちらかに落ちる。取得の性質や予定の書き損じが黙ってどちらかに落ち、AI の意図と違う予定で回る。断りの文が定義の
-/// どこを直せばよいかを言わず、AI が直せない。`paused` に文字列を渡して止めたつもりが再開になる。
+/// 壊れると何が起きるか: 定義の欄が別の値に化けて target へ届く。`paused` に文字列を渡して止めたつもりが再開になる。
 extension ControlWireTests {
   /// 自動化の 9 動詞の正しい params 一式（`validRequests` の一部）。
   var automationRequests: [(method: String, params: [String: Any])] {
@@ -53,7 +51,7 @@ extension ControlWireTests {
     ["name": "Slack: 自分宛", "nodes": [fetch, judge]]
   }
 
-  /// cron 式は前後の空白を除いて受けたまま運ぶ。ノードの id・入力の取り方・件数の上限と、書き換えの版も運ぶ。
+  /// 定義は外の形の JSON のまま target へ運ぶ（workspace の席の写しと読みは target が持つ）。書き換えの版も運ぶ。
   func testSetAutomationCarriesTheDefinitionToTheTarget() throws {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
@@ -67,78 +65,17 @@ extension ControlWireTests {
     XCTAssertEqual(fake.setAutomations.last?.automationId, 3)
     XCTAssertEqual(fake.setAutomations.last?.version, 5)
     XCTAssertEqual(
-      fake.setAutomations.last?.definition,
-      AutomationDefinition(
-        name: "Slack: 自分宛", notify: nil,
-        nodes: [
-          AutomationDefinition.Node(
-            id: nil, key: "slack", name: "Slack: 自分宛",
-            trigger: .scheduled(.cron(try BackgroundCron("*/10 9-18 * * 1-5"))), from: [],
-            action: AutomationActionDef(
-              method: .agent(
-                AutomationNodeAgent(
-                  cli: "claude", model: "haiku", tools: ["mcp__slack__search"], instruction: "DM")),
-              timeoutMinutes: nil, coverage: .newArrivals, destination: .nextNode),
-            maxItems: nil),
-          AutomationDefinition.Node(
-            id: AutomationNodeID(4), key: "judge", name: "判定", trigger: .arrival,
-            from: [AutomationDefinition.Input(nodeKey: "slack", maxAgeHours: 24)],
-            action: AutomationActionDef(
-              method: .agent(
-                AutomationNodeAgent(
-                  cli: "claude", model: "opus", tools: [], instruction: "自分がやること")),
-              timeoutMinutes: nil, coverage: nil, destination: .taskCandidates),
-            maxItems: 30),
-        ]),
-      "agent は省略で claude")
+      fake.setAutomations.last.map { NSDictionary(dictionary: $0.definition) },
+      NSDictionary(dictionary: definition))
   }
 
-  func testSetAutomationRejectsAnIncompleteOrAmbiguousDefinition() {
+  func testSetAutomationRejectsADefinitionThatIsNotAnObject() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
-    func with(_ key: String, _ value: Any?) -> [String: Any] {
-      var changed = fetch
-      changed[key] = value
-      return ["definition": ["name": "x", "nodes": [changed, judge]]]
-    }
 
     for (label, params, message) in [
+      ("定義が無い", [String: Any](), "missing definition"),
       ("定義がオブジェクトでない", ["definition": "x"], "invalid definition"),
-      ("ノードが無い", ["definition": ["name": "x"]], "missing nodes"),
-      (
-        "知らない通知先", ["definition": ["name": "x", "notify": "mail", "nodes": [fetch, judge]]],
-        "invalid notify: pass menuBar or notificationCenter"
-      ),
-      ("予定が無い", with("trigger", nil), "missing nodes[0].trigger"),
-      ("agent のモデルが無い", with("model", nil), "missing nodes[0].model"),
-      ("数でない出来事の日数", with("retentionDays", "long"), "invalid nodes[0].retentionDays"),
-      (
-        "ノードが 2 つの形", with("command", "gh api"),
-        "invalid nodes[0]: pass either command (a shell command) or instruction (an agent)"
-      ),
-      (
-        "毎回全件の取得の性質", with("coverage", "everything"),
-        "invalid nodes[0].coverage: pass currentSet or newArrivals"
-      ),
-      (
-        "知らない取り方", with("from", [["node": "x", "take": "some"]]),
-        "invalid nodes[0].from[0].take: pass new or all"
-      ),
-      (
-        "数でない件数の上限", with("maxItems", "many"), "invalid nodes[0].maxItems"
-      ),
-      (
-        "知らない予定の種類", with("trigger", ["kind": "daily"]),
-        "invalid nodes[0].trigger.kind: pass interval, cron, manual or arrival"
-      ),
-      (
-        "cron の欄が範囲外", with("trigger", ["kind": "cron", "expression": "0 24 * * *"]),
-        "invalid nodes[0].trigger.expression: invalid hour field: 24"
-      ),
-      (
-        "間隔が文字列", with("trigger", ["kind": "interval", "minutes": "30"]),
-        "invalid nodes[0].trigger.minutes"
-      ),
     ] {
       let response = wire.request(id: 1, method: "set_automation", params: params)
       XCTAssertEqual(errorCode(response), -32602, label)

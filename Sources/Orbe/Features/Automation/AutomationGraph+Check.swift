@@ -3,15 +3,23 @@ import Foundation
 // グラフの検証。断りの文は定義の中の場所（`nodes[2].from` など。制御 API が読む誤りに付ける場所と同じ書き方）で始まる。
 
 extension AutomationGraph {
-  /// 検証して、ノードごとの役割と入力のノードの位置を返す。最初に見つけた誤り 1 つで断る。順は「自分の欄だけで決まるもの → 鍵の
-  /// 名指し → 名指しの向き → 行き先」。ノードの `id` は見ない（書き換えの口が確かめる）。
-  static func check(_ definitionNodes: [AutomationDefinition.Node]) throws(AutomationError)
-    -> [Checked]
+  /// 検証して、ノードごとの役割・走る workspace と入力のノードの位置を返す。`workspace` は自動化の workspace。最初に見つけた
+  /// 誤り 1 つで断る。順は「自動化の workspace → 自分の欄だけで決まるもの → 鍵の名指し → 名指しの向き → 行き先」。
+  /// ノードの `id` は見ない（書き換えの口が確かめる）。workspace が今あるかも見ない——消した workspace を指す保存した定義を、
+  /// 読めない定義にしないため（回の始めに解けなければその回が始まらない）。
+  static func check(_ definitionNodes: [AutomationDefinition.Node], workspace: UUID?)
+    throws(AutomationError) -> [Checked]
   {
     guard !definitionNodes.isEmpty else { throw .invalid("nodes: at least one node is required") }
-    var checked: [(definitionNode: AutomationDefinition.Node, role: AutomationNodeRole)] = []
+    if workspace != nil, !definitionNodes.contains(where: \.inheritsWorkspace) {
+      throw .invalid(
+        "workspace: no command node runs in it; write it only when a command node without its own "
+          + "workspace uses it")
+    }
+    var checked: [Own] = []
     for (index, definitionNode) in definitionNodes.enumerated() {
-      checked.append(try Self.checked(definitionNode, at: "nodes[\(index)]"))
+      checked.append(
+        try Self.checked(definitionNode, at: "nodes[\(index)]", inheriting: workspace))
     }
     let upstream = try Self.upstream(of: checked.map(\.definitionNode))
     try Self.checkAcyclic(checked.map(\.definitionNode), upstream)
@@ -22,14 +30,22 @@ extension AutomationGraph {
     try Self.checkDestinations(checked.map(\.definitionNode), upstream, downstream)
     return checked.indices.map {
       Checked(
-        definitionNode: checked[$0].definitionNode, role: checked[$0].role, upstream: upstream[$0])
+        definitionNode: checked[$0].definitionNode, role: checked[$0].role,
+        workspace: checked[$0].workspace, upstream: upstream[$0])
     }
   }
 
-  /// 自分の欄だけで決まる規則を見て、役割を導く。名前は 1 行に整えて持つ。
-  private static func checked(_ definitionNode: AutomationDefinition.Node, at path: String)
-    throws(AutomationError) -> (definitionNode: AutomationDefinition.Node, role: AutomationNodeRole)
-  {
+  /// 自分の欄（と継ぐ自動化の workspace）だけで決まった、ノードの外の形と役割と走る workspace。
+  private struct Own {
+    let definitionNode: AutomationDefinition.Node
+    let role: AutomationNodeRole
+    let workspace: UUID?
+  }
+
+  /// 自分の欄（と継ぐ自動化の workspace）だけで決まる規則を見て、役割と走る workspace を導く。名前は 1 行に整えて持つ。
+  private static func checked(
+    _ definitionNode: AutomationDefinition.Node, at path: String, inheriting workspace: UUID?
+  ) throws(AutomationError) -> Own {
     var definitionNode = definitionNode
     try checkKey(definitionNode.key, path)
     definitionNode.name = try line(definitionNode.name, "\(path).name")
@@ -40,7 +56,7 @@ extension AutomationGraph {
         throw .invalid("\(path).trigger: \(error.message)")
       }
     }
-    try checkMethod(definitionNode.action.method, path)
+    let runsIn = try checkMethod(definitionNode.action.method, path, inheriting: workspace)
     if let minutes = definitionNode.action.timeoutMinutes,
       !AutomationActionDef.timeoutRange.contains(minutes)
     {
@@ -71,7 +87,7 @@ extension AutomationGraph {
           "\(path).maxItems: a currentSet node copies its whole input, so it has no maxItems")
       }
     }
-    return (definitionNode, role)
+    return Own(definitionNode: definitionNode, role: role, workspace: runsIn)
   }
 
   /// 入力と、受け手の器（件数の上限・届いたら）。
@@ -215,16 +231,30 @@ extension AutomationGraph {
     }
   }
 
-  private static func checkMethod(_ method: AutomationActionDef.Method, _ path: String)
-    throws(AutomationError)
-  {
+  /// 手段の欄を見て、走る workspace（コマンドのノードだけ。ノードの workspace か、無ければ継ぐ自動化の workspace）を返す。
+  /// workspace が効くコマンドの作業ディレクトリは root からの相対パスで必ず書き、効かないコマンドは絶対パスか省略——workspace を
+  /// 消した後の書き戻しで、相対パスの定義が黙ってホームで走らないため。
+  private static func checkMethod(
+    _ method: AutomationActionDef.Method, _ path: String, inheriting inherited: UUID?
+  ) throws(AutomationError) -> UUID? {
     switch method {
     case .command(let command):
-      do throws(BackgroundJobError) {
-        try BackgroundJob.command(command).validate()
-      } catch {
-        let field = error == .relativeDirectory ? "directory" : "command"
-        throw .invalid("\(path).\(field): \(error.message)")
+      guard !isBlank(command.script) else { throw .invalid("\(path).command: command is empty") }
+      let workspace = command.workspace ?? inherited
+      let absolute = command.directory?.hasPrefix("/")
+      switch (workspace, absolute) {
+      case (.some, nil):
+        throw .invalid(
+          "\(path).directory: a node that runs in a workspace needs a directory relative to its root "
+            + "(\".\" for the root)")
+      case (.some, true?):
+        throw .invalid("\(path).directory: write the directory relative to the workspace root")
+      case (nil, false?):
+        throw .invalid(
+          "\(path).directory: a relative directory needs a workspace (the node's or the "
+            + "automation's)")
+      default:
+        return workspace
       }
     case .agent(let agent):
       switch AgentCatalog.profile(agent.cli)?.headless {
@@ -244,6 +274,7 @@ extension AutomationGraph {
       guard !isBlank(agent.instruction) else {
         throw .invalid("\(path).instruction: instruction is empty")
       }
+      return nil
     }
   }
 

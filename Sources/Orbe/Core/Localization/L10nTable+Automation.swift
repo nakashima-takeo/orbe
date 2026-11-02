@@ -88,6 +88,7 @@ extension L10n {
     .automationEndStopped: ("中断", "interrupted"),
     .automationEndAgentMissing: ("%@ がインストールされていません", "%@ is not installed"),
     .automationEndDirectoryMissing: ("作業ディレクトリ %@ が見つかりません", "working directory %@ not found"),
+    .automationEndWorkspaceMissing: ("workspace が見つかりません", "workspace not found"),
     .automationEndNotStarted: ("起動に失敗", "failed to launch"),
     .automationEndToolsUnavailable: ("使用できないツール：%@", "unavailable tools: %@"),
     .automationFailNoReply: ("応答なしで終了", "ended without a response"),

@@ -124,6 +124,32 @@ extension DesignGallerySnapshotTests {
     try renderBoardMapSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardPausedNodeSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardJudgeOutcomeSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardWorkspaceSnapshots(write: write)
+  }
+
+  /// コマンドのノードのカードの「workspace」の欄: 自動化から継いだ・ノードに書いた・ノードに書いた workspace を消した・継いだ
+  /// workspace を消した（最新の回は workspace が見つからずに失敗）。
+  private func renderBoardWorkspaceSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void
+  ) throws {
+    let size = NSSize(width: 1440, height: 844)
+    func card(_ name: String, _ nodeKey: String) -> BoardModel {
+      let runner = DesignSceneFixtures.automationRunner(
+        DesignSceneFixtures.boardWorkspaceSamples(),
+        workspaces: DesignSceneFixtures.boardWorkspaces)
+      let model = BoardModel(automation: BoardAutomationModel(runner: runner), parts: [.automation])
+      if let id = runner.store.automations.first(where: { $0.name == name })?.id {
+        model.automation.tap(id)
+      }
+      model.automation.enterMap()
+      model.automation.tapNode(key: nodeKey)
+      return model
+    }
+    try write("board_workspace_inherited.png", card("PR の確認", "prs"), .ja, size)
+    try write("board_workspace_inherited_en.png", card("PR の確認", "prs"), .en, size)
+    try write("board_workspace_own.png", card("PR の確認", "sync"), .ja, size)
+    try write("board_workspace_removed.png", card("PR の確認", "archive"), .ja, size)
+    try write("board_workspace_removed_inherited.png", card("旧リポジトリの掃除", "clean"), .ja, size)
   }
 
   /// 定義を読めない自動化（一覧の先頭の行と、名前・理由・「修正を依頼」だけの詳細）と、不明な記録（Slack の取得のカード）。
@@ -215,38 +241,6 @@ extension DesignGallerySnapshotTests {
     try write("board_map_paused.png", map(3), .ja, size)
     try write(
       "board_map_narrow.png", map(0, nodeKey: "contact"), .ja, NSSize(width: 1000, height: 844))
-  }
-
-  /// ノードごとの停止: 選んだ予定の取得（github）と、選んでいない処理（dedupe）を地図の space で止める。地図の行に停止の印と
-  /// 「一時停止中」、カードの頭と「次回」に「一時停止中」、フッターの space は「再開」。
-  private func renderBoardPausedNodeSnapshots(
-    write: (String, BoardModel, Language, NSSize) throws -> Void,
-    board: ([AutomationSample]?, Int) -> BoardModel
-  ) throws {
-    for language in [Language.ja, .en] {
-      let model = board(DesignSceneFixtures.boardMapSamples(), 0)
-      model.automation.enterMap()
-      model.automation.tapNode(key: "dedupe")
-      model.automation.perform(.toggleNodePause)
-      model.automation.tapNode(key: "github")
-      model.automation.perform(.toggleNodePause)
-      try write(
-        "board_map_paused_node\(language == .ja ? "" : "_en").png", model, language,
-        NSSize(width: 1440, height: 844))
-    }
-    // 予定のあるノードをすべて止めた自動化: 一覧の行と見出しの「次回」の位置に「ノードを一時停止中」。
-    for language in [Language.ja, .en] {
-      let all = board(DesignSceneFixtures.boardMapSamples(), 0)
-      if let automation = all.automation.selectedAutomation {
-        for node in automation.graph.nodes {
-          guard case .scheduled = node.entity.trigger else { continue }
-          _ = try all.automation.runner.pause(automation.id, nodeId: node.id, true)
-        }
-      }
-      try write(
-        "board_map_paused_scheduled\(language == .ja ? "" : "_en").png", all, language,
-        NSSize(width: 1440, height: 844))
-    }
   }
 
   /// 判定のノードの回の終わり方ごとのカード: 形式エラーをその場で修正済み・修正されず失敗（agent と、コマンドの出力の形式

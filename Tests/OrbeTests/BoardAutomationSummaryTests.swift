@@ -87,7 +87,8 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       "前提: 最新の回が失敗したノード")
     func look(running: Bool) -> BoardNodeLook? {
       let detail = BoardAutomationDetailValue(
-        automation, text: text, running: { $0 == failing && running }, open: 0, next: nil)
+        automation, text: text, running: { $0 == failing && running }, open: 0, next: nil,
+        workspaces: AutomationWorkspaces(all: [], home: nil))
       return detail.rows.lazy.compactMap { row -> BoardNodeLook? in
         guard case .node(let node) = row.content, node.id == failing else { return nil }
         return node.look
@@ -100,7 +101,8 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(look(running: true), .running, "走っていれば止めているより先に言う")
     let card = try XCTUnwrap(
       BoardAutomationNodeValue(
-        automation, nodeId: failing, text: text, running: false, next: nil, open: 0))
+        automation, nodeId: failing, text: text, running: false, next: nil, open: 0,
+        workspaces: AutomationWorkspaces(all: [], home: nil)))
     XCTAssertEqual(card.state, .paused)
     XCTAssertEqual(card.mark, .failure, "頭の印は前回の成否のまま")
   }
@@ -108,7 +110,8 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   /// 見本の 12 ノードの線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
   func testMapLanesFollowTheInputs() throws {
     let detail = BoardAutomationDetailValue(
-      automations()[0], text: text, running: { _ in false }, open: 0, next: nil)
+      automations()[0], text: text, running: { _ in false }, open: 0, next: nil,
+      workspaces: AutomationWorkspaces(all: [], home: nil))
 
     XCTAssertEqual(detail.rows.map(\.lanes.lane), [0, 1, 2, 3, 4, 5, 3, 4, 5, 2, 0, 4, 0, 2])
     XCTAssertEqual(detail.laneCount, 6)

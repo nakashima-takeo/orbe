@@ -17,6 +17,8 @@ enum AutomationEnding: Equatable {
   case agentMissing(String)
   /// 作業ディレクトリが無い。
   case directoryMissing(String)
+  /// コマンドの走る workspace が無い（消した）。
+  case workspaceMissing
   /// ほかの理由で起動できなかった（下の層の理由の英文）。
   case notStarted(String)
   /// 指定した MCP のツールが始まりの時点で揃わなかった（揃わなかった名前）。
@@ -48,6 +50,7 @@ enum AutomationEnding: Equatable {
     case .stopped: "stopped"
     case .agentMissing(let cli): "not started (\(cli) is not installed)"
     case .directoryMissing(let directory): "not started (directory missing: \(directory))"
+    case .workspaceMissing: "not started (workspace missing)"
     case .notStarted(let reason): "not started (\(reason))"
     case .toolsUnavailable(let tools): BackgroundEnding.unavailable(tools)
     }
@@ -220,6 +223,7 @@ extension AutomationEnding: Codable {
     case "agentMissing": self = .agentMissing(try c.decode(String.self, forKey: .cli))
     case "directoryMissing":
       self = .directoryMissing(try c.decode(String.self, forKey: .directory))
+    case "workspaceMissing": self = .workspaceMissing
     case "notStarted": self = .notStarted(try c.decode(String.self, forKey: .reason))
     case "toolsUnavailable": self = .toolsUnavailable(try c.decode([String].self, forKey: .tools))
     default:
@@ -247,6 +251,7 @@ extension AutomationEnding: Codable {
     case .directoryMissing(let directory):
       try c.encode("directoryMissing", forKey: .kind)
       try c.encode(directory, forKey: .directory)
+    case .workspaceMissing: try c.encode("workspaceMissing", forKey: .kind)
     case .notStarted(let reason):
       try c.encode("notStarted", forKey: .kind)
       try c.encode(reason, forKey: .reason)

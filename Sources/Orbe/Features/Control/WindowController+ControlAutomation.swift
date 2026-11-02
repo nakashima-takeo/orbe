@@ -2,7 +2,7 @@ import Foundation
 import OrbeSessionLog
 
 /// 自動化の 9 動詞と、裏の agent の回の道具の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
-/// `AutomationTrials` に任せ、ここは応答の形を組む。
+/// `AutomationTrials` に任せ、ここは定義の workspace の席を外の形と保存の形の間で写し、定義を読み、応答の形を組む。
 extension WindowController {
   /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
   func controlListAutomations() -> Result<Any, ControlError> {
@@ -16,10 +16,12 @@ extension WindowController {
   }
 
   func controlSetAutomation(
-    automationId: Int?, version: Int?, _ definition: AutomationDefinition
+    automationId: Int?, version: Int?, _ definition: [String: Any]
   ) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      [
+      let definition = try AutomationDefinition.decode(
+        try automationRunner.workspaces().inward(definition))
+      return [
         "automation": try automationJSON(
           try automationRunner.set(automationId, version: version, definition))
       ]
@@ -210,7 +212,7 @@ extension WindowController {
     var json: [String: Any] = [
       "automationId": automation.id,
       "version": automation.version,
-      "definition": AutomationWire.object(automation.definition),
+      "definition": definitionJSON(AutomationWire.object(automation.definition)),
       "paused": automation.paused,
       "nodes": nodeObjects,
     ]
@@ -226,10 +228,15 @@ extension WindowController {
   private func unreadableJSON(_ broken: AutomationUnreadable) -> [String: Any] {
     [
       "automationId": broken.id, "version": broken.version,
-      "definition": (try? JSONSerialization.jsonObject(with: Data(broken.definition.utf8)))
-        ?? [String: Any](),
+      "definition": definitionJSON(
+        try? JSONSerialization.jsonObject(with: Data(broken.definition.utf8))),
       "definitionError": broken.reason,
     ]
+  }
+
+  /// 定義の外の形（workspace の席を今の起動ごとの ID に写す）。定義を外へ出す道はすべてここを通す。
+  private func definitionJSON(_ stored: Any?) -> [String: Any] {
+    automationRunner.workspaces().outward(stored as? [String: Any] ?? [:])
   }
 
   private static func automationNotFound(_ id: Int) -> ControlError {

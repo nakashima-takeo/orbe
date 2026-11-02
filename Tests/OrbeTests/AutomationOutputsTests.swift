@@ -262,7 +262,7 @@ final class AutomationOutputsTests: OrbeTestCase {
   }
 
   private func listed(_ workspaces: [AutomationWorkspace]) -> AutomationWorkspaces {
-    AutomationWorkspaces(listed: workspaces, home: nil)
+    AutomationWorkspaces(all: workspaces, home: nil)
   }
 
   /// 仕事の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は report_nothing で終える。

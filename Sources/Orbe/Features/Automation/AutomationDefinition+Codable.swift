@@ -72,12 +72,14 @@ extension AutomationDefinition.Input: Codable {
   }
 }
 
-/// `command`（＋`directory`）か `instruction`（＋`model`・`agent`〔既定 claude〕・`tools`）のちょうど一方と、`timeoutMinutes`・
-/// `coverage`・`deliver`。`deliver` の省略は次のノード。外の定義のノードの欄と同じオブジェクトに並び、保存（`action_defs.action`）は
-/// この欄だけのオブジェクト。
+/// `command`（＋`workspace`・`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方と、
+/// `timeoutMinutes`・`coverage`・`deliver`。`deliver` の省略は次のノード。外の定義のノードの欄と同じオブジェクトに並び、保存
+/// （`action_defs.action`）はこの欄だけのオブジェクト。`workspace` は保存の形（`Workspace.persistentId` の文字列）で読み書きし、
+/// 外の形の起動ごとの ID との写しは制御の境界（`AutomationWorkspaces`）が持つ。
 extension AutomationActionDef: Codable {
   private enum CodingKeys: String, CodingKey {
-    case command, directory, agent, model, tools, instruction, timeoutMinutes, coverage, deliver
+    case command, workspace, directory, agent, model, tools, instruction, timeoutMinutes, coverage,
+      deliver
   }
 
   init(from decoder: Decoder) throws {
@@ -93,6 +95,7 @@ extension AutomationActionDef: Codable {
     switch method {
     case .command(let command):
       try c.encode(command.script, forKey: .command)
+      try c.encodeIfPresent(command.workspace, forKey: .workspace)
       try c.encodeIfPresent(command.directory, forKey: .directory)
     case .agent(let agent):
       try c.encode(agent.cli, forKey: .agent)
@@ -113,13 +116,14 @@ extension AutomationActionDef: Codable {
           forKey: key, in: c, debugDescription: "a command node has no \(key.stringValue)")
       }
       return .command(
-        BackgroundCommand(
+        AutomationNodeCommand(
           script: try c.decode(String.self, forKey: .command),
+          workspace: try c.decodeIfPresent(UUID.self, forKey: .workspace),
           directory: try c.decodeIfPresent(String.self, forKey: .directory)))
     case (false, true):
-      guard !c.contains(.directory) else {
+      if let key = [CodingKeys.workspace, .directory].first(where: c.contains) {
         throw DecodingError.dataCorruptedError(
-          forKey: .directory, in: c, debugDescription: "an agent node has no directory")
+          forKey: key, in: c, debugDescription: "an agent node has no \(key.stringValue)")
       }
       return .agent(
         AutomationNodeAgent(

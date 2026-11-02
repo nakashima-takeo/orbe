@@ -8,11 +8,20 @@ import XCTest
 /// 一覧が 0 件を返し、AI が自動化を作り直して二重に動かす。ほかの動詞が「見つからない」と答え、AI が消えたと読み違える。
 extension WindowControllerAutomationControlTests {
   /// 読めない自動化は一覧の自分の場所に、行から組めた定義（ノードの id つき）・版・理由で載り、回の記録はノードの鍵で読める。
-  /// 候補の一覧はほかの動詞と同じく読めない理由で断る。一覧の id と版を添えた `set_automation` で、同じノードのまま直る。
+  /// 定義の workspace の席も読める自動化と同じく外の形に写る（今の workspace に無ければ `null`）。候補の一覧はほかの動詞と
+  /// 同じく読めない理由で断る。一覧の id と版を添えた `set_automation` で、同じノードのまま直る。
   func testAnUnreadableAutomationIsListedWithItsReasonAndCanBeFixed() throws {
     try {
       let store = AutomationStore()
-      let id = try store.create(Self.definition(), now: Date()).id
+      var broken = Self.definition()
+      broken.workspace = UUID()
+      broken.nodes[0].action.method = .command(
+        AutomationNodeCommand(script: "true", directory: "."))
+      broken.nodes.append(
+        DesignSceneFixtures.commandNode(
+          "say", "知らせる", .manual, from: ["fetch"], script: "say", workspace: UUID(),
+          directory: "bin", deliver: .sideEffect))
+      let id = try store.create(broken, now: Date()).id
       try store.record(id, nodeKey: "fetch", at: Date(), outcome: DesignSceneFixtures.fetched([]))
       try store.read {
         try $0.db.run(
@@ -39,7 +48,9 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(refused.code, -32000, "見つからないではなく、読めない理由で断る")
     let definition = try XCTUnwrap(entry["definition"] as? [String: Any])
     let nodes = try XCTUnwrap(definition["nodes"] as? [[String: Any]])
-    XCTAssertEqual(nodes.map { $0["key"] as? String }, ["fetch", "judge"])
+    XCTAssertEqual(nodes.map { $0["key"] as? String }, ["fetch", "judge", "say"])
+    XCTAssertTrue(definition["workspace"] is NSNull, "永続 ID を外に出さない")
+    XCTAssertTrue(nodes[2]["workspace"] is NSNull, "永続 ID を外に出さない")
     var fixed = Self.definition()
     for index in fixed.nodes.indices {
       fixed.nodes[index].id = (nodes[index]["id"] as? Int).map(AutomationNodeID.init)

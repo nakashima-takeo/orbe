@@ -177,20 +177,3 @@ struct AutomationJudgeChoices: Equatable {
   let open: [AutomationProposal]
   let workspaces: AutomationWorkspaces
 }
-
-/// 候補の付け先にできる workspace。
-struct AutomationWorkspaces: Equatable {
-  /// 判定に見せる workspace（Home を除く。サイドバーの順）。
-  let listed: [AutomationWorkspace]
-  /// Home の起動ごとの ID。付け先にこれを書いた行は付け先なし（Home に付く）として受ける——コマンドの判定は
-  /// `orb ws list --json` から Home の ID を書きうる。
-  let home: Int?
-}
-
-/// 判定に付け先として見せる workspace 1 つ。`id` は起動ごとの ID で、1 回の中でしか使わず保存しない。
-struct AutomationWorkspace: Equatable {
-  let id: Int
-  let persistentId: UUID
-  let name: String
-  let root: String
-}
