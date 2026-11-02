@@ -122,6 +122,7 @@ extension DesignGallerySnapshotTests {
     try renderBoardNotifySnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardCronSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardMapSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardPausedNodeSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardJudgeOutcomeSnapshots(write: write, board: { board($0, row: $1) })
   }
 
@@ -214,6 +215,25 @@ extension DesignGallerySnapshotTests {
     try write("board_map_paused.png", map(3), .ja, size)
     try write(
       "board_map_narrow.png", map(0, nodeKey: "contact"), .ja, NSSize(width: 1000, height: 844))
+  }
+
+  /// ノードごとの停止: 選んだ予定の取得（github）と、選んでいない処理（dedupe）を地図の space で止める。地図の行に停止の印と
+  /// 「一時停止中」、カードの頭と「次回」に「一時停止中」、フッターの space は「再開」。
+  private func renderBoardPausedNodeSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: ([AutomationSample]?, Int) -> BoardModel
+  ) throws {
+    for language in [Language.ja, .en] {
+      let model = board(DesignSceneFixtures.boardMapSamples(), 0)
+      model.automation.enterMap()
+      model.automation.tapNode(key: "dedupe")
+      model.automation.perform(.toggleNodePause)
+      model.automation.tapNode(key: "github")
+      model.automation.perform(.toggleNodePause)
+      try write(
+        "board_map_paused_node\(language == .ja ? "" : "_en").png", model, language,
+        NSSize(width: 1440, height: 844))
+    }
   }
 
   /// 判定のノードの回の終わり方ごとのカード: 形式エラーをその場で修正済み・修正されず失敗（agent と、コマンドの出力の形式
