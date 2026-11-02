@@ -40,9 +40,11 @@ extension AutomationStore {
     fileprivate let current: Current?
   }
 
-  /// 書き込みの結果と、ノードごとの変化（作ったときはどれも空）。
+  /// 書き込みの結果と、ノードごとの変化（作ったときは全ノードが足したノード）。
   struct Written {
     let automation: Automation
+    /// 足したノード。
+    let added: [AutomationNodeID]
     /// 何をするか（省略を解いた動作と入力の集合）が変わったノード。決まりを外した印を下ろした。
     let reworked: [AutomationNodeID]
     /// 外したノード。
@@ -99,7 +101,10 @@ extension AutomationStore {
   func apply(_ checked: CheckedWrite, now: Date) throws(AutomationError) -> Written {
     let at = TaskItem.storedInstant(now)
     guard let current = checked.current else {
-      return Written(automation: try insert(checked, at: at), reworked: [], removed: [])
+      let automation = try insert(checked, at: at)
+      return Written(
+        automation: automation, added: automation.graph.nodes.map(\.id), reworked: [],
+        removed: [])
     }
     return try rewrite(current, checked, at: at)
   }
@@ -154,7 +159,7 @@ extension AutomationStore {
         old.graph.workspace == definition.workspace, old.graph.nodes.map(\.entity) == entities,
         old.graph.definitionNodes.map(\.from) == checked.nodes.map(\.definitionNode.from)
       {
-        return Written(automation: old, reworked: [], removed: [])
+        return Written(automation: old, added: [], reworked: [], removed: [])
       }
       let removed = current.nodeIds.filter {
         !Set(checked.nodes.compactMap(\.definitionNode.id)).contains($0)
@@ -183,8 +188,9 @@ extension AutomationStore {
       try memory.forgetUnheld(db, now: at)
       try memory.recount(id, db, now: at)
       return Written(
-        automation: memory.automation(id) ?? automation, reworked: rewired.reworked,
-        removed: removed)
+        automation: memory.automation(id) ?? automation,
+        added: checked.nodes.indices.filter { checked.nodes[$0].definitionNode.id == nil }
+          .map { entities[$0].id }, reworked: rewired.reworked, removed: removed)
     }
   }
 

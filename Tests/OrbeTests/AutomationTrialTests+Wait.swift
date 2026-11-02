@@ -27,7 +27,7 @@ extension AutomationTrialTests {
     var rewrite = current.definition
     rewrite.name = "直した"
     let second = try trials.start(
-      .unsaved(try store.check(.replace(id, version: current.version, rewrite))), .init())
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
     XCTAssertEqual(jobs.stopped, [calls("gh")[0]])
     XCTAssertNotEqual(second.id, first.id)
     guard case .failure(let error) = replies.first, replies.count == 1 else {
@@ -75,10 +75,8 @@ extension AutomationTrialTests {
     let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
     let trial = try trials.start(.saved(id), .init())
     let unsaved = try trials.start(
-      .unsaved(
-        try store.check(
-          .create(definition([fetch("new"), definitionNode("r", from: ["new"], deliver: .report)])))
-      ),
+      try unsaved(
+        .create(definition([fetch("new"), definitionNode("r", from: ["new"], deliver: .report)]))),
       .init())
     waitCalls("gh", 1)
     waitCalls("new", 1)
@@ -100,12 +98,11 @@ extension AutomationTrialTests {
     let savedTrial = try trials.start(.saved(saved), .init())
     let startNew = {
       try self.trials.start(
-        .unsaved(
-          try self.store.check(
-            .create(
-              self.definition([
-                self.fetch("new"), self.definitionNode("r", from: ["new"], deliver: .report),
-              ])))),
+        try self.unsaved(
+          .create(
+            self.definition([
+              self.fetch("new"), self.definitionNode("r", from: ["new"], deliver: .report),
+            ]))),
         .init())
     }
     let oldest = try startNew()

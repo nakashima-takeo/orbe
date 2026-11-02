@@ -4,10 +4,42 @@ import Foundation
 /// 足すノードに ID が無く、ID で引くグラフを組めないため。保存した自動化はグラフを同じ形に組み直して（`AutomationGraph.checked`）、
 /// 書く前の定義は確かめの結果のまま、同じ規則で解く。
 extension AutomationTrial {
-  /// 範囲を解く形: 定義の順の検証を通ったノードと、試走の持ち主の自動化（新しい定義の試走には無い）。
+  /// 範囲を解く形: 定義の順の検証を通ったノードと、鍵を引く保存した自動化（書く前の定義には無い）。
   struct Shape {
     let nodes: [AutomationGraph.Checked]
-    let owner: Int?
+    let automationId: Int?
+  }
+
+  /// 外の形の範囲（入口・行き先・道のノードの鍵）。
+  struct Keys {
+    let from: [String]
+    let to: [String]
+    let path: [String]
+  }
+
+  /// 写しの上の自動化で解いた範囲。
+  struct Range {
+    /// 範囲を解いた写しの上の自動化（新しい定義では写しの中だけの ID）。
+    let automationId: Int
+    let to: [AutomationNodeID]
+    /// 道——入口のどれかの子孫か入口そのもので、行き先のどれかの祖先か行き先そのもののノード（定義の順）。
+    let path: [AutomationGraph.Node]
+
+    /// 道の根（道の上の入力を持たないノード）。
+    var roots: [AutomationGraph.Node] {
+      let ids = Set(path.map(\.id))
+      return path.filter { ids.isDisjoint(with: $0.inputNodeIds) }
+    }
+  }
+
+  /// 与えた行: 入口と書くノード（取得の入口ならその取得、入力のある入口ならただ 1 つの上流）の定義の順の位置と、その出力にする行。
+  struct Given {
+    let entry: Int
+    let writer: Int
+    let rows: [AutomationNodeRow]
+
+    /// 取得の入口に与えたか（その取得は動かない）。
+    var fetched: Bool { writer == entry }
   }
 
   /// 位置で解いた範囲。
@@ -18,8 +50,8 @@ extension AutomationTrial {
     let path: [Int]
   }
 
-  /// 範囲を解く。知らない鍵は、持ち主の自動化があればそのノードが無い（`nodeNotFound`）、無ければ定義の中の参照の誤り（`invalid`）。
-  /// どの行き先にも届かない入口・どの入口からも届かない行き先は `invalid`。
+  /// 範囲を解く。知らない鍵は、保存した自動化で引くならそのノードが無い（`nodeNotFound`）、書く前の定義なら定義の中の参照の誤り
+  /// （`invalid`）。どの行き先にも届かない入口・どの入口からも届かない行き先は `invalid`。
   static func span(of shape: Shape, _ request: Request) throws(AutomationError) -> Span {
     let nodes = shape.nodes
     var downstream = Array(repeating: [Int](), count: nodes.count)
@@ -44,10 +76,10 @@ extension AutomationTrial {
       var positions: [Int] = []
       for (index, key) in keys.enumerated() {
         guard let position = nodes.firstIndex(where: { $0.key == key }) else {
-          guard let owner = shape.owner else {
+          guard let automationId = shape.automationId else {
             throw .invalid("\(name)[\(index)]: unknown node \"\(key)\"")
           }
-          throw .nodeNotFound(owner, key)
+          throw .nodeNotFound(automationId, key)
         }
         positions.append(position)
       }
@@ -77,12 +109,13 @@ extension AutomationTrial {
     return positions.filter { seen.insert($0).inserted }
   }
 
-  /// 与えた行を、道の根（ちょうど 1 つ）の役割に合わせて読む。取得は取得の読み方でその取得の出力に、入力のあるノードは文字列の
+  /// 与えた行（1 行以上）を、道の根（ちょうど 1 つ）の役割に合わせて読む。取得は取得の読み方でその取得の出力に、入力のあるノードは文字列の
   /// `id` を持つ行として受けてその上流の出力にする（上流がちょうど 1 つのときだけ）。下流へ渡す id の接頭（書くノードの ID）を
   /// 含めた大きさで確かめるが、書く前の定義の足すノードは ID がまだ無いので仮の 0 で測る（写しに書いた後に、振った ID で読み直す）。
   static func given(_ rows: [String], in span: Span, of shape: Shape) throws(AutomationError)
     -> Given
   {
+    guard !rows.isEmpty else { throw .invalid("rows must have at least one row") }
     let path = Set(span.path)
     let roots = span.path.filter { path.isDisjoint(with: shape.nodes[$0].upstream) }
     guard roots.count == 1, let entry = roots.first else {

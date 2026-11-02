@@ -194,9 +194,10 @@ let automationUsage = """
   --node pauses one node. resume restarts it.
   try runs the nodes on a copy and returns at once (nothing saved or notified;
   side effects are held), printing the trial id. With --definition it tries the
-  definition on stdin before writing it: new without <id>, a rewrite of <id> from
-  --version with it. --rows gives the entry node one JSON object per line of the
-  file. trial reads a trial by its id per node; --wait exits 124 on timeout.
+  definition on stdin before it is written: a new automation without <id>, or a
+  rewrite of <id> from the version given with --version. --rows gives the entry
+  node one JSON object per line of the file. trial reads a trial by its id per
+  node; --wait exits 124 on timeout.
   list prints one automation per line: id, state (active / paused /
   running), name, trigger, next run, last run (from the run record:
   fetched and new when it has a source, then proposed, the command's

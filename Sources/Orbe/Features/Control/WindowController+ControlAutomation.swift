@@ -27,11 +27,14 @@ extension WindowController {
     }
   }
 
-  /// 書き込みの入口（`set_automation` と、書く前の定義の `try_automation` が通る）。定義を読み、workspace の席を確かめ、ストアで
-  /// 確かめる——断りの集合と順番が両方の口で同じになる。
+  /// 書き込みの入口（`set_automation` と、書く前の定義の `try_automation` が通る）。版は書き換える自動化と組みでだけ受け、定義を
+  /// 読み、workspace の席を確かめ、ストアで確かめる——断りの集合と順番が両方の口で同じになる。
   private func checkedWrite(_ automationId: Int?, _ version: Int?, _ definition: [String: Any])
     throws(AutomationError) -> AutomationStore.CheckedWrite
   {
+    if version != nil, automationId == nil {
+      throw .invalid("version: pass it only with the automationId of the automation to rewrite")
+    }
     let definition = try AutomationDefinition.decode(definition)
     try automationRunner.workspaces().checkSeats(of: definition)
     return try automationStore.check(
@@ -175,14 +178,15 @@ extension WindowController {
   private func trialTarget(_ automationId: Int?, _ version: Int?, _ definition: [String: Any]?)
     throws(AutomationError) -> AutomationTrial.Target
   {
-    if version != nil, automationId == nil || definition == nil {
-      throw .invalid("version: pass it only with automationId and definition, to try a rewrite")
-    }
     guard let definition else {
+      if version != nil {
+        throw .invalid("version: pass it only with a definition, the rewrite to try")
+      }
       guard let automationId else { throw .invalid("missing automationId or definition") }
       return .saved(automationId)
     }
-    return .unsaved(try checkedWrite(automationId, version, definition))
+    let checked = try checkedWrite(automationId, version, definition)
+    return .unsaved(checked.write, nodes: checked.nodes)
   }
 
   func controlAutomationTrial(

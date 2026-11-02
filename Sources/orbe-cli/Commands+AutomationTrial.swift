@@ -50,7 +50,7 @@ private func checkTrialTarget(id: Int?, version: Int?, definition: Bool) {
   }
 }
 
-/// 入口に与える行。ファイルの 1 行 1 JSON オブジェクトで、空行は飛ばす（改行は LF と CRLF）。
+/// 入口に与える行。ファイルの 1 行 1 JSON オブジェクトで、空行は飛ばす（改行は LF と CRLF）。行が 1 つも無いファイルは断る。
 private func rows(at path: String) -> [[String: Any]] {
   guard let data = FileManager.default.contents(atPath: path) else {
     usageDie("--rows cannot read \(path)")
@@ -65,6 +65,7 @@ private func rows(at path: String) -> [[String: Any]] {
     else { usageDie("--rows line \(index + 1) is not a JSON object") }
     rows.append(object)
   }
+  guard !rows.isEmpty else { usageDie("--rows \(path) has no rows") }
   return rows
 }
 

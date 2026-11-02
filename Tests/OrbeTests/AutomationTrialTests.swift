@@ -68,6 +68,12 @@ final class AutomationTrialTests: OrbeTestCase {
     AutomationDefinition(name: "自動化", notify: nil, nodes: definitionNodes)
   }
 
+  /// 書く前の定義の試走の対象（本番のストアで確かめる）。
+  func unsaved(_ write: AutomationStore.Write) throws -> AutomationTrial.Target {
+    let checked = try store.check(write)
+    return .unsaved(checked.write, nodes: checked.nodes)
+  }
+
   func define(_ definitionNodes: [AutomationDefinition.Node]) throws -> Int {
     try runner.set(nil, definition(definitionNodes)).id
   }

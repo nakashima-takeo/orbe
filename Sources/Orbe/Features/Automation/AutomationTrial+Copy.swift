@@ -48,6 +48,17 @@ extension AutomationStore {
     }
   }
 
+  /// 止めるノードが読んだ行を、手段を起こさずに読んだことにする（読んだ位置を読む上限の番号まで進める）。書いた時点の起こしで
+  /// 止めるノードが取る行を、次の流しで読み直さないため（本番では、その時点で走った副作用・仕事がその行を受け取っている）。
+  func consume(_ read: AutomationIntake.Read, of nodeId: AutomationNodeID, in id: Int, now: Date)
+    throws(AutomationError)
+  {
+    try commit(sweepingAt: nil) { db, memory in
+      try db.advance(nodeId, read.reach)
+      try memory.recount(id, db, now: now, nodeIds: [nodeId])
+    }
+  }
+
   /// ノードの回が新しく足した `fresh` 行のうち、番号の順で `keeping` 行を超えた分を写しから消し、その表の最後の番号を、残った
   /// 行が記録する最も大きい番号（項目の表は項目・版・無効化の番号）まで戻す。写しは、その回が新しい行を `keeping` 行だけ出
   /// した状態と同じになる（読んだ位置・読む前に期限で消えた数・起こす決まりが本番の意味のまま揃う）。確定の直後、下流が読む

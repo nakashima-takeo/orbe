@@ -24,7 +24,8 @@ extension WindowControllerAutomationControlTests {
   }
 
   /// 書く前の定義の誤り（形・定義の中の参照・workspace の席・新しい定義のノードの id・この自動化のノードでない id・版の欠け・
-  /// 版の食い違い・知らない自動化）は、`set_automation` と同じコードと文で断られ、試走は始まらない。
+  /// 版の食い違い・知らない自動化・書き換える自動化の無い版）は、`set_automation` と同じコードと文で断られ、試走は始まらない。
+  /// `set_automation` も、書き換える自動化の無い版を -32602 で断り、新しい自動化を作らない。
   func testAnUnsavedDefinitionIsRefusedExactlyAsSetAutomationRefusesIt() throws {
     let wc = try launch()
     let id = try set(wc, Self.definition())
@@ -45,6 +46,7 @@ extension WindowControllerAutomationControlTests {
       Attempt(automationId: id, version: nil, definition: json(saved.definition)),
       Attempt(automationId: id, version: 7, definition: json(saved.definition)),
       Attempt(automationId: 99, version: 1, definition: json(Self.definition())),
+      Attempt(automationId: nil, version: 1, definition: json(Self.definition())),
     ] {
       let definition = attempt.definition ?? [:]
       let label =
@@ -63,6 +65,9 @@ extension WindowControllerAutomationControlTests {
       XCTAssertEqual(tried.code, written.code, label)
       XCTAssertEqual(tried.message, written.message, label)
     }
+    XCTAssertEqual(
+      refusal(wc.controlSetAutomation(automationId: nil, version: 1, json(Self.definition())))?
+        .code, -32602)
     XCTAssertEqual(wc.automationStore.automations, [saved])
     XCTAssertThrowsError(try wc.automationTrials.trial(1), "試走は始まらない")
   }

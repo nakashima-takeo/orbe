@@ -4,8 +4,8 @@ import Foundation
 protocol ControlAutomationTarget: AnyObject {
   /// 自動化を ID 順に列挙する（list_automations）。使えないセッションでは -32000 と理由。
   func controlListAutomations() -> Result<Any, ControlError>
-  /// 自動化を作るか書き換える（set_automation）。automationId が nil なら作る。書き換えは version が要り、違えば -32000。未知の
-  /// automationId は -32004。定義は外の形の JSON のまま渡す。読めない定義と、今の workspace に無い席は -32602（場所付き）。
+  /// 自動化を作るか書き換える（set_automation）。automationId が nil なら作る（version は受けない）。書き換えは version が要り、
+  /// 違えば -32000。未知の automationId は -32004。定義は外の形の JSON のまま渡す。読めない定義と、今の workspace に無い席は -32602（場所付き）。
   func controlSetAutomation(
     automationId: Int?, version: Int?, _ definition: [String: Any]
   ) -> Result<Any, ControlError>
