@@ -46,6 +46,19 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(wide.last, "未実行")
   }
 
+  /// 次回: 予定のあるノードがすべて止まっていれば「一時停止中」、一部だけなら出さない（残りの次の時刻は走らせ役が渡す）。
+  func testTheNextSaysPausedWhenEveryScheduledNodeIsPaused() throws {
+    var automation = try XCTUnwrap(automations().first)
+    let scheduled = automation.graph.nodes.filter {
+      if case .scheduled = $0.entity.trigger { true } else { false }
+    }
+    XCTAssertGreaterThan(scheduled.count, 1, "前提: 予定のあるノードが 2 つ以上")
+    automation.states[scheduled[0].id]?.pausedAt = DesignSceneFixtures.taskToday
+    XCTAssertNil(BoardAutomationSummary(automation, text: text, next: nil).next)
+    for node in scheduled { automation.states[node.id]?.pausedAt = DesignSceneFixtures.taskToday }
+    XCTAssertEqual(BoardAutomationSummary(automation, text: text, next: nil).next, "一時停止中")
+  }
+
   /// 名前の右の状態（実行中・停止中）と前回の印は混ぜない。失敗したノードのある自動化を流している間も印は失敗のまま、止めて
   /// いる自動化の印は前回の成否のまま。
   func testListRowKeepsTheStateApartFromTheLastResult() throws {
