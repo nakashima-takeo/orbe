@@ -131,6 +131,29 @@ extension WindowControllerAutomationNoticeTests {
     XCTAssertEqual(center.removed, ["automation.\(id).\(weekly)"])
   }
 
+  /// 定義を読めない自動化を消しても、その全ノードの通知を取り下げる（ノードは定義からでなく、ノードの台帳から引く）。
+  @MainActor func testDeletingAnUnreadableAutomationWithdrawsEveryNode() throws {
+    let (id, nodeIds) = try {
+      let store = AutomationStore()
+      let id = try store.create(AutomationStoreTests.definition(), now: Date()).id
+      try store.read {
+        try $0.db.run(
+          """
+          UPDATE action_defs SET action = '{"model": "sonnet", "instruction": 1}'
+          WHERE id = (SELECT def_id FROM nodes WHERE automation_id = ? AND key = 'judge')
+          """, [.integer(Int64(id))])
+      }
+      return (id, [store.nodeId(id, "fetch"), store.nodeId(id, "judge")])
+    }()
+    let wc = controller()
+    let center = try notifier(wc)
+    XCTAssertNil(wc.automationStore.automation(id), "前提: 定義を読めない")
+
+    _ = wc.controlDeleteAutomation(automationId: id)
+
+    XCTAssertEqual(Set(center.removed), Set(nodeIds.map { "automation.\(id).\($0)" }))
+  }
+
   /// ボードのサブメニューで通知センターを選んでも、AI の口と同じくその場で許可を求める。
   @MainActor func testChoosingNotificationCenterOnTheBoardAsksForPermission() throws {
     let wc = controller()
