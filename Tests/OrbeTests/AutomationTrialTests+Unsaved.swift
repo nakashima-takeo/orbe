@@ -80,6 +80,51 @@ extension AutomationTrialTests {
     XCTAssertEqual(ids("digest"), tried.digest)
   }
 
+  /// 直す試走は、本番で書いたときと同じく、入力を変えた判定の判断待ちの候補に下げる条件を当て直す: 外した入力だけが支えていた
+  /// 候補は写しの上で下がり、試走の判定は同じリンクを新しい候補にする（本番で書いた後の次の回と同じ結果）。本番の候補は残る。
+  func testARewriteReviewsTheJudgesWaitingProposalsAsWritingItInProductionDoes() throws {
+    func row(_ id: String) -> String {
+      #"{"id":"\#(id)","link":"https://example.com/a","body":"\#(id)","time":"2026-10-10T09:00:00Z"}"#
+    }
+    let id = try define([
+      fetch("gh"), fetch("gl"),
+      definitionNode("judge", from: ["gh", "gl"], deliver: .taskCandidates),
+      definitionNode("d", from: ["gl"], deliver: .report),
+    ])
+    let judge = store.nodeId(id, "judge")
+    let propose = #"{"propose":"\#(downstream("gh", "a", of: id))","title":"A"}"#
+    try runner.flow(id, to: .node(judge))
+    finish("gh", row("a"))
+    finish("gl", row("b"))
+    finish("judge", propose)
+    try runner.flow(id, to: .node(store.nodeId(id, "gh")))
+    finish("gh", "")
+    XCTAssertEqual(store.openProposals(of: judge).count, 1, "前提: 元の項目は消えたが、gl の行が同じリンクで支える")
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.nodes[2].from = [AutomationDefinition.Input(nodeKey: "gh")]
+    let proposals = store.proposals
+
+    let trial = try trials.start(
+      .unsaved(try store.check(.replace(id, version: current.version, rewrite))),
+      .init(to: ["judge"]))
+    waitCalls("gh", 3)
+    finish("gh", row("a"))
+    waitCalls("judge", 2)
+    finish("judge", propose)
+    ended(trial)
+    XCTAssertNil(trial.failure)
+    XCTAssertEqual(store.proposals, proposals)
+
+    _ = try runner.set(id, version: current.version, rewrite)
+    try runner.flow(id, to: .node(judge))
+    finish("gh", row("a"))
+    finish("judge", propose)
+    let written = try XCTUnwrap(store.automation(id)?.state(key: "judge").runs.first?.run?.result)
+    XCTAssertEqual(written, .judge(proposed: 1, resolved: 0, dismissed: []), "前提: 書いた後の次の回は候補にする")
+    XCTAssertEqual(trial.passes(key: "judge").first?.run?.result, written)
+  }
+
   /// 直す試走を始めた後、写し終える前に本番が書き換わると、試走は `set_automation` と同じ版の食い違いの文で終わり、何も流さない。
   func testARewriteEndsWhenProductionMovesOnWhileCopying() throws {
     let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
