@@ -286,8 +286,7 @@ func parseISOOrDie(_ raw: String, flag: String) -> String {
 }
 
 /// `<token>` が workspace の ID（UUID。大文字小文字を問わない）か `current` なら、解決した ID を返す（それ以外 nil＝値として
-/// 消費しない）。ID は `list_workspaces` と同じ形（大文字）にそろえる——手元の絞り込み（`tab list --workspace`）が、小文字で
-/// 打っても外れないため。
+/// 消費しない）。ID は `list_workspaces` と同じ形（大文字）にそろえる——人向けの出力に出す ID が、一覧の id と同じ形になるため。
 func workspaceIdIfResolvable(_ token: String) -> String? {
   if let id = UUID(uuidString: token) { return id.uuidString }
   if token == "current" { return activeWorkspaceId() }

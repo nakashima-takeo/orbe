@@ -31,8 +31,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
 
   private func workspaceId(_ wc: WindowController, _ name: String) throws -> UUID {
     try XCTUnwrap(
-      (wc.controlListWorkspaces().first { $0["name"] as? String == name }?["id"] as? String)
-        .flatMap(UUID.init(uuidString:)))
+      workspaceUUID(wc.controlListWorkspaces().first { $0["name"] as? String == name }?["id"]))
   }
 
   func backgroundTab(_ wc: WindowController) throws -> TerminalTab {

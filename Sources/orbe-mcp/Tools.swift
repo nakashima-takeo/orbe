@@ -46,10 +46,10 @@ let tools: [[String: Any]] =
       ("name", "list_tabs"),
       (
         "description",
-        "全タブを列挙する。tabId（操作の宛先）・所属 workspace・タイトル・cwd・エージェント状態・その workspace で選択中か（active）を返す。"
-          + "応答の seq はこの時点のイベント履歴位置（他の成功応答も同じく seq を持つ）。"
+        "タブを列挙する（workspaceId を省けば全 workspace）。tabId（操作の宛先）・所属 workspace・タイトル・cwd・エージェント状態・"
+          + "その workspace で選択中か（active）を返す。応答の seq はこの時点のイベント履歴位置（他の成功応答も同じく seq を持つ）。"
       ),
-      ("inputSchema", schema([:])),
+      ("inputSchema", schema(["workspaceId": strProp("この workspace のタブだけに絞る（未知 id はエラー）")])),
     ]),
     obj([
       ("name", "list_agents"),

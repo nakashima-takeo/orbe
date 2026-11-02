@@ -7,8 +7,9 @@ import XCTest
 /// 観測可能な契約を固定する。
 ///
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
-/// **libghostty ランタイムを起動する**（GhosttyKit 必須）。tab の id は `IdGen` 採番で予測不能なため、workspace の id は
-/// 外の口から見える値を確かめるため、直書きせず `controlListWorkspaces()` / `controlListTabs()` の戻りから読む。
+/// **libghostty ランタイムを起動する**（GhosttyKit 必須）。tab の id は `IdGen` 採番で予測不能なので、直書きせず
+/// `controlListTabs()` の戻りから読む。workspace の id も、外の口から見える値を確かめるため `controlListWorkspaces()` の
+/// 戻りから読む。
 final class WindowControllerTabControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers
@@ -121,7 +122,8 @@ final class WindowControllerTabControlTests: OrbeTestCase {
   /// close_tab は id 解決の上でタブを閉じ、そのタブが list_tabs から消える（複数タブ WS で畳まず）。
   func testCloseTabByIdRemovesTab() throws {
     let wc = try restore(activeWorkspace: 0, [twoTabbed("main")])
-    let tabIds = Set(wc.controlListTabs().compactMap { $0["tabId"] as? Int })
+    let tabIds = Set(
+      try wc.controlListTabs(workspaceId: nil).get().compactMap { $0["tabId"] as? Int })
     XCTAssertEqual(tabIds.count, 2, "前提: 2 タブ")
     let victim = try XCTUnwrap(tabIds.first)
     // エージェント hook のセッション報告（report_agent）と同じくエージェントを載せてから閉じる。
@@ -131,7 +133,8 @@ final class WindowControllerTabControlTests: OrbeTestCase {
       return XCTFail("close_tab は success")
     }
     XCTAssertFalse(
-      wc.controlListTabs().contains { $0["tabId"] as? Int == victim }, "閉じたタブは消える")
+      try wc.controlListTabs(workspaceId: nil).get().contains { $0["tabId"] as? Int == victim },
+      "閉じたタブは消える")
     XCTAssertEqual(
       wc.sessionLog.lastEvent(sessionId: "live-1")?.closeOrigin, .controlAPI,
       "制御 API の閉鎖は同一性の終わり方 controlAPI としてログに写る")
@@ -154,7 +157,9 @@ final class WindowControllerTabControlTests: OrbeTestCase {
     XCTAssertEqual(wc.window.title, "main", "前提: main がアクティブ")
     let bgId = try XCTUnwrap(workspaceUUID(row(wc, name: "background")?["id"]))
     let bgTab = try XCTUnwrap(
-      wc.controlListTabs().first { workspaceUUID($0["workspaceId"]) == bgId }?["tabId"] as? Int)
+      try wc.controlListTabs(workspaceId: nil).get().first {
+        workspaceUUID($0["workspaceId"]) == bgId
+      }?["tabId"] as? Int)
     guard case .success = wc.controlFocusTab(tabId: bgTab) else {
       return XCTFail("focus_tab は success")
     }
@@ -203,7 +208,9 @@ final class WindowControllerTabControlTests: OrbeTestCase {
       return XCTFail("focus_tab は success")
     }
 
-    let active = wc.controlListTabs().filter { $0["active"] as? Bool == true }
+    let active = try wc.controlListTabs(workspaceId: nil).get().filter {
+      $0["active"] as? Bool == true
+    }
 
     XCTAssertEqual(
       Set(active.compactMap { $0["tabId"] as? Int }),
@@ -303,5 +310,33 @@ final class WindowControllerTabControlTests: OrbeTestCase {
         key: "font-size", value: 20, scope: "workspace", workspaceId: UUID())
     else { return XCTFail("config_set 未知 id は failure") }
     XCTAssertEqual(setErr.code, -32004)
+  }
+
+  /// global の層に workspaceId を添えた config_set は -32602 で、どの層も書かない（添えた ID を黙って捨てない）。
+  func testConfigSetGlobalWithAWorkspaceIdIsRefused() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main")])
+    let main = try XCTUnwrap(workspaceUUID(row(wc, name: "main")?["id"]))
+    guard
+      case .failure(let error) = wc.controlConfigSet(
+        key: "font-size", value: 21, scope: "global", workspaceId: main)
+    else { return XCTFail("global に workspaceId を添えた config_set が通った") }
+    XCTAssertEqual(error.code, -32602)
+    XCTAssertEqual(error.message, "invalid workspaceId: scope global takes no workspaceId")
+    XCTAssertNil(wc.settingsStore.global[SettingKeys.fontSize], "global の層は変わらない")
+  }
+
+  /// list_tabs は workspaceId でその workspace のタブだけを返し、未知 id は -32004。
+  func testListTabsNarrowsToTheNamedWorkspace() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("background")])
+    let bgId = try XCTUnwrap(workspaceUUID(row(wc, name: "background")?["id"]))
+
+    let rows = try wc.controlListTabs(workspaceId: bgId).get()
+
+    XCTAssertEqual(rows.count, 1)
+    XCTAssertEqual(rows.first.flatMap { workspaceUUID($0["workspaceId"]) }, bgId)
+    guard case .failure(let error) = wc.controlListTabs(workspaceId: UUID()) else {
+      return XCTFail("未知 id の list_tabs が通った")
+    }
+    XCTAssertEqual(error.code, -32004)
   }
 }

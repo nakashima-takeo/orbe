@@ -53,7 +53,7 @@ extension WindowControllerControlTests {
     let wc = try restore(
       activeWorkspace: 0,
       [tabbed("main"), tabbed("dormant", tabs: [agentTab("sleeping")])])
-    let rows = wc.controlListTabs()
+    let rows = try wc.controlListTabs(workspaceId: nil).get()
     XCTAssertEqual(
       Set(rows.compactMap { $0["workspaceName"] as? String }), ["main", "dormant"],
       "休眠 workspace のタブも列挙する")

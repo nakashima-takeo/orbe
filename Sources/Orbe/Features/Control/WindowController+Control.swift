@@ -14,21 +14,29 @@ extension WindowController: ControlTarget {
     }
   }
 
-  /// 全タブを列挙する（list_tabs）。`active` は「その workspace で選択中のタブ」——背景 workspace でも
-  /// 1 枚 true（ボードを選んでいる workspace ではどれも false）で、前面かは `list_workspaces` の `active` で分かる。
-  func controlListTabs() -> [[String: Any]] {
-    store.allTabs().map { ref in
-      let ws = workspaces[ref.workspaceIndex]
-      let tab = ref.tab
-      return [
-        "tabId": tab.id, "workspaceId": ws.id.uuidString, "workspaceName": ws.name,
-        "title": tab.surface.title,
-        "cwd": tab.cwd,
-        "agentState": tab.agentState.map { $0 as Any } ?? NSNull(),
-        "agentSessionId": tab.agentSlot.session?.sessionId.map { $0 as Any } ?? NSNull(),
-        "active": ref.tab === ws.selectedTab,
-      ]
+  /// タブを列挙する（list_tabs）。workspaceId 指定でその workspace のタブだけ（未知 id は -32004）。`active` は「その
+  /// workspace で選択中のタブ」——背景 workspace でも 1 枚 true（ボードを選んでいる workspace ではどれも false）で、前面かは
+  /// `list_workspaces` の `active` で分かる。
+  func controlListTabs(workspaceId: UUID?) -> Result<[[String: Any]], ControlError> {
+    if let workspaceId, !workspaces.contains(where: { $0.id == workspaceId }) {
+      return .failure(ControlError(code: -32004, message: "workspace not found"))
     }
+    let refs = store.allTabs().filter { ref in
+      workspaceId.map { workspaces[ref.workspaceIndex].id == $0 } ?? true
+    }
+    return .success(
+      refs.map { ref in
+        let ws = workspaces[ref.workspaceIndex]
+        let tab = ref.tab
+        return [
+          "tabId": tab.id, "workspaceId": ws.id.uuidString, "workspaceName": ws.name,
+          "title": tab.surface.title,
+          "cwd": tab.cwd,
+          "agentState": tab.agentState.map { $0 as Any } ?? NSNull(),
+          "agentSessionId": tab.agentSlot.session?.sessionId.map { $0 as Any } ?? NSNull(),
+          "active": ref.tab === ws.selectedTab,
+        ]
+      })
   }
 
   /// 検出済みエージェント CLI を列挙する（制御 API の list_agents）。source は
@@ -252,12 +260,18 @@ extension WindowController: ControlTarget {
     guard scope == "global" || scope == "workspace" else {
       return .failure(ControlError(code: -32602, message: "invalid scope: \(scope)"))
     }
+    // global の層は workspace に属さないので、添えた workspaceId を読まずに捨てない（指定と違う層を書いて成功しない）。
+    if scope == "global", workspaceId != nil {
+      return .failure(
+        ControlError(
+          code: -32602, message: "invalid workspaceId: scope global takes no workspaceId"))
+    }
     guard let change = SettingChange(key: key, jsonValue: value) else {
       return .failure(ControlError(code: -32602, message: "invalid key or value for \(key)"))
     }
-    // workspace スコープで workspaceId 指定時はその WS を対象に（未指定・global はアクティブ WS）。
+    // workspace スコープで workspaceId 指定時はその WS を対象に（未指定はアクティブ WS）。
     var target: Workspace?
-    if scope == "workspace", let workspaceId {
+    if let workspaceId {
       guard let ws = workspaces.first(where: { $0.id == workspaceId }) else {
         return .failure(ControlError(code: -32004, message: "workspace not found"))
       }

@@ -266,6 +266,11 @@ extension OrbeCliProcessTests {
     failure(
       control.orb(["ws", "switch", "3"]), code: 2,
       message: "ws switch requires a workspace <id>", "ws switch の整数")
+
+    // 今の workspace に無い ID は、空の一覧ではなく control の断り。
+    failure(
+      control.orb(["tab", "list", "--workspace", UUID().uuidString]), code: 1,
+      message: "workspace not found", "tab list の知らない ID")
   }
 
   /// `--json` の応答は control の result をそのまま出すので、成功応答の `seq`（その操作時点の履歴位置）が

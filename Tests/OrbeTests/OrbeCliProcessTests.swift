@@ -18,7 +18,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名の綴りは、どのテストにも現れない。
 /// 片方だけ改名すれば `-32601` で全滅するが、それに気づく経路がこの 1 本しかない。
-/// tab の id は `IdGen` 採番で予測不能なので、workspace の id は外の口から見える値を確かめるため、必ず `--json` の出力から読む。
+/// tab の id は `IdGen` 採番で予測不能なので、必ず `--json` の出力から読む。workspace の id も、外の口から見える値を
+/// 確かめるため `--json` の出力から読む。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliProcessTests: OrbeTestCase {

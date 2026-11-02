@@ -53,7 +53,7 @@ extension WindowControllerReportAgentTests {
 
   /// `list_tabs` から当該タブの行を引く。
   private func listTabRow(_ wc: WindowController, tabId: Int) -> [String: Any]? {
-    wc.controlListTabs().first { $0["tabId"] as? Int == tabId }
+    (try? wc.controlListTabs(workspaceId: nil).get())?.first { $0["tabId"] as? Int == tabId }
   }
 
   /// 復元単位が持つ agent セッション。cwd は実 surface だと `currentPwd` が入って

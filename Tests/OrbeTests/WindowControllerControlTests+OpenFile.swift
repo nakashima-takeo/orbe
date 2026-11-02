@@ -22,7 +22,7 @@ extension WindowControllerControlTests {
             TabState(cwd: dir.path, agent: nil, explicitTitle: nil),
           ])
       ])
-    let tabs = wc.controlListTabs()
+    let tabs = try wc.controlListTabs(workspaceId: nil).get()
     let second = try XCTUnwrap(tabs[1]["tabId"] as? Int)
     let tab = try XCTUnwrap(wc.controlResolveTab(second))
     XCTAssertEqual(tab.group.faces, .terminalOnly)
@@ -32,7 +32,8 @@ extension WindowControllerControlTests {
     XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
     let opened = MainActor.assumeIsolated { tab.group.editor.activeDocument?.url }
     XCTAssertEqual(opened, url.resolvingSymlinksInPath())
-    XCTAssertTrue(wc.controlListTabs()[1]["active"] as? Bool == true, "そのタブが選ばれる")
+    XCTAssertTrue(
+      try wc.controlListTabs(workspaceId: nil).get()[1]["active"] as? Bool == true, "そのタブが選ばれる")
     XCTAssertTrue(wc.window.firstResponder === tab.focusTarget, "テキスト面へフォーカス")
 
     tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
@@ -79,7 +80,7 @@ extension WindowControllerControlTests {
 
   func testOpenFileErrors() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
+    let tabId = try XCTUnwrap(try wc.controlListTabs(workspaceId: nil).get()[0]["tabId"] as? Int)
     let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
 
     if case .failure(let error) = wc.controlOpenFile(tabId: 999_999, path: "/tmp/x") {

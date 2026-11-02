@@ -33,7 +33,7 @@ extension ControlWireTests {
     var id = 0
 
     let resultReturning = [
-      "focus_tab", "close_tab", "open_file",
+      "list_tabs", "spawn", "focus_tab", "close_tab", "open_file",
       "spawn_agent", "resume_agent", "prompt_agent",
       "config_list", "config_set", "create_workspace", "rename_workspace",
       "set_workspace_root", "remove_workspace", "restore_sessions",

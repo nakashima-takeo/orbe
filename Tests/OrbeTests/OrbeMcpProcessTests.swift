@@ -191,6 +191,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
   /// workspaceId を取るツールは、どれも workspace の ID を文字列で受けると説明する（タスクの付き先だけは null で「なし」も）。
   /// 整数と説明すると、AI が送る値はどれも control に断られる。
   func testEveryWorkspaceIdIsDescribedAsAString() throws {
+    let clearable: Set<String> = ["add_task", "update_task"]
     var described: [String] = []
     for tool in ControlProcess.mcpToolsList() {
       let name = try XCTUnwrap(tool["name"] as? String)
@@ -198,10 +199,11 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: [String: Any]]
       guard let property = properties?["workspaceId"] else { continue }
       described.append(name)
-      let type = property["type"]
-      XCTAssertTrue(
-        type as? String == "string" || type as? [String] == ["string", "null"],
-        "\(name) の workspaceId: \(String(describing: type))")
+      if clearable.contains(name) {
+        XCTAssertEqual(property["type"] as? [String], ["string", "null"], name)
+      } else {
+        XCTAssertEqual(property["type"] as? String, "string", name)
+      }
     }
     XCTAssertFalse(described.isEmpty, "workspaceId を取るツールが無い")
   }

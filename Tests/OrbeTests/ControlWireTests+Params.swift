@@ -41,7 +41,7 @@ extension ControlWireTests {
     let ws = Self.workspace
     return [
       ("list_workspaces", [:]),
-      ("list_tabs", [:]),
+      ("list_tabs", ["workspaceId": ws]),
       ("list_agents", [:]),
       ("get_tab_text", ["tabId": tab]),
       ("send_text", ["tabId": tab, "text": "hello"]),
@@ -56,7 +56,7 @@ extension ControlWireTests {
       // 待機を張るので、表駆動で必ず 1 行返るよう短い timeoutMs を添える。
       ("prompt_agent", ["tabId": tab, "text": "hello", "timeoutMs": 10]),
       ("config_list", ["workspaceId": ws]),
-      ("config_set", ["key": "font-size", "value": 14, "scope": "global", "workspaceId": ws]),
+      ("config_set", ["key": "font-size", "value": 14, "scope": "workspace", "workspaceId": ws]),
       ("create_workspace", ["name": "wsp", "rootPath": "/tmp/root"]),
       ("rename_workspace", ["workspaceId": ws, "name": "renamed"]),
       ("set_workspace_root", ["workspaceId": ws, "rootPath": "/tmp/root2"]),
@@ -308,15 +308,6 @@ extension ControlWireTests {
       errorCode(wire.request(id: 2, method: "spawn", params: ["select": 0])), -32602,
       "数は真偽値として受けない")
     XCTAssertEqual(fake.spawns.count, 1, "弾いた spawn は target へ届かない")
-  }
-
-  /// `spawn` が失敗（target が nil を返す）したら -32000。
-  func testSpawnFailureIsCannotExecute() {
-    let fake = FakeControlTarget()
-    fake.spawnedTabId = nil
-    let wire = startWire(target: fake)
-
-    XCTAssertEqual(errorCode(wire.request(id: 1, method: "spawn")), -32000, "spawn 失敗は -32000")
   }
 
   /// 未知 workspace への `activate_workspace` は -32004。

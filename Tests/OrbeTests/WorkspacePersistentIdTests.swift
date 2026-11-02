@@ -29,7 +29,7 @@ final class WorkspacePersistentIdTests: OrbeTestCase {
     XCTAssertEqual(loaded.workspaces.map(\.name), ["alpha", "bravo"], "workspace 構成は欠けない")
     XCTAssertNotEqual(
       loaded.workspaces[0].id, loaded.workspaces[1].id,
-      "振ったworkspace の ID は workspace ごとに別")
+      "振った ID は workspace ごとに別")
   }
 
   func testUnreadablePersistentIdIsReplacedOnlyForThatWorkspace() throws {
@@ -40,10 +40,10 @@ final class WorkspacePersistentIdTests: OrbeTestCase {
     ])
 
     let loaded = try XCTUnwrap(
-      WorkspacePersistence.load(), "1 workspace のworkspace の ID が読めなくてもファイルは読める")
+      WorkspacePersistence.load(), "1 つの workspace の ID が読めなくてもファイルは読める")
 
     XCTAssertEqual(loaded.workspaces.map(\.name), ["broken", "kept"])
-    XCTAssertEqual(loaded.workspaces[1].id, kept, "読めるworkspace の ID はそのまま保つ")
+    XCTAssertEqual(loaded.workspaces[1].id, kept, "読める ID はそのまま保つ")
     XCTAssertNotEqual(loaded.workspaces[0].id, kept)
   }
 

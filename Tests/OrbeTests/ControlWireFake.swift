@@ -17,8 +17,8 @@ final class FakeControlTarget: ControlTarget {
   var workspaces: [[String: Any]] = []
   var tabs: [[String: Any]] = []
   var agents: [[String: Any]] = []
-  /// nil にすると `spawn` が `-32000`（spawn failed）になる。
-  var spawnedTabId: Int? = 4242
+  /// `spawn` が返す新タブの ID。
+  let spawnedTabId = 4242
   /// nil にすると `activate_workspace` が `-32004` になる。
   var activateResult: (activeWorkspaceId: UUID, tabIds: [Int])? = (
     activeWorkspaceId: FakeControlTarget.workspaceId, tabIds: []
@@ -113,6 +113,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var prompts: [Prompt] = []
   private(set) var configSets: [ConfigSet] = []
   private(set) var configLists: [UUID?] = []
+  private(set) var tabLists: [UUID?] = []
   private(set) var createdWorkspaces: [CreatedWorkspace] = []
   private(set) var renamedWorkspaces: [RenamedWorkspace] = []
   private(set) var workspaceRoots: [WorkspaceRoot] = []
@@ -154,16 +155,18 @@ final class FakeControlTarget: ControlTarget {
   // MARK: - ControlTarget
 
   func controlListWorkspaces() -> [[String: Any]] { workspaces }
-  func controlListTabs() -> [[String: Any]] { tabs }
+  func controlListTabs(workspaceId: UUID?) -> Result<[[String: Any]], ControlError> {
+    tabLists.append(workspaceId)
+    if let failure = domainFailure { return .failure(failure) }
+    return .success(tabs)
+  }
   func controlListAgents() -> [[String: Any]] { agents }
 
   func controlSpawn(workspaceId: UUID?, cwd: String?, command: String?, selects: Bool)
     -> Result<Int, ControlError>
   {
     spawns.append(Spawn(workspaceId: workspaceId, cwd: cwd, command: command, selects: selects))
-    guard let spawnedTabId else {
-      return .failure(ControlError(code: -32000, message: "spawn failed"))
-    }
+    if let failure = domainFailure { return .failure(failure) }
     return .success(spawnedTabId)
   }
 

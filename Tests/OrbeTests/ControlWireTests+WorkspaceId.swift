@@ -17,7 +17,8 @@ extension ControlWireTests {
     XCTAssertEqual(
       Set(verbs.map(\.method)),
       [
-        "spawn", "spawn_agent", "resume_agent", "activate_workspace", "config_list", "config_set",
+        "list_tabs", "spawn", "spawn_agent", "resume_agent", "activate_workspace", "config_list",
+        "config_set",
         "rename_workspace", "set_workspace_root", "remove_workspace", "list_tasks", "add_task",
         "update_task", "list_board_widgets", "add_board_widget", "remove_board_widget",
       ], "workspaceId を読む動詞の全部")
@@ -42,5 +43,7 @@ extension ControlWireTests {
     _ = wire.request(
       id: 2, method: "spawn", params: ["workspaceId": workspace.uuidString.lowercased()])
     XCTAssertEqual(fake.spawns.last?.workspaceId, workspace, "小文字でも同じ ID")
+    _ = wire.request(id: 3, method: "list_tabs", params: ["workspaceId": workspace.uuidString])
+    XCTAssertEqual(fake.tabLists.last, workspace, "list_tabs の絞り込みも target が解く")
   }
 }
