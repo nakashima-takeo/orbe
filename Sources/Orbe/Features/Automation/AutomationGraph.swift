@@ -138,36 +138,30 @@ struct AutomationGraph: Equatable {
   /// `id` のノードが出した行が、途中で取得のノードを通らずに判定のノードへ届くか（タスク候補へ至るか）。入力を持つツールの agent は
   /// 取得の役割で、届いた行を起こす合図にしか使わないので、行はそこを通り抜けない。
   func reachesTaskCandidates(_ id: AutomationNodeID) -> Bool {
-    guard let index = index(id) else { return false }
-    return !Self.judges(reachedFrom: index, nodes.map(\.role), downstream).isEmpty
-  }
-
-  /// `start` のノードが出した行が、途中で取得のノードを通らずに届く判定のノードの位置。
-  static func judges(reachedFrom start: Int, _ roles: [AutomationNodeRole], _ downstream: [[Int]])
-    -> Set<Int>
-  {
+    guard let start = index(id) else { return false }
     var pending = downstream[start]
     var seen = Set<Int>()
-    var judges = Set<Int>()
     while let index = pending.popLast() {
       guard seen.insert(index).inserted else { continue }
-      switch roles[index] {
-      case .judge: judges.insert(index)
+      switch nodes[index].role {
+      case .judge: return true
       case .fetch: continue
       case .process, .report, .work, .sideEffect: pending += downstream[index]
       }
     }
-    return judges
+    return false
   }
 
-  /// `judge` のノードへ、途中で別の取得のノードを通らずに行が届く取得のノード（定義の順）。
-  func fetches(reaching judge: AutomationNodeID) -> [Node] {
-    guard let target = index(judge) else { return [] }
-    let roles = nodes.map(\.role)
-    return nodes.indices.filter { index in
-      nodes[index].role == .fetch
-        && Self.judges(reachedFrom: index, roles, downstream).contains(target)
-    }.map { nodes[$0] }
+  /// `judge` のノードへ行が届くノード——入力を上流へたどり、取得で止めたもの（取得と処理。定義の順）。
+  func feeders(of judge: AutomationNodeID) -> [Node] {
+    guard let start = index(judge) else { return [] }
+    var pending = upstream[start]
+    var seen = Set<Int>()
+    while let index = pending.popLast() {
+      guard seen.insert(index).inserted, nodes[index].role != .fetch else { continue }
+      pending += upstream[index]
+    }
+    return seen.sorted().map { nodes[$0] }
   }
 
   /// `id` のノードを入力に名指すノード（定義の順）。

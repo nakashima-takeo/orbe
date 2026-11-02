@@ -250,7 +250,7 @@ extension TaskPaletteCardKeyTests {
     let window = mount(model)
     XCTAssertEqual(model.automation.proposalList.selectedID, 1)
 
-    try model.automation.store.dismiss(1)
+    try model.automation.store.dismiss(1, now: DesignSceneFixtures.automationNow)
     flush(window)
 
     XCTAssertEqual(model.automation.proposalList.selectedID, 2)

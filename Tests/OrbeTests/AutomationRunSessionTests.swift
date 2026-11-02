@@ -14,7 +14,7 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
       AutomationNodeRow(
         id: "f:\($0)",
         text: #"{"id":"f:\#($0)","body":""# + String(repeating: "x", count: size) + #""}"#,
-        origin: nil, source: nil)
+        ref: nil, source: nil)
     }
   }
 
@@ -119,7 +119,8 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
 
   /// 何も無いの申告は結果の前だけで、申告の後は結果を受けない。失敗の申告の後も受けない。
   func testNothingAndErrorDoNotMixWithResults() {
-    let fetch = AutomationRunSession(.fetch(since: nil), writer: AutomationNodeID(1))
+    let fetch = AutomationRunSession(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
     XCTAssertFalse(fetch.call("report_nothing", ["why": "無い"]).isError)
     XCTAssertTrue(
       fetch.call(
@@ -132,7 +133,8 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
       ).isError)
     XCTAssertTrue(fetch.answered)
 
-    let failing = AutomationRunSession(.fetch(since: nil), writer: AutomationNodeID(1))
+    let failing = AutomationRunSession(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
     XCTAssertFalse(failing.call("report_error", ["what": "落ちた"]).isError)
     XCTAssertEqual(failing.error, "落ちた")
     XCTAssertTrue(failing.call("report_nothing", ["why": "x"]).isError)
@@ -150,12 +152,13 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
   /// 「id が無い」と言う。
   func testJudgeReadsItsChoicesAndChecksItsDecisions() throws {
     let waiting = AutomationProposal(
-      id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationNodeDefID(2),
-      originNodeId: AutomationNodeID(1), origin: .version(1), item: item("old"), title: "前の提案",
-      due: nil, workspace: nil, reason: nil, proposedAt: now, state: .open)
+      id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationNodeDefID(2), row: .version(1),
+      originNodeId: AutomationNodeID(1),
+      fields: AutomationRowFields(link: "https://example.com/old", body: nil, time: nil),
+      title: "前の提案", due: nil, workspace: nil, reason: nil, proposedAt: now, state: .open)
     let session = AutomationRunSession(
       .judge(
-        [AutomationSourcedRow(id: "f:a", text: #"{"id":"f:a"}"#, origin: origin("a"))],
+        [linkedRow("a")],
         choices: AutomationJudgeChoices(
           open: [waiting],
           workspaces: AutomationWorkspaces(
@@ -171,7 +174,8 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
     XCTAssertEqual(
       session.call("propose", ["proposals": [["title": "x"], ["id": "zzz", "title": "y"]]]).texts[0]
         .split(separator: "\n").dropFirst(),
-      ["item 1: missing id", "item 2: propose zzz: not a new item"], "id の無い件もほかの件と一緒に全件言う")
+      ["item 1: missing id", "item 2: propose zzz: not an item of this run"], "id の無い件もほかの件と一緒に全件言う"
+    )
     XCTAssertFalse(
       session.call("propose", ["proposals": [["id": "f:a", "title": "a に返信する", "workspace": 3]]])
         .isError)

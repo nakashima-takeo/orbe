@@ -77,8 +77,8 @@ extension AutomationTrialTests {
   }
 
   /// 取得の入口に与えた行は、手段を起こさず、本番が既に出した出来事と同じ id でも接頭の付いた id で下流へ流れる。その取得は
-  /// 回の記録を持たず、与えた行を結果にする。判定へ与えると断る。
-  func testRowsGivenToAFetchFlowDownWithoutItsMethodAndAJudgeRefusesThem() throws {
+  /// 回の記録を持たず、与えた行を結果にする。判定の入口に与えた行は、ただ 1 つの上流の行として判定が取る。
+  func testRowsGivenToAFetchOrAJudgeFlowDownWithoutTheFetchMethod() throws {
     let id = try define([
       DesignSceneFixtures.commandNode(
         "gh", "gh", .manual, script: "gh", coverage: .newArrivals),
@@ -101,13 +101,16 @@ extension AutomationTrialTests {
     }
     XCTAssertEqual(given.compactMap(AutomationPrompts.id(of:)), [downstream("gh", "a", of: id)])
 
-    XCTAssertThrowsError(
-      try trials.start(id, .init(from: ["judge"], to: ["judge"], rows: [#"{"id":"x"}"#]))
-    ) {
-      guard case .invalid = $0 as? AutomationError else { return XCTFail("\($0)") }
-    }
+    let judged = try trials.start(
+      id,
+      .init(from: ["judge"], to: ["judge"], rows: [#"{"id":"x","link":"https://example.com/x"}"#]))
+    waitCalls("judge", 3)
+    XCTAssertEqual(ids("judge"), [downstream("gh", "x", of: id)])
+    XCTAssertEqual(calls("gh").count, 1)
+    finish("judge", "")
+    ended(judged)
     XCTAssertThrowsError(try trials.start(id, .init(rows: [#"{"id":"x"}"#]))) {
-      XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: missing link"))
+      XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: missing body"))
     }
   }
 

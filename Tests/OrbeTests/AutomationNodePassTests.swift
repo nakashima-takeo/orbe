@@ -37,12 +37,12 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
 
     start(
       AutomationGraphTests.fetch("f", .newArrivals), .fetch,
-      .fetch(since: since))
+      .fetch(since: since, reachesJudge: false))
     start(
       AutomationGraphTests.fetch("f", .currentSet), .fetch,
-      .fetch(since: since))
-    start(agent(.newArrivals), .fetch, .fetch(since: since))
-    start(agent(.currentSet), .fetch, .fetch(since: since))
+      .fetch(since: since, reachesJudge: false))
+    start(agent(.newArrivals), .fetch, .fetch(since: since, reachesJudge: false))
+    start(agent(.currentSet), .fetch, .fetch(since: since, reachesJudge: false))
 
     XCTAssertEqual(try XCTUnwrap(commandInput(0)).environment, ["ORBE_SINCE": mark])
     XCTAssertEqual(try XCTUnwrap(commandInput(1)).environment, [:])
@@ -75,7 +75,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
-      .fetch, .fetch(since: nil))
+      .fetch, .fetch(since: nil, reachesJudge: false))
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
@@ -99,7 +99,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
 
   /// 取れた全項目を、書かれた id と書かれたままの 1 行（余分な欄も残す）で返す。何が新しいかは出す側の確定が決める。
   func testFetchReturnsEveryItemAsWritten() throws {
-    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
+    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil, reachesJudge: false))
     let labelled =
       #"{"id":"b","link":"https://example.com/b","body":"b","time":"2026-10-10T09:00:00Z","labels":["x"]}"#
 
@@ -122,7 +122,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
-      .fetch, .fetch(since: nil))
+      .fetch, .fetch(since: nil, reachesJudge: false))
 
     use(
       0, .putItems,
@@ -144,7 +144,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
 
   /// 同じ `id` の 2 つ目の項目は外れた件で、コマンドの取得はその回を失敗にする。
   func testFetchItemWithARepeatedIdBreaksTheRules() throws {
-    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
+    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil, reachesJudge: false))
 
     jobs.finish(0, fetched(["a", "a"]))
 
@@ -157,7 +157,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
-      .fetch, .fetch(since: nil))
+      .fetch, .fetch(since: nil, reachesJudge: false))
 
     jobs.finish(
       0,
@@ -173,7 +173,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
-      .fetch, .fetch(since: nil))
+      .fetch, .fetch(since: nil, reachesJudge: false))
 
     use(0, .reportError, ["what": "Slack に届かない"])
     jobs.finish(0, done())
@@ -183,8 +183,8 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
 
   // MARK: - 処理
 
-  /// 出力の行は `id` で入力の行と照らして、その入力（出す側の行）と出どころを引き継ぎ、照らせない行はどちらも持たない。
-  func testProcessCarriesTheOriginById() throws {
+  /// 出力の行は `id` で入力の行と照らして、その入力（出す側の行）を引き継ぎ、照らせない行は持たない。
+  func testProcessCarriesTheSourceById() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a"), row("b")], reachesJudge: false))
@@ -197,29 +197,24 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
       return XCTFail("\(outcomes)")
     }
     XCTAssertEqual(rows.map(\.id), ["f:b", "new"])
-    XCTAssertEqual(rows.map(\.origin), [origin("b"), nil])
     XCTAssertEqual(rows.map(\.source), [row("b").source, nil])
   }
 
-  /// 取得 → 処理 a → 処理 b → 判定 では、a の行も判定へ届く。照らせない行は判定で使えず黙って消えるので、それを初めに出した
-  /// a が外したことになる——下流の b には直しようがない。
-  func testProcessWhoseRowsReachAJudgeBreaksTheRulesWithARowItCannotTrace() throws {
-    let definitionNodes = [
-      AutomationGraphTests.fetch("f"),
-      AutomationGraphTests.command("a", from: ["f"], deliver: .nextNode),
-      AutomationGraphTests.command("b", from: ["a"], deliver: .nextNode),
-      AutomationGraphTests.agent("j", from: ["b"], deliver: .taskCandidates),
-    ]
-    let graph = try AutomationGraph.numbered(definitionNodes)
-    let a = try XCTUnwrap(graph.node(key: "a"))
+  /// 判定へ届く処理も、入力に無い `id` の新しい行を作れる（判定はその行を案にできる）。
+  func testProcessWhoseRowsReachAJudgeCanMakeNewRows() throws {
     start(
-      definitionNodes[1], a.role,
-      .process([row("a")], reachesJudge: graph.reachesTaskCandidates(a.id)))
+      AutomationGraphTests.command("a", from: ["f"], deliver: .nextNode), .process,
+      .process([row("a")], reachesJudge: true))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"new"}"#))
 
-    XCTAssertEqual(breach?.lines.map(\.line), [2], "\(outcomes)")
-    XCTAssertNotNil(failed)
+    XCTAssertEqual(
+      succeeded,
+      .process([
+        AutomationNodeRow(id: "f:a", text: #"{"id":"f:a"}"#, ref: nil, source: row("a").source),
+        AutomationNodeRow(id: "new", text: #"{"id":"new"}"#, ref: nil, source: nil),
+      ]), "\(outcomes)")
+    XCTAssertNil(breach)
   }
 
   /// 同じ `id` の 2 つ目の行は外れた件——前の行を置き換え、前の行が黙って消える。
@@ -235,8 +230,8 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
 
   // MARK: - 判定
 
-  /// 候補の案には指した行の出どころが付く。
-  func testJudgeProposalsCarryTheOriginOfTheRowTheyPointTo() throws {
+  /// 候補の案には指した行と、その行のリンク・本文・時刻が付く。
+  func testJudgeProposalsCarryTheRowTheyPointTo() throws {
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
       judgeInput(["a", "b"]))
@@ -252,10 +247,24 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
       proposals,
       [
         AutomationNodePass.Proposal(
-          origin: origin("b"), title: "b に返信する", due: nil, workspace: nil, reason: nil)
+          id: "f:b", row: .event(Self.number("b")),
+          fields: AutomationRowFields(link: "https://example.com/b", body: nil, time: nil),
+          title: "b に返信する", due: nil, workspace: nil, reason: nil)
       ]
     )
     XCTAssertNil(breach)
+  }
+
+  /// link の無い行への案は外れた件。
+  func testJudgeProposalForARowWithoutALinkBreaksTheRules() throws {
+    start(
+      AutomationGraphTests.command("j", from: ["f"], deliver: .taskCandidates), .judge,
+      .judge([row("a")], choices: Self.noChoices))
+
+    jobs.finish(0, printed(#"{"propose":"f:a","title":"a"}"#))
+
+    XCTAssertEqual(breach?.lines.map(\.text), [#"item 1: the row "f:a" has no link"#])
+    XCTAssertNotNil(failed)
   }
 
   /// 何も出さないコマンドの判定は、候補なしの正しい成功——候補にすべき項目が無い回のたびに失敗しない。
@@ -320,7 +329,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   /// 止めた回は、手段が後から終わっても結果を返さず、agent の回の口も閉じる。
   func testStoppedPassNeverReturnsAResult() {
     let handle = start(
-      AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
+      AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil, reachesJudge: false))
     let agentHandle = start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
 
     handle.stop()

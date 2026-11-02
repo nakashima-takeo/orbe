@@ -161,7 +161,7 @@ extension AutomationDatabase {
     ) { AutomationSeqs(item: $0.int(at: 0), event: $0.int(at: 1)) }.first ?? AutomationSeqs()
   }
 
-  /// ノードの今有効な項目のリンク（取得の最新の結果）。リンクの無い項目は入らない。
+  /// ノードの今有効な項目のリンク。リンクの無い項目は入らない。
   func liveLinks(of nodeId: AutomationNodeID) throws -> Set<String> {
     Set(
       try db.select(
@@ -170,34 +170,6 @@ extension AutomationDatabase {
         WHERE i.node_id = ? AND i.valid_to IS NULL AND v.link IS NOT NULL
         """, [.integer(Int64(nodeId.rawValue))]
       ) { $0.text(at: 0) ?? "" })
-  }
-
-  /// 項目を出どころに持つ候補を下げる候補の ID（覚えていて、判断が無く、対応済みでないもの）。
-  func openProposals(originatingIn items: [Int]) throws -> [Int] {
-    guard !items.isEmpty else { return [] }
-    let list = items.map(String.init).joined(separator: ",")
-    return try db.select(
-      """
-      SELECT q.id FROM proposals q
-      JOIN held_proposals h ON h.proposal_id = q.id
-      JOIN item_versions v ON v.id = q.origin_version_id
-      WHERE v.item_id IN (\(list)) AND h.resolved_at IS NULL
-        AND q.id NOT IN (SELECT proposal_id FROM settlements)
-      """, []
-    ) { $0.int(at: 0) }
-  }
-
-  /// 版のうち、その項目が今有効でないもの。
-  func invalidatedVersions(_ versions: [Int]) throws -> Set<Int> {
-    guard !versions.isEmpty else { return [] }
-    let list = versions.map(String.init).joined(separator: ",")
-    return Set(
-      try db.select(
-        """
-        SELECT v.id FROM item_versions v JOIN items i ON i.id = v.item_id
-        WHERE v.id IN (\(list)) AND i.valid_to IS NOT NULL
-        """, []
-      ) { $0.int(at: 0) })
   }
 
   // MARK: - 値

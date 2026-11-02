@@ -20,7 +20,7 @@ extension AutomationNodePassTests {
 
   /// コマンドの失敗は 0 以外の終了コード——標準出力に項目があっても使わない。
   func testCommandFailsByItsExitCode() throws {
-    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
+    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil, reachesJudge: false))
 
     jobs.finish(0, printed(fetchedLines(["a"]), exit: 2, stderr: "down"))
 
@@ -121,7 +121,7 @@ extension AutomationNodePassTests {
     start(
       AutomationGraphTests.agent(
         "f", tools: ["mcp__slack__search"], deliver: .nextNode, coverage: .currentSet),
-      .fetch, .fetch(since: nil))
+      .fetch, .fetch(since: nil, reachesJudge: false))
 
     XCTAssertFalse(use(0, .reportNothing, ["why": "無い"]).isError)
     XCTAssertTrue(
@@ -187,7 +187,7 @@ extension AutomationNodePassTests {
       succeeded,
       .process([
         AutomationNodeRow(
-          id: "f:a", text: #"{"id":"f:a"}"#, origin: origin("a"), source: row("a").source)
+          id: "f:a", text: #"{"id":"f:a"}"#, ref: nil, source: row("a").source)
       ]), "\(outcomes)")
     XCTAssertEqual(breach?.lines.map(\.text), ["item 1: missing id"])
   }

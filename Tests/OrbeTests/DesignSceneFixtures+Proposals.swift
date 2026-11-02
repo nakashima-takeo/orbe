@@ -152,3 +152,15 @@ extension DesignSceneFixtures {
     return samples
   }
 }
+
+extension AutomationIntake.Row {
+  /// この行を指す候補の案。行に http か https の `link` が無ければ nil。
+  func proposal(
+    _ title: String, due: TaskItem.DueDate? = nil, workspace: UUID? = nil, reason: String? = nil
+  ) -> AutomationNodePass.Proposal? {
+    AutomationRowFields(row: text).map {
+      AutomationNodePass.Proposal(
+        id: id, row: ref, fields: $0, title: title, due: due, workspace: workspace, reason: reason)
+    }
+  }
+}

@@ -16,7 +16,7 @@ struct AutomationOutputs {
   /// 行を出すノード（下流へ渡す id の接頭）。
   let writer: AutomationNodeID
   /// 受けた行（取得・処理）。取得は書かれた id と書かれたままの 1 行（余分な欄も残す）、処理は入力と `id` で照らせた行だけが
-  /// その入力を引き継ぎ、出どころも引き継ぐ。
+  /// その入力を引き継ぐ。
   private(set) var rows: [AutomationNodeRow] = []
   /// 判定の案と、対応済みにする判断待ちの候補のリンク。
   private(set) var proposals: [AutomationNodePass.Proposal] = []
@@ -50,8 +50,7 @@ struct AutomationOutputs {
     let broken: [AutomationBrokenLine]
     switch input {
     case .fetch: broken = next.fetched(text)
-    case .process(let input, let reachesJudge):
-      broken = next.processed(text, input, reachesJudge: reachesJudge)
+    case .process(let input, _): broken = next.processed(text, input)
     case .judge(let input, let choices): broken = next.judged(text, shape, input, choices)
     case .report, .work, .sideEffect:
       preconditionFailure("only a node that passes rows on puts rows")
@@ -103,15 +102,15 @@ struct AutomationOutputs {
         continue
       }
       rows.append(
-        AutomationNodeRow(id: accepted.item.id, text: accepted.text, origin: nil, source: nil))
+        AutomationNodeRow(id: accepted.item.id, text: accepted.text, ref: nil, source: nil))
     }
     return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
 
-  /// `id` の無い件・同じ `id` の 2 つ目・判定へ届くときの入力の行の `id` でない件は外れた件。
-  private mutating func processed(
-    _ text: String, _ input: [AutomationNodeRow], reachesJudge: Bool
-  ) -> [AutomationBrokenLine] {
+  /// `id` の無い件・同じ `id` の 2 つ目は外れた件。
+  private mutating func processed(_ text: String, _ input: [AutomationNodeRow])
+    -> [AutomationBrokenLine]
+  {
     var (objects, broken) = Self.objectRows(text)
     let inputs = Dictionary(input.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
     for object in objects {
@@ -123,40 +122,41 @@ struct AutomationOutputs {
         broken.append(AutomationBrokenLine(line: object.line, fault: .tooLarge))
         continue
       }
-      guard !reachesJudge || inputs[id] != nil else {
-        broken.append(AutomationBrokenLine(line: object.line, fault: .notInputId(id)))
-        continue
-      }
       guard ids.insert(id).inserted else {
         broken.append(AutomationBrokenLine(line: object.line, fault: .idTwice(id)))
         continue
       }
       rows.append(
-        AutomationNodeRow(
-          id: id, text: object.text, origin: inputs[id]?.origin, source: inputs[id]?.source))
+        AutomationNodeRow(id: id, text: object.text, ref: nil, source: inputs[id]?.source))
     }
     return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
 
-  /// 案は取った行の `id` を指すものだけを受け、指した行の出どころを付ける。
+  /// 案は取った行の `id` を指し、その行が http か https の URL の `link` を持つものだけを受け、指した行とその欄を付ける。
   private mutating func judged(
-    _ text: String, _ shape: JudgeShape, _ input: [AutomationSourcedRow],
+    _ text: String, _ shape: JudgeShape, _ input: [AutomationNodeRow],
     _ choices: AutomationJudgeChoices
   ) -> [AutomationBrokenLine] {
     let (objects, malformed) = Self.objectRows(text)
-    let origins = Dictionary(input.map { ($0.id, $0.origin) }, uniquingKeysWith: { $1 })
+    let rows = Dictionary(input.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
     var broken = malformed
-    for reading in Self.judgeRows(
-      objects, shape, itemIds: Set(origins.keys), choices: choices, seen: &judgeSeen)
+    for (object, reading) in zip(
+      objects,
+      Self.judgeRows(objects, shape, itemIds: Set(rows.keys), choices: choices, seen: &judgeSeen))
     {
       switch reading {
       case .success(.propose(let itemId, let title, let due, let workspace, let reason)):
-        guard let origin = origins[itemId] else {
-          preconditionFailure("an accepted proposal points at one of the rows")
+        guard let row = rows[itemId], let ref = row.ref else {
+          preconditionFailure("an accepted proposal points at one of the rows read")
+        }
+        guard let fields = AutomationRowFields(row: row.text) else {
+          broken.append(AutomationBrokenLine(line: object.line, fault: .noLink(itemId)))
+          continue
         }
         proposals.append(
           AutomationNodePass.Proposal(
-            origin: origin, title: title, due: due, workspace: workspace, reason: reason))
+            id: itemId, row: ref, fields: fields, title: title, due: due, workspace: workspace,
+            reason: reason))
       case .success(.resolve(let link)):
         resolved.append(link)
       case .failure(let line):

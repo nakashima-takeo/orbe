@@ -145,21 +145,6 @@ extension AutomationGraphTests {
         "nodes[2].from"
       ),
       (
-        "毎回すべてを取るつながりの行が処理を通って判定へ届く",
-        [
-          Self.fetch("f"), Self.taking(.all, Self.agent("p", from: ["f"], deliver: .nextNode)),
-          Self.agent("j", from: ["p"], deliver: .taskCandidates),
-        ], "nodes[1].from[0]"
-      ),
-      (
-        "判定が毎回すべてを取る",
-        [
-          Self.fetch("f"),
-          Self.taking(.all, Self.agent("j", from: ["f"], deliver: .taskCandidates)),
-        ],
-        "nodes[1].from[0]"
-      ),
-      (
         "今の集合の処理が新しい行だけを取る",
         [
           Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextNode, coverage: .currentSet),
@@ -178,5 +163,16 @@ extension AutomationGraphTests {
     ] {
       assertRefused(definitionNodes, at: place, label)
     }
+  }
+
+  /// 毎回すべてを取るつながりは判定へ至る道にも書ける（取得 → 今の集合の処理 → 判定、判定が毎回すべてを取る）。
+  func testTakingAllMayReachAJudge() {
+    XCTAssertNoThrow(
+      try AutomationGraph.check([
+        Self.fetch("f"),
+        Self.taking(
+          .all, Self.agent("p", from: ["f"], deliver: .nextNode, coverage: .currentSet)),
+        Self.taking(.all, Self.agent("j", from: ["p"], deliver: .taskCandidates)),
+      ]))
   }
 }
