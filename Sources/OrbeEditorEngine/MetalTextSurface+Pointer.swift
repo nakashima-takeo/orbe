@@ -13,13 +13,13 @@ struct PointerHit {
   var row: Int
   /// いちばん近い書記素の境（最終行より下なら本文の終わり）。
   var offset: Int
-  /// 文書の行の上か（差し込んだ行と区画の上は、次の文書の行に当たるが文書の行の上ではない）。
+  /// 文書の行の上か（差し込みの上は、次の文書の行に当たるが文書の行の上ではない）。
   var onLine = true
 }
 
 extension MetalTextSurface {
-  /// view の点（flipped、pt）の場所。行は縦の並び（`RowLayout`）で引き、推定が無い——遠くへ飛んだ直後でも、ポインタの下の
-  /// 行・字に当たる。差し込んだ行と区画の上は次の文書の行の行頭（最終行の後の塊の上は本文の終わり）に当たる。`position` は
+  /// view の点（flipped、pt）の場所。行は縦の並び（`RowLayout`）で引き、推定が無い——遠くへ飛んだ直後でも、ポインタの
+  /// 下の行・字に当たる。差し込みの上は次の文書の行の行頭（最終行の後の塊の上は本文の終わり）に当たる。`position` は
   /// スクロールの位置（省けば今の位置）。
   func hit(_ point: CGPoint, position: SIMD2<Double>? = nil) -> PointerHit? {
     guard let env = bodySite.editingEnvironment() else { return nil }
@@ -49,9 +49,9 @@ extension MetalTextSurface {
       area: area, row: row, offset: text.lineStart(row) + env.geometry.column(atX: x, row: row))
   }
 
-  /// 点を含む書記素。点が文書の行の字の上でなければ（行番号の列・行末より右・字の無い行・差し込んだ行と区画・最終行より
-  /// 下の空き地）nil。当たりと同じ組版の行から引くので、右から左の字の並びでも見た目の字に当たる。`position` はスクロールの
-  /// 位置（省けば今の位置）。
+  /// 点を含む書記素。点が文書の行の字の上でなければ（行番号の列・行末より右・字の無い行・差し込み・最終行より下の空き
+  /// 地）nil。当たりと同じ組版の行から引くので、右から左の字の並びでも見た目の字に当たる。`position` はスクロールの位置
+  /// （省けば今の位置）。
   func character(at point: CGPoint, position: SIMD2<Double>? = nil) -> NSRange? {
     guard let text = currentContent?.text else { return nil }
     let p = position ?? scrollPosition

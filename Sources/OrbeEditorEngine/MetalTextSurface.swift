@@ -64,21 +64,21 @@ final class MetalTextSurface: TextSurface {
   /// 表示の構成と、そのうち配置と描き方に効くもの。
   var presentation = SurfacePresentation.code
   var arrangement = SurfaceArrangement()
-  /// 置いている区画（区画の同一性で引く）と、絵を材料に写す係。
+  /// 置いている絵の差し込み（同一性で引く）と、中身を材料に写す係。
   var zones: [ObjectIdentifier: ZoneEntry] = [:]
   let painter = ZonePainter()
   /// 入力欄の場（入力欄の id で引く）と、場に振る通し番号。
   var fields: [AnyHashable: EditingSite] = [:]
   var nextFieldSerial = 0
-  /// 主（→ `Primary`）と、主が区画の文の間の区画の選択。
+  /// 主（→ `Primary`）と、絵の差し込みの文が主の間の、その文の選択。
   var primary = Primary.body
   var zoneSelection: ZoneTextSelection?
   /// ポインタの下の押せる場所と、ホバーを知らせている最中か。
   var hoveredButton: HoveredButton?
   var hovering = false
-  /// 取引の中で、区画の絵の高さが並びの高さと違うものを写した（取引の終わりに並びを組み直す）。
+  /// 取引の中で、中身の高さが並びの高さと違う絵の差し込みを写した（取引の終わりに並びを組み直す）。
   var zoneHeightsChanged = false
-  /// 取引の中で、区画を写したか外した（取引の終わりに、どの区画も指さない画像の覚えを手放す）。
+  /// 取引の中で、絵の差し込みを写したか外した（取引の終わりに、どの絵の差し込みも指さない画像の覚えを手放す）。
   var zonesRepainted = false
   /// 面自身の入力の処理の入れ子の深さ（→ `inputScope`）。
   var inputDepth = 0

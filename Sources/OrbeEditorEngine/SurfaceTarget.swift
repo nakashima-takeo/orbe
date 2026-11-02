@@ -5,19 +5,21 @@ import OrbeEditorCore
 enum Primary: Equatable {
   /// 本文の場。
   case body
-  /// 区画の選べる文（選択は `MetalTextSurface.zoneSelection`）。⌘C・⌘A・Esc だけが効く。
+  /// 絵の差し込みの選べる文（選択は `MetalTextSurface.zoneSelection`）。⌘C・⌘A・Esc だけが効く。
   case zoneText
   /// 入力欄の場（入力欄の id）。
   case field(AnyHashable)
 }
 
-/// 点の下の行き先。区画の上は、入力欄 → 押せる場所 → 選べる文 → 区画の空き の順に当たる。
+/// 点の下の行き先。絵の差し込みの上では、入力欄 → 押せる場所 → 選べる文 の順に当たる。どれにも当たらない所（箱・画像・
+/// 選べない字の行の上を含む）は、絵の差し込みの、ほかに当たらない所。
 enum SurfaceTarget {
   case body
   case field(EditingSite)
   case button(ZoneEntry, ZoneHits.Button)
-  /// 区画の選べる文のまとまり `text` の位置 `offset`。
+  /// 絵の差し込みの選べる文のまとまり `text` の位置 `offset`。
   case zoneText(ZoneEntry, text: AnyHashable, offset: Int)
+  /// 絵の差し込みの、ほかに当たらない所。
   case zoneSpace(ZoneEntry)
 }
 
@@ -54,7 +56,7 @@ extension MetalTextSurface {
     return .zoneSpace(entry)
   }
 
-  /// 点（view の座標）の、区画 `zone` の中の座標（区画が並びに無ければ nil）。`position` はスクロールの位置。
+  /// 点（view の座標）の、絵の差し込み `zone` の中の座標（並びに無ければ nil）。`position` はスクロールの位置。
   func zonePoint(
     _ point: CGPoint, in zone: ObjectIdentifier, position: SIMD2<Double>? = nil
   ) -> CGPoint? {
@@ -65,7 +67,7 @@ extension MetalTextSurface {
       y: CGFloat(Double(point.y - config.topInset) + p.y - rows.top(ofBlock: block)))
   }
 
-  /// 主の場——キー・IME・コマンドが効く場（主が区画の文なら nil）。
+  /// 主の場——キー・IME・コマンドが効く場（主が絵の差し込みの文なら nil）。
   var primarySite: EditingSite? {
     switch primary {
     case .body: bodySite
@@ -74,8 +76,8 @@ extension MetalTextSurface {
     }
   }
 
-  /// 主を `next` にする（取引の中）。離れる場の変換を確定し、⌘D の続きを終え、AppKit に入力の文脈を取り直させる。区画の文
-  /// から離れれば区画の選択を解く。入力欄には主になった・外れたを知らせる。
+  /// 主を `next` にする（取引の中）。離れる場の変換を確定し、⌘D の続きを終え、AppKit に入力の文脈を取り直させる。
+  /// 絵の差し込みの文から離れれば、その選択を解く。入力欄には主になった・外れたを知らせる。
   func setPrimary(_ next: Primary) {
     guard next != primary else { return }
     transact {

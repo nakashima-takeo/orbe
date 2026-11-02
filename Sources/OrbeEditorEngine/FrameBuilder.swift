@@ -42,7 +42,7 @@ final class FrameBuilder {
   var highlightShapes: [ShapeInstance] = []
   private(set) var textScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   private(set) var gutterScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
-  /// 区画の箱の切り取り——行番号の列と本文の区画（区画の影は行番号の列にも落ちる。行番号と印はその上に描く）。
+  /// 絵の差し込みの箱の切り取り——行番号の列と本文の区画（箱の影は行番号の列にも落ちる。行番号と印はその上に描く）。
   private(set) var zoneScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   /// 行の型の地の切り取り——上端の余白の下の、面の幅いっぱい。
   private(set) var lineScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
@@ -55,7 +55,7 @@ final class FrameBuilder {
   var overviewShapes: [ShapeInstance] = []
   /// スクロールバーの印の縦の区間（元が変わったときだけ作り直す）。
   var rulerSpans = RulerSpans()
-  /// 区画の箱・画像（画像の地図の頁ごと）・区画の文の選択の地（本文の列に切り取る）。
+  /// 絵の差し込みの箱・画像（画像の地図の頁ごと）・文の選択の地（本文の列に切り取る）。
   var zoneBoxes: [BoxInstance] = []
   var zoneImages: [[GlyphInstance]] = []
   var zoneSelectionShapes: [ShapeInstance] = []
@@ -111,7 +111,7 @@ final class FrameBuilder {
       top + (rows.y(ofLine: row, scale: scale) + lineHeight).rounded() - scrollY
     }
 
-    /// 塊 `index`（区画）の上端の y。
+    /// 塊 `index`（絵の差し込み）の上端の y。
     func blockTop(_ index: Int) -> Double {
       top + rows.top(ofBlock: index, scale: scale).rounded() - scrollY
     }
@@ -165,7 +165,7 @@ final class FrameBuilder {
     let baselines: Int
     /// 前のコマのミニマップの配置（揺れ止め）。
     let previousPlacement: MinimapLayout?
-    /// 区画を描く持ち物（画像の地図・入力欄の組版のキャッシュ）。
+    /// 絵の差し込みを描く持ち物（画像の地図・入力欄の組版のキャッシュ）。
     let zones: ZoneResources
   }
 

@@ -4,9 +4,9 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 差し込みの境は「行 r−1 の後」——上の行の中身の終わりに付く。壊れると、コメントの付いた行の行末で Enter を押すとスレッドが
-/// 新しい空の行の下へ離れる・行頭の Enter で区画が動く・CRLF の文書だけ振る舞いが変わる・編集の知らせの中で置き直した
-/// 差し込みが知らせの後にもう一度ずれる・複数カーソルで打つとスレッドが別の行へ飛ぶ。
+/// 差し込みの境は「行 r−1 の後」——上の行の中身の終わりに付く。壊れると、コメントの付いた行の行末で Enter を押すと
+/// スレッドが新しい空の行の下へ離れる・行頭の Enter で絵の差し込みが動く・CRLF の文書だけ振る舞いが変わる・編集の
+/// 知らせの中で置き直した差し込みが知らせの後にもう一度ずれる・複数カーソルで打つとスレッドが別の行へ飛ぶ。
 extension SurfaceRowsTests {
   /// 境 `boundaries`（既定は境 0 と境 5——行 4 の後）を持つ、ミニマップを出さない 20 行の面。
   private func anchored(_ text: String? = nil, at boundaries: [Int] = [0, 5]) throws -> Opened {
@@ -33,7 +33,7 @@ extension SurfaceRowsTests {
     let lineEnd = opened.document.text.lineStart(5) - 1 - opened.document.text.lineStart(4)
     place(opened, row: 4, column: lineEnd)
     surface.textView.insertNewline(nil)
-    XCTAssertEqual(surface.rows.boundaries, [0, 5], "行末の Enter: 区画は行 4 の直後に残る")
+    XCTAssertEqual(surface.rows.boundaries, [0, 5], "行末の Enter: 絵の差し込みは行 4 の直後に残る")
     place(opened, row: 6, column: 0)
     surface.textView.insertNewline(nil)
     XCTAssertEqual(surface.rows.boundaries, [0, 5], "境の下の行の行頭の Enter も動かさない")

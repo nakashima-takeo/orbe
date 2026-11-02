@@ -175,7 +175,8 @@ extension MetalTextSurface {
   }
 
   /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。本文が動いていれば、変換中の IME にも知らせる
-  /// （候補窓が追従する）。区画の押せる場所がポインタの下を動いたかもしれないので、ホバーとポインタの形も引き直す。
+  /// （候補窓が追従する）。絵の差し込みの押せる場所がポインタの下を動いたかもしれないので、ホバーとポインタの形も引き
+  /// 直す。
   func refreshViewport() {
     let (position, limits) = scrollState()
     if let current = measureViewport(position: position, limits: limits), current != viewport {

@@ -214,7 +214,7 @@ final class RenderLoopTests: EngineTestCase {
       policy.constraint, HeadlessDriver.period - 0.001, accuracy: 1e-6, "起きてから刻み − 1ms 以内")
   }
 
-  /// 見えている区画の画像が地図の頁に収まりきらなくても、描けるだけ描いたら刻みは止まる。
+  /// 見えている絵の差し込みの画像が地図の頁に収まりきらなくても、描けるだけ描いたら刻みは止まる。
   func testZoneImagesBeyondTheAtlasStillLetTheLoopStop() throws {
     let opened = try open(text)
     let surface = opened.surface

@@ -1,9 +1,9 @@
 import AppKit
 import OrbeEditorCore
 
-/// 試しのスレッドの区画——見本（orbe_design の `DiffView.tsx` の `Thread`。デザイン台帳 D 節）の構成を、区画の絵で組んだ
-/// もの。差し込みの flow（`editor_rows`）と、画面に出す試しの場（`EditorRowsTrialTests`）と、編集メニューの経路のテスト
-/// （`EditorZoneEditingMenuTests`）が載せる。
+/// 試しのスレッド——見本（orbe_design の `DiffView.tsx` の `Thread`。デザイン台帳 D 節）の構成を、絵の差し込みの中身で
+/// 組んだもの。差し込みの flow（`editor_rows`）と、画面に出す試しの場（`EditorRowsTrialTests`）と、編集メニューの経路の
+/// テスト（`EditorZoneEditingMenuTests`）が載せる。
 ///
 /// 枠（半透明の地・枠線・影）・頭（行と話題・状態の点・押せる「解決」「折りたたむ」）・コメント（アバターの円と頭文字か
 /// OrbeGlyph・名前と時刻と保留中の札・幅で折り返す本文とインラインコードの地・関連コミット）・返信の入力欄と 2 つの
@@ -73,7 +73,7 @@ final class SampleThreadZone: SurfaceZone {
       ], reply: "了解。それなら OK", id: id)
   }
 
-  // MARK: - 区画
+  // MARK: - 絵の差し込み
 
   func zone(_ event: ZoneEvent) {
     switch event {
@@ -240,14 +240,11 @@ final class SampleThreadZone: SurfaceZone {
           ZoneBox(
             frame: CGRect(x: left, y: y + (headLine - 7) / 2, width: 7, height: 7), radius: 3.5,
             fill: Self.accentBright)))
-      let id = "commit-\(index)"
-      canvas.texts.append(ZoneText(id: id, string: commit))
-      canvas.elements.append(
-        .selectable(
-          ZoneSelectableLine(
-            origin: CGPoint(x: left + 12, y: Self.baseline(top: y, height: headLine, font: mono)),
-            text: id, range: NSRange(location: 0, length: commit.utf16.count),
-            styles: [ZoneTextStyle(length: commit.utf16.count, font: mono, color: Self.muted)])))
+      let line = ZoneSelectableLine(
+        origin: CGPoint(x: left + 12, y: Self.baseline(top: y, height: headLine, font: mono)),
+        range: NSRange(location: 0, length: commit.utf16.count),
+        styles: [ZoneTextStyle(length: commit.utf16.count, font: mono, color: Self.muted)])
+      canvas.texts.append(ZoneText(id: "commit-\(index)", string: commit, lines: [line]))
       y += headLine
     }
     return max(20, y - top)
@@ -280,29 +277,28 @@ final class SampleThreadZone: SurfaceZone {
             padding: Self.codePadding))
       }
     }
-    canvas.texts.append(ZoneText(id: id, string: string))
     let lineHeight: CGFloat = 12 * 1.6
     let lines = ZoneTextLayout.lines(string, styles: styles, width: width)
+    var selectable: [ZoneSelectableLine] = []
     for (index, line) in lines.enumerated() {
       let lineTop = top + CGFloat(index) * lineHeight
       let baseline = Self.baseline(top: lineTop, height: lineHeight, font: sans)
-      for (style, span) in zip(line.styles, line.spans) where style.font == mono {
+      for (index, style) in line.styles.enumerated() where style.font == mono {
+        let ground = line.ground(index)
         canvas.elements.append(
           .box(
             ZoneBox(
               frame: CGRect(
-                x: left + span.lowerBound - style.leadingPadding, y: baseline - mono.ascender - 1,
-                width: span.upperBound - span.lowerBound + style.leadingPadding
-                  + style.trailingPadding,
+                x: left + ground.lowerBound, y: baseline - mono.ascender - 1,
+                width: ground.upperBound - ground.lowerBound,
                 height: mono.ascender - mono.descender + 2), radius: 3,
               fill: Self.tint(Self.accent, 0.12))))
       }
-      canvas.elements.append(
-        .selectable(
-          ZoneSelectableLine(
-            origin: CGPoint(x: left, y: baseline), text: id, range: line.range,
-            styles: line.styles)))
+      selectable.append(
+        ZoneSelectableLine(
+          origin: CGPoint(x: left, y: baseline), range: line.range, styles: line.styles))
     }
+    canvas.texts.append(ZoneText(id: id, string: string, lines: selectable))
     return CGFloat(lines.count) * lineHeight
   }
 }

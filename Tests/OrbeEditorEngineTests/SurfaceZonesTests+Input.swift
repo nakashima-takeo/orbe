@@ -4,9 +4,9 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 区画の入力欄と区画の文の選択——主（キーと IME の行き先）の遷移と、入力欄の場の打鍵・IME・undo、区画の文の選択と
-/// コピー、主が区画の文の間に効くコマンド。壊れると、返信の打鍵がソースへ入る・返信の undo が本文を戻す・コメントを
-/// 選んでいる間のキーで本文が変わる・入力欄が伸びるコマに字が遅れる。
+/// 絵の差し込みの入力欄と文の選択——主（キーと IME の行き先）の遷移と、入力欄の場の打鍵・IME・undo、絵の差し込みの文の
+/// 選択とコピー、絵の差し込みの文が主の間に効くコマンド。壊れると、返信の打鍵がソースへ入る・返信の undo が本文を
+/// 戻す・コメントを選んでいる間のキーで本文が変わる・入力欄が伸びるコマに字が遅れる。
 extension SurfaceZonesTests {
   /// 返信の入力欄つきのスレッドを行 4 の前に置いた面。
   struct Threaded {
@@ -80,8 +80,8 @@ extension SurfaceZonesTests {
     XCTAssertEqual(text(opened.document), body, "本文は変わらない")
   }
 
-  /// 改行で入力欄が伸びるとき、伸びた区画（並びの高さ）と打った字は同じ書き込みで材料に入る。入力欄のキャレットは主の
-  /// 間だけ描き、本文のキャレットは描かない。
+  /// 改行で入力欄が伸びるとき、伸びた絵の差し込み（並びの高さ）と打った字は同じ書き込みで材料に入る。入力欄の
+  /// キャレットは主の間だけ描き、本文のキャレットは描かない。
   func testAFieldGrowsInTheSameWriteAsTheKeystroke() throws {
     let setup = try threaded()
     let (opened, thread, field) = (setup.opened, setup.thread, setup.field)
@@ -178,8 +178,9 @@ extension SurfaceZonesTests {
     XCTAssertEqual(shown.minY, origin.y - 36, accuracy: 0.5, "スクロールに付いて動く")
   }
 
-  /// 区画の文をドラッグで選ぶと主が区画の文になり、⌘C で選んだまとまりの文の部分が写る。主が区画の文の間は ⌘C・⌘A・Esc
-  /// だけが効き、打鍵や貼るは本文にも入力欄にも効かない（メニューも無効）。Esc で本文へ戻り、選択は解ける。
+  /// 絵の差し込みの文をドラッグで選ぶと主が絵の差し込みの文になり、⌘C で選んだまとまりの文の部分が写る。
+  /// 絵の差し込みの文が主の間は ⌘C・⌘A・Esc だけが効き、打鍵や貼るは本文にも入力欄にも効かない（メニューも無効）。
+  /// Esc で本文へ戻り、選択は解ける。
   func testSelectingZoneTextAndCopying() throws {
     let setup = try threaded()
     let (opened, thread, field) = (setup.opened, setup.thread, setup.field)
@@ -233,7 +234,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(surface.primary, .body)
   }
 
-  /// 入力欄を外から置き換える口は場の丸ごとの置き換え（undo の区切りを通る）で、主にする口は主を入力欄にする。絵から
+  /// 入力欄を外から置き換える口は場の丸ごとの置き換え（undo の区切りを通る）で、主にする口は主を入力欄にする。中身から
   /// 入力欄が消えれば場を閉じ、主は本文に戻る。
   func testReplacingFocusingAndClosingAField() throws {
     let setup = try threaded()
@@ -247,7 +248,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(field.string, "送る文", "置き換えは undo に載る")
     let replacement = ThreadZone(comment: thread.comment)
     surface.setRows(zone(replacement, at: 4))
-    XCTAssertNil(surface.fields["reply"], "絵に無い入力欄の場は閉じる")
+    XCTAssertNil(surface.fields["reply"], "中身に無い入力欄の場は閉じる")
     XCTAssertEqual(surface.primary, .body)
     XCTAssertTrue(surface.drawn.fields.isEmpty)
   }
@@ -276,8 +277,8 @@ extension SurfaceZonesTests {
     XCTAssertLessThanOrEqual(shown.maxY, view.bounds.height, "キャレットが面の中に見える")
   }
 
-  /// 字を落とせるのは区画の中では入力欄だけで、落とせば入力欄に入って主が入力欄になる。区画の文・押せる場所・空きへは
-  /// 落とせず、本文も入力欄も変わらない。
+  /// 絵の差し込みの中で字を落とせるのは入力欄だけで、落とせば入力欄に入って主が入力欄になる。絵の差し込みの文・押せる
+  /// 場所・ほかに当たらない所へは落とせず、本文も入力欄も変わらない。
   func testDroppingTextGoesIntoAFieldButNotElsewhereInAZone() throws {
     let setup = try threaded()
     let (opened, thread, field) = (setup.opened, setup.thread, setup.field)

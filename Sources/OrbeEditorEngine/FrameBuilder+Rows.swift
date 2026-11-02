@@ -1,8 +1,8 @@
 import Foundation
 import OrbeEditorCore
 
-/// 見えている縦の並び——文書の行（行の型の地・本文・装備・選択・強調・行番号・記号・印）と差し込んだ行（行の型の地・
-/// 出どころの行の字と空白の点・番号・記号）と区画（→ `FrameBuilder+Zones`）。
+/// 見えている縦の並び——文書の行（行の型の地・本文・装備・選択・強調・行番号・記号・印）と差し込んだ行（行の型の
+/// 地・出どころの行の字と空白の点・番号・記号）と絵の差し込み（→ `FrameBuilder+Zones`）。
 extension FrameBuilder {
   /// 縦の並びで見えている項目を描く。
   func drawRows(_ source: Source, _ content: SurfaceContent, cache: LineLayoutCache, _ c: Context) {

@@ -70,7 +70,7 @@ public final class RevisionDocument {
 
   /// 見えている行（写しの行）。構文の裏の仕事が、次の区切りからそこを先に作る。
   public func setVisible(lines: ClosedRange<Int>) {
-    reception.setVisible(lines, in: text)
+    reception.setVisible(lines)
   }
 
   /// 初めて画面に出す直前に呼ぶ（2 回目以降は何もしない）。見えている範囲の色が揃っていなければ、最大
@@ -114,7 +114,7 @@ extension RevisionDocument: TextSurfaceDelegate {
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {
-    reception.setVisible(SyntaxReception.lines(of: surface.viewport, in: text), in: text)
+    reception.setVisible(SyntaxReception.lines(of: surface.viewport))
     onViewportChange?()
   }
 

@@ -97,6 +97,23 @@ final class SurfaceDecorTests: EngineTestCase {
     XCTAssertFalse(try pixelShot(opened).hasInk(x(opened, 10.5), underlineY(opened)))
   }
 
+  /// 打鍵の行き先が絵の差し込みの入力欄でも、面に焦点があれば、⌘ を押して本文の URL に乗せると下線を引く（指カーソルと
+  /// 同じ条件）。本文のキャレットを描かない間も、下線は引く。
+  func testLinkUnderlineShowsWhileTypingGoesToAZoneField() throws {
+    let opened = try focusedHost("see https://example.com/a ok\n\n\n", name: "a.txt")
+    let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
+    let thread = ThreadZone(comment: "返信の入力欄つきのスレッド。", field: field)
+    thread.surface = opened.surface
+    opened.surface.setPresentation(SurfacePresentation(showsMinimap: false))
+    opened.surface.setRows(
+      SurfaceRows(insertions: [RowInsertion(line: 2, content: .zone(thread))]))
+    opened.surface.focus(field)
+    XCTAssertEqual(opened.surface.primary, .field("reply"), "前提: 打鍵の行き先は入力欄")
+
+    hover(opened, at: point(opened, row: 0, column: 10))
+    XCTAssertTrue(try pixelShot(opened).hasInk(x(opened, 10.5), underlineY(opened)))
+  }
+
   /// スクロールで URL がポインタの下から外れれば、下線は消える（ポインタは動いていない）。
   func testLinkUnderlineFollowsThePointerThroughScrolling() throws {
     let opened = try focusedHost(

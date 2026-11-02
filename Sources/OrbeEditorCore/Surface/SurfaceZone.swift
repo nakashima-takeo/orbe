@@ -1,14 +1,15 @@
 import AppKit
 
-/// 区画——面の縦の並びの、文書の行と行の間に置く載せる側の絵（→ `RowInsertion.Content.zone`。PR のスレッドなど）。面は
-/// 区画を view でなく絵として受け、本文と同じ 1 コマに描く（区画と本文がずれて動く余地が無い）。
+/// 絵の差し込み——面の縦の並びの、文書の行と行の間に置き、載せる側が絵を描くもの（→ `RowInsertion.Content.zone`。PR の
+/// スレッドなど）。面は載せる側から view でなく絵（`ZonePicture`）を受け、本文と同じ 1 コマに描く。絵の差し込みと本文が
+/// ずれて動く余地は無い。
 ///
-/// 面は本文の区画の幅を渡して絵を問い（差し込んだとき・幅が変わったとき・`TextSurface.redrawZone` のとき）、絵の高さを
-/// 区画の高さにする。配置の仕組みは持たない——要素の座標は載せる側が区画の中の pt で決める（字の折り返しは
-/// `ZoneTextLayout`）。押せる場所のホバーと押下は `zone(_:)` で載せる側へ知らせる。
+/// 面は本文の区画の幅を渡して中身を問い（置いたとき・幅が変わったとき・`TextSurface.redrawZone` のとき）、返った高さを
+/// 絵の差し込みの高さにする。面は配置の仕組みを持たない。要素の座標は、載せる側が絵の差し込みの中の pt で決める（字の
+/// 折り返しは `ZoneTextLayout`）。押せる場所のホバーと押下は `zone(_:)` で載せる側へ知らせる。
 @MainActor
 public protocol SurfaceZone: AnyObject {
-  /// 幅 `width`（本文の区画の幅、pt）で組んだ区画の絵。
+  /// 幅 `width`（本文の区画の幅、pt）で組んだ絵。
   func picture(width: CGFloat) -> ZonePicture
   /// 押せる場所の知らせ。載せる側は見た目を変えるなら `redrawZone` で描き直させる。
   func zone(_ event: ZoneEvent)
@@ -23,11 +24,12 @@ public enum ZoneEvent: Equatable {
   case pressed(AnyHashable)
 }
 
-/// 区画の絵——高さと、描く順の要素の列と、選べる文のまとまり。座標は区画の左上を原点にした pt（y は下向き）。
+/// 載せる側が描く絵——高さと、要素の列（重ね順は種類で決まる → `ZoneElement`）と、選べる文のまとまり。座標は、
+/// 絵の差し込みの左上を原点にした pt（y は下向き）。
 public struct ZonePicture {
   public var height: CGFloat
   public var elements: [ZoneElement]
-  /// 選べる文のまとまり（コピーで渡す文の正）。描かないので要素の列には入れない——選べる字の行が範囲で指す。
+  /// 選べる文のまとまり——文と、それを描く行。コピーで渡す文の正。
   public var texts: [ZoneText]
 
   public init(height: CGFloat, elements: [ZoneElement] = [], texts: [ZoneText] = []) {
@@ -37,18 +39,18 @@ public struct ZonePicture {
   }
 }
 
-/// 区画の要素。重ね順は種類で決まる（下から 箱 → 画像 → 選んだ文の地 → 字 → 入力欄の中身）。同じ種類の中は列の順。
+/// 絵の差し込みの要素。重ね順は種類で決まる（下から 箱 → 画像 → 選んだ文の地 → 字 → 入力欄の中身）。同じ種類の中は
+/// 列の順。
 public enum ZoneElement {
   case box(ZoneBox)
   case text(ZoneTextLine)
-  case selectable(ZoneSelectableLine)
   case image(ZoneImage)
   case button(ZoneButton)
   case field(ZoneField)
 }
 
-/// 角の丸い矩形（円は、半径が辺の半分の箱）。塗り・枠線・影はどれも省ける。枠線は箱の内側に引き、影は箱の外へはみ出して
-/// よい（CSS の box-shadow と同じく、区画の外の行にも落ちる）。
+/// 角の丸い矩形（円は、半径が辺の半分の箱）。塗り・枠線・影はどれも省ける。枠線は箱の内側に引く。影は箱の外へはみ
+/// 出してよい（CSS の box-shadow と同じく、絵の差し込みの外の行にも落ちる）。
 public struct ZoneBox {
   public var frame: CGRect
   public var radius: CGFloat
@@ -115,19 +117,23 @@ public struct ZoneTextLine {
   }
 }
 
-/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。区画の中で一意）と文。
+/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。絵の差し込みの中で一意）と文と、文を描く行の列。
 public struct ZoneText {
   public var id: AnyHashable
   public var string: String
+  public var lines: [ZoneSelectableLine]
 
-  public init(id: AnyHashable, string: String) {
+  public init(id: AnyHashable, string: String, lines: [ZoneSelectableLine]) {
     self.id = id
     self.string = string
+    self.lines = lines
   }
 }
 
-/// 字の見え方を、文の範囲の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの前後の字をその幅ずつ
-/// 押し出す（CSS のインラインの左右の padding。地は連なりの字の x 範囲をこの幅ずつ広げて置く）。折り返しで割れた側には
+/// 字の見え方を、文の範囲の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの左右の字をその幅ずつ
+/// 押し出す（CSS のインラインの padding）。地は、連なりの字の x 範囲を余白の幅ずつ広げて置く（→ `ZoneTextLayout.Line`
+/// の `ground(_:)`）。先頭の余白は段落の向きの始まりの側（左から右の段落では左、右から左の段落では右）に、末尾の余白は
+/// その反対の側に付く。余白は組版で 1 つにまとまる字の塊の外に付き、絵文字や結合文字を割らない。折り返しで割れた側には
 /// 付かない（→ `ZoneTextLayout.styles(_:in:)`）。
 public struct ZoneTextStyle: Equatable {
   public var length: Int
@@ -145,17 +151,15 @@ public struct ZoneTextStyle: Equatable {
   }
 }
 
-/// 選べる字の行——まとまり `text` の文の範囲 `range` を、基線の左端 `origin` から描く。字はまとまりの文から引く（文の正は
-/// 1 か所）。
+/// 選べる字の行——まとまりの文の範囲 `range` を、基線の左端 `origin` から描く（折り返さない）。字はまとまりの文から引く
+/// （文の正は 1 か所）。行は、まとまりの文の中で範囲を含む段落の向きで組む（→ `ZoneTextLayout.Line`）。
 public struct ZoneSelectableLine {
   public var origin: CGPoint
-  public var text: AnyHashable
   public var range: NSRange
   public var styles: [ZoneTextStyle]
 
-  public init(origin: CGPoint, text: AnyHashable, range: NSRange, styles: [ZoneTextStyle]) {
+  public init(origin: CGPoint, range: NSRange, styles: [ZoneTextStyle]) {
     self.origin = origin
-    self.text = text
     self.range = range
     self.styles = styles
   }
@@ -173,7 +177,7 @@ public struct ZoneImage {
   }
 }
 
-/// 押せる場所——id（描き直しをまたいで安定。区画の中で一意）・矩形・上にあるときのポインタの形。
+/// 押せる場所——id（描き直しをまたいで安定。絵の差し込みの中で一意）・矩形・上にあるときのポインタの形。
 public struct ZoneButton {
   public var id: AnyHashable
   public var frame: CGRect

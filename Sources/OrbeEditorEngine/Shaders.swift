@@ -83,8 +83,9 @@ enum Shaders {
       return float4(in.color.rgb * a, a);
     }
 
-    // 区画の箱: 影 → 塗り → 枠線（内側）を 1 つの断片で重ねる。影は箱を縦に shadow_offset ずらした角丸の矩形を σ の
-    // ガウスでぼかした濃さ（直線の縁の erfc を角丸の距離に当てた近似）で、箱の内側には落とさない（CSS の box-shadow）。
+    // 絵の差し込みの箱: 影 → 塗り → 枠線（内側）を 1 つの断片で重ねる。影は箱を縦に shadow_offset ずらした角丸の
+    // 矩形を σ のガウスでぼかした濃さ（直線の縁の erfc を角丸の距離に当てた近似）で、箱の内側には落とさない（CSS の
+    // box-shadow）。
     struct Box {
       float4 quad; float4 box; float radius; float stroke_width; float sigma; float shadow_offset;
       uint fill; uint stroke; uint shadow; uint pad;

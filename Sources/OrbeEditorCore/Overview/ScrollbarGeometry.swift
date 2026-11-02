@@ -37,8 +37,9 @@ public struct ScrollbarGeometry: Equatable, Sendable {
     sliderPosition = (position * ratio).rounded()
   }
 
-  /// 縦——表示の単位（行高を 1 とする縦の位置。→ `TextReveal`）。`contentLines` は最後の項目の上端 + 1（差し込みの
-  /// 無い面では行数）で、スクロール全体は「最後の項目を最上段まで送れる」ぶんを含み `contentLines + max(0, 表示行数 − 1)`。
+  /// 縦——表示の単位（行高を 1 とする縦の位置。→ `TextReveal`）。`contentLines` は縦の全体の量。最後の項目の上端 + 1
+  /// （差し込みの無い面では行数）で、スクロールを共にする面では、共にする範囲の縦の端 + 1 との大きい方。スクロール
+  /// 全体は「最後の項目を最上段まで送れる」ぶんを含み `contentLines + max(0, 表示行数 − 1)`。
   public init(contentLines: CGFloat, firstLine: CGFloat, visibleLines: CGFloat, height: CGFloat) {
     self.init(
       visible: visibleLines, total: max(1, contentLines) + max(0, visibleLines - 1),

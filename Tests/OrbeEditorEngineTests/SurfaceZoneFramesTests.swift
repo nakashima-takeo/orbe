@@ -6,10 +6,11 @@ import os
 
 @testable import OrbeEditorEngine
 
-/// 区画は本文と同じコマに描かれる——窓を出さず画面外に実際の刻み（120Hz）で描き、合成のはじき（6000pt/s）と端の弾みを
-/// 流しながら、描画スレッドが出したコマを 1 枚ずつ読み、区画の上端・下端と、上下の印の行（全角の塗りの字）の字の画素の
-/// 距離を引く。区画と本文が同じコマに組まれていれば、距離はどのコマでも同じ。壊れると（区画を別の刻み・別の位置で描く
-/// と）、速いスクロールの間に区画が本文の空きから離れたり行に重なったりする。
+/// 絵の差し込みは本文と同じコマに描かれる——窓を出さず画面外に実際の刻み（120Hz）で描き、合成のはじき（6000pt/s）と
+/// 端の弾みを流しながら、描画スレッドが出したコマを 1 枚ずつ読む。読んだコマから、絵の差し込みの上端・下端と、上下の
+/// 印の行（全角の塗りの字）の字の画素の距離を引く。絵の差し込みと本文が同じコマに組まれていれば、距離はどのコマでも
+/// 同じ。壊れると（絵の差し込みを別の刻み・別の位置で描くと）、速いスクロールの間に絵の差し込みが本文の空きから離れたり
+/// 行に重なったりする。
 @MainActor
 final class SurfaceZoneFramesTests: EngineTestCase {
   func testZonesStayInTheGapThroughAFlickAndABounce() throws {
@@ -52,11 +53,11 @@ final class SurfaceZoneFramesTests: EngineTestCase {
       "above \(gaps.above.min() ?? -1)...\(gaps.above.max() ?? -1)",
       "below \(gaps.below.min() ?? -1)...\(gaps.below.max() ?? -1)")
     XCTAssertGreaterThan(probe.frames, 60, "前提: スクロールの間のコマを読んだ")
-    XCTAssertGreaterThan(gaps.above.count, 60, "前提: 区画と上下の印の行を引けた")
-    XCTAssertEqual(gaps.above.min(), gaps.above.max(), "区画の上端と上の行の距離は、どのコマでも同じ")
-    XCTAssertEqual(gaps.below.min(), gaps.below.max(), "区画の下端と下の行の距離は、どのコマでも同じ")
-    XCTAssertGreaterThan(gaps.above.min() ?? 0, 0, "区画は上の行の字に重ならない")
-    XCTAssertGreaterThan(gaps.below.min() ?? 0, 0, "区画は下の行の字に重ならない")
+    XCTAssertGreaterThan(gaps.above.count, 60, "前提: 絵の差し込みと上下の印の行を引けた")
+    XCTAssertEqual(gaps.above.min(), gaps.above.max(), "絵の差し込みの上端と上の行の距離は、どのコマでも同じ")
+    XCTAssertEqual(gaps.below.min(), gaps.below.max(), "絵の差し込みの下端と下の行の距離は、どのコマでも同じ")
+    XCTAssertGreaterThan(gaps.above.min() ?? 0, 0, "絵の差し込みは上の行の字に重ならない")
+    XCTAssertGreaterThan(gaps.below.min() ?? 0, 0, "絵の差し込みは下の行の字に重ならない")
   }
 
   /// はじく: 80ms で速さ `peak`（pt/秒。正は下へ送る）まで上げて離し、OS の momentum の出来事（0.95 倍ずつ落ちる列）が
@@ -95,8 +96,8 @@ final class SurfaceZoneFramesTests: EngineTestCase {
   }
 }
 
-/// 描いたコマの画素から、区画（`zoneX` の列で区画の塗りの画素の続く行）ごとに、上端と上の印の行の字の下端・下端と下の
-/// 印の行の字の上端の距離（画素）を引く。印の行は `markerX` の列で明るい画素の行。
+/// 描いたコマの画素から、絵の差し込み（`zoneX` の列で、絵の差し込みの塗りの画素が続く行）ごとに、上端と上の印の行の字の
+/// 下端・下端と下の印の行の字の上端の距離（画素）を引く。印の行は `markerX` の列で明るい画素の行。
 private final class FrameProbe: Sendable {
   struct Gaps {
     var above: [Int] = []

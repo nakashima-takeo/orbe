@@ -1,7 +1,8 @@
 import AppKit
 import OrbeEditorCore
 
-/// 区画 1 つの main の持ち物——載せる側の区画（面が保持する）・絵を問うた幅・最後の絵と、それを写した描く材料と当たりの表。
+/// 絵の差し込み 1 つの main の持ち物——載せる側の絵の差し込み（面が保持する）・中身を問うた幅・最後の中身と、それを
+/// 写した描く材料と当たりの表。
 @MainActor
 final class ZoneEntry {
   let zone: SurfaceZone
@@ -23,14 +24,14 @@ struct HoveredButton: Equatable {
   var id: AnyHashable
 }
 
-/// 区画（絵を問い・材料に写し・幅に合わせ・描き直す）と、入力欄の場（作る・使い回す・閉じる）と、押せる場所のホバー。
-/// 絵を問うのも写すのも main の取引の中で、描く材料は並びと同じ書き込みで材料の箱に載る（描画スレッドは引き取った版の
-/// 並びと材料で描く）。
+/// 絵の差し込み（中身を問い・材料に写し・幅に合わせ・描き直す）と、入力欄の場（作る・使い回す・閉じる）と、押せる場所の
+/// ホバー。中身を問うのも写すのも main の取引の中で、描く材料は並びと同じ書き込みで材料の箱に載る（描画スレッドは引き
+/// 取った版の並びと材料で描く）。
 extension MetalTextSurface {
-  /// 今の本文の区画の幅（区画の絵を問う幅）。
+  /// 今の本文の区画の幅（絵の差し込みの中身を問う幅）。
   var zoneWidth: CGFloat { surfaceLayout.text.width }
 
-  /// 置く区画を `list` にする（取引の中）——新しい区画は今の幅で絵を問うて写し、外れた区画は手放す。
+  /// 置く絵の差し込みを `list` にする（取引の中）——新しいものは今の幅で中身を問うて写し、外れたものは手放す。
   func syncZones(_ list: [SurfaceZone]) {
     let ids = Set(list.map(ObjectIdentifier.init))
     for (id, entry) in zones where !ids.contains(id) {
@@ -57,26 +58,25 @@ extension MetalTextSurface {
     }
   }
 
-  /// 絵を描く材料と当たりの表に写して書く（取引の中）。入力欄の場を作り・使い回し、絵から消えた入力欄の場は取引の終わりに
-  /// 閉じる。区画の文の選択を確かめ直す。高さが変われば取引の終わりに並びを組み直す。
+  /// 中身を描く材料と当たりの表に写して書く（取引の中）。入力欄の場を作り・使い回し、中身から消えた入力欄の場は取引の
+  /// 終わりに閉じる。絵の差し込みの文の選択を確かめ直す。高さが変われば取引の終わりに並びを組み直す。
   func paint(_ entry: ZoneEntry) {
     let id = ObjectIdentifier(entry.zone)
     let (material, hits) = painter.paint(
       entry.picture,
       ZonePainter.Look(appearance: textView.effectiveAppearance, space: space, scale: scale),
       serial: { fieldSite(for: $0).serial })
-    let previous = entry.hits
+    orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)))
     entry.material = material
     entry.hits = hits
     zonesRepainted = true
     for field in hits.fields {
       guard let site = fields[field.field.id] else { continue }
-      precondition(site.zone == nil || site.zone == id, "入力欄の id は面の中で一意（2 つの区画に置かない）")
+      precondition(site.zone == nil || site.zone == id, "入力欄の id は面の中で一意（2 つの絵の差し込みに置かない）")
       site.zone = id
       site.frame = field.frame
       site.touch()
     }
-    orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)), previous: previous)
     transaction?.writes.append { $0.zones[id] = material }
     if let block = rows.block(ofZone: id),
       rows.heights[block] != Double(max(0, entry.picture.height))
@@ -86,12 +86,11 @@ extension MetalTextSurface {
     if zoneSelection?.zone == id { validateZoneSelection(entry) }
   }
 
-  /// 区画 `entry` が描いていた入力欄のうち、`keeping` に無いものを、どの区画も描いていない場にする（取引の終わりに閉じる）。
-  private func orphanFields(
-    of entry: ZoneEntry, keeping: Set<AnyHashable>, previous: ZoneHits? = nil
-  ) {
+  /// 絵の差し込み `entry` が描いていた入力欄のうち、`keeping` に無いものを、どの絵の差し込みも描いていない場にする
+  /// （取引の終わりに閉じる）。
+  private func orphanFields(of entry: ZoneEntry, keeping: Set<AnyHashable>) {
     let id = ObjectIdentifier(entry.zone)
-    for field in (previous ?? entry.hits).fields where !keeping.contains(field.field.id) {
+    for field in entry.hits.fields where !keeping.contains(field.field.id) {
       if let site = fields[field.field.id], site.zone == id { site.zone = nil }
     }
   }
@@ -108,10 +107,10 @@ extension MetalTextSurface {
     return site
   }
 
-  /// 取引の終わりに、区画を今に合わせる（取引の中）——本文の区画の幅が変わっていれば絵を問い直し、どの区画も描いていない
-  /// 入力欄の場を閉じ（主なら本文が主になる）、高さが変わった区画で並びを組み直す（閉じた場の知らせの中で描き直した高さも
-  /// 同じ取引に入る）。
-  /// 区画を写したか外したなら、どの区画の材料も指さない画像の覚えを手放す。
+  /// 取引の終わりに、絵の差し込みを今に合わせる（取引の中）——本文の区画の幅が変わっていれば中身を問い直し、どの
+  /// 絵の差し込みも描いていない入力欄の場を閉じ（主なら本文が主になる）、高さが変わった絵の差し込みで並びを組み直す
+  /// （閉じた場の知らせの中で描き直した高さも同じ取引に入る）。絵の差し込みを写したか外したなら、どの材料も指さない
+  /// 画像の覚えを手放す。
   func settleZones() {
     guard !zones.isEmpty || !fields.isEmpty || zonesRepainted else { return }
     let width = zoneWidth
@@ -134,7 +133,7 @@ extension MetalTextSurface {
     }
   }
 
-  /// 区画の絵の高さで並びを組み直す（見えている先頭の文書の行は確定で保つ）。
+  /// 絵の差し込みの中身の高さで並びを組み直す（見えている先頭の文書の行は確定で保つ）。
   private func applyZoneHeights() {
     zoneHeightsChanged = false
     let current = rows
@@ -161,7 +160,7 @@ extension MetalTextSurface {
     if transaction?.anchor == nil { transaction?.anchor = rows }
   }
 
-  /// 外観・色空間・倍率が変わった——区画の色と画像を写し直し（絵は問い直さない）、入力欄の色を解き直す。
+  /// 外観・色空間・倍率が変わった——絵の差し込みの色と画像を写し直し（中身は問い直さない）、入力欄の色を解き直す。
   func zonesAppearanceDidChange() {
     guard !zones.isEmpty || !fields.isEmpty else { return }
     transact {
@@ -203,8 +202,8 @@ extension MetalTextSurface {
     if let next { zones[next.zone]?.zone.zone(.entered(next.id)) }
   }
 
-  /// 窓の今のポインタの位置でホバーとポインタの形を引き直す（スクロール・並び・区画の絵が変わり、押せる場所がポインタの
-  /// 下を動いた）。
+  /// 窓の今のポインタの位置でホバーとポインタの形を引き直す（スクロール・並び・絵の差し込みの中身が変わり、押せる場所が
+  /// ポインタの下を動いた）。
   func refreshPointer() {
     guard rows.hasZones || hoveredButton != nil else { return }
     textView.refreshPointer()

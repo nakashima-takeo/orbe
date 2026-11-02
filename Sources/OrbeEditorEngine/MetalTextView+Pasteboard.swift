@@ -14,7 +14,8 @@ extension MetalTextView {
 
   /// 選択を写す。選択が空ならキャレットの行を写し、行ごと写した印を付ける。選択を 2 つ以上写せば断片も載せる。色の付く
   /// 文書で、写したものが本文の 1 つの範囲（選択 1 つか、選択が空のときの 1 行）で 64KB 未満なら、構文色付きの HTML も
-  /// 載せる。主が区画の文なら、選んだまとまりの文の部分を平文で写す（折り返しで改行は入らない。選択が空なら何もしない）。
+  /// 載せる。主が絵の差し込みの文なら、選んだまとまりの文の部分を平文で写す（折り返しで改行は入らない。選択が空なら
+  /// 何もしない）。
   @objc func copy(_ sender: Any?) {
     guard surface?.primary != .zoneText else {
       guard let text = surface?.zoneSelectedText else { return }
@@ -95,7 +96,7 @@ extension MetalTextView {
 
   // MARK: - サービス
 
-  /// 平文を送る（選択があるとき）と受ける（主が編集の場のとき）。主が区画の文の間は送るだけ。
+  /// 平文を送る（選択があるとき）と受ける（主が編集の場のとき）。絵の差し込みの文が主の間は送るだけ。
   override func validRequestor(
     forSendType sendType: NSPasteboard.PasteboardType?,
     returnType: NSPasteboard.PasteboardType?
@@ -115,10 +116,10 @@ extension MetalTextView {
 
   // MARK: - 右クリック
 
-  /// 右クリック・⌃クリックのメニュー（中身と文言は載せる側が組む）。先に変換を確定し、焦点を取り、点の下の行き先を主に
-  /// する。本文と入力欄は、選択の外で押せばキャレットをそこへ動かし、選択の中（両端を含む）なら選択を保つ。区画の選べる
-  /// 文は、選択の外で押せば押した点を選び、メニューはコピーだけにする。区画の空きは本文を主にするだけで、押せる場所には
-  /// メニューを出さない。
+  /// 右クリック・⌃クリックのメニュー（中身と文言は載せる側が組む）。先に変換を確定し、焦点を取り、点の下の行き先を
+  /// 主にする。本文と入力欄は、選択の外で押せばキャレットをそこへ動かし、選択の中（両端を含む）なら選択を保つ。
+  /// 絵の差し込みの選べる文は、選択の外で押せば押した点を選び、メニューはコピーだけにする。絵の差し込みの
+  /// ほかに当たらない所は本文を主にするだけで、押せる場所にはメニューを出さない。
   override func menu(for event: NSEvent) -> NSMenu? {
     let point = convert(event.locationInWindow, from: nil)
     guard let surface, let host = surface.host, overview.area(at: point) == nil else { return nil }
@@ -186,7 +187,7 @@ extension MetalTextView {
 }
 
 extension MetalTextView: @preconcurrency NSServicesMenuRequestor {
-  /// サービスへ選択の平文を渡す（主が区画の文なら、選んだ区画の文）。
+  /// サービスへ選択の平文を渡す（主が絵の差し込みの文なら、選んだその文）。
   func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
     if surface?.primary == .zoneText {
       guard types.contains(.string), let text = surface?.zoneSelectedText else { return false }
@@ -203,7 +204,7 @@ extension MetalTextView: @preconcurrency NSServicesMenuRequestor {
     return pboard.setString(text.substring(selection), forType: .string)
   }
 
-  /// サービスが返した平文で主の場の選択を置き換える（前後で区切る。主が区画の文か読むだけの場なら受けない）。
+  /// サービスが返した平文で主の場の選択を置き換える（前後で区切る。主が絵の差し込みの文か読むだけの場なら受けない）。
   func readSelection(from pboard: NSPasteboard) -> Bool {
     guard let surface, let site = surface.primarySite, site.isEditable,
       let string = pboard.string(forType: .string)

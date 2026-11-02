@@ -32,7 +32,7 @@ extension MetalTextSurface {
       return nil
     }
     precondition(
-      Set(zoneList.map(ObjectIdentifier.init)).count == zoneList.count, "同じ区画は並びに 1 度だけ置く")
+      Set(zoneList.map(ObjectIdentifier.init)).count == zoneList.count, "同じ絵の差し込みは並びに 1 度だけ置く")
     transact {
       noteRowsChange()
       rowSource = rows.source
@@ -75,7 +75,7 @@ extension MetalTextSurface {
     }
   }
 
-  /// 今の並びが `insertions` と同じ（境と中身。区画は同一性）か。
+  /// 今の並びが `insertions` と同じ（境と中身。絵の差し込みは同一性）か。
   private func holds(_ insertions: [RowInsertion]) -> Bool {
     guard insertions.map(\.line) == rows.boundaries else { return false }
     return zip(insertions, rows.contents).allSatisfy { insertion, content in
