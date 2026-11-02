@@ -207,6 +207,27 @@ final class ZoneTextLayoutTests: XCTestCase {
     return wrong
   }
 
+  /// 段落の途中の行も段落の向きで組む——左から右の段落で右から左の字から始まる行でも、後ろの字はその右に、右から左の
+  /// 段落で左から右の字から始まる行でも、後ろの字はその左に並ぶ。
+  func testAWrappedLineIsLaidOutInTheParagraphsDirection() throws {
+    for (parts, width, rightToLeft) in [
+      (["see ", "שלום עולם ארוך מאוד", " z"], CGFloat(90), false),
+      (["שלום ", "aaaa bbbb cccc dddd", " עולם"], 90, true),
+    ] {
+      let string = parts.joined()
+      let lines = ZoneTextLayout.lines(string, styles: codeStyles(parts), width: width)
+      let line = try XCTUnwrap(
+        lines.last { $0.range.location > 0 && $0.styles.count == 2 && $0.styles[0].font == mono },
+        "前提: \(string) に、コードの続きから始まって後ろの字が並ぶ行がある")
+      let (code, after) = (line.spans[0], line.spans[1])
+      if rightToLeft {
+        XCTAssertLessThanOrEqual(after.upperBound, code.lowerBound + 0.01, "\(string): 後ろの字は左")
+      } else {
+        XCTAssertGreaterThanOrEqual(after.lowerBound, code.upperBound - 0.01, "\(string): 後ろの字は右")
+      }
+    }
+  }
+
   /// 前と後ろを本文の字体、真ん中を余白 4 のインラインコードにした見え方。
   private func codeStyles(_ parts: [String]) -> [ZoneTextStyle] {
     parts.enumerated().map { index, part in
