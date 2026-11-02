@@ -3,12 +3,12 @@ import XCTest
 @testable import Orbe
 
 /// 結果の関門——取得の項目は、書けば link が http(s)、time が ISO 8601 のものだけ。判定の結果は、今回渡した項目・出ている提案だけを
-/// 指し、タイトルと期限がタスクの規則に合うものだけを受ける。付け先は付け先の一覧の id だけを受けて永続 ID に直して運び、Home
-/// の id は付け先なしとして受ける。候補にした理由は 1 段落に整えて運ぶ。
+/// 指し、タイトルと期限がタスクの規則に合うものだけを受ける。付け先は付け先の一覧の id だけを受けて運び、Home の id は付け先なし
+/// として受ける。候補にした理由は 1 段落に整えて運ぶ。
 ///
 /// 壊れると何が起きるか。外の文面の file: の link が候補のリンクになる。判定が別の自動化の項目や
-/// 存在しない提案を指しても通り、タスクにできないタイトルの提案が棚に並ぶ。判定が一覧に無い workspace や true を付け先に
-/// 書いても通り、候補が別の workspace や行き場の無い付け先を持つ。`orb ws list --json` の Home の id を書いたコマンドの判定の
+/// 存在しない提案を指しても通り、タスクにできないタイトルの提案が棚に並ぶ。判定が一覧に無い workspace や文字列でない値を
+/// 付け先に書いても通り、候補が別の workspace や行き場の無い付け先を持つ。`orb ws list --json` の Home の id を書いたコマンドの判定の
 /// 候補が捨てられ、二度と出ない。候補の詳細に、判定が書いた理由が改行の崩れたまま出る。
 final class AutomationOutputsTests: OrbeTestCase {
   private let line =
@@ -113,8 +113,7 @@ final class AutomationOutputsTests: OrbeTestCase {
     }
     return Read(decisions: decisions, rejected: rejected, notJSON: broken.map(\.text))
   }
-  private let orbe = AutomationWorkspace(
-    id: 3, persistentId: UUID(), name: "orbe", root: "/src/orbe")
+  private let orbe = AutomationWorkspace(id: UUID(), name: "orbe", root: "/src/orbe")
 
   func testJudgeKeepsOnlyLinesThatPointAtWhatWasGiven() {
     let text = [
@@ -163,10 +162,10 @@ final class AutomationOutputsTests: OrbeTestCase {
     return (read.decisions, read.rejected)
   }
 
-  /// 一覧の id は永続 ID に直して運び、書かなければ付け先なし。
-  func testJudgeTurnsAListedWorkspaceIntoItsPersistentId() {
+  /// 一覧の id（大文字小文字を問わない）はその workspace に付け、書かなければ付け先なし。
+  func testJudgeAttachesAListedWorkspaceById() {
     let (decisions, rejected) = judged([
-      #"{"propose":"a","title":"orbe の作業","workspace":3}"#,
+      #"{"propose":"a","title":"orbe の作業","workspace":"\#(orbe.id.uuidString.lowercased())"}"#,
       #"{"propose":"b","title":"どこでもない作業"}"#,
     ])
 
@@ -174,18 +173,19 @@ final class AutomationOutputsTests: OrbeTestCase {
       decisions,
       [
         .propose(
-          itemId: "a", title: "orbe の作業", due: nil, workspace: orbe.persistentId, reason: nil),
+          itemId: "a", title: "orbe の作業", due: nil, workspace: orbe.id, reason: nil),
         .propose(itemId: "b", title: "どこでもない作業", due: nil, workspace: nil, reason: nil),
       ])
     XCTAssertEqual(rejected, [])
   }
 
-  /// 一覧に無い id・整数でない値（文字列・小数）の行は、候補にせず理由付きで捨てる。null は書かなかったのと同じ。
-  func testJudgeDropsLinesWithAnUnlistedOrNonIntegerWorkspace() {
+  /// 一覧に無い id・UUID でない文字列・文字列でない値（整数）の行は、候補にせず理由付きで捨てる。null は書かなかったのと同じ。
+  func testJudgeDropsLinesWithAnUnlistedOrMalformedWorkspace() {
+    let unknown = UUID()
     let (decisions, rejected) = judged([
-      #"{"propose":"a","title":"知らない","workspace":4}"#,
-      #"{"propose":"a","title":"文字列","workspace":"3"}"#,
-      #"{"propose":"b","title":"小数","workspace":3.5}"#,
+      #"{"propose":"a","title":"知らない","workspace":"\#(unknown.uuidString)"}"#,
+      #"{"propose":"a","title":"UUID でない","workspace":"3"}"#,
+      #"{"propose":"b","title":"整数","workspace":3}"#,
       #"{"propose":"b","title":"null","workspace":null}"#,
     ])
 
@@ -194,9 +194,9 @@ final class AutomationOutputsTests: OrbeTestCase {
     XCTAssertEqual(
       rejected,
       [
-        "item 1: propose a: workspace 4 is not a listed workspace",
-        "item 2: workspace has the wrong type",
-        "item 3: invalid value",
+        "item 1: propose a: workspace \(unknown.uuidString) is not a listed workspace",
+        "item 2: propose a: workspace 3 is not a listed workspace",
+        "item 3: workspace has the wrong type",
       ])
   }
 
@@ -218,18 +218,6 @@ final class AutomationOutputsTests: OrbeTestCase {
     XCTAssertEqual(rejected, ["item 2: reason has the wrong type"])
   }
 
-  /// 真偽値の true を id 1 と取り違えない（id 1 の workspace があっても付けない）。
-  func testJudgeDoesNotReadTrueAsWorkspaceOne() {
-    let one = AutomationWorkspace(id: 1, persistentId: UUID(), name: "one", root: "/one")
-    let read = read(
-      #"{"propose":"a","title":"t","workspace":true}"#, itemIds: ["a"],
-      choices: AutomationJudgeChoices(open: [], workspaces: listed([one])))
-    let (decisions, rejected) = (read.decisions, read.rejected)
-
-    XCTAssertEqual(decisions, [])
-    XCTAssertEqual(rejected, ["item 1: workspace has the wrong type"])
-  }
-
   /// Home は依頼文の一覧に載らず、Home の id を書いた行は付け先なし（Home に付く）として受ける——コマンドの判定は
   /// `orb ws list --json` から Home の id を書きうる。
   func testHomeIsNotListedAndItsIdMeansNoWorkspace() throws {
@@ -244,8 +232,8 @@ final class AutomationOutputsTests: OrbeTestCase {
       .call("read_workspaces", [:])
     let read = read(
       [
-        #"{"propose":"a","title":"Home の作業","workspace":\#(home.id)}"#,
-        #"{"propose":"b","title":"orbe の作業","workspace":\#(repo.id)}"#,
+        #"{"propose":"a","title":"Home の作業","workspace":"\#(home.id.uuidString)"}"#,
+        #"{"propose":"b","title":"orbe の作業","workspace":"\#(repo.id.uuidString)"}"#,
       ].joined(separator: "\n"), itemIds: Set(items.map(\.id)), choices: choices)
     let (decisions, rejected) = (read.decisions, read.rejected)
 
@@ -256,7 +244,7 @@ final class AutomationOutputsTests: OrbeTestCase {
       [
         .propose(itemId: "a", title: "Home の作業", due: nil, workspace: nil, reason: nil),
         .propose(
-          itemId: "b", title: "orbe の作業", due: nil, workspace: repo.persistentId, reason: nil),
+          itemId: "b", title: "orbe の作業", due: nil, workspace: repo.id, reason: nil),
       ])
     XCTAssertEqual(rejected, [])
   }

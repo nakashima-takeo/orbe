@@ -158,9 +158,9 @@ extension BoardAutomationDetailValue {
 
   /// workspace の名前（描くときの今の名前）。今の workspace に無ければ「削除済み」。
   static func workspace(
-    _ persistentId: UUID, _ workspaces: AutomationWorkspaces, _ l10n: LocalizationStore
+    _ id: UUID, _ workspaces: AutomationWorkspaces, _ l10n: LocalizationStore
   ) -> String {
-    workspaces.workspace(persistentId)?.name ?? l10n.string(.boardWorkspaceRemoved)
+    workspaces.workspace(id)?.name ?? l10n.string(.boardWorkspaceRemoved)
   }
 
   /// 報告と作業の文の出し先（「メニューバー」）。役割の名前（報告・作業）は使わない。

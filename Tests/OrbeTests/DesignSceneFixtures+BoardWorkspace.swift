@@ -7,29 +7,26 @@ import Foundation
 /// いて、継ぐ `clean` の最新の回は workspace が見つからずに失敗した。
 extension DesignSceneFixtures {
   static let orbeWorkspace = AutomationWorkspace(
-    id: 3, persistentId: UUID(uuidString: "6F1E0C2A-0000-4000-8000-000000000003")!, name: "orbe",
+    id: UUID(uuidString: "6F1E0C2A-0000-4000-8000-000000000003")!, name: "orbe",
     root: "/Users/me/src/orbe")
   static let dotfilesWorkspace = AutomationWorkspace(
-    id: 4, persistentId: UUID(uuidString: "6F1E0C2A-0000-4000-8000-000000000004")!,
+    id: UUID(uuidString: "6F1E0C2A-0000-4000-8000-000000000004")!,
     name: "dotfiles", root: "/Users/me/dotfiles")
   /// どの workspace にも無い（消した）workspace。
   static let removedWorkspace = UUID(uuidString: "6F1E0C2A-0000-4000-8000-000000000009")!
 
   /// Home・orbe・dotfiles。
   static var boardWorkspaces: AutomationWorkspaces {
-    AutomationWorkspaces(
-      all: [
-        AutomationWorkspace(
-          id: 1, persistentId: UUID(uuidString: "6F1E0C2A-0000-4000-8000-000000000001")!,
-          name: "Home", root: "/Users/me/Library/Application Support/Orbe/home"),
-        orbeWorkspace, dotfilesWorkspace,
-      ], home: 1)
+    let home = AutomationWorkspace(
+      id: UUID(uuidString: "6F1E0C2A-0000-4000-8000-000000000001")!,
+      name: "Home", root: "/Users/me/Library/Application Support/Orbe/home")
+    return AutomationWorkspaces(all: [home, orbeWorkspace, dotfilesWorkspace], home: home.id)
   }
 
   static func boardWorkspaceSamples() -> [AutomationSample] {
     let prs = AutomationSample(
       definition: AutomationDefinition(
-        name: "PR の確認", notify: nil, workspace: orbeWorkspace.persistentId,
+        name: "PR の確認", notify: nil, workspace: orbeWorkspace.id,
         nodes: [
           commandNode(
             "prs", "自分の PR", .scheduled(.every(3600)),
@@ -37,7 +34,7 @@ extension DesignSceneFixtures {
             coverage: .currentSet),
           commandNode(
             "sync", "設定の同期", .manual, from: ["prs"], script: "./sync.sh",
-            workspace: dotfilesWorkspace.persistentId, directory: "bin", deliver: .sideEffect),
+            workspace: dotfilesWorkspace.id, directory: "bin", deliver: .sideEffect),
           commandNode(
             "archive", "記録の保存", .manual, from: ["prs"], script: "./archive.sh",
             workspace: removedWorkspace, directory: "tools", deliver: .sideEffect),

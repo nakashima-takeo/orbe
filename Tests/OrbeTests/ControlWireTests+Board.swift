@@ -5,15 +5,14 @@ import XCTest
 
 /// ボードのウィジェットの 3 動詞の params の語と型検査と、domain への配線。
 ///
-/// 壊れると何が起きるか: 真偽値の true が workspace の 1 番として読まれ、別の workspace のボードを触る。知らない種類が黙って
-/// 何かに読み替えられる。置くと外すが入れ替わって配線され、AI が外したつもりのウィジェットが残る。
+/// 壊れると何が起きるか: 知らない種類が黙って何かに読み替えられる。置くと外すが入れ替わって配線され、AI が外したつもりのウィジェットが残る。
 extension ControlWireTests {
   /// 3 動詞の正しい params 一式（`validRequests` の一部）。
   var boardRequests: [(method: String, params: [String: Any])] {
     [
-      ("list_board_widgets", ["workspaceId": 3]),
-      ("add_board_widget", ["workspaceId": 3, "kind": "automation"]),
-      ("remove_board_widget", ["workspaceId": 3, "kind": "automation"]),
+      ("list_board_widgets", ["workspaceId": Self.workspace]),
+      ("add_board_widget", ["workspaceId": Self.workspace, "kind": "automation"]),
+      ("remove_board_widget", ["workspaceId": Self.workspace, "kind": "automation"]),
     ]
   }
 
@@ -21,19 +20,24 @@ extension ControlWireTests {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
 
-    let listed = wire.request(id: 1, method: "list_board_widgets", params: ["workspaceId": 3])
+    let (listedIn, addedTo, removedFrom) = (UUID(), UUID(), UUID())
+
+    let listed = wire.request(
+      id: 1, method: "list_board_widgets", params: ["workspaceId": listedIn.uuidString])
     _ = wire.request(
-      id: 2, method: "add_board_widget", params: ["workspaceId": 4, "kind": "automation"])
+      id: 2, method: "add_board_widget",
+      params: ["workspaceId": addedTo.uuidString, "kind": "automation"])
     _ = wire.request(
-      id: 3, method: "remove_board_widget", params: ["workspaceId": 5, "kind": "automation"])
+      id: 3, method: "remove_board_widget",
+      params: ["workspaceId": removedFrom.uuidString, "kind": "automation"])
 
     XCTAssertEqual(
       ((listed?["result"] as? [String: Any])?["widgets"] as? [[String: Any]])?.first?["kind"]
         as? String, "automation", "結果の並びは widgets で包む")
-    XCTAssertEqual(fake.boardLists, [3])
-    XCTAssertEqual(fake.addedBoardWidgets.map(\.workspaceId), [4])
+    XCTAssertEqual(fake.boardLists, [listedIn])
+    XCTAssertEqual(fake.addedBoardWidgets.map(\.workspaceId), [addedTo])
     XCTAssertEqual(fake.addedBoardWidgets.map(\.widget), [.automation])
-    XCTAssertEqual(fake.removedBoardWidgets.map(\.workspaceId), [5])
+    XCTAssertEqual(fake.removedBoardWidgets.map(\.workspaceId), [removedFrom])
     XCTAssertEqual(fake.removedBoardWidgets.map(\.widget), [.automation])
   }
 
@@ -49,18 +53,11 @@ extension ControlWireTests {
     }
     let cases = [
       Case(
-        label: "真偽値は workspace の番号でない", method: "list_board_widgets", params: ["workspaceId": true],
-        message: "invalid workspaceId"),
-      Case(
-        label: "文字列の番号", method: "add_board_widget",
-        params: ["workspaceId": "3", "kind": "automation"],
-        message: "invalid workspaceId"),
-      Case(
-        label: "種類が文字列でない", method: "add_board_widget", params: ["workspaceId": 3, "kind": 1],
-        message: "invalid kind"),
+        label: "種類が文字列でない", method: "add_board_widget",
+        params: ["workspaceId": Self.workspace, "kind": 1], message: "invalid kind"),
       Case(
         label: "知らない種類", method: "remove_board_widget",
-        params: ["workspaceId": 3, "kind": "weather"],
+        params: ["workspaceId": Self.workspace, "kind": "weather"],
         message: "unknown kind: weather (known: automation)"),
     ]
     for item in cases {

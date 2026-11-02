@@ -123,11 +123,11 @@ extension OrbeCliProcessTests {
     XCTAssertNotNil(try json(ok.stdout)["workspaces"], "成功時の生 JSON は stdout へ")
     XCTAssertTrue(ok.stderr.isEmpty, "成功時に stderr へは何も出さない: \(ok.stderr)")
 
-    let plain = control.orb(["ws", "switch", "999999"])
+    let plain = control.orb(["ws", "switch", UUID().uuidString])
     failure(plain, code: 1, message: "error -32004", "RPC エラー")
     XCTAssertTrue(plain.stdout.isEmpty, "非 --json のエラーは stdout を汚さない: \(plain.stdout)")
 
-    let structured = control.orb(["ws", "switch", "999999", "--json"])
+    let structured = control.orb(["ws", "switch", UUID().uuidString, "--json"])
     XCTAssertEqual(structured.status, 1, "--json でも RPC エラーは exit 1")
     let error = try XCTUnwrap(try json(structured.stdout)["error"] as? [String: Any])
     XCTAssertEqual(error["code"] as? Int, -32004, "control の code をそのまま載せる")
@@ -251,10 +251,26 @@ extension OrbeCliProcessTests {
       control.orbJSON(["tab", "list", "--workspace", "\(activeId)"])["tabs"] as? [[String: Any]])
     XCTAssertFalse(tabs.isEmpty, "--workspace <id> の絞り込みで結果が消えない")
     XCTAssertTrue(
-      tabs.allSatisfy { $0["workspaceId"] as? Int == activeId }, "指定した WS のタブだけが残る")
+      tabs.allSatisfy { $0["workspaceId"] as? String == activeId }, "指定した WS のタブだけが残る")
     XCTAssertEqual(
       (control.orbJSON(["tab", "list", "--workspace", "current"])["tabs"] as? [[String: Any]])?
-        .count, tabs.count, "`current` も `<id>` として解決する（数値だけの受け付けに退行しない）")
+        .count, tabs.count, "`current` も `<id>` として解決する")
+    XCTAssertEqual(
+      (control.orbJSON(["tab", "list", "--workspace", activeId.lowercased()])["tabs"]
+        as? [[String: Any]])?.count, tabs.count, "小文字で打った ID でも絞り込みが外れない")
+
+    // 整数は workspace の ID でない。
+    failure(
+      control.orb(["tab", "list", "--workspace", "3"]), code: 2,
+      message: "invalid workspace id: 3", "tab list の整数")
+    failure(
+      control.orb(["ws", "switch", "3"]), code: 2,
+      message: "ws switch requires a workspace <id>", "ws switch の整数")
+
+    // 今の workspace に無い ID は、空の一覧ではなく control の断り。
+    failure(
+      control.orb(["tab", "list", "--workspace", UUID().uuidString]), code: 1,
+      message: "workspace not found", "tab list の知らない ID")
   }
 
   /// `--json` の応答は control の result をそのまま出すので、成功応答の `seq`（その操作時点の履歴位置）が
@@ -291,7 +307,7 @@ extension OrbeCliProcessTests {
 
     let tabs = try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
     XCTAssertEqual(
-      tabs.first { $0["tabId"] as? Int == tabId }?["workspaceId"] as? Int, backgroundId,
+      tabs.first { $0["tabId"] as? Int == tabId }?["workspaceId"] as? String, backgroundId,
       "開いたタブは指定した workspace に属する")
   }
 

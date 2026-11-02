@@ -45,7 +45,7 @@ private func wsList(_ rest: [String]) -> Never {
     let list = (result as? [String: Any])?["workspaces"] as? [[String: Any]] ?? []
     for ws in list {
       let mark = (ws["active"] as? Bool == true) ? "*" : " "
-      let id = ws["id"] as? Int ?? -1
+      let id = ws["id"] as? String ?? "?"
       let name = ws["name"] as? String ?? "?"
       let root = ws["rootPath"] as? String ?? ""
       print("\(mark) \(id)\t\(name)\t\(root)")
@@ -66,7 +66,8 @@ private func wsNew(_ args: [String]) -> Never {
     printJSON(result)
   } else {
     let d = result as? [String: Any]
-    print("created workspace \(d?["workspaceId"] as? Int ?? -1): \(d?["name"] as? String ?? name)")
+    print(
+      "created workspace \(d?["workspaceId"] as? String ?? "?"): \(d?["name"] as? String ?? name)")
   }
   exit(0)
 }
@@ -93,8 +94,8 @@ private func wsDir(_ rest: [String]) -> Never {
 
 private func wsSwitch(_ rest: [String]) -> Never {
   rejectLeftovers(rest, positionals: 1)
-  guard let arg = rest.first, let id = Int(arg) else {
-    usageDie("ws switch requires a numeric <id>")
+  guard let arg = rest.first, let id = UUID(uuidString: arg)?.uuidString else {
+    usageDie("ws switch requires a workspace <id>")
   }
   let result = callOrExit("activate_workspace", ["workspaceId": id])
   if wantJSON { printJSON(result) } else { print("switched to workspace \(id)") }

@@ -2,10 +2,10 @@ import Foundation
 
 /// 自動化の定義（AI から見える外の形）。書くときに動作の定義・自動化のノード・つながりへ分け、読むときに行から組み直す。
 /// 形だけを読み、値と組み合わせは `checked()` が検証する。ノードの同一性は `id`（Orbe が振る）で、鍵はただの呼び名。
-struct AutomationDefinition: Equatable, Codable {
+struct AutomationDefinition: Equatable {
   var name: String
   var notify: AutomationNotify?
-  /// 自分の workspace を書かないコマンドのノードが走る workspace の `Workspace.persistentId`。判定の付け先とは関係しない。
+  /// 自分の workspace を書かないコマンドのノードが走る workspace の `Workspace.id`。判定の付け先とは関係しない。
   var workspace: UUID?
   var nodes: [Node]
 

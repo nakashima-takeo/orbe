@@ -2,6 +2,19 @@ import Foundation
 
 @testable import Orbe
 
+/// `set_automation` が届けたもの。
+struct FakeSetAutomation {
+  let automationId: Int?
+  let version: Int?
+  let definition: [String: Any]
+
+  init(_ automationId: Int?, _ version: Int?, _ definition: [String: Any]) {
+    self.automationId = automationId
+    self.version = version
+    self.definition = definition
+  }
+}
+
 /// `pause_automation` が届けたもの。
 struct FakePause {
   let automationId: Int

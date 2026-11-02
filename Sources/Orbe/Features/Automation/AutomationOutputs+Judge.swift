@@ -69,11 +69,13 @@ extension AutomationOutputs {
       due = parsed
     }
     var workspace: UUID?
-    if let number = line.workspace, number != choices.workspaces.home {
-      guard let listed = choices.workspaces.listed.first(where: { $0.id == number }) else {
-        return refuse(.workspaceNotListed(id, number))
+    if let raw = line.workspace {
+      let named = UUID(uuidString: raw)
+      let listed = choices.workspaces.listed.first { $0.id == named }
+      guard listed != nil || (named != nil && named == choices.workspaces.home) else {
+        return refuse(.workspaceNotListed(id, raw))
       }
-      workspace = listed.persistentId
+      workspace = listed?.id
     }
     return .success(
       .propose(
@@ -96,6 +98,6 @@ private struct JudgeLine: Decodable {
   let resolve: String?
   let title: String?
   let due: String?
-  let workspace: Int?
+  let workspace: String?
   let reason: String?
 }

@@ -64,7 +64,7 @@ extension WindowControllerReportAgentTests {
     origin.settingsOverride = override
     XCTAssertFalse(wc.current === origin, "前提: タスクの workspace はアクティブでない方")
     let (id, resolution) = try resolveTask(
-      wc, workspace: origin.persistentId, links: [try pr214()])
+      wc, workspace: origin.id, links: [try pr214()])
 
     wc.notifyWaitResolved(task: id, resolution)
 

@@ -77,18 +77,18 @@ private func tabList(_ rest: [String]) -> Never {
   var args = rest
   let workspaceId = takeWorkspaceId(&args)
   rejectLeftovers(args, positionals: 0)
-  var result = (callOrExit("list_tabs", [:]) as? [String: Any]) ?? [:]
-  var tabs = result["tabs"] as? [[String: Any]] ?? []
-  if let workspaceId { tabs = tabs.filter { $0["workspaceId"] as? Int == workspaceId } }
+  var params: [String: Any] = [:]
+  if let workspaceId { params["workspaceId"] = workspaceId }
+  let result = callOrExit("list_tabs", params)
+  let tabs = (result as? [String: Any])?["tabs"] as? [[String: Any]] ?? []
   if wantJSON {
-    result["tabs"] = tabs
     printJSON(result)
   } else {
     // 人間向けの `*` は「前面 workspace で選択中」——`active` は背景 workspace でも true になるので、
     // 前面かは list_workspaces で確かめる。
     let front = activeWorkspaceId()
     for t in tabs {
-      let wid = t["workspaceId"] as? Int ?? -1
+      let wid = t["workspaceId"] as? String ?? "?"
       let mark = (t["active"] as? Bool == true && wid == front) ? "*" : " "
       let tid = t["tabId"] as? Int ?? -1
       let title = t["title"] as? String ?? ""

@@ -156,31 +156,34 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
       originNodeId: AutomationNodeID(1),
       fields: AutomationRowFields(link: "https://example.com/old", body: nil, time: nil),
       title: "前の提案", due: nil, workspace: nil, reason: nil, proposedAt: now, state: .open)
+    let home = AutomationWorkspace(id: UUID(), name: "Home", root: "/state/home")
+    let orbe = AutomationWorkspace(id: UUID(), name: "orbe", root: "/src")
     let session = AutomationRunSession(
       .judge(
         [linkedRow("a")],
         choices: AutomationJudgeChoices(
           open: [waiting],
-          workspaces: AutomationWorkspaces(
-            all: [
-              AutomationWorkspace(id: 1, persistentId: UUID(), name: "Home", root: "/state/home"),
-              AutomationWorkspace(id: 3, persistentId: UUID(), name: "orbe", root: "/src"),
-            ], home: 1))), writer: AutomationNodeID(1))
+          workspaces: AutomationWorkspaces(all: [home, orbe], home: home.id))),
+      writer: AutomationNodeID(1))
     _ = session.call("read_run_rows", [:])
 
     XCTAssertEqual(
       session.call("read_waiting_proposals", [:]).texts,
       [#"{"link":"https://example.com/old","title":"前の提案"}"#])
     XCTAssertEqual(
-      session.call("read_workspaces", [:]).texts, [#"{"name":"orbe","root":"/src","workspace":3}"#])
+      session.call("read_workspaces", [:]).texts,
+      [#"{"name":"orbe","root":"/src","workspace":"\#(orbe.id.uuidString)"}"#])
     XCTAssertEqual(
       session.call("propose", ["proposals": [["title": "x"], ["id": "zzz", "title": "y"]]]).texts[0]
         .split(separator: "\n").dropFirst(),
       ["item 1: missing id", "item 2: propose zzz: not an item of this run"], "id の無い件もほかの件と一緒に全件言う"
     )
     XCTAssertFalse(
-      session.call("propose", ["proposals": [["id": "f:a", "title": "a に返信する", "workspace": 3]]])
-        .isError)
+      session.call(
+        "propose",
+        ["proposals": [["id": "f:a", "title": "a に返信する", "workspace": orbe.id.uuidString]]]
+      )
+      .isError)
     XCTAssertTrue(session.call("resolve", ["links": ["https://example.com/other"]]).isError)
     XCTAssertFalse(session.call("resolve", ["links": ["https://example.com/old"]]).isError)
 
@@ -188,6 +191,7 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
       return XCTFail("判定の結果")
     }
     XCTAssertEqual(proposals.map(\.title), ["a に返信する"])
+    XCTAssertEqual(proposals.map(\.workspace), [orbe.id], "read_workspaces の ID の workspace に付く")
     XCTAssertEqual(resolved, ["https://example.com/old"])
   }
 }

@@ -111,7 +111,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
           lastWorktreeBase: "origin/release/0.8"),
         home,
       ],
-      windowSize: WindowSize(width: 700, height: 400), homeWorkspaceId: home.persistentId)
+      windowSize: WindowSize(width: 700, height: 400), homeWorkspaceId: home.id)
     WorkspacePersistence.save(original)
 
     let before = Date()
@@ -149,7 +149,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
           lastUsedAt: stampFront, settingsOverride: overrideLayer()),
         home,
       ],
-      windowSize: WindowSize(width: 700, height: 400), homeWorkspaceId: home.persistentId)
+      windowSize: WindowSize(width: 700, height: 400), homeWorkspaceId: home.id)
     WorkspacePersistence.save(original)
     let before = Date()
 
@@ -183,6 +183,29 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     XCTAssertEqual(saved.version, WorkspacePersistence.version, "起動 1 回で現行バージョンへ書き直す")
     XCTAssertEqual(saved.workspaces[0].tabs.map(\.cwd), ["/r/a"], "v2 のタブ構成を失わない")
     XCTAssertEqual(wc.current.tabs.count, 1)
+  }
+
+  // MARK: - workspace の ID
+
+  /// 保存に同じ ID の workspace が 2 つあっても、復元の後は ID が互いに違い、どちらも ID で指せる（先の方が元の ID を保つ）。
+  /// 重なったままだと、後ろの workspace に制御から届かない。
+  func testDuplicatedIdsAreSeparatedOnRestore() throws {
+    let shared = UUID()
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0,
+      workspaces: ["first", "second"].map {
+        WorkspaceState(name: $0, rootPath: "/tmp", activeTab: 0, tabs: [], id: shared)
+      })
+    try JSONEncoder().encode(file).write(to: workspacesFile())
+
+    let wc = WindowController()
+    let first = try XCTUnwrap(wc.workspaces.first { $0.name == "first" })
+    let second = try XCTUnwrap(wc.workspaces.first { $0.name == "second" })
+
+    XCTAssertEqual(first.id, shared, "先の方が元の ID を保つ")
+    XCTAssertNotEqual(second.id, shared)
+    XCTAssertNotNil(wc.controlActivateWorkspace(workspaceId: second.id))
+    XCTAssertTrue(wc.current === second, "後ろの workspace も ID で指せる")
   }
 
   // MARK: - index のクランプ（範囲外の保存値で起動しても配列を踏み外さない）

@@ -28,7 +28,7 @@ extension WindowController {
     let task = taskID.flatMap { id in taskStore.tasks.first { $0.id == id } }
     let binding = WorktreePaletteBinding(
       opened: current,
-      workspace: task?.workspace.flatMap { id in workspaces.first { $0.persistentId == id } }
+      workspace: task?.workspace.flatMap { id in workspaces.first { $0.id == id } }
         ?? current,
       frontsWorkspace: task != nil)
     let p = WorktreePaletteModel(

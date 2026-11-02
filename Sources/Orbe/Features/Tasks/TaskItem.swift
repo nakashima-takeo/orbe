@@ -13,7 +13,7 @@ struct TaskItem: Codable, Equatable, Identifiable {
   var wait: Wait?
   var priority: Priority
   var due: DueDate?
-  /// 付き先の `Workspace.persistentId`。解決できない参照は「なし」と同じに扱う（削除された workspace を
+  /// 付き先の `Workspace.id`。解決できない参照は「なし」と同じに扱う（削除された workspace を
   /// 指していても書き換えない）。
   var workspace: UUID?
   /// 人も agent も読む前提の自由記述（複数行可）。

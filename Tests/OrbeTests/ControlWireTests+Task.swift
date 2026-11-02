@@ -38,7 +38,7 @@ extension ControlWireTests {
     XCTAssertEqual(
       added?.draft.links,
       [TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 214)), kind: .pr)])
-    XCTAssertEqual(describe(added?.workspaceId), "set(3)")
+    XCTAssertEqual(describe(added?.workspaceId), "set(\(FakeControlTarget.workspaceId))")
     XCTAssertEqual(added?.callerTabId, fake.tabId, "呼び出し元タブは target が解決できるよう届く")
   }
 
@@ -62,8 +62,10 @@ extension ControlWireTests {
   func testWorkspaceIdDistinguishesOmittedNullAndAnId() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
+    let workspace = UUID()
     let cases: [(params: [String: Any], expected: String)] = [
-      ([:], "omitted"), (["workspaceId": NSNull()], "clear"), (["workspaceId": 5], "set(5)"),
+      ([:], "omitted"), (["workspaceId": NSNull()], "clear"),
+      (["workspaceId": workspace.uuidString], "set(\(workspace))"),
     ]
 
     for (index, entry) in cases.enumerated() {
@@ -155,11 +157,9 @@ extension ControlWireTests {
       ("add_task", ["title": "a", "due": "2026-02-30"]),
       ("add_task", ["title": "a", "due": "2026-2-3"]),
       ("add_task", ["title": "a", "due": "2026-10-06T00:00:00Z"]),
-      ("add_task", ["title": "a", "workspaceId": true]),
       ("update_task", ["taskId": 7, "status": "DONE"]),
       ("update_task", ["taskId": 7, "due": "tomorrow"]),
       ("update_task", ["taskId": true, "description": "m"]),
-      ("list_tasks", ["workspaceId": "3"]),
       ("delete_task", ["taskId": 7.5]),
       ("start_task", ["taskId": "7"]),
       ("start_task", ["taskId": 7, "branch": 1]),
@@ -173,7 +173,6 @@ extension ControlWireTests {
     }
     XCTAssertTrue(fake.addedTasks.isEmpty)
     XCTAssertTrue(fake.updatedTasks.isEmpty)
-    XCTAssertTrue(fake.taskLists.isEmpty)
     XCTAssertTrue(fake.deletedTaskIds.isEmpty)
     XCTAssertTrue(fake.startedTasks.isEmpty)
   }
@@ -240,10 +239,11 @@ extension ControlWireTests {
     let wire = startWire(target: fake)
 
     _ = wire.request(id: 1, method: "list_tasks")
-    _ = wire.request(id: 2, method: "list_tasks", params: ["workspaceId": 6])
+    let workspace = UUID()
+    _ = wire.request(id: 2, method: "list_tasks", params: ["workspaceId": workspace.uuidString])
     _ = wire.request(id: 3, method: "delete_task", params: ["taskId": 11])
 
-    XCTAssertEqual(fake.taskLists, [nil, 6], "workspaceId の省略は絞り込まない")
+    XCTAssertEqual(fake.taskLists, [nil, workspace], "workspaceId の省略は絞り込まない")
     XCTAssertEqual(fake.deletedTaskIds, [11])
   }
 

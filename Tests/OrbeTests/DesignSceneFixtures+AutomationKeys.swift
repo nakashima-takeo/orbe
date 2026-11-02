@@ -83,8 +83,7 @@ extension WindowController {
   ) -> Result<Any, ControlError> {
     controlSetAutomation(
       automationId: automationId, version: version,
-      automationRunner.workspaces().outward(
-        AutomationWire.object(definition) as? [String: Any] ?? [:]))
+      AutomationWire.object(definition) as? [String: Any] ?? [:])
   }
 }
 

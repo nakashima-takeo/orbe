@@ -16,7 +16,7 @@ extension WindowController {
     guard let task = taskStore.tasks.first(where: { $0.id == id }), !isViewingTask(id) else {
       return nil
     }
-    let ws = task.workspace.flatMap { wsId in workspaces.first { $0.persistentId == wsId } }
+    let ws = task.workspace.flatMap { wsId in workspaces.first { $0.id == wsId } }
     let subject = task.links.first.map { "#\($0.item.number)" } ?? task.title
     let text = subject + " " + TaskWaitText.headline(resolution.headline, l10n: localization)
     return ChromeNotification(

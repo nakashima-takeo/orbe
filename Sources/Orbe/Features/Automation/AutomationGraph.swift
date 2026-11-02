@@ -5,7 +5,7 @@ import Foundation
 struct AutomationGraph: Equatable {
   /// 定義の順（ノードの位置の順）。
   let nodes: [Node]
-  /// 自動化の workspace（`Workspace.persistentId`）。自分の workspace を書かないコマンドのノードが継ぐ。
+  /// 自動化の workspace（`Workspace.id`）。自分の workspace を書かないコマンドのノードが継ぐ。
   let workspace: UUID?
   /// 位置ごとの、入力のノードの位置（`from` の中の順）。
   private let upstream: [[Int]]

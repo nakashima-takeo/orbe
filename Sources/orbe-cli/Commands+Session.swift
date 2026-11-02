@@ -157,7 +157,7 @@ private func sessionRestore(_ rest: [String]) -> Never {
   } else {
     for row in rows {
       var line = "\(row["sessionId"] as? String ?? "?")\t\(row["status"] as? String ?? "?")"
-      if let ws = row["workspaceId"] as? Int, let tab = row["tabId"] as? Int {
+      if let ws = row["workspaceId"] as? String, let tab = row["tabId"] as? Int {
         line += "\tws:\(ws)\ttab:\(tab)"
       }
       print(line)

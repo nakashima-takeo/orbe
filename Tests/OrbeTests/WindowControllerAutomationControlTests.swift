@@ -5,7 +5,7 @@ import XCTest
 /// 自動化の 8 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みのノードが番人に載ること、
 /// 候補が出した自動化の棚に出ること、判定のノードに人の判断の数が出ること、拒否が制御 API の語彙になること、一覧の定義を
 /// `set_automation` へ戻せること。
-/// 候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で、候補にした理由は判定が書いたときだけ出ること。
+/// 候補の付け先は今ある workspace に解けるときだけその workspace の id と名前で、候補にした理由は判定が書いたときだけ出ること。
 /// 試走は始めた応答で道の上のノードを返し、待って読むとノードごとの回の結果（取得の rows・止めた副作用の held.rows）を返し、
 /// 始める前と自動化を消した後は -32004 で読めないこと。
 ///
@@ -219,8 +219,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertTrue(store.proposals.isEmpty)
   }
 
-  /// 候補は付け先が今ある workspace に解けるときだけ、起動ごとの id と名前を持つ（永続 ID は出さない）。付け先が無い・
-  /// 消えた候補はキーごと出さない。
+  /// 候補は付け先が今ある workspace に解けるときだけ、その workspace の id と名前を持つ。付け先が無い・消えた候補はキーごと
+  /// 出さない。
   func testProposalsCarryTheirWorkspaceOnlyWhenItResolves() throws {
     let wc = try launch()
     let id = try set(wc, Self.definition())
@@ -228,12 +228,12 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let items = ["a", "b", "c"].map { Self.item($0) }
     try Self.round(
       wc.automationStore, id, fetched: items, proposing: items,
-      workspaces: [main.persistentId, nil, UUID()])
+      workspaces: [main.id, nil, UUID()])
 
     let listed = Dictionary(
       uniqueKeysWithValues: try proposals(wc, of: id).map { ($0["title"] as? String ?? "", $0) })
 
-    XCTAssertEqual(listed["対応: a"]?["workspaceId"] as? Int, main.id)
+    XCTAssertEqual(listed["対応: a"]?["workspaceId"] as? String, main.id.uuidString)
     XCTAssertEqual(listed["対応: a"]?["workspaceName"] as? String, "main")
     XCTAssertEqual(listed["対応: a"]?["automationId"] as? Int, id)
     XCTAssertEqual(listed["対応: a"]?["nodeKey"] as? String, "judge")

@@ -85,8 +85,7 @@ extension WindowControllerWorkspaceTests {
     let mixed = try XCTUnwrap(wc.workspaces.first { $0.name == "mixed" })
 
     for state in ["working", "waiting", "done", "idle"] {
-      let tabId = try XCTUnwrap(
-        wc.controlSpawn(workspaceId: mixed.id, cwd: nil, command: nil))
+      let tabId = try wc.controlSpawn(workspaceId: mixed.id, cwd: nil, command: nil).get()
       let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
       setReportedState(tab, state)
     }

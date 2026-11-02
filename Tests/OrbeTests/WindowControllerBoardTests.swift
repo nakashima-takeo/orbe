@@ -306,7 +306,9 @@ final class WindowControllerBoardTests: OrbeTestCase {
     let wc = try homeOnBoard(tabs: 2)
     let homeId = wc.current.id
 
-    let homeRows = wc.controlListTabs().filter { $0["workspaceId"] as? Int == homeId }
+    let homeRows = try wc.controlListTabs(workspaceId: nil).get().filter {
+      workspaceUUID($0["workspaceId"]) == homeId
+    }
 
     XCTAssertEqual(homeRows.count, 2, "タブは 2 枚とも出る（ボードは出ない）")
     XCTAssertTrue(homeRows.allSatisfy { $0["active"] as? Bool == false })

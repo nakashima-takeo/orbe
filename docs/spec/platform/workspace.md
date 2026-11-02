@@ -12,6 +12,10 @@ host 所有。ドメイン状態（workspace 配列とアクティブ index と 
 
 起動時は default（root はホームディレクトリ）と [Home](#home) の 2 つ、または永続からの復元に Home を保証したもの（→ [persistence](persistence.md)）。workspace は root path を持つ。worktree パレットで新しいブランチを作れたときのベースを「前回」として workspace ごとに覚え、次の作成で最初に選ぶ（→ [worktree](../palette/worktree.md)）。書くのはウィンドウだけで、パレットは読むだけ。
 
+## workspace の ID
+
+workspace は ID を 1 つだけ持つ。UUID で、workspace の間で一意、起動をまたいで変わらず、改名・root の変更でも変わらず、使い回さない。[制御 API](../control/api.md#宛先-id)・MCP・`orb` の宛先も、[タスク](tasks.md)の付き先と[自動化](automation.md)の定義・候補の付け先が workspace を指すのも、この ID——種類が 1 つなので、外で書き留めた ID と保存が指す ID が食い違わず、再起動の後に古い ID が別の workspace に当たることが無い。保存（[persistence](persistence.md)）から復元するとき、同じ ID を持つ workspace が 2 つ以上あれば、先の 1 つが元の ID を保ち、後ろには新しい ID を振る（制御から後ろの workspace に届かなくなることを防ぐ）。
+
 ## 保持・切替
 
 - **0 タブ（休眠）でもエントリを保持する。** 0 タブ workspace のアクティブ化（切替・復元・削除後の MRU 繰上げ）は、ボードを持てばボード、持たなければ空状態を表示し、シェルは自動起動しない。シェルの起こしは新規作成の明示動作にのみ残す。タブを 1 枚も持たない workspace を配列から削除することはない。
@@ -33,7 +37,7 @@ host 所有。ドメイン状態（workspace 配列とアクティブ index と 
 リポジトリに属さないタスクの居場所で、agent を動かす場所。通常の workspace とは別に必ず 1 つあり、表示名は「Home」（日英同じ）。[秘書](../agent/secretary.md)が頼みのたびに起こす claude も、ここで起きる。Home 以外の workspace を「通常の workspace」と呼ぶ。
 
 - **ボードを持つ。** タブ行の左端に固定のボードがあり、最後のタブを閉じるとボードへ戻る（→ [board](../chrome/board.md)）。どの workspace がボードを持つかは SessionStore の判定 1 か所が決め、今は「Home であること」。
-- **一覧の側が 1 つを指す。** どれが Home かは、アクティブ workspace と同じく一覧が持つ 1 つの値（対象の永続 ID）で表し、workspace 自身は自分の役割を知らない——「ちょうど 1 つ」を要素ごとの印で表すと 0 個や 2 個も表せてしまうため。
+- **一覧の側が 1 つを指す。** どれが Home かは、アクティブ workspace と同じく一覧が持つ 1 つの値（対象の workspace の ID）で表し、workspace 自身は自分の役割を知らない——「ちょうど 1 つ」を要素ごとの印で表すと 0 個や 2 個も表せてしまうため。
 - **起動時の保証。** 復元（または新規の default 作成）の後に 1 回、「Home がちょうど 1 つあり、root が専用フォルダ」へそろえる。指している workspace があれば root だけを専用フォルダへ上書きし（名前・位置・タブは保つ）、無い・指す先が見つからなければ「Home」という名前の workspace を末尾に足して指す。active は動かさず、タブも起こさない（作っただけではタブは起きない。足した Home はボードを選んでいる）。指す先が見つからず足し直したとき、同じフォルダを root に持つ既存の workspace は通常の workspace のまま残る——root の一致では、同じフォルダで作った通常の workspace と区別できないため。
 - **専用フォルダ。** state フォルダ（[persistence](persistence.md)。`ORBE_STATE_DIR` があればその下）の `home/`。root は永続値ではなく state フォルダから毎起動導く値で、隔離起動でも本物のフォルダに触れない。state フォルダが決まらなければ保証もフォルダの用意もしない。
 - **フォルダの中身は 2 つに分かれる。** Orbe の操作手段（MCP・`orb`）は Orbe 側の事情で変わるので Orbe が持ち、人と AI が書くことは CLAUDE.md が持つ。

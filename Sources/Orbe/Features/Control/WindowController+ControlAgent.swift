@@ -8,7 +8,7 @@ extension WindowController {
   /// 検出済みエージェントを新タブで起こす（制御 API の spawn_agent）。command 省略時は対象
   /// workspace の実効 `default-agent` を `AgentLauncher.resolveDefault` で解く（GUI の Cmd+Shift+C
   /// と同じ 1 規則。違うのは入力がアクティブ WS ではなく**対象 WS** の実効設定であることだけ）。
-  func controlSpawnAgent(command: String?, workspaceId: Int?, cwd: String?) -> Result<
+  func controlSpawnAgent(command: String?, workspaceId: UUID?, cwd: String?) -> Result<
     AgentLaunch, ControlError
   > {
     resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
@@ -19,7 +19,7 @@ extension WindowController {
   /// 既存セッションを resume してエージェントを新タブで起こす（制御 API の resume_agent）。再開は休眠のタブの起床と
   /// 同じ組み立て（`openResumedTab`）を通る。その会話が既に生きているタブで
   /// 開いていれば、新しく起こさずそのタブを返す（同じ会話を 2 つの claude が同時に書くと記録が混ざる）。
-  func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
+  func controlResumeAgent(command: String, sessionId: String, workspaceId: UUID?, cwd: String?)
     -> Result<AgentLaunch, ControlError>
   {
     resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
@@ -55,7 +55,7 @@ extension WindowController {
 
   /// 対象 workspace と agent を解決する。workspaceId 未知は -32004、未検出 command は -32602、
   /// デフォルトが解けない（検出ゼロ）は -32000。
-  private func resolveAgentLaunch(command: String?, workspaceId: Int?) -> Result<
+  private func resolveAgentLaunch(command: String?, workspaceId: UUID?) -> Result<
     AgentLaunchTarget, ControlError
   > {
     let index: Int

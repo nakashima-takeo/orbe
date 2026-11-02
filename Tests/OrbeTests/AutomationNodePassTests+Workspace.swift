@@ -12,7 +12,7 @@ extension AutomationNodePassTests {
 
   private func workspace(root: String) -> AutomationWorkspaces {
     AutomationWorkspaces(
-      all: [AutomationWorkspace(id: 3, persistentId: Self.repo, name: "orbe", root: root)],
+      all: [AutomationWorkspace(id: Self.repo, name: "orbe", root: root)],
       home: nil)
   }
 

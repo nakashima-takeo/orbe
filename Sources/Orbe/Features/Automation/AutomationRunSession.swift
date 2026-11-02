@@ -145,7 +145,7 @@ final class AutomationRunSession {
   private var workspaces: String {
     let lines = (choices?.workspaces.listed ?? []).map {
       AutomationPrompts.jsonLine(
-        ["workspace": $0.id, "name": $0.name, "root": $0.root] as [String: Any])
+        ["workspace": $0.id.uuidString, "name": $0.name, "root": $0.root])
     }
     return lines.isEmpty ? "(none)" : lines.joined(separator: "\n")
   }

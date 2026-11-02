@@ -3,7 +3,7 @@ import Foundation
 /// `spawn_agent` / `resume_agent` が起こした結果（domain）。wire の形は `toDict(ready:)` が組む。
 struct AgentLaunch {
   let tabId: Int
-  let workspaceId: Int
+  let workspaceId: UUID
   let agent: AgentCLI
   /// 再開する会話が既に生きているタブで開いていて、新しく起こさずそのタブを返したとき、今 prompt を送れるか
   /// （idle / done を報告しているか）。新しく起こしたなら nil（最初の idle を待つ）。
@@ -13,7 +13,7 @@ struct AgentLaunch {
   /// 最初の idle を報告した（prompt を送れる）か。
   func toDict(ready: Bool) -> [String: Any] {
     [
-      "tabId": tabId, "workspaceId": workspaceId,
+      "tabId": tabId, "workspaceId": workspaceId.uuidString,
       "agent": ["command": agent.command, "path": agent.path],
       "ready": ready,
     ]

@@ -92,11 +92,10 @@ final class TtyDumpTab {
     self.controller = controller
     let scriptURL = TestScratch.caseDir.appendingPathComponent("ttydump.py")
     try Self.script.write(to: scriptURL, atomically: true, encoding: .utf8)
-    let tabId = try XCTUnwrap(
-      controller.controlSpawn(
-        workspaceId: nil, cwd: nil,
-        command: "/usr/bin/python3 \(scriptURL.path) \(mode.rawValue)"),
-      "dump のタブを開けない", file: file, line: line)
+    let tabId = try controller.controlSpawn(
+      workspaceId: nil, cwd: nil,
+      command: "/usr/bin/python3 \(scriptURL.path) \(mode.rawValue)"
+    ).get()
     tab = try XCTUnwrap(controller.controlResolveTab(tabId), file: file, line: line)
     let ready = ControlProcess.waitUntil(ControlProcess.tabSettleTimeout) {
       self.screen().contains("READY")

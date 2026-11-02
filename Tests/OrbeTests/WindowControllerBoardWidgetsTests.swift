@@ -174,7 +174,7 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
       XCTAssertEqual(error.code, -32000)
     }
     XCTAssertNil(other.boardWidgets, "ボードを持たない workspace に並びを残さない")
-    guard case .failure(let unknown) = wc.controlListBoardWidgets(workspaceId: -1) else {
+    guard case .failure(let unknown) = wc.controlListBoardWidgets(workspaceId: UUID()) else {
       return XCTFail("知らない workspace で成功した")
     }
     XCTAssertEqual(unknown.code, -32004)
@@ -191,7 +191,8 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
 
     let listed = wc.controlListWorkspaces()
     XCTAssertEqual(
-      listed.filter { $0["hasBoard"] as? Bool == true }.compactMap { $0["id"] as? Int }, [homeId],
+      listed.filter { $0["hasBoard"] as? Bool == true }.compactMap { workspaceUUID($0["id"]) },
+      [homeId],
       "hasBoard は Home だけ")
   }
 
@@ -210,7 +211,7 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
 
     var file = try XCTUnwrap(WorkspacePersistence.load())
     let homeIndex = try XCTUnwrap(
-      file.workspaces.firstIndex { $0.persistentId == file.homeWorkspaceId })
+      file.workspaces.firstIndex { $0.id == file.homeWorkspaceId })
     file.workspaces[homeIndex].boardWidgets = [.automation, .automation]
     WorkspacePersistence.save(file)
 

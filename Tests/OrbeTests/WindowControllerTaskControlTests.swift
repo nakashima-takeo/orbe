@@ -3,16 +3,15 @@ import XCTest
 
 @testable import Orbe
 
-/// タスクの 4 動詞のドメイン側を、実 `WindowController` 越しに固定する。外に見せる起動ごとの
-/// workspaceId とタスクが持つ永続 ID の変換、呼び出し元タブからの既定の付き先と追加者、
-/// ストアの拒否から制御エラーへの写像、応答の形。
+/// タスクの 4 動詞のドメイン側を、実 `WindowController` 越しに固定する。workspace の解決、呼び出し元タブからの既定の
+/// 付き先と追加者、ストアの拒否から制御エラーへの写像、応答の形。
 ///
 /// 壊れると何が起きるか: タブ内の agent が workspace を省いて足したタスクが前面の workspace（人が
 /// 見ている別の workspace）に付く。workspace を改名・削除しただけでタスクの結び付けが別の workspace へ
 /// ずれる、または壊れた参照のまま名前が出る。拒否が成功に化け、`orb task set` が黙って何もしない。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
-/// workspace の id はプロセス全域の IdGen で採番され予測不能なため、`controlListWorkspaces()` から読む。
+/// workspace の id は外の口から見える値を確かめるため、`controlListWorkspaces()` から読む。
 final class WindowControllerTaskControlTests: OrbeTestCase {
   private let backgroundId = UUID()
 
@@ -24,15 +23,15 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
         WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [tab]),
         WorkspaceState(
           name: "background", rootPath: "/tmp", activeTab: 0, tabs: [tab],
-          persistentId: backgroundId),
+          id: backgroundId),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     return WindowController()
   }
 
-  private func workspaceId(_ wc: WindowController, _ name: String) throws -> Int {
+  private func workspaceId(_ wc: WindowController, _ name: String) throws -> UUID {
     try XCTUnwrap(
-      wc.controlListWorkspaces().first { $0["name"] as? String == name }?["id"] as? Int)
+      workspaceUUID(wc.controlListWorkspaces().first { $0["name"] as? String == name }?["id"]))
   }
 
   func backgroundTab(_ wc: WindowController) throws -> TerminalTab {
@@ -57,7 +56,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
   }
 
   func added(
-    _ wc: WindowController, _ title: String = "a", workspaceId: ClearableValue<Int>? = nil,
+    _ wc: WindowController, _ title: String = "a", workspaceId: ClearableValue<UUID>? = nil,
     callerTabId: Int? = nil, file: StaticString = #filePath, line: UInt = #line
   ) throws -> [String: Any] {
     try XCTUnwrap(
@@ -67,7 +66,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
         file: file, line: line)["task"] as? [String: Any], file: file, line: line)
   }
 
-  func listed(_ wc: WindowController, workspaceId: Int? = nil) throws -> [[String: Any]] {
+  func listed(_ wc: WindowController, workspaceId: UUID? = nil) throws -> [[String: Any]] {
     try XCTUnwrap(
       success(wc.controlListTasks(workspaceId: workspaceId))["tasks"] as? [[String: Any]])
   }
@@ -83,7 +82,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     let task = try added(wc, callerTabId: tab.id)
 
     XCTAssertEqual(
-      task["workspaceId"] as? Int, try workspaceId(wc, "background"),
+      task["workspaceId"] as? String, try workspaceId(wc, "background").uuidString,
       "前面の workspace ではなく呼び出し元タブの workspace に付く")
     XCTAssertEqual(task["workspaceName"] as? String, "background")
     XCTAssertEqual(task["createdBy"] as? String, "claude", "追加者として呼び出し元タブの agent 名が残る")
@@ -137,7 +136,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     XCTAssertEqual(main["workspaceName"] as? String, "main", "id を渡せばその workspace")
 
     XCTAssertEqual(
-      code(wc.controlAddTask(TaskDraft(title: "x"), workspaceId: .set(999_999), callerTabId: nil)),
+      code(wc.controlAddTask(TaskDraft(title: "x"), workspaceId: .set(UUID()), callerTabId: nil)),
       -32004, "未知の workspace は -32004")
     XCTAssertEqual(try listed(wc).count, 2, "拒否した追加は一覧に残らない")
   }
@@ -205,7 +204,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     XCTAssertEqual(
       try listed(wc, workspaceId: main).compactMap { $0["title"] as? String }, ["m2", "m1"])
     XCTAssertEqual(
-      code(wc.controlListTasks(workspaceId: 999_999)), -32004, "未知の workspace は -32004")
+      code(wc.controlListTasks(workspaceId: UUID())), -32004, "未知の workspace は -32004")
   }
 
   // MARK: - 変更・拒否
@@ -218,11 +217,12 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     let moved = try XCTUnwrap(
       success(wc.controlUpdateTask(taskId: taskId, TaskUpdate(), workspaceId: .set(background)))[
         "task"] as? [String: Any])
-    XCTAssertEqual(moved["workspaceId"] as? Int, background)
+    XCTAssertEqual(moved["workspaceId"] as? String, background.uuidString)
 
     XCTAssertEqual(
-      code(wc.controlUpdateTask(taskId: taskId, TaskUpdate(), workspaceId: .set(999_999))), -32004)
-    XCTAssertEqual(try listed(wc).first?["workspaceId"] as? Int, background, "拒否した変更は付き先を変えない")
+      code(wc.controlUpdateTask(taskId: taskId, TaskUpdate(), workspaceId: .set(UUID()))), -32004)
+    XCTAssertEqual(
+      try listed(wc).first?["workspaceId"] as? String, background.uuidString, "拒否した変更は付き先を変えない")
 
     let cleared = try XCTUnwrap(
       success(wc.controlUpdateTask(taskId: taskId, TaskUpdate(), workspaceId: .clear))["task"]
@@ -310,7 +310,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     _ = try success(wc.controlSetWorkspaceRoot(workspaceId: background, rootPath: "/tmp/elsewhere"))
 
     let task = try XCTUnwrap(try listed(wc).first)
-    XCTAssertEqual(task["workspaceId"] as? Int, background)
+    XCTAssertEqual(task["workspaceId"] as? String, background.uuidString)
     XCTAssertEqual(task["workspaceName"] as? String, "renamed", "名前は今の名前で見せる")
   }
 
@@ -342,7 +342,8 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
 
     let task = try XCTUnwrap(try listed(wc).first)
     XCTAssertEqual(task["taskId"] as? Int, 4)
-    XCTAssertEqual(task["workspaceName"] as? String, "background", "永続 ID で前回の workspace に結び付く")
+    XCTAssertEqual(
+      task["workspaceName"] as? String, "background", "workspace の ID で前回の workspace に結び付く")
     XCTAssertEqual(try added(wc)["taskId"] as? Int, 7, "採番位置も前回から続く")
   }
 }

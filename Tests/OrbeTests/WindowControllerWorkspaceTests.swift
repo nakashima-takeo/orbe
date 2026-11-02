@@ -162,7 +162,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
         version: WorkspacePersistence.version, activeWorkspace: 3,
         workspaces: [
           home, state("origin", t1), state("older", t2), state("newer", t3),
-        ], homeWorkspaceId: home.persistentId))
+        ], homeWorkspaceId: home.id))
 
     let wc = WindowController()  // 上記をディスクから復元
     wc.showWorkspacePalette()

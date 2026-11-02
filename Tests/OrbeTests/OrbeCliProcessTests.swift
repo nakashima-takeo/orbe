@@ -18,7 +18,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名の綴りは、どのテストにも現れない。
 /// 片方だけ改名すれば `-32601` で全滅するが、それに気づく経路がこの 1 本しかない。
-/// workspace / tab の id は `IdGen` 採番で予測不能なので、必ず `--json` の出力から読む。
+/// tab の id は `IdGen` 採番で予測不能なので、必ず `--json` の出力から読む。workspace の id も、外の口から見える値を
+/// 確かめるため `--json` の出力から読む。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliProcessTests: OrbeTestCase {
@@ -58,10 +59,10 @@ final class OrbeCliProcessTests: OrbeTestCase {
     try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
   }
 
-  /// `ws list` から `active` が一致する行の id を引く（id は `IdGen` 採番で予測不能なので必ず出力から読む）。
-  func workspaceId(_ control: ControlProcess, active: Bool) throws -> Int {
+  /// `ws list` から `active` が一致する行の id を引く。
+  func workspaceId(_ control: ControlProcess, active: Bool) throws -> String {
     try XCTUnwrap(
-      workspaceRows(control).first(where: { $0["active"] as? Bool == active })?["id"] as? Int,
+      workspaceRows(control).first(where: { $0["active"] as? Bool == active })?["id"] as? String,
       active ? "アクティブ WS が無い" : "背景 WS が無い")
   }
 
@@ -71,17 +72,18 @@ final class OrbeCliProcessTests: OrbeTestCase {
 
   /// ws の 5 本（list → new → rename → dir → switch。rm はライフサイクルの最後）を叩き、
   /// 作った workspace の id を返す。連鎖の一部なのでライフサイクル本体と同じ `control` に対して走る。
-  private func driveWorkspaceSubcommands(_ control: ControlProcess) throws -> Int {
+  private func driveWorkspaceSubcommands(_ control: ControlProcess) throws -> String {
     let before = try workspaceRows(control)
     let mainId = try XCTUnwrap(
-      before.first(where: { $0["active"] as? Bool == true })?["id"] as? Int, "ws list: アクティブ WS が無い"
+      before.first(where: { $0["active"] as? Bool == true })?["id"] as? String,
+      "ws list: アクティブ WS が無い"
     )
 
     // `--dir` を通す正常系。これが無いと、門番を `--dir` の抜き取りより前へ動かして
     // `--dir` を丸ごと使えなくする変更が、拒否ケースだけのテストをすり抜ける。
     // 実在ディレクトリを渡す——`createWorkspace` は rootPath を initialCwd に実シェルを起こす。
     let created = control.orbJSON(["ws", "new", "scratch", "--dir", "/tmp"])
-    let scratchId = try XCTUnwrap(created["workspaceId"] as? Int, "ws new: workspaceId を返さない")
+    let scratchId = try XCTUnwrap(created["workspaceId"] as? String, "ws new: workspaceId を返さない")
     XCTAssertEqual(created["name"] as? String, "scratch", "ws new: 指定した名前で作られる")
     XCTAssertEqual(
       created["rootPath"] as? String, "/tmp", "ws new: --dir <path> が rootPath として効く")
@@ -93,13 +95,13 @@ final class OrbeCliProcessTests: OrbeTestCase {
 
     let afterSwitch = try workspaceRows(control)
     XCTAssertEqual(
-      afterSwitch.first(where: { $0["active"] as? Bool == true })?["id"] as? Int, mainId,
+      afterSwitch.first(where: { $0["active"] as? Bool == true })?["id"] as? String, mainId,
       "ws switch: 指定した WS が実際にアクティブになる")
     XCTAssertEqual(
-      afterSwitch.first(where: { $0["id"] as? Int == scratchId })?["name"] as? String, "renamed",
+      afterSwitch.first(where: { $0["id"] as? String == scratchId })?["name"] as? String, "renamed",
       "ws rename: 改名が一覧に反映される")
     XCTAssertEqual(
-      afterSwitch.first(where: { $0["id"] as? Int == scratchId })?["rootPath"] as? String,
+      afterSwitch.first(where: { $0["id"] as? String == scratchId })?["rootPath"] as? String,
       "/tmp/l4-root", "ws dir: rootPath の変更が一覧に反映される")
     return scratchId
   }
@@ -169,7 +171,7 @@ final class OrbeCliProcessTests: OrbeTestCase {
     // --- ws rm（21 本目）
     step(control, ["ws", "rm", "\(scratchId)"], expect: "removed workspace \(scratchId)")
     XCTAssertFalse(
-      try workspaceRows(control).contains { $0["id"] as? Int == scratchId },
+      try workspaceRows(control).contains { $0["id"] as? String == scratchId },
       "ws rm: 削除した WS が一覧から消える")
   }
 

@@ -4,17 +4,17 @@ import OrbeSessionLog
 /// タスクの動詞（4 動詞と `set_wait_condition`・`start_task`）の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
 protocol ControlTaskTarget: AnyObject {
   /// タスクを作成の新しい順（`TaskItem.newerFirst`）に列挙する（list_tasks）。workspaceId 指定でその workspace のタスクだけ。未知 id は -32004。
-  func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError>
+  func controlListTasks(workspaceId: UUID?) -> Result<Any, ControlError>
   /// タスクを足す（add_task）。workspaceId は省略＝呼び出し元タブの workspace（タブが分からなければ
   /// なし）・`.clear`＝なし・`.set`＝その workspace（未知は -32004）。callerTabId は追加者の agent 名と
   /// 既定の付き先を引くためだけに読み、未知のタブでもエラーにしない。worktree は実在するディレクトリの
   /// 絶対パス（それ以外は -32602）で、それを含む worktree のルートに揃えて付ける。
   func controlAddTask(
-    _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?, worktree: String?
+    _ draft: TaskDraft, workspaceId: ClearableValue<UUID>?, callerTabId: Int?, worktree: String?
   ) -> Result<Any, ControlError>
   /// タスクを変える（update_task）。workspaceId・worktree は省略＝変えない・`.clear`＝なし・`.set`＝付ける。
   func controlUpdateTask(
-    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
+    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<UUID>?,
     worktree: ClearableValue<String>?
   ) -> Result<Any, ControlError>
   /// 待っているタスクに解ける条件を付ける・外す（set_wait_condition）。付ける条件には、呼び出し元タブの作業ディレクトリ・
@@ -74,7 +74,7 @@ extension ControlServer {
     switch method {
     case "list_tasks":
       return { target, p throws(ControlError) in
-        target.controlListTasks(workspaceId: try p.optionalInt("workspaceId"))
+        target.controlListTasks(workspaceId: try ControlWorkspaceId.optional(p.params))
       }
     case "add_task":
       return { target, p throws(ControlError) in
@@ -86,7 +86,7 @@ extension ControlServer {
         if let description = try p.optionalString("description") { draft.description = description }
         if let links = try p.links() { draft.links = links }
         return target.controlAddTask(
-          draft, workspaceId: try p.nullableInt("workspaceId"),
+          draft, workspaceId: try ControlWorkspaceId.clearable(p.params),
           callerTabId: try p.optionalInt("callerTabId"), worktree: try p.optionalString("worktree"))
       }
     case "update_task":
@@ -97,7 +97,8 @@ extension ControlServer {
           waitingReason: try p.nullableString("waitingReason"),
           description: try p.optionalString("description"), links: try p.links())
         return target.controlUpdateTask(
-          taskId: try p.int("taskId"), update, workspaceId: try p.nullableInt("workspaceId"),
+          taskId: try p.int("taskId"), update,
+          workspaceId: try ControlWorkspaceId.clearable(p.params),
           worktree: try p.nullableString("worktree"))
       }
     case "set_wait_condition":
@@ -152,12 +153,6 @@ private struct TaskParams {
   func optionalInt(_ key: String) throws(ControlError) -> Int? {
     guard let raw = params[key] else { return nil }
     return try intValue(raw, key)
-  }
-
-  func nullableInt(_ key: String) throws(ControlError) -> ClearableValue<Int>? {
-    guard let raw = params[key] else { return nil }
-    if raw is NSNull { return .clear }
-    return .set(try intValue(raw, key))
   }
 
   func string(_ key: String) throws(ControlError) -> String {
