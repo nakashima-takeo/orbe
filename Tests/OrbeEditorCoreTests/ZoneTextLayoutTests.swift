@@ -208,7 +208,8 @@ final class ZoneTextLayoutTests: XCTestCase {
   }
 
   /// 段落の途中の行も段落の向きで組む——左から右の段落で右から左の字から始まる行でも、後ろの字はその右に、右から左の
-  /// 段落で左から右の字から始まる行でも、後ろの字はその左に並ぶ。
+  /// 段落で左から右の字から始まる行でも、後ろの字はその左に並ぶ。測った行（`lines`）でも、その行を描く組版（`typeset`
+  /// に文と行の範囲を渡したもの）でも同じ。
   func testAWrappedLineIsLaidOutInTheParagraphsDirection() throws {
     for (parts, width, rightToLeft) in [
       (["see ", "שלום עולם ארוך מאוד", " z"], CGFloat(90), false),
@@ -220,12 +221,28 @@ final class ZoneTextLayoutTests: XCTestCase {
         lines.last { $0.range.location > 0 && $0.styles.count == 2 && $0.styles[0].font == mono },
         "前提: \(string) に、コードの続きから始まって後ろの字が並ぶ行がある")
       let (code, after) = (line.spans[0], line.spans[1])
+      let set = ZoneTextLayout.typeset(string, range: line.range, styles: line.styles)
+      let (drawnCode, drawnAfter) = (left(of: 0, in: set.line), left(of: 1, in: set.line))
       if rightToLeft {
         XCTAssertLessThanOrEqual(after.upperBound, code.lowerBound + 0.01, "\(string): 後ろの字は左")
+        XCTAssertLessThan(drawnAfter, drawnCode, "\(string): 描く組版でも後ろの字は左")
       } else {
         XCTAssertGreaterThanOrEqual(after.lowerBound, code.upperBound - 0.01, "\(string): 後ろの字は右")
+        XCTAssertGreaterThan(drawnAfter, drawnCode, "\(string): 描く組版でも後ろの字は右")
       }
     }
+  }
+
+  /// 組んだ行 `line` で、見え方 `style` の字の左端の x。
+  private func left(of style: Int, in line: CTLine) -> CGFloat {
+    let runs = (CTLineGetGlyphRuns(line) as? [CTRun] ?? []).filter {
+      ZoneTextLayout.style(of: $0) == style
+    }
+    return runs.flatMap { run -> [CGFloat] in
+      var positions = [CGPoint](repeating: .zero, count: CTRunGetGlyphCount(run))
+      CTRunGetPositions(run, CFRange(location: 0, length: 0), &positions)
+      return positions.map(\.x)
+    }.min() ?? .nan
   }
 
   /// 前と後ろを本文の字体、真ん中を余白 4 のインラインコードにした見え方。
