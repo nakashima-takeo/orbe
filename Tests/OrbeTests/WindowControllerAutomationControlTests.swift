@@ -10,8 +10,8 @@ import XCTest
 /// 始める前と自動化を消した後は -32004 で読めないこと。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、元の項目がもう無い
-/// 候補が混ざる・ほかの自動化の候補につられて消える。AI が判定の採用・見送りの数を読めない、または指示文を直す前の数で読む。
-/// 流している自動化への `run_automation` が別の誤りに化ける。
+/// 候補が混ざる・ほかの自動化の候補につられて消える・外したノードを出どころとして読む。
+/// AI が判定の採用・見送りの数を読めない、または指示文を直す前の数で読む。流している自動化への `run_automation` が別の誤りに化ける。
 /// 一覧の定義を書き換えて戻すと、予定やノードが別物になる。
 /// AI が候補の付け先や候補にした理由を読めない、または消えた workspace を付け先として読む。AI が試走を始めても結果を読めない、止めた副作用に
 /// 何が渡るはずだったかを確かめられず本番で初めて誤りに気づく、試走をまだ始めていないのに自動化が無いと読んで作り直す。
@@ -66,12 +66,14 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         as? [String: Any])?["automationId"] as? Int)
   }
 
-  /// 今の集合を取る取得のノード `fetch` と、届いたらタスク候補を出す判定のノード `judge`。
-  static func definition(_ name: String = "受信", script: String = "true") -> AutomationDefinition {
+  /// 取得のノード `fetch`（既定は今の集合）と、届いたらタスク候補を出す判定のノード `judge`。
+  static func definition(
+    _ name: String = "受信", script: String = "true", coverage: AutomationCoverage = .currentSet
+  ) -> AutomationDefinition {
     DesignSceneFixtures.candidatesDefinition(
       name,
       fetch: DesignSceneFixtures.commandNode(
-        "fetch", "取る", .scheduled(.every(1800)), script: script, coverage: .currentSet))
+        "fetch", "取る", .scheduled(.every(1800)), script: script, coverage: coverage))
   }
 
   static func item(_ id: String) -> AutomationItem {
@@ -188,11 +190,12 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(try settled(), [0, 0])
   }
 
-  /// 候補を出した判定のノードと出どころのノードは、要素の直下に今の鍵で出す。出した自動化を消したら候補ごと消える。
+  /// 候補を出した判定のノードと出どころのノードは、要素の直下に今の鍵で出す。出どころのノードを外した後も残る候補（出来事の行の
+  /// 候補は残す期間まで残る）は、出どころの鍵を出さない。出した自動化を消したら候補ごと消える。
   func testProposalsNameTheirJudgeAndOriginNodesByTheCurrentKeys() throws {
     let wc = try launch()
     let store = wc.automationStore
-    let id = try set(wc, Self.definition("受信"))
+    let id = try set(wc, Self.definition("受信", coverage: .newArrivals))
     let item = Self.item("a")
     try Self.round(store, id, fetched: [item], proposing: [item])
     var renamed = try XCTUnwrap(store.automation(id)?.definition)
@@ -204,6 +207,13 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(proposal["automationId"] as? Int, id)
     XCTAssertEqual(proposal["nodeKey"] as? String, "judge")
     XCTAssertEqual(proposal["originNodeKey"] as? String, "source")
+
+    renamed.nodes[0].id = nil
+    renamed.nodes[0].key = "other"
+    renamed.nodes[1].from = [AutomationDefinition.Input(nodeKey: "other")]
+    _ = try success(wc.controlSetAutomation(automationId: id, version: 2, renamed))
+
+    XCTAssertEqual(try proposals(wc, of: id).map { $0["originNodeKey"] as? String }, [nil])
 
     _ = wc.controlDeleteAutomation(automationId: id)
     XCTAssertTrue(store.proposals.isEmpty)
