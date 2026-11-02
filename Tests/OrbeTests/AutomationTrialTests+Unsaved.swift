@@ -136,6 +136,43 @@ extension AutomationTrialTests {
     XCTAssertEqual(held, [ids("send"), writtenSend], "渡るはずだった行は新しい順")
   }
 
+  /// 直す試走は、何をするかが変わった「届いたら」のノードも本番で書いた時点と同じに起こす: 失敗して読み残した行（a）を書いた時点の
+  /// 回で読み直し、流しで足された b を次の回で読む。どちらも本番で直して流したときと同じ行。
+  func testARewriteWakesAReworkedNodeOnTheRowsItLeftUnreadAsWritingItInProductionDoes() throws {
+    let id = try define([
+      fetch("gh"), definitionNode("p", .arrival, from: ["gh"], deliver: .report),
+    ])
+    try runner.flow(id, to: .ends)
+    finish("gh", fetched(["a"]))
+    finish("p", "", exit: 1)
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.nodes[1].action.method = .command(AutomationNodeCommand(script: "p2"))
+
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
+    waitCalls("p2", 1)
+    let triedAtWriting = ids("p2")
+    finish("p2", "a")
+    waitCalls("gh", 2)
+    finish("gh", fetched(["a", "b"]))
+    waitCalls("p2", 2)
+    let triedInFlow = ids("p2")
+    finish("p2", "b")
+    ended(trial)
+    XCTAssertNil(trial.failure)
+
+    _ = try runner.set(id, version: current.version, rewrite)
+    XCTAssertEqual(calls("p2").count, 3, "前提: 本番では書いた時点で p が起きる")
+    let written = ids("p2")
+    finish("p2", "a")
+    try runner.flow(id, to: .ends)
+    finish("gh", fetched(["a", "b"]))
+    XCTAssertEqual(calls("p2").count, 4, "前提: 書いた後の流しでも p が走る")
+    XCTAssertEqual(written, [downstream("gh", "a", of: id)], "前提: 失敗して読み残した行を読み直す")
+    XCTAssertEqual([triedAtWriting, triedInFlow], [written, ids("p2")])
+  }
+
   /// 直す試走は、本番で書いたときと同じく、入力を変えた判定の判断待ちの候補に下げる条件を当て直す: 外した入力だけが支えていた
   /// 候補は写しの上で下がり、試走の判定は同じリンクを新しい候補にする（本番で書いた後の次の回と同じ結果）。本番の候補は残る。
   func testARewriteReviewsTheJudgesWaitingProposalsAsWritingItInProductionDoes() throws {
