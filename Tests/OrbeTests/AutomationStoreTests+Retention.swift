@@ -201,17 +201,16 @@ extension AutomationStoreTests {
   /// 今の集合の古い版の掃除の基準は、回数の内か期間の内で残る回のうち最も古い始まり（期間の内で残る回が読みうる版を残す）。
   func testAReplacedVersionStaysWhileARunWithinTheDaysCouldHaveReadIt() throws {
     let retention = AutomationRetention(runCount: 1, runDays: 2, eventDays: 30)
-    var store: AutomationStore? = AutomationStore(
-      opening: AutomationPersistence.open(retention: { retention }))
-    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    let store = AutomationStore(opening: AutomationPersistence.open(retention: { retention }))
+    let id = try store.create(Self.definition(), now: Self.at).id
     func fetch(_ body: String, onDay day: Int) throws {
       try Self.fetch(
-        XCTUnwrap(store), id,
+        store, id,
         [AutomationItem(id: "a", link: "https://example.com/a", body: body, time: Self.at)],
         at: Self.at.addingTimeInterval(Self.day * Double(day)))
     }
     func versions() throws -> Int {
-      try XCTUnwrap(store).read {
+      try store.read {
         try $0.db.select("SELECT count(*) FROM item_versions", []) { $0.int(at: 0) }
       }
       .first ?? -1
@@ -221,7 +220,6 @@ extension AutomationStoreTests {
 
     try fetch("v5", onDay: 5)
     XCTAssertEqual(try versions(), 3, "残る回より前に置き換わった版は消える")
-    store = nil
   }
 
   /// 版の掃除の基準は出す側のノードの回だけで数える——ほかのノードの回が増えても、出す側の回数の内の回が読みうる版は残る。
@@ -264,13 +262,19 @@ extension AutomationStoreTests {
       .fetch(fresh: 1, duplicates: 0), "10 日を過ぎたので新しい出来事")
   }
 
-  /// 保持の回数がメモリの直近の数より小さくても、メモリの直近の回は掃除の後の DB と同じ（消えた回を画面に残さない）。
+  /// 保持の回数がメモリの直近の数より小さくても、メモリの直近の回は掃除の後の DB と同じ（消えた回を画面に残さない）。確定した
+  /// ノードのほか、その確定の掃除で回を消されたほかのノードも同じ。
   func testTheRecentRunsInMemoryFollowTheSweep() throws {
     let store = AutomationStore(
       opening: AutomationPersistence.open(retention: {
         AutomationRetention(runCount: 2, runDays: 1, eventDays: 30)
       }))
     let id = try store.create(Self.definition(), now: Self.at).id
+    for minute in 1...3 {
+      try store.record(
+        id, nodeKey: "judge", at: Self.at.addingTimeInterval(60 * Double(minute)),
+        outcome: DesignSceneFixtures.failed("boom"))
+    }
     for day in 0...4 {
       try Self.fetch(
         store, id, [], outcome: DesignSceneFixtures.failed("boom"),
@@ -280,5 +284,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(
       store.automation(id)?.state(key: "fetch").runs.map(\.startedAt),
       [4, 3].map { Self.at.addingTimeInterval(Self.day * Double($0)) })
+    XCTAssertEqual(
+      store.automation(id)?.state(key: "judge").runs.count, 2, "取得の確定の掃除で消えた判定の回もメモリから消える")
   }
 }

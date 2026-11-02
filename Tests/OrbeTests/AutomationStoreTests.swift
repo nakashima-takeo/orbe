@@ -98,9 +98,9 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 再起動
 
-  /// 自動化・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・決まりを外した印・止めた印・回の記録・読めば
-  /// 取る行の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・自動化とノードを止める・消す）の後に開き直しても同じ。回の記録は
-  /// 失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
+  /// 自動化・ノードの出来事の残す日数・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・決まりを外した印・
+  /// 止めた印・回の記録・読めば取る行の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・自動化とノードを止める・消す）の後に
+  /// 開き直しても同じ。回の記録は失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)

@@ -18,9 +18,7 @@ struct AutomationHolding: Equatable {
 extension AutomationDatabase {
   /// `holding` は走っている回が確定まで使うもの（消さない）。回の記録を消した外していないノードを返す（呼び手がメモリの直近の
   /// 回を読み直す——保持の回数がメモリの直近の数より小さいと、メモリに DB で消えた回が残るため）。
-  @discardableResult func sweep(now: Date, holding: AutomationHolding) throws -> Set<
-    AutomationNodeID
-  > {
+  func sweep(now: Date, holding: AutomationHolding) throws -> Set<AutomationNodeID> {
     let retention = retention()
     let heldVersions = holding.rows.compactMap { ref -> String? in
       if case .version(let id) = ref { return String(id) }
