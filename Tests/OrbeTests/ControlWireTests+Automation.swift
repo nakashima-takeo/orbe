@@ -36,7 +36,7 @@ extension ControlWireTests {
     [
       "key": "slack", "name": "Slack: 自分宛",
       "trigger": ["kind": "cron", "expression": " */10 9-18 * * 1-5 "],
-      "agent": "claude", "tools": ["mcp__slack__search"], "instruction": "DM",
+      "agent": "claude", "model": "haiku", "tools": ["mcp__slack__search"], "instruction": "DM",
       "coverage": "newArrivals",
     ]
   }
@@ -77,7 +77,7 @@ extension ControlWireTests {
             action: AutomationActionDef(
               method: .agent(
                 AutomationNodeAgent(
-                  cli: "claude", model: nil, tools: ["mcp__slack__search"], instruction: "DM")),
+                  cli: "claude", model: "haiku", tools: ["mcp__slack__search"], instruction: "DM")),
               timeoutMinutes: nil, coverage: .newArrivals, destination: .nextNode),
             maxItems: nil),
           AutomationDefinition.Node(
@@ -90,7 +90,7 @@ extension ControlWireTests {
               timeoutMinutes: nil, coverage: nil, destination: .taskCandidates),
             maxItems: 30),
         ]),
-      "agent は省略で claude・モデルは省略のまま")
+      "agent は省略で claude")
   }
 
   func testSetAutomationRejectsAnIncompleteOrAmbiguousDefinition() {

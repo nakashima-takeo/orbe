@@ -106,8 +106,8 @@ extension AutomationStoreTests {
     XCTAssertFalse(stored.contains { $0.contains(#""key""#) }, "定義に鍵は残らない")
   }
 
-  /// 省略していた値に既定と同じ値を書き足すだけ（判定のモデル・上限）は、何をするかの変化に入らず、走っている回を止めない。
-  /// 既定と違う値は変化。
+  /// 省略していた値に既定と同じ値を書き足すだけ（上限）は、何をするかの変化に入らず、走っている回を止めない。既定と違う値と、
+  /// モデルの書き換えは変化。
   func testSpellingOutADefaultIsNotAChangeOfBehavior() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
@@ -118,7 +118,7 @@ extension AutomationStoreTests {
       let version = try XCTUnwrap(store.automation(id)?.version)
       return try store.replace(id, version: version, with: definition, now: Self.at).reworked
     }
-    func model(_ model: String?) -> (inout AutomationActionDef) -> Void {
+    func model(_ model: String) -> (inout AutomationActionDef) -> Void {
       { action in
         guard case .agent(var agent) = action.method else { return }
         agent.model = model
@@ -126,7 +126,6 @@ extension AutomationStoreTests {
       }
     }
 
-    XCTAssertEqual(try rewritten(model(nil)), [], "省略は既定の sonnet と同じ")
     XCTAssertEqual(
       try rewritten { $0.timeoutMinutes = AutomationActionDef.agentTimeoutMinutes }, [],
       "agent の既定の上限を明示")

@@ -135,7 +135,8 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
           control, ["set"],
           stdin: #"{"name": "PR を Slack へ", "nodes": [{"key": "post", "name": "投稿", "#
             + #""trigger": {"kind": "cron", "expression": "0 9 * * 1-5"}, "#
-            + #""tools": ["Bash(gh search prs:*)"], "instruction": "投稿して", "deliver": "report"}]}"#
+            + #""model": "sonnet", "tools": ["Bash(gh search prs:*)"], "instruction": "投稿して", "#
+            + #""deliver": "report"}]}"#
         )))
     try control.target.automationStore.record(
       id, nodeKey: "post", at: Date(),

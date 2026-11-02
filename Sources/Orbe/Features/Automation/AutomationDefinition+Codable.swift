@@ -70,7 +70,7 @@ extension AutomationDefinition.Input: Codable {
   }
 }
 
-/// `command`（＋`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方と、`timeoutMinutes`・
+/// `command`（＋`directory`）か `instruction`（＋`model`・`agent`〔既定 claude〕・`tools`）のちょうど一方と、`timeoutMinutes`・
 /// `coverage`・`deliver`。`deliver` の省略は次のノード。外の定義のノードの欄と同じオブジェクトに並び、保存（`action_defs.action`）は
 /// この欄だけのオブジェクト。
 extension AutomationActionDef: Codable {
@@ -94,7 +94,7 @@ extension AutomationActionDef: Codable {
       try c.encodeIfPresent(command.directory, forKey: .directory)
     case .agent(let agent):
       try c.encode(agent.cli, forKey: .agent)
-      try c.encodeIfPresent(agent.model, forKey: .model)
+      try c.encode(agent.model, forKey: .model)
       if !agent.tools.isEmpty { try c.encode(agent.tools, forKey: .tools) }
       try c.encode(agent.instruction, forKey: .instruction)
     }
@@ -122,7 +122,7 @@ extension AutomationActionDef: Codable {
       return .agent(
         AutomationNodeAgent(
           cli: try c.decodeIfPresent(String.self, forKey: .agent) ?? "claude",
-          model: try c.decodeIfPresent(String.self, forKey: .model),
+          model: try c.decode(String.self, forKey: .model),
           tools: try c.decodeIfPresent([String].self, forKey: .tools) ?? [],
           instruction: try c.decode(String.self, forKey: .instruction)))
     default:

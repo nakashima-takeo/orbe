@@ -5,16 +5,17 @@ import XCTest
 /// ノードの JSON の形——外から受けた定義の読み書き。
 ///
 /// 壊れると何が起きるか: AI が書いたノードが別の意味で読まれる（`none` が報告に化ける・入力や取り方が落ちる・ノードの id が
-/// 落ちて別のノードになる）。読み直したノードのモデルが解いた値で固まり、役割が変わっても前の既定で走る。コマンドに書いたツールや
-/// 知らない行き先・取り方が黙って捨てられ、書いた AI が誤りの場所を知らされない。
+/// 落ちて別のノードになる・出来事の残す日数が落ちる）。モデルを書かない agent のノードが通り、隠れた既定で走る。コマンドに書いた
+/// ツールや知らない行き先・取り方が黙って捨てられ、書いた AI が誤りの場所を知らされない。
 final class AutomationNodeTests: OrbeTestCase {
   private func definitionNode(
     _ id: Int?, _ key: String, _ name: String, _ trigger: AutomationNode.Trigger,
-    from: [AutomationDefinition.Input] = [], _ action: AutomationActionDef, maxItems: Int? = nil
+    from: [AutomationDefinition.Input] = [], _ action: AutomationActionDef, maxItems: Int? = nil,
+    retentionDays: Int? = nil
   ) -> AutomationDefinition.Node {
     AutomationDefinition.Node(
       id: id.map(AutomationNodeID.init), key: key, name: name, trigger: trigger, from: from,
-      action: action, maxItems: maxItems)
+      action: action, maxItems: maxItems, retentionDays: retentionDays)
   }
 
   func testTheJSONFormReadsIntoNodesAndWritesBackTheSame() throws {
@@ -23,14 +24,15 @@ final class AutomationNodeTests: OrbeTestCase {
         {"id": 3, "key": "gh", "name": "GitHub", "trigger": {"kind": "interval", "minutes": 10},
          "command": "gh search prs", "directory": "/Users/me/repo", "coverage": "currentSet"},
         {"key": "judge", "name": "判定", "trigger": {"kind": "cron", "expression": "0 9 * * *"},
-         "from": [{"node": "gh", "maxAgeHours": 72}], "instruction": "判定して",
+         "from": [{"node": "gh", "maxAgeHours": 72}], "model": "sonnet", "instruction": "判定して",
          "deliver": "taskCandidates", "maxItems": 30, "timeoutMinutes": 10},
         {"key": "post", "name": "投稿", "trigger": {"kind": "manual"}, "agent": "claude",
          "model": "opus", "tools": ["mcp__slack__post"], "instruction": "投稿して", "deliver": "report"},
         {"key": "say", "name": "知らせ", "trigger": {"kind": "arrival"},
          "from": ["gh", {"node": "post", "take": "all"}], "command": "say hi", "deliver": "none"},
         {"key": "sum", "name": "まとめ", "trigger": {"kind": "arrival"},
-         "from": [{"node": "gh", "take": "all"}], "instruction": "まとめて", "coverage": "currentSet"}
+         "from": [{"node": "gh", "take": "all"}], "model": "haiku", "instruction": "まとめて",
+         "coverage": "currentSet"}
       ]
       """#
     let expected = [
@@ -44,7 +46,7 @@ final class AutomationNodeTests: OrbeTestCase {
         from: [.init(nodeKey: "gh", maxAgeHours: 72)],
         AutomationActionDef(
           method: .agent(
-            AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "判定して")),
+            AutomationNodeAgent(cli: "claude", model: "sonnet", tools: [], instruction: "判定して")),
           timeoutMinutes: 10, coverage: nil, destination: .taskCandidates), maxItems: 30),
       definitionNode(
         nil, "post", "投稿", .manual,
@@ -63,7 +65,7 @@ final class AutomationNodeTests: OrbeTestCase {
         nil, "sum", "まとめ", .arrival, from: [.init(nodeKey: "gh", take: .all)],
         AutomationActionDef(
           method: .agent(
-            AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "まとめて")),
+            AutomationNodeAgent(cli: "claude", model: "haiku", tools: [], instruction: "まとめて")),
           timeoutMinutes: nil, coverage: .currentSet, destination: .nextNode)),
     ]
 
@@ -88,6 +90,7 @@ final class AutomationNodeTests: OrbeTestCase {
       ("手段が無い", manual, #""coverage": "currentSet""#, "[1]"),
       ("コマンドにツール", manual, #""command": "x", "tools": ["mcp__a__b"]"#, "[1].tools"),
       ("コマンドにモデル", manual, #""command": "x", "model": "haiku""#, "[1].model"),
+      ("agent にモデルが無い", manual, #""instruction": "y""#, "[1].model"),
       ("agent に作業ディレクトリ", manual, #""instruction": "y", "directory": "/a""#, "[1].directory"),
       ("知らない予定", #"{"kind": "weekly"}"#, #""command": "x""#, "[1].trigger.kind"),
       (

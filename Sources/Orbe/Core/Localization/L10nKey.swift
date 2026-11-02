@@ -666,7 +666,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardNodeDirectory
   case boardNodeNext
   case boardNodeAgent
-  case boardNodeDefaultModel
   case boardNodeToolMCP
   case boardNodeToolCommand
   case boardNodeOverwrite

@@ -91,7 +91,7 @@ extension AutomationStoreTests {
     store = nil
     try database().run(
       """
-      UPDATE action_defs SET action = '{"instruction": 1}'
+      UPDATE action_defs SET action = '{"model": "sonnet", "instruction": 1}'
       WHERE id = (SELECT def_id FROM nodes WHERE id = ?)
       """, [.integer(Int64(judge.rawValue))])
 
@@ -166,7 +166,7 @@ extension AutomationStoreTests {
     store = nil
     try database().run(
       """
-      UPDATE action_defs SET action = '{"instruction": 1}'
+      UPDATE action_defs SET action = '{"model": "sonnet", "instruction": 1}'
       WHERE id = (SELECT def_id FROM nodes WHERE id = ?)
       """, [.integer(Int64(judge.rawValue))])
     return (AutomationStore(), id)

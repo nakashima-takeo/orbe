@@ -42,7 +42,6 @@ extension L10n {
     .boardNodeDirectory: ("作業ディレクトリ", "Working directory"),
     .boardNodeNext: ("次回", "Next"),
     .boardNodeAgent: ("%1$@（%2$@）", "%1$@ (%2$@)"),
-    .boardNodeDefaultModel: ("既定のモデル", "default model"),
     .boardNodeToolMCP: ("%@（MCP）", "%@ (MCP)"),
     .boardNodeToolCommand: ("%@ コマンド", "%@ command"),
     .boardNodeOverwrite: ("上書き", "overwrite"),

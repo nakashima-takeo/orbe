@@ -84,7 +84,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let index = try XCTUnwrap(samples[0].definition.nodes.firstIndex { $0.key == "backlog" })
     samples[0].definition.nodes[index].action.method = .agent(
       AutomationNodeAgent(
-        cli: "claude", model: nil,
+        cli: "claude", model: "haiku",
         tools: [
           "mcp__claude_ai_Gmail__search_threads", "mcp__plugin_core_backlog__get_issues",
           "mcp__claude_ai_Gmail__get_thread", "Bash(npm run test:unit:*)",

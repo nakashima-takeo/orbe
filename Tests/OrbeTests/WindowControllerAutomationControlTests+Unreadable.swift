@@ -17,7 +17,7 @@ extension WindowControllerAutomationControlTests {
       try store.read {
         try $0.db.run(
           """
-          UPDATE action_defs SET action = '{"instruction": 1}'
+          UPDATE action_defs SET action = '{"model": "sonnet", "instruction": 1}'
           WHERE id = (SELECT def_id FROM nodes WHERE automation_id = ? AND key = 'judge')
           """, [.integer(Int64(id))])
       }

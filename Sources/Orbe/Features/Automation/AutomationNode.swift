@@ -106,8 +106,7 @@ enum AutomationTake: String, Hashable {
 /// ノードの agent。
 struct AutomationNodeAgent: Equatable {
   var cli: String
-  /// 省略は役割の既定（`AutomationNodeRole.defaultModel`）。
-  var model: String?
+  var model: String
   /// 許可の規則。MCP のツールの完全名か `Bash(<コマンドの接頭>:*)`。空はツールを持たない。
   var tools: [String]
   var instruction: String
@@ -127,13 +126,4 @@ enum AutomationNodeRole: Equatable {
   case work
   /// 何も渡さないコマンド。
   case sideEffect
-
-  /// Orbe へ渡す役割は sonnet、次のノードへ渡す役割は haiku。副作用はコマンドだけの役割なのでモデルを持たない。
-  var defaultModel: String? {
-    switch self {
-    case .judge, .report, .work: "sonnet"
-    case .fetch, .process: "haiku"
-    case .sideEffect: nil
-    }
-  }
 }

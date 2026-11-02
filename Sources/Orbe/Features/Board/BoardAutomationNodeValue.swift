@@ -123,9 +123,7 @@ extension BoardAutomationNodeValue {
     }
     switch action.method {
     case .agent(let agent):
-      fact(
-        .boardNodeMethod,
-        l10n.format(.boardNodeAgent, agent.cli, node.model ?? l10n.string(.boardNodeDefaultModel)))
+      fact(.boardNodeMethod, l10n.format(.boardNodeAgent, agent.cli, agent.model))
       if !agent.tools.isEmpty {
         fact(.boardNodeTools, tools(agent.tools, l10n).joined(separator: separator))
       }

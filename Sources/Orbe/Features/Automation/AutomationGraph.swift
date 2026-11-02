@@ -21,10 +21,10 @@ struct AutomationGraph: Equatable {
     var id: AutomationNodeID { entity.id }
     var key: String { entity.key }
 
-    /// 走るモデル。保存は省略のまま持ち、走らせるとき・画面はここで解く。コマンドは nil。
+    /// 走るモデル（書かれた値）。コマンドは nil。
     var model: String? {
       guard case .agent(let agent) = action.method else { return nil }
-      return agent.model ?? role.defaultModel
+      return agent.model
     }
 
     /// 省略を解いた上限（分）。
@@ -50,13 +50,8 @@ struct AutomationGraph: Equatable {
     /// 何をするか（省略を解いた動作と入力の集合）。書き換えで何をするかが変わったかはこれで比べる——省略していた値に既定と
     /// 同じ値を書き足しただけでは変わらない。
     var behavior: Behavior {
-      var method = action.method
-      if case .agent(var agent) = method {
-        agent.model = model
-        method = .agent(agent)
-      }
-      return Behavior(
-        method: method, timeoutMinutes: timeoutMinutes, coverage: coverage,
+      Behavior(
+        method: action.method, timeoutMinutes: timeoutMinutes, coverage: coverage,
         destination: action.destination, inputs: Set(inputs))
     }
   }

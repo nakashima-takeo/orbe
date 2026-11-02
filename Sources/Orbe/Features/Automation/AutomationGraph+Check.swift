@@ -243,7 +243,7 @@ extension AutomationGraph {
           "\(path).agent: \(agent.cli) cannot run in the background (\(reason.message))")
       case nil: throw .invalid("\(path).agent: agent \(agent.cli) is not supported")
       }
-      if let model = agent.model, isBlank(model) { throw .invalid("\(path).model: model is empty") }
+      if isBlank(agent.model) { throw .invalid("\(path).model: model is empty") }
       if let tool = agent.tools.first(where: { !isMCPToolName($0) && !isBashRule($0) }) {
         throw .invalid(
           "\(path).tools: \(tool) is neither a full MCP tool name (mcp__<server>__<tool>) nor a Bash "
