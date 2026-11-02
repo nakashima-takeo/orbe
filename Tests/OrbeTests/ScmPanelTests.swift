@@ -47,9 +47,9 @@ final class ScmPanelTests: OrbeTestCase {
     if addingOrigin { repo.addOrigin() }
   }
 
-  /// git 管理外の根では、ファイルに触れずにパネルが管理外と決まる（見出しの下に理由の一文だけが出る）。`.git` が無い根でも、
-  /// `.git` はあるが git が解決できない根（指す先が消えた worktree のリンク）でも。
-  func testAnUnmanagedRootIsKnownWithoutTouchingAnyFile() throws {
+  /// git 管理外の根では、根の下のファイルが変わるのを待たずにパネルが管理外と決まる（見出しの下に理由の一文だけが出る）。
+  /// `.git` が無い根でも、`.git` はあるが git が解決できない根（指す先が消えた worktree のリンク）でも。
+  func testAnUnmanagedRootIsKnownWithoutAnyFileChange() throws {
     let plain = TestScratch.caseDir.appendingPathComponent("plain", isDirectory: true)
     let broken = TestScratch.caseDir.appendingPathComponent("broken", isDirectory: true)
     for dir in [plain, broken] {
