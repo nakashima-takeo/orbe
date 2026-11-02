@@ -23,7 +23,8 @@ struct AutomationNodeRun: Equatable {
   var breach: AutomationRejections?
   /// 役割ごとの結果。失敗した回は持たない。
   var result: Result?
-  /// この回の確定で下げた（判断待ちだった）候補の数。取得の成功した回だけ持つ。
+  /// 下げた（判断待ちだった）候補の数。取得・処理の成功した回はその確定で下げた数、判定の成功した回は前の成功した回から後に、
+  /// 読んだ出来事が残す期間を過ぎて下げた数（あったときだけ）。
   var withdrawn: Int?
   var failure: AutomationFailure?
 
@@ -52,14 +53,10 @@ struct AutomationDrops: Equatable {
   enum Reason: String, CaseIterable {
     /// 古さの上限を過ぎた。
     case expired
-    /// 出どころのリンクに候補がある。
-    case proposed
-    /// 同じリンクの、より新しい行がある。
-    case sameLink
+    /// 判定のノードへ、その判定の判断待ちでない覚えている候補のリンクの行が届いた。
+    case closed
     /// 件数の上限を超えた。
     case overflow
-    /// 判定のノードへ、出どころ（元になった取得の行）の無い行が届いた。
-    case unsourced
     /// 同じ回の中で、同じ id の新しい行に置き換わった。
     case replaced
     /// 受け手が読む前に、残す期間を過ぎて消えた出来事（読みでは出ない。読んだ位置の進め先から数える）。
@@ -78,6 +75,13 @@ struct AutomationDrops: Equatable {
   mutating func add(_ other: AutomationDrops) {
     for (reason, count) in other.counts { add(reason, count) }
   }
+}
+
+/// 受け手が回の無い場面で数え、次の成功した回の記録へ持ち越す数。取る行が 0 件の契機で捨てた数・読む前に期限で消えた数と、
+/// 判定が読んだ出来事が残す期間を過ぎて下げた候補の数。
+struct AutomationCarried: Equatable {
+  var dropped = AutomationDrops()
+  var withdrawn = 0
 }
 
 /// 回の記録 1 件。時刻・契機・成否は列から分かり、中身は読めなければ不明な記録になる。

@@ -1,7 +1,7 @@
 import Foundation
 
-/// 走っている回が確定まで使うもの: 読んだ行とその出どころ（判定の確定は読んだ時点の出どころの版を指す）と、回を始めたときの
-/// ノードの定義（確定の回の記録が指す）。
+/// 走っている回が確定まで使うもの: 読んだ行（回の履歴と、判定の確定の候補が指す）と、回を始めたときのノードの定義（確定の回の
+/// 記録が指す）。
 struct AutomationHolding: Equatable {
   var rows: Set<AutomationRowRef> = []
   var defs: Set<AutomationNodeDefID> = []
@@ -35,7 +35,7 @@ extension AutomationDatabase {
       since: now.addingTimeInterval(-TimeInterval(retention.runDays) * Self.day))
     let swept = try sweepRecords(kept)
     try sweepItems(heldVersions, kept)
-    try sweepEvents(now: now, days: retention.eventDays, held: heldEvents)
+    try sweepEvents(now: now, held: heldEvents)
     try sweepLedger(held: holding.defs.map { String($0.rawValue) }.joined(separator: ","))
     return swept
   }
@@ -57,9 +57,8 @@ extension AutomationDatabase {
       DELETE FROM settlements WHERE proposal_id IN (
         SELECT proposal_id FROM (
           SELECT s.proposal_id, s.decided_at, o.removed_at, ROW_NUMBER() OVER (
-            PARTITION BY r.node_id ORDER BY s.decided_at DESC, s.proposal_id DESC) AS n
-          FROM settlements s JOIN proposals q ON q.id = s.proposal_id JOIN runs r ON r.id = q.run_id
-            JOIN nodes o ON o.id = r.node_id)
+            PARTITION BY q.node_id ORDER BY s.decided_at DESC, s.proposal_id DESC) AS n
+          FROM settlements s JOIN proposals q ON q.id = s.proposal_id JOIN nodes o ON o.id = q.node_id)
         WHERE ((n > ?1 AND decided_at < ?2) OR removed_at IS NOT NULL)
           AND proposal_id NOT IN (SELECT proposal_id FROM held_proposals))
       """, kept.values)
@@ -93,18 +92,18 @@ extension AutomationDatabase {
     return Set(swept)
   }
 
-  /// 出来事: 出したノードの残す期間（ノードの `retention_days`、無ければ `days`）を過ぎ、どこからも指されていないもの。
-  private func sweepEvents(now: Date, days: Int, held heldEvents: String) throws {
+  /// 出来事: 出したノードの残す期間を過ぎ、どこからも指されていないもの。
+  private func sweepEvents(now: Date, held heldEvents: String) throws {
+    let expired = expiredEvents(at: now)
     try db.run(
       """
-      DELETE FROM events WHERE created_at < ?1
-          - coalesce((SELECT retention_days FROM nodes WHERE id = events.node_id), ?2) * ?3
+      DELETE FROM events WHERE id IN (\(expired.sql))
         \(heldEvents.isEmpty ? "" : "AND id NOT IN (\(heldEvents))")
         AND NOT EXISTS (SELECT 1 FROM items WHERE source_event_id = events.id)
         AND NOT EXISTS (SELECT 1 FROM events e WHERE e.source_event_id = events.id)
         AND NOT EXISTS (SELECT 1 FROM run_event_inputs WHERE event_id = events.id)
-        AND NOT EXISTS (SELECT 1 FROM proposals WHERE origin_event_id = events.id)
-      """, [Self.instant(now), .integer(Int64(days)), .integer(Int64(Self.day * 1000))])
+        AND NOT EXISTS (SELECT 1 FROM proposals WHERE event_id = events.id)
+      """, expired.values)
   }
 
   /// 外したノードの台帳とノードの定義: どこからも指されず、走っている回も使っていないもの。
@@ -147,7 +146,7 @@ extension AutomationDatabase {
     let oldest = "coalesce((SELECT at FROM oldest WHERE node_id = i.node_id), 9223372036854775807)"
     let referenced = """
       (v.id IN (SELECT version_id FROM run_item_inputs)
-        OR v.id IN (SELECT origin_version_id FROM proposals WHERE origin_version_id IS NOT NULL)
+        OR v.id IN (SELECT version_id FROM proposals WHERE version_id IS NOT NULL)
         \(heldVersions.isEmpty ? "" : "OR v.id IN (\(heldVersions))"))
       """
     try db.run(

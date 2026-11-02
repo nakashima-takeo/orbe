@@ -33,8 +33,8 @@ let runTools: [[String: Any]] = [
     ("name", "read_waiting_proposals"),
     (
       "description",
-      "Returns the task proposals already waiting for the user, one JSON object per line ({link, title, due?}), "
-        + "or (none)."
+      "Returns the task proposals this node made that are waiting for the user, one JSON object per line "
+        + "({link, title, due?}), or (none)."
     ),
     ("inputSchema", schema([:])),
   ]),
@@ -51,8 +51,9 @@ let runTools: [[String: Any]] = [
     ("name", "put_items"),
     (
       "description",
-      "Gives Orbe fetched items: {id, link, body, time} each (extra fields are kept; an item is at most 64 KiB). "
-        + "Orbe checks every item; if any is wrong it accepts none of this call and says what to fix."
+      "Gives Orbe fetched items: {id, body, link?, time?} each, where link is an http(s) URL and time is ISO 8601 "
+        + "(extra fields are kept; an item is at most 64 KiB). Orbe checks every item; if any is wrong it accepts "
+        + "none of this call and says what to fix."
     ),
     ("inputSchema", schema(["items": itemArray("the items")], required: ["items"])),
   ]),
@@ -69,8 +70,9 @@ let runTools: [[String: Any]] = [
     ("name", "propose"),
     (
       "description",
-      "Proposes tasks: {id, title, due?, workspace?, reason?} each, where id is a new item's id. Orbe checks every "
-        + "proposal; if any is wrong it accepts none of this call and says what to fix."
+      "Proposes tasks: {id, title, due?, workspace?, reason?} each, where id is the id of an input item that has "
+        + "a link (an http(s) URL). Orbe checks every proposal; if any is wrong it accepts none of this call and "
+        + "says what to fix."
     ),
     ("inputSchema", schema(["proposals": itemArray("the proposals")], required: ["proposals"])),
   ]),

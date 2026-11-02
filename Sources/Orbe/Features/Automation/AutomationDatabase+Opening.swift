@@ -26,7 +26,7 @@ extension AutomationDatabase {
     let (proposals, unreadableProposals) = try database.heldProposals()
     var memory = AutomationMemory(
       automations: automations, unreadable: unreadable, proposals: proposals,
-      unreadableProposals: unreadableProposals, judgeOwners: try database.judgeOwners())
+      unreadableProposals: unreadableProposals)
     for automation in automations { try memory.recount(automation.id, database, now: now) }
     return memory
   }
@@ -223,25 +223,24 @@ extension AutomationDatabase {
   private func heldProposals() throws -> ([AutomationProposal], [AutomationUnreadableProposal]) {
     let rows = try db.select(
       """
-      SELECT q.id, q.run_id, r.node_id, r.def_id, r.ended_at, q.origin_version_id,
-        q.origin_event_id, coalesce(v.body, e.body), coalesce(i.node_id, e.node_id), q.link, q.title,
-        q.due, q.workspace, q.reason, h.resolved_at, s.outcome, s.task_id
+      SELECT q.id, q.run_id, q.node_id, r.def_id, r.ended_at, q.version_id, q.event_id,
+        coalesce(v.body, e.body), q.link, q.title, q.due, q.workspace, q.reason, h.resolved_at,
+        s.outcome, s.task_id
       FROM held_proposals h JOIN proposals q ON q.id = h.proposal_id
       JOIN runs r ON r.id = q.run_id
-      LEFT JOIN item_versions v ON v.id = q.origin_version_id
-      LEFT JOIN items i ON i.id = v.item_id
-      LEFT JOIN events e ON e.id = q.origin_event_id
+      LEFT JOIN item_versions v ON v.id = q.version_id
+      LEFT JOIN events e ON e.id = q.event_id
       LEFT JOIN settlements s ON s.proposal_id = q.id
       ORDER BY q.id
       """, []
     ) { s in
       (
-        id: s.int(at: 0), run: s.int(at: 1), judge: s.int(at: 2), defId: s.int(at: 3),
-        endedAt: s.int64(at: 4), version: s.optionalInt64(at: 5), event: s.optionalInt64(at: 6),
-        body: s.text(at: 7), originNodeId: s.optionalInt64(at: 8), link: s.text(at: 9) ?? "",
-        title: s.text(at: 10) ?? "", due: s.text(at: 11), workspace: s.text(at: 12),
-        reason: s.text(at: 13), resolvedAt: s.optionalInt64(at: 14), outcome: s.text(at: 15),
-        taskId: s.optionalInt64(at: 16)
+        id: s.int(at: 0), run: s.int(at: 1), judge: AutomationNodeID(s.int(at: 2)),
+        defId: s.int(at: 3), endedAt: s.int64(at: 4), version: s.optionalInt64(at: 5),
+        event: s.optionalInt64(at: 6), body: s.text(at: 7), link: s.text(at: 8) ?? "",
+        title: s.text(at: 9) ?? "", due: s.text(at: 10), workspace: s.text(at: 11),
+        reason: s.text(at: 12), resolvedAt: s.optionalInt64(at: 13), outcome: s.text(at: 14),
+        taskId: s.optionalInt64(at: 15)
       )
     }
     var proposals: [AutomationProposal] = []
@@ -257,23 +256,20 @@ extension AutomationDatabase {
       }
       let due = row.due.map { TaskItem.DueDate($0) }
       let workspace = row.workspace.map { UUID(uuidString: $0) }
-      let origin: AutomationRowRef? =
+      let ref: AutomationRowRef? =
         row.version.map { .version(Int($0)) } ?? row.event.map { .event(Int($0)) }
-      guard let state, let origin, let originNodeId = row.originNodeId,
-        let item = Self.decode(AutomationItem.self, row.body), item.link == row.link,
+      guard let state, let ref, let originNodeId = try lineage(of: ref).last?.nodeId,
+        let fields = row.body.flatMap(AutomationRowFields.init(row:)), fields.link == row.link,
         due.map({ $0 != nil }) ?? true, workspace.map({ $0 != nil }) ?? true
       else {
         unreadable.append(
-          AutomationUnreadableProposal(
-            id: row.id, link: row.link, judge: AutomationNodeID(row.judge)))
+          AutomationUnreadableProposal(id: row.id, link: row.link, judge: row.judge))
         continue
       }
       proposals.append(
         AutomationProposal(
-          id: row.id, runId: row.run,
-          judge: AutomationNodeID(row.judge), defId: AutomationNodeDefID(row.defId),
-          originNodeId: AutomationNodeID(Int(originNodeId)), origin: origin, item: item,
-          title: row.title,
+          id: row.id, runId: row.run, judge: row.judge, defId: AutomationNodeDefID(row.defId),
+          row: ref, originNodeId: originNodeId, fields: fields, title: row.title,
           due: due ?? nil, workspace: workspace ?? nil, reason: row.reason,
           proposedAt: AutomationPersistence.date(row.endedAt), state: state))
     }

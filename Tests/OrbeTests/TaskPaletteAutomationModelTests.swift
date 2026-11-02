@@ -64,7 +64,8 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     let item = DesignSceneFixtures.automationItem(
       "C03-9", "後の回", at: DesignSceneFixtures.automationNow)
     try WindowControllerAutomationControlTests.round(
-      runner.store, 2, fetched: [item], proposing: [item], titles: ["後の提案"])
+      runner.store, 2, fetched: [item], proposing: [item], titles: ["後の提案"],
+      now: DesignSceneFixtures.automationNow)
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(palette.automation.proposalIDs, [4, 1, 2, 3])
@@ -182,7 +183,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   /// 選んでいる提案が付け直しの前にさばかれていた（判定の確定や別の口と行き違った）なら、↵ は何もせず赤も出さない。
   func testEnterOnAProposalThatIsNoLongerOpenDoesNothing() throws {
     let palette = listed()
-    try palette.automation.store.dismiss(1)
+    try palette.automation.store.dismiss(1, now: DesignSceneFixtures.automationNow)
 
     palette.submit()
 
@@ -326,7 +327,8 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   // MARK: - 出どころ
 
-  /// 候補の出どころのノードの名前は、候補を出した自動化の定義から引く。消えた自動化の候補は、出どころの項目が無効になって下がる。
+  /// 候補の出どころのノードの名前は、候補を出した自動化の定義から引く。同じリンクをほかの自動化も候補にしていても、棚には出した
+  /// 自動化の候補だけが出る。
   func testOriginNodeNameComesFromTheProposingAutomation() {
     let palette = TaskPaletteSamples.model(
       [],
@@ -336,6 +338,6 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     automation.tapShelf(.automation(1))
 
     XCTAssertEqual(
-      automation.proposals.map(automation.originNodeName(of:)), ["GitHub", "Backlog"])
+      automation.proposals.map(automation.originNodeName(of:)), ["GitHub", "Backlog", "GitHub"])
   }
 }

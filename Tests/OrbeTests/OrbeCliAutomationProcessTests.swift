@@ -157,7 +157,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertTrue(last.hasSuffix(" post: agent exited 0"), last)
   }
 
-  /// `proposals <id>` はその自動化の棚の提案だけを、`proposals` は全部を 1 行 1 提案で出す。
+  /// `proposals <id>` はその自動化が出した提案だけを、`proposals` は全部を 1 行 1 提案で出す。
   func testProposalsListsTheShelfOfTheGivenAutomation() throws {
     let control = try startControlProcess()
     let store = control.target.automationStore
@@ -170,11 +170,11 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       try WindowControllerAutomationControlTests.round(
         store, id, fetched: [item], proposing: [item])
     }
-    let b = try XCTUnwrap(store.proposals.first { $0.item.id == "b" })
+    let b = try XCTUnwrap(store.proposals.first { $0.link == "https://example.com/b" })
 
     XCTAssertEqual(
       run(control, ["proposals", String(second)]),
-      ["\(b.id)", "open", "\(second)", "-", "対応: b", b.item.link].joined(separator: "\t"))
+      ["\(b.id)", "open", "\(second)", "-", "対応: b", b.link].joined(separator: "\t"))
     XCTAssertEqual(run(control, ["proposals"]).split(separator: "\n").count, 2)
   }
 

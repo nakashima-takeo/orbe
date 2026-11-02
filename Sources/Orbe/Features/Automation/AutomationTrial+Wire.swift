@@ -43,9 +43,7 @@ extension AutomationTrial.Pass {
       case .judged(let proposals, let resolved):
         json["proposals"] = proposals.map { proposal -> [String: Any] in
           var item: [String: Any] = [
-            "id": AutomationDatabase.downstreamId(
-              proposal.origin.item.id, of: proposal.origin.nodeId, inherited: false),
-            "link": proposal.origin.item.link, "title": proposal.title,
+            "id": proposal.id, "link": proposal.fields.link, "title": proposal.title,
           ]
           if let due = proposal.due { item["due"] = due.text }
           if let reason = proposal.reason { item["reason"] = reason }

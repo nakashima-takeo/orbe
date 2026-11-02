@@ -3,6 +3,8 @@ import Foundation
 extension AutomationDatabase {
   /// 版 2 の表。ID はどれも使い回さない（AUTOINCREMENT）。外部キーは接続ごとに `PRAGMA foreign_keys = ON` で守る。
   ///
+  /// 候補は判定のノード（`node_id`。回のノードと複合外部キーで揃う）とリンクで一意で、判定が読んだ行（項目は版）を指す。
+  ///
   /// ノードの項目の通し番号（`nodes.last_item_seq`）は変化の番号で、項目の追加（`items.seq`。最初の版も同じ番号）・版の追加
   /// （`item_versions.seq`）・項目の無効化（`items.valid_to_seq`）のたびに 1 進む。出来事の通し番号は出来事の追加で進む。
   static let schema = """
@@ -64,9 +66,9 @@ extension AutomationDatabase {
       breach_run_id   INTEGER REFERENCES runs (id),
       last_item_seq   INTEGER NOT NULL DEFAULT 0 CHECK (last_item_seq >= 0),
       last_event_seq  INTEGER NOT NULL DEFAULT 0 CHECK (last_event_seq >= 0),
-      pending_drops   TEXT    NOT NULL DEFAULT '{}' CHECK (json_type(pending_drops) = 'object'),
+      carried         TEXT    NOT NULL DEFAULT '{}' CHECK (json_type(carried) = 'object'),
       CHECK (removed_at IS NOT NULL OR automation_id IS NOT NULL),
-      CHECK (removed_at IS NULL OR (breach_run_id IS NULL AND pending_drops = '{}')),
+      CHECK (removed_at IS NULL OR (breach_run_id IS NULL AND carried = '{}')),
       UNIQUE (automation_id, id)
     );
     CREATE UNIQUE INDEX nodes_key      ON nodes (automation_id, key)      WHERE removed_at IS NULL;
@@ -145,7 +147,8 @@ extension AutomationDatabase {
       ended_at   INTEGER NOT NULL,
       trigger    TEXT    NOT NULL CHECK (trigger IN ('schedule', 'now', 'arrival')),
       failure    TEXT,
-      record     TEXT    NOT NULL
+      record     TEXT    NOT NULL,
+      UNIQUE (id, node_id)
     );
     CREATE INDEX runs_node ON runs (node_id, id);
     CREATE INDEX runs_def ON runs (def_id);
@@ -153,7 +156,7 @@ extension AutomationDatabase {
       run_id     INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE,
       version_id INTEGER NOT NULL REFERENCES item_versions (id),
       how        TEXT    NOT NULL
-        CHECK (how IN ('taken', 'expired', 'overflow', 'replaced', 'unsourced', 'proposed', 'sameLink')),
+        CHECK (how IN ('taken', 'expired', 'overflow', 'replaced', 'closed')),
       PRIMARY KEY (run_id, version_id)
     ) WITHOUT ROWID;
     CREATE INDEX run_item_inputs_version ON run_item_inputs (version_id);
@@ -161,33 +164,37 @@ extension AutomationDatabase {
       run_id   INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE,
       event_id INTEGER NOT NULL REFERENCES events (id),
       how      TEXT    NOT NULL
-        CHECK (how IN ('taken', 'expired', 'overflow', 'replaced', 'unsourced', 'proposed', 'sameLink')),
+        CHECK (how IN ('taken', 'expired', 'overflow', 'replaced', 'closed')),
       PRIMARY KEY (run_id, event_id)
     ) WITHOUT ROWID;
     CREATE INDEX run_event_inputs_event ON run_event_inputs (event_id);
     CREATE TABLE proposals (
-      id                INTEGER PRIMARY KEY AUTOINCREMENT,
-      run_id            INTEGER NOT NULL REFERENCES runs (id),
-      origin_version_id INTEGER,
-      origin_event_id   INTEGER,
-      link              TEXT    NOT NULL,
-      title             TEXT    NOT NULL,
-      due               TEXT,
-      workspace         TEXT,
-      reason            TEXT,
-      CHECK ((origin_version_id IS NULL) <> (origin_event_id IS NULL)),
-      FOREIGN KEY (origin_version_id, link) REFERENCES item_versions (id, link),
-      FOREIGN KEY (origin_event_id, link)   REFERENCES events (id, link),
-      UNIQUE (id, link)
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id     INTEGER NOT NULL,
+      node_id    INTEGER NOT NULL,
+      version_id INTEGER,
+      event_id   INTEGER,
+      link       TEXT    NOT NULL,
+      title      TEXT    NOT NULL,
+      due        TEXT,
+      workspace  TEXT,
+      reason     TEXT,
+      CHECK ((version_id IS NULL) <> (event_id IS NULL)),
+      FOREIGN KEY (run_id, node_id)  REFERENCES runs (id, node_id),
+      FOREIGN KEY (version_id, link) REFERENCES item_versions (id, link),
+      FOREIGN KEY (event_id, link)   REFERENCES events (id, link),
+      UNIQUE (id, node_id, link)
     );
-    CREATE INDEX proposals_run ON proposals (run_id);
-    CREATE INDEX proposals_origin_version ON proposals (origin_version_id, link);
-    CREATE INDEX proposals_origin_event ON proposals (origin_event_id, link);
+    CREATE INDEX proposals_run ON proposals (run_id, node_id);
+    CREATE INDEX proposals_version ON proposals (version_id, link);
+    CREATE INDEX proposals_event ON proposals (event_id, link);
     CREATE TABLE held_proposals (
       proposal_id INTEGER PRIMARY KEY,
-      link        TEXT    NOT NULL UNIQUE,
+      node_id     INTEGER NOT NULL,
+      link        TEXT    NOT NULL,
       resolved_at INTEGER,
-      FOREIGN KEY (proposal_id, link) REFERENCES proposals (id, link)
+      FOREIGN KEY (proposal_id, node_id, link) REFERENCES proposals (id, node_id, link),
+      UNIQUE (node_id, link)
     );
     CREATE TABLE settlements (
       proposal_id INTEGER PRIMARY KEY REFERENCES proposals (id),

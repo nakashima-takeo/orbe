@@ -7,7 +7,9 @@ extension WindowController {
   /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
   func controlListAutomations() -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      let readable = automationStore.automations.map { ($0.id, automationJSON($0)) }
+      let readable = try automationStore.automations.map { automation throws(AutomationError) in
+        (automation.id, try automationJSON(automation))
+      }
       let unreadable = automationStore.unreadable.map { ($0.id, unreadableJSON($0)) }
       return ["automations": (readable + unreadable).sorted { $0.0 < $1.0 }.map(\.1)]
     }
@@ -18,7 +20,7 @@ extension WindowController {
   ) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
       [
-        "automation": automationJSON(
+        "automation": try automationJSON(
           try automationRunner.set(automationId, version: version, definition))
       ]
     }
@@ -71,7 +73,7 @@ extension WindowController {
         nodeId = node.id
       }
       return [
-        "automation": automationJSON(
+        "automation": try automationJSON(
           try automationRunner.pause(automationId, nodeId: nodeId, paused))
       ]
     }
@@ -91,46 +93,48 @@ extension WindowController {
     }
   }
 
-  /// 覚えている候補（`automationId` があればその自動化の棚の分だけ）。
+  /// 覚えている候補（`automationId` があればその自動化が出した分だけ）。
   private func proposalsJSON(of automationId: Int?) -> [[String: Any]] {
     let proposals = automationStore.proposals.compactMap { proposal -> [String: Any]? in
-      let shelf = automationStore.shelf(of: proposal)
-      if let automationId, shelf?.id != automationId { return nil }
-      var json: [String: Any] = [
-        "proposalId": proposal.id, "state": proposal.state.name, "title": proposal.title,
-        "link": proposal.item.link, "body": proposal.item.body,
-        "time": SessionEvent.iso8601(proposal.item.time),
-        "proposedAt": SessionEvent.iso8601(proposal.proposedAt),
-      ]
-      if let reason = proposal.reason { json["reason"] = reason }
-      // 出した自動化とノードの鍵は組で出す——棚の自動化（`automationId`）と別のことがあり、鍵だけでは取り違える。出した自動化が
-      // 消えた後は、指す先が無いので出さない。ノードは今の鍵で言い、外れていれば出さない。
-      if let issuer = automationStore.issuer(of: proposal) {
-        var by: [String: Any] = ["automationId": issuer.id]
-        if let judge = issuer.graph.node(proposal.judge) { by["nodeKey"] = judge.key }
-        if let origin = issuer.graph.node(proposal.originNodeId) {
-          by["originNodeKey"] = origin.key
-        }
-        json["proposedBy"] = by
-      }
-      if let shelf {
-        json["automationId"] = shelf.id
-        json["automationName"] = shelf.name
-      }
-      if let due = proposal.due { json["due"] = due.text }
-      if let ws = proposal.workspace.flatMap({ id in workspaces.first { $0.persistentId == id } }) {
-        json["workspaceId"] = ws.id
-        json["workspaceName"] = ws.name
-      }
-      if case .accepted(let taskId) = proposal.state { json["taskId"] = taskId }
-      return json
+      let issuer = automationStore.issuer(of: proposal)
+      if let automationId, issuer?.id != automationId { return nil }
+      return proposalJSON(proposal, issuer: issuer)
     }
     // 読めない候補は、読めない記録と同じく分かる分だけで出す。
     let unreadable = automationStore.unreadableProposals.compactMap { proposal -> [String: Any]? in
-      if let automationId, automationStore.holder(of: proposal)?.id != automationId { return nil }
+      if let automationId, automationStore.issuerId(ofJudge: proposal.judge) != automationId {
+        return nil
+      }
       return ["proposalId": proposal.id, "link": proposal.link, "unreadable": true]
     }
     return proposals + unreadable
+  }
+
+  /// 候補 1 つ。出した自動化（`issuer`。定義を読めなければ nil）と、その判定のノード・出どころのノードを今の鍵で言う。出どころの
+  /// ノードは外れていれば出さない。
+  private func proposalJSON(_ proposal: AutomationProposal, issuer: Automation?) -> [String: Any] {
+    var json: [String: Any] = [
+      "proposalId": proposal.id, "state": proposal.state.name, "title": proposal.title,
+      "link": proposal.link, "proposedAt": SessionEvent.iso8601(proposal.proposedAt),
+    ]
+    if let body = proposal.fields.body { json["body"] = body }
+    if let time = proposal.fields.time { json["time"] = SessionEvent.iso8601(time) }
+    if let reason = proposal.reason { json["reason"] = reason }
+    if let issuer {
+      json["automationId"] = issuer.id
+      json["automationName"] = issuer.name
+      if let judge = issuer.graph.node(proposal.judge) { json["nodeKey"] = judge.key }
+      if let origin = issuer.graph.node(proposal.originNodeId) {
+        json["originNodeKey"] = origin.key
+      }
+    }
+    if let due = proposal.due { json["due"] = due.text }
+    if let ws = proposal.workspace.flatMap({ id in workspaces.first { $0.persistentId == id } }) {
+      json["workspaceId"] = ws.id
+      json["workspaceName"] = ws.name
+    }
+    if case .accepted(let taskId) = proposal.state { json["taskId"] = taskId }
+    return json
   }
 
   /// 裏で動く agent の回の道具を 1 つ呼ぶ。返事は道具の答え（中身の塊と、断ったか）。
@@ -179,8 +183,9 @@ extension WindowController {
   }
 
   /// 定義（ノードに `id` を添えた外の形）と版に、止めているか・ノードの今の鍵ごとの状態（走っているか・ノード自身を止めているか・
-  /// 最新の回・次の時刻・読めば取る行の数・決まりを外した印）を足す。判定のノードを持つ自動化にだけタスク候補の欄を付ける。
-  private func automationJSON(_ automation: Automation) -> [String: Any] {
+  /// 最新の回・次の時刻・読めば取る行の数・決まりを外した印。判定は今の定義が出した候補への人の判断の数も）を足す。判定のノードを
+  /// 持つ自動化にだけタスク候補の欄を付ける。
+  private func automationJSON(_ automation: Automation) throws(AutomationError) -> [String: Any] {
     var nodeObjects: [String: Any] = [:]
     for node in automation.graph.nodes {
       let state = automation.state(node.id)
@@ -195,6 +200,11 @@ extension WindowController {
       }
       if !node.inputs.isEmpty { object["pending"] = state.pending.count }
       if let breach = state.breach { object["breach"] = AutomationRunWire.breach(breach) }
+      if node.role == .judge {
+        let counts = try automationStore.settlementCounts(of: node)
+        object["accepted"] = counts.accepted
+        object["dismissed"] = counts.dismissed
+      }
       nodeObjects[node.key] = object
     }
     var json: [String: Any] = [
@@ -205,14 +215,9 @@ extension WindowController {
       "nodes": nodeObjects,
     ]
     if automation.judges {
-      json["taskCandidates"] =
-        [
-          "openProposals": automationStore.shelvedProposals(of: automation.id).count,
-          "overlaps": automationStore.overlaps(of: automation.id).map {
-            ["automationId": $0.automation.id, "name": $0.automation.name, "count": $0.count]
-              as [String: Any]
-          },
-        ] as [String: Any]
+      json["taskCandidates"] = [
+        "openProposals": automationStore.shelvedProposals(of: automation.id).count
+      ]
     }
     return json
   }

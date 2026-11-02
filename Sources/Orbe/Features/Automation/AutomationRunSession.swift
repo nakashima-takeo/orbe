@@ -135,7 +135,7 @@ final class AutomationRunSession {
 
   private var waitingProposals: String {
     let lines = (choices?.open ?? []).map { proposal in
-      var entry: [String: Any] = ["link": proposal.item.link, "title": proposal.title]
+      var entry: [String: Any] = ["link": proposal.link, "title": proposal.title]
       if let due = proposal.due { entry["due"] = due.text }
       return AutomationPrompts.jsonLine(entry)
     }

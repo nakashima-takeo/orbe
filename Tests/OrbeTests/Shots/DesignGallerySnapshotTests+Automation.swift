@@ -46,7 +46,7 @@ extension DesignGallerySnapshotTests {
   }
 
   /// 棚の見本（見本 O2Palette）: 棚の 2 行目の全種（前回の判定の成功・失敗・まだ判定していない・停止中・更新中）、
-  /// 判定ごとの一覧の頭、出どころのノードの名前。
+  /// 判定ごとの一覧の頭、出どころのノードの名前、2 つの棚に出る同じリンクの候補。
   private func renderTaskPaletteAutomationShelfSnapshots(
     _ write: (String, TaskPaletteModel, CGFloat, CGFloat) throws -> Void
   ) throws {
@@ -73,12 +73,14 @@ extension DesignGallerySnapshotTests {
     list.automation.enterProposals()
     try write("automation_shelf_list.png", list, 1440, 900)
 
-    // 出どころのノードの名前を引けない候補（消えた自動化が出した）。
-    let unnamed = model()
-    unnamed.automation.tapShelf(.automation(1))
-    unnamed.automation.enterProposals()
-    unnamed.automation.jumpProposal(1)
-    try write("automation_shelf_unnamed.png", unnamed, 1440, 900)
+    // 同じリンク（#398）を 2 つの自動化の判定が候補にした: 「すべて」に 2 行、自動化 1 と 6 の棚に 1 つずつ。
+    let shared = model()
+    shared.automation.enterProposals()
+    try write("automation_shelf_shared.png", shared, 1440, 900)
+    let sharedShelf = model()
+    sharedShelf.automation.tapShelf(.automation(6))
+    sharedShelf.automation.enterProposals()
+    try write("automation_shelf_shared_issuer.png", sharedShelf, 1440, 900)
 
     // 更新中の ⌘↵ は、フッターに赤で断る。
     let refused = model()

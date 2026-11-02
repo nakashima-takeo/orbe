@@ -55,7 +55,7 @@ extension AutomationStoreTests {
       AutomationNodeRow(
         id: $0,
         text: #"{"id":"\#($0)","link":"https://example.com/\#($0)","body":"\#($0)","#
-          + #""time":"2026-10-10T09:00:00Z"}"#, origin: nil, source: nil)
+          + #""time":"2026-10-10T09:00:00Z"}"#, ref: nil, source: nil)
     }
     func state(_ key: String) -> AutomationNodeState? { store?.automation(id)?.state(key: key) }
 

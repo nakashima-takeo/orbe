@@ -9,15 +9,6 @@ enum AutomationIntake {
     case event
   }
 
-  /// 出どころ——引き継ぎをたどった先の、取得のノードが出した行。候補のリンクと本文はいつもここから取る。
-  struct Origin: Equatable {
-    let nodeId: AutomationNodeID
-    /// 項目なら今の版、出来事ならその出来事。
-    let row: AutomationRowRef
-    /// 出どころの行の欄（`id` は書かれた id）。
-    let item: AutomationItem
-  }
-
   /// 上流の行 1 つ。
   struct Row: Equatable {
     /// 上流のノード（つながり）。
@@ -34,7 +25,8 @@ enum AutomationIntake {
     let text: String
     /// 項目は有効になった時刻、出来事は作られた時刻。古さはここから数える。
     let at: Date
-    let origin: Origin?
+    /// 行の `link`（項目は今の版の）。無ければ nil。
+    let link: String?
     /// 読んだ位置より後か（take が all の行は、前の回までに読んだ行も載る）。
     let unread: Bool
   }
@@ -72,13 +64,13 @@ enum AutomationIntake {
 
   /// 取るときの事情。
   struct Context {
-    /// リンクに候補があるか。
-    let proposed: (String) -> Bool
+    /// リンクが、読むノード（判定）の判断待ちでない覚えている候補のリンクか。
+    let closed: (String) -> Bool
     let now: Date
   }
 
-  /// `node` が `rows` から取る行を選ぶ。古さ → 判定だけの捨て方（出どころなし → 候補あり → 同じリンクの古い方）→ 同じ id の
-  /// 古い方 → 件数の上限 の順に捨て、残りを古い順に取る。読んだ位置は上限の番号まで進める。
+  /// `node` が `rows` から取る行を選ぶ。古さ → 判定だけの捨て方（判断待ちでない覚えている候補のリンク）→ 同じ id の古い方 →
+  /// 件数の上限 の順に捨て、残りを古い順に取る。読んだ位置は上限の番号まで進める。
   static func read(
     by node: AutomationGraph.Node, _ rows: [Row], ceilings: [Ceiling], in context: Context
   ) -> Read {
@@ -101,33 +93,25 @@ enum AutomationIntake {
       reach: reach(ceilings))
   }
 
-  /// 古さで捨て、判定だけは出どころなし → 候補あり → 同じリンクの古い方で捨てる。残りと捨てた行（古い順）を返す。
+  /// 古さで捨て、判定だけは判断待ちでない覚えている候補のリンクの行を捨てる。残りと捨てた行（古い順）を返す。
   private static func filtered(
     _ rows: [Row], by node: AutomationGraph.Node, _ edges: [AutomationNodeID: AutomationNodeEdge],
     _ context: Context
   ) -> (remaining: [Row], dropped: [Drop]) {
     var remaining: [Row] = []
     var dropped: [Drop] = []
-    let judge = node.role == .judge
     for row in rows {
       if let hours = edges[row.from]?.maxAgeHours,
         context.now.timeIntervalSince(row.at) > TimeInterval(hours) * 3600
       {
         dropped.append(Drop(row: row, reason: .expired))
-      } else if judge, row.origin == nil {
-        dropped.append(Drop(row: row, reason: .unsourced))
-      } else if judge, let link = row.origin?.item.link, context.proposed(link) {
-        dropped.append(Drop(row: row, reason: .proposed))
+      } else if node.role == .judge, let link = row.link, context.closed(link) {
+        dropped.append(Drop(row: row, reason: .closed))
       } else {
         remaining.append(row)
       }
     }
-    guard judge else { return (remaining, dropped) }
-    var newest: [String: Row] = [:]
-    for row in remaining { if let link = row.origin?.item.link { newest[link] = row } }
-    let stale = remaining.filter { row in row.origin.map { newest[$0.item.link] != row } ?? false }
-    remaining.removeAll { stale.contains($0) }
-    return (remaining, dropped + stale.map { Drop(row: $0, reason: .sameLink) })
+    return (remaining, dropped)
   }
 
   /// 読んだ位置の進め先——つながりと表ごとに上限の番号まで（その間で取らなかった番号は、読む前に無効になった項目・版の追加や

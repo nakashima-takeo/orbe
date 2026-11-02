@@ -143,7 +143,7 @@ final class AutomationDatabase {
     let invalidated = try invalidateItems(of: nodeId, at: at)
     try db.run("DELETE FROM node_edges WHERE from_node_id = ?1 OR to_node_id = ?1", values)
     try db.run(
-      "UPDATE nodes SET removed_at = ?, breach_run_id = NULL, pending_drops = '{}' WHERE id = ?",
+      "UPDATE nodes SET removed_at = ?, breach_run_id = NULL, carried = '{}' WHERE id = ?",
       [Self.instant(at)] + values)
     return invalidated
   }
@@ -155,24 +155,24 @@ final class AutomationDatabase {
       [run.map { .integer(Int64($0)) } ?? .null, .integer(Int64(nodeId.rawValue))])
   }
 
-  /// 受け手として回の無い契機（取る行 0 件）で捨てた・期限で消えたと数え、次の成功した回の記録へ持ち越す数。読めなければ空と
-  /// して扱う（ログに残す）。
-  func pendingDrops(of nodeId: AutomationNodeID) throws -> AutomationDrops {
+  /// 受け手が回の無い場面で数え、次の成功した回の記録へ持ち越す数（`AutomationCarried`）。読めなければ空として扱う（ログに
+  /// 残す）。
+  func carried(of nodeId: AutomationNodeID) throws -> AutomationCarried {
     let raw =
       try db.select(
-        "SELECT pending_drops FROM nodes WHERE id = ?", [.integer(Int64(nodeId.rawValue))]
+        "SELECT carried FROM nodes WHERE id = ?", [.integer(Int64(nodeId.rawValue))]
       ) { $0.text(at: 0) }.first ?? nil
-    guard let drops = Self.decode(AutomationDrops.self, raw) else {
+    guard let carried = Self.decode(AutomationCarried.self, raw) else {
       NSLog("[automation] dropped unreadable carried counts of node \(nodeId)")
-      return AutomationDrops()
+      return AutomationCarried()
     }
-    return drops
+    return carried
   }
 
-  func setPendingDrops(_ nodeId: AutomationNodeID, _ drops: AutomationDrops) throws {
+  func setCarried(_ nodeId: AutomationNodeID, _ carried: AutomationCarried) throws {
     try db.run(
-      "UPDATE nodes SET pending_drops = ? WHERE id = ?",
-      [.text(try Self.encode(drops)), .integer(Int64(nodeId.rawValue))])
+      "UPDATE nodes SET carried = ? WHERE id = ?",
+      [.text(try Self.encode(carried)), .integer(Int64(nodeId.rawValue))])
   }
 
   /// ノードの自分の状態（止めた時刻・直近の回・最新の成功・外した印・今有効な項目のリンク）。起動時も変化の後も、メモリのノードの
@@ -261,7 +261,7 @@ final class AutomationDatabase {
   }
 }
 
-/// 出す側の行への参照（回の履歴・候補の出どころ）。項目は版を指す。
+/// 出す側の行への参照（回の履歴・候補が指す読んだ行）。項目は版を指す。
 enum AutomationRowRef: Hashable {
   case version(Int)
   case event(Int)

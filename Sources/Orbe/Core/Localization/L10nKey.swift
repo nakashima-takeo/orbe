@@ -431,7 +431,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationRunUnknownFailed
   case automationFailUnreadInput
   case automationFailNoResult
-  case automationFailUnsourced
   case automationLineAt
   case automationFaultNotJSON
   case automationFaultNotObject
@@ -441,8 +440,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFaultInvalid
   case automationFaultInvalidValue
   case automationFaultIdTwice
-  case automationFaultNotInputId
-  case automationFaultNotNewItem
+  case automationFaultNotTakenItem
+  case automationFaultNoLink
   case automationFaultProposedTwice
   case automationFaultNotWaiting
   case automationFaultNotOneDecision
@@ -454,7 +453,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFaultTooLarge
   case automationDismissedAlready
   case automationDismissedNoOpen
-  case automationDismissedOriginInvalidated
+  case automationDismissedNoLongerCurrent
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）
   case taskStartHomeTask
   case secretaryRequestInput

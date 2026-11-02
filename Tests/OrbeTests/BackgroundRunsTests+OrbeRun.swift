@@ -12,7 +12,7 @@ extension BackgroundRunsTests {
     let control = try startControlProcess()
     let runSessions = control.target.automationRunner.runSessions
     let rows = ["a", "b"].map {
-      AutomationNodeRow(id: $0, text: #"{"id":"\#($0)"}"#, origin: nil, source: nil)
+      AutomationNodeRow(id: $0, text: #"{"id":"\#($0)"}"#, ref: nil, source: nil)
     }
     let session = AutomationRunSession(
       .process(rows, reachesJudge: false), writer: AutomationNodeID(1))

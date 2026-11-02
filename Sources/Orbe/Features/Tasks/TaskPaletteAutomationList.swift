@@ -130,7 +130,8 @@ struct TaskPaletteAutomationList: View {
   }
 }
 
-/// 候補の行。タイトル・期限の札・右に時刻、下に出どころの取得のノードの名前と本文の先頭 1 行。印は選ばれている候補の行だけ。
+/// 候補の行。タイトル・期限の札・右に時刻（あれば）、下に出どころのノードの名前と本文の先頭 1 行（あれば）。印は選ばれている
+/// 候補の行だけ。
 private struct TaskPaletteAutomationProposalRow: View {
   let proposal: AutomationProposal
   let originNodeName: String?
@@ -155,13 +156,15 @@ private struct TaskPaletteAutomationProposalRow: View {
             foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill)
         }
         Spacer(minLength: Theme.Space.step)
-        Text(text.short(proposal.item.time))
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .fixedSize()
+        if let time = proposal.fields.time {
+          Text(text.short(time))
+            .font(Font.theme.meta)
+            .foregroundStyle(Color.theme.textMuted)
+            .fixedSize()
+        }
       }
       fontResolver.text(
-        [originNodeName, Self.firstLine(proposal.item.body)].compactMap { $0 }.joined(
+        [originNodeName, proposal.fields.body.map(Self.firstLine)].compactMap { $0 }.joined(
           separator: " · "),
         base: Theme.Typography.meta
       )
