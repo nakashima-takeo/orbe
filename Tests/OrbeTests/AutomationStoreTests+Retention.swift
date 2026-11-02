@@ -192,7 +192,8 @@ extension AutomationStoreTests {
     let later = Self.at.addingTimeInterval(40 * Self.day)
     try Self.fetch(store, id, [Self.item("new")], at: later)
 
-    let read = try XCTUnwrap(store.read(store.nodeId(id, "judge"), of: id, baseline: nil, now: later))
+    let read = try XCTUnwrap(
+      store.read(store.nodeId(id, "judge"), of: id, baseline: nil, now: later))
     XCTAssertEqual(
       read.taken.map(\.id), ["old", "new"].map { "\(store.nodeId(id, "fetch")):\($0)" })
   }

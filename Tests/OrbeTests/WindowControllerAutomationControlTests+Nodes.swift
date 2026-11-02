@@ -44,8 +44,9 @@ extension WindowControllerAutomationControlTests {
     _ = try success(wc.controlPauseAutomation(automationId: id, nodeKey: "fetch", paused: false))
     XCTAssertEqual(try nodes()["fetch"]?["paused"] as? Bool, false)
     XCTAssertNotNil(try nodes()["fetch"]?["nextRunAt"])
-    guard case .failure(let unknown) = wc.controlPauseAutomation(
-      automationId: id, nodeKey: "nope", paused: true)
+    guard
+      case .failure(let unknown) = wc.controlPauseAutomation(
+        automationId: id, nodeKey: "nope", paused: true)
     else { return XCTFail("知らない鍵を受けた") }
     XCTAssertEqual(unknown.code, -32004)
   }
