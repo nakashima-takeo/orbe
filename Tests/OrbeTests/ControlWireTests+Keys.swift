@@ -92,7 +92,8 @@ extension ControlWireTests {
     }
   }
 
-  /// 型に合わない値。型を問わない値は無い。
+  /// 型に合わない値。型を問わない値は無い。正しい値を隣の型へ移した値（整数には数字の文字列、文字列には数）にする——どの型にも
+  /// ならない値だけだと、読みを片側へ緩める改変（CLI が文字列で送る `tabId` に合わせて数字の文字列を許すなど）が通る。
   private static func wrongValue(for type: ControlParamType) -> Any? {
     switch type {
     case .int: "1"

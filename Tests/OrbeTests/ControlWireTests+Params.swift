@@ -12,7 +12,7 @@ import XCTest
 ///
 /// 2 つの方式で押さえる。
 /// 1. `-32602` / `-32004` ガードのある必須 param は、正しい名前一式で成功し 1 つ落とすと
-///    そのコードになる（改名は「落とす」と等価なので成功側が落ちる）。型不一致と値域外も同じ表で見る
+///    そのコードになる（改名は「落とす」と等価なので成功側が落ちる）。型不一致は `ControlWireTests+Keys.swift` が全引数で見る
 /// 2. ガードの無い optional param は、Fake が受領値を記録して送った値と突き合わせる。
 ///    `messageSource` はここでしか固定できない（欠落しても目に見えず `-32602` にもならない）
 ///
@@ -184,39 +184,6 @@ extension ControlWireTests {
       XCTAssertEqual(
         errorCode(wire.request(id: id, method: spec.method, params: dropped)), spec.code,
         "\(spec.method) から \(spec.key) を落とすと \(spec.code)")
-    }
-  }
-
-  /// 型の違う値は、宛先を解く前に `-32602 invalid <鍵>` で断る——欠落が `-32004` に落ちる宛先の `tabId` も、型違いは
-  /// 省略と同じに読まない。
-  ///
-  /// 型違いには**正しい値を隣の型へ移した値**を渡す（Int 期待なら数字文字列、String 期待なら
-  /// 数値）。配列のような「どの型にもならない値」だけだと、キャストを片側へ緩める改変——例えば
-  /// CLI が全部文字列で送ってくるのに合わせて `tabId` に `Int(文字列)` を許す——が 1 本も
-  /// 落とさずに通る。spec の `-32602` は「欠落・型不一致・値域外」の 3 つを名指しており、
-  /// ここが型不一致を受け持つ。
-  func testWronglyTypedParamsAreRejectedAsInvalid() {
-    let fake = FakeControlTarget()
-    let wire = startWire(target: fake)
-    let fixtures = fixtures(fake)
-    var id = 0
-
-    for spec in requiredParams {
-      // `config_set` の `value` だけは型を問わない（存在チェックのみ）。値の検証は設定
-      // レジストリの domain が唯一の検証点という契約なので、ここで型を縛ると spec と食い違う。
-      if spec.method == "config_set" && spec.key == "value" { continue }
-      guard let full = fixtures[spec.method], let correct = full[spec.key] else { continue }
-
-      id += 1
-      var mistyped = full
-      let moved: Any = correct is Int ? String(describing: correct) : 42
-      mistyped[spec.key] = moved
-      let response = wire.request(id: id, method: spec.method, params: mistyped)
-      XCTAssertEqual(
-        errorCode(response), -32602, "\(spec.method) の \(spec.key) に型違い \(moved) を渡すと -32602")
-      XCTAssertEqual(
-        (response?["error"] as? [String: Any])?["message"] as? String, "invalid \(spec.key)",
-        "\(spec.method) の \(spec.key)")
     }
   }
 

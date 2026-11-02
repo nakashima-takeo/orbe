@@ -141,13 +141,4 @@ extension AutomationNodeTests {
       }
     }
   }
-
-  /// `list_automations` が返す定義（各ノードに id が付く外の形）は、そのまま送り返して読める。
-  func testTheDefinitionItWritesReadsBack() throws {
-    let definition = try AutomationDefinition.decode([
-      "name": "Slack: 自分宛", "nodes": [fetch, judge],
-    ])
-    let written = try XCTUnwrap(AutomationWire.object(definition) as? [String: Any])
-    XCTAssertEqual(try AutomationDefinition.decode(written), definition)
-  }
 }

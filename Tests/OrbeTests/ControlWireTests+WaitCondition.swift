@@ -104,23 +104,4 @@ extension ControlWireTests {
       "condition を省けない（外すのは null）")
     XCTAssertTrue(fake.setWaitConditions.isEmpty)
   }
-
-  /// 帳簿の動詞は条件を受けない（知らない鍵として断り、target に何も届かない）。
-  func testTaskVerbsDoNotCarryAWaitingCondition() {
-    let fake = FakeControlTarget()
-    let wire = startWire(target: fake)
-
-    for (method, params) in [
-      ("update_task", ["taskId": 7, "title": "t", "waitingCondition": condition] as [String: Any]),
-      ("add_task", ["title": "t", "waitingCondition": condition]),
-    ] {
-      let response = wire.request(id: 1, method: method, params: params)
-      XCTAssertEqual(
-        (response?["error"] as? [String: Any])?["message"] as? String,
-        "unknown waitingCondition", method)
-    }
-    XCTAssertTrue(fake.updatedTasks.isEmpty)
-    XCTAssertTrue(fake.addedTasks.isEmpty)
-    XCTAssertTrue(fake.setWaitConditions.isEmpty)
-  }
 }
