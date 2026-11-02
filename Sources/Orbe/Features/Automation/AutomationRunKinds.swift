@@ -141,7 +141,7 @@ enum AutomationLineFault: Equatable {
   case notArray(String)
   /// 何も無いと申告した後に結果を出した。
   case afterNothing
-  /// 下流へ渡す行が大きさの上限（`AutomationOutputs.rowKiB`）を超えた。
+  /// 下流へ渡す行か、報告・仕事の文が大きさの上限（`AutomationOutputs.rowKiB`）を超えた。
   case tooLarge
 
   init<Item>(_ reason: JSONLines<Item>.Reason) {

@@ -102,7 +102,7 @@ enum AutomationPrompts {
   /// 報告の依頼文。`count` は入力の行の数。
   static func report(instruction: String, count: Int, now: Date, timeZone: TimeZone) -> String {
     """
-    You write a short report for the user as the last step of an automation. \(orbeToolsOnly)
+    You write a report for the user as the last step of an automation. \(orbeToolsOnly)
 
     Now: \(local(now, timeZone)), time zone \(timeZone.identifier).
 
@@ -112,8 +112,7 @@ enum AutomationPrompts {
     Input: \(input(count))
 
     Give Orbe the report with \(tool(.putReport)): plain text (no code fences), in the language of the user's \
-    instruction. The first line is the summary shown on the board's heading and in the notification. Keep the \
-    whole report short (\(AutomationOutputs.reportLimit) characters at most). If there is nothing to report, call \
+    instruction. The first line is the summary shown in the notification. If there is nothing to report, call \
     \(tool(.reportNothing)) instead. Orbe ignores your final text reply.
     """
   }
@@ -135,9 +134,8 @@ enum AutomationPrompts {
     The user's request:
     \(instruction)
 
-    When you are done, give Orbe a short plain-text report of what you did with \(tool(.putReport)) (no code \
-    fences), in the language of the user's request. The first line is the summary shown on the board's heading \
-    and in the notification. Keep the whole report within \(AutomationOutputs.reportLimit) characters.
+    When you are done, give Orbe a plain-text report of what you did with \(tool(.putReport)) (no code \
+    fences), in the language of the user's request. The first line is the summary shown in the notification.
     If the request leaves nothing to do this time, do nothing and call \(tool(.reportNothing)) instead.
     If you cannot do what the request asks (a tool fails, is unavailable or is refused), call \
     \(tool(.reportError)) instead. Orbe ignores your final text reply.

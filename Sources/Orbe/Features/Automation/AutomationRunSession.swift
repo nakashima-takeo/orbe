@@ -205,13 +205,15 @@ final class AutomationRunSession {
     guard let text = arguments["text"] as? String else {
       return refuse(.typeMismatch("text"), "give the report as a string")
     }
-    guard AutomationOutputs.kept(text) != nil else {
+    guard AutomationOutputs.trimmedReport(text) != nil else {
       return .refused(
         "The report is empty; when there is nothing to report, call "
           + "\(Tool.reportNothing.rawValue).")
     }
     if let afterNothing { return afterNothing }
-    outputs.putReport(text)
+    if outputs.putReport(text) != nil {
+      return refuse(.tooLarge, "shorten the report and call again")
+    }
     unfixed = []
     return .ok("Accepted the report.")
   }
