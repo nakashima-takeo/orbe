@@ -79,17 +79,24 @@ final class AutomationTrialTests: OrbeTestCase {
   }
 
   func calls(_ script: String) -> [Int] {
-    jobs.calls.indices.filter {
-      if case .command(let command, _) = jobs.calls[$0].job.work { return command.script == script }
-      return false
-    }
+    jobs.calls.indices.filter { self.script(at: $0) == script }
+  }
+
+  /// `index` 番目に呼んだ手段のスクリプト。
+  func script(at index: Int) -> String? {
+    guard case .command(let command, _) = jobs.calls[index].job.work else { return nil }
+    return command.script
   }
 
   /// 最後に呼んだ `script` に標準入力で渡した行の id。
   func ids(_ script: String) -> [String] {
-    guard let last = calls(script).last,
-      case .command(_, let input) = jobs.calls[last].job.work
-    else { return [] }
+    guard let last = calls(script).last else { return [] }
+    return ids(at: last)
+  }
+
+  /// `index` 番目の呼び出しに標準入力で渡した行の id。
+  func ids(at index: Int) -> [String] {
+    guard case .command(_, let input) = jobs.calls[index].job.work else { return [] }
     let text = String(bytes: input.stdin ?? Data(), encoding: .utf8) ?? ""
     return text.split(separator: "\n").compactMap {
       (try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])?["id"] as? String
@@ -98,8 +105,12 @@ final class AutomationTrialTests: OrbeTestCase {
 
   func finish(_ script: String, _ stdout: String, exit: Int32 = 0) {
     guard let last = calls(script).last else { return XCTFail("\(script) は呼ばれていない") }
+    finish(at: last, stdout, exit: exit)
+  }
+
+  func finish(at index: Int, _ stdout: String, exit: Int32 = 0) {
     jobs.finish(
-      last,
+      index,
       BackgroundRunResult(
         commandLine: "run", startedAt: now, endedAt: now, ending: .exited(exit),
         output: .command(stdout: .init(data: Data(stdout.utf8)), stderr: .init())))

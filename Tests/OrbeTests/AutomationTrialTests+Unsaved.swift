@@ -14,6 +14,24 @@ extension AutomationTrialTests {
     try unsaved(.create(definition(definitionNodes)))
   }
 
+  /// `start` 番目から後に呼ばれた手段を、呼ばれた順に `output`（スクリプトと読んだ行の id から出力を決める）で終え、新しい呼び出しが
+  /// 無く `done` が立てば返す。スクリプトごとに、呼ばれた順の読んだ行の id を返す。回の順が本番と食い違っても最後まで進める。
+  private func answer(
+    from start: Int, until done: () -> Bool = { true },
+    _ output: (_ script: String, _ ids: [String]) -> String
+  ) -> [String: [[String]]] {
+    var read: [String: [[String]]] = [:]
+    var next = start
+    while true {
+      settle(until: { done() || jobs.calls.count > next })
+      guard jobs.calls.count > next else { return read }
+      let script = script(at: next) ?? ""
+      read[script, default: []].append(ids(at: next))
+      finish(at: next, output(script, ids(at: next)))
+      next += 1
+    }
+  }
+
   /// 新しい定義の試走は、作れば受かる定義を写しの上で作って流し、結果のノードは定義の鍵で並ぶ。本番には何も増えず、知らせも
   /// 出ない。外の形は試走の ID を持ち、自動化の ID を持たない。
   func testANewDefinitionRunsOnTheCopyAndLeavesProductionWithoutIt() throws {
@@ -171,6 +189,93 @@ extension AutomationTrialTests {
     XCTAssertEqual(calls("p2").count, 4, "前提: 書いた後の流しでも p が走る")
     XCTAssertEqual(written, [downstream("gh", "a", of: id)], "前提: 失敗して読み残した行を読み直す")
     XCTAssertEqual([triedAtWriting, triedInFlow], [written, ids("p2")])
+  }
+
+  /// 直す試走は、予定だけを「届いたら」に変えたノードも本番で書いた時点と同じに起こす: 読んでいない b を書いた時点の回で読み、
+  /// 流しで足された c を次の回で読む（予定は何をするかに入らないので、そのノードは何をするかが変わったノードではない）。
+  func testARewriteWakesANodeTurnedToArrivalAsWritingItInProductionDoes() throws {
+    let id = try define([fetch("gh"), definitionNode("p", from: ["gh"], deliver: .report)])
+    try runner.flow(id, to: .ends)
+    finish("gh", fetched(["a"]))
+    finish("p", "a")
+    try runner.flow(id, to: .node(store.nodeId(id, "gh")))
+    finish("gh", fetched(["a", "b"]))
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.nodes[1].trigger = .arrival
+    let output = { (script: String, _: [String]) in
+      script == "gh" ? self.fetched(["a", "b", "c"]) : "読んだ"
+    }
+
+    let start = jobs.calls.count
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
+    let tried = answer(from: start, until: { !trial.running }, output)
+    XCTAssertNil(trial.failure)
+
+    let writing = jobs.calls.count
+    _ = try runner.set(id, version: current.version, rewrite)
+    var written = answer(from: writing, output)
+    let flowing = jobs.calls.count
+    try runner.flow(id, to: .ends)
+    written.merge(answer(from: flowing, output)) { $0 + $1 }
+    XCTAssertEqual(
+      written["p"], [[downstream("gh", "b", of: id)], [downstream("gh", "c", of: id)]],
+      "前提: 本番では書いた時点で b を読み、流しで c を読む")
+    XCTExpectFailure("試走は足したノードと何をするかが変わったノードだけを書いた時点に起こす（本番は全ノードを前の契機の印で起こす）") {
+      XCTAssertEqual(tried["p"], written["p"])
+    }
+  }
+
+  /// 直す試走は、上流の出力の性質を変えたとき、変えていない毎回すべてを取るノードも本番で書いた時点と同じに起こす: そのノードは
+  /// 無効になった上流を空の集合として写し、流しで写し直した a も新しい行として副作用に渡る（本番では a の副作用がもう一度走る）。
+  func testARewriteOfTheUpstreamsCoverageHoldsWhatTheSideEffectGetsAgainAsInProduction() throws {
+    var copy = DesignSceneFixtures.commandNode(
+      "copy", "copy", .arrival, script: "copy", coverage: .currentSet)
+    copy.from = [AutomationDefinition.Input(nodeKey: "gh", take: .all)]
+    let id = try define([
+      fetch("gh"), copy, definitionNode("post", .arrival, from: ["copy"], deliver: .sideEffect),
+    ])
+    let output = { (script: String, ids: [String]) -> String in
+      switch script {
+      case "gh": self.fetched(["a", "b"])
+      case "copy":
+        ids.map { #"{"id":"\#($0.split(separator: ":").last ?? "")","body":"写し"}"# }
+          .joined(separator: "\n")
+      default: ""
+      }
+    }
+    try runner.flow(id, to: .ends)
+    finish("gh", fetched(["a"]))
+    finish("copy", output("copy", ids("copy")))
+    finish("post", "")
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.nodes[0].action.coverage = .newArrivals
+
+    let start = jobs.calls.count
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
+    _ = answer(from: start, until: { !trial.running }, output)
+    XCTAssertNil(trial.failure)
+    let held = trial.passes(key: "post").reversed().map { pass -> [String] in
+      guard case .held(let rows) = pass else { return [] }
+      return rows.compactMap(AutomationPrompts.id(of:))
+    }
+
+    let writing = jobs.calls.count
+    _ = try runner.set(id, version: current.version, rewrite)
+    var written = answer(from: writing, output)
+    let flowing = jobs.calls.count
+    try runner.flow(id, to: .ends)
+    written.merge(answer(from: flowing, output)) { $0 + $1 }
+    XCTAssertEqual(written["copy"]?.first, [], "前提: 本番では書いた時点で copy が空の集合を写す")
+    XCTAssertEqual(
+      written["post"], [[downstream("copy", "a", of: id), downstream("copy", "b", of: id)]],
+      "前提: 本番では a の副作用がもう一度走る")
+    XCTExpectFailure("試走は足したノードと何をするかが変わったノードだけを書いた時点に起こす（本番は全ノードを前の契機の印で起こす）") {
+      XCTAssertEqual(held, written["post"])
+    }
   }
 
   /// 直す試走は、本番で書いたときと同じく、入力を変えた判定の判断待ちの候補に下げる条件を当て直す: 外した入力だけが支えていた
