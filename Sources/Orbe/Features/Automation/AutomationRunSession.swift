@@ -121,7 +121,7 @@ final class AutomationRunSession {
       return .refused("\(name) is not a tool of this run")
     }
     if let unknown = arguments.keys.sorted().first(where: { !tool.arguments.contains($0) }) {
-      return unknownArgument(unknown, of: tool)
+      return unknownArgument(unknown, of: tool, arguments)
     }
     switch tool {
     case .readRunRows: return page(arguments)
@@ -268,17 +268,32 @@ final class AutomationRunSession {
     return .ok("Noted: nothing this time.")
   }
 
-  /// 道具の受けない引数。結果の道具では呼び出しの形の誤り（外れた件）、読む道具と申告の道具では数えない断り。
-  private func unknownArgument(_ key: String, of tool: Tool) -> Reply {
+  /// 道具の受けない引数。どれも書き損じた鍵と受ける引数を言って断る。外れた件に数えるのは中身のある結果の呼び出しだけで、
+  /// 中身の無い結果の呼び出し（空の配列・空白だけの報告）は、受けない引数の無いときと同じく数えずに report_nothing を
+  /// 勧める——数えると、勧めどおりの申告が断られて、report_error を持たない役割の回は直す手段が無くなる。
+  private func unknownArgument(_ key: String, of tool: Tool, _ arguments: [String: Any]) -> Reply {
     let takes =
       tool.arguments.isEmpty
       ? "\(tool.rawValue) takes no arguments"
       : "\(tool.rawValue) takes only \(tool.arguments.sorted().joined(separator: ", "))"
-    guard tool.givesResults else {
-      return .refused("\(AutomationLineFault.unknownArgument(key).text); \(takes).")
-    }
+    let refusal = "\(AutomationLineFault.unknownArgument(key).text); \(takes)."
+    guard tool.givesResults else { return .refused(refusal) }
     if let closed { return closed }
+    guard Self.givesSomething(arguments, to: tool) else {
+      return .refused(
+        "\(refusal) This call gives nothing; when there is nothing, call "
+          + "\(Tool.reportNothing.rawValue).")
+    }
     return refuse(.unknownArgument(key), takes)
+  }
+
+  /// 結果の呼び出しが中身を持つか（空の配列・空白だけの報告でない）。
+  private static func givesSomething(_ arguments: [String: Any], to tool: Tool) -> Bool {
+    if tool == .putReport {
+      return (arguments["text"] as? String).map { AutomationOutputs.trimmedReport($0) != nil }
+        ?? true
+    }
+    return !tool.arguments.contains { (arguments[$0] as? [Any])?.isEmpty == true }
   }
 
   /// 呼び出しの形そのものの誤りで断り、断った結果に数える（位置は持たない）。

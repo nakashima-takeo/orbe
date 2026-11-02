@@ -187,10 +187,8 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
     _ = report.call("read_run_rows", [:])
     XCTAssertTrue(report.call("put_report", ["text": " ", "note": "無い"]).isError)
 
-    XCTExpectFailure("受けない引数の照らしが中身の無い呼び出しの扱いより先に効き、外れた件に数える") {
-      XCTAssertFalse(process.call("report_nothing", ["why": "無い"]).isError)
-      XCTAssertFalse(report.call("report_nothing", ["why": "無い"]).isError)
-    }
+    XCTAssertFalse(process.call("report_nothing", ["why": "無い"]).isError)
+    XCTAssertFalse(report.call("report_nothing", ["why": "無い"]).isError)
   }
 
   /// 何も無いの申告は結果の前だけで、申告の後は結果を受けない。失敗の申告の後も受けない。
