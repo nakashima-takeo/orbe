@@ -281,7 +281,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99, nodeKey: nil)), -32004)
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, nodeKey: "nope")), -32004)
-    XCTAssertEqual(code(wc.controlPauseAutomation(automationId: 99, paused: true)), -32004)
+    XCTAssertEqual(
+      code(wc.controlPauseAutomation(automationId: 99, nodeKey: nil, paused: true)), -32004)
     XCTAssertEqual(code(wc.controlDeleteAutomation(automationId: 99)), -32004)
     XCTAssertEqual(code(wc.controlListAutomationProposals(automationId: 99)), -32004)
     XCTAssertEqual(

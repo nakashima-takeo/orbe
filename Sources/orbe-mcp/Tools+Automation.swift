@@ -255,7 +255,11 @@ let automationTools: [[String: Any]] = [
     (
       "inputSchema",
       schema(
-        ["automationId": intProp("対象の自動化"), "paused": boolProp("true で止める、false で再開")],
+        [
+          "automationId": intProp("対象の自動化"),
+          "nodeKey": strProp("このノードだけを止める・再開する（省略で自動化）"),
+          "paused": boolProp("true で止める、false で再開"),
+        ],
         required: ["automationId", "paused"])
     ),
   ]),

@@ -105,14 +105,23 @@ import Observation
     }
   }
 
-  /// 止める・再開する。版は変えない。
-  func setPaused(_ id: Int, _ paused: Bool, now: Date) throws(AutomationError) -> Automation {
+  /// 止める・再開する。`nodeId` があればそのノード自身の印、無ければ自動化の印を書く（2 つの印は別に持つ）。版は変えない。
+  func setPaused(_ id: Int, nodeId: AutomationNodeID? = nil, _ paused: Bool, now: Date)
+    throws(AutomationError) -> Automation
+  {
     let index = try index(id)
     var next = automations[index]
-    guard next.paused != paused else { return next }
-    next.pausedAt = paused ? TaskItem.storedInstant(now) : nil
+    let at = paused ? TaskItem.storedInstant(now) : nil
+    if let nodeId {
+      guard next.graph.node(nodeId) != nil else { throw .nodeNotFound(id, "\(nodeId)") }
+      guard next.state(nodeId).paused != paused else { return next }
+      next.states[nodeId]?.pausedAt = at
+    } else {
+      guard next.paused != paused else { return next }
+      next.pausedAt = at
+    }
     try commit(sweepingAt: nil) { db, memory in
-      try db.setPaused(id, at: next.pausedAt)
+      if let nodeId { try db.setPaused(nodeId, at: at) } else { try db.setPaused(id, at: at) }
       memory.automations[index] = next
     }
     return next

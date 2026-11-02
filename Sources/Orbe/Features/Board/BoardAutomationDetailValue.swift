@@ -24,6 +24,8 @@ struct BoardMapNode: Equatable {
   /// 出力の形式エラーの印があるか。
   let breached: Bool
   let look: BoardNodeLook
+  /// ノード自身を止めているか（自動化を止めていても、ノードごとの印として出す）。
+  let paused: Bool
   /// 前回の列。まだ動いていなければ nil。
   let last: Last?
   /// 最新の回が失敗なら、その理由（「日本語（原文）」）。行の下に出す。
@@ -168,7 +170,7 @@ extension BoardAutomationDetailValue {
         : inputs.map { automation.graph.node($0)?.entity.name ?? "\($0)" }.joined(
           separator: l10n.string(.automationListSeparator)),
       pending: inputs.isEmpty ? nil : state.pending.count, breached: state.breach != nil,
-      look: running ? .running : latest?.failed == true ? .failed : .idle,
+      look: running ? .running : latest?.failed == true ? .failed : .idle, paused: state.paused,
       last: latest.map {
         BoardMapNode.Last(
           mark: $0.failed ? .failure : .success, at: text.recent($0.startedAt),

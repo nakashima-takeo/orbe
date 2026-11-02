@@ -171,12 +171,17 @@ enum TaskPaletteAutomationError: Equatable {
   }
 
   /// 棚の段の 2 行目。前回の判定は、判定のノードのうち最も新しく回ったものの最新の回（他の判定の失敗は一覧の頭で見る）。今の
-  /// 状態は、一巡の間なら更新中、止めていれば一時停止中。
+  /// 状態は、判定とその祖先のどれかを通る一巡の間なら更新中（棚の更新が断られる間と一致する）、自動化を止めているか判定のノードが
+  /// すべて実効で止まっていれば一時停止中。
   func status(of automation: Automation) -> TaskPaletteAutomationShelfStatus {
-    let last = automation.graph.judges.compactMap { automation.state($0.id).runs.first }
+    let judges = automation.graph.judges
+    let last = judges.compactMap { automation.state($0.id).runs.first }
       .max { $0.startedAt < $1.startedAt }
+    let reach = Set(judges.flatMap { [$0.id] + automation.graph.ancestors(of: $0.id).map(\.id) })
     let state: TaskPaletteAutomationShelfStatus.State? =
-      runner.isFlowing(automation.id) ? .refreshing : automation.paused ? .paused : nil
+      runner.isFlowing(automation.id, through: reach)
+      ? .refreshing
+      : automation.paused || judges.allSatisfy({ automation.halted($0.id) }) ? .paused : nil
     return TaskPaletteAutomationShelfStatus(
       last: last.map { .init(at: $0.startedAt, failed: $0.failed) }, state: state)
   }
@@ -330,8 +335,8 @@ enum TaskPaletteAutomationError: Equatable {
 
   // MARK: - 候補の更新
 
-  /// 棚の ⌘↵。選んでいる自動化の候補を今すぐ更新する（タスク候補を行き先にするノードすべてまで流す）。断るのは一巡の途中
-  /// だけで、行き違い（消えていた・使えない）は黙る。「すべて」では何もしない。
+  /// 棚の ⌘↵。選んでいる自動化の候補を今すぐ更新する（タスク候補を行き先にするノードすべてまで流す）。断るのは、判定とその祖先の
+  /// どれかを通る一巡の途中だけで、行き違い（消えていた・使えない）は黙る。「すべて」では何もしない。
   func refresh() {
     guard let automation = selectedAutomation else { return }
     error = nil

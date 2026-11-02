@@ -13,8 +13,8 @@ let automationUsageLines = [
   "orb automation runs <id> [--node <key>] [--before <recordId>] [--limit <n>] [--json]",
   "orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]",
   "orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]",
-  "orb automation pause <id> [--json]",
-  "orb automation resume <id> [--json]",
+  "orb automation pause <id> [--node <key>] [--json]",
+  "orb automation resume <id> [--node <key>] [--json]",
   "orb automation rm <id> [--json]",
 ]
 
@@ -343,11 +343,17 @@ private func automationSet(_ rest: [String]) -> Never {
 
 private func automationPause(_ rest: [String], paused: Bool) -> Never {
   exitIfAutomationHelp(rest)
-  rejectLeftovers(rest, positionals: 1)
-  let id = automationIdArg(rest, verb: paused ? "pause" : "resume")
-  let result = callOrExit("pause_automation", ["automationId": id, "paused": paused])
+  var args = rest
+  let nodeKey = takeOption(&args, "--node", requires: "a <key> value")
+  rejectLeftovers(args, positionals: 1)
+  let id = automationIdArg(args, verb: paused ? "pause" : "resume")
+  var params: [String: Any] = ["automationId": id, "paused": paused]
+  if let nodeKey { params["nodeKey"] = nodeKey }
+  let result = callOrExit("pause_automation", params)
   if wantJSON {
     printJSON(result)
+  } else if let nodeKey {
+    print("\(paused ? "paused" : "resumed") node \(nodeKey) of automation \(id)")
   } else {
     print("\(paused ? "paused" : "resumed") automation \(id)")
   }

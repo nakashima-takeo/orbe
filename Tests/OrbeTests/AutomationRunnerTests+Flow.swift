@@ -15,12 +15,13 @@ extension AutomationRunnerTests {
     try runner.flow(id, to: target)
   }
 
-  /// もう一度流すと流している途中で断られるか。断られなければ、そこで新しい一巡が始まっている。
+  /// もう一度終わりまで流すと、道の重なる流しとして断られるか。断られなければ、そこで新しい一巡が始まっている。
   private func refusesAnotherFlow(_ id: Int) -> Bool {
     do throws(AutomationError) {
       try runner.flow(id, to: .ends)
     } catch {
-      return error == .flowing(id)
+      if case .flowing(id, _) = error { return true }
+      return false
     }
     return false
   }

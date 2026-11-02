@@ -12,10 +12,12 @@ protocol ControlAutomationTarget: AnyObject {
   /// 回の記録を新しい順に 1 ページ読む（list_automation_runs）。
   func controlListAutomationRuns(automationId: Int, nodeKey: String?, before: Int?, limit: Int?)
     -> Result<Any, ControlError>
-  /// ノードまで流す（run_automation）。nodeKey が nil なら終わりのノードすべてまで。知らないノードは -32004、流している途中は -32000。
+  /// ノードまで流す（run_automation）。nodeKey が nil なら終わりのノードすべてまで。知らないノードは -32004、道の重なる流しがあれば -32000。
   func controlRunAutomation(automationId: Int, nodeKey: String?) -> Result<Any, ControlError>
-  /// 予定を止める・再開する（pause_automation）。
-  func controlPauseAutomation(automationId: Int, paused: Bool) -> Result<Any, ControlError>
+  /// 止める・再開する（pause_automation）。nodeKey があればそのノードだけ。知らないノードは -32004。
+  func controlPauseAutomation(automationId: Int, nodeKey: String?, paused: Bool) -> Result<
+    Any, ControlError
+  >
   /// 消す（delete_automation）。
   func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError>
   /// 覚えている提案を列挙する（list_automation_proposals）。automationId 指定はその自動化の棚の分。
@@ -108,7 +110,8 @@ extension ControlServer {
     case "pause_automation":
       return { target, p throws(ControlError) in
         target.controlPauseAutomation(
-          automationId: try p.int("automationId"), paused: try p.bool("paused"))
+          automationId: try p.int("automationId"), nodeKey: try p.optionalString("nodeKey"),
+          paused: try p.bool("paused"))
       }
     case "delete_automation":
       return { target, p throws(ControlError) in

@@ -61,9 +61,12 @@ extension BoardAutomationModel {
         BoardKeyHint("↑↓", .boardHintNodes), BoardKeyHint("↵", .boardHintChangeNotify),
         BoardKeyHint("←", .automationHintToList),
       ]
-    case .node:
+    case .node(let nodeId):
+      let pause = BoardAutomationHand.Operation.toggleNodePause
       return [
         BoardKeyHint("↑↓", .boardHintNodes), hand(.flow(.node)),
+        BoardKeyHint(
+          pause.key, pause.title(paused: selectedAutomation.states[nodeId]?.paused == true)),
         BoardKeyHint("←", .automationHintToList),
       ]
     case nil:

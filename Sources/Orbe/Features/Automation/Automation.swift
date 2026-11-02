@@ -9,7 +9,7 @@ struct Automation: Equatable, Identifiable {
   /// ノードの回を知らせる先。nil は知らせない。何をするかには入らない。
   var notify: AutomationNotify?
   var graph: AutomationGraph
-  /// 止めた時刻。止めているのは時刻による予定と起動時の起こしだけ。
+  /// 止めた時刻。止めている間、Orbe はどのノードも自分からは動かさない（`halted(_:)`）。
   var pausedAt: Date?
   /// 定義の版。名前・通知・ノード・つながりのどれかが変わるたびに 1 増える（古い定義からの書き換えを断る印）。
   var version: Int
@@ -18,6 +18,12 @@ struct Automation: Equatable, Identifiable {
   var states: [AutomationNodeID: AutomationNodeState]
 
   var paused: Bool { pausedAt != nil }
+
+  /// ノードが実効で止まっているか——自動化かノード自身を止めている。Orbe が自分から動かすか（予定・起こす決まり・次回）は
+  /// これを読む。明示の実行（流し）は止めない。
+  func halted(_ nodeId: AutomationNodeID) -> Bool {
+    paused || state(nodeId).paused
+  }
 
   /// 外の形（ノードに ID を添える）。
   var definition: AutomationDefinition {
@@ -82,6 +88,8 @@ enum AutomationCoverage: String {
 struct AutomationNodeState: Equatable {
   /// ノードを足した時刻。一度も回っていないノードの数え始め。
   var addedAt: Date
+  /// ノード自身を止めた時刻（人の状態。定義には入らず、書き換えでノードの ID が残れば引き継ぐ）。自動化の停止とは別に持つ。
+  var pausedAt: Date?
   /// 直近の回の記録（新しい順に `recentRuns` 件まで）。
   var runs: [AutomationRunRecord] = []
   /// 最新の成功した回の開始時刻。新着の流れの取得に目印として渡す。
@@ -95,6 +103,8 @@ struct AutomationNodeState: Equatable {
 
   /// メモリに持つ直近の回の数（画面の実行履歴と帯の長さ）。DB に残す回の数は `AutomationRetention` が決める。
   static let recentRuns = 20
+
+  var paused: Bool { pausedAt != nil }
 
   var lastRunAt: Date? { runs.first?.startedAt }
 
@@ -185,8 +195,8 @@ enum AutomationError: Error, Equatable {
   /// 値か組み合わせが不変条件に反する。
   case invalid(String)
   case nodeNotFound(Int, String)
-  /// 流している途中に流そうとした。
-  case flowing(Int)
+  /// 流そうとした道が、終わっていない流しの道と重なった（重なったノードのうち定義の順で最初のもの）。
+  case flowing(Int, AutomationNodeID)
   /// 自動化の DB を使えない、または書けなかった。
   case unavailable(String)
   /// その自動化の試走が無い。

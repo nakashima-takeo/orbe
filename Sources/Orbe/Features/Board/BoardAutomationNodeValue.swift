@@ -14,6 +14,8 @@ struct BoardAutomationNodeValue: Equatable {
   let role: String
   let name: String
   let running: Bool
+  /// ノード自身を止めているか（頭に「一時停止中」）。
+  let paused: Bool
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
   /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・作業ディレクトリ・次回の順。ノードに無い項目は出さない。
@@ -57,7 +59,7 @@ struct BoardAutomationNodeValue: Equatable {
 }
 
 extension BoardAutomationNodeValue {
-  /// `next` はノードが次に予定で回る時刻（止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数。
+  /// `next` はノードが次に予定で回る時刻（実効で止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数。
   init?(
     _ automation: Automation, nodeId: AutomationNodeID, text: AutomationText, running: Bool,
     next: Date?, open: Int
@@ -69,6 +71,7 @@ extension BoardAutomationNodeValue {
     role = text.role(node.role)
     name = node.entity.name
     self.running = running
+    paused = state.paused
     mark = state.runs.first.map { $0.failed ? .failure : .success }
     switch node.action.method {
     case .agent(let agent): body = agent.instruction
@@ -156,7 +159,7 @@ extension BoardAutomationNodeValue {
     if case .scheduled = entity.trigger {
       fact(
         .boardNodeNext,
-        automation.paused ? l10n.string(.automationPaused) : next.map(text.stamp) ?? "")
+        automation.halted(node.id) ? l10n.string(.automationPaused) : next.map(text.stamp) ?? "")
     }
     return facts
   }

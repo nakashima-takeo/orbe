@@ -59,6 +59,7 @@ extension AutomationDatabase {
       retention_days  INTEGER CHECK (retention_days > 0),
       def_id          INTEGER NOT NULL REFERENCES node_defs (id),
       added_at        INTEGER NOT NULL,
+      paused_at       INTEGER,
       removed_at      INTEGER,
       breach_run_id   INTEGER REFERENCES runs (id),
       last_item_seq   INTEGER NOT NULL DEFAULT 0 CHECK (last_item_seq >= 0),

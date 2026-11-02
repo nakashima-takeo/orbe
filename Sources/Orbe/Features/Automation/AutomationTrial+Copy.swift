@@ -4,6 +4,24 @@ import Foundation
 /// （出来事は見分けて足す・番号を使い回さない・出どころの項目が無効になれば候補を下げる）を崩す。どの操作も変異の 1 経路
 /// （`commit`）とノードの状態の読み直しを通し、写しのメモリを写しの DB と一致させ続ける。
 extension AutomationStore {
+  /// ノード `nodeIds` の間隔・cron の予定を手動に書き換える（写しの定義の書き換え。版と数え始めは写しの中のこと）。予定の時刻で
+  /// 回さないため、走らせ役を立てる前に呼ぶ——番人は登録や回の終わりの数え直しのたびに過ぎた時刻の予定を始めるので、「いつ」を
+  /// 載せないしかない。
+  func unschedule(_ nodeIds: Set<AutomationNodeID>, of id: Int, now: Date) throws(AutomationError) {
+    let automation = automations[try index(id)]
+    var definition = automation.definition
+    var changed = false
+    for index in definition.nodes.indices {
+      guard let nodeId = definition.nodes[index].id, nodeIds.contains(nodeId),
+        case .scheduled = definition.nodes[index].trigger
+      else { continue }
+      definition.nodes[index].trigger = .manual
+      changed = true
+    }
+    guard changed else { return }
+    _ = try replace(id, version: automation.version, with: definition, now: now)
+  }
+
   /// 行を、ノード `nodeId` の出力として新しい行で書く。今の集合は、同じ書かれた id の今有効な項目を無効にしてから新しい項目として
   /// 足す（今有効な項目は id ごとに 1 つのまま。この無効化では判断待ちの候補を下げない——判定は既に候補のあるリンクの行を
   /// 「既に候補がある」で捨てる）。出来事の流れは同じ id でも足す。

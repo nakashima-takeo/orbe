@@ -85,7 +85,7 @@ extension WindowControllerAutomationControlTests {
       "list_automation_runs": wc.controlListAutomationRuns(
         automationId: 1, nodeKey: nil, before: nil, limit: nil),
       "run_automation": wc.controlRunAutomation(automationId: 1, nodeKey: nil),
-      "pause_automation": wc.controlPauseAutomation(automationId: 1, paused: true),
+      "pause_automation": wc.controlPauseAutomation(automationId: 1, nodeKey: nil, paused: true),
       "delete_automation": wc.controlDeleteAutomation(automationId: 1),
       "list_automation_proposals": wc.controlListAutomationProposals(automationId: nil),
       "try_automation": wc.controlTryAutomation(automationId: 1, AutomationTrial.Request()),
