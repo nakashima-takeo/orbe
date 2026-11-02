@@ -43,7 +43,7 @@ struct BoardAutomationNodeCard: View {
 
   private var head: some View {
     HStack(spacing: Theme.Space.step) {
-      if card.running {
+      if card.state == .running {
         StatusGlyphView(kind: .working, size: 10)
       } else if let mark = card.mark {
         BoardRunMarkGlyph(mark: mark)
@@ -55,7 +55,7 @@ struct BoardAutomationNodeCard: View {
         .font(Font(Theme.Typography.title.monospacedWeight(.semibold)))
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
-      if card.paused, !card.running {
+      if card.state == .paused {
         HStack(spacing: 5) {
           MarkGlyph(kind: .paused, color: Color.theme.textMuted)
           Text(l10n.string(.automationPaused))

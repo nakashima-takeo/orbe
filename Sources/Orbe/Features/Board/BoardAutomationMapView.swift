@@ -94,7 +94,7 @@ struct BoardMapRowView: View {
     case .node(let mapNode):
       switch mapNode.look {
       case .running: .running
-      case _ where mapNode.paused: .paused
+      case .paused: .paused
       case .idle: .idle
       case .failed: .failed
       }
@@ -109,8 +109,7 @@ struct BoardMapRowView: View {
       fontResolver.text(mapNode.name, base: Theme.Typography.code)
         .font(Font.theme.code)
         .foregroundStyle(
-          mapNode.paused && mapNode.look != .running
-            ? Color.theme.textMuted : Color.theme.textPrimary
+          mapNode.look == .paused ? Color.theme.textMuted : Color.theme.textPrimary
         )
         .padding(.trailing, Theme.Space.hair)
         .truncationMode(.tail)
@@ -121,7 +120,7 @@ struct BoardMapRowView: View {
           .font(Font.theme.codeSmall)
           .foregroundStyle(Color.theme.accentBright)
           .fixedSize()
-      } else if mapNode.paused {
+      } else if mapNode.look == .paused {
         HStack(spacing: 5) {
           MarkGlyph(kind: .paused, color: Color.theme.textMuted)
           Text(l10n.string(.automationPaused))

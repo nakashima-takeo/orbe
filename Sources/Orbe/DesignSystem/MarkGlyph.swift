@@ -109,14 +109,13 @@ struct MarkGlyph: View {
 }
 
 /// 地図のノードの点。普段は強調色の輪、最新の回が失敗なら赤の輪に斜めの十字、行き先は塗った点、走っている間は
-/// 点の代わりに回る輪。
+/// 点の代わりに回る輪、ノード自身を止めていれば沈んだ色の輪に停止の 2 本線（一覧の行の停止と同じ色と印）。
 struct MapNodeGlyph: View {
   enum Look: Equatable {
     case idle
     case failed
     case running
     case destination
-    /// ノード自身を止めている（沈んだ色の輪に停止の 2 本線。一覧の行の停止と同じ色と印）。
     case paused
   }
 

@@ -1,12 +1,22 @@
 import Foundation
 
-/// 地図のノードの点の見え方。
+/// 地図のノードの行の見え方（点・名前の色・状態の欄）。ノードの状態（走っている・止めている）を最新の回の成否より先に言う。
 enum BoardNodeLook: Equatable {
   case idle
   /// 最新の回が失敗。
   case failed
-  /// 走っている（点の代わりに回る輪）。
+  /// 走っている（点の代わりに回る輪と「実行中」）。
   case running
+  /// 走っていなくてノード自身を止めている（停止の 2 本線と「一時停止中」、沈んだ色の名前）。
+  case paused
+
+  init(_ state: BoardAutomationStanding.State?, failed: Bool) {
+    switch state {
+    case .running: self = .running
+    case .paused: self = .paused
+    case nil: self = failed ? .failed : .idle
+    }
+  }
 }
 
 /// 地図のノードの行。文言まで解いた値。
@@ -23,9 +33,8 @@ struct BoardMapNode: Equatable {
   let pending: Int?
   /// 出力の形式エラーの印があるか。
   let breached: Bool
+  /// 自動化を止めていても、ノード自身の印で決める。
   let look: BoardNodeLook
-  /// ノード自身を止めているか（自動化を止めていても、ノードごとの印として出す）。
-  let paused: Bool
   /// 前回の列。まだ動いていなければ nil。
   let last: Last?
   /// 最新の回が失敗なら、その理由（「日本語（原文）」）。行の下に出す。
@@ -170,7 +179,9 @@ extension BoardAutomationDetailValue {
         : inputs.map { automation.graph.node($0)?.entity.name ?? "\($0)" }.joined(
           separator: l10n.string(.automationListSeparator)),
       pending: inputs.isEmpty ? nil : state.pending.count, breached: state.breach != nil,
-      look: running ? .running : latest?.failed == true ? .failed : .idle, paused: state.paused,
+      look: BoardNodeLook(
+        BoardAutomationStanding.State(running: running, paused: state.paused),
+        failed: latest?.failed == true),
       last: latest.map {
         BoardMapNode.Last(
           mark: $0.failed ? .failure : .success, at: text.recent($0.startedAt),

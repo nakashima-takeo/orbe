@@ -90,15 +90,15 @@ extension BoardAutomationTests {
     let github = try XCTUnwrap(automation.store.automation(id)).state(key: "github")
     XCTAssertTrue(github.paused, "押し続けても 1 回だけ")
     XCTAssertEqual(automation.store.automation(id)?.paused, false, "自動化は止めない")
-    XCTAssertEqual(try mapNode()?.paused, true)
+    XCTAssertEqual(try mapNode()?.look, .paused)
     let paused = try XCTUnwrap(card(automation))
-    XCTAssertTrue(paused.paused)
+    XCTAssertEqual(paused.state, .paused)
     XCTAssertEqual(
       paused.facts.first { $0.label == .boardNodeNext }?.value.map(\.text), ["一時停止中"])
     XCTAssertTrue(automation.hints.contains(BoardKeyHint(pause.key, .automationResume)))
 
     send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(id)?.state(key: "github").paused, false)
-    XCTAssertEqual(try mapNode()?.paused, false)
+    XCTAssertEqual(try mapNode()?.look, .idle)
   }
 }

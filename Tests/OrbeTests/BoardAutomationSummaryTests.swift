@@ -78,6 +78,33 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(model.summary(weekend, text: text, now: now)?.mark, .success, "止めていても前回の印")
   }
 
+  /// 地図の行の見え方は、走っている → ノード自身を止めている → 最新の回が失敗の順に言う。カードの頭は状態だけを言い、前回の
+  /// 成否の印は止めても失敗のまま。
+  func testAPausedNodeSaysItIsPausedBeforeItsFailure() throws {
+    var automation = try XCTUnwrap(automations().first)
+    let failing = try XCTUnwrap(
+      automation.graph.nodes.first { automation.state($0.id).runs.first?.failed == true }?.id,
+      "前提: 最新の回が失敗したノード")
+    func look(running: Bool) -> BoardNodeLook? {
+      let detail = BoardAutomationDetailValue(
+        automation, text: text, running: { $0 == failing && running }, open: 0, next: nil)
+      return detail.rows.lazy.compactMap { row -> BoardNodeLook? in
+        guard case .node(let node) = row.content, node.id == failing else { return nil }
+        return node.look
+      }.first
+    }
+    XCTAssertEqual(look(running: false), .failed)
+
+    automation.states[failing]?.pausedAt = DesignSceneFixtures.taskToday
+    XCTAssertEqual(look(running: false), .paused, "止めていれば失敗より先に言う")
+    XCTAssertEqual(look(running: true), .running, "走っていれば止めているより先に言う")
+    let card = try XCTUnwrap(
+      BoardAutomationNodeValue(
+        automation, nodeId: failing, text: text, running: false, next: nil, open: 0))
+    XCTAssertEqual(card.state, .paused)
+    XCTAssertEqual(card.mark, .failure, "頭の印は前回の成否のまま")
+  }
+
   /// 見本の 12 ノードの線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
   func testMapLanesFollowTheInputs() throws {
     let detail = BoardAutomationDetailValue(
