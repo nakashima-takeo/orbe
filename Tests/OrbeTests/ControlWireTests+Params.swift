@@ -144,11 +144,11 @@ extension ControlWireTests {
       RequiredParam(method: "delete_automation", key: "automationId", code: -32602),
       RequiredParam(method: "try_automation", key: "automationId", code: -32602),
       RequiredParam(method: "get_automation_trial", key: "automationId", code: -32602),
-      RequiredParam(method: "list_board_parts", key: "workspaceId", code: -32602),
-      RequiredParam(method: "add_board_part", key: "workspaceId", code: -32602),
-      RequiredParam(method: "add_board_part", key: "kind", code: -32602),
-      RequiredParam(method: "remove_board_part", key: "workspaceId", code: -32602),
-      RequiredParam(method: "remove_board_part", key: "kind", code: -32602),
+      RequiredParam(method: "list_board_widgets", key: "workspaceId", code: -32602),
+      RequiredParam(method: "add_board_widget", key: "workspaceId", code: -32602),
+      RequiredParam(method: "add_board_widget", key: "kind", code: -32602),
+      RequiredParam(method: "remove_board_widget", key: "workspaceId", code: -32602),
+      RequiredParam(method: "remove_board_widget", key: "kind", code: -32602),
     ]
   }
 

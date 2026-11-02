@@ -87,7 +87,7 @@ extension WindowController {
   }
 
   /// Home のボードでその自動化を開く（ピル・通知のクリック）。差し替えてはならない画面の間は何もしない。行き先はボードそのもの
-  /// なので、ほかのパレットは閉じる。自動化が消えていれば欄を、自動化の部品が無ければボードを開くだけ。
+  /// なので、ほかのパレットは閉じる。自動化が消えていれば欄を、自動化のウィジェットが無ければボードを開くだけ。
   func showAutomation(_ id: Int) {
     guard !model.overlay.isModal, let home = store.homeIndex else { return }
     if model.overlay != .none { dismissPalette() }

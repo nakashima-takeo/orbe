@@ -1,39 +1,39 @@
 import Foundation
 
-/// ボードの部品の並びの意味——ボードを持つか（`hasBoard`）・既定・置ける／外せるか。「1 種類 1 つ」の保証者は
+/// ボードのウィジェットの並びの意味——ボードを持つか（`hasBoard`）・既定・置ける／外せるか。「1 種類 1 つ」の保証者は
 /// ここと `load` の正規化だけ。
 extension SessionStore {
-  /// 何も決めていないボードの部品の並び。
-  static let defaultBoardParts: [BoardPart] = [.automation]
+  /// 何も決めていないボードのウィジェットの並び。
+  static let defaultBoardWidgets: [BoardWidget] = [.automation]
 
-  /// ボードを持たない workspace へ部品を置こうとした・外そうとした。
+  /// ボードを持たない workspace へウィジェットを置こうとした・外そうとした。
   struct NoBoard: Error {}
 
-  /// その workspace のボードの部品の並び。ボードを持たなければ nil。
-  func boardParts(of ws: Workspace) -> [BoardPart]? {
+  /// その workspace のボードのウィジェットの並び。ボードを持たなければ nil。
+  func boardWidgets(of ws: Workspace) -> [BoardWidget]? {
     guard hasBoard(ws) else { return nil }
-    return ws.boardParts ?? Self.defaultBoardParts
+    return ws.boardWidgets ?? Self.defaultBoardWidgets
   }
 
-  /// 部品を末尾に置き、変わったかを返す。既にあれば何もしない。
-  func addBoardPart(_ part: BoardPart, to ws: Workspace) throws(NoBoard) -> Bool {
-    guard let parts = boardParts(of: ws) else { throw NoBoard() }
-    guard !parts.contains(part) else { return false }
-    ws.boardParts = parts + [part]
+  /// ウィジェットを末尾に置き、変わったかを返す。既にあれば何もしない。
+  func addBoardWidget(_ widget: BoardWidget, to ws: Workspace) throws(NoBoard) -> Bool {
+    guard let widgets = boardWidgets(of: ws) else { throw NoBoard() }
+    guard !widgets.contains(widget) else { return false }
+    ws.boardWidgets = widgets + [widget]
     return true
   }
 
-  /// 部品を外し、変わったかを返す。無ければ何もしない。外して空になった並びも「決めた並び」として残す。
-  func removeBoardPart(_ part: BoardPart, from ws: Workspace) throws(NoBoard) -> Bool {
-    guard let parts = boardParts(of: ws) else { throw NoBoard() }
-    guard parts.contains(part) else { return false }
-    ws.boardParts = parts.filter { $0 != part }
+  /// ウィジェットを外し、変わったかを返す。無ければ何もしない。外して空になった並びも「決めた並び」として残す。
+  func removeBoardWidget(_ widget: BoardWidget, from ws: Workspace) throws(NoBoard) -> Bool {
+    guard let widgets = boardWidgets(of: ws) else { throw NoBoard() }
+    guard widgets.contains(widget) else { return false }
+    ws.boardWidgets = widgets.filter { $0 != widget }
     return true
   }
 
   /// 同じ種類の重なりを落とす（先を残す）。`load` の正規化が使う。
-  static func distinct(_ parts: [BoardPart]) -> [BoardPart] {
-    var seen = Set<BoardPart>()
-    return parts.filter { seen.insert($0).inserted }
+  static func distinct(_ widgets: [BoardWidget]) -> [BoardWidget] {
+    var seen = Set<BoardWidget>()
+    return widgets.filter { seen.insert($0).inserted }
   }
 }

@@ -53,10 +53,10 @@ extension OrbeCliProcessTests {
       "tab --help の KEYS が ControlKey と食い違っている")
   }
 
-  /// `orb board --help` の `KINDS:` は control の `BoardPart` と同じ集合。種類の後の括弧は説明で、行をまたぐ。
+  /// `orb board --help` の `KINDS:` は control の `BoardWidget` と同じ集合。種類の後の括弧は説明で、行をまたぐ。
   ///
   /// 弾くのは control（知らない種類は -32602）だが、help は socket 不達でも出す必要があるため CLI に種類を写している。
-  /// 写しが欠けると、置ける部品が help を読む人と AI から見えなくなる。
+  /// 写しが欠けると、置けるウィジェットが help を読む人と AI から見えなくなる。
   func testBoardHelpListsEveryKind() throws {
     let outcome = ControlProcess.orbWithoutServer(["board", "--help"])
     XCTAssertEqual(outcome.status, 0, "board --help は socket 不達でも exit 0: \(outcome.stderr)")
@@ -78,8 +78,8 @@ extension OrbeCliProcessTests {
     }
     let listed = names.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
     XCTAssertEqual(
-      Set(listed), Set(BoardPart.allCases.map(\.rawValue)),
-      "board --help の KINDS が BoardPart と食い違っている")
+      Set(listed), Set(BoardWidget.allCases.map(\.rawValue)),
+      "board --help の KINDS が BoardWidget と食い違っている")
   }
 
   /// `orb task --help` の `STATUSES:` / `PRIORITIES:` は control の `TaskItem.Status` / `Priority` と同じ集合。

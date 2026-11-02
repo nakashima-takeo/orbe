@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの自動化の部品——一覧の並びと、選んだ自動化へのキー。本物の `BoardView`（中身は SwiftUI）を実窓に載せ、実
+/// ボードの自動化のウィジェット——一覧の並びと、選んだ自動化へのキー。本物の `BoardView`（中身は SwiftUI）を実窓に載せ、実
 /// `NSEvent` のキーを届ける。走らせ役は取得が終わらない偽物で、本物の claude は起きない。
 ///
 /// 壊れると何が起きるか: 前回が失敗した自動化が一覧の上に来ず、壊れた取得に気づけない。走り出すたびに行が跳ね、⌘↵ を押した
@@ -46,7 +46,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(
           samples ?? DesignSceneFixtures.boardAutomationSamples())),
-      parts: [.automation])
+      widgets: [.automation])
   }
 
   /// 見本の 4 件を置いたままの自動化（置き方は決定論なので、別の DB に置いても同じ値になる）。
@@ -54,7 +54,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     DesignSceneFixtures.automationStore(DesignSceneFixtures.boardAutomationSamples()).automations
   }
 
-  /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。部品は欄から始まる。
+  /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。ウィジェットは欄から始まる。
   func mount(_ model: BoardModel, height: CGFloat = 700) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyDeliveryWindow(
@@ -202,7 +202,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(
           store: DesignSceneFixtures.boardUnreadableStore())),
-      parts: [.automation])
+      widgets: [.automation])
     let automation = model.automation
     let window = mount(model)
     down(window)

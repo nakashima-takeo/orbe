@@ -3,17 +3,17 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの部品の 3 動詞の params の語と型検査と、domain への配線。
+/// ボードのウィジェットの 3 動詞の params の語と型検査と、domain への配線。
 ///
 /// 壊れると何が起きるか: 真偽値の true が workspace の 1 番として読まれ、別の workspace のボードを触る。知らない種類が黙って
-/// 何かに読み替えられる。置くと外すが入れ替わって配線され、AI が外したつもりの部品が残る。
+/// 何かに読み替えられる。置くと外すが入れ替わって配線され、AI が外したつもりのウィジェットが残る。
 extension ControlWireTests {
   /// 3 動詞の正しい params 一式（`validRequests` の一部）。
   var boardRequests: [(method: String, params: [String: Any])] {
     [
-      ("list_board_parts", ["workspaceId": 3]),
-      ("add_board_part", ["workspaceId": 3, "kind": "automation"]),
-      ("remove_board_part", ["workspaceId": 3, "kind": "automation"]),
+      ("list_board_widgets", ["workspaceId": 3]),
+      ("add_board_widget", ["workspaceId": 3, "kind": "automation"]),
+      ("remove_board_widget", ["workspaceId": 3, "kind": "automation"]),
     ]
   }
 
@@ -21,20 +21,20 @@ extension ControlWireTests {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
 
-    let listed = wire.request(id: 1, method: "list_board_parts", params: ["workspaceId": 3])
+    let listed = wire.request(id: 1, method: "list_board_widgets", params: ["workspaceId": 3])
     _ = wire.request(
-      id: 2, method: "add_board_part", params: ["workspaceId": 4, "kind": "automation"])
+      id: 2, method: "add_board_widget", params: ["workspaceId": 4, "kind": "automation"])
     _ = wire.request(
-      id: 3, method: "remove_board_part", params: ["workspaceId": 5, "kind": "automation"])
+      id: 3, method: "remove_board_widget", params: ["workspaceId": 5, "kind": "automation"])
 
     XCTAssertEqual(
-      ((listed?["result"] as? [String: Any])?["parts"] as? [[String: Any]])?.first?["kind"]
-        as? String, "automation", "結果の並びは parts で包む")
+      ((listed?["result"] as? [String: Any])?["widgets"] as? [[String: Any]])?.first?["kind"]
+        as? String, "automation", "結果の並びは widgets で包む")
     XCTAssertEqual(fake.boardLists, [3])
-    XCTAssertEqual(fake.addedBoardParts.map(\.workspaceId), [4])
-    XCTAssertEqual(fake.addedBoardParts.map(\.part), [.automation])
-    XCTAssertEqual(fake.removedBoardParts.map(\.workspaceId), [5])
-    XCTAssertEqual(fake.removedBoardParts.map(\.part), [.automation])
+    XCTAssertEqual(fake.addedBoardWidgets.map(\.workspaceId), [4])
+    XCTAssertEqual(fake.addedBoardWidgets.map(\.widget), [.automation])
+    XCTAssertEqual(fake.removedBoardWidgets.map(\.workspaceId), [5])
+    XCTAssertEqual(fake.removedBoardWidgets.map(\.widget), [.automation])
   }
 
   func testBoardVerbsCheckTheirParams() {
@@ -49,17 +49,17 @@ extension ControlWireTests {
     }
     let cases = [
       Case(
-        label: "真偽値は workspace の番号でない", method: "list_board_parts", params: ["workspaceId": true],
+        label: "真偽値は workspace の番号でない", method: "list_board_widgets", params: ["workspaceId": true],
         message: "invalid workspaceId"),
       Case(
-        label: "文字列の番号", method: "add_board_part",
+        label: "文字列の番号", method: "add_board_widget",
         params: ["workspaceId": "3", "kind": "automation"],
         message: "invalid workspaceId"),
       Case(
-        label: "種類が文字列でない", method: "add_board_part", params: ["workspaceId": 3, "kind": 1],
+        label: "種類が文字列でない", method: "add_board_widget", params: ["workspaceId": 3, "kind": 1],
         message: "invalid kind"),
       Case(
-        label: "知らない種類", method: "remove_board_part",
+        label: "知らない種類", method: "remove_board_widget",
         params: ["workspaceId": 3, "kind": "weather"],
         message: "unknown kind: weather (known: automation)"),
     ]
@@ -69,7 +69,7 @@ extension ControlWireTests {
       XCTAssertEqual(
         (response?["error"] as? [String: Any])?["message"] as? String, item.message, item.label)
     }
-    XCTAssertTrue(fake.boardLists.isEmpty && fake.addedBoardParts.isEmpty, "target へ届かない")
-    XCTAssertTrue(fake.removedBoardParts.isEmpty, "target へ届かない")
+    XCTAssertTrue(fake.boardLists.isEmpty && fake.addedBoardWidgets.isEmpty, "target へ届かない")
+    XCTAssertTrue(fake.removedBoardWidgets.isEmpty, "target へ届かない")
   }
 }

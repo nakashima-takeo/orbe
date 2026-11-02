@@ -39,7 +39,7 @@ struct TabRef {
 /// タブ配列の不変条件「同じ `groupKey` のタブは配列上で必ず隣接する」の唯一の保証者。変異点
 /// （挿入・cd 再判定・並び替え・セグメント移動・load の正規化）がすべてこれを守り、
 /// 「セグメント」はドメイン型ではなく `segments(of:)` が配列から導く連。
-/// 選択（`Workspace.selection`）の不変条件と、ボードの部品の並び（`Workspace.boardParts`）の「1 種類 1 つ」の
+/// 選択（`Workspace.selection`）の不変条件と、ボードのウィジェットの並び（`Workspace.boardWidgets`）の「1 種類 1 つ」の
 /// 唯一の保証者でもある。
 /// Foundation のみに依存する（同モジュール型 `Workspace`/`TerminalTab` の名前参照は
 /// フレームワーク import を要さない）。
@@ -65,7 +65,7 @@ final class SessionStore {
     self.homeWorkspaceId = homeWorkspaceId
     for ws in workspaces {
       ws.tabs = Self.grouped(ws.tabs)
-      ws.boardParts = ws.boardParts.map(Self.distinct)
+      ws.boardWidgets = ws.boardWidgets.map(Self.distinct)
       settle(ws)
     }
   }

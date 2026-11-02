@@ -1,14 +1,14 @@
 import Foundation
 
-/// ボードの部品の 3 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。どれも結果の並び `{parts}` を返す。
+/// ボードのウィジェットの 3 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。どれも結果の並び `{widgets}` を返す。
 /// 知らない workspace は -32004、ボードを持たない workspace は -32000。
 protocol ControlBoardTarget: AnyObject {
-  /// ボードの部品の並びを読む（list_board_parts）。
-  func controlListBoardParts(workspaceId: Int) -> Result<Any, ControlError>
-  /// 部品を末尾に置く（add_board_part）。既にあれば何もしない。
-  func controlAddBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError>
-  /// 部品を外す（remove_board_part）。無ければ何もしない。
-  func controlRemoveBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError>
+  /// ボードのウィジェットの並びを読む（list_board_widgets）。
+  func controlListBoardWidgets(workspaceId: Int) -> Result<Any, ControlError>
+  /// ウィジェットを末尾に置く（add_board_widget）。既にあれば何もしない。
+  func controlAddBoardWidget(workspaceId: Int, widget: BoardWidget) -> Result<Any, ControlError>
+  /// ウィジェットを外す（remove_board_widget）。無ければ何もしない。
+  func controlRemoveBoardWidget(workspaceId: Int, widget: BoardWidget) -> Result<Any, ControlError>
 }
 
 /// ボードの 3 動詞の解決。ハンドラが見るのは params の在否と JSON の型と種類の名前（違反は -32602）だけで、workspace の
@@ -29,17 +29,17 @@ extension ControlServer {
 
   private func boardBody(for method: String) -> BoardBody? {
     switch method {
-    case "list_board_parts":
+    case "list_board_widgets":
       return { target, p throws(ControlError) in
-        target.controlListBoardParts(workspaceId: try p.workspaceId())
+        target.controlListBoardWidgets(workspaceId: try p.workspaceId())
       }
-    case "add_board_part":
+    case "add_board_widget":
       return { target, p throws(ControlError) in
-        target.controlAddBoardPart(workspaceId: try p.workspaceId(), part: try p.part())
+        target.controlAddBoardWidget(workspaceId: try p.workspaceId(), widget: try p.widget())
       }
-    case "remove_board_part":
+    case "remove_board_widget":
       return { target, p throws(ControlError) in
-        target.controlRemoveBoardPart(workspaceId: try p.workspaceId(), part: try p.part())
+        target.controlRemoveBoardWidget(workspaceId: try p.workspaceId(), widget: try p.widget())
       }
     default:
       return nil
@@ -67,17 +67,17 @@ private struct BoardParams {
     return id
   }
 
-  func part() throws(ControlError) -> BoardPart {
+  func widget() throws(ControlError) -> BoardWidget {
     guard let raw = params["kind"] else {
       throw ControlError(code: -32602, message: "missing kind")
     }
     guard let kind = raw as? String else {
       throw ControlError(code: -32602, message: "invalid kind")
     }
-    guard let part = BoardPart(rawValue: kind) else {
-      let known = BoardPart.allCases.map(\.rawValue).joined(separator: ", ")
+    guard let widget = BoardWidget(rawValue: kind) else {
+      let known = BoardWidget.allCases.map(\.rawValue).joined(separator: ", ")
       throw ControlError(code: -32602, message: "unknown kind: \(kind) (known: \(known))")
     }
-    return part
+    return widget
   }
 }

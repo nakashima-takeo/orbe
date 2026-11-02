@@ -11,7 +11,7 @@ extension AutomationNotify {
 }
 
 /// サブメニュー「通知」を重ねる位置: 詳細の見える範囲と、見出しの「通知」の行。詳細は ScrollView なので、行の中に重ねると
-/// 詳細の幅で切られる。部品の高さへ運んで重ねる。
+/// 詳細の幅で切られる。ウィジェットの高さへ運んで重ねる。
 struct BoardAutomationNotifyAnchor: PreferenceKey {
   var viewport: Anchor<CGRect>?
   var row: Anchor<CGRect>?
@@ -27,7 +27,7 @@ struct BoardAutomationNotifyAnchor: PreferenceKey {
   }
 }
 
-/// 開いているサブメニュー「通知」を部品に重ねる層。「通知」の行の右に、行の上端に揃えて置く。部品の端を越えるなら内側へずらす。
+/// 開いているサブメニュー「通知」をウィジェットに重ねる層。「通知」の行の右に、行の上端に揃えて置く。ウィジェットの端を越えるなら内側へずらす。
 /// 置くのは行が詳細の見える範囲に収まっている間だけで、開いている間に外れたら閉じる。メニューの外のクリックは閉じるだけで、
 /// 下へは届かない。
 struct BoardAutomationNotifyLayer: View {

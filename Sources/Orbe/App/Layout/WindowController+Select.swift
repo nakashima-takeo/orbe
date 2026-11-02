@@ -29,7 +29,7 @@ extension WindowController {
     let ws = current
     if let tab = ws.selectedTab { store.recordMaterialization(of: tab, in: ws) }
     reconcileContent()
-    if store.hasBoard(ws) { projectBoardParts() }
+    if store.hasBoard(ws) { projectBoardWidgets() }
     // overlay 表示中は入力を奪わない（フォーカス復帰は dismiss 側が担う）。
     if model.overlay == .none { focusSelection() }
     consumeVisibleTabDone()
@@ -37,9 +37,9 @@ extension WindowController {
     scheduleHiddenMounts(for: ws)
   }
 
-  /// 前面の workspace のボードの部品の並びをボードへ写す唯一の口（`select` と、部品の操作の後）。
-  func projectBoardParts() {
-    board.show(store.boardParts(of: current) ?? [])
+  /// 前面の workspace のボードのウィジェットの並びをボードへ写す唯一の口（`select` と、ウィジェットの操作の後）。
+  func projectBoardWidgets() {
+    board.show(store.boardWidgets(of: current) ?? [])
   }
 
   /// タブ 1 枚を materialize し（休眠チケットの消費と起動指示の確定）、content を照合する。端末はそこで連の器へ差さり、

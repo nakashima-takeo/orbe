@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// ボードの SwiftUI ルート。器（`BoardView`）の中の別 root なので環境は明示注入する。地は端末・エディター面と同じ veil。
-/// 中身は上から部品の並びとフッター。部品が無ければ中央の一文だけ。地のクリックはボードの当て直し（選んでいる場所へ）を通る
+/// 中身は上からウィジェットの並びとフッター。ウィジェットが無ければ中央の一文だけ。地のクリックはボードの当て直し（選んでいる場所へ）を通る
 /// ので、続けてキーが効く。
 struct BoardRoot: View {
   let model: BoardModel
@@ -11,13 +11,13 @@ struct BoardRoot: View {
 
   var body: some View {
     Group {
-      if model.parts.isEmpty {
+      if model.widgets.isEmpty {
         BoardEmptyView()
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         VStack(spacing: 0) {
-          ForEach(model.parts, id: \.self) { part in
-            BoardPartView(part: part, model: model)
+          ForEach(model.widgets, id: \.self) { widget in
+            BoardWidgetView(widget: widget, model: model)
               .frame(maxHeight: .infinity)
           }
           BoardFooter(model: model)
@@ -33,25 +33,25 @@ struct BoardRoot: View {
   }
 }
 
-/// 部品 1 つ。種類ごとの網羅の分岐で、種類が増えたときの描き忘れをコンパイラが止める。
-struct BoardPartView: View {
-  let part: BoardPart
+/// ウィジェット 1 つ。種類ごとの網羅の分岐で、種類が増えたときの描き忘れをコンパイラが止める。
+struct BoardWidgetView: View {
+  let widget: BoardWidget
   let model: BoardModel
 
   var body: some View {
-    switch part {
-    case .automation: BoardAutomationPart(board: model)
+    switch widget {
+    case .automation: BoardAutomationWidget(board: model)
     }
   }
 }
 
-/// 自動化の部品: 上に全幅の依頼の欄、その下に左の一覧と右の欄（選んだ自動化の詳細か、欄を選んでいる間の案内）。焦点の宛先は
+/// 自動化のウィジェット: 上に全幅の依頼の欄、その下に左の一覧と右の欄（選んだ自動化の詳細か、欄を選んでいる間の案内）。焦点の宛先は
 /// 欄・一覧の器・詳細の器（地図）の 3 つで、場所の正はモデル（`place`）だけ。届いていない合図（`focusToken`）はボードを通して受け取って写し
 /// （現れただけでは写さず、焦点がボードの外にあれば捨てる）、SwiftUI が自分で焦点を動かした（窓が key になったときの既定の
 /// 焦点など）ら、モデルの場所へ戻す。クリックはジェスチャがモデルへ届ける。ストアの変化で場所が替わった（行がすべて消えて欄に
-/// なった）ときは、焦点が部品の中にあるときだけ追う（外にある焦点を奪わない）。サブメニュー「通知」は詳細の見出しの
-/// 「通知」の行の右に、部品の上の 1 枚の層として重ねる。
-struct BoardAutomationPart: View {
+/// なった）ときは、焦点がウィジェットの中にあるときだけ追う（外にある焦点を奪わない）。サブメニュー「通知」は詳細の見出しの
+/// 「通知」の行の右に、ウィジェットの上の 1 枚の層として重ねる。
+struct BoardAutomationWidget: View {
   let board: BoardModel
   @FocusState private var focused: BoardAutomationModel.Place?
 
@@ -130,7 +130,7 @@ struct BoardAutomationColumns: View {
   }
 }
 
-/// 部品を 1 つも持たないボード: 中央に沈んだ一文。
+/// ウィジェットを 1 つも持たないボード: 中央に沈んだ一文。
 struct BoardEmptyView: View {
   @Environment(\.localization) private var l10n
 

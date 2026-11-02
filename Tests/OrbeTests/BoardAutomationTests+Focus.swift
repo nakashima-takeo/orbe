@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の部品の中の焦点——依頼の欄と一覧の行き来。本物の `BoardView` を実窓に載せ、実 `NSEvent` のキーとクリックを届ける。
+/// 自動化のウィジェットの中の焦点——依頼の欄と一覧の行き来。本物の `BoardView` を実窓に載せ、実 `NSEvent` のキーとクリックを届ける。
 ///
 /// 壊れると何が起きるか: 欄と一覧を行き来できず、頼めないか一覧を操れない。欄で打った space・↵ が一覧の止める・地図へ入る
 /// 操作になる。クリックした場所とキーの届く場所が食い違い、行をクリックしてから押した space が欄に入る。
@@ -53,7 +53,7 @@ extension BoardAutomationTests {
     pump(0.3)
   }
 
-  /// 欄は一覧の上の 1 段で、欄と行は 1 つの選択を分け合う。部品は欄から始まり、欄を選んでいる間は行の選択と詳細が無い。
+  /// 欄は一覧の上の 1 段で、欄と行は 1 つの選択を分け合う。ウィジェットは欄から始まり、欄を選んでいる間は行の選択と詳細が無い。
   /// 欄の ↓ で一覧の先頭、先頭の行の ↑ で欄、欄の ↑ で一覧の末尾（巡回）、末尾の行の ↓ で欄（巡回）、欄の esc は ↓ と同じく
   /// 一覧の先頭へ。⇥・⇧⇥ は欄でも一覧でも何もせず、一覧の → で地図へ入り、地図の ← で一覧へ戻る。
   func testArrowsMoveOneSelectionThroughTheFieldAndTheRows() {
@@ -117,7 +117,7 @@ extension BoardAutomationTests {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner([])),
-      parts: [.automation])
+      widgets: [.automation])
     let automation = model.automation
     let window = mount(model)
     XCTAssertEqual(automation.place, .request)

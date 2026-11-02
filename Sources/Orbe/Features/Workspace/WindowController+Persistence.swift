@@ -13,7 +13,7 @@ extension WindowController {
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
       ws.lastWorktreeBase = state.lastWorktreeBase
-      ws.boardParts = state.boardParts  // 重なりは下の store.load が落とす
+      ws.boardWidgets = state.boardWidgets  // 重なりは下の store.load が落とす
       // 連はキー（cwd の根）ごとに 1 つ作り、その連の保存状態で起こす。隣接の正規化は下の store.load。
       let keys = state.tabs.map { GitWorktreeRoot.root(of: $0.cwd) }
       let groupStates = state.groupStates(keys: keys)
@@ -134,7 +134,7 @@ extension WindowController {
           tabs: ws.tabs.map { $0.tabState() }, groups: ws.groups.compactMap { $0.groupState() },
           lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
           lastWorktreeBase: ws.lastWorktreeBase, persistentId: ws.persistentId,
-          boardParts: ws.boardParts)
+          boardWidgets: ws.boardWidgets)
       },
       windowSize: rememberedWindowSize, homeWorkspaceId: store.homeWorkspaceId)
   }

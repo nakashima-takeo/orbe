@@ -3,14 +3,14 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの部品の並び——制御 API で置く・外すと、前面のボードがすぐ描き直り、焦点はボードの中にあるときだけ追う——を実窓で固定する。
+/// ボードのウィジェットの並び——制御 API で置く・外すと、前面のボードがすぐ描き直り、焦点はボードの中にあるときだけ追う——を実窓で固定する。
 ///
-/// 壊れると何が起きるか: 欄に焦点があるところで部品を外すと焦点が窓へ落ち、⌘⇧] などの窓のキーまで黙って消える。端末や ⌘⇧X で
-/// 作業中の人の焦点を、AI が部品を置いた瞬間に依頼の欄が奪い、打鍵が欄へ流れる。ボードを持たない workspace に部品が置け、
+/// 壊れると何が起きるか: 欄に焦点があるところでウィジェットを外すと焦点が窓へ落ち、⌘⇧] などの窓のキーまで黙って消える。端末や ⌘⇧X で
+/// 作業中の人の焦点を、AI がウィジェットを置いた瞬間に依頼の欄が奪い、打鍵が欄へ流れる。ボードを持たない workspace にウィジェットが置け、
 /// 外から見えない並びが保存に残る。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
-final class WindowControllerBoardPartsTests: OrbeTestCase {
+final class WindowControllerBoardWidgetsTests: OrbeTestCase {
   private var shown: WindowController?
 
   override func setUp() {
@@ -40,9 +40,9 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
     return wc
   }
 
-  private func parts(_ result: Result<Any, ControlError>) -> [String]? {
+  private func widgets(_ result: Result<Any, ControlError>) -> [String]? {
     guard case .success(let value) = result else { return nil }
-    return ((value as? [String: Any])?["parts"] as? [[String: Any]])?.compactMap {
+    return ((value as? [String: Any])?["widgets"] as? [[String: Any]])?.compactMap {
       $0["kind"] as? String
     }
   }
@@ -66,16 +66,17 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
 
   // MARK: - 焦点
 
-  /// 欄に焦点があるところで部品を外すと、ボードは空になり、焦点はボードの中（ホスト）に残って ⌘⇧] / ⌘⇧[ が効く。置き直すと
+  /// 欄に焦点があるところでウィジェットを外すと、ボードは空になり、焦点はボードの中（ホスト）に残って ⌘⇧] / ⌘⇧[ が効く。置き直すと
   /// 欄に焦点が入り、そのまま打てる。
-  @MainActor func testRemovingThePartKeepsTheFocusInTheBoardAndAddingItStartsAtTheField() throws {
+  @MainActor func testRemovingTheWidgetKeepsTheFocusInTheBoardAndAddingItStartsAtTheField() throws {
     let wc = try homeOnBoard(tabs: 1)
     let homeId = wc.current.id
     XCTAssertTrue(wc.window.firstResponder is NSTextView, "前提: 焦点は依頼の欄")
 
-    XCTAssertEqual(parts(wc.controlRemoveBoardPart(workspaceId: homeId, part: .automation)), [])
+    XCTAssertEqual(
+      widgets(wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)), [])
     pump()
-    XCTAssertEqual(wc.board.parts, [], "ボードはすぐ空になる")
+    XCTAssertEqual(wc.board.widgets, [], "ボードはすぐ空になる")
     XCTAssertTrue(wc.boardView.focusIsInside, "焦点は窓へ落ちずボードの中に残る")
     try type(wc, "a")
     XCTAssertTrue(wc.boardView.focusIsInside, "空のボードの打鍵は飲まれ、焦点は動かない")
@@ -91,16 +92,16 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
     pump()
 
     XCTAssertEqual(
-      parts(wc.controlAddBoardPart(workspaceId: homeId, part: .automation)), ["automation"])
+      widgets(wc.controlAddBoardWidget(workspaceId: homeId, widget: .automation)), ["automation"])
     pump()
     XCTAssertEqual(wc.board.automation.place, .request)
-    XCTAssertTrue(wc.window.firstResponder is NSTextView, "置かれた部品の欄に焦点が入る")
+    XCTAssertTrue(wc.window.firstResponder is NSTextView, "置かれたウィジェットの欄に焦点が入る")
     try type(wc, "b")
     XCTAssertEqual(wc.board.automation.requestText, "b", "そのまま打てる")
   }
 
-  /// 端末タブで作業中に部品を外しても置いても、焦点と選択は動かない。
-  @MainActor func testChangingThePartsBehindATerminalTabLeavesTheFocusThere() throws {
+  /// 端末タブで作業中にウィジェットを外しても置いても、焦点と選択は動かない。
+  @MainActor func testChangingTheWidgetsBehindATerminalTabLeavesTheFocusThere() throws {
     let wc = try homeOnBoard(tabs: 1)
     let homeId = wc.current.id
     let tab = wc.current.tabs[0]
@@ -108,50 +109,50 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
     pump()
     let focused = wc.window.firstResponder
 
-    _ = wc.controlRemoveBoardPart(workspaceId: homeId, part: .automation)
+    _ = wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)
     pump()
     XCTAssertTrue(wc.window.firstResponder === focused, "外しても端末の焦点は動かない")
-    _ = wc.controlAddBoardPart(workspaceId: homeId, part: .automation)
+    _ = wc.controlAddBoardWidget(workspaceId: homeId, widget: .automation)
     pump()
     XCTAssertTrue(wc.window.firstResponder === focused, "置いても依頼の欄が焦点を奪わない")
     XCTAssertEqual(wc.current.selection, .tab(tab), "選択も動かない")
   }
 
-  /// ボードの上に ⌘⇧X を開いている間に部品を置いても外しても、打鍵は ⌘⇧X の入力欄に届いたまま。
-  @MainActor func testChangingThePartsUnderThePaletteLeavesTheFocusInThePalette() throws {
+  /// ボードの上に ⌘⇧X を開いている間にウィジェットを置いても外しても、打鍵は ⌘⇧X の入力欄に届いたまま。
+  @MainActor func testChangingTheWidgetsUnderThePaletteLeavesTheFocusInThePalette() throws {
     let wc = try homeOnBoard(tabs: 0)
     let homeId = wc.current.id
-    _ = wc.controlRemoveBoardPart(workspaceId: homeId, part: .automation)
+    _ = wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)
     pump()
     wc.showTaskPalette()
     pump()
     let palette = try XCTUnwrap(wc.model.taskPalette)
 
-    _ = wc.controlAddBoardPart(workspaceId: homeId, part: .automation)
+    _ = wc.controlAddBoardWidget(workspaceId: homeId, widget: .automation)
     pump()
     try type(wc, "x")
     XCTAssertEqual(palette.query, "x", "置いても打鍵は ⌘⇧X に届く")
     XCTAssertEqual(wc.board.automation.requestText, "", "ボードの欄は焦点を奪わない")
 
-    _ = wc.controlRemoveBoardPart(workspaceId: homeId, part: .automation)
+    _ = wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)
     pump()
     try type(wc, "y")
     XCTAssertEqual(palette.query, "xy", "外しても打鍵は ⌘⇧X に届く")
   }
 
   /// Home が背景にある間に変えても、Home に戻ると変えた並びで出る。
-  @MainActor func testChangingAnInactiveHomesPartsShowsWhenHomeReturns() throws {
+  @MainActor func testChangingAnInactiveHomesWidgetsShowsWhenHomeReturns() throws {
     let wc = try homeOnBoard(tabs: 0)
     let homeIndex = try XCTUnwrap(wc.store.homeIndex)
     let homeId = wc.current.id
     let other = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" })
     wc.switchWorkspace(to: other)
 
-    _ = wc.controlRemoveBoardPart(workspaceId: homeId, part: .automation)
+    _ = wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)
     XCTAssertEqual(wc.activeWorkspace, other, "前面の workspace は動かない")
     wc.switchWorkspace(to: homeIndex)
     pump()
-    XCTAssertEqual(wc.board.parts, [], "戻ると空のボード")
+    XCTAssertEqual(wc.board.widgets, [], "戻ると空のボード")
     XCTAssertTrue(wc.boardView.focusIsInside, "焦点はボードの中")
   }
 
@@ -165,26 +166,28 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
     let other = try XCTUnwrap(wc.workspaces.first { $0.name == "default" })
 
     for result in [
-      wc.controlListBoardParts(workspaceId: other.id),
-      wc.controlAddBoardPart(workspaceId: other.id, part: .automation),
-      wc.controlRemoveBoardPart(workspaceId: other.id, part: .automation),
+      wc.controlListBoardWidgets(workspaceId: other.id),
+      wc.controlAddBoardWidget(workspaceId: other.id, widget: .automation),
+      wc.controlRemoveBoardWidget(workspaceId: other.id, widget: .automation),
     ] {
       guard case .failure(let error) = result else { return XCTFail("ボードが無いのに成功した") }
       XCTAssertEqual(error.code, -32000)
     }
-    XCTAssertNil(other.boardParts, "ボードを持たない workspace に並びを残さない")
-    guard case .failure(let unknown) = wc.controlListBoardParts(workspaceId: -1) else {
+    XCTAssertNil(other.boardWidgets, "ボードを持たない workspace に並びを残さない")
+    guard case .failure(let unknown) = wc.controlListBoardWidgets(workspaceId: -1) else {
       return XCTFail("知らない workspace で成功した")
     }
     XCTAssertEqual(unknown.code, -32004)
 
     XCTAssertEqual(
-      parts(wc.controlListBoardParts(workspaceId: homeId)), ["automation"], "決めていなければ既定")
+      widgets(wc.controlListBoardWidgets(workspaceId: homeId)), ["automation"], "決めていなければ既定")
     XCTAssertEqual(
-      parts(wc.controlAddBoardPart(workspaceId: homeId, part: .automation)), ["automation"])
-    XCTAssertNil(wc.current.boardParts, "既にあるものを置いても何も変えない")
-    XCTAssertEqual(parts(wc.controlRemoveBoardPart(workspaceId: homeId, part: .automation)), [])
-    XCTAssertEqual(parts(wc.controlRemoveBoardPart(workspaceId: homeId, part: .automation)), [])
+      widgets(wc.controlAddBoardWidget(workspaceId: homeId, widget: .automation)), ["automation"])
+    XCTAssertNil(wc.current.boardWidgets, "既にあるものを置いても何も変えない")
+    XCTAssertEqual(
+      widgets(wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)), [])
+    XCTAssertEqual(
+      widgets(wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)), [])
 
     let listed = wc.controlListWorkspaces()
     XCTAssertEqual(
@@ -195,24 +198,25 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
   // MARK: - 保存
 
   /// 外した並びは再起動しても空のまま戻る。保存に重なった種類は 1 つに落ちる。
-  @MainActor func testPartsSurviveARestart() throws {
+  @MainActor func testWidgetsSurviveARestart() throws {
     let wc = try homeOnBoard(tabs: 0)
-    _ = wc.controlRemoveBoardPart(workspaceId: wc.current.id, part: .automation)
+    _ = wc.controlRemoveBoardWidget(workspaceId: wc.current.id, widget: .automation)
     wc.flushSave()
 
     let emptied = WindowController()
     let emptiedHome = emptied.workspaces[try XCTUnwrap(emptied.store.homeIndex)]
-    XCTAssertEqual(parts(emptied.controlListBoardParts(workspaceId: emptiedHome.id)), [], "空のまま戻る")
+    XCTAssertEqual(
+      widgets(emptied.controlListBoardWidgets(workspaceId: emptiedHome.id)), [], "空のまま戻る")
 
     var file = try XCTUnwrap(WorkspacePersistence.load())
     let homeIndex = try XCTUnwrap(
       file.workspaces.firstIndex { $0.persistentId == file.homeWorkspaceId })
-    file.workspaces[homeIndex].boardParts = [.automation, .automation]
+    file.workspaces[homeIndex].boardWidgets = [.automation, .automation]
     WorkspacePersistence.save(file)
 
     let restored = WindowController()
     let home = restored.workspaces[try XCTUnwrap(restored.store.homeIndex)]
     XCTAssertEqual(
-      parts(restored.controlListBoardParts(workspaceId: home.id)), ["automation"], "重なりは 1 つ")
+      widgets(restored.controlListBoardWidgets(workspaceId: home.id)), ["automation"], "重なりは 1 つ")
   }
 }
