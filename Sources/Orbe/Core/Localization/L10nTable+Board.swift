@@ -34,7 +34,7 @@ extension L10n {
     .boardNodeTools: ("ツール", "Tools"),
     .boardNodeTrigger: ("トリガー", "Trigger"),
     .boardNodeSaving: ("保存", "Write mode"),
-    .boardNodeKeep: ("候補の保持", "Keep proposals"),
+    .boardNodeWaiting: ("判断待ち", "Waiting proposals"),
     .boardNodeFrom: ("入力元", "Input"),
     .boardNodeDestination: ("出力先", "Output"),
     .boardPending: ("未処理", "Pending"),
@@ -48,8 +48,10 @@ extension L10n {
     .boardNodeToolCommand: ("%@ コマンド", "%@ command"),
     .boardNodeOverwrite: ("上書き", "overwrite"),
     .boardNodeAppend: ("追記", "append"),
-    .boardNodeKeepWhileCurrent: ("元の項目が有効な間", "while the source item is current"),
-    .boardNodeKeepUntilDecided: ("対応済みか、さばくまで", "until resolved or handled"),
+    .boardNodeWaitingDiscardWhenInvalidated: (
+      "元の項目が無効になったら破棄", "Discard when the source item is invalidated"
+    ),
+    .boardNodeWaitingKeepUntilDecided: ("判断まで保持", "Keep until decided"),
     .boardNodeAppendSince: ("追記（前回 %@ より後を取る）", "append (fetches items after %@)"),
     .boardNodeTakeAll: ("毎回全件", "all items every run"),
     .boardNodeMaxAge: ("%lld 時間以内", "within %lld h"),

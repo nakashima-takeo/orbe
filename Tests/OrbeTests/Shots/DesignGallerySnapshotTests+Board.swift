@@ -217,7 +217,7 @@ extension DesignGallerySnapshotTests {
       "board_map_narrow.png", map(0, nodeKey: "contact"), .ja, NSSize(width: 1000, height: 844))
   }
 
-  /// 候補の保持: 判断待ちを、対応済みか人がさばくまで保つ判定のカード（既定の判定は board_map_card）。
+  /// 判断待ち: 判断待ちの候補を判断まで保持する判定のカード（既定の判定は board_map_card）。
   private func renderBoardKeepSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
     board: ([AutomationSample]?, Int) -> BoardModel
