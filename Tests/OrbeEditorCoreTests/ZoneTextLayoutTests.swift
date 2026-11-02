@@ -135,6 +135,31 @@ final class ZoneTextLayoutTests: XCTestCase {
       ).line)
   }
 
+  /// 余白のあるインラインコードと右から左の字が同じ段落にあっても、折り返したどの行も幅に収まる。
+  func testWrappedLinesFitTheWidthWithPaddedCodeAndRightToLeftText() {
+    for parts in [
+      ["see the ", "קוד ארוך", " and more words here"],
+      ["הריצו את ", "git commit -m", " ואז את זה"],
+    ] {
+      let string = parts.joined()
+      let over = stride(from: CGFloat(40), through: 200, by: 0.5).filter { width in
+        ZoneTextLayout.lines(string, styles: codeStyles(parts), width: width).contains {
+          $0.width > width
+        }
+      }
+      XCTAssertEqual(over, [], "\(string) を折り返すと幅を超える行が出る幅")
+    }
+  }
+
+  /// 前と後ろを本文の字体、真ん中を余白 4 のインラインコードにした見え方。
+  private func codeStyles(_ parts: [String]) -> [ZoneTextStyle] {
+    parts.enumerated().map { index, part in
+      index == 1
+        ? ZoneTextStyle(length: part.utf16.count, font: mono, color: .red, padding: 4)
+        : ZoneTextStyle(length: part.utf16.count, font: font, color: .white)
+    }
+  }
+
   /// 折り返しで割れた見え方は、割れた側の余白を持たない。
   func testPaddingIsDroppedOnTheSideCutByAWrap() {
     let style = ZoneTextStyle(length: 10, font: mono, color: .red, padding: 4)
