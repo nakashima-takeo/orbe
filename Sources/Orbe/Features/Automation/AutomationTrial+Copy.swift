@@ -6,7 +6,7 @@ import Foundation
 extension AutomationStore {
   /// ノード `nodeIds` の間隔・cron の予定を手動に書き換える（写しの定義の書き換え。版と数え始めは写しの中のこと）。予定の時刻で
   /// 回さないため、走らせ役を立てる前に呼ぶ——番人は登録や回の終わりの数え直しのたびに過ぎた時刻の予定を始めるので、「いつ」を
-  /// 載せないしかない。
+  /// 載せずにおくしかない。
   func unschedule(_ nodeIds: Set<AutomationNodeID>, of id: Int, now: Date) throws(AutomationError) {
     let automation = automations[try index(id)]
     var definition = automation.definition

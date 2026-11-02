@@ -49,6 +49,19 @@ extension AutomationRunner {
     }
   }
 
+  /// 契機が始まりの時点で上流の最後の行まで読んでいたか（`baseline` は契機の基準線。それより新しい上流の行が無い）。入力を
+  /// 読まなかった契機（基準線が空）は偽。
+  func covered(
+    _ nodeId: AutomationNodeID, of id: Int, since baseline: [AutomationNodeID: AutomationSeqs]
+  )
+    -> Bool
+  {
+    guard !baseline.isEmpty, let node = store.automation(id)?.graph.node(nodeId),
+      let inlets = inlets(of: nodeId)
+    else { return false }
+    return !Self.hasNew(node, inlets, since: baseline)
+  }
+
   /// 起こす決まり。実効で止めていない「届いたら」のノードに、基準線より新しい上流の行があり、走っていなければ起こす。
   func wake(_ id: Int, _ nodeId: AutomationNodeID) {
     guard let automation = store.automation(id), let node = automation.graph.node(nodeId),

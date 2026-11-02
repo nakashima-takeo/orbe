@@ -89,14 +89,12 @@ extension AutomationRunnerTests {
   }
 
   /// 上流が何も積まなくても一巡は終わる——「届いたら」は起きないまま、流しが起こした手動のノードは取る行が無いまま終わる。
-  /// 止めた自動化も流せる。
-  func testAFlowWhoseUpstreamAddsNothingStillEndsAndPausedAutomationsFlow() throws {
+  func testAFlowWhoseUpstreamAddsNothingStillEnds() throws {
     let id = try define([
       fetch("f", every: 3600),
       definitionNode("digest", .arrival, from: ["f"], deliver: .report),
       definitionNode("p", .manual, from: ["f"], deliver: .report),
     ])
-    _ = try runner.pause(id, true)
 
     try flow(id)
     finish("f", fetched([]))

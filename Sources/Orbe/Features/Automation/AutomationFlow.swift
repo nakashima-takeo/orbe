@@ -9,7 +9,7 @@ import Foundation
 /// 走らせ役がメモリに持ち、ノードの契機の始まりと終わり（普段の起こす決まりを見た後）を今の自動化と共に知らせる。返したノードは
 /// 走らせ役が「今すぐ」で起こす。起こすか見届けるかは知らせのたびに今の予定の種類と止めているかで決める——一巡の間に予定だけを
 /// 書き換えたり、ノードを止めたり再開したりしても一巡は続くので、流し始めの状態で決めると今とずれる（止めた「届いたら」のノードを
-/// 見届け続けて一巡が終わらない）。道の形（入力・行き先）が変わる書き換えはノードを番人から外すので、一巡はそこで打ち切られる。
+/// 動かさないまま一巡を終える）。道の形（入力・行き先）が変わる書き換えはノードを番人から外すので、一巡はそこで打ち切られる。
 struct AutomationFlow {
   enum Target: Equatable {
     case node(AutomationNodeID)
@@ -83,17 +83,22 @@ struct AutomationFlow {
     return true
   }
 
-  /// ノードの契機が終わった（`flowed` は一巡の分として受け取った契機か）。返すのは今すぐ起こすノード。受け取ったノードは一巡の分の
-  /// 契機の終わりだけを数える——番人は回の終わりの中で次の予定の回を同期に始めうるので、古い回の終わりが受け取った回の始まり
-  /// より後に届く。一巡の分でない回の終わりは、起こすノードを邪魔していた回が終わったとして、走っていなければ起こし直す。
+  /// ノードの契機が終わった（`flowed` は一巡の分として受け取った契機か、`covered` はその契機が始まりの時点で上流の最後の行まで
+  /// 読んでいたか——その契機の基準線より新しい上流の行が無い）。返すのは今すぐ起こすノード。受け取ったノードは一巡の分の契機の
+  /// 終わりだけを数える——番人は回の終わりの中で次の予定の回を同期に始めうるので、古い回の終わりが受け取った回の始まりより後に
+  /// 届く。一巡の分でない回の終わりは、起こすノードを邪魔していた回が終わったとして、走っていなければ起こし直す。ただし根でない
+  /// 「届いたら」のノード（見届けている間に止めたノード）は、その回が上流の最後の行まで読んでいれば見届けた回を一巡の分に数える
+  /// ——普段の起こす決まりと同じく、読んだ行で起こし直さない（失敗した回の行も読み直さない）。
   mutating func ended(
-    _ nodeId: AutomationNodeID, flowed: Bool, in automation: Automation,
+    _ nodeId: AutomationNodeID, flowed: Bool, covered: Bool, in automation: Automation,
     running: (AutomationNodeID) -> Bool
   ) -> [AutomationNodeID] {
     switch steps[nodeId] {
     case .adopted:
       return finish(nodeId, automation, running)
     case .taken where flowed:
+      return finish(nodeId, automation, running)
+    case .ready where covered && watchesArrival(nodeId, in: automation):
       return finish(nodeId, automation, running)
     case .ready:
       return advance(nodeId, automation, running)
@@ -131,7 +136,11 @@ struct AutomationFlow {
 
   /// 普段の決まりで起きるのを見届けるノードか（根でない、実効で止めていない「届いたら」のノード）。
   private func arrives(_ nodeId: AutomationNodeID, in automation: Automation) -> Bool {
+    watchesArrival(nodeId, in: automation) && !automation.halted(nodeId)
+  }
+
+  /// 根でない「届いたら」のノードか。
+  private func watchesArrival(_ nodeId: AutomationNodeID, in automation: Automation) -> Bool {
     !roots.contains(nodeId) && automation.graph.node(nodeId)?.entity.trigger == .arrival
-      && !automation.halted(nodeId)
   }
 }

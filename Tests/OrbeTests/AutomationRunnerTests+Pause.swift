@@ -134,4 +134,59 @@ extension AutomationRunnerTests {
     finish("b", printed(""))
     XCTAssertFalse(runner.isFlowing(id))
   }
+
+  /// 取得 `f` → 届いたらの `a` → 手動の報告 `s`。
+  private func chain() throws -> Int {
+    try define([
+      fetch("f", every: 3600),
+      definitionNode("a", .arrival, from: ["f"]),
+      definitionNode("s", .manual, from: ["a"], deliver: .report),
+    ])
+  }
+
+  /// 流しの途中で道の上の「届いたら」を止めると、上流の後に流しが 1 回起こして下流へ進み、一巡が終わる（起こすか見届けるかを
+  /// 知らせのたびに今の状態で決める）。
+  func testAnArrivalNodePausedMidFlowIsWokenByTheFlow() throws {
+    let id = try chain()
+    try runner.flow(id, to: .ends)
+    _ = try runner.pause(id, nodeId: store.nodeId(id, "a"), true)
+    finish("f", fetched(["x"]))
+
+    XCTAssertEqual(ids("a"), [downstream("f", "x", of: id)])
+    XCTAssertEqual(trigger("a", of: id), nil, "前提: まだ記録が無い")
+    finish("a", printed(#"{"id":"\#(downstream("f", "x", of: id))"}"#))
+    XCTAssertEqual(trigger("a", of: id), .now, "流しが起こした回")
+    finish("s", printed("要約"))
+    XCTAssertFalse(runner.isFlowing(id))
+  }
+
+  /// 流しが見届けている「届いたら」の回の途中でそのノードを止めても、その回が上流の最後の行まで読んでいれば、見届けた回を
+  /// 一巡の分に数える——失敗で終えても同じ行で起こし直さない。
+  func testAWatchedRunPausedMidwayCountsForTheFlowEvenWhenItFails() throws {
+    let id = try chain()
+    try runner.flow(id, to: .ends)
+    finish("f", fetched(["x"]))
+    XCTAssertEqual(calls("a").count, 1, "前提: 上流が積んだので普段どおり起きる")
+    _ = try runner.pause(id, nodeId: store.nodeId(id, "a"), true)
+    finish("a", printed("", exit: 1))
+
+    XCTAssertEqual(calls("a").count, 1, "失敗した行で流しが起こし直さない")
+    XCTAssertFalse(runner.isFlowing(id), "a を終わりと数え、取る行の無い s で一巡が終わる")
+  }
+
+  /// 流しの前から走っていた「届いたら」の回を止めると、その回は流しの後に上流が出した行を読んでいないので、回の終わりに流しが
+  /// 1 回起こし、その行を読む。
+  func testARunFromBeforeTheFlowPausedMidwayIsFollowedByAFlowedRun() throws {
+    let id = try chain()
+    advance(by: 3600)
+    finish("f", fetched(["x"]))
+    XCTAssertEqual(calls("a").count, 1, "前提: 流しの前から a が走っている")
+    try runner.flow(id, to: .ends)
+    _ = try runner.pause(id, nodeId: store.nodeId(id, "a"), true)
+    finish("f", fetched(["y"]))
+    finish("a", printed(#"{"id":"\#(downstream("f", "x", of: id))"}"#))
+
+    XCTAssertEqual(calls("a").count, 2, "流しの後の行を読む回を起こす")
+    XCTAssertEqual(ids("a"), [downstream("f", "y", of: id)])
+  }
 }

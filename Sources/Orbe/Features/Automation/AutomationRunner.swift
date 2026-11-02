@@ -382,9 +382,10 @@ extension AutomationRunner {
     guard let index = flows[id]?.firstIndex(where: { $0.path.contains(trigger.nodeId) }),
       var flow = flows[id]?[index], let automation = store.automation(id)
     else { return }
-    let wake = flow.ended(trigger.nodeId, flowed: trigger.flowed, in: automation) {
-      isRunning(id, $0)
-    }
+    let wake = flow.ended(
+      trigger.nodeId, flowed: trigger.flowed,
+      covered: covered(trigger.nodeId, of: id, since: trigger.baseline), in: automation
+    ) { isRunning(id, $0) }
     flows[id]?[index] = flow
     if flow.finished { endFlow(id, at: index) }
     for nodeId in wake { scheduler.runNow(id: Self.key(id, nodeId)) }
