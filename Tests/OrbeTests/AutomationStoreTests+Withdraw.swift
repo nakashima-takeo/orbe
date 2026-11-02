@@ -4,20 +4,22 @@ import XCTest
 
 /// 判定ごとの候補の保ち方——判定の入力に残るリンクの歯止め、処理を通った行の下げ方、毎回すべてを読む判定の覚え方。
 ///
-/// 壊れると何が起きるか: 1 つの判定に入力を集めた形で、片方の取得が外しただけで、まだある項目の候補が消えて戻らない。取得 →
-/// 処理 → 判定 の形で、取得が外した項目の候補が棚に残り続ける。処理がまとめた行の候補が、処理が外しても棚に残り続ける。処理が
-/// まとめた行を書き換えるたびに、さばいた候補が戻る。直近の窓を毎回読む判定で、さばいた候補が次の回に戻る。
+/// 壊れると何が起きるか: 1 つの判定に入力を集めた形で、片方の取得が外した・出来事が残す期間を過ぎただけで、まだある項目の
+/// 候補が消えて戻らない。取得 → 処理 → 判定 の形で、取得が外した項目の候補が棚に残り続ける。処理がまとめた行の候補が、処理が
+/// 外しても棚に残り続ける。処理がまとめた行を書き換えるたびに、さばいた候補が戻る。直近の窓を毎回読む判定で、さばいた候補が次の回に戻る。
 extension AutomationStoreTests {
-  /// 取得 f1・f2（どちらも今の集合）→ 判定 の自動化の定義。`judgeFrom` は判定の入力。
-  private func gathering(judgeFrom inputs: [String] = ["f1", "f2"]) -> AutomationDefinition {
-    let fetch = { (key: String) in
+  /// 取得 f1（`f1` の出力の性質）・f2（今の集合）→ 判定 の自動化の定義。`judgeFrom` は判定の入力。
+  private func gathering(
+    judgeFrom inputs: [String] = ["f1", "f2"], f1: AutomationCoverage = .currentSet
+  ) -> AutomationDefinition {
+    let fetch = { (key: String, coverage: AutomationCoverage) in
       DesignSceneFixtures.commandNode(
-        key, key, .scheduled(.every(1800)), script: key, coverage: .currentSet)
+        key, key, .scheduled(.every(1800)), script: key, coverage: coverage)
     }
     return AutomationDefinition(
       name: "集める", notify: nil,
       nodes: [
-        fetch("f1"), fetch("f2"),
+        fetch("f1", f1), fetch("f2", .currentSet),
         DesignSceneFixtures.agentNode(
           "judge", "判定", .arrival, from: inputs, instruction: "選ぶ", deliver: .taskCandidates),
       ])
@@ -222,5 +224,24 @@ extension AutomationStoreTests {
     try Self.judge(store, id, at: later)
     XCTAssertEqual(store.automation(id)?.state(key: "judge").runs.first?.run?.withdrawn, 1)
     XCTAssertEqual(try store.carried(id, "judge"), AutomationCarried())
+  }
+
+  /// 判定が読んだ出来事が残す期間を過ぎても、判定のもう 1 つの入力の今有効な項目にリンクがあれば下げない。その入力も外すと下がる。
+  func testAnExpiredEventKeepsItsProposalWhileAnotherInputOfTheJudgeStillHasItsLink() throws {
+    let store = AutomationStore()
+    let id = try store.create(gathering(f1: .newArrivals), now: Self.at).id
+    let a = Self.item("a")
+    for key in ["f1", "f2"] {
+      try store.record(id, nodeKey: key, at: Self.at, outcome: DesignSceneFixtures.fetched([a]))
+    }
+    try Self.judge(store, id, proposing: [a])
+    XCTAssertEqual(store.proposals.map(\.originNodeId), [store.nodeId(id, "f1")], "前提: 出来事の行の候補")
+    let later = Self.at.addingTimeInterval(AutomationDatabase.retention + 60)
+
+    try store.record(id, nodeKey: "f1", at: later, outcome: DesignSceneFixtures.fetched([]))
+    XCTAssertEqual(store.proposals.map(\.state), [.open], "f2 にまだあるので残る")
+
+    try store.record(id, nodeKey: "f2", at: later, outcome: DesignSceneFixtures.fetched([]))
+    XCTAssertEqual(store.proposals, [])
   }
 }
