@@ -8,7 +8,7 @@ struct AutomationRecording {
   let index: Int
   let db: AutomationDatabase
   /// 回の履歴から数えられない捨てた数（持ち越し・読む前に期限で消えた数）。
-  private var carried = AutomationDrops()
+  private var carriedDrops = AutomationDrops()
   private var written = AutomationDatabase.Written()
 
   init(end: AutomationPassEnd, node: AutomationGraph.Node, index: Int, db: AutomationDatabase) {
@@ -37,7 +37,7 @@ struct AutomationRecording {
         proposed: reconciled.pending.count, resolved: reconciled.resolving.count,
         dismissed: reconciled.dismissed)
     }
-    let recordId = try db.insert(run: run, of: end.nodeId, defId: end.defId, carried: carried)
+    let recordId = try db.insert(run: run, of: end.nodeId, defId: end.defId, carried: carriedDrops)
     if let read = end.read {
       try db.insertInputs(
         of: recordId,
@@ -54,10 +54,10 @@ struct AutomationRecording {
   private mutating func consume(_ run: inout AutomationNodeRun) throws {
     guard let read = end.read else { return }
     try db.advance(end.nodeId, read.reach)
-    let pending = try db.carried(of: end.nodeId)
-    carried.add(pending.dropped)
-    carried.add(.lapsed, read.lapsed)
-    if pending.withdrawn > 0 { run.withdrawn = pending.withdrawn }
+    let carried = try db.carried(of: end.nodeId)
+    carriedDrops.add(carried.dropped)
+    carriedDrops.add(.lapsed, read.lapsed)
+    if carried.withdrawn > 0 { run.withdrawn = carried.withdrawn }
     try db.setCarried(end.nodeId, AutomationCarried())
   }
 
@@ -101,8 +101,8 @@ struct AutomationRecording {
     let dismissed: [AutomationDismissal]
   }
 
-  /// 回の途中に他の確定や人のさばきがあっても、この判定が同じリンクの候補を既に持つ案と、元にした行が
-  /// 今のものでなくなった案は理由付きで捨て、この判定の判断待ちでない候補は対応済みにしない。
+  /// 回の途中に他の確定や人のさばきがあっても、この判定が同じリンクの候補を既に持つ案と、元にした行が今のものでなくなった案は
+  /// 理由付きで捨て、この判定の判断待ちでない候補は対応済みにしない。
   private func reconcile(
     _ proposals: [AutomationNodePass.Proposal], _ resolved: [String], _ memory: AutomationMemory
   ) throws -> Reconciled {

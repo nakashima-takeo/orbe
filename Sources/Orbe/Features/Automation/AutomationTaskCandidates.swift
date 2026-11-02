@@ -3,8 +3,9 @@ import Foundation
 // タスク候補の保ち方。候補は判定の出力で、出した判定のノードが持つ。同一性は（判定のノード, リンク）で、ほかの判定・ほかの自動化の
 // 候補は、読みにも確定にも効かない。棚は判定のノードの持ち主の自動化。
 //
-// 判断待ちの候補を Orbe が下げるのは、候補が元にした行（判定が読んだ行か、その行が引き継ぎで
-// たどる元の行）のうち項目のどれかが無効になり、判定の入力（直接の上流）の今有効な項目にもそのリンクが無いときだけ。
+// 判断待ちの候補を Orbe が下げるのは、候補が元にした行（判定が読んだ行と、その行が引き継ぎでたどる元の行）のうち項目のどれかが
+// 無効になったか、元にした行がどれも出来事で判定が読んだ行が残す期間を過ぎ、判定の入力（直接の上流）の今有効な項目にも残す期間の
+// 内の出来事にもそのリンクが無いときだけ。
 //
 // 判定のノード J の候補 P を覚えるのは、J が今のノードで役割が判定のうち、P が判断待ちの間か、P のリンクの行がまた J へ届きうる
 // 間——J へ行が届くノード（入力を上流へたどり、取得で止める）の今有効な項目にリンクがあるか、J が `take: all` で読む出来事に
@@ -79,7 +80,7 @@ extension AutomationMemory {
         candidates += try db.openProposals(of: judge.id, links: links)
       }
     }
-    return try withdraw(candidates, db, now: now)
+    return try withdraw(candidates, db, now: now).count
   }
 
   /// 判定のノード `judges` の判断待ちの候補のうち、下げる条件が既にそろった候補を下げる（忘れる）。書き換えで何をするかが変わった
@@ -92,24 +93,17 @@ extension AutomationMemory {
     try withdraw(candidates, db, now: now)
   }
 
-  /// 元にした出来事（判定が読んだ出来事）が残す期間を過ぎた判断待ちの候補を下げ（忘れ）、判定ごとの下げた数を返す。回の無い
-  /// 契機（掃除）で下げる分。判定の入力の今有効な項目にリンクがあれば下げない（ほかの下げ方と同じ歯止め）。
+  /// 判定が読んだ出来事が残す期間を過ぎた判断待ちの候補のうち、下げる条件がそろった候補を下げ（忘れ）、判定ごとの下げた数を
+  /// 返す。回の無い契機（掃除）で下げる分。
   mutating func withdrawExpired(_ db: AutomationDatabase, now: Date) throws
     -> [AutomationNodeID: Int]
   {
-    let withdrawn = try withdrawing(try db.openProposals(readingEventsBefore: now), db, now: now)
+    let withdrawn = try withdraw(try db.openProposals(readingEventsExpiredAt: now), db, now: now)
     return Dictionary(grouping: withdrawn, by: \.judge).mapValues(\.count)
   }
 
-  /// 下げる条件を当て、満たす候補を忘れて数を返す。
-  @discardableResult private mutating func withdraw(
-    _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase, now: Date
-  ) throws -> Int {
-    try withdrawing(candidates, db, now: now).count
-  }
-
   /// 候補のうち、判定のノードが今のノードで、時刻 `now` に下げる条件がそろった候補を忘れて返す。
-  private mutating func withdrawing(
+  @discardableResult private mutating func withdraw(
     _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase, now: Date
   ) throws -> [AutomationDatabase.OpenProposal] {
     var withdrawn: [Int: AutomationDatabase.OpenProposal] = [:]

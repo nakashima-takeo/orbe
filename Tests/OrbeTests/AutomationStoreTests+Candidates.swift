@@ -141,7 +141,7 @@ extension AutomationStoreTests {
     guard case .judge(0, 0, let rejected) = run?.result else { return XCTFail("二つ目の判定の回が記録されない") }
     XCTAssertEqual(rejected.map(\.why), [.alreadyProposed])
 
-    try store.dismiss(XCTUnwrap(store.proposals.first?.id))
+    try store.dismiss(XCTUnwrap(store.proposals.first?.id), now: Self.at)
     try Self.judge(store, first, resolving: [Self.link("a")])
     XCTAssertEqual(store.proposals.map(\.state), [.dismissed, .open])
   }
@@ -153,7 +153,7 @@ extension AutomationStoreTests {
     let a = Self.item("a")
     try Self.fetch(store, id, [a])
     try Self.judge(store, id, proposing: [a])
-    try store.dismiss(XCTUnwrap(store.proposals.first?.id))
+    try store.dismiss(XCTUnwrap(store.proposals.first?.id), now: Self.at)
     XCTAssertEqual(proposals(store), [:])
 
     try Self.fetch(store, id, [])

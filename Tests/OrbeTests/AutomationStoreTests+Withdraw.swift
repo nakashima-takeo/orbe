@@ -7,6 +7,8 @@ import XCTest
 /// 壊れると何が起きるか: 1 つの判定に入力を集めた形で、片方の取得が外した・出来事が残す期間を過ぎただけで、まだある項目の
 /// 候補が消えて戻らない。取得 → 処理 → 判定 の形で、取得が外した項目の候補が棚に残り続ける。処理がまとめた行の候補が、処理が
 /// 外しても棚に残り続ける。処理がまとめた行を書き換えるたびに、さばいた候補が戻る。直近の窓を毎回読む判定で、さばいた候補が次の回に戻る。
+/// 取得（今の集合）→ 処理（出来事）→ 判定 で、取得にまだある課題の候補が出来事の残す期間で消える。同じリンクの出来事が続けて届く
+/// 取得で、最初の出来事の残す期間で候補が消える。残す期間を過ぎた候補を人がタスクにできてしまう。
 extension AutomationStoreTests {
   /// 取得 f1（`f1` の出力の性質）・f2（今の集合）→ 判定 の自動化の定義。`judgeFrom` は判定の入力。
   private func gathering(
@@ -92,10 +94,9 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "f2").runs.first?.run?.withdrawn, 1)
   }
 
-  /// 取得（今の集合）→ 処理（出来事の流れ、入力の id を保って本文を書き換える）→ 判定 の候補は、本文が処理の書いた本文で、出どころの
-  /// ノードは取得。取得がその項目を外すと下がり、取得の回に数える。
-  func testAProposalOfARowAProcessPassedOnIsWithdrawnWhenTheFetchDropsItsItem() throws {
-    let store = AutomationStore()
+  /// 取得（今の集合）→ 処理（出来事の流れ、入力の id を保って本文を書き換える）→ 判定 の自動化で、判定が処理の行 `a` から候補に
+  /// した状態。自動化の ID を返す。
+  private func passedOnByAProcess(_ store: AutomationStore) throws -> Int {
     var definition = Self.definition()
     definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "p")]
     definition.nodes.insert(
@@ -111,6 +112,13 @@ extension AutomationStoreTests {
     try store.record(
       id, nodeKey: "p", at: Self.at, outcome: DesignSceneFixtures.processed([summary], read: 1))
     try Self.judge(store, id, proposing: [Self.item("a")])
+    return id
+  }
+
+  /// 処理が引き継いだ行の候補は、本文が処理の書いた本文で、出どころのノードは取得。取得がその項目を外すと下がり、取得の回に数える。
+  func testAProposalOfARowAProcessPassedOnIsWithdrawnWhenTheFetchDropsItsItem() throws {
+    let store = AutomationStore()
+    let id = try passedOnByAProcess(store)
 
     let proposal = try XCTUnwrap(store.proposals.first)
     XCTAssertEqual(proposal.fields.body, "要約した本文")
@@ -119,6 +127,22 @@ extension AutomationStoreTests {
     try Self.fetch(store, id, [])
     XCTAssertEqual(store.proposals, [])
     XCTAssertEqual(store.automation(id)?.state(key: "fetch").runs.first?.run?.withdrawn, 1)
+  }
+
+  /// 判定が読んだ処理の出来事が残す期間を過ぎても、引き継ぎの元の取得の項目が今有効な間は残る（元の行の保存の規則に従う）。
+  /// 取得がその項目を外すと下がり、取得の回に数える。
+  func testAProposalOfAnEventFromACurrentSetItemOutlivesTheEventWhileTheItemStays() throws {
+    let store = AutomationStore()
+    let id = try passedOnByAProcess(store)
+    let later = Self.at.addingTimeInterval(AutomationDatabase.retention + 60)
+
+    try Self.fetch(store, id, [Self.item("a")], at: later)
+    XCTAssertEqual(store.proposals.map(\.state), [.open])
+
+    try Self.fetch(store, id, [], at: later)
+    XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(store.automation(id)?.state(key: "fetch").runs.first?.run?.withdrawn, 1)
+    XCTAssertEqual(try store.carried(id, "judge").withdrawn, 0)
   }
 
   /// 今の集合の処理が新しい id で作った行も候補になり、本文はその行のもの、出どころのノードはその処理。処理がその行を出さなく
@@ -207,8 +231,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.proposals, [])
   }
 
-  /// 判定が読んだ出来事が残す期間を過ぎると、その判断待ちの候補を下げ、判定の持ち越しに数えて、判定の次の成功した回の記録に
-  /// 載せる（読む前に期限で消えた出来事と同じく、受け手の次の回に）。
+  /// 元にした行がどれも出来事の候補は、判定が読んだ出来事が残す期間を過ぎると下げ、判定の持ち越しに数えて、判定の次の成功した
+  /// 回の記録に載せる（読む前に期限で消えた出来事と同じく、受け手の次の回に）。取る行が 0 件の契機と失敗した回は持ち越しを保つ。
   func testAProposalOfAnEventIsWithdrawnWhenTheEventOutlivesItsRetention() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
@@ -220,6 +244,15 @@ extension AutomationStoreTests {
     try Self.fetch(store, id, [Self.item("b")], at: later)
     XCTAssertEqual(store.proposals, [])
     XCTAssertEqual(try store.carried(id, "judge").withdrawn, 1)
+
+    let judge = store.nodeId(id, "judge")
+    var nothing = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: later))
+    XCTAssertFalse(nothing.reach.isEmpty, "前提: 読む上限がある")
+    nothing.taken = []
+    try store.discard(nothing, of: judge, in: id, now: later)
+    XCTAssertEqual(try store.carried(id, "judge").withdrawn, 1, "取る行が 0 件の契機")
+    try store.record(id, nodeKey: "judge", at: later, outcome: DesignSceneFixtures.failed("boom"))
+    XCTAssertEqual(try store.carried(id, "judge").withdrawn, 1, "失敗した回")
 
     try Self.judge(store, id, at: later)
     XCTAssertEqual(store.automation(id)?.state(key: "judge").runs.first?.run?.withdrawn, 1)
@@ -249,5 +282,48 @@ extension AutomationStoreTests {
         try store.carried(id, "judge").withdrawn,
       ],
       [1, 0], "リンクを外した回に数え、判定の持ち越しには載せない")
+  }
+
+  /// 判定が読んだ出来事が残す期間を過ぎても、判定の入力に同じリンクの残す期間の内の出来事があれば下げない——その時刻の判定の
+  /// 確定でも（判定はその出来事を、既に候補があるとして捨てている）。その出来事も残す期間を過ぎると下げる。
+  func testAnExpiredEventKeepsItsProposalWhileTheInputHasALaterEventWithItsLink() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, id, [a])
+    try Self.judge(store, id, proposing: [a])
+    let again = Self.at.addingTimeInterval(20 * 86400)
+    let followUp = AutomationItem(id: "a2", link: Self.link("a"), body: "a の続き", time: again)
+    try Self.fetch(store, id, [followUp], at: again)
+    try Self.judge(store, id, proposing: [followUp], at: again)
+    XCTAssertEqual(store.proposals.map(\.state), [.open], "前提: 同じリンクの候補は 1 つ")
+
+    try Self.judge(store, id, at: Self.at.addingTimeInterval(AutomationDatabase.retention + 60))
+    XCTAssertEqual(store.proposals.map(\.state), [.open])
+
+    try Self.fetch(store, id, [], at: again.addingTimeInterval(AutomationDatabase.retention + 60))
+    XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(try store.carried(id, "judge").withdrawn, 1)
+  }
+
+  /// 人がさばいた時刻に、判定が読んだ出来事が残す期間を過ぎていれば、候補はその時刻に下がり、タスクを足さず候補が無いと断る。
+  func testAcceptingAProposalWhoseEventOutlivedItsRetentionAddsNoTask() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, id, [a])
+    try Self.judge(store, id, proposing: [a])
+    let proposal = try XCTUnwrap(store.proposals.first)
+    let tasks = TaskStore()
+    let count = tasks.tasks.count
+
+    XCTAssertThrowsError(
+      try store.accept(
+        proposal.id, into: tasks, workspace: nil,
+        now: Self.at.addingTimeInterval(AutomationDatabase.retention + 60))
+    ) { XCTAssertEqual($0 as? AutomationError, .proposalNotFound(proposal.id)) }
+    XCTAssertEqual(tasks.tasks.count, count)
+    XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(try store.carried(id, "judge").withdrawn, 1)
   }
 }

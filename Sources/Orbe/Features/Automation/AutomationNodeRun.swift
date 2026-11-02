@@ -23,8 +23,8 @@ struct AutomationNodeRun: Equatable {
   var breach: AutomationRejections?
   /// 役割ごとの結果。失敗した回は持たない。
   var result: Result?
-  /// 下げた（判断待ちだった）候補の数。取得・処理の成功した回はその確定で下げた数、判定の成功した回は前の回から後に、読んだ
-  /// 出来事が残す期間を過ぎて下げた数（あったときだけ）。
+  /// 下げた（判断待ちだった）候補の数。取得・処理の成功した回はその確定で下げた数、判定の成功した回は前の成功した回から後に、
+  /// 読んだ出来事が残す期間を過ぎて下げた数（あったときだけ）。
   var withdrawn: Int?
   var failure: AutomationFailure?
 

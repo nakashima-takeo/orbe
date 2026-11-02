@@ -121,7 +121,7 @@ extension AutomationDatabase {
   }
 
   /// 判断待ちの候補のうち、判定が読んだ行が残す期間を過ぎた（`now` の時点で）出来事のもの。
-  func openProposals(readingEventsBefore now: Date) throws -> [OpenProposal] {
+  func openProposals(readingEventsExpiredAt now: Date) throws -> [OpenProposal] {
     try selectOpen(
       "q.event_id IN (SELECT id FROM events WHERE created_at < ?)", [Self.cutoff(now)])
   }
@@ -137,17 +137,31 @@ extension AutomationDatabase {
     ) { (AutomationNodeID($0.int(at: 0)), $0.text(at: 1) ?? "") }
   }
 
-  /// 行 `row` を元にしたリンク `link` の候補が、時刻 `now` に今のものでなくなったか——元にした行か、その行が引き継ぎでたどる元の
-  /// 行のうち項目のどれかが無効か、元にした行が残す期間を過ぎた出来事で、候補を出した判定の入力（直接の上流のノード `inputs`）の
-  /// 今有効な項目にもリンクが無い。
+  /// 行 `row` を元にしたリンク `link` の候補が、時刻 `now` に今のものでなくなったか——元にした行（`row` と、その行が引き継ぎで
+  /// たどる元の行）のうち項目のどれかが無効か、元にした行がどれも出来事で `row` が残す期間を過ぎ、候補を出した判定の入力（直接の
+  /// 上流のノード `inputs`）のどれもリンクを今の行に持たない。
   func noLongerCurrent(
     _ row: AutomationRowRef, link: String, inputs: [AutomationNodeID], now: Date
   ) throws -> Bool {
-    guard try lineage(of: row).contains(where: \.invalid) || expired(row, now: now) else {
-      return false
-    }
-    for input in inputs where try liveLinks(of: input).contains(link) { return false }
+    let steps = try lineage(of: row)
+    let stale =
+      try steps.contains(where: \.invalid) || steps.allSatisfy(\.event) && expired(row, now: now)
+    guard stale else { return false }
+    for input in inputs where try holds(link, in: input, now: now) { return false }
     return true
+  }
+
+  /// ノード `nodeId` がリンク `link` を時刻 `now` に今の行に持つか——今有効な項目か、残す期間の内の出来事のうち元にした行に
+  /// 無効な項目が無いもの。
+  private func holds(_ link: String, in nodeId: AutomationNodeID, now: Date) throws -> Bool {
+    if try liveLinks(of: nodeId).contains(link) { return true }
+    let events = try db.select(
+      "SELECT id FROM events WHERE node_id = ? AND link = ? AND created_at >= ? ORDER BY id DESC",
+      [.integer(Int64(nodeId.rawValue)), .text(link), Self.cutoff(now)], { $0.int(at: 0) })
+    for event in events where try !lineage(of: .event(event)).contains(where: \.invalid) {
+      return true
+    }
+    return false
   }
 
   /// 行が、時刻 `now` に残す期間を過ぎた出来事か。
@@ -161,9 +175,10 @@ extension AutomationDatabase {
       ).isEmpty)
   }
 
-  /// 引き継ぎをたどる 1 歩: 行を出したノードと、行が無効になった項目か。
+  /// 引き継ぎをたどる 1 歩: 行を出したノードと、行が出来事か、無効になった項目か。
   struct Lineage: Equatable {
     let nodeId: AutomationNodeID
+    let event: Bool
     let invalid: Bool
   }
 
@@ -175,7 +190,7 @@ extension AutomationDatabase {
     case .version(let id):
       next = (
         """
-        SELECT i.node_id, i.valid_to IS NOT NULL, i.source_item_id, i.source_event_id
+        SELECT i.node_id, 0, i.valid_to IS NOT NULL, i.source_item_id, i.source_event_id
         FROM item_versions v JOIN items i ON i.id = v.item_id WHERE v.id = ?
         """, id
       )
@@ -187,8 +202,10 @@ extension AutomationDatabase {
           sql, [.integer(Int64(id))],
           {
             (
-              step: Lineage(nodeId: AutomationNodeID($0.int(at: 0)), invalid: $0.int(at: 1) != 0),
-              source: Self.source($0, item: 2, event: 3)
+              step: Lineage(
+                nodeId: AutomationNodeID($0.int(at: 0)), event: $0.int(at: 1) != 0,
+                invalid: $0.int(at: 2) != 0),
+              source: Self.source($0, item: 3, event: 4)
             )
           }
         ).first
@@ -204,9 +221,9 @@ extension AutomationDatabase {
   }
 
   private static let itemStep =
-    "SELECT node_id, valid_to IS NOT NULL, source_item_id, source_event_id FROM items WHERE id = ?"
+    "SELECT node_id, 0, valid_to IS NOT NULL, source_item_id, source_event_id FROM items WHERE id = ?"
   private static let eventStep =
-    "SELECT node_id, 0, source_item_id, source_event_id FROM events WHERE id = ?"
+    "SELECT node_id, 1, 0, source_item_id, source_event_id FROM events WHERE id = ?"
 
   /// 行を引き継いだ（`source_item_id`・`source_event_id` が指す）項目と出来事。
   private func sourcedBy(items: [Int], events: [Int]) throws -> (items: [Int], events: [Int]) {

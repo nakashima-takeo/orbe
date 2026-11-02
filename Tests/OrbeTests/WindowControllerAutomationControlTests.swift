@@ -172,8 +172,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let (a, b) = (Self.item("a"), Self.item("b"))
     try Self.round(store, id, fetched: [a, b], proposing: [a, b])
     let ids = store.proposals.map(\.id)
-    _ = try store.accept(ids[0], into: TaskStore(), workspace: nil)
-    try store.dismiss(ids[1])
+    _ = try store.accept(ids[0], into: TaskStore(), workspace: nil, now: Date())
+    try store.dismiss(ids[1], now: Date())
     func settled() throws -> [Int?] {
       let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
       return [nodes["judge"]?["accepted"] as? Int, nodes["judge"]?["dismissed"] as? Int]

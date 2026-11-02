@@ -138,48 +138,60 @@ import Observation
 
   /// 出ている候補を、`workspace` に付けてタスク一覧へ未着手で足す。追加が拒否されたら候補は変わらない。タスクを足した後に
   /// 判断を書けなければ、候補は判断待ちのまま残る（タスクと自動化は別の原本）。
-  func accept(_ proposalId: Int, into tasks: TaskStore, workspace: UUID?, now: Date = Date())
+  func accept(_ proposalId: Int, into tasks: TaskStore, workspace: UUID?, now: Date)
     throws(AutomationError) -> TaskItem
   {
-    let index = try openIndex(proposalId)
-    guard database != nil else { throw unavailableError }
-    let proposal = proposals[index]
-    var draft = TaskDraft(title: proposal.title)
-    draft.due = proposal.due
-    draft.workspace = workspace
-    draft.description = [proposal.link, proposal.fields.body].compactMap { $0 }.joined(
-      separator: "\n\n")
-    let task: TaskItem
-    do {
-      task = try tasks.add(draft)
-    } catch {
-      switch error {
-      case .invalid(let message): throw .invalid(message)
-      case .notFound(let id): throw .invalid("task not found: \(id)")
-      }
-    }
+    var added: TaskItem?
     do throws(AutomationError) {
-      try settle(index, as: .accepted(taskId: task.id), now: now)
+      return try settle(proposalId, now: now) { proposal throws(AutomationError) in
+        var draft = TaskDraft(title: proposal.title)
+        draft.due = proposal.due
+        draft.workspace = workspace
+        draft.description = [proposal.link, proposal.fields.body].compactMap { $0 }.joined(
+          separator: "\n\n")
+        let task: TaskItem
+        do throws(TaskStoreError) {
+          task = try tasks.add(draft)
+        } catch {
+          switch error {
+          case .invalid(let message): throw .invalid(message)
+          case .notFound(let id): throw .invalid("task not found: \(id)")
+          }
+        }
+        added = task
+        return (.accepted(taskId: task.id), task)
+      }
     } catch {
-      NSLog("[automation] the task \(task.id) was added but the proposal stays open: \(error)")
+      guard let added else { throw error }
+      NSLog("[automation] the task \(added.id) was added but the proposal stays open: \(error)")
+      return added
     }
-    return task
   }
 
-  func dismiss(_ proposalId: Int, now: Date = Date()) throws(AutomationError) {
-    try settle(try openIndex(proposalId), as: .dismissed, now: now)
+  func dismiss(_ proposalId: Int, now: Date) throws(AutomationError) {
+    try settle(proposalId, now: now) { _ in (.dismissed, ()) }
   }
 
-  /// 人の判断を 1 件残す。判断待ちでなくなった候補は、リンクの行がまた判定へ届きうるのでなければ忘れる。
-  private func settle(_ index: Int, as state: AutomationProposal.State, now: Date)
-    throws(AutomationError)
-  {
+  /// 人の判断を 1 件残す。変異の時刻 `now` の状態（残す期間を過ぎて下げた後）でまだ判断待ちなら `decide` が判断を決め、下がって
+  /// いれば候補が無いと断る（下げたことは確定する）。判断待ちでなくなった候補は、リンクの行がまた判定へ届きうるのでなければ忘れる。
+  private func settle<T>(
+    _ proposalId: Int, now: Date,
+    _ decide: (AutomationProposal) throws(AutomationError) -> (AutomationProposal.State, T)
+  ) throws(AutomationError) -> T {
+    _ = try openIndex(proposalId)
     let at = TaskItem.storedInstant(now)
-    try commit(sweepingAt: at) { db, memory in
-      try db.settle(memory.proposals[index].id, state, at: at)
+    let settled: T? = try commit(sweepingAt: at) { db, memory in
+      guard let index = memory.proposals.firstIndex(where: { $0.id == proposalId }) else {
+        return nil
+      }
+      let (state, result) = try decide(memory.proposals[index])
+      try db.settle(proposalId, state, at: at)
       memory.proposals[index].state = state
       try memory.forgetUnheld(db, now: at)
+      return result
     }
+    guard let settled else { throw .proposalNotFound(proposalId) }
+    return settled
   }
 
   private func openIndex(_ proposalId: Int) throws(AutomationError) -> Int {
@@ -193,9 +205,10 @@ import Observation
   // MARK: - 書き込み
 
   /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。`sweepingAt`（変異の時刻）が
-  /// あれば、判定が読んだ出来事が残す期間を過ぎた判断待ちの候補を下げて判定の持ち越しに数え、判断待ちでない覚えている候補の
-  /// リンクが変わった判定のノードの読めば取る行を数え直し（判定の前に捨てる行が変わる）、最後に掃除する。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
-  /// 検証は呼ぶ前に済ませる（`body` が投げたものはどれも書けなかったことになる）。
+  /// あれば、`body` の前に、判定が読んだ出来事が残す期間を過ぎた判断待ちの候補を下げて判定の持ち越しに数え（`body` はその時刻の
+  /// 状態から進める）、`body` の後に、判断待ちでない覚えている候補のリンクが変わった判定のノードの読めば取る行を数え直し（判定の
+  /// 前に捨てる行が変わる）、最後に掃除する。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を
+  /// 手放してストアを使えなくする。`body` が投げたものは、先に下げた候補も含めてどれも書けなかったことになる。
   func commit<T>(
     sweepingAt sweep: Date?, _ body: (AutomationDatabase, inout AutomationMemory) throws -> T
   ) throws(AutomationError) -> T {
@@ -206,13 +219,15 @@ import Observation
     do {
       result = try database.transaction {
         let closed = memory.closedLinksByJudge
-        let result = try body(database, &memory)
         if let sweep {
           for (judge, count) in try memory.withdrawExpired(database, now: sweep) {
             var carried = try database.carried(of: judge)
             carried.withdrawn += count
             try database.setCarried(judge, carried)
           }
+        }
+        let result = try body(database, &memory)
+        if let sweep {
           let after = memory.closedLinksByJudge
           let changed = Set(closed.keys).union(after.keys).filter { closed[$0] != after[$0] }
           try memory.recountJudges(changed, database, now: sweep)

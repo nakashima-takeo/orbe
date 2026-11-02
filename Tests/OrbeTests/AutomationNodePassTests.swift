@@ -204,7 +204,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   func testProcessWhoseRowsReachAJudgeCanMakeNewRows() throws {
     start(
       AutomationGraphTests.command("a", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a")], reachesJudge: true))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"new"}"#))
 

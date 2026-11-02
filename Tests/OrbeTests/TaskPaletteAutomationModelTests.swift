@@ -183,7 +183,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   /// 選んでいる提案が付け直しの前にさばかれていた（判定の確定や別の口と行き違った）なら、↵ は何もせず赤も出さない。
   func testEnterOnAProposalThatIsNoLongerOpenDoesNothing() throws {
     let palette = listed()
-    try palette.automation.store.dismiss(1)
+    try palette.automation.store.dismiss(1, now: DesignSceneFixtures.automationNow)
 
     palette.submit()
 
