@@ -137,7 +137,7 @@ final class ScmPanel {
   // MARK: - 観測
 
   /// 根のサービスが git 管理下かを読む。握った時点で判定が済んでいればそこで、まだなら判定が済んだ知らせで決まる（判定は
-  /// 根のサービスごとに 1 度しか変わらない）。管理下なら裏の fetch を欲しがるか決め直す。
+  /// 根のサービスごとに 1 度だけ決まる）。管理下なら裏の fetch を欲しがるか決め直す。
   func resolveManaged() {
     guard let files = liveFiles else { return }
     if files.repo != nil {
@@ -254,7 +254,8 @@ final class ScmPanel {
 
   /// グラフと HEAD の push 済みを読み直す（パネルを出している間だけ）。`remoteRefsMayHaveMoved` なら、HEAD の push 済みは読み
   /// 終わるまで分からないとする（パネルを出した・再読込・remote 追跡 ref の変化・自分のネット操作の終わり）。git 管理下と
-  /// 分かる前に呼ばれたら、HEAD の push 済みを分からないにして返る（読みは判定が済んだ知らせで始まる）。
+  /// 分かっていなければ（判定の前・管理外）、HEAD の push 済みを分からないにして返る（判定の後に管理下と分かれば、読みは
+  /// 判定が済んだ知らせで始まる）。
   func readGraphAndHead(remoteRefsMayHaveMoved: Bool) {
     guard isShown else { return }
     guard liveFiles?.repo != nil else {
