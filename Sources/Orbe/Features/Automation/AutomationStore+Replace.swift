@@ -126,14 +126,14 @@ extension AutomationStore {
     var states: [AutomationNodeID: AutomationNodeState] = [:]
     var reworked: [AutomationNodeID] = []
     var invalidated: [Int] = []
-    /// 判断待ちの候補を下げる決まりを当て直す判定（直した読めない自動化の判定）。
+    /// 判断待ちの候補を下げる決まりを当て直す判定（何をするかが変わった判定）。
     var reviewed: [AutomationNodeID] = []
   }
 
   /// つながりを書き換え、出力の性質が変わったノードの今有効な項目を無効にし、何をするかが変わったノードの外した印を下ろし、ノードの
   /// 状態を読み直す。同じノードどうしのつながりが残れば読んだ位置も残る。定義を読めない自動化を直すときは前の性質を知らないので、
-  /// 残るノードのうち今の集合でないノードの今有効な項目を無効にし、残るノードをすべて何をするかが変わったものとして扱い、残る判定には
-  /// 下げる決まりを当て直す（読めない間に元が無効になった候補を下げる）。
+  /// 残るノードのうち今の集合でないノードの今有効な項目を無効にし、残るノードをすべて何をするかが変わったものとして扱う。何をするかが
+  /// 変わった判定（入力を変えた判定を含む）には、下げる決まりを当て直す（入力を外すと、下げない歯止めだったリンクが抜けうるため）。
   private static func rewire(
     _ graph: AutomationGraph, of id: Int, _ current: Current, _ db: AutomationDatabase, at: Date
   ) throws -> Rewired {
@@ -150,11 +150,9 @@ extension AutomationStore {
       if coverageChanged {
         rewired.invalidated += try db.invalidateItems(of: node.id, at: at)
       }
-      if old == nil, kept, node.role == .judge {
-        rewired.reviewed.append(node.id)
-      }
       let reworked = old == nil ? kept : before.map { $0.behavior != node.behavior } ?? false
       if reworked {
+        if node.role == .judge { rewired.reviewed.append(node.id) }
         rewired.reworked.append(node.id)
         try db.setBreach(node.id, run: nil)
       }

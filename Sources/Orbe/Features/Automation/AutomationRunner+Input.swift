@@ -17,7 +17,7 @@ extension AutomationRunner {
     case .work:
       return .work
     case .process:
-      return .process(rows)
+      return .process(rows, reachesJudge: automation.graph.reachesTaskCandidates(node.id))
     case .judge:
       return .judge(
         rows,

@@ -138,26 +138,18 @@ struct AutomationGraph: Equatable {
   /// `id` のノードが出した行が、途中で取得のノードを通らずに判定のノードへ届くか（タスク候補へ至るか）。入力を持つツールの agent は
   /// 取得の役割で、届いた行を起こす合図にしか使わないので、行はそこを通り抜けない。
   func reachesTaskCandidates(_ id: AutomationNodeID) -> Bool {
-    guard let index = index(id) else { return false }
-    return !Self.judges(reachedFrom: index, nodes.map(\.role), downstream).isEmpty
-  }
-
-  /// `start` のノードが出した行が、途中で取得のノードを通らずに届く判定のノードの位置。
-  static func judges(reachedFrom start: Int, _ roles: [AutomationNodeRole], _ downstream: [[Int]])
-    -> Set<Int>
-  {
+    guard let start = index(id) else { return false }
     var pending = downstream[start]
     var seen = Set<Int>()
-    var judges = Set<Int>()
     while let index = pending.popLast() {
       guard seen.insert(index).inserted else { continue }
-      switch roles[index] {
-      case .judge: judges.insert(index)
+      switch nodes[index].role {
+      case .judge: return true
       case .fetch: continue
       case .process, .report, .work, .sideEffect: pending += downstream[index]
       }
     }
-    return judges
+    return false
   }
 
   /// `judge` のノードへ行が届くノード——入力を上流へたどり、取得で止めたもの（取得と処理。定義の順）。

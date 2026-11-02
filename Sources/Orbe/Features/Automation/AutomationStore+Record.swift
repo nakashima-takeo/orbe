@@ -59,8 +59,8 @@ struct AutomationRecording {
     try db.setPendingDrops(end.nodeId, AutomationDrops())
   }
 
-  /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、無効にした項目を元にした
-  /// 判断待ちの候補を下げ、下げた数をこの回に数える。
+  /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、無効にした項目と、今有効な
+  /// 項目から抜けたリンクで判断待ちの候補を下げ、下げた数をこの回に数える。
   private mutating func produce(
     _ output: AutomationNodePass.Output, _ run: inout AutomationNodeRun,
     _ memory: inout AutomationMemory
@@ -70,11 +70,16 @@ struct AutomationRecording {
       let outputs = rows.map {
         AutomationDatabase.Output(id: $0.id, body: $0.text, source: $0.source)
       }
-      written =
-        node.coverage == .currentSet
-        ? try db.writeItems(of: end.nodeId, outputs, at: run.endedAt)
-        : try db.writeEvents(of: end.nodeId, outputs, at: run.endedAt)
-      run.withdrawn = try memory.withdraw(after: written.invalidated, db)
+      var lost = Set<String>()
+      if node.coverage == .currentSet {
+        lost = try db.liveLinks(of: end.nodeId)
+        written = try db.writeItems(of: end.nodeId, outputs, at: run.endedAt)
+        lost.subtract(try db.liveLinks(of: end.nodeId))
+      } else {
+        written = try db.writeEvents(of: end.nodeId, outputs, at: run.endedAt)
+      }
+      run.withdrawn = try memory.withdraw(
+        after: written.invalidated, lost: [end.nodeId: lost], db)
       run.result =
         node.role == .fetch
         ? .fetch(fresh: written.fresh, duplicates: written.duplicates)

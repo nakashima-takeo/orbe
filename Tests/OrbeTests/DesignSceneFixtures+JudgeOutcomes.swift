@@ -21,7 +21,7 @@ extension DesignSceneFixtures {
     let broken = AutomationNodePass.Outcome.failed(
       .brokeRules, execution(0, ending: .exited(0)),
       breach: AutomationRejections([
-        AutomationBrokenLine(line: 1, fault: .notNewItem(new[0].id)),
+        AutomationBrokenLine(line: 1, fault: .notTakenItem(new[0].id)),
         AutomationBrokenLine(line: 2, fault: .notJSON),
       ]))
     let unread = failed(.unreadInput(2), ending: .exited(0))

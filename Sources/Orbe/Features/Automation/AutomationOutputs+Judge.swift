@@ -59,7 +59,7 @@ extension AutomationOutputs {
     _ id: String, _ line: JudgeLine, itemIds: Set<String>, choices: AutomationJudgeChoices,
     _ refuse: (AutomationLineFault) -> Result<AutomationDecision, AutomationBrokenLine>
   ) -> Result<AutomationDecision, AutomationBrokenLine> {
-    guard itemIds.contains(id) else { return refuse(.notNewItem(id)) }
+    guard itemIds.contains(id) else { return refuse(.notTakenItem(id)) }
     guard let rawTitle = line.title, let title = try? TaskStore.validTitle(rawTitle) else {
       return refuse(.titleNotOneLine(id))
     }

@@ -22,9 +22,8 @@ extension AutomationMemory {
 
   /// 候補を覚えている判定のノードごとの `closedLinks(of:)`。
   var closedLinksByJudge: [AutomationNodeID: Set<String>] {
-    Dictionary(
-      grouping: proposals.map(\.judge) + unreadableProposals.map(\.judge), by: { $0 }
-    ).mapValues { closedLinks(of: $0[0]) }
+    let judges = Set(proposals.map(\.judge) + unreadableProposals.map(\.judge))
+    return Dictionary(uniqueKeysWithValues: judges.map { ($0, closedLinks(of: $0)) })
   }
 
   /// 判定のノード `judge` の覚えている候補のリンク（読めない候補を含む）。確定の「既に候補がある」はこれで言う。
@@ -59,15 +58,16 @@ extension AutomationMemory {
     unreadableProposals.removeAll { ids.contains($0.id) }
   }
 
-  /// 項目 `items` が無効になったので、元にした行が今のものでなくなった判断待ちの候補を下げ（忘れ）、下げた数を返す。見直すのは、
-  /// 読んだ行が `items` から引き継ぎで降りた行の候補と、`items` を出したノードを入力に持つ判定の、その項目のリンクの候補。
-  @discardableResult mutating func withdraw(after items: [Int], _ db: AutomationDatabase) throws
-    -> Int
-  {
-    guard !items.isEmpty else { return 0 }
+  /// 項目 `items` が無効になった・ノードの今有効な項目のリンク `lost` が抜けたので、下げる条件がそろった判断待ちの候補を下げ
+  /// （忘れ）、下げた数を返す。見直すのは、読んだ行が `items` から引き継ぎで降りた行の候補と、`items` を出したノードか `lost` の
+  /// ノードを入力に持つ判定の、そのリンクの候補（版の更新でリンクだけが変わった項目も、前のリンクが `lost` に入る）。
+  @discardableResult mutating func withdraw(
+    after items: [Int], lost: [AutomationNodeID: Set<String>] = [:], _ db: AutomationDatabase
+  ) throws -> Int {
+    guard !items.isEmpty || lost.contains(where: { !$0.value.isEmpty }) else { return 0 }
     var candidates = try db.openProposals(descendingFrom: items)
     let linked = Dictionary(grouping: try db.linkedItems(items), by: \.nodeId)
-      .mapValues { Set($0.map(\.link)) }
+      .mapValues { Set($0.map(\.link)) }.merging(lost) { $0.union($1) }
     for automation in automations {
       for judge in automation.graph.judges {
         let links = judge.inputNodeIds.reduce(into: Set<String>()) {
@@ -80,8 +80,8 @@ extension AutomationMemory {
     return try withdraw(candidates, db)
   }
 
-  /// 判定のノード `judges` の判断待ちの候補のうち、元にした行が既に今のものでない候補を下げる（忘れる）。直した読めない自動化の
-  /// 判定に当てる。
+  /// 判定のノード `judges` の判断待ちの候補のうち、下げる条件が既にそろった候補を下げる（忘れる）。書き換えで何をするかが変わった
+  /// 判定（入力を変えた判定・直した読めない自動化の判定）に当てる。
   mutating func withdraw(reviewing judges: [AutomationNodeID], _ db: AutomationDatabase) throws {
     var candidates: [AutomationDatabase.OpenProposal] = []
     for judge in judges { candidates += try db.openProposals(of: judge) }

@@ -15,7 +15,7 @@ extension BackgroundRunsTests {
       AutomationNodeRow(id: $0, text: #"{"id":"\#($0)"}"#, ref: nil, source: nil)
     }
     let session = AutomationRunSession(
-      .process(rows), writer: AutomationNodeID(1))
+      .process(rows, reachesJudge: false), writer: AutomationNodeID(1))
     let token = runSessions.open(session)
     try placeClaude(#"echo '{"type":"result","is_error":false,"result":"done"}'"#)
     let job = BackgroundJob.agent(

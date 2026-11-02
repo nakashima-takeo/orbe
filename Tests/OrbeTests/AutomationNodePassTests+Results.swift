@@ -10,7 +10,7 @@ extension AutomationNodePassTests {
   func testEmptyCommandOutputIsNothing() throws {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(""))
 
@@ -40,7 +40,7 @@ extension AutomationNodePassTests {
     for _ in 0..<2 {
       start(
         AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-        .process([row("a"), row("b")]))
+        .process([row("a"), row("b")], reachesJudge: false))
     }
     for index in 0..<2 {
       readAll(index)
@@ -77,7 +77,7 @@ extension AutomationNodePassTests {
   func testAgentEndingWithoutReadingItsInputFails() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a"), row("b")]))
+      .process([row("a"), row("b")], reachesJudge: false))
 
     use(0, .readRunRows, ["limit": 1])
     XCTAssertTrue(use(0, .putRows, ["rows": [["id": "f:a"]]]).isError, "読み切るまで断る")
@@ -91,7 +91,7 @@ extension AutomationNodePassTests {
   func testRefusedResultsLeftUnfixedFailAsBrokenRules() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
 
     readAll(0)
     XCTAssertTrue(use(0, .putRows, ["rows": [["note": "id が無い"]]]).isError)
@@ -106,7 +106,7 @@ extension AutomationNodePassTests {
   func testACallOfTheWrongShapeLeftUnfixedFailsAsBrokenRules() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
 
     readAll(0)
     XCTAssertTrue(use(0, .putRows, ["rows": "f:a"]).isError)
@@ -143,7 +143,7 @@ extension AutomationNodePassTests {
   func testABrokenRunRecordsTheUnfixedItemsFirst() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
 
     readAll(0)
     use(0, .putRows, ["rows": [["note": "1"], ["note": "2"]]])
@@ -161,7 +161,7 @@ extension AutomationNodePassTests {
   func testNothingAfterARefusedResultIsRefusedAndTheRunFails() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
 
     readAll(0)
     XCTAssertTrue(use(0, .putRows, ["rows": [["note": "id が無い"]]]).isError)
@@ -175,7 +175,7 @@ extension AutomationNodePassTests {
   func testRefusedResultsAreRecordedAndTheFixedResultPasses() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
 
     readAll(0)
     XCTAssertTrue(use(0, .putRows, ["rows": [["note": "id が無い"]]]).isError)

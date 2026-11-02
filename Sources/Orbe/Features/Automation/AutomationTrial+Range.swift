@@ -74,7 +74,7 @@ extension AutomationTrial {
             + "rows are given as the output of a single input, so give them to one of those nodes "
             + "(with from) instead")
       }
-      var outputs = AutomationOutputs(.process([]), writer: upstream)
+      var outputs = AutomationOutputs(.process([], reachesJudge: false), writer: upstream)
       let broken = outputs.put(rows.joined(separator: "\n"))
       guard broken.isEmpty else { throw .invalid("rows: \(broken[0].text)") }
       return Given(entry: entry.id, writer: upstream, rows: outputs.rows)

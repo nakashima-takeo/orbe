@@ -69,12 +69,19 @@ enum AutomationPrompts {
     return jsonLine(object)
   }
 
-  /// 処理の依頼文。外れた行にする `id` の決まりと、新しく作る行の `id` の付け方を伝える。`count` は入力の行の数。
-  static func process(instruction: String, count: Int, now: Date, timeZone: TimeZone) -> String {
+  /// 処理の依頼文。外れた行にする `id` の決まりと、新しく作る行の `id` の付け方を伝える。`count` は入力の行の数。`reachesJudge`
+  /// は出した行が判定へ届くか（届くなら、候補にしたい行に link を残させる）。
+  static func process(
+    instruction: String, count: Int, now: Date, timeZone: TimeZone, reachesJudge: Bool
+  ) -> String {
     let ids =
       #"Give every item a string "id" and never give the same "id" twice. "#
       + #"Keep the "id" of each item you pass on unchanged. "#
       + #"Give an item you make an "id" that stays the same for the same item in every run."#
+      + (reachesJudge
+        ? #" An item can become a task only when it has "link": keep the "link" of each item you "#
+          + #"pass on, and write "link" on an item you make that should be able to become a task."#
+        : "")
     return """
       You process items for Orbe as one step of an automation. \(orbeToolsOnly)
 

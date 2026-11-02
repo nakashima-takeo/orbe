@@ -111,8 +111,8 @@ import Observation
     return next
   }
 
-  /// 消す。ノードをすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。その自動化の判定の候補はすべて忘れ、
-  /// ほかの自動化の判断待ちの候補は下げる決まりで下がる。定義を読めない自動化も消せる。
+  /// 消す。ノードをすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。その自動化の判定の候補はすべて忘れる。
+  /// 定義を読めない自動化も消せる。
   func delete(_ id: Int, now: Date) throws(AutomationError) {
     let nodeIds: [AutomationNodeID]
     if let automation = automation(id) {
@@ -124,14 +124,12 @@ import Observation
     }
     let at = TaskItem.storedInstant(now)
     try commit(sweepingAt: at) { db, memory in
-      var invalidated: [Int] = []
       for nodeId in nodeIds {
-        invalidated += try db.removeNode(nodeId, at: at)
+        _ = try db.removeNode(nodeId, at: at)
       }
       try db.deleteAutomation(id)
       memory.automations.removeAll { $0.id == id }
       memory.unreadable.removeAll { $0.id == id }
-      try memory.withdraw(after: invalidated, db)
       try memory.forgetUnheld(db, now: at)
     }
   }

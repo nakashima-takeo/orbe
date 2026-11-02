@@ -21,7 +21,7 @@ final class AutomationNodePassRecordTests: AutomationNodePassTestCase {
   func testProcessAndJudgeCountTheLinesTheyGave() {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a"), row("b")]))
+      .process([row("a"), row("b")], reachesJudge: false))
     start(
       AutomationGraphTests.command("j", from: ["f"], deliver: .taskCandidates), .judge,
       judgeInput(["a", "b"]))
@@ -47,7 +47,7 @@ final class AutomationNodePassRecordTests: AutomationNodePassTestCase {
   func testAgentCountsWhatWasAccepted() {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a"), row("b")]))
+      .process([row("a"), row("b")], reachesJudge: false))
 
     readAll(0)
     use(0, .putRows, ["rows": [["id": "f:a"], ["note": "x"]]])

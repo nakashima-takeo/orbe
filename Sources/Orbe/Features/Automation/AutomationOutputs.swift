@@ -50,7 +50,7 @@ struct AutomationOutputs {
     let broken: [AutomationBrokenLine]
     switch input {
     case .fetch: broken = next.fetched(text)
-    case .process(let input): broken = next.processed(text, input)
+    case .process(let input, _): broken = next.processed(text, input)
     case .judge(let input, let choices): broken = next.judged(text, shape, input, choices)
     case .report, .work, .sideEffect:
       preconditionFailure("only a node that passes rows on puts rows")

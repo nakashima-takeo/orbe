@@ -20,9 +20,10 @@ struct AutomationNodePass {
   /// 持たない——外から届いた文面を、ツールを持ちうる agent の依頼文へ型の上で運ばないため。
   enum Input {
     /// `since` は前回成功した回の開始時刻（新着の流れの取得にだけ渡す）。`reachesJudge` は、出した行が途中で取得のノードを
-    /// 通らずに判定のノードへ届くか（`AutomationGraph.reachesTaskCandidates`）。
+    /// 通らずに判定のノードへ届くか（`AutomationGraph.reachesTaskCandidates`）。届くなら、依頼文で候補にしたい行に link を
+    /// 書かせる。
     case fetch(since: Date?, reachesJudge: Bool)
-    case process([AutomationNodeRow])
+    case process([AutomationNodeRow], reachesJudge: Bool)
     /// `choices` は判断待ちの候補と付け先にできる workspace。
     case judge([AutomationNodeRow], choices: AutomationJudgeChoices)
     /// 入力の無い報告は空。
@@ -178,7 +179,7 @@ struct AutomationNodePass {
     case .fetch(let since, _):
       guard let since = mark(node, since) else { return BackgroundInput() }
       return BackgroundInput(environment: ["ORBE_SINCE": SessionEvent.iso8601(since)])
-    case .process(let rows), .judge(let rows, _), .report(let rows):
+    case .process(let rows, _), .judge(let rows, _), .report(let rows):
       return BackgroundInput(stdin: stdin(rows.map(\.text)))
     case .sideEffect(let rows, let runId):
       return BackgroundInput(
@@ -204,9 +205,10 @@ struct AutomationNodePass {
     case .fetch(let since, let reachesJudge):
       return AutomationPrompts.fetch(
         instruction: instruction, since: mark(node, since), reachesJudge: reachesJudge)
-    case .process(let rows):
+    case .process(let rows, let reachesJudge):
       return AutomationPrompts.process(
-        instruction: instruction, count: rows.count, now: now, timeZone: timeZone)
+        instruction: instruction, count: rows.count, now: now, timeZone: timeZone,
+        reachesJudge: reachesJudge)
     case .judge(let rows, _):
       return AutomationPrompts.judge(
         instruction: instruction, count: rows.count, now: now, timeZone: timeZone)
@@ -235,7 +237,7 @@ extension AutomationNodePass.Input {
   /// ノードの 1 回が受ける行の 1 行ずつ（取得と仕事は持たない）。
   var rowTexts: [String] {
     switch self {
-    case .process(let rows), .judge(let rows, _), .report(let rows), .sideEffect(let rows, _):
+    case .process(let rows, _), .judge(let rows, _), .report(let rows), .sideEffect(let rows, _):
       rows.map(\.text)
     case .fetch, .work: []
     }

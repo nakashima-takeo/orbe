@@ -10,12 +10,10 @@ struct AutomationSample {
   var paused = false
   /// 古い順に確定するノードの回。
   var passes: [AutomationSamplePass] = []
-  /// 回を確定した後に消す（出した候補が、重ねて取っている別の自動化の棚に残る）。
-  var deleted = false
 }
 
-/// 見本のノードの 1 回。入力のあるノードの回は、その時点で読める行を（捨てる分のほかは）すべて取った回にする。判定の候補の案の
-/// 出どころと、素通しの処理の出力は、読んだ行から組み直す（出どころは DB の行を指すため）。
+/// 見本のノードの 1 回。入力のあるノードの回は、その時点で読める行を（捨てる分のほかは）すべて取った回にする。判定の候補の案が
+/// 指す行と、素通しの処理の出力は、読んだ行から組み直す（候補は DB の行を指すため）。
 struct AutomationSamplePass {
   let nodeKey: String
   let at: Date
@@ -110,7 +108,6 @@ extension DesignSceneFixtures {
           try record(pass, of: id, in: store, kept: kept[pass.nodeKey] ?? [])
         }
         if sample.paused { _ = try store.setPaused(id, true, now: sample.createdAt) }
-        if sample.deleted { try store.delete(id, now: sample.createdAt) }
       }
     } catch {
       preconditionFailure("the samples are valid: \(error)")

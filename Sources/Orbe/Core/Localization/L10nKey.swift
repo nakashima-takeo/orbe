@@ -440,7 +440,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFaultInvalid
   case automationFaultInvalidValue
   case automationFaultIdTwice
-  case automationFaultNotNewItem
+  case automationFaultNotTakenItem
   case automationFaultNoLink
   case automationFaultProposedTwice
   case automationFaultNotWaiting

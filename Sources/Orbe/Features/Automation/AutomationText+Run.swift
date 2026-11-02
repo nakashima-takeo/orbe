@@ -94,7 +94,7 @@ extension AutomationText {
     case .invalidValue(let key) where key.isEmpty: l10n.string(.automationFaultInvalidValue)
     case .invalidValue(let key): l10n.format(.automationFaultInvalid, key)
     case .idTwice(let id): l10n.format(.automationFaultIdTwice, id)
-    case .notNewItem(let id): l10n.format(.automationFaultNotNewItem, id)
+    case .notTakenItem(let id): l10n.format(.automationFaultNotTakenItem, id)
     case .noLink(let id): l10n.format(.automationFaultNoLink, id)
     case .proposedTwice(let id): l10n.format(.automationFaultProposedTwice, id)
     case .notWaiting: l10n.string(.automationFaultNotWaiting)

@@ -205,7 +205,6 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(proposal["automationId"] as? Int, id)
     XCTAssertEqual(proposal["nodeKey"] as? String, "judge")
     XCTAssertEqual(proposal["originNodeKey"] as? String, "source")
-    XCTAssertNil(proposal["proposedBy"])
 
     _ = wc.controlDeleteAutomation(automationId: id)
     XCTAssertTrue(store.proposals.isEmpty)

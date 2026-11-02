@@ -119,7 +119,7 @@ enum AutomationLineFault: Equatable {
   /// 同じ id の 2 つ目の行。
   case idTwice(String)
   /// 判定の案が、取った行でない id を指した。
-  case notNewItem(String)
+  case notTakenItem(String)
   /// 判定の案が指した行に、http か https の URL の link が無い（行の id）。
   case noLink(String)
   case proposedTwice(String)
@@ -160,7 +160,7 @@ enum AutomationLineFault: Equatable {
     case .typeMismatch(let key): "\(key) has the wrong type"
     case .invalidValue(let key): key.isEmpty ? "invalid value" : "invalid \(key)"
     case .idTwice(let id): "id \(id) appeared twice"
-    case .notNewItem(let id): "propose \(id): not an item of this run"
+    case .notTakenItem(let id): "propose \(id): not an item of this run"
     case .noLink(let id): "the row \"\(id)\" has no link"
     case .proposedTwice(let id): "propose \(id): proposed twice"
     case .notWaiting(let link): "resolve \(link): not a waiting proposal"
@@ -324,7 +324,7 @@ extension AutomationBrokenLine: Codable {
     case "typeMismatch": fault = .typeMismatch(try string(.key))
     case "invalidValue": fault = .invalidValue(try string(.key))
     case "idTwice": fault = .idTwice(try string(.id))
-    case "notNewItem": fault = .notNewItem(try string(.id))
+    case "notTakenItem": fault = .notTakenItem(try string(.id))
     case "noLink": fault = .noLink(try string(.id))
     case "proposedTwice": fault = .proposedTwice(try string(.id))
     case "notWaiting": fault = .notWaiting(try string(.link))
@@ -358,7 +358,7 @@ extension AutomationBrokenLine: Codable {
     case .typeMismatch(let key): try kind("typeMismatch", [(.key, key)])
     case .invalidValue(let key): try kind("invalidValue", [(.key, key)])
     case .idTwice(let id): try kind("idTwice", [(.id, id)])
-    case .notNewItem(let id): try kind("notNewItem", [(.id, id)])
+    case .notTakenItem(let id): try kind("notTakenItem", [(.id, id)])
     case .noLink(let id): try kind("noLink", [(.id, id)])
     case .proposedTwice(let id): try kind("proposedTwice", [(.id, id)])
     case .notWaiting(let link): try kind("notWaiting", [(.link, link)])

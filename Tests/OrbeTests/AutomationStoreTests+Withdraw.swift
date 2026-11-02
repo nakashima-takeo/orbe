@@ -8,35 +8,84 @@ import XCTest
 /// 処理 → 判定 の形で、取得が外した項目の候補が棚に残り続ける。処理がまとめた行の候補が、処理が外しても棚に残り続ける。処理が
 /// まとめた行を書き換えるたびに、さばいた候補が戻る。直近の窓を毎回読む判定で、さばいた候補が次の回に戻る。
 extension AutomationStoreTests {
-  /// 1 つの判定に 2 つの取得（どちらも今の集合）から同じリンクが届くとき、候補の元の取得が外しても、もう片方にあれば残る。もう
-  /// 片方も外すと下がり、その取得の回に数える。
-  func testAProposalStaysWhileAnotherInputOfTheJudgeStillHasItsLink() throws {
-    let store = AutomationStore()
+  /// 取得 f1・f2（どちらも今の集合）→ 判定 の自動化の定義。`judgeFrom` は判定の入力。
+  private func gathering(judgeFrom inputs: [String] = ["f1", "f2"]) -> AutomationDefinition {
     let fetch = { (key: String) in
       DesignSceneFixtures.commandNode(
         key, key, .scheduled(.every(1800)), script: key, coverage: .currentSet)
     }
-    let id = try store.create(
-      AutomationDefinition(
-        name: "集める", notify: nil,
-        nodes: [
-          fetch("f1"), fetch("f2"),
-          DesignSceneFixtures.agentNode(
-            "judge", "判定", .arrival, from: ["f1", "f2"], instruction: "選ぶ",
-            deliver: .taskCandidates),
-        ]), now: Self.at
-    ).id
+    return AutomationDefinition(
+      name: "集める", notify: nil,
+      nodes: [
+        fetch("f1"), fetch("f2"),
+        DesignSceneFixtures.agentNode(
+          "judge", "判定", .arrival, from: inputs, instruction: "選ぶ", deliver: .taskCandidates),
+      ])
+  }
+
+  /// `gathering` の自動化で、f1・f2 が同じリンクの項目を出し、判定が f1 の行から候補にし、f1 が項目を外した状態（f2 が支えて
+  /// 候補は残る）。自動化の ID を返す。
+  private func supportedByF2(_ store: AutomationStore) throws -> Int {
+    let id = try store.create(gathering(), now: Self.at).id
     let a = Self.item("a")
     for key in ["f1", "f2"] {
       try store.record(id, nodeKey: key, at: Self.at, outcome: DesignSceneFixtures.fetched([a]))
     }
     try Self.judge(store, id, proposing: [a])
     XCTAssertEqual(store.proposals.map(\.originNodeId), [store.nodeId(id, "f1")])
-
     try store.record(id, nodeKey: "f1", at: Self.at, outcome: DesignSceneFixtures.fetched([]))
-    XCTAssertEqual(store.proposals.map(\.state), [.open])
+    XCTAssertEqual(store.proposals.map(\.state), [.open], "前提: f2 にまだあるので残る")
+    return id
+  }
+
+  /// 1 つの判定に 2 つの取得（どちらも今の集合）から同じリンクが届くとき、候補の元の取得が外しても、もう片方にあれば残る。もう
+  /// 片方も外すと下がり、その取得の回に数える。
+  func testAProposalStaysWhileAnotherInputOfTheJudgeStillHasItsLink() throws {
+    let store = AutomationStore()
+    let id = try supportedByF2(store)
 
     try store.record(id, nodeKey: "f2", at: Self.at, outcome: DesignSceneFixtures.fetched([]))
+    XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(store.automation(id)?.state(key: "f2").runs.first?.run?.withdrawn, 1)
+  }
+
+  /// 支えていた入力のノードを書き換えで外すと、判定の入力が変わるので、その場で下げる条件を当て直して下げる。
+  func testRemovingTheInputThatStillHadTheLinkWithdrawsTheProposal() throws {
+    let store = AutomationStore()
+    let id = try supportedByF2(store)
+    var definition = gathering(judgeFrom: ["f1"])
+    definition.nodes.remove(at: 1)
+
+    try Self.rewrite(store, id, definition)
+
+    XCTAssertEqual(store.proposals, [])
+  }
+
+  /// 支えていた入力とのつながりだけを外しても、判定の入力が変わるので、その場で下げる。
+  func testCuttingTheEdgeFromTheInputThatStillHadTheLinkWithdrawsTheProposal() throws {
+    let store = AutomationStore()
+    let id = try supportedByF2(store)
+    var definition = gathering(judgeFrom: ["f1"])
+    definition.nodes.append(
+      DesignSceneFixtures.commandNode(
+        "digest", "要約", .arrival, from: ["f2"], script: "digest", deliver: .report))
+
+    try Self.rewrite(store, id, definition)
+
+    XCTAssertEqual(store.proposals, [])
+  }
+
+  /// 支えていた入力の項目が無効にならず、新しい版でリンクだけを変えたときも、そのリンクが入力の今有効な項目から抜けたので下げ、
+  /// その取得の回に数える。
+  func testAnInputItemChangingItsLinkWithdrawsTheProposalItSupported() throws {
+    let store = AutomationStore()
+    let id = try supportedByF2(store)
+    let moved = AutomationItem(id: "a", link: Self.link("moved"), body: "a の本文", time: Self.at)
+
+    try store.record(
+      id, nodeKey: "f2", at: Self.at.addingTimeInterval(60),
+      outcome: DesignSceneFixtures.fetched([moved]))
+
     XCTAssertEqual(store.proposals, [])
     XCTAssertEqual(store.automation(id)?.state(key: "f2").runs.first?.run?.withdrawn, 1)
   }

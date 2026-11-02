@@ -108,7 +108,7 @@ extension L10n {
     .automationFaultInvalid: ("%@ の値が不正", "invalid value for %@"),
     .automationFaultInvalidValue: ("値が不正", "invalid value"),
     .automationFaultIdTwice: ("id %@ が重複", "duplicate id %@"),
-    .automationFaultNotNewItem: (
+    .automationFaultNotTakenItem: (
       "id %@ は今回判定する項目ではありません", "id %@ is not an item to judge in this run"
     ),
     .automationFaultNoLink: ("id %@ の行に link がありません", "the row %@ has no link"),

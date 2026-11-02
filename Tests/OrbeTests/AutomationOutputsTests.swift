@@ -39,7 +39,7 @@ final class AutomationOutputsTests: OrbeTestCase {
       line + "\n"
         + #"{"id":"2","link":"https://example.com/2","body":"\#(large)","time":"2026-10-10T09:00:00Z"}"#
     )
-    var process = AutomationOutputs(.process([]), writer: AutomationNodeID(1))
+    var process = AutomationOutputs(.process([], reachesJudge: false), writer: AutomationNodeID(1))
     let processed = process.put(#"{"id":"x","note":"\#(large)"}"#)
 
     XCTAssertEqual(fetched.map(\.text), ["item 2: larger than 64 KiB"])
@@ -61,11 +61,11 @@ final class AutomationOutputsTests: OrbeTestCase {
     let pad = String(repeating: "x", count: limit - #"{"id":"a","note":""}"#.utf8.count)
     let edge = #"{"id":"a","note":"\#(pad)"}"#
     XCTAssertEqual(edge.utf8.count, limit, "前提: 書いた形はちょうど上限")
-    var made = AutomationOutputs(.process([]), writer: AutomationNodeID(1))
+    var made = AutomationOutputs(.process([], reachesJudge: false), writer: AutomationNodeID(1))
     XCTAssertEqual(made.put(edge).map(\.text), ["item 1: larger than 64 KiB"])
     let input = AutomationNodeRow(id: "a", text: #"{"id":"a"}"#, ref: nil, source: .item(1))
     var kept = AutomationOutputs(
-      .process([input]), writer: AutomationNodeID(1))
+      .process([input], reachesJudge: false), writer: AutomationNodeID(1))
     XCTAssertEqual(kept.put(edge).map(\.text), [], "入力を引き継いだ行の id はそのまま渡す")
   }
 

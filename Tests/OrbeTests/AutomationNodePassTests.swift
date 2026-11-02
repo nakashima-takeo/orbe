@@ -78,7 +78,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
       .fetch, .fetch(since: nil, reachesJudge: false))
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
       judgeInput(["a"]))
@@ -187,7 +187,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   func testProcessCarriesTheSourceById() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a"), row("b")]))
+      .process([row("a"), row("b")], reachesJudge: false))
 
     readAll(0)
     use(0, .putRows, ["rows": [["id": "f:b", "note": "x"], ["id": "new"]]])
@@ -204,7 +204,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   func testProcessWhoseRowsReachAJudgeCanMakeNewRows() throws {
     start(
       AutomationGraphTests.command("a", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"new"}"#))
 
@@ -221,7 +221,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   func testProcessRowWithARepeatedIdBreaksTheRules() throws {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"f:a","note":"2 度目"}"#))
 

@@ -16,11 +16,21 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   func testProcessPromptStatesTheIdRules() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
 
-    XCTAssertTrue(try prompt().contains(#"Give every item a string "id""#))
-    XCTAssertTrue(try prompt().contains(#"never give the same "id" twice"#))
-    XCTAssertTrue(try prompt().contains(#"stays the same for the same item in every run"#))
+    start(
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
+      .process([row("a")], reachesJudge: true))
+
+    for index in 0..<2 {
+      XCTAssertTrue(try prompt(index).contains(#"Give every item a string "id""#), "\(index)")
+      XCTAssertTrue(try prompt(index).contains(#"never give the same "id" twice"#), "\(index)")
+      XCTAssertTrue(
+        try prompt(index).contains(#"stays the same for the same item in every run"#), "\(index)")
+    }
+    let keepLink = #"keep the "link" of each item you pass on"#
+    XCTAssertFalse(try prompt(0).contains(keepLink), "判定へ届かない処理には link の案内を載せない")
+    XCTAssertTrue(try prompt(1).contains(keepLink))
   }
 
   /// 行を見る agent（処理・判定・報告）は、行をその回の札付きの Orbe の MCP で読み、依頼文には件数と読み方だけがある。
@@ -28,7 +38,7 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   func testRowsAreReadThroughOrbesMCPAndThePromptCarriesOnlyTheirCount() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a"), row("b")]))
+      .process([row("a"), row("b")], reachesJudge: false))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
       .judge([row("a"), row("b")], choices: Self.noChoices))
@@ -54,7 +64,7 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   func testTheTokenEndsWithTheRun() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
     let token = try XCTUnwrap(agentCall(0)?.orbe?.token)
     readAll(0)
     use(0, .putRows, ["rows": [["id": "f:a"]]])
@@ -100,7 +110,7 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
     start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")]))
+      .process([row("a")], reachesJudge: false))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
       judgeInput(["a"]))
