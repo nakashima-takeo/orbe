@@ -218,7 +218,6 @@ final class ScmPanelTests: OrbeTestCase {
     panel.press(header, .discardAll, in: panel.layout)
     XCTAssertEqual(discarding, ["a.txt"])
 
-    // サブモジュールの中の git dir は監視しないので、再読込で取り直す。
     XCTAssertTrue(repo.git(["-C", "sub", "add", "inner.txt"]).isSuccess)
     XCTAssertTrue(repo.git(["-C", "sub", "commit", "-qm", "inner"]).isSuccess)
     panel.refresh()
