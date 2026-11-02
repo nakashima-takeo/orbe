@@ -190,8 +190,8 @@ let automationUsage = """
   again.
   run starts a run now (paused automations too) and returns at once; the
   result shows up in list. pause stops only what Orbe starts on its own
-  (schedules and arriving rows), not a running run nor run; --node pauses
-  one node. resume restarts it.
+  (schedules and arriving lines), not a running run or the run command;
+  --node pauses one node. resume restarts it.
   try runs the nodes on a copy and returns at once (nothing saved or notified;
   side effects are held). trial reads it per node; --wait exits 124 on timeout.
   list prints one automation per line: id, state (active / paused /
