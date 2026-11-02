@@ -138,6 +138,29 @@ extension AutomationStoreTests {
     store = nil
   }
 
+  /// 人の判断の記録も、判定のノードごとに「新しい方から回数の内」か「判断の時刻が期間の内」のどちらかに入れば残る。
+  func testDecisionsAreKeptWithinTheCountOrTheDaysOfTheRetention() throws {
+    var store: AutomationStore? = AutomationStore(
+      opening: AutomationPersistence.open(retention: {
+        AutomationRetention(runCount: 2, runDays: 3, eventDays: 30)
+      }))
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    for day in [0, 5, 6, 7] {
+      let at = Self.at.addingTimeInterval(Self.day * Double(day))
+      let item = Self.item("i\(day)")
+      try Self.fetch(XCTUnwrap(store), id, [item], at: at)
+      try Self.judge(XCTUnwrap(store), id, proposing: [item], at: at)
+      try store?.dismiss(XCTUnwrap(store?.proposals.first?.id), now: at)
+      try Self.fetch(XCTUnwrap(store), id, [], at: at)
+    }
+    store = nil
+
+    let decided = try database().select(
+      "SELECT decided_at FROM settlements ORDER BY decided_at", []
+    ) { Int((AutomationPersistence.date($0.int64(at: 0)).timeIntervalSince(Self.at) / Self.day)) }
+    XCTAssertEqual(decided, [5, 6, 7], "3 日以内の判断は回数を超えても残る")
+  }
+
   /// 出来事の流れのノードの `retentionDays` は、同じ id を同じ出来事とみなす窓を延ばす。書かないノードは全体の設定の日数。
   func testANodesRetentionDaysWidensTheWindowOfTheSameEvent() throws {
     let store = AutomationStore()
@@ -157,5 +180,20 @@ extension AutomationStoreTests {
     XCTAssertEqual(
       store.automation(plain)?.state(key: "fetch").runs.first?.run?.result,
       .fetch(fresh: 1, duplicates: 0), "既定の 30 日を過ぎたので新しい出来事")
+  }
+
+  /// 出す側のノードの `retentionDays` の内の出来事は、全体の既定（30 日）を過ぎても掃除されず、受け手が読む。
+  func testANodesRetentionDaysKeepsItsEventsForTheReceiverPastTheDefault() throws {
+    let store = AutomationStore()
+    var definition = Self.definition(coverage: .newArrivals)
+    definition.nodes[0].retentionDays = 60
+    let id = try store.create(definition, now: Self.at).id
+    try Self.fetch(store, id, [Self.item("old")])
+    let later = Self.at.addingTimeInterval(40 * Self.day)
+    try Self.fetch(store, id, [Self.item("new")], at: later)
+
+    let read = try XCTUnwrap(store.read(store.nodeId(id, "judge"), of: id, baseline: nil, now: later))
+    XCTAssertEqual(
+      read.taken.map(\.id), ["old", "new"].map { "\(store.nodeId(id, "fetch")):\($0)" })
   }
 }

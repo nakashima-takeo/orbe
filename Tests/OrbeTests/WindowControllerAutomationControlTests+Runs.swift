@@ -168,4 +168,24 @@ extension WindowControllerAutomationControlTests {
       (nodes["judge"]?["lastRun"] as? [String: Any])?["recordId"] as? Int, ids.first,
       "一覧の lastRun は最新の回")
   }
+
+  /// 回の記録を残す回数と日数は設定の値で、確定のたびに読む（AI が `list_automation_runs` で読める過去の回が変わる）。
+  func testTheRetentionSettingsDecideWhichPastRunsRemain() throws {
+    let wc = try launch()
+    let id = try set(wc, Self.definition())
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.automationRunRetentionCount, 2))
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.automationRunRetentionDays, 3))
+    let start = Date()
+    for day in 0..<6 {
+      try wc.automationStore.record(
+        id, nodeKey: "fetch", at: start.addingTimeInterval(TimeInterval(day * 86400)),
+        outcome: DesignSceneFixtures.fetched([]))
+    }
+
+    let runs = try XCTUnwrap(
+      success(
+        wc.controlListAutomationRuns(automationId: id, nodeKey: "fetch", before: nil, limit: nil)
+      )["runs"] as? [[String: Any]])
+    XCTAssertEqual(runs.count, 4, "最後の回から 3 日以内の 4 回が残る")
+  }
 }
