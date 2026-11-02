@@ -6,18 +6,18 @@ import Foundation
 /// 名前を張る。
 ///
 /// 1. 受け持ちの全部: 取得 3 つ（GitHub・Backlog・Slack）→ 判定「開発の依頼を選ぶ」（毎日 9:00。GitHub と Backlog から
-///    12 件 → 候補 2。#405 には候補にした理由）と判定「返事が要る連絡を選ぶ」（毎日 13:00。制限時間で失敗）。棚には消えた自動化 6 の候補も出る（出どころのノードの名前を引けない）。
+///    12 件 → 候補 3。#405 には候補にした理由。#398 は自動化 6 も候補にしている）と判定「返事が要る連絡を選ぶ」（毎日 13:00。
+///    制限時間で失敗）。
 /// 2. Sentry: 新しいエラー（届いたらの判定。候補 1）。
 /// 3. 長い名前の自動化（手動の判定。候補 1）。
 /// 4. CI: main の失敗（届いたらの判定。候補なし）。
 /// 5. GitHub: 自分へのレビュー依頼（止めていて、取得が失敗。候補なし）。
-/// 6. 消えた自動化（GitHub の 1 項目を自動化 1 と重ねて取り、候補にした）。
+/// 6. GitHub: 失敗した CI（GitHub の #398 を自動化 1 と重ねて取り、候補にした。同じリンクの候補が 2 つの棚に出る）。
 extension DesignSceneFixtures {
   static func automationShelfSamples() -> [AutomationSample] {
     let github = shelfGitHubItems
     return [
-      shelfOwned(github), shelfSentry, shelfManual, shelfCI, shelfPaused,
-      shelfDeleted(github[6]),
+      shelfOwned(github), shelfSentry, shelfManual, shelfCI, shelfPaused, shelfShared(github[6]),
     ]
   }
 
@@ -100,6 +100,7 @@ extension DesignSceneFixtures {
                 reason: "あなたにレビューが依頼されていて、まだ応えていない。脆弱性の修正を含むので早めの確認が要る。"),
               shelfProposal(
                 "backlog", backlog[0], "BLG-231 決済画面の文言を直す", due: TaskItem.DueDate("2025-10-07")),
+              shelfProposal("github", github[6], "#398 checkout の e2e を直す"),
             ], rows: 12)),
         AutomationSamplePass(
           nodeKey: "slack", at: automationAt(12, 58), outcome: fetched(slack)),
@@ -179,7 +180,7 @@ extension DesignSceneFixtures {
         failure: "gh: Not Found (HTTP 404)"))
   }
 
-  private static func shelfDeleted(_ shared: AutomationItem) -> AutomationSample {
+  private static func shelfShared(_ shared: AutomationItem) -> AutomationSample {
     AutomationSample(
       definition: candidatesDefinition(
         "GitHub: 失敗した CI",
@@ -193,7 +194,6 @@ extension DesignSceneFixtures {
         AutomationSamplePass(
           nodeKey: "judge", at: automationAt(8, 46), trigger: .arrival,
           outcome: judged([proposal(shared, "main の e2e の失敗を調べる")], rows: 1)),
-      ],
-      deleted: true)
+      ])
   }
 }

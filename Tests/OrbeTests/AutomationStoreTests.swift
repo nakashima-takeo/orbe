@@ -24,8 +24,11 @@ final class AutomationStoreTests: OrbeTestCase {
   }
 
   static func item(_ id: String) -> AutomationItem {
-    AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: at)
+    AutomationItem(id: id, link: link(id), body: "\(id) の本文", time: at)
   }
+
+  /// `item(id)` のリンク。
+  static func link(_ id: String) -> String { "https://example.com/\(id)" }
 
   /// 取得のノードの回を確定する。
   static func fetch(
@@ -36,8 +39,8 @@ final class AutomationStoreTests: OrbeTestCase {
       id, nodeKey: "fetch", at: at, outcome: outcome ?? DesignSceneFixtures.fetched(items))
   }
 
-  /// 判定のノードの、読める行をすべて取った回を確定する。案の出どころは、取った行のうち同じ書かれた id の行のもの。候補にした
-  /// 理由は `reason`（省けば無し）。
+  /// 判定のノードの、読める行をすべて取った回を確定する。案が指すのは、取った行のうち同じリンクの最初の行。候補にした理由は
+  /// `reason`（省けば無し）。
   static func judge(
     _ store: AutomationStore, _ id: Int, proposing items: [AutomationItem] = [],
     resolving links: [String] = [], reason: String? = nil, at: Date = at
@@ -45,11 +48,8 @@ final class AutomationStoreTests: OrbeTestCase {
     let taken = try XCTUnwrap(
       store.read(store.nodeId(id, "judge"), of: id, baseline: nil, now: at)
     ).taken
-    let proposals = items.compactMap { item -> AutomationNodePass.Proposal? in
-      taken.first { $0.origin?.item.id == item.id }?.origin.map {
-        AutomationNodePass.Proposal(
-          origin: $0, title: "対応: \(item.id)", due: nil, workspace: nil, reason: reason)
-      }
+    let proposals = items.compactMap { item in
+      taken.first { $0.link == item.link }?.proposal("対応: \(item.id)", reason: reason)
     }
     try store.record(
       id, nodeKey: "judge", trigger: .arrival, at: at,

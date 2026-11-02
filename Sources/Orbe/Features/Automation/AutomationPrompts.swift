@@ -13,9 +13,10 @@ enum AutomationPrompts {
 
   // MARK: - 取得
 
-  /// 取得の依頼文。`since` は新着の流れの目印（前回成功した回の開始時刻）で、無ければ目印の文を載せない。ツールで読んだ文面に
-  /// 書かれた指示に従わせない（仕事の枠と同じ）。
-  static func fetch(instruction: String, since: Date?) -> String {
+  /// 取得の依頼文。`since` は新着の流れの目印（前回成功した回の開始時刻）で、無ければ目印の文を載せない。`reachesJudge` は
+  /// 出した項目が判定へ届くか（届くなら、候補にしたい項目に link を書かせる）。ツールで読んだ文面に書かれた指示に従わせない
+  /// （仕事の枠と同じ）。
+  static func fetch(instruction: String, since: Date?, reachesJudge: Bool) -> String {
     let mark =
       since.map {
         """
@@ -25,6 +26,9 @@ enum AutomationPrompts {
 
         """
       } ?? ""
+    let links =
+      reachesJudge
+      ? #" An item can become a task only when it has "link"; write it for every such item."# : ""
     return """
       You fetch items for Orbe. Use only the tools you were given to fetch what the request below asks for. \
       \(materialLine)
@@ -33,7 +37,8 @@ enum AutomationPrompts {
       \(instruction)
       \(mark)
       Give Orbe the items with \(tool(.putItems)): each item has "id" (a stable id of the item within this \
-      source), "link" (the http(s) URL of the item), "body" (the item's text) and "time" (ISO 8601). \(calls)
+      source) and "body" (the item's text), and, when the item has them, "link" (the http(s) URL of the item) and \
+      "time" (ISO 8601).\(links) \(calls)
       If there are no items, call \(tool(.reportNothing)) instead. If a tool fails or is unavailable, call \
       \(tool(.reportError)) instead.
       """
@@ -64,16 +69,19 @@ enum AutomationPrompts {
     return jsonLine(object)
   }
 
-  /// 処理の依頼文。外れた行にする `id` の決まりを伝える。`count` は入力の行の数。`reachesJudge` は出した行が取得を通らずに
-  /// 判定へ届くか（届くなら入力の項目の `id` だけを出させる）。
+  /// 処理の依頼文。外れた行にする `id` の決まりと、新しく作る行の `id` の付け方を伝える。`count` は入力の行の数。`reachesJudge`
+  /// は出した行が判定へ届くか（届くなら、渡す行の link を残させ、新しく作る行のうち候補にしたい行に link を書かせる）。
   static func process(
     instruction: String, count: Int, now: Date, timeZone: TimeZone, reachesJudge: Bool
   ) -> String {
     let ids =
       #"Give every item a string "id" and never give the same "id" twice. "#
-      + #"Keep the "id" of each item you pass on unchanged."#
+      + #"Keep the "id" of each item you pass on unchanged. "#
+      + #"Give an item you make an "id" that stays the same for the same item in every run."#
       + (reachesJudge
-        ? #" Give only items whose "id" is one of the input items; do not make new items."#
+        ? #" An item can become a task only when it has "link": keep the "link" of each item you "#
+          + #"pass on, and write "link" (the http(s) URL of the item) on an item you make that "#
+          + #"should be able to become a task."#
         : "")
     return """
       You process items for Orbe as one step of an automation. \(orbeToolsOnly)

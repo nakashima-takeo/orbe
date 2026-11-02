@@ -100,7 +100,6 @@ extension L10n {
     .automationRunUnknownFailed: ("失敗（記録を読み込めません）", "failed (couldn’t load the record)"),
     .automationFailUnreadInput: ("入力 %lld 件を読まずに終了", "ended with %lld input items unread"),
     .automationFailNoResult: ("結果を渡さずに終了", "ended without returning a result"),
-    .automationFailUnsourced: ("判定へ渡す行の取得元が不明", "unknown source of the rows passed to the judge"),
     .automationLineAt: ("%1$lld 件目：%2$@", "item %1$lld: %2$@"),
     .automationFaultNotJSON: ("JSON として解析できません", "not valid JSON"),
     .automationFaultNotObject: ("JSON オブジェクトではありません", "not a JSON object"),
@@ -110,10 +109,10 @@ extension L10n {
     .automationFaultInvalid: ("%@ の値が不正", "invalid value for %@"),
     .automationFaultInvalidValue: ("値が不正", "invalid value"),
     .automationFaultIdTwice: ("id %@ が重複", "duplicate id %@"),
-    .automationFaultNotInputId: ("id %@ は入力の行にありません", "id %@ is not in the input rows"),
-    .automationFaultNotNewItem: (
+    .automationFaultNotTakenItem: (
       "id %@ は今回判定する項目ではありません", "id %@ is not an item to judge in this run"
     ),
+    .automationFaultNoLink: ("id %@ の行に link がありません", "the row %@ has no link"),
     .automationFaultProposedTwice: ("id %@ の候補が重複", "duplicate proposal for id %@"),
     .automationFaultNotWaiting: ("対応済みにする候補が判断待ちにありません", "no waiting proposal to resolve"),
     .automationFaultNotOneDecision: (
@@ -127,8 +126,8 @@ extension L10n {
     .automationFaultTooLarge: ("%lld KiB を超える大きさ", "larger than %lld KiB"),
     .automationDismissedAlready: ("候補に登録済みの %lld 件を破棄", "discarded %lld already proposed"),
     .automationDismissedNoOpen: ("判断待ちの候補が無い %lld 件を破棄", "discarded %lld with no waiting proposal"),
-    .automationDismissedOriginInvalidated: (
-      "取得元の項目が無効になった %lld 件を破棄", "discarded %lld whose source item is no longer current"
+    .automationDismissedNoLongerCurrent: (
+      "元の項目が無効になった %lld 件を破棄", "discarded %lld whose source item is no longer current"
     ),
   ]
 }

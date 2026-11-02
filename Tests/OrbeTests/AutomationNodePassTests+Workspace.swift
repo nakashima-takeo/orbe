@@ -35,14 +35,14 @@ extension AutomationNodePassTests {
 
   func testACommandRunsUnderTheWorkspaceRootOfTheMoment() {
     workspaces = workspace(root: "/src/orbe")
-    start(command(directory: "."), .fetch, .fetch(since: nil))
-    start(command(directory: "tools/../sub"), .fetch, .fetch(since: nil))
+    start(command(directory: "."), .fetch, .fetch(since: nil, reachesJudge: false))
+    start(command(directory: "tools/../sub"), .fetch, .fetch(since: nil, reachesJudge: false))
     workspaces = workspace(root: "/moved/orbe")
-    start(command(directory: "sub"), .fetch, .fetch(since: nil))
+    start(command(directory: "sub"), .fetch, .fetch(since: nil, reachesJudge: false))
     start(
       DesignSceneFixtures.commandNode(
         "f", "f", .manual, script: "pwd", directory: "/opt/x", coverage: .currentSet),
-      .fetch, .fetch(since: nil))
+      .fetch, .fetch(since: nil, reachesJudge: false))
 
     XCTAssertEqual(
       jobs.calls.indices.map(directory),
@@ -56,13 +56,13 @@ extension AutomationNodePassTests {
     start(
       DesignSceneFixtures.commandNode(
         "f", "f", .manual, script: "pwd", directory: "sub", coverage: .currentSet),
-      .fetch, .fetch(since: nil), workspace: Self.repo)
+      .fetch, .fetch(since: nil, reachesJudge: false), workspace: Self.repo)
 
     XCTAssertEqual(directory(0), "/src/orbe/sub")
   }
 
   func testACommandWhoseWorkspaceIsGoneFailsOnTheNextTurnWithoutStarting() {
-    start(command(directory: "."), .fetch, .fetch(since: nil))
+    start(command(directory: "."), .fetch, .fetch(since: nil, reachesJudge: false))
 
     XCTAssertTrue(jobs.calls.isEmpty, "手段を起こさない")
     XCTAssertEqual(outcomes, [], "start の中では返さない")
@@ -80,7 +80,7 @@ extension AutomationNodePassTests {
   }
 
   func testAStoppedPassWhoseWorkspaceIsGoneReturnsNothing() {
-    start(command(directory: "."), .fetch, .fetch(since: nil)).stop()
+    start(command(directory: "."), .fetch, .fetch(since: nil, reachesJudge: false)).stop()
     nextTurn()
 
     XCTAssertEqual(outcomes, [])

@@ -35,7 +35,7 @@ extension AutomationText {
     switch failure {
     case .ended(let detail), .noReply(let detail): detail.isEmpty ? nil : detail
     case .brokeRules: breach?.lines.first.map(line)
-    case .notUTF8, .agentError, .reported, .unsourced, .unreadInput, .noResult: nil
+    case .notUTF8, .agentError, .reported, .unreadInput, .noResult: nil
     }
   }
 
@@ -55,7 +55,6 @@ extension AutomationText {
     case .brokeRules: return l10n.string(.automationFormatError)
     case .unreadInput(let count): return l10n.format(.automationFailUnreadInput, count)
     case .noResult: return l10n.string(.automationFailNoResult)
-    case .unsourced: return l10n.string(.automationFailUnsourced)
     }
   }
 
@@ -96,8 +95,8 @@ extension AutomationText {
     case .invalidValue(let key) where key.isEmpty: l10n.string(.automationFaultInvalidValue)
     case .invalidValue(let key): l10n.format(.automationFaultInvalid, key)
     case .idTwice(let id): l10n.format(.automationFaultIdTwice, id)
-    case .notInputId(let id): l10n.format(.automationFaultNotInputId, id)
-    case .notNewItem(let id): l10n.format(.automationFaultNotNewItem, id)
+    case .notTakenItem(let id): l10n.format(.automationFaultNotTakenItem, id)
+    case .noLink(let id): l10n.format(.automationFaultNoLink, id)
     case .proposedTwice(let id): l10n.format(.automationFaultProposedTwice, id)
     case .notWaiting: l10n.string(.automationFaultNotWaiting)
     case .notOneDecision: l10n.string(.automationFaultNotOneDecision)
@@ -122,7 +121,7 @@ extension AutomationText {
     switch why {
     case .alreadyProposed: .automationDismissedAlready
     case .noOpenProposal: .automationDismissedNoOpen
-    case .originInvalidated: .automationDismissedOriginInvalidated
+    case .noLongerCurrent: .automationDismissedNoLongerCurrent
     }
   }
 }

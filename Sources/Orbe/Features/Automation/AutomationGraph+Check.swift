@@ -4,7 +4,7 @@ import Foundation
 
 extension AutomationGraph {
   /// 検証して、ノードごとの役割・走る workspace と入力のノードの位置を返す。`workspace` は自動化の workspace。最初に見つけた
-  /// 誤り 1 つで断る。順は「自動化の workspace → 自分の欄だけで決まるもの → 鍵の名指し → 名指しの向き → 至るか・取り方」。
+  /// 誤り 1 つで断る。順は「自動化の workspace → 自分の欄だけで決まるもの → 鍵の名指し → 名指しの向き → 行き先」。
   /// ノードの `id` は見ない（書き換えの口が確かめる）。workspace が今あるかも見ない——消した workspace を指す保存した定義を、
   /// 読めない定義にしないため（回の始めに解けなければその回が始まらない）。
   static func check(_ definitionNodes: [AutomationDefinition.Node], workspace: UUID?)
@@ -27,9 +27,7 @@ extension AutomationGraph {
     for (index, inputs) in upstream.enumerated() {
       for input in inputs { downstream[input].append(index) }
     }
-    let roles = checked.map(\.role)
     try Self.checkDestinations(checked.map(\.definitionNode), upstream, downstream)
-    try Self.checkTakes(checked.map(\.definitionNode), roles, downstream)
     return checked.indices.map {
       Checked(
         definitionNode: checked[$0].definitionNode, role: checked[$0].role,
@@ -173,24 +171,6 @@ extension AutomationGraph {
           "nodes[\(index)].from: \"\(definitionNodes[input].key)\" delivers to \(delivered), so it passes no "
             + "rows to a node")
       }
-    }
-  }
-
-  /// 毎回すべてを取るつながりを通る行は判定へ至れない（判定は新しい行から候補を作る）。
-  private static func checkTakes(
-    _ definitionNodes: [AutomationDefinition.Node], _ roles: [AutomationNodeRole],
-    _ downstream: [[Int]]
-  ) throws(AutomationError) {
-    for (index, definitionNode) in definitionNodes.enumerated() {
-      let passes =
-        roles[index] == .judge
-        || (roles[index] != .fetch && !judges(reachedFrom: index, roles, downstream).isEmpty)
-      guard passes, let input = definitionNode.from.firstIndex(where: { $0.take == .all }) else {
-        continue
-      }
-      throw .invalid(
-        "nodes[\(index)].from[\(input)]: rows taken with take all reach taskCandidates; take new here"
-      )
     }
   }
 

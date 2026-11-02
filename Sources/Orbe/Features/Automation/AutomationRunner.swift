@@ -316,10 +316,7 @@ extension AutomationRunner {
     trigger.passStartedAt = startedAt
     let defId = node.entity.defId
     trigger.holding = AutomationHolding(
-      rows: Set(
-        read.map {
-          $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) + $0.taken.compactMap(\.origin?.row)
-        } ?? []),
+      rows: Set(read.map { $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) } ?? []),
       defs: [defId])
     let pass = AutomationNodePass(
       run: run, now: now, calendar: calendar, runSessions: runSessions, workspaces: workspaces)

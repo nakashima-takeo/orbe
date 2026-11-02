@@ -140,7 +140,7 @@ final class AutomationTrialTests: OrbeTestCase {
     ])
     try runner.flow(id, to: .ends)
     finish("gh", fetched(["a"]))
-    finish("p", #"{"id":"\#(downstream("gh", "a", of: id))"}"#)
+    finish("p", #"{"id":"\#(downstream("gh", "a", of: id))","link":"https://example.com/a"}"#)
     finish("judge", #"{"propose":"\#(downstream("gh", "a", of: id))","title":"A"}"#)
     let automations = store.automations
     let proposals = store.proposals
@@ -151,7 +151,8 @@ final class AutomationTrialTests: OrbeTestCase {
     finish("gh", fetched(["a", "b"]))
     waitCalls("p", 2)
     XCTAssertEqual(ids("p"), [downstream("gh", "b", of: id)], "写しの上の読んだ位置で新しい行だけを読む")
-    finish("p", #"{"id":"\#(downstream("gh", "b", of: id))","note":"b"}"#)
+    finish(
+      "p", #"{"id":"\#(downstream("gh", "b", of: id))","note":"b","link":"https://example.com/b"}"#)
     waitCalls("judge", 2)
     finish("judge", #"{"propose":"\#(downstream("gh", "b", of: id))","title":"B"}"#)
     ended(trial)

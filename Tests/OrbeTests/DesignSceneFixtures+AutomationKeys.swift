@@ -47,8 +47,8 @@ extension AutomationStore {
   }
 
   /// 鍵で指した受け手の持ち越し（DB から。テスト）。
-  func pendingDrops(_ id: Int, _ key: String) throws -> AutomationDrops {
-    try read { try $0.pendingDrops(of: nodeId(id, key)) }
+  func carried(_ id: Int, _ key: String) throws -> AutomationCarried {
+    try read { try $0.carried(of: nodeId(id, key)) }
   }
 
   /// 鍵で指したノードの 1 回を、走らせ役と同じ読み（読める行をすべて取る）で確定する（テストと見本）。

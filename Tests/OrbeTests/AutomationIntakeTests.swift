@@ -4,9 +4,9 @@ import XCTest
 
 /// 受け手の読み——取る行・捨てる行・読んだ位置の進め先。
 ///
-/// 壊れると何が起きるか: 同じ下流の id の行が二重に渡る。出どころの無い行が判定へ届き、候補のリンクと本文が引けない。件数の
-/// 上限で新しい行が先に捨てられる。古さで捨てた行・候補のある行が判定に渡り、提案が二重になる。前の回までに読んだ行が古く
-/// なるたびに捨てた数に数え直される。行を見る agent が読めば取る行を一部しか取らない。
+/// 壊れると何が起きるか: 同じ下流の id の行が二重に渡る。件数の上限で新しい行が先に捨てられる。古さで捨てた行・さばき終えた
+/// 候補のリンクの行が判定に渡り、さばいた候補が戻る。判断待ちの候補のリンクの行が判定に渡らず、対応済みにできない。前の回までに
+/// 読んだ行が古くなるたびに捨てた数に数え直される。行を見る agent が読めば取る行を一部しか取らない。
 final class AutomationIntakeTests: OrbeTestCase {
   typealias Nodes = AutomationGraphTests
 
@@ -26,18 +26,15 @@ final class AutomationIntakeTests: OrbeTestCase {
 
   private func row(
     _ seq: Int, _ id: String? = nil, from edge: AutomationNodeID? = nil, link: String? = nil,
-    sourced: Bool = true, at: Date? = nil, unread: Bool = true, size: Int = 10
+    at: Date? = nil, unread: Bool = true, size: Int = 10
   ) -> AutomationIntake.Row {
     let edge = edge ?? cs
     let id = id ?? "row\(seq)"
-    let item = AutomationItem(
-      id: id, link: link ?? "https://example.com/\(id)", body: "", time: t0)
     return AutomationIntake.Row(
       from: edge, table: edge == cs ? .item : .event, seq: seq,
       ref: edge == cs ? .version(seq) : .event(seq), source: .item(seq), id: id,
       text: String(repeating: "x", count: size), at: at ?? t0.addingTimeInterval(Double(seq)),
-      origin: sourced ? AutomationIntake.Origin(nodeId: edge, row: .version(seq), item: item) : nil,
-      unread: unread)
+      link: link ?? "https://example.com/\(id)", unread: unread)
   }
 
   private func ceilings(cs item: Int = 0, na event: Int = 0) -> [AutomationIntake.Ceiling] {
@@ -47,9 +44,9 @@ final class AutomationIntakeTests: OrbeTestCase {
     ]
   }
 
-  private func context(proposed: Set<String> = [], now: Date? = nil) -> AutomationIntake.Context {
+  private func context(closed: Set<String> = [], now: Date? = nil) -> AutomationIntake.Context {
     AutomationIntake.Context(
-      proposed: { proposed.contains($0) }, now: now ?? t0.addingTimeInterval(3600))
+      closed: { closed.contains($0) }, now: now ?? t0.addingTimeInterval(3600))
   }
 
   /// 捨てた行（古い順に「id 理由」）。
@@ -91,25 +88,25 @@ final class AutomationIntakeTests: OrbeTestCase {
     XCTAssertEqual(drops(read), ["newOld expired"])
   }
 
-  /// 判定だけが、出どころなし → 既に候補がある → 同じリンクの古い方 の順に捨てる。報告は捨てない。
-  func testOnlyAJudgeDropsUnsourcedProposedAndOlderSameLinkRows() throws {
+  /// 判定だけが、判断待ちでない覚えている候補のリンクの行を捨てる。同じリンクの行は絞らずにすべて取る。報告は捨てない。
+  func testOnlyAJudgeDropsRowsOfClosedProposalLinks() throws {
     let judge = try node(Nodes.agent("j", from: ["cs", "na"], deliver: .taskCandidates))
     let report = try node(Nodes.agent("r", from: ["cs", "na"]))
     let rows = [
-      row(1, "unsourced", sourced: false), row(2, "proposed", link: "https://example.com/p"),
-      row(3, "older", link: "https://example.com/same"),
-      row(4, "newer", from: na, link: "https://example.com/same"),
+      row(1, "closed", link: "https://example.com/p"),
+      row(2, "older", link: "https://example.com/same"),
+      row(3, "newer", from: na, link: "https://example.com/same"),
     ]
-    let proposed: Set = ["https://example.com/p"]
+    let closed: Set = ["https://example.com/p"]
 
     let judged = AutomationIntake.read(
-      by: judge, rows, ceilings: ceilings(cs: 3, na: 4), in: context(proposed: proposed))
+      by: judge, rows, ceilings: ceilings(cs: 2, na: 3), in: context(closed: closed))
     let reported = AutomationIntake.read(
-      by: report, rows, ceilings: ceilings(cs: 3, na: 4), in: context(proposed: proposed))
+      by: report, rows, ceilings: ceilings(cs: 2, na: 3), in: context(closed: closed))
 
-    XCTAssertEqual(judged.taken.map(\.id), ["newer"])
-    XCTAssertEqual(drops(judged), ["unsourced unsourced", "proposed proposed", "older sameLink"])
-    XCTAssertEqual(reported.taken.count, 4)
+    XCTAssertEqual(judged.taken.map(\.id), ["older", "newer"])
+    XCTAssertEqual(drops(judged), ["closed closed"])
+    XCTAssertEqual(reported.taken.count, 3)
   }
 
   /// 同じ下流の id の行が 2 つあれば新しい方を取る。件数の上限を超えたら、新しい方から上限まで取る。

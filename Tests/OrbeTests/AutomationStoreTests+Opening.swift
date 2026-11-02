@@ -104,9 +104,9 @@ extension AutomationStoreTests {
     XCTAssertEqual(aside.version, 1)
     XCTAssertTrue(aside.reason.hasPrefix("invalid nodes[1].instruction"), aside.reason)
     XCTAssertTrue(aside.definition.contains(#""key":"judge""#), aside.definition)
-    XCTAssertEqual(reopened.proposals.map(\.item.link), [a.link], "持っていた候補は残る")
+    XCTAssertEqual(reopened.proposals.map(\.link), [Self.link("a")], "持っていた候補は残る")
     try Self.fetch(reopened, fine, [])
-    XCTAssertEqual(reopened.proposals.map(\.item.link), [a.link], "ほかの確定の後も残る")
+    XCTAssertEqual(reopened.proposals.map(\.link), [Self.link("a")], "ほかの確定の後も残る")
     XCTAssertThrowsError(try reopened.setPaused(broken, true, now: Self.at)) {
       guard case .unreadable(broken, _) = $0 as? AutomationError else { return XCTFail("\($0)") }
     }
@@ -219,7 +219,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.unreadable.first?.nodeIds, nodeIds)
   }
 
-  /// 値の壊れた候補は、その 1 件だけが読めない候補としてリンクを塞ぎ続け、持ち主（出した判定のノードの自動化）が無くなれば
+  /// 値の壊れた候補は、その 1 件だけが読めない候補としてその判定の同じリンクを塞ぎ続け、出した判定のノードが無くなれば
   /// メモリからも DB からも忘れる。
   func testAProposalThatCannotBeReadHoldsItsLinkUntilItsHolderIsGone() throws {
     var store: AutomationStore? = AutomationStore()
@@ -228,12 +228,14 @@ extension AutomationStoreTests {
     try Self.fetch(XCTUnwrap(store), id, [a, b])
     try Self.judge(XCTUnwrap(store), id, proposing: [a, b])
     store = nil
-    try database().run("UPDATE proposals SET due = 'x' WHERE link = ?", [.text(a.link)])
+    try database().run("UPDATE proposals SET due = 'x' WHERE link = ?", [.text(Self.link("a"))])
 
     let reopened = AutomationStore()
-    XCTAssertEqual(reopened.proposals.map(\.item.link), [b.link], "ほかの候補は普段どおり")
-    XCTAssertEqual(reopened.unreadableProposals.map(\.link), [a.link])
-    XCTAssertTrue(reopened.heldLinks.contains(a.link), "読めない候補も同じリンクを塞ぐ")
+    XCTAssertEqual(reopened.proposals.map(\.link), [Self.link("b")], "ほかの候補は普段どおり")
+    XCTAssertEqual(reopened.unreadableProposals.map(\.link), [Self.link("a")])
+    XCTAssertTrue(
+      reopened.memory.links(of: reopened.nodeId(id, "judge")).contains(Self.link("a")),
+      "読めない候補も同じリンクを塞ぐ")
 
     try reopened.delete(id, now: Self.at)
 
@@ -244,22 +246,22 @@ extension AutomationStoreTests {
       }, [0])
   }
 
-  /// 読めない候補も、出どころの今の集合の項目が無効になれば読める候補と同じく下がり、メモリからも外れて同じリンクを塞がない。
-  func testAProposalThatCannotBeReadIsWithdrawnWhenItsOriginLeaves() throws {
+  /// 読めない候補も、元にした今の集合の項目が無効になれば読める候補と同じく下がり、メモリからも外れて同じリンクを塞がない。
+  func testAProposalThatCannotBeReadIsWithdrawnWhenItsRowLeaves() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
     let a = Self.item("a")
     try Self.fetch(XCTUnwrap(store), id, [a])
     try Self.judge(XCTUnwrap(store), id, proposing: [a])
     store = nil
-    try database().run("UPDATE proposals SET due = 'x' WHERE link = ?", [.text(a.link)])
+    try database().run("UPDATE proposals SET due = 'x' WHERE link = ?", [.text(Self.link("a"))])
     let reopened = AutomationStore()
-    XCTAssertEqual(reopened.unreadableProposals.map(\.link), [a.link], "前提: 読めない候補")
+    XCTAssertEqual(reopened.unreadableProposals.map(\.link), [Self.link("a")], "前提: 読めない候補")
 
     try Self.fetch(reopened, id, [])
 
     XCTAssertEqual(reopened.unreadableProposals, [])
-    XCTAssertFalse(reopened.heldLinks.contains(a.link))
+    XCTAssertFalse(reopened.memory.links(of: reopened.nodeId(id, "judge")).contains(Self.link("a")))
   }
 
   /// 中身の JSON を壊した回の記録は、その 1 件だけが「不明な記録」として、時刻・契機・成否を持って残る。

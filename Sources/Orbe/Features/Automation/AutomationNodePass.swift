@@ -21,16 +21,13 @@ struct AutomationNodePass {
   /// ノードの役割の入力。ケースが役割と 1 対 1 に対応し、役割と食い違う入力は呼び手の誤り。取得と仕事のケースは行の席を
   /// 持たない——外から届いた文面を、ツールを持ちうる agent の依頼文へ型の上で運ばないため。
   enum Input {
-    /// `since` は前回成功した回の開始時刻（新着の流れの取得にだけ渡す）。
-    case fetch(since: Date?)
-    /// `reachesJudge` は、出した行が途中で取得のノードを通らずに判定のノードへ届くか（`AutomationGraph.reachesTaskCandidates`）。
-    /// 届くなら、入力の行の `id` でない `id` の出力の行も決まりを外した行になる——判定は出どころの項目から候補を作るので、
-    /// 新しく作った行は判定で使えないため。処理が続くなら、そうした行を初めに出した処理が外したことになる。入力の行の `id` を
-    /// 保った行は、入力の行に出どころが無くても外れた行にしない（ノードは決まりどおりに素通ししている。判定が読む時点で
-    /// 出どころなしとして捨てる）。
+    /// `since` は前回成功した回の開始時刻（新着の流れの取得にだけ渡す）。`reachesJudge` は、出した行が途中で取得のノードを
+    /// 通らずに判定のノードへ届くか（`AutomationGraph.reachesTaskCandidates`）。届くなら、依頼文で候補にしたい行に link を
+    /// 書かせる。
+    case fetch(since: Date?, reachesJudge: Bool)
     case process([AutomationNodeRow], reachesJudge: Bool)
-    /// 行はどれも出どころを持つ。`choices` は判断待ちの候補と付け先にできる workspace。
-    case judge([AutomationSourcedRow], choices: AutomationJudgeChoices)
+    /// `choices` は判断待ちの候補と付け先にできる workspace。
+    case judge([AutomationNodeRow], choices: AutomationJudgeChoices)
     /// 入力の無い報告は空。
     case report([AutomationNodeRow])
     case work
@@ -69,7 +66,7 @@ struct AutomationNodePass {
   enum Output: Equatable {
     /// 取れた全項目（書かれた id と書かれたままの 1 行）。何が新しいかは出す側の確定が決める。
     case fetch([AutomationNodeRow])
-    /// どの行も `id` を持ち、`id` は重ならない。入力の行と `id` で照らせた行だけが、その入力を引き継ぎ、出どころを持つ。
+    /// どの行も `id` を持ち、`id` は重ならない。入力の行と `id` で照らせた行だけが、その入力を引き継ぐ。
     case process([AutomationNodeRow])
     /// `resolved` は対応済みにする判断待ちの候補のリンク。
     case judge(proposals: [Proposal], resolved: [String])
@@ -79,9 +76,13 @@ struct AutomationNodePass {
     case sideEffect
   }
 
-  /// 判定が出した候補の案。リンクと本文は出どころの項目から取る。
+  /// 判定が出した候補の案。リンク・本文・時刻は案が指した行から取る。
   struct Proposal: Equatable {
-    let origin: AutomationIntake.Origin
+    /// 案が指した行の、下流へ渡す id。
+    let id: String
+    /// 案が指した行（項目は版）。
+    let row: AutomationRowRef
+    let fields: AutomationRowFields
     let title: String
     let due: TaskItem.DueDate?
     /// 付け先の `Workspace.persistentId`。
@@ -207,12 +208,10 @@ struct AutomationNodePass {
     -> BackgroundInput
   {
     switch input {
-    case .fetch(let since):
+    case .fetch(let since, _):
       guard let since = mark(node, since) else { return BackgroundInput() }
       return BackgroundInput(environment: ["ORBE_SINCE": SessionEvent.iso8601(since)])
-    case .process(let rows, _), .report(let rows):
-      return BackgroundInput(stdin: stdin(rows.map(\.text)))
-    case .judge(let rows, _):
+    case .process(let rows, _), .judge(let rows, _), .report(let rows):
       return BackgroundInput(stdin: stdin(rows.map(\.text)))
     case .sideEffect(let rows, let runId):
       return BackgroundInput(
@@ -235,8 +234,9 @@ struct AutomationNodePass {
     timeZone: TimeZone
   ) -> String {
     switch input {
-    case .fetch(let since):
-      return AutomationPrompts.fetch(instruction: instruction, since: mark(node, since))
+    case .fetch(let since, let reachesJudge):
+      return AutomationPrompts.fetch(
+        instruction: instruction, since: mark(node, since), reachesJudge: reachesJudge)
     case .process(let rows, let reachesJudge):
       return AutomationPrompts.process(
         instruction: instruction, count: rows.count, now: now, timeZone: timeZone,
@@ -269,8 +269,8 @@ extension AutomationNodePass.Input {
   /// ノードの 1 回が受ける行の 1 行ずつ（取得と仕事は持たない）。
   var rowTexts: [String] {
     switch self {
-    case .process(let rows, _), .report(let rows), .sideEffect(let rows, _): rows.map(\.text)
-    case .judge(let rows, _): rows.map(\.text)
+    case .process(let rows, _), .judge(let rows, _), .report(let rows), .sideEffect(let rows, _):
+      rows.map(\.text)
     case .fetch, .work: []
     }
   }
@@ -290,16 +290,10 @@ struct AutomationNodeRow: Equatable {
   let id: String
   /// 行の JSON の 1 行（受ける行は下流へ渡す 1 行、出した行は書かれたまま）。
   let text: String
-  let origin: AutomationIntake.Origin?
+  /// 受ける行は回の履歴が指す行（項目は版）。出した行は持たない。
+  let ref: AutomationRowRef?
   /// 受ける行は出す側の行（下流が引き継ぐ参照）、出した行は引き継いだ入力。
   let source: AutomationSourceRef?
-}
-
-/// 出どころを必ず持つ行。判定は出どころのある行だけを読む。
-struct AutomationSourcedRow: Equatable {
-  let id: String
-  let text: String
-  let origin: AutomationIntake.Origin
 }
 
 /// 保存の形は終わり方を種類で持つ（`end`）。外の形の英文の `ending` は `AutomationRunWire` が足す。

@@ -19,7 +19,7 @@ extension AutomationOutputs {
     _ rows: [AutomationRow], _ shape: JudgeShape, itemIds: Set<String>,
     choices: AutomationJudgeChoices, seen: inout JudgeSeen
   ) -> [Result<AutomationDecision, AutomationBrokenLine>] {
-    let openLinks = Set(choices.open.map(\.item.link))
+    let openLinks = Set(choices.open.map(\.link))
     return rows.map { row in
       let refuse = { (fault: AutomationLineFault) in
         Result<AutomationDecision, AutomationBrokenLine>.failure(
@@ -59,7 +59,7 @@ extension AutomationOutputs {
     _ id: String, _ line: JudgeLine, itemIds: Set<String>, choices: AutomationJudgeChoices,
     _ refuse: (AutomationLineFault) -> Result<AutomationDecision, AutomationBrokenLine>
   ) -> Result<AutomationDecision, AutomationBrokenLine> {
-    guard itemIds.contains(id) else { return refuse(.notNewItem(id)) }
+    guard itemIds.contains(id) else { return refuse(.notTakenItem(id)) }
     guard let rawTitle = line.title, let title = try? TaskStore.validTitle(rawTitle) else {
       return refuse(.titleNotOneLine(id))
     }

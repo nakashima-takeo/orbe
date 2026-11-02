@@ -135,6 +135,25 @@ extension AutomationNodeRun.Result: Codable {
   }
 }
 
+/// `{"dropped"?: {理由: 数}, "withdrawn"?: n}`（空の欄は書かない）。
+extension AutomationCarried: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case dropped, withdrawn
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    dropped = try c.decodeIfPresent(AutomationDrops.self, forKey: .dropped) ?? AutomationDrops()
+    withdrawn = try c.decodeIfPresent(Int.self, forKey: .withdrawn) ?? 0
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    if !dropped.isEmpty { try c.encode(dropped, forKey: .dropped) }
+    if withdrawn > 0 { try c.encode(withdrawn, forKey: .withdrawn) }
+  }
+}
+
 /// 理由ごとの数の object（0 の理由は書かない）。知らない理由は使えない記録として断る。
 extension AutomationDrops: Codable {
   init(from decoder: Decoder) throws {

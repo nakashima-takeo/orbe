@@ -137,7 +137,7 @@ enum TaskPaletteAutomationError: Equatable {
     .map(\.proposal)
     .filter {
       query.isEmpty || $0.title.localizedStandardContains(query)
-        || $0.item.body.localizedStandardContains(query)
+        || $0.fields.body?.localizedStandardContains(query) == true
     }
     .sorted { ($0.proposedAt, -$0.id) > ($1.proposedAt, -$1.id) }
   }
@@ -160,7 +160,8 @@ enum TaskPaletteAutomationError: Equatable {
     workspaces().destination(of: proposal.workspace)
   }
 
-  /// 候補の出どころの取得のノードの名前。候補を出した自動化の定義から引き、ノードか自動化が消えていれば nil。
+  /// 候補の出どころのノード（読んだ行から引き継ぎをたどった先の行を出したノード）の名前。候補を出した自動化の定義から引き、
+  /// ノードか自動化が消えていれば nil。
   func originNodeName(of proposal: AutomationProposal) -> String? {
     store.issuer(of: proposal)?.graph.node(proposal.originNodeId)?.entity.name
   }
@@ -301,7 +302,8 @@ enum TaskPaletteAutomationError: Equatable {
     error = nil
     var task: TaskItem?
     do throws(AutomationError) {
-      task = try store.accept(proposal.id, into: tasks, workspace: destination(of: proposal)?.id)
+      task = try store.accept(
+        proposal.id, into: tasks, workspace: destination(of: proposal)?.id, now: runner.now())
     } catch {
       if case .invalid = error { self.error = .accept }
     }
@@ -313,13 +315,13 @@ enum TaskPaletteAutomationError: Equatable {
   func dismiss() {
     guard let proposal = selectedProposal else { return }
     error = nil
-    try? store.dismiss(proposal.id)
+    try? store.dismiss(proposal.id, now: runner.now())
     settle()
   }
 
   /// ⌘O・リンクのクリック。
   func openLink() {
-    guard let proposal = selectedProposal, let url = URL(string: proposal.item.link) else { return }
+    guard let proposal = selectedProposal, let url = URL(string: proposal.link) else { return }
     onOpenURL(url)
   }
 
