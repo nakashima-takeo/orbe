@@ -60,10 +60,10 @@ updated: 2026-11-02
 - `orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due] [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting] [--description <text> | --no-description] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--no-links] [--worktree <path> | --no-worktree] [--json]` … 渡した項目だけを変える。`--no-*` は値を外す。完了は `--status done`（待ちは外れる）。変更フラグが 1 つも無い、または `--x` と `--no-x` を同時に渡すと usage エラー（exit 2）。
 - `--issue` / `--pr` は GitHub の Issue・PR を結び付ける（くり返し可）。**引数に現れた順を保ち、先頭が主**になる。`set` では渡した結び付きで丸ごと置き換え、`--no-links` で全部外す（`--issue` / `--pr` と同時なら usage エラー）。1 つの Issue・PR は 1 つのタスクにだけ付き、ほかのタスクに付いているものは拒否される（[タスク](../platform/tasks.md)）。`owner/name#N` は最後の `#` で割り、後ろが正の整数でなければ usage エラー（exit 2）。`owner/name` の形は control が確かめる。
 - `--worktree` はタスクに作業の場所を付ける（`orb task set 12 --worktree .`）。**相対パスは呼び出し元の作業ディレクトリから解いて**絶対パスで送り、control が実在するディレクトリか確かめて、それを含む worktree のルートに揃える（worktree の中のどこで打ってもルートが付く）。1 つの worktree は 1 つのタスクにだけ付き、ほかのタスクが持つ worktree は相手の ID を添えて拒否される。`set --no-worktree` で外す。
-- `orb task condition <id> (--condition <text> --check <command> --every <minutes> --deadline <date-time> | --no-condition) [--json]` … 待っているタスクに解ける条件を付ける（`set_wait_condition`。[待ちの条件](../platform/tasks.md)。説明・確認のコマンド・間隔〔分〕・期限）。条件を付ける口はこれだけ（`add` / `set` は受けない）。4 つは揃えて渡し、欠ければ usage エラー（exit 2）。`--every` は整数でなければ usage エラー。期限は ISO 8601 の日時をそのまま送り、読むのは control（時差の無い形は Mac のタイムゾーンの時刻）。値の規則は control が確かめる。待っていないタスクには先に `set --waiting` で待ちにする。`--no-condition` は条件だけを外す（待ちは残る。`--condition` と同時か、どちらも無ければ usage エラー）。呼び出し元タブ（`ORBE_TAB`）を control へ伝え、条件にタブの作業ディレクトリと、タブで作業中の agent の会話が入る。TSV の一覧は変えない（条件と経過は `--json` で見える）。
+- `orb task condition <id> (--condition <text> --check <command> --every <minutes> --deadline <date-time> | --no-condition) [--json]` … 待っているタスクに解ける条件を付ける（`set_wait_condition`。[待ちの条件](../platform/tasks.md)。説明・確認のコマンド・間隔〔分〕・期限）。条件を付ける口はこれだけ（`add` / `set` は受けない）。4 つは揃えて渡し、欠ければ usage エラー（exit 2）。`--every` は整数でなければ usage エラー。期限は ISO 8601 の日時をそのまま送り、読むのは control（時差の無い形は Mac のタイムゾーンの時刻）。値の規則は control が確かめる。待っていないタスクには先に `set --waiting` で待ちにする。`--no-condition` は条件だけを外す（待ちは残る。`--condition` と同時か、どちらも無ければ usage エラー）。呼び出し元タブ（`ORBE_TAB`）を要求の封筒で control へ伝え、条件にタブの作業ディレクトリと、タブで作業中の agent の会話が入る。TSV の一覧は変えない（条件と経過は `--json` で見える）。
 - `orb task rm <id> [--json]`
 
-**`add` で `--workspace` を省くと、呼び出し元タブ（`ORBE_TAB`）の workspace に付く**——タブの外なら「なし」。`tab new` / `agent spawn` の省略が前面の workspace に落ちるのと違うのは、タブ内の agent が背景で足したタスクを、人が見ている別の workspace に付けないため。同じ理由で、`--workspace current` は**前面の** workspace であって自分のタブの workspace ではない。`add` は `ORBE_TAB` を control へ伝え、タブ内の agent が足したタスクにはその agent の名前が追加者として残る。
+**`add` で `--workspace` を省くと、呼び出し元タブ（`ORBE_TAB`）の workspace に付く**——タブの外なら「なし」。`tab new` / `agent spawn` の省略が前面の workspace に落ちるのと違うのは、タブ内の agent が背景で足したタスクを、人が見ている別の workspace に付けないため。同じ理由で、`--workspace current` は**前面の** workspace であって自分のタブの workspace ではない。`add` は `ORBE_TAB` を要求の封筒で control へ伝え、タブ内の agent が足したタスクにはその agent の名前が追加者として残る。
 
 ステータスと優先度の語彙と日付の妥当性は control が持ち、CLI は素通しする（`--help` の一覧は人が読むための写し）。詳細の `-` 始まりや空文字は値必須フラグの規約で渡せず、詳細を外すのは `--no-description`。
 
@@ -115,7 +115,7 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 ## 文脈解決
 
-control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。`task add` と `task set` は呼び出し元タブとして `ORBE_TAB` を control へ伝える（追加者と既定の付き先、待ちの条件の作業ディレクトリと会話に使う）。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
+control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。`task add` と `task condition` は呼び出し元タブとして `ORBE_TAB` を要求の封筒（[api](api.md#呼び出し元タブ封筒の-caller)）で control へ伝える（追加者と既定の付き先、待ちの条件の作業ディレクトリと会話に使う）。ほかのサブコマンドは載せない。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
 
 ## 終了コード・エラー
 
