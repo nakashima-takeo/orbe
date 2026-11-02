@@ -68,7 +68,8 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   /// 見本の 12 ノードの線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
   func testMapLanesFollowTheInputs() throws {
     let detail = BoardAutomationDetailValue(
-      automations()[0], text: text, running: { _ in false }, open: 0, next: nil)
+      automations()[0], text: text, running: { _ in false }, open: 0, next: nil,
+      workspaces: AutomationWorkspaces(all: [], home: nil))
 
     XCTAssertEqual(detail.rows.map(\.lanes.lane), [0, 1, 2, 3, 4, 5, 3, 4, 5, 2, 0, 4, 0, 2])
     XCTAssertEqual(detail.laneCount, 6)

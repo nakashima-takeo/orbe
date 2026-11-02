@@ -44,14 +44,31 @@ final class AutomationWorkspacesTests: OrbeTestCase {
       ("真偽値", definition(true, nil), "invalid workspace: pass a workspace id from list_workspaces"),
       ("知らない ID", definition(nil, 7), "nodes[1].workspace: unknown workspace 7"),
       (
-        "消えた workspace の書き戻し", definition(3, NSNull()),
-        "nodes[1].workspace: the workspace was removed; pass a workspace id from list_workspaces or "
-          + "leave workspace out"
+        "自動化の workspace があるノードの null", definition(3, NSNull()),
+        "nodes[1].workspace: null names no workspace (a removed workspace is listed as null); pass a "
+          + "workspace id from list_workspaces, or leave workspace out to run in the automation's "
+          + "workspace"
+      ),
+      (
+        "自動化の workspace が無いノードの null", definition(nil, NSNull()),
+        "nodes[1].workspace: null names no workspace (a removed workspace is listed as null); pass a "
+          + "workspace id from list_workspaces, or leave workspace out and give the node an absolute "
+          + "directory"
       ),
     ] {
       XCTAssertThrowsError(try workspaces.inward(object), label) {
         XCTAssertEqual($0 as? AutomationError, .invalid(message), label)
       }
     }
+  }
+
+  /// agent のノードの席は写さない（定義の読みが値によらず「agent のノードは workspace を持たない」で断る）。
+  func testAnAgentNodeSeatIsLeftForTheDefinitionToRefuse() throws {
+    var object = definition(nil, nil)
+    object["nodes"] = [["key": "r", "instruction": "i", "workspace": NSNull()]]
+
+    let stored = try workspaces.inward(object)
+
+    XCTAssertTrue((stored["nodes"] as? [[String: Any]])?[0]["workspace"] is NSNull)
   }
 }

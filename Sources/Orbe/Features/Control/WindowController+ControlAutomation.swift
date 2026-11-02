@@ -2,7 +2,7 @@ import Foundation
 import OrbeSessionLog
 
 /// 自動化の 9 動詞と、裏の agent の回の道具の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
-/// `AutomationTrials` に任せ、ここは応答の形を組む。
+/// `AutomationTrials` に任せ、ここは定義の workspace の席を外の形と保存の形の間で写し、定義を読み、応答の形を組む。
 extension WindowController {
   /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
   func controlListAutomations() -> Result<Any, ControlError> {

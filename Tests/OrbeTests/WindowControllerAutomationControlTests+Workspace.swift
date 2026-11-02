@@ -85,7 +85,8 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(error.code, -32602)
     XCTAssertEqual(
       error.message,
-      "nodes[1].workspace: the workspace was removed; pass a workspace id from list_workspaces or "
-        + "leave workspace out")
+      "nodes[1].workspace: null names no workspace (a removed workspace is listed as null); pass a "
+        + "workspace id from list_workspaces, or leave workspace out to run in the automation's "
+        + "workspace")
   }
 }

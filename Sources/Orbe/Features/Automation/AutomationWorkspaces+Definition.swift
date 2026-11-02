@@ -1,21 +1,25 @@
 import Foundation
 
-// 定義の JSON の workspace の席（最上位と `nodes[i]`）の、外の形と保存の形の写し。外の形は起動ごとの ID（`list_workspaces` の
-// `id`）、保存の形は `Workspace.persistentId` の文字列。定義の型は保存の形だけを読み書きし、写しは制御の境界でここを通す。
+// 定義の JSON の workspace の席（最上位とコマンドのノード）の、外の形と保存の形の写し。外の形は起動ごとの ID（`list_workspaces`
+// の `id`）、保存の形は `Workspace.persistentId` の文字列。定義の型は保存の形だけを読み書きし、写しは制御の境界でここを通す。
+// agent のノードの席は写さない（定義の読みが値によらず断る）。
 
 extension AutomationWorkspaces {
-  /// 外の形の定義を保存の形へ。整数でない値・`null`（消えた workspace の書き戻し）・知らない ID を、定義の中の場所で断る。
-  /// 席の外の形の誤りは写さずに残す（定義の読みが場所付きで断る）。
+  /// 外の形の定義を保存の形へ。整数でない値・`null`・知らない ID を、定義の中の場所で断る。`null` の断りは、席を外したときに
+  /// どこで走るかを言う——ノードの席で「書かない」は自動化の workspace を継ぐ意味で、消えた workspace の席を外すと別の
+  /// workspace で走りうるため。席の外の形の誤りは写さずに残す（定義の読みが場所付きで断る）。
   func inward(_ definition: [String: Any]) throws(AutomationError) -> [String: Any] {
     var definition = definition
-    try inward(&definition, at: "workspace")
-    if var nodes = definition["nodes"] as? [Any] {
-      for index in nodes.indices {
-        guard var node = nodes[index] as? [String: Any] else { continue }
-        try inward(&node, at: "nodes[\(index)].workspace")
-        nodes[index] = node
-      }
-      definition["nodes"] = nodes
+    try inward(
+      &definition, at: "workspace",
+      leftOut: "leave workspace out and give its command nodes absolute directories")
+    let inherited = definition["workspace"] != nil
+    try commandNodes(&definition) { node, index throws(AutomationError) in
+      try inward(
+        &node, at: "nodes[\(index)].workspace",
+        leftOut: inherited
+          ? "leave workspace out to run in the automation's workspace"
+          : "leave workspace out and give the node an absolute directory")
     }
     return definition
   }
@@ -25,23 +29,30 @@ extension AutomationWorkspaces {
   func outward(_ definition: [String: Any]) -> [String: Any] {
     var definition = definition
     outward(&definition)
-    if var nodes = definition["nodes"] as? [Any] {
-      for index in nodes.indices {
-        guard var node = nodes[index] as? [String: Any] else { continue }
-        outward(&node)
-        nodes[index] = node
-      }
-      definition["nodes"] = nodes
-    }
+    commandNodes(&definition) { node, _ in outward(&node) }
     return definition
   }
 
-  private func inward(_ object: inout [String: Any], at path: String) throws(AutomationError) {
+  private func commandNodes<E: Error>(
+    _ definition: inout [String: Any], _ body: (inout [String: Any], Int) throws(E) -> Void
+  ) throws(E) {
+    guard var nodes = definition["nodes"] as? [Any] else { return }
+    for index in nodes.indices {
+      guard var node = nodes[index] as? [String: Any], node["command"] != nil else { continue }
+      try body(&node, index)
+      nodes[index] = node
+    }
+    definition["nodes"] = nodes
+  }
+
+  private func inward(_ object: inout [String: Any], at path: String, leftOut: String)
+    throws(AutomationError)
+  {
     guard let raw = object["workspace"] else { return }
     if raw is NSNull {
       throw .invalid(
-        "\(path): the workspace was removed; pass a workspace id from list_workspaces or leave "
-          + "workspace out")
+        "\(path): null names no workspace (a removed workspace is listed as null); pass a "
+          + "workspace id from list_workspaces, or \(leftOut)")
     }
     guard !Self.isBool(raw), let id = raw as? Int else {
       throw .invalid("invalid \(path): pass a workspace id from list_workspaces")

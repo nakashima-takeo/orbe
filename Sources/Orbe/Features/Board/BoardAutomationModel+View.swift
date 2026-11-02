@@ -14,7 +14,8 @@ extension BoardAutomationModel {
     guard let automation = store.automation(id) else { return nil }
     return BoardAutomationDetailValue(
       automation, text: text, running: { self.runner.isRunning(id, $0) },
-      open: store.shelvedProposals(of: id).count, next: runner.nextRunAt(automation, now: now))
+      open: store.shelvedProposals(of: id).count, next: runner.nextRunAt(automation, now: now),
+      workspaces: runner.workspaces())
   }
 
   /// 選ばれているノードのカードの値。ノードが選ばれていなければ nil。

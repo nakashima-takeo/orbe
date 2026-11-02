@@ -169,9 +169,12 @@ struct AutomationNodePass {
     guard let workspace else {
       return BackgroundCommand(script: command.script, directory: command.directory)
     }
+    guard let relative = command.directory else {
+      preconditionFailure("a node that runs in a workspace has a directory")
+    }
     guard let root = workspaces().workspace(workspace)?.root else { return nil }
     let directory = URL(fileURLWithPath: root, isDirectory: true)
-      .appendingPathComponent(command.directory ?? ".").standardized.path
+      .appendingPathComponent(relative).standardized.path
     return BackgroundCommand(script: command.script, directory: directory)
   }
 

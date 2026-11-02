@@ -666,8 +666,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardNodeTimeout
   case boardNodeDirectory
   case boardNodeWorkspace
-  case boardNodeWorkspaceInherited
-  case boardNodeWorkspaceRemoved
+  case boardWorkspaceLine
+  case boardWorkspaceRemoved
   case boardNodeNext
   case boardNodeAgent
   case boardNodeDefaultModel

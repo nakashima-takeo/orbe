@@ -76,12 +76,8 @@ extension BoardAutomationNodeValue {
     case .agent(let agent): body = agent.instruction
     case .command(let command): body = command.script
     }
-    var facts = Self.facts(automation, node, text: text, next: next, open: open)
-    if let workspace = Self.workspace(node, workspaces, l10n) {
-      facts.insert(
-        workspace, at: facts.firstIndex { $0.label == .boardNodeDirectory } ?? facts.endIndex)
-    }
-    self.facts = facts
+    facts = Self.facts(
+      automation, node, text: text, Outside(next: next, open: open, workspaces: workspaces))
     breach = state.breach.map { Self.breach($0, text: text) }
     lastText = Self.lastText(state.runs, text: text)
     runs = BoardAutomationSummary.lines(state.runs, node: node, text: text)
@@ -113,9 +109,16 @@ extension BoardAutomationNodeValue {
     return nil
   }
 
+  /// 項目が自動化の外から引く、描くときの値。
+  private struct Outside {
+    let next: Date?
+    let open: Int
+    let workspaces: AutomationWorkspaces
+  }
+
   private static func facts(
-    _ automation: Automation, _ node: AutomationGraph.Node, text: AutomationText, next: Date?,
-    open: Int
+    _ automation: Automation, _ node: AutomationGraph.Node, text: AutomationText,
+    _ outside: Outside
   ) -> [Fact] {
     let l10n = text.l10n
     let graph = automation.graph
@@ -150,7 +153,8 @@ extension BoardAutomationNodeValue {
     }
     switch action.destination {
     case .nextNode: break
-    case .taskCandidates: fact(.boardNodeDestination, l10n.format(.boardNodeTaskCandidates, open))
+    case .taskCandidates:
+      fact(.boardNodeDestination, l10n.format(.boardNodeTaskCandidates, outside.open))
     case .report:
       fact(.boardNodeDestination, BoardAutomationDetailValue.reports(automation.notify, l10n))
     case .sideEffect: fact(.boardNodeDestination, l10n.string(.boardNodeNothing))
@@ -159,29 +163,20 @@ extension BoardAutomationNodeValue {
       facts.append(pending(state.pending, maxItems: entity.maxItems, l10n))
     }
     fact(.boardNodeTimeout, l10n.format(.boardNodeMinutes, node.timeoutMinutes))
+    if let workspace = node.workspace {
+      fact(
+        .boardNodeWorkspace,
+        BoardAutomationDetailValue.workspace(workspace, outside.workspaces, l10n))
+    }
     if case .command(let command) = action.method, let directory = command.directory {
       fact(.boardNodeDirectory, directory)
     }
     if case .scheduled = entity.trigger {
       fact(
         .boardNodeNext,
-        automation.paused ? l10n.string(.automationPaused) : next.map(text.stamp) ?? "")
+        automation.paused ? l10n.string(.automationPaused) : outside.next.map(text.stamp) ?? "")
     }
     return facts
-  }
-
-  /// 走る workspace の項目（「orbe」「orbe（自動化の設定）」）。今の workspace に無ければ「削除済み」。作業ディレクトリの直前に
-  /// 置く（workspace が効くコマンドは作業ディレクトリを必ず持つ）。走る workspace の無いノードは nil。
-  private static func workspace(
-    _ node: AutomationGraph.Node, _ workspaces: AutomationWorkspaces, _ l10n: LocalizationStore
-  ) -> Fact? {
-    guard let workspace = node.workspace, case .command(let command) = node.action.method else {
-      return nil
-    }
-    let name = workspaces.workspace(workspace)?.name ?? l10n.string(.boardNodeWorkspaceRemoved)
-    let value = command.workspace == nil ? l10n.format(.boardNodeWorkspaceInherited, name) : name
-    return Fact(
-      label: .boardNodeWorkspace, incoming: false, value: [Segment(text: value, look: .plain)])
   }
 
   /// 同じ表示になるツール（同じサーバーの MCP、同じコマンドの Bash 規則）は、最初の 1 つだけを残す。
