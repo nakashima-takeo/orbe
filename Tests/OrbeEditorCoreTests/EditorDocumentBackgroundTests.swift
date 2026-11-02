@@ -180,8 +180,8 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     }
   }
 
-  /// 構文木が誤りを含まなくなれば、その構文木の範囲を丸ごと作り直す——誤りを含む間に枠で落ちた、余白を超える構文（区画
-  /// をいくつもまたぐコメント）の色が、誤りから遠い編集していない行にも戻る。
+  /// 構文木が誤りを含まなくなれば、その構文木の範囲を丸ごと作り直す——誤りを含む間に枠で落ちた、余白を超える構文
+  /// （格子の目をいくつもまたぐコメント）の色が、誤りから遠い編集していない行にも戻る。
   func testFixingTheLastErrorRestoresColorsDroppedByTheFrame() throws {
     let comment = "/*\n" + String(repeating: "note\n", count: 30_000) + "*/\n"
     let source = "let = 1\n" + comment + "let b = 2\n"

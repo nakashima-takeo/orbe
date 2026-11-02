@@ -242,7 +242,8 @@ final class QueryCursor {
 }
 
 extension QueryCursor {
-  /// 層 1 つの、区画の capture を集める（`clip` は層の注入の範囲と区画の積）。誤りを含む層では区画の枠を掛ける。
+  /// 層 1 つの、区間 `piece` の capture を集める（`clip` は層の注入の範囲と区間の積）。誤りを含む層では、区間を含む格子の目の
+  /// 枠を掛ける。
   func collectHighlights(
     of placed: Placed, in piece: Range<Int>, clip: [Range<Int>], text: TextRope,
     into captures: inout [PaintedCapture]

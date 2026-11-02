@@ -7,7 +7,7 @@ import os
 /// 文書は編集ごとに、編集（行と桁つき）と最新の写しを郵便受けに積み、止まっていれば起こす。起きた裏の仕事は、郵便受けの
 /// 編集をまとめて受け取って全部当ててから 1 回だけ差分解析し（速い打鍵は 1 回に畳まれる）、「構文木が変わった区間 ∪
 /// 編集の区間」に掛かる行を丸ごと「まだ作り直していない」に足す——字の中身で役割が決まる capture（`#match?` など）は、
-/// 構文木が変わらなくても役割が変わるから。作り直しは区画ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
+/// 構文木が変わらなくても役割が変わるから。作り直しは格子で切った区間ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
 /// 変わった字を版つきで置く。見えていない範囲は、最後の編集から `quietDelay` 経つまで始めない（打鍵が続く間は見えている範囲
 /// だけを作る。開いてから編集が無ければ待たない）。区切りの間に新しい編集が来ていれば、それを先に当てる。文書を閉じたら、走っている解析を打ち切って止まる。
 actor SyntaxWorker {
@@ -190,7 +190,7 @@ actor SyntaxWorker {
     stale.formUnion(layers.takeInvalidated())
   }
 
-  /// 次に作り直す区画。見えている行に掛かる部分が先。見えていない部分は待ちが明けてから。
+  /// 次に作り直す区間（格子で切る → `SyntaxLayers`）。見えている行に掛かる部分が先。見えていない部分は待ちが明けてから。
   private func nextTarget(shown: NSRange, quiet: Bool) -> Range<Int>? {
     let part =
       stale.intersection(IndexSet(integersIn: shown.location..<NSMaxRange(shown))).rangeView.first
@@ -200,7 +200,7 @@ actor SyntaxWorker {
     return part.lowerBound..<min(part.upperBound, block)
   }
 
-  /// 区画 1 つを作り直して置く。
+  /// 区間 1 つを作り直して置く。
   private func rebuild(_ target: Range<Int>, shown: NSRange) {
     let spans = layers.roles(in: NSRange(target))
     guard !layers.isCancelled else { return }
