@@ -22,8 +22,8 @@ final class AutomationTrials {
     self.runner = runner
   }
 
-  /// 試走を始める（すぐ返り、写しは後で進む）。範囲と与えた行を始めるときの定義で確かめてから、同じ持ち主の前の試走を止めて
-  /// 置き換える（新しい定義の試走は、覚える数を超えた古いものを止めて忘れる）。
+  /// 試走を始める（すぐ返り、写しは後で進む）。範囲と与えた行を始めるときの定義で確かめ、写し始めてから、同じ持ち主の前の試走を
+  /// 止めて置き換える（新しい定義の試走は、覚える数を超えた古いものを止めて忘れる）——断った依頼で前の試走が消えないように。
   func start(_ target: AutomationTrial.Target, _ request: AutomationTrial.Request)
     throws(AutomationError) -> AutomationTrial
   {
@@ -32,18 +32,18 @@ final class AutomationTrials {
     if let limit = request.limit, limit < 1 { throw .invalid("limit must be a positive integer") }
     let span = try AutomationTrial.span(of: shape, request)
     if let rows = request.rows { _ = try AutomationTrial.given(rows, in: span, of: shape) }
-    if let owner = target.owner {
-      trials.values.filter { $0.target.owner == owner }.map(\.id).forEach(forget)
-    } else {
-      let ownerless = trials.values.filter { $0.target.owner == nil }.map(\.id).sorted()
-      ownerless.dropLast(Self.newDefinitionTrials - 1).forEach(forget)
-    }
     lastId += 1
     let id = lastId
     let trial = AutomationTrial(
       id: id, target: target, request: request, keys: AutomationTrial.Keys(span, of: shape),
       production: runner, onEnd: { [weak self] in self?.ended(id) })
     try trial.begin()
+    if let owner = target.owner {
+      trials.values.filter { $0.target.owner == owner }.map(\.id).forEach(forget)
+    } else {
+      let ownerless = trials.values.filter { $0.target.owner == nil }.map(\.id).sorted()
+      ownerless.dropLast(Self.newDefinitionTrials - 1).forEach(forget)
+    }
     trials[id] = trial
     return trial
   }

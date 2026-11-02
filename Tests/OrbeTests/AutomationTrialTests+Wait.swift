@@ -9,13 +9,19 @@ import XCTest
 /// 試走を待ち続ける。
 extension AutomationTrialTests {
   /// 同じ自動化で始め直すと（保存した定義の試走を直す定義で始め直しても）前の試走の手段が止まり、前の試走の ID は知らない試走に
-  /// なる。前の ID で待っている読み手にも、新しい試走ではなく知らない試走として返る。
+  /// なる。前の ID で待っている読み手にも、新しい試走ではなく知らない試走として返る。始めるときに断られた試走は、前の試走を止めない。
   func testStartingAgainStopsTheRunningTrialAndForgetsItsId() throws {
     let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
     let first = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     var replies: [Result<AutomationTrial, AutomationError>] = []
     trials.wait(first.id, timeout: .seconds(10)) { result, _ in replies.append(result) }
+
+    XCTAssertThrowsError(try trials.start(.saved(id), .init(to: ["nope"])))
+    XCTAssertTrue(try trials.trial(first.id) === first, "断られた試走は前の試走を置き換えない")
+    XCTAssertTrue(first.running)
+    XCTAssertEqual(jobs.stopped, [])
+    XCTAssertTrue(replies.isEmpty)
 
     let current = try XCTUnwrap(store.automation(id))
     var rewrite = current.definition
