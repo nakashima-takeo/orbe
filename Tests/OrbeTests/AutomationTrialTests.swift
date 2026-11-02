@@ -198,6 +198,38 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(calls("y").count, 1)
   }
 
+  /// 試走の間、道のノードは予定の時刻を過ぎていても写しの上で予定では回らず、流しの順に 1 回だけ動く。
+  func testNodesOnThePathDoNotRunOnTheirScheduleInTheCopy() throws {
+    // 写しの番人は壁時計で数えるので、1 時間前に足した 1 分ごとのノードの予定は写しの上で過ぎている。判定には前からの読めば取る
+    // 行を持たせる（予定で回れば、上流を待たずにそれを読む）。
+    now = Date()
+    let added = now.addingTimeInterval(-3600)
+    let id = try store.create(
+      AutomationDefinition(
+        name: "自動化", notify: nil,
+        nodes: [
+          fetch("gh"),
+          definitionNode("judge", .scheduled(.every(60)), from: ["gh"], deliver: .taskCandidates),
+        ]), now: added
+    ).id
+    try store.record(
+      id, nodeKey: "gh", at: added,
+      outcome: DesignSceneFixtures.fetched([
+        AutomationItem(id: "a", link: "https://example.com/a", body: "a", time: added)
+      ]))
+
+    let trial = try trials.start(id, .init())
+    waitCalls("gh", 1)
+    XCTAssertEqual(calls("judge"), [], "上流が終わる前に予定で回らない")
+    finish("gh", fetched(["a", "b"]))
+    waitCalls("judge", 1)
+    XCTAssertEqual(ids("judge"), [downstream("gh", "a", of: id), downstream("gh", "b", of: id)])
+    finish("judge", "")
+    ended(trial)
+
+    XCTAssertEqual(calls("judge").count, 1)
+  }
+
   /// 処理が `id` の無い行を出すと、試走の回は本番の回と同じ失敗の理由と外した行の記録で返る。
   func testABreachInATrialReadsTheSameAsInProduction() throws {
     let id = try define([
