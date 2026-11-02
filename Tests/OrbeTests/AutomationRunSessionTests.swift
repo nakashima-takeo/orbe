@@ -176,6 +176,23 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
     XCTAssertFalse(reply.texts[0].contains("report_error"), reply.texts[0])
   }
 
+  /// 中身の無い結果の呼び出しは、受けない引数が付いていても断った結果に数えず、report_nothing で回を終えられる。
+  func testAnEmptyCallWithAnUnknownArgumentLeavesRoomToReportNothing() {
+    let process = AutomationRunSession(
+      .process(rows(1), reachesJudge: false), writer: AutomationNodeID(1))
+    _ = process.call("read_run_rows", [:])
+    XCTAssertTrue(process.call("put_rows", ["rows": [], "reason": "無い"]).isError)
+
+    let report = AutomationRunSession(.report(rows(1)), writer: AutomationNodeID(1))
+    _ = report.call("read_run_rows", [:])
+    XCTAssertTrue(report.call("put_report", ["text": " ", "note": "無い"]).isError)
+
+    XCTExpectFailure("受けない引数の照らしが中身の無い呼び出しの扱いより先に効き、外れた件に数える") {
+      XCTAssertFalse(process.call("report_nothing", ["why": "無い"]).isError)
+      XCTAssertFalse(report.call("report_nothing", ["why": "無い"]).isError)
+    }
+  }
+
   /// 何も無いの申告は結果の前だけで、申告の後は結果を受けない。失敗の申告の後も受けない。
   func testNothingAndErrorDoNotMixWithResults() {
     let fetch = AutomationRunSession(
