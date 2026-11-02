@@ -170,7 +170,7 @@ extension AutomationDatabase {
     let action: AutomationActionDef
     do throws(Unbuilt) {
       trigger = try decode(AutomationNode.Trigger.self, storedTrigger, at: "\(at).trigger")
-      action = try decode(AutomationActionDef.self, storedAction, at: at)
+      action = try decode(StoredAction.self, storedAction, at: at).action
     } catch {
       return .failure(error)
     }
@@ -181,6 +181,17 @@ extension AutomationDatabase {
           AutomationDefinition.Input(
             nodeKey: keys[$0.from] ?? "", take: $0.take, maxAgeHours: $0.maxAgeHours)
         }, action: action, maxItems: row.maxItems, retentionDays: row.retentionDays))
+  }
+
+  /// 保存した動作の定義（`action_defs.action`）。外の形ではノードの欄と同じオブジェクトに並び、ノードの入口が照らすので、保存の
+  /// 列を読むこの入口では動作の定義の欄だけを持つかを照らす。
+  private struct StoredAction: Decodable {
+    let action: AutomationActionDef
+
+    init(from decoder: Decoder) throws {
+      try decoder.checkKeys(AutomationActionDef.keys)
+      action = try AutomationActionDef(from: decoder)
+    }
   }
 
   private static func decode<T: Decodable>(_ type: T.Type, _ object: [String: Any], at: String)

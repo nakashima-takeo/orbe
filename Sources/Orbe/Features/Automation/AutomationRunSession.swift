@@ -16,6 +16,30 @@ final class AutomationRunSession {
     case putReport = "put_report"
     case reportNothing = "report_nothing"
     case reportError = "report_error"
+
+    /// 受ける引数の名前（orbe-mcp の道具の `inputSchema` の欄と同じ）。
+    var arguments: Set<String> {
+      switch self {
+      case .readRunRows: ["offset", "limit"]
+      case .readWaitingProposals, .readWorkspaces: []
+      case .putItems: ["items"]
+      case .putRows: ["rows"]
+      case .propose: ["proposals"]
+      case .resolve: ["links"]
+      case .putReport: ["text"]
+      case .reportNothing: ["why"]
+      case .reportError: ["what"]
+      }
+    }
+
+    /// 結果を出す道具か（断った呼び出しを外れた件に数える）。
+    var givesResults: Bool {
+      switch self {
+      case .putItems, .putRows, .propose, .resolve, .putReport: true
+      case .readRunRows, .readWaitingProposals, .readWorkspaces, .reportNothing, .reportError:
+        false
+      }
+    }
   }
 
   /// 道具の返事。`texts` は返事の中身の塊。
@@ -95,6 +119,9 @@ final class AutomationRunSession {
   func call(_ name: String, _ arguments: [String: Any]) -> Reply {
     guard let tool = Tool(rawValue: name), tools.contains(tool) else {
       return .refused("\(name) is not a tool of this run")
+    }
+    if let unknown = arguments.keys.sorted().first(where: { !tool.arguments.contains($0) }) {
+      return unknownArgument(unknown, of: tool)
     }
     switch tool {
     case .readRunRows: return page(arguments)
@@ -238,6 +265,19 @@ final class AutomationRunSession {
     }
     nothing = (arguments["why"] as? String) ?? ""
     return .ok("Noted: nothing this time.")
+  }
+
+  /// 道具の受けない引数。結果の道具では呼び出しの形の誤り（外れた件）、読む道具と申告の道具では数えない断り。
+  private func unknownArgument(_ key: String, of tool: Tool) -> Reply {
+    let takes =
+      tool.arguments.isEmpty
+      ? "\(tool.rawValue) takes no arguments"
+      : "\(tool.rawValue) takes only \(tool.arguments.sorted().joined(separator: ", "))"
+    guard tool.givesResults else {
+      return .refused("\(AutomationLineFault.unknownArgument(key).text); \(takes).")
+    }
+    if let closed { return closed }
+    return refuse(.unknownArgument(key), takes)
   }
 
   /// 呼び出しの形そのものの誤りで断り、断った結果に数える（位置は持たない）。

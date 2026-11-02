@@ -97,6 +97,34 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
       session.rejected.map(\.line), [2, 3, 4, 1, nil], "空の配列は数えず、配列でない引数は位置の無い 1 件")
   }
 
+  /// 道具が受けない引数のある呼び出しは丸ごと受けない。結果の道具では位置の無い外れた件 1 つとして数え（直さずに終えれば出力の
+  /// 形式エラー）、読む道具と申告の道具では数えずに断る。どれも受ける引数を言う。
+  func testAnArgumentAToolDoesNotTakeIsRefused() {
+    let session = AutomationRunSession(
+      .process(rows(1), reachesJudge: false), writer: AutomationNodeID(1))
+
+    let read = session.call("read_run_rows", ["offset": 0, "page": 2])
+    XCTAssertTrue(read.isError)
+    XCTAssertEqual(read.texts, ["unknown argument page; read_run_rows takes only limit, offset."])
+    XCTAssertEqual(session.unread, [0], "断った読みは行を渡さない")
+    _ = session.call("read_run_rows", [:])
+
+    let put = session.call("put_rows", ["rows": [["id": "a"]], "items": [["id": "b"]]])
+    XCTAssertTrue(put.isError)
+    XCTAssertEqual(
+      put.texts,
+      ["Nothing from this call was accepted: unknown argument items; put_rows takes only rows."])
+    XCTAssertEqual(session.outputs.count, 0)
+    XCTAssertEqual(
+      session.rejected, [AutomationBrokenLine(line: nil, fault: .unknownArgument("items"))])
+    XCTAssertTrue(session.refusedLast)
+    XCTAssertTrue(session.call("report_nothing", ["why": "無い", "reason": "x"]).isError)
+    XCTAssertEqual(session.rejected.count, 1, "申告の道具の断りは数えない")
+
+    XCTAssertFalse(session.call("put_rows", ["rows": [["id": "a"]]]).isError)
+    XCTAssertFalse(session.refusedLast)
+  }
+
   /// 空の配列は断った結果に数えないので、勧めどおり report_nothing を呼べる。report_error を持たない役割には、断られた後の
   /// report_nothing の断りで report_error を勧めない。
   func testAnEmptyCallLeavesRoomToReportNothing() {

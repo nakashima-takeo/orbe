@@ -74,6 +74,7 @@ final class AutomationStoreTests: OrbeTestCase {
   static let breachLines = [
     AutomationBrokenLine(line: 3, fault: .missingKey("link")),
     AutomationBrokenLine(line: nil, fault: .notArray("items")),
+    AutomationBrokenLine(line: nil, fault: .unknownArgument("rows")),
   ]
 
   static func breached(_ items: [AutomationItem]) -> AutomationNodePass.Outcome {

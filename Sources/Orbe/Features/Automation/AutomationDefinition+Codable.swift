@@ -1,14 +1,42 @@
 import Foundation
 
-// 定義の JSON の形。読むときに断るのは形の誤りだけで、値と組み合わせは `AutomationGraph` が検証する。
+// 定義の JSON の形。読むときに断るのは形の誤り（知らない鍵を含む）だけで、値と組み合わせは `AutomationGraph` が検証する。
+// 知らない鍵は、そのオブジェクトを読む入口が自分の欄で照らす。
+
+/// 定義の JSON のオブジェクトの、受ける欄に無い鍵。場所は読みの誤りと同じく定義の中の場所で言う。
+struct AutomationUnknownKey: Error {
+  let codingPath: [CodingKey]
+}
+
+extension Decoder {
+  /// このオブジェクトの鍵が `fields` の中だけかを照らす。オブジェクトでなければ読みの誤り。
+  func checkKeys(_ fields: Set<String>) throws {
+    let c = try container(keyedBy: AnyKey.self)
+    if let unknown = c.allKeys.map(\.stringValue).sorted().first(where: { !fields.contains($0) }) {
+      throw AutomationUnknownKey(codingPath: codingPath + [AnyKey(stringValue: unknown)])
+    }
+  }
+}
+
+private struct AnyKey: CodingKey {
+  let stringValue: String
+  var intValue: Int? { nil }
+  init(stringValue: String) { self.stringValue = stringValue }
+  init?(intValue: Int) { nil }
+}
+
+extension CaseIterable where Self: CodingKey {
+  fileprivate static var names: Set<String> { Set(allCases.map(\.stringValue)) }
+}
 
 /// `workspace` は書けば UUID の文字列（`Workspace.id`）。
 extension AutomationDefinition: Codable {
-  private enum CodingKeys: String, CodingKey {
+  private enum CodingKeys: String, CodingKey, CaseIterable {
     case name, notify, workspace, nodes
   }
 
   init(from decoder: Decoder) throws {
+    try decoder.checkKeys(CodingKeys.names)
     let c = try decoder.container(keyedBy: CodingKeys.self)
     name = try c.decode(String.self, forKey: .name)
     notify = try c.decodeIfPresent(AutomationNotify.self, forKey: .notify)
@@ -38,13 +66,15 @@ extension KeyedDecodingContainer {
   }
 }
 
-/// ノードの欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
+/// ノードの欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。受ける鍵は
+/// ノードの欄と動作の定義の欄の和で、ノードの入口が照らす（動作の定義が自分で照らすと、同じオブジェクトのノードの欄を断る）。
 extension AutomationDefinition.Node: Codable {
-  private enum CodingKeys: String, CodingKey {
+  private enum CodingKeys: String, CodingKey, CaseIterable {
     case id, key, name, trigger, from, maxItems, retentionDays
   }
 
   init(from decoder: Decoder) throws {
+    try decoder.checkKeys(CodingKeys.names.union(AutomationActionDef.keys))
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decodeIfPresent(Int.self, forKey: .id).map(AutomationNodeID.init)
     key = try c.decode(String.self, forKey: .key)
@@ -72,7 +102,7 @@ extension AutomationDefinition.Node: Codable {
 /// `"<鍵>"`（新しい行だけ・古さの上限なし）か `{"node": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n}`。書くときは、
 /// 取り方も古さの上限も省けるつながりを鍵の文字列で書く。
 extension AutomationDefinition.Input: Codable {
-  private enum CodingKeys: String, CodingKey {
+  private enum CodingKeys: String, CodingKey, CaseIterable {
     case nodeKey = "node", take, maxAgeHours
   }
 
@@ -81,6 +111,7 @@ extension AutomationDefinition.Input: Codable {
       self.init(nodeKey: key)
       return
     }
+    try decoder.checkKeys(CodingKeys.names)
     let c = try decoder.container(keyedBy: CodingKeys.self)
     var take = AutomationTake.new
     if let raw = try c.decodeIfPresent(String.self, forKey: .take) {
@@ -110,12 +141,16 @@ extension AutomationDefinition.Input: Codable {
 
 /// `command`（＋`workspace`・`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方と、
 /// `timeoutMinutes`・`coverage`・`deliver`。`deliver` の省略は次のノード。外の定義のノードの欄と同じオブジェクトに並び、保存
-/// （`action_defs.action`）はこの欄だけのオブジェクト。`workspace` は書けば UUID の文字列（`Workspace.id`）。
+/// （`action_defs.action`）はこの欄だけのオブジェクト。`workspace` は書けば UUID の文字列（`Workspace.id`）。知らない鍵は、
+/// このオブジェクトを読む入口（外の形はノード、保存は動作の定義の列）が照らす。
 extension AutomationActionDef: Codable {
-  private enum CodingKeys: String, CodingKey {
+  private enum CodingKeys: String, CodingKey, CaseIterable {
     case command, workspace, directory, agent, model, tools, instruction, timeoutMinutes, coverage,
       deliver
   }
+
+  /// 動作の定義の欄の名前。
+  static var keys: Set<String> { CodingKeys.names }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -214,7 +249,7 @@ extension AutomationActionDef.Destination {
 }
 
 /// `{"kind": "interval", "minutes": 10}`・`{"kind": "cron", "expression": "0 9 * * *"}`・`{"kind": "manual"}`・
-/// `{"kind": "arrival"}`。cron 式は受けた時点で解析し、正しくなければ断る。
+/// `{"kind": "arrival"}`。受ける鍵は種類ごとに決まる。cron 式は受けた時点で解析し、正しくなければ断る。
 extension AutomationNode.Trigger: Codable {
   private enum CodingKeys: String, CodingKey {
     case kind, minutes, expression
@@ -222,18 +257,25 @@ extension AutomationNode.Trigger: Codable {
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
+    func only(_ keys: CodingKeys...) throws { try decoder.checkKeys(Set(keys.map(\.stringValue))) }
     switch try c.decode(String.self, forKey: .kind) {
     case "interval":
+      try only(.kind, .minutes)
       self = .scheduled(.every(TimeInterval(try c.decode(Int.self, forKey: .minutes)) * 60))
     case "cron":
+      try only(.kind, .expression)
       do {
         self = .scheduled(.cron(try BackgroundCron(try c.decode(String.self, forKey: .expression))))
       } catch let error as BackgroundCronError {
         throw DecodingError.dataCorruptedError(
           forKey: .expression, in: c, debugDescription: error.message)
       }
-    case "manual": self = .manual
-    case "arrival": self = .arrival
+    case "manual":
+      try only(.kind)
+      self = .manual
+    case "arrival":
+      try only(.kind)
+      self = .arrival
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "pass interval, cron, manual or arrival")

@@ -84,10 +84,10 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
-  /// 裏の agent の回の道具（札があるときだけ出す）の名前と、説明が写すページの既定・上限・大きさ・行と報告の上限は、Orbe 本体の正本
-  /// （`AutomationRunSession.Tool`・ページの定数・`AutomationOutputs.rowKiB`）と同じで、`read_run_rows` は claude が結果を
-  /// ファイルに書き出す閾値を上げる。orbe-mcp は別ターゲットなので、片側だけ直してもコンパイルもほかのテストも通り、その道具を
-  /// 持つ役割の回が毎回「ツールが使えなかった」で失敗する。
+  /// 裏の agent の回の道具（札があるときだけ出す）の名前と `inputSchema` の欄、説明が写すページの既定・上限・大きさ・行と報告の
+  /// 上限は、Orbe 本体の正本（`AutomationRunSession.Tool` とその受ける引数・ページの定数・`AutomationOutputs.rowKiB`）と同じで、
+  /// `read_run_rows` は claude が結果をファイルに書き出す閾値を上げる。orbe-mcp は別ターゲットなので、片側だけ直してもコンパイルも
+  /// ほかのテストも通り、その道具を持つ役割の回が毎回「ツールが使えなかった」か外れた件で失敗する。
   func testRunToolsMatchTheRunSession() throws {
     let all = AutomationRunSession.Tool.allCases.map(\.rawValue)
     let tools = ControlProcess.mcpToolsList(
@@ -97,6 +97,13 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
 
     XCTAssertEqual(Set(tools.compactMap { $0["name"] as? String }), Set(all))
+    for runTool in AutomationRunSession.Tool.allCases {
+      let schema = try tool(runTool.rawValue)["inputSchema"] as? [String: Any]
+      let properties = schema?["properties"] as? [String: Any] ?? [:]
+      XCTAssertEqual(
+        Set(properties.keys), runTool.arguments,
+        "\(runTool.rawValue) の inputSchema の欄と、その道具が受ける引数（片側だけ足すとその鍵付きの呼び出しが毎回外れる）")
+    }
     let read = try tool("read_run_rows")
     let properties = (read["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
     let limit = (properties?["limit"] as? [String: Any])?["description"] as? String ?? ""
