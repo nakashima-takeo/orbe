@@ -97,40 +97,57 @@ extension TaskPaletteAutomationModelTests {
     XCTAssertEqual(try status(5), TaskPaletteAutomationShelfStatus(last: nil, state: .paused))
   }
 
-  /// 棚の「更新中」は判定とその祖先のどれかを通る流しの間だけで、判定に触れない枝の流しの間は出ず、⌘↵ も断られない。判定の
-  /// ノードがすべて止まっていれば、自動化を止めていなくても一時停止中。
-  func testTheShelfRefreshesBesideAFlowThatMissesTheJudgesAndPausesWithItsJudges() throws {
+  /// 棚の「更新中」は判定とその祖先のどれかを通る流しの間だけで、⌘↵ を断るのもその間だけ（判定の祖先だけを通る流しでも
+  /// 更新中で、断る）。判定のノードがすべて止まっていれば、自動化を止めていなくても一時停止中。
+  func testTheShelfRefreshesOnlyWhileAFlowTouchesItsJudgesAndPausesWithItsJudges() throws {
     let runner = DesignSceneFixtures.automationRunner()
-    let id = try runner.set(
+    func fetch() -> AutomationDefinition.Node {
+      DesignSceneFixtures.commandNode(
+        "fetch", "GitHub", .manual, script: "gh", coverage: .newArrivals)
+    }
+    let judge = DesignSceneFixtures.agentNode(
+      "judge", "判定", .arrival, from: ["fetch"], instruction: "i", deliver: .taskCandidates)
+    let posting = try runner.set(
       nil,
       AutomationDefinition(
         name: "候補と投稿", notify: nil,
         nodes: [
-          DesignSceneFixtures.commandNode(
-            "fetch", "GitHub", .manual, script: "gh", coverage: .newArrivals),
-          DesignSceneFixtures.agentNode(
-            "judge", "判定", .arrival, from: ["fetch"], instruction: "i", deliver: .taskCandidates),
+          fetch(), judge,
           DesignSceneFixtures.commandNode(
             "log", "ログ", .manual, script: "log", coverage: .newArrivals),
           DesignSceneFixtures.commandNode(
             "post", "投稿", .arrival, from: ["log"], script: "post", deliver: .sideEffect),
         ])
     ).id
+    let noticing = try runner.set(
+      nil,
+      AutomationDefinition(
+        name: "候補と知らせ", notify: nil,
+        nodes: [
+          fetch(), judge,
+          DesignSceneFixtures.commandNode(
+            "notice", "知らせ", .arrival, from: ["fetch"], script: "notice", deliver: .sideEffect),
+        ])
+    ).id
     let palette = TaskPaletteSamples.model([], automations: runner)
     palette.setTab(.automation)
-    palette.automation.tapShelf(.automation(id))
-    func state() throws -> TaskPaletteAutomationShelfStatus.State? {
+    func state(_ id: Int) throws -> TaskPaletteAutomationShelfStatus.State? {
       palette.automation.status(of: try XCTUnwrap(runner.store.automation(id))).state
     }
 
-    try runner.flow(id, to: .node(runner.store.nodeId(id, "post")))
-    XCTAssertNil(try state(), "判定に触れない流しの間は更新中にしない")
+    _ = try runner.pause(posting, nodeId: runner.store.nodeId(posting, "judge"), true)
+    XCTAssertEqual(try state(posting), .paused)
+    try runner.flow(posting, to: .node(runner.store.nodeId(posting, "post")))
+    XCTAssertEqual(try state(posting), .paused, "判定に触れない流しの間は更新中にしない")
+    palette.automation.tapShelf(.automation(posting))
     palette.automation.refresh()
-    XCTAssertNil(palette.automation.error, "判定に触れない流しの間も断らない")
-    XCTAssertEqual(try state(), .refreshing)
+    XCTAssertNil(palette.automation.error, "判定に触れない流しの間は断らない")
+    XCTAssertEqual(try state(posting), .refreshing)
 
-    _ = try runner.pause(id, nodeId: runner.store.nodeId(id, "judge"), true)
-    runner.stopAll()
-    XCTAssertEqual(try state(), .paused)
+    try runner.flow(noticing, to: .node(runner.store.nodeId(noticing, "notice")))
+    XCTAssertEqual(try state(noticing), .refreshing, "判定の祖先を通る流しの間は更新中")
+    palette.automation.tapShelf(.automation(noticing))
+    palette.automation.refresh()
+    XCTAssertEqual(palette.automation.error, .refreshing)
   }
 }
