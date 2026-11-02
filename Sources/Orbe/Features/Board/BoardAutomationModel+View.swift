@@ -23,7 +23,7 @@ extension BoardAutomationModel {
     return BoardAutomationNodeValue(
       automation, nodeId: nodeId, text: text, running: runner.isRunning(automation.id, nodeId),
       next: runner.nextRunAt(automation, nodeId: nodeId, now: now),
-      open: store.shelvedProposals(of: automation.id).count)
+      open: store.shelvedProposals(of: automation.id).count, workspaces: runner.workspaces())
   }
 
   /// 描くときの文。暦の今日は描くときの今から導く（開きっぱなしの画面で日をまたいでも「今日」が古くならない）。

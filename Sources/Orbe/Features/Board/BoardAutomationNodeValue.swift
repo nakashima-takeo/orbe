@@ -7,8 +7,8 @@ enum BoardSegmentLook: Equatable {
   case emphasized
 }
 
-/// 選んだノードのカードの値。地図に出さないノードの中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・作業ディレクトリ・
-/// 回の記録）を出すのはここだけ。
+/// 選んだノードのカードの値。地図に出さないノードの中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・workspace・
+/// 作業ディレクトリ・回の記録）を出すのはここだけ。
 struct BoardAutomationNodeValue: Equatable {
   let id: AutomationNodeID
   let role: String
@@ -16,7 +16,8 @@ struct BoardAutomationNodeValue: Equatable {
   let running: Bool
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
-  /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・作業ディレクトリ・次回の順。ノードに無い項目は出さない。
+  /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・workspace・作業ディレクトリ・次回の順。ノードに無い項目は
+  /// 出さない。
   /// 出力先はノードの外の行き場所（タスク候補・報告の出し先など）だけで、後ろのノードへ渡す取得・処理には出さない。
   let facts: [Fact]
   /// 指示文かコマンド。
@@ -57,10 +58,11 @@ struct BoardAutomationNodeValue: Equatable {
 }
 
 extension BoardAutomationNodeValue {
-  /// `next` はノードが次に予定で回る時刻（止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数。
+  /// `next` はノードが次に予定で回る時刻（止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数、`workspaces` は
+  /// 描くときの今の workspace（走る workspace の名前を引く）。
   init?(
     _ automation: Automation, nodeId: AutomationNodeID, text: AutomationText, running: Bool,
-    next: Date?, open: Int
+    next: Date?, open: Int, workspaces: AutomationWorkspaces
   ) {
     guard let node = automation.graph.node(nodeId) else { return nil }
     let l10n = text.l10n
@@ -74,7 +76,12 @@ extension BoardAutomationNodeValue {
     case .agent(let agent): body = agent.instruction
     case .command(let command): body = command.script
     }
-    facts = Self.facts(automation, node, text: text, next: next, open: open)
+    var facts = Self.facts(automation, node, text: text, next: next, open: open)
+    if let workspace = Self.workspace(node, workspaces, l10n) {
+      facts.insert(
+        workspace, at: facts.firstIndex { $0.label == .boardNodeDirectory } ?? facts.endIndex)
+    }
+    self.facts = facts
     breach = state.breach.map { Self.breach($0, text: text) }
     lastText = Self.lastText(state.runs, text: text)
     runs = BoardAutomationSummary.lines(state.runs, node: node, text: text)
@@ -161,6 +168,20 @@ extension BoardAutomationNodeValue {
         automation.paused ? l10n.string(.automationPaused) : next.map(text.stamp) ?? "")
     }
     return facts
+  }
+
+  /// 走る workspace の項目（「orbe」「orbe（自動化の設定）」）。今の workspace に無ければ「削除済み」。作業ディレクトリの直前に
+  /// 置く（workspace が効くコマンドは作業ディレクトリを必ず持つ）。走る workspace の無いノードは nil。
+  private static func workspace(
+    _ node: AutomationGraph.Node, _ workspaces: AutomationWorkspaces, _ l10n: LocalizationStore
+  ) -> Fact? {
+    guard let workspace = node.workspace, case .command(let command) = node.action.method else {
+      return nil
+    }
+    let name = workspaces.workspace(workspace)?.name ?? l10n.string(.boardNodeWorkspaceRemoved)
+    let value = command.workspace == nil ? l10n.format(.boardNodeWorkspaceInherited, name) : name
+    return Fact(
+      label: .boardNodeWorkspace, incoming: false, value: [Segment(text: value, look: .plain)])
   }
 
   /// 同じ表示になるツール（同じサーバーの MCP、同じコマンドの Bash 規則）は、最初の 1 つだけを残す。

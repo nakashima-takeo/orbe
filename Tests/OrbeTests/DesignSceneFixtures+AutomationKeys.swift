@@ -92,10 +92,12 @@ extension BoardAutomationNodeValue {
   /// ノードを今の鍵で指す（テスト）。
   init?(
     _ automation: Automation, key: String, text: AutomationText, running: Bool, next: Date?,
-    open: Int
+    open: Int, workspaces: AutomationWorkspaces = AutomationWorkspaces(all: [], home: nil)
   ) {
     guard let nodeId = automation.graph.node(key: key)?.id else { return nil }
-    self.init(automation, nodeId: nodeId, text: text, running: running, next: next, open: open)
+    self.init(
+      automation, nodeId: nodeId, text: text, running: running, next: next, open: open,
+      workspaces: workspaces)
   }
 }
 
