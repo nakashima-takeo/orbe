@@ -41,7 +41,7 @@ extension L10n {
     .boardNodeTimeout: ("制限時間", "Timeout"),
     .boardNodeDirectory: ("作業ディレクトリ", "Working directory"),
     .boardNodeWorkspace: ("workspace", "Workspace"),
-    .boardWorkspaceLine: ("workspace　%@", "Workspace: %@"),
+    .boardWorkspaceLine: ("workspace：%@", "Workspace: %@"),
     .boardWorkspaceRemoved: ("削除済み", "Deleted"),
     .boardNodeNext: ("次回", "Next"),
     .boardNodeAgent: ("%1$@（%2$@）", "%1$@ (%2$@)"),

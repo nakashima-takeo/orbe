@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// ボードの workspace の言い方。カードの「workspace」の欄は、コマンドのノードに走る workspace があるときだけ「作業ディレクトリ」の
-/// 直前に名前を出し、詳細の見出しは、自動化に workspace の設定があるときだけ「workspace　名前」の行を出す。名前は描くときの今の
+/// 直前に名前を出し、詳細の見出しは、自動化に workspace の設定があるときだけ「workspace：名前」の行を出す。名前は描くときの今の
 /// workspace で解き、消えた workspace は「削除済み」と言う。
 ///
 /// 壊れると何が起きるか: 相対の作業ディレクトリがどこからの相対か画面で分からない。自動化の workspace がどこか画面で分からない。
@@ -64,7 +64,7 @@ final class BoardAutomationWorkspaceTests: OrbeTestCase {
     }
 
     XCTAssertEqual(
-      heading(DesignSceneFixtures.boardWorkspaceSamples()), ["workspace　orbe", "workspace　削除済み"])
+      heading(DesignSceneFixtures.boardWorkspaceSamples()), ["workspace：orbe", "workspace：削除済み"])
     XCTAssertEqual(Set(heading(DesignSceneFixtures.boardMapSamples())), [nil])
   }
 }

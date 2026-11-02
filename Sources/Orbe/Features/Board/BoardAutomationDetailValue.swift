@@ -79,7 +79,7 @@ struct BoardMapRow: Equatable {
 struct BoardAutomationDetailValue: Equatable {
   /// 「通知：メニューバー」。
   let notify: String
-  /// 「workspace　orbe」。自動化に workspace の設定が無ければ nil。
+  /// 「workspace：orbe」。自動化に workspace の設定が無ければ nil。
   let workspace: String?
   /// 「次回 16:50」「手動」。止めていれば nil（見出しは一時停止中を出す）。
   let next: String?
