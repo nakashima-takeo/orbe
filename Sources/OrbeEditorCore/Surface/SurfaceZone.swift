@@ -131,9 +131,10 @@ public struct ZoneText {
 }
 
 /// 字の見え方を、文の範囲の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの左右の字をその幅ずつ
-/// 押し出す（CSS のインラインの左右の padding。地は連なりの字の x 範囲をこの幅ずつ広げて置く）。左右は見た目の左右で、
-/// 余白は組版で 1 つにまとまる字の塊の外に付く（絵文字や結合文字を割らない）。折り返しで割れた側には付かない
-/// （→ `ZoneTextLayout.styles(_:in:)`）。
+/// 押し出す（CSS のインラインの padding）。地は、連なりの字の x 範囲を余白の幅ずつ広げて置く（→ `ZoneTextLayout.Line`
+/// の `ground(_:)`）。先頭の余白は段落の向きの始まりの側（左から右の段落では左、右から左の段落では右）に、末尾の余白は
+/// その反対の側に付く。余白は組版で 1 つにまとまる字の塊の外に付き、絵文字や結合文字を割らない。折り返しで割れた側には
+/// 付かない（→ `ZoneTextLayout.styles(_:in:)`）。
 public struct ZoneTextStyle: Equatable {
   public var length: Int
   public var font: NSFont
@@ -151,7 +152,7 @@ public struct ZoneTextStyle: Equatable {
 }
 
 /// 選べる字の行——まとまりの文の範囲 `range` を、基線の左端 `origin` から描く（折り返さない）。字はまとまりの文から引く
-/// （文の正は 1 か所）。
+/// （文の正は 1 か所）。行は、まとまりの文の中で範囲を含む段落の向きで組む（→ `ZoneTextLayout.Line`）。
 public struct ZoneSelectableLine {
   public var origin: CGPoint
   public var range: NSRange

@@ -71,7 +71,8 @@ final class ZoneTextLayoutTests: XCTestCase {
     let lead = CGFloat(
       CTLineGetTypographicBounds(
         ZoneTextLayout.typeset(
-          "see ", styles: [ZoneTextStyle(length: 4, font: font, color: .white)]
+          "see ", range: NSRange(location: 0, length: 4),
+          styles: [ZoneTextStyle(length: 4, font: font, color: .white)]
         ).line, nil, nil, nil))
     XCTAssertGreaterThan(
       lead, ZoneTextLayout.width([ZoneTextRun("see", font: font, color: .white)]),
@@ -126,7 +127,10 @@ final class ZoneTextLayoutTests: XCTestCase {
   }
 
   private func glyphCount(_ string: String, _ styles: [ZoneTextStyle]) -> Int {
-    CTLineGetGlyphCount(ZoneTextLayout.typeset(string, styles: styles).line)
+    CTLineGetGlyphCount(
+      ZoneTextLayout.typeset(
+        string, range: NSRange(location: 0, length: string.utf16.count), styles: styles
+      ).line)
   }
 
   /// 折り返しで割れた見え方は、割れた側の余白を持たない。
@@ -141,7 +145,7 @@ final class ZoneTextLayoutTests: XCTestCase {
   /// 組んだ字の連なりは見え方の境で分かれる（同じ字体でも）。
   func testTypesetRunsSplitAtEveryStyle() {
     let set = ZoneTextLayout.typeset(
-      "redgreen",
+      "redgreen", range: NSRange(location: 0, length: 8),
       styles: [
         ZoneTextStyle(length: 3, font: font, color: .red),
         ZoneTextStyle(length: 5, font: font, color: .green),

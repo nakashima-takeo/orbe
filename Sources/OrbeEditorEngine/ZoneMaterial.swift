@@ -197,7 +197,9 @@ final class ZonePainter {
         let styles = line.runs.map {
           ZoneTextStyle(length: $0.string.utf16.count, font: $0.font, color: $0.color)
         }
-        let set = ZoneTextLayout.typeset(line.runs.map(\.string).joined(), styles: styles)
+        let string = line.runs.map(\.string).joined()
+        let set = ZoneTextLayout.typeset(
+          string, range: NSRange(location: 0, length: string.utf16.count), styles: styles)
         material.runs += runs(set.line, styles: styles, origin: line.origin, look)
       case .image(let image):
         if let pixels = pixels(image, look) {
@@ -229,15 +231,15 @@ final class ZonePainter {
     for line in text.lines {
       let lower = min(max(0, line.range.location), whole.length)
       let upper = min(max(lower, NSMaxRange(line.range)), whole.length)
-      let string = whole.substring(NSRange(location: lower, length: upper - lower))
-      let set = ZoneTextLayout.typeset(string, styles: line.styles)
+      let range = NSRange(location: lower, length: upper - lower)
+      let set = ZoneTextLayout.typeset(text.string, range: range, styles: line.styles)
       let origin = CGPoint(x: line.origin.x + set.inset, y: line.origin.y)
       material.runs += runs(set.line, styles: line.styles, origin: origin, look)
       let font = line.styles.first?.font ?? .systemFont(ofSize: 12)
       let width = CGFloat(CTLineGetTypographicBounds(set.line, nil, nil, nil))
       hits.lines.append(
         ZoneHits.Line(
-          text: text.id, range: NSRange(location: lower, length: upper - lower),
+          text: text.id, range: range,
           origin: origin, ascent: font.ascender, descent: -font.descender,
           width: width, line: set.line, carets: CaretMap(set.line, width: width)))
     }

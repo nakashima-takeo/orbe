@@ -283,14 +283,14 @@ final class SampleThreadZone: SurfaceZone {
     for (index, line) in lines.enumerated() {
       let lineTop = top + CGFloat(index) * lineHeight
       let baseline = Self.baseline(top: lineTop, height: lineHeight, font: sans)
-      for (style, span) in zip(line.styles, line.spans) where style.font == mono {
+      for (index, style) in line.styles.enumerated() where style.font == mono {
+        let ground = line.ground(index)
         canvas.elements.append(
           .box(
             ZoneBox(
               frame: CGRect(
-                x: left + span.lowerBound - style.leadingPadding, y: baseline - mono.ascender - 1,
-                width: span.upperBound - span.lowerBound + style.leadingPadding
-                  + style.trailingPadding,
+                x: left + ground.lowerBound, y: baseline - mono.ascender - 1,
+                width: ground.upperBound - ground.lowerBound,
                 height: mono.ascender - mono.descender + 2), radius: 3,
               fill: Self.tint(Self.accent, 0.12))))
       }
