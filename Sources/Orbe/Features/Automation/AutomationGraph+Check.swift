@@ -260,7 +260,8 @@ extension AutomationGraph {
         throw .invalid("\(path).directory: write the directory relative to the workspace root")
       case (nil, false?):
         throw .invalid(
-          "\(path).directory: a relative directory needs a workspace (the node's or the automation's)")
+          "\(path).directory: a relative directory needs a workspace (the node's or the "
+            + "automation's)")
       default:
         return workspace
       }

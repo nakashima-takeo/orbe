@@ -365,7 +365,8 @@ extension AutomationWorkspaces {
   init(_ session: SessionStore) {
     self.init(
       all: session.workspaces.map {
-        AutomationWorkspace(id: $0.id, persistentId: $0.persistentId, name: $0.name, root: $0.rootPath)
+        AutomationWorkspace(
+          id: $0.id, persistentId: $0.persistentId, name: $0.name, root: $0.rootPath)
       }, home: session.homeIndex.map { session.workspaces[$0].id })
   }
 }

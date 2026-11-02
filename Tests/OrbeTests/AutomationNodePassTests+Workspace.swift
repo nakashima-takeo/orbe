@@ -45,7 +45,8 @@ extension AutomationNodePassTests {
       .fetch, .fetch(since: nil))
 
     XCTAssertEqual(
-      jobs.calls.indices.map(directory), ["/src/orbe", "/src/orbe/sub", "/moved/orbe/sub", "/opt/x"],
+      jobs.calls.indices.map(directory),
+      ["/src/orbe", "/src/orbe/sub", "/moved/orbe/sub", "/opt/x"],
       "root の変更は次の回から効く。workspace の無いコマンドは書いたまま")
   }
 
