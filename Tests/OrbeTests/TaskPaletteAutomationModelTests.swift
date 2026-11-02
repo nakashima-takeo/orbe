@@ -64,7 +64,8 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     let item = DesignSceneFixtures.automationItem(
       "C03-9", "後の回", at: DesignSceneFixtures.automationNow)
     try WindowControllerAutomationControlTests.round(
-      runner.store, 2, fetched: [item], proposing: [item], titles: ["後の提案"])
+      runner.store, 2, fetched: [item], proposing: [item], titles: ["後の提案"],
+      now: DesignSceneFixtures.automationNow)
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(palette.automation.proposalIDs, [4, 1, 2, 3])

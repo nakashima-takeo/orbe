@@ -120,6 +120,12 @@ extension AutomationDatabase {
       [.integer(Int64(judge.rawValue))] + links.sorted().map { .text($0) })
   }
 
+  /// 判断待ちの候補のうち、判定が読んだ行が残す期間を過ぎた（`now` の時点で）出来事のもの。
+  func openProposals(readingEventsBefore now: Date) throws -> [OpenProposal] {
+    try selectOpen(
+      "q.event_id IN (SELECT id FROM events WHERE created_at < ?)", [Self.cutoff(now)])
+  }
+
   /// 項目 `items` のうち、今の版がリンクを持つものの、ノードとリンク。
   func linkedItems(_ items: [Int]) throws -> [(nodeId: AutomationNodeID, link: String)] {
     guard !items.isEmpty else { return [] }

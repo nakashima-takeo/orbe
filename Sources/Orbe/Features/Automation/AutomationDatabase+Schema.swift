@@ -64,9 +64,9 @@ extension AutomationDatabase {
       breach_run_id   INTEGER REFERENCES runs (id),
       last_item_seq   INTEGER NOT NULL DEFAULT 0 CHECK (last_item_seq >= 0),
       last_event_seq  INTEGER NOT NULL DEFAULT 0 CHECK (last_event_seq >= 0),
-      pending_drops   TEXT    NOT NULL DEFAULT '{}' CHECK (json_type(pending_drops) = 'object'),
+      carried         TEXT    NOT NULL DEFAULT '{}' CHECK (json_type(carried) = 'object'),
       CHECK (removed_at IS NOT NULL OR automation_id IS NOT NULL),
-      CHECK (removed_at IS NULL OR (breach_run_id IS NULL AND pending_drops = '{}')),
+      CHECK (removed_at IS NULL OR (breach_run_id IS NULL AND carried = '{}')),
       UNIQUE (automation_id, id)
     );
     CREATE UNIQUE INDEX nodes_key      ON nodes (automation_id, key)      WHERE removed_at IS NULL;

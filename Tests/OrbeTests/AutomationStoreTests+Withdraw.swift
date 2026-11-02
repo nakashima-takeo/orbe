@@ -204,4 +204,23 @@ extension AutomationStoreTests {
     try Self.fetch(store, id, [], at: Self.at.addingTimeInterval(25 * 3600))
     XCTAssertEqual(store.proposals, [])
   }
+
+  /// 判定が読んだ出来事が残す期間を過ぎると、その判断待ちの候補を下げ、判定の持ち越しに数えて、判定の次の成功した回の記録に
+  /// 載せる（読む前に期限で消えた出来事と同じく、受け手の次の回に）。
+  func testAProposalOfAnEventIsWithdrawnWhenTheEventOutlivesItsRetention() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, id, [a])
+    try Self.judge(store, id, proposing: [a])
+    let later = Self.at.addingTimeInterval(AutomationDatabase.retention + 60)
+
+    try Self.fetch(store, id, [Self.item("b")], at: later)
+    XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(try store.carried(id, "judge").withdrawn, 1)
+
+    try Self.judge(store, id, at: later)
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").runs.first?.run?.withdrawn, 1)
+    XCTAssertEqual(try store.carried(id, "judge"), AutomationCarried())
+  }
 }

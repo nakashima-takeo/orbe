@@ -302,7 +302,8 @@ enum TaskPaletteAutomationError: Equatable {
     error = nil
     var task: TaskItem?
     do throws(AutomationError) {
-      task = try store.accept(proposal.id, into: tasks, workspace: destination(of: proposal)?.id)
+      task = try store.accept(
+        proposal.id, into: tasks, workspace: destination(of: proposal)?.id, now: runner.now())
     } catch {
       if case .invalid = error { self.error = .accept }
     }
@@ -314,7 +315,7 @@ enum TaskPaletteAutomationError: Equatable {
   func dismiss() {
     guard let proposal = selectedProposal else { return }
     error = nil
-    try? store.dismiss(proposal.id)
+    try? store.dismiss(proposal.id, now: runner.now())
     settle()
   }
 

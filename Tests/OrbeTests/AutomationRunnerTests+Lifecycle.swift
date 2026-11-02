@@ -159,7 +159,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(calls("judge").count, 1, "取る行が無ければ手段を起こさない")
     XCTAssertEqual(store.automation(id)?.state(key: "judge").runs.count, 1, "記録も残さない")
     XCTAssertEqual(
-      try store.pendingDrops(id, "judge").counts, [.closed: 1],
+      try store.carried(id, "judge").dropped.counts, [.closed: 1],
       "捨てた数は持ち越す")
 
     finish("gh", printed([item("a"), sameLink, item("b")].joined(separator: "\n")))

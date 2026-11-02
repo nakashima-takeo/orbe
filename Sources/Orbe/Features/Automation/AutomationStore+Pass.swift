@@ -55,10 +55,10 @@ extension AutomationStore {
     }
     try commit(sweepingAt: TaskItem.storedInstant(now)) { db, memory in
       try db.advance(nodeId, read.reach)
-      var drops = try db.pendingDrops(of: nodeId)
-      for drop in read.dropped { drops.add(drop.reason) }
-      drops.add(.lapsed, read.lapsed)
-      try db.setPendingDrops(nodeId, drops)
+      var carried = try db.carried(of: nodeId)
+      for drop in read.dropped { carried.dropped.add(drop.reason) }
+      carried.dropped.add(.lapsed, read.lapsed)
+      try db.setCarried(nodeId, carried)
       try memory.recount(id, db, now: now, nodeIds: [nodeId])
     }
   }

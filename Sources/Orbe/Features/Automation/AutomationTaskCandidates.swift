@@ -88,24 +88,45 @@ extension AutomationMemory {
     try withdraw(candidates, db)
   }
 
+  /// 元にした出来事（判定が読んだ出来事）が残す期間を過ぎた判断待ちの候補を下げ（忘れ）、判定ごとの下げた数を返す。出来事は
+  /// 掃除で消える時に今のものでなくなる。判定の入力の今有効な項目にリンクがあれば下げない（ほかの下げ方と同じ歯止め）。
+  mutating func withdrawExpired(_ db: AutomationDatabase, now: Date) throws
+    -> [AutomationNodeID: Int]
+  {
+    let expired = try db.openProposals(readingEventsBefore: now)
+    let withdrawn = try withdraw(expired, db) { candidate, judge in
+      !(try judge.inputNodeIds.contains { try db.liveLinks(of: $0).contains(candidate.link) })
+    }
+    return Dictionary(grouping: withdrawn, by: \.judge).mapValues(\.count)
+  }
+
   /// 下げる条件を当て、満たす候補を忘れて数を返す。
   @discardableResult private mutating func withdraw(
     _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase
   ) throws -> Int {
-    var withdrawn = Set<Int>()
-    for candidate in candidates where !withdrawn.contains(candidate.id) {
+    try withdraw(candidates, db) { candidate, judge in
+      try db.noLongerCurrent(candidate.row, link: candidate.link, inputs: judge.inputNodeIds)
+    }.count
+  }
+
+  /// 候補のうち、判定のノードが今のノードで、`stale` が真の候補を忘れて返す。
+  private mutating func withdraw(
+    _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase,
+    stale: (AutomationDatabase.OpenProposal, AutomationGraph.Node) throws -> Bool
+  ) throws -> [AutomationDatabase.OpenProposal] {
+    var withdrawn: [Int: AutomationDatabase.OpenProposal] = [:]
+    for candidate in candidates where withdrawn[candidate.id] == nil {
       guard
         let judge = automations.lazy.compactMap({ $0.graph.node(candidate.judge) }).first,
-        judge.role == .judge,
-        try db.noLongerCurrent(candidate.row, link: candidate.link, inputs: judge.inputNodeIds)
+        judge.role == .judge, try stale(candidate, judge)
       else { continue }
-      withdrawn.insert(candidate.id)
+      withdrawn[candidate.id] = candidate
     }
-    guard !withdrawn.isEmpty else { return 0 }
-    try db.forget(proposals: Array(withdrawn))
-    proposals.removeAll { withdrawn.contains($0.id) }
-    unreadableProposals.removeAll { withdrawn.contains($0.id) }
-    return withdrawn.count
+    guard !withdrawn.isEmpty else { return [] }
+    try db.forget(proposals: Array(withdrawn.keys))
+    proposals.removeAll { withdrawn[$0.id] != nil }
+    unreadableProposals.removeAll { withdrawn[$0.id] != nil }
+    return Array(withdrawn.values)
   }
 }
 

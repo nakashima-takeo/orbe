@@ -25,7 +25,7 @@ struct AutomationRecording {
     var run = run
     var judged: (proposals: [AutomationNodePass.Proposal], resolved: [String])?
     if !run.failed, case .succeeded(let output, _, _) = end.outcome {
-      try consume()
+      try consume(&run)
       switch output {
       case .judge(let proposals, let resolved): judged = (proposals, resolved)
       default: try produce(output, &run, &memory)
@@ -50,13 +50,15 @@ struct AutomationRecording {
     return AutomationRecorded(changed: written.changed, run: recorded?.run)
   }
 
-  /// 読んだ位置を進め、持ち越しを回の記録へ移す。
-  private mutating func consume() throws {
+  /// 読んだ位置を進め、持ち越しを回の記録へ移す（下げた候補の数は判定の回の `withdrawn` へ）。
+  private mutating func consume(_ run: inout AutomationNodeRun) throws {
     guard let read = end.read else { return }
     try db.advance(end.nodeId, read.reach)
-    carried.add(try db.pendingDrops(of: end.nodeId))
+    let pending = try db.carried(of: end.nodeId)
+    carried.add(pending.dropped)
     carried.add(.lapsed, read.lapsed)
-    try db.setPendingDrops(end.nodeId, AutomationDrops())
+    if pending.withdrawn > 0 { run.withdrawn = pending.withdrawn }
+    try db.setCarried(end.nodeId, AutomationCarried())
   }
 
   /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、無効にした項目と、今有効な

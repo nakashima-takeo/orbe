@@ -78,14 +78,13 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: Date())
   }
 
-  /// 取得の回を確定し、`proposing` があれば読める行をすべて取った判定の回で候補にする（タイトルは `titles`、付け先は
+  /// 取得の回を時刻 `now` で確定し、`proposing` があれば読める行をすべて取った判定の回で候補にする（タイトルは `titles`、付け先は
   /// `workspaces`、候補にした理由は `reasons` の順。省けば「対応: <id>」・付け先なし・理由なし）。
   static func round(
     _ store: AutomationStore, _ id: Int, fetched items: [AutomationItem],
     proposing: [AutomationItem] = [], titles: [String]? = nil, workspaces: [UUID?]? = nil,
-    reasons: [String?]? = nil
+    reasons: [String?]? = nil, now: Date = Date()
   ) throws {
-    let now = Date()
     try store.record(id, nodeKey: "fetch", at: now, outcome: DesignSceneFixtures.fetched(items))
     guard !proposing.isEmpty else { return }
     let judge = store.nodeId(id, "judge")

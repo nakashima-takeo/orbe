@@ -193,8 +193,8 @@ import Observation
   // MARK: - 書き込み
 
   /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。`sweepingAt`（変異の時刻）が
-  /// あれば、判断待ちでない覚えている候補のリンクが変わった判定のノードの読めば取る行を数え直し（判定の前に捨てる行が変わる）、
-  /// 最後に掃除する。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
+  /// あれば、判定が読んだ出来事が残す期間を過ぎた判断待ちの候補を下げて判定の持ち越しに数え、判断待ちでない覚えている候補の
+  /// リンクが変わった判定のノードの読めば取る行を数え直し（判定の前に捨てる行が変わる）、最後に掃除する。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
   /// 検証は呼ぶ前に済ませる（`body` が投げたものはどれも書けなかったことになる）。
   func commit<T>(
     sweepingAt sweep: Date?, _ body: (AutomationDatabase, inout AutomationMemory) throws -> T
@@ -208,6 +208,11 @@ import Observation
         let closed = memory.closedLinksByJudge
         let result = try body(database, &memory)
         if let sweep {
+          for (judge, count) in try memory.withdrawExpired(database, now: sweep) {
+            var carried = try database.carried(of: judge)
+            carried.withdrawn += count
+            try database.setCarried(judge, carried)
+          }
           let after = memory.closedLinksByJudge
           let changed = Set(closed.keys).union(after.keys).filter { closed[$0] != after[$0] }
           try memory.recountJudges(changed, database, now: sweep)

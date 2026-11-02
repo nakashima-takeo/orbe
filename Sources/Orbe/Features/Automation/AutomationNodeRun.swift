@@ -23,7 +23,8 @@ struct AutomationNodeRun: Equatable {
   var breach: AutomationRejections?
   /// 役割ごとの結果。失敗した回は持たない。
   var result: Result?
-  /// この回の確定で下げた（判断待ちだった）候補の数。取得・処理の成功した回だけ持つ。
+  /// 下げた（判断待ちだった）候補の数。取得・処理の成功した回はその確定で下げた数、判定の成功した回は前の回から後に、読んだ
+  /// 出来事が残す期間を過ぎて下げた数（あったときだけ）。
   var withdrawn: Int?
   var failure: AutomationFailure?
 
@@ -74,6 +75,13 @@ struct AutomationDrops: Equatable {
   mutating func add(_ other: AutomationDrops) {
     for (reason, count) in other.counts { add(reason, count) }
   }
+}
+
+/// 受け手が回の無い場面で数え、次の成功した回の記録へ持ち越す数。取る行が 0 件の契機で捨てた数・読む前に期限で消えた数と、
+/// 判定が読んだ出来事が残す期間を過ぎて下げた候補の数。
+struct AutomationCarried: Equatable {
+  var dropped = AutomationDrops()
+  var withdrawn = 0
 }
 
 /// 回の記録 1 件。時刻・契機・成否は列から分かり、中身は読めなければ不明な記録になる。
