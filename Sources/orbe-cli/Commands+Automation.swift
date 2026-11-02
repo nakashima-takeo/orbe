@@ -81,9 +81,7 @@ let automationUsage = """
              no tools. Keep each item's id: a run fails when no line that
              reaches the last step carries an id of this run's items.
              Narrow with cheap steps (commands, haiku) before costly ones.
-             Without model, the last step runs sonnet and the other steps
-             and the source run haiku; an omitted model stays omitted, so
-             reordering steps moves the default with them.
+             An agent needs a model; a definition without one is refused.
              The lines a step command or the sink command receives are text
              from outside, or what steps made from it, so instructions hidden
              in that text can reshape them, and Orbe does not check what they
@@ -124,11 +122,11 @@ let automationUsage = """
              large output to /dev/null. Editing the definition does not make
              the next run process every fetched item again.
              {"kind": "report"}
-             The output of the last step is the report, kept as text (up to
-             2000 characters) in the run record; a command last step prints
-             it on stdout. Its first line shows on the board's heading and in
+             The output of the last step is the report, kept as text in the
+             run record (up to 64 KiB; a larger report breaks the rules); a
+             command last step prints it on stdout. Its first line shows in
              the notification. An agent last step gives it through Orbe's
-             tool, kept short, or says there is nothing to report; a command
+             tool, or says there is nothing to report; a command
              that prints nothing, or an agent that says so, succeeds as
              "nothing to report". Editing
              the definition does not make the next run process every fetched
@@ -155,7 +153,7 @@ let automationUsage = """
              can read under your settings' additionalDirectories without
              naming anything. Instructions hidden in outside text the agent
              reads with its tools can make it use a writing tool it was given.
-             Without model it runs sonnet; it is cut off after 10 minutes, or
+             It needs a model; it is cut off after 10 minutes, or
              3 minutes without output. It gives its report through Orbe's
              tool, kept as the result of the run (the first line shows on the
              board's heading and in the notification); when there is nothing
