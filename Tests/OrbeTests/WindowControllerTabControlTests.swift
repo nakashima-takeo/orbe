@@ -312,7 +312,7 @@ final class WindowControllerTabControlTests: OrbeTestCase {
     XCTAssertEqual(setErr.code, -32004)
   }
 
-  /// global の層に workspaceId を添えた config_set は -32602 で、どの層も書かない（添えた ID を黙って捨てない）。
+  /// global の層に workspaceId を添えた config_set は -32602 で、global の層を書かない（添えた ID を黙って捨てない）。
   func testConfigSetGlobalWithAWorkspaceIdIsRefused() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
     let main = try XCTUnwrap(workspaceUUID(row(wc, name: "main")?["id"]))
