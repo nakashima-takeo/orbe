@@ -14,10 +14,12 @@ extension WindowController {
   }
 
   func controlSetAutomation(
-    automationId: Int?, version: Int?, _ definition: AutomationDefinition
+    automationId: Int?, version: Int?, _ definition: [String: Any]
   ) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      [
+      let definition = try AutomationDefinition.decode(
+        try automationRunner.workspaces().inward(definition))
+      return [
         "automation": automationJSON(
           try automationRunner.set(automationId, version: version, definition))
       ]
@@ -185,7 +187,7 @@ extension WindowController {
     var json: [String: Any] = [
       "automationId": automation.id,
       "version": automation.version,
-      "definition": AutomationWire.object(automation.definition),
+      "definition": definitionJSON(AutomationWire.object(automation.definition)),
       "paused": automation.paused,
       "nodes": nodeObjects,
     ]
@@ -206,10 +208,15 @@ extension WindowController {
   private func unreadableJSON(_ broken: AutomationUnreadable) -> [String: Any] {
     [
       "automationId": broken.id, "version": broken.version,
-      "definition": (try? JSONSerialization.jsonObject(with: Data(broken.definition.utf8)))
-        ?? [String: Any](),
+      "definition": definitionJSON(
+        try? JSONSerialization.jsonObject(with: Data(broken.definition.utf8))),
       "definitionError": broken.reason,
     ]
+  }
+
+  /// 定義の外の形（workspace の席を今の起動ごとの ID に写す）。定義を外へ出す道はすべてここを通す。
+  private func definitionJSON(_ stored: Any?) -> [String: Any] {
+    automationRunner.workspaces().outward(stored as? [String: Any] ?? [:])
   }
 
   private static func automationNotFound(_ id: Int) -> ControlError {

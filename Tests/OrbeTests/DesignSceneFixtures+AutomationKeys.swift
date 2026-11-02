@@ -76,6 +76,16 @@ extension WindowController {
   func notifyAutomationRecorded(_ id: Int, _ key: String) {
     notifyAutomationRecorded(id, automationStore.nodeId(id, key))
   }
+
+  /// 型の定義を外の形の JSON にして送る（テスト）。
+  func controlSetAutomation(
+    automationId: Int?, version: Int?, _ definition: AutomationDefinition
+  ) -> Result<Any, ControlError> {
+    controlSetAutomation(
+      automationId: automationId, version: version,
+      automationRunner.workspaces().outward(
+        AutomationWire.object(definition) as? [String: Any] ?? [:]))
+  }
 }
 
 extension BoardAutomationNodeValue {

@@ -12,7 +12,7 @@ extension AutomationGraphTests {
     _ definitionNodes: [AutomationDefinition.Node], at place: String, _ label: String,
     line: UInt = #line
   ) {
-    XCTAssertThrowsError(try AutomationGraph.check(definitionNodes), label, line: line) {
+    XCTAssertThrowsError(try AutomationGraph.check(definitionNodes, workspace: nil), label, line: line) {
       guard case .invalid(let message) = $0 as? AutomationError else {
         return XCTFail("\(label): \($0)", line: line)
       }
@@ -42,7 +42,8 @@ extension AutomationGraphTests {
   /// ノード自身の欄だけで決まる規則は、そのノードの欄を指して断る。
   func testANodesOwnFieldsAreRefusedAtTheirPlace() {
     let command = { (script: String, directory: String?) in
-      AutomationActionDef.Method.command(BackgroundCommand(script: script, directory: directory))
+      AutomationActionDef.Method.command(
+        AutomationNodeCommand(script: script, directory: directory))
     }
     for (label, definitionNodes, place) in [
       ("ノードが 0 個", [AutomationDefinition.Node](), "nodes"),
@@ -111,14 +112,14 @@ extension AutomationGraphTests {
       assertRefused(working(tool), at: "nodes[0].tools", tool)
     }
     for tool in ["mcp__plugin_core_backlog__get_issues", "Bash(gh search prs:*)"] {
-      XCTAssertNoThrow(try AutomationGraph.check(working(tool)), tool)
+      XCTAssertNoThrow(try AutomationGraph.check(working(tool), workspace: nil), tool)
     }
   }
 
   /// ノードどうしの組み合わせの規則は、直すべきノードの欄を指して断る。
   func testCombinationsAreRefusedAtTheNodeToFix() {
     let unknown = [Self.fetch("f"), Self.agent("r", from: ["gh"])]
-    XCTAssertThrowsError(try AutomationGraph.check(unknown)) {
+    XCTAssertThrowsError(try AutomationGraph.check(unknown, workspace: nil)) {
       XCTAssertEqual($0 as? AutomationError, .invalid(#"nodes[1].from: unknown node "gh""#))
     }
 

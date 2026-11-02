@@ -5,6 +5,8 @@ import Foundation
 struct AutomationDefinition: Equatable, Codable {
   var name: String
   var notify: AutomationNotify?
+  /// 自分の workspace を書かないコマンドのノードが走る workspace の `Workspace.persistentId`。判定の付け先とは関係しない。
+  var workspace: UUID?
   var nodes: [Node]
 
   /// 外の形のノード 1 つ。`id` は今あるノードを指す（新しく足すノードは持たない）。
@@ -21,6 +23,12 @@ struct AutomationDefinition: Equatable, Codable {
 
     /// 行を見るか——入力があり、ツールを持つ agent でない。
     var readsRows: Bool { !from.isEmpty && !action.hasTools }
+
+    /// 自動化の workspace を継ぐか——自分の workspace を書かないコマンドのノード。
+    var inheritsWorkspace: Bool {
+      guard case .command(let command) = action.method else { return false }
+      return command.workspace == nil
+    }
   }
 
   /// `from` の要素。鍵だけの文字列は、新しい行だけを取り古さの上限を持たない。
@@ -39,7 +47,7 @@ struct AutomationDefinition: Equatable, Codable {
     } catch {
       throw .invalid("name: must be a single non-empty line")
     }
-    return (name, try AutomationGraph.check(nodes))
+    return (name, try AutomationGraph.check(nodes, workspace: workspace))
   }
 
   /// JSON の値を定義として読む。読めない箇所を定義の中の場所（`nodes[2].trigger` など）で言う。

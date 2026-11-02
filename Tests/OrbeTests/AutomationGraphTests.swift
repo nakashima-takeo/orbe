@@ -178,7 +178,7 @@ extension AutomationGraph {
   static func numbered(_ definitionNodes: [AutomationDefinition.Node]) throws(AutomationError)
     -> AutomationGraph
   {
-    let checked = try check(definitionNodes)
+    let checked = try check(definitionNodes, workspace: nil)
     return AutomationGraph(
       checked,
       entities: checked.enumerated().map { index, item in
@@ -187,6 +187,6 @@ extension AutomationGraph {
           name: item.definitionNode.name,
           trigger: item.definitionNode.trigger, maxItems: item.definitionNode.maxItems,
           defId: AutomationNodeDefID(index + 1))
-      })
+      }, workspace: nil)
   }
 }

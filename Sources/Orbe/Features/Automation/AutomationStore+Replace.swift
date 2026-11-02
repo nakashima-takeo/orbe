@@ -52,7 +52,7 @@ extension AutomationStore {
     return try commit(sweepingAt: at) { db, memory in
       var entities = try Self.entities(checked, old: current.automation, db)
       if let old = current.automation, old.name == name, old.notify == definition.notify,
-        old.graph.nodes.map(\.entity) == entities,
+        old.graph.workspace == definition.workspace, old.graph.nodes.map(\.entity) == entities,
         old.graph.definitionNodes.map(\.from) == checked.map(\.definitionNode.from)
       {
         return Replaced(automation: old, reworked: [], removed: [])
@@ -65,9 +65,11 @@ extension AutomationStore {
         invalidated += try db.removeNode(nodeId, at: at)
       }
       try Self.writeNodes(checked, &entities, of: id, db, at: at)
-      let graph = AutomationGraph(checked, entities: entities)
+      let graph = AutomationGraph(checked, entities: entities, workspace: definition.workspace)
       let rewired = try Self.rewire(graph, of: id, current, db, at: at)
-      try db.updateAutomation(id, name: name, notify: definition.notify, version: version + 1)
+      try db.updateAutomation(
+        id, name: name, notify: definition.notify, workspace: definition.workspace,
+        version: version + 1)
       let row = try db.automationRow(id)
       let automation = Automation(
         id: id, name: name, notify: definition.notify, graph: graph, pausedAt: row.pausedAt,

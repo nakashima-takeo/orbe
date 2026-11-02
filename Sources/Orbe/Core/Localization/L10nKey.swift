@@ -419,6 +419,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationEndStopped
   case automationEndAgentMissing
   case automationEndDirectoryMissing
+  case automationEndWorkspaceMissing
   case automationEndNotStarted
   case automationEndToolsUnavailable
   case automationFailNoReply

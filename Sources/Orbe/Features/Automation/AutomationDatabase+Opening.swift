@@ -9,11 +9,15 @@ extension AutomationDatabase {
     var automations: [Automation] = []
     var unreadable: [AutomationUnreadable] = []
     for row in try db.select(
-      "SELECT id, name, notify, paused_at, version, created_at FROM automations ORDER BY id", [],
+      """
+      SELECT id, name, notify, workspace, paused_at, version, created_at FROM automations
+      ORDER BY id
+      """, [],
       {
         AutomationRow(
           id: $0.int(at: 0), name: $0.text(at: 1) ?? "", notify: $0.text(at: 2),
-          pausedAt: $0.optionalInt64(at: 3), version: $0.int(at: 4), createdAt: $0.int64(at: 5))
+          workspace: $0.text(at: 3), pausedAt: $0.optionalInt64(at: 4), version: $0.int(at: 5),
+          createdAt: $0.int64(at: 6))
       })
     {
       switch try database.automation(row) {
@@ -34,6 +38,7 @@ extension AutomationDatabase {
     let id: Int
     let name: String
     let notify: String?
+    let workspace: String?
     let pausedAt: Int64?
     let version: Int
     let createdAt: Int64
@@ -49,6 +54,7 @@ extension AutomationDatabase {
   private func automation(_ row: AutomationRow) throws -> Assembled {
     let rows = try nodeRows(of: row.id)
     let notify = row.notify.flatMap(AutomationNotify.init)
+    let workspace = row.workspace.flatMap(UUID.init(uuidString:))
     func broken(_ reason: String, _ definition: Any) -> Assembled {
       .unreadable(
         AutomationUnreadable(
@@ -63,7 +69,8 @@ extension AutomationDatabase {
       case .failure(let problem): return broken(problem.reason, Self.rawDefinition(row, rows, keys))
       }
     }
-    let definition = AutomationDefinition(name: row.name, notify: notify, nodes: definitionNodes)
+    let definition = AutomationDefinition(
+      name: row.name, notify: notify, workspace: workspace, nodes: definitionNodes)
     let checked: (name: String, checkedNodes: [AutomationGraph.Checked])
     do throws(AutomationError) {
       checked = try definition.checked()
@@ -74,7 +81,7 @@ extension AutomationDatabase {
       checked.checkedNodes,
       entities: zip(checked.checkedNodes, rows).map { checked, row in
         AutomationNode(checked.definitionNode, id: row.id, defId: row.defId)
-      })
+      }, workspace: workspace)
     var states: [AutomationNodeID: AutomationNodeState] = [:]
     for nodeRow in rows { states[nodeRow.id] = try state(of: nodeRow.id) }
     return .readable(
@@ -210,6 +217,7 @@ extension AutomationDatabase {
       },
     ]
     if let notify = row.notify { object["notify"] = notify }
+    if let workspace = row.workspace { object["workspace"] = workspace }
     return object
   }
 
