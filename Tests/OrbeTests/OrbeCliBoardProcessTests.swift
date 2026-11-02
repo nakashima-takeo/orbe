@@ -16,7 +16,7 @@ final class OrbeCliBoardProcessTests: OrbeTestCase {
     let workspaces = try XCTUnwrap(
       control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
     let home = try XCTUnwrap(
-      workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? Int,
+      workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? String,
       "ws list --json に hasBoard")
     func run(_ args: [String]) -> String {
       let outcome = control.orb(["board"] + args)

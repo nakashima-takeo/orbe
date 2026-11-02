@@ -1,22 +1,22 @@
 import Foundation
 import OrbeSessionLog
 
-/// タスクの動詞（4 動詞と `set_wait_condition`）の domain 側。外に見せる起動ごとの workspaceId とタスクが持つ永続 ID の相互変換・
-/// 呼び出し元タブの解決をここで行い、検証と変異は `TaskStore` に任せる。
+/// タスクの動詞（4 動詞と `set_wait_condition`）の domain 側。workspace と呼び出し元タブの解決をここで行い、検証と変異は
+/// `TaskStore` に任せる。
 extension WindowController {
-  func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError> {
+  func controlListTasks(workspaceId: UUID?) -> Result<Any, ControlError> {
     var tasks = taskStore.tasks
     if let workspaceId {
       guard let ws = workspaces.first(where: { $0.id == workspaceId }) else {
         return .failure(Self.workspaceNotFound)
       }
-      tasks = tasks.filter { $0.workspace == ws.persistentId }
+      tasks = tasks.filter { $0.workspace == ws.id }
     }
     return .success(["tasks": tasks.sorted(by: TaskItem.newerFirst).map(taskJSON)])
   }
 
   func controlAddTask(
-    _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?,
+    _ draft: TaskDraft, workspaceId: ClearableValue<UUID>?, callerTabId: Int?,
     worktree: String? = nil
   ) -> Result<Any, ControlError> {
     var draft = draft
@@ -35,7 +35,7 @@ extension WindowController {
     switch workspaceId {
     case nil:
       draft.workspace = caller.flatMap { tab in
-        workspaces.first { $0.tabs.contains { $0 === tab } }?.persistentId
+        workspaces.first { $0.tabs.contains { $0 === tab } }?.id
       }
     case .clear:
       draft.workspace = nil
@@ -43,13 +43,13 @@ extension WindowController {
       guard let ws = workspaces.first(where: { $0.id == id }) else {
         return .failure(Self.workspaceNotFound)
       }
-      draft.workspace = ws.persistentId
+      draft.workspace = ws.id
     }
     return taskResult { () throws(TaskStoreError) in ["task": taskJSON(try taskStore.add(draft))] }
   }
 
   func controlUpdateTask(
-    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
+    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<UUID>?,
     worktree: ClearableValue<String>? = nil
   ) -> Result<Any, ControlError> {
     var update = update
@@ -73,7 +73,7 @@ extension WindowController {
       guard let ws = workspaces.first(where: { $0.id == id }) else {
         return .failure(Self.workspaceNotFound)
       }
-      update.workspace = .set(ws.persistentId)
+      update.workspace = .set(ws.id)
     }
     return taskResult { () throws(TaskStoreError) in
       ["task": taskJSON(try taskStore.update(taskId, update))]
@@ -118,7 +118,7 @@ extension WindowController {
     {
       request.conversation = WaitConversation(
         command: session.command, sessionId: sessionId,
-        workspace: workspaces.first { $0.tabs.contains { $0 === caller } }?.persistentId)
+        workspace: workspaces.first { $0.tabs.contains { $0 === caller } }?.id)
     }
     return request
   }
@@ -145,7 +145,7 @@ extension WindowController {
     }
   }
 
-  /// list_tasks の要素。workspace は今の workspaceId と名前で見せ、解決できない参照（削除済み）は
+  /// list_tasks の要素。workspace は workspaceId と今の名前で見せ、解決できない参照（削除済み）は
   /// 「なし」と同じくキーごと出さない。worktree もディレクトリが無ければ出さない。無い値はキーごと出さない。
   /// 外した項目は出さない（自動の結び付けのための内部の記録）。
   func taskJSON(_ task: TaskItem) -> [String: Any] {
@@ -169,8 +169,8 @@ extension WindowController {
       json["waitResolved"] = resolved
     }
     if let due = task.due { json["due"] = due.text }
-    if let ws = task.workspace.flatMap({ id in workspaces.first { $0.persistentId == id } }) {
-      json["workspaceId"] = ws.id
+    if let ws = task.workspace.flatMap({ id in workspaces.first { $0.id == id } }) {
+      json["workspaceId"] = ws.id.uuidString
       json["workspaceName"] = ws.name
     }
     if let createdBy = task.createdBy { json["createdBy"] = createdBy }

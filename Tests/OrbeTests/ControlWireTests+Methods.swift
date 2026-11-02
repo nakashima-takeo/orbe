@@ -149,15 +149,18 @@ extension ControlWireTests {
   /// 実際に読めるタブを指すことは L4（`OrbeMcpProcessTests`）が実 `WindowController` で見る。
   func testActivateWorkspaceReturnsActiveIdAndTabIds() {
     let fake = FakeControlTarget()
-    fake.activateResult = (activeWorkspaceId: 3, tabIds: [11, 12])
+    let workspace = UUID()
+    fake.activateResult = (activeWorkspaceId: workspace, tabIds: [11, 12])
     let wire = startWire(target: fake)
 
     let result =
-      wire.request(id: 1, method: "activate_workspace", params: ["workspaceId": 3])?["result"]
-      as? [String: Any]
+      wire.request(
+        id: 1, method: "activate_workspace", params: ["workspaceId": workspace.uuidString])?[
+        "result"] as? [String: Any]
 
     XCTAssertEqual(
-      result?["activeWorkspaceId"] as? Int, 3, "前面化した workspace を activeWorkspaceId で返す")
+      result?["activeWorkspaceId"] as? String, workspace.uuidString,
+      "前面化した workspace を activeWorkspaceId で返す")
     XCTAssertEqual(result?["tabIds"] as? [Int], [11, 12], "mount したタブ一式を tabIds で返す")
   }
 
@@ -167,15 +170,20 @@ extension ControlWireTests {
   func testDestinationIdsReachTheirOwnDomainVerb() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
+    let (renamed, rooted, removed, activated) = (UUID(), UUID(), UUID(), UUID())
 
     _ = wire.request(id: 2, method: "focus_tab", params: ["tabId": 82])
     _ = wire.request(id: 3, method: "close_tab", params: ["tabId": 83])
     _ = wire.request(id: 9, method: "open_file", params: ["tabId": 89, "path": "a.swift"])
-    _ = wire.request(id: 4, method: "rename_workspace", params: ["workspaceId": 84, "name": "r"])
     _ = wire.request(
-      id: 5, method: "set_workspace_root", params: ["workspaceId": 85, "rootPath": "/tmp/r"])
-    _ = wire.request(id: 6, method: "remove_workspace", params: ["workspaceId": 86])
-    _ = wire.request(id: 7, method: "activate_workspace", params: ["workspaceId": 87])
+      id: 4, method: "rename_workspace", params: ["workspaceId": renamed.uuidString, "name": "r"])
+    _ = wire.request(
+      id: 5, method: "set_workspace_root",
+      params: ["workspaceId": rooted.uuidString, "rootPath": "/tmp/r"])
+    _ = wire.request(
+      id: 6, method: "remove_workspace", params: ["workspaceId": removed.uuidString])
+    _ = wire.request(
+      id: 7, method: "activate_workspace", params: ["workspaceId": activated.uuidString])
     _ = wire.request(
       id: 8, method: "prompt_agent", params: ["tabId": fake.tabId, "text": "p", "timeoutMs": 10])
 
@@ -184,14 +192,15 @@ extension ControlWireTests {
     XCTAssertEqual(fake.openedFiles.last?.tabId, 89, "open_file は controlOpenFile へ tabId を渡す")
     XCTAssertEqual(fake.openedFiles.last?.path, "a.swift", "open_file は path をそのまま渡す")
     XCTAssertEqual(
-      fake.renamedWorkspaces.last?.workspaceId, 84, "rename_workspace は workspaceId を渡す")
+      fake.renamedWorkspaces.last?.workspaceId, renamed, "rename_workspace は workspaceId を渡す")
     XCTAssertEqual(fake.renamedWorkspaces.last?.name, "r", "rename_workspace は name を渡す")
     XCTAssertEqual(
-      fake.workspaceRoots.last?.workspaceId, 85, "set_workspace_root は workspaceId を渡す")
+      fake.workspaceRoots.last?.workspaceId, rooted, "set_workspace_root は workspaceId を渡す")
     XCTAssertEqual(
       fake.workspaceRoots.last?.rootPath, "/tmp/r", "set_workspace_root は rootPath を渡す")
-    XCTAssertEqual(fake.removedWorkspaceIds, [86], "remove_workspace は workspaceId を渡す")
-    XCTAssertEqual(fake.activatedWorkspaceIds, [87], "activate_workspace は workspaceId を渡す")
+    XCTAssertEqual(fake.removedWorkspaceIds, [removed], "remove_workspace は workspaceId を渡す")
+    XCTAssertEqual(
+      fake.activatedWorkspaceIds, [activated], "activate_workspace は workspaceId を渡す")
     XCTAssertEqual(
       fake.prompts.map(\.tabId), [fake.tabId], "prompt_agent は解決したタブを controlPromptAgent へ渡す")
   }

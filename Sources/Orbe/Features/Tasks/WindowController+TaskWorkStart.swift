@@ -12,7 +12,7 @@ extension WindowController {
       return completion(.failure(Self.taskNotFound(request.taskId)))
     }
     guard
-      let workspace = task.workspace.flatMap({ id in workspaces.first { $0.persistentId == id } }),
+      let workspace = task.workspace.flatMap({ id in workspaces.first { $0.id == id } }),
       let index = workspaces.firstIndex(where: { $0 === workspace })
     else {
       return completion(
@@ -38,7 +38,7 @@ extension WindowController {
       case .success(let workplace):
         completion(
           self.beginTaskWork(
-            task.id, in: workspace.persistentId, at: workplace, agent: agent, firstInput: input))
+            task.id, in: workspace.id, at: workplace, agent: agent, firstInput: input))
       }
     }
     let prompt = request.prompt.flatMap { $0.isEmpty ? nil : $0 }
@@ -105,7 +105,7 @@ extension WindowController {
     guard let worktree = TaskWorktree(directory: workplace.path) else {
       return .failure(ControlError(code: -32000, message: "not a directory: \(workplace.path)"))
     }
-    guard let index = workspaces.firstIndex(where: { $0.persistentId == workspaceId }) else {
+    guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
       return .failure(ControlError(code: -32000, message: "the task's workspace was removed"))
     }
     do throws(TaskStoreError) {
@@ -136,7 +136,7 @@ extension WindowController {
     else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
     var result: [String: Any] = [
       "task": taskJSON(task), "workdir": worktree.path, "created": workplace.created,
-      "tabId": opened.tabId, "workspaceId": opened.workspaceId,
+      "tabId": opened.tabId, "workspaceId": opened.workspaceId.uuidString,
       "agent": ["command": agent.command, "path": agent.path],
     ]
     if let repo = workplace.repo { result["repo"] = repo }

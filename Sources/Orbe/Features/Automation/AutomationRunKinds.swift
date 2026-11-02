@@ -133,8 +133,8 @@ enum AutomationLineFault: Equatable {
   case titleNotOneLine(String)
   /// 判定の案の期限が日付でない（id と原文）。
   case dueNotDate(String, String)
-  /// 判定の案の付け先が一覧に無い（id と番号）。
-  case workspaceNotListed(String, Int)
+  /// 判定の案の付け先が一覧に無い（id と、書かれた付け先）。
+  case workspaceNotListed(String, String)
   /// 結果の道具の引数（欄の名前）が配列でない。
   case notArray(String)
   /// 何も無いと申告した後に結果を出した。
@@ -170,8 +170,8 @@ enum AutomationLineFault: Equatable {
     case .notOneDecision: "must have exactly one of propose / resolve"
     case .titleNotOneLine(let id): "propose \(id): title must be a single non-empty line"
     case .dueNotDate(let id, let raw): "propose \(id): due is not a YYYY-MM-DD date: \(raw)"
-    case .workspaceNotListed(let id, let number):
-      "propose \(id): workspace \(number) is not a listed workspace"
+    case .workspaceNotListed(let id, let workspace):
+      "propose \(id): workspace \(workspace) is not a listed workspace"
     case .notArray(let key): "\(key) must be an array"
     case .afterNothing: "a result after report_nothing"
     case .tooLarge: "larger than \(AutomationOutputs.rowKiB) KiB"
@@ -337,7 +337,7 @@ extension AutomationBrokenLine: Codable {
     case "titleNotOneLine": fault = .titleNotOneLine(try string(.id))
     case "dueNotDate": fault = .dueNotDate(try string(.id), try string(.raw))
     case "workspaceNotListed":
-      fault = .workspaceNotListed(try string(.id), try c.decode(Int.self, forKey: .workspace))
+      fault = .workspaceNotListed(try string(.id), try string(.workspace))
     case "notArray": fault = .notArray(try string(.key))
     case "afterNothing": fault = .afterNothing
     case "tooLarge": fault = .tooLarge
@@ -370,9 +370,8 @@ extension AutomationBrokenLine: Codable {
     case .notOneDecision: try kind("notOneDecision")
     case .titleNotOneLine(let id): try kind("titleNotOneLine", [(.id, id)])
     case .dueNotDate(let id, let raw): try kind("dueNotDate", [(.id, id), (.raw, raw)])
-    case .workspaceNotListed(let id, let number):
-      try kind("workspaceNotListed", [(.id, id)])
-      try c.encode(number, forKey: .workspace)
+    case .workspaceNotListed(let id, let workspace):
+      try kind("workspaceNotListed", [(.id, id), (.workspace, workspace)])
     case .notArray(let key): try kind("notArray", [(.key, key)])
     case .afterNothing: try kind("afterNothing")
     case .tooLarge: try kind("tooLarge")

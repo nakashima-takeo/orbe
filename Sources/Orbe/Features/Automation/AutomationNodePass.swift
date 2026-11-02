@@ -85,7 +85,7 @@ struct AutomationNodePass {
     let fields: AutomationRowFields
     let title: String
     let due: TaskItem.DueDate?
-    /// 付け先の `Workspace.persistentId`。
+    /// 付け先の `Workspace.id`。
     let workspace: UUID?
     /// 候補にした理由（判定が書いたときだけ）。
     let reason: String?

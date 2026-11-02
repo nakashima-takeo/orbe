@@ -12,7 +12,7 @@ private let boardChange =
   + "応答は結果のウィジェットの並び {widgets: [{kind}]}。"
 
 private func boardTarget(_ verb: String) -> [String: Any] {
-  intProp("\(verb) workspace の id（list_workspaces で hasBoard が true のもの）")
+  strProp("\(verb) workspace の id（list_workspaces で hasBoard が true のもの）")
 }
 
 let boardTools: [[String: Any]] = [

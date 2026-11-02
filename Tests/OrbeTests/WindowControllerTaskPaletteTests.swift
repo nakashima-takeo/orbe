@@ -26,9 +26,9 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)], persistentId: mainId),
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)], id: mainId),
         WorkspaceState(
-          name: "empty", rootPath: "/tmp", activeTab: 0, tabs: [], persistentId: emptyId),
+          name: "empty", rootPath: "/tmp", activeTab: 0, tabs: [], id: emptyId),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
@@ -126,7 +126,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     palette.setTab(.automation)
     palette.automation.enterProposals()
 
-    let main = try XCTUnwrap(wc.workspaces.firstIndex { $0.persistentId == mainId })
+    let main = try XCTUnwrap(wc.workspaces.firstIndex { $0.id == mainId })
     wc.closeWorkspace(main, origin: .controlAPI)
     palette.submit()
 

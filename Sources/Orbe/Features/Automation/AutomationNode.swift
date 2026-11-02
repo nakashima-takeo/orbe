@@ -109,7 +109,7 @@ enum AutomationTake: String, Hashable {
 /// 回の始めにその時点の root で解く。効かないときは絶対パスか省略（ホーム）。
 struct AutomationNodeCommand: Equatable {
   var script: String
-  /// 走らせる workspace の `Workspace.persistentId`。省略は自動化の workspace を継ぐ。
+  /// 走らせる workspace の `Workspace.id`。省略は自動化の workspace を継ぐ。
   var workspace: UUID?
   var directory: String?
 }

@@ -2,6 +2,42 @@ import Foundation
 
 // 定義の JSON の形。読むときに断るのは形の誤りだけで、値と組み合わせは `AutomationGraph` が検証する。
 
+/// `workspace` は書けば UUID の文字列（`Workspace.id`）。
+extension AutomationDefinition: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case name, notify, workspace, nodes
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    name = try c.decode(String.self, forKey: .name)
+    notify = try c.decodeIfPresent(AutomationNotify.self, forKey: .notify)
+    workspace = try c.decodeWorkspace(forKey: .workspace)
+    nodes = try c.decode([Node].self, forKey: .nodes)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(name, forKey: .name)
+    try c.encodeIfPresent(notify, forKey: .notify)
+    try c.encodeIfPresent(workspace, forKey: .workspace)
+    try c.encode(nodes, forKey: .nodes)
+  }
+}
+
+extension KeyedDecodingContainer {
+  /// workspace の席。欄があれば UUID の文字列だけを受ける——`null` を「書かない」と同じに読むと、ノードの席では黙って自動化の
+  /// workspace を継ぐ。`null`・UUID でない値は、どれも場所付きの読みの誤り。
+  fileprivate func decodeWorkspace(forKey key: Key) throws -> UUID? {
+    guard contains(key) else { return nil }
+    guard let id = UUID(uuidString: try decode(String.self, forKey: key)) else {
+      throw DecodingError.typeMismatch(
+        UUID.self, .init(codingPath: codingPath + [key], debugDescription: "not a workspace id"))
+    }
+    return id
+  }
+}
+
 /// ノードの欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
 extension AutomationDefinition.Node: Codable {
   private enum CodingKeys: String, CodingKey {
@@ -74,8 +110,7 @@ extension AutomationDefinition.Input: Codable {
 
 /// `command`（＋`workspace`・`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方と、
 /// `timeoutMinutes`・`coverage`・`deliver`。`deliver` の省略は次のノード。外の定義のノードの欄と同じオブジェクトに並び、保存
-/// （`action_defs.action`）はこの欄だけのオブジェクト。`workspace` は保存の形（`Workspace.persistentId` の文字列）で読み書きし、
-/// 外の形の起動ごとの ID との写しは制御の境界（`AutomationWorkspaces`）が持つ。
+/// （`action_defs.action`）はこの欄だけのオブジェクト。`workspace` は書けば UUID の文字列（`Workspace.id`）。
 extension AutomationActionDef: Codable {
   private enum CodingKeys: String, CodingKey {
     case command, workspace, directory, agent, model, tools, instruction, timeoutMinutes, coverage,
@@ -118,7 +153,7 @@ extension AutomationActionDef: Codable {
       return .command(
         AutomationNodeCommand(
           script: try c.decode(String.self, forKey: .command),
-          workspace: try c.decodeIfPresent(UUID.self, forKey: .workspace),
+          workspace: try c.decodeWorkspace(forKey: .workspace),
           directory: try c.decodeIfPresent(String.self, forKey: .directory)))
     case (false, true):
       if let key = [CodingKeys.workspace, .directory].first(where: c.contains) {

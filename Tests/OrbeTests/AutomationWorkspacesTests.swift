@@ -2,62 +2,81 @@ import XCTest
 
 @testable import Orbe
 
-/// 定義の workspace の席の、外の形（起動ごとの ID）と保存の形（永続 ID）の写し。入口は整数でない値・`null`・知らない ID を
-/// 定義の中の場所で断る。
+/// 定義の workspace の席（最上位とコマンドのノード）。読みは UUID の文字列だけを受け、`null`・整数・UUID でない値を定義の中の
+/// 場所で断る。書くときは、席が今の workspace を指すかを確かめ、無い席を場所付きで断る。
 ///
-/// 壊れると何が起きるか: 永続 ID が外に漏れ、AI が書いた起動ごとの ID が再起動で別の workspace を指す。消えた workspace の席の
-/// 書き戻しが通り、黙って自動化の workspace に付け替わって別のリポジトリで走る。真偽値や文字列が workspace として通る。
+/// 壊れると何が起きるか: 消えた workspace の席の書き戻しが通り、黙って自動化の workspace に付け替わって別のリポジトリで走る。
+/// `null` や真偽値が「書かない」や別の workspace として通る。
 final class AutomationWorkspacesTests: OrbeTestCase {
-  private let home = AutomationWorkspace(id: 1, persistentId: UUID(), name: "Home", root: "/h")
-  private let orbe = AutomationWorkspace(id: 3, persistentId: UUID(), name: "orbe", root: "/src")
-  private var workspaces: AutomationWorkspaces { AutomationWorkspaces(all: [home, orbe], home: 1) }
+  private let home = AutomationWorkspace(id: UUID(), name: "Home", root: "/h")
+  private let orbe = AutomationWorkspace(id: UUID(), name: "orbe", root: "/src")
+  private var workspaces: AutomationWorkspaces {
+    AutomationWorkspaces(all: [home, orbe], home: home.id)
+  }
 
   private func definition(_ top: Any?, _ node: Any?) -> [String: Any] {
-    var command: [String: Any] = ["key": "a", "command": "pwd"]
-    command["workspace"] = node
-    var definition: [String: Any] = ["name": "x", "nodes": [["key": "r"], command]]
+    func command(_ key: String) -> [String: Any] {
+      ["key": key, "name": key, "trigger": ["kind": "manual"], "command": "pwd"]
+    }
+    var seated = command("a")
+    seated["workspace"] = node
+    var definition: [String: Any] = ["name": "x", "nodes": [command("r"), seated]]
     definition["workspace"] = top
     return definition
   }
 
-  private func seats(_ definition: [String: Any]) -> [String] {
-    let nodes = definition["nodes"] as? [[String: Any]] ?? []
-    return ([definition["workspace"]] + nodes.map { $0["workspace"] }).map { "\($0 ?? "-")" }
+  func testSeatsNamingCurrentWorkspacesAreAcceptedAndComeBackInTheStoredForm() throws {
+    let read = try AutomationDefinition.decode(
+      definition(orbe.id.uuidString.lowercased(), home.id.uuidString))
+
+    XCTAssertNoThrow(try workspaces.checkSeats(of: read), "Home も走る場所に書ける")
+    let written = try XCTUnwrap(AutomationWire.object(read) as? [String: Any])
+    XCTAssertEqual(written["workspace"] as? String, orbe.id.uuidString, "小文字で書いても保存の形で返る")
+    let nodes = try XCTUnwrap(written["nodes"] as? [[String: Any]])
+    XCTAssertNil(nodes[0]["workspace"], "書かない席は書かないまま")
+    XCTAssertEqual(nodes[1]["workspace"] as? String, home.id.uuidString)
   }
 
-  func testTheSeatsGoInAsPersistentIdsAndComeBackAsTheIdsOfThisLaunch() throws {
-    let stored = try workspaces.inward(definition(3, 1))
-
-    XCTAssertEqual(
-      seats(stored), [orbe.persistentId.uuidString, "-", home.persistentId.uuidString],
-      "Home も走る場所に書ける")
-    XCTAssertEqual(seats(workspaces.outward(stored)), ["3", "-", "1"])
-    XCTAssertEqual(seats(try workspaces.inward(definition(nil, nil))), ["-", "-", "-"])
-  }
-
-  func testAnUnusableSeatIsRefusedAtItsPlace() {
+  func testAnUnknownSeatIsRefusedAtItsPlace() throws {
+    let removed = UUID()
+    let refusal = { (path: String, leftOut: String) in
+      "\(path): unknown workspace \(removed.uuidString) (it may have been removed); pass a workspace id from "
+        + "list_workspaces, or \(leftOut)"
+    }
     for (label, object, message) in [
       (
-        "整数でない", definition(nil, "3"),
-        "invalid nodes[1].workspace: pass a workspace id from list_workspaces"
-      ),
-      ("真偽値", definition(true, nil), "invalid workspace: pass a workspace id from list_workspaces"),
-      ("知らない ID", definition(nil, 7), "nodes[1].workspace: unknown workspace 7"),
-      (
-        "自動化の workspace があるノードの null", definition(3, NSNull()),
-        "nodes[1].workspace: null names no workspace (a removed workspace is listed as null); pass a "
-          + "workspace id from list_workspaces, or leave workspace out to run in the automation's "
-          + "workspace"
+        "自動化の席", definition(removed.uuidString, nil),
+        refusal("workspace", "leave workspace out and give its command nodes absolute directories")
       ),
       (
-        "自動化の workspace が無いノードの null", definition(nil, NSNull()),
-        "nodes[1].workspace: null names no workspace (a removed workspace is listed as null); pass a "
-          + "workspace id from list_workspaces, or leave workspace out and give the node an absolute "
-          + "directory"
+        "自動化の workspace があるノードの席", definition(orbe.id.uuidString, removed.uuidString),
+        refusal("nodes[1].workspace", "leave workspace out to run in the automation's workspace")
+      ),
+      (
+        "自動化の workspace が無いノードの席", definition(nil, removed.uuidString),
+        refusal("nodes[1].workspace", "leave workspace out and give the node an absolute directory")
       ),
     ] {
-      XCTAssertThrowsError(try workspaces.inward(object), label) {
+      let read = try AutomationDefinition.decode(object)
+      XCTAssertThrowsError(try workspaces.checkSeats(of: read), label) {
         XCTAssertEqual($0 as? AutomationError, .invalid(message), label)
+      }
+    }
+  }
+
+  func testASeatThatIsNotAWorkspaceIdIsRefusedAtItsPlace() {
+    let values: [(String, Any)] = [
+      ("null", NSNull()), ("整数", 3), ("真偽値", true), ("UUID でない文字列", "3"),
+    ]
+    for (label, value) in values {
+      XCTAssertThrowsError(try AutomationDefinition.decode(definition(value, nil)), label) {
+        XCTAssertEqual($0 as? AutomationError, .invalid("invalid workspace"), "自動化の \(label)")
+      }
+      XCTAssertThrowsError(
+        try AutomationDefinition.decode(definition(orbe.id.uuidString, value)), label
+      ) {
+        XCTAssertEqual(
+          $0 as? AutomationError, .invalid("invalid nodes[1].workspace"), "ノードの \(label)")
       }
     }
   }

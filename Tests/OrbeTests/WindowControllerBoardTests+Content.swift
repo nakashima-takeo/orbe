@@ -81,7 +81,7 @@ extension WindowControllerBoardTests {
     WorkspacePersistence.save(
       WorkspacesFile(
         version: WorkspacePersistence.version, activeWorkspace: 0, workspaces: [home],
-        homeWorkspaceId: home.persistentId))
+        homeWorkspaceId: home.id))
 
     let wc = WindowController()
     XCTAssertTrue(waitUntil { wc.current.tabs.allSatisfy(\.activated) }, "前提: 休眠のタブが起きる")
@@ -112,8 +112,8 @@ extension WindowControllerBoardTests {
     let wc = try homeOnBoard(tabs: 0)
     let homeId = wc.current.id
 
-    let tabId = try XCTUnwrap(
-      wc.controlSpawn(workspaceId: homeId, cwd: nil, command: nil, selects: false))
+    let tabId = try wc.controlSpawn(workspaceId: homeId, cwd: nil, command: nil, selects: false)
+      .get()
 
     XCTAssertEqual(wc.current.selection, .board, "ボードのまま")
     XCTAssertEqual(visibleContent(wc), [wc.boardView])

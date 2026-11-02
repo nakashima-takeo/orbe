@@ -38,6 +38,7 @@ extension ControlWireTests {
     -> [(method: String, params: [String: Any])]
   {
     let tab = fake.tabId
+    let ws = Self.workspace
     return [
       ("list_workspaces", [:]),
       ("list_tabs", [:]),
@@ -45,21 +46,21 @@ extension ControlWireTests {
       ("get_tab_text", ["tabId": tab]),
       ("send_text", ["tabId": tab, "text": "hello"]),
       ("send_key", ["tabId": tab, "key": "ctrl+c"]),
-      ("spawn", ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l", "select": false]),
-      ("spawn_agent", ["command": "codex", "workspaceId": 3, "cwd": "/tmp/cwd"]),
+      ("spawn", ["workspaceId": ws, "cwd": "/tmp/cwd", "command": "zsh -l", "select": false]),
+      ("spawn_agent", ["command": "codex", "workspaceId": ws, "cwd": "/tmp/cwd"]),
       (
         "resume_agent",
-        ["command": "codex", "sessionId": "sess-1", "workspaceId": 3, "cwd": "/tmp/cwd"]
+        ["command": "codex", "sessionId": "sess-1", "workspaceId": ws, "cwd": "/tmp/cwd"]
       ),
-      ("activate_workspace", ["workspaceId": 3]),
+      ("activate_workspace", ["workspaceId": ws]),
       // 待機を張るので、表駆動で必ず 1 行返るよう短い timeoutMs を添える。
       ("prompt_agent", ["tabId": tab, "text": "hello", "timeoutMs": 10]),
-      ("config_list", ["workspaceId": 3]),
-      ("config_set", ["key": "font-size", "value": 14, "scope": "global", "workspaceId": 3]),
+      ("config_list", ["workspaceId": ws]),
+      ("config_set", ["key": "font-size", "value": 14, "scope": "global", "workspaceId": ws]),
       ("create_workspace", ["name": "wsp", "rootPath": "/tmp/root"]),
-      ("rename_workspace", ["workspaceId": 3, "name": "renamed"]),
-      ("set_workspace_root", ["workspaceId": 3, "rootPath": "/tmp/root2"]),
-      ("remove_workspace", ["workspaceId": 3]),
+      ("rename_workspace", ["workspaceId": ws, "name": "renamed"]),
+      ("set_workspace_root", ["workspaceId": ws, "rootPath": "/tmp/root2"]),
+      ("remove_workspace", ["workspaceId": ws]),
       ("focus_tab", ["tabId": 8]),
       ("close_tab", ["tabId": 9]),
       ("open_file", ["tabId": 8, "path": "/tmp/f.txt"]),
@@ -74,12 +75,12 @@ extension ControlWireTests {
       ("completion_accept", ["tabId": tab]),
       ("session_log", ["since": "2026-01-01T00:00:00.000Z", "limit": 10]),
       ("restore_sessions", ["sessionIds": ["sess-1"]]),
-      ("list_tasks", ["workspaceId": 3]),
+      ("list_tasks", ["workspaceId": ws]),
       (
         "add_task",
         [
           "title": "経費精算", "status": "in_progress", "priority": "high", "due": "2026-10-06",
-          "waitingReason": "返事", "description": "詳細", "workspaceId": 3, "callerTabId": tab,
+          "waitingReason": "返事", "description": "詳細", "workspaceId": ws, "callerTabId": tab,
           "links": [["kind": "pr", "repo": "o/n", "number": 214]],
         ]
       ),
@@ -276,16 +277,20 @@ extension ControlWireTests {
   func testSpawnOptionalParamsReachTarget() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
+    let workspace = UUID()
 
     let response = wire.request(
       id: 1, method: "spawn",
-      params: ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l", "select": false])
+      params: [
+        "workspaceId": workspace.uuidString, "cwd": "/tmp/cwd", "command": "zsh -l",
+        "select": false,
+      ])
 
     XCTAssertEqual(
       (response?["result"] as? [String: Any])?["tabId"] as? Int, fake.spawnedTabId,
       "戻りは新タブ ID を tabId で返す")
     let spawn = fake.spawns.last
-    XCTAssertEqual(spawn?.workspaceId, 3, "workspaceId が名前どおり届く")
+    XCTAssertEqual(spawn?.workspaceId, workspace, "workspaceId が名前どおり届く")
     XCTAssertEqual(spawn?.cwd, "/tmp/cwd", "cwd が名前どおり届く")
     XCTAssertEqual(spawn?.command, "zsh -l", "command が名前どおり届く")
     XCTAssertEqual(spawn?.selects, false, "select が名前どおり届く")
@@ -314,14 +319,16 @@ extension ControlWireTests {
     XCTAssertEqual(errorCode(wire.request(id: 1, method: "spawn")), -32000, "spawn 失敗は -32000")
   }
 
-  /// 未知 workspace への `activate_workspace` は -32004（spawn と違いフォールバックしない）。
+  /// 未知 workspace への `activate_workspace` は -32004。
   func testActivateUnknownWorkspaceIsNotFound() {
     let fake = FakeControlTarget()
     fake.activateResult = nil
     let wire = startWire(target: fake)
 
     XCTAssertEqual(
-      errorCode(wire.request(id: 1, method: "activate_workspace", params: ["workspaceId": 77])),
+      errorCode(
+        wire.request(
+          id: 1, method: "activate_workspace", params: ["workspaceId": UUID().uuidString])),
       -32004, "未知 workspace は -32004")
   }
 
@@ -329,19 +336,23 @@ extension ControlWireTests {
   func testConfigWorkspaceIdReachesTarget() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
+    let (setIn, listedIn) = (UUID(), UUID())
 
     _ = wire.request(
       id: 1, method: "config_set",
-      params: ["key": "font-size", "value": 14, "scope": "workspace", "workspaceId": 5])
-    _ = wire.request(id: 2, method: "config_list", params: ["workspaceId": 6])
+      params: [
+        "key": "font-size", "value": 14, "scope": "workspace", "workspaceId": setIn.uuidString,
+      ])
+    _ = wire.request(id: 2, method: "config_list", params: ["workspaceId": listedIn.uuidString])
     _ = wire.request(id: 3, method: "config_list")
 
     let set = fake.configSets.last
     XCTAssertEqual(set?.key, "font-size", "key が名前どおり届く")
     XCTAssertEqual(set?.value as? Int, 14, "value が名前どおり届く（型も保つ）")
     XCTAssertEqual(set?.scope, "workspace", "scope が名前どおり届く")
-    XCTAssertEqual(set?.workspaceId, 5, "config_set の workspaceId が名前どおり届く")
-    XCTAssertEqual(fake.configLists, [6, nil], "config_list の workspaceId は省略で nil（アクティブ WS）")
+    XCTAssertEqual(set?.workspaceId, setIn, "config_set の workspaceId が名前どおり届く")
+    XCTAssertEqual(
+      fake.configLists, [listedIn, nil], "config_list の workspaceId は省略で nil（アクティブ WS）")
   }
 
   /// `create_workspace` の optional `rootPath` が名前どおり target へ届く。

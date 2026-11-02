@@ -89,8 +89,9 @@ final class TerminalTabConversationTests: OrbeTestCase {
     let (controller, tab) = try openTab("/bin/sleep 600")
     defer { withExtendedLifetime(controller) {} }
     let client = try foreground(tab)
-    let paneTabId = try XCTUnwrap(
-      controller.controlSpawn(workspaceId: nil, cwd: nil, command: "/bin/sleep 601"))
+    let paneTabId = try controller.controlSpawn(
+      workspaceId: nil, cwd: nil, command: "/bin/sleep 601"
+    ).get()
     let pane = try foreground(try XCTUnwrap(controller.controlResolveTab(paneTabId)))
 
     tab.applyReport(idle(ProcessGroup.terminalGroup(of: pane)))
@@ -186,7 +187,7 @@ final class TerminalTabConversationTests: OrbeTestCase {
       workspaces: [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [])])
     try JSONEncoder().encode(fixture).write(to: workspacesFile())
     let controller = WindowController()
-    let tabId = try XCTUnwrap(controller.controlSpawn(workspaceId: nil, cwd: nil, command: command))
+    let tabId = try controller.controlSpawn(workspaceId: nil, cwd: nil, command: command).get()
     return (controller, try XCTUnwrap(controller.controlResolveTab(tabId)))
   }
 

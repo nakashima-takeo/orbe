@@ -4,15 +4,17 @@ import OrbeSessionLog
 /// 試走の外の形（`try_automation` / `get_automation_trial` の `trial`）。ノードの回は本番の `runs` の要素から `recordId`・`nodeKey` を
 /// 除いた形に中身を足す。
 extension AutomationTrial {
-  /// `workspace` は候補の付け先（`Workspace.persistentId`）を今の workspace の id と名前に解く。
-  func json(workspace: (UUID) -> (id: Int, name: String)?) -> [String: Any] {
+  /// `workspaceName` は候補の付け先（`Workspace.id`）を今の workspace の名前に解く。
+  func json(workspaceName: (UUID) -> String?) -> [String: Any] {
     var json: [String: Any] = [
       "automationId": automationId, "from": keys(range.from), "to": keys(range.to),
       "startedAt": SessionEvent.iso8601(startedAt), "running": running, "preparing": preparing,
       "nodes": range.path.map { node -> [String: Any] in
         [
           "key": node.key, "state": state(of: node.id).rawValue,
-          "runs": (passes[node.id] ?? []).map { $0.json(nodeKey: node.key, workspace: workspace) },
+          "runs": (passes[node.id] ?? []).map {
+            $0.json(nodeKey: node.key, workspaceName: workspaceName)
+          },
         ]
       },
     ]
@@ -29,9 +31,7 @@ extension AutomationTrial {
 
 extension AutomationTrial.Pass {
   /// 止めた副作用・仕事と与えた取得は、手段を起こしていないので回の記録を持たず、行だけ。
-  fileprivate func json(nodeKey: String, workspace: (UUID) -> (id: Int, name: String)?) -> [String:
-    Any]
-  {
+  fileprivate func json(nodeKey: String, workspaceName: (UUID) -> String?) -> [String: Any] {
     switch self {
     case .held(let rows): return ["held": ["rows": Self.objects(rows)]]
     case .given(let rows): return ["given": ["rows": Self.objects(rows)]]
@@ -47,9 +47,9 @@ extension AutomationTrial.Pass {
           ]
           if let due = proposal.due { item["due"] = due.text }
           if let reason = proposal.reason { item["reason"] = reason }
-          if let ws = proposal.workspace.flatMap(workspace) {
-            item["workspaceId"] = ws.id
-            item["workspaceName"] = ws.name
+          if let id = proposal.workspace, let name = workspaceName(id) {
+            item["workspaceId"] = id.uuidString
+            item["workspaceName"] = name
           }
           return item
         }

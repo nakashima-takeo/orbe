@@ -174,7 +174,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     let names = ControlProcess.mcpToolsList().compactMap { $0["name"] as? String }
     XCTAssertFalse(names.isEmpty, "tools/list が空")
     let nowhere: [String: Any] = [
-      "tabId": 999_999, "workspaceId": 999_999, "taskId": 999_999, "timeoutMs": 1,
+      "tabId": 999_999, "workspaceId": UUID().uuidString, "taskId": 999_999, "timeoutMs": 1,
     ]
     for name in names {
       let call = control.mcpCall(name, nowhere)
@@ -182,10 +182,28 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         call.text.hasPrefix("method not found"), "\(name) が control の method として通らない: \(call.text)")
     }
 
-    let rejected = control.mcpCall("activate_workspace", ["workspaceId": 999_999])
+    let rejected = control.mcpCall("activate_workspace", ["workspaceId": UUID().uuidString])
     XCTAssertTrue(rejected.isError, "control の拒否は isError:true になる")
     XCTAssertTrue(
       rejected.text.contains("workspace not found"), "error 本文に理由が残る: \(rejected.text)")
+  }
+
+  /// workspaceId を取るツールは、どれも workspace の ID を文字列で受けると説明する（タスクの付き先だけは null で「なし」も）。
+  /// 整数と説明すると、AI が送る値はどれも control に断られる。
+  func testEveryWorkspaceIdIsDescribedAsAString() throws {
+    var described: [String] = []
+    for tool in ControlProcess.mcpToolsList() {
+      let name = try XCTUnwrap(tool["name"] as? String)
+      let properties =
+        (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: [String: Any]]
+      guard let property = properties?["workspaceId"] else { continue }
+      described.append(name)
+      let type = property["type"]
+      XCTAssertTrue(
+        type as? String == "string" || type as? [String] == ["string", "null"],
+        "\(name) の workspaceId: \(String(describing: type))")
+    }
+    XCTAssertFalse(described.isEmpty, "workspaceId を取るツールが無い")
   }
 
   /// 自動化のツールが `inputSchema` に挙げる引数は、どれも control が同じ名前で読む。control は知らない鍵を黙って読み捨てる
@@ -234,7 +252,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     let workspaces = try XCTUnwrap(
       control.mcpJSON("list_workspaces")["workspaces"] as? [[String: Any]])
     let home = try XCTUnwrap(
-      workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? Int,
+      workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? String,
       "list_workspaces に hasBoard")
     func kinds(_ tool: String, _ arguments: [String: Any]) -> [String]? {
       (control.mcpJSON(tool, arguments)["widgets"] as? [[String: Any]])?.compactMap {
@@ -256,7 +274,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       control.mcpJSON("list_workspaces")["workspaces"] as? [[String: Any]])
     let background = try XCTUnwrap(
       workspaces.first { $0["active"] as? Bool == false }, "背景 workspace が fixture に無い")
-    let backgroundId = try XCTUnwrap(background["id"] as? Int)
+    let backgroundId = try XCTUnwrap(background["id"] as? String)
 
     let activated = control.mcpJSON("activate_workspace", ["workspaceId": backgroundId])
     let tabIds = try XCTUnwrap(activated["tabIds"] as? [Int], "activate が tabIds を返さない")

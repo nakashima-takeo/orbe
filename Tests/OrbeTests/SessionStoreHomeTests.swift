@@ -27,7 +27,7 @@ final class SessionStoreHomeTests: OrbeTestCase {
     XCTAssertEqual(home.rootPath, root)
     XCTAssertTrue(home.tabs.isEmpty)
     XCTAssertEqual(home.selection, .board, "足した Home はボードを選んでいる")
-    XCTAssertEqual(store.homeWorkspaceId, home.persistentId)
+    XCTAssertEqual(store.homeWorkspaceId, home.id)
     XCTAssertTrue(store.current === b, "active は動かない")
   }
 
@@ -37,7 +37,7 @@ final class SessionStoreHomeTests: OrbeTestCase {
     let store = SessionStore()
     store.load(
       workspaces: [home, Workspace(name: "a", rootPath: "/a")], activeWorkspace: 1,
-      homeWorkspaceId: home.persistentId)
+      homeWorkspaceId: home.id)
 
     store.ensureHome(rootPath: root)
     store.ensureHome(rootPath: root)

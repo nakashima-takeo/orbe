@@ -1,19 +1,13 @@
 import Carbon.HIToolbox
 import GhosttyKit
 
-/// 制御チャネルの宛先 ID 発番（プロセス内で単調増加・型をまたいで一意）。
-/// workspace / tab(TerminalTab) が同じ空間から引く。
+/// タブ（TerminalTab）の宛先 ID 発番（プロセス内で単調増加）。
 /// main スレッド規律下でのみ呼ばれる（全オブジェクト生成は main）。
 enum IdGen {
   nonisolated(unsafe) private static var counter = 0
   static func next() -> Int {
     counter += 1
     return counter
-  }
-  /// カウンタを少なくとも `value` まで前進させる。復元カードの id（前回 run の値）と、以後
-  /// 新規採番される tab/card の id の衝突を避けるため load 時に呼ぶ。
-  static func bump(atLeast value: Int) {
-    if counter < value { counter = value }
   }
 }
 

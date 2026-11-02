@@ -2,7 +2,7 @@ import Foundation
 import OrbeSessionLog
 
 /// 自動化の 9 動詞と、裏の agent の回の道具の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
-/// `AutomationTrials` に任せ、ここは定義の workspace の席を外の形と保存の形の間で写し、定義を読み、応答の形を組む。
+/// `AutomationTrials` に任せ、ここは定義を読み、書く定義の workspace の席が今の workspace を指すかを確かめ、応答の形を組む。
 extension WindowController {
   /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
   func controlListAutomations() -> Result<Any, ControlError> {
@@ -19,8 +19,8 @@ extension WindowController {
     automationId: Int?, version: Int?, _ definition: [String: Any]
   ) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      let definition = try AutomationDefinition.decode(
-        try automationRunner.workspaces().inward(definition))
+      let definition = try AutomationDefinition.decode(definition)
+      try automationRunner.workspaces().checkSeats(of: definition)
       return [
         "automation": try automationJSON(
           try automationRunner.set(automationId, version: version, definition))
@@ -131,8 +131,8 @@ extension WindowController {
       }
     }
     if let due = proposal.due { json["due"] = due.text }
-    if let ws = proposal.workspace.flatMap({ id in workspaces.first { $0.persistentId == id } }) {
-      json["workspaceId"] = ws.id
+    if let ws = proposal.workspace.flatMap({ id in workspaces.first { $0.id == id } }) {
+      json["workspaceId"] = ws.id.uuidString
       json["workspaceName"] = ws.name
     }
     if case .accepted(let taskId) = proposal.state { json["taskId"] = taskId }
@@ -179,9 +179,7 @@ extension WindowController {
   }
 
   private func trialJSON(_ trial: AutomationTrial) -> [String: Any] {
-    trial.json { id in
-      workspaces.first { $0.persistentId == id }.map { ($0.id, $0.name) }
-    }
+    trial.json { id in workspaces.first { $0.id == id }?.name }
   }
 
   /// 定義（ノードに `id` を添えた外の形）と版に、止めているか・ノードの今の鍵ごとの状態（走っているか・ノード自身を止めているか・
@@ -212,7 +210,7 @@ extension WindowController {
     var json: [String: Any] = [
       "automationId": automation.id,
       "version": automation.version,
-      "definition": definitionJSON(AutomationWire.object(automation.definition)),
+      "definition": AutomationWire.object(automation.definition),
       "paused": automation.paused,
       "nodes": nodeObjects,
     ]
@@ -228,15 +226,10 @@ extension WindowController {
   private func unreadableJSON(_ broken: AutomationUnreadable) -> [String: Any] {
     [
       "automationId": broken.id, "version": broken.version,
-      "definition": definitionJSON(
-        try? JSONSerialization.jsonObject(with: Data(broken.definition.utf8))),
+      "definition": (try? JSONSerialization.jsonObject(with: Data(broken.definition.utf8)))
+        ?? [String: Any](),
       "definitionError": broken.reason,
     ]
-  }
-
-  /// 定義の外の形（workspace の席を今の起動ごとの ID に写す）。定義を外へ出す道はすべてここを通す。
-  private func definitionJSON(_ stored: Any?) -> [String: Any] {
-    automationRunner.workspaces().outward(stored as? [String: Any] ?? [:])
   }
 
   private static func automationNotFound(_ id: Int) -> ControlError {

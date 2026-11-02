@@ -14,6 +14,9 @@ import XCTest
 /// エラーコードの語彙は `docs/spec/control/api.md` の「エラー」節と 1 対 1 に対応する。
 /// 片方だけ変えたらここが落ちる。
 final class ControlWireTests: OrbeTestCase {
+  /// params に書く workspace の ID（形の正しい 1 つ。Fake は解かない）。
+  static let workspace = FakeControlTarget.workspaceId.uuidString
+
   /// 駆動台。後始末は `tearDown` が持つ（各テストの `defer` に散らさない）。
   private var wire: ControlWire?
 

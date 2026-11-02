@@ -4,11 +4,11 @@ import Foundation
 /// 知らない workspace は -32004、ボードを持たない workspace は -32000。
 protocol ControlBoardTarget: AnyObject {
   /// ボードのウィジェットの並びを読む（list_board_widgets）。
-  func controlListBoardWidgets(workspaceId: Int) -> Result<Any, ControlError>
+  func controlListBoardWidgets(workspaceId: UUID) -> Result<Any, ControlError>
   /// ウィジェットを末尾に置く（add_board_widget）。既にあれば何もしない。
-  func controlAddBoardWidget(workspaceId: Int, widget: BoardWidget) -> Result<Any, ControlError>
+  func controlAddBoardWidget(workspaceId: UUID, widget: BoardWidget) -> Result<Any, ControlError>
   /// ウィジェットを外す（remove_board_widget）。無ければ何もしない。
-  func controlRemoveBoardWidget(workspaceId: Int, widget: BoardWidget) -> Result<Any, ControlError>
+  func controlRemoveBoardWidget(workspaceId: UUID, widget: BoardWidget) -> Result<Any, ControlError>
 }
 
 /// ボードの 3 動詞の解決。ハンドラが見るのは params の在否と JSON の型と種類の名前（違反は -32602）だけで、workspace の
@@ -31,15 +31,17 @@ extension ControlServer {
     switch method {
     case "list_board_widgets":
       return { target, p throws(ControlError) in
-        target.controlListBoardWidgets(workspaceId: try p.workspaceId())
+        target.controlListBoardWidgets(workspaceId: try ControlWorkspaceId.required(p.params))
       }
     case "add_board_widget":
       return { target, p throws(ControlError) in
-        target.controlAddBoardWidget(workspaceId: try p.workspaceId(), widget: try p.widget())
+        target.controlAddBoardWidget(
+          workspaceId: try ControlWorkspaceId.required(p.params), widget: try p.widget())
       }
     case "remove_board_widget":
       return { target, p throws(ControlError) in
-        target.controlRemoveBoardWidget(workspaceId: try p.workspaceId(), widget: try p.widget())
+        target.controlRemoveBoardWidget(
+          workspaceId: try ControlWorkspaceId.required(p.params), widget: try p.widget())
       }
     default:
       return nil
@@ -51,21 +53,9 @@ private typealias BoardBody = (ControlBoardTarget, BoardParams) throws(ControlEr
   Any, ControlError
 >
 
-/// params の型検査。
+/// params の型検査（workspace の ID は `ControlWorkspaceId`）。
 private struct BoardParams {
   let params: [String: Any]
-
-  /// JSONSerialization は true / false も NSNumber に載せ `as? Int` を通すので、真偽値を整数として受けない。
-  func workspaceId() throws(ControlError) -> Int {
-    guard let raw = params["workspaceId"] else {
-      throw ControlError(code: -32602, message: "missing workspaceId")
-    }
-    let isBool = (raw as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() } ?? false
-    guard !isBool, let id = raw as? Int else {
-      throw ControlError(code: -32602, message: "invalid workspaceId")
-    }
-    return id
-  }
 
   func widget() throws(ControlError) -> BoardWidget {
     guard let raw = params["kind"] else {

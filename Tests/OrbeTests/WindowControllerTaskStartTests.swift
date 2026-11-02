@@ -61,7 +61,7 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
           tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
         WorkspaceState(
           name: "web", rootPath: webRoot ?? local, activeTab: 0, tabs: webTabs,
-          persistentId: webId),
+          id: webId),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
@@ -129,7 +129,7 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
     let opened = try XCTUnwrap(tab(wc, result["tabId"] as? Int))
     let homeWorkspace = try homeId(wc)
     XCTAssertTrue(
-      try XCTUnwrap(wc.workspaces.first { $0.persistentId == homeWorkspace }).tabs.contains {
+      try XCTUnwrap(wc.workspaces.first { $0.id == homeWorkspace }).tabs.contains {
         $0 === opened
       }, "Home に開く")
     let command = try XCTUnwrap(opened.surface.initialCommand)
@@ -162,7 +162,7 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
     let started = try XCTUnwrap(stored(wc, task.id))
     XCTAssertEqual(started.status, .inProgress)
     XCTAssertEqual(started.worktree?.path, GitWorktreeRoot.root(of: folder), "タスクのフォルダが作業場として付く")
-    XCTAssertEqual(wc.current.persistentId, home)
+    XCTAssertEqual(wc.current.id, home)
     XCTAssertEqual(wc.current.tabs.map(\.cwd), [folder], "そのフォルダにタブが開く")
   }
 
@@ -251,7 +251,7 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
     let opened = try XCTUnwrap(tab(wc, result["tabId"] as? Int))
     XCTAssertEqual(GitWorktreeRoot.root(of: opened.cwd), workdir, "その worktree で開く")
     XCTAssertTrue(
-      try XCTUnwrap(wc.workspaces.first { $0.persistentId == webId }).tabs.contains {
+      try XCTUnwrap(wc.workspaces.first { $0.id == webId }).tabs.contains {
         $0 === opened
       }, "タスクの workspace に開く")
     XCTAssertEqual(wc.activeTab?.id, front, "見ているタブは変わらない")

@@ -7,7 +7,7 @@ extension WindowController: ControlTarget {
   func controlListWorkspaces() -> [[String: Any]] {
     workspaces.enumerated().map { i, ws in
       [
-        "id": ws.id, "name": ws.name, "rootPath": ws.rootPath,
+        "id": ws.id.uuidString, "name": ws.name, "rootPath": ws.rootPath,
         "active": i == activeWorkspace, "tabCount": ws.tabs.count, "activated": ws.activated,
         "dormantAgentCount": ws.dormantAgentCount(), "hasBoard": store.hasBoard(ws),
       ]
@@ -21,7 +21,7 @@ extension WindowController: ControlTarget {
       let ws = workspaces[ref.workspaceIndex]
       let tab = ref.tab
       return [
-        "tabId": tab.id, "workspaceId": ws.id, "workspaceName": ws.name,
+        "tabId": tab.id, "workspaceId": ws.id.uuidString, "workspaceName": ws.name,
         "title": tab.surface.title,
         "cwd": tab.cwd,
         "agentState": tab.agentState.map { $0 as Any } ?? NSNull(),
@@ -84,19 +84,26 @@ extension WindowController: ControlTarget {
     return nil
   }
 
-  /// 指定 workspace に新タブを開き、新タブ ID を返す（制御 API の spawn）。未知 workspaceId は
-  /// アクティブへフォールバックする（`spawn_agent` / `resume_agent` は同じ形を継がず -32004 で弾く）。
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool = true) -> Int?
+  /// 指定 workspace（省略はアクティブ）に新タブを開き、新タブ ID を返す（制御 API の spawn）。未知 workspaceId は -32004。
+  func controlSpawn(workspaceId: UUID?, cwd: String?, command: String?, selects: Bool = true)
+    -> Result<Int, ControlError>
   {
-    let index =
-      workspaceId.flatMap { wid in workspaces.firstIndex { $0.id == wid } } ?? activeWorkspace
-    return openTab(workspaceIndex: index, cwd: cwd, command: command, selects: selects)?.tabId
+    var index = activeWorkspace
+    if let workspaceId {
+      guard let found = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
+        return .failure(ControlError(code: -32004, message: "workspace not found"))
+      }
+      index = found
+    }
+    guard let opened = openTab(workspaceIndex: index, cwd: cwd, command: command, selects: selects)
+    else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
+    return .success(opened.tabId)
   }
 
   /// 背景/休眠 workspace を前面化し全タブを mount する（制御 API の activate_workspace）。
   /// 切替実体は `switchWorkspace(to:)` に委譲（既アクティブ no-op・0タブはボードか空表示〔自動起動なし〕・mount・
   /// フォーカス・保存を既存経路が担う）。
-  func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])? {
+  func controlActivateWorkspace(workspaceId: UUID) -> (activeWorkspaceId: UUID, tabIds: [Int])? {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else { return nil }
     switchWorkspace(to: index)
     let ws = workspaces[index]
@@ -161,7 +168,7 @@ extension WindowController: ControlTarget {
   /// 全設定項目の実効値・由来 scope・型・値域（domain）を列挙する（config CLI）。実効値は global 層に
   /// 対象 workspace 上書き層を重ねて解決する（全設定 WS 可）。default-agent の domain は検出済み一覧を動的に差す。
   /// workspaceId 指定でその WS の上書きを、未指定はアクティブ WS の上書きを重ねる。未知 id は -32004。
-  func controlConfigList(workspaceId: Int?) -> Result<Any, ControlError> {
+  func controlConfigList(workspaceId: UUID?) -> Result<Any, ControlError> {
     let override: SettingsLayer?
     if let workspaceId {
       guard let ws = workspaces.first(where: { $0.id == workspaceId }) else {
@@ -239,7 +246,7 @@ extension WindowController: ControlTarget {
   /// 設定 1 項目を global / workspace スコープへ設定しライブ反映する（config CLI）。全設定が同じ 1 経路で、
   /// 値検証は `SettingChange(key:jsonValue:)`（domain 駆動）が担う。value: null は「解除（継承へ）」として受理。
   /// workspace スコープ＋workspaceId 指定でその WS（未指定はアクティブ WS）の上書きへ書く。未知 id は -32004。
-  func controlConfigSet(key: String, value: Any, scope: String, workspaceId: Int?) -> Result<
+  func controlConfigSet(key: String, value: Any, scope: String, workspaceId: UUID?) -> Result<
     Any, ControlError
   > {
     guard scope == "global" || scope == "workspace" else {
@@ -275,11 +282,11 @@ extension WindowController: ControlTarget {
       return .failure(ControlError(code: -32602, message: "workspace name is empty"))
     }
     let ws = current
-    return .success(["workspaceId": id, "name": ws.name, "rootPath": ws.rootPath])
+    return .success(["workspaceId": id.uuidString, "name": ws.name, "rootPath": ws.rootPath])
   }
 
   /// workspace を改名する（`ws rename`）。id 未発見 -32004・name 空 -32602。
-  func controlRenameWorkspace(workspaceId: Int, name: String) -> Result<Any, ControlError> {
+  func controlRenameWorkspace(workspaceId: UUID, name: String) -> Result<Any, ControlError> {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
       return .failure(ControlError(code: -32004, message: "workspace not found"))
     }
@@ -292,7 +299,7 @@ extension WindowController: ControlTarget {
 
   /// workspace の rootPath を変更する（`ws dir`）。id 未発見 -32004・Home -32000・rootPath 空 -32602。
   /// 意味論は GUI（パレットのディレクトリ変更）と同一: trim・`~` ホーム展開・実在チェックなし。
-  func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError> {
+  func controlSetWorkspaceRoot(workspaceId: UUID, rootPath: String) -> Result<Any, ControlError> {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
       return .failure(ControlError(code: -32004, message: "workspace not found"))
     }
@@ -308,7 +315,7 @@ extension WindowController: ControlTarget {
   }
 
   /// workspace を削除する（`ws rm`）。id 未発見 -32004・消せない workspace -32000（理由はメッセージ）。
-  func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError> {
+  func controlRemoveWorkspace(workspaceId: UUID) -> Result<Any, ControlError> {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
       return .failure(ControlError(code: -32004, message: "workspace not found"))
     }

@@ -7,8 +7,8 @@ import XCTest
 /// 観測可能な契約を固定する。
 ///
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
-/// **libghostty ランタイムを起動する**（GhosttyKit 必須）。workspace の id は IdGen 採番で予測不能なため
-/// 直書きせず `controlListWorkspaces()` / `controlListTabs()` の戻りから読む。
+/// **libghostty ランタイムを起動する**（GhosttyKit 必須）。tab の id は `IdGen` 採番で予測不能なため、workspace の id は
+/// 外の口から見える値を確かめるため、直書きせず `controlListWorkspaces()` / `controlListTabs()` の戻りから読む。
 final class WindowControllerTabControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers
@@ -152,9 +152,9 @@ final class WindowControllerTabControlTests: OrbeTestCase {
   func testFocusTabAcrossWorkspacesActivatesTarget() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("background")])
     XCTAssertEqual(wc.window.title, "main", "前提: main がアクティブ")
-    let bgId = try XCTUnwrap(row(wc, name: "background")?["id"] as? Int)
+    let bgId = try XCTUnwrap(workspaceUUID(row(wc, name: "background")?["id"]))
     let bgTab = try XCTUnwrap(
-      wc.controlListTabs().first { $0["workspaceId"] as? Int == bgId }?["tabId"] as? Int)
+      wc.controlListTabs().first { workspaceUUID($0["workspaceId"]) == bgId }?["tabId"] as? Int)
     guard case .success = wc.controlFocusTab(tabId: bgTab) else {
       return XCTFail("focus_tab は success")
     }
@@ -266,7 +266,7 @@ final class WindowControllerTabControlTests: OrbeTestCase {
   /// 実効値は変えない（参照型 in-place・ライブ反映 gate の契約）。
   func testConfigSetTargetsInactiveWorkspaceWithoutTouchingActive() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("probe")])
-    let probeId = try XCTUnwrap(row(wc, name: "probe")?["id"] as? Int)
+    let probeId = try XCTUnwrap(workspaceUUID(row(wc, name: "probe")?["id"]))
     guard
       case .success = wc.controlConfigSet(
         key: "font-size", value: 20, scope: "workspace", workspaceId: probeId)
@@ -294,13 +294,13 @@ final class WindowControllerTabControlTests: OrbeTestCase {
   /// config_list / config_set は未知 workspaceId を -32004 で弾く。
   func testConfigWorkspaceTargetUnknownIsNotFound() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    guard case .failure(let listErr) = wc.controlConfigList(workspaceId: 999_999) else {
+    guard case .failure(let listErr) = wc.controlConfigList(workspaceId: UUID()) else {
       return XCTFail("config_list 未知 id は failure")
     }
     XCTAssertEqual(listErr.code, -32004)
     guard
       case .failure(let setErr) = wc.controlConfigSet(
-        key: "font-size", value: 20, scope: "workspace", workspaceId: 999_999)
+        key: "font-size", value: 20, scope: "workspace", workspaceId: UUID())
     else { return XCTFail("config_set 未知 id は failure") }
     XCTAssertEqual(setErr.code, -32004)
   }

@@ -38,7 +38,7 @@ extension ControlWireTests {
     XCTAssertEqual(
       added?.draft.links,
       [TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 214)), kind: .pr)])
-    XCTAssertEqual(describe(added?.workspaceId), "set(3)")
+    XCTAssertEqual(describe(added?.workspaceId), "set(\(FakeControlTarget.workspaceId))")
     XCTAssertEqual(added?.callerTabId, fake.tabId, "呼び出し元タブは target が解決できるよう届く")
   }
 
@@ -62,8 +62,10 @@ extension ControlWireTests {
   func testWorkspaceIdDistinguishesOmittedNullAndAnId() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
+    let workspace = UUID()
     let cases: [(params: [String: Any], expected: String)] = [
-      ([:], "omitted"), (["workspaceId": NSNull()], "clear"), (["workspaceId": 5], "set(5)"),
+      ([:], "omitted"), (["workspaceId": NSNull()], "clear"),
+      (["workspaceId": workspace.uuidString], "set(\(workspace))"),
     ]
 
     for (index, entry) in cases.enumerated() {
@@ -240,10 +242,11 @@ extension ControlWireTests {
     let wire = startWire(target: fake)
 
     _ = wire.request(id: 1, method: "list_tasks")
-    _ = wire.request(id: 2, method: "list_tasks", params: ["workspaceId": 6])
+    let workspace = UUID()
+    _ = wire.request(id: 2, method: "list_tasks", params: ["workspaceId": workspace.uuidString])
     _ = wire.request(id: 3, method: "delete_task", params: ["taskId": 11])
 
-    XCTAssertEqual(fake.taskLists, [nil, 6], "workspaceId の省略は絞り込まない")
+    XCTAssertEqual(fake.taskLists, [nil, workspace], "workspaceId の省略は絞り込まない")
     XCTAssertEqual(fake.deletedTaskIds, [11])
   }
 

@@ -119,10 +119,12 @@ extension ControlServer {
     guard params["command"] == nil || params["command"] is String else {
       return .failure(ControlError(code: -32602, message: "invalid command"))
     }
-    if let error = invalidWorkspaceId(params) { return .failure(error) }
-    return target.controlSpawnAgent(
-      command: params["command"] as? String, workspaceId: params["workspaceId"] as? Int,
-      cwd: params["cwd"] as? String)
+    return Result { () throws(ControlError) in try ControlWorkspaceId.optional(params) }
+      .flatMap { workspaceId in
+        target.controlSpawnAgent(
+          command: params["command"] as? String, workspaceId: workspaceId,
+          cwd: params["cwd"] as? String)
+      }
   }
 
   /// `resume_agent` の main 側。sessionId の文字集合検証は target（`controlResumeAgent` の `AgentCatalog.isSafeSessionId`）が持つ。
@@ -135,19 +137,12 @@ extension ControlServer {
     guard let sessionId = params["sessionId"] as? String else {
       return .failure(ControlError(code: -32602, message: "missing sessionId"))
     }
-    if let error = invalidWorkspaceId(params) { return .failure(error) }
-    return target.controlResumeAgent(
-      command: command, sessionId: sessionId, workspaceId: params["workspaceId"] as? Int,
-      cwd: params["cwd"] as? String)
-  }
-
-  /// `workspaceId` は省略可（アクティブ）だが、非 Int を「省略」と同じにはしない——未知 id を
-  /// -32004 で弾く契約なのに、型違いだけが黙ってアクティブ WS へ逸れて別の場所にタブが生える。
-  private func invalidWorkspaceId(_ params: [String: Any]) -> ControlError? {
-    guard params["workspaceId"] == nil || params["workspaceId"] is Int else {
-      return ControlError(code: -32602, message: "invalid workspaceId")
-    }
-    return nil
+    return Result { () throws(ControlError) in try ControlWorkspaceId.optional(params) }
+      .flatMap { workspaceId in
+        target.controlResumeAgent(
+          command: command, sessionId: sessionId, workspaceId: workspaceId,
+          cwd: params["cwd"] as? String)
+      }
   }
 
   /// `restore_sessions` を解決する。params の検証（型・件数・安全文字集合）はハンドラで、ログの照合と
@@ -172,7 +167,8 @@ extension ControlServer {
     switch method {
     case "config_list":
       return { target, params in
-        target.controlConfigList(workspaceId: params["workspaceId"] as? Int)
+        Result { () throws(ControlError) in try ControlWorkspaceId.optional(params) }
+          .flatMap { target.controlConfigList(workspaceId: $0) }
       }
     case "config_set":
       return { target, params in
@@ -185,8 +181,10 @@ extension ControlServer {
         guard let scope = params["scope"] as? String else {
           return .failure(ControlError(code: -32602, message: "missing scope"))
         }
-        return target.controlConfigSet(
-          key: key, value: value, scope: scope, workspaceId: params["workspaceId"] as? Int)
+        return Result { () throws(ControlError) in try ControlWorkspaceId.optional(params) }
+          .flatMap {
+            target.controlConfigSet(key: key, value: value, scope: scope, workspaceId: $0)
+          }
       }
     case "create_workspace":
       return { target, params in
@@ -197,30 +195,28 @@ extension ControlServer {
       }
     case "rename_workspace":
       return { target, params in
-        guard let wid = params["workspaceId"] as? Int else {
-          return .failure(ControlError(code: -32602, message: "missing workspaceId"))
-        }
-        guard let name = params["name"] as? String else {
-          return .failure(ControlError(code: -32602, message: "missing name"))
-        }
-        return target.controlRenameWorkspace(workspaceId: wid, name: name)
+        Result { () throws(ControlError) in try ControlWorkspaceId.required(params) }
+          .flatMap { wid in
+            guard let name = params["name"] as? String else {
+              return .failure(ControlError(code: -32602, message: "missing name"))
+            }
+            return target.controlRenameWorkspace(workspaceId: wid, name: name)
+          }
       }
     case "set_workspace_root":
       return { target, params in
-        guard let wid = params["workspaceId"] as? Int else {
-          return .failure(ControlError(code: -32602, message: "missing workspaceId"))
-        }
-        guard let rootPath = params["rootPath"] as? String else {
-          return .failure(ControlError(code: -32602, message: "missing rootPath"))
-        }
-        return target.controlSetWorkspaceRoot(workspaceId: wid, rootPath: rootPath)
+        Result { () throws(ControlError) in try ControlWorkspaceId.required(params) }
+          .flatMap { wid in
+            guard let rootPath = params["rootPath"] as? String else {
+              return .failure(ControlError(code: -32602, message: "missing rootPath"))
+            }
+            return target.controlSetWorkspaceRoot(workspaceId: wid, rootPath: rootPath)
+          }
       }
     case "remove_workspace":
       return { target, params in
-        guard let wid = params["workspaceId"] as? Int else {
-          return .failure(ControlError(code: -32602, message: "missing workspaceId"))
-        }
-        return target.controlRemoveWorkspace(workspaceId: wid)
+        Result { () throws(ControlError) in try ControlWorkspaceId.required(params) }
+          .flatMap { target.controlRemoveWorkspace(workspaceId: $0) }
       }
     default:
       return nil

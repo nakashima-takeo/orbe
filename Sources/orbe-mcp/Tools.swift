@@ -110,7 +110,7 @@ let tools: [[String: Any]] =
       (
         "inputSchema",
         schema([
-          "workspaceId": intProp("開く workspace（省略時アクティブ）"),
+          "workspaceId": strProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
           "cwd": strProp("作業ディレクトリ（省略時アクティブタブ由来）"),
           "command": strProp("シェルの代わりに起動するコマンド（絶対パス推奨）"),
           "select": boolProp("false で選ばずに起こす（人が見ているタブを変えない。既定 true）"),
@@ -133,7 +133,7 @@ let tools: [[String: Any]] =
         "inputSchema",
         schema([
           "command": strProp("起動する agent（list_agents の command。省略時は対象 WS の実効デフォルト）"),
-          "workspaceId": intProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
+          "workspaceId": strProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
           "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブタブ由来）"),
           "timeoutMs": intProp("準備完了を待つ上限 ミリ秒（既定 30000）"),
         ])
@@ -154,7 +154,7 @@ let tools: [[String: Any]] =
           [
             "command": strProp("再開する agent（claude / codex / agy）"),
             "sessionId": strProp("再開するセッション ID"),
-            "workspaceId": intProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
+            "workspaceId": strProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
             "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブタブ由来）"),
             "timeoutMs": intProp("準備完了を待つ上限 ミリ秒（既定 30000）"),
           ], required: ["command", "sessionId"])
@@ -169,7 +169,7 @@ let tools: [[String: Any]] =
       ),
       (
         "inputSchema",
-        schema(["workspaceId": intProp("アクティブにする workspace の id")], required: ["workspaceId"])
+        schema(["workspaceId": strProp("アクティブにする workspace の id")], required: ["workspaceId"])
       ),
     ]),
     obj([
@@ -284,7 +284,7 @@ let tools: [[String: Any]] =
           + "workspace に付いていないタスク（付き先が削除されたものを含む）は workspaceId を持たない。"
           + "完了したタスクも削除されるまで残る。description は人も agent も読む前提の欄。"
       ),
-      ("inputSchema", schema(["workspaceId": intProp("この workspace のタスクだけに絞る")])),
+      ("inputSchema", schema(["workspaceId": strProp("この workspace のタスクだけに絞る")])),
     ]),
     obj([
       ("name", "add_task"),
@@ -313,7 +313,7 @@ let tools: [[String: Any]] =
             "links": taskLinksProp("結び付ける GitHub の Issue・PR（先頭が主）"),
             "worktree": strProp("このタスクの作業の場所（実在するディレクトリの絶対パス）"),
             "workspaceId": [
-              "type": ["integer", "null"],
+              "type": ["string", "null"],
               "description": "付ける workspace（省略で呼び出し元タブの workspace、null でなし）",
             ],
           ], required: ["title"])
@@ -350,7 +350,7 @@ let tools: [[String: Any]] =
               "description": "このタスクの作業の場所（実在するディレクトリの絶対パス。null で外す）",
             ],
             "workspaceId": [
-              "type": ["integer", "null"], "description": "付ける workspace（null でなし）",
+              "type": ["string", "null"], "description": "付ける workspace（null でなし）",
             ],
           ], required: ["taskId"])
       ),

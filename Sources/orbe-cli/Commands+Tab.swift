@@ -79,7 +79,7 @@ private func tabList(_ rest: [String]) -> Never {
   rejectLeftovers(args, positionals: 0)
   var result = (callOrExit("list_tabs", [:]) as? [String: Any]) ?? [:]
   var tabs = result["tabs"] as? [[String: Any]] ?? []
-  if let workspaceId { tabs = tabs.filter { $0["workspaceId"] as? Int == workspaceId } }
+  if let workspaceId { tabs = tabs.filter { $0["workspaceId"] as? String == workspaceId } }
   if wantJSON {
     result["tabs"] = tabs
     printJSON(result)
@@ -88,7 +88,7 @@ private func tabList(_ rest: [String]) -> Never {
     // 前面かは list_workspaces で確かめる。
     let front = activeWorkspaceId()
     for t in tabs {
-      let wid = t["workspaceId"] as? Int ?? -1
+      let wid = t["workspaceId"] as? String ?? "?"
       let mark = (t["active"] as? Bool == true && wid == front) ? "*" : " "
       let tid = t["tabId"] as? Int ?? -1
       let title = t["title"] as? String ?? ""

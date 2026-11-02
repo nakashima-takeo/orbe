@@ -11,7 +11,7 @@ struct WorkspacesFile: Codable, Equatable {
   /// 終了時のウィンドウサイズ（幅・高さ）。位置は記憶しない。
   /// optional——一度もリサイズしていない起動では書かれない。無ければ既定 800×500。
   var windowSize: WindowSize?
-  /// Home の `persistentId`（`SessionStore.homeWorkspaceId`）。無いか読めなければ nil——
+  /// Home の `Workspace.id`（`SessionStore.homeWorkspaceId`）。無いか読めなければ nil——
   /// 後から足したフィールドの異常でファイル全体を落とさない。
   var homeWorkspaceId: UUID?
 
@@ -65,9 +65,9 @@ struct WorkspaceState: Codable, Equatable {
   /// worktree パレットで前回新しいブランチを作ったときのベース（ブランチ名）。
   /// optional——一度も作っていない workspace では書かれない。
   var lastWorktreeBase: String?
-  /// `Workspace.persistentId`。無いか読めない workspace にはその workspace だけ新しく振る（旧形式から
+  /// `Workspace.id`。無いか読めない workspace にはその workspace だけ新しく振る（旧形式から
   /// 読んだ場合も同じ）——後から足したフィールドの異常でファイル全体を落とさない。
-  var persistentId: UUID
+  var id: UUID
   /// ボードのウィジェットの決めた並び（`Workspace.boardWidgets`）。決めていれば空でも書き、nil（決めていない）は書かない。読めない要素
   /// （知らない種類を含む）はその要素だけ落とし、配列でない・中身があるのに 1 つも読めなければ nil（既定）——後から足した
   /// フィールドの異常でファイル全体を落とさない。重なりは `SessionStore.load` が落とす。
@@ -76,14 +76,16 @@ struct WorkspaceState: Codable, Equatable {
   /// `CaseIterable` は TabState と同じ seam（encode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。
   enum CodingKeys: String, CodingKey, CaseIterable {
     case name, rootPath, activeTab, boardSelected, tabs, groups, lastUsedAt, settingsOverride
-    case lastWorktreeBase, persistentId, boardWidgets
+    case lastWorktreeBase, boardWidgets
+    /// 鍵の名前は保存の契約（型の名前とそろえない。替えると読めない ID として全 workspace に新しい ID が振られる）。
+    case id = "persistentId"
   }
 
   init(
     name: String, rootPath: String, activeTab: Int, boardSelected: Bool = false, tabs: [TabState],
     groups: [GroupState] = [],
     lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil,
-    lastWorktreeBase: String? = nil, persistentId: UUID = UUID(), boardWidgets: [BoardWidget]? = nil
+    lastWorktreeBase: String? = nil, id: UUID = UUID(), boardWidgets: [BoardWidget]? = nil
   ) {
     self.name = name
     self.rootPath = rootPath
@@ -94,7 +96,7 @@ struct WorkspaceState: Codable, Equatable {
     self.lastUsedAt = lastUsedAt
     self.settingsOverride = settingsOverride
     self.lastWorktreeBase = lastWorktreeBase
-    self.persistentId = persistentId
+    self.id = id
     self.boardWidgets = boardWidgets
   }
 
@@ -116,7 +118,7 @@ struct WorkspaceState: Codable, Equatable {
     let layer = try? c.decode(SettingsLayer.self, forKey: .settingsOverride)
     settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
     lastWorktreeBase = try? c.decodeIfPresent(String.self, forKey: .lastWorktreeBase)
-    persistentId = (try? c.decode(UUID.self, forKey: .persistentId)) ?? UUID()
+    id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
     boardWidgets = (try? c.decodeIfPresent([Lenient<BoardWidget>].self, forKey: .boardWidgets))
       .flatMap { elements in
         let widgets = elements.compactMap(\.value)
@@ -135,7 +137,7 @@ struct WorkspaceState: Codable, Equatable {
     try c.encodeIfPresent(lastUsedAt, forKey: .lastUsedAt)
     try c.encodeIfPresent(settingsOverride, forKey: .settingsOverride)
     try c.encodeIfPresent(lastWorktreeBase, forKey: .lastWorktreeBase)
-    try c.encode(persistentId, forKey: .persistentId)
+    try c.encode(id, forKey: .id)
     try c.encodeIfPresent(boardWidgets, forKey: .boardWidgets)
   }
 }

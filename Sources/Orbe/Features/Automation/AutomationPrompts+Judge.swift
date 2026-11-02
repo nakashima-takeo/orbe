@@ -20,11 +20,11 @@ extension AutomationPrompts {
 
     Give Orbe your decisions:
     - \(tool(.propose)): a task for an item, {"id": "<item id>", "title": "<one-line task title>", \
-    "due": "YYYY-MM-DD", "workspace": <workspace number>, "reason": "<why this item should be a task>"}. \
+    "due": "YYYY-MM-DD", "workspace": "<workspace id>", "reason": "<why this item should be a task>"}. \
     Write reason in one or two sentences, in the language of the user's instruction. Omit due when there is no \
     deadline. At most one proposal per item; use only ids of the items, and only items that have "link" (an \
     http(s) URL). Write workspace only when the item clearly belongs to one of the listed workspaces (by the \
-    user's instruction or by the item itself, such as its repository), using only listed numbers; omit it when \
+    user's instruction or by the item itself, such as its repository), using only listed ids; omit it when \
     unsure, and the task goes to Home.
     - \(tool(.resolve)): the links of waiting proposals that the items show are already dealt with.
     You can call them more than once; when Orbe refuses a call, fix what it names and call again. Orbe ignores \

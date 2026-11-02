@@ -200,10 +200,10 @@ func takeFlag(_ args: inout [String], _ name: String) -> Bool {
 enum WorkspaceTarget {
   case none  // --workspace 未指定
   case active  // --workspace のみ（値なし）
-  case id(Int)  // --workspace <id>（<id> は数値か current）
+  case id(String)  // --workspace <id>（<id> は workspace の ID か current）
 }
 
-/// config の `--workspace [<id>]` を抜き取る。直後トークンが `-` 始まりでなく数値か `current` に
+/// config の `--workspace [<id>]` を抜き取る。直後トークンが `-` 始まりでなく workspace の ID か `current` に
 /// 解決できるなら値として消費して `.id`、無ければ `.active`、フラグ自体が無ければ `.none`。
 ///
 /// `positionals` はそのサブコマンドが取る位置引数の数。bare と判定した後に残余がこれを超えるなら、
@@ -228,7 +228,7 @@ func takeWorkspaceTarget(_ args: inout [String], positionals: Int) -> WorkspaceT
 /// エラー——bare を黙ってアクティブ扱いにすると、絞り込みも開く先も指定と無関係に決まる。
 ///
 /// 値の席の規則（`-` 始まり・空を取らない）は `takeOption` が唯一持つ（ここで二重実装しない）。
-func takeWorkspaceId(_ args: inout [String]) -> Int? {
+func takeWorkspaceId(_ args: inout [String]) -> String? {
   guard let token = takeOption(&args, "--workspace", requires: "an <id>") else { return nil }
   guard let id = workspaceIdIfResolvable(token) else { usageDie("invalid workspace id: \(token)") }
   return id
@@ -285,10 +285,12 @@ func parseISOOrDie(_ raw: String, flag: String) -> String {
   return SessionEvent.iso8601(parsed)
 }
 
-/// `<token>` が数値 workspace id か `current` なら解決した id を返す（それ以外 nil＝値として消費しない）。
-func workspaceIdIfResolvable(_ token: String) -> Int? {
-  if let n = Int(token) { return n }
-  if token == "current" { return resolveWorkspaceId("current") }
+/// `<token>` が workspace の ID（UUID。大文字小文字を問わない）か `current` なら、解決した ID を返す（それ以外 nil＝値として
+/// 消費しない）。ID は `list_workspaces` と同じ形（大文字）にそろえる——手元の絞り込み（`tab list --workspace`）が、小文字で
+/// 打っても外れないため。
+func workspaceIdIfResolvable(_ token: String) -> String? {
+  if let id = UUID(uuidString: token) { return id.uuidString }
+  if token == "current" { return activeWorkspaceId() }
   return nil
 }
 
@@ -317,23 +319,22 @@ func tabContextDie() -> Never {
 }
 
 /// 前面 workspace の id（list_workspaces の active:true 要素）。無ければ transport エラー。
-func activeWorkspaceId() -> Int {
+func activeWorkspaceId() -> String {
   let result = callOrExit("list_workspaces", [:])
   guard
     let list = (result as? [String: Any])?["workspaces"] as? [[String: Any]],
     let active = list.first(where: { $0["active"] as? Bool == true }),
-    let id = active["id"] as? Int
+    let id = active["id"] as? String
   else {
     transportDie("no active workspace")
   }
   return id
 }
 
-/// `<id|current>` を workspace id へ解決する。`current` は前面 workspace の id。
-func resolveWorkspaceId(_ arg: String) -> Int {
-  if let n = Int(arg) { return n }
-  guard arg == "current" else { usageDie("invalid workspace id: \(arg)") }
-  return activeWorkspaceId()
+/// `<id|current>` を workspace の ID へ解決する。`current` は前面 workspace の ID。
+func resolveWorkspaceId(_ arg: String) -> String {
+  guard let id = workspaceIdIfResolvable(arg) else { usageDie("invalid workspace id: \(arg)") }
+  return id
 }
 
 // MARK: - usage テキスト（ドメインの USAGE 行は `Commands+<ドメイン>.swift` が持つ）
@@ -365,6 +366,7 @@ let topUsage = """
     --dir <path>        root/working directory (see the USAGE lines above)
     --cmd "…"           command to run in the new tab (tab new)
 
+  A workspace <id> is an id from `orb ws list` (letter case does not matter).
   tab commands default to the current tab via ORBE_TAB. Outside a Orbe tab,
   pass an explicit id (see: orb tab list). wait is not a tab command and never
   falls back to ORBE_TAB — omitting <tab> watches every tab.

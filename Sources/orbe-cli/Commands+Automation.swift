@@ -98,12 +98,11 @@ let automationUsage = """
              one the task goes to Home); say how to choose it in the
              instruction too. A command last step prints
              {"propose": id, "title": "…", "due": "YYYY-MM-DD",
-              "workspace": <id from orb ws list --json>} lines itself (it
+              "workspace": "<id from orb ws list --json>"} lines itself (it
              gets neither the open proposals nor the workspace list, so it
-             cannot resolve; workspace ids change on every launch, so look
-             them up on each run instead of writing them into the command).
-             Home's id or no workspace sends the task to Home. A line naming
-             an id that is not a current workspace is dropped.
+             cannot resolve). Home's id or no workspace sends the task to
+             Home. A line naming an id that is not a current workspace is
+             dropped.
              {"kind": "command", "command": "…", "directory": "/abs",
               "timeoutMinutes": 10}
              The command gets the lines that reach it on stdin, one JSON

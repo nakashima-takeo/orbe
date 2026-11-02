@@ -25,7 +25,7 @@ final class SecretaryTests: OrbeTestCase {
           name: "main", rootPath: "/tmp", activeTab: 0,
           tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
         WorkspaceState(
-          name: "Home", rootPath: home, activeTab: 0, tabs: [], persistentId: homeId),
+          name: "Home", rootPath: home, activeTab: 0, tabs: [], id: homeId),
       ], homeWorkspaceId: homeId)
     try JSONEncoder().encode(workspaces).write(to: workspacesFile())
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
@@ -40,7 +40,7 @@ final class SecretaryTests: OrbeTestCase {
   }
 
   func homeTabs(_ wc: WindowController) throws -> [TerminalTab] {
-    try XCTUnwrap(wc.workspaces.first { $0.persistentId == homeId }).tabs
+    try XCTUnwrap(wc.workspaces.first { $0.id == homeId }).tabs
   }
 
   // MARK: - 起こす
@@ -56,7 +56,7 @@ final class SecretaryTests: OrbeTestCase {
 
     XCTAssertEqual(wc.presentedOverlay, .none, "⌘⇧X は閉じる")
     let tab = try XCTUnwrap(try homeTabs(wc).first, "Home に claude のタブが起きる")
-    XCTAssertEqual(wc.current.persistentId, homeId, "Home へ移る")
+    XCTAssertEqual(wc.current.id, homeId, "Home へ移る")
     XCTAssertEqual(wc.activeTab?.id, tab.id, "そのタブを選ぶ")
     let command = try XCTUnwrap(tab.surface.initialCommand)
     XCTAssertTrue(
