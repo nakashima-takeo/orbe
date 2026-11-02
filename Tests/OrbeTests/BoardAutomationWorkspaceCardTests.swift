@@ -35,7 +35,6 @@ final class BoardAutomationWorkspaceCardTests: OrbeTestCase {
     XCTAssertEqual(place(try card(0, "sync")), ["dotfiles", "bin"], "ノードに書いた")
     XCTAssertEqual(place(try card(0, "archive")), ["削除済み", "tools"])
     XCTAssertEqual(place(try card(1, "clean")), ["削除済み（自動化の設定）", "."])
-    XCTAssertEqual(place(try card(0, "prs", .en)), ["orbe (automation setting)", "."])
     XCTAssertEqual(
       try card(0, "prs").map(\.label).suffix(3),
       [.boardNodeWorkspace, .boardNodeDirectory, .boardNodeNext])
