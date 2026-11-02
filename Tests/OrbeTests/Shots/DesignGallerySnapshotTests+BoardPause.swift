@@ -35,5 +35,22 @@ extension DesignGallerySnapshotTests {
         "board_map_paused_scheduled\(language == .ja ? "" : "_en").png", all, language,
         NSSize(width: 1440, height: 844))
     }
+    // workspace の設定がある自動化で、予定のあるノードをすべて止めた見出し: 「workspace：orbe」の行と「ノードを一時停止中」。
+    for language in [Language.ja, .en] {
+      let runner = DesignSceneFixtures.automationRunner(
+        DesignSceneFixtures.boardWorkspaceSamples(),
+        workspaces: DesignSceneFixtures.boardWorkspaces)
+      let model = BoardModel(automation: BoardAutomationModel(runner: runner), parts: [.automation])
+      if let automation = runner.store.automations.first(where: { $0.name == "PR の確認" }) {
+        model.automation.tap(automation.id)
+        for node in automation.graph.nodes {
+          guard case .scheduled = node.entity.trigger else { continue }
+          _ = try runner.pause(automation.id, nodeId: node.id, true)
+        }
+      }
+      try write(
+        "board_workspace_paused_scheduled\(language == .ja ? "" : "_en").png", model, language,
+        NSSize(width: 1440, height: 844))
+    }
   }
 }
