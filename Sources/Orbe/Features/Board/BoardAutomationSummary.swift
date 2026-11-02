@@ -32,7 +32,7 @@ struct BoardAutomationSummary: Equatable {
   let mark: BoardRunMark?
   /// 「前回 16:41」「前回 昨日 23:00」。まだ動いていなければ「未実行」。時刻はどのノードかを問わず最後に動いた時刻。
   let last: String
-  /// 「次回 16:50」。予定のあるノードが無ければ「手動」、予定のあるノードがすべて止まっていれば「一時停止中」、自動化を
+  /// 「次回 16:50」。予定のあるノードが無ければ「手動」、予定のあるノードがすべて止まっていれば「ノードを一時停止中」、自動化を
   /// 止めていれば nil（状態の欄が「一時停止中」を言う）。
   let next: String?
 }
@@ -59,7 +59,7 @@ extension BoardAutomationSummary {
       if scheduled.isEmpty {
         self.next = l10n.string(.automationManual)
       } else if scheduled.allSatisfy({ automation.halted($0.id) }) {
-        self.next = l10n.string(.automationPaused)
+        self.next = l10n.string(.automationNodesPaused)
       } else {
         self.next = nil
       }

@@ -38,6 +38,7 @@ extension L10n {
     // MARK: 自動化の共有の文
     .automationNext: ("次回 %@", "next %@"),
     .automationPaused: ("一時停止中", "paused"),
+    .automationNodesPaused: ("ノードを一時停止中", "nodes paused"),
     .automationRunning: ("実行中", "running"),
     .automationToday: ("今日", "today"),
     .automationEvery: ("%lld分ごと", "every %lld min"),

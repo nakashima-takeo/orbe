@@ -234,15 +234,19 @@ extension DesignGallerySnapshotTests {
         "board_map_paused_node\(language == .ja ? "" : "_en").png", model, language,
         NSSize(width: 1440, height: 844))
     }
-    // 予定のあるノードをすべて止めた自動化: 一覧の行と見出しの「次回」の位置に「一時停止中」。
-    let all = board(DesignSceneFixtures.boardMapSamples(), 0)
-    if let automation = all.automation.selectedAutomation {
-      for node in automation.graph.nodes {
-        guard case .scheduled = node.entity.trigger else { continue }
-        _ = try all.automation.runner.pause(automation.id, nodeId: node.id, true)
+    // 予定のあるノードをすべて止めた自動化: 一覧の行と見出しの「次回」の位置に「ノードを一時停止中」。
+    for language in [Language.ja, .en] {
+      let all = board(DesignSceneFixtures.boardMapSamples(), 0)
+      if let automation = all.automation.selectedAutomation {
+        for node in automation.graph.nodes {
+          guard case .scheduled = node.entity.trigger else { continue }
+          _ = try all.automation.runner.pause(automation.id, nodeId: node.id, true)
+        }
       }
+      try write(
+        "board_map_paused_scheduled\(language == .ja ? "" : "_en").png", all, language,
+        NSSize(width: 1440, height: 844))
     }
-    try write("board_map_paused_scheduled.png", all, .ja, NSSize(width: 1440, height: 844))
   }
 
   /// 判定のノードの回の終わり方ごとのカード: 形式エラーをその場で修正済み・修正されず失敗（agent と、コマンドの出力の形式

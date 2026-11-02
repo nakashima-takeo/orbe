@@ -90,7 +90,7 @@ struct BoardMapRow: Equatable {
 struct BoardAutomationDetailValue: Equatable {
   /// 「通知：メニューバー」。
   let notify: String
-  /// 「次回 16:50」「手動」「一時停止中」（予定のあるノードがすべて止まっている）。自動化を止めていれば nil（見出しは一時停止中を出す）。
+  /// 「次回 16:50」「手動」「ノードを一時停止中」（予定のあるノードがすべて止まっている）。自動化を止めていれば nil（見出しは一時停止中を出す）。
   let next: String?
   /// 直近の回の区分（全ノードを混ぜた新しい `stripLength` 回。古い回が左）。
   let strip: [BoardRunTone]

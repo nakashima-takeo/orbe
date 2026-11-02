@@ -374,6 +374,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - 自動化の共有の文（L10nTable+Automation）
   case automationNext
   case automationPaused
+  case automationNodesPaused
   case automationRunning
   case automationToday
   case automationEvery
