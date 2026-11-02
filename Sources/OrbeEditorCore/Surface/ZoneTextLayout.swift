@@ -85,7 +85,7 @@ public enum ZoneTextLayout {
       ]
     }
     let typesetter = CTTypesetterCreateWithAttributedString(
-      padded(Array(units[span]), styles: Self.styles(styles, in: NSRange(span))).string)
+      breaking(Array(units[span]), styles: Self.styles(styles, in: NSRange(span))))
     var lines: [Line] = []
     var start = span.lowerBound
     while start < span.upperBound {
@@ -102,7 +102,7 @@ public enum ZoneTextLayout {
     return lines
   }
 
-  /// 文の位置 `offset` で始まる見え方の前の余白（そこで始まる見え方が無ければ 0）。
+  /// 文の位置 `offset` で始まる見え方の先頭の余白（そこで始まる見え方が無ければ 0）。
   private static func leadingPadding(at offset: Int, _ styles: [ZoneTextStyle]) -> CGFloat {
     var start = 0
     for style in styles {
@@ -220,6 +220,31 @@ public enum ZoneTextLayout {
       }
       return starts[index]..<(index + 1 < starts.count ? starts[index + 1] : end)
     }
+  }
+
+  /// 行の割り位置を測る属性文字列。余白は文の並びの順に送りとして置く——末尾の余白は見え方の最後の字の塊に、先頭の余白は
+  /// 見え方のすぐ前の字の塊に置く。行の頭で始まる見え方の先頭の余白は、その行を割るときに幅から引く
+  /// （→ `leadingPadding(at:)`）。割った行で外す余白（→ `styles(_:in:)`）も文の並びの順で決まるので、組んだ行の幅は
+  /// 測った幅を超えない。
+  private static func breaking(_ units: [UInt16], styles: [ZoneTextStyle]) -> CFAttributedString {
+    let plain = attributed(units, styles: styles, kerns: [:])
+    guard styles.contains(where: { $0.leadingPadding > 0 || $0.trailingPadding > 0 }) else {
+      return plain
+    }
+    let clusters = Clusters(glyphs(of: CTLineCreateWithAttributedString(plain)), units)
+    var kerns: [Range<Int>: CGFloat] = [:]
+    var offset = 0
+    for style in styles {
+      if style.length > 0, style.trailingPadding > 0 {
+        kerns[clusters.range(containing: offset + style.length - 1), default: 0] +=
+          style.trailingPadding
+      }
+      if style.length > 0, style.leadingPadding > 0, offset > 0 {
+        kerns[clusters.range(containing: offset - 1), default: 0] += style.leadingPadding
+      }
+      offset += style.length
+    }
+    return attributed(units, styles: styles, kerns: kerns)
   }
 
   /// 組んだ行のグリフ 1 つ——見え方（`styles` の添字）・文の位置・x 範囲（行の左端から。送りを含む）。
