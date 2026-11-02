@@ -2,36 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 判定ごとの候補の保ち方——判定の `keep`、判定の入力に残るリンクの歯止め、処理を通った行の下げ方、毎回すべてを読む判定の覚え方。
+/// 判定ごとの候補の保ち方——判定の入力に残るリンクの歯止め、処理を通った行の下げ方、毎回すべてを読む判定の覚え方。
 ///
-/// 壊れると何が起きるか: 判定に片付けさせたい候補が、元の項目が消えたときに黙って消える。1 つの判定に入力を集めた形で、片方の
-/// 取得が外しただけで、まだある項目の候補が消えて戻らない。取得 → 処理 → 判定 の形で、取得が外した項目の候補が棚に残り続ける。
-/// 処理がまとめた行の候補が、処理が外しても棚に残り続ける。処理がまとめた行を書き換えるたびに、さばいた候補が戻る。直近の窓を
-/// 毎回読む判定で、さばいた候補が次の回に戻る。
+/// 壊れると何が起きるか: 1 つの判定に入力を集めた形で、片方の取得が外しただけで、まだある項目の候補が消えて戻らない。取得 →
+/// 処理 → 判定 の形で、取得が外した項目の候補が棚に残り続ける。処理がまとめた行の候補が、処理が外しても棚に残り続ける。処理が
+/// まとめた行を書き換えるたびに、さばいた候補が戻る。直近の窓を毎回読む判定で、さばいた候補が次の回に戻る。
 extension AutomationStoreTests {
-  private func keeping(_ keep: AutomationKeep?) -> AutomationDefinition {
-    var definition = Self.definition()
-    definition.nodes[1].action.keep = keep
-    return definition
-  }
-
-  /// `untilDecided` の判定の候補は、元の項目が無効になっても判断待ちのまま残る。`whileCurrent` へ書き換えると、元の項目が既に
-  /// 無効の判断待ちがその場で下がる。
-  func testUntilDecidedKeepsAProposalUntilItIsRewrittenToWhileCurrent() throws {
-    let store = AutomationStore()
-    let id = try store.create(keeping(.untilDecided), now: Self.at).id
-    let a = Self.item("a")
-    try Self.fetch(store, id, [a])
-    try Self.judge(store, id, proposing: [a])
-
-    try Self.fetch(store, id, [])
-    XCTAssertEqual(store.proposals.map(\.state), [.open])
-    XCTAssertEqual(store.automation(id)?.state(key: "fetch").runs.first?.run?.withdrawn, 0)
-
-    try Self.rewrite(store, id, keeping(nil))
-    XCTAssertEqual(store.proposals, [])
-  }
-
   /// 1 つの判定に 2 つの取得（どちらも今の集合）から同じリンクが届くとき、候補の元の取得が外しても、もう片方にあれば残る。もう
   /// 片方も外すと下がり、その取得の回に数える。
   func testAProposalStaysWhileAnotherInputOfTheJudgeStillHasItsLink() throws {

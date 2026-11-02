@@ -44,11 +44,6 @@ struct AutomationGraph: Equatable {
       }
     }
 
-    /// 判断待ちの候補の保ち方を解いたもの。判定だけが持ち、省略は `whileCurrent`。
-    var keep: AutomationKeep? {
-      role == .judge ? action.keep ?? .whileCurrent : nil
-    }
-
     /// 入力のノード。
     var inputNodeIds: [AutomationNodeID] { inputs.map(\.from) }
 
@@ -61,7 +56,7 @@ struct AutomationGraph: Equatable {
         method = .agent(agent)
       }
       return Behavior(
-        method: method, timeoutMinutes: timeoutMinutes, coverage: coverage, keep: keep,
+        method: method, timeoutMinutes: timeoutMinutes, coverage: coverage,
         destination: action.destination, inputs: Set(inputs))
     }
   }
@@ -71,7 +66,6 @@ struct AutomationGraph: Equatable {
     let method: AutomationActionDef.Method
     let timeoutMinutes: Int
     let coverage: AutomationCoverage?
-    let keep: AutomationKeep?
     let destination: AutomationActionDef.Destination
     let inputs: Set<AutomationNodeEdge>
   }

@@ -186,7 +186,7 @@ struct AutomationDismissal: Equatable {
     case alreadyProposed
     /// 対応済みにする判断待ちの候補が無い。
     case noOpenProposal
-    /// 案が元にした行が、回の途中に今のものでなくなった（`keep` が `whileCurrent` の判定だけ）。
+    /// 案が元にした行が、回の途中に今のものでなくなった。
     case noLongerCurrent
   }
 

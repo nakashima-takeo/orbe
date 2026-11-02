@@ -3,7 +3,7 @@ import Foundation
 // タスク候補の保ち方。候補は判定の出力で、出した判定のノードが持つ。同一性は（判定のノード, リンク）で、ほかの判定・ほかの自動化の
 // 候補は、読みにも確定にも効かない。棚は判定のノードの持ち主の自動化。
 //
-// 判断待ちの候補を Orbe が下げるのは、判定の `keep` が `whileCurrent` で、候補が元にした行（判定が読んだ行か、その行が引き継ぎで
+// 判断待ちの候補を Orbe が下げるのは、候補が元にした行（判定が読んだ行か、その行が引き継ぎで
 // たどる元の行）のうち項目のどれかが無効になり、判定の入力（直接の上流）の今有効な項目にもそのリンクが無いときだけ。
 //
 // 判定のノード J の候補 P を覚えるのは、J が今のノードで役割が判定のうち、P が判断待ちの間か、P のリンクの行がまた J へ届きうる
@@ -80,15 +80,15 @@ extension AutomationMemory {
     return try withdraw(candidates, db)
   }
 
-  /// 判定のノード `judges` の判断待ちの候補のうち、元にした行が既に今のものでない候補を下げる（忘れる）。`keep` を
-  /// `whileCurrent` に書き換えた判定と、直した読めない自動化の判定に当てる。
+  /// 判定のノード `judges` の判断待ちの候補のうち、元にした行が既に今のものでない候補を下げる（忘れる）。直した読めない自動化の
+  /// 判定に当てる。
   mutating func withdraw(reviewing judges: [AutomationNodeID], _ db: AutomationDatabase) throws {
     var candidates: [AutomationDatabase.OpenProposal] = []
     for judge in judges { candidates += try db.openProposals(of: judge) }
     try withdraw(candidates, db)
   }
 
-  /// 下げる条件を当て、満たす候補を忘れて数を返す。判定の `keep` が `whileCurrent` の候補だけを下げる。
+  /// 下げる条件を当て、満たす候補を忘れて数を返す。
   @discardableResult private mutating func withdraw(
     _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase
   ) throws -> Int {
@@ -96,7 +96,7 @@ extension AutomationMemory {
     for candidate in candidates where !withdrawn.contains(candidate.id) {
       guard
         let judge = automations.lazy.compactMap({ $0.graph.node(candidate.judge) }).first,
-        judge.keep == .whileCurrent,
+        judge.role == .judge,
         try db.noLongerCurrent(candidate.row, link: candidate.link, inputs: judge.inputNodeIds)
       else { continue }
       withdrawn.insert(candidate.id)

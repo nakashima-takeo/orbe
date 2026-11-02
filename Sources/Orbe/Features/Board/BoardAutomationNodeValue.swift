@@ -7,8 +7,8 @@ enum BoardSegmentLook: Equatable {
   case emphasized
 }
 
-/// 選んだノードのカードの値。地図に出さないノードの中身（手段・モデル・ツール・指示文・保存・判断待ち・取り方・上限・制限時間・
-/// 作業ディレクトリ・回の記録）を出すのはここだけ。
+/// 選んだノードのカードの値。地図に出さないノードの中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・作業ディレクトリ・
+/// 回の記録）を出すのはここだけ。
 struct BoardAutomationNodeValue: Equatable {
   let id: AutomationNodeID
   let role: String
@@ -16,8 +16,7 @@ struct BoardAutomationNodeValue: Equatable {
   let running: Bool
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
-  /// 実行方法・ツール・トリガー・保存（判定は判断待ち）・入力元・出力先・未処理・制限時間・作業ディレクトリ・次回の順。ノードに
-  /// 無い項目は出さない。
+  /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・作業ディレクトリ・次回の順。ノードに無い項目は出さない。
   /// 出力先はノードの外の行き場所（タスク候補・報告の出し先など）だけで、後ろのノードへ渡す取得・処理には出さない。
   let facts: [Fact]
   /// 指示文かコマンド。
@@ -136,12 +135,6 @@ extension BoardAutomationNodeValue {
     fact(.boardNodeTrigger, text.schedule(entity.trigger))
     if let coverage = node.coverage {
       fact(.boardNodeSaving, self.coverage(coverage, of: node, state, text))
-    }
-    switch node.keep {
-    case .whileCurrent:
-      fact(.boardNodeWaiting, l10n.string(.boardNodeWaitingDiscardWhenInvalidated))
-    case .untilDecided: fact(.boardNodeWaiting, l10n.string(.boardNodeWaitingKeepUntilDecided))
-    case nil: break
     }
     if !node.inputs.isEmpty {
       fact(

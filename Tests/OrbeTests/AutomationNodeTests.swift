@@ -4,9 +4,9 @@ import XCTest
 
 /// ノードの JSON の形——外から受けた定義の読み書き。
 ///
-/// 壊れると何が起きるか: AI が書いたノードが別の意味で読まれる（`none` が報告に化ける・入力や取り方・候補の保ち方が落ちる・
-/// ノードの id が落ちて別のノードになる）。読み直したノードのモデルが解いた値で固まり、役割が変わっても前の既定で走る。
-/// コマンドに書いたツールや知らない行き先・取り方が黙って捨てられ、書いた AI が誤りの場所を知らされない。
+/// 壊れると何が起きるか: AI が書いたノードが別の意味で読まれる（`none` が報告に化ける・入力や取り方が落ちる・ノードの id が
+/// 落ちて別のノードになる）。読み直したノードのモデルが解いた値で固まり、役割が変わっても前の既定で走る。コマンドに書いたツールや
+/// 知らない行き先・取り方が黙って捨てられ、書いた AI が誤りの場所を知らされない。
 final class AutomationNodeTests: OrbeTestCase {
   private func definitionNode(
     _ id: Int?, _ key: String, _ name: String, _ trigger: AutomationNode.Trigger,
@@ -24,7 +24,7 @@ final class AutomationNodeTests: OrbeTestCase {
          "command": "gh search prs", "directory": "/Users/me/repo", "coverage": "currentSet"},
         {"key": "judge", "name": "判定", "trigger": {"kind": "cron", "expression": "0 9 * * *"},
          "from": [{"node": "gh", "maxAgeHours": 72}], "instruction": "判定して",
-         "deliver": "taskCandidates", "keep": "untilDecided", "maxItems": 30, "timeoutMinutes": 10},
+         "deliver": "taskCandidates", "maxItems": 30, "timeoutMinutes": 10},
         {"key": "post", "name": "投稿", "trigger": {"kind": "manual"}, "agent": "claude",
          "model": "opus", "tools": ["mcp__slack__post"], "instruction": "投稿して", "deliver": "report"},
         {"key": "say", "name": "知らせ", "trigger": {"kind": "arrival"},
@@ -45,8 +45,7 @@ final class AutomationNodeTests: OrbeTestCase {
         AutomationActionDef(
           method: .agent(
             AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "判定して")),
-          timeoutMinutes: 10, coverage: nil, keep: .untilDecided, destination: .taskCandidates),
-        maxItems: 30),
+          timeoutMinutes: 10, coverage: nil, destination: .taskCandidates), maxItems: 30),
       definitionNode(
         nil, "post", "投稿", .manual,
         AutomationActionDef(

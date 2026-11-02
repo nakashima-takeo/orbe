@@ -50,9 +50,6 @@ extension AutomationGraph {
     }
     try checkInputs(definitionNode, path)
     let role = try role(of: definitionNode, path)
-    if role != .judge, definitionNode.action.keep != nil {
-      throw .invalid("\(path).keep: only a node that delivers taskCandidates keeps proposals")
-    }
     if role == .process, definitionNode.action.coverage == .currentSet {
       if let index = definitionNode.from.firstIndex(where: { $0.take != .all }) {
         throw .invalid(

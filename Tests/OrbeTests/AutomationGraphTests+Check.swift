@@ -145,14 +145,6 @@ extension AutomationGraphTests {
         "nodes[2].from"
       ),
       (
-        "判定でないノードが候補の保ち方を持つ",
-        {
-          var process = Self.agent("p", from: ["f"], deliver: .nextNode)
-          process.action.keep = .untilDecided
-          return [Self.fetch("f"), process, Self.agent("r", from: ["p"])]
-        }(), "nodes[1].keep"
-      ),
-      (
         "今の集合の処理が新しい行だけを取る",
         [
           Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextNode, coverage: .currentSet),

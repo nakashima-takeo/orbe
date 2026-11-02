@@ -94,8 +94,8 @@ struct AutomationRecording {
     let dismissed: [AutomationDismissal]
   }
 
-  /// 回の途中に他の確定や人のさばきがあっても、この判定が同じリンクの候補を既に持つ案と、（`keep` が `whileCurrent` なら）元に
-  /// した行が今のものでなくなった案は理由付きで捨て、この判定の判断待ちでない候補は対応済みにしない。
+  /// 回の途中に他の確定や人のさばきがあっても、この判定が同じリンクの候補を既に持つ案と、元にした行が
+  /// 今のものでなくなった案は理由付きで捨て、この判定の判断待ちでない候補は対応済みにしない。
   private func reconcile(
     _ proposals: [AutomationNodePass.Proposal], _ resolved: [String], _ memory: AutomationMemory
   ) throws -> Reconciled {
@@ -105,9 +105,7 @@ struct AutomationRecording {
     var dismissed: [AutomationDismissal] = []
     for proposal in proposals {
       let link = proposal.fields.link
-      if node.keep == .whileCurrent,
-        try db.noLongerCurrent(proposal.row, link: link, inputs: node.inputNodeIds)
-      {
+      if try db.noLongerCurrent(proposal.row, link: link, inputs: node.inputNodeIds) {
         dismissed.append(AutomationDismissal(link: link, why: .noLongerCurrent))
         continue
       }
