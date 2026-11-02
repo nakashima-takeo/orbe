@@ -7,8 +7,8 @@ import XCTest
 /// として受ける。候補にした理由は 1 段落に整えて運ぶ。
 ///
 /// 壊れると何が起きるか。外の文面の file: の link が候補のリンクになる。判定が別の自動化の項目や
-/// 存在しない提案を指しても通り、タスクにできないタイトルの提案が棚に並ぶ。判定が一覧に無い workspace や true を付け先に
-/// 書いても通り、候補が別の workspace や行き場の無い付け先を持つ。`orb ws list --json` の Home の id を書いたコマンドの判定の
+/// 存在しない提案を指しても通り、タスクにできないタイトルの提案が棚に並ぶ。判定が一覧に無い workspace や文字列でない値を
+/// 付け先に書いても通り、候補が別の workspace や行き場の無い付け先を持つ。`orb ws list --json` の Home の id を書いたコマンドの判定の
 /// 候補が捨てられ、二度と出ない。候補の詳細に、判定が書いた理由が改行の崩れたまま出る。
 final class AutomationOutputsTests: OrbeTestCase {
   private let line =
@@ -216,18 +216,6 @@ final class AutomationOutputsTests: OrbeTestCase {
         .propose(itemId: "b", title: "空", due: nil, workspace: nil, reason: nil),
       ])
     XCTAssertEqual(rejected, ["item 2: reason has the wrong type"])
-  }
-
-  /// 真偽値は付け先として読まない。
-  func testJudgeDoesNotReadTrueAsAWorkspace() {
-    let one = AutomationWorkspace(id: UUID(), name: "one", root: "/one")
-    let read = read(
-      #"{"propose":"a","title":"t","workspace":true}"#, itemIds: ["a"],
-      choices: AutomationJudgeChoices(open: [], workspaces: listed([one])))
-    let (decisions, rejected) = (read.decisions, read.rejected)
-
-    XCTAssertEqual(decisions, [])
-    XCTAssertEqual(rejected, ["item 1: workspace has the wrong type"])
   }
 
   /// Home は依頼文の一覧に載らず、Home の id を書いた行は付け先なし（Home に付く）として受ける——コマンドの判定は

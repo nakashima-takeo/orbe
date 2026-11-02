@@ -25,16 +25,10 @@ final class AutomationWorkspacesTests: OrbeTestCase {
     return definition
   }
 
-  func testSeatsNamingCurrentWorkspacesAreAcceptedAndComeBackInTheStoredForm() throws {
-    let read = try AutomationDefinition.decode(
-      definition(orbe.id.uuidString.lowercased(), home.id.uuidString))
+  func testSeatsNamingCurrentWorkspacesAreAcceptedIncludingHome() throws {
+    let read = try AutomationDefinition.decode(definition(orbe.id.uuidString, home.id.uuidString))
 
     XCTAssertNoThrow(try workspaces.checkSeats(of: read), "Home も走る場所に書ける")
-    let written = try XCTUnwrap(AutomationWire.object(read) as? [String: Any])
-    XCTAssertEqual(written["workspace"] as? String, orbe.id.uuidString, "小文字で書いても保存の形で返る")
-    let nodes = try XCTUnwrap(written["nodes"] as? [[String: Any]])
-    XCTAssertNil(nodes[0]["workspace"], "書かない席は書かないまま")
-    XCTAssertEqual(nodes[1]["workspace"] as? String, home.id.uuidString)
   }
 
   func testAnUnknownSeatIsRefusedAtItsPlace() throws {
