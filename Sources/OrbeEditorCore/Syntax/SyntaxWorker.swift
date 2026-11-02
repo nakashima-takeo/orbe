@@ -184,7 +184,7 @@ actor SyntaxWorker {
     version = batch.version
     parses.withLock { $0 += 1 }
     for range in layers.apply(batch.edits, text: text).rangeView {
-      let covered = lines(covering: NSRange(range))
+      let covered = self.range(of: text.rows(of: NSRange(range)))
       stale.insert(integersIn: covered.location..<NSMaxRange(covered))
     }
     stale.formUnion(layers.takeInvalidated())
@@ -227,15 +227,6 @@ actor SyntaxWorker {
     let last = min(max(first, lines.upperBound), text.lineCount - 1)
     let start = text.lineStart(first)
     return NSRange(location: start, length: text.lineEnd(last) - start)
-  }
-
-  /// 区間に掛かる行を丸ごと（改行を含む）。本文の外は切り詰める。
-  private func lines(covering range: NSRange) -> NSRange {
-    let start = min(range.location, text.length)
-    let end = min(NSMaxRange(range), text.length)
-    let first = text.lineStart(text.row(containing: start))
-    let last = text.lineEnd(text.row(containing: max(start, end - 1)))
-    return NSRange(location: first, length: max(0, last - first))
   }
 }
 
