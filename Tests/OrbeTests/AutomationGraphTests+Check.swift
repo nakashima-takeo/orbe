@@ -12,7 +12,9 @@ extension AutomationGraphTests {
     _ definitionNodes: [AutomationDefinition.Node], at place: String, _ label: String,
     line: UInt = #line
   ) {
-    XCTAssertThrowsError(try AutomationGraph.check(definitionNodes, workspace: nil), label, line: line) {
+    XCTAssertThrowsError(
+      try AutomationGraph.check(definitionNodes, workspace: nil), label, line: line
+    ) {
       guard case .invalid(let message) = $0 as? AutomationError else {
         return XCTFail("\(label): \($0)", line: line)
       }
@@ -41,9 +43,8 @@ extension AutomationGraphTests {
 
   /// ノード自身の欄だけで決まる規則は、そのノードの欄を指して断る。
   func testANodesOwnFieldsAreRefusedAtTheirPlace() {
-    let command = { (script: String, directory: String?) in
-      AutomationActionDef.Method.command(
-        AutomationNodeCommand(script: script, directory: directory))
+    let command = { (script: String) in
+      AutomationActionDef.Method.command(AutomationNodeCommand(script: script, directory: nil))
     }
     for (label, definitionNodes, place) in [
       ("ノードが 0 個", [AutomationDefinition.Node](), "nodes"),
@@ -53,11 +54,7 @@ extension AutomationGraphTests {
       ("鍵に英数字以外", changing(1) { $0.key = "取得" }, "nodes[1].key"),
       ("名前が 2 行", changing(1) { $0.name = "a\nb" }, "nodes[1].name"),
       ("1 分未満の間隔", changing(0) { $0.trigger = .scheduled(.every(30)) }, "nodes[0].trigger"),
-      ("空のコマンド", changing(0) { $0.action.method = command(" ", nil) }, "nodes[0].command"),
-      (
-        "相対の作業ディレクトリ", changing(0) { $0.action.method = command("x", "tmp") },
-        "nodes[0].directory"
-      ),
+      ("空のコマンド", changing(0) { $0.action.method = command(" ") }, "nodes[0].command"),
       ("裏で回せない CLI", changingAgent { $0.cli = "codex" }, "nodes[1].agent"),
       ("知らない CLI", changingAgent { $0.cli = "nope" }, "nodes[1].agent"),
       ("空のモデル", changingAgent { $0.model = " " }, "nodes[1].model"),

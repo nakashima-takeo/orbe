@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// 自動化の workspace の保存と書き換え。自動化の workspace は版を上げる欄で、替えると、それを継ぐコマンドのノードだけが何をするかが
-/// 変わったノードになる。
+/// 変わったノードになる。継いだのと同じ workspace をノードに書き移しても、何をするかは変わらない。
 ///
 /// 壊れると何が起きるか: 再起動で自動化の workspace が落ち、継ぐノードが読めない定義になる。自動化の workspace を替えても版が
 /// 進まず、古い定義からの書き換えが通る。継ぐノードの走っている回が止まらず、古い場所の結果が新しい定義の結果として確定する。
@@ -12,13 +12,16 @@ extension AutomationStoreTests {
   private static let repo = UUID()
   private static let tools = UUID()
 
-  /// 自動化の workspace を継ぐ取得 `fetch` と、自分の workspace を書いた副作用 `say`。
-  private static func workspaceDefinition(_ workspace: UUID) -> AutomationDefinition {
+  /// 取得 `fetch`（`fetch` を省けば自動化の workspace を継ぐ）と、自分の workspace を書いた副作用 `say`。
+  private static func workspaceDefinition(_ workspace: UUID?, fetch: UUID? = nil)
+    -> AutomationDefinition
+  {
     AutomationDefinition(
       name: "workspace", notify: nil, workspace: workspace,
       nodes: [
         DesignSceneFixtures.commandNode(
-          "fetch", "取る", .manual, script: "pwd", directory: ".", coverage: .currentSet),
+          "fetch", "取る", .manual, script: "pwd", workspace: fetch, directory: ".",
+          coverage: .currentSet),
         DesignSceneFixtures.commandNode(
           "say", "知らせる", .arrival, from: ["fetch"], script: "say", workspace: tools,
           directory: "bin", deliver: .sideEffect),
@@ -46,5 +49,9 @@ extension AutomationStoreTests {
     let moved = try Self.rewrite(store, id, Self.workspaceDefinition(Self.tools))
     XCTAssertEqual(moved.automation.version, 2)
     XCTAssertEqual(moved.reworked, [store.nodeId(id, "fetch")], "自分の workspace を書いた say は変わらない")
+
+    let written = try Self.rewrite(store, id, Self.workspaceDefinition(nil, fetch: Self.tools))
+    XCTAssertEqual(written.automation.version, 3)
+    XCTAssertEqual(written.reworked, [], "継いでいた workspace をノードに書き移しても走る場所は同じ")
   }
 }
