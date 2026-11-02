@@ -21,13 +21,13 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["commit", "-qm", "four lines"]).isSuccess)
   }
 
-  func tab() -> (TerminalTab, NSWindow) {
+  func tab(modes: EditorDiffModeState? = nil) -> (TerminalTab, NSWindow) {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
     tab.group.view.editor.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
-      diffModes: EditorDiffModeState())
+      diffModes: modes ?? EditorDiffModeState())
     addTeardownBlock { window.orderOut(nil) }
     return (tab, window)
   }
@@ -156,10 +156,7 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "n.txt"]).isSuccess)
     XCTAssertTrue(repo.git(["rm", "-q", "a.txt"]).isSuccess)
     let modes = EditorDiffModeState()
-    let (tab, _) = tab()
-    tab.group.view.editor.configure(
-      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
+    let (tab, _) = tab(modes: modes)
     let added = try tab.group.editor.openDiff(id("n.txt", .staged), as: .pinned)
     waitRows(added, "+ aaa") { $0.style(ofLine: 0) == DiffStyle.added }
     XCTAssertEqual(removedLines(try engine(added.newSurface).rows), [], "− 空の行は出ない")
@@ -241,11 +238,8 @@ final class EditorDiffTests: OrbeTestCase {
     changed.insert(contentsOf: ["added a", "added b"], at: 150)
     try repo.write("long.txt", changed.joined(separator: "\n") + "\n")
     let modes = EditorDiffModeState()
-    let (tab, _) = tab()
+    let (tab, _) = tab(modes: modes)
     let pane = tab.group.view.editor
-    pane.configure(
-      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
     let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree), as: .pinned)
     waitRows(diff, "インライン") { !$0.isEmpty }
     let right = try engine(diff.newSurface)

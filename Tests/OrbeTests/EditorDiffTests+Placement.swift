@@ -20,10 +20,7 @@ extension EditorDiffTests {
     try repo.write("middle.txt", (lines[..<100] + lines[118...]).joined(separator: "\n") + "\n")
     try repo.write("tail.txt", lines[..<190].joined(separator: "\n") + "\n")
     let modes = EditorDiffModeState()
-    let (tab, _) = tab()
-    tab.group.view.editor.configure(
-      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
+    let (tab, _) = tab(modes: modes)
     for mode in [EditorDiff.Mode.inline, .side] {
       modes.select(mode)
       for (path, boundary) in [("middle.txt", 100), ("tail.txt", 190)] {
