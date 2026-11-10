@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
 description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/自動化/ボードのウィジェット/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/automation/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-11-02
+updated: 2026-11-11
 ---
 
 # Orbe CLI（`orb`）
@@ -77,7 +77,7 @@ updated: 2026-11-02
 - `orb automation runs <id> [--node <key>] [--before <recordId>] [--limit <n>] [--json]` … `list_automation_runs` に乗り、回の記録を新しい順に 1 行 1 回（`記録の ID 回の要約`。要約は `list` の「前回」と同じ語）で出す。続きがあれば最後に `next <recordId>` の行を出し、その値を `--before` に渡すと続きが出る。`--before`・`--limit` が正の整数でないのは usage エラー（exit 2）。
 - `orb automation run <id> [--node <key>] [--json]` … `--node` のノードまで流す（省けば終わりのノードすべてまで。止めた自動化も受ける）。回の終わりを待たずに返る。`--node` の値の欠けは usage エラー。
 - `orb automation try (<id> | [<id> --version <n>] --definition) [--from <key>]... [--to <key>]... [--rows <path>] [--limit <n>] [--json]` … [試走](../platform/automation.md#試走)を始め、写すのを待たずに返る（人向けの出力は試走の ID だけ。`trial` に渡す）。`--definition` は標準入力の JSON（`set` と同じ形）を書く前の定義として試す——`<id>` が無ければ新しい定義、あれば `--version`（読んだ版）からの書き換え。`set` に流すのと同じ JSON を、書く前に `try` に流して確かめられる。`--from`・`--to` は繰り返して並べる。`--rows` はファイルの 1 行 1 JSON オブジェクト（空行は飛ばす）を入口に与える行にする。`<id>` も `--definition` も無い・`<id>` を直す `--definition` に `--version` が無い・`--version` が `<id>` と `--definition` の組みでないのは、標準入力を読む前に usage エラー（exit 2）。標準入力が空・JSON オブジェクトでない、`--rows` のファイルが読めない・行が 1 つも無い・JSON オブジェクトでない行は usage エラー（exit 2）、定義・範囲・行の検証は control が持つ（exit 1）。
-- `orb automation trial <trialId> [--wait] [--timeout-ms <ms>] [--json]` … 試走を試走の ID で読み、ノードごとに 1 行（`鍵 状態 回`）で出す。回は最新の回を `list` の「前回」と同じ語で、止めた副作用・仕事は `held N rows`、行を与えた取得は `given N rows`。流し切れずに終わった試走は先頭に `failed: <理由>`。中身（下流へ渡す行・候補の案・渡るはずだった行・与えた行）は `--json` で読む。`--wait` で終わりまで待ち（既定 3600000 ms）、時間切れは exit 124。
+- `orb automation trial <trialId> [--wait] [--timeout-ms <ms>] [--json]` … 試走を試走の ID で読み、ノードごとに 1 行（`鍵 状態 回 書いた時点の回`）で出す。回は流しの分の最新の回、書いた時点の回は直す試走で本番で書いた時点に起きる分（`atWrite`）の最新の回で、どちらも `list` の「前回」と同じ語、止めた副作用・仕事は `held N rows`、行を与えた取得は `given N rows`、無ければ `-`。流し切れずに終わった試走は先頭に `failed: <理由>`。中身（下流へ渡す行・候補の案・渡るはずだった行・与えた行）は `--json` で読む。`--wait` で終わりまで待ち（既定 3600000 ms）、時間切れは exit 124。
 - `orb automation pause <id> [--node <鍵>] [--json]` / `orb automation resume <id> [--node <鍵>] [--json]` … 自動化を止める・再開する。`--node` でそのノードだけ（規則は `pause_automation`）。`--node` の値の欠けは usage エラー、知らない鍵は `-32004`。`list` の状態の列は自動化の停止だけを言う。
 - `orb automation rm <id> [--json]`
 
