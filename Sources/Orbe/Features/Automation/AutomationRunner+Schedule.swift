@@ -29,12 +29,13 @@ extension AutomationRunner {
     }
   }
 
-  /// 走らせ役 `other` が持つ、自動化 `id` の各ノードの前の契機の印と数え始めを、この走らせ役のものにする（番人に載せる前に呼ぶ）。
+  /// 走らせ役 `other` が持つ、自動化 `id` の各ノードの数え始めと、前の契機の印を、この走らせ役のものにする（番人に載せる前に呼ぶ）。
+  /// 数え始めは `other` が番人に今返すはずの値（`anchor(_:_:)`）——`other` で走っている契機は、結果を残さずに終わったものとする。
   func inherit(_ id: Int, from other: AutomationRunner) {
     for node in other.store.automation(id)?.graph.nodes ?? [] {
       let key = Self.key(id, node.id)
       marks[key] = other.marks[key]
-      anchors[key] = other.anchors[key]
+      anchors[key] = other.anchor(id, node.id)
     }
   }
 }

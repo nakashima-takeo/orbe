@@ -150,29 +150,14 @@ extension AutomationDatabase {
 
 /// 試走が写しの上に走らせ役を立てるときの部品。
 extension AutomationTrial {
-  /// 写しの走らせ役の番人。時計・暦・予約は本番の番人と同じものを使う（書いた時点に過ぎていた予定の回を、本番と同じ時計で数える）。
+  /// 写しの走らせ役の番人。時計は写し終えた時点（今）で止め、予約を張らない——その時点に過ぎていた予定はノードをこの番人に
+  /// 載せたときに起き、その後の予定の時刻は来ない。暦は本番の番人と同じ。
   static func scheduler(like production: BackgroundScheduler) -> BackgroundScheduler {
     let scheduler = BackgroundScheduler()
-    scheduler.now = production.now
+    let copiedAt = production.now()
+    scheduler.now = { copiedAt }
     scheduler.calendar = production.calendar
-    scheduler.arm = production.arm
+    scheduler.arm = { _, _ in {} }
     return scheduler
-  }
-
-  /// ノード `nodeIds` の間隔・cron の予定を手動にした定義（変える予定が無ければ nil）。番人は登録や回の終わりの数え直しのたびに
-  /// 過ぎた時刻の予定を始めるので、予定の時刻で回さないようにするには「いつ」を載せずにおくしかない。
-  static func unscheduled(_ nodeIds: Set<AutomationNodeID>, of automation: Automation)
-    -> AutomationDefinition?
-  {
-    var definition = automation.definition
-    var changed = false
-    for index in definition.nodes.indices {
-      guard let nodeId = definition.nodes[index].id, nodeIds.contains(nodeId),
-        case .scheduled = definition.nodes[index].trigger
-      else { continue }
-      definition.nodes[index].trigger = .manual
-      changed = true
-    }
-    return changed ? definition : nil
   }
 }

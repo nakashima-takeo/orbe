@@ -8,7 +8,7 @@ import XCTest
 /// または本番の取得が走る。
 extension AutomationTrialTests {
   /// 副作用と仕事（ツールを持つ agent）は写しの上でも動かさず、そのノードに渡るはずだった行を返す。その行を、「届いたら」の副作用は
-  /// 上流の回の確定で起こされたときに、手動の仕事は流しの終わりに読む。止めたノードは回の記録を持たない。
+  /// 上流の回の確定で起こされたときに、手動の仕事は流しが上流の後に起こしたときに読む。止めたノードは回の記録を持たない。
   func testSideEffectsAndWorkAreHeldWithTheRowsTheyWouldHaveGot() throws {
     let id = try define([
       fetch("gh"), definitionNode("send", .arrival, from: ["gh"], deliver: .sideEffect),
@@ -164,9 +164,7 @@ extension AutomationTrialTests {
     ended(trial)
 
     XCTAssertNil(trial.failure)
-    XCTExpectFailure("試走は、同じ行を渡るはずだった行として、与えた行で入口の副作用を起こしたときと、流しの終わりに道の根として読み直すときの 2 回返す") {
-      XCTAssertEqual(
-        trial.passes(key: "send").compactMap(\.heldIds), [[downstream("gh", "x", of: id)]])
-    }
+    XCTAssertEqual(
+      trial.passes(key: "send").compactMap(\.heldIds), [[downstream("gh", "x", of: id)]])
   }
 }

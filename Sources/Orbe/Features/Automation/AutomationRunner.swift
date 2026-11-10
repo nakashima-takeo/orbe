@@ -21,8 +21,8 @@ import Observation
 /// どうか・何を出すかは受けた側が決める）。`recorded` は確定の直後、下流を起こす前に同期で呼ぶ——受けた側はその中で、確定した
 /// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。契機が終わるたびに、起こす決まりと一巡の
 /// 進みを見た後で `triggerEnded` で知らせる。定義を書いたら `defined` で外したノードと、消したら `deleted` で消えたノードと共に
-/// 知らせる。使い手が差し替えられるのは、番人に載せるノード（`admits`。既定は全ノード）と知らせだけ。起こす決まりが番人に載せて
-/// いないノードを起こしたら、手段を起こさず `wokeUnadmitted` で知らせる（そのノードをどう扱うかは使い手が決める）。
+/// 知らせる。使い手が差し替えられるのは、番人に載せるノード（`admits`。既定は全ノード）と、1 回を引き取るノード（`holds`。既定は
+/// 無し）と知らせだけ。引き取った 1 回は、手段を起こさず、回の記録も書かず、読んだ結果を `held` で知らせ、記録の無い契機と同じに終える。
 @Observable final class AutomationRunner {
   let store: AutomationStore
   @ObservationIgnored var now: () -> Date = Date.init
@@ -40,12 +40,13 @@ import Observation
   private let admits: (Int, AutomationNodeID) -> Bool
   private let flowEnded: (Int, AutomationFlow) -> Void
   private let triggerEnded: (Int, AutomationNodeID) -> Void
-  private let wokeUnadmitted: (Int, AutomationNodeID, [AutomationNodeID: AutomationSeqs]) -> Void
+  private let holds: (Int, AutomationGraph.Node) -> Bool
+  private let held: (Int, AutomationGraph.Node, AutomationIntake.Read?) -> Void
   /// 番人に載せている鍵。
   @ObservationIgnored private var registered = Set<String>()
   /// ノードごとの、前の契機の始まりの時点の、入力ごとの上流の最後の番号（メモリだけ。無ければ読んだ位置だけが基準線）。
   @ObservationIgnored var marks: [String: [AutomationNodeID: AutomationSeqs]] = [:]
-  /// ノードごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
+  /// ノードごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件など）でも進むので、次の時刻はこれから数える。
   @ObservationIgnored var anchors: [String: Date] = [:]
   /// 走っている契機（掃除から守る行を言う）。
   @ObservationIgnored private var active: [ObjectIdentifier: Trigger] = [:]
@@ -56,8 +57,8 @@ import Observation
   var flows: [Int: [AutomationFlow]] = [:]
 
   /// `workspaces` は今の workspace の写しの読み口（判定に見せる付け先と、コマンドの走る場所を引く）。`admits` は自動化の ID と
-  /// ノードの ID から、番人に載せるかを決める。`wokeUnadmitted` は起こす決まりが起こした、番人に載せていないノードと、その契機の
-  /// 基準線（前の契機の印にした、その時点の上流の最後の番号）。
+  /// ノードの ID から、番人に載せるかを決める。`holds` は自動化の ID とノードから、そのノードの 1 回を引き取るかを決める。`held` は
+  /// 引き取った 1 回の、自動化の ID・ノード・読んだ結果（入力の無いノードは nil。読んだ位置は使い手が進める）。
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
@@ -69,8 +70,8 @@ import Observation
     admits: @escaping (Int, AutomationNodeID) -> Bool = { _, _ in true },
     flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in },
     triggerEnded: @escaping (Int, AutomationNodeID) -> Void = { _, _ in },
-    wokeUnadmitted: @escaping (Int, AutomationNodeID, [AutomationNodeID: AutomationSeqs]) -> Void =
-      { _, _, _ in }
+    holds: @escaping (Int, AutomationGraph.Node) -> Bool = { _, _ in false },
+    held: @escaping (Int, AutomationGraph.Node, AutomationIntake.Read?) -> Void = { _, _, _ in }
   ) {
     self.store = store
     self.scheduler = scheduler
@@ -83,7 +84,8 @@ import Observation
     self.admits = admits
     self.flowEnded = flowEnded
     self.triggerEnded = triggerEnded
-    self.wokeUnadmitted = wokeUnadmitted
+    self.holds = holds
+    self.held = held
     store.onUnavailable = { [weak self] in self?.stopAll() }
     store.holding = { [weak self] in
       self?.active.values.reduce(into: AutomationHolding()) { $0.formUnion($1.holding) }
@@ -191,15 +193,10 @@ import Observation
     anchors[key] = nil
   }
 
-  /// 起こす。番人に載せていないノードは、契機の始まりと同じくその時点の上流の最後の番号を前の契機の印にしてから、それを基準線に
-  /// して `wokeUnadmitted` で知らせる。読めなければ何もしない（ログに残す）。
-  func runNow(_ id: Int, _ nodeId: AutomationNodeID) {
-    let key = Self.key(id, nodeId)
-    guard !registered.contains(key) else { return scheduler.runNow(id: key) }
-    guard let inlets = inlets(of: nodeId) else { return }
-    let marks = inlets.mapValues(\.up)
-    self.marks[key] = marks
-    wokeUnadmitted(id, nodeId, marks)
+  /// ノードの、番人に今返すはずの数え始め: 走っている契機があればその契機が終わりに返す値、無ければ最後に返した値。
+  func anchor(_ id: Int, _ nodeId: AutomationNodeID) -> Date? {
+    active.values.first { $0.automationId == id && $0.nodeId == nodeId }?.anchor
+      ?? anchors[Self.key(id, nodeId)]
   }
 
   /// 全ノードを番人から外す（走っている回は止め、その結果は捨てる）。一巡は打ち切る。
@@ -233,6 +230,8 @@ extension AutomationRunner {
     var holding = AutomationHolding()
     /// 回の始まり。
     var passStartedAt: Date?
+    /// 終わりに番人へ返す数え始め（回の始まり。回が無ければ契機の始まり）。
+    var anchor: Date { passStartedAt ?? startedAt }
     var current: BackgroundRunHandle?
     var cancelled = false
     /// 一巡の分として受け取った契機か。
@@ -308,11 +307,15 @@ extension AutomationRunner {
     pass(trigger, read: read)
   }
 
-  /// ノードの 1 回。役割の入力を組み、`AutomationNodePass` に任せ、終わったら確定する。
+  /// ノードの 1 回。役割の入力を組み、`AutomationNodePass` に任せ、終わったら確定する（引き取るノードは知らせて終える）。
   private func pass(_ trigger: Trigger, read: AutomationIntake.Read?) {
     guard let automation = store.automation(trigger.automationId),
       let node = automation.graph.node(trigger.nodeId)
     else { return end(trigger) }
+    if holds(trigger.automationId, node) {
+      held(trigger.automationId, node, read)
+      return end(trigger)
+    }
     let input = self.input(node, automation, read)
     let startedAt = now()
     trigger.passStartedAt = startedAt
@@ -359,7 +362,7 @@ extension AutomationRunner {
     defer { triggerEnded(trigger.automationId, trigger.nodeId) }
     active[ObjectIdentifier(trigger)] = nil
     let key = Self.key(trigger.automationId, trigger.nodeId)
-    let anchor = trigger.passStartedAt ?? trigger.startedAt
+    let anchor = trigger.anchor
     anchors[key] = anchor
     trigger.finish(anchor)
     guard let node = store.automation(trigger.automationId)?.graph.node(trigger.nodeId) else {

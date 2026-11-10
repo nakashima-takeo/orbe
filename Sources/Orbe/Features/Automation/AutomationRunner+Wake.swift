@@ -59,6 +59,11 @@ extension AutomationRunner {
     return !Self.hasNew(node, inlets, since: baseline)
   }
 
+  /// 起こす（番人に載せていないノードには何もしない）。
+  func runNow(_ id: Int, _ nodeId: AutomationNodeID) {
+    scheduler.runNow(id: Self.key(id, nodeId))
+  }
+
   /// 起こす決まり。実効で止めていない「届いたら」のノードに、基準線より新しい上流の行があり、走っていなければ起こす。
   func wake(_ id: Int, _ nodeId: AutomationNodeID) {
     guard let automation = store.automation(id), let node = automation.graph.node(nodeId),

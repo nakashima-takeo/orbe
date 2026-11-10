@@ -222,9 +222,8 @@ final class AutomationTrialTests: OrbeTestCase {
 
   /// 試走の間、道のノードは予定の時刻を過ぎていても写しの上で予定では回らず、流しの順に 1 回だけ動く。
   func testNodesOnThePathDoNotRunOnTheirScheduleInTheCopy() throws {
-    // 写しの番人は壁時計で数えるので、1 時間前に足した 1 分ごとのノードの予定は写しの上で過ぎている。判定には前からの読めば取る
-    // 行を持たせる（予定で回れば、上流を待たずにそれを読む）。
-    now = Date()
+    // 1 時間前に足した 1 分ごとのノードの予定は、写しの上でも過ぎている（写しの番人の時計は写し終えた時点で止まる）。判定には
+    // 前からの読めば取る行を持たせる（予定で回れば、上流を待たずにそれを読む）。
     let added = now.addingTimeInterval(-3600)
     let id = try store.create(
       AutomationDefinition(
