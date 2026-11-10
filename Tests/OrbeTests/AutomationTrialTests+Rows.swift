@@ -165,7 +165,7 @@ extension AutomationTrialTests {
 
     let start = jobs.calls.count
     let trial = try trials.start(.saved(id), .init(rows: [item("x")]))
-    let tried = answer(from: start, until: { !trial.running }) { _, _ in "" }
+    let tried = answer(from: start, until: { !trial.running }, { _, _ in "" })
     XCTAssertNil(trial.failure)
 
     let flowing = jobs.calls.count
