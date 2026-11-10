@@ -251,6 +251,30 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(calls("judge").count, 1)
   }
 
+  /// 直す試走の流しの途中に予定の時刻を過ぎても、範囲の道の上にある間隔の予定のノードは、写しの上で予定の回としては走らず、流しの
+  /// 今すぐの回として 1 回だけ走る。
+  func testARewriteDoesNotRunOnTheScheduleWhoseTimeComesDuringTheFlow() throws {
+    let id = try define([
+      fetch("gh"), definitionNode("p", .scheduled(.every(60)), from: ["gh"], deliver: .report),
+    ])
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.name = "直した"
+
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
+    waitCalls("gh", 1)
+    now += 600
+    finish("gh", fetched(["a"]))
+    waitCalls("p", 1)
+    finish("p", "読んだ")
+    ended(trial)
+
+    XCTAssertNil(trial.failure)
+    XCTAssertEqual(calls("p").count, 1)
+    XCTAssertEqual(trial.passes(key: "p").compactMap { $0.run?.trigger }, [.now])
+  }
+
   /// 処理が `id` の無い行を出すと、試走の回は本番の回と同じ失敗の理由と外した行の記録で返る。
   func testABreachInATrialReadsTheSameAsInProduction() throws {
     let id = try define([
