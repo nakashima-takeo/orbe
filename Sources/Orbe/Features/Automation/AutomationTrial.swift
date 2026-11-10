@@ -246,8 +246,15 @@ final class AutomationTrial {
     }
   }
 
-  /// 契機の終わり。書いた時点の起こしを待っていて、写しの自動化のどのノードも走っていなければ、行を与えて流す。
+  /// 契機の終わり。書いた時点の起こしを待っていれば、静まったかを次の周回で確かめる——走らせ役は契機の終わりの中で続けて
+  /// 起こすので（引き取った 1 回はその場で終わる）、その起こしの途中で流し始めると、書いた時点の回と流しの回がまとまる。
   private func triggerEnded() {
+    guard !stopped, running, waiting != nil else { return }
+    DispatchQueue.main.async { [weak self] in self?.proceedWhenQuiet() }
+  }
+
+  /// 書いた時点の起こしを待っていて、写しの自動化のどのノードも走っていなければ、行を与えて流す。
+  private func proceedWhenQuiet() {
     guard !stopped, running, let plan = waiting, let range,
       runner?.isRunning(range.automationId) == false
     else { return }
