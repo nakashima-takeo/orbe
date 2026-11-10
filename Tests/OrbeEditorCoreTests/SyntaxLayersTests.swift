@@ -67,7 +67,7 @@ final class SyntaxLayersTests: XCTestCase {
   }
 
   /// 乱択の編集を重ね、そのあと 1 手ずつ取り消して元の本文に戻す。文書は格子の目 2 つに掛かり、編集の 3 回に 1 回は格子の切れ目の
-  /// 近くを狙う（境をまたぐ削除もある）。1 手は、1〜3 回の編集（編集の合間は見えている範囲だけを作る——打鍵中の裏と同じ）の
+  /// 近くを狙う（切れ目をまたぐ削除もある）。1 手は、1〜3 回の編集（編集の合間は見えている範囲だけを作る——打鍵中の裏と同じ）の
   /// 後に文書全体を作り、新しく解いたものと比べる。崩れている間に誤りを含む木が食い違っても、元の本文に戻せば揃う。
   private func fuzz(_ language: SyntaxLanguage, unit: String, pieces: [String]) throws {
     let rules = try XCTUnwrap(registry.rules(for: language))
