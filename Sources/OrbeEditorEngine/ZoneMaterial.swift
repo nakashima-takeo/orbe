@@ -2,9 +2,9 @@ import AppKit
 import CoreText
 import OrbeEditorCore
 
-/// 絵の差し込みを描く材料——中身を、描画スレッドがそのまま置ける形にしたもの（座標は絵の差し込みの左上を原点にした
-/// pt）。main が中身を問うたとき・外観や倍率が変わったときに作り、並びと同じ書き込みで材料の箱に載せる。字は Core Text
-/// で組んだグリフと送り、色は面の外観と色空間で解いた値、画像は倍率で描いた画素。
+/// 絵の差し込みを描く材料——載せる側が描いた絵を、描画スレッドがそのまま置ける形にしたもの（座標は絵の差し込みの左上を
+/// 原点にした pt）。main が絵を問うたとき・外観や倍率が変わったときに作り、並びと同じ書き込みで材料の箱に載せる。字は
+/// Core Text で組んだグリフと送り、色は面の外観と色空間で解いた値、画像は倍率で描いた画素。
 ///
 /// フォントは不変で、Core Text はスレッドをまたいだ利用を保証する（`SurfaceConfig` と同じ）。
 struct ZoneMaterial: @unchecked Sendable {
@@ -144,7 +144,7 @@ struct ZoneHits {
   }
 }
 
-/// 絵の差し込みの中身を材料と当たりの表に写す（main）。画像は倍率と色空間で描いて覚える（同じ画像・大きさなら
+/// 載せる側が描いた絵を材料と当たりの表に写す（main）。画像は倍率と色空間で描いて覚える（同じ画像・大きさなら
 /// 描き直さない）。
 @MainActor
 final class ZonePainter {
@@ -170,7 +170,7 @@ final class ZonePainter {
     var scale: CGFloat
   }
 
-  /// 中身 `picture` を外観 `look` で材料に、入力欄を `serial` で場の通し番号に写す。
+  /// 絵 `picture` を外観 `look` で材料に、入力欄を `serial` で場の通し番号に写す。
   func paint(_ picture: ZonePicture, _ look: Look, serial: (ZoneTextField) -> Int)
     -> (ZoneMaterial, ZoneHits)
   {

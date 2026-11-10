@@ -81,8 +81,8 @@ extension SurfaceZonesTests {
     try mouse(opened, .leftMouseUp, at: right)
   }
 
-  /// 入力欄は主になった・外れたを知らせる（押す → Esc → 主にする口 → 中身から消える）。中身から消えて外れた知らせの
-  /// 中で絵の差し込みを描き直せば、その高さは同じ取引の並びに入る。
+  /// 入力欄は主になった・外れたを知らせる（押す → Esc → 主にする口 → 描き直した絵から消える）。絵から消えて外れた
+  /// 知らせの中で絵の差し込みを描き直せば、その高さは同じ取引の並びに入る。
   func testAFieldNoticesPrimaryChangesAndARedrawInTheLastNoticeSettlesTheRows() throws {
     let opened = try hostedRows()
     let surface = opened.surface

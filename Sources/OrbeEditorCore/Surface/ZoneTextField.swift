@@ -6,7 +6,7 @@ import AppKit
 /// 横に送る）。
 @MainActor
 public final class ZoneTextField: SiteText {
-  /// 面の中で入力欄を指す id（面の中で一意。絵の差し込みの中身の `ZoneField` はこの型を渡す）。
+  /// 面の中で入力欄を指す id（面の中で一意。載せる側が描いた絵の `ZoneField` はこの型を渡す）。
   public let id: AnyHashable
   public let style: Style
   public private(set) var text: TextRope

@@ -40,7 +40,7 @@ extension FramePerfTests {
   }
 
   /// 絵の差し込みの入力欄に打つ——差し込みの多い 1MB の中ほどのスレッドの返信の入力欄で、打鍵の間隔 100ms と 33ms。
-  /// 関門は本文の打鍵と同じ（打鍵→present の中央値 12.5ms・p95 17ms、打鍵 1 回の main の仕事 p99 1ms）。中身を
+  /// 関門は本文の打鍵と同じ（打鍵→present の中央値 12.5ms・p95 17ms、打鍵 1 回の main の仕事 p99 1ms）。絵を
   /// 問い直して材料に写す main の仕事（絵の差し込み 1 つと、幅を変えたときの全部の絵の差し込み）は記録して示す。
   func testTypingIntoAZoneField() throws {
     let opened = try attach(Self.swiftSource(bytes: 1_000_000))

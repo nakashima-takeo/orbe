@@ -55,7 +55,7 @@ public struct RowInsertion: Equatable {
   public enum Content: Equatable {
     /// 文書に無い行の列。面が出どころの行を本文と同じ字・出どころの役割の色・空白の点で描くが、選べず、写せず、当たらない。
     case lines([InsertedLine])
-    /// 絵の差し込み。面は本文の区画の幅を渡して中身を問い、返った高さで並べ、本文と同じコマに描く（→ `SurfaceZone`）。
+    /// 絵の差し込み。面は本文の区画の幅を渡して絵を問い、返った高さで並べ、本文と同じコマに描く（→ `SurfaceZone`）。
     case zone(SurfaceZone)
 
     public static func == (lhs: Content, rhs: Content) -> Bool {

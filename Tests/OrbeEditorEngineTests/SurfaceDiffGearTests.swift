@@ -257,7 +257,7 @@ final class SurfaceDiffGearTests: EngineTestCase {
       "文書の行の番号は行を選ぶ")
   }
 
-  /// 番号の列の数が変わって本文の区画の幅が変われば、絵の差し込みの中身を新しい幅で問い直す。
+  /// 番号の列の数が変わって本文の区画の幅が変われば、絵の差し込みに新しい幅で絵を問い直す。
   func testChangingTheColumnsAsksZonesAgain() throws {
     let opened = try open(rows(20), size: size)
     let surface = opened.surface
@@ -269,7 +269,7 @@ final class SurfaceDiffGearTests: EngineTestCase {
     XCTAssertLessThan(zone.widths.last ?? 0, zone.widths.first ?? 0)
   }
 
-  /// 絵の差し込みの中身の高さが変わって並びを組み直しても、文書の行の区間（行の型・もう一方の番号）と行の地と番号の列の
+  /// 載せる側が描いた絵の高さが変わって並びを組み直しても、文書の行の区間（行の型・もう一方の番号）と行の地と番号の列の
   /// 幅は残る。
   func testRegrowingAZoneKeepsTheLineSpans() throws {
     let opened = try open(rows(20), size: size)

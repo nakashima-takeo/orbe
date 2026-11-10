@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// 絵の差し込み 1 つの main の持ち物——載せる側の絵の差し込み（面が保持する）・中身を問うた幅・最後の中身と、それを
+/// 絵の差し込み 1 つの main の持ち物——載せる側の絵の差し込み（面が保持する）・絵を問うた幅・最後に返った絵と、それを
 /// 写した描く材料と当たりの表。
 @MainActor
 final class ZoneEntry {
@@ -24,14 +24,14 @@ struct HoveredButton: Equatable {
   var id: AnyHashable
 }
 
-/// 絵の差し込み（中身を問い・材料に写し・幅に合わせ・描き直す）と、入力欄の場（作る・使い回す・閉じる）と、押せる場所の
-/// ホバー。中身を問うのも写すのも main の取引の中で、描く材料は並びと同じ書き込みで材料の箱に載る（描画スレッドは引き
+/// 絵の差し込み（絵を問い・材料に写し・幅に合わせ・描き直す）と、入力欄の場（作る・使い回す・閉じる）と、押せる場所の
+/// ホバー。絵を問うのも写すのも main の取引の中で、描く材料は並びと同じ書き込みで材料の箱に載る（描画スレッドは引き
 /// 取った版の並びと材料で描く）。
 extension MetalTextSurface {
-  /// 今の本文の区画の幅（絵の差し込みの中身を問う幅）。
+  /// 今の本文の区画の幅（絵の差し込みに絵を問う幅）。
   var zoneWidth: CGFloat { surfaceLayout.text.width }
 
-  /// 置く絵の差し込みを `list` にする（取引の中）——新しいものは今の幅で中身を問うて写し、外れたものは手放す。
+  /// 置く絵の差し込みを `list` にする（取引の中）——新しいものは今の幅で絵を問うて写し、外れたものは手放す。
   func syncZones(_ list: [SurfaceZone]) {
     let ids = Set(list.map(ObjectIdentifier.init))
     for (id, entry) in zones where !ids.contains(id) {
@@ -58,8 +58,8 @@ extension MetalTextSurface {
     }
   }
 
-  /// 中身を描く材料と当たりの表に写して書く（取引の中）。入力欄の場を作り・使い回し、中身から消えた入力欄の場は取引の
-  /// 終わりに閉じる。絵の差し込みの文の選択を確かめ直す。高さが変われば取引の終わりに並びを組み直す。
+  /// 絵を描く材料と当たりの表に写して書く（取引の中）。入力欄の場を作り・使い回し、描き直した絵から消えた入力欄の場は
+  /// 取引の終わりに閉じる。絵の差し込みの文の選択を確かめ直す。高さが変われば取引の終わりに並びを組み直す。
   func paint(_ entry: ZoneEntry) {
     let id = ObjectIdentifier(entry.zone)
     let (material, hits) = painter.paint(
@@ -107,7 +107,7 @@ extension MetalTextSurface {
     return site
   }
 
-  /// 取引の終わりに、絵の差し込みを今に合わせる（取引の中）——本文の区画の幅が変わっていれば中身を問い直し、どの
+  /// 取引の終わりに、絵の差し込みを今に合わせる（取引の中）——本文の区画の幅が変わっていれば絵を問い直し、どの
   /// 絵の差し込みも描いていない入力欄の場を閉じ（主なら本文が主になる）、高さが変わった絵の差し込みで並びを組み直す
   /// （閉じた場の知らせの中で描き直した高さも同じ取引に入る）。絵の差し込みを写したか外したなら、どの材料も指さない
   /// 画像の覚えを手放す。
@@ -133,7 +133,7 @@ extension MetalTextSurface {
     }
   }
 
-  /// 絵の差し込みの中身の高さで並びを組み直す（見えている先頭の文書の行は確定で保つ）。
+  /// 載せる側が描いた絵の高さで並びを組み直す（見えている先頭の文書の行は確定で保つ）。
   private func applyZoneHeights() {
     zoneHeightsChanged = false
     let current = rows
@@ -160,7 +160,7 @@ extension MetalTextSurface {
     if transaction?.anchor == nil { transaction?.anchor = rows }
   }
 
-  /// 外観・色空間・倍率が変わった——絵の差し込みの色と画像を写し直し（中身は問い直さない）、入力欄の色を解き直す。
+  /// 外観・色空間・倍率が変わった——絵の差し込みの色と画像を写し直し（絵は問い直さない）、入力欄の色を解き直す。
   func zonesAppearanceDidChange() {
     guard !zones.isEmpty || !fields.isEmpty else { return }
     transact {
@@ -202,7 +202,7 @@ extension MetalTextSurface {
     if let next { zones[next.zone]?.zone.zone(.entered(next.id)) }
   }
 
-  /// 窓の今のポインタの位置でホバーとポインタの形を引き直す（スクロール・並び・絵の差し込みの中身が変わり、押せる場所が
+  /// 窓の今のポインタの位置でホバーとポインタの形を引き直す（スクロール・並び・載せる側が描いた絵が変わり、押せる場所が
   /// ポインタの下を動いた）。
   func refreshPointer() {
     guard rows.hasZones || hoveredButton != nil else { return }

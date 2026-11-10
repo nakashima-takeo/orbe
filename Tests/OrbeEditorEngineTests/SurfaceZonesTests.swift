@@ -4,10 +4,10 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 絵の差し込み（載せる側が描く中身を、本文と同じコマに描く差し込み）——中身を問う幅と高さ・本文と同じ位置への描き
-/// 方・幅や中身の変化での問い直し・上端の影と横スクロールバーとの重ね順・点の下の行き先（入力欄・押せる場所・選べる
-/// 文・ほかに当たらない所）・押せる場所のホバーと押下。壊れると、PR のスレッドが本文の行に重なる・ずれて動く・幅を
-/// 変えても高さが中身に合わない・ボタンが効かない。
+/// 絵の差し込み（載せる側が描いた絵を、本文と同じコマに描く差し込み）——絵を問う幅と高さ・本文と同じ位置への描き方・
+/// 幅や載せる側の中身の変化での問い直し・上端の影と横スクロールバーとの重ね順・点の下の行き先（入力欄・押せる場所・
+/// 選べる文・ほかに当たらない所）・押せる場所のホバーと押下。壊れると、PR のスレッドが本文の行に重なる・ずれて動く・
+/// 幅を変えても高さが絵に合わない・ボタンが効かない。
 @MainActor
 final class SurfaceZonesTests: EngineTestCase {
   private let size = CGSize(width: 600, height: 400)
@@ -24,7 +24,7 @@ final class SurfaceZonesTests: EngineTestCase {
     SurfaceRows(insertions: [RowInsertion(line: line, content: .zone(zone))])
   }
 
-  /// 絵の差し込みの高さは、本文の区画の幅で問うた中身の高さで、下の文書の行はその高さだけ下がる。絵の差し込みの箱は
+  /// 絵の差し込みの高さは、本文の区画の幅で問うた絵の高さで、下の文書の行はその高さだけ下がる。絵の差し込みの箱は
   /// 並びの y − スクロールの位置に、本文と同じコマに描かれる。
   func testAZoneIsAskedAtTheTextWidthAndDrawnWithTheText() throws {
     let opened = try hostedRows()
@@ -47,7 +47,7 @@ final class SurfaceZonesTests: EngineTestCase {
     XCTAssertNotEqual(shot.rgb(x, top - 2.5 * 18 - 1), [255, 0, 0])
   }
 
-  /// 載せる側が描き直すと言えば中身を問い直し、見えている先頭の文書の行より上の絵の差し込みが伸びても、その行の画面上の
+  /// 載せる側が描き直すと言えば絵を問い直し、見えている先頭の文書の行より上の絵の差し込みが伸びても、その行の画面上の
   /// 位置は変わらない。置いていない絵の差し込みは何もしない。
   func testRedrawingAZoneAboveKeepsTheFirstVisibleLine() throws {
     let opened = try hostedRows()
@@ -66,7 +66,7 @@ final class SurfaceZonesTests: EngineTestCase {
     XCTAssertEqual(surface.rows.heights, [90], "置いていない絵の差し込みは何もしない")
   }
 
-  /// 本文の区画の幅が変われば（窓の幅・行番号の桁）中身を問い直す（折り返しが変わり、高さが合う）。
+  /// 本文の区画の幅が変われば（窓の幅・行番号の桁）絵を問い直す（折り返しが変わり、高さが合う）。
   func testAZoneIsAskedAgainWhenTheTextWidthChanges() throws {
     let opened = try hostedRows()
     let surface = opened.surface

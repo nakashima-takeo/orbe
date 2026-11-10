@@ -1,8 +1,8 @@
 import AppKit
 import OrbeEditorCore
 
-/// 試しのスレッド——見本（orbe_design の `DiffView.tsx` の `Thread`。デザイン台帳 D 節）の構成を、絵の差し込みの中身で
-/// 組んだもの。差し込みの flow（`editor_rows`）と、画面に出す試しの場（`EditorRowsTrialTests`）と、編集メニューの経路の
+/// 試しのスレッド——見本（orbe_design の `DiffView.tsx` の `Thread`。デザイン台帳 D 節）の構成を、絵の差し込みに描く絵
+/// として組んだもの。差し込みの flow（`editor_rows`）と、画面に出す試しの場（`EditorRowsTrialTests`）と、編集メニューの経路の
 /// テスト（`EditorZoneEditingMenuTests`）が載せる。
 ///
 /// 枠（半透明の地・枠線・影）・頭（行と話題・状態の点・押せる「解決」「折りたたむ」）・コメント（アバターの円と頭文字か

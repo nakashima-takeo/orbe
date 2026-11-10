@@ -25,7 +25,7 @@ final class BoxZone: SurfaceZone {
   func zone(_ event: ZoneEvent) {}
 }
 
-/// 中身を渡された関数で組む絵の差し込み（要素を直に並べて確かめる）。
+/// 渡された関数で絵を組む絵の差し込み（要素を直に並べて確かめる）。
 @MainActor
 final class PictureZone: SurfaceZone {
   var draw: (CGFloat) -> ZonePicture
@@ -68,7 +68,7 @@ final class ThreadZone: SurfaceZone {
   weak var surface: (any TextSurface)?
   private(set) var hovered: AnyHashable?
   private(set) var events: [ZoneEvent] = []
-  /// 中身を問われた幅（問われた順）。
+  /// 絵を問われた幅（問われた順）。
   private(set) var widths: [CGFloat] = []
   private var fieldLines = 0
 

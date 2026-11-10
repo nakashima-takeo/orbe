@@ -88,8 +88,8 @@ extension MetalTextSurface {
     transaction?.writes.append { $0.zoneSelection = nil }
   }
 
-  /// 絵の差し込みを描き直した——まとまりが中身に無いか、範囲がまとまりの文の外になれば主を本文に、そうでなければ選択の
-  /// 地を描き直す。
+  /// 絵の差し込みを描き直した——まとまりが描き直した絵に無いか、範囲がまとまりの文の外になれば主を本文に、そうでなければ
+  /// 選択の地を描き直す。
   func validateZoneSelection(_ entry: ZoneEntry) {
     guard let selection = zoneSelection else { return }
     guard let rope = entry.hits.texts[selection.text],
