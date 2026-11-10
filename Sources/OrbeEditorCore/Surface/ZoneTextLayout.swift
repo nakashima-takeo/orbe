@@ -4,7 +4,7 @@ import CoreText
 /// 絵の差し込みの字の組版（純関数）。面は配置の仕組みを持たない。載せる側は中身を組むときにここで測り、面は
 /// 描くときにここで組む——測りと描きが同じ組み立て（→ `typeset`）を通るので、測った幅・位置と描いた字が食い違わない。
 public enum ZoneTextLayout {
-  /// 折り返した 1 行——元の文の中の範囲（改行は含めない）と、その範囲の字の見え方と、行の幅（行頭の余白を含み、行末の
+  /// 折り返した 1 行——元の文の中の範囲（改行は含めない）と、その範囲の字の見え方と、行の幅（左端の余白を含み、行末の
   /// 空白を除く）と、見え方ごとの字の x 範囲（行の左端から。余白と行末の空白を含まない）。行は段落（改行で区切った文）の
   /// 向きで組む。段落の向きは段落の最初の、向きを持つ字で決まり、段落の途中の行も同じ向きで組む。
   public struct Line: Equatable {
@@ -23,7 +23,8 @@ public enum ZoneTextLayout {
     }
   }
 
-  /// 1 行に組んだもの——組んだ文の範囲と、組んだ行と、行頭の余白（見た目で行の左端に来る見え方の、左の余白。字はこの幅だけ右へずらして置く）。
+  /// 1 行に組んだもの——組んだ文の範囲と、組んだ行と、左端の余白（見た目で行の左端に来る見え方の、左の余白。字はこの
+  /// 幅だけ右へずらして置く）。
   public struct Typeset {
     public let range: NSRange
     public let line: CTLine
@@ -164,7 +165,7 @@ public enum ZoneTextLayout {
     return 0
   }
 
-  /// 1 行に組んだ行・行頭の余白・幅（行頭の余白を含み、行末の空白を除く）・見え方ごとの字の x 範囲。
+  /// 1 行に組んだ行・左端の余白・幅（左端の余白を含み、行末の空白を除く）・見え方ごとの字の x 範囲。
   private struct Laid {
     let line: CTLine
     let inset: CGFloat
@@ -204,7 +205,7 @@ public enum ZoneTextLayout {
     return Laid(line: line, inset: set.inset, width: set.inset + max(0, width), spans: spans)
   }
 
-  /// 余白を置いた属性文字列と、行頭の余白と、字の塊（文の範囲）ごとに置いた余白。
+  /// 余白を置いた属性文字列と、左端の余白と、字の塊（文の範囲）ごとに置いた余白。
   private struct Padded {
     let string: CFAttributedString
     let inset: CGFloat
@@ -214,7 +215,7 @@ public enum ZoneTextLayout {
   /// 余白を、Core Text が 1 つにまとめて組む字の塊（→ `Clusters`）の送りとして置く。見え方の先頭の余白は段落の向きの
   /// 始まりの側（左から右の段落では左、右から左の段落では右）に、末尾の余白はその反対の側に付く。右に付く余白は見え方の
   /// 右端のグリフの塊に、左に付く余白は見え方の左端のグリフのすぐ左に並ぶグリフの塊に送りを置く（すぐ左に字が無ければ
-  /// 行頭の余白）。送りは塊の最後のグリフの右に空きを作るので、右から左の字でも余白は見え方の字の外に出る。余白が無ければ
+  /// 左端の余白）。送りは塊の最後のグリフの右に空きを作るので、右から左の字でも余白は見え方の字の外に出る。余白が無ければ
   /// 組まない。
   private static func padded(_ units: [UInt16], styles: [ZoneTextStyle], rightToLeft: Bool)
     -> Padded
