@@ -1,4 +1,5 @@
 import Foundation
+import OrbeAutomationReference
 
 // `orb automation <サブコマンド>` の実装と usage。定義は MCP の set_automation の definition と同じ形の JSON を標準入力で
 // 受け、検証は control に任せる（ノードはコマンドか agent かで項目が入れ子になるので、フラグに割ると検証が 2 か所に割れる）。
@@ -19,195 +20,52 @@ let automationUsageLines = [
   "orb automation rm <id> [--json]",
 ]
 
-let automationUsage = """
-  orb automation — fetch items on a schedule, process them in steps, and
-  deliver the result
+/// usage の行・CLI の注・共有の節（MCP の自動化ツールと同じ文）。
+let automationUsage =
+  """
+  orb automation — automations: graphs of nodes that fetch from outside on their own
+  schedules, then process, judge into task candidates, report, do work with tools, or
+  run side effects
 
   USAGE:
   \(usageBlock(automationUsageLines))
 
-  An automation runs trigger -> source (optional) -> steps (zero or more)
-  -> sink. Only items not seen in its previous run reach the steps. There
-  are four sinks. Task candidates: the last step proposes tasks for you to
-  accept or dismiss in Orbe; it needs a source (currentSet or newArrivals)
-  and at least one step, and a proposal belongs to its link across all
-  automations. Command: a command receives the lines that reach the sink;
-  the source and the steps are optional. Report: the text the last step
-  writes is kept as the result of the run; it needs at least one step.
-  Agent: a throwaway claude does a job with the tools it names; the source
-  and the steps are optional.
-  set reads the definition from stdin, the same JSON as the definition of
-  the MCP tool set_automation:
-  {"name", "trigger", "source", "steps", "sink", "notify"}; source and
-  notify are optional.
-    trigger  {"everyMinutes": 30}  or  {"cron": "0 9 * * 1-5"}
-             everyMinutes runs N minutes after the last run; one missed
-             while the Mac slept or Orbe was not running runs once on
-             waking. cron is "minute hour day month weekday" in the Mac's
-             time zone and runs only at those times; a time missed while
-             asleep is skipped. Fields take *, numbers, ranges a-b, steps
-             */n, a-b/n and a/n, and lists with commas; months and
-             weekdays also take names (JAN, MON; weekday 0 and 7 are
-             Sunday). No @daily shorthands, no L W # ?. Leave the day or
-             the weekday as *; an expression that never matches is
-             refused. Weekdays at 9:00 is "0 9 * * 1-5"; every 10 minutes
-             from 9:00 to 18:50 on weekdays is "*/10 9-18 * * 1-5".
-    source   {"command": "…", "directory": "/abs", "coverage": "…"}  or
-             {"agent": "claude", "model": "…", "tools": ["mcp__<server>__<tool>"],
-              "request": "…", "coverage": "…"}
-             An agent may use only the MCP tools named in full; built-in
-             tools, whole servers and wildcards are refused. Name only
-             tools that read the source (never ones that send, update or
-             delete, nor Orbe's own tools): the name is checked, not what
-             the tool does. Background agents start in a fresh empty directory
-             on each run, so MCP servers registered to a directory (claude's
-             local and project scopes) are unavailable.
-             A command prints one JSON object per item:
-             {"id","link","body","time"} (link http(s), time ISO 8601),
-             prints nothing when there are none, and fails with a non-zero
-             exit.
-             coverage (required): "currentSet" when the source returns the
-             whole current set (a proposal whose link leaves it is
-             withdrawn), "newArrivals" when it returns only new items (a
-             proposal stays until the last step resolves it), "everything"
-             to skip the diff against the previous run (not for task
-             candidates). With newArrivals, the start of the last
-             successful run is passed as ORBE_SINCE (ISO 8601, UTC) to a
-             command and as a sentence to an agent; fetch from then on
-             (overlap is fine; Orbe drops seen ids). The first run has none.
-    steps    [{"name": "…", "command": "…", "directory": "/abs"}  or
-              {"name": "…", "agent": "claude", "model": "…", "instruction": "…"}]
-             A step takes JSON lines and prints JSON lines (stdin for a
-             command, Orbe's framed prompt for an agent). A step agent has
-             no tools. Keep each item's id: a run fails when no line that
-             reaches the last step carries an id of this run's items.
-             Narrow with cheap steps (commands, haiku) before costly ones.
-             An agent needs a model; a definition without one is refused.
-             The lines a step command or the sink command receives are text
-             from outside, or what steps made from it, so instructions hidden
-             in that text can reshape them, and Orbe does not check what they
-             say: never evaluate their values as shell, nor pass them to an
-             agent (claude -p and the like). To have an agent read them, make
-             it a step (Orbe runs a step agent without tools). To have
-             something done with tools, use the agent sink: Orbe's limits do
-             not apply to claude -p started inside a command sink.
-    sink     {"kind": "taskCandidates"}
-             An agent last step is told the output form by Orbe: write in
-             its instruction what makes a task and how to title and date
-             it. The last step may give each proposal a workspace to attach
-             the task to (Orbe lists the workspaces other than Home; without
-             one the task goes to Home); say how to choose it in the
-             instruction too. A command last step prints
-             {"propose": id, "title": "…", "due": "YYYY-MM-DD",
-              "workspace": "<id from orb ws list --json>"} lines itself (it
-             gets neither the open proposals nor the workspace list, so it
-             cannot resolve). Home's id or no workspace sends the task to
-             Home. A line naming an id that is not a current workspace is
-             dropped.
-             {"kind": "command", "command": "…", "directory": "/abs",
-              "timeoutMinutes": 10}
-             The command gets the lines that reach it on stdin, one JSON
-             object per line (the source's items when there are no steps).
-             It runs only when at least one line arrives; with neither a
-             source nor steps it runs on every trigger with empty stdin. A
-             run fails when the last step prints lines but none is a JSON
-             object, and when the command exits non-zero or hits its limit.
-             ORBE_RUN_ID names the run and stays the same when Orbe retries a
-             run that did not finish; record it at the end, not the start.
-             Items of a failed run flow again in the next run, mixed with new
-             ones: skip them by each line's "id" (steps keep the id).
-             timeoutMinutes (1-60, default 2) bounds both the run time and the
-             time without output. stdout is not read. Over 1 MiB of stdout or
-             64 KiB of stderr cuts the command off and fails the run; send
-             large output to /dev/null. Editing the definition does not make
-             the next run process every fetched item again.
-             {"kind": "report"}
-             The output of the last step is the report, kept as text in the
-             run record (up to 64 KiB; a larger report breaks the rules); a
-             command last step prints it on stdout. Its first line shows in
-             the notification. An agent last step gives it through Orbe's
-             tool, or says there is nothing to report; a command
-             that prints nothing, or an agent that says so, succeeds as
-             "nothing to report". Editing
-             the definition does not make the next run process every fetched
-             item again.
-             {"kind": "agent", "agent": "claude", "model": "…",
-              "tools": ["Bash(gh search prs:*)", "mcp__<server>__<tool>"],
-              "request": "…"}
-             Each run starts a throwaway claude in the background (no tab)
-             with Orbe's fixed frame and the request, and only the named
-             tools. It starts only when at least one line reaches the sink (on
-             every trigger with neither a source nor steps); the lines and
-             their count never reach the agent, so have it look up its targets
-             itself. tools names full MCP tool names and
-             Bash(<command prefix>:*) rules only (the prefix has no , ( ) *);
-             bare built-in tools, whole servers and wildcards are refused.
-             Name as few as possible. Each run starts in a fresh empty
-             directory. With Bash rules only, claude reads none of your
-             settings, and it refuses commands that read a file outside that
-             directory given as an argument, even when they match a named
-             rule; to read such a file, name a command that reads it, such as
-             a script. Once an MCP tool is named, it reads your settings to
-             reach your MCP servers, so the tools you always allow in claude
-             (MCP tools and Bash commands) and your hooks apply too, and it
-             can read under your settings' additionalDirectories without
-             naming anything. Instructions hidden in outside text the agent
-             reads with its tools can make it use a writing tool it was given.
-             It needs a model; it is cut off after 10 minutes, or
-             3 minutes without output. It gives its report through Orbe's
-             tool, kept as the result of the run (the first line shows in the
-             notification); when there is nothing
-             to do it says so and delivers nothing. A run fails when the agent
-             says it cannot do it, ends without a result, crashes, hits its
-             limit, or a named MCP tool is unavailable. A failed run, or
-             one Orbe did not finish, starts the agent again on the next run
-             (a post can be doubled). Editing the definition does not make the
-             next run process every fetched item again. The request stays in
-             automations.json; never put secrets in it.
-    notify   "menuBar" or "notificationCenter"  (any sink; omit to stay
-             silent)
-             When a run delivers something (a proposal, a command run, a
-             report, an agent run that had something to do), or on the first
-             of consecutive failed runs, the automation's name and the result
-             line show with a sound: in the menu bar, or in macOS Notification
-             Center. Notification Center keeps one notification per node;
-             the node's next run replaces it (other nodes' notifications
-             stay). Setting notificationCenter
-             makes macOS ask for Orbe's notification permission if it is not
-             decided yet; without permission, the run shows in the menu bar.
-             Clicking either opens the automation on Home's board. Runs that
-             deliver nothing are not notified. Changing only notify does not
-             stop a running run.
-  To edit, take .definition and .version from list --json, change the
-  definition and pipe it whole with that version:
-    orb automation list --json | jq '.automations[] |
-      select(.automationId==3) | .definition' | … | orb automation set 3 --version 4
-  set without <id> creates an automation and prints its id; with <id> it
-  replaces the whole definition, and is refused when the automation changed
-  since that version. Keep each node's id to keep the node. Changing the source method, a step's
-  method, model, instruction or command, or the sink stops a running run;
-  with task candidates the next run also processes every fetched item
-  again.
-  run starts a run now (paused automations too) and returns at once; the
-  result shows up in list. pause stops only what Orbe starts on its own
-  (schedules and arriving lines), not a running run or the run command;
-  --node pauses one node. resume restarts it.
-  try runs the nodes on a copy and returns at once (nothing saved or notified;
-  side effects are held), printing the trial id. With --definition it tries the
-  definition on stdin before it is written: a new automation without <id>, or a
-  rewrite of <id> from the version given with --version. --rows gives the entry
-  node one JSON object per line of the file. trial reads a trial by its id per
-  node; --wait exits 124 on timeout.
-  list prints one automation per line: id, state (active / paused /
-  running), name, trigger, next run, last run (from the run record:
-  fetched and new when it has a source, then proposed, the command's
-  ending, reported or nothing to report, or the agent's ending when the
-  sink recorded one).
-  Per-step counts are in list --json. runs prints past runs newest first,
-  one per line (record id, then the run), and "next <recordId>" when more
-  remain; pass it as --before for the next page.
-  proposals prints one proposal per line: id, state, automation id, due,
-  title, link.
+  """ + "\n" + automationNotes + "\n\n" + AutomationReference.sections.joined(separator: "\n\n")
+
+/// 共有の節の振る舞いをどのサブコマンド・フラグで呼ぶか。
+private let automationNotes = """
+  COMMANDS
+  The sections after this one describe the JSON that `--json` prints and the behavior behind
+  each command.
+  - set reads the definition JSON on stdin. Without <id> it creates an automation and prints
+  its id; with <id> it replaces the whole definition and needs `--version`, the `version` you
+  read. To edit, take `definition` and `version` from list `--json`, change the definition
+  and pipe it whole:
+      orb automation list --json | jq '.automations[] |
+        select(.automationId==3) | .definition' | ... | orb automation set 3 --version 4
+  - try starts a trial and prints its trial id. With `--definition` it reads a definition on
+  stdin (the same JSON as set) and tries it before it is written: a new automation without
+  <id>, or a rewrite of <id> from `--version`. `--from` and `--to` (each repeatable) give the
+  entry and target keys, `--rows` a file of rows to give the entry (one JSON object per line;
+  blank lines are skipped), and `--limit` the cap on new rows.
+  - trial reads a trial by its id, one line per node: key, state, its latest run, and its
+  latest run at the moment of writing ("held N rows", "given N rows" or "-"); a trial that
+  ended early starts with "failed: <reason>". The rows, proposals and held rows are in
+  `--json`. `--wait` waits until the trial ends, up to `--timeout-ms` (default 3600000, max
+  86400000), and exits 124 on timeout.
+  - run flows to the node `--node` (every end node without it) and returns at once.
+  - pause and resume act on the automation, or on the node `--node` only.
+  - list prints one automation per line: id, state (active, paused, running or unreadable),
+  name, the next schedule ("every 30m" or "cron 0 9 * * 1-5", with " +N" for N more
+  scheduled nodes, or "manual"), the next run time, and the latest run of any node:
+  "<start> <key>: " and then "12 fetched, 3 new", "12 in, 4 out", "2 proposed", "reported",
+  "nothing to report", "command exited 0" or "agent exited 0", or "<start> <key> failed:
+  <reason>".
+  - runs prints run records newest first, one per line (record id and the same summary), up
+  to `--limit` (default 20, max 100) of the node `--node` or of all nodes, then
+  "next <recordId>" when more remain; pass that id as `--before` for the next page.
+  - proposals prints one proposal per line: id, state, automation id, due, title, link.
+  - rm deletes the automation.
   """
 
 // MARK: - サブコマンド

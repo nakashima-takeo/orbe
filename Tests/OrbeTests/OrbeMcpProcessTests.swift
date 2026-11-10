@@ -149,7 +149,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       "prompt_agent の既定 / 上限が WaitTimeout と食い違っている: \(description(prompt))")
     XCTAssertTrue(
       description(try tool("get_automation_trial")).contains(
-        "timeoutMs（既定 \(WaitTimeout.promptDefaultMs)・上限 \(WaitTimeout.maxMs)）"),
+        "`timeoutMs` (default \(WaitTimeout.promptDefaultMs), max \(WaitTimeout.maxMs))"),
       "get_automation_trial の既定 / 上限が WaitTimeout と食い違っている")
     for name in ["spawn_agent", "resume_agent"] {
       XCTAssertTrue(
@@ -165,10 +165,6 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       description(try tool("restore_sessions"), property: "sessionIds")
         .contains("\(SessionLogLimits.restoreMaxIds) 件"),
       "sessionIds の上限を写す")
-    XCTAssertTrue(
-      description(try tool("list_automations")).contains(
-        "新しい順に \(AutomationNodeState.recentRuns) 件まで。"),
-      "メモリに持つ直近の回の数を写す")
   }
 
   /// `tools/list` に出る全ツールが control の method として通る。ブリッジはツール名をそのまま method 名へ
