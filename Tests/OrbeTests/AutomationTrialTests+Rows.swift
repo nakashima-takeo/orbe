@@ -30,7 +30,7 @@ extension AutomationTrialTests {
     for key in ["send", "job"] {
       XCTAssertEqual(trial.state(key: key), .held, key)
       XCTAssertEqual(trial.passes(key: key).count, 1, key)
-      guard case .held(let held) = trial.passes(key: key).first else {
+      guard case .held(let held, _) = trial.passes(key: key).first else {
         return XCTFail("\(key) に止めた行が無い")
       }
       XCTAssertEqual(

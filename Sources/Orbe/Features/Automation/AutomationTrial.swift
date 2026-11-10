@@ -2,63 +2,49 @@ import Foundation
 
 /// 試走——自動化のノードを、本番を汚さずに本番と同じ流しで動かし、ノードの回ごとの結果を集める 1 回。main で使う。
 ///
-/// 本番の DB を区切ってメモリの DB へ写し（`AutomationStore.Copy`）、書く前の定義なら写しのストアに本番と同じ書き込みを掛け
-/// （`Target`）、写しの上に本番と同じ走らせ役を立てて、範囲の道だけを番人に載せて流す。読む・確定・出す側の行・起こす決まり・
+/// 本番の DB を区切ってメモリの DB へ写し（`AutomationStore.Copy`）、写しの上に本番と同じ走らせ役を立てて、範囲の道だけを番人に
+/// 載せて流す。写しの走らせ役は、本番の走らせ役が持つ前の契機の印と数え始めを引き継ぐ。読む・確定・出す側の行・起こす決まり・
 /// 結果の確かめは本番のコードのまま写しの上で動き、本番の DB には届かない。本番の層は試走を知らない。試走の都合は、試走が
-/// 自分の写しに掛ける操作（書く前の定義の書き込み・`AutomationTrial+Copy`・走らせ役を立てる間だけ写しの自動化を止めること）と、
-/// 載せるノードの選び方だけで表す:
+/// 自分の写しに掛ける操作（書く前の定義の書き込み・予定を手動にすること・`AutomationTrial+Copy`・走らせ役を立てる間だけ写しの
+/// 自動化を止めること）と、載せるノードの選び方だけで表す:
 ///
-/// - 副作用と仕事は止めるノードで、写しの上でも動かさない（載せない）。流しの終わりに、本番の読みで取るはずだった行を 1 回だけ
-///   読んで返す。
+/// - 副作用と仕事は止めるノードで、写しの上でも動かさない（載せない）。起こす決まりが起こしたらその場で、流しが起こすはずの
+///   止めるノード（`AutomationFlow` が見届けないもの）は流しの終わりに、本番の読みで取るはずだった行を読んで返し、読んだことにする。
 /// - 与えた行は、取得の入口ならその取得の、入力のある入口ならただ 1 つの上流の出力として、写しに新しい行で書く。取得の入口は
 ///   動かない（載せない）。
 /// - `limit` は、道の根の取得の回が写しに確定した直後、受け手が読む前に、その回が足した新しい行のうち N 行を超えた分を写しから
 ///   取り除いて掛ける（与えた行は書く前に N 行に切る）。
 ///
-/// 写しの上では、範囲の道のノードの間隔・cron の予定を手動にしてから走らせ役を立てる——予定の時刻で回さないため。流しの間は
-/// 自動化を止めない（止めると「届いたら」のノードも起きなくなり、本番の流しと違う動きになる）。一巡は間隔・cron・手動を同じ
-/// 「普段なら今すぐ動かないノード」として扱うので、流しの動きは本番と変わらない。走らせ役を立てる間（`start()`）だけ写しの自動化を
-/// 止めておく——立てるときの起こす決まりは前の契機の基準線を持たないので、本番では起こさない前からの未処理（失敗した回が残した
-/// 行など）で道の上の「届いたら」が流しより先に走り、本番で流したときより回が増えるため。止めた印は本番のまま写るので、止めた
-/// 自動化・止めたノードの試走は、本番でそれを流したときと同じに動く。ほかの自動化は写しに残るが番人に載せないので動かない。候補の
-/// 帳面は、試走する判定自身の候補だけが効く。流しが終わるか打ち切られたら写しを捨てる。
+/// 写しの上では、流す前に範囲の道のノードの間隔・cron の予定を手動にする——予定の時刻で回さないため。流しの間は自動化を止めない
+/// （止めると「届いたら」のノードも起きなくなり、本番の流しと違う動きになる）。一巡は間隔・cron・手動を同じ「普段なら今すぐ動かない
+/// ノード」として扱うので、流しの動きは本番と変わらない。止めた印は本番のまま写るので、止めた自動化・止めたノードの試走は、本番で
+/// それを流したときと同じに動く。ほかの自動化は写しに残るが番人に載せないので動かない。候補の帳面は、試走する判定自身の候補だけが
+/// 効く。流しが終わるか打ち切られたら写しを捨てる。
 ///
-/// 書く前の定義は、止めを戻した後、本番で書いた時点の起こす決まりを写しの上でも見て（`wake`）、その回がすべて終わってから行を
-/// 与えて流す。本番で書いた直後の起こしと次の流しを、同じ順で表すため——続けて流すと、書いた時点の回と流しの回の確定の順が本番と
-/// 入れ替わりうる（判定の案が、流しの取得に無効にされた行を指して捨てられる など）。予定を手動にしてから走らせ役を立てるので、
-/// 書いた時点に過ぎていた間隔の回は起こさない（流しはノードを予定によらず起こす）。
+/// 保存した定義は、予定を手動にしてから、写しの自動化を止めた間に走らせ役を立てて流す——本番で流すときは起こす決まりを見直さない
+/// ので、立てるときの起こす決まりで道の上の「届いたら」が流しより先に走ると、本番で流したときより回が増えるため。
+///
+/// 書く前の定義は、写しに書き込みを掛けた後、その書き込みに写しの走らせ役を本番の書き込みと同じに合わせ（`AutomationRunner.adopt`。
+/// 本番の予定のまま番人に載せ、全ノードに起こす決まりを、前の契機の印を基準線にして見る）、その直後に予定を手動にする。本番で書いた時点に起きる
+/// 回（起こす決まりで起きる「届いたら」・過ぎていた予定の回）と、その確定から続く起こしは写しの上でも同じに起き、それがすべて
+/// 終わってから行を与えて流す。続けて流すと、書いた時点の回と流しの回の確定の順が本番と入れ替わりうる（判定の案が、流しの取得に
+/// 無効にされた行を指して捨てられる など）。
 final class AutomationTrial {
-  struct Request: Equatable {
-    /// 入口のノード。省けば、行き先とその祖先のうち入力の無いノードすべて。
-    var from: [String]?
-    /// 行き先のノード。省けば、入口から届く終わりのノードすべて。
-    var to: [String]?
-    /// 入口に与える行（1 行 1 JSON オブジェクト）。道の根が 1 つのときだけ受ける。
-    var rows: [String]?
-    /// 道の根の取得の回が新しく足す行の上限。毎回すべてを取る受け手は、前から今有効な行もあわせて読む。
-    var limit: Int?
-  }
-
-  enum NodeState: String {
-    case waiting
-    case running
-    case done
-    /// 副作用・仕事のノードを止めて終えた。
-    case held
-    /// 与えた行を出力にした取得（手段を起こさない）。
-    case given
-    /// 打ち切りで動かなかった。
-    case untouched
-  }
-
-  /// ノードの結果。
+  /// ノードの結果。`atWrite` は本番で書いた時点に起きる分か（書いた時点の起こす決まりと過ぎていた予定の回、その確定から続く起こし）。
   enum Pass: Equatable {
     /// 写しの上で確定した回（本番の `runs` の要素と同じ形）と、その中身。
-    case ran(AutomationNodeRun, Content)
+    case ran(AutomationNodeRun, Content, atWrite: Bool)
     /// 止めた副作用・仕事に渡るはずだった行。
-    case held([String])
+    case held([String], atWrite: Bool)
     /// 与えた行を出力にした取得が下流へ渡す行。
     case given([String])
+
+    var atWrite: Bool {
+      switch self {
+      case .ran(_, _, let atWrite), .held(_, let atWrite): atWrite
+      case .given: false
+      }
+    }
   }
 
   enum Content: Equatable {
@@ -79,7 +65,8 @@ final class AutomationTrial {
   /// 写しの上の自動化で解いた範囲（写しに書き終えてから）。
   private(set) var range: Range?
   private(set) var endedAt: Date?
-  /// 流し切れずに終わった理由（写している間に範囲のノードが消えた・本番の版が進んだ・写しに掛ける操作が書けなかった など）。
+  /// 流し切れずに終わった理由（写している間に範囲のノードが消えた・本番の版が進んだ・写しに掛ける操作が書けなかった・写しが
+  /// 使えなくなった など）。
   private(set) var failure: String?
   /// ノードごとの回（本番の `runs` と同じく新しい順）。
   private(set) var passes: [AutomationNodeID: [Pass]] = [:]
@@ -96,6 +83,8 @@ final class AutomationTrial {
   private var finalFlow: AutomationFlow?
   /// 書いた時点の起こしが静まるのを待っている、行を与えて流す段取り。
   private var waiting: Plan?
+  /// 書いた時点の起こしの間か（書き込みに走らせ役を合わせてから、行を与えて流すまで）。
+  private var writing = false
   /// 流し切って終えたか（止めるノードを読んだか）。
   private var completed = false
   private var stopped = false
@@ -130,14 +119,18 @@ final class AutomationTrial {
   /// 範囲を写しの上で解く前（どのノードもまだ動いていない）のノードの進み。
   var unresolvedState: NodeState { running ? .waiting : .untouched }
 
+  /// 打ち切りで終わっても、回または渡るはずだった行を持つノードは動いたものとする（書いた時点の分は流しの成否に依らず本番で起きる）。
   func state(of nodeId: AutomationNodeID) -> NodeState {
     guard let range else { return unresolvedState }
     if nodeId == givenFetch { return .given }
+    let moved = passes[nodeId]?.isEmpty == false
     if let node = range.path.first(where: { $0.id == nodeId }), Self.holds(node) {
       if running { return .waiting }
-      return completed ? .held : .untouched
+      return completed || moved ? .held : .untouched
     }
-    guard running else { return finalFlow?.isDone(nodeId) == true ? .done : .untouched }
+    guard running else {
+      return finalFlow?.isDone(nodeId) == true || moved ? .done : .untouched
+    }
     if runner?.currentFlow(range.automationId, through: nodeId)?.isDone(nodeId) == true {
       return .done
     }
@@ -185,10 +178,10 @@ final class AutomationTrial {
   }
 
   /// 写しの上の流す自動化（書く前の定義なら写しに本番と同じ書き込みを掛けたもの）で範囲を解き直し、止めるノードと行を与えた取得の
-  /// 入口を除いた道を番人に載せ、書いた時点の起こしが静まってから、行を与えて流す。行き先は、範囲の行き先のうち載せるノードと、
-  /// 止めるノードの上流で載せるノード。載せるノードが無ければ流さずに終える。
+  /// 入口を除いた道を番人に載せる走らせ役を立て、書いた時点の起こしが静まってから、行を与えて流す。行き先は、範囲の行き先のうち
+  /// 載せるノードと、止めるノードの上流で載せるノード。載せるノードが無ければ流さずに終える。
   private func flow(on store: AutomationStore) throws(AutomationError) {
-    let (automation, rewritten) = try target.automation(on: store, now: production.now())
+    let (automation, written) = try target.automation(on: store, now: production.now())
     let id = automation.id
     let nodes = automation.graph.nodes
     let shape = Shape(nodes: automation.graph.checked, automationId: target.savedAutomationId)
@@ -199,62 +192,89 @@ final class AutomationTrial {
     self.range = range
     var given: Given?
     if let rows = request.rows { given = try Self.given(rows, in: span, of: shape) }
-    try store.unschedule(Set(range.path.map(\.id)), of: id, now: production.now())
     self.store = store
     if let given, given.fetched { givenFetch = nodes[given.entry].id }
+    let path = Set(range.path.map(\.id))
     let held = range.path.filter(Self.holds)
-    let admitted = Set(range.path.map(\.id)).subtracting(held.map(\.id))
-      .subtracting([givenFetch].compactMap { $0 })
+    let admitted = path.subtracting(held.map(\.id)).subtracting([givenFetch].compactMap { $0 })
     let targets = range.path.map(\.id).filter { nodeId in
       admitted.contains(nodeId)
         && (range.to.contains(nodeId) || held.contains { $0.inputNodeIds.contains(nodeId) })
     }
-    // 走らせ役は行を与える前に立てる——与えた行で起動の起こす決まりが入口を起こすと、入口の回が流しの分にならない。
-    if !targets.isEmpty {
-      let started = AutomationRunner(
-        store: store, run: production.run, runSessions: production.runSessions,
-        workspaces: production.workspaces,
-        recorded: { [weak self] in self?.recorded($0) }, defined: { _, _ in },
-        deleted: { _, _ in },
-        admits: { $0 == id && admitted.contains($1) },
-        flowEnded: { [weak self] _, flow in self?.flowEnded(flow) },
-        triggerEnded: { [weak self] _, _ in self?.triggerEnded() })
-      started.now = production.now
-      started.calendar = production.calendar
-      runner = started
+    let runner = AutomationRunner(
+      store: store, scheduler: Self.scheduler(like: production.scheduler), run: production.run,
+      runSessions: production.runSessions, workspaces: production.workspaces,
+      recorded: { [weak self] in self?.recorded($0) }, defined: { _, _ in },
+      deleted: { _, _ in },
+      admits: { $0 == id && admitted.contains($1) },
+      flowEnded: { [weak self] _, flow in self?.flowEnded(flow) },
+      triggerEnded: { [weak self] _, _ in self?.triggerEnded() },
+      wokeUnadmitted: { [weak self] _, nodeId, baseline in self?.woke(nodeId, since: baseline) })
+    runner.now = production.now
+    runner.calendar = production.calendar
+    endWhenUnavailable(store)
+    if let owner = target.owner { runner.inherit(owner, from: production) }
+    self.runner = runner
+    if let written {
+      // 予定を手動にするのは書き込みに合わせた後——本番で書いた時点に過ぎていた予定の回は、番人に載せた時点で起きるため。
+      writing = true
+      runner.adopt(written)
+      if let definition = Self.unscheduled(path, of: written.automation) {
+        _ = try runner.set(id, version: written.automation.version, definition)
+      }
+    } else {
+      if let definition = Self.unscheduled(path, of: automation) {
+        _ = try store.replace(
+          id, version: automation.version, with: definition, now: production.now())
+      }
       let unpaused = store.automation(id)?.paused == false
       if unpaused { _ = try store.setPaused(id, true, now: production.now()) }
-      started.start()
+      runner.start()
       if unpaused { _ = try store.setPaused(id, false, now: production.now()) }
     }
-    try wake(rewritten, in: range, store)
     let plan = Plan(given: given, admitted: admitted, targets: targets)
-    guard runner?.isRunning(id) == true else { return try proceed(plan) }
+    guard runner.isRunning(id) else { return try proceed(plan) }
     waiting = plan
   }
 
-  /// 書いた時点の起こす決まりを、本番で書いたときと同じに見る。足したノードと何をするかが変わったノードは前の契機の印を持たない
-  /// ので、写しの走らせ役（印を持たない）の起こす決まりで起こす。止めるノードは手段を起こさず、そのとき取る行を渡るはずだった
-  /// 行にして、読んだことにする。
-  private func wake(_ rewritten: [AutomationNodeID], in range: Range, _ store: AutomationStore)
+  /// 写しのストアが使えなくなったら（運転中の壊れ）、写しの走らせ役が全ノードを番人から外す前に、その理由で終える——外した後は、
+  /// 書いた時点の回の終わりを待っていても知らせが来ない。走らせ役を立てた後に呼ぶ（走らせ役の止め方を残して前に足す）。
+  private func endWhenUnavailable(_ store: AutomationStore) {
+    let stopRunner = store.onUnavailable
+    store.onUnavailable = { [weak self, weak store] in
+      if let self, let store, !stopped, running { end(failure: store.unavailableError.message) }
+      stopRunner()
+    }
+  }
+
+  /// 起こす決まりが、番人に載せていないノードを起こした。道の上の止めるノードなら、その場で渡るはずだった行を読む。
+  private func woke(_ nodeId: AutomationNodeID, since baseline: [AutomationNodeID: AutomationSeqs])
+  {
+    guard !stopped, running, let node = range?.path.first(where: { $0.id == nodeId }),
+      Self.holds(node)
+    else { return }
+    do throws(AutomationError) {
+      try hold(node, baseline: baseline)
+    } catch {
+      end(failure: error.message)
+    }
+  }
+
+  /// 止めるノードが取る行を、手段を起こさずに渡るはずだった行にし、読んだことにする（読んだ位置を読む上限の番号まで進める）。
+  /// 本番では、そのとき起きた副作用・仕事がその行を受け取るので、後の起こしで読み直さない。`baseline` は読む上限の番号（nil なら
+  /// 今の上流の最後まで）。
+  private func hold(_ node: AutomationGraph.Node, baseline: [AutomationNodeID: AutomationSeqs]?)
     throws(AutomationError)
   {
-    guard let automation = store.automation(range.automationId) else { return }
-    for node in range.path where rewritten.contains(node.id) {
-      guard Self.holds(node) else {
-        runner?.wake(automation.id, node.id)
-        continue
-      }
-      let inlets = try store.positions(of: node.id).mapValues {
-        AutomationRunner.Inlet(read: $0.read, up: $0.last)
-      }
-      guard AutomationRunner.wakes(node, of: automation, since: [:], { inlets }),
-        let read = try store.read(
-          node.id, of: automation.id, baseline: inlets.mapValues(\.up), now: production.now())
-      else { continue }
-      if !read.taken.isEmpty { passes[node.id] = [.held(read.taken.map(\.text))] }
-      try store.consume(read, of: node.id, in: automation.id, now: production.now())
+    guard let store, let range,
+      let read = try store.read(
+        node.id, of: range.automationId, baseline: baseline, now: production.now())
+    else { return }
+    if !read.taken.isEmpty {
+      passes[node.id, default: []].insert(
+        .held(read.taken.map(\.text), atWrite: writing), at: 0)
     }
+    try store.consume(read, of: node.id, in: range.automationId, now: production.now())
   }
 
   /// 契機の終わり。書いた時点の起こしを待っていて、写しの自動化のどのノードも走っていなければ、行を与えて流す。
@@ -272,7 +292,8 @@ final class AutomationTrial {
 
   /// 行を与えて流す。
   private func proceed(_ plan: Plan) throws(AutomationError) {
-    guard let store, let range else { return }
+    writing = false
+    guard let store, let range, let runner else { return }
     let id = range.automationId
     if let given = plan.given, let automation = store.automation(id) {
       let nodes = automation.graph.nodes
@@ -280,10 +301,17 @@ final class AutomationTrial {
       let rows = request.limit.map { Array(given.rows.prefix($0)) } ?? given.rows
       try store.give(rows, as: writer, of: id, at: production.now())
       if given.fetched {
-        passes[entry] = [.given(try store.latestRows(of: entry, in: id, count: rows.count))]
+        let given = try store.latestRows(of: entry, in: id, count: rows.count)
+        passes[entry] = [.given(given)]
+      }
+      // 与えた行は書くノードの出力なので、本番の確定の後と同じく、道の上の下流の止めるノードに起こす決まりを見る（載せるノードは
+      // 流しが起こす）。
+      for node in automation.graph.downstream(of: writer)
+      where Self.holds(node) && range.path.contains(where: { $0.id == node.id }) {
+        runner.wake(id, node.id)
       }
     }
-    guard let runner else { return finish(completed: true) }
+    guard !plan.targets.isEmpty else { return finish(completed: true) }
     try runner.flow(id, through: plan.admitted, to: plan.targets)
   }
 
@@ -300,7 +328,7 @@ final class AutomationTrial {
     } catch {
       return end(failure: error.message)
     }
-    passes[nodeId, default: []].insert(.ran(run, content), at: 0)
+    passes[nodeId, default: []].insert(.ran(run, content, atWrite: writing), at: 0)
   }
 
   private func content(
@@ -335,17 +363,15 @@ final class AutomationTrial {
     finish(completed: flow.finished)
   }
 
-  /// 流しの終わり。流し切ったら、止めるノードごとに本番の読み（位置は進めない）で取るはずだった行を読み、あれば結果に足す。
+  /// 流しの終わり。流し切ったら、流しが起こすはずの止めるノード（一巡が見届けないもの。道の根か、「届いたら」でないか、実効で止めたノード）ごとに、
+  /// 本番の読みで取るはずだった行を読み、あれば結果に足す。一巡が見届ける止めるノードは、起こす決まりが起こしたときに読んでいる。
   private func finish(completed: Bool) {
-    if completed, let store, let range {
+    if completed, let store, let range, let automation = store.automation(range.automationId) {
+      let roots = Set(range.roots.map(\.id))
       do throws(AutomationError) {
-        for node in range.path where Self.holds(node) {
-          guard
-            let read = try store.read(
-              node.id, of: range.automationId, baseline: nil, now: production.now()),
-            !read.taken.isEmpty
-          else { continue }
-          passes[node.id, default: []].insert(.held(read.taken.map(\.text)), at: 0)
+        for node in range.path
+        where Self.holds(node) && !AutomationFlow.watches(node, roots: roots, in: automation) {
+          try hold(node, baseline: nil)
         }
       } catch {
         return end(failure: error.message)

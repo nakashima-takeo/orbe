@@ -5,6 +5,19 @@ import OrbeSessionLog
 /// 除いた形に中身を足す。新しい定義の試走は自動化を持たない（写しの上の自動化の ID は外に出さない——本番で後に作る自動化と重なり
 /// うる）。
 extension AutomationTrial {
+  /// ノードの進み（外の形の `state`）。
+  enum NodeState: String {
+    case waiting
+    case running
+    case done
+    /// 副作用・仕事のノードを止めて終えた。
+    case held
+    /// 与えた行を出力にした取得（手段を起こさない）。
+    case given
+    /// 打ち切りで、一度も動かなかった。
+    case untouched
+  }
+
   /// `workspaceName` は候補の付け先（`Workspace.id`）を今の workspace の名前に解く。
   func json(workspaceName: (UUID) -> String?) -> [String: Any] {
     var json: [String: Any] = [
@@ -35,12 +48,19 @@ extension AutomationTrial {
 }
 
 extension AutomationTrial.Pass {
-  /// 止めた副作用・仕事と与えた取得は、手段を起こしていないので回の記録を持たず、行だけ。
+  /// 本番で書いた時点に起きる分は `atWrite: true` を持つ。
   fileprivate func json(nodeKey: String, workspaceName: (UUID) -> String?) -> [String: Any] {
+    var json = passJSON(nodeKey: nodeKey, workspaceName: workspaceName)
+    if atWrite { json["atWrite"] = true }
+    return json
+  }
+
+  /// 止めた副作用・仕事と与えた取得は、手段を起こしていないので回の記録を持たず、行だけ。
+  private func passJSON(nodeKey: String, workspaceName: (UUID) -> String?) -> [String: Any] {
     switch self {
-    case .held(let rows): return ["held": ["rows": Self.objects(rows)]]
+    case .held(let rows, _): return ["held": ["rows": Self.objects(rows)]]
     case .given(let rows): return ["given": ["rows": Self.objects(rows)]]
-    case .ran(let run, let content):
+    case .ran(let run, let content, _):
       var json = AutomationRunWire.object(run, nodeKey: nodeKey)
       switch content {
       case .rows(let rows):

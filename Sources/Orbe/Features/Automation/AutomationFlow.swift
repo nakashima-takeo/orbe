@@ -136,7 +136,15 @@ struct AutomationFlow {
 
   /// 普段の決まりで起きるのを見届けるノードか（根でない、実効で止めていない「届いたら」のノード）。
   private func watched(_ nodeId: AutomationNodeID, in automation: Automation) -> Bool {
-    nonRootArrival(nodeId, in: automation) && !automation.halted(nodeId)
+    guard let node = automation.graph.node(nodeId) else { return false }
+    return Self.watches(node, roots: roots, in: automation)
+  }
+
+  /// 道の根が `roots` である一巡が、ノードを普段の決まりで起きるのを見届けるか（根でない、実効で止めていない「届いたら」のノード）。
+  static func watches(
+    _ node: AutomationGraph.Node, roots: Set<AutomationNodeID>, in automation: Automation
+  ) -> Bool {
+    !roots.contains(node.id) && node.entity.trigger == .arrival && !automation.halted(node.id)
   }
 
   /// 根でない「届いたら」のノードか（止めているかは問わない）。

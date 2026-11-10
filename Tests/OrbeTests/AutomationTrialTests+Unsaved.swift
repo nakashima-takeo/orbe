@@ -16,7 +16,7 @@ extension AutomationTrialTests {
 
   /// `start` 番目から後に呼ばれた手段を、呼ばれた順に `output`（スクリプトと読んだ行の id から出力を決める）で終え、新しい呼び出しが
   /// 無く `done` が立てば返す。スクリプトごとに、呼ばれた順の読んだ行の id を返す。回の順が本番と食い違っても最後まで進める。
-  private func answer(
+  func answer(
     from start: Int, until done: () -> Bool = { true },
     _ output: (_ script: String, _ ids: [String]) -> String
   ) -> [String: [[String]]] {
@@ -133,10 +133,7 @@ extension AutomationTrialTests {
     XCTAssertEqual(store.automations, automations)
     XCTAssertEqual(trial.passes(key: "p").compactMap { $0.run?.trigger }, [.arrival, .arrival])
     XCTAssertEqual(calls("send"), [], "副作用は写しの上でも走らない")
-    let held = trial.passes(key: "send").map { pass -> [String] in
-      guard case .held(let rows) = pass else { return [] }
-      return rows.compactMap(AutomationPrompts.id(of:))
-    }
+    let held = trial.passes(key: "send").compactMap(\.heldIds)
 
     _ = try runner.set(id, version: current.version, rewrite)
     XCTAssertEqual(calls("p").count, 3, "前提: 本番では書いた時点で p が起きる")
@@ -222,9 +219,7 @@ extension AutomationTrialTests {
     XCTAssertEqual(
       written["p"], [[downstream("gh", "b", of: id)], [downstream("gh", "c", of: id)]],
       "前提: 本番では書いた時点で b を読み、流しで c を読む")
-    XCTExpectFailure("試走は足したノードと何をするかが変わったノードだけを書いた時点に起こす（本番は全ノードを前の契機の印で起こす）") {
-      XCTAssertEqual(tried["p"], written["p"])
-    }
+    XCTAssertEqual(tried["p"], written["p"])
   }
 
   /// 直す試走は、上流の出力の性質を変えたとき、変えていない毎回すべてを取るノードも本番で書いた時点と同じに起こす: そのノードは
@@ -258,10 +253,7 @@ extension AutomationTrialTests {
       try unsaved(.replace(id, version: current.version, rewrite)), .init())
     _ = answer(from: start, until: { !trial.running }, output)
     XCTAssertNil(trial.failure)
-    let held = trial.passes(key: "post").reversed().map { pass -> [String] in
-      guard case .held(let rows) = pass else { return [] }
-      return rows.compactMap(AutomationPrompts.id(of:))
-    }
+    let held = trial.passes(key: "post").reversed().compactMap(\.heldIds)
 
     let writing = jobs.calls.count
     _ = try runner.set(id, version: current.version, rewrite)
@@ -273,9 +265,7 @@ extension AutomationTrialTests {
     XCTAssertEqual(
       written["post"], [[downstream("copy", "a", of: id), downstream("copy", "b", of: id)]],
       "前提: 本番では a の副作用がもう一度走る")
-    XCTExpectFailure("試走は足したノードと何をするかが変わったノードだけを書いた時点に起こす（本番は全ノードを前の契機の印で起こす）") {
-      XCTAssertEqual(held, written["post"])
-    }
+    XCTAssertEqual(held, written["post"])
   }
 
   /// 直す試走は、本番で書いたときと同じく、入力を変えた判定の判断待ちの候補に下げる条件を当て直す: 外した入力だけが支えていた

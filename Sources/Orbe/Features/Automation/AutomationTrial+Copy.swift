@@ -4,24 +4,6 @@ import Foundation
 /// （出来事は見分けて足す・番号を使い回さない・元にした項目が無効になれば候補を下げる）を崩す。どの操作も変異の 1 経路
 /// （`commit`）とノードの状態の読み直しを通し、写しのメモリを写しの DB と一致させ続ける。
 extension AutomationStore {
-  /// ノード `nodeIds` の間隔・cron の予定を手動に書き換える（写しの定義の書き換え。版と数え始めは写しの中のこと）。予定の時刻で
-  /// 回さないため、走らせ役を立てる前に呼ぶ——番人は登録や回の終わりの数え直しのたびに過ぎた時刻の予定を始めるので、「いつ」を
-  /// 載せずにおくしかない。
-  func unschedule(_ nodeIds: Set<AutomationNodeID>, of id: Int, now: Date) throws(AutomationError) {
-    let automation = automations[try index(id)]
-    var definition = automation.definition
-    var changed = false
-    for index in definition.nodes.indices {
-      guard let nodeId = definition.nodes[index].id, nodeIds.contains(nodeId),
-        case .scheduled = definition.nodes[index].trigger
-      else { continue }
-      definition.nodes[index].trigger = .manual
-      changed = true
-    }
-    guard changed else { return }
-    _ = try replace(id, version: automation.version, with: definition, now: now)
-  }
-
   /// 行を、ノード `nodeId` の出力として新しい行で書く。今の集合は、同じ書かれた id の今有効な項目を無効にしてから新しい項目として
   /// 足す（今有効な項目は id ごとに 1 つのまま。この無効化では判断待ちの候補を下げない——判定は自分の候補と同じリンクの案を
   /// 「既に候補がある」で捨てる）。出来事の流れは同じ id でも足す。
@@ -48,8 +30,8 @@ extension AutomationStore {
     }
   }
 
-  /// 止めるノードが読んだ行を、手段を起こさずに読んだことにする（読んだ位置を読む上限の番号まで進める）。書いた時点の起こしで
-  /// 止めるノードが取る行を、次の流しで読み直さないため（本番では、その時点で走った副作用・仕事がその行を受け取っている）。
+  /// 止めるノードが読んだ行を、手段を起こさずに読んだことにする（読んだ位置を読む上限の番号まで進める）。止めるノードが取った行を、
+  /// 後の起こしで読み直さないため（本番では、そのとき起きた副作用・仕事がその行を受け取っている）。
   func consume(_ read: AutomationIntake.Read, of nodeId: AutomationNodeID, in id: Int, now: Date)
     throws(AutomationError)
   {
@@ -163,5 +145,34 @@ extension AutomationDatabase {
     {
       try invalidate(item: item, of: nodeId, at: at)
     }
+  }
+}
+
+/// 試走が写しの上に走らせ役を立てるときの部品。
+extension AutomationTrial {
+  /// 写しの走らせ役の番人。時計・暦・予約は本番の番人と同じものを使う（書いた時点に過ぎていた予定の回を、本番と同じ時計で数える）。
+  static func scheduler(like production: BackgroundScheduler) -> BackgroundScheduler {
+    let scheduler = BackgroundScheduler()
+    scheduler.now = production.now
+    scheduler.calendar = production.calendar
+    scheduler.arm = production.arm
+    return scheduler
+  }
+
+  /// ノード `nodeIds` の間隔・cron の予定を手動にした定義（変える予定が無ければ nil）。番人は登録や回の終わりの数え直しのたびに
+  /// 過ぎた時刻の予定を始めるので、予定の時刻で回さないようにするには「いつ」を載せずにおくしかない。
+  static func unscheduled(_ nodeIds: Set<AutomationNodeID>, of automation: Automation)
+    -> AutomationDefinition?
+  {
+    var definition = automation.definition
+    var changed = false
+    for index in definition.nodes.indices {
+      guard let nodeId = definition.nodes[index].id, nodeIds.contains(nodeId),
+        case .scheduled = definition.nodes[index].trigger
+      else { continue }
+      definition.nodes[index].trigger = .manual
+      changed = true
+    }
+    return changed ? definition : nil
   }
 }

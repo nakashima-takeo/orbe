@@ -325,10 +325,15 @@ final class AutomationTrialTests: OrbeTestCase {
 extension AutomationTrial.Pass {
   /// 写しの上で確定した回（テスト）。止めた・与えた結果は nil。
   var run: AutomationNodeRun? {
-    if case .ran(let run, _) = self { run } else { nil }
+    if case .ran(let run, _, _) = self { run } else { nil }
   }
 
   var content: AutomationTrial.Content? {
-    if case .ran(_, let content) = self { content } else { nil }
+    if case .ran(_, let content, _) = self { content } else { nil }
+  }
+
+  /// 止めた副作用・仕事に渡るはずだった行の id（下流へ渡す形。テスト）。止めた結果でなければ nil。
+  var heldIds: [String]? {
+    if case .held(let rows, _) = self { rows.compactMap(AutomationPrompts.id(of:)) } else { nil }
   }
 }

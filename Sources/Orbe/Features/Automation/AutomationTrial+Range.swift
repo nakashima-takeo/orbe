@@ -4,6 +4,18 @@ import Foundation
 /// 足すノードに ID が無く、ID で引くグラフを組めないため。保存した自動化はグラフを同じ形に組み直して（`AutomationGraph.checked`）、
 /// 書く前の定義は確かめの結果のまま、同じ規則で解く。
 extension AutomationTrial {
+  /// 試走の依頼（範囲・与える行・limit）。
+  struct Request: Equatable {
+    /// 入口のノード。省けば、行き先とその祖先のうち入力の無いノードすべて。
+    var from: [String]?
+    /// 行き先のノード。省けば、入口から届く終わりのノードすべて。
+    var to: [String]?
+    /// 入口に与える行（1 行 1 JSON オブジェクト）。道の根が 1 つのときだけ受ける。
+    var rows: [String]?
+    /// 道の根の取得の回が新しく足す行の上限。毎回すべてを取る受け手は、以前からあり今も有効な行もあわせて読む。
+    var limit: Int?
+  }
+
   /// 範囲を解く形: 定義の順の検証を通ったノードと、鍵を引く保存した自動化（書く前の定義には無い）。
   struct Shape {
     let nodes: [AutomationGraph.Checked]

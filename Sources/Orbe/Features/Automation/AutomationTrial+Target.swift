@@ -35,19 +35,18 @@ extension AutomationTrial {
       }
     }
 
-    /// 写しの上で流す自動化と、書いた時点の起こす決まりを見るノード（足したノードと何をするかが変わったノード。前の契機の印を
-    /// 持たない）。保存した定義は写しの自動化をそのまま引き、書く前の定義は写しのストアで同じ書き込みを確かめ直して掛ける
-    /// （写している間に本番の版が進んでいれば、版の食い違いで断る）。
+    /// 写しの上で流す自動化と、書く前の定義なら写しに掛けた書き込み（番人を合わせる前）。保存した定義は写しの自動化をそのまま引き、
+    /// 書く前の定義は写しのストアで同じ書き込みを確かめ直して掛ける（写している間に本番の版が進んでいれば、版の食い違いで断る）。
     func automation(on copy: AutomationStore, now: Date) throws(AutomationError)
-      -> (automation: Automation, rewritten: [AutomationNodeID])
+      -> (automation: Automation, written: AutomationStore.Written?)
     {
       switch self {
       case .saved(let id):
         guard let automation = copy.automation(id) else { throw .automationNotFound(id) }
-        return (automation, [])
+        return (automation, nil)
       case .unsaved(let write, _):
         let written = try copy.apply(try copy.check(write), now: now)
-        return (written.automation, written.added + written.reworked)
+        return (written.automation, written)
       }
     }
   }
