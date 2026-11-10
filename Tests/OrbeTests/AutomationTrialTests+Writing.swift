@@ -315,7 +315,7 @@ extension AutomationTrialTests {
     XCTAssertEqual(trial.passes(key: "p").map(\.atWrite), [false])
   }
 
-  /// 写しの走らせ役は、本番の走らせ役が番人に最後に返した数え始め（予定の次の時刻を数える起点）も引き継ぐ。予定の回が取る行 0 件で
+  /// 写しの走らせ役は、本番の走らせ役が番人に今返すはずの数え始め（予定の次の時刻を数える起点）も引き継ぐ。予定の回が取る行 0 件で
   /// 終わって回の記録を残さなかった場合も、写しの走らせ役は本番と同じく、書いた時点に予定の回を起こさない。その後に届いた行は流しで読む。
   func testARewriteKeepsProductionsAnchorSoAScheduleThatTookNothingIsNotOverdueAtWriting() throws {
     let id = try define([
