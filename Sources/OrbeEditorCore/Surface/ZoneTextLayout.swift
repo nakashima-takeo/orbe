@@ -49,7 +49,7 @@ public enum ZoneTextLayout {
       ZoneTextStyle(length: $0.string.utf16.count, font: $0.font, color: $0.color)
     }
     let units = Array(runs.map(\.string).joined().utf16)
-    return laid(units, styles: styles, rightToLeft: rightToLeft(units[...])).width
+    return laid(units, styles: styles, rightToLeft: isRightToLeft(units[...])).width
   }
 
   /// 文 `string` の範囲 `range` を、見え方 `styles`（範囲の先頭から順に当てる）で 1 行に組む（折り返さない）。行は範囲を
@@ -60,7 +60,7 @@ public enum ZoneTextLayout {
     let end = units[range.location...].firstIndex(of: 0x0A) ?? units.count
     let line = laid(
       Array(units[range.location..<NSMaxRange(range)]), styles: styles,
-      rightToLeft: rightToLeft(units[start..<end]))
+      rightToLeft: isRightToLeft(units[start..<end]))
     return Typeset(line: line.line, inset: line.inset)
   }
 
@@ -102,7 +102,7 @@ public enum ZoneTextLayout {
           rightToLeft: false)
       ]
     }
-    let rightToLeft = rightToLeft(units[span])
+    let rightToLeft = isRightToLeft(units[span])
     let typesetter = CTTypesetterCreateWithAttributedString(
       breaking(
         Array(units[span]), styles: Self.styles(styles, in: NSRange(span)),
@@ -297,7 +297,7 @@ extension ZoneTextLayout {
   /// 段落 `units` が右から左か——段落の最初の、向きを持つ字で決まる（UAX #9 の P2・P3。向きを持つ字が無ければ左から
   /// 右）。Core Text は段落の向きを返さないので、末尾に空白を 1 つ足して組み、その空白の向きを読む（行末の空白は段落の
   /// 向きで組まれる。UAX #9 の L1）。
-  private static func rightToLeft(_ units: ArraySlice<UInt16>) -> Bool {
+  private static func isRightToLeft(_ units: ArraySlice<UInt16>) -> Bool {
     let probe = Array(units) + [0x20]
     let string = probe.withUnsafeBufferPointer {
       CFStringCreateWithCharacters(nil, $0.baseAddress, $0.count)!
