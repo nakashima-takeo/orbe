@@ -194,8 +194,8 @@ public enum TextHighlightKind: Sendable {
 }
 
 /// 見えている範囲を本文の言葉で表したもの。`top` は先頭に見えている所（縦の並びの中の位置。文書の行の中なら段 0、差し込みの
-/// 中なら、その下の文書の行と差し込みの中の段——段の粒度で、塊の中でも 1 段越えれば変わる）、`visibleLines` は見えている
-/// 高さに入る行数（小数）。文書の構文が見えている行を先に解き、diff が位置を引き継ぐのに使う。
+/// 中なら、その下の文書の行と差し込みの中の段——段の粒度で、差し込みの中でも 1 段越えれば変わる）、`visibleLines` は見えて
+/// いる高さに入る行数（小数）。文書の構文が見えている行を先に解き、diff が位置を引き継ぐのに使う。
 public struct TextViewport: Equatable, Sendable {
   public var top: RowPosition
   public var visibleLines: CGFloat
