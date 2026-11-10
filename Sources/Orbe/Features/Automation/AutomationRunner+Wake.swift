@@ -59,11 +59,6 @@ extension AutomationRunner {
     return !Self.hasNew(node, inlets, since: baseline)
   }
 
-  /// 起こす（番人に載せていないノードには何もしない）。
-  func runNow(_ id: Int, _ nodeId: AutomationNodeID) {
-    scheduler.runNow(id: Self.key(id, nodeId))
-  }
-
   /// 起こす決まり。実効で止めていない「届いたら」のノードに、基準線より新しい上流の行があり、走っていなければ起こす。
   func wake(_ id: Int, _ nodeId: AutomationNodeID) {
     guard let automation = store.automation(id), let node = automation.graph.node(nodeId),
@@ -73,7 +68,7 @@ extension AutomationRunner {
     guard !scheduler.isRunning(id: key), let inlets = inlets(of: nodeId),
       Self.hasNew(node, inlets, since: marks[key] ?? [:])
     else { return }
-    runNow(id, nodeId)
+    scheduler.runNow(id: key)
   }
 
   /// 失敗のやり直し。「届いたら」でないノードの契機が終わったら、実効で止めていない下流の「届いたら」のノードを、読んだ位置より
@@ -82,10 +77,11 @@ extension AutomationRunner {
     guard let automation = store.automation(id) else { return }
     for node in automation.graph.descendants(of: nodeId)
     where node.entity.trigger == .arrival && !automation.halted(node.id) {
+      let key = Self.key(id, node.id)
       guard let inlets = inlets(of: node.id), Self.needsRetry(node, inlets) else {
         continue
       }
-      runNow(id, node.id)
+      scheduler.runNow(id: key)
     }
   }
 }
