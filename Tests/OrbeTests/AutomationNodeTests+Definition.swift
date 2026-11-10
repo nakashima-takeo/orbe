@@ -105,4 +105,49 @@ extension AutomationNodeTests {
       }
     }
   }
+
+  /// 定義の最上位・ノード・入力のオブジェクト・予定（種類ごとの欄）は、受けない鍵を場所付きで断る。ノードの欄と動作の定義の欄は
+  /// 同じオブジェクトに並ぶので、どちらの欄も受ける。
+  ///
+  /// 壊れると何が起きるか: 書き損じた欄（`maxItem`）や古い名前（`inboxLimit`）が黙って読み捨てられ、上限の無いノードや
+  /// 意図と違う予定で回る。
+  func testKeysADefinitionDoesNotTakeAreRefusedWithTheirPlace() {
+    func node(_ key: String, _ value: Any) -> [String: Any] {
+      var changed = judge
+      changed[key] = value
+      return ["name": "x", "nodes": [fetch, changed]]
+    }
+
+    let described: [String: Any] = ["name": "x", "description": "d", "nodes": [fetch, judge]]
+    for (label, object, message) in [
+      ("最上位", described, "unknown description"),
+      ("ノードの古い名前", node("inboxLimit", 5), "unknown nodes[1].inboxLimit"),
+      ("ノードの書き損じ", node("maxItem", 5), "unknown nodes[1].maxItem"),
+      (
+        "入力のオブジェクト", node("from", [["node": "slack", "takes": "all"]]),
+        "unknown nodes[1].from[0].takes"
+      ),
+      (
+        "間隔の予定に cron の欄", node("trigger", ["kind": "interval", "minutes": 5, "expression": "x"]),
+        "unknown nodes[1].trigger.expression"
+      ),
+      (
+        "cron の予定に間隔の欄",
+        node("trigger", ["kind": "cron", "expression": "0 9 * * *", "minutes": 5]),
+        "unknown nodes[1].trigger.minutes"
+      ),
+      (
+        "手で回す予定に欄", node("trigger", ["kind": "manual", "expression": "0 9 * * *"]),
+        "unknown nodes[1].trigger.expression"
+      ),
+      (
+        "届いたときの予定に欄", node("trigger", ["kind": "arrival", "minutes": 5]),
+        "unknown nodes[1].trigger.minutes"
+      ),
+    ] {
+      XCTAssertThrowsError(try AutomationDefinition.decode(object), label) {
+        XCTAssertEqual($0 as? AutomationError, .invalid(message), label)
+      }
+    }
+  }
 }

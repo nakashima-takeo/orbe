@@ -30,12 +30,11 @@ protocol ControlTaskTarget: AnyObject {
 }
 
 extension ControlServer {
-  /// `start_task`: queue で params の型を確かめ、main で始め、作業場の用意（worktree の作成・fetch の着地待ちで
+  /// `start_task`: queue で引数の型を確かめ、main で始め、作業場の用意（worktree の作成・fetch の着地待ちで
   /// 数秒かかりうる）が済んだ完了で 1 度だけ応答する。
-  func startTask(id: Any?, params: [String: Any], conn: Connection) {
+  func startTask(id: Any?, params p: ControlParams, conn: Connection) {
     let request: TaskStartRequest
     do throws(ControlError) {
-      let p = TaskParams(params)
       request = TaskStartRequest(
         taskId: try p.int("taskId"), branch: try p.optionalString("branch"),
         repo: try p.optionalString("repo"), agent: try p.optionalString("agent"),
@@ -53,179 +52,152 @@ extension ControlServer {
   }
 }
 
-/// タスクの動詞（4 動詞と `set_wait_condition`）の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と
+/// タスクの動詞（4 動詞と `set_wait_condition`）。ハンドラが見るのは引数の在否と JSON の型（違反は -32602）だけで、値の検証と
 /// 不変条件は `TaskStore`、workspace・呼び出し元タブ・worktree の解決は target が持つ。
 extension ControlServer {
-  /// 非該当は nil。target を `ControlTaskTarget` に絞っても `WindowedHandler` として渡せる。
-  func taskHandler(for method: String) -> (
-    (ControlTaskTarget, [String: Any]) -> Result<Any, ControlError>
-  )? {
-    guard let body = taskBody(for: method) else { return nil }
-    return { target, params in
-      do throws(ControlError) {
-        return try body(target, TaskParams(params))
-      } catch {
-        return .failure(error)
-      }
-    }
+  static func listTasks(_ target: ControlTaskTarget, _ p: ControlParams) throws(ControlError)
+    -> Result<Any, ControlError>
+  {
+    target.controlListTasks(workspaceId: try p.optionalWorkspaceId())
   }
 
-  private func taskBody(for method: String) -> TaskBody? {
-    switch method {
-    case "list_tasks":
-      return { target, p throws(ControlError) in
-        target.controlListTasks(workspaceId: try ControlWorkspaceId.optional(p.params))
-      }
-    case "add_task":
-      return { target, p throws(ControlError) in
-        var draft = TaskDraft(title: try p.string("title"))
-        if let status = try p.status() { draft.status = status }
-        if let priority = try p.priority() { draft.priority = priority }
-        draft.due = try p.due()?.value
-        draft.waitingReason = try p.nullableString("waitingReason")?.value
-        if let description = try p.optionalString("description") { draft.description = description }
-        if let links = try p.links() { draft.links = links }
-        return target.controlAddTask(
-          draft, workspaceId: try ControlWorkspaceId.clearable(p.params),
-          callerTabId: try p.optionalInt("callerTabId"), worktree: try p.optionalString("worktree"))
-      }
-    case "update_task":
-      return { target, p throws(ControlError) in
-        let update = TaskUpdate(
-          title: try p.optionalString("title"), status: try p.status(),
-          priority: try p.priority(), due: try p.due(),
-          waitingReason: try p.nullableString("waitingReason"),
-          description: try p.optionalString("description"), links: try p.links())
-        return target.controlUpdateTask(
-          taskId: try p.int("taskId"), update,
-          workspaceId: try ControlWorkspaceId.clearable(p.params),
-          worktree: try p.nullableString("worktree"))
-      }
-    case "set_wait_condition":
-      return { target, p throws(ControlError) in
-        target.controlSetWaitCondition(
-          taskId: try p.int("taskId"), try p.condition(),
-          callerTabId: try p.optionalInt("callerTabId"))
-      }
-    case "delete_task":
-      return { target, p throws(ControlError) in
-        target.controlDeleteTask(taskId: try p.int("taskId"))
-      }
-    default:
-      return nil
-    }
+  /// 呼び出し元のタブは要求の封筒から読む（追加者と、workspace を省いたときの付き先）。
+  static func addTask(_ target: ControlTaskTarget, _ p: ControlParams) throws(ControlError)
+    -> Result<Any, ControlError>
+  {
+    let title = try p.string("title")
+    let status = try p.optionalString("status")
+    let priority = try p.optionalString("priority")
+    let due = try p.clearableString("due")
+    let waitingReason = try p.clearableString("waitingReason")
+    let description = try p.optionalString("description")
+    let links = try p.optionalObjects("links")
+    let workspaceId = try p.clearableWorkspaceId()
+    let worktree = try p.optionalString("worktree")
+    var draft = TaskDraft(title: title)
+    if let status = try p.status(status) { draft.status = status }
+    if let priority = try p.priority(priority) { draft.priority = priority }
+    draft.due = try p.due(due)?.value
+    draft.waitingReason = waitingReason?.value
+    if let description { draft.description = description }
+    if let links = try p.links(links) { draft.links = links }
+    return target.controlAddTask(
+      draft, workspaceId: workspaceId, callerTabId: p.callerTabId, worktree: worktree)
+  }
+
+  static func updateTask(_ target: ControlTaskTarget, _ p: ControlParams) throws(ControlError)
+    -> Result<Any, ControlError>
+  {
+    let taskId = try p.int("taskId")
+    let title = try p.optionalString("title")
+    let status = try p.optionalString("status")
+    let priority = try p.optionalString("priority")
+    let due = try p.clearableString("due")
+    let waitingReason = try p.clearableString("waitingReason")
+    let description = try p.optionalString("description")
+    let links = try p.optionalObjects("links")
+    let workspaceId = try p.clearableWorkspaceId()
+    let worktree = try p.clearableString("worktree")
+    let update = TaskUpdate(
+      title: title, status: try p.status(status), priority: try p.priority(priority),
+      due: try p.due(due), waitingReason: waitingReason, description: description,
+      links: try p.links(links))
+    return target.controlUpdateTask(
+      taskId: taskId, update, workspaceId: workspaceId, worktree: worktree)
+  }
+
+  /// 呼び出し元のタブは要求の封筒から読む（条件の作業ディレクトリと会話）。
+  static func setWaitCondition(_ target: ControlTaskTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    let taskId = try p.int("taskId")
+    return target.controlSetWaitCondition(
+      taskId: taskId, try p.condition(), callerTabId: p.callerTabId)
+  }
+
+  static func deleteTask(_ target: ControlTaskTarget, _ p: ControlParams) throws(ControlError)
+    -> Result<Any, ControlError>
+  {
+    target.controlDeleteTask(taskId: try p.int("taskId"))
   }
 }
 
-private typealias TaskBody = (ControlTaskTarget, TaskParams) throws(ControlError) -> Result<
-  Any, ControlError
->
-
-/// params の型検査。キーが無いことと `null` を区別する（`null` は「外す」）。
-private struct TaskParams {
-  let params: [String: Any]
-  /// 入れ子の値のキーに付ける、拒否の文の前置き（`condition.`）。
-  let prefix: String
-
-  init(_ params: [String: Any], prefix: String = "") {
-    self.params = params
-    self.prefix = prefix
-  }
-
-  func invalid(_ key: String) -> ControlError {
-    ControlError(code: -32602, message: "invalid \(prefix)\(key)")
-  }
-
-  /// JSONSerialization は true / false も NSNumber に載せ `as? Int` を通すので、真偽値を整数として受けない。
-  private func intValue(_ raw: Any, _ key: String) throws(ControlError) -> Int {
-    let isBool = (raw as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() } ?? false
-    guard !isBool, let n = raw as? Int else { throw invalid(key) }
-    return n
-  }
-
-  func int(_ key: String) throws(ControlError) -> Int {
-    guard let raw = params[key] else {
-      throw ControlError(code: -32602, message: "missing \(prefix)\(key)")
-    }
-    return try intValue(raw, key)
-  }
-
-  func optionalInt(_ key: String) throws(ControlError) -> Int? {
-    guard let raw = params[key] else { return nil }
-    return try intValue(raw, key)
-  }
-
-  func string(_ key: String) throws(ControlError) -> String {
-    guard let raw = params[key] else {
-      throw ControlError(code: -32602, message: "missing \(prefix)\(key)")
-    }
-    guard let text = raw as? String else { throw invalid(key) }
-    return text
-  }
-
-  func optionalString(_ key: String) throws(ControlError) -> String? {
-    guard params[key] != nil else { return nil }
-    return try string(key)
-  }
-
-  func nullableString(_ key: String) throws(ControlError) -> ClearableValue<String>? {
-    guard let raw = params[key] else { return nil }
-    if raw is NSNull { return .clear }
-    return .set(try string(key))
-  }
-
-  func status() throws(ControlError) -> TaskItem.Status? {
-    guard let raw = try optionalString("status") else { return nil }
+/// タスクの引数のうち、語彙や入れ子の形を持つものを、型を確かめて読んだ値から値へ写す（型違いを値の不正より先に断るため、
+/// 読むのはハンドラが全部済ませてから）。キーが無いことと `null` を区別する（`null` は「外す」）。
+extension ControlParams {
+  fileprivate func status(_ raw: String?) throws(ControlError) -> TaskItem.Status? {
+    guard let raw else { return nil }
     guard let status = TaskItem.Status(rawValue: raw) else { throw invalid("status") }
     return status
   }
 
-  func priority() throws(ControlError) -> TaskItem.Priority? {
-    guard let raw = try optionalString("priority") else { return nil }
+  fileprivate func priority(_ raw: String?) throws(ControlError) -> TaskItem.Priority? {
+    guard let raw else { return nil }
     guard let priority = TaskItem.Priority(rawValue: raw) else { throw invalid("priority") }
     return priority
   }
 
-  /// 結び付きの列。配列だけを受け（`null` は型の違反）、各要素の `kind`・`repo`・`number` の型・形・範囲を
-  /// 値の型（`GitHubItemKind`・`GitHubItemID`）で確かめる。
-  func links() throws(ControlError) -> [TaskLink]? {
-    guard let raw = params["links"] else { return nil }
-    guard let elements = raw as? [Any] else { throw invalid("links") }
+  fileprivate func due(_ raw: ClearableValue<String>?) throws(ControlError)
+    -> ClearableValue<TaskItem.DueDate>?
+  {
+    switch raw {
+    case .set(let raw):
+      guard let due = TaskItem.DueDate(raw) else { throw invalid("due") }
+      return .set(due)
+    case .clear: return .clear
+    case nil: return nil
+    }
+  }
+
+  /// 結び付きの列。オブジェクトの配列だけを受け（`null` は型の違反）、各要素は `{kind, repo, number}` だけを持ち、値の型
+  /// （`GitHubItemKind`・`GitHubItemID`）で形と範囲を確かめる。要素の誤りは要素の場所で言う（`missing links[0].number`）。
+  fileprivate func links(_ elements: [[String: Any]]?) throws(ControlError) -> [TaskLink]? {
+    guard let elements else { return nil }
     var links: [TaskLink] = []
-    for element in elements {
-      guard let object = element as? [String: Any],
-        let kind = (object["kind"] as? String).flatMap(GitHubItemKind.init(rawValue:)),
-        let repo = object["repo"] as? String, let rawNumber = object["number"]
-      else { throw invalid("links") }
-      guard let item = GitHubItemID(repo: repo, number: try intValue(rawNumber, "links")) else {
-        throw invalid("links")
+    for (index, element) in elements.enumerated() {
+      let at = "links[\(index)]"
+      let fields = try ControlParams(
+        element, accepting: ["kind": .string, "repo": .string, "number": .int], prefix: at + ".")
+      let rawKind = try fields.string("kind")
+      let repo = try fields.string("repo")
+      let number = try fields.int("number")
+      guard let kind = GitHubItemKind(rawValue: rawKind) else { throw fields.invalid("kind") }
+      guard let item = GitHubItemID(repo: repo, number: number) else {
+        throw ControlError(code: -32602, message: "invalid \(at)")
       }
       links.append(TaskLink(item: item, kind: kind))
     }
     return links
   }
 
-  /// 待ちの条件（`{description, command, everyMinutes, deadline}`。4 つとも必須）。`null` は条件だけを外す。
-  /// 値の規則（空・間隔の下限・過ぎた期限）はストアが確かめる。
-  func condition() throws(ControlError) -> ClearableValue<WaitConditionRequest> {
-    guard let raw = params["condition"] else {
-      throw ControlError(code: -32602, message: "missing condition")
+  /// 待ちの条件（`{description, command, everyMinutes, deadline}`。4 つとも必須で、ほかの欄は持たない）。`null` は条件だけを
+  /// 外す。値の規則（空・間隔の下限・過ぎた期限）はストアが確かめる。
+  fileprivate func condition() throws(ControlError) -> ClearableValue<WaitConditionRequest> {
+    switch try clearableObject("condition") {
+    case nil: throw missing("condition")
+    case .clear: return .clear
+    case .set(let object):
+      let fields = try ControlParams(
+        object,
+        accepting: [
+          "description": .string, "command": .string, "everyMinutes": .int, "deadline": .string,
+        ], prefix: "condition.")
+      let description = try fields.string("description")
+      let command = try fields.string("command")
+      let everyMinutes = try fields.int("everyMinutes")
+      guard let deadline = Self.deadline(try fields.string("deadline")) else {
+        throw fields.invalid("deadline")
+      }
+      return .set(
+        WaitConditionRequest(
+          description: description, command: command, everyMinutes: everyMinutes,
+          deadline: deadline))
     }
-    if raw is NSNull { return .clear }
-    guard let object = raw as? [String: Any] else { throw invalid("condition") }
-    let fields = TaskParams(object, prefix: "condition.")
-    guard let deadline = Self.deadline(try fields.string("deadline")) else {
-      throw fields.invalid("deadline")
-    }
-    return .set(
-      WaitConditionRequest(
-        description: try fields.string("description"), command: try fields.string("command"),
-        everyMinutes: try fields.int("everyMinutes"), deadline: deadline))
   }
 
   /// ISO 8601 の日時。時差の無い形（`2026-10-13T09:00`）は Mac のタイムゾーンの時刻として読む。秒は時差の有無に
   /// 関わらず省ける（`2026-10-13T09:00+09:00`）。
-  static func deadline(_ text: String) -> Date? {
+  private static func deadline(_ text: String) -> Date? {
     if let date = SessionEvent.parseISO8601(text) { return date }
     let local = DateFormatter()
     local.locale = Locale(identifier: "en_US_POSIX")
@@ -235,15 +207,5 @@ private struct TaskParams {
       if let date = local.date(from: text) { return date }
     }
     return nil
-  }
-
-  func due() throws(ControlError) -> ClearableValue<TaskItem.DueDate>? {
-    switch try nullableString("due") {
-    case .set(let raw):
-      guard let due = TaskItem.DueDate(raw) else { throw invalid("due") }
-      return .set(due)
-    case .clear: return .clear
-    case nil: return nil
-    }
   }
 }

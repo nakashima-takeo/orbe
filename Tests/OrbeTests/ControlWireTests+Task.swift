@@ -25,7 +25,7 @@ extension ControlWireTests {
     let wire = startWire(target: fake)
 
     let response = wire.request(
-      id: 1, method: "add_task", params: fixtures(fake)["add_task"] ?? [:])
+      id: 1, method: "add_task", params: fixtures(fake)["add_task"] ?? [:], callerTabId: fake.tabId)
 
     XCTAssertNil(response?["error"])
     let added = fake.addedTasks.last
@@ -39,7 +39,7 @@ extension ControlWireTests {
       added?.draft.links,
       [TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 214)), kind: .pr)])
     XCTAssertEqual(describe(added?.workspaceId), "set(\(FakeControlTarget.workspaceId))")
-    XCTAssertEqual(added?.callerTabId, fake.tabId, "呼び出し元タブは target が解決できるよう届く")
+    XCTAssertEqual(added?.callerTabId, fake.tabId, "封筒の呼び出し元タブは target が解決できるよう届く")
   }
 
   func testAddTaskOmittedFieldsKeepTheirDefaults() {

@@ -83,9 +83,9 @@ extension ControlWireTests {
     id += 1
     XCTAssertNotEqual(
       errorCode(wire.request(id: id, method: "wait_for_event", params: ["timeoutMs": 10])), -32601,
-      "wait_for_event は handle が直接引き受ける（改名すると windowedHandler の未知メソッドへ落ちる）")
+      "wait_for_event は動詞の表にある（改名すると -32601 に落ちる）")
 
-    // 無応答契約の 2 つ。改名されると runCompletion の default に落ちて -32601 の行を書くので、
+    // 無応答契約の 2 つ。改名されると動詞の表から外れて -32601 の行を書くので、
     // barrier の応答より先に届く＝ここで捕まる。
     wire.send([
       "jsonrpc": "2.0", "id": 900, "method": "completion_update",

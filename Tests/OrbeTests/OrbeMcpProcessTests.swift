@@ -84,10 +84,10 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
-  /// 裏の agent の回の道具（札があるときだけ出す）の名前と、説明が写すページの既定・上限・大きさ・行と報告の上限は、Orbe 本体の正本
-  /// （`AutomationRunSession.Tool`・ページの定数・`AutomationOutputs.rowKiB`）と同じで、`read_run_rows` は claude が結果を
-  /// ファイルに書き出す閾値を上げる。orbe-mcp は別ターゲットなので、片側だけ直してもコンパイルもほかのテストも通り、その道具を
-  /// 持つ役割の回が毎回「ツールが使えなかった」で失敗する。
+  /// 裏の agent の回の道具（札があるときだけ出す）の名前と `inputSchema` の欄、説明が写すページの既定・上限・大きさ・行と報告の
+  /// 上限は、Orbe 本体の正本（`AutomationRunSession.Tool` とその受ける引数・ページの定数・`AutomationOutputs.rowKiB`）と同じで、
+  /// `read_run_rows` は claude が結果をファイルに書き出す閾値を上げる。orbe-mcp は別ターゲットなので、片側だけ直してもコンパイルも
+  /// ほかのテストも通り、その道具を持つ役割の回が毎回「ツールが使えなかった」か外れた件で失敗する。
   func testRunToolsMatchTheRunSession() throws {
     let all = AutomationRunSession.Tool.allCases.map(\.rawValue)
     let tools = ControlProcess.mcpToolsList(
@@ -97,6 +97,13 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
 
     XCTAssertEqual(Set(tools.compactMap { $0["name"] as? String }), Set(all))
+    for runTool in AutomationRunSession.Tool.allCases {
+      let schema = try tool(runTool.rawValue)["inputSchema"] as? [String: Any]
+      let properties = schema?["properties"] as? [String: Any] ?? [:]
+      XCTAssertEqual(
+        Set(properties.keys), runTool.arguments,
+        "\(runTool.rawValue) の inputSchema の欄と、その道具が受ける引数（片側だけ足すとその鍵付きの呼び出しが毎回外れる）")
+    }
     let read = try tool("read_run_rows")
     let properties = (read["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
     let limit = (properties?["limit"] as? [String: Any])?["description"] as? String ?? ""
@@ -171,13 +178,16 @@ final class OrbeMcpProcessTests: OrbeTestCase {
   /// control の拒否は MCP の `isError` へ畳まれ、本文に理由が残る——畳まれなければ AI は失敗を成功と読む。
   func testEveryListedToolReachesControlAndRejectionsBecomeIsError() throws {
     let control = try startControlProcess()
-    let names = ControlProcess.mcpToolsList().compactMap { $0["name"] as? String }
-    XCTAssertFalse(names.isEmpty, "tools/list が空")
+    let tools = ControlProcess.mcpToolsList()
+    XCTAssertFalse(tools.isEmpty, "tools/list が空")
     let nowhere: [String: Any] = [
       "tabId": 999_999, "workspaceId": UUID().uuidString, "taskId": 999_999, "timeoutMs": 1,
     ]
-    for name in names {
-      let call = control.mcpCall(name, nowhere)
+    for tool in tools {
+      let name = try XCTUnwrap(tool["name"] as? String)
+      let properties = (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
+      let call = control.mcpCall(
+        name, nowhere.filter { properties?[$0.key] != nil })
       XCTAssertFalse(
         call.text.hasPrefix("method not found"), "\(name) が control の method として通らない: \(call.text)")
     }
@@ -208,22 +218,33 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     XCTAssertFalse(described.isEmpty, "workspaceId を取るツールが無い")
   }
 
-  /// 自動化のツールが `inputSchema` に挙げる引数は、どれも control が同じ名前で読む。control は知らない鍵を黙って読み捨てる
-  /// ので、片側だけ名前が変わると、AI が渡した `run_automation` の行き先のノードが捨てられ、終わりのノードすべて（副作用と
-  /// 仕事を含む）まで流れる。読んだことは、型の違う値を渡してその名前で断られることで見る。
-  func testEveryArgumentTheAutomationToolsListIsReadByControl() throws {
-    let control = try startControlProcess()
-    let tools = ControlProcess.mcpToolsList().filter {
-      ($0["name"] as? String)?.contains("automation") == true
+  /// どのツールの `inputSchema` の欄も、その動詞が受ける鍵（動詞の表の行）とちょうど一致する。orbe-mcp は本体に依れない
+  /// 別ターゲットなので、片側だけ鍵を足すと、AI が書いたその鍵は control に知らない鍵として断られ、control だけに足した
+  /// 鍵は AI に見えない。
+  func testEveryToolListsExactlyTheKeysItsVerbTakes() throws {
+    for tool in ControlProcess.mcpToolsList() {
+      let name = try XCTUnwrap(tool["name"] as? String)
+      let verb = try XCTUnwrap(ControlServer.verbs[name], "\(name) が動詞の表に無い")
+      let properties = (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
+      XCTAssertEqual(Set(properties?.keys ?? [:].keys), Set(verb.params.keys), name)
     }
-    XCTAssertFalse(tools.isEmpty, "tools/list に自動化のツールが無い")
-    func value(ofType type: String?, matching: Bool) -> Any {
-      switch type {
-      case "integer": matching ? 999_999 : "x"
-      case "boolean": matching ? false : "x"
-      case "array": matching ? [Any]() : "x"
-      case "object": matching ? [String: Any]() : "x"
-      default: matching ? "x" : 1
+  }
+
+  /// どのツールが `inputSchema` に挙げる引数も、control が同じ名前と型で読む。読んだことは、型の違う値を渡してその名前で
+  /// 断られることで見る（表にあってハンドラが読まない鍵は断られない）。型違いを省略と読むと、AI が渡した
+  /// `get_tab_text` の `scrollback` が既定に倒れ、`spawn` の `cwd` がホームに倒れる。
+  func testEveryArgumentTheToolsListIsReadByControl() throws {
+    let control = try startControlProcess()
+    let tools = ControlProcess.mcpToolsList()
+    XCTAssertFalse(tools.isEmpty, "tools/list が空")
+    func value(ofKey key: String, type: Any?, matching: Bool) -> Any {
+      if key == "workspaceId" { return matching ? UUID().uuidString : 1 }
+      switch type as? String {
+      case "integer": return matching ? 999_999 : "x"
+      case "boolean": return matching ? false : "x"
+      case "array": return matching ? [Any]() : "x"
+      case "object": return matching ? [String: Any]() : "x"
+      default: return matching ? "x" : 1
       }
     }
 
@@ -235,9 +256,9 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       for (key, property) in properties {
         var arguments: [String: Any] = [:]
         for other in required where other != key {
-          arguments[other] = value(ofType: properties[other]?["type"] as? String, matching: true)
+          arguments[other] = value(ofKey: other, type: properties[other]?["type"], matching: true)
         }
-        arguments[key] = value(ofType: property["type"] as? String, matching: false)
+        arguments[key] = value(ofKey: key, type: property["type"], matching: false)
 
         let call = control.mcpCall(name, arguments)
 

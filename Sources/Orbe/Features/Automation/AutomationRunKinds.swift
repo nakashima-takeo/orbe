@@ -137,6 +137,8 @@ enum AutomationLineFault: Equatable {
   case workspaceNotListed(String, String)
   /// 結果の道具の引数（欄の名前）が配列でない。
   case notArray(String)
+  /// 結果の道具が受けない引数（欄の名前）。
+  case unknownArgument(String)
   /// 何も無いと申告した後に結果を出した。
   case afterNothing
   /// 下流へ渡す行か、報告・仕事の文が大きさの上限（`AutomationOutputs.rowKiB`）を超えた。
@@ -173,6 +175,7 @@ enum AutomationLineFault: Equatable {
     case .workspaceNotListed(let id, let workspace):
       "propose \(id): workspace \(workspace) is not a listed workspace"
     case .notArray(let key): "\(key) must be an array"
+    case .unknownArgument(let key): "unknown argument \(key)"
     case .afterNothing: "a result after report_nothing"
     case .tooLarge: "larger than \(AutomationOutputs.rowKiB) KiB"
     }
@@ -339,6 +342,7 @@ extension AutomationBrokenLine: Codable {
     case "workspaceNotListed":
       fault = .workspaceNotListed(try string(.id), try string(.workspace))
     case "notArray": fault = .notArray(try string(.key))
+    case "unknownArgument": fault = .unknownArgument(try string(.key))
     case "afterNothing": fault = .afterNothing
     case "tooLarge": fault = .tooLarge
     default:
@@ -373,6 +377,7 @@ extension AutomationBrokenLine: Codable {
     case .workspaceNotListed(let id, let workspace):
       try kind("workspaceNotListed", [(.id, id), (.workspace, workspace)])
     case .notArray(let key): try kind("notArray", [(.key, key)])
+    case .unknownArgument(let key): try kind("unknownArgument", [(.key, key)])
     case .afterNothing: try kind("afterNothing")
     case .tooLarge: try kind("tooLarge")
     }

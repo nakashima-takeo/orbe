@@ -101,10 +101,10 @@ enum WaitTimeout {
   /// hook 報告までを負荷時も含めて覆う長さ（L4 のタブ安定待ち 15 秒の倍）。
   static let launchDefaultMs = 30_000
 
-  /// 省略なら既定、正の Int で上限内ならその値、それ以外は nil（呼び出し側が -32602）。
-  static func parse(_ params: [String: Any], default defaultMs: Int) -> Int? {
-    guard let raw = params["timeoutMs"] else { return defaultMs }
-    guard let ms = raw as? Int, ms > 0, ms <= maxMs else { return nil }
+  /// 省略なら既定、正の整数で上限内ならその値、それ以外は -32602 invalid timeoutMs。
+  static func parse(_ params: ControlParams, default defaultMs: Int) throws(ControlError) -> Int {
+    guard let ms = try params.optionalInt("timeoutMs") else { return defaultMs }
+    guard ms > 0, ms <= maxMs else { throw params.invalid("timeoutMs") }
     return ms
   }
 }

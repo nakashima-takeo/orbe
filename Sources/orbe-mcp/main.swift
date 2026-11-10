@@ -3,7 +3,7 @@ import Foundation
 import OrbePaths
 
 // Orbe 制御チャネルの MCP ブリッジ。MCP(stdio・改行区切り JSON-RPC 2.0) を喋り、
-// tools/call を Orbe.app の control.sock（同じく JSON-RPC）へ、呼び出し元タブを添えて転送する薄い層。
+// tools/call を Orbe.app の control.sock（同じく JSON-RPC）へ、要求の封筒に呼び出し元タブを載せて転送する薄い層。
 // ツール定義をここに置くことで、Orbe 本体を再ビルド/再起動せずツールを反復できる。
 
 // control.sock の解決は OrbePaths.controlSocketPath() に一本化（GUI 本体・cli と同一実装）。
@@ -20,6 +20,9 @@ let runToolNames = Set(
 let servedTools =
   runToken == nil ? tools : runTools.filter { runToolNames.contains($0["name"] as? String ?? "") }
 let servedToolNames = Set(servedTools.compactMap { $0["name"] as? String })
+/// 呼び出し元タブは、ブリッジを起こした agent のタブ（環境の ORBE_TAB）。どの動詞が読むかを知らずに全呼び出しの封筒へ載せ、
+/// agent の引数には触れない（agent が名乗る手間も名乗り間違いも生まれない）。
+let callerTabId = ProcessInfo.processInfo.environment["ORBE_TAB"].flatMap(Int.init)
 
 // MARK: - control.sock クライアント（1 リクエスト 1 接続・同期）
 
@@ -86,7 +89,8 @@ func controlRequest(method: String, params: [String: Any]) -> ControlResult {
   }
   defer { close(fd) }
 
-  let req: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": method, "params": params]
+  var req: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": method, "params": params]
+  if let callerTabId { req["caller"] = ["tabId": callerTabId] }
   guard var data = try? JSONSerialization.data(withJSONObject: req) else {
     return .err("encode failed")
   }
@@ -149,14 +153,11 @@ func handle(_ message: [String: Any]) {
       replyError(id: id, code: -32602, message: "unknown tool")
       return
     }
-    var args = params["arguments"] as? [String: Any] ?? [:]
+    let args = params["arguments"] as? [String: Any] ?? [:]
     if let runToken {
       runTool(id: id, token: runToken, name: name, arguments: args)
       return
     }
-    // 呼び出し元タブは、ブリッジを起こした agent のタブ（環境の ORBE_TAB）。どの動詞が読むかを知らずに
-    // 全呼び出しへ添え、agent が引数に書いた値は使わない（名乗り間違いを起こさない）。
-    args["callerTabId"] = ProcessInfo.processInfo.environment["ORBE_TAB"].flatMap(Int.init)
     switch controlRequest(method: name, params: args) {
     case .ok(let value):
       reply(id: id, result: ["content": [["type": "text", "text": jsonText(value)]]])

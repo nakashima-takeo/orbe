@@ -123,6 +123,7 @@ extension L10n {
     .automationFaultDue: ("期限が YYYY-MM-DD の形式ではありません", "the due date isn’t in YYYY-MM-DD format"),
     .automationFaultWorkspace: ("workspace が一覧にありません", "the workspace isn’t in the list"),
     .automationFaultNotArray: ("%@ が配列ではありません", "%@ is not an array"),
+    .automationFaultUnknownArgument: ("受けない引数 %@", "unknown argument %@"),
     .automationFaultAfterNothing: ("何も無いと申告した後の結果", "a result after reporting nothing"),
     .automationFaultTooLarge: ("%lld KiB を超える大きさ", "larger than %lld KiB"),
     .automationDismissedAlready: ("候補に登録済みの %lld 件を破棄", "discarded %lld already proposed"),

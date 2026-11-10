@@ -87,11 +87,14 @@ final class ControlWire {
 
   /// 要求を 1 件送り、その応答を読む。応答の id が送った id と違えば失敗させる——表駆動で
   /// 何十件も往復するとき、1 件の取りこぼしが以降すべてを 1 つずれた応答で緑にしてしまう。
+  /// `callerTabId` は要求の封筒の `caller` に載せる。
   func request(
-    id: Int, method: String, params: [String: Any] = [:],
+    id: Int, method: String, params: [String: Any] = [:], callerTabId: Int? = nil,
     file: StaticString = #filePath, line: UInt = #line
   ) -> [String: Any]? {
-    send(["jsonrpc": "2.0", "id": id, "method": method, "params": params], file: file, line: line)
+    var request: [String: Any] = ["jsonrpc": "2.0", "id": id, "method": method, "params": params]
+    if let callerTabId { request["caller"] = ["tabId": callerTabId] }
+    send(request, file: file, line: line)
     let response = nextResponse(file: file, line: line)
     XCTAssertEqual(
       response?["id"] as? Int, id,
