@@ -4,8 +4,8 @@ import Foundation
 protocol ControlAutomationTarget: AnyObject {
   /// 自動化を ID 順に列挙する（list_automations）。使えないセッションでは -32000 と理由。
   func controlListAutomations() -> Result<Any, ControlError>
-  /// 自動化を作るか書き換える（set_automation）。automationId が nil なら作る。書き換えは version が要り、違えば -32000。未知の
-  /// automationId は -32004。定義は外の形の JSON のまま渡す。読めない定義と、今の workspace に無い席は -32602（場所付き）。
+  /// 自動化を作るか書き換える（set_automation）。automationId が nil なら作る（version は受けない）。書き換えは version が要り、
+  /// 違えば -32000。未知の automationId は -32004。定義は外の形の JSON のまま渡す。読めない定義と、今の workspace に無い席は -32602（場所付き）。
   func controlSetAutomation(
     automationId: Int?, version: Int?, _ definition: [String: Any]
   ) -> Result<Any, ControlError>
@@ -22,18 +22,23 @@ protocol ControlAutomationTarget: AnyObject {
   func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError>
   /// 覚えている提案を列挙する（list_automation_proposals）。automationId 指定はその自動化の棚の分。
   func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError>
-  /// 試走を始める（try_automation）。すぐ返る。知らない自動化・ノードは -32004、範囲・行・limit の誤りは -32602。
-  func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
-    Any, ControlError
-  >
+  /// 試走を始める（try_automation）。すぐ返る。definition が無ければ保存した定義、あれば書く前の定義（automationId があれば
+  /// version を添えて直す定義、無ければ新しい定義）を試す。書く前の定義は set_automation と同じ断りで確かめる。知らない自動化と、
+  /// 保存した定義の試走の知らないノードの鍵は -32004。書く前の定義の試走の知らないノードの鍵、範囲・行・limit の誤り、組めない
+  /// 組み合わせは -32602。
+  func controlTryAutomation(
+    automationId: Int?, version: Int?, definition: [String: Any]?,
+    _ request: AutomationTrial.Request
+  ) -> Result<Any, ControlError>
   /// 裏で動く agent が、自分の回の道具（入力を読む・結果を出す）を 1 つ呼ぶ（run_tool）。終わった回の札は -32004。道具の
   /// 引数の誤りは道具の答え（断った）で返す。
   func controlRunTool(token: String, name: String, arguments: [String: Any]) -> Result<
     Any, ControlError
   >
-  /// 試走を読む（get_automation_trial）。`wait` なら終わりか `timeoutMs` まで待つ。試走が無ければ -32004。
+  /// 試走を試走の ID で読む（get_automation_trial）。`wait` なら終わりか `timeoutMs` まで待つ。知らない試走（忘れた試走を含む）は
+  /// -32004。
   func controlAutomationTrial(
-    automationId: Int, wait: Bool, timeoutMs: Int,
+    trialId: Int, wait: Bool, timeoutMs: Int,
     completion: @escaping (Result<Any, ControlError>) -> Void)
 }
 
@@ -42,11 +47,11 @@ protocol ControlAutomationTarget: AnyObject {
 extension ControlServer {
   /// `get_automation_trial`（`wait` なら待つので、接続ごとに自分で応える）。
   func automationTrial(id: Any?, params p: ControlParams, conn: Connection) {
-    let automationId: Int
+    let trialId: Int
     let wait: Bool
     let timeoutMs: Int
     do throws(ControlError) {
-      automationId = try p.int("automationId")
+      trialId = try p.int("trialId")
       wait = try p.optionalBool("wait") ?? false
       timeoutMs = try WaitTimeout.parse(p, default: WaitTimeout.promptDefaultMs)
     } catch {
@@ -58,7 +63,7 @@ extension ControlServer {
         return respond(.failure(ControlError(code: -32000, message: "no window")))
       }
       target.controlAutomationTrial(
-        automationId: automationId, wait: wait, timeoutMs: timeoutMs, completion: respond)
+        trialId: trialId, wait: wait, timeoutMs: timeoutMs, completion: respond)
     }
   }
 
@@ -125,13 +130,15 @@ extension ControlServer {
   static func tryAutomation(_ target: ControlAutomationTarget, _ p: ControlParams)
     throws(ControlError) -> Result<Any, ControlError>
   {
-    let automationId = try p.int("automationId")
+    let automationId = try p.optionalInt("automationId")
+    let version = try p.optionalInt("version")
+    let definition = try p.optionalObject("definition")
     let from = try p.optionalStrings("from")
     let to = try p.optionalStrings("to")
     let rows = try p.optionalObjects("rows")
     let limit = try p.optionalInt("limit")
     return target.controlTryAutomation(
-      automationId: automationId,
+      automationId: automationId, version: version, definition: definition,
       AutomationTrial.Request(
         from: from, to: to,
         rows: try rows?.map { object throws(ControlError) in

@@ -11,8 +11,7 @@ import XCTest
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
 /// `proposals` の `automationId`、`set` の `definition`、`run` の `nodeKey`）はここでしか測れない。`resume` が
 /// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`--node` が `nodeKey` を落とすと、自動化ごと止まる。`run` が `nodeKey` を落とすと、指したノードの先まで流れる。
-/// `try` が範囲・行・limit を落とすと、AI が指したのと違う試走が黙って走る。`trial --wait` が時間切れを 0 で返すと、AI は
-/// 途中の結果を終わった結果と読む。`runs` が `nodeKey`・`before` を落とすと、AI は別のノードの回や同じページを続きと読む。
+/// `runs` が `nodeKey`・`before` を落とすと、AI は別のノードの回や同じページを続きと読む。試走の口は `+Trial` が固定する。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
@@ -29,7 +28,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     """#
 
   /// `allowFailure` なら終わり方を問わず、標準出力と標準エラーを返す。
-  private func run(
+  func run(
     _ control: ControlProcess, _ args: [String], stdin: String? = nil, allowFailure: Bool = false,
     file: StaticString = #filePath, line: UInt = #line
   ) -> String {
@@ -230,73 +229,8 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertTrue(control.target.automationStore.automations.isEmpty)
   }
 
-  /// 取得（手段は走れば 3 秒かかる）→ 処理（`cat` で素通し）→ 副作用（走れば `marker` を作る）。
-  private func trialDefinition(marker: URL) -> String {
-    #"{"name": "試す", "nodes": ["#
-      + #"{"key": "fetch", "name": "取る", "trigger": {"kind": "manual"}, "coverage": "currentSet", "#
-      + #""command": "sleep 3"}, "#
-      + #"{"key": "note", "name": "写す", "trigger": {"kind": "arrival"}, "from": ["fetch"], "#
-      + #""command": "cat"}, "#
-      + #"{"key": "send", "name": "送る", "trigger": {"kind": "arrival"}, "from": ["note"], "#
-      + #""deliver": "none", "command": "cat >/dev/null; touch '\#(marker.path)'"}]}"#
-  }
-
-  /// `try` は与える行（`--stdin`。0 バイトは usage エラー）・limit・範囲を運び、`trial --wait` は試走の終わりまで待ってノードごとの結果を
-  /// 出す。副作用は走らず、渡るはずだった行の数が人向けの 1 行に出る。
-  func testTryCarriesRowsLimitAndRangeAndTrialWaitsForTheResult() throws {
-    let control = try startControlProcess()
-    let marker = TestScratch.caseDir.appendingPathComponent("sent")
-    let id = run(control, ["set"], stdin: trialDefinition(marker: marker))
-    let rows = ["b", "c"].map { (key: String) -> String in
-      #"{"id":"\#(key)","link":"https://x.test/\#(key)","body":"\#(key)","#
-        + #""time":"2026-01-01T00:00:00Z"}"#
-    }.joined(separator: "\n")
-
-    XCTAssertEqual(
-      run(control, ["try", id, "--stdin", "--limit", "1"], stdin: rows),
-      "started a trial of automation \(id)")
-    let empty = control.orb(["automation", "try", id, "--stdin"], stdin: "")
-    XCTAssertEqual(empty.status, 2, empty.stderr)
-    XCTAssertTrue(empty.stderr.contains("--stdin got no input"), empty.stderr)
-    let trial = try XCTUnwrap(
-      control.orbJSON(["automation", "trial", id, "--wait"])["trial"] as? [String: Any])
-    let nodes = try XCTUnwrap(trial["nodes"] as? [[String: Any]])
-    func firstRun(_ key: String) -> [String: Any]? {
-      (nodes.first { $0["key"] as? String == key }?["runs"] as? [[String: Any]])?.first
-    }
-    func ids(_ rows: Any?) -> [String]? {
-      (rows as? [[String: Any]])?.compactMap { $0["id"] as? String }
-    }
-    XCTAssertEqual(
-      ids((firstRun("fetch")?["given"] as? [String: Any])?["rows"]), ["1:b"],
-      "取得のノードの ID の接頭（新しい DB の最初のノード）")
-    XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["1:b"])
-    XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "副作用のコマンドは走らない")
-    let lines = run(control, ["trial", id]).split(separator: "\n")
-    XCTAssertTrue(lines.contains("fetch\tgiven\tgiven 1 rows"), "\(lines)")
-    XCTAssertEqual(lines.last, "send\theld\theld 1 rows")
-
-    let ranged = try XCTUnwrap(
-      control.orbJSON(["automation", "try", id, "--from", "note", "--to", "note"])["trial"]
-        as? [String: Any])
-    XCTAssertEqual(ranged["from"] as? [String], ["note"])
-    XCTAssertEqual(ranged["to"] as? [String], ["note"])
-  }
-
-  /// `trial --wait` は、試走が `--timeout-ms` までに終わらなければ exit 124。
-  func testTrialWaitExits124WhenTheTrialOutlastsTheTimeout() throws {
-    let control = try startControlProcess()
-    let id = run(
-      control, ["set"],
-      stdin: trialDefinition(marker: TestScratch.caseDir.appendingPathComponent("sent")))
-    _ = run(control, ["try", id])
-
-    let outcome = control.orb(["automation", "trial", id, "--wait", "--timeout-ms", "300"])
-    XCTAssertEqual(outcome.status, 124, outcome.stderr)
-  }
-
   /// 数のオプションは、標準入力を読む前・socket に触れる前に usage エラー（2）で確かめる。`set` の `--version` は `<id>` と
-  /// 組みでだけ受ける。
+  /// 組みでだけ、`try` の `--version` は `<id>` と `--definition` の組みでだけ受け、`<id>` を直す `--definition` には `--version` が要る。
   ///
   /// 壊れると何が起きるか: `orb automation set 3 --version x` が端末で標準入力の終わりを待って止まる。`--version 0` が版の
   /// 食い違いとして返り、誤りの場所が伝わらない。`<id>` の無い `--version` が黙って捨てられ、書き換えのつもりで新しい自動化を
@@ -306,6 +240,11 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       (["set", "1", "--version", "x"], "--version requires a positive <n>"),
       (["set", "1", "--version", "0"], "--version requires a positive <n>"),
       (["set", "--version", "1"], "--version requires the <id>"),
+      (["try", "1", "--definition"], "requires --version"),
+      (["try", "--version", "1", "--definition"], "--version requires <id> and --definition"),
+      (["try", "1", "--version", "1"], "--version requires <id> and --definition"),
+      (["try"], "requires <id> or --definition"),
+      (["trial", "x"], "invalid trial id: x"),
       (["runs", "1", "--before", "x"], "--before requires a positive <recordId>"),
       (["runs", "1", "--limit", "0"], "--limit requires a positive <n>"),
     ] {

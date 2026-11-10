@@ -64,22 +64,39 @@ final class AutomationTrialTests: OrbeTestCase {
     "\(store.nodeId(id, key)):\(written)"
   }
 
+  func definition(_ definitionNodes: [AutomationDefinition.Node]) -> AutomationDefinition {
+    AutomationDefinition(name: "自動化", notify: nil, nodes: definitionNodes)
+  }
+
+  /// 書く前の定義の試走の対象（本番のストアで確かめる）。
+  func unsaved(_ write: AutomationStore.Write) throws -> AutomationTrial.Target {
+    let checked = try store.check(write)
+    return .unsaved(checked.write, nodes: checked.nodes)
+  }
+
   func define(_ definitionNodes: [AutomationDefinition.Node]) throws -> Int {
-    try runner.set(nil, AutomationDefinition(name: "自動化", notify: nil, nodes: definitionNodes)).id
+    try runner.set(nil, definition(definitionNodes)).id
   }
 
   func calls(_ script: String) -> [Int] {
-    jobs.calls.indices.filter {
-      if case .command(let command, _) = jobs.calls[$0].job.work { return command.script == script }
-      return false
-    }
+    jobs.calls.indices.filter { self.script(at: $0) == script }
+  }
+
+  /// `index` 番目に呼んだ手段のスクリプト。
+  func script(at index: Int) -> String? {
+    guard case .command(let command, _) = jobs.calls[index].job.work else { return nil }
+    return command.script
   }
 
   /// 最後に呼んだ `script` に標準入力で渡した行の id。
   func ids(_ script: String) -> [String] {
-    guard let last = calls(script).last,
-      case .command(_, let input) = jobs.calls[last].job.work
-    else { return [] }
+    guard let last = calls(script).last else { return [] }
+    return ids(at: last)
+  }
+
+  /// `index` 番目の呼び出しに標準入力で渡した行の id。
+  func ids(at index: Int) -> [String] {
+    guard case .command(_, let input) = jobs.calls[index].job.work else { return [] }
     let text = String(bytes: input.stdin ?? Data(), encoding: .utf8) ?? ""
     return text.split(separator: "\n").compactMap {
       (try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])?["id"] as? String
@@ -88,8 +105,12 @@ final class AutomationTrialTests: OrbeTestCase {
 
   func finish(_ script: String, _ stdout: String, exit: Int32 = 0) {
     guard let last = calls(script).last else { return XCTFail("\(script) は呼ばれていない") }
+    finish(at: last, stdout, exit: exit)
+  }
+
+  func finish(at index: Int, _ stdout: String, exit: Int32 = 0) {
     jobs.finish(
-      last,
+      index,
       BackgroundRunResult(
         commandLine: "run", startedAt: now, endedAt: now, ending: .exited(exit),
         output: .command(stdout: .init(data: Data(stdout.utf8)), stderr: .init())))
@@ -146,7 +167,7 @@ final class AutomationTrialTests: OrbeTestCase {
     let proposals = store.proposals
     let notices = recorded
 
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 2)
     finish("gh", fetched(["a", "b"]))
     waitCalls("p", 2)
@@ -191,7 +212,7 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(calls("y").count, 1, "前提: 本番の y が走っていて、読んだ位置はまだ進んでいない")
     let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
 
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     finish("gh", fetched([]))
     ended(trial)
@@ -201,9 +222,8 @@ final class AutomationTrialTests: OrbeTestCase {
 
   /// 試走の間、道のノードは予定の時刻を過ぎていても写しの上で予定では回らず、流しの順に 1 回だけ動く。
   func testNodesOnThePathDoNotRunOnTheirScheduleInTheCopy() throws {
-    // 写しの番人は壁時計で数えるので、1 時間前に足した 1 分ごとのノードの予定は写しの上で過ぎている。判定には前からの読めば取る
-    // 行を持たせる（予定で回れば、上流を待たずにそれを読む）。
-    now = Date()
+    // 1 時間前に足した 1 分ごとのノードの予定は、写しの上でも過ぎている（写しの番人の時計は写し終えた時点で止まる）。判定には
+    // 前からの読めば取る行を持たせる（予定で回れば、上流を待たずにそれを読む）。
     let added = now.addingTimeInterval(-3600)
     let id = try store.create(
       AutomationDefinition(
@@ -219,7 +239,7 @@ final class AutomationTrialTests: OrbeTestCase {
         AutomationItem(id: "a", link: "https://example.com/a", body: "a", time: added)
       ]))
 
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     XCTAssertEqual(calls("judge"), [], "上流が終わる前に予定で回らない")
     finish("gh", fetched(["a", "b"]))
@@ -231,13 +251,37 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(calls("judge").count, 1)
   }
 
+  /// 直す試走の流しの途中に予定の時刻を過ぎても、範囲の道の上にある間隔の予定のノードは、写しの上で予定の回としては走らず、流しの
+  /// 今すぐの回として 1 回だけ走る。
+  func testARewriteDoesNotRunOnTheScheduleWhoseTimeComesDuringTheFlow() throws {
+    let id = try define([
+      fetch("gh"), definitionNode("p", .scheduled(.every(60)), from: ["gh"], deliver: .report),
+    ])
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.name = "直した"
+
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
+    waitCalls("gh", 1)
+    now += 600
+    finish("gh", fetched(["a"]))
+    waitCalls("p", 1)
+    finish("p", "読んだ")
+    ended(trial)
+
+    XCTAssertNil(trial.failure)
+    XCTAssertEqual(calls("p").count, 1)
+    XCTAssertEqual(trial.passes(key: "p").compactMap { $0.run?.trigger }, [.now])
+  }
+
   /// 処理が `id` の無い行を出すと、試走の回は本番の回と同じ失敗の理由と外した行の記録で返る。
   func testABreachInATrialReadsTheSameAsInProduction() throws {
     let id = try define([
       fetch("gh"), definitionNode("p", from: ["gh"]),
       definitionNode("digest", from: ["p"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     finish("gh", fetched(["a"]))
     waitCalls("p", 1)
@@ -262,7 +306,7 @@ final class AutomationTrialTests: OrbeTestCase {
       fetch("gh"), fetch("backlog"),
       definitionNode("digest", .arrival, from: ["gh", "backlog"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("backlog", 1)
     finish("gh", fetched(["a"]))
     waitCalls("digest", 1)
@@ -285,7 +329,7 @@ final class AutomationTrialTests: OrbeTestCase {
       fetch("gh"), fetch("backlog"), definitionNode("p", .arrival, from: ["gh", "backlog"]),
       definitionNode("d", from: ["p"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init(from: ["gh", "backlog"], to: ["p"]))
+    let trial = try trials.start(.saved(id), .init(from: ["gh", "backlog"], to: ["p"]))
     waitCalls("backlog", 1)
     finish("gh", fetched(["a"]))
     waitCalls("p", 1)
@@ -304,10 +348,15 @@ final class AutomationTrialTests: OrbeTestCase {
 extension AutomationTrial.Pass {
   /// 写しの上で確定した回（テスト）。止めた・与えた結果は nil。
   var run: AutomationNodeRun? {
-    if case .ran(let run, _) = self { run } else { nil }
+    if case .ran(let run, _, _) = self { run } else { nil }
   }
 
   var content: AutomationTrial.Content? {
-    if case .ran(_, let content) = self { content } else { nil }
+    if case .ran(_, let content, _) = self { content } else { nil }
+  }
+
+  /// 止めた副作用・仕事に渡るはずだった行の id（下流へ渡す形。テスト）。止めた結果でなければ nil。
+  var heldIds: [String]? {
+    if case .held(let rows, _) = self { rows.compactMap(AutomationPrompts.id(of:)) } else { nil }
   }
 }

@@ -49,7 +49,7 @@ extension AutomationRunner {
     if let overlap = automation.graph.nodes.first(where: {
       path.contains($0.id) && busy.contains($0.id)
     }) {
-      throw .flowing(id, overlap.id)
+      throw .flowing(id, overlap.key)
     }
     let (flow, wake) = AutomationFlow.start(through: path, to: targets, in: automation) {
       isRunning(id, $0)

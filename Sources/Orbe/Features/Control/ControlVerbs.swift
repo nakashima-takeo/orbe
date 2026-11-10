@@ -121,10 +121,11 @@ extension ControlServer {
       ["automationId": .int], .window(listAutomationProposals)),
     "try_automation": ControlVerb(
       [
-        "automationId": .int, "from": .strings, "to": .strings, "rows": .objects, "limit": .int,
+        "automationId": .int, "version": .int, "definition": .object, "from": .strings,
+        "to": .strings, "rows": .objects, "limit": .int,
       ], .window(tryAutomation)),
     "get_automation_trial": ControlVerb(
-      ["automationId": .int, "wait": .bool, "timeoutMs": .int], .connection(automationTrial)),
+      ["trialId": .int, "wait": .bool, "timeoutMs": .int], .connection(automationTrial)),
     "run_tool": ControlVerb(
       ["token": .string, "name": .string, "arguments": .object], .window(runTool)),
     "list_board_widgets": ControlVerb(["workspaceId": .workspaceId], .window(listBoardWidgets)),

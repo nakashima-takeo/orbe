@@ -19,9 +19,10 @@ import Observation
 ///
 /// ノードの回を記録するたびに `recorded` で、その回の終わり（読んだもの・ノードの 1 回の結果）と確定を知らせる（知らせるか
 /// どうか・何を出すかは受けた側が決める）。`recorded` は確定の直後、下流を起こす前に同期で呼ぶ——受けた側はその中で、確定した
-/// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。定義を書いたら `defined` で外したノードと、
-/// 消したら `deleted` で消えたノードと共に知らせる。使い手が差し替えられるのは、番人に載せるノード（`admits`。既定は全ノード）と
-/// 知らせだけ。
+/// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。契機が終わるたびに、起こす決まりと一巡の
+/// 進みを見た後で `triggerEnded` で知らせる。定義を書いたら `defined` で外したノードと、消したら `deleted` で消えたノードと共に
+/// 知らせる。使い手が差し替えられるのは、番人に載せるノード（`admits`。既定は全ノード）と、1 回を引き取るノード（`holds`。既定は
+/// 無し）と知らせだけ。引き取った 1 回は、手段を起こさず、回の記録も書かず、読んだ結果を `held` で知らせ、記録の無い契機と同じに終える。
 @Observable final class AutomationRunner {
   let store: AutomationStore
   @ObservationIgnored var now: () -> Date = Date.init
@@ -38,12 +39,15 @@ import Observation
   private let deleted: (Int, [AutomationNodeID]) -> Void
   private let admits: (Int, AutomationNodeID) -> Bool
   private let flowEnded: (Int, AutomationFlow) -> Void
+  private let triggerEnded: (Int, AutomationNodeID) -> Void
+  private let holds: (Int, AutomationGraph.Node) -> Bool
+  private let held: (Int, AutomationGraph.Node, AutomationIntake.Read?) -> Void
   /// 番人に載せている鍵。
   @ObservationIgnored private var registered = Set<String>()
   /// ノードごとの、前の契機の始まりの時点の、入力ごとの上流の最後の番号（メモリだけ。無ければ読んだ位置だけが基準線）。
   @ObservationIgnored var marks: [String: [AutomationNodeID: AutomationSeqs]] = [:]
-  /// ノードごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
-  @ObservationIgnored private var anchors: [String: Date] = [:]
+  /// ノードごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件など）でも進むので、次の時刻はこれから数える。
+  @ObservationIgnored var anchors: [String: Date] = [:]
   /// 走っている契機（掃除から守る行を言う）。
   @ObservationIgnored private var active: [ObjectIdentifier: Trigger] = [:]
   /// 読めば取る行の数え直し（古さの上限を過ぎた行を除く）の時刻と、その時計。
@@ -53,7 +57,8 @@ import Observation
   var flows: [Int: [AutomationFlow]] = [:]
 
   /// `workspaces` は今の workspace の写しの読み口（判定に見せる付け先と、コマンドの走る場所を引く）。`admits` は自動化の ID と
-  /// ノードの ID から、番人に載せるかを決める。
+  /// ノードの ID から、番人に載せるかを決める。`holds` は自動化の ID とノードから、そのノードの 1 回を引き取るかを決める。`held` は
+  /// 引き取った 1 回の、自動化の ID・ノード・読んだ結果（入力の無いノードは nil。読んだ位置は使い手が進める）。
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
@@ -63,7 +68,10 @@ import Observation
     defined: @escaping (Int, [AutomationNodeID]) -> Void,
     deleted: @escaping (Int, [AutomationNodeID]) -> Void,
     admits: @escaping (Int, AutomationNodeID) -> Bool = { _, _ in true },
-    flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in }
+    flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in },
+    triggerEnded: @escaping (Int, AutomationNodeID) -> Void = { _, _ in },
+    holds: @escaping (Int, AutomationGraph.Node) -> Bool = { _, _ in false },
+    held: @escaping (Int, AutomationGraph.Node, AutomationIntake.Read?) -> Void = { _, _, _ in }
   ) {
     self.store = store
     self.scheduler = scheduler
@@ -75,6 +83,9 @@ import Observation
     self.deleted = deleted
     self.admits = admits
     self.flowEnded = flowEnded
+    self.triggerEnded = triggerEnded
+    self.holds = holds
+    self.held = held
     store.onUnavailable = { [weak self] in self?.stopAll() }
     store.holding = { [weak self] in
       self?.active.values.reduce(into: AutomationHolding()) { $0.formUnion($1.holding) }
@@ -83,60 +94,37 @@ import Observation
     store.committed = { [weak self] in self?.scheduleRecount() }
   }
 
-  /// 起動時に一度、全ノードを番人へ載せ、実効で止めていない「届いたら」のノードに起こす決まりを見る（過ぎていた間隔の回は
-  /// ここで 1 回だけ走る）。
+  /// 起動時に一度、全ノードを番人へ載せ、実効で止めていない「届いたら」のノードに起こす決まりを見る（過ぎていた間隔の回はここで 1 回だけ走る）。
   func start() {
     for automation in store.automations { register(automation) }
     scheduleRecount()
   }
 
-  /// どれかのノードが走っているか。
-  func isRunning(_ id: Int) -> Bool {
-    store.automation(id)?.graph.nodes.contains { isRunning(id, $0.id) } ?? false
-  }
-
-  func isRunning(_ id: Int, _ nodeId: AutomationNodeID) -> Bool {
-    scheduler.isRunning(id: Self.key(id, nodeId))
-  }
-
-  /// `now`（渡さなければ走らせ役の今）から見て、どれかのノードが次に予定で回る時刻（実効で止めたノードは数えない）。
-  func nextRunAt(_ automation: Automation, now: Date? = nil) -> Date? {
-    automation.graph.nodes.compactMap { nextRunAt(automation, nodeId: $0.id, now: now) }.min()
-  }
-
-  /// ノードが次に予定で回る時刻。実効で止めた・予定の無いノードは nil。過ぎていれば `now` 以前の時刻を返す。
-  func nextRunAt(_ automation: Automation, nodeId: AutomationNodeID, now: Date? = nil) -> Date? {
-    guard let node = automation.graph.node(nodeId), !automation.halted(nodeId),
-      case .scheduled(let timing) = node.entity.trigger
-    else { return nil }
-    let anchor = anchors[Self.key(automation.id, nodeId)] ?? automation.state(nodeId).anchor
-    switch timing.next(after: anchor, deadline: nil, now: now ?? self.now(), calendar: calendar()) {
-    case .run(let date): return date
-    case .expire: return nil
-    }
-  }
-
   // MARK: - 定義の変異
 
-  /// `id` が nil なら作り、あれば `version` を添えて書き換える。何をするかが変わったノードは走っている回を止めて載せ直し（結果は
-  /// 捨てる）、外したノードは外し、足したノードは足した時刻から数える。鍵・名前・予定・件数の上限・出来事の日数・通知だけなら予定だけを
-  /// 差し替える（走っている回は最後まで走る）。
+  /// `id` が nil なら作り、あれば `version` を添えて書き換える（確かめてから掛ける）。
   func set(_ id: Int?, version: Int? = nil, _ definition: AutomationDefinition)
     throws(AutomationError) -> Automation
   {
+    try set(try store.check(AutomationStore.Write(id, version: version, definition)))
+  }
+
+  /// 確かめた書き込みを掛ける。何をするかが変わったノードは走っている回を止めて載せ直し（結果は捨てる）、外したノードは外し、
+  /// 足したノードは足した時刻から数える。鍵・名前・予定・件数の上限・出来事の日数・通知だけなら予定だけを差し替える（走っている回は
+  /// 最後まで走る）。
+  func set(_ checked: AutomationStore.CheckedWrite) throws(AutomationError) -> Automation {
     try checkAvailable()
-    guard let id else {
-      let automation = try store.create(definition, now: now())
-      register(automation)
-      defined(automation.id, [])
-      return automation
-    }
-    let replaced = try store.replace(id, version: version, with: definition, now: now())
-    let automation = replaced.automation
-    for nodeId in replaced.removed + replaced.reworked { unregister(id, nodeId) }
-    register(automation)
-    defined(id, replaced.removed)
-    return automation
+    let written = try store.apply(checked, now: now())
+    adopt(written)
+    return written.automation
+  }
+
+  /// ストアに掛けた書き込みに番人を合わせる（`set` の後半。書いた時点の起こす決まりもここで見る）。
+  func adopt(_ written: AutomationStore.Written) {
+    let id = written.automation.id
+    for nodeId in written.removed + written.reworked { unregister(id, nodeId) }
+    register(written.automation)
+    defined(id, written.removed)
   }
 
   /// 止める・再開する（`nodeId` があればそのノード自身、無ければ自動化）。止めるのは Orbe が自分から動かすことだけで、走っている回は
@@ -166,9 +154,9 @@ import Observation
 
   static func key(_ id: Int, _ nodeId: AutomationNodeID) -> String { "automation:\(id)/\(nodeId)" }
 
-  /// 全ノードを番人に合わせる。載っていないノードは載せ（数え始めはノードの最後に回った時刻、無ければ足した時刻）、載っているノードは
-  /// 予定だけを差し替える。実効で止めたノードは「いつ」なしで載せる（流しの「今すぐ」では走れる）。「届いたら」のノードに起こす決まりを
-  /// 見る（決まりが実効で止めたノードを除く）。
+  /// 全ノードを番人に合わせる。載っていないノードは載せ（数え始めは番人に最後に返した数え始め、無ければノードの最後に回った時刻、
+  /// それも無ければ足した時刻）、載っているノードは予定だけを差し替える。実効で止めたノードは「いつ」なしで載せる（流しの「今すぐ」
+  /// では走れる）。「届いたら」のノードに起こす決まりを見る（決まりが実効で止めたノードを除く）。
   private func register(_ automation: Automation) {
     let id = automation.id
     for node in automation.graph.nodes where admits(id, node.id) {
@@ -186,7 +174,8 @@ import Observation
         self?.begin(id, nodeId, trigger, finish) ?? BackgroundRunHandle {}
       }
       try? scheduler.register(
-        id: key, timing: timing, anchor: automation.state(nodeId).anchor, start: start)
+        id: key, timing: timing, anchor: anchors[key] ?? automation.state(nodeId).anchor,
+        start: start)
       registered.insert(key)
     }
     for node in automation.graph.nodes { wake(id, node.id) }
@@ -202,6 +191,12 @@ import Observation
     registered.remove(key)
     marks[key] = nil
     anchors[key] = nil
+  }
+
+  /// ノードの、番人に今返すはずの数え始め: 走っている契機があればその契機が終わりに返す値、無ければ最後に返した値。
+  func anchor(_ id: Int, _ nodeId: AutomationNodeID) -> Date? {
+    active.values.first { $0.automationId == id && $0.nodeId == nodeId }?.anchor
+      ?? anchors[Self.key(id, nodeId)]
   }
 
   /// 全ノードを番人から外す（走っている回は止め、その結果は捨てる）。一巡は打ち切る。
@@ -235,6 +230,8 @@ extension AutomationRunner {
     var holding = AutomationHolding()
     /// 回の始まり。
     var passStartedAt: Date?
+    /// 終わりに番人へ返す数え始め（回の始まり。回が無ければ契機の始まり）。
+    var anchor: Date { passStartedAt ?? startedAt }
     var current: BackgroundRunHandle?
     var cancelled = false
     /// 一巡の分として受け取った契機か。
@@ -310,11 +307,15 @@ extension AutomationRunner {
     pass(trigger, read: read)
   }
 
-  /// ノードの 1 回。役割の入力を組み、`AutomationNodePass` に任せ、終わったら確定する。
+  /// ノードの 1 回。役割の入力を組み、`AutomationNodePass` に任せ、終わったら確定する（引き取るノードは知らせて終える）。
   private func pass(_ trigger: Trigger, read: AutomationIntake.Read?) {
     guard let automation = store.automation(trigger.automationId),
       let node = automation.graph.node(trigger.nodeId)
     else { return end(trigger) }
+    if holds(trigger.automationId, node) {
+      held(trigger.automationId, node, read)
+      return end(trigger)
+    }
     let input = self.input(node, automation, read)
     let startedAt = now()
     trigger.passStartedAt = startedAt
@@ -346,11 +347,7 @@ extension AutomationRunner {
     }
     trigger.holding = AutomationHolding()
     recorded(AutomationPassRecord(end: passEnd, run: result.run))
-    if result.changed, let automation = store.automation(trigger.automationId) {
-      for node in automation.graph.downstream(of: trigger.nodeId) {
-        wake(trigger.automationId, node.id)
-      }
-    }
+    if result.changed { wake(below: trigger.nodeId, in: trigger.automationId) }
     end(trigger)
   }
 
@@ -358,9 +355,10 @@ extension AutomationRunner {
   /// 走っている間に届いた行を起こす決まりを見て、そうでなければ下流をやり直す。一巡へはその後に知らせる——「届いたら」の
   /// ノードが普段の決まりで起き直さなかったことを見てから終わりと数えるため。
   private func end(_ trigger: Trigger) {
+    defer { triggerEnded(trigger.automationId, trigger.nodeId) }
     active[ObjectIdentifier(trigger)] = nil
     let key = Self.key(trigger.automationId, trigger.nodeId)
-    let anchor = trigger.passStartedAt ?? trigger.startedAt
+    let anchor = trigger.anchor
     anchors[key] = anchor
     trigger.finish(anchor)
     guard let node = store.automation(trigger.automationId)?.graph.node(trigger.nodeId) else {

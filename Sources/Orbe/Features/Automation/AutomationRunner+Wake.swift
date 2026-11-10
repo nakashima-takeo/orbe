@@ -71,6 +71,12 @@ extension AutomationRunner {
     scheduler.runNow(id: key)
   }
 
+  /// ノードの出力の行が変わった後に、下流のノードに起こす決まりを見る。
+  func wake(below nodeId: AutomationNodeID, in id: Int) {
+    guard let automation = store.automation(id) else { return }
+    for node in automation.graph.downstream(of: nodeId) { wake(id, node.id) }
+  }
+
   /// 失敗のやり直し。「届いたら」でないノードの契機が終わったら、実効で止めていない下流の「届いたら」のノードを、読んだ位置より
   /// 後の上流の番号があればすべて起こす（`needsRetry`）。
   func retry(below nodeId: AutomationNodeID, in id: Int) {

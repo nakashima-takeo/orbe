@@ -2,7 +2,8 @@ import Foundation
 import OrbeSessionLog
 
 /// 自動化の 9 動詞と、裏の agent の回の道具の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
-/// `AutomationTrials` に任せ、ここは定義を読み、書く定義の workspace の席が今の workspace を指すかを確かめ、応答の形を組む。
+/// `AutomationTrials` に任せ、ここは書き込みの入口（定義を読み、書く定義の workspace の席が今の workspace を指すかを確かめ、ストアで
+/// 確かめる）と試す対象を組み、応答の形を組む。
 extension WindowController {
   /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
   func controlListAutomations() -> Result<Any, ControlError> {
@@ -19,13 +20,25 @@ extension WindowController {
     automationId: Int?, version: Int?, _ definition: [String: Any]
   ) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      let definition = try AutomationDefinition.decode(definition)
-      try automationRunner.workspaces().checkSeats(of: definition)
-      return [
+      [
         "automation": try automationJSON(
-          try automationRunner.set(automationId, version: version, definition))
+          try automationRunner.set(try checkedWrite(automationId, version, definition)))
       ]
     }
+  }
+
+  /// 書き込みの入口（`set_automation` と、書く前の定義の `try_automation` が通る）。版は書き換える自動化と組みでだけ受け、定義を
+  /// 読み、workspace の席を確かめ、ストアで確かめる——断りの集合と順番が両方の口で同じになる。
+  private func checkedWrite(_ automationId: Int?, _ version: Int?, _ definition: [String: Any])
+    throws(AutomationError) -> AutomationStore.CheckedWrite
+  {
+    if version != nil, automationId == nil {
+      throw .invalid("version: pass it only with the automationId of the automation to rewrite")
+    }
+    let definition = try AutomationDefinition.decode(definition)
+    try automationRunner.workspaces().checkSeats(of: definition)
+    return try automationStore.check(
+      AutomationStore.Write(automationId, version: version, definition))
   }
 
   func controlRunAutomation(automationId: Int, nodeKey: String?) -> Result<Any, ControlError> {
@@ -150,25 +163,43 @@ extension WindowController {
     return .success(["texts": reply.texts, "isError": reply.isError])
   }
 
-  func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
-    Any, ControlError
-  > {
+  func controlTryAutomation(
+    automationId: Int?, version: Int?, definition: [String: Any]?,
+    _ request: AutomationTrial.Request
+  ) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      ["trial": trialJSON(try automationTrials.start(automationId, request))]
+      let target = try trialTarget(automationId, version, definition)
+      return ["trial": trialJSON(try automationTrials.start(target, request))]
     }
   }
 
+  /// 試す対象: 定義が無ければ保存した定義、あれば書き込みの入口を通した書く前の定義（`automationId` があれば直す定義、無ければ
+  /// 新しい定義）。版は直す定義だけが持つ。
+  private func trialTarget(_ automationId: Int?, _ version: Int?, _ definition: [String: Any]?)
+    throws(AutomationError) -> AutomationTrial.Target
+  {
+    guard let definition else {
+      if version != nil {
+        throw .invalid("version: pass it only with a definition, the rewrite to try")
+      }
+      guard let automationId else { throw .invalid("missing automationId or definition") }
+      return .saved(automationId)
+    }
+    let checked = try checkedWrite(automationId, version, definition)
+    return .unsaved(checked.write, nodes: checked.nodes)
+  }
+
   func controlAutomationTrial(
-    automationId: Int, wait: Bool, timeoutMs: Int,
+    trialId: Int, wait: Bool, timeoutMs: Int,
     completion: @escaping (Result<Any, ControlError>) -> Void
   ) {
     guard wait else {
       return completion(
         automationResult { () throws(AutomationError) in
-          ["trial": trialJSON(try automationTrials.trial(automationId))]
+          ["trial": trialJSON(try automationTrials.trial(trialId))]
         })
     }
-    automationTrials.wait(automationId, timeout: .milliseconds(timeoutMs)) { result, timedOut in
+    automationTrials.wait(trialId, timeout: .milliseconds(timeoutMs)) { result, timedOut in
       completion(
         self.automationResult { () throws(AutomationError) in
           var json: [String: Any] = ["trial": self.trialJSON(try result.get())]
@@ -232,12 +263,8 @@ extension WindowController {
     ]
   }
 
-  private static func automationNotFound(_ id: Int) -> ControlError {
-    ControlError(code: -32004, message: "automation not found: \(id)")
-  }
-
-  /// ドメインエラーを制御エラーの語彙へ写す（未知・試走が無い → -32004・不正な値 → -32602・道の重なる流し・使えない → -32000）。
-  /// 自動化を使えないセッションでは、どの動詞も中身を見る前に理由で断る。
+  /// ドメインエラーを制御エラーのコードへ写す（未知 → -32004・不正な値 → -32602・道の重なる流し・使えない・版の食い違い・読めない
+  /// → -32000）。文は `AutomationError.message`。自動化を使えないセッションでは、どの動詞も中身を見る前に理由で断る。
   private func automationResult(_ body: () throws(AutomationError) -> [String: Any]) -> Result<
     Any, ControlError
   > {
@@ -245,43 +272,13 @@ extension WindowController {
       guard automationStore.available else { throw automationStore.unavailableError }
       return .success(try body())
     } catch {
-      switch error {
-      case .automationNotFound(let id): return .failure(Self.automationNotFound(id))
-      case .proposalNotFound(let id):
-        return .failure(ControlError(code: -32004, message: "proposal not found: \(id)"))
-      case .proposalNotOpen(let id):
-        return .failure(ControlError(code: -32602, message: "proposal \(id) is not open"))
-      case .invalid(let message): return .failure(ControlError(code: -32602, message: message))
-      case .nodeNotFound(let id, let key):
-        return .failure(
-          ControlError(code: -32004, message: "node not found: \(key) in automation \(id)"))
-      case .flowing(let id, let nodeId):
-        let key = automationStore.automation(id)?.graph.node(nodeId)?.key ?? "\(nodeId)"
-        return .failure(
-          ControlError(
-            code: -32000,
-            message:
-              "automation \(id): node \"\(key)\" is already in a running flow; wait until it finishes"
-          ))
-      case .unavailable(let message):
-        return .failure(ControlError(code: -32000, message: message))
-      case .trialNotFound(let id):
-        return .failure(ControlError(code: -32004, message: "no trial of automation \(id)"))
-      case .versionMismatch(let sent, let current):
-        return .failure(
-          ControlError(
-            code: -32000,
-            message:
-              "version mismatch: sent \(sent), current \(current); read it again with list_automations"
-          ))
-      case .unreadable(let id, let reason):
-        return .failure(
-          ControlError(
-            code: -32000,
-            message:
-              "automation \(id) cannot be read: \(reason); fix it with set_automation or delete it")
-        )
-      }
+      let code =
+        switch error {
+        case .automationNotFound, .proposalNotFound, .nodeNotFound, .trialNotFound: -32004
+        case .proposalNotOpen, .invalid: -32602
+        case .flowing, .unavailable, .versionMismatch, .unreadable: -32000
+        }
+      return .failure(ControlError(code: code, message: error.message))
     }
   }
 }

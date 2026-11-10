@@ -7,16 +7,16 @@ import XCTest
 /// 壊れると何が起きるか: 試走で副作用や仕事が本当に走る。止めたノードに何が渡るはずだったかが分からない。与えた行が流れない、
 /// または本番の取得が走る。
 extension AutomationTrialTests {
-  /// 副作用と仕事（ツールを持つ agent）は写しの上でも動かさず、流しの終わりに渡るはずだった行を 1 つにまとめて返す。回の記録は
-  /// 持たない。
+  /// 副作用と仕事（ツールを持つ agent）は写しの上でも動かさず、そのノードに渡るはずだった行を返す。その行を、「届いたら」の副作用は
+  /// 上流の回の確定で起こされたときに、手動の仕事は流しが上流の後に起こしたときに読む。止めたノードは回の記録を持たない。
   func testSideEffectsAndWorkAreHeldWithTheRowsTheyWouldHaveGot() throws {
     let id = try define([
       fetch("gh"), definitionNode("send", .arrival, from: ["gh"], deliver: .sideEffect),
       DesignSceneFixtures.agentNode(
-        "job", "job", .arrival, from: ["gh"], tools: ["Bash(git status:*)"], instruction: "do",
+        "job", "job", .manual, from: ["gh"], tools: ["Bash(git status:*)"], instruction: "do",
         deliver: .report),
     ])
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     finish("gh", fetched(["a"]))
     ended(trial)
@@ -30,7 +30,7 @@ extension AutomationTrialTests {
     for key in ["send", "job"] {
       XCTAssertEqual(trial.state(key: key), .held, key)
       XCTAssertEqual(trial.passes(key: key).count, 1, key)
-      guard case .held(let held) = trial.passes(key: key).first else {
+      guard case .held(let held, _) = trial.passes(key: key).first else {
         return XCTFail("\(key) に止めた行が無い")
       }
       XCTAssertEqual(
@@ -50,7 +50,7 @@ extension AutomationTrialTests {
     finish("gh", fetched(["a"]))
     XCTAssertEqual(store.automation(id)?.state(key: "p").pending.count, 1)
 
-    let trial = try trials.start(id, .init(from: ["p"], rows: [#"{"id":"x"}"#]))
+    let trial = try trials.start(.saved(id), .init(from: ["p"], rows: [#"{"id":"x"}"#]))
     let agents = {
       self.jobs.calls.indices.filter {
         if case .agent = self.jobs.calls[$0].job.work { return true }
@@ -88,7 +88,7 @@ extension AutomationTrialTests {
     finish("gh", fetched(["a"]))
     finish("judge", "")
 
-    let trial = try trials.start(id, .init(rows: [item("a")]))
+    let trial = try trials.start(.saved(id), .init(rows: [item("a")]))
     waitCalls("judge", 2)
     XCTAssertEqual(ids("judge"), [downstream("gh", "a", of: id)])
     XCTAssertEqual(calls("gh").count, 1)
@@ -102,14 +102,14 @@ extension AutomationTrialTests {
     XCTAssertEqual(given.compactMap(AutomationPrompts.id(of:)), [downstream("gh", "a", of: id)])
 
     let judged = try trials.start(
-      id,
+      .saved(id),
       .init(from: ["judge"], to: ["judge"], rows: [#"{"id":"x","link":"https://example.com/x"}"#]))
     waitCalls("judge", 3)
     XCTAssertEqual(ids("judge"), [downstream("gh", "x", of: id)])
     XCTAssertEqual(calls("gh").count, 1)
     finish("judge", "")
     ended(judged)
-    XCTAssertThrowsError(try trials.start(id, .init(rows: [#"{"id":"x"}"#]))) {
+    XCTAssertThrowsError(try trials.start(.saved(id), .init(rows: [#"{"id":"x"}"#]))) {
       XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: missing body"))
     }
   }
@@ -122,7 +122,7 @@ extension AutomationTrialTests {
       definitionNode("digest", from: ["p"], deliver: .report),
     ])
     let trial = try trials.start(
-      id, .init(from: ["p"], rows: [#"{"id":"x","note":"手作り"}"#]))
+      .saved(id), .init(from: ["p"], rows: [#"{"id":"x","note":"手作り"}"#]))
     waitCalls("p", 1)
     let x = downstream("gh", "x", of: id)
     XCTAssertEqual(ids("p"), [x])
@@ -138,16 +138,58 @@ extension AutomationTrialTests {
       fetch("gh"), fetch("slack"), definitionNode("p", from: ["gh", "slack"]),
       definitionNode("digest", from: ["p"], deliver: .report),
     ])
-    XCTAssertThrowsError(try trials.start(merged, .init(from: ["p"], rows: [#"{"id":"x"}"#]))) {
+    XCTAssertThrowsError(
+      try trials.start(.saved(merged), .init(from: ["p"], rows: [#"{"id":"x"}"#]))
+    ) {
       guard case .invalid(let message) = $0 as? AutomationError else { return XCTFail("\($0)") }
       XCTAssertTrue(message.hasPrefix(#"rows: "p" has 2 inputs"#), message)
     }
 
     let large = String(repeating: "x", count: AutomationOutputs.rowKiB << 10)
     XCTAssertThrowsError(
-      try trials.start(id, .init(from: ["p"], rows: [#"{"id":"y","note":"\#(large)"}"#]))
+      try trials.start(.saved(id), .init(from: ["p"], rows: [#"{"id":"y","note":"\#(large)"}"#]))
     ) {
       XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: larger than 64 KiB"))
     }
+  }
+
+  /// 「届いたら」のノードが、取得の入口と、その入口の下流のノードの両方から読むとき、与えた行は、間のノードが何も出さなくても本番の流しと同じく届く:
+  /// 止めた副作用には渡るはずだった行として、報告には読んだ行として。
+  func testRowsGivenToAFetchReachAReceiverOfItAndItsDownstreamWhenTheMiddleOutputsNothing() throws {
+    let id = try define([
+      DesignSceneFixtures.commandNode("gh", "gh", .manual, script: "gh", coverage: .newArrivals),
+      definitionNode("p", .arrival, from: ["gh"]),
+      definitionNode("send", .arrival, from: ["gh", "p"], deliver: .sideEffect),
+      definitionNode("q", .arrival, from: ["gh", "p"], deliver: .report),
+    ])
+
+    let start = jobs.calls.count
+    let trial = try trials.start(.saved(id), .init(rows: [item("x")]))
+    let tried = answer(from: start, until: { !trial.running }, { _, _ in "" })
+    XCTAssertNil(trial.failure)
+
+    let flowing = jobs.calls.count
+    try runner.flow(id, to: .ends)
+    let written = answer(from: flowing) { script, _ in script == "gh" ? self.fetched(["x"]) : "" }
+    let x = downstream("gh", "x", of: id)
+    XCTAssertEqual(written["send"], [[x]], "前提: 本番の流しでは副作用が x を受け取る")
+    XCTAssertEqual(written["q"], [[x]], "前提: 本番の流しでは q が x を読む")
+    XCTAssertEqual(trial.passes(key: "send").compactMap(\.heldIds), written["send"])
+    XCTAssertEqual(tried["q"], written["q"])
+  }
+
+  /// 行を与えた入口が「届いたら」の副作用で、その入力が毎回すべてを取るときも、渡るはずだった行は 1 回だけ返す（本番の流しでは、
+  /// 入口の副作用は 1 回だけ動く）。
+  func testAHeldEntryTakingAllReturnsTheGivenRowsOnce() throws {
+    var send = definitionNode("send", .arrival, deliver: .sideEffect)
+    send.from = [AutomationDefinition.Input(nodeKey: "gh", take: .all)]
+    let id = try define([fetch("gh"), send])
+
+    let trial = try trials.start(.saved(id), .init(from: ["send"], rows: [#"{"id":"x"}"#]))
+    ended(trial)
+
+    XCTAssertNil(trial.failure)
+    XCTAssertEqual(
+      trial.passes(key: "send").compactMap(\.heldIds), [[downstream("gh", "x", of: id)]])
   }
 }

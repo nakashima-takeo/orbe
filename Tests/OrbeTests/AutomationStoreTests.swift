@@ -61,7 +61,7 @@ final class AutomationStoreTests: OrbeTestCase {
   /// 今の版で書き換える。同じ鍵のノードは今のノードの id を添える（同じノードのまま）。
   @discardableResult static func rewrite(
     _ store: AutomationStore, _ id: Int, _ definition: AutomationDefinition, at: Date = at
-  ) throws -> AutomationStore.Replaced {
+  ) throws -> AutomationStore.Written {
     let current = try XCTUnwrap(store.automation(id))
     var definition = definition
     for index in definition.nodes.indices {

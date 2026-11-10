@@ -40,7 +40,7 @@ final class FakeControlTarget: ControlTarget {
   // MARK: - 記録
 
   struct ReadTrial {
-    let automationId: Int
+    let trialId: Int
     let wait: Bool
     let timeoutMs: Int
   }
@@ -136,7 +136,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var pausedAutomations: [FakePause] = []
   private(set) var deletedAutomationIds: [Int] = []
   private(set) var proposalLists: [Int?] = []
-  var triedAutomations: [(automationId: Int, request: AutomationTrial.Request)] = []
+  var triedAutomations: [FakeTry] = []
   private(set) var readTrials: [ReadTrial] = []
   private(set) var boardLists: [UUID] = []
   private(set) var addedBoardWidgets: [(workspaceId: UUID, widget: BoardWidget)] = []
@@ -364,10 +364,10 @@ final class FakeControlTarget: ControlTarget {
   }
 
   func controlAutomationTrial(
-    automationId: Int, wait: Bool, timeoutMs: Int,
+    trialId: Int, wait: Bool, timeoutMs: Int,
     completion: @escaping (Result<Any, ControlError>) -> Void
   ) {
-    readTrials.append(ReadTrial(automationId: automationId, wait: wait, timeoutMs: timeoutMs))
+    readTrials.append(ReadTrial(trialId: trialId, wait: wait, timeoutMs: timeoutMs))
     completion(outcome(["trial": [String: Any]()]))
   }
 }
