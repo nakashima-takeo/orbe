@@ -350,4 +350,43 @@ extension AutomationTrialTests {
     XCTAssertEqual(tried["p"], written["p"])
     XCTAssertEqual(trial.passes(key: "p").map(\.atWrite), [false])
   }
+
+  /// 試走は、書いた時点の起こしが、止めるノードの引き取った 1 回を挟んで続いても、その途中で流し始めない。過ぎていた予定の回が何も
+  /// 変えずに終わり、その下流のやり直しで、読み残しのある副作用と、読み残しのある「届いたら」の x が続けて起きる。このとき x は、
+  /// 本番と同じく書いた時点の回と流しの回に分かれて読み、書いた時点の回だけが `atWrite` を持つ。
+  func testARewriteDoesNotFlowInTheMiddleOfTheWakesAtWriting() throws {
+    let id = try define([
+      fetch("gh"), definitionNode("p", .scheduled(.every(60)), from: ["gh"]),
+      definitionNode("se", .arrival, from: ["p"], deliver: .sideEffect),
+      definitionNode("x", .arrival, from: ["gh", "p"], deliver: .report),
+    ])
+    try runner.flow(id, to: .ends)
+    _ = answer(from: 0, failing: ["se", "x"], echo(["a"]))
+    let fetching = jobs.calls.count
+    try runner.flow(id, to: .node(store.nodeId(id, "gh")))
+    _ = answer(from: fetching, failing: ["se", "x"], echo(["a", "b"]))
+    now += 61
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.name = "直した"
+    let output = { (script: String, _: [String]) in
+      script == "gh" ? self.fetched(["a", "b", "x"]) : ""
+    }
+
+    let start = jobs.calls.count
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init(rows: [item("x")]))
+    let tried = answer(from: start, until: { !trial.running }, output)
+    XCTAssertNil(trial.failure)
+
+    let writing = jobs.calls.count
+    _ = try runner.set(id, version: current.version, rewrite)
+    var written = answer(from: writing, output)
+    let flowing = jobs.calls.count
+    try runner.flow(id, to: .ends)
+    written.merge(answer(from: flowing, output)) { $0 + $1 }
+    XCTAssertEqual(written["x"]?.count, 2, "前提: 本番では x が書いた時点の回と流しの回の 2 回に分かれて読む")
+    XCTAssertEqual(tried["x"], written["x"])
+    XCTAssertEqual(trial.passes(key: "x").reversed().map(\.atWrite), [true, false])
+  }
 }

@@ -15,9 +15,10 @@ extension AutomationTrialTests {
   }
 
   /// `start` 番目から後に呼ばれた手段を、呼ばれた順に `output`（スクリプトと読んだ行の id から出力を決める）で終え、新しい呼び出しが
-  /// 無く `done` が立てば返す。スクリプトごとに、呼ばれた順の読んだ行の id を返す。回の順が本番と食い違っても最後まで進める。
+  /// 無く `done` が立てば返す。`failing` のスクリプトは失敗で終える。スクリプトごとに、呼ばれた順の読んだ行の id を返す。回の順が
+  /// 本番と食い違っても最後まで進める。
   func answer(
-    from start: Int, until done: () -> Bool = { true },
+    from start: Int, until done: () -> Bool = { true }, failing: Set<String> = [],
     _ output: (_ script: String, _ ids: [String]) -> String
   ) -> [String: [[String]]] {
     var read: [String: [[String]]] = [:]
@@ -27,7 +28,7 @@ extension AutomationTrialTests {
       guard jobs.calls.count > next else { return read }
       let script = script(at: next) ?? ""
       read[script, default: []].append(ids(at: next))
-      finish(at: next, output(script, ids(at: next)))
+      finish(at: next, output(script, ids(at: next)), exit: failing.contains(script) ? 1 : 0)
       next += 1
     }
   }
