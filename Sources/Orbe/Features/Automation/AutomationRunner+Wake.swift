@@ -68,7 +68,7 @@ extension AutomationRunner {
     guard !scheduler.isRunning(id: key),
       Self.wakes(node, of: automation, since: marks[key] ?? [:], { inlets(of: nodeId) })
     else { return }
-    scheduler.runNow(id: key)
+    runNow(id, nodeId)
   }
 
   /// 起こす決まりで起きるか: 実効で止めていない「届いたら」のノードで、入力のどれかに `previous` を基準線とした新しい上流の行が
@@ -89,11 +89,10 @@ extension AutomationRunner {
     guard let automation = store.automation(id) else { return }
     for node in automation.graph.descendants(of: nodeId)
     where node.entity.trigger == .arrival && !automation.halted(node.id) {
-      let key = Self.key(id, node.id)
       guard let inlets = inlets(of: node.id), Self.needsRetry(node, inlets) else {
         continue
       }
-      scheduler.runNow(id: key)
+      runNow(id, node.id)
     }
   }
 }
