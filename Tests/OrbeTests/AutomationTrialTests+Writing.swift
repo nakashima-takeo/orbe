@@ -212,4 +212,40 @@ extension AutomationTrialTests {
     XCTAssertEqual(tried["p"], written["p"])
     XCTAssertEqual(trial.passes(key: "p").map(\.atWrite), [false])
   }
+
+  /// 写しの走らせ役は、本番の走らせ役が番人に最後に返した数え始め（予定の次の時刻を数える起点）も引き継ぐ。予定の回が取る行 0 件で
+  /// 終わって回の記録を残さなかった場合も、写しの走らせ役は本番と同じく、書いた時点に予定の回を起こさない。その後に届いた行は流しで読む。
+  func testARewriteKeepsProductionsAnchorSoAScheduleThatTookNothingIsNotOverdueAtWriting() throws {
+    let id = try define([
+      fetch("gh"), definitionNode("p", .scheduled(.every(60)), from: ["gh"], deliver: .report),
+    ])
+    now += 120
+    try runner.flow(id, to: .node(store.nodeId(id, "gh")))
+    finish("gh", "")
+    XCTAssertEqual(calls("p"), [], "前提: 過ぎていた p の予定の回は、取る行が 0 件なので手段を起こさない")
+    try runner.flow(id, to: .node(store.nodeId(id, "gh")))
+    finish("gh", fetched(["a"]))
+    now += 10
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.name = "直した"
+    let output = { (script: String, _: [String]) in
+      script == "gh" ? self.fetched(["a"]) : "読んだ"
+    }
+
+    let start = jobs.calls.count
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
+    let tried = answer(from: start, until: { !trial.running }, output)
+    XCTAssertNil(trial.failure)
+
+    let writing = jobs.calls.count
+    _ = try runner.set(id, version: current.version, rewrite)
+    XCTAssertEqual(jobs.calls.count, writing, "前提: 本番では書いた時点に何も起きない")
+    try runner.flow(id, to: .ends)
+    let written = answer(from: writing, output)
+    XCTAssertEqual(written["p"], [[downstream("gh", "a", of: id)]], "前提: 流しで a を読む")
+    XCTAssertEqual(tried["p"], written["p"])
+    XCTAssertEqual(trial.passes(key: "p").map(\.atWrite), [false])
+  }
 }
