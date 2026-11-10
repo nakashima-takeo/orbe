@@ -322,7 +322,8 @@ public enum ZoneTextLayout {
 }
 
 extension ZoneTextLayout {
-  /// 文の位置 `offset` を含む段落（改行で区切った文。改行は含めない）の範囲。改行の位置は、その改行で終わる段落に含める。
+  /// 文の位置 `offset` を含む段落（改行で区切った文。改行は含めない）の範囲。`offset` が改行の位置のときは、その改行で
+  /// 終わる段落の範囲を返す。
   private static func paragraphSpan(around offset: Int, in units: [UInt16]) -> Range<Int> {
     let start = units[..<offset].lastIndex(of: 0x0A).map { $0 + 1 } ?? 0
     return start..<(units[offset...].firstIndex(of: 0x0A) ?? units.count)
