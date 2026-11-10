@@ -259,16 +259,19 @@ final class AutomationTrial {
     }
   }
 
-  /// 行を与えて流す。
+  /// 行を与えて流す。与えた行は書くノードの出力なので、流し始めた後に、本番の確定の後と同じく書くノードの下流に起こす決まりを
+  /// 見る（道の根は流しが先に起こしている）。
   private func proceed(_ plan: Plan) throws(AutomationError) {
     writing = false
     guard let store, let range, let runner else { return }
     let id = range.automationId
+    var wrote: AutomationNodeID?
     if let given = plan.given, let automation = store.automation(id) {
       let nodes = automation.graph.nodes
       let (entry, writer) = (nodes[given.entry].id, nodes[given.writer].id)
       let rows = request.limit.map { Array(given.rows.prefix($0)) } ?? given.rows
       try store.give(rows, as: writer, of: id, at: production.now())
+      wrote = writer
       if given.fetched {
         let given = try store.latestRows(of: entry, in: id, count: rows.count)
         passes[entry] = [.given(given)]
@@ -276,6 +279,7 @@ final class AutomationTrial {
     }
     guard !plan.targets.isEmpty else { return end(failure: nil) }
     try runner.flow(id, through: plan.admitted, to: plan.targets)
+    if let wrote { runner.wake(below: wrote, in: id) }
   }
 
   /// ノードの回の知らせ（確定の直後、下流が読む前）。取得・処理はその回が写しに足した新しい行を結果にし、道の根の取得なら先に
