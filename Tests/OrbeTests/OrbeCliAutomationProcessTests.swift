@@ -156,6 +156,31 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertTrue(last.hasSuffix(" post: agent exited 0"), last)
   }
 
+  /// `list` の前回の列は、報告のノードの最新の回が報告の文を書いていれば `reported`、書いていなければ `nothing to report`
+  /// を出す（`list_automations` の `lastRun` は報告の全文を持たず、1 行目の `summary` だけを持つ）。
+  func testListShowsWhetherAReportNodeReported() throws {
+    let control = try startControlProcess()
+    let id = try XCTUnwrap(
+      Int(
+        run(
+          control, ["set"],
+          stdin: #"{"name": "日報", "nodes": [{"key": "digest", "name": "要約", "#
+            + #""trigger": {"kind": "cron", "expression": "0 18 * * *"}, "#
+            + #""command": "cat ~/report.txt", "deliver": "report"}]}"#
+        )))
+    let store = control.target.automationStore
+
+    try store.record(
+      id, nodeKey: "digest", at: Date(),
+      outcome: DesignSceneFixtures.reported("PR は 3 件\n- #1\n- #2"))
+    XCTAssertTrue(row(control)[5].hasSuffix(" digest: reported"), row(control)[5])
+
+    try store.record(
+      id, nodeKey: "digest", at: Date().addingTimeInterval(60),
+      outcome: DesignSceneFixtures.reported(nil))
+    XCTAssertTrue(row(control)[5].hasSuffix(" digest: nothing to report"), row(control)[5])
+  }
+
   /// `proposals <id>` はその自動化が出した提案だけを、`proposals` は全部を 1 行 1 提案で出す。
   func testProposalsListsTheShelfOfTheGivenAutomation() throws {
     let control = try startControlProcess()
