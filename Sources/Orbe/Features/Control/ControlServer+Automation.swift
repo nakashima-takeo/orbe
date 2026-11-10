@@ -23,8 +23,9 @@ protocol ControlAutomationTarget: AnyObject {
   /// 覚えている提案を列挙する（list_automation_proposals）。automationId 指定はその自動化の棚の分。
   func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError>
   /// 試走を始める（try_automation）。すぐ返る。definition が無ければ保存した定義、あれば書く前の定義（automationId があれば
-  /// version を添えて直す定義、無ければ新しい定義）を試す。書く前の定義は set_automation と同じ断りで確かめる。知らない自動化・
-  /// ノードは -32004、範囲・行・limit の誤りと組めない組み合わせは -32602。
+  /// version を添えて直す定義、無ければ新しい定義）を試す。書く前の定義は set_automation と同じ断りで確かめる。知らない自動化と、
+  /// 保存した定義の試走の知らないノードの鍵は -32004。書く前の定義の試走の知らないノードの鍵、範囲・行・limit の誤り、組めない
+  /// 組み合わせは -32602。
   func controlTryAutomation(
     automationId: Int?, version: Int?, definition: [String: Any]?,
     _ request: AutomationTrial.Request
