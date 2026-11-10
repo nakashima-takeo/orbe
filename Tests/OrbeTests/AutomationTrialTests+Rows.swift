@@ -7,13 +7,13 @@ import XCTest
 /// 壊れると何が起きるか: 試走で副作用や仕事が本当に走る。止めたノードに何が渡るはずだったかが分からない。与えた行が流れない、
 /// または本番の取得が走る。
 extension AutomationTrialTests {
-  /// 副作用と仕事（ツールを持つ agent）は写しの上でも動かさず、流しの終わりに渡るはずだった行を 1 つにまとめて返す。回の記録は
-  /// 持たない。
+  /// 副作用と仕事（ツールを持つ agent）は写しの上でも動かさず、そのノードに渡るはずだった行を返す。その行を、「届いたら」の副作用は
+  /// 上流の回の確定で起こされたときに、手動の仕事は流しの終わりに読む。止めたノードは回の記録を持たない。
   func testSideEffectsAndWorkAreHeldWithTheRowsTheyWouldHaveGot() throws {
     let id = try define([
       fetch("gh"), definitionNode("send", .arrival, from: ["gh"], deliver: .sideEffect),
       DesignSceneFixtures.agentNode(
-        "job", "job", .arrival, from: ["gh"], tools: ["Bash(git status:*)"], instruction: "do",
+        "job", "job", .manual, from: ["gh"], tools: ["Bash(git status:*)"], instruction: "do",
         deliver: .report),
     ])
     let trial = try trials.start(.saved(id), .init())
