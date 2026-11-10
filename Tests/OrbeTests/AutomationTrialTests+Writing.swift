@@ -183,6 +183,108 @@ extension AutomationTrialTests {
     XCTAssertEqual(trial.passes(key: "p").reversed().map(\.atWrite), [true, false])
   }
 
+  /// 書いた時点に過ぎていた予定の回は、止めるノードでも書いた時点の分として起きる: 手動から短い間隔に変えた副作用は、本番で書いて
+  /// 流したときに副作用が受け取る行と同じ分かれ方で、書いた時点の分と流しの分に渡るはずだった行を持つ。
+  func testARewriteHoldsWhatAnOverdueSideEffectGetsAtWritingAsInProduction() throws {
+    let id = try define([fetch("gh"), definitionNode("send", from: ["gh"], deliver: .sideEffect)])
+    try runner.flow(id, to: .ends)
+    finish("gh", fetched(["a"]))
+    finish("send", "")
+    try runner.flow(id, to: .node(store.nodeId(id, "gh")))
+    finish("gh", fetched(["a", "b"]))
+    now += 3600
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.nodes[1].trigger = .scheduled(.every(60))
+    let output = { (script: String, _: [String]) in
+      script == "gh" ? self.fetched(["a", "b", "c"]) : ""
+    }
+
+    let start = jobs.calls.count
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
+    _ = answer(from: start, until: { !trial.running }, output)
+    XCTAssertNil(trial.failure)
+    XCTAssertEqual(calls("send").filter { $0 >= start }, [], "副作用は写しの上でも走らない")
+    let sends = trial.passes(key: "send").reversed()
+
+    let writing = jobs.calls.count
+    _ = try runner.set(id, version: current.version, rewrite)
+    var written = answer(from: writing, output)
+    let flowing = jobs.calls.count
+    try runner.flow(id, to: .ends)
+    written.merge(answer(from: flowing, output)) { $0 + $1 }
+    XCTAssertEqual(
+      written["send"], [[downstream("gh", "b", of: id)], [downstream("gh", "c", of: id)]],
+      "前提: 本番では書いた時点に副作用が b を受け取り、流しで c を受け取る")
+    XCTAssertEqual(sends.compactMap(\.heldIds), written["send"])
+    XCTAssertEqual(sends.map(\.atWrite), [true, false])
+  }
+
+  /// 入力の無い止めるノードも、起きるたびに渡るはずだった行（中身は空）を返す: 手動から短い間隔に変えた入力の無い副作用は、本番で
+  /// 書いて流したときに副作用のコマンドが起きる回（書いた時点と流し）と同じ数だけ、空の渡るはずだった行を持つ。
+  func testARewriteHoldsEachTimeASideEffectWithoutInputsWouldRunAsInProduction() throws {
+    let id = try define([definitionNode("send", deliver: .sideEffect)])
+    try runner.flow(id, to: .ends)
+    finish("send", "")
+    now += 3600
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.nodes[0].trigger = .scheduled(.every(60))
+    let output = { (_: String, _: [String]) in "" }
+
+    let start = jobs.calls.count
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
+    _ = answer(from: start, until: { !trial.running }, output)
+    XCTAssertNil(trial.failure)
+    let sends = trial.passes(key: "send").reversed()
+
+    let writing = jobs.calls.count
+    _ = try runner.set(id, version: current.version, rewrite)
+    XCTAssertEqual(calls("send").filter { $0 >= writing }.count, 1, "前提: 本番では書いた時点に副作用が起きる")
+    _ = answer(from: writing, output)
+    let flowing = jobs.calls.count
+    try runner.flow(id, to: .ends)
+    _ = answer(from: flowing, output)
+    XCTAssertEqual(calls("send").filter { $0 >= flowing }.count, 1, "前提: 流しでも副作用が起きる")
+    XCTAssertEqual(sends.compactMap(\.heldIds), [[], []])
+    XCTAssertEqual(sends.map(\.atWrite), [true, false])
+  }
+
+  /// 写した時点に本番で予定の回が走っているノードは、写しの上では結果を残さずに終わった回として引き継ぐ: 走っている回が間隔を過ぎて
+  /// いなければ、本番と同じく書いた時点に予定の回を起こさず、その回が読んでいる行は流しで読む。
+  func testARewriteDoesNotRunAgainAtWritingAScheduleRunningInProduction() throws {
+    let id = try define([
+      fetch("gh"), definitionNode("p", .scheduled(.every(60)), from: ["gh"], deliver: .report),
+    ])
+    try runner.flow(id, to: .node(store.nodeId(id, "gh")))
+    finish("gh", fetched(["a"]))
+    now += 120
+    runner.scheduler.recount()
+    XCTAssertEqual(ids("p"), [downstream("gh", "a", of: id)], "前提: p の予定の回が本番で走っている")
+    now += 10
+    let current = try XCTUnwrap(store.automation(id))
+    var rewrite = current.definition
+    rewrite.name = "直した"
+    let output = { (script: String, _: [String]) in
+      script == "gh" ? self.fetched(["a"]) : "読んだ"
+    }
+
+    let start = jobs.calls.count
+    let trial = try trials.start(
+      try unsaved(.replace(id, version: current.version, rewrite)), .init())
+    let tried = answer(from: start, until: { !trial.running }, output)
+    XCTAssertNil(trial.failure)
+
+    let writing = jobs.calls.count
+    _ = try runner.set(id, version: current.version, rewrite)
+    XCTAssertEqual(jobs.calls.count, writing, "前提: 本番では書いた時点に何も起きない")
+    XCTAssertEqual(tried["p"], [[downstream("gh", "a", of: id)]])
+    XCTAssertEqual(trial.passes(key: "p").compactMap { $0.run?.trigger }, [.now])
+    XCTAssertEqual(trial.passes(key: "p").map(\.atWrite), [false])
+  }
+
   /// 写しの走らせ役は本番の前の契機の印を引き継ぐ: 失敗した回が残した行（基準線以下）では、本番と同じく書いた時点に「届いたら」の
   /// ノードを起こさず、流しの祖先の予定でのやり直しで読む。
   func testARewriteKeepsProductionsMarksSoARowAFailedRunLeftDoesNotWakeAtWriting() throws {
