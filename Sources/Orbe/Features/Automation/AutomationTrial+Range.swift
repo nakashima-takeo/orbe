@@ -19,7 +19,7 @@ extension AutomationTrial {
   /// 範囲を解く形: 定義の順の検証を通ったノードと、鍵を引く保存した自動化（書く前の定義には無い）。
   struct Shape {
     let nodes: [AutomationGraph.Checked]
-    let automationId: Int?
+    let savedAutomationId: Int?
   }
 
   /// 外の形の範囲（入口・行き先・道のノードの鍵）。
@@ -88,7 +88,7 @@ extension AutomationTrial {
       var positions: [Int] = []
       for (index, key) in keys.enumerated() {
         guard let position = nodes.firstIndex(where: { $0.key == key }) else {
-          guard let automationId = shape.automationId else {
+          guard let automationId = shape.savedAutomationId else {
             throw .invalid("\(name)[\(index)]: unknown node \"\(key)\"")
           }
           throw .nodeNotFound(automationId, key)

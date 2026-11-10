@@ -29,9 +29,9 @@ extension AutomationTrial {
       switch self {
       case .saved(let id):
         return Shape(
-          nodes: store.automations[try store.index(id)].graph.checked, automationId: id)
+          nodes: store.automations[try store.index(id)].graph.checked, savedAutomationId: id)
       case .unsaved(_, let nodes):
-        return Shape(nodes: nodes, automationId: nil)
+        return Shape(nodes: nodes, savedAutomationId: nil)
       }
     }
 

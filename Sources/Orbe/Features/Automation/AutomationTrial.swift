@@ -184,7 +184,7 @@ final class AutomationTrial {
     let (automation, written) = try target.automation(on: store, now: production.now())
     let id = automation.id
     let nodes = automation.graph.nodes
-    let shape = Shape(nodes: automation.graph.checked, automationId: target.savedAutomationId)
+    let shape = Shape(nodes: automation.graph.checked, savedAutomationId: target.savedAutomationId)
     let span = try Self.span(of: shape, request)
     let range = Range(
       automationId: id, to: span.to.map { nodes[$0].id }, path: span.path.map { nodes[$0] })
