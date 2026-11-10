@@ -54,16 +54,26 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
-  /// Home の rules・⌘⇧X の役目の指示（日英）・同梱プラグインの自動化のスキルが名指しする MCP のツールは、どれも
-  /// `tools/list` にある。どれも claude が読む手引きで、orbe-mcp は別ターゲットなので、ツールを改名・削除しても
-  /// コンパイルもほかのテストも通ってしまう。
+  /// 次の文書が名指しする MCP のツールは、どれも `tools/list` にある。対象は Home の rules、⌘⇧X の役目の指示（日英）、
+  /// 同梱プラグインの自動化のスキルとその型。いずれも claude が読む手引きで、orbe-mcp は別ターゲットなので、
+  /// ツールを改名・削除してもコンパイルもほかのテストも通ってしまう。
   func testAgentInstructionsNameOnlyToolsTheBridgeLists() throws {
     let names = Set(ControlProcess.mcpToolsList().compactMap { $0["name"] as? String })
     let pattern = try NSRegularExpression(pattern: "`([a-z]+(?:_[a-z]+)+|spawn)`")
     let skill = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-      .appendingPathComponent("app/agent-plugin/plugins/orbe-agent/skills/automation/SKILL.md")
-    var texts = [("自動化のスキル", try String(contentsOf: skill, encoding: .utf8))]
+      .appendingPathComponent("app/agent-plugin/plugins/orbe-agent/skills/automation")
+    var texts = [
+      (
+        "自動化のスキル",
+        try String(contentsOf: skill.appendingPathComponent("SKILL.md"), encoding: .utf8)
+      ),
+      (
+        "自動化のスキルの型",
+        try String(
+          contentsOf: skill.appendingPathComponent("references/patterns.md"), encoding: .utf8)
+      ),
+    ]
     for language in Language.allCases {
       texts += [
         ("\(language) の Home の rules", HomeTemplate.rules(language, home: "/home")),
@@ -151,6 +161,10 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       description(try tool("get_automation_trial")).contains(
         "`timeoutMs` (default \(WaitTimeout.promptDefaultMs), max \(WaitTimeout.maxMs))"),
       "get_automation_trial の既定 / 上限が WaitTimeout と食い違っている")
+    XCTAssertTrue(
+      description(try tool("list_automation_runs"), property: "limit").contains(
+        "(default \(AutomationStore.historyPage), max \(AutomationStore.historyPageLimit))"),
+      "list_automation_runs の limit の既定 / 上限が AutomationStore と食い違っている")
     for name in ["spawn_agent", "resume_agent"] {
       XCTAssertTrue(
         description(try tool(name), property: "timeoutMs")

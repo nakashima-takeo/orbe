@@ -35,6 +35,23 @@ extension OrbeCliProcessTests {
       "wait --help の既定が WaitTimeout.eventDefaultMs と食い違っている: \(wait.stdout)")
   }
 
+  /// `orb automation --help` にコピーされている、`trial --wait` の待ち時間（`--timeout-ms`）の既定・上限と、
+  /// `runs` の 1 ページの件数（`--limit`）の既定・上限は、control と同じ値。
+  func testAutomationHelpLimitsMatchControl() {
+    let outcome = ControlProcess.orbWithoutServer(["automation", "--help"])
+    XCTAssertEqual(outcome.status, 0, "automation --help は socket 不達でも exit 0: \(outcome.stderr)")
+    let help = outcome.stdout.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    XCTAssertTrue(
+      help.contains(
+        "`--timeout-ms` (default \(WaitTimeout.promptDefaultMs), max \(WaitTimeout.maxMs))"),
+      "trial の --timeout-ms の既定 / 上限が WaitTimeout と食い違っている: \(help)")
+    XCTAssertTrue(
+      help.contains(
+        "`--limit` (default \(AutomationStore.historyPage), max \(AutomationStore.historyPageLimit))"
+      ),
+      "runs の --limit の既定 / 上限が AutomationStore と食い違っている: \(help)")
+  }
+
   /// `orb tab --help` の `KEYS:` は control の `ControlKey.namedKeys` と同じ集合。
   ///
   /// 弾くのは control（`ControlKey.parse` が -32602）だが、help は socket 不達でも出す必要が
