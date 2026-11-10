@@ -50,8 +50,8 @@ extension OrbeCliAutomationProcessTests {
     XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["1:b"])
     XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "副作用のコマンドは走らない")
     let lines = run(control, ["trial", trialId]).split(separator: "\n")
-    XCTAssertTrue(lines.contains("fetch\tgiven\tgiven 1 rows"), "\(lines)")
-    XCTAssertEqual(lines.last, "send\theld\theld 1 rows")
+    XCTAssertTrue(lines.contains("fetch\tgiven\tgiven 1 rows\t-"), "\(lines)")
+    XCTAssertEqual(lines.last, "send\theld\theld 1 rows\t-")
 
     let ranged = try XCTUnwrap(
       control.orbJSON(["automation", "try", id, "--from", "note", "--to", "note"])["trial"]

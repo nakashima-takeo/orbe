@@ -93,16 +93,22 @@ func automationTrial(_ rest: [String]) -> Never {
   if let failure = trial?["failure"] as? String { print("failed: \(failure)") }
   for node in trial?["nodes"] as? [[String: Any]] ?? [] {
     let key = node["key"] as? String ?? "?"
-    let cell = (node["runs"] as? [[String: Any]])?.first.map { run in
-      for kind in ["held", "given"] {
-        if let rows = (run[kind] as? [String: Any])?["rows"] as? [Any] {
-          return "\(kind) \(rows.count) rows"
-        }
-      }
-      return runCell(key, run)
-    }
+    let runs = node["runs"] as? [[String: Any]] ?? []
+    let flowed = runs.first { $0["atWrite"] as? Bool != true }.map { trialCell(key, $0) }
+    let written = runs.first { $0["atWrite"] as? Bool == true }.map { trialCell(key, $0) }
     print(
-      [key, node["state"].map(display) ?? "-", cell ?? "-"].map(tsvCell).joined(separator: "\t"))
+      [key, node["state"].map(display) ?? "-", flowed ?? "-", written ?? "-"].map(tsvCell)
+        .joined(separator: "\t"))
   }
   exit(0)
+}
+
+/// 試走の回 1 つの表示。止めた副作用・仕事と与えた取得は行の数、ほかは `list` の「前回」と同じ語。
+private func trialCell(_ key: String, _ run: [String: Any]) -> String {
+  for kind in ["held", "given"] {
+    if let rows = (run[kind] as? [String: Any])?["rows"] as? [Any] {
+      return "\(kind) \(rows.count) rows"
+    }
+  }
+  return runCell(key, run)
 }
