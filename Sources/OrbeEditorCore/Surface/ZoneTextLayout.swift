@@ -262,7 +262,7 @@ public enum ZoneTextLayout {
   /// 始まる見え方の先頭の余白は、その行を割るときに幅から引く（→ `leadingPadding(at:)`）。割った行で外す余白
   /// （→ `styles(_:in:)`）も文の並びの順で決まり、送りの量は組んだ行と同じなので、組んだ行の幅はふつう割るときに測った
   /// 幅と同じになる。ただし、Core Text が和文とほかの字の間に入れる空き（字の大きさの 1/8）の入り方は送りを置く字で
-  /// 変わるので、和文と右から左の字のインラインコードが同じ行にあると、組んだ行は割った幅を字の大きさの 1/8 まで
+  /// 変わるので、和文と、右から左の字のインラインコードが同じ行にあると、組んだ行は割った幅を字の大きさの 1/8 まで
   /// 超える。
   private static func breaking(_ units: [UInt16], styles: [ZoneTextStyle], rightToLeft: Bool)
     -> CFAttributedString
