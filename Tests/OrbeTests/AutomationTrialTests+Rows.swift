@@ -152,4 +152,21 @@ extension AutomationTrialTests {
       XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: larger than 64 KiB"))
     }
   }
+
+  /// 行を与えた入口が「届いたら」の副作用で、その入力が毎回すべてを取るときも、渡るはずだった行は 1 回だけ返す（本番の流しでは、
+  /// 入口の副作用は 1 回だけ動く）。
+  func testAHeldEntryTakingAllReturnsTheGivenRowsOnce() throws {
+    var send = definitionNode("send", .arrival, deliver: .sideEffect)
+    send.from = [AutomationDefinition.Input(nodeKey: "gh", take: .all)]
+    let id = try define([fetch("gh"), send])
+
+    let trial = try trials.start(.saved(id), .init(from: ["send"], rows: [#"{"id":"x"}"#]))
+    ended(trial)
+
+    XCTAssertNil(trial.failure)
+    XCTExpectFailure("試走は、同じ行を渡るはずだった行として、与えた行で入口の副作用を起こしたときと、流しの終わりに道の根として読み直すときの 2 回返す") {
+      XCTAssertEqual(
+        trial.passes(key: "send").compactMap(\.heldIds), [[downstream("gh", "x", of: id)]])
+    }
+  }
 }
