@@ -89,7 +89,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(shape(center(hits.buttons[0].frame)), .pointingHand, "押せる場所")
     XCTAssertEqual(shape(center(hits.fields[0].frame)), .iBeam, "入力欄")
     XCTAssertEqual(shape(CGPoint(x: line.origin.x + 2, y: line.origin.y - 3)), .iBeam, "選べる文")
-    XCTAssertEqual(shape(CGPoint(x: 10, y: 10)), .iBeam, "空き")
+    XCTAssertEqual(shape(CGPoint(x: 10, y: 10)), .iBeam, "ほかに当たらない所")
   }
 
   /// Orbe の操作（選択を置く）が引き直したホバーで押せる場所から出ても、変化はその周の終わりに 1 回で出る——出入りが
