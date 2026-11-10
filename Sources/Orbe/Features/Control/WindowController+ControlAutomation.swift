@@ -224,7 +224,7 @@ extension WindowController {
         "running": automationRunner.isRunning(automation.id, node.id), "paused": state.paused,
       ]
       if let last = state.runs.first {
-        object["lastRun"] = AutomationRunWire.object(last, nodeKey: node.key)
+        object["lastRun"] = AutomationRunWire.listed(last, nodeKey: node.key)
       }
       if let next = automationRunner.nextRunAt(automation, nodeId: node.id) {
         object["nextRunAt"] = SessionEvent.iso8601(next)

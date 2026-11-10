@@ -32,7 +32,7 @@ func runCell(_ key: String, _ run: [String: Any]) -> String {
   case "fetch": summary = "\(count) fetched, \(result?["fresh"].map(display) ?? "0") new"
   case "process": summary = "\(run["taken"].map(display) ?? "0") in, \(count) out"
   case "judge": summary = "\(result?["proposed"].map(display) ?? "0") proposed"
-  case "report": summary = result?["text"] == nil ? "nothing to report" : "reported"
+  case "report": summary = result?["summary"] == nil ? "nothing to report" : "reported"
   case "sideEffect": summary = "command \(ending)"
   case "work": summary = "agent \(ending)"
   default: summary = ending

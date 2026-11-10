@@ -266,12 +266,7 @@ extension BoardAutomationSummary {
     text: AutomationText
   ) -> String {
     guard let node = automation.graph.node(nodeId) else { return "\(nodeId)" }
-    let body: String =
-      switch run.result {
-      case .report(let report?) where !run.failed: report
-      case .work(let reply?, nil) where !run.failed: reply
-      default: result(run, node: node, text: text).text
-      }
+    let body = run.result?.summary ?? result(run, node: node, text: text).text
     return String(
       text.l10n.format(.automationLabeled, node.entity.name, body).prefix { !$0.isNewline })
   }

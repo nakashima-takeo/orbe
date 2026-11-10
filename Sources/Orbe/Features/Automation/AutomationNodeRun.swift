@@ -40,6 +40,17 @@ struct AutomationNodeRun: Equatable {
     case sideEffect(count: Int)
     /// 何もしなかった回は `nothing` に理由を持つ。
     case work(text: String?, nothing: String?)
+
+    /// 報告と仕事のノードが書いた文の 1 行目（前後の空白を除いた文の最初の行）。通知の本文と、外の形の `summary` になる。
+    /// 文の無い結果は nil。
+    var summary: String? {
+      switch self {
+      case .report(let text?), .work(let text?, _):
+        let line = text.trimmingCharacters(in: .whitespacesAndNewlines).prefix { !$0.isNewline }
+        return line.isEmpty ? nil : String(line)
+      default: return nil
+      }
+    }
   }
 
   var failed: Bool { failure != nil }
