@@ -70,10 +70,8 @@ final class ZoneTextLayoutTests: XCTestCase {
     let padded = ZoneTextLayout.lines(string, styles: styles(4), width: 500)[0]
     let lead = CGFloat(
       CTLineGetTypographicBounds(
-        ZoneTextLayout.typeset(
-          "see ", range: NSRange(location: 0, length: 4),
-          styles: [ZoneTextStyle(length: 4, font: font, color: .white)]
-        ).line, nil, nil, nil))
+        ZoneTextLayout.typeset([ZoneTextRun("see ", font: font, color: .white)]).line, nil, nil,
+        nil))
     XCTAssertGreaterThan(
       lead, ZoneTextLayout.width([ZoneTextRun("see", font: font, color: .white)]),
       "前提: 手前の空白に幅がある")
@@ -130,9 +128,17 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   private func glyphCount(_ string: String, _ styles: [ZoneTextStyle]) -> Int {
     CTLineGetGlyphCount(
-      ZoneTextLayout.typeset(
-        string, range: NSRange(location: 0, length: string.utf16.count), styles: styles
-      ).line)
+      typeset(string, range: NSRange(location: 0, length: string.utf16.count), styles: styles).line)
+  }
+
+  /// まとまりの文 `string` の範囲 `range` を見え方 `styles` で描く組版。
+  private func typeset(_ string: String, range: NSRange, styles: [ZoneTextStyle])
+    -> ZoneTextLayout.Typeset
+  {
+    ZoneTextLayout.typeset(
+      ZoneText(
+        id: 0, string: string,
+        lines: [ZoneSelectableLine(origin: .zero, range: range, styles: styles)]))[0]
   }
 
   /// 余白のあるインラインコードと右から左の字が同じ段落にあっても、折り返したどの行も幅に収まる。
@@ -209,7 +215,7 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   /// 段落の途中の行も段落の向きで組む——左から右の段落で右から左の字から始まる行でも、後ろの字はその右に、右から左の
   /// 段落で左から右の字から始まる行でも、後ろの字はその左に並ぶ。測った行（`lines`）でも、その行を描く組版（`typeset`
-  /// に文と行の範囲を渡したもの）でも同じ。
+  /// にまとまりの文とその行を渡したもの）でも同じ。
   func testAWrappedLineIsLaidOutInTheParagraphsDirection() throws {
     for (parts, width, rightToLeft) in [
       (["see ", "שלום עולם ארוך מאוד", " z"], CGFloat(90), false),
@@ -221,7 +227,7 @@ final class ZoneTextLayoutTests: XCTestCase {
         lines.last { $0.range.location > 0 && $0.styles.count == 2 && $0.styles[0].font == mono },
         "前提: \(string) に、コードの続きから始まって後ろの字が並ぶ行がある")
       let (code, after) = (line.spans[0], line.spans[1])
-      let set = ZoneTextLayout.typeset(string, range: line.range, styles: line.styles)
+      let set = typeset(string, range: line.range, styles: line.styles)
       let (drawnCode, drawnAfter) = (left(of: 0, in: set.line), left(of: 1, in: set.line))
       if rightToLeft {
         XCTAssertLessThanOrEqual(after.upperBound, code.lowerBound + 0.01, "\(string): 後ろの字は左")
@@ -265,12 +271,9 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   /// 組んだ字の連なりは見え方の境で分かれる（同じ字体でも）。
   func testTypesetRunsSplitAtEveryStyle() {
-    let set = ZoneTextLayout.typeset(
-      "redgreen", range: NSRange(location: 0, length: 8),
-      styles: [
-        ZoneTextStyle(length: 3, font: font, color: .red),
-        ZoneTextStyle(length: 5, font: font, color: .green),
-      ])
+    let set = ZoneTextLayout.typeset([
+      ZoneTextRun("red", font: font, color: .red), ZoneTextRun("green", font: font, color: .green),
+    ])
     let runs = CTLineGetGlyphRuns(set.line) as? [CTRun] ?? []
     XCTAssertEqual(runs.map { ZoneTextLayout.style(of: $0) }, [0, 1])
   }

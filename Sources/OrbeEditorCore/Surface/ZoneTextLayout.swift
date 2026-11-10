@@ -23,8 +23,9 @@ public enum ZoneTextLayout {
     }
   }
 
-  /// 1 行に組んだもの——組んだ行と、行頭の余白（見た目で行の左端に来る見え方の、左の余白。字はこの幅だけ右へずらして置く）。
+  /// 1 行に組んだもの——組んだ文の範囲と、組んだ行と、行頭の余白（見た目で行の左端に来る見え方の、左の余白。字はこの幅だけ右へずらして置く）。
   public struct Typeset {
+    public let range: NSRange
     public let line: CTLine
     public let inset: CGFloat
   }
@@ -36,32 +37,49 @@ public enum ZoneTextLayout {
     var lines: [Line] = []
     var start = 0
     repeat {
-      let end = units[start...].firstIndex(of: 0x0A) ?? units.count
-      lines += paragraph(start..<end, units, styles: styles, width: width)
-      start = end + 1
+      let span = paragraphSpan(around: start, in: units)
+      lines += paragraph(span, units, styles: styles, width: width)
+      start = span.upperBound + 1
     } while start <= units.count
     return lines
   }
 
   /// 字の連なりを 1 つの段落として 1 行に組んだ幅（折り返さない。行末の空白を除く）。
   public static func width(_ runs: [ZoneTextRun]) -> CGFloat {
-    let styles = runs.map {
-      ZoneTextStyle(length: $0.string.utf16.count, font: $0.font, color: $0.color)
-    }
-    let units = Array(runs.map(\.string).joined().utf16)
-    return laid(units, styles: styles, rightToLeft: isRightToLeft(units[...])).width
+    laid(runs).width
   }
 
-  /// 文 `string` の範囲 `range` を、見え方 `styles`（範囲の先頭から順に当てる）で 1 行に組む（折り返さない）。行は範囲を
-  /// 含む段落の向きで組む（→ `Line`）。組んだ字の連なりは見え方の境で必ず分かれる（→ `style(of:)`）。
-  public static func typeset(_ string: String, range: NSRange, styles: [ZoneTextStyle]) -> Typeset {
-    let units = Array(string.utf16)
-    let start = units[..<range.location].lastIndex(of: 0x0A).map { $0 + 1 } ?? 0
-    let end = units[range.location...].firstIndex(of: 0x0A) ?? units.count
-    let line = laid(
-      Array(units[range.location..<NSMaxRange(range)]), styles: styles,
-      rightToLeft: isRightToLeft(units[start..<end]))
-    return Typeset(line: line.line, inset: line.inset)
+  /// 字の連なりを 1 つの段落として 1 行に組む（折り返さない。見え方は連なりごと）。組んだ字の連なりは見え方の境で必ず
+  /// 分かれる（→ `style(of:)`）。
+  public static func typeset(_ runs: [ZoneTextRun]) -> Typeset {
+    let line = laid(runs)
+    return Typeset(
+      range: NSRange(location: 0, length: runs.reduce(0) { $0 + $1.string.utf16.count }),
+      line: line.line, inset: line.inset)
+  }
+
+  /// 選べる文のまとまり `text` の行を、`text.lines` の順に 1 行ずつ組む（折り返さない）。行の範囲は文の中へ切り詰める。
+  /// 行は範囲を含む段落の向きで組み（→ `Line`）、段落の向きは段落ごとに 1 度だけ求める。組んだ字の連なりは見え方の境で
+  /// 必ず分かれる（→ `style(of:)`）。
+  public static func typeset(_ text: ZoneText) -> [Typeset] {
+    let units = Array(text.string.utf16)
+    var paragraph: (span: Range<Int>, rightToLeft: Bool)?
+    return text.lines.map { line in
+      let lower = min(max(0, line.range.location), units.count)
+      let upper = min(max(lower, NSMaxRange(line.range)), units.count)
+      let current: (span: Range<Int>, rightToLeft: Bool)
+      if let paragraph, (paragraph.span.lowerBound...paragraph.span.upperBound).contains(lower) {
+        current = paragraph
+      } else {
+        let span = paragraphSpan(around: lower, in: units)
+        current = (span, isRightToLeft(units[span]))
+        paragraph = current
+      }
+      let set = laid(
+        Array(units[lower..<upper]), styles: line.styles, rightToLeft: current.rightToLeft)
+      return Typeset(
+        range: NSRange(location: lower, length: upper - lower), line: set.line, inset: set.inset)
+    }
   }
 
   /// `typeset` で組んだ字の連なりの見え方（`styles` の添字）。
@@ -124,6 +142,15 @@ public enum ZoneTextLayout {
       start += count
     }
     return lines
+  }
+
+  /// 字の連なりを 1 つの段落として 1 行に組む。段落の向きは連なりをつないだ文の最初の、向きを持つ字で決まる。
+  private static func laid(_ runs: [ZoneTextRun]) -> Laid {
+    let styles = runs.map {
+      ZoneTextStyle(length: $0.string.utf16.count, font: $0.font, color: $0.color)
+    }
+    let units = Array(runs.map(\.string).joined().utf16)
+    return laid(units, styles: styles, rightToLeft: isRightToLeft(units[...]))
   }
 
   /// 文の位置 `offset` で始まる見え方の先頭の余白（そこで始まる見え方が無ければ 0）。
@@ -294,6 +321,12 @@ public enum ZoneTextLayout {
 }
 
 extension ZoneTextLayout {
+  /// 文の位置 `offset` を含む段落（改行で区切った文。改行は含めない）の範囲。改行の位置は、その改行で終わる段落に含める。
+  private static func paragraphSpan(around offset: Int, in units: [UInt16]) -> Range<Int> {
+    let start = units[..<offset].lastIndex(of: 0x0A).map { $0 + 1 } ?? 0
+    return start..<(units[offset...].firstIndex(of: 0x0A) ?? units.count)
+  }
+
   /// 段落 `units` が右から左か——段落の最初の、向きを持つ字で決まる（UAX #9 の P2・P3。向きを持つ字が無ければ左から
   /// 右）。Core Text は段落の向きを返さないので、末尾に空白を 1 つ足して組み、その空白の向きを読む（行末の空白は段落の
   /// 向きで組まれる。UAX #9 の L1）。

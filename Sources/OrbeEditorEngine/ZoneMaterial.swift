@@ -194,13 +194,9 @@ final class ZonePainter {
             shadow: resolve(box.shadow?.color), shadowOffset: Float(box.shadow?.offset ?? 0),
             shadowBlur: Float(box.shadow?.blur ?? 0)))
       case .text(let line):
-        let styles = line.runs.map {
-          ZoneTextStyle(length: $0.string.utf16.count, font: $0.font, color: $0.color)
-        }
-        let string = line.runs.map(\.string).joined()
-        let set = ZoneTextLayout.typeset(
-          string, range: NSRange(location: 0, length: string.utf16.count), styles: styles)
-        material.runs += runs(set.line, styles: styles, origin: line.origin, look)
+        let set = ZoneTextLayout.typeset(line.runs)
+        material.runs += runs(
+          set.line, colors: line.runs.map(\.color), origin: line.origin, look)
       case .image(let image):
         if let pixels = pixels(image, look) {
           material.images.append(ZoneMaterial.Image(frame: image.frame, pixels: pixels))
@@ -222,32 +218,28 @@ final class ZonePainter {
     return (material, hits)
   }
 
-  /// 選べる文のまとまり `text` の文を当たりの表に、その行を材料と当たりの表の行に写す。行の範囲は文の中へ切り詰める。
+  /// 選べる文のまとまり `text` の文を当たりの表に、その行を材料と当たりの表の行に写す。
   private func paint(
     _ text: ZoneText, _ look: Look, into material: inout ZoneMaterial, hits: inout ZoneHits
   ) {
-    let whole = TextRope(text.string)
-    hits.texts[text.id] = whole
-    for line in text.lines {
-      let lower = min(max(0, line.range.location), whole.length)
-      let upper = min(max(lower, NSMaxRange(line.range)), whole.length)
-      let range = NSRange(location: lower, length: upper - lower)
-      let set = ZoneTextLayout.typeset(text.string, range: range, styles: line.styles)
+    hits.texts[text.id] = TextRope(text.string)
+    for (line, set) in zip(text.lines, ZoneTextLayout.typeset(text)) {
       let origin = CGPoint(x: line.origin.x + set.inset, y: line.origin.y)
-      material.runs += runs(set.line, styles: line.styles, origin: origin, look)
+      material.runs += runs(set.line, colors: line.styles.map(\.color), origin: origin, look)
       let font = line.styles.first?.font ?? .systemFont(ofSize: 12)
       let width = CGFloat(CTLineGetTypographicBounds(set.line, nil, nil, nil))
       hits.lines.append(
         ZoneHits.Line(
-          text: text.id, range: range,
+          text: text.id, range: set.range,
           origin: origin, ascent: font.ascender, descent: -font.descender,
           width: width, line: set.line, carets: CaretMap(set.line, width: width)))
     }
   }
 
-  /// `ZoneTextLayout.typeset` で組んだ行を、字の連なり（フォントと色ごと）に写す。色は連なりの見え方から引く。
+  /// `ZoneTextLayout.typeset` で組んだ行を、字の連なり（フォントと色ごと）に写す。色は連なりの見え方の色 `colors` から
+  /// 引く。
   private func runs(
-    _ line: CTLine, styles: [ZoneTextStyle], origin: CGPoint, _ look: Look
+    _ line: CTLine, colors: [NSColor], origin: CGPoint, _ look: Look
   ) -> [ZoneMaterial.Run] {
     var result: [ZoneMaterial.Run] = []
     for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
@@ -261,17 +253,16 @@ final class ZonePainter {
       let all = CFRange(location: 0, length: count)
       CTRunGetGlyphs(run, all, &glyphs)
       CTRunGetPositions(run, all, &positions)
-      guard let index = ZoneTextLayout.style(of: run), styles.indices.contains(index) else {
+      guard let index = ZoneTextLayout.style(of: run), colors.indices.contains(index) else {
         continue
       }
-      let style = styles[index]
       let raised = positions.contains { $0.y != 0 }
       result.append(
         ZoneMaterial.Run(
           font: font, glyphs: glyphs, xs: positions.map { Float(origin.x + $0.x) },
           ys: raised ? positions.map { Float($0.y) } : [], baseline: Float(origin.y),
           ink: InkColor(
-            style.color, appearance: look.appearance, space: look.space, scale: look.scale)))
+            colors[index], appearance: look.appearance, space: look.space, scale: look.scale)))
     }
     return result
   }
