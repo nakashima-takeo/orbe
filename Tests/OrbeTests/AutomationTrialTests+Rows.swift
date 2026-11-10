@@ -153,6 +153,31 @@ extension AutomationTrialTests {
     }
   }
 
+  /// 「届いたら」のノードが、取得の入口と、その入口の下流のノードの両方から読むとき、与えた行は、間のノードが何も出さなくても本番の流しと同じく届く:
+  /// 止めた副作用には渡るはずだった行として、報告には読んだ行として。
+  func testRowsGivenToAFetchReachAReceiverOfItAndItsDownstreamWhenTheMiddleOutputsNothing() throws {
+    let id = try define([
+      DesignSceneFixtures.commandNode("gh", "gh", .manual, script: "gh", coverage: .newArrivals),
+      definitionNode("p", .arrival, from: ["gh"]),
+      definitionNode("send", .arrival, from: ["gh", "p"], deliver: .sideEffect),
+      definitionNode("q", .arrival, from: ["gh", "p"], deliver: .report),
+    ])
+
+    let start = jobs.calls.count
+    let trial = try trials.start(.saved(id), .init(rows: [item("x")]))
+    let tried = answer(from: start, until: { !trial.running }) { _, _ in "" }
+    XCTAssertNil(trial.failure)
+
+    let flowing = jobs.calls.count
+    try runner.flow(id, to: .ends)
+    let written = answer(from: flowing) { script, _ in script == "gh" ? self.fetched(["x"]) : "" }
+    let x = downstream("gh", "x", of: id)
+    XCTAssertEqual(written["send"], [[x]], "前提: 本番の流しでは副作用が x を受け取る")
+    XCTAssertEqual(written["q"], [[x]], "前提: 本番の流しでは q が x を読む")
+    XCTAssertEqual(trial.passes(key: "send").compactMap(\.heldIds), written["send"])
+    XCTAssertEqual(tried["q"], written["q"])
+  }
+
   /// 行を与えた入口が「届いたら」の副作用で、その入力が毎回すべてを取るときも、渡るはずだった行は 1 回だけ返す（本番の流しでは、
   /// 入口の副作用は 1 回だけ動く）。
   func testAHeldEntryTakingAllReturnsTheGivenRowsOnce() throws {
