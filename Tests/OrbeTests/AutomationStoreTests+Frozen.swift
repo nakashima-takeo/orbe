@@ -23,7 +23,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.unreadable.count, 0, "定義を読める")
     XCTAssertEqual(store.unreadableProposals, [], "候補を読める")
     let automation = try XCTUnwrap(store.automation(1))
-    let definition = try JSONSerialization.jsonObject(with: Data(frozenDefinition.utf8))
+    let definition = try JSONSerialization.jsonObject(
+      with: Data(AutomationVersionTwoFixture.definition.utf8))
     XCTAssertEqual(
       AutomationWire.object(automation.definition) as? NSDictionary, definition as? NSDictionary)
     XCTAssertTrue(automation.state(key: "post").paused)
@@ -67,29 +68,3 @@ extension AutomationStoreTests {
     XCTAssertEqual(open.workspace, UUID(uuidString: "6F1C2D3E-4B5A-4C6D-8E7F-9A0B1C2D3E4F"))
   }
 }
-
-/// フィクスチャの定義を、`set_automation` が受ける JSON の形で書いたもの（Orbe が足す `id` と、省略できる `agent` を含む）。
-private let frozenDefinition = #"""
-  {"name": "見本", "notify": "menuBar", "workspace": "6F1C2D3E-4B5A-4C6D-8E7F-9A0B1C2D3E4F",
-   "nodes": [
-    {"id": 1, "key": "issues", "name": "課題を取る", "trigger": {"kind": "interval", "minutes": 30},
-     "command": "gh issue list", "directory": ".", "coverage": "currentSet"},
-    {"id": 2, "key": "slack", "name": "Slack を取る",
-     "trigger": {"kind": "cron", "expression": "0 9 * * 1-5"}, "agent": "claude", "model": "haiku",
-     "tools": ["mcp__slack__search"], "instruction": "取る", "coverage": "newArrivals",
-     "retentionDays": 14, "timeoutMinutes": 5},
-    {"id": 3, "key": "filter", "name": "絞る", "trigger": {"kind": "arrival"},
-     "from": [{"node": "slack", "maxAgeHours": 48}], "command": "jq -c .", "directory": "."},
-    {"id": 4, "key": "judge", "name": "判定", "trigger": {"kind": "arrival"},
-     "from": ["issues", "filter"], "maxItems": 20, "agent": "claude", "model": "sonnet",
-     "instruction": "決める", "deliver": "taskCandidates"},
-    {"id": 5, "key": "digest", "name": "要約", "trigger": {"kind": "cron", "expression": "0 18 * * *"},
-     "from": [{"node": "issues", "take": "all", "maxAgeHours": 24}], "agent": "claude",
-     "model": "haiku", "instruction": "要約する", "deliver": "report"},
-    {"id": 6, "key": "post", "name": "投稿", "trigger": {"kind": "manual"}, "agent": "claude",
-     "model": "sonnet", "tools": ["Bash(gh search prs:*)"], "instruction": "投稿する",
-     "deliver": "report"},
-    {"id": 7, "key": "send", "name": "送る", "trigger": {"kind": "arrival"}, "from": ["filter"],
-     "command": "~/bin/send.sh", "directory": "bin", "deliver": "none", "timeoutMinutes": 3}
-   ]}
-  """#
