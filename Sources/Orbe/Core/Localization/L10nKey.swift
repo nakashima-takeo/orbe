@@ -549,6 +549,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorDiffSide
   case editorDiffNotText
   case editorDiffSymlink
+  case editorDiffDirectory
+  case editorDiffUnreadable
   case editorDiffConflicted
   case editorDiffFailed
   case editorDiffNowhereInWorkingTree

@@ -26,7 +26,7 @@ final class EditorPaneView: NSView {
   private(set) var tree: FileTree
   let sideHost: NSHostingView<EditorSideRoot>
   let headerHost: NSHostingView<EditorHeaderRoot>
-  let emptyHost: NSHostingView<EditorFaceRoot>
+  let faceHost: NSHostingView<EditorFaceRoot>
   /// 本体（焦点のタブの中身）。
   private(set) var body = EditorBody.empty
   /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
@@ -95,11 +95,11 @@ final class EditorPaneView: NSView {
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
         shell: shell, localization: localization, fontResolver: fontResolver))
-    emptyHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
+    faceHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
-    for host in [sideHost, headerHost, emptyHost] as [NSView] {
+    for host in [sideHost, headerHost, faceHost] as [NSView] {
       // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
       host.wantsLayer = true
       host.layer?.isOpaque = false
@@ -163,7 +163,7 @@ final class EditorPaneView: NSView {
       fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
-    emptyHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
+    faceHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
   }
 
   /// 行内入力を預かっている間に焦点を明け渡した。行き先が決まった次のターンに、入力欄と同じ判定へ通す
@@ -246,11 +246,11 @@ final class EditorPaneView: NSView {
 
   /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の
   /// 見え方をコードへ戻す）、新しい本体を載せる（文書の面にはコードの見え方を、diff には今の見せ方の見え方を載せる）。
-  /// 文書を初めて画面に出すときは、最初の描画に色が間に合うよう上限つきで待つ（→ `prepareBodyIfVisible`）。検索を新しい
-  /// 文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。前の文書の一致の地は消し、新しい文書に
-  /// 2 つの出どころの和を敷く。焦点が面の中（サイドバーを除く）にあれば新しい行き先へ移す——判定は前の面を外す前に取る
-  /// （外した瞬間に AppKit が first responder を窓へ戻すので、外した後では「中にあった」ことが分からない）。サイドバーの
-  /// 焦点（検索結果・行内入力）は面を外しても残るので動かさない。
+  /// 配置を頼み、文書を初めて画面に出すときはその配置で、最初の描画に色が間に合うよう上限つきで待つ（→
+  /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
+  /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が面の中（サイドバーを除く）にあれば新しい
+  /// 行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では
+  /// 「中にあった」ことが分からない）。サイドバーの焦点（検索結果・行内入力）は面を外しても残るので動かさない。
   func show(_ next: EditorBody) {
     guard !Self.same(next, body) else { return }
     let hadFocusInside = focusIsInside && !focusIsInSidebar
@@ -272,7 +272,6 @@ final class EditorPaneView: NSView {
     if let document { projectSearch.documentDidShow(document) }
     pushFindGround()
     refreshNotice()
-    prepareBodyIfVisible()
     needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
@@ -342,7 +341,8 @@ final class EditorPaneView: NSView {
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。
+  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。配置を頼み、見えるようになった本体を
+  /// 初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても抜けない）。
   private func updateLiveness() {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
@@ -350,7 +350,7 @@ final class EditorPaneView: NSView {
     scm.isLive = live
     updateSourceControlShown()
     if live { group?.editor.prepareSurfaces() }
-    prepareBodyIfVisible()
+    needsLayout = true
   }
 
   /// ソース管理パネルを出しているか（面が見えていて、サイドバーがソース管理のパネルを出している）を写す。
@@ -358,8 +358,10 @@ final class EditorPaneView: NSView {
     scm.isShown = window != nil && !isHiddenOrHasHiddenAncestor && showsSourceControl
   }
 
-  /// 面が画面に見えていれば、本体の文書を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書が何もしない）。畳まれた
-  /// 面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置の連を復元しても main を止めない。
+  /// 面が画面に見えていれば、本体の文書・diff を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書・diff が何もしない）。
+  /// 畳まれた面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置の連を復元しても main を止めない。呼ぶのは面の
+  /// 配置（`layout()`）の最後だけ。配置は画面に出る前で、AppKit が main の周の終わりに呼ぶので文書の知らせの外になる——
+  /// 知らせの中で待つと、同じ文書の受け取りが入れ子になる。
   func prepareBodyIfVisible() {
     guard window != nil, !isHiddenOrHasHiddenAncestor else { return }
     switch body {

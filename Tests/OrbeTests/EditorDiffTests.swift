@@ -8,7 +8,8 @@ import XCTest
 
 /// diff のタブ——作業ツリー（index の版 ↔ 文書）とステージ済み（HEAD の版 ↔ index の版）の側と並び、片側だけの diff、
 /// 表示できない理由、git と外の書き換えへの追従、インライン / 並列の面。壊れると、diff の削除行が古い版の別の行を指す・
-/// ステージ済みの rename が元のパスの版で比べられない・git add しても diff が古いまま・並列の 2 面が揃わない。
+/// ステージ済みの rename が元のパスの版で比べられない・git add しても diff が古いまま・並列の 2 面が揃わない・大きな
+/// ファイルの離れた変更が 1 つの塊になる・ほかのファイルが次々に変わる間、ステージ済み diff の中身が届かない。
 @MainActor
 final class EditorDiffTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -94,7 +95,25 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(surface.isEditable, "ファイルタブではコードの見え方")
     XCTAssertTrue(surface.rows.isEmpty)
     XCTAssertEqual(surface.presentation, .code)
-    XCTAssertEqual(document.hunkLimit, LineDiff.gutter, "ガターの上限に戻る")
+  }
+
+  /// diff の間は、ガターなら 1 つの区間にまとめる大きさでも、離れた変更を行ごとに出す。ファイルタブへ戻れば、ガターは
+  /// 同じ変更を 1 つの区間にまとめる（打鍵ごとの手間を抑える上限に戻る）。
+  func testADiffShowsDistantChangesLineByLineBeyondTheGutterLimit() throws {
+    var lines = (0..<(LineDiff.maximumComparedLines + 200)).map { "line \($0)" }
+    try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
+    lines[0] = "changed first"
+    lines[lines.count - 1] = "changed last"
+    try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
+    let (tab, _) = tab()
+    let document = try tab.group.editor.open(repo.url("long.txt"), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree), as: .pinned)
+    waitRows(diff, "離れた 2 か所だけが変更") { self.removedLines($0) == [0, lines.count - 1] }
+
+    tab.group.editor.activate(document)
+    pumpMain(until: { document.hunksAreCurrent && document.hunks.count == 1 }, "ガターは 1 つの区間")
   }
 
   /// 中身が届く前に本体（pane）にあった焦点は、面ができたときに面へ移る。
@@ -178,22 +197,27 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(try engine(added.newSurface).presentation.numbersOwnLines)
   }
 
-  /// バイナリ・シンボリックリンク・競合中は、タブは開き、本体に理由の一文が出る。
+  /// バイナリ・シンボリックリンク・追跡中のファイルを置き換えたディレクトリ・競合中は、タブは開き、本体に理由の一文が出る。
   func testUnavailableDiffsShowAReason() throws {
     try Data([0xFF, 0xFE, 0x00, 0x01]).write(to: repo.url("bin.dat"))
-    XCTAssertTrue(repo.git(["add", "bin.dat"]).isSuccess)
+    try repo.write("d.txt", "d\n")
+    XCTAssertTrue(repo.git(["add", "bin.dat", "d.txt"]).isSuccess)
+    try FileManager.default.removeItem(at: repo.url("d.txt"))
+    try repo.write("d.txt/inner.txt", "x\n")
     try FileManager.default.createSymbolicLink(
       atPath: repo.url("link.txt").path, withDestinationPath: "a.txt")
     let (tab, _) = tab()
     let pane = tab.group.view.editor
     let binary = try tab.group.editor.openDiff(id("bin.dat", .workingTree), as: .pinned)
     pumpMain(until: { binary.content == .unavailable(.notText) }, "バイナリ")
-    pumpMain(until: { pane.faceContent == .notice(.editorDiffNotText) && !pane.emptyHost.isHidden })
+    pumpMain(until: { pane.faceContent == .notice(.editorDiffNotText) && !pane.faceHost.isHidden })
     let link = try tab.group.editor.openDiff(id("link.txt", .workingTree), as: .pinned)
     pumpMain(until: { link.content == .unavailable(.symlink) }, "シンボリックリンク")
     XCTAssertTrue(pane.focusTarget === pane, "面が無ければ行き先は pane")
     XCTAssertEqual(
       pane.headerHeight, Theme.Layout.editorFileTabs + 1 + Theme.Layout.editorBreadcrumb)
+    try tab.group.editor.openDiff(id("d.txt", .workingTree), as: .pinned)
+    pumpMain(until: { pane.faceContent == .notice(.editorDiffDirectory) }, "ディレクトリ")
 
     XCTAssertTrue(repo.git(["checkout", "-qb", "other"]).isSuccess)
     try repo.write("a.txt", "other\n")

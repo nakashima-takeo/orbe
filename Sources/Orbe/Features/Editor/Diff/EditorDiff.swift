@@ -44,7 +44,7 @@ final class EditorDiff: RootFilesObserver {
   var onFocusChange: ((Bool) -> Void)?
   /// 見せている見せ方（見せていなければ nil）。
   private(set) var presented: Mode?
-  /// 中身・面・並びが変わった（見せている間だけ。pane が本体を置き直す）。
+  /// 中身・面・並びが変わった・初めての位置を決めた（見せている間だけ。pane が本体を置き直す）。
   var onPresentationChange: (() -> Void)?
   /// 古い側が index のサブモジュール（文書の底ではない「Subproject commit」の行）。
   var oldIsSubmodule = false
@@ -53,14 +53,16 @@ final class EditorDiff: RootFilesObserver {
   private var newSource: String??
   private(set) var oldSide = DiffRows.Side(nil)
   private(set) var newRevisionSide = DiffRows.Side(nil)
-  /// ステージ済みの側と行差分を頼んだ通し番号と、側と並びが今の版の状態に揃っていないか（今の関心の版の状態がまだ無い・
-  /// 頼んだ行差分が届いていない）。
-  private var stagedRequest = 0
+  /// ステージ済みの、裏で行差分を取っている両側の本文（取っていなければ nil）。
+  private var stagedComputing: SideTexts?
+  /// ステージ済みの側と並びが、今の版の状態に揃っていない（今の関心の版の状態がまだ無い・頼んだ行差分が届いていない）。
   private(set) var stagedPending = false
   /// 見せていない間に変わった。
   private var stale = true
   /// 初めての位置決めの段階。
   var placement = Placement.catchingUp
+  /// 初めて画面に出す前の色の上限待ちを済ませた（diff ごとに 1 回。版の本文を作り直しても待ち直さない）。
+  private(set) var hasBeenShown = false
   /// 開いた後に頼んだ根のサービスの取り直し（status と版の本文）のうち、済んでいない数。
   private(set) var awaitedRefreshes = 2
   /// 開いた後の取り直しが済んでから、中身を決め直したか。
@@ -79,7 +81,7 @@ final class EditorDiff: RootFilesObserver {
     files = RootFiles.shared(for: id.root)
     if id.kind == .workingTree {
       workingStale = false
-      working = try readWorkingTree(throwing: true)
+      working = try readWorkingTree()
       // 監視の知らせより先に開いても（エージェントが書いた直後の open_diff）、書いた中身で始める。
       document?.reconcileWithDisk()
     }
@@ -156,7 +158,8 @@ final class EditorDiff: RootFilesObserver {
     files.status?.entries[id.path]?.originalPath ?? id.path
   }
 
-  private var interests: Set<RootFiles.Version> {
+  /// 根のサービスに本文を追わせる版（作業ツリー: index。ステージ済み: HEAD——rename なら元のパス——と index）。
+  var interests: Set<RootFiles.Version> {
     switch id.kind {
     case .workingTree: [RootFiles.Version(path: id.path, revision: .index)]
     case .staged:
@@ -180,13 +183,17 @@ final class EditorDiff: RootFilesObserver {
     if stale { refresh() } else { applyRows() }
   }
 
-  /// 初めて画面に出す直前の、色の上限待ち（見えている範囲——インラインの古い側は見えている削除行——で効かせる）。
+  /// 初めての位置を決めた画面を出す直前の、色の上限待ち（diff ごとに 1 回）。古い側の版の文書・新しい側の版の文書・作業
+  /// ツリーの文書を、1 つの期限（今から `SyntaxReception.firstColorsWait`）まで順に待つ。待つ前に見えている範囲——インラインの
+  /// 古い側は見えている削除行——を裏へ渡す。位置を決める前に出る画面と、待った後に作り直した版の文書では待たない。
   func prepareToShow() {
-    guard content == .ready else { return }
+    guard content == .ready, placement == .placed, !hasBeenShown else { return }
+    hasBeenShown = true
     viewportDidChange()
-    old?.prepareToShow()
-    newRevision?.prepareToShow()
-    document?.prepareToShow()
+    let deadline = DispatchTime.now() + SyntaxReception.firstColorsWait
+    old?.prepareToShow(until: deadline)
+    newRevision?.prepareToShow(until: deadline)
+    document?.prepareToShow(until: deadline)
   }
 
   /// 見せるのをやめる——古い側の面を閉じ（スクロールの共有が外れる）、文書の面にコードの見え方を戻し、文書のハンクを
@@ -231,40 +238,14 @@ final class EditorDiff: RootFilesObserver {
         from: viewport.top, count: Int(viewport.visibleLines.rounded(.up)), hunks))
   }
 
-  /// 作業ツリー diff の文書の本文が変わった（見せている間に外部変更で差し替わった）。片側だけの diff は並びを今の行の数で
-  /// 置き直す。
+  /// 作業ツリー diff の文書の本文が変わった（見せている間に外部変更で差し替わった）。古い側が文書の底ではない diff（古い
+  /// 側の版が無い・サブモジュールからファイルへ置き換えた）は、並びを今の行の数で置き直す。
   func documentTextDidChange() {
-    guard presented != nil, oldSource == .some(nil) else { return }
+    guard presented != nil, oldIsNotBaseline else { return }
     sourcesDidChange()
   }
 
   // MARK: - 根のサービス
-
-  /// 作業ツリーのファイルが変わった——作業ツリー diff は、新しい側（文書・消えた・表示できない）を読み直す。
-  func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
-    guard id.kind == .workingTree, change.includes(id.root + "/" + id.path) else { return }
-    workingStale = true
-    sourcesDidChange()
-  }
-
-  /// status が変わった——競合の出入り・ステージ済みの rename の元パス・作業ツリーのサブモジュールの中の変化。
-  func rootFilesStatusDidChange(_ files: RootFiles) {
-    files.setVersions(interests, for: self)
-    forgetSubmoduleHead()
-    sourcesDidChange()
-  }
-
-  /// 入れ子の git dir が変わった（監視の 1 バッチに 1 回）——作業ツリーのサブモジュールが取り出しているコミットを読み直す
-  /// （中で続けてコミットしても、親の status は「コミットが動いた」のまま変わらない）。
-  func rootFilesNestedGitStateDidChange(_ files: RootFiles) {
-    guard case .directory? = working else { return }
-    forgetSubmoduleHead()
-    sourcesDidChange()
-  }
-
-  func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {
-    sourcesDidChange()
-  }
 
   /// 開いた後に頼んだ取り直しが 1 つ済んだ。両方済めば、その後の状態で作り直す。
   private func refreshDidSettle() {
@@ -295,21 +276,23 @@ final class EditorDiff: RootFilesObserver {
 
   /// 中身を決め、見せられるなら側と行差分を今の版に合わせる。
   private func resolve() -> Content {
-    // 走っている（前の本文の）ステージ済みの依頼は、ここでどの中身に決まっても捨てる——表示できないに決まった後に
-    // 届いて上書きしない。
-    stagedRequest += 1
+    // 走っているステージ済みの依頼は、両側が同じ本文に決まったときだけ続けて待つ。別の本文に決まった後や、表示できないと
+    // 決まった後に届いた結果は使わない。
+    let computing = stagedComputing
+    stagedComputing = nil
     stagedPending = false
     if awaitedRefreshes == 0 { resolvedAfterCatchUp = true }
     if files.status?.entries[id.path]?.isConflicted == true { return .unavailable(.conflicted) }
     switch id.kind {
     case .workingTree: return resolveWorkingTree()
-    case .staged: return resolveStaged()
+    case .staged: return resolveStaged(computing: computing)
     }
   }
 
   /// ステージ済みは、両側の本文と行差分を裏で揃えてから一緒に入れ替える（届くまでは前の側と並びのまま）。status で関心の
-  /// 版が替わった（rename の元パス）直後など、今の関心の版の状態がまだ無い間も前の側と並びのまま待つ。
-  private func resolveStaged() -> Content {
+  /// 版が替わった（rename の元パス）直後など、今の関心の版の状態がまだ無い間も前の側と並びのまま待つ。行差分は両側の本文
+  /// だけで決まるので、決めた両側の本文が `computing`（裏で取っていた本文）と同じなら、頼み直さずその結果を待つ。
+  private func resolveStaged(computing: SideTexts?) -> Content {
     let head = files.state(of: RootFiles.Version(path: headPath, revision: .head))
     let index = files.state(of: RootFiles.Version(path: id.path, revision: .index))
     guard let head, let index else {
@@ -321,20 +304,28 @@ final class EditorDiff: RootFilesObserver {
       if state == .failed { return .unavailable(.failed) }
     }
     if head == .absent, index == .absent { return .unavailable(.nowhere) }
-    let (oldText, newText, limit) = (Self.sideText(head), Self.sideText(index), Self.hunkLimit)
-    // 今の側と同じなら、走っている依頼を捨てただけで済む。
-    guard oldSource != .some(oldText) || newSource != .some(newText) else { return .ready }
-    let request = stagedRequest
+    let texts = SideTexts(old: Self.sideText(head), new: Self.sideText(index))
+    // 決めた両側の本文が今の側と同じなら、走っている依頼を手放すだけで済む。
+    guard oldSource != .some(texts.old) || newSource != .some(texts.new) else { return .ready }
     stagedPending = true
+    stagedComputing = texts
+    if texts != computing { requestStagedHunks(texts) }
+    return content == .ready ? .ready : .loading
+  }
+
+  /// 両側の本文 `texts` の行差分を裏で取り、届いたときにまだその本文を待っていれば、両側と並びを一緒に入れ替える。
+  private func requestStagedHunks(_ texts: SideTexts) {
+    let limit = Self.hunkLimit
     Task.detached(priority: .userInitiated) { [weak self] in
       let hunks = DiffRows.hunks(
-        old: oldText.map(TextRope.init), new: newText.map(TextRope.init), limit: limit)
+        old: texts.old.map(TextRope.init), new: texts.new.map(TextRope.init), limit: limit)
       await MainActor.run { [weak self] in
-        guard let self, request == stagedRequest else { return }
+        guard let self, stagedComputing == texts else { return }
+        stagedComputing = nil
         stagedPending = false
-        let keepsOld = oldSource == .some(oldText)
-        setOld(oldText)
-        setNewRevision(newText, keepsOld: keepsOld)
+        let keepsOld = oldSource == .some(texts.old)
+        setOld(texts.old)
+        setNewRevision(texts.new, keepsOld: keepsOld)
         revisionHunks = hunks
         if content != .ready {
           content = .ready
@@ -344,7 +335,6 @@ final class EditorDiff: RootFilesObserver {
         settleSurfaces()
       }
     }
-    return content == .ready ? .ready : .loading
   }
 
   /// 古い側を本文 `text`（その版に無ければ nil——空の本文の文書で、大きさは 0 行）にする。変われば作り直す。

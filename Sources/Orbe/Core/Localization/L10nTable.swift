@@ -160,6 +160,12 @@ enum L10n {
     .editorDiffSymlink: (
       "シンボリックリンクのため、差分を表示できません", "Can't show the diff: the file is a symbolic link"
     ),
+    .editorDiffDirectory: (
+      "ディレクトリのため、差分を表示できません", "Can't show the diff: the path is a directory"
+    ),
+    .editorDiffUnreadable: (
+      "ファイルを読み込めないため、差分を表示できません", "Can't show the diff: the file couldn't be read"
+    ),
     .editorDiffConflicted: (
       "競合中のため、差分を表示できません", "Can't show the diff: the file has merge conflicts"
     ),

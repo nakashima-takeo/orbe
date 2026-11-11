@@ -103,7 +103,7 @@ extension EditorPaneView {
       x: 0, y: 0, width: min(sideWidth, bounds.width), height: bounds.height)
     headerHost.frame = NSRect(
       x: sideWidth, y: 0, width: max(0, bounds.width - sideWidth), height: headerHeight)
-    emptyHost.frame = bodyRect
+    faceHost.frame = bodyRect
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない列に出すとレールの右 1pt を
     // 覆ってリサイズカーソルだけが出る。
     sidebarHandle.isHidden =
@@ -111,5 +111,7 @@ extension EditorPaneView {
     sidebarHandle.frame = NSRect(
       x: sideWidth - Theme.Stroke.hairline - Theme.Layout.editorSidebarHandle / 2, y: 0,
       width: Theme.Layout.editorSidebarHandle, height: bounds.height)
+    // 待つ間に届く文書の知らせが配置を頼み直すことがあるので、待ちはこの配置の最後の文にし、待った後に配置の値を読まない。
+    prepareBodyIfVisible()
   }
 }
