@@ -35,8 +35,11 @@ extension AutomationDefinition: Codable {
     case name, notify, workspace, nodes
   }
 
+  /// 定義の最上位が受ける鍵。
+  static var keys: Set<String> { CodingKeys.names }
+
   init(from decoder: Decoder) throws {
-    try decoder.checkKeys(CodingKeys.names)
+    try decoder.checkKeys(Self.keys)
     let c = try decoder.container(keyedBy: CodingKeys.self)
     name = try c.decode(String.self, forKey: .name)
     notify = try c.decodeIfPresent(AutomationNotify.self, forKey: .notify)
@@ -73,8 +76,11 @@ extension AutomationDefinition.Node: Codable {
     case id, key, name, trigger, from, maxItems, retentionDays
   }
 
+  /// ノードが受ける鍵（ノードの欄と動作の定義の欄の和）。
+  static var keys: Set<String> { CodingKeys.names.union(AutomationActionDef.keys) }
+
   init(from decoder: Decoder) throws {
-    try decoder.checkKeys(CodingKeys.names.union(AutomationActionDef.keys))
+    try decoder.checkKeys(Self.keys)
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decodeIfPresent(Int.self, forKey: .id).map(AutomationNodeID.init)
     key = try c.decode(String.self, forKey: .key)
@@ -106,12 +112,15 @@ extension AutomationDefinition.Input: Codable {
     case nodeKey = "node", take, maxAgeHours
   }
 
+  /// オブジェクトで書いた入力が受ける鍵。
+  static var keys: Set<String> { CodingKeys.names }
+
   init(from decoder: Decoder) throws {
     if let key = try? decoder.singleValueContainer().decode(String.self) {
       self.init(nodeKey: key)
       return
     }
-    try decoder.checkKeys(CodingKeys.names)
+    try decoder.checkKeys(Self.keys)
     let c = try decoder.container(keyedBy: CodingKeys.self)
     var take = AutomationTake.new
     if let raw = try c.decodeIfPresent(String.self, forKey: .take) {
@@ -251,9 +260,12 @@ extension AutomationActionDef.Destination {
 /// `{"kind": "interval", "minutes": 10}`・`{"kind": "cron", "expression": "0 9 * * *"}`・`{"kind": "manual"}`・
 /// `{"kind": "arrival"}`。受ける鍵は種類ごとに決まる。cron 式は受けた時点で解析し、正しくなければ断る。
 extension AutomationNode.Trigger: Codable {
-  private enum CodingKeys: String, CodingKey {
+  private enum CodingKeys: String, CodingKey, CaseIterable {
     case kind, minutes, expression
   }
+
+  /// 予定が受ける鍵（種類ごとの欄の和。種類ごとに受ける鍵は読むときに絞る）。
+  static var keys: Set<String> { CodingKeys.names }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
