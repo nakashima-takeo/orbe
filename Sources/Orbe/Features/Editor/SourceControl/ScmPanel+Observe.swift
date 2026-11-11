@@ -2,9 +2,7 @@ import Foundation
 
 /// 根のサービスと worktree の状態の知らせを、パネルの観測へ届ける。
 extension ScmPanel: RootFilesObserver {
-  func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
-    resolveManaged()
-  }
+  func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {}
 
   func rootFilesStatusDidChange(_ files: RootFiles) {
     statusDidChange()
@@ -14,9 +12,13 @@ extension ScmPanel: RootFilesObserver {
 
   /// remote 追跡 ref が動いたかもしれなければ、欲しがると届けている係にも渡す（止まった裏の fetch が確かめる）。
   func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
-    resolveManaged()
     if remoteRefsChanged { autoFetch?.remoteRefsMayHaveMoved(by: self) }
     readGraphAndHead(remoteRefsMayHaveMoved: remoteRefsChanged)
+  }
+
+  func rootFilesDidResolve(_ files: RootFiles) {
+    resolveManaged()
+    readGraphAndHead(remoteRefsMayHaveMoved: true)
   }
 }
 

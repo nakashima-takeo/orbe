@@ -241,13 +241,13 @@ final class ScmMessageTextView: NSTextView {
   }
 
   /// ↵ と ⇧↵（と pane が取らない修飾の組）の命令。修飾の無い ↵ だけがコミットで、ほか（押下の無い合成の命令を含む）は改行
-  /// ——押し間違いは軽い側に倒す。
+  /// ——押し間違いは軽い側に倒す。修飾の無い ↵ の押し続けたキーリピートは捨てる（押した瞬間だけをコミットの合図にする）。
   override func insertNewline(_ sender: Any?) {
     if let press = interpreting,
       press.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]),
       press.specialKey == .carriageReturn || press.specialKey == .enter
     {
-      onCommit?()
+      if !press.isARepeat { onCommit?() }
       return
     }
     super.insertNewline(sender)

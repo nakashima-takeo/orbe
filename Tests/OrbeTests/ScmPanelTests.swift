@@ -3,13 +3,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 面ごとのソース管理パネル（実 git）: HEAD が push 済みかの追従（隠れていた間の push を含む）・選んだ行が区分から消えた
-/// ときの選び直し・大きな worktree での行の追従・サブモジュールの行・一括操作と競合。
+/// 面ごとのソース管理パネル（実 git）: git 管理外の根の判定・HEAD が push 済みかの追従（隠れていた間の push を含む）・選んだ
+/// 行が区分から消えたときの選び直し・大きな worktree での行の追従・サブモジュールの行・一括操作と競合。
 ///
-/// 壊れると何が起きるか。端末で push したコミットを amend・取り消しで書き換えられる（force push を持たないので Orbe の中では
-/// 戻せない）。ステージした行の選択が消えて ↑↓ で見て回る位置を失う・選び直しで diff が勝手に開く。サブモジュールの破棄が
-/// 戻せない確認を通した後で空振りする。「すべてステージ」が競合の印の残ったファイルを解決済みにする・「すべて破棄」が
-/// 競合中のファイルを捨てる。
+/// 壊れると何が起きるか。git 管理外の根で、押しても何も起きないメッセージ欄とボタンが説明なしに出続ける。端末で push した
+/// コミットを amend・取り消しで書き換えられる（force push を持たないので Orbe の中では戻せない）。ステージした行の選択が
+/// 消えて ↑↓ で見て回る位置を失う・選び直しで diff が勝手に開く。サブモジュールの破棄が戻せない確認を通した後で空振り
+/// する。「すべてステージ」が競合の印の残ったファイルを解決済みにする・「すべて破棄」が競合中のファイルを捨てる。
 @MainActor
 final class ScmPanelTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -45,6 +45,28 @@ final class ScmPanelTests: OrbeTestCase {
       repo = try TempGitRepo()
     }
     if addingOrigin { repo.addOrigin() }
+  }
+
+  /// git 管理外の根では、根の下のファイルが変わるのを待たずにパネルが管理外と決まる（見出しの下に理由の一文だけが出る）。
+  /// `.git` が無い根でも、`.git` はあるが git が解決できない根（指す先が消えた worktree のリンク）でも。
+  func testAnUnmanagedRootIsKnownWithoutAnyFileChange() throws {
+    let plain = TestScratch.caseDir.appendingPathComponent("plain", isDirectory: true)
+    let broken = TestScratch.caseDir.appendingPathComponent("broken", isDirectory: true)
+    for dir in [plain, broken] {
+      try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+    try "gitdir: /nonexistent/orbe/.git\n".write(
+      to: broken.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+
+    for dir in [plain, broken] {
+      panel?.isShown = false
+      panel?.isLive = false
+      panel = ScmPanel(root: GitWorktreeRoot.normalizedPath(dir.path))
+      panel.isLive = true
+      panel.isShown = true
+      if dir == broken { XCTAssertNil(panel.isManaged, "前提: git に訊く判定はまだ済んでいない") }
+      pumpMain(until: { self.panel.isManaged == false }, "\(dir.lastPathComponent): 管理外")
+    }
   }
 
   /// 端末で HEAD を upstream を付けずに push すると（status は変わらず ref だけが動く）、amend と取り消しは押せなくなる。
@@ -218,10 +240,8 @@ final class ScmPanelTests: OrbeTestCase {
     panel.press(header, .discardAll, in: panel.layout)
     XCTAssertEqual(discarding, ["a.txt"])
 
-    // サブモジュールの中の git dir は監視しないので、再読込で取り直す。
     XCTAssertTrue(repo.git(["-C", "sub", "add", "inner.txt"]).isSuccess)
     XCTAssertTrue(repo.git(["-C", "sub", "commit", "-qm", "inner"]).isSuccess)
-    panel.refresh()
     pumpMain(
       until: {
         self.panel.changes.changes.first { $0.path == "sub" }?.submodule == .commit(dirty: false)
