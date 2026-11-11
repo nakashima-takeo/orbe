@@ -120,7 +120,8 @@ enum HomeTemplate {
 
     - 自動化（`list_automations`・`set_automation`・`try_automation`・`get_automation_trial`・`run_automation`・\
     `list_automation_runs`・`pause_automation`・`delete_automation`・`list_automation_proposals`）。
-    - 自動化はノード（取得・処理・判定・報告・作業・外部操作）をつないだグラフで、ノードごとの予定で動く。判定が出した候補は、\
+    - 自動化はノード（取得・処理・判定・報告・作業・外部操作）をつないだグラフで、ノードはそれぞれ自分の予定（間隔・cron 式・手動・\
+    上流から行が届いたら）で動く。判定が出した候補は、\
     人が ⌘⇧X の提案タブで受けたものだけがタスクになる。
     - 作る・直すときは、Orbe のプラグインの automation スキルの手順で進める。定義の形と仕組みは `set_automation` の説明にある。
 
@@ -135,7 +136,8 @@ enum HomeTemplate {
     `run_automation`, `list_automation_runs`, `pause_automation`, `delete_automation`, \
     `list_automation_proposals`).
     - An automation is a graph of nodes (fetch, process, judge, report, work, side effect), each running \
-    on its own schedule. Only proposals the user accepts in the Proposals tab of ⌘⇧X become tasks.
+    on its own trigger (an interval, a cron expression, manual, or when rows arrive from upstream). \
+    Only proposals the user accepts in the Proposals tab of ⌘⇧X become tasks.
     - To create or edit one, follow the automation skill of Orbe's plugin. The definition and how it \
     works are in the description of `set_automation`.
 

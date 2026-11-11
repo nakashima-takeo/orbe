@@ -14,8 +14,8 @@ extension WindowController {
   /// 失敗は続く間の最初の回だけ、決まりを外したことはノードの印が無かった回（何をするかが変わるまでに 1 度）だけ知らせる——
   /// 毎回鳴らすと、ピルと音を見なくなるため。外して失敗した回は、外したことの文で失敗も言う。
   ///
-  /// 本文は、外した回のほかは実行履歴のその回の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定
-  /// （押した先が Home なので、発信元の workspace の値という読み方に揃う）。
+  /// 本文は、外した回のほかは実行履歴のその回の行の 1 行目（報告と仕事の応答なら文の 1 行目）——ピルと、押した先の行を同じ文で
+  /// 語るため。設定は Home の実効設定（押した先が Home なので、発信元の workspace の値という読み方に揃う）。
   func automationNotification(_ id: Int, _ nodeId: AutomationNodeID) -> ChromeNotification? {
     guard let automation = automationStore.automation(id), let notify = automation.notify,
       let state = automation.states[nodeId], let record = state.runs.first, let latest = record.run,
