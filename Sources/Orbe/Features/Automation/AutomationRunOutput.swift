@@ -32,10 +32,17 @@ enum AutomationRunOutput {
     return snippet(stderr.data)
   }
 
-  /// 標準エラー・応答の抜粋（前後の空白を除き、500 字で切る）。
+  /// 標準エラー・応答の抜粋（前後の空白を除き、`excerptLength` 字で切る）。
   static func snippet(_ data: Data) -> String {
-    let trimmed = (String(bytes: data, encoding: .utf8) ?? "")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.count > 500 ? String(trimmed.prefix(500)) + "…" : trimmed
+    excerpt(
+      (String(bytes: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+  }
+
+  /// 抜粋の長さ（字）。標準エラー・応答の抜粋と、報告・仕事の文の 1 行目（`summary`）を同じ長さで切る。
+  static let excerptLength = 500
+
+  /// `excerptLength` 字を超えた分を切り、切ったことを「…」で示す。
+  static func excerpt(_ text: String) -> String {
+    text.count > excerptLength ? String(text.prefix(excerptLength)) + "…" : text
   }
 }
