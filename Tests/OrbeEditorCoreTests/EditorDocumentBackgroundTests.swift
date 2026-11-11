@@ -180,8 +180,8 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     }
   }
 
-  /// 構文木が誤りを含まなくなれば、その構文木の範囲を丸ごと作り直す——誤りを含む間に枠で落ちた、余白を超える構文（区画
-  /// をいくつもまたぐコメント）の色が、誤りから遠い編集していない行にも戻る。
+  /// 構文木が誤りを含まなくなれば、その構文木の範囲を丸ごと作り直す——誤りを含む間に枠で落ちた、余白を超える構文
+  /// （格子の目をいくつもまたぐコメント）の色が、誤りから遠い編集していない行にも戻る。
   func testFixingTheLastErrorRestoresColorsDroppedByTheFrame() throws {
     let comment = "/*\n" + String(repeating: "note\n", count: 30_000) + "*/\n"
     let source = "let = 1\n" + comment + "let b = 2\n"
@@ -267,6 +267,18 @@ final class EditorDocumentBackgroundTests: XCTestCase {
 
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30), "待つ口は打鍵の止むのを待たずに揃える")
     XCTAssertEqual(role(ofRow: 1500, in: document), .keyword)
+  }
+
+  /// 見えている行より上で、行の数を変えずに字の数が大きく変わる編集（上の行に長い文を足すなど）の後も、打鍵が続く間に
+  /// 見えている行を作り直す。見えている行の番号は変わらないので、面は見えている範囲を知らせ直さない。
+  func testVisibleLinesAreRebuiltAfterAnEditAboveThemWithoutBeingToldAgain() throws {
+    let (document, surface) = try open("above.js", Self.template, quietDelay: .seconds(3600))
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    show(row: 2500, of: surface)
+
+    surface.replace(NSRange(location: 4, length: 1), with: String(repeating: " ", count: 40_000))
+    XCTAssertTrue(
+      pump(document) { self.role(ofRow: 2500, in: $0) == .keyword }, "見えている行を作り直した")
   }
 
   /// 打鍵が止んで待ちが明ければ、急かさなくても文書全体を作り直す。

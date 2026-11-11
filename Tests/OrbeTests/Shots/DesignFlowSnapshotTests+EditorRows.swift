@@ -5,12 +5,13 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// 差し込みの flow（fixture は gallery と同じ `EditorCodeFixtures` の長い文書）。ミニマップを出さない構成の本物のコードに、
-/// 文書に無い行（先頭の前・途中・最終行の後）と試しのスレッドの区画（見本 D 節の構成——枠・影・頭・アバター・折り返す
-/// 日本語の本文とインラインコード・関連コミット・返信の入力欄と 2 つのボタン）を置き、下の行・行番号・git の印が差し込みの
-/// 高さだけ下がること、縦に送ると区画が本文と一緒に動き上端の影が区画の上に出ること、ボタンのホバー、区画の文の選択
-/// （焦点のある色）と焦点の無い色の本文の選択、入力欄が主で日本語の未確定の文字がある状態、横に送ると区画は動かず横
-/// スクロールバーが区画の上に出ること、最後まで送ると最終行の後の差し込みが最上段に来ること、light の外観の区画を撮る。
+/// 差し込みの flow（fixture は gallery と同じ `EditorCodeFixtures` の長い文書）。ミニマップを出さない構成の本物の
+/// コードに、文書に無い行（先頭の前・途中・最終行の後）と試しのスレッド（見本 D 節の構成——枠・影・頭・アバター・折り
+/// 返す日本語の本文とインラインコード・関連コミット・返信の入力欄と 2 つのボタン）を置き、次を撮る。下の行・行番号・git
+/// の印が差し込みの高さだけ下がること。縦に送るとスレッドが本文と一緒に動き、上端の影がスレッドの上に出ること。ボタンの
+/// ホバー。スレッドの文の選択（焦点のある色）と焦点の無い色の本文の選択。入力欄が主で日本語の未確定の文字がある状態。
+/// 横に送るとスレッドは動かず、横スクロールバーがスレッドの上に出ること。最後まで送ると最終行の後の差し込みが最上段に
+/// 来ること。light の外観のスレッド。
 extension DesignFlowSnapshotTests {
   func testEditorRows() throws {
     let (scene, document) = try longScene()
@@ -58,7 +59,7 @@ private struct RowsFlow {
     settleFades()
   }
 
-  /// 区画の中の点の、面の view の座標。
+  /// 絵の差し込みの中の点の、面の view の座標。
   private func point(_ local: CGPoint) -> CGPoint {
     CGPoint(
       x: surface.surfaceLayout.text.minX + local.x,
@@ -96,15 +97,15 @@ private struct RowsFlow {
     settle()
   }
 
-  /// 本文の 2 行を選んだ後に、コメントの本文の 1 行目の途中から 2 行目の途中までを選ぶ（区画の文が主——焦点のある色、
-  /// 本文の選択は焦点の無い色）。
+  /// 本文の 2 行を選んだ後に、コメントの本文の 1 行目の途中から 2 行目の途中までを選ぶ（絵の差し込みの文が主——
+  /// 焦点のある色、本文の選択は焦点の無い色）。
   func select() {
     surface.hover(at: nil)
     surface.updateFocus(true)
     let text = document.text
     surface.selectedRange = NSRange(
       location: text.lineStart(37), length: text.lineEnd(38) - text.lineStart(37))
-    guard let entry = surface.zones[zone] else { return XCTFail("前提: 区画がある") }
+    guard let entry = surface.zones[zone] else { return XCTFail("前提: 絵の差し込みがある") }
     let lines = entry.hits.lines.filter { $0.text == AnyHashable("body-0") }
     guard lines.count >= 2 else { return XCTFail("前提: 本文が 2 行以上に折り返す") }
     surface.inputScope {
@@ -130,7 +131,7 @@ private struct RowsFlow {
     settle()
   }
 
-  /// 区画の下端の近くを見せて横に送る（区画は横に動かず、横スクロールバーが区画の上に出る）。
+  /// スレッドの下端の近くを見せて横に送る（スレッドは横に動かず、横スクロールバーがスレッドの上に出る）。
   func scrollRight() {
     surface.commitMarkedText()
     let viewport = surface.scrollState().limits.viewport.y
@@ -144,7 +145,7 @@ private struct RowsFlow {
     scroll(toFirstLine: .greatestFiniteMagnitude)
   }
 
-  /// 窓を light の外観にして区画を見せる（区画の色は面の外観で解き直す）。
+  /// 窓を light の外観にしてスレッドを見せる（絵の差し込みの色は面の外観で解き直す）。
   func showThreadInLight() {
     surface.view.window?.appearance = NSAppearance(named: .aqua)
     showThread()

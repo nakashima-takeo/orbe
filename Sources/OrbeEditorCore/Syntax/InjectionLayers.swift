@@ -3,13 +3,13 @@ import TreeSitter
 
 /// 注入の層の並び——束ねない層を開始位置の順に載せた区間の木と、束ねた層の列。区間の木の項目は前の項目の原点からの距離を
 /// 持つので、編集より後ろの層は項目 1 つを直すだけでずれ、打鍵 1 回の手間が注入の数に比例しない。要約に部分木の最も遠い
-/// 端を持ち、区画と交わる層を枝を刈りながら引く（区画より前から始まって区画まで伸びる層も引ける）。
+/// 端を持ち、区間と交わる層を枝を刈りながら引く（区間より前から始まって区間まで伸びる層も引ける）。
 struct InjectionLayers {
   private var entries = SummaryTree<LayerEntry>([])
   /// 束ねた層（原点は本文の先頭）。
   private(set) var combined: [SyntaxLayer] = []
 
-  /// 区画と交わる層（束ねない層は開始位置の順、その後に束ねた層）。
+  /// 区間 `piece` と交わる層（束ねない層は開始位置の順、その後に束ねた層）。
   func intersecting(_ piece: Range<Int>) -> [Placed] {
     var result: [Placed] = []
     entries.visit(
@@ -38,7 +38,7 @@ struct InjectionLayers {
     return result + combined.map { Placed(layer: $0, origin: 0, row: 0) }
   }
 
-  /// 深さ `depth` の束ねない層のうち、マッチが区画に掛かるもの（開始位置の順）。
+  /// 深さ `depth` の束ねない層のうち、マッチが区間 `piece` に掛かるもの（開始位置の順）。
   func uncombined(atDepth depth: Int, touching piece: Range<Int>) -> [(index: Int, placed: Placed)]
   {
     var result: [(Int, Placed)] = []
@@ -88,7 +88,7 @@ struct InjectionLayers {
 
   /// 編集 1 つを写す。束ねた層と、編集に掛かる束ねない層の木へは層の座標で写し、後ろの層は原点をずらす。原点をまたぐ編集
   /// （原点が行頭でなくなる）と、マッチを丸ごと消す編集（層を生んだ節が消える）は、その層を子孫ごと外す——空になった
-  /// マッチは、文書の末尾にあるとどの区画にも掛からず、問い直しで外れない。束ねた層は丸ごと消えた部分を除き、部分が全部
+  /// マッチは、文書の末尾にあると色を問うどの区間にも掛からず、問い直しで外れない。束ねた層は丸ごと消えた部分を除き、部分が全部
   /// 消えたら外す。外した範囲（編集の前の本文の上）を返す。
   mutating func apply(_ record: VersionedEdit) -> IndexSet {
     let start = record.edit.range.location

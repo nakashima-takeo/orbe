@@ -55,7 +55,7 @@ extension SyntaxLayersTests {
     }
   }
 
-  /// 開きタグと閉じタグが区画の境をはさむ段落。束ねた層の部分は区画ごとに問い直すので、境の両側の区画で問い直しても層を
+  /// 開きタグと閉じタグが格子の切れ目をはさむ段落。束ねた層の部分は格子の目ごとに問い直すので、切れ目の両側で問い直しても層を
   /// 作り直し続けず、作り直しは止まる。
   func testAParagraphWhoseTagsStraddleABlockSettles() throws {
     let rules = try XCTUnwrap(registry.rules(for: SyntaxLanguage.markdown))

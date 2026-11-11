@@ -4,12 +4,12 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 主が本文でない間に本文へ直接届く操作（view へのセレクタ・契約の口・IME の呼び出し）を、入力欄の打鍵・区画の文の選択・
-/// Esc・押下と混ぜて何千手流しても、打鍵・削除・undo / redo は主の場にだけ効き、契約の選択の口は主を本文にし、本文の写し・
-/// カーソルが文書と一致し、入力欄の場の文・カーソル・変換中の文字が入力欄の文と一致し、主と区画の選択が規則どおり（区画の
-/// 文が主なら選択がまとまりの中にあり、そうでなければ選択は無い。変換中なのは主の場だけ）で、最後に本文と入力欄の undo を
-/// 尽くすとそれぞれ元に戻る。壊れると「ある順の操作でだけ」返信の字がソースへ入る・undo が別の場を戻す・変換中の字が場から
-/// ずれる。
+/// 主が本文でない間に本文へ直接届く操作（view へのセレクタ・契約の口・IME の呼び出し）を、入力欄の打鍵・絵の差し込みの
+/// 文の選択・Esc・押下と混ぜて何千手流しても、打鍵・削除・undo / redo は主の場にだけ効き、契約の選択の口は主を
+/// 本文にし、本文の写し・カーソルが文書と一致し、入力欄の場の文・カーソル・変換中の文字が入力欄の文と一致し、主と
+/// 絵の差し込みの文の選択が規則どおり（絵の差し込みの文が主なら選択がまとまりの中にあり、そうでなければ選択は無い。
+/// 変換中なのは主の場だけ）で、最後に本文と入力欄の undo を尽くすとそれぞれ元に戻る。壊れると「ある順の操作でだけ」
+/// 返信の字がソースへ入る・undo が別の場を戻す・変換中の字が場からずれる。
 extension SurfaceZonesTests {
   func testRandomOperationsAcrossTheBodyFieldsAndZoneTextStayConsistent() throws {
     for seed: UInt64 in [0x20e, 3, 17] { try fuzz(seed: seed, steps: 2000) }
@@ -25,7 +25,7 @@ extension SurfaceZonesTests {
     let view = surface.textView
     privatePasteboard(opened)
     let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
-    let thread = ThreadZone(comment: "区画の選べる文。折り返す長さの文で、二行目へ続く。", field: field)
+    let thread = ThreadZone(comment: "絵の差し込みの選べる文。折り返す長さの文で、二行目へ続く。", field: field)
     thread.surface = surface
     surface.setRows(zone(thread, at: 3))
     var generator = SplitMix(seed: seed)
@@ -119,7 +119,7 @@ extension SurfaceZonesTests {
     for cursor in surface.editor.state.cursors.all {
       XCTAssertLessThanOrEqual(NSMaxRange(cursor.selection), length, "\(step)")
     }
-    let site = try XCTUnwrap(surface.fields["reply"], "\(step): 入力欄の場は絵にある限り続く")
+    let site = try XCTUnwrap(surface.fields["reply"], "\(step): 入力欄の場は、絵にその入力欄がある限り続く")
     XCTAssertEqual(site.currentContent?.text.length, field.text.length, "\(step)")
     for cursor in site.editor.state.cursors.all {
       XCTAssertLessThanOrEqual(NSMaxRange(cursor.selection), field.text.length, "\(step)")
@@ -129,11 +129,11 @@ extension SurfaceZonesTests {
     }
     switch surface.primary {
     case .zoneText:
-      let selection = try XCTUnwrap(surface.zoneSelection, "\(step): 区画の文が主なら選択がある")
+      let selection = try XCTUnwrap(surface.zoneSelection, "\(step): 絵の差し込みの文が主なら選択がある")
       let rope = surface.zones[selection.zone]?.hits.texts[selection.text]
       XCTAssertLessThanOrEqual(NSMaxRange(selection.range), rope?.length ?? -1, "\(step)")
     case .body, .field:
-      XCTAssertNil(surface.zoneSelection, "\(step): 区画の文が主でなければ選択は無い")
+      XCTAssertNil(surface.zoneSelection, "\(step): 絵の差し込みの文が主でなければ選択は無い")
     }
     let composing = [surface.bodySite, site].filter { $0.editor.isComposing }
     XCTAssertTrue(

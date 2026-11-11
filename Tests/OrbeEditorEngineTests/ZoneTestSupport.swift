@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// 高さの決まった区画——区画いっぱいの箱 1 つ（色 `color`）。
+/// 高さの決まった絵の差し込み——絵の差し込みいっぱいの箱 1 つ（色 `color`）。
 @MainActor
 final class BoxZone: SurfaceZone {
   var height: CGFloat
@@ -25,7 +25,7 @@ final class BoxZone: SurfaceZone {
   func zone(_ event: ZoneEvent) {}
 }
 
-/// 絵を渡された関数で組む区画（要素を直に並べて確かめる）。
+/// 渡された関数で絵を組む絵の差し込み（要素を直に並べて確かめる）。
 @MainActor
 final class PictureZone: SurfaceZone {
   var draw: (CGFloat) -> ZonePicture
@@ -39,9 +39,9 @@ final class PictureZone: SurfaceZone {
   func zone(_ event: ZoneEvent) {}
 }
 
-/// スレッドの形の区画（テストと性能の場面の区画）——影と枠線の付いた角丸の枠・頭の帯と字・アバターの円と頭文字と画像・
-/// 幅で折り返す選べる本文・押せる場所 2 つ・入力欄（`field` があれば。行の数だけ高くなる）。
-/// 押せる場所はホバーで地の色を変え、押下を `events` に残す。
+/// スレッドの形の絵の差し込み（テストと性能の場面で使う）——影と枠線の付いた角丸の枠・頭の帯と字・アバターの円と
+/// 頭文字と画像・幅で折り返す選べる本文・押せる場所 2 つ・入力欄（`field` があれば。行の数だけ高くなる）。押せる場所は
+/// ホバーで地の色を変え、押下を `events` に残す。
 @MainActor
 final class ThreadZone: SurfaceZone {
   static let bodyFont = NSFont.systemFont(ofSize: 12)
@@ -94,13 +94,14 @@ final class ThreadZone: SurfaceZone {
       x: Self.margin.width, y: Self.margin.height,
       width: max(80, width - Self.margin.width - 16), height: 0)
     var body: [ZoneElement] = []
-    let bottom = layOutComment(in: frame, into: &body)
+    var lines: [ZoneSelectableLine] = []
+    let bottom = layOutComment(in: frame, into: &body, lines: &lines)
     let height = bottom - frame.minY
     return ZonePicture(
       height: frame.minY + height + 8,
       elements: chrome(CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: height))
         + body,
-      texts: [ZoneText(id: Self.commentText, string: comment)])
+      texts: [ZoneText(id: Self.commentText, string: comment, lines: lines)])
   }
 
   /// 頭の帯の高さ。
@@ -143,8 +144,10 @@ final class ThreadZone: SurfaceZone {
     return elements
   }
 
-  /// アバター（円・頭文字・画像）・折り返す本文・入力欄を積み、下端の y を返す。
-  private func layOutComment(in frame: CGRect, into body: inout [ZoneElement]) -> CGFloat {
+  /// アバター（円・頭文字・画像）・折り返す本文・入力欄を積み（本文の行は `lines` へ）、下端の y を返す。
+  private func layOutComment(
+    in frame: CGRect, into body: inout [ZoneElement], lines selectable: inout [ZoneSelectableLine]
+  ) -> CGFloat {
     let inner = frame.width - 2 * Self.inset
     var y = frame.minY + Self.head + 10
     body += [
@@ -164,11 +167,10 @@ final class ThreadZone: SurfaceZone {
     let lines = ZoneTextLayout.lines(
       comment, styles: Self.styles(comment), width: max(10, inner - 30))
     for line in lines {
-      body.append(
-        .selectable(
-          ZoneSelectableLine(
-            origin: CGPoint(x: frame.minX + Self.inset + 30, y: y + 14), text: Self.commentText,
-            range: line.range, styles: line.styles)))
+      selectable.append(
+        ZoneSelectableLine(
+          origin: CGPoint(x: frame.minX + Self.inset + 30, y: y + 14), range: line.range,
+          styles: line.styles))
       y += Self.lineHeight
     }
     y += 8

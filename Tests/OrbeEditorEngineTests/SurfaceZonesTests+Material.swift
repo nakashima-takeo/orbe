@@ -4,9 +4,9 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 区画の絵を描く材料に写す——字の連なりの色・余白、画像の上限と覚え、箱の影の届く所、入力欄のキャレット。壊れると、
-/// 同じ字体で色を分けた字が 1 色になる・インラインコードの地が字からずれる・大きな画像が黙って消える・描かなくなった画像が
-/// 面の寿命まで残る・スレッドの影が本文の左端で切れる・返信欄のキャレットが見えない。
+/// 載せる側が描いた絵を描く材料に写す——字の連なりの色・余白、画像の上限と覚え、箱の影の届く所、入力欄のキャレット。
+/// 壊れると、同じ字体で色を分けた字が 1 色になる・インラインコードの地が字からずれる・大きな画像が黙って
+/// 消える・描かなくなった画像が面の寿命まで残る・スレッドの影が本文の左端で切れる・返信欄のキャレットが見えない。
 extension SurfaceZonesTests {
   private static let red = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
   private static let green = NSColor(srgbRed: 0, green: 1, blue: 0, alpha: 1)
@@ -30,15 +30,20 @@ extension SurfaceZonesTests {
               runs: [
                 ZoneTextRun("red", font: font, color: Self.red),
                 ZoneTextRun("green", font: font, color: Self.green),
-              ])),
-          .selectable(
-            ZoneSelectableLine(
-              origin: CGPoint(x: 0, y: 32), text: "t", range: NSRange(location: 0, length: 8),
-              styles: [
-                ZoneTextStyle(length: 3, font: font, color: Self.red),
-                ZoneTextStyle(length: 5, font: font, color: Self.green),
-              ])),
-        ], texts: [ZoneText(id: "t", string: "redgreen")])
+              ]))
+        ],
+        texts: [
+          ZoneText(
+            id: "t", string: "redgreen",
+            lines: [
+              ZoneSelectableLine(
+                origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8),
+                styles: [
+                  ZoneTextStyle(length: 3, font: font, color: Self.red),
+                  ZoneTextStyle(length: 5, font: font, color: Self.green),
+                ])
+            ])
+        ])
     }
     surface.setRows(self.zone(zone, at: 2))
     let look = { (color: NSColor) in
@@ -62,15 +67,18 @@ extension SurfaceZonesTests {
       PictureZone { _ in
         ZonePicture(
           height: 30,
-          elements: [
-            .selectable(
-              ZoneSelectableLine(
-                origin: CGPoint(x: 10, y: 14), text: "t", range: NSRange(location: 0, length: 10),
-                styles: [
-                  ZoneTextStyle(length: 4, font: mono, color: Self.red, padding: padding),
-                  ZoneTextStyle(length: 6, font: font, color: Self.green),
-                ]))
-          ], texts: [ZoneText(id: "t", string: "code after")])
+          texts: [
+            ZoneText(
+              id: "t", string: "code after",
+              lines: [
+                ZoneSelectableLine(
+                  origin: CGPoint(x: 10, y: 14), range: NSRange(location: 0, length: 10),
+                  styles: [
+                    ZoneTextStyle(length: 4, font: mono, color: Self.red, padding: padding),
+                    ZoneTextStyle(length: 6, font: font, color: Self.green),
+                  ])
+              ])
+          ])
       }
     }
     let plain = picture(0)
@@ -93,7 +101,7 @@ extension SurfaceZonesTests {
   }
 
   /// 画像は辺が地図の上限（`ImageAtlas.maximumSide`）までなら描き、超えれば描かない。描き直しをまたいで同じ画像は同じ
-  /// 画素を使い回し、区画を外せば覚えを手放す（もう一度置けば描き直す）。
+  /// 画素を使い回し、絵の差し込みを外せば覚えを手放す（もう一度置けば描き直す）。
   func testImagesUpToTheLimitAreDrawnAndForgottenWhenNoZoneUsesThem() throws {
     let opened = try hostedRows()
     let surface = opened.surface
@@ -119,11 +127,11 @@ extension SurfaceZonesTests {
     surface.setRows(SurfaceRows())
     surface.setRows(self.zone(zone, at: 2))
     XCTAssertNotEqual(
-      try material(surface, zone).images.first?.pixels.key, key, "外した区画の画像の覚えは手放した")
+      try material(surface, zone).images.first?.pixels.key, key, "外した絵の差し込みの画像の覚えは手放した")
   }
 
-  /// 画面の外の画像は地図に入れない——縦に長い区画の下だけが見えていれば、上の画面外の画像が地図を埋めて、見えている画像が
-  /// 欠けることはない（地図に収まる量を数えるのは見えている画像だけ）。
+  /// 画面の外の画像は地図に入れない——縦に長い絵の差し込みの下だけが見えていれば、上の画面外の画像が地図を埋めて、
+  /// 見えている画像が欠けることはない（地図に収まる量を数えるのは見えている画像だけ）。
   func testImagesOutsideTheViewDoNotTakeTheAtlas() throws {
     let opened = try hostedRows()
     let surface = opened.surface
@@ -159,7 +167,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(shot.rgb(center.x, center.y), [255, 0, 0], "見えている画像を描く")
   }
 
-  /// 区画の箱の影は行番号の列にも落ちる（本文の区画の左端で切らない）。
+  /// 絵の差し込みの箱の影は行番号の列にも落ちる（本文の区画の左端で切らない）。
   func testAZoneShadowFallsOnTheGutter() throws {
     let opened = try hostedRows()
     let surface = opened.surface

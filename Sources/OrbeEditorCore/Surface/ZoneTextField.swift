@@ -1,11 +1,12 @@
 import AppKit
 
-/// 区画の入力欄の型——入力欄の文の出どころ（`SiteText`）と見え方。打鍵・IME・undo は面が本文と同じ編集の仕組みで行い、
-/// 文はここに持つ。文が変われば `didChange` を同期で呼ぶ——その中で載せる側が `redrawZone` を呼べば、伸びた入力欄と打った字
-/// が同じコマに出る。入力欄は折り返さない（改行で行が増え、載せる側が入力欄を高くする。長い行は横に送る）。
+/// 絵の差し込みの入力欄の型——入力欄の文の出どころ（`SiteText`）と見え方。打鍵・IME・undo は面が本文と同じ編集の
+/// 仕組みで行い、文はここに持つ。文が変われば `didChange` を同期で呼ぶ——その中で載せる側が `redrawZone` を呼べば、
+/// 伸びた入力欄と打った字が同じコマに出る。入力欄は折り返さない（改行で行が増え、載せる側が入力欄を高くする。長い行は
+/// 横に送る）。
 @MainActor
 public final class ZoneTextField: SiteText {
-  /// 面の中で入力欄を指す id（面の中で一意。区画の絵の `ZoneField` はこの型を渡す）。
+  /// 面の中で入力欄を指す id（面の中で一意。載せる側が描いた絵の `ZoneField` はこの型を渡す）。
   public let id: AnyHashable
   public let style: Style
   public private(set) var text: TextRope

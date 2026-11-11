@@ -66,8 +66,8 @@ final class SyntaxLayersTests: XCTestCase {
       pieces: ["println!(", "vec![", "foo!(", ")", "]", "\"", "{", "}", "\n", "//", "x", "!"])
   }
 
-  /// 乱択の編集を重ね、そのあと 1 手ずつ取り消して元の本文に戻す。文書は区画 2 つに掛かり、編集の 3 回に 1 回は区画の境の
-  /// 近くを狙う（境をまたぐ削除もある）。1 手は、1〜3 回の編集（編集の合間は見えている範囲だけを作る——打鍵中の裏と同じ）の
+  /// 乱択の編集を重ね、そのあと 1 手ずつ取り消して元の本文に戻す。文書は格子の目 2 つに掛かり、編集の 3 回に 1 回は格子の切れ目の
+  /// 近くを狙う（切れ目をまたぐ削除もある）。1 手は、1〜3 回の編集（編集の合間は見えている範囲だけを作る——打鍵中の裏と同じ）の
   /// 後に文書全体を作り、新しく解いたものと比べる。崩れている間に誤りを含む木が食い違っても、元の本文に戻せば揃う。
   private func fuzz(_ language: SyntaxLanguage, unit: String, pieces: [String]) throws {
     let rules = try XCTUnwrap(registry.rules(for: language))
@@ -121,7 +121,7 @@ final class SyntaxLayersTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(compared, 16, "前提: 比べられた手が十分ある")
   }
 
-  /// 乱択の編集 1 つ。部品を足す・字を部品に置き換える・字を消す（区画の境をまたぎうる長さも）・行を消す／複製する。
+  /// 乱択の編集 1 つ。部品を足す・字を部品に置き換える・字を消す（格子の切れ目をまたぎうる長さも）・行を消す／複製する。
   private func randomEdit(
     of text: TextRope, pieces: [String], using generator: inout SeededGenerator
   ) -> TextEdit {
@@ -204,9 +204,9 @@ final class SyntaxLayersTests: XCTestCase {
     }
   }
 
-  /// 束ねた層の節は部分の隙間をまたげる——1 つ目のタグ付きテンプレートで開いた style が、区画をまるごと覆う JS を挟んだ
-  /// 2 つ目のテンプレートで閉じる。その style の子の層は、束ねた層の部分が無い区画にもマッチが掛かる。その区画でも子を戻せ
-  /// ないと、外しては隣の区画で作り直すのを繰り返し、作り直しが止まらない。
+  /// 束ねた層の節は部分の隙間をまたげる——1 つ目のタグ付きテンプレートで開いた style が、格子の目をまるごと覆う JS を
+  /// 挟んだ 2 つ目のテンプレートで閉じる。その style の子の層は、束ねた層の部分が無い格子の目にもマッチが掛かる。そこでも
+  /// 子を戻せないと、外しては隣の格子の目で作り直すのを繰り返し、作り直しが止まらない。
   func testAChildSpanningAGapOfItsCombinedParentSettles() throws {
     let rules = try XCTUnwrap(registry.rules(for: SyntaxLanguage.javascript))
     let gap = "const s = \"" + String(repeating: "x", count: SyntaxLayers.block * 2) + "\";\n"
@@ -257,7 +257,7 @@ private struct EditCase {
 }
 
 /// 構文の裏の仕事（`SyntaxWorker`）と同じ手順で構文の層を同期で追う。作り直す範囲は、編集の後に根の変化と編集の区間を
-/// 行に広げたものと注入の層の変化を足し、区画ずつ（見えている範囲を先に）作り直す。
+/// 行に広げたものと注入の層の変化を足し、格子で切った区間ずつ（見えている範囲を先に）作り直す。
 final class Tracker {
   enum Comparison: Equatable {
     case same

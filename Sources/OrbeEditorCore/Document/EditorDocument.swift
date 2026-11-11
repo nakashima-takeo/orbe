@@ -375,7 +375,7 @@ extension EditorDocument: TextSurfaceDelegate {
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {
-    reception.setVisible(SyntaxReception.lines(of: surface.viewport, in: text), in: text)
+    reception.setVisible(SyntaxReception.lines(of: surface.viewport))
     onViewportChange?()
   }
 

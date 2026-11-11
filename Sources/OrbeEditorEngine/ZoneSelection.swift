@@ -2,8 +2,8 @@ import AppKit
 import OrbeEditorCore
 import simd
 
-/// 区画の文の選択——区画 1 つの、選べる文のまとまり 1 つの中のカーソル（本文と同じ形。語・段落の単位で伸ばせる）。
-/// 位置はまとまりの文の UTF-16。
+/// 絵の差し込みの文の選択——絵の差し込み 1 つの、選べる文のまとまり 1 つの中のカーソル（本文と同じ形。語・段落の単位で
+/// 伸ばせる）。位置はまとまりの文の UTF-16。
 struct ZoneTextSelection: Equatable {
   var zone: ObjectIdentifier
   var text: AnyHashable
@@ -12,13 +12,14 @@ struct ZoneTextSelection: Equatable {
   var range: NSRange { cursor.selection }
 }
 
-/// 区画の文の選択（main）。選べる文の上を押す・ドラッグする・ダブルクリックする・⇧クリックすると主が区画の文になり、選択は
-/// まとまりの中だけで伸びる（まとまりをまたがない。区画の外へドラッグすれば本文と同じ自動スクロールで伸び、まとまりの
-/// 端で止まる）。語の境は本文と同じ規則（`EditCommands`）。選択の地は区画の箱の上・区画の字の下に描く（面に焦点があれば
-/// 焦点のある選択の色）。区画を描き直しても、まとまりと範囲が残っていれば選択は残る。
+/// 絵の差し込みの文の選択（main）。選べる文の上を押す・ドラッグする・ダブルクリックする・⇧クリックすると、主が
+/// 絵の差し込みの文になる。選択はまとまりの中だけで伸びる（まとまりをまたがない。絵の差し込みの外へドラッグすれば本文と
+/// 同じ自動スクロールで伸び、まとまりの端で止まる）。語の境は本文と同じ規則（`EditCommands`）。選択の地は、
+/// 絵の差し込みの箱の上・字の下に描く（面に焦点があれば焦点のある選択の色）。絵の差し込みを描き直しても、まとまりと
+/// 範囲が残っていれば選択は残る。
 extension MetalTextSurface {
-  /// 区画 `entry` のまとまり `text` の位置 `offset` を押した——主を区画の文にし、押した回数で単位（字・語・段落）を決めて
-  /// 選ぶ。`extending`（⇧）なら、同じまとまりの今の選択を起点を保って伸ばす。
+  /// 絵の差し込み `entry` のまとまり `text` の位置 `offset` を押した——主を絵の差し込みの文にし、押した回数で単位
+  /// （字・語・段落）を決めて選ぶ。`extending`（⇧）なら、同じまとまりの今の選択を起点を保って伸ばす。
   func beginZoneSelection(
     _ entry: ZoneEntry, text: AnyHashable, offset: Int, clicks: Int, extending: Bool
   ) {
@@ -45,8 +46,8 @@ extension MetalTextSurface {
     }
   }
 
-  /// ドラッグ——区画の文の選択の動く端を、点（view の座標。`position` はスクロールの位置）にいちばん近いまとまりの位置へ
-  /// 伸ばす（点が区画の外なら、まとまりの端）。
+  /// ドラッグ——絵の差し込みの文の選択の動く端を、点（view の座標。`position` はスクロールの位置）にいちばん
+  /// 近いまとまりの位置へ伸ばす（点が絵の差し込みの外なら、まとまりの端）。
   func extendZoneSelection(to point: CGPoint, position: SIMD2<Double>? = nil) {
     guard let selection = zoneSelection, let entry = zones[selection.zone],
       let rope = entry.hits.texts[selection.text],
@@ -72,7 +73,7 @@ extension MetalTextSurface {
     }
   }
 
-  /// 選んでいる区画の文（空なら nil）。
+  /// 選んでいる絵の差し込みの文（空なら nil）。
   var zoneSelectedText: String? {
     guard let selection = zoneSelection, selection.range.length > 0,
       let rope = zones[selection.zone]?.hits.texts[selection.text]
@@ -80,15 +81,15 @@ extension MetalTextSurface {
     return rope.substring(selection.range)
   }
 
-  /// 区画の選択を解く（主が区画の文から離れた）。
+  /// 絵の差し込みの文の選択を解く（主が絵の差し込みの文から離れた）。
   func clearZoneSelection() {
     guard zoneSelection != nil else { return }
     zoneSelection = nil
     transaction?.writes.append { $0.zoneSelection = nil }
   }
 
-  /// 区画を描き直した——まとまりが絵に無いか、範囲がまとまりの文の外になれば主を本文に、そうでなければ選択の地を描き
-  /// 直す。
+  /// 絵の差し込みを描き直した——まとまりが描き直した絵に無いか、範囲がまとまりの文の外になれば主を本文に、そうでなければ
+  /// 選択の地を描き直す。
   func validateZoneSelection(_ entry: ZoneEntry) {
     guard let selection = zoneSelection else { return }
     guard let rope = entry.hits.texts[selection.text],
@@ -98,7 +99,7 @@ extension MetalTextSurface {
     publishZoneSelection()
   }
 
-  /// 区画の選択の地を材料に書く——字の行ごとに、選択と行の範囲の交わりを行の帯の高さで塗る（取引の中）。
+  /// 絵の差し込みの文の選択の地を材料に書く——字の行ごとに、選択と行の範囲の交わりを行の帯の高さで塗る（取引の中）。
   func publishZoneSelection() {
     guard let selection = zoneSelection, let entry = zones[selection.zone] else { return }
     let range = selection.range
@@ -120,7 +121,7 @@ extension MetalTextSurface {
     transaction?.writes.append { $0.zoneSelection = material }
   }
 
-  /// 区画の文の選択の焦点の色を、面の焦点に合わせる。
+  /// 面に焦点があるかに合わせて、絵の差し込みの文の選択の地の色を替える。
   func zoneSelectionFocusDidChange() {
     guard zoneSelection != nil else { return }
     publishZoneSelection()

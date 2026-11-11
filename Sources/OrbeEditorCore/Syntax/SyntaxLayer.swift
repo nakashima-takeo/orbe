@@ -133,14 +133,14 @@ struct Placed {
     return result
   }
 
-  /// 区画を層の座標のバイトへ。層が区画より後ろなら nil。
+  /// 区間 `piece` を層の座標のバイトへ。層が区間より後ろなら nil。
   func bytes(of piece: Range<Int>) -> Range<Int>? {
     let lower = max(piece.lowerBound, origin) - origin
     let upper = piece.upperBound - origin
     return upper > lower ? (lower * 2)..<(upper * 2) : nil
   }
 
-  /// 注入の範囲（本文の上）と区画の積（昇順）。
+  /// 注入の範囲（本文の上）と区間 `piece` の積（昇順）。
   func clip(to piece: Range<Int>) -> [Range<Int>] {
     layer.includedRanges.compactMap { range in
       let lower = max(piece.lowerBound, origin + Int(range.start_byte) / 2)
@@ -282,8 +282,9 @@ struct RestoreKey: Hashable {
 }
 
 extension Range<Int> {
-  /// マッチの範囲が区画に掛かるか（空のマッチは区画の中にあれば掛かる）。注入の存否を決める区画は、この規則で選ぶ——
-  /// tree-sitter はパターンの根の節が区間と交わるマッチを返すが、捕まえた節が区画の外にあるマッチは、その節の区画で決める。
+  /// マッチの範囲が区間 `piece` に掛かるか（空のマッチは区間の中にあれば掛かる）。注入の存否をどの区間で決めるかは、この
+  /// 規則で選ぶ——tree-sitter はパターンの根の節が問うた区間と交わるマッチを返すが、捕まえた節がその区間の外にあるマッチは、
+  /// その節に掛かる区間で決める。
   func touches(_ piece: Range<Int>) -> Bool {
     overlaps(piece) || piece.contains(lowerBound)
   }

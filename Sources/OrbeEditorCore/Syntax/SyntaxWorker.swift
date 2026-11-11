@@ -7,7 +7,7 @@ import os
 /// 文書は編集ごとに、編集（行と桁つき）と最新の写しを郵便受けに積み、止まっていれば起こす。起きた裏の仕事は、郵便受けの
 /// 編集をまとめて受け取って全部当ててから 1 回だけ差分解析し（速い打鍵は 1 回に畳まれる）、「構文木が変わった区間 ∪
 /// 編集の区間」に掛かる行を丸ごと「まだ作り直していない」に足す——字の中身で役割が決まる capture（`#match?` など）は、
-/// 構文木が変わらなくても役割が変わるから。作り直しは区画ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
+/// 構文木が変わらなくても役割が変わるから。作り直しは格子で切った区間ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
 /// 変わった字を版つきで置く。見えていない範囲は、最後の編集から `quietDelay` 経つまで始めない（打鍵が続く間は見えている範囲
 /// だけを作る。開いてから編集が無ければ待たない）。区切りの間に新しい編集が来ていれば、それを先に当てる。文書を閉じたら、走っている解析を打ち切って止まる。
 actor SyntaxWorker {
@@ -20,7 +20,8 @@ actor SyntaxWorker {
     var text: TextRope
     var version: Int
     var edits: [VersionedEdit] = []
-    var visible: NSRange
+    /// 見えている行（最新の版の行）。
+    var visible: ClosedRange<Int>
     var running = false
     /// 見えていない範囲の作り直しを始めてよくなる時刻（最後の編集 ＋ 待ち）。編集がまだ無ければ nil（待たない）。
     var quietAt: DispatchTime?
@@ -62,9 +63,9 @@ actor SyntaxWorker {
     self.version = version
     self.inbox = inbox
     roles = RoleRuns(length: text.length)
-    let visible = NSRange(location: 0, length: text.lineEnd(Self.initialVisibleLines - 1))
     mailbox = OSAllocatedUnfairLock(
-      initialState: Mail(text: text, version: version, visible: visible, running: true))
+      initialState: Mail(
+        text: text, version: version, visible: 0...(Self.initialVisibleLines - 1), running: true))
     Task.detached(priority: .userInitiated) { [self] in await run() }
   }
 
@@ -81,9 +82,9 @@ actor SyntaxWorker {
     if wake { start() }
   }
 
-  /// 見えている範囲（最新の版のオフセット）。次の区切りから、そこを先に作る——待ちの間に止まっていても、そこは待たずに作る。
-  nonisolated func setVisible(_ range: NSRange) {
-    wakeIfStale { $0.visible = range }
+  /// 見えている行（最新の版の行）。次の区切りから、そこを先に作る——待ちの間に止まっていても、そこは待たずに作る。
+  nonisolated func setVisible(_ lines: ClosedRange<Int>) {
+    wakeIfStale { $0.visible = lines }
   }
 
   /// main が結果を同期で待つ間、キューの優先度を上げる（待っている main は優先度を譲らない）。
@@ -136,7 +137,7 @@ actor SyntaxWorker {
       }
       absorb(batch)
       guard !layers.isCancelled else { return }
-      let shown = lines(covering: batch.visible)
+      let shown = range(of: batch.visible)
       let quiet = batch.hurry || batch.quietAt.map { DispatchTime.now() >= $0 } ?? true
       if let target = nextTarget(shown: shown, quiet: quiet) {
         rebuild(target, shown: shown)
@@ -183,13 +184,13 @@ actor SyntaxWorker {
     version = batch.version
     parses.withLock { $0 += 1 }
     for range in layers.apply(batch.edits, text: text).rangeView {
-      let covered = lines(covering: NSRange(range))
+      let covered = self.range(of: text.rows(of: NSRange(range)))
       stale.insert(integersIn: covered.location..<NSMaxRange(covered))
     }
     stale.formUnion(layers.takeInvalidated())
   }
 
-  /// 次に作り直す区画。見えている行に掛かる部分が先。見えていない部分は待ちが明けてから。
+  /// 次に作り直す区間（格子で切る → `SyntaxLayers`）。見えている行に掛かる部分が先。見えていない部分は待ちが明けてから。
   private func nextTarget(shown: NSRange, quiet: Bool) -> Range<Int>? {
     let part =
       stale.intersection(IndexSet(integersIn: shown.location..<NSMaxRange(shown))).rangeView.first
@@ -199,7 +200,7 @@ actor SyntaxWorker {
     return part.lowerBound..<min(part.upperBound, block)
   }
 
-  /// 区画 1 つを作り直して置く。
+  /// 区間 1 つを作り直して置く。
   private func rebuild(_ target: Range<Int>, shown: NSRange) {
     let spans = layers.roles(in: NSRange(target))
     guard !layers.isCancelled else { return }
@@ -220,13 +221,12 @@ actor SyntaxWorker {
     inbox.deposit { $0.syntax.append(outcome) }
   }
 
-  /// 区間に掛かる行を丸ごと（改行を含む）。本文の外は切り詰める。
-  private func lines(covering range: NSRange) -> NSRange {
-    let start = min(range.location, text.length)
-    let end = min(NSMaxRange(range), text.length)
-    let first = text.lineStart(text.row(containing: start))
-    let last = text.lineEnd(text.row(containing: max(start, end - 1)))
-    return NSRange(location: first, length: max(0, last - first))
+  /// 行 `lines` を丸ごと（改行を含む）。本文の外の行は切り詰める。
+  private func range(of lines: ClosedRange<Int>) -> NSRange {
+    let first = min(max(0, lines.lowerBound), text.lineCount - 1)
+    let last = min(max(first, lines.upperBound), text.lineCount - 1)
+    let start = text.lineStart(first)
+    return NSRange(location: start, length: text.lineEnd(last) - start)
   }
 }
 

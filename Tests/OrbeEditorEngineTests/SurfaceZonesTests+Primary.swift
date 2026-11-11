@@ -4,10 +4,10 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 主と点で受ける入口の境——入力欄の選択のドラッグ・字の位置の問い・入力欄の横の外へのドラッグ・入力欄を閉じる知らせ・
-/// 焦点の変化・入力欄へ落とすファイル。壊れると、返信欄の選択をドラッグして本文の字が動く・変換中のクリックを IME に
-/// 取られる・返信欄のドラッグで本文が横に流れる・返信欄を畳んでも区画が古い高さで並ぶ・焦点の無い窓で返信欄のキャレット
-/// が点滅し続ける・返信欄にファイルを落として別の文書が開く。
+/// 主と点で受ける入口の境——入力欄の選択のドラッグ・字の位置の問い・入力欄の横の外へのドラッグ・入力欄を閉じる
+/// 知らせ・焦点の変化・入力欄へ落とすファイル。壊れると、返信欄の選択をドラッグして本文の字が動く・変換中のクリックを
+/// IME に取られる・返信欄のドラッグで本文が横に流れる・返信欄を畳んでも絵の差し込みが古い高さで並ぶ・焦点の無い窓で
+/// 返信欄のキャレットが点滅し続ける・返信欄にファイルを落として別の文書が開く。
 extension SurfaceZonesTests {
   /// 入力欄の場の文の位置 `offset` のすぐ右の点（view の座標）。
   private func fieldPoint(_ site: EditingSite, _ offset: Int) throws -> CGPoint {
@@ -81,8 +81,8 @@ extension SurfaceZonesTests {
     try mouse(opened, .leftMouseUp, at: right)
   }
 
-  /// 入力欄は主になった・外れたを知らせる（押す → Esc → 主にする口 → 絵から消える）。絵から消えて外れた知らせの中で区画を
-  /// 描き直せば、その高さは同じ取引の並びに入る。
+  /// 入力欄は主になった・外れたを知らせる（押す → Esc → 主にする口 → 描き直した絵から消える）。絵から消えて外れた
+  /// 知らせの中で絵の差し込みを描き直せば、その高さは同じ取引の並びに入る。
   func testAFieldNoticesPrimaryChangesAndARedrawInTheLastNoticeSettlesTheRows() throws {
     let opened = try hostedRows()
     let surface = opened.surface
@@ -118,7 +118,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(surface.drawn.rows.heights, [200], "同じ書き込みで材料にも")
   }
 
-  /// 面が焦点を失えば、区画の文の選択の地は焦点の無い色に、入力欄のキャレットは描かなくなる。
+  /// 面が焦点を失えば、絵の差し込みの文の選択の地は焦点の無い色に、入力欄のキャレットは描かなくなる。
   func testLosingFocusUnfocusesTheZoneSelectionAndTheFieldCaret() throws {
     let setup = try threaded()
     let (opened, thread, field) = (setup.opened, setup.thread, setup.field)

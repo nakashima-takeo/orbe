@@ -3,10 +3,11 @@ import OrbeEditorCore
 import QuartzCore
 import simd
 
-/// 本文のドラッグ＆ドロップ（AppKit のドラッグ）。同じ面の中は移動（⌥ でコピー）、他の文書・他のアプリへはコピーで出し、
-/// 他のアプリの文字も受ける。Finder のファイルは載せる側へ「開く」を渡し、⇧ を押していればパスを入れる。落とす位置の印は
-/// 描く材料に置き、本文の上下の端の 1 行の帯の中では自動でスクロールする。区画の入力欄へ落とせば入力欄に入れ（コピー。
-/// 入力欄が主になる）、区画のほかの所（文・押せる場所・空き）へは落とせない。
+/// 本文のドラッグ＆ドロップ（AppKit のドラッグ）。同じ面の中は移動（⌥ でコピー）、他の文書・他のアプリへはコピーで
+/// 出し、他のアプリの文字も受ける。Finder のファイルは載せる側へ「開く」を渡し、⇧ を押していればパスを入れる。落とす
+/// 位置の印は描く材料に置き、本文の上下の端の 1 行の帯の中では自動でスクロールする。絵の差し込みの入力欄へ落とせば
+/// 入力欄に入れる（コピー。入力欄が主になる）。絵の差し込みの入力欄でない所（文・押せる場所・ほかに当たらない所）へは
+/// 落とせない。
 extension MetalTextView: NSDraggingSource {
   /// 読むだけの本文からは写すだけ（運んだ字を消さない）。
   func draggingSession(
@@ -185,7 +186,7 @@ extension MetalTextView: NSDraggingSource {
         offset: site.hit(point, position: surface.scrollPosition)?.offset,
         files: fileURLs(on: board), string: board.string(forType: .string),
         dragged: own ? draggedRange : nil,
-        copying: !info.draggingSourceOperationMask.contains(.move) || !site.isBody,
+        copying: !info.draggingSourceOperationMask.contains(.move),
         shift: NSEvent.modifierFlags.contains(.shift),
         opensFiles: site.isBody && surface.host != nil, inserts: site.isEditable))
   }

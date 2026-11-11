@@ -59,18 +59,14 @@ struct SyntaxReception {
     return changedRoles
   }
 
-  /// 見えている行 `lines`（`text` の行）を裏へ渡す。次の区切りから、そこを先に作る。
-  func setVisible(_ lines: ClosedRange<Int>, in text: TextRope) {
-    guard let worker else { return }
-    let first = min(lines.lowerBound, text.lineCount - 1)
-    let last = min(lines.upperBound, text.lineCount - 1)
-    worker.setVisible(
-      NSRange(location: text.lineStart(first), length: text.lineEnd(last) - text.lineStart(first)))
+  /// 見えている行 `lines`（最新の版の行）を裏へ渡す。次の区切りから、そこを先に作る。
+  func setVisible(_ lines: ClosedRange<Int>) {
+    worker?.setVisible(lines)
   }
 
-  /// 面の見えている範囲 `viewport` に掛かる行（`text` の行）。
-  static func lines(of viewport: TextViewport, in text: TextRope) -> ClosedRange<Int> {
-    let first = min(max(0, viewport.top.line), text.lineCount - 1)
+  /// 面の見えている範囲 `viewport` に掛かる行。
+  static func lines(of viewport: TextViewport) -> ClosedRange<Int> {
+    let first = viewport.top.line
     return first...(first + Int(viewport.visibleLines.rounded(.up)))
   }
 

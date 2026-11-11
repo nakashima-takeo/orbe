@@ -2,7 +2,7 @@ import CoreText
 import Metal
 import OrbeEditorCore
 
-/// 区画の箱 1 つ（px）。シェーダの `Box` と同じ並び。`quad` は影の広がりを含む描く矩形、`box` は箱。
+/// 絵の差し込みの箱 1 つ（px）。シェーダの `Box` と同じ並び。`quad` は影の広がりを含む描く矩形、`box` は箱。
 struct BoxInstance {
   var quad: SIMD4<Float>
   var box: SIMD4<Float>
@@ -24,8 +24,8 @@ struct FieldLayer {
   var color: [[GlyphInstance]] = []
 }
 
-/// 区画を描く描画スレッドの持ち物（面ごと）——画像の地図と、入力欄の場ごとの組版のキャッシュ（場の版と行を、本文や
-/// 他の入力欄と取り違えない）。
+/// 絵の差し込みを描く描画スレッドの持ち物（面ごと）——画像の地図と、入力欄の場ごとの組版のキャッシュ（場の版と行を、
+/// 本文や他の入力欄と取り違えない）。
 final class ZoneResources {
   let images: ImageAtlas
   private var fieldLines: [Int: LineLayoutCache] = [:]
@@ -49,10 +49,11 @@ final class ZoneResources {
   }
 }
 
-/// 区画——並びの塊の y に、区画の材料（箱・画像・選んだ文の地・字・入力欄の中身）を本文と同じ 1 コマに置く。区画は横に
-/// 送らない（本文の区画の左端が区画の左端）。影は区画の外へ落ちるので、見えている範囲の少し外の区画も描く。
+/// 絵の差し込み——並びの塊の y に、絵の差し込みを描く材料（箱・画像・選んだ文の地・字・入力欄の中身）を本文と
+/// 同じ 1 コマに置く。絵の差し込みは横に送らない。左端はいつも本文の区画の左端に揃う。影は絵の差し込みの外へ
+/// 落ちるので、見えている範囲の少し外の絵の差し込みも描く。
 extension FrameBuilder {
-  /// 区画の影が区画の外へ落ちうる幅（pt）。
+  /// 影が絵の差し込みの外へ落ちうる幅（pt）。
   static let zoneOverhang = 48.0
 
   func drawZones(_ source: Source, _ c: Context) {
@@ -143,8 +144,9 @@ extension FrameBuilder {
       stroke: box.stroke.packed, shadow: box.shadow.packed)
   }
 
-  /// 入力欄の場の文を、入力欄の矩形に描く（入力欄の矩形と本文の区画の交わりで切り取る。横は場の送りの分だけ左へずらす）。
-  /// 選択・キャレット・未確定の文字は本文と同じ描き方で、場の色で描く。`origin` は区画の左上（px）。
+  /// 入力欄の場の文を、入力欄の矩形に描く（入力欄の矩形と本文の区画の交わりで切り取る。横は場の送りの分だけ
+  /// 左へずらす）。選択・キャレット・未確定の文字は本文と同じ描き方で、場の色で描く。`origin` は絵の差し込みの左上
+  /// （px）。
   private func drawField(
     _ field: ZoneMaterial.Field, _ material: FieldMaterial, origin: (x: Double, y: Double),
     _ source: Source, _ c: Context
