@@ -35,7 +35,7 @@ extension EditorDiff {
   /// 面に初めて見せる位置へ送る——位置を決めた後に作り直した面なら前の面で先頭に見えていた所、まだなら、開いた時点に
   /// 追いついた並びで 1 回だけ最初の変更区間（無ければ送らない）。どちらも見えている高さで決まる位置なので、面がまだ大きさを
   /// 持たない（本体に置いた直後の配置の前）なら送らず、大きさが決まって見えている範囲が変わったとき（`viewportDidChange`）に
-  /// 送る。
+  /// 送る。初めての位置を決めたら pane へ知らせる（中身も面も変わらないまま位置だけ決まっても、pane が配置で色を待つ）。
   func placeFirstView(on surface: any TextSurface) {
     switch placement {
     case .placed:
@@ -47,6 +47,7 @@ extension EditorDiff {
       guard surface.viewport.visibleLines > 0 else { return }
       placement = .placed
       revealFirstChange(on: surface)
+      onPresentationChange?()
     }
   }
 

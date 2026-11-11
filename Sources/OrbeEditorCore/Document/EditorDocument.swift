@@ -98,6 +98,8 @@ public final class EditorDocument {
   }
   /// ディスクの内容で本文を差し替えている間は、その編集で未保存を動かさない（差し替えの後に揃えた姿を置く）。
   private var isReplacingFromDisk = false
+  /// 受け取り箱の結果を受け取っている途中（その知らせの中から、初めて見せる前の待ちを始めない）。
+  private var isReceiving = false
 
   /// `surface` は、まだ文書と結ばれていない面。ロープは読んだ内容から組み、面は結ばれたときに写しを引く。構文の裏の仕事はここで起き、
   /// 全体の解析と先頭の画面ぶんの役割を作り始める（待たない）。
@@ -161,12 +163,16 @@ public final class EditorDocument {
     analysis.post(request, text: text, version: version)
   }
 
-  /// 文書を初めて画面に出す直前に呼ぶ。構文の裏の仕事が見えている範囲の役割を作り終えていなければ、最初の描画に色が
-  /// 間に合うよう最大 `SyntaxReception.firstColorsWait` 待つ（越えたら無色で出し、後から色が付く）。
-  /// 2 回目以降は何もしない。
-  public func prepareToShow() {
+  /// 文書を初めて画面に出す直前に呼ぶ。構文の裏の仕事が、見えている範囲の役割を作り終えていなければ、最初の描画に色が
+  /// 間に合うよう期限 `deadline`（省けば今から `SyntaxReception.firstColorsWait`）まで待つ（越えたら無色で出し、後から色が
+  /// 付く）。2 回目以降は何もしない。待つ間も結果を受け取るので、受け取りの知らせの中からは呼べない——受け取りが入れ子に
+  /// なり、外側の受け取りが持つ役割の変わった区間が、内側の差し替えの前の座標のまま面へ届く。
+  public func prepareToShow(
+    until deadline: DispatchTime = .now() + SyntaxReception.firstColorsWait
+  ) {
+    precondition(!isReceiving, "受け取りの知らせの中からは、初めて見せる前の待ちを始められない")
     guard reception.beginShowing(ready: isFirstColorReady) else { return }
-    _ = wait(until: .now() + SyntaxReception.firstColorsWait) { $0.isFirstColorReady }
+    _ = wait(until: deadline) { $0.isFirstColorReady }
   }
 
   /// 裏の仕事（構文・比較・行差分・問い）がすべて今の版に追いつき、その結果を受け取るまで待つ（最大 `timeout`）。
@@ -277,6 +283,8 @@ public final class EditorDocument {
   /// 直す（未保存でなくなったので外の内容に差し替わる）——差し替えは打鍵と同じ編集の道を通るので、ほかの結果を置き
   /// 終えるまで本文を変えない。
   private func receive() {
+    isReceiving = true
+    defer { isReceiving = false }
     let contents = inbox.take()
     let synced = contents.comparison.map { diskSync.settle($0, version: version) } ?? false
     let changedRoles = reception.receive(contents.syntax, roles: &roles) { log.edits(since: $0) }

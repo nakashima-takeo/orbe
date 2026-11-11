@@ -44,7 +44,7 @@ final class EditorDiff: RootFilesObserver {
   var onFocusChange: ((Bool) -> Void)?
   /// 見せている見せ方（見せていなければ nil）。
   private(set) var presented: Mode?
-  /// 中身・面・並びが変わった（見せている間だけ。pane が本体を置き直す）。
+  /// 中身・面・並びが変わった・初めての位置を決めた（見せている間だけ。pane が本体を置き直す）。
   var onPresentationChange: (() -> Void)?
   /// 古い側が index のサブモジュール（文書の底ではない「Subproject commit」の行）。
   var oldIsSubmodule = false
@@ -61,6 +61,8 @@ final class EditorDiff: RootFilesObserver {
   private var stale = true
   /// 初めての位置決めの段階。
   var placement = Placement.catchingUp
+  /// 初めて画面に出す前の色の上限待ちを済ませた（diff ごとに 1 回。版の本文を作り直しても待ち直さない）。
+  private(set) var hasBeenShown = false
   /// 開いた後に頼んだ根のサービスの取り直し（status と版の本文）のうち、済んでいない数。
   private(set) var awaitedRefreshes = 2
   /// 開いた後の取り直しが済んでから、中身を決め直したか。
@@ -180,13 +182,17 @@ final class EditorDiff: RootFilesObserver {
     if stale { refresh() } else { applyRows() }
   }
 
-  /// 初めて画面に出す直前の、色の上限待ち（見えている範囲——インラインの古い側は見えている削除行——で効かせる）。
+  /// 初めての位置を決めた画面を出す直前の、色の上限待ち（diff ごとに 1 回）。古い側の版の文書・新しい側の版の文書・作業
+  /// ツリーの文書を、1 つの期限（今から `SyntaxReception.firstColorsWait`）まで順に待つ。待つ前に見えている範囲——インラインの
+  /// 古い側は見えている削除行——を裏へ渡す。位置を決める前に出る画面と、待った後に作り直した版の文書では待たない。
   func prepareToShow() {
-    guard content == .ready else { return }
+    guard content == .ready, placement == .placed, !hasBeenShown else { return }
+    hasBeenShown = true
     viewportDidChange()
-    old?.prepareToShow()
-    newRevision?.prepareToShow()
-    document?.prepareToShow()
+    let deadline = DispatchTime.now() + SyntaxReception.firstColorsWait
+    old?.prepareToShow(until: deadline)
+    newRevision?.prepareToShow(until: deadline)
+    document?.prepareToShow(until: deadline)
   }
 
   /// 見せるのをやめる——古い側の面を閉じ（スクロールの共有が外れる）、文書の面にコードの見え方を戻し、文書のハンクを

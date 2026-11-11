@@ -3,9 +3,9 @@ import Foundation
 /// 構文の裏の仕事と、その結果の受け取り——文書（`EditorDocument`）とリビジョンの文書（`RevisionDocument`）が共有する。裏の
 /// 仕事を起こし、受け取り箱に届いた結果の役割を今の版へ写して置き、見えている範囲を裏へ渡し、初めて見せるときの色の上限
 /// 待ちを行う。受け取り箱は持ち主のもので、持ち主が箱から取った結果のうち構文のものをここへ渡す。
-struct SyntaxReception {
-  /// 初めて画面に出すとき、最初の色を待つ上限。
-  static let firstColorsWait: TimeInterval = 0.05
+public struct SyntaxReception: Sendable {
+  /// 初めて画面に出すとき、最初の色を待つ上限（diff は古い側と新しい側を合わせてこの長さで待つ）。
+  public static let firstColorsWait: TimeInterval = 0.05
 
   private(set) var worker: SyntaxWorker?
   /// 最後に受け取った結果の版と、そのとき見えている範囲・全体の作り直しが済んでいたか。
