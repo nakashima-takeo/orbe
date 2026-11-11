@@ -92,7 +92,7 @@ extension EditorDiffTests {
     try Data([0xFF, 0xFE, 0x00, 0x01]).write(to: repo.url("a.txt"))
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(until: { diff.content == .unavailable(.notText) }, "表示できなくなる")
-    XCTAssertFalse(pane.emptyHost.isHidden)
+    XCTAssertFalse(pane.faceHost.isHidden)
     XCTAssertNil(surface.view.superview, "面は本体から外れる")
   }
 

@@ -29,8 +29,8 @@ extension EditorPaneView {
   /// host は自分で受ける。
   override func hitTest(_ point: NSPoint) -> NSView? {
     let hit = super.hitTest(point)
-    guard !emptyHost.isHidden, let hit else { return hit }
-    return hit.isDescendant(of: emptyHost) ? self : hit
+    guard !faceHost.isHidden, let hit else { return hit }
+    return hit.isDescendant(of: faceHost) ? self : hit
   }
 
   override func mouseDown(with event: NSEvent) {

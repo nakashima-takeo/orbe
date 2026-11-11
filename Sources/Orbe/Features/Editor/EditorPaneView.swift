@@ -26,7 +26,7 @@ final class EditorPaneView: NSView {
   private(set) var tree: FileTree
   let sideHost: NSHostingView<EditorSideRoot>
   let headerHost: NSHostingView<EditorHeaderRoot>
-  let emptyHost: NSHostingView<EditorFaceRoot>
+  let faceHost: NSHostingView<EditorFaceRoot>
   /// 本体（焦点のタブの中身）。
   private(set) var body = EditorBody.empty
   /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
@@ -95,11 +95,11 @@ final class EditorPaneView: NSView {
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
         shell: shell, localization: localization, fontResolver: fontResolver))
-    emptyHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
+    faceHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
-    for host in [sideHost, headerHost, emptyHost] as [NSView] {
+    for host in [sideHost, headerHost, faceHost] as [NSView] {
       // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
       host.wantsLayer = true
       host.layer?.isOpaque = false
@@ -163,7 +163,7 @@ final class EditorPaneView: NSView {
       fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
-    emptyHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
+    faceHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
   }
 
   /// 行内入力を預かっている間に焦点を明け渡した。行き先が決まった次のターンに、入力欄と同じ判定へ通す

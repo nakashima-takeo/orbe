@@ -188,7 +188,7 @@ final class EditorDiffTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let binary = try tab.group.editor.openDiff(id("bin.dat", .workingTree), as: .pinned)
     pumpMain(until: { binary.content == .unavailable(.notText) }, "バイナリ")
-    pumpMain(until: { pane.faceContent == .notice(.editorDiffNotText) && !pane.emptyHost.isHidden })
+    pumpMain(until: { pane.faceContent == .notice(.editorDiffNotText) && !pane.faceHost.isHidden })
     let link = try tab.group.editor.openDiff(id("link.txt", .workingTree), as: .pinned)
     pumpMain(until: { link.content == .unavailable(.symlink) }, "シンボリックリンク")
     XCTAssertTrue(pane.focusTarget === pane, "面が無ければ行き先は pane")
