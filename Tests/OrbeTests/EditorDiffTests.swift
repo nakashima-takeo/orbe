@@ -178,10 +178,13 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(try engine(added.newSurface).presentation.numbersOwnLines)
   }
 
-  /// バイナリ・シンボリックリンク・競合中は、タブは開き、本体に理由の一文が出る。
+  /// バイナリ・シンボリックリンク・追跡中のファイルを置き換えたディレクトリ・競合中は、タブは開き、本体に理由の一文が出る。
   func testUnavailableDiffsShowAReason() throws {
     try Data([0xFF, 0xFE, 0x00, 0x01]).write(to: repo.url("bin.dat"))
-    XCTAssertTrue(repo.git(["add", "bin.dat"]).isSuccess)
+    try repo.write("d.txt", "d\n")
+    XCTAssertTrue(repo.git(["add", "bin.dat", "d.txt"]).isSuccess)
+    try FileManager.default.removeItem(at: repo.url("d.txt"))
+    try repo.write("d.txt/inner.txt", "x\n")
     try FileManager.default.createSymbolicLink(
       atPath: repo.url("link.txt").path, withDestinationPath: "a.txt")
     let (tab, _) = tab()
@@ -194,6 +197,8 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(pane.focusTarget === pane, "面が無ければ行き先は pane")
     XCTAssertEqual(
       pane.headerHeight, Theme.Layout.editorFileTabs + 1 + Theme.Layout.editorBreadcrumb)
+    try tab.group.editor.openDiff(id("d.txt", .workingTree), as: .pinned)
+    pumpMain(until: { pane.faceContent == .notice(.editorDiffDirectory) }, "ディレクトリ")
 
     XCTAssertTrue(repo.git(["checkout", "-qb", "other"]).isSuccess)
     try repo.write("a.txt", "other\n")
