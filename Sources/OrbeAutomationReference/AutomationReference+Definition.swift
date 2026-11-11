@@ -17,8 +17,8 @@ extension AutomationReference {
     what it does with its output.
     - `id`: given by Orbe. Send it back to keep the node; a node without `id` is a new node, and it \
     cannot take the key of a node the same rewrite removes.
-    - `key`: 1-32 letters, digits, _ or -, unique in the automation (case-sensitive). It names the \
-    node in `from` and when you point at a node. Changing it keeps the node.
+    - `key`: 1-32 letters, digits, _ or - (ASCII only), unique in the automation (case-sensitive). \
+    It names the node in `from` and when you point at a node. Changing it keeps the node.
     - `name`: one line.
     - `trigger`: `kind` `interval` with `minutes` (1-10080), `cron` with `expression` ("minute hour \
     day month weekday", in the Mac's time zone), `manual` (runs only when a flow points at it or at \
@@ -32,8 +32,8 @@ extension AutomationReference {
     - `from`: the upstream nodes. Each is a key, or an object with `node` (the key), `take` and \
     `maxAgeHours`. `take` is `new` (the default: only rows this node has not received) or `all` \
     (every valid row of that upstream, every run). `maxAgeHours` (at least 1) drops older rows. \
-    Both belong to the receiver; the upstream's rows do not change. An input with neither comes \
-    back as a key.
+    Both belong to the receiver; the upstream's rows do not change. An input that takes `new` and \
+    has no `maxAgeHours` comes back as a key.
     - A command: `command` runs with /bin/sh -c. `directory` is relative to the workspace root \
     ("." for the root) and required when the node runs in a workspace (its own `workspace`, or the \
     automation's); otherwise it is absolute, or left out for the home folder. The root is resolved \
@@ -80,7 +80,7 @@ extension AutomationReference {
 
     TOOLS
     Only fetch and work agents have `tools`: full MCP tool names (mcp__<server>__<tool>) and \
-    Bash(<command prefix>:*) rules, where the prefix has no , ( ) * or control characters. Bare \
+    Bash(<command prefix>:*) rules, where the prefix is not blank and has no , ( ) * or control characters. Bare \
     built-in tools (Bash, Read, Write, Edit and so on), whole servers and wildcards are refused. \
     Name as few as possible.
     - With Bash rules only, claude runs without the user's settings, hooks and MCP servers, and \
@@ -120,9 +120,9 @@ extension AutomationReference {
     - With `take` `new`, a receiver gets the items and events added since it last read; with `all`, \
     every valid item and every event in the window, on every run (`all` with `maxAgeHours` sums up \
     a recent window each time).
-    - Rows are dropped for the first of: older than `maxAgeHours`; for a judge, rows whose `link` it \
-    already settled (accepted, dismissed or resolved); an older row with the same downstream id; \
-    beyond `maxItems`. Rows with the same `link` are all kept.
+    - Rows are dropped for the first of: older than `maxAgeHours`; for a judge, rows whose `link` is \
+    one of its proposals that is not open (accepted, dismissed, resolved or unreadable); an older \
+    row with the same downstream id; beyond `maxItems`. Rows with the same `link` are all kept.
     - A receiver takes all its rows in one run, whatever their number and size. Without limits \
     nothing is dropped: while a node keeps failing its unread rows grow, and the next good run \
     takes them all. Write `maxItems` and `maxAgeHours` where cost or freshness matters.
@@ -130,7 +130,7 @@ extension AutomationReference {
     it was added.
     - A `newArrivals` fetch gets the start of its last successful run: a command as `ORBE_SINCE` \
     (ISO 8601, UTC), an agent as a sentence. Fetch what came after it; overlap is fine (Orbe drops \
-    ids it has seen). The first run gets none.
+    ids it has seen). Until a run has succeeded, it gets none.
     - A failed run moves nothing: the same rows are read again next time.
 
     JUDGE
@@ -141,15 +141,17 @@ extension AutomationReference {
     (I replied, the PR was merged).
     A judge command reads rows on stdin and prints lines of {"propose": "<row id>", "title": "...", \
     "due": "YYYY-MM-DD", "workspace": "<workspace id>", "reason": "..."} (`due`, `workspace` and \
-    `reason` optional). It gets neither its open proposals nor the workspaces, so it cannot resolve.
+    `reason` optional) or {"resolve": "<link>"}. It gets neither its open proposals nor the \
+    workspaces; a resolve that names no open proposal of the judge breaks the rules.
     A proposal points at a row with `link`. `title` is one non-empty line, `due` a real date, \
     `workspace` a current workspace id (Home's id, or none, means Home), `reason` a sentence or two \
     on why.
     Proposals belong to each judge: the same `link` from two judges is two proposals. For one \
     proposal from several fetches, feed them into one judge. Besides people taking or dismissing \
-    it, an open proposal goes away in three ways: its judge resolves it; the item it was based on \
-    leaves its `currentSet` result; or, when it was based only on events, the event it read passes \
-    `retentionDays`. The last two wait while a direct input of the judge still has a row with the \
+    it, an open proposal goes away when its judge resolves it, or when its basis is gone: the item \
+    it was based on is no longer valid (it left its `currentSet` result, or its node was removed or \
+    changed `coverage`), or, when it was based only on events, the event it read passed \
+    `retentionDays`. A lost basis waits while a direct input of the judge still has a row with the \
     `link`.
 
     REPORT, WORK, SIDE EFFECT
@@ -179,7 +181,7 @@ extension AutomationReference {
     run that breaks the rules, the first of consecutive failures, and runs that deliver (a judge's \
     proposal taken in, a report with text, a side effect that ran, work that did something). \
     Fetch and process nodes notify only failures and broken rules. `notificationCenter` keeps one \
-    notification per node, replaced by that node's next run; writing it makes macOS ask for \
+    notification per node, replaced by that node's next notification; writing it makes macOS ask for \
     permission if it is undecided, and without permission the menu bar shows it. Clicking opens \
     the automation on Home's board, where people can also switch `notify`.
 
@@ -195,8 +197,9 @@ extension AutomationReference {
     - Changing only `key`, `name`, `trigger`, `maxItems`, `retentionDays` or `notify` stops nothing.
     - A removed node stops and its current items become invalid; a removed judge forgets its \
     proposals. To stop a node for a while, pause it instead.
-    - A new automation and an added node do not run at once; an interval counts from when they \
-    were added.
+    - A new automation and an added node wait for their schedules (an interval counts from when \
+    they were added), but an added `arrival` node runs on writing when its upstream already has \
+    rows for it.
     - Orbe never goes back over rows a node already took because its definition changed. To judge \
     seen items again by a new standard, or to keep a new node from taking what exists now, prepare \
     the inputs yourself before writing.

@@ -53,7 +53,7 @@ extension AutomationReference {
     `workspaceName`} and `resolved` (links) for a judge. A held node's runs are `held` {`rows`}, one \
     per run it would have had (rows are empty for a node without `from`; how runs split may \
     differ from a real run). A given fetch has `given` {`rows`}. Runs and holds from the moment of \
-    writing have `atWrite`. Runs the flow started are `now`, even for `arrival` nodes. A run that \
-    took no rows is not recorded.
+    writing have `atWrite`. Runs the flow started are `now`, even for `arrival` nodes. As in real \
+    runs, a node with no rows to take records no run.
     """
 }

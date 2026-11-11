@@ -170,9 +170,9 @@ let automationTools: [[String: Any]] = [
     ("name", "delete_automation"),
     (
       "description",
-      "Deletes the automation. Its running runs stop and their results are discarded, all its "
-        + "proposals are forgotten (other automations' proposals stay), and its notifications "
-        + "are withdrawn from Notification Center."
+      "Deletes the automation and returns {ok}. Its running runs stop and their results are "
+        + "discarded, all its proposals are forgotten (other automations' proposals stay), and its "
+        + "notifications are withdrawn from Notification Center."
     ),
     (
       "inputSchema",
