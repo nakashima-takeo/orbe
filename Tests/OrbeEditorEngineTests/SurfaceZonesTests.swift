@@ -125,7 +125,7 @@ final class SurfaceZonesTests: EngineTestCase {
     XCTAssertEqual(text, ThreadZone.commentText)
     XCTAssertEqual(offset, 0)
     let space = point(CGPoint(x: 10, y: 10))
-    guard case .zoneSpace = surface.target(at: space) else { return XCTFail("絵の差し込みのほかに当たらない所") }
+    guard case .zoneSpace = surface.target(at: space) else { return XCTFail("絵の差し込みの、ほかに当たらない所") }
     XCTAssertEqual(surface.hit(space)?.offset, opened.document.text.lineStart(4))
     XCTAssertNil(surface.character(at: space))
     guard case .body = surface.target(at: point(CGPoint(x: 10, y: -5))) else {

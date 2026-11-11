@@ -234,7 +234,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(surface.primary, .body)
   }
 
-  /// 入力欄を外から置き換える口は場の丸ごとの置き換え（undo の区切りを通る）で、主にする口は主を入力欄にする。中身から
+  /// 入力欄を外から置き換える口は場の丸ごとの置き換え（undo の区切りを通る）で、主にする口は主を入力欄にする。絵から
   /// 入力欄が消えれば場を閉じ、主は本文に戻る。
   func testReplacingFocusingAndClosingAField() throws {
     let setup = try threaded()
@@ -248,7 +248,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(field.string, "送る文", "置き換えは undo に載る")
     let replacement = ThreadZone(comment: thread.comment)
     surface.setRows(zone(replacement, at: 4))
-    XCTAssertNil(surface.fields["reply"], "中身に無い入力欄の場は閉じる")
+    XCTAssertNil(surface.fields["reply"], "絵に無い入力欄の場は閉じる")
     XCTAssertEqual(surface.primary, .body)
     XCTAssertTrue(surface.drawn.fields.isEmpty)
   }

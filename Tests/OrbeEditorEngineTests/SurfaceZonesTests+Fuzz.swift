@@ -119,7 +119,7 @@ extension SurfaceZonesTests {
     for cursor in surface.editor.state.cursors.all {
       XCTAssertLessThanOrEqual(NSMaxRange(cursor.selection), length, "\(step)")
     }
-    let site = try XCTUnwrap(surface.fields["reply"], "\(step): 入力欄の場は中身にある限り続く")
+    let site = try XCTUnwrap(surface.fields["reply"], "\(step): 入力欄の場は、絵にその入力欄がある限り続く")
     XCTAssertEqual(site.currentContent?.text.length, field.text.length, "\(step)")
     for cursor in site.editor.state.cursors.all {
       XCTAssertLessThanOrEqual(NSMaxRange(cursor.selection), field.text.length, "\(step)")
