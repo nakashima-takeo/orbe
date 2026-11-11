@@ -86,15 +86,15 @@ extension EditorDiff {
     guard let document else { return (revisionHunks, newRevisionSide) }
     let side = DiffRows.Side(document.text)
     guard let oldSource else { return nil }
-    guard let base = oldSource else {
-      return (DiffRows.hunks(old: nil, new: document.text, limit: Self.hunkLimit), side)
-    }
-    // サブモジュールからファイルへ置き換えた行——古い側は文書の底ではないので、丸ごとの置き換え（git が削除と追加に割るのと
-    // 同じ形）。
-    if oldIsSubmodule { return ([LineHunk(old: 0..<oldSide.lines, new: 0..<side.lines)], side) }
-    guard document.hunksBase == base else { return nil }
+    // 丸ごとの置き換え（git が削除と追加に割るのと同じ形。古い側が無ければ全部の行の追加）。
+    if oldIsNotBaseline { return ([LineHunk(old: 0..<oldSide.lines, new: 0..<side.lines)], side) }
+    guard document.hunksBase == oldSource else { return nil }
     return (document.hunks, side)
   }
+
+  /// 作業ツリー diff の古い側が文書の底ではない（index の版に無い・サブモジュールの行）。文書は底を持たないのでハンクも
+  /// ハンクの知らせも持たず、並びは両側の行の数だけで決まる——文書の本文が変われば diff が自分で並びを置き直す。
+  var oldIsNotBaseline: Bool { oldSource == .some(nil) || oldIsSubmodule }
 
   /// 見え方。版が無い側（`absent`）の面は、エディターの都合で持つ空の行に番号を描かない（存在しない行を番号付きで出さない）。
   private func look(

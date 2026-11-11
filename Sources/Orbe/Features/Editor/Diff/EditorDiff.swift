@@ -238,10 +238,10 @@ final class EditorDiff: RootFilesObserver {
         from: viewport.top, count: Int(viewport.visibleLines.rounded(.up)), hunks))
   }
 
-  /// 作業ツリー diff の文書の本文が変わった（見せている間に外部変更で差し替わった）。片側だけの diff は並びを今の行の数で
-  /// 置き直す。
+  /// 作業ツリー diff の文書の本文が変わった（見せている間に外部変更で差し替わった）。古い側が文書の底ではない diff（古い
+  /// 側の版が無い・サブモジュールからファイルへ置き換えた）は、並びを今の行の数で置き直す。
   func documentTextDidChange() {
-    guard presented != nil, oldSource == .some(nil) else { return }
+    guard presented != nil, oldIsNotBaseline else { return }
     sourcesDidChange()
   }
 
