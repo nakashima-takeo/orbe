@@ -337,8 +337,8 @@ extension EditorDocument: TextSurfaceDelegate {
       analysis.postComparison(text: text, version: version, synced: diskSync.snapshot.text)
     }
     if baseline != nil {
-      pushLineMarks()
       requestHunks()
+      pushLineMarks()
     }
     // 届きうる結果が無ければ、写すための記録は要らない（結果が一つも来ない文書で、差し替えの本文が溜まり続けない）。
     if syntax == nil, pendingHunks == nil, pendingRanges.isEmpty { log.discard(through: version) }
