@@ -12,15 +12,15 @@
 {"name": "GitHub: 自分へのレビュー依頼",
  "nodes": [
   {"key": "requests", "name": "レビュー依頼を取る", "trigger": {"kind": "interval", "minutes": 30},
-   "command": "gh search prs --review-requested=@me --state open --json url,title,repository,updatedAt --jq '.[] | {id: .url, link: .url, body: (.repository.nameWithOwner + \" \" + .title), time: .updatedAt}'",
+   "command": "gh search prs --review-requested=@me --state open --draft=false --json url,title,repository,updatedAt,author --jq '.[] | select(.author.type != \"Bot\") | {id: .url, link: .url, body: (.repository.nameWithOwner + \" \" + .title), time: .updatedAt}'",
    "coverage": "currentSet"},
   {"key": "judge", "name": "タスクにするか決める", "trigger": {"kind": "arrival"},
    "from": ["requests"], "model": "sonnet", "deliver": "taskCandidates",
-   "instruction": "タスクにする: 自分がレビューする PR\nタスクにしない: draft の PR・bot が開いた PR\nタイトル: 「レビュー: <リポジトリ名> #<番号> <タイトル>」\n期限: 付けない\n付け先: リポジトリ名と同じ名前の workspace があればそれ。それ以外は省く"}
+   "instruction": "タスクにする: 自分がレビューする PR\nタスクにしない: タイトルに WIP や do not merge とある PR\nタイトル: 「レビュー: <リポジトリ名> #<番号> <タイトル>」\n期限: 付けない\n付け先: リポジトリ名と同じ名前の workspace があればそれ。それ以外は省く"}
  ]}
 ```
 
-レビュー依頼は済むと取得から消えるので `currentSet`。消えた依頼の候補は、⌘⇧X の候補の一覧から下がる。
+レビュー依頼は済むと取得から消えるので `currentSet`。消えた依頼の候補は、⌘⇧X の候補の一覧から下がる。draft の PR と bot が開いた PR は、判定に届く行からは見分けられないので、取得の条件で落とす。draft の PR は ready になると取得に現れ、そのとき判定に届く。
 
 ### 判定の指示文
 
@@ -154,12 +154,15 @@
    "command": "gh search issues --assignee @me --state open --json url,title,repository,labels --jq '.[] | {id: .url, link: .url, body: (.repository.nameWithOwner + \" \" + .title), labels: [.labels[].name]}'",
    "coverage": "currentSet"},
   {"key": "urgent", "name": "急ぎだけに絞る", "trigger": {"kind": "arrival"},
-   "from": ["issues"], "command": "jq -c 'select(.labels | index(\"urgent\"))'"},
+   "from": [{"node": "issues", "take": "all"}], "command": "jq -c 'select(.labels | index(\"urgent\"))'",
+   "coverage": "currentSet"},
   {"key": "judge", "name": "タスクにするか決める", "trigger": {"kind": "arrival"},
    "from": ["urgent"], "model": "sonnet", "deliver": "taskCandidates",
-   "instruction": "タスクにする: 自分が手を動かす課題\nタスクにしない: 他人の対応待ちの課題\nタイトル: 「<リポジトリ名>: <タイトル>」\n期限: 付けない"},
+   "instruction": "タスクにする: 自分が手を動かす課題\nタスクにしない: タイトルが質問や議論の呼びかけで、手を動かすことが無い課題\nタイトル: 「<リポジトリ名>: <タイトル>」\n期限: 付けない"},
   {"key": "notice", "name": "急ぎを知らせる", "trigger": {"kind": "arrival"},
    "from": ["urgent"], "model": "haiku", "deliver": "report",
    "instruction": "新しい急ぎの課題を 1 行ずつ並べる。1 行目は件数。"}
  ]}
 ```
+
+urgent のラベルは後から付くことがある。取得の項目は中身が変わっても同じ項目で、`take` が `new` の受け手には再び届かないので、ラベルで絞る処理は取得の今の項目を毎回すべて読み（`take` を `all`）、自分も `currentSet` にする。後からラベルが付いた課題は処理の新しい項目として下流に届き、ラベルが外れたり課題が閉じたりすると、その候補は下がる。
