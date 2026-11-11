@@ -98,7 +98,6 @@ public final class EditorDocument {
   }
   /// ディスクの内容で本文を差し替えている間は、その編集で未保存を動かさない（差し替えの後に揃えた姿を置く）。
   private var isReplacingFromDisk = false
-  /// 受け取り箱の結果を受け取っている途中（その知らせの中から、初めて見せる前の待ちを始めない）。
   private var isReceiving = false
 
   /// `surface` は、まだ文書と結ばれていない面。ロープは読んだ内容から組み、面は結ばれたときに写しを引く。構文の裏の仕事はここで起き、
