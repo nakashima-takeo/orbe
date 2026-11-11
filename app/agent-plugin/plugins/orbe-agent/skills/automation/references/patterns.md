@@ -1,6 +1,6 @@
 # 型 — 自動化の設計の参考
 
-自動化はノードのグラフで、ノードはそれぞれ自分の予定で動く。予定のある取得は予定のたびに実行され、「届いたら」（`arrival`）のノードは、上流の行が変わったときだけ実行される（`take` が `new` なら、新しい行が届いたときだけ）。だから取得を agent にすると回ごとに LLM が起動し、取得をコマンドにすれば、LLM は上流の行が変わったときだけ起動する。型はこの構造から導いた形で、依頼に合わなければ外れてよい。外れるときは、外れた理由と代替を人に示す。
+自動化はノードのグラフで、ノードはそれぞれ自分の予定で動く。予定のある取得は予定のたびに実行され、「届いたら」（`arrival`）のノードは、上流の行が変わったときだけ実行される（`take` が `new` なら、新しい行が届いたときだけ）。だから取得を agent にすると回ごとに LLM が起動し、取得をコマンドにすれば、LLM が起動するのは受け手が読む行を持つ回だけになる（`take` が `new` なら新しい行が届いた回、`all` なら今有効な行がある回）。型はこの構造から導いた形で、依頼に合わなければ外れてよい。外れるときは、外れた理由と代替を人に示す。
 
 どの JSON も、そのまま `set_automation` の定義として通る。ノードの欄の意味と組み合わせの規則は `set_automation` の説明にある。
 
@@ -43,15 +43,15 @@
  "nodes": [
   {"key": "slack", "name": "メンションと DM を取る", "trigger": {"kind": "interval", "minutes": 30},
    "model": "haiku", "tools": ["mcp__slack__slack_search_public_and_private"],
-   "instruction": "自分へのメンションと DM を取る。id はチャンネル ID と ts の組、link は permalink、body は「#チャンネル / 送り手: 本文」、time は送信時刻。",
+   "instruction": "自分へのメンションと DM と、そのスレッドの後の返信を取る。id はチャンネル ID と ts の組、link はスレッドの最初のメッセージの permalink（同じスレッドのメッセージは同じ link）、body は「#チャンネル / 送り手: 本文」、time は送信時刻。",
    "coverage": "newArrivals"},
   {"key": "judge", "name": "タスクにするか決める", "trigger": {"kind": "arrival"},
    "from": ["slack"], "model": "sonnet", "deliver": "taskCandidates",
-   "instruction": "タスクにする: 自分への依頼・質問・判断を求められているもの\nタスクにしない: お礼・挨拶・周知・bot の通知\nタイトル: 「<送り手>: <何をするか>」\n期限: 文面にあればそれ\n対応済み: 自分が返信した・相手が取り下げた候補は対応済みにする"}
+   "instruction": "タスクにする: 自分への依頼・質問・判断を求められているもの\nタスクにしない: お礼・挨拶・周知・bot の通知\nタイトル: 「<送り手>: <何をするか>」\n期限: 文面にあればそれ\n対応済み: 同じ link の新しい行が、決着したこと（送り手が取り下げた・解決したと言う）を示した候補は対応済みにする"}
  ]}
 ```
 
-新着だけが返る出どころなので `newArrivals`。取得の `instruction` には、取る範囲と、1 項目の作り方（`id`・`link`・`body`・`time` に何を入れるか）を書く。判定の指示文には対応済みにする条件を必ず書く。
+新着だけが返る出どころなので `newArrivals`。取得の `instruction` には、取る範囲と、1 項目の作り方（`id`・`link`・`body`・`time` に何を入れるか）を書く。判定の指示文には対応済みにする条件を必ず書く。判定が確かめられるのは届いた行だけなので、取得はスレッドの後の返信も取り、同じスレッドのメッセージに同じ `link` を持たせる。
 
 ## 型 3: 出どころごとの予定で集め、まとめて判定する
 
@@ -65,11 +65,11 @@
    "coverage": "currentSet"},
   {"key": "slack", "name": "Slack のメンションと DM を取る", "trigger": {"kind": "interval", "minutes": 10},
    "model": "haiku", "tools": ["mcp__slack__slack_search_public_and_private"],
-   "instruction": "自分へのメンションと DM を取る。id はチャンネル ID と ts の組、link は permalink、body は「#チャンネル / 送り手: 本文」、time は送信時刻。",
+   "instruction": "自分へのメンションと DM と、そのスレッドの後の返信を取る。id はチャンネル ID と ts の組、link はスレッドの最初のメッセージの permalink（同じスレッドのメッセージは同じ link）、body は「#チャンネル / 送り手: 本文」、time は送信時刻。",
    "coverage": "newArrivals"},
   {"key": "triage", "name": "朝にまとめて判定する", "trigger": {"kind": "cron", "expression": "0 9 * * 1-5"},
    "from": ["github", "slack"], "model": "sonnet", "deliver": "taskCandidates",
-   "instruction": "タスクにする: 自分への依頼・質問・レビューの頼み\nタスクにしない: お礼・周知・bot の通知\nタイトル: 「<送り手>: <何をするか>」\n期限: 文面にあればそれ\n対応済み: 自分が返信した・PR が閉じた候補は対応済みにする"},
+   "instruction": "タスクにする: 自分への依頼・質問・レビューの頼み\nタスクにしない: お礼・周知・bot の通知\nタイトル: 「<送り手>: <何をするか>」\n期限: 文面にあればそれ\n対応済み: 同じ link の新しい行が、決着したこと（送り手が取り下げた・解決したと言う）を示した候補は対応済みにする"},
   {"key": "digest", "name": "GitHub を届いたら要約する", "trigger": {"kind": "arrival"},
    "from": ["github"], "model": "haiku", "deliver": "report",
    "instruction": "新しいレビュー依頼を、急ぐものから数行で要約する。1 行目は件数。"}
