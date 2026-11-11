@@ -132,8 +132,10 @@ extension AutomationReference {
     Orbe gives a judge agent its rows, its own open proposals and the workspaces other than Home \
     through its tools, and tells it the output form. Its `instruction` says what becomes a task \
     and what does not, how to title and date it, and how to choose the workspace (none means \
-    Home). When it reads `newArrivals`, also tell it to resolve open proposals that are finished \
-    (I replied, the PR was merged).
+    Home). When it reads `newArrivals`, also tell it when to resolve an open proposal, by what it \
+    can see: rows with an open proposal's `link` still reach the judge, so a newer row with that \
+    `link` can show the matter settled (the sender withdrew the request or says it is solved). Have \
+    the fetch give related messages one `link`, such as the thread's first message.
     A judge command reads rows on stdin and prints lines of {"propose": "<row id>", "title": "...", \
     "due": "YYYY-MM-DD", "workspace": "<workspace id>", "reason": "..."} (`due`, `workspace` and \
     `reason` optional) or {"resolve": "<link>"}. It gets neither its open proposals nor the \

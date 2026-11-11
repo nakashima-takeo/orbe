@@ -15,8 +15,9 @@ extension AutomationReference {
       {"key": "slack", "name": "Slack: mentions and DMs to me",
        "trigger": {"kind": "interval", "minutes": 10},
        "model": "haiku", "tools": ["mcp__slack__slack_search_public_and_private"],
-       "instruction": "Get mentions of me and DMs to me. id: channel id and ts; \
-    link: the permalink; body: \\"#channel / sender: text\\"; time: when it was sent.",
+       "instruction": "Get mentions of me and DMs to me, and the later replies in their threads. \
+    id: channel id and ts; link: the permalink of the thread's first message, so every message of \
+    a thread shares it; body: \\"#channel / sender: text\\"; time: when it was sent.",
        "coverage": "newArrivals", "retentionDays": 14},
       {"key": "triage", "name": "Morning triage",
        "trigger": {"kind": "cron", "expression": "0 9 * * *"},
@@ -24,7 +25,8 @@ extension AutomationReference {
        "instruction": "Task: something I am asked to do, answer or review. \
     Not a task: thanks, announcements, bot notices. Title: \\"<sender>: <what to do>\\". \
     Due: only when the text gives one. \
-    Resolve open proposals that are finished (I replied, the PR was merged or closed)."},
+    Resolve an open proposal when a newer row with its link shows the matter is settled \
+    (the sender withdrew the request or says it is solved)."},
       {"key": "digest", "name": "GitHub digest", "trigger": {"kind": "arrival"},
        "from": ["github"], "model": "haiku", "deliver": "report",
        "instruction": "Summarize the new pull requests in a few lines, the most urgent first. \

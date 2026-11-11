@@ -54,6 +54,7 @@ extension AutomationReference {
     per run it would have had (rows are empty for a node without `from`; how runs split may \
     differ from a real run). A given fetch has `given` {`rows`}. Runs and holds from the moment of \
     writing have `atWrite`. Runs the flow started are `now`, even for `arrival` nodes. As in real \
-    runs, a node with no rows to take records no run.
+    runs, a node with no rows to take records no run, except a `currentSet` process, which runs to \
+    copy an empty input.
     """
 }
