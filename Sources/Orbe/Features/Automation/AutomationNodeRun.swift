@@ -1,8 +1,9 @@
 import Foundation
 
 /// ノードの 1 回の記録の中身。確定（失敗の記録を含む）が、読む・確定する・当て直すときに決まった数とノードの 1 回の結果から組む。
-/// 保存は時刻・契機・失敗を列に、回の履歴から数えられない残りを JSON に持ち（`AutomationRunStore`）、外の形は保存の形に英文を
-/// 足したもの（`AutomationRunWire`）。手段を起こさなかった契機（取る行が 0 件）は記録しないので、いつも実行の記録を持つ。
+/// 保存は時刻・契機・失敗を列に、回の履歴から数えられない残りを JSON に持ち（`AutomationRunStore`）、外の形は保存の形に英文と、
+/// 報告・仕事の文の 1 行目（`summary`）を足したもの（`AutomationRunWire`）。手段を起こさなかった契機（取る行が 0 件）は記録しないので、
+/// いつも実行の記録を持つ。
 struct AutomationNodeRun: Equatable {
   enum Trigger: String, Codable {
     case schedule
@@ -40,6 +41,17 @@ struct AutomationNodeRun: Equatable {
     case sideEffect(count: Int)
     /// 何もしなかった回は `nothing` に理由を持つ。
     case work(text: String?, nothing: String?)
+
+    /// 報告と仕事のノードが書いた文の 1 行目（前後の空白を除いた文の最初の行を、抜粋の長さで切ったもの）。通知の本文と、外の形の
+    /// `summary` になる。改行の無い長い文でも一覧が全文で膨らまないよう、長さで切る。文の無い結果は nil。
+    var summary: String? {
+      switch self {
+      case .report(let text?), .work(let text?, _):
+        let line = text.trimmingCharacters(in: .whitespacesAndNewlines).prefix { !$0.isNewline }
+        return line.isEmpty ? nil : AutomationRunOutput.excerpt(String(line))
+      default: return nil
+      }
+    }
   }
 
   var failed: Bool { failure != nil }

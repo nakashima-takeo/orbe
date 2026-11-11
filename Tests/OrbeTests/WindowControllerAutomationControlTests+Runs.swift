@@ -169,6 +169,50 @@ extension WindowControllerAutomationControlTests {
       "一覧の lastRun は最新の回")
   }
 
+  /// 報告のノードの回は、`list_automation_runs` の回の記録では 1 行目の `summary` と全文の `text` を持ち、`list_automations` の
+  /// `lastRun` では `summary` だけを持つ（一覧が報告の全文で膨らまない）。
+  @MainActor func testAReportRunListsOnlyItsFirstLineAndRecordsTheWholeText() throws {
+    let wc = try launch()
+    let id = try set(wc, DesignSceneFixtures.boardReportExample().definition)
+    let first = "開いている PR は 2 件。"
+    let text = first + "\n- #412 レビュー待ち\n- #415 CI 失敗"
+    try wc.automationStore.record(
+      id, nodeKey: "digest", trigger: .arrival, at: Date(),
+      outcome: DesignSceneFixtures.reported(text))
+
+    let runs = try XCTUnwrap(
+      success(
+        wc.controlListAutomationRuns(automationId: id, nodeKey: "digest", before: nil, limit: nil)
+      )["runs"] as? [[String: Any]])
+    let recorded = try XCTUnwrap(runs.first?["result"] as? [String: Any])
+    XCTAssertEqual(recorded["summary"] as? String, first)
+    XCTAssertEqual(recorded["text"] as? String, text, "回の記録は全文")
+
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
+    let listedResult = try XCTUnwrap(
+      (nodes["digest"]?["lastRun"] as? [String: Any])?["result"] as? [String: Any])
+    XCTAssertEqual(listedResult["kind"] as? String, "report")
+    XCTAssertEqual(listedResult["summary"] as? String, first)
+    XCTAssertNil(listedResult["text"], "一覧は全文を持たない")
+  }
+
+  /// 改行の無い長い報告でも、一覧の `summary` は抜粋の長さで切られ、切られたことが「…」で示される（一覧が報告の全文で膨らまない）。
+  @MainActor func testALongFirstLineIsCutInTheListedSummary() throws {
+    let wc = try launch()
+    let id = try set(wc, DesignSceneFixtures.boardReportExample().definition)
+    let length = AutomationRunOutput.excerptLength
+    let text = String(repeating: "あ", count: length) + String(repeating: "い", count: length)
+    try wc.automationStore.record(
+      id, nodeKey: "digest", trigger: .arrival, at: Date(),
+      outcome: DesignSceneFixtures.reported(text))
+
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
+    let listedResult = try XCTUnwrap(
+      (nodes["digest"]?["lastRun"] as? [String: Any])?["result"] as? [String: Any])
+    XCTAssertEqual(
+      listedResult["summary"] as? String, String(repeating: "あ", count: length) + "…")
+  }
+
   /// 回の記録を残す回数と日数は設定の値で、確定のたびに読む（AI が `list_automation_runs` で読める過去の回が変わる）。
   func testTheRetentionSettingsDecideWhichPastRunsRemain() throws {
     let wc = try launch()

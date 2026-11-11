@@ -54,16 +54,26 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
-  /// Home の rules・⌘⇧X の役目の指示（日英）・同梱プラグインの自動化のスキルが名指しする MCP のツールは、どれも
-  /// `tools/list` にある。どれも claude が読む手引きで、orbe-mcp は別ターゲットなので、ツールを改名・削除しても
-  /// コンパイルもほかのテストも通ってしまう。
+  /// 次の文書が名指しする MCP のツールは、どれも `tools/list` にある。対象は Home の rules、⌘⇧X の役目の指示（日英）、
+  /// 同梱プラグインの自動化のスキルとその型。いずれも claude が読む手引きで、orbe-mcp は別ターゲットなので、
+  /// ツールを改名・削除してもコンパイルもほかのテストも通ってしまう。
   func testAgentInstructionsNameOnlyToolsTheBridgeLists() throws {
     let names = Set(ControlProcess.mcpToolsList().compactMap { $0["name"] as? String })
     let pattern = try NSRegularExpression(pattern: "`([a-z]+(?:_[a-z]+)+|spawn)`")
     let skill = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-      .appendingPathComponent("app/agent-plugin/plugins/orbe-agent/skills/automation/SKILL.md")
-    var texts = [("自動化のスキル", try String(contentsOf: skill, encoding: .utf8))]
+      .appendingPathComponent("app/agent-plugin/plugins/orbe-agent/skills/automation")
+    var texts = [
+      (
+        "自動化のスキル",
+        try String(contentsOf: skill.appendingPathComponent("SKILL.md"), encoding: .utf8)
+      ),
+      (
+        "自動化のスキルの型",
+        try String(
+          contentsOf: skill.appendingPathComponent("references/patterns.md"), encoding: .utf8)
+      ),
+    ]
     for language in Language.allCases {
       texts += [
         ("\(language) の Home の rules", HomeTemplate.rules(language, home: "/home")),
@@ -122,6 +132,18 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
+  /// `tools/list` のどのツールの説明も、claude がツールを探して読み込むときに説明を切る長さ（16,384 字）に収まる。超えると説明の
+  /// 末尾が AI に届かない。
+  func testEveryToolDescriptionFitsWhereClaudeCutsIt() {
+    let claudeDescriptionLimit = 16_384
+    for tool in ControlProcess.mcpToolsList() {
+      let description = tool["description"] as? String ?? ""
+      XCTAssertLessThanOrEqual(
+        description.utf16.count, claudeDescriptionLimit,
+        "\(tool["name"] ?? "") の説明が claude の切る長さを超えている")
+    }
+  }
+
   /// `tools/list` の description が写す既定・上限は control の正本（`WaitTimeout` / `SessionLogLimits`）と
   /// 同じ値。AI が timeoutMs・limit・一度に戻す件数を決める唯一の情報源なので、写しが古いと省略時の
   /// 待ち時間を誤って見積もり、上限を超えた要求を組む。数字の直後の区切りまで含めて比べる——部分一致だと
@@ -149,8 +171,12 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       "prompt_agent の既定 / 上限が WaitTimeout と食い違っている: \(description(prompt))")
     XCTAssertTrue(
       description(try tool("get_automation_trial")).contains(
-        "timeoutMs（既定 \(WaitTimeout.promptDefaultMs)・上限 \(WaitTimeout.maxMs)）"),
+        "`timeoutMs` (default \(WaitTimeout.promptDefaultMs), max \(WaitTimeout.maxMs))"),
       "get_automation_trial の既定 / 上限が WaitTimeout と食い違っている")
+    XCTAssertTrue(
+      description(try tool("list_automation_runs"), property: "limit").contains(
+        "(default \(AutomationStore.historyPage), max \(AutomationStore.historyPageLimit))"),
+      "list_automation_runs の limit の既定 / 上限が AutomationStore と食い違っている")
     for name in ["spawn_agent", "resume_agent"] {
       XCTAssertTrue(
         description(try tool(name), property: "timeoutMs")
@@ -165,10 +191,6 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       description(try tool("restore_sessions"), property: "sessionIds")
         .contains("\(SessionLogLimits.restoreMaxIds) 件"),
       "sessionIds の上限を写す")
-    XCTAssertTrue(
-      description(try tool("list_automations")).contains(
-        "新しい順に \(AutomationNodeState.recentRuns) 件まで。"),
-      "メモリに持つ直近の回の数を写す")
   }
 
   /// `tools/list` に出る全ツールが control の method として通る。ブリッジはツール名をそのまま method 名へ

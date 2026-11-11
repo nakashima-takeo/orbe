@@ -1,131 +1,27 @@
 import Foundation
+import OrbeAutomationReference
 
-// 自動化の 9 動詞の MCP ツール定義。秘書の AI が自動化を作り・直し・結果を読むための説明をここに持つ。
-// 候補をタスクにする・捨てるは人の判断なので、AI には出さない。
+// 自動化の 9 動詞の MCP ツール定義。説明は英語で、各ツールの説明は、そのツールの 1 文（呼び方・引数・返すもの）の後ろに
+// 共有の節（`AutomationReference`）を 1 つ続けて組む。どの節をどのツールに載せるかは 1 対 1 に決めてある（定義の節は
+// `set_automation` だけ、など）。`tools/list` は Orbe のプラグインの入ったすべての claude の文脈に載るので、同じ節を 2 つの
+// ツールに載せず、ほかのツールはその節を載せたツールを名指しする。候補をタスクにする・捨てる操作は人が判断するので、その
+// ツールは AI に出さない。
 
-private let definitionShape =
-  "定義は {name, trigger, source?, steps, sink, notify?}。自動化は、トリガー → 取得元（任意）→ 処理の段 0 個以上 → 出力先 の順に流れる。"
-  + "出力先はタスク候補 {\"kind\": \"taskCandidates\"}・"
-  + "コマンド {\"kind\": \"command\", command, directory?, timeoutMinutes?}・報告 {\"kind\": \"report\"}・"
-  + "agent {\"kind\": \"agent\", agent?（既定 claude）, model?, tools, request} の 4 つ。"
-  + "タスク候補には取得元（coverage は currentSet か newArrivals）と段 1 つ以上が要る。コマンドでは取得元も段も省略できる。"
-  + "報告には段 1 つ以上が要り、取得元は省略できる。agent では取得元も段も省略できる。"
-  + "name は「出どころ: 何を取るか」の 1 行（例「GitHub: 自分へのレビュー依頼」）。取得元が無ければ何をするかの 1 行（例「日報の下書き」）。"
-  + "trigger は {everyMinutes: 1〜10080（7 日）} か {cron: \"分 時 日 月 曜日\"}。everyMinutes は最後に回ってから N 分後に回り、"
-  + "Mac が眠っていた・Orbe が動いていなかった間に過ぎていれば、起きたときに 1 回回る。cron は Mac のタイムゾーンでその時刻にだけ回り、"
-  + "眠っていた間・Orbe が動いていなかった間に過ぎた時刻は回さず、次の時刻を待つ。"
-  + "cron の各欄は *・数・範囲 a-b・刻み */n, a-b/n, a/n・それらの , 区切りで、月と曜日は英名（JAN・MON など）も書ける（曜日の 0 と 7 は日曜）。"
-  + "@daily などの略記と L W # ? は使えない。日と曜日はどちらか一方を * のままにする（両方を書くと断られる）。一度も来ない式も断られる。"
-  + "例: 平日 9:00 は \"0 9 * * 1-5\"、毎週月曜 10:00 は \"0 10 * * 1\"、平日 9:00〜18:50 の 10 分ごとは \"*/10 9-18 * * 1-5\"。"
-  + "新着の流れ（newArrivals）は、どちらでも次の回が前回成功した回以降を取るので、過ぎた回が飛んでも項目は落ちない。"
-  + "source はコマンド {command, directory?, coverage}（/bin/sh -c で走る。directory は絶対パス、既定はホーム）か、"
-  + "軽い agent {agent?（既定 claude）, model?, tools（使ってよい MCP のツールの完全名 mcp__<サーバー>__<ツール> を 1 つ以上）, "
-  + "request（何を取るか）, coverage}。裏の agent（取得元・出力先）は回ごとに作る空のディレクトリで起きるので、"
-  + "ディレクトリに結び付く登録（claude の local・project スコープ）の MCP サーバーは使えない。範囲は取得の条件（検索語・期間・宛先）で切る。広すぎる取得は段の依頼文を大きくし、失敗の元になる。"
-  + "取得元の agent は外から届いた文面を読むので、組み込みのツール・サーバー単位（mcp__<サーバー>）・ワイルドカードは断られる"
-  + "（文面に仕込まれた指示で書き込みが起きないように）。名前の形は検証されても読み取りかどうかは検証されないので、"
-  + "tools には出どころを読むツールだけを名指しする（送信・更新・削除などの書き込みのツールや、Orbe 自身のツールは渡さない）。"
-  + "取得元のコマンドは 1 項目 1 行の JSON {\"id\": 出どころの中で変わらない ID, \"link\": http(s) の URL, \"body\": 本文, "
-  + "\"time\": ISO 8601 の時刻} だけを標準出力に出し（項目が無ければ何も出さない）、取得に失敗したら終了コードを 0 以外にする。"
-  + "agent の取得元には、同じ形の項目を Orbe の道具で渡すよう Orbe が指示する。"
-  + "coverage は取得の性質で必須。\"currentSet\"（取得結果がその時点の全体。例: 自分が担当の未完了課題・自分へのレビュー依頼）は、"
-  + "取得から消えた項目の候補を Orbe が下げる。\"newArrivals\"（取得結果は新着だけ。例: 自分宛の新しい DM・メンション）は、"
-  + "取得から消えても下げず、最後の段が対応済みとしたときだけ下げる。\"everything\" は前回の取得結果との差分を掛けない（タスク候補では使えない）。"
-  + "newArrivals では、前回成功した回の開始時刻が、コマンドには環境変数 ORBE_SINCE（ISO 8601、UTC）で、agent には依頼文の 1 文で渡る。"
-  + "その時刻以降を取ればよく、前の分が混ざってもよい（Orbe が id で除く）。初回は渡らない。"
-  + "steps は段の並び。段は {name, command, directory?} か {name, agent?（既定 claude）, model?, instruction} で、"
-  + "JSON の行を受けて JSON の行を出す（コマンドの段は標準入力と標準出力で、agent の段は Orbe の道具で読んで渡す）。"
-  + "段の agent はツールを持たない（tools は書けない）。項目は取得元の id でたどるので、段は渡された id を保つ。"
-  + "段と出力先のコマンドが受ける行は、外から届いた文面か、それをもとに段が作ったもので、文面に仕込まれた指示で作り変えられることがあり、"
-  + "Orbe は中身を確かめない。コマンドは行の値をシェルとして評価せず、agent（claude -p など）にも渡さない。"
-  + "agent に読ませたいなら段に置く（段の agent は Orbe の道具だけを持たせて走らせる）。"
-  + "ツールを使って何かをしてほしいなら出力先を agent にする（コマンドの出力先の中で claude -p を起こすと、Orbe の絞り込みが掛からない）。"
-  + "最後の段に届いた行の id が全部外れた回は失敗になる。安い段（コマンド・haiku）で先に絞ってから、高い段に回す。"
-  + "agent には model を必ず書く（書かない定義は断られる）。仕事に合うモデルを選ぶ。"
-  + "出力先がタスク候補のとき、最後の段が agent なら Orbe が出力の形（propose / resolve）を指示するので、指示文には"
-  + "「どんな項目をタスクにするか・タイトルと期限の付け方」を書く。最後の段は候補ごとに付け先の workspace を書ける"
-  + "（Orbe が Home 以外の workspace の一覧を渡す。省けばタスクは Home に付く）。付け先の決め方も指示文に書ける。"
-  + "最後の段がコマンドなら、自分で "
-  + "{\"propose\": id, \"title\": …, \"due\"?: \"YYYY-MM-DD\", \"workspace\"?: \"<list_workspaces の id>\"} の行を出す"
-  + "（判断待ちの候補も workspace の一覧も渡らないので resolve は出せない）。"
-  + "Home の id か省略ならタスクは Home に付く。今ある workspace でない id を書いた行は捨てられる。"
-  + "前の回に無かった項目だけが段に回り、新しい項目が無い回は段を起こさない。候補はリンク単位ですべての自動化を通じて 1 つ。"
-  + "出力先がコマンドのとき、出力先に届いた行が 1 行 1 JSON オブジェクトで標準入力に渡る（段が 0 個なら取得元の項目の形）。"
-  + "コマンドは届いた行が 1 行以上ある回だけ走り、取得元も段も無ければトリガーのたびに空の標準入力で走る"
-  + "（例「毎晩 23 時に ~/bin/daily-note.sh を実行する」は {\"name\": \"日報の下書き\", "
-  + "\"trigger\": {\"cron\": \"0 23 * * *\"}, \"steps\": [], "
-  + "\"sink\": {\"kind\": \"command\", \"command\": \"~/bin/daily-note.sh\"}}）。"
-  + "最後の段が行を出したのに 1 行も JSON オブジェクトとして読めなかった回と、コマンドが 0 以外で終わった・上限で止まった回は失敗になる。"
-  + "最後の段が agent なら、Orbe は中間の段と同じ枠（JSON の行を受けて JSON の行を出す）を指示する。"
-  + "環境変数 ORBE_RUN_ID は回の ID で、Orbe が終わらなかった回をやり直すときは同じ値になる。記録するなら終わりに記録する（始めに記録すると、止めた回の後の回を飛ばしうる）。"
-  + "失敗した回の項目は次の回にもう一度、新しい項目と混ざって流れるので、二重実行は回の ID ではなく行の id で除く（段は id を保つ）。"
-  + "timeoutMinutes は 1〜60（既定 2）で、経過時間と出力の無い時間の両方の上限。標準出力は読まないが、"
-  + "標準出力は 1 MiB・標準エラーは 64 KiB を超えると打ち切られて回が失敗するので、多く出すものは /dev/null へ向ける。"
-  + "出力先がコマンドの自動化は、定義を書き換えても全件を見直さない（既にコマンドに渡した項目は渡し直さない）。"
-  + "出力先が報告のとき、最後の段の出力が文章のまま回の結果として残る（64 KiB まで。超えた報告は決まりを外した出力として断られる）。1 行目が通知に出る。"
-  + "最後の段が agent なら、Orbe が「報告を道具で渡す・1 行目は要約・言うことが無ければそう申告する」を指示するので、"
-  + "指示文には何をどうまとめるかを書く。最後の段がコマンドなら、標準出力がそのまま報告になる。"
-  + "最後の段が何も出さない回と、言うことが無いと申告した回は「報告なし」の成功になる。報告の自動化は、定義を書き換えても全件を見直さない"
-  + "（毎回全体をまとめたいなら、取得元の coverage を everything にする）。"
-  + "出力先が agent のとき、回ごとに裏で使い捨ての claude を 1 つ起こし、request と tools で名指ししたツールだけで仕事をさせる。タブは作らない。"
-  + "起こすのは、出力先に届いた行が 1 行以上ある回だけ（取得元も段も無ければトリガーのたびに）で、届いた行も件数も agent には渡らない"
-  + "（依頼文は Orbe の固定の枠と request だけ）。対象が要る仕事なら、request で agent 自身にツールで調べさせる"
-  + "（例「平日 9:00 に、レビュー待ちの PR をまとめて Slack の #dev-me に投稿する」は、trigger {cron: \"0 9 * * 1-5\"}・取得元も段も無しで、"
-  + "tools に [\"Bash(gh search prs:*)\", \"<Slack の投稿の MCP ツール>\"]、request に「自分がレビュー待ちの "
-  + "open な PR を gh で調べてまとめ、Slack の #dev-me に投稿して」）。"
-  + "tools は 1 つ以上で、MCP のツールの完全名 mcp__<サーバー>__<ツール> か Bash(<コマンドの接頭>:*) の規則だけ"
-  + "（例 Bash(gh search prs:*)。接頭に , ( ) * は書けない）。裸の Bash・Write・Edit・Read などの組み込み・サーバー単位・ワイルドカードは断られる。"
-  + "名指しは最小にする。agent は回ごとに作る空のディレクトリを作業ディレクトリにして起きる。"
-  + "保証は名指しの形で変わる: Bash の規則だけなら、利用者の設定を読まずに走り、作業ディレクトリの外のファイルを引数に取って読むコマンドは、"
-  + "名指しの規則に一致していても claude が拒否する（外のファイルを読ませたいなら、それを読むコマンド〔スクリプトなど〕を名指しする）。"
-  + "MCP のツールを 1 つでも名指しすると、利用者の MCP サーバーを使うために利用者の設定を読むので、利用者が claude で「常に許可」にした"
-  + "ツール（MCP も Bash のコマンドも）と hook も効き、その設定の additionalDirectories の下も名指しなしで読める。"
-  + "agent は自分のツールで読んだ外の文面も読むので、そこに仕込まれた指示で、名指しした書き込みのツールが使われうる。"
-  + "model は必ず書く（書かない定義は断られる）。上限は経過 10 分・出力の無い時間 3 分。"
-  + "Orbe は「したことを報告にして道具で渡す（64 KiB まで）・1 行目は要約、することが無い・できないときはその旨を道具で申告する」を指示するので、"
-  + "request には何をしてほしいかだけを書く。"
-  + "渡した報告がその回の結果として残り（1 行目が通知に出る）、することが無いと申告した回は何も出さなかった回になる（知らせない）。"
-  + "できないと申告した回・結果を渡さずに終えた回・agent が落ちた回・上限で止まった回・名指しの MCP ツールが揃わなかった回は失敗になる。"
-  + "失敗した回と、Orbe が終わる前に止まった回は、次の回でもう一度 agent が起きる（投稿が二重になりうる）。"
-  + "定義を書き換えても全件を見直さない。request は automations.json に残るので秘密を書かない。"
-  + "notify は任意で、値は \"menuBar\" か \"notificationCenter\"（省略すると知らせない）。どの出力先にも付けられ、出力先へ何かを出した回"
-  + "（候補を受けた・コマンドが走った・報告があった・agent がすることが無いと申告せずに終えた）と、失敗が続くなら最初の失敗の回に、自動化の名前と結果の 1 行が出て音が鳴る。"
-  + "menuBar はメニューバーに、notificationCenter は macOS の通知センターに出す。通知センターの通知はノードごとに 1 つで、同じノードの次の回が前の通知を差し替える（別のノードの通知は残る）。"
-  + "notificationCenter を書くと、Orbe の通知の許可がまだ決まっていなければ、その場で OS が許可を問う。"
-  + "許可が無い回はメニューバーに出る。"
-  + "どちらも押すと Home のボードでその自動化が開く。何も出さなかった回は知らせない。"
-  + "例: {\"name\": \"GitHub: 自分へのレビュー依頼\", \"trigger\": {\"everyMinutes\": 30}, "
-  + "\"source\": {\"command\": \"gh api …\", \"coverage\": \"currentSet\"}, "
-  + "\"steps\": [{\"name\": \"絞り込み\", \"command\": \"jq -c 'select(…)'\"}, "
-  + "{\"name\": \"判定\", \"instruction\": \"…\"}], \"sink\": {\"kind\": \"taskCandidates\"}}。"
+private func described(_ sentence: String, _ section: String) -> String {
+  sentence + "\n\n" + section
+}
 
 let automationTools: [[String: Any]] = [
   obj([
     ("name", "list_automations"),
     (
       "description",
-      "自動化（外の出どころから項目を予定どおり取り、処理の段で絞り・判断して、出力先へ出す仕組み）を ID 順に返す {automations}。"
-        + "各要素は automationId・version（書き換えに添える定義の版）・definition（set_automation と同じ定義。各ノードに id が付く）・"
-        + "paused（自動化を止めているか）・running（回が走っているか）・nextRunAt（次に予定で回る時刻。止めていれば無い）・lastRunAt・"
-        + "nodes のノードの鍵ごとに lastRun（最新の 1 回の記録。過去は list_automation_runs）。定義を読めない自動化は "
-        + "{automationId, version, definition（行から組めた分）, definitionError（理由）} で、直すか消す。"
-        + "出力先がタスク候補の自動化だけが taskCandidates {openProposals"
-        + "（この自動化の棚に出ている候補の数）, overlaps（前回の取得結果が他の自動化と重なっているリンクの数 "
-        + "[{automationId, name, count}]。範囲の切り直しの手がかり）} を持つ。"
-        + "runs は新しい順に 20 件まで。各回は startedAt・endedAt・trigger（schedule / now）・"
-        + "source{commandLine, ending, count, rejected{count, reasons}}"
-        + "（取得元の無い自動化と、取得元まで行かなかった回は無い）・fresh（段に回した新しい項目の数）・"
-        + "steps[{name, commandLine, ending, count, rejected}]（走った段だけ）・"
-        + "lastStepCountedBySink（steps の最後の段の count を出力先が数えたか。途中の段が 0 行で止めた回・段で落ちた回は false）・"
-        + "sink（確定した回と、出力先で落ちた回だけ。タスク候補は {kind, proposed, resolved, withdrawn, rejected} で withdrawn は下げた候補の数、"
-        + "コマンドは走らせた回だけ {kind, commandLine, ending, count} で count は渡した行の数（落ちた回も持つ）、"
-        + "報告は最後の段の出力を読んだ回だけ {kind, text?} で、報告が無かった回は text を持たない、"
-        + "agent は起こした回だけ {kind, commandLine, ending, text?, nothing?} で text は渡した報告"
-        + "（nothing の回・落ちた回は持たない）、nothing は agent がすることが無いと申告した回だけが持つその理由）・"
-        + "failure（失敗した回の理由）。"
-        + "count は取得元なら項目として読めた数、段なら JSON の行として読めた数（最後の段は出力先が数え、報告は報告があれば 1・無ければ 0）で、rejected は読めなかった行。"
-        + "失敗した回は取得済みも候補も動かさないので、failure と各所の rejected.reasons を読んで、どこで落ちたかを直す。"
-        + "agent は書かれた model のまま走る。"
+      described(
+        "Lists the automations in id order as {automations}. An automation is a graph of nodes "
+          + "that fetch from outside on their own schedules and process, judge into task "
+          + "candidates, report, do work with tools, or run side effects; `set_automation` "
+          + "describes the definition, `list_automation_runs` the run records.",
+        AutomationReference.nodeState)
     ),
     ("inputSchema", schema([:])),
   ]),
@@ -133,32 +29,26 @@ let automationTools: [[String: Any]] = [
     ("name", "set_automation"),
     (
       "description",
-      "自動化を作るか、automationId を渡して定義を丸ごと置き換え、その自動化を list_automations の 1 要素の形で返す {automation}。"
-        + definitionShape
-        + "書き直すときは、list_automations の definition と version を取り、直して丸ごと version を添えて送る（間に定義が変わって"
-        + "いれば断られるので、読み直す）。ノードの id を保てば同じノードのまま（鍵を変えても）。id の無いノードは新しいノードになる。"
-        + "置き換えで、取得元のやり方・段の手段とモデルと指示文かコマンド・出力先"
-        + "（出力先のコマンドの timeoutMinutes も、省略は 2 として比べる）が"
-        + "変わると、走っている回を止める。"
-        + "出力先がタスク候補なら、次の回は取れた全件を見直す（既に候補のあるリンクは見直さない）。"
-        + "名前・トリガー・coverage・段の名前・notify だけの置き換えは走っている回を止めない。"
-        + "新しく作った自動化はすぐには回らない。試すときは run_automation。"
+      described(
+        "Creates an automation, or replaces the whole definition of `automationId` with the "
+          + "`version` read from `list_automations`, and returns it as {automation} in the "
+          + "`list_automations` shape. Before writing a new or changed definition, run it with "
+          + "`try_automation` and show the result to the user. A new automation runs when its "
+          + "schedules come; `run_automation` runs it now. orb automation --help also shows an "
+          + "example definition.",
+        AutomationReference.definition)
     ),
     (
       "inputSchema",
       schema(
         [
-          "automationId": intProp("書き換える自動化（省略で新規）"),
-          "version": intProp("書き換えの元にした版（list_automations の version。書き換えでは必須）"),
+          "automationId": intProp("The automation to rewrite (leave it out to create one)"),
+          "version": intProp(
+            "The version the rewrite is based on (`version` in `list_automations`; required "
+              + "with `automationId`)"),
           "definition": [
             "type": "object",
-            "description":
-              "{name, trigger, source?, steps, sink, notify?}。trigger は {everyMinutes: n} か {cron: \"分 時 日 月 曜日\"}、"
-              + "source は {command, directory?, coverage} か {agent?, model?, tools, request, coverage}、"
-              + "steps は [{name, command, directory?} か {name, agent?, model?, instruction}]、"
-              + "sink は {\"kind\": \"taskCandidates\"}・{\"kind\": \"command\", command, directory?, timeoutMinutes?}・"
-              + "{\"kind\": \"report\"}・{\"kind\": \"agent\", agent?, model?, tools, request} のどれか、"
-              + "notify は \"menuBar\" か \"notificationCenter\"（省略で知らせない）",
+            "description": "The whole definition {name, notify?, workspace?, nodes}",
           ],
         ], required: ["definition"])
     ),
@@ -167,18 +57,19 @@ let automationTools: [[String: Any]] = [
     ("name", "list_automation_runs"),
     (
       "description",
-      "自動化の過去の回の記録を新しい順に返す {runs, next?}。各回は list_automations の lastRun と同じ形に recordId と nodeKey を"
-        + "足したもの。中身を読めない記録は {recordId, nodeKey, startedAt, endedAt, trigger, failed, unknown: true}。"
-        + "next があれば、before に渡すと続きが返る。"
+      described(
+        "Returns the run records of an automation newest first as {runs, next?}, only those of "
+          + "`nodeKey` when given. Pass `next` as `before` for the next page.",
+        AutomationReference.runRecord)
     ),
     (
       "inputSchema",
       schema(
         [
-          "automationId": intProp("読む自動化"),
-          "nodeKey": strProp("このノードの回だけ（省略で全ノード）"),
-          "before": intProp("この recordId より前（前のページの next）"),
-          "limit": intProp("件数（既定 20・上限 100）"),
+          "automationId": intProp("The automation to read"),
+          "nodeKey": strProp("Only this node's runs (leave it out for every node)"),
+          "before": intProp("Runs before this `recordId` (`next` of the previous page)"),
+          "limit": intProp("How many runs (default 20, max 100)"),
         ], required: ["automationId"])
     ),
   ]),
@@ -186,15 +77,17 @@ let automationTools: [[String: Any]] = [
     ("name", "run_automation"),
     (
       "description",
-      "自動化を今すぐ 1 回回す。すぐ返り、結果は list_automations の runs に載る。止めた自動化も回せる（有効にする前の試し打ち）。"
-        + "通るノードが終わっていない流しと重なれば断られる。"
+      described(
+        "Flows the automation now up to `nodeKey` (every end node when it is left out) and "
+          + "returns at once ({ok}).",
+        AutomationReference.flow)
     ),
     (
       "inputSchema",
       schema(
         [
-          "automationId": intProp("回す自動化"),
-          "nodeKey": strProp("このノードまで流す（省略で終わりのノードすべてまで）"),
+          "automationId": intProp("The automation to run"),
+          "nodeKey": strProp("The node to flow to (leave it out for every end node)"),
         ], required: ["automationId"])
     ),
   ]),
@@ -202,31 +95,34 @@ let automationTools: [[String: Any]] = [
     ("name", "try_automation"),
     (
       "description",
-      "自動化のノードを、本番を汚さずに試す（試走）。本番の DB の写しの上で本番と同じ流しを動かし、すぐ返る。結果は"
-        + "返る trial.trialId を get_automation_trial に渡して読む。DB には何も書かず、通知もしない。from（入口のノードの鍵）から to（行き先のノードの鍵）"
-        + "への道の上のノードだけが動く。from を省けば入力の無いノードすべて、to を省けば入口から届く終わりのノードすべて。"
-        + "副作用・仕事のノードは動かさず、渡るはずだった行を返す。取得は本当に走る。rows は入口が 1 つのときだけ与えられ、"
-        + "取得の入口なら取った項目、入力のある入口なら溜まりに届いた行になる（判定の入口は断られる）。limit は各取得が"
-        + "下流へ渡す新しい項目を先頭から N 行に絞る。同じ自動化の試走は 1 つで、始め直すと前の試走を止めて置き換える。"
-        + "definition を渡すと書く前の定義を試す（automationId と version も渡せば、その版からの書き換えとして）。"
+      described(
+        "Starts a trial and returns at once as {trial}; read it with `get_automation_trial` by "
+          + "`trial.trialId`. Pass `automationId` alone for the saved definition, `definition` "
+          + "alone for a new one, or `automationId`, `version` and `definition` for a rewrite. "
+          + "`from` and `to` give the range, `rows` the rows for the entry, and `limit` the cap on "
+          + "new rows of each root fetch.",
+        AutomationReference.trial)
     ),
     (
       "inputSchema",
       schema(
         [
-          "automationId": intProp("試す自動化（definition だけなら新しい定義を試す）"),
-          "version": intProp("書き換えの元にした版（automationId と definition を渡すときは必須）"),
+          "automationId": intProp(
+            "The automation to try (leave it out to try `definition` as a new automation)"),
+          "version": intProp(
+            "The version the rewrite is based on (required with `automationId` and `definition`)"),
           "definition": [
             "type": "object",
-            "description": "書く前の定義（set_automation の definition と同じ形）",
+            "description": "The definition to try before writing it (the same shape as in "
+              + "`set_automation`)",
           ],
-          "from": strArrayProp("入口のノードの鍵"),
-          "to": strArrayProp("行き先のノードの鍵"),
+          "from": strArrayProp("Entry node keys"),
+          "to": strArrayProp("Target node keys"),
           "rows": [
             "type": "array", "items": ["type": "object"],
-            "description": "入口に与える行（JSON オブジェクト）",
+            "description": "Rows (JSON objects) to give the entry",
           ],
-          "limit": intProp("各取得が下流へ渡す新しい項目の上限"),
+          "limit": intProp("The most new rows each root fetch passes on"),
         ])
     ),
   ]),
@@ -234,20 +130,20 @@ let automationTools: [[String: Any]] = [
     ("name", "get_automation_trial"),
     (
       "description",
-      "試走を試走の ID（try_automation の trial.trialId）で読む。"
-        + "ノードごとに state（waiting / running / done / held / untouched）と回の列を返す。"
-        + "回は list_automations の runs と同じ形・同じ新しい順に、取得・処理は rows（下流へ渡す行）、判定は proposals と resolved を足す。"
-        + "止めた副作用・仕事の回は held.rows（渡るはずだった行）だけ。wait: true なら試走の終わりまで待ち、"
-        + "timeoutMs（既定 3600000・上限 86400000）を過ぎたらその時点の結果に timedOut:true を付けて返す。"
-        + "MCP クライアント側のツールタイムアウトがそれより短いことがあるので timeoutMs を明示するとよい。"
+      described(
+        "Reads a trial by `trialId` as {trial, timedOut?}; while it runs, with the runs finished "
+          + "so far. With `wait` true it waits until the trial ends, up to `timeoutMs` (default "
+          + "3600000, max 86400000), and then returns the trial as it is with `timedOut` true. "
+          + "Pass `timeoutMs` explicitly: the MCP client's tool timeout may be shorter.",
+        AutomationReference.trialResult)
     ),
     (
       "inputSchema",
       schema(
         [
-          "trialId": intProp("読む試走（try_automation の trial.trialId）"),
-          "wait": boolProp("true で試走の終わりまで待つ"),
-          "timeoutMs": intProp("待つ上限 ミリ秒（既定 3600000）"),
+          "trialId": intProp("The trial to read (`trial.trialId` of `try_automation`)"),
+          "wait": boolProp("true to wait until the trial ends"),
+          "timeoutMs": intProp("How long to wait, in milliseconds (default 3600000)"),
         ], required: ["trialId"])
     ),
   ]),
@@ -255,16 +151,18 @@ let automationTools: [[String: Any]] = [
     ("name", "pause_automation"),
     (
       "description",
-      "自動化を止める（paused: true）・再開する（false）。nodeKey でそのノードだけ。止めるのは Orbe が自分から動かすこと"
-        + "（予定・届いた行での起動）だけで、走っている回と run_automation は止めない。止めた自動化の取得結果も覚えているので、候補は下がらない。"
+      described(
+        "Pauses the automation when `paused` is true and resumes it when false, or only the node "
+          + "`nodeKey`, and returns it as {automation}.",
+        AutomationReference.pause)
     ),
     (
       "inputSchema",
       schema(
         [
-          "automationId": intProp("対象の自動化"),
-          "nodeKey": strProp("このノードだけを止める・再開する（省略で自動化）"),
-          "paused": boolProp("true で止める、false で再開"),
+          "automationId": intProp("The automation"),
+          "nodeKey": strProp("Only this node (leave it out for the automation)"),
+          "paused": boolProp("true to pause, false to resume"),
         ],
         required: ["automationId", "paused"])
     ),
@@ -273,20 +171,27 @@ let automationTools: [[String: Any]] = [
     ("name", "delete_automation"),
     (
       "description",
-      "自動化を消す。走っている回は止め、その結果は捨てる。この自動化だけが取っていたリンクの候補は忘れられる。"
+      "Deletes the automation and returns {ok}. Its running runs stop and their results are "
+        + "discarded, all its proposals are forgotten (other automations' proposals stay), and its "
+        + "notifications are withdrawn from Notification Center."
     ),
-    ("inputSchema", schema(["automationId": intProp("消す自動化")], required: ["automationId"])),
+    (
+      "inputSchema",
+      schema(["automationId": intProp("The automation to delete")], required: ["automationId"])
+    ),
   ]),
   obj([
     ("name", "list_automation_proposals"),
     (
       "description",
-      "出力先がタスク候補の自動化が出した候補を、覚えている全状態で返す（指示文を直す材料）。各要素は proposalId・state"
-        + "（open: 人の判断待ち / accepted: タスクにした〔taskId〕 / dismissed: 捨てた / resolved: 最後の段が対応済みとした）・"
-        + "title・due（YYYY-MM-DD）・link・body・time・proposedAt・automationId と automationName（棚に出す自動化）・"
-        + "workspaceId と workspaceName（付け先が解けるときだけ。無ければタスクにすると Home に付く）。"
-        + "automationId を渡すとその自動化の棚の分だけ。候補をタスクにする・捨てるのは人が Orbe の画面で行う。"
+      described(
+        "Returns the proposals of the judges as {proposals}, only those of `automationId` when "
+          + "given. Read them to tune a judge's instruction.",
+        AutomationReference.proposals)
     ),
-    ("inputSchema", schema(["automationId": intProp("この自動化の棚の候補だけに絞る")])),
+    (
+      "inputSchema",
+      schema(["automationId": intProp("Only the proposals of this automation")])
+    ),
   ]),
 ]

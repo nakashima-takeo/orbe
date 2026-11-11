@@ -1,24 +1,26 @@
 # 型 — 自動化の設計の参考
 
-回のたびに走るのは取得元だけ。処理の段と出力先は、前の回に無かった項目がある回だけ走る（取得元の無い自動化は、トリガーのたびに出力先が走る）。だから取得元を agent にすると回のたびに LLM が起き、取得元をコマンドにすれば LLM は新しい項目があるときだけ起きる。型はこの構造から導いた形で、頼みに合わなければ外れてよい。外れるときは、外れた理由と代替を人に示す。
+自動化はノードのグラフで、ノードはそれぞれ自分の予定で動く。予定のある取得は予定のたびに実行され、「届いたら」（`arrival`）のノードは、上流の行が変わったときだけ実行される（`take` が `new` なら、新しい行が届いたときだけ）。だから取得を agent にすると回ごとに LLM が起動し、取得をコマンドにすれば、LLM が起動するのは受け手が読む行を持つ回だけになる（`take` が `new` なら新しい行が届いた回、`all` なら今有効な行がある回）。型はこの構造から導いた形で、依頼に合わなければ外れてよい。外れるときは、外れた理由と代替を人に示す。
 
-出どころ 1 つに自動化 1 つ。範囲（組織・状態・期間・宛先）は取得の条件で切る。
+どの JSON も、そのまま `set_automation` の定義として通る。ノードの欄の意味と組み合わせの規則は `set_automation` の説明にある。
 
 ## 型 1: 見張ってタスク候補にする
 
-「○○の△△を拾ってタスクにして」。取得元のコマンドが毎回走り、新しい項目があった回だけ判定の agent が起きて候補を作る。
+「○○の△△を拾ってタスクにして」。取得のコマンドが予定どおり実行され、新しい行があったときだけ判定の agent が起動して候補を作る。
 
 ```json
 {"name": "GitHub: 自分へのレビュー依頼",
- "trigger": {"everyMinutes": 30},
- "source": {"command": "gh search prs --review-requested=@me --state open --json url,title,repository,updatedAt --jq '.[] | {id: .url, link: .url, body: (.repository.nameWithOwner + \" \" + .title), time: .updatedAt}'",
-            "coverage": "currentSet"},
- "steps": [{"name": "判定", "instruction": "タスクにする: 自分がレビューする PR\nタスクにしない: draft の PR・bot が開いた PR\nタイトル: 「レビュー: <リポジトリ名> #<番号> <タイトル>」\n期限: 付けない\n付け先: リポジトリ名と同じ名前の workspace があればそれ。それ以外は省く"}],
- "sink": {"kind": "taskCandidates"}}
+ "nodes": [
+  {"key": "requests", "name": "レビュー依頼を取る", "trigger": {"kind": "interval", "minutes": 30},
+   "command": "gh search prs --review-requested=@me --state open --draft=false --json url,title,repository,updatedAt,author --jq '.[] | select(.author.type != \"Bot\") | {id: .url, link: .url, body: (.repository.nameWithOwner + \" \" + .title), time: .updatedAt}'",
+   "coverage": "currentSet"},
+  {"key": "judge", "name": "タスクにするか決める", "trigger": {"kind": "arrival"},
+   "from": ["requests"], "model": "sonnet", "deliver": "taskCandidates",
+   "instruction": "タスクにする: 自分がレビューする PR\nタスクにしない: タイトルに WIP や do not merge とある PR\nタイトル: 「レビュー: <リポジトリ名> #<番号> <タイトル>」\n期限: 付けない\n付け先: リポジトリ名と同じ名前の workspace があればそれ。それ以外は省く"}
+ ]}
 ```
 
-- `coverage`: 取得結果がその時点の全体（担当の未完了・レビュー待ち）なら `currentSet`。新着だけ（DM・メンション）なら `newArrivals` にし、コマンドは環境変数 `ORBE_SINCE` 以降を取る。
-- 判定の agent には `model` を書く（書かない定義は断られる）。
+レビュー依頼は済むと取得から消えるので `currentSet`。消えた依頼の候補は、⌘⇧X の候補の一覧から下がる。draft の PR と bot が開いた PR は、判定に届く行からは見分けられないので、取得の条件で落とす。draft の PR は ready になると取得に現れ、そのとき判定に届く。
 
 ### 判定の指示文
 
@@ -27,69 +29,140 @@
 タスクにしない: お礼・挨拶・周知・bot の通知・自分で完結した報告
 タイトル: 「<送り手>: <何をするか>」。何をするかは動詞で終える
 期限: 文面にあればそれ
-付け先: Jリーグの話なら jleague-line-app。それ以外は省く
+付け先: 請求の話なら billing-api。それ以外は省く
 ```
 
-「タスクにしない」が空の指示文は判定になっていない。状態・担当・期間のように条件で落とせるものは取得の条件で落とし、判定には読まないと決まらないものだけを渡す。
+状態・担当・期間のように条件で落とせるものは取得の条件で落とし、判定には読まないと決まらないものだけを渡す。
 
 ## 型 2: MCP でしか読めない出どころを見張ってタスク候補にする
 
-認証が MCP サーバーの中にしか無く、コマンドでは読めない出どころ（Slack の OAuth 接続など）。取得元を軽い agent にし、読み取りのツールだけを名指しする。回のたびに LLM が起きるので、そのことを人に伝える。
+認証が MCP サーバーの中にしか無く、コマンドでは読めない出どころ（Slack の OAuth 接続など）。取得を軽い agent にし、読み取りのツールだけを指定する。回ごとに LLM が起動するので、そのことを人に伝える。
 
 ```json
 {"name": "Slack: 自分へのメンションと DM",
- "trigger": {"everyMinutes": 30},
- "source": {"agent": "claude", "tools": ["mcp__slack__slack_search_public_and_private"],
-            "request": "自分へのメンションと DM を、渡された開始時刻以降で取る。id はチャンネル ID と ts の組、link は permalink、body は「#チャンネル / 送り手: 本文」、time は送信時刻。",
-            "coverage": "newArrivals"},
- "steps": [{"name": "判定", "instruction": "…型 1 と同じ形…"}],
- "sink": {"kind": "taskCandidates"}}
+ "nodes": [
+  {"key": "slack", "name": "メンションと DM を取る", "trigger": {"kind": "interval", "minutes": 30},
+   "model": "haiku", "tools": ["mcp__slack__slack_search_public_and_private"],
+   "instruction": "自分へのメンションと DM と、そのスレッドの後の返信を取る。id はチャンネル ID と ts の組、link はスレッドの最初のメッセージの permalink（同じスレッドのメッセージは同じ link）、body は「#チャンネル / 送り手: 本文」、time は送信時刻。",
+   "coverage": "newArrivals"},
+  {"key": "judge", "name": "タスクにするか決める", "trigger": {"kind": "arrival"},
+   "from": ["slack"], "model": "sonnet", "deliver": "taskCandidates",
+   "instruction": "タスクにする: 自分への依頼・質問・判断を求められているもの\nタスクにしない: お礼・挨拶・周知・bot の通知\nタイトル: 「<送り手>: <何をするか>」\n期限: 文面にあればそれ\n対応済み: 同じ link の新しい行が、決着したこと（送り手が取り下げた・解決したと言う）を示した候補は対応済みにする"}
+ ]}
 ```
 
-取得元の agent にも `model` を書く。`request` に、取る範囲と 1 項目の作り方（id・link・body・time に何を入れるか）を書く。
+新着だけが返る出どころなので `newArrivals`。取得の `instruction` には、取る範囲と、1 項目の作り方（`id`・`link`・`body`・`time` に何を入れるか）を書く。判定の指示文には対応済みにする条件を必ず書く。判定が確かめられるのは届いた行だけなので、取得はスレッドの後の返信も取り、同じスレッドのメッセージに同じ `link` を持たせる。
 
-## 型 3: 定時にまとめて報告する
+## 型 3: 出どころごとの予定で集め、まとめて判定する
 
-「毎日 18 時に○○を要約して」。cron で回り、毎回全件を取って、agent が文章にする。
+「GitHub と Slack を見て、平日の朝 9 時にまとめてタスクにして。GitHub は来たらすぐ要約も欲しい」。取得はそれぞれの予定で実行され、判定は平日の朝に 1 回、まだ受け取っていない行をまとめて読む。別の受け手（要約）は、同じ取得の行が届いたらすぐ読む。
 
 ```json
-{"name": "GitHub: 開いている PR の要約",
- "trigger": {"cron": "0 18 * * 1-5"},
- "source": {"command": "gh pr list --author @me --json url,title,updatedAt --jq '.[] | {id: .url, link: .url, body: .title, time: .updatedAt}'",
-            "coverage": "everything"},
- "steps": [{"name": "まとめ", "instruction": "PR を状態ごとに 1 行ずつ。止まっているものを先に。"}],
- "sink": {"kind": "report"}}
+{"name": "朝の仕分け",
+ "nodes": [
+  {"key": "github", "name": "GitHub のレビュー依頼を取る", "trigger": {"kind": "interval", "minutes": 10},
+   "command": "gh search prs --review-requested=@me --state open --json url,title,repository,updatedAt --jq '.[] | {id: .url, link: .url, body: (.repository.nameWithOwner + \" \" + .title), time: .updatedAt}'",
+   "coverage": "currentSet"},
+  {"key": "slack", "name": "Slack のメンションと DM を取る", "trigger": {"kind": "interval", "minutes": 10},
+   "model": "haiku", "tools": ["mcp__slack__slack_search_public_and_private"],
+   "instruction": "自分へのメンションと DM と、そのスレッドの後の返信を取る。id はチャンネル ID と ts の組、link はスレッドの最初のメッセージの permalink（同じスレッドのメッセージは同じ link）、body は「#チャンネル / 送り手: 本文」、time は送信時刻。",
+   "coverage": "newArrivals"},
+  {"key": "triage", "name": "朝にまとめて判定する", "trigger": {"kind": "cron", "expression": "0 9 * * 1-5"},
+   "from": ["github", "slack"], "model": "sonnet", "deliver": "taskCandidates",
+   "instruction": "タスクにする: 自分への依頼・質問・レビューの頼み\nタスクにしない: お礼・周知・bot の通知\nタイトル: 「<送り手>: <何をするか>」\n期限: 文面にあればそれ\n対応済み: 同じ link の新しい行が、決着したこと（送り手が取り下げた・解決したと言う）を示した候補は対応済みにする"},
+  {"key": "digest", "name": "GitHub を届いたら要約する", "trigger": {"kind": "arrival"},
+   "from": ["github"], "model": "haiku", "deliver": "report",
+   "instruction": "新しいレビュー依頼を、急ぐものから数行で要約する。1 行目は件数。"}
+ ]}
 ```
 
-## 型 4: 定時にツールで仕事をさせる
+1 つの判定に入力を集めるので、同じリンクの行が両方から届いても候補は 1 つ。
 
-「平日 9 時に○○を△△へ投稿して」。cron で回り、使い捨ての agent が名指しのツールで仕事をする。届いた行は agent に渡らないので、対象は agent 自身にツールで調べさせる。
+## 型 4: 定時にまとめて報告する
+
+「平日 18 時に○○を要約して」。取得は自分の予定で今の集合を保ち、報告は cron で回るたびに、取得の今有効な行をすべて読む（`take` を `all`）。予定が取得と別なので、毎回全体をまとめられる。
 
 ```json
-{"name": "レビュー待ち PR を Slack に投稿",
- "trigger": {"cron": "0 9 * * 1-5"},
- "steps": [],
- "sink": {"kind": "agent", "tools": ["Bash(gh search prs:*)", "mcp__slack__slack_send_message"],
-          "request": "自分がレビュー待ちの open な PR を gh で調べ、1 行ずつまとめて Slack の #dev-me に投稿する。無ければ投稿しない。"}}
+{"name": "GitHub: 開いている自分の PR の要約",
+ "nodes": [
+  {"key": "prs", "name": "自分の PR を取る", "trigger": {"kind": "interval", "minutes": 60},
+   "command": "gh search prs --author @me --state open --json url,title,repository,updatedAt --jq '.[] | {id: .url, link: .url, body: (.repository.nameWithOwner + \" \" + .title), time: .updatedAt}'",
+   "coverage": "currentSet"},
+  {"key": "summary", "name": "夕方に要約する", "trigger": {"kind": "cron", "expression": "0 18 * * 1-5"},
+   "from": [{"node": "prs", "take": "all"}], "model": "haiku", "deliver": "report",
+   "instruction": "PR を 1 行ずつ、止まっているものを先にまとめる。1 行目は件数。"}
+ ]}
 ```
 
-名指しは最小にする。書き込みのツールは、agent が読んだ文面に仕込まれた指示で使われうる。
+## 型 5: 定時にツールで作業をさせる
 
-## 型 5: 定時にコマンドを走らせる
+「平日 9 時に○○を△△へ投稿して」。入力の無い、ツール付きの agent が cron で起動し、指定したツールで作業をして、したことを報告に残す。行は agent に渡らないので、対象は agent 自身にツールで調べさせる。
 
-「毎晩 23 時に○○.sh を実行して」。
+```json
+{"name": "レビュー待ちの PR を Slack に投稿",
+ "nodes": [
+  {"key": "post", "name": "レビュー待ちを投稿する", "trigger": {"kind": "cron", "expression": "0 9 * * 1-5"},
+   "model": "sonnet", "tools": ["Bash(gh search prs:*)", "mcp__slack__slack_send_message"],
+   "deliver": "report",
+   "instruction": "自分がレビュー待ちの open な PR を gh で調べ、1 行ずつまとめて Slack の #dev-me に投稿する。無ければ投稿しない。"}
+ ]}
+```
+
+指定するツールは最小にする。書き込みのツールは、agent が読んだ文面に仕込まれた指示で使われうる。失敗した回は次の回でもう一度実行されるので、投稿が二重になりうることを人に伝える。
+
+## 型 6: 定時にコマンドを実行する
+
+「毎晩 23 時に○○.sh を実行して」。入力の無いコマンドが cron で実行される。
 
 ```json
 {"name": "日報の下書き",
- "trigger": {"cron": "0 23 * * *"},
- "steps": [],
- "sink": {"kind": "command", "command": "~/bin/daily-note.sh"}}
+ "nodes": [
+  {"key": "note", "name": "日報の下書きを作る", "trigger": {"kind": "cron", "expression": "0 23 * * *"},
+   "command": "~/bin/daily-note.sh", "deliver": "none"}
+ ]}
 ```
+
+## 型 7: 届いたら外部操作をする
+
+「担当の課題が増えたら○○に送って」。取得が新しい行を出したときだけ、コマンドが届いた行を標準入力で受けて実行される。
+
+```json
+{"name": "GitHub: 担当の課題をチャットに送る",
+ "nodes": [
+  {"key": "issues", "name": "担当の課題を取る", "trigger": {"kind": "interval", "minutes": 15},
+   "command": "gh search issues --assignee @me --state open --json url,title,repository --jq '.[] | {id: .url, link: .url, body: (.repository.nameWithOwner + \" \" + .title)}'",
+   "coverage": "currentSet"},
+  {"key": "send", "name": "チャットに送る", "trigger": {"kind": "arrival"},
+   "from": ["issues"], "command": "~/bin/send-issues.sh", "deliver": "none"}
+ ]}
+```
+
+コマンドの中では、行の値をシェルとして評価せず、agent（claude -p など）にも渡さない。済んだ行は行の `id` で除外し、`ORBE_RUN_ID` を使うなら終わりに記録する（理由は `set_automation` の説明の REPORT, WORK, SIDE EFFECT）。
 
 ## 組み合わせ
 
-型は部品の組み合わせなので、頼みに合わせて組み替える（例は網羅ではない）:
+型は組み合わせて使う。例は網羅ではない。
 
-- 届いたら作業: 型 1 の取得元と段に、出力先を agent かコマンドにする。新しい項目があった回だけ出力先が走る。
-- 見張って報告: 型 1 の取得元に、出力先を報告にする。
-- 他。
+- 取得と判定の間にコマンドの処理を置き、安く絞ってから高い判定に回す（処理は行の `id` と `link` を保つ）。
+- 同じ取得から、判定と報告の両方へ分ける（型 3）。
+- 判定の代わりに報告を置けば「見張って知らせる」、外部操作を置けば「届いたら何かする」。
+
+```json
+{"name": "GitHub: 急ぎの課題",
+ "nodes": [
+  {"key": "issues", "name": "担当の課題を取る", "trigger": {"kind": "interval", "minutes": 15},
+   "command": "gh search issues --assignee @me --state open --json url,title,repository,labels --jq '.[] | {id: .url, link: .url, body: (.repository.nameWithOwner + \" \" + .title), labels: [.labels[].name]}'",
+   "coverage": "currentSet"},
+  {"key": "urgent", "name": "急ぎだけに絞る", "trigger": {"kind": "arrival"},
+   "from": [{"node": "issues", "take": "all"}], "command": "jq -c 'select(.labels | index(\"urgent\"))'",
+   "coverage": "currentSet"},
+  {"key": "judge", "name": "タスクにするか決める", "trigger": {"kind": "arrival"},
+   "from": ["urgent"], "model": "sonnet", "deliver": "taskCandidates",
+   "instruction": "タスクにする: 自分が手を動かす課題\nタスクにしない: タイトルが質問や議論の呼びかけで、手を動かすことが無い課題\nタイトル: 「<リポジトリ名>: <タイトル>」\n期限: 付けない"},
+  {"key": "notice", "name": "急ぎを知らせる", "trigger": {"kind": "arrival"},
+   "from": ["urgent"], "model": "haiku", "deliver": "report",
+   "instruction": "新しい急ぎの課題を 1 行ずつ並べる。1 行目は件数。"}
+ ]}
+```
+
+urgent のラベルは後から付くことがある。取得の項目は中身が変わっても同じ項目で、`take` が `new` の受け手には再び届かないので、ラベルで絞る処理は取得の今の項目を毎回すべて読み（`take` を `all`）、自分も `currentSet` にする。後からラベルが付いた課題は処理の新しい項目として下流に届き、ラベルが外れたり課題が閉じたりすると、その候補は下がる。
