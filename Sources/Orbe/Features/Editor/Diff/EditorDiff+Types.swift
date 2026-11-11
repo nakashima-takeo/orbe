@@ -75,6 +75,12 @@ extension EditorDiff {
     case position(RowPosition)
   }
 
+  /// 古い側と新しい側の本文（その版に無い側は nil）。
+  struct SideTexts: Equatable {
+    let old: String?
+    let new: String?
+  }
+
   /// 作業ツリー diff の新しい側。
   enum WorkingSide {
     /// 開いた文書（ファイルタブと共有する）。

@@ -53,9 +53,9 @@ final class EditorDiff: RootFilesObserver {
   private var newSource: String??
   private(set) var oldSide = DiffRows.Side(nil)
   private(set) var newRevisionSide = DiffRows.Side(nil)
-  /// ステージ済みの側と行差分を頼んだ通し番号と、側と並びが今の版の状態に揃っていないか（今の関心の版の状態がまだ無い・
-  /// 頼んだ行差分が届いていない）。
-  private var stagedRequest = 0
+  /// ステージ済みの、裏で行差分を取っている両側の本文（取っていなければ nil）。
+  private var stagedComputing: SideTexts?
+  /// ステージ済みの側と並びが、今の版の状態に揃っていない（今の関心の版の状態がまだ無い・頼んだ行差分が届いていない）。
   private(set) var stagedPending = false
   /// 見せていない間に変わった。
   private var stale = true
@@ -276,21 +276,23 @@ final class EditorDiff: RootFilesObserver {
 
   /// 中身を決め、見せられるなら側と行差分を今の版に合わせる。
   private func resolve() -> Content {
-    // 走っている（前の本文の）ステージ済みの依頼は、ここでどの中身に決まっても捨てる——表示できないに決まった後に
-    // 届いて上書きしない。
-    stagedRequest += 1
+    // 走っているステージ済みの依頼は、両側が同じ本文に決まったときだけ続けて待つ。別の本文に決まった後や、表示できないと
+    // 決まった後に届いた結果は使わない。
+    let computing = stagedComputing
+    stagedComputing = nil
     stagedPending = false
     if awaitedRefreshes == 0 { resolvedAfterCatchUp = true }
     if files.status?.entries[id.path]?.isConflicted == true { return .unavailable(.conflicted) }
     switch id.kind {
     case .workingTree: return resolveWorkingTree()
-    case .staged: return resolveStaged()
+    case .staged: return resolveStaged(computing: computing)
     }
   }
 
   /// ステージ済みは、両側の本文と行差分を裏で揃えてから一緒に入れ替える（届くまでは前の側と並びのまま）。status で関心の
-  /// 版が替わった（rename の元パス）直後など、今の関心の版の状態がまだ無い間も前の側と並びのまま待つ。
-  private func resolveStaged() -> Content {
+  /// 版が替わった（rename の元パス）直後など、今の関心の版の状態がまだ無い間も前の側と並びのまま待つ。行差分は両側の本文
+  /// だけで決まるので、決めた両側の本文が `computing`（裏で取っていた本文）と同じなら、頼み直さずその結果を待つ。
+  private func resolveStaged(computing: SideTexts?) -> Content {
     let head = files.state(of: RootFiles.Version(path: headPath, revision: .head))
     let index = files.state(of: RootFiles.Version(path: id.path, revision: .index))
     guard let head, let index else {
@@ -302,20 +304,28 @@ final class EditorDiff: RootFilesObserver {
       if state == .failed { return .unavailable(.failed) }
     }
     if head == .absent, index == .absent { return .unavailable(.nowhere) }
-    let (oldText, newText, limit) = (Self.sideText(head), Self.sideText(index), Self.hunkLimit)
-    // 今の側と同じなら、走っている依頼を捨てただけで済む。
-    guard oldSource != .some(oldText) || newSource != .some(newText) else { return .ready }
-    let request = stagedRequest
+    let texts = SideTexts(old: Self.sideText(head), new: Self.sideText(index))
+    // 決めた両側の本文が今の側と同じなら、走っている依頼を手放すだけで済む。
+    guard oldSource != .some(texts.old) || newSource != .some(texts.new) else { return .ready }
     stagedPending = true
+    stagedComputing = texts
+    if texts != computing { requestStagedHunks(texts) }
+    return content == .ready ? .ready : .loading
+  }
+
+  /// 両側の本文 `texts` の行差分を裏で取り、届いたときにまだその本文を待っていれば、両側と並びを一緒に入れ替える。
+  private func requestStagedHunks(_ texts: SideTexts) {
+    let limit = Self.hunkLimit
     Task.detached(priority: .userInitiated) { [weak self] in
       let hunks = DiffRows.hunks(
-        old: oldText.map(TextRope.init), new: newText.map(TextRope.init), limit: limit)
+        old: texts.old.map(TextRope.init), new: texts.new.map(TextRope.init), limit: limit)
       await MainActor.run { [weak self] in
-        guard let self, request == stagedRequest else { return }
+        guard let self, stagedComputing == texts else { return }
+        stagedComputing = nil
         stagedPending = false
-        let keepsOld = oldSource == .some(oldText)
-        setOld(oldText)
-        setNewRevision(newText, keepsOld: keepsOld)
+        let keepsOld = oldSource == .some(texts.old)
+        setOld(texts.old)
+        setNewRevision(texts.new, keepsOld: keepsOld)
         revisionHunks = hunks
         if content != .ready {
           content = .ready
@@ -325,7 +335,6 @@ final class EditorDiff: RootFilesObserver {
         settleSurfaces()
       }
     }
-    return content == .ready ? .ready : .loading
   }
 
   /// 古い側を本文 `text`（その版に無ければ nil——空の本文の文書で、大きさは 0 行）にする。変われば作り直す。
