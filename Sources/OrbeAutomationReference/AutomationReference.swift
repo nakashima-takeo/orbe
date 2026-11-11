@@ -9,6 +9,6 @@
 public enum AutomationReference {
   /// `orb automation --help` に出す順。
   public static let sections = [
-    definition, nodeState, runRecord, flow, pause, trial, trialResult, proposals,
+    definition, exampleSection, nodeState, runRecord, flow, pause, trial, trialResult, proposals,
   ]
 }

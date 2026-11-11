@@ -11,17 +11,17 @@ extension AutomationReference {
     `paused`).
     - `nextRunAt`: the next scheduled run; absent while the node or its automation is paused, and \
     for nodes without a schedule; in the past when overdue.
-    - `pending`: the rows the node would take now (nodes with `from`).
+    - `pending`: the number of rows the node would take now (nodes with `from`).
     - `breach`: the first run that broke the rules, kept until the node's behavior changes: `at`, \
     `lines` {`count`, `lines`, `reasons`} (the number of broken items and the first five, with \
     English `reasons`), and `passed` (whether that run still succeeded).
     - `lastRun`: the latest run, in the run record shape without the full `text` of a report or \
-    work result. Every other field stays, including `summary` (the first line of the text) and \
+    work result. Every other field stays, including `summary` (the first line of the text, up to 500 characters) and \
     the `nothing` of work; read the run records for the full `text`.
-    - `accepted` and `dismissed` (judges): proposals of the node's current definition that people \
-    took as tasks or dismissed.
-    An automation with a judge also has `taskCandidates` {`openProposals`}, the proposals waiting \
-    for people. An automation whose definition cannot be read has only `automationId`, `version`, \
+    - `accepted` and `dismissed` (judges): the numbers of proposals of the node's current \
+    definition that people took as tasks or dismissed.
+    An automation with a judge also has `taskCandidates` {`openProposals`}, the number of \
+    proposals waiting for people. An automation whose definition cannot be read has only `automationId`, `version`, \
     `definition` (what could be read) and `definitionError`; fix it by rewriting it with that \
     version, or delete it.
     """
@@ -31,7 +31,8 @@ extension AutomationReference {
     RUN RECORDS
     Each run of a node is recorded, newest first: `recordId`, `nodeKey`, `startedAt`, `endedAt` \
     (UTC), `trigger` (`schedule`, `now` for a run a flow started, or `arrival`), and:
-    - `taken`: rows the run took (nodes with `from`); `dropped`: rows dropped, by reason \
+    - `taken`: the number of rows the run took (nodes with `from`); `dropped`: the number of rows \
+    dropped, by reason \
     (`expired`, `closed` for links of the judge's proposals that are not open, `replaced`, \
     `overflow`, and `lapsed` for events that passed their window before being read).
     - `execution` {`commandLine`, `end`, `ending`, `count`}: how the method ended (`ending` in \
@@ -40,14 +41,14 @@ extension AutomationReference {
     - `breach` {`count`, `lines`, `reasons`}: output refused because it broke the rules (the count \
     and the first five).
     - `result` (absent when the run failed): `kind` `fetch` or `process` {`fresh`, `duplicates`} \
-    (new rows passed on, events not added again), `judge` {`proposed`, `resolved`, `dismissed`, \
+    (the numbers of new rows passed on and of events not added again), `judge` {`proposed`, `resolved`, `dismissed`, \
     `rejected`} (`dismissed` lists {`link`, `why`} proposals dropped when settling, `why` being \
     `alreadyProposed`, `noLongerCurrent` or `noOpenProposal`, and `rejected` {`count`, `reasons`} \
     gives their count and the English of the first five), `report` {`summary`, `text`} (both \
     absent when there was nothing to report), `sideEffect` {`count`}, `work` {`summary`, `text`, \
     `nothing`} (`nothing` gives the reason when there was nothing to do).
-    - `withdrawn`: proposals that went away with this run; on a judge, those whose events passed \
-    `retentionDays` since its last good run.
+    - `withdrawn`: the number of proposals that went away with this run; on a judge, of those whose \
+    events passed `retentionDays` since its last good run.
     - `failed` and `failure`: why the run failed (`failure` in English). A failed run moves \
     nothing, so read `failure` and the `reasons` to see where it broke.
     A node with no rows to take does not start its method and records no run, except a \
