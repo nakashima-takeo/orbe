@@ -15,8 +15,9 @@ extension AutomationReference {
     - `breach`: the first run that broke the rules, kept until the node's behavior changes: `at`, \
     `lines` {`count`, `lines`, `reasons`} (the number of broken items and the first five, with \
     English `reasons`), and `passed` (whether that run still succeeded).
-    - `lastRun`: the latest run, in the run record shape, except that a report or work result has \
-    only `summary`, its first line; read the run records for the full `text`.
+    - `lastRun`: the latest run, in the run record shape without the full `text` of a report or \
+    work result. Every other field stays, including `summary` (the first line of the text) and \
+    the `nothing` of work; read the run records for the full `text`.
     - `accepted` and `dismissed` (judges): proposals of the node's current definition that people \
     took as tasks or dismissed.
     An automation with a judge also has `taskCandidates` {`openProposals`}, the proposals waiting \
