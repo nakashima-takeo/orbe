@@ -321,4 +321,29 @@ extension EditorDiffTests {
       until: { diff.oldSurface.map { $0.responder !== left } ?? false }, "左の面が作り直される")
     XCTAssertTrue(window.firstResponder === diff.oldSurface?.responder, "焦点は最後に焦点のあった左の面に残る")
   }
+
+  /// ステージ済み diff の行差分を裏で取っている間、status が取り終えるより短い間隔で変わり続けても（エージェントがほかの
+  /// ファイルを次々に書く間）、両側の本文が変わらなければ中身は届く。
+  func testAStagedDiffArrivesWhileTheStatusKeepsChanging() throws {
+    // 1 行おきに書き換えた数千行——下で status を変える間隔より、裏の行差分のほうが十分長くかかる大きさ。
+    let lines = (0..<3000).map { "line \($0)" }
+    try repo.write("big.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "big"]).isSuccess)
+    let staged = lines.enumerated().map {
+      $0.offset.isMultiple(of: 2) ? "changed \($0.offset)" : $0.element
+    }
+    try repo.write("big.txt", staged.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "big.txt"]).isSuccess)
+    let (tab, _) = tab()
+    let diff = try tab.group.editor.openDiff(id("big.txt", .staged), as: .pinned)
+
+    let deadline = Date().addingTimeInterval(10)
+    while diff.content != .ready, Date() < deadline {
+      diff.rootFilesStatusDidChange(diff.files)
+      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.005))
+    }
+    XCTAssertEqual(diff.content, .ready, "status が変わり続けても中身が届く")
+    XCTAssertEqual(diff.newRevision?.text.lineCount, staged.count + 1, "新しい側は index の本文")
+  }
 }

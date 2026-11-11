@@ -9,7 +9,7 @@ import XCTest
 /// diff のタブ——作業ツリー（index の版 ↔ 文書）とステージ済み（HEAD の版 ↔ index の版）の側と並び、片側だけの diff、
 /// 表示できない理由、git と外の書き換えへの追従、インライン / 並列の面。壊れると、diff の削除行が古い版の別の行を指す・
 /// ステージ済みの rename が元のパスの版で比べられない・git add しても diff が古いまま・並列の 2 面が揃わない・大きな
-/// ファイルの離れた変更が 1 つの塊になる。
+/// ファイルの離れた変更が 1 つの塊になる・ほかのファイルが次々に変わる間、ステージ済み diff の中身が届かない。
 @MainActor
 final class EditorDiffTests: OrbeTestCase {
   var repo: TempGitRepo!
