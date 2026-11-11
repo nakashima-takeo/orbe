@@ -1,4 +1,5 @@
-/// 版 2 の自動化の DB の凍結フィクスチャ（`AutomationStoreTests+Frozen`）。この形で凍結しておく（足した列や欄に合わせて書き換えない）。
+/// 版 2 の自動化の DB の凍結フィクスチャ（`AutomationStoreTests+Frozen`）。表作りの文と行は、この形で凍結しておく（表に足した列や JSON 列に足した欄に
+/// 合わせて書き換えない）。
 enum AutomationVersionTwoFixture {}
 
 extension AutomationVersionTwoFixture {
@@ -329,33 +330,5 @@ extension AutomationVersionTwoFixture {
     INSERT INTO held_proposals VALUES(4,4,'https://example.com/c',NULL);
     INSERT INTO settlements VALUES(1,1793000540000,'accepted',1);
     INSERT INTO settlements VALUES(2,1793000600000,'dismissed',NULL);
-    """#
-}
-
-extension AutomationVersionTwoFixture {
-  /// フィクスチャの定義を、`set_automation` が受ける JSON の形で書いたもの（Orbe が足す `id` と、省略できる `agent` を含む）。
-  static let definition = #"""
-    {"name": "見本", "notify": "menuBar", "workspace": "6F1C2D3E-4B5A-4C6D-8E7F-9A0B1C2D3E4F",
-     "nodes": [
-      {"id": 1, "key": "issues", "name": "課題を取る", "trigger": {"kind": "interval", "minutes": 30},
-       "command": "gh issue list", "directory": ".", "coverage": "currentSet"},
-      {"id": 2, "key": "slack", "name": "Slack を取る",
-       "trigger": {"kind": "cron", "expression": "0 9 * * 1-5"}, "agent": "claude", "model": "haiku",
-       "tools": ["mcp__slack__search"], "instruction": "取る", "coverage": "newArrivals",
-       "retentionDays": 14, "timeoutMinutes": 5},
-      {"id": 3, "key": "filter", "name": "絞る", "trigger": {"kind": "arrival"},
-       "from": [{"node": "slack", "maxAgeHours": 48}], "command": "jq -c .", "directory": "."},
-      {"id": 4, "key": "judge", "name": "判定", "trigger": {"kind": "arrival"},
-       "from": ["issues", "filter"], "maxItems": 20, "agent": "claude", "model": "sonnet",
-       "instruction": "決める", "deliver": "taskCandidates"},
-      {"id": 5, "key": "digest", "name": "要約", "trigger": {"kind": "cron", "expression": "0 18 * * *"},
-       "from": [{"node": "issues", "take": "all", "maxAgeHours": 24}], "agent": "claude",
-       "model": "haiku", "instruction": "要約する", "deliver": "report"},
-      {"id": 6, "key": "post", "name": "投稿", "trigger": {"kind": "manual"}, "agent": "claude",
-       "model": "sonnet", "tools": ["Bash(gh search prs:*)"], "instruction": "投稿する",
-       "deliver": "report"},
-      {"id": 7, "key": "send", "name": "送る", "trigger": {"kind": "arrival"}, "from": ["filter"],
-       "command": "~/bin/send.sh", "directory": "bin", "deliver": "none", "timeoutMinutes": 3}
-     ]}
     """#
 }

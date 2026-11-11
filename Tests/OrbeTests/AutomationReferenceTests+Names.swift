@@ -38,12 +38,9 @@ extension AutomationReferenceTests {
   }
 
   /// 定義が持てる欄（省略できる欄を含む）は、どれも定義の節に囲んで出ている。
-  func testEveryDefinitionFieldIsInTheDefinitionSection() throws {
-    let definition = try XCTUnwrap(
-      try JSONSerialization.jsonObject(with: Data(AutomationVersionTwoFixture.definition.utf8))
-        as? [String: Any])
-    var fields = AutomationActionDef.keys
-    Self.collect(AutomationWire.object(try AutomationDefinition.decode(definition)), keys: &fields)
+  func testEveryDefinitionFieldIsInTheDefinitionSection() {
+    let fields = AutomationDefinition.keys.union(AutomationDefinition.Node.keys)
+      .union(AutomationDefinition.Input.keys).union(AutomationNode.Trigger.keys)
     let quoted = Set(Self.quoted(in: AutomationReference.definition))
 
     for field in fields.subtracting(quoted).sorted() {
