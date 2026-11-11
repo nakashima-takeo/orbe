@@ -81,7 +81,7 @@ updated: 2026-11-11
 - `orb automation pause <id> [--node <鍵>] [--json]` / `orb automation resume <id> [--node <鍵>] [--json]` … 自動化を止める・再開する。`--node` でそのノードだけ（規則は `pause_automation`）。`--node` の値の欠けは usage エラー、知らない鍵は `-32004`。`list` の状態の列は自動化の停止だけを言う。
 - `orb automation rm <id> [--json]`
 
-`orb automation --help` は、usage の行と、各サブコマンド・フラグが何を呼ぶかの注（往復の `jq` の例・`list`／`runs`／`proposals`／`trial` が人向けに出す 1 行の列・`--rows`・`trial --wait` の 124）に続けて、MCP の自動化の 9 動詞と同じ説明の節（定義・自動化の一覧・回の記録・流し・止める・試走・試走の結果・候補。[api](api.md#mcp-ブリッジ)）をすべて出す。CLI は MCP が使えないときの口なので、説明を MCP へ案内せず、同じ文を CLI でも届ける。
+`orb automation --help` は、usage の行と、各サブコマンド・フラグが何を呼ぶかの注（往復の `jq` の例・`list`／`runs`／`proposals`／`trial` が人向けに出す 1 行の列・`--rows`・`trial --wait` の 124）に続けて、MCP の自動化の 9 動詞と同じ説明の節（定義・自動化の一覧・回の記録・流し・止める・試走・試走の結果・候補。[api](api.md#mcp-ブリッジ)）と、MCP の説明には長さのために載せない定義の例の節をすべて出す。CLI は MCP が使えないときの口なので、説明を MCP へ案内せず、同じ文を CLI でも届ける。
 
 ### board（ボードのウィジェット）
 
