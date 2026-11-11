@@ -29,6 +29,10 @@ extension EditorDiff {
     case notText
     /// 作業ツリーのパスがシンボリックリンク。
     case symlink
+    /// 作業ツリーのパスが、サブモジュールとして見せられないディレクトリ。
+    case directory
+    /// 作業ツリーのファイルを読めない。
+    case unreadable
     /// 競合中。
     case conflicted
     /// git から取れない。
@@ -78,7 +82,7 @@ extension EditorDiff {
     /// 作業ツリーに無い（消した）。
     case missing
     /// ディレクトリ（`hasRepository` は中が取り出したリポジトリ）。index の版がサブモジュールか、中がリポジトリなら、
-    /// サブモジュールとして「Subproject commit」の行で見せる。どちらでもなければ表示できない。
+    /// サブモジュールとして「Subproject commit」の行で見せる。見せられなければ、理由「ディレクトリ」で表示できない。
     case directory(hasRepository: Bool)
     case unavailable(Unavailable)
   }

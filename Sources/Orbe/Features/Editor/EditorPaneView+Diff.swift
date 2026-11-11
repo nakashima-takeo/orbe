@@ -120,6 +120,8 @@ extension EditorPaneView {
     case .ready, .loading: return .blank
     case .unavailable(.notText): return .notice(.editorDiffNotText)
     case .unavailable(.symlink): return .notice(.editorDiffSymlink)
+    case .unavailable(.directory): return .notice(.editorDiffDirectory)
+    case .unavailable(.unreadable): return .notice(.editorDiffUnreadable)
     case .unavailable(.conflicted): return .notice(.editorDiffConflicted)
     case .unavailable(.failed): return .notice(.editorDiffFailed)
     case .unavailable(.nowhere):

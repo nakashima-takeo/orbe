@@ -81,7 +81,7 @@ final class EditorDiff: RootFilesObserver {
     files = RootFiles.shared(for: id.root)
     if id.kind == .workingTree {
       workingStale = false
-      working = try readWorkingTree(throwing: true)
+      working = try readWorkingTree()
       // 監視の知らせより先に開いても（エージェントが書いた直後の open_diff）、書いた中身で始める。
       document?.reconcileWithDisk()
     }
