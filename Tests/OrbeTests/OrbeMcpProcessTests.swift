@@ -132,6 +132,18 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
+  /// `tools/list` のどのツールの説明も、claude がツールを探して読み込むときに説明を切る長さ（16,384 字）に収まる。超えると説明の
+  /// 末尾が AI に届かない。
+  func testEveryToolDescriptionFitsWhereClaudeCutsIt() {
+    let claudeDescriptionLimit = 16_384
+    for tool in ControlProcess.mcpToolsList() {
+      let description = tool["description"] as? String ?? ""
+      XCTAssertLessThanOrEqual(
+        description.utf16.count, claudeDescriptionLimit,
+        "\(tool["name"] ?? "") の説明が claude の切る長さを超えている")
+    }
+  }
+
   /// `tools/list` の description が写す既定・上限は control の正本（`WaitTimeout` / `SessionLogLimits`）と
   /// 同じ値。AI が timeoutMs・limit・一度に戻す件数を決める唯一の情報源なので、写しが古いと省略時の
   /// 待ち時間を誤って見積もり、上限を超えた要求を組む。数字の直後の区切りまで含めて比べる——部分一致だと

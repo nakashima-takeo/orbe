@@ -54,6 +54,8 @@ final class AutomationReferenceTests: OrbeTestCase {
       "(settings, \(retention.runCount) runs and \(retention.runDays) days by default)",
       "each is at most \(AutomationOutputs.rowKiB) KiB.",
       "kept up to the newest \(AutomationTrials.newDefinitionTrials).",
+      "Its first line, cut at \(AutomationRunOutput.excerptLength) characters with",
+      "(the first line of the text, up to \(AutomationRunOutput.excerptLength) characters)",
     ]
     for copy in copies {
       XCTAssertTrue(text.contains(copy), "共有の英文のコピーが本体の値と食い違っている: \(copy)")

@@ -196,6 +196,23 @@ extension WindowControllerAutomationControlTests {
     XCTAssertNil(listedResult["text"], "一覧は全文を持たない")
   }
 
+  /// 改行の無い長い報告でも、一覧の `summary` は抜粋の長さで切られ、切られたことが「…」で示される（一覧が報告の全文で膨らまない）。
+  @MainActor func testALongFirstLineIsCutInTheListedSummary() throws {
+    let wc = try launch()
+    let id = try set(wc, DesignSceneFixtures.boardReportExample().definition)
+    let length = AutomationRunOutput.excerptLength
+    let text = String(repeating: "あ", count: length) + String(repeating: "い", count: length)
+    try wc.automationStore.record(
+      id, nodeKey: "digest", trigger: .arrival, at: Date(),
+      outcome: DesignSceneFixtures.reported(text))
+
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
+    let listedResult = try XCTUnwrap(
+      (nodes["digest"]?["lastRun"] as? [String: Any])?["result"] as? [String: Any])
+    XCTAssertEqual(
+      listedResult["summary"] as? String, String(repeating: "あ", count: length) + "…")
+  }
+
   /// 回の記録を残す回数と日数は設定の値で、確定のたびに読む（AI が `list_automation_runs` で読める過去の回が変わる）。
   func testTheRetentionSettingsDecideWhichPastRunsRemain() throws {
     let wc = try launch()
