@@ -280,7 +280,7 @@ Orbe が回の途中で終わったら最後に回った時刻は進んでいな
 - `read_waiting_proposals` が返す候補（リンク・タイトル・期限）は、その判定が出した判断待ちの候補だけ。`resolve` もその判定の候補だけを対応済みにする。判定が `all` で読むと、自分の判断待ちの候補のリンクの行も毎回届く（案にし直しても、確定で「既に候補がある」として捨てる）。
 - `read_workspaces` が返す workspace は Home を除く今の workspace（サイドバーの順）で、workspace の ID（`list_workspaces` の `id` と同じ文字列）・名前・root。無ければ「(none)」。
 - 判断待ちの候補と workspace の一覧は回を始める時点に 1 度だけ取り、道具の答えと結果の確かめに同じものを使う——回の途中に候補がさばかれたり workspace が変わったりしても、判定が見たものと照らし合わせるものが食い違わない。
-- 判定がコマンドなら、取った行を標準入力で渡すだけで、判断待ちの候補も workspace の一覧も渡らない（`resolve` は出せない。付け先は `orb ws list --json` の ID で書ける。Home の ID は付け先なしとして受ける）。
+- 判定がコマンドなら、取った行を標準入力で渡すだけで、判断待ちの候補も workspace の一覧も渡らない（`resolve` はリンクを書いて出せ、そのリンクがその判定の判断待ちの候補なら対応済みになる。付け先は `orb ws list --json` の ID で書ける。Home の ID は付け先なしとして受ける）。
 
 結果は 2 種類だけ。agent は `propose {proposals: [...]}`・`resolve {links: [...]}` で、コマンドは標準出力の 1 行 1 つの JSON で出す。propose も resolve もしない回は、agent は `report_nothing`、コマンドは空の出力。
 
