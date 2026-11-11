@@ -8,7 +8,8 @@ import XCTest
 
 /// diff のタブ——作業ツリー（index の版 ↔ 文書）とステージ済み（HEAD の版 ↔ index の版）の側と並び、片側だけの diff、
 /// 表示できない理由、git と外の書き換えへの追従、インライン / 並列の面。壊れると、diff の削除行が古い版の別の行を指す・
-/// ステージ済みの rename が元のパスの版で比べられない・git add しても diff が古いまま・並列の 2 面が揃わない。
+/// ステージ済みの rename が元のパスの版で比べられない・git add しても diff が古いまま・並列の 2 面が揃わない・大きな
+/// ファイルの離れた変更が 1 つの塊になる。
 @MainActor
 final class EditorDiffTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -94,7 +95,25 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(surface.isEditable, "ファイルタブではコードの見え方")
     XCTAssertTrue(surface.rows.isEmpty)
     XCTAssertEqual(surface.presentation, .code)
-    XCTAssertEqual(document.hunkLimit, LineDiff.gutter, "ガターの上限に戻る")
+  }
+
+  /// diff の間は、ガターなら 1 つの区間にまとめる大きさでも、離れた変更を行ごとに出す。ファイルタブへ戻れば、ガターは
+  /// 同じ変更を 1 つの区間にまとめる（打鍵ごとの手間を抑える上限に戻る）。
+  func testADiffShowsDistantChangesLineByLineBeyondTheGutterLimit() throws {
+    var lines = (0..<(LineDiff.maximumComparedLines + 200)).map { "line \($0)" }
+    try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
+    lines[0] = "changed first"
+    lines[lines.count - 1] = "changed last"
+    try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
+    let (tab, _) = tab()
+    let document = try tab.group.editor.open(repo.url("long.txt"), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree), as: .pinned)
+    waitRows(diff, "離れた 2 か所だけが変更") { self.removedLines($0) == [0, lines.count - 1] }
+
+    tab.group.editor.activate(document)
+    pumpMain(until: { document.hunksAreCurrent && document.hunks.count == 1 }, "ガターは 1 つの区間")
   }
 
   /// 中身が届く前に本体（pane）にあった焦点は、面ができたときに面へ移る。
