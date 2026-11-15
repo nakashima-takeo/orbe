@@ -64,6 +64,10 @@ extension AutomationDatabase {
           definition: Self.jsonText(definition), reason: reason, nodeIds: rows.map(\.id)))
     }
     let keys = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.key) })
+    if row.notify != nil, notify == nil {
+      return broken(
+        "invalid notify: \(AutomationNotify.choices)", Self.rawDefinition(row, rows, keys))
+    }
     if row.workspace != nil, workspace == nil {
       return broken("invalid workspace", Self.rawDefinition(row, rows, keys))
     }
