@@ -1,0 +1,217 @@
+import XCTest
+
+@testable import Orbe
+
+/// PR ごとの状態（`PullRequestState`）——中身の読み直し、確認済みの先行反映と書き込みの順序、diff の両端。GitHub は差し替えの
+/// 構造体が答え、git は一時リポジトリで実際に問う。
+///
+/// 壊れると何が起きるか: 読み直しの失敗で前の中身が消える。押した直後の読み直しでチェックが外れる・2 回続けて押したのに
+/// 最初の値に戻る・書き込みの失敗でチェックが付いたまま残る。PR に push があっても diff が古い両端のまま、コミットが
+/// 手元に無いと diff が出ないまま止まる。
+@MainActor
+final class PullRequestStateTests: OrbeTestCase {
+  private var gitHub: PullRequestFakeGitHub!
+  private var key: PullRequestState.Key!
+
+  override func setUpWithError() throws {
+    gitHub = PullRequestFakeGitHub()
+    key = PullRequestState.Key(
+      commonDir: "/tmp/\(UUID().uuidString)",
+      id: try XCTUnwrap(GitHubItemID(repo: "o/r", number: 7)))
+  }
+
+  private func content(
+    viewed: Set<String> = [], base: String = "b", head: String = "h", files: [String] = ["a", "b"]
+  ) -> GitHubPullRequestContent {
+    GitHubPullRequestContent(
+      nodeID: "PR_1", number: 7, title: "題", url: "https://github.com/o/r/pull/7", isDraft: false,
+      state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
+      baseCommit: base, headCommit: head, commitCount: 0, commits: [],
+      files: files.map { .init(path: $0, change: .modified, isViewed: viewed.contains($0)) })
+  }
+
+  private func watchedState() -> PullRequestState {
+    let state = PullRequestState.shared(for: key, source: gitHub.source)
+    state.beginWatching()
+    return state
+  }
+
+  // MARK: - 中身
+
+  /// 見ている者がいる間だけ読み、読み直しの失敗は失敗の文になって、前に読めた中身は残る。
+  func testAFailedReloadKeepsTheLastContent() {
+    let state = PullRequestState.shared(for: key, source: gitHub.source)
+    gitHub.content = .success(content())
+    state.reload()
+    XCTAssertNil(state.content, "見ている者がいなければ読まない")
+
+    state.beginWatching()
+    state.reload()
+    XCTAssertEqual(state.content?.title, "題")
+    gitHub.content = .failure(.unreachable)
+    state.reload()
+    XCTAssertEqual(state.content?.title, "題", "前の中身は残る")
+    XCTAssertEqual(state.failure, .read(.unreachable))
+  }
+
+  /// 読んでいる間に来た読み直しは、終わった後に 1 回だけ読む。
+  func testReloadsWhileReadingCollapseIntoOne() {
+    let state = watchedState()
+    gitHub.answersAtOnce = false
+    gitHub.content = .success(content())
+    state.reload()
+    state.reload()
+    state.reload()
+    XCTAssertEqual(gitHub.contentRequests.count, 1)
+    gitHub.answerContent()
+    XCTAssertEqual(gitHub.contentRequests.count, 1, "終わった後の 1 回")
+  }
+
+  // MARK: - 確認済み
+
+  /// 押した瞬間に付き、通れば GitHub の値として残る。通らなければ元に戻り、失敗の文が出る。
+  func testViewedIsShownAtOnceAndRevertsOnFailure() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+
+    state.setViewed(true, paths: ["a", "b"])
+    XCTAssertTrue(state.isViewed("a"))
+    XCTAssertEqual(state.viewedCount.viewed, 2)
+    gitHub.finishWrite(written: ["a"], failure: .rateLimited)
+    XCTAssertTrue(state.isViewed("a"), "通ったパスは残る")
+    XCTAssertFalse(state.isViewed("b"), "通らなかったパスは元に戻る")
+    XCTAssertEqual(state.failure, .write(.rateLimited))
+  }
+
+  /// 書き込みより前に出して後から届いた読み直しは、通ったチェックを外さない。書いている途中のパスも上書きしない。
+  func testAReloadIssuedBeforeAWriteDoesNotUndoIt() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+    gitHub.answersAtOnce = false
+    state.reload()
+    state.setViewed(true, paths: ["a"])
+    gitHub.finishWrite()
+    gitHub.answerContent()
+    XCTAssertTrue(state.isViewed("a"), "書き込みより前に出した読み直しは、通った値を上書きしない")
+
+    gitHub.content = .success(content(viewed: ["a"]))
+    state.reload()
+    state.setViewed(false, paths: ["a"])
+    gitHub.answerContent()
+    XCTAssertFalse(state.isViewed("a"), "書いている途中は重ねた値")
+    gitHub.finishWrite(written: [], failure: .unreachable)
+    XCTAssertTrue(state.isViewed("a"), "通らなければ GitHub の値に戻る")
+
+    gitHub.answersAtOnce = true
+    gitHub.content = .success(content())
+    state.reload()
+    XCTAssertFalse(state.isViewed("a"), "書き込みの後に出した読み直しは、GitHub の値（外れた）で上書きする")
+  }
+
+  /// 書き込みは 1 つずつ順に送り、続けて押したら最後の値になる。
+  func testWritesGoOneAtATimeAndTheLastValueWins() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+    state.setViewed(true, paths: ["a"])
+    state.setViewed(false, paths: ["a"])
+    XCTAssertEqual(gitHub.writes.count, 1, "前の書き込みが終わってから次を送る")
+    XCTAssertFalse(state.isViewed("a"))
+    gitHub.finishWrite()
+    XCTAssertFalse(state.isViewed("a"), "後の書き込みの重ねた値のまま")
+    XCTAssertEqual(gitHub.writes.map(\.viewed), [false])
+    gitHub.finishWrite()
+    XCTAssertFalse(state.isViewed("a"))
+  }
+
+  // MARK: - diff の両端
+
+  /// 両端はマージベースと PR の先頭で、間の rename の対応も持つ。手元に無いコミットは、PR が置かれたリポジトリを指す
+  /// remote から取ってきて求め直す。
+  func testBoundsFetchMissingCommitsAndCarryRenames() throws {
+    let repo = try TempGitRepo()
+    let bare = repo.addOrigin()
+    let base = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    XCTAssertTrue(repo.git(["mv", "a.txt", "b.txt"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "rename"]).isSuccess)
+    let head = repo.head()
+    XCTAssertTrue(repo.git(["push", "-q", "origin", "feat"]).isSuccess)
+    let clone = try TempGitRepo(name: "orbe-clone", initialCommit: false)
+    XCTAssertTrue(clone.git(["remote", "add", "origin", bare]).isSuccess)
+    XCTAssertTrue(clone.git(["fetch", "-q", "origin", "main"]).isSuccess)
+    XCTAssertTrue(clone.git(["cat-file", "-e", head + "^{commit}"]).status != 0, "前提: 先頭は手元に無い")
+
+    let state = watchedState()
+    gitHub.content = .success(content(base: base, head: head, files: ["b.txt"]))
+    state.reload()
+    state.attach(repo: try clone.open(), fetchRemote: "origin")
+
+    pumpMain(
+      until: { if case .ready = state.bounds { return true } else { return false } }, "両端が揃う")
+    guard case .ready(_, let ends) = state.bounds else { return XCTFail("両端が揃う") }
+    XCTAssertEqual(ends.mergeBase, base)
+    XCTAssertEqual(ends.head, head)
+    XCTAssertEqual(ends.renames, ["b.txt": "a.txt"])
+    XCTAssertTrue(
+      clone.git(["for-each-ref", "refs/remotes/origin/feat"]).stdoutText.isEmpty,
+      "取ってきても ref は書かない")
+  }
+
+  /// 取りに行く remote が無ければ、取れなかったとして理由を持つ。再読込で求め直す。
+  func testBoundsWithoutARemoteFailAndAReloadRetries() throws {
+    let repo = try TempGitRepo()
+    let state = watchedState()
+    gitHub.content = .success(content(base: repo.head(), head: String(repeating: "0", count: 40)))
+    state.reload()
+    state.attach(repo: try repo.open(), fetchRemote: nil)
+    pumpMain(until: { if case .failed = state.bounds { return true } else { return false } })
+    XCTAssertEqual(state.bounds.ends?.head, String(repeating: "0", count: 40))
+    guard case .failed(_, .commitsMissing) = state.bounds else { return XCTFail("\(state.bounds)") }
+
+    state.reload()
+    guard case .fetching = state.bounds else { return XCTFail("再読込で求め直す: \(state.bounds)") }
+  }
+}
+
+@MainActor
+/// 差し替えの構造体の相手——中身の答えと、確認済みの書き込みの完了を、テストが好きな順に返す。
+final class PullRequestFakeGitHub {
+  var content: Result<GitHubPullRequestContent, GitHubFailure> = .failure(.reason(""))
+  private(set) var contentRequests: [(Result<GitHubPullRequestContent, GitHubFailure>) -> Void] =
+    []
+  private(set) var writes: [PullRequestFakeWrite] = []
+  /// 中身の問い合わせに、すぐ答えるか（偽なら `answerContent` まで待つ）。
+  var answersAtOnce = true
+
+  var source: PullRequestSource {
+    PullRequestSource(
+      branchPullRequests: { _, _, _ in },
+      branchExists: { _, _ in },
+      content: { [unowned self] _, completion in
+        if answersAtOnce { completion(content) } else { contentRequests.append(completion) }
+      },
+      setViewed: { [unowned self] viewed, paths, _, completion in
+        writes.append(PullRequestFakeWrite(viewed: viewed, paths: paths, done: completion))
+      })
+  }
+
+  func answerContent(at index: Int = 0) {
+    contentRequests.remove(at: index)(content)
+  }
+
+  /// 書き込み `index` を、`written` のパスが通った（`failure` なら残りは通らなかった）として返す。
+  func finishWrite(_ index: Int = 0, written: Set<String>? = nil, failure: GitHubFailure? = nil) {
+    let write = writes.remove(at: index)
+    write.done(GitHubViewedWrite(written: written ?? write.paths, failure: failure))
+  }
+}
+
+/// 差し替えの構造体が受けた確認済みの書き込み 1 回。
+struct PullRequestFakeWrite {
+  let viewed: Bool
+  let paths: Set<String>
+  let done: (GitHubViewedWrite) -> Void
+}
