@@ -2,44 +2,67 @@ import Foundation
 
 // MARK: - 観測（status・index の読み）
 
-/// 結果が古くても監視が取り直す観測。`.independent` で走らせ、巨大リポジトリの status が
-/// `.exclusive`（worktree remove・update-ref）を待たせないようにする。
+/// 版（index・HEAD）の木の項目——ファイル（blob の OID）か、サブモジュール（gitlink が指すコミット）。
+enum GitVersionEntry: Equatable {
+  case file(String)
+  case submodule(String)
+}
+
+/// 前の値と比べた status の読み。
+enum GitStatusRead: Equatable {
+  case changed(GitStatus)
+  /// 前の値と同じ。
+  case unchanged
+  /// git が失敗した。
+  case failed
+}
+
 extension GitRepo {
-  /// status の見え方を左右するユーザー設定（`status.showUntrackedFiles`・`diff.ignoreSubmodules`）を
-  /// 引数で封じ、`--no-optional-locks` で index を書き換えない。パスは `-z` で verbatim に出る
+  /// status の見え方を左右するユーザー設定を引数で封じる——`status.showUntrackedFiles`（未追跡はファイル単位）・
+  /// `diff.ignoreSubmodules`・`status.aheadBehind`（先行/遅れは必ず数える）・`status.renames`（rename は必ず検出する）。
+  /// ブランチのヘッダを必ず出す。`--no-optional-locks` で index を書き換えない。パスは `-z` で verbatim に出る
   /// （`core.quotepath` は参照されない）。
   static let statusArguments = [
-    "--no-optional-locks", "status", "--porcelain=v2", "-z", "--untracked-files=normal",
-    "--ignore-submodules=none",
+    "--no-optional-locks", "status", "--porcelain=v2", "-z", "--branch", "--ahead-behind",
+    "--renames", "--untracked-files=all", "--ignore-submodules=none",
   ]
 
-  /// worktree の status。git が失敗したら nil。
-  func status(completion: @escaping (GitStatus?) -> Void) {
-    runner.run(Self.statusArguments, cwd: root, lane: .independent) { output in
-      completion(output.isSuccess ? GitStatus.parse(output.stdout) : nil)
-    }
+  /// worktree の status を `previous` と比べて返す（nil と比べれば、成功は必ず `changed`）。未追跡が多いと出力も値も
+  /// 大きい（2 万件で約 0.4MB・2 万エントリ）ので、解析と比較は裏のスレッドで済ませ、main には変わったかと新しい値だけを
+  /// 渡す。同じだったときの新しい値も裏で捨てる。
+  func status(
+    comparedTo previous: GitStatus?, completion: @escaping (GitStatusRead) -> Void
+  ) {
+    runner.run(
+      Self.statusArguments, cwd: root,
+      transform: { output -> GitStatusRead in
+        guard output.isSuccess else { return .failed }
+        let status = GitStatus.parse(output.stdout)
+        return status == previous ? .unchanged : .changed(status)
+      }, completion: completion)
   }
 
-  /// index にある blob の OID（相対パス → OID。stage 0 だけ＝競合中のパスは含まない）。
+  /// index にある項目（相対パス → ファイルの blob の OID かサブモジュールのコミット。stage 0 だけ＝競合中のパスは含まない）。
   /// 空の問い合わせは git を起こさない。git が失敗したら nil。
   ///
   /// パスはファイル名そのもの（ユーザーのデータ）なので pathspec として解釈させない——`:` 始まりは magic、
   /// `*` `[` は glob で、`:(` 始まりは fatal になって根の全 baseline が凍る。`:(literal)` を前置し、
   /// これを無効化する環境変数は `GitRunner` が落とす。
-  func indexEntries(relativePaths: [String], completion: @escaping ([String: String]?) -> Void) {
+  func indexEntries(
+    relativePaths: [String], completion: @escaping ([String: GitVersionEntry]?) -> Void
+  ) {
     guard !relativePaths.isEmpty else {
       completion([:])
       return
     }
     runner.run(
-      ["ls-files", "-s", "-z", "--"] + relativePaths.map { ":(literal)" + $0 }, cwd: root,
-      lane: .independent
+      ["ls-files", "-s", "-z", "--"] + relativePaths.map { ":(literal)" + $0 }, cwd: root
     ) { output in
       guard output.isSuccess else {
         completion(nil)
         return
       }
-      var entries: [String: String] = [:]
+      var entries: [String: GitVersionEntry] = [:]
       for record in output.stdout.split(separator: 0) {
         // `<mode> <oid> <stage>\t<path>`
         guard let line = String(bytes: record, encoding: .utf8),
@@ -47,9 +70,67 @@ extension GitRepo {
         else { continue }
         let fields = line[..<tab].split(separator: " ")
         guard fields.count == 3, fields[2] == "0" else { continue }
-        entries[String(line[line.index(after: tab)...])] = String(fields[1])
+        let oid = String(fields[1])
+        entries[String(line[line.index(after: tab)...])] =
+          fields[0] == "160000" ? .submodule(oid) : .file(oid)
       }
       completion(entries)
+    }
+  }
+
+  /// HEAD のツリーにある項目（相対パス → ファイルの blob の OID かサブモジュールのコミット。無いもの・ディレクトリは含まない。
+  /// 初回コミット前は空）。空の問い合わせは git を起こさない。git が失敗したら nil。
+  ///
+  /// パスは `indexEntries` と同じく `:(literal)` を前置した pathspec で argv に渡す——macOS の git は argv のパスを
+  /// `core.precomposeunicode` で NFC に揃えて照合するので、ディスク上の NFD の綴りでも index と同じく引ける。
+  /// 初回コミット前は HEAD が無くて失敗するので、そのときは HEAD が無いことを確かめて空にする。
+  func headEntries(
+    relativePaths: [String], completion: @escaping ([String: GitVersionEntry]?) -> Void
+  ) {
+    guard !relativePaths.isEmpty else {
+      completion([:])
+      return
+    }
+    runner.run(
+      ["ls-tree", "-z", "--full-tree", "HEAD", "--"] + relativePaths.map { ":(literal)" + $0 },
+      cwd: root
+    ) { [runner, root] output in
+      guard output.isSuccess else {
+        // `rev-parse -q --verify` は、HEAD が無い（初回コミット前）ときだけ黙って 1 で終わる。
+        runner.run(["rev-parse", "-q", "--verify", "HEAD"], cwd: root) { probe in
+          completion(probe.exited && probe.status == 1 ? [:] : nil)
+        }
+        return
+      }
+      var entries: [String: GitVersionEntry] = [:]
+      for record in output.stdout.split(separator: 0) {
+        // `<mode> <type> <oid>\t<path>`
+        guard let line = String(bytes: record, encoding: .utf8),
+          let tab = line.firstIndex(of: "\t")
+        else { continue }
+        let fields = line[..<tab].split(separator: " ")
+        guard fields.count == 3 else { continue }
+        let path = String(line[line.index(after: tab)...])
+        switch fields[1] {
+        case "blob": entries[path] = .file(String(fields[2]))
+        case "commit": entries[path] = .submodule(String(fields[2]))
+        default: continue
+        }
+      }
+      completion(entries)
+    }
+  }
+
+  /// 作業ツリーのサブモジュール `relativePath` が取り出しているコミット。中のリポジトリの最上位がそのパスのときだけで（初期化
+  /// していないサブモジュールの中では親の HEAD を答えない）、取り出していない・git が失敗したら nil。
+  func submoduleHead(relativePath: String, completion: @escaping (String?) -> Void) {
+    let path = (root as NSString).appendingPathComponent(relativePath)
+    runner.run(["rev-parse", "--show-toplevel", "HEAD"], cwd: path) { output in
+      let lines = output.stdoutText.split(separator: "\n")
+      guard output.isSuccess, lines.count == 2,
+        GitWorktreeRoot.normalizedPath(String(lines[0])) == GitWorktreeRoot.normalizedPath(path)
+      else { return completion(nil) }
+      completion(String(lines[1]))
     }
   }
 
@@ -59,7 +140,7 @@ extension GitRepo {
   /// 外部 diff は通らない。git が失敗したら nil。
   func blob(oid: String, relativePath: String, completion: @escaping (Data?) -> Void) {
     runner.run(
-      ["cat-file", "--filters", "--path=" + relativePath, oid], cwd: root, lane: .independent
+      ["cat-file", "--filters", "--path=" + relativePath, oid], cwd: root
     ) { output in
       completion(output.isSuccess ? output.stdout : nil)
     }

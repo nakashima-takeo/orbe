@@ -138,7 +138,8 @@ enum SettingsRegistry {
   /// agent-state-icons〔gui.conf 非経由〕→ worktree-dir〔同〕→
   /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕→
   /// notification-sound-custom-done / -waiting / -waiting-same-as-done〔いずれも同〕→
-  /// menubar-notification-duration〔同〕→ automation-run-retention-count / -days・-event-retention-days〔同〕）。
+  /// menubar-notification-duration〔同〕→ scm-auto-fetch〔同〕→
+  /// automation-run-retention-count / -days・-event-retention-days〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] =
     [
@@ -329,6 +330,13 @@ enum SettingsRegistry {
         defaultValue: { .int(40) }, domain: .intRange(5...180, step: 5, unit: "s"),
         guiConf: nil,  // gui.conf 非経由（メニューバー chrome の尺で libghostty 設定ではない）
         display: secondsLabel, unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .scmAutoFetch, key: "scm-auto-fetch", labelKey: .settingsScmAutoFetch,
+        activation: .toggle,
+        // ssh-agent の承認を毎回求める人（1Password・Secretive・FIDO 鍵）が止められるように持つ。
+        defaultValue: { .bool(true) }, domain: .toggle,
+        guiConf: nil,  // gui.conf 非経由（面が裏の fetch を欲しがるか決めるときに面の workspace の実効値を読む）
+        display: boolLabel, unsetPlaceholderKey: nil),
     ] + automationRetention
 
   /// 取り込み済み音源の実体（`sounds/` 配下のファイル）を指す項目。参照集合 GC の契機判定が読む。
@@ -346,15 +354,16 @@ enum SettingsRegistry {
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// worktreeDir → notificationSound → 音量 → オン/オフ → メニューバー通知の表示時間 → 自動化の保持 3 つ）。
+  /// worktreeDir → notificationSound → 音量 → オン/オフ → メニューバー通知の表示時間 → ソース管理の自動フェッチ →
+  /// 自動化の保持 3 つ）。
   /// 背景関連・フォント関連・通知音関連・自動化の保持をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
       .worktreeDir, .notificationSound, .notificationSoundVolume,
-      .notificationSoundEnabled, .menuBarNotificationDuration, .automationRunRetentionCount,
-      .automationRunRetentionDays, .automationEventRetentionDays,
+      .notificationSoundEnabled, .menuBarNotificationDuration, .scmAutoFetch,
+      .automationRunRetentionCount, .automationRunRetentionDays, .automationEventRetentionDays,
     ].map { id in all.first { $0.id == id }! }
 
   static func descriptor(_ id: SettingID) -> SettingDescriptor { all.first { $0.id == id }! }

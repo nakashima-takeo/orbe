@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 骨の写し——ファイルタブ行（名前・チップ・未保存・衝突・アクティブ）とパンくず（根の下は相対で押せる、
+/// 骨の写し——タブ行（名前・チップ・未保存・衝突・アクティブ）とパンくず（根の下は相対で押せる、
 /// 根の外は絶対で押せない）。
 ///
 /// 壊れると何が起きるか。写しがセッションと食い違うと、閉じた文書のタブが残る・別の文書がアクティブに見える。
@@ -30,7 +30,7 @@ final class EditorShellModelTests: OrbeTestCase {
     XCTAssertEqual(shell.tabs.map(\.name), ["a.swift", "b.md"])
     XCTAssertEqual(shell.tabs.map(\.isActive), [false, true])
     XCTAssertEqual(shell.tabs[0].chip, FileChip(glyph: "S", hue: .orange))
-    XCTAssertEqual(shell.activeID, b.url)
+    XCTAssertEqual(shell.activeID, .document(b.url))
     XCTAssertEqual(shell.activeName, "b.md")
     XCTAssertEqual(shell.crumbs.map(\.name), ["src"])
     XCTAssertEqual(shell.crumbs.first?.directory?.path, root + "/src", "根の下は祖先の URL を持つ")
@@ -53,7 +53,7 @@ final class EditorShellModelTests: OrbeTestCase {
     XCTAssertTrue(shell.crumbs.isEmpty)
   }
 
-  /// 未保存の文書が外で書き換えられると、写しは衝突（ドットが変更の黄）を持ち、外の内容に戻れば消える。
+  /// 未保存の文書が外で書き換えられると、写しは衝突（ドットが注意の黄）を持ち、外の内容に戻れば消える。
   func testConflictFollowsExternalWritesOnADirtyDocument() throws {
     let repo = try TempGitRepo()
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))

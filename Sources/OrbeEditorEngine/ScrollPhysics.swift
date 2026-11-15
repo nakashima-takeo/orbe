@@ -67,9 +67,11 @@ extension ScrollInput.Phase {
 ///   指で動かせばその位置から動く。
 /// - マウスのホイールは 1 目盛り（量 1）を 10pt として、その場で当てる（NSScrollView の行送りと同じ）。
 struct ScrollPhysics: Sendable {
-  /// 範囲を決める値。縦は最終行が最上段に来るまで、横は見たことのある最も長い行の右端から 5 桁先まで。
+  /// 範囲を決める値。縦は最後の項目（最後の文書の行か、最終行の後の差し込み）の終わりの 1 行が最上段に来るまで、横は見たこと
+  /// のある最も長い行の右端から 5 桁先まで。
   struct Limits: Equatable, Sendable {
-    var lineCount = 1
+    /// 縦のスクロールの端（縦の並び `RowLayout.lastTop`）。
+    var lastTop: Double = 0
     var lineHeight: Double = 1
     /// 本文の見えている大きさ（行番号の列と上端の余白を除く）。
     var viewport = SIMD2<Double>(0, 0)
@@ -77,27 +79,38 @@ struct ScrollPhysics: Sendable {
     var longestLine: Double = 0
     /// 1 桁の幅。
     var cell: Double = 7
+    /// スクロールを共にする面の範囲の端（共にしていなければ 0）。範囲の端はこれより手前にならない。
+    var shared = SIMD2<Double>(0, 0)
 
-    var maximum: SIMD2<Double> {
+    /// この面の本文が決める範囲の端。
+    var own: SIMD2<Double> {
       SIMD2(
         max(0, longestLine + ScrollPhysics.trailingColumns * cell - viewport.x),
-        max(0, Double(lineCount - 1) * lineHeight))
+        max(0, lastTop))
     }
 
-    /// 位置 `position` で先頭に見えている行（`lineCount` 行の文書の行）と、その行が上へ隠れている割合（0…1）。端を越えて
-    /// 見せている分は端で数える（俯瞰と見えている範囲は端の位置を表す）。
-    func firstVisible(at position: SIMD2<Double>, lineCount: Int) -> (row: Int, hidden: Double) {
-      let y = min(max(0, position.y), maximum.y)
-      let row = min(Int((y / lineHeight).rounded(.down)), max(0, lineCount - 1))
-      return (row, min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1))
+    var maximum: SIMD2<Double> { simd_max(own, shared) }
+
+    /// 位置 `position` の縦を端に収めたもの（俯瞰と見えている範囲は、端を越えて見せている間も端の位置を表す）。
+    func clampedY(_ position: SIMD2<Double>) -> Double {
+      min(max(0, position.y), maximum.y)
     }
 
-    /// 位置 `position` で先頭に見えている行（小数。行 + 隠れている割合）と見えている行数——俯瞰の式の入力。
-    func viewportLines(at position: SIMD2<Double>, lineCount: Int) -> (
+    /// 位置 `position` で先頭に見えている所と見えている高さ（どちらも表示の単位）——俯瞰の式の入力。スクロールを共にする
+    /// 短い側の面で、自分の並びの端より下（長い側だけが続く所）にいれば、範囲の位置から換算する。
+    func viewportLines(at position: SIMD2<Double>, rows: RowLayout, lineCount: Int) -> (
       first: CGFloat, visible: CGFloat
     ) {
-      let (row, hidden) = firstVisible(at: position, lineCount: lineCount)
-      return (CGFloat(Double(row) + hidden), CGFloat(viewport.y / lineHeight))
+      let y = clampedY(position)
+      let first =
+        y > max(0, lastTop) ? y / lineHeight : rows.firstUnit(atY: y, lineCount: lineCount)
+      return (CGFloat(first), CGFloat(viewport.y / lineHeight))
+    }
+
+    /// 縦の全体の量（表示の単位）——自分の並びの量（最後の項目の上端 + 1）と、範囲の縦の端を表示の単位にしたもの + 1 の
+    /// 大きい方（スクロールを共にする面は、共にする範囲で写す）。スクロールバーのつまみ・押下・印の写像の入力。
+    func contentLines(rows: RowLayout, lineCount: Int) -> CGFloat {
+      CGFloat(max(rows.contentLines(lineCount: lineCount), maximum.y / lineHeight + 1))
     }
   }
 
@@ -225,6 +238,17 @@ struct ScrollPhysics: Sendable {
   mutating func place(_ p: SIMD2<Double>) {
     position = clamp(p)
     mode = .idle
+  }
+
+  /// 縦の位置を `dy` だけずらす（縦の並びが見えている所より上で変わった）。追っている間・止まっている間は位置を、戻って
+  /// いる間は戻りの起点を動かし、動きの状態は保つ。端には収めない（弾んでいる最中でも弾みは続く）。
+  mutating func shift(by dy: Double) {
+    switch mode {
+    case .idle, .tracking:
+      position.y += dy
+    case .returning(let from, let velocity, let start):
+      mode = .returning(from: from + SIMD2(0, dy), velocity: velocity, start: start)
+    }
   }
 
   /// 範囲が変わった。止まっていれば範囲に収める。

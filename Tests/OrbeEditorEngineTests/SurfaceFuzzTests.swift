@@ -85,7 +85,7 @@ final class SurfaceFuzzTests: EngineTestCase {
       case 20..<30:
         inputMethodStep(opened, window, &generator)
       default:
-        opened.surface.perform(Self.commands.randomElement(using: &generator)!)
+        opened.surface.editor.perform(Self.commands.randomElement(using: &generator)!)
       }
       try check(opened, "seed \(seed) step \(step)")
       XCTAssertEqual(shadow as String, text(opened.document), "seed \(seed) step \(step): 配り先の畳み")

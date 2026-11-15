@@ -7,7 +7,7 @@ import os
 /// 文書は編集ごとに、編集（行と桁つき）と最新の写しを郵便受けに積み、止まっていれば起こす。起きた裏の仕事は、郵便受けの
 /// 編集をまとめて受け取って全部当ててから 1 回だけ差分解析し（速い打鍵は 1 回に畳まれる）、「構文木が変わった区間 ∪
 /// 編集の区間」に掛かる行を丸ごと「まだ作り直していない」に足す——字の中身で役割が決まる capture（`#match?` など）は、
-/// 構文木が変わらなくても役割が変わるから。作り直しは区画ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
+/// 構文木が変わらなくても役割が変わるから。作り直しは格子で切った区間ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
 /// 変わった字を版つきで置く。見えていない範囲は、最後の編集から `quietDelay` 経つまで始めない（打鍵が続く間は見えている範囲
 /// だけを作る。開いてから編集が無ければ待たない）。区切りの間に新しい編集が来ていれば、それを先に当てる。文書を閉じたら、走っている解析を打ち切って止まる。
 actor SyntaxWorker {
@@ -20,7 +20,9 @@ actor SyntaxWorker {
     var text: TextRope
     var version: Int
     var edits: [VersionedEdit] = []
-    var visible: NSRange
+    /// 見えている行（最新の版の行）と、それを渡した依頼の番号。
+    var visible: ClosedRange<Int>
+    var visibleRequest = 0
     var running = false
     /// 見えていない範囲の作り直しを始めてよくなる時刻（最後の編集 ＋ 待ち）。編集がまだ無ければ nil（待たない）。
     var quietAt: DispatchTime?
@@ -48,8 +50,11 @@ actor SyntaxWorker {
   private var stale = IndexSet()
   /// 前に置いてから役割が変わった字（`text` の上）。
   private var changed = IndexSet()
-  /// 最後に結果を置いた版。
+  /// 最後に結果を置いた版と、そのとき作っていた見えている行の依頼の番号。
   private var deposited: Int?
+  private var depositedRequest = 0
+  /// 今作っている見えている行の依頼の番号。
+  private var shownRequest = 0
   private var parsed = false
 
   init(
@@ -62,9 +67,9 @@ actor SyntaxWorker {
     self.version = version
     self.inbox = inbox
     roles = RoleRuns(length: text.length)
-    let visible = NSRange(location: 0, length: text.lineEnd(Self.initialVisibleLines - 1))
     mailbox = OSAllocatedUnfairLock(
-      initialState: Mail(text: text, version: version, visible: visible, running: true))
+      initialState: Mail(
+        text: text, version: version, visible: 0...(Self.initialVisibleLines - 1), running: true))
     Task.detached(priority: .userInitiated) { [self] in await run() }
   }
 
@@ -81,9 +86,13 @@ actor SyntaxWorker {
     if wake { start() }
   }
 
-  /// 見えている範囲（最新の版のオフセット）。次の区切りから、そこを先に作る——待ちの間に止まっていても、そこは待たずに作る。
-  nonisolated func setVisible(_ range: NSRange) {
-    wakeIfStale { $0.visible = range }
+  /// 見えている行（最新の版の行）と、その依頼の番号 `request`（渡すたびに進む）。次の区切りから、そこを先に作る——待ちの
+  /// 間に止まっていても、そこは待たずに作る。結果はどの依頼の行に対するものかを持つ。
+  nonisolated func setVisible(_ lines: ClosedRange<Int>, request: Int) {
+    wakeIfStale { mail in
+      mail.visible = lines
+      mail.visibleRequest = request
+    }
   }
 
   /// main が結果を同期で待つ間、キューの優先度を上げる（待っている main は優先度を譲らない）。
@@ -136,16 +145,19 @@ actor SyntaxWorker {
       }
       absorb(batch)
       guard !layers.isCancelled else { return }
-      let shown = lines(covering: batch.visible)
+      shownRequest = batch.visibleRequest
+      let shown = range(of: batch.visible)
       let quiet = batch.hurry || batch.quietAt.map { DispatchTime.now() >= $0 } ?? true
       if let target = nextTarget(shown: shown, quiet: quiet) {
         rebuild(target, shown: shown)
         continue
       }
-      if deposited != version { deposit(visibleReady: true) }
+      if deposited != version || depositedRequest != shownRequest { deposit(visibleReady: true) }
       let hasStale = !stale.isEmpty
       let wait = mailbox.withLock { mail -> DispatchTime?? in
-        guard mail.edits.isEmpty, mail.visible == batch.visible, mail.hurry == batch.hurry else {
+        guard mail.edits.isEmpty, mail.visibleRequest == batch.visibleRequest,
+          mail.hurry == batch.hurry
+        else {
           return nil
         }
         mail.running = false
@@ -183,13 +195,13 @@ actor SyntaxWorker {
     version = batch.version
     parses.withLock { $0 += 1 }
     for range in layers.apply(batch.edits, text: text).rangeView {
-      let covered = lines(covering: NSRange(range))
+      let covered = self.range(of: text.rows(of: NSRange(range)))
       stale.insert(integersIn: covered.location..<NSMaxRange(covered))
     }
     stale.formUnion(layers.takeInvalidated())
   }
 
-  /// 次に作り直す区画。見えている行に掛かる部分が先。見えていない部分は待ちが明けてから。
+  /// 次に作り直す区間（格子で切る → `SyntaxLayers`）。見えている行に掛かる部分が先。見えていない部分は待ちが明けてから。
   private func nextTarget(shown: NSRange, quiet: Bool) -> Range<Int>? {
     let part =
       stale.intersection(IndexSet(integersIn: shown.location..<NSMaxRange(shown))).rangeView.first
@@ -199,7 +211,7 @@ actor SyntaxWorker {
     return part.lowerBound..<min(part.upperBound, block)
   }
 
-  /// 区画 1 つを作り直して置く。
+  /// 区間 1 つを作り直して置く。
   private func rebuild(_ target: Range<Int>, shown: NSRange) {
     let spans = layers.roles(in: NSRange(target))
     guard !layers.isCancelled else { return }
@@ -209,24 +221,25 @@ actor SyntaxWorker {
     deposit(visibleReady: !stale.intersects(integersIn: shown.location..<NSMaxRange(shown)))
   }
 
-  /// 今の版の役割の並びと、前に置いてから役割が変わった字を受け取り箱へ置く。取り込んだ版には必ず 1 つ置く（作り直す
-  /// 範囲が空の版——空の本文や、編集で作り直す範囲が消えた版——でも、文書が追いついたと分かるように）。
+  /// 今の版の役割の並びと、前に置いてから役割が変わった字を受け取り箱へ置く。取り込んだ版と、受けた見えている行の依頼には
+  /// 必ず 1 つ置く（作り直す範囲が空の版——空の本文や、編集で作り直す範囲が消えた版——でも、見えている行が既に作ってある
+  /// 依頼でも、文書が追いついたと分かるように）。
   private func deposit(visibleReady: Bool) {
     let outcome = SyntaxOutcome(
-      version: version, roles: roles, changed: changed, visibleReady: visibleReady,
-      complete: stale.isEmpty)
+      version: version, roles: roles, changed: changed, visibleRequest: shownRequest,
+      visibleReady: visibleReady, complete: stale.isEmpty)
     changed = IndexSet()
     deposited = version
+    depositedRequest = shownRequest
     inbox.deposit { $0.syntax.append(outcome) }
   }
 
-  /// 区間に掛かる行を丸ごと（改行を含む）。本文の外は切り詰める。
-  private func lines(covering range: NSRange) -> NSRange {
-    let start = min(range.location, text.length)
-    let end = min(NSMaxRange(range), text.length)
-    let first = text.lineStart(text.row(containing: start))
-    let last = text.lineEnd(text.row(containing: max(start, end - 1)))
-    return NSRange(location: first, length: max(0, last - first))
+  /// 行 `lines` を丸ごと（改行を含む）。本文の外の行は切り詰める。
+  private func range(of lines: ClosedRange<Int>) -> NSRange {
+    let first = min(max(0, lines.lowerBound), text.lineCount - 1)
+    let last = min(max(first, lines.upperBound), text.lineCount - 1)
+    let start = text.lineStart(first)
+    return NSRange(location: start, length: text.lineEnd(last) - start)
   }
 }
 
@@ -236,7 +249,9 @@ struct SyntaxOutcome: Sendable {
   let roles: RoleRuns
   /// 前の区切りから役割が変わった字（`version` の本文の上）。
   let changed: IndexSet
-  /// 見えている範囲の作り直しが済んだ。
+  /// 作っていた見えている行の依頼の番号。
+  let visibleRequest: Int
+  /// その見えている行の作り直しが済んだ。
   let visibleReady: Bool
   /// 文書全体の作り直しが済んだ。
   let complete: Bool
@@ -245,6 +260,7 @@ struct SyntaxOutcome: Sendable {
 /// 構文の裏の仕事がどこまで進んだか（文書が最後に受け取った結果の版で）。
 struct SyntaxProgress {
   let version: Int
+  let visibleRequest: Int
   let visibleReady: Bool
   let complete: Bool
 }

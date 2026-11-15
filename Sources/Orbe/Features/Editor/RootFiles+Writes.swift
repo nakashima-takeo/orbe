@@ -1,0 +1,218 @@
+import Foundation
+
+// MARK: - git の書き込み
+
+/// 根のサービスが git の書き込みの入口になる。index を書くのはその worktree の根のサービスだけで、根はレジストリにより
+/// worktree ごとに 1 つに決まるので、同じ worktree の index への書き込みの順番はここで作れば足りる（git は index.lock を
+/// 待たずに落ちる）。index を書く操作（ステージ・解除・破棄・コミット・amend・取り消し・pull）は投げた順に 1 つずつ
+/// 走り、fetch・push は並ばない。
+///
+/// どの書き込みも止める手（`Write`）を返す。その手は人が見ている手で（人が見ていない裏の fetch を除く）、手の下で走る段は
+/// 前段の読みも含めて無出力で打ち切らない。完了は「書き込みの後に始まった status の取り直し」が済んでから main で返る——
+/// 完了が届いた時点で `status` はもう書き込み後の姿になっている（監視の到着を待たない）。
+/// 版の本文の取り直しは待たない（smudge が詰まっても完了は遅れない）。git 管理外の根では呼べない（`notManaged`）。
+///
+/// 完了を返すまでは、返りを待つ処理がサービスを強く握る——順番待ちは止める手（行列との輪）、走っている間は git の完了の
+/// 閉包、完了の前の status の取り直しは待ち手。握る者が離れても書き込みの完了は返り、レジストリの「根ごとに 1 つ」も
+/// 崩れない（同じ根を握り直せば、まだ生きているこのサービスが返る）。返り終われば手放す。
+extension RootFiles {
+  /// 書き込み 1 つの止める手。順番待ちなら、その場で行列から外して「止めた」で返す（前の書き込みの終わりを待たず、
+  /// git を起こさない）。走っていれば git を SIGTERM で止める。何度呼んでもよい。走り始めた（順番待ちを抜けた）ことも
+  /// 知らせる——順番待ちか走っているかは根のサービスの順番の中にしか無い。
+  @MainActor
+  final class Write {
+    fileprivate let handle: GitRunner.Handle
+    fileprivate var dequeue: (() -> Void)?
+    private var hasStarted = false
+    private var onStart: (() -> Void)?
+
+    fileprivate init(attended: Bool = true) {
+      handle = GitRunner.Handle(attended: attended)
+    }
+
+    func cancel() {
+      handle.cancel()
+      guard let dequeue else { return }
+      self.dequeue = nil
+      dequeue()
+    }
+
+    /// 走り始めたら呼ぶ（もう走っていればその場で）。走る前に止めた書き込みでは呼ばない。
+    func whenStarted(_ body: @escaping () -> Void) {
+      if hasStarted { body() } else { onStart = body }
+    }
+
+    fileprivate func markStarted() {
+      hasStarted = true
+      let body = onStart
+      onStart = nil
+      body?()
+    }
+  }
+
+  typealias WriteBody<Outcome> = (GitRepo, GitRunner.Handle, @escaping (Outcome) -> Void) -> Void
+
+  struct QueuedWrite {
+    let write: Write
+    /// 書き込みを起こす。git の書き込みが終われば、完了を返しに行く前に `finished` を呼ぶ（順番を次へ渡す）。
+    let run: (GitRepo, GitRunner.Handle, _ finished: @escaping () -> Void) -> Void
+  }
+
+  /// 行をステージする（rename の元パスは、呼んだ時点の index に在るときだけ含める）。
+  @discardableResult
+  func stage(_ rows: [GitStatus.Row], completion: @escaping (GitWriteFailure?) -> Void) -> Write {
+    enqueue({ $0.stage(rows: rows, handle: $1, completion: $2) }, completion)
+  }
+
+  /// 行のステージを解く（rename の行は元パスの削除の側も）。
+  @discardableResult
+  func unstage(_ rows: [GitStatus.Row], completion: @escaping (GitWriteFailure?) -> Void) -> Write {
+    enqueue({ $0.unstage(rows: rows, handle: $1, completion: $2) }, completion)
+  }
+
+  /// `content` の行の変更を捨てる。追跡中は作業ツリーを index の版へ（ステージ済みは残る）、未追跡と作業ツリーに在る
+  /// intent-to-add はゴミ箱へ。行き先が `content` に見えていたものと違えば何も書かずに `contentMismatch`。
+  /// rename の元パスは、呼んだ時点の index に在るときだけ含める。git とゴミ箱は 1 枠で走り、後から投げた書き込みと
+  /// 入れ替わらない。
+  @discardableResult
+  func discard(
+    _ content: GitDiscardContent, completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    enqueue({ $0.discard(content, handle: $1, completion: $2) }, completion)
+  }
+
+  /// `content` をコミットする（`amend` なら直前のコミットを差し替える）。先にステージする行は、ステージとコミットを 1 つの
+  /// 書き込みとして続けて走らせる（間に別の書き込みが割り込まない）。index に競合が残っていれば何も書かずに
+  /// `conflictsRemain`、コミットに入るものが `content` と違えば何も書かずに `contentMismatch`。amend でメッセージが空
+  /// なら、前のメッセージのまま中身だけ差し替える。落ちたら、落ちる前に先のステージを書いたかも返す。
+  @discardableResult
+  func commit(
+    message: String, content: GitCommitContent, amend: Bool = false,
+    completion: @escaping (GitCommitOutcome) -> Void
+  ) -> Write {
+    enqueue(
+      { $0.commit(message: message, content: content, amend: amend, handle: $1, completion: $2) },
+      completion, refused: { .failed($0, stagedFirst: false) })
+  }
+
+  /// 最後のコミットを取り消す（中身はステージ済みに残る）。HEAD が `head` でなければ何も書かずに `contentMismatch`。
+  @discardableResult
+  func undoLastCommit(
+    head: GitSeenHead, completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    enqueue({ $0.undoLastCommit(head: head, handle: $1, completion: $2) }, completion)
+  }
+
+  /// 取り込む。ネット待ちごと順番に入る（取り込みは index と作業ツリーを書く）。
+  @discardableResult
+  func pull(
+    onProgress: @escaping (String) -> Void, completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    enqueue(
+      { repo, handle, done in
+        self.withFreshBranch(handle, done) {
+          repo.pull(branch: $0, onProgress: onProgress, handle: handle, completion: done)
+        }
+      }, completion)
+  }
+
+  /// 送る。並ばない。
+  @discardableResult
+  func push(
+    onProgress: @escaping (String) -> Void, completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    start(
+      Write(),
+      { repo, handle, done in
+        self.withFreshBranch(handle, done) {
+          repo.push(branch: $0, onProgress: onProgress, handle: handle, completion: done)
+        }
+      }, completion)
+  }
+
+  /// 取ってくる。並ばない。`attended` が偽なら人が見ていない裏の fetch で、その手は見ていない手になる（→ `GitRepo.fetch`）。
+  @discardableResult
+  func fetch(
+    attended: Bool = true, onProgress: @escaping (String) -> Void,
+    completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    start(
+      Write(attended: attended),
+      { $0.fetch(onProgress: onProgress, handle: $1, completion: $2) }, completion)
+  }
+
+  // MARK: - 順番と完了
+
+  private func enqueue(
+    _ body: @escaping WriteBody<GitWriteFailure?>,
+    _ completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    enqueue(body, completion, refused: { $0 })
+  }
+
+  /// 順番に入れる。走る前に止めた・管理外で断った書き込みは、その失敗を `refused` で結果にして返す。
+  private func enqueue<Outcome>(
+    _ body: @escaping WriteBody<Outcome>, _ completion: @escaping (Outcome) -> Void,
+    refused: @escaping (GitWriteFailure) -> Outcome
+  ) -> Write {
+    let write = Write()
+    guard repo != nil else { return reject(write) { completion(refused($0)) } }
+    write.dequeue = { [self] in
+      queuedWrites.removeAll { $0.write === write }
+      DispatchQueue.main.async { completion(refused(.cancelled)) }
+    }
+    queuedWrites.append(
+      QueuedWrite(write: write) { [self] repo, handle, finished in
+        body(repo, handle) { outcome in
+          finished()
+          self.complete { completion(outcome) }
+        }
+      })
+    startNextWrite()
+    return write
+  }
+
+  private func startNextWrite() {
+    guard !isWriting, let repo, !queuedWrites.isEmpty else { return }
+    let next = queuedWrites.removeFirst()
+    next.write.dequeue = nil
+    isWriting = true
+    next.write.markStarted()
+    next.run(repo, next.write.handle) { [self] in
+      isWriting = false
+      startNextWrite()
+    }
+  }
+
+  private func start(
+    _ write: Write, _ body: @escaping WriteBody<GitWriteFailure?>,
+    _ completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    guard let repo else { return reject(write, completion) }
+    write.markStarted()
+    body(repo, write.handle) { [self] failure in complete { completion(failure) } }
+    return write
+  }
+
+  private func reject(_ write: Write, _ refuse: @escaping (GitWriteFailure) -> Void) -> Write {
+    DispatchQueue.main.async { refuse(.notManaged) }
+    return write
+  }
+
+  /// 書き込みの後の status の取り直しが済んでから、`completion` を main で返す。
+  private func complete(_ completion: @escaping () -> Void) {
+    requestStatusRefresh { [self] in withExtendedLifetime(self) { completion() } }
+  }
+
+  /// 前提（upstream・detached）の判定は、取り直した status のブランチで行う（打ってすぐの外の変化を読み落とさない）。
+  /// 取り直しは観測と共有するので、書き込みの手の下では走らず、観測と同じく打ち切られうる。
+  private func withFreshBranch(
+    _ handle: GitRunner.Handle, _ done: @escaping (GitWriteFailure?) -> Void,
+    _ body: @escaping (GitStatus.Branch?) -> Void
+  ) {
+    requestStatusRefresh { [self] in
+      guard !handle.isCancelled else { return done(.cancelled) }
+      body(status?.branch)
+    }
+  }
+}

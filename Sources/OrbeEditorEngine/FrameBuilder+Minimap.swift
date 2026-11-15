@@ -214,8 +214,8 @@ private struct MinimapDecorations {
           x: x, y: placement.y(ofLine: row), width: width, height: MinimapLayout.lineHeight, color)
       }
     }
-    for deletion in marks.deletions {
-      let row = max(0, deletion.row + (deletion.atBottom ? 1 : 0) - 1)
+    for boundary in marks.deletions {
+      let row = max(0, boundary - 1)
       guard placement.lines.contains(row) else { continue }
       fill(
         x: x, y: placement.y(ofLine: row), width: width, height: MinimapLayout.lineHeight,

@@ -34,7 +34,7 @@ extension ProjectSearchPaneTests {
     let list = try list(hosted)
     hosted.window.makeFirstResponder(list)
     var window: (() -> Void)?
-    hosted.search.navigationDelay.schedule = { _, fire in window = fire }
+    hosted.search.navigation.delay.schedule = { _, fire in window = fire }
     let arrow = String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!)
     hosted.search.select(RowID(path: "a.txt", match: nil))
     list.keyDown(with: .key(arrow, []))
@@ -64,7 +64,7 @@ extension ProjectSearchPaneTests {
     pumpMain(until: { hosted.pane.document?.url == url }, "\(message): 押したものが見える", line: line)
     let responder = hosted.window.firstResponder
     held.closeWindow()
-    hosted.search.navigationKeyDidRelease()
+    hosted.search.navigation.keyDidRelease()
     held.closeWindow()
     RunLoop.main.run(until: Date())
     XCTAssertEqual(
@@ -104,7 +104,7 @@ extension ProjectSearchPaneTests {
       let held = try holding(released: released)
       let hosted = held.hosted
       let x = hosted.repo.url("x.txt")
-      let index = try XCTUnwrap(hosted.pane.shell.tabs.firstIndex { $0.id == x })
+      let index = try XCTUnwrap(hosted.pane.shell.tabs.firstIndex { $0.id == .document(x) })
       try click(hosted.pane, at: fileTabSlotCenter(hosted.pane, index))
       pumpMain(until: { !hosted.tab.group.editor.documents.contains { $0.url == x } }, "× で閉じる")
       assertTheWaitingMatchStaysClosed(

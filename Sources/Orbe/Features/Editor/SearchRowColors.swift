@@ -12,7 +12,7 @@ struct SearchRowColors {
   @MainActor static func of(_ appearance: NSAppearance) -> SearchRowColors { resolved(appearance) }
 
   private init() {
-    hit = Theme.Color.editorModified.withAlphaComponent(0.30).cgColor
+    hit = Theme.Color.editorCaution.withAlphaComponent(0.30).cgColor
     countFill = EditorStyle.fill(0.10).cgColor
   }
 }

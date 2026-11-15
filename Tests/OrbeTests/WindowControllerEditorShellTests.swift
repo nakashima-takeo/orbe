@@ -6,10 +6,12 @@ import XCTest
 
 /// 骨の窓側の結線——サイドバーの記憶は app-state から起きて全連の面へ配られ、どの連で変えても書き戻る。
 /// 隠れた連と端末だけの連の面は mount の瞬間にも根のサービスを握らない。開いていた文書は復元で戻り、
-/// 未消費の背景の連の分も含めて再保存で同じ形に戻る。
+/// 未消費の背景の連の分も含めて再保存で同じ形に戻る。見えている面が裏の fetch を欲しがるかは、面の workspace の
+/// 実効設定で決まる。
 ///
 /// 壊れると何が起きるか。再起動でサイドバーの幅と開閉が戻らない。起動時の復元で背景の連ぶんの readdir・
-/// FSEvents・git が余計に走る。再起動を重ねると一度も見なかった連の文書が消える。
+/// FSEvents・git が余計に走る。再起動を重ねると一度も見なかった連の文書が消える。自動 fetch をオフにしても
+/// 裏の fetch が続き、ssh-agent の承認を毎回求める人に 180 秒ごとに承認の窓が出る。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 @MainActor
@@ -62,7 +64,7 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     XCTAssertTrue(first.group.view.editor.sidebar.isOpen, "どの連で開いても全連に効く")
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar,
-      EditorSidebarRecord(width: 300, isOpen: true, panel: "files"),
+      EditorSidebarRecord(width: 300, isOpen: true, panel: "files", graphHeight: 198),
       "開閉は app-state へ書き戻る")
     XCTAssertEqual(AppStatePersistence.load()?.preferredLanguage, "ja", "他の項目は巻き込まない")
   }
@@ -143,5 +145,22 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     let saved = try XCTUnwrap(WorkspacePersistence.load())
     XCTAssertEqual(saved.workspaces[0].groups, [group(dir, editor: front)])
     XCTAssertEqual(saved.workspaces[1].groups, [group(dir, editor: dormant)], "未消費の状態を同じ形で書き戻す")
+  }
+
+  /// 見えているエディター面は、既定（オン）なら裏の fetch を欲しがり、面の workspace で自動 fetch をオフにするとその場で
+  /// 欲しがらなくなる。
+  func testTheBackgroundFetchFollowsTheWorkspacesAutoFetchSetting() throws {
+    let repo = try TempGitRepo()
+    let wc = launch([
+      WorkspaceState(name: "main", rootPath: repo.root, activeTab: 0, tabs: [tab(repo.dir)])
+    ])
+    wc.handleWindowCommand(.toggleEditorFace)
+    let scm = try XCTUnwrap(wc.activeTab).group.view.editor.scm
+    pumpMain(until: { scm.liveFiles?.repo != nil }, "根の git dir が分かる")
+    let autoFetch = ScmAutoFetch.shared(for: try XCTUnwrap(scm.liveFiles?.repo))
+    pumpMain(until: { autoFetch.rules.isWanted }, "既定（オン）なら欲しがる")
+
+    wc.applySetting(SettingChange(SettingKeys.scmAutoFetch, false), scope: .workspace)
+    XCTAssertFalse(autoFetch.rules.isWanted, "workspace でオフにするとその場で欲しがらない")
   }
 }

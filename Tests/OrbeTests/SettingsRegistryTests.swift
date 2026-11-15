@@ -47,6 +47,7 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(
       SettingsRegistry.descriptor(.automationEventRetentionDays).key,
       "automation-event-retention-days")
+    XCTAssertEqual(SettingsRegistry.descriptor(.scmAutoFetch).key, "scm-auto-fetch")
     XCTAssertEqual(SettingsRegistry.confKey(.fontSize), "font-size", "confKey は descriptor.key を引く")
     let keys = SettingsRegistry.all.map(\.key)
     XCTAssertEqual(Set(keys).count, SettingsRegistry.all.count, "key は全項目で一意")

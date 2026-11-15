@@ -115,7 +115,7 @@ final class DocumentLinkTests: OrbeTestCase {
     XCTAssertNil(files, "入れ替えで古い文書の結線を手放す")
   }
 
-  /// 文書が属する根は文書の実体から解く（タブの根ではない）。管理外のファイルは baseline 無し。
+  /// 文書が属する根は文書の実体から解く（連の根ではない）。管理外のファイルは baseline 無し。
   func testDocumentOutsideAnyRepositoryHasNoBaseline() throws {
     let outside = TestScratch.caseDir.appendingPathComponent(
       "orbe-outside-\(UUID().uuidString)", isDirectory: true)

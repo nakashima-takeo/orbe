@@ -33,35 +33,48 @@ extension EditorPaneView {
     layoutSubtreeIfNeeded()
   }
 
-  /// サイドバーの幅・開閉・パネルを観測して置き直す。閉じれば行内入力は終わり、検索パネルの見え隠れで一致の地を押し直す。
-  /// この面の検索パネルにあった焦点は、パネルが隠れたら面の行き先へ戻す（サイドバーはアプリ全体で 1 つなので、全連の面が
-  /// 同時に受ける——焦点を持っていた面だけが動く）。
+  /// サイドバーの幅・開閉・パネルを観測して置き直す。閉じれば行内入力は終わり、検索パネルの見え隠れで一致の地を押し直し、
+  /// ソース管理パネルの見え隠れで行とグラフを組むかを決め直す。この面のパネルにあった焦点は、そのパネルが隠れたら面の行き先へ
+  /// 戻す（サイドバーはアプリ全体で 1 つなので、全連の面が同時に受ける——焦点を持っていた面だけが動く）。
   func observeSidebar() {
     withObservationTracking {
       _ = sidebar.width
       _ = sidebar.isOpen
       _ = sidebar.panel
     } onChange: { [weak self] in
-      // 変わる直前に呼ばれるので、焦点が検索パネルにあったかはここで取る。
-      let hadPanelFocus = MainActor.assumeIsolated { self?.focusIsInSearchPanel == true }
+      // 変わる直前に呼ばれるので、焦点がどのパネルにあったかはここで取る。
+      let held = MainActor.assumeIsolated { self?.panelHoldingFocus }
       DispatchQueue.main.async {
         guard let self else { return }
         self.needsLayout = true
         if !self.sidebar.isOpen || self.sidebar.panel != .files { self.tree.cancelNew() }
-        if hadPanelFocus, !self.showsSearchPanel { self.reclaimSidebarFocus() }
+        if let held, !self.sidebar.isOpen || self.sidebar.panel != held {
+          self.reclaimSidebarFocus()
+        }
+        self.updateSourceControlShown()
         self.pushFindGround()
         self.observeSidebar()
       }
     }
   }
 
-  /// 列の頭の高さ（ファイルタブ行 ＋ 下の hairline、文書があればパンくずも）。
-  var headerHeight: CGFloat {
-    Theme.Layout.editorFileTabs + Theme.Stroke.hairline
-      + (document != nil ? Theme.Layout.editorBreadcrumb : 0)
+  /// 焦点を持っているサイドバーのパネル（検索パネル・ソース管理パネルの入力欄か列）。
+  var panelHoldingFocus: EditorSidebarState.Panel? {
+    switch sidebar.panel {
+    case .files: return nil
+    case .search: return focusIsInSearchPanel ? .search : nil
+    case .sourceControl: return focusIsInSourceControl ? .sourceControl : nil
+    }
   }
 
-  /// 本体（文書があればテキスト面、無ければ空状態）の矩形。
+  /// 列の頭の高さ（タブ行 ＋ 下の hairline、本体がパンくずを持てばパンくずも——空状態だけ持たない）。SwiftUI 側の
+  /// パンくずの出し分けも同じ事実（`EditorShellModel.activeName`、本体の種類から作る）で決まる。
+  var headerHeight: CGFloat {
+    Theme.Layout.editorFileTabs + Theme.Stroke.hairline
+      + (body.hasBreadcrumb ? Theme.Layout.editorBreadcrumb : 0)
+  }
+
+  /// 本体（文書の面・diff の面・文字だけの器）の矩形。
   var bodyRect: NSRect {
     NSRect(
       x: sideWidth, y: headerHeight, width: max(0, bounds.width - sideWidth),
@@ -82,6 +95,7 @@ extension EditorPaneView {
   override func layout() {
     // 面の大きさが右列の幅を決め、検索バーの制約はその幅から置く——制約は super.layout() が当てるので、その前に置く。
     document?.surface.view.frame = bodyRect
+    if let diff { layoutDiff(diff) }
     placeSearchBar()
     super.layout()
     let sideWidth = self.sideWidth
@@ -89,7 +103,7 @@ extension EditorPaneView {
       x: 0, y: 0, width: min(sideWidth, bounds.width), height: bounds.height)
     headerHost.frame = NSRect(
       x: sideWidth, y: 0, width: max(0, bounds.width - sideWidth), height: headerHeight)
-    emptyHost.frame = bodyRect
+    faceHost.frame = bodyRect
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない列に出すとレールの右 1pt を
     // 覆ってリサイズカーソルだけが出る。
     sidebarHandle.isHidden =
@@ -97,5 +111,7 @@ extension EditorPaneView {
     sidebarHandle.frame = NSRect(
       x: sideWidth - Theme.Stroke.hairline - Theme.Layout.editorSidebarHandle / 2, y: 0,
       width: Theme.Layout.editorSidebarHandle, height: bounds.height)
+    // 待ちは本体の面の枠を置き終えた後に通す——文書は見えている範囲が、diff は最初の位置が、枠で決まる。
+    prepareBodyIfVisible()
   }
 }

@@ -16,7 +16,7 @@ extension SettingsPaletteModel {
     case .notificationSound: return .notificationSound
     case .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink,
       .notificationSoundVolume, .notificationSoundEnabled,
-      .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration,
+      .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration, .scmAutoFetch,
       .automationRunRetentionCount, .automationRunRetentionDays, .automationEventRetentionDays:
       return .root  // stepper/toggle であって drillIn でない
     case .notificationSoundCustomDone, .notificationSoundCustomWaiting:

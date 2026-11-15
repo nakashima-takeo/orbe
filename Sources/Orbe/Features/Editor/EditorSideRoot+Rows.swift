@@ -145,10 +145,10 @@ extension GitStatus.Badge {
     }
   }
 
-  /// バッジと、その行の名前の色。M は変更の黄、A / U は追加の緑、競合は conflict。
+  /// バッジと、その行の名前の色。M は git の変更、A / U は git の追加、競合は conflict。
   var color: Color {
     switch self {
-    case .modified: return Color.theme.editorModified
+    case .modified: return Color.theme.diffModified
     case .added, .untracked: return Color.theme.diffAdded
     case .conflicted: return Color.theme.conflict
     }

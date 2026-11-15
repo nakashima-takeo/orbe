@@ -32,5 +32,9 @@ extension WindowController {
     NSApp.appearance = settings[SettingKeys.theme].appearance
     GuiConfig.regenerate(from: settings)
     scheduleConfigReload()
+    // エディターの面は使う時点で自分の workspace の実効値を読む。各面に決め直させる。
+    for workspace in workspaces {
+      for tab in workspace.tabs { tab.group.view.editor.settingsDidChange() }
+    }
   }
 }

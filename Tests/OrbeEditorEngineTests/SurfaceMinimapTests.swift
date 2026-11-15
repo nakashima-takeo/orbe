@@ -130,7 +130,7 @@ final class SurfaceMinimapTests: EngineTestCase {
       let cached = RenderThread.shared.performAndWait { $0.slot(id)?.minimapCells.cached ?? [] }
       XCTAssertTrue(cached.contains(1), "前提: 打つ行より後ろのまとまりを覚えている")
       edited.surface.selectedRange = NSRange(location: edited.document.text.lineStart(5), length: 0)
-      edited.surface.perform(.insert(inserted))
+      edited.surface.editor.perform(.insert(inserted))
       let text = edited.document.text.substring(
         NSRange(location: 0, length: edited.document.text.length))
       edited.surface.setHighlights(matches(text), for: .findMatch)

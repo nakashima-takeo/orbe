@@ -39,14 +39,14 @@ final class GitRunnerStreamTests: OrbeTestCase {
   }
 
   private func stream(_ args: [String], cwd: String? = nil, into recorder: Recorder)
-    -> GitRunner.Stream
+    -> GitRunner.Handle
   {
     runner.stream(
       args, cwd: cwd ?? fixture.root, onOutput: recorder.receive, completion: recorder.complete)
   }
 
   /// hook が返らない commit を流す（無出力のまま止まる実行）。
-  private func streamHangingCommit(body: String, into recorder: Recorder) throws -> GitRunner.Stream
+  private func streamHangingCommit(body: String, into recorder: Recorder) throws -> GitRunner.Handle
   {
     try fixture.installHook("pre-commit", body: body)
     try "changed\n".write(

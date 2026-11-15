@@ -62,6 +62,21 @@ extension ControlServer {
     return target.controlOpenFile(tabId: tabId, path: path)
   }
 
+  private static let diffKinds: [String: EditorDiff.Kind] = [
+    "workingTree": .workingTree, "staged": .staged,
+  ]
+
+  static func openDiff(_ target: ControlTarget, _ p: ControlParams) throws(ControlError)
+    -> Result<Any, ControlError>
+  {
+    let tabId = try p.int("tabId")
+    let path = try p.optionalString("path")
+    let kind = try p.string("kind")
+    guard let path, !path.isEmpty else { throw p.missing("path") }
+    guard let diffKind = diffKinds[kind] else { throw p.invalid("kind") }
+    return target.controlOpenDiff(tabId: tabId, path: path, kind: diffKind)
+  }
+
   // MARK: - hook の報告
 
   /// `report_agent`。報告者は接続の向こうのプロセスなので、接続が取った報告者のグループを報告に添えて main で適用する

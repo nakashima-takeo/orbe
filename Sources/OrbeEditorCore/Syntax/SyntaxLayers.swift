@@ -5,17 +5,18 @@ import TreeSitter
 /// UTF-16（バイトはその 2 倍）。構文の裏の仕事（`SyntaxWorker`）の状態としてだけ使う。
 ///
 /// 注入は tree-sitter の約束どおりに扱う——注入 1 つにつき木 1 本、規則が束ねると指定したものだけを（生んだ層・言語）ごとに
-/// 1 本に束ねる。注入の層は、自分を生んだマッチで存否が決まり、作り直す区画の中で問い直す（深さの順に、マッチが区画に
+/// 1 本に束ねる。注入の層は、自分を生んだマッチで存否が決まり、作り直す区間の中で問い直す（深さの順に、マッチがその区間に
 /// 掛かる子の層を外し、見つかった注入のうち言語と注入の範囲が同じものは木と孫を持ったまま戻す）。
 ///
-/// 色は区画（本文の `block` 字ごとの固定の格子）ごとに問う。構文木が誤りを含む層では、区画の前後 `margin` 字の枠に収まる
-/// マッチだけを問う——誤りを含む木の問い合わせは後ろに続く文書の長さに比例して重くなるので、その重さを枠で塞ぐ。枠は区画で
-/// 決まるので、同じ本文の同じ字は、どこから作り直しても同じ色になる。注入の問い合わせには枠を掛けない（誤りを含む木でも
-/// 重くならず、枠で見えないマッチがあると、区画によって注入の存否の答えが食い違う）。
+/// 色は、区間を本文の固定の格子（先頭から `block` 字ごとの切れ目）で切り、切った区間ごとに問う。構文木が誤りを含む層では、
+/// 切った区間を含む格子の目の前後 `margin` 字の枠に収まるマッチだけを問う——誤りを含む木の問い合わせは後ろに続く文書の
+/// 長さに比例して重くなるので、その重さを枠で塞ぐ。枠は格子で決まるので、同じ本文の同じ字は、どこから作り直しても同じ色に
+/// なる。注入の問い合わせには枠を掛けない（誤りを含む木でも重くならず、枠で見えないマッチがあると、格子の目によって注入の
+/// 存否の答えが食い違う）。
 final class SyntaxLayers {
-  /// 色を問う区画の大きさ（UTF-16）。
+  /// 格子の目の大きさ（UTF-16）。
   static let block = 16_384
-  /// 誤りを含む層で、区画の前後に取る枠の余白（UTF-16）。
+  /// 誤りを含む層で、格子の目の前後に取る枠の余白（UTF-16）。
   static let margin = 16_384
   /// 注入の深さの上限。この深さの層は注入を問わない。
   static let maximumDepth = 4
@@ -52,7 +53,7 @@ final class SyntaxLayers {
 
   /// 編集（古い順）を構文木へ写し、根を 1 回だけ差分で解析する。根の構文木が変わった区間と編集の区間（どちらも `text`
   /// の上）を返す。削除の編集の区間は、消した位置の前後の 1 字ずつ（消した位置の行を作り直す範囲に入れるため）。編集で
-  /// 部分が丸ごと消えた束ねた層もここで解析し直す——消えた部分はもうどの区画にも掛からないので、残りの部分の構文の変化は
+  /// 部分が丸ごと消えた束ねた層もここで解析し直す——消えた部分はもう色を問うどの区間にも掛からないので、残りの部分の構文の変化は
   /// 問い直しでは見つからない。
   func apply(_ edits: some Collection<VersionedEdit>, text: TextRope) -> IndexSet {
     self.text = text
@@ -81,7 +82,7 @@ final class SyntaxLayers {
   }
 
   /// 区間の役割の区間——区間の注入を問い直してから、層ごとの capture を優先の順に塗り重ねて平らにした、重ならない昇順の
-  /// 列。役割の無い字は含まない。答えは区間の切り方に依らない（区間を区画で切って区画ごとに問い、区間の外の字の役割は
+  /// 列。役割の無い字は含まない。答えは区間の切り方に依らない（区間を格子で切り、切った区間ごとに問い、区間の外の字の役割は
   /// 答えない）。
   func roles(in range: NSRange) -> [HighlightSpan] {
     var result: [HighlightSpan] = []
@@ -140,10 +141,10 @@ final class SyntaxLayers {
 
   // MARK: - 注入の問い直し
 
-  /// 区画の中で、深さの順に各層の注入を問い直す。深さごとに、マッチが区画に掛かる子の層をまとめて外し、区画と交わる層と
+  /// 区間 `piece` の中で、深さの順に各層の注入を問い直す。深さごとに、マッチが区間に掛かる子の層をまとめて外し、区間と交わる層と
   /// 外した子の親の注入を問い直して、言語と注入の範囲が同じ子は木と孫を持ったまま戻す。戻らなかった子は子孫ごと外す。外した
-  /// 子の親は、区画と交わらなくても問い直す——束ねた層の節は部分の隙間をまたげるので、親の部分が無い区画に子のマッチが
-  /// 掛かることがある。そこで親に問わないと、子を戻せずに外し、隣の区画で作り直すのを繰り返す。
+  /// 子の親は、区間と交わらなくても問い直す——束ねた層の節は部分の隙間をまたげるので、親の部分が無い区間に子のマッチが
+  /// 掛かることがある。そこで親に問わないと、子を戻せずに外し、隣の区間で作り直すのを繰り返す。
   private func resolveInjections(in piece: Range<Int>) {
     var parents = [placedRoot]
     for depth in 0..<Self.maximumDepth {
@@ -171,7 +172,7 @@ final class SyntaxLayers {
     }
   }
 
-  /// `parent` の注入を区画の中で問い、子の層を置く。外した子（`taken`）のうち言語と注入の範囲が同じものは戻す。
+  /// `parent` の注入を区間 `piece` の中で問い、子の層を置く。外した子（`taken`）のうち言語と注入の範囲が同じものは戻す。
   private func resolveChildren(
     of parent: Placed, in piece: Range<Int>, restoring taken: inout [RestoreKey: [Placed]]
   ) {
@@ -197,9 +198,9 @@ final class SyntaxLayers {
     resolveCombined(of: parent.layer, in: piece, found: combinedParts)
   }
 
-  /// 束ねる層の、区画に掛かるマッチの部分を差し替える。部分が変わった層はその場で解析し直す——束ねた層では、区画の部分が
-  /// 消えると区画の外の構文が変わり、その層がもう区画と交わらないこともあるので、変わった区間をここで足す。部分が空に
-  /// なった層は外す。
+  /// 束ねる層の、区間 `piece` に掛かるマッチの部分を差し替える。部分が変わった層はその場で解析し直す——束ねた層では、
+  /// 区間の中の部分が消えると区間の外の構文が変わり、その層がもう区間と交わらないこともあるので、構文木が変わった区間は
+  /// この関数の中で「作り直していない範囲」へ足す。部分が空になった層は外す。
   private func resolveCombined(
     of parent: SyntaxLayer, in piece: Range<Int>, found: [Grammar: [InjectionPart]]
   ) {
@@ -230,7 +231,7 @@ final class SyntaxLayers {
     }
   }
 
-  /// `parent` の注入のうち、マッチが区画に掛かるもの。
+  /// `parent` の注入のうち、マッチが区間 `piece` に掛かるもの。
   private func injections(of parent: Placed, in piece: Range<Int>) -> [Injection] {
     guard let bytes = parent.bytes(of: piece), let query = parent.layer.rules.injections,
       let content = query.content, let tree = parent.layer.tree
@@ -285,7 +286,7 @@ final class SyntaxLayers {
 
   // MARK: - 色
 
-  /// 区画の役割。区画と交わる層ごとに capture を集め、優先の順に塗り重ねる。注入の層の capture は注入の範囲の中に切る。
+  /// 区間 `piece` の役割。区間と交わる層ごとに capture を集め、優先の順に塗り重ねる。注入の層の capture は注入の範囲の中に切る。
   private func paint(_ piece: Range<Int>) -> [HighlightSpan] {
     var captures: [PaintedCapture] = []
     for placed in [placedRoot] + injections.intersecting(piece) {
