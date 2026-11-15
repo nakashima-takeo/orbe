@@ -58,7 +58,7 @@ enum TaskPaletteAutomationError: Equatable {
   }
 }
 
-/// ⌘⇧X の提案タブの状態（@Observable）。自動化・候補・回の記録はストアから、一巡の有無・次の時刻は走らせ役から毎回読み、
+/// ⌘⇧X の提案タブの状態（@Observable）。自動化・候補・回の記録はストアから、一巡の有無は走らせ役から毎回読み、
 /// 写さない。ここが持つのは棚と候補の一覧の状態（入力・同一性での選択）・居場所・失敗だけ。候補の一覧の選択は覚えている行で、
 /// それが「選ばれている」のは候補の一覧に居る間だけ（印・詳細・さばく操作はすべて `selectedProposal` を読む）。
 /// ストアが変わったら `reconcile()` で選択を付け直す（カードの `.onChange` が届ける）。
@@ -105,7 +105,7 @@ enum TaskPaletteAutomationError: Equatable {
 
   // MARK: - 行
 
-  /// 人の判断待ちの提案と、それを出す棚の受信。
+  /// 人の判断待ちの提案と、それを出す棚の自動化の ID。
   private var shelved: [(proposal: AutomationProposal, shelf: Int)] { store.shelvedProposals }
 
   /// ヘッダーのタブの件数（入力の絞り込みに左右されない）。
@@ -115,7 +115,7 @@ enum TaskPaletteAutomationError: Equatable {
   var shelfRows: [TaskPaletteAutomationShelfRow] {
     let counts = Dictionary(grouping: shelved, by: \.shelf).mapValues(\.count)
     return [TaskPaletteAutomationShelfRow(id: .all, automation: nil, count: shelved.count)]
-      + store.automations.filter(\.judges)
+      + store.automations.filter(\.hasJudges)
       .sorted { $0.id < $1.id }.map {
         TaskPaletteAutomationShelfRow(
           id: .automation($0.id), automation: $0, count: counts[$0.id] ?? 0)

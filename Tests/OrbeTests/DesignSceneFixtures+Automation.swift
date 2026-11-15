@@ -3,7 +3,8 @@ import OrbeTestSupport
 
 @testable import Orbe
 
-/// 見本の自動化 1 つ。ストアの変異の口（作る・ノードの回の確定・止める）を通して DB に置く——見本専用の口を本番に足さない。
+/// 見本の自動化 1 つ。ストアの変異の口（作る・出力へ行を足す・読んだ位置を進める・ノードの回の確定・止める）を通して DB に置く
+/// ——見本専用の口を本番に足さない。
 struct AutomationSample {
   var definition: AutomationDefinition
   var createdAt: Date

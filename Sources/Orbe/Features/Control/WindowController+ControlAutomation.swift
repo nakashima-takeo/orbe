@@ -214,7 +214,7 @@ extension WindowController {
   }
 
   /// 定義（ノードに `id` を添えた外の形）と版に、止めているか・ノードの今の鍵ごとの状態（走っているか・ノード自身を止めているか・
-  /// 最新の回・次の時刻・読めば取る行の数・決まりを外した印。判定は今の定義が出した候補への人の判断の数も）を足す。判定のノードを
+  /// 最新の回・次の時刻・読めば取る行の数・形式エラーの印。判定は今の定義が出した候補への人の判断の数も）を足す。判定のノードを
   /// 持つ自動化にだけタスク候補の欄を付ける。
   private func automationJSON(_ automation: Automation) throws(AutomationError) -> [String: Any] {
     var nodeObjects: [String: Any] = [:]
@@ -245,7 +245,7 @@ extension WindowController {
       "paused": automation.paused,
       "nodes": nodeObjects,
     ]
-    if automation.judges {
+    if automation.hasJudges {
       json["taskCandidates"] = [
         "openProposals": automationStore.shelvedProposals(of: automation.id).count
       ]

@@ -67,7 +67,7 @@ extension AutomationDatabase {
         AND id NOT IN (SELECT proposal_id FROM settlements)
       """, [])
     // 回の記録: ノードごとに、新しい方から回数の内か期間の内（始まりの時刻で見る）のものを残す。外したノードのものは残さない。
-    // 外していないノードの最新の成功した回・外した印の回・残っている候補を出した回は消さない（最新の回は回数の内にいつも入る）。
+    // 外していないノードの最新の成功した回・形式エラーの印の回・残っている候補を出した回は消さない（最新の回は回数の内にいつも入る）。
     let stale = """
       SELECT id FROM (
         SELECT r.id, r.started_at, o.removed_at,
@@ -141,7 +141,7 @@ extension AutomationDatabase {
           FROM runs)
         WHERE n <= ?1 OR started_at >= ?2 GROUP BY node_id)
       """
-    let oldest = "coalesce((SELECT at FROM oldest WHERE node_id = i.node_id), 9223372036854775807)"
+    let oldest = "coalesce((SELECT at FROM oldest WHERE node_id = i.node_id), \(Int64.max))"
     let referenced = """
       (v.id IN (SELECT version_id FROM run_item_inputs)
         OR v.id IN (SELECT version_id FROM proposals WHERE version_id IS NOT NULL)

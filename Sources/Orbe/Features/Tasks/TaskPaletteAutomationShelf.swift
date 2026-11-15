@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 提案タブの左の棚。先頭に「すべて」、続いて自動化ごとに名前・件数・2 行目（次の判定 / 一時停止中 / 更新中…と、失敗したノード）。
-/// 候補の無い自動化は減光する。下に、自動化を足す・変える口が Home のボードであることを添える（この画面では定義を変えない）。
+/// 提案タブの左の棚。先頭に「すべて」、続いて自動化ごとに名前・件数・2 行目（前回の判定の成否の印と時刻、右に更新中 /
+/// 一時停止中）。下に、自動化を足す・変える口が Home のボードであることを添える（この画面では定義を変えない）。
 struct TaskPaletteAutomationShelf: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -44,7 +44,7 @@ struct TaskPaletteAutomationShelf: View {
   }
 }
 
-/// 棚の 1 段。上に印・名前・件数、下に前回の判定（成否の印と時刻）と今の状態（更新中・一時停止中）。印はどの受信も共通（出どころの
+/// 棚の 1 段。上に印・名前・件数、下に前回の判定（成否の印と時刻）と今の状態（更新中・一時停止中）。印はどの自動化も共通（出どころの
 /// 種類は知らない）。棚に焦点が無い間は、選択の地を薄くする（選んでいるが、キーが届く場所ではない）。
 private struct TaskPaletteAutomationShelfRowView: View {
   let row: TaskPaletteAutomationShelfRow

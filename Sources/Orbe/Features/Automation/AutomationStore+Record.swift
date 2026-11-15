@@ -18,7 +18,7 @@ struct AutomationRecording {
     self.db = db
   }
 
-  /// 確定する。成功した回は読んだ位置を進めて持ち越しを載せ、役割ごとの結果を書く。どちらの回も記録・回の履歴・外した印を書く。
+  /// 確定する。成功した回は読んだ位置を進めて持ち越しを載せ、役割ごとの結果を書く。どちらの回も記録・回の履歴・形式エラーの印を書く。
   mutating func record(_ run: AutomationNodeRun, _ memory: inout AutomationMemory) throws
     -> AutomationRecorded
   {

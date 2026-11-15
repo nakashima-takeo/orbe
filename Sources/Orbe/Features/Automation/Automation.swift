@@ -32,7 +32,7 @@ struct Automation: Equatable, Identifiable {
   }
 
   /// 判定のノードを持つか。タスク候補の棚はこれを持つ自動化の単位。
-  var judges: Bool { !graph.judges.isEmpty }
+  var hasJudges: Bool { !graph.judges.isEmpty }
 
   /// ノードの状態。グラフのノードはいつも状態を持つ。
   func state(_ nodeId: AutomationNodeID) -> AutomationNodeState {

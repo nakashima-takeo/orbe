@@ -280,8 +280,7 @@ final class AutomationTrial {
       try store.give(rows, as: writer, of: id, at: production.now())
       wrote = writer
       if given.fetched {
-        let given = try store.latestRows(of: entry, in: id, count: rows.count)
-        passes[entry] = [.given(given)]
+        passes[entry] = [.given(try store.latestRows(of: entry, in: id, count: rows.count))]
       }
     }
     guard !plan.targets.isEmpty else { return end(failure: nil) }
