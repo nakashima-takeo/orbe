@@ -177,8 +177,8 @@ extension AutomationDatabase {
 }
 
 extension AutomationDatabase {
-  /// 受け手 `node` が今読めば取る行の数と、そのどれかが古さの上限を過ぎる最も早い時刻。`closed` はリンクが判定の判断待ちで
-  /// ない覚えている候補のリンクか。
+  /// 受け手 `node` が今読めば取る行の数と、そのどれかが古さの上限か出来事の残す期間を過ぎる最も早い時刻。`closed` はリンクが
+  /// 判定の判断待ちでない覚えている候補のリンクか。
   func pending(_ node: AutomationGraph.Node, closed: @escaping (String) -> Bool, now: Date) throws
     -> AutomationPending
   {
@@ -186,8 +186,17 @@ extension AutomationDatabase {
       node, baseline: nil, context: AutomationIntake.Context(closed: closed, now: now)
     ).taken
     let ages = Dictionary(uniqueKeysWithValues: node.inputs.map { ($0.from, $0.maxAgeHours) })
+    var eventDays: [AutomationNodeID: Int] = [:]
+    for from in Set(taken.filter { $0.table == .event }.map(\.from)) {
+      eventDays[from] = try self.eventDays(of: from)
+    }
     let expiries = taken.compactMap { row in
-      ages[row.from].flatMap { $0 }.map { row.at.addingTimeInterval(TimeInterval($0) * 3600) }
+      [
+        ages[row.from].flatMap { $0 }.map { row.at.addingTimeInterval(TimeInterval($0) * 3600) },
+        row.table == .event
+          ? eventDays[row.from].map { row.at.addingTimeInterval(TimeInterval($0) * Self.day) }
+          : nil,
+      ].compactMap { $0 }.min()
     }
     return AutomationPending(count: taken.count, expiresAt: expiries.min())
   }

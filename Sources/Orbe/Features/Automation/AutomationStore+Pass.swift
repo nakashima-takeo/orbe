@@ -88,12 +88,12 @@ extension AutomationStore {
 }
 
 extension AutomationStore {
-  /// 数えた行のどれかが古さの上限を過ぎる最も早い時刻（どの受け手でも）。
+  /// 数えた行のどれかが古さの上限か出来事の残す期間を過ぎる最も早い時刻（どの受け手でも）。
   var nextPendingExpiry: Date? {
     automations.flatMap { $0.states.values.compactMap(\.pending.expiresAt) }.min()
   }
 
-  /// 数えた行が古さの上限を過ぎた（`now` が過ぎる時刻より後の）受け手の「読めば取る行」の数を数え直す。
+  /// 数えた行が古さの上限か出来事の残す期間を過ぎた（`now` が過ぎる時刻より後の）受け手の「読めば取る行」の数を数え直す。
   func recountExpired(now: Date) throws(AutomationError) {
     let expired = automations.map { automation in
       (

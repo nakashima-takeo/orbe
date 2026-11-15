@@ -177,15 +177,18 @@ extension AutomationDatabase {
     "(SELECT max(id) FROM item_versions WHERE item_id = \(item))"
   }
 
-  /// 出す側のノードの出来事を残す期間の始まり（これより前に作られた出来事は期限を過ぎた）。期間はノードの `retention_days`、
-  /// 無ければ今の設定の値。
-  func eventCutoff(of nodeId: AutomationNodeID, now: Date) throws -> SQLiteValue {
+  /// 出す側のノードの出来事を残す日数。ノードの `retention_days`、無ければ今の設定の値。
+  func eventDays(of nodeId: AutomationNodeID) throws -> Int {
     let days =
       try db.select(
         "SELECT retention_days FROM nodes WHERE id = ?", [.integer(Int64(nodeId.rawValue))]
       ) { $0.optionalInt64(at: 0).map(Int.init) }.first ?? nil
-    return Self.instant(
-      now.addingTimeInterval(-TimeInterval(days ?? retention().eventDays) * Self.day))
+    return days ?? retention().eventDays
+  }
+
+  /// 出す側のノードの出来事を残す期間の始まり（これより前に作られた出来事は期限を過ぎた）。
+  func eventCutoff(of nodeId: AutomationNodeID, now: Date) throws -> SQLiteValue {
+    Self.instant(now.addingTimeInterval(-TimeInterval(try eventDays(of: nodeId)) * Self.day))
   }
 
   /// 時刻 `now` に、出したノードの残す期間（ノードの `retention_days`、無ければ今の設定の値）を過ぎた出来事の ID を選ぶ SQL と、
