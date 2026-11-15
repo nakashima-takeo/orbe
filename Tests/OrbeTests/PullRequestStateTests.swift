@@ -160,7 +160,7 @@ final class PullRequestStateTests: OrbeTestCase {
       "取ってきても ref は書かない")
   }
 
-  /// 取りに行く remote が無ければ、取れなかったとして理由を持つ。再読込で求め直す。
+  /// 取りに行く remote が無ければ、両端は取れなかった状態になり、理由を持つ。読み直しで求め直す。
   func testBoundsWithoutARemoteFailAndAReloadRetries() throws {
     let repo = try TempGitRepo()
     let state = watchedState()
@@ -172,7 +172,7 @@ final class PullRequestStateTests: OrbeTestCase {
     guard case .failed(_, .commitsMissing) = state.bounds else { return XCTFail("\(state.bounds)") }
 
     state.reload()
-    guard case .fetching = state.bounds else { return XCTFail("再読込で求め直す: \(state.bounds)") }
+    guard case .fetching = state.bounds else { return XCTFail("読み直しで求め直す: \(state.bounds)") }
   }
 }
 

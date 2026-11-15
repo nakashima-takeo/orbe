@@ -36,7 +36,7 @@ extension EditorDiffTests {
     return state
   }
 
-  /// rename したファイルは元のパスのマージベースの版と比べ、両側とも読むだけ。PR に push があって両端が変われば、新しい
+  /// rename したファイルは、マージベースの版の元のパスと比べ、両側とも読むだけ。PR に push があって両端が変われば、新しい
   /// 先頭の本文で作り直す。
   func testAPullRequestDiffComparesTheMergeBaseAndFollowsANewHead() throws {
     let base = repo.head()

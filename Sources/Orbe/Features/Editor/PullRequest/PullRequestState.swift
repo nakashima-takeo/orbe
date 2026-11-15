@@ -1,12 +1,12 @@
 import Foundation
 
-/// 状態の変化を受ける者（その PR を見ている worktree の今の PR・PR の diff）。
+/// 状態の変化を受ける者（その PR を見ている worktree の今の PR と、PR の diff）。
 @MainActor
 protocol PullRequestStateObserver: AnyObject {
   func pullRequestStateDidChange(_ state: PullRequestState)
 }
 
-/// PR ごとの状態——最後に読めた中身、確認済み（GitHub が言った値と、書いている途中の値）、diff の両端、最後の失敗。手元の
+/// PR ごとの状態——最後に読めた中身、確認済み（GitHub が返した値と、書いている途中の値）、diff の両端、最後の失敗。手元の
 /// リポジトリ（`git-common-dir`）と PR の同一性ごとに 1 つで、アプリが動いている間持つ。PR のパネル・PR の diff タブ・
 /// タブ行のチェックが同じものを見るので、確認済みが面やウインドウで食い違わない。
 ///
@@ -21,7 +21,7 @@ final class PullRequestState {
     let id: GitHubItemID
   }
 
-  /// PR が比べる両端のコミット（GitHub の中身の、基準のベース側のコミットと PR の先頭のコミット）。
+  /// PR が比べる両端のコミット（GitHub が返した中身の、基準のベース側のコミットと PR の先頭のコミット）。
   struct Ends: Hashable {
     let base: String
     let head: String
@@ -204,7 +204,7 @@ final class PullRequestState {
   // MARK: - diff の両端
 
   /// 中身の両端に対する diff の両端を求める（見ている者がいて、中身とリポジトリがあり、その両端でまだ求めていないとき）。
-  /// マージベースを求め、どちらかのコミットが手元に無いと返ったときだけ、両端を取りに行ってもう一度求める。
+  /// マージベースを求め、どちらかのコミットが手元に無いと返ったときだけ、両端のコミットを取りに行ってもう一度求める。
   private func resolveBounds() {
     guard isWatched, let content, let repo else { return }
     let ends = Ends(base: content.baseCommit, head: content.headCommit)

@@ -56,7 +56,7 @@ final class BranchPullRequestTests: OrbeTestCase {
     pumpMain(until: { pullRequest.answer != .reading }, "答えが出る")
   }
 
-  /// 既定のブランチと、ブランチに居ない worktree では GitHub に問い合わせず、理由だけを出す。
+  /// 既定のブランチに居る worktree と、どのブランチにも居ない worktree では GitHub に問い合わせず、理由だけを出す。
   func testTheDefaultBranchAndDetachedHeadAreNotAsked() {
     let pullRequest = watch()
     settled(pullRequest)
@@ -67,8 +67,8 @@ final class BranchPullRequestTests: OrbeTestCase {
     XCTAssertEqual(lookups, [])
   }
 
-  /// open の PR が無ければ（閉じた PR だけでも）作成の入口の材料になり、ブランチが GitHub に無いと確かめられたときだけ
-  /// 「無い」になる。
+  /// open の PR が無ければ（閉じた PR だけでも）、答えは作成の入口の材料になる。公開済みかは、ブランチが GitHub に無いと
+  /// 確かめられたときだけ「無い」になる。
   func testWithoutAnOpenPullRequestTheCreationEntryAsksWhetherTheBranchIsPublished() {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     let ref = GitHubBranchRef(repo: me, branch: "feat")
@@ -90,7 +90,7 @@ final class BranchPullRequestTests: OrbeTestCase {
     XCTAssertEqual(creation.url, ref.pullRequestCreationURL)
   }
 
-  /// open の最新の PR を、その PR ごとの状態として指し、中身を読む。手元の HEAD が PR の先頭と同じなら一致。
+  /// open の最新の PR を、その PR の PR ごとの状態（`PullRequestState`）で答え、中身を読む。手元の HEAD が PR の先頭と同じなら一致とする。
   func testAnOpenPullRequestIsReadAndTheDriftIsCounted() throws {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     try repo.write("b.txt", "b\n")
@@ -117,7 +117,7 @@ final class BranchPullRequestTests: OrbeTestCase {
     XCTAssertEqual(lookups, ["feat"], "HEAD が動いただけなら GitHub に問い合わせない")
   }
 
-  /// ブランチを切り替えたら引き直し、前のブランチの答えは出さない。
+  /// ブランチを切り替えたら GitHub に問い直し、前のブランチの答えは出さない。
   func testSwitchingTheBranchLooksUpTheNewBranch() {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     answers["feat"] = .unavailable(.notGitHub)

@@ -5,7 +5,7 @@ import Foundation
 /// ごとの状態（`PullRequestState`）が持つ——ブランチを切り替えても、開いている PR の diff タブはその PR を見続ける。
 ///
 /// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。読み直すきっかけは、見ている者が現れた・`reload`・
-/// 今のブランチ名が変わった・Orbe の中のネット操作が終わった・リモート追跡の ref が動いて、このブランチの push 先の追跡
+/// 今のブランチ名が変わった・Orbe の中のネット操作が終わった・リモート追跡の ref が動き、このブランチの push 先の追跡
 /// ref か PR のベースブランチの追跡 ref の値が前と変わった、のどれか。読んでいる間に次のきっかけが来たら、終わった後に
 /// 1 回だけ読み直す。手元の HEAD が動いただけなら、GitHub に問い合わせずに手元とのずれを数え直す。
 @MainActor @Observable
@@ -207,8 +207,8 @@ final class BranchPullRequest {
     }
   }
 
-  /// 読み終えた。読んでいる間にブランチが変わっていれば答えを捨て（前のブランチの答えは出さない）、変わっていたか、
-  /// きっかけが来ていれば読み直す。
+  /// 読み終えた。読んでいる間にブランチが変わっていれば答えを捨てる（前のブランチの答えは出さない）。ブランチが
+  /// 変わっていたか、きっかけが来ていれば読み直す。
   private func finish(_ next: Answer, _ name: String) {
     isReading = false
     let current = files?.status?.branch?.name

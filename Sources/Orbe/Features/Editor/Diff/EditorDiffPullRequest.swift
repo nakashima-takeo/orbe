@@ -1,7 +1,7 @@
 import Foundation
 
 /// PR の diff の出どころ——古い側は PR のマージベースのコミットの版（rename なら元のパス）、新しい側は PR の先頭のコミットの
-/// 版。両側とも読むだけ。開いたときの PR ごとの状態を持ち続け、ブランチを切り替えても同じ PR の diff を出す。PR に push が
+/// 版。両側とも読むだけ。diff を開いたときの PR の、PR ごとの状態を持ち続け、ブランチを切り替えても同じ PR の diff を出す。PR に push が
 /// あって両端が変わったら、新しい両端の版の本文を読み直す。両端が変わらない間（中身の読み直し・確認済みの切り替え）は、
 /// 読んだ本文で同じ答えを返し続ける。
 @MainActor
@@ -43,13 +43,13 @@ final class EditorDiffPullRequest: EditorDiffSource {
     }
   }
 
-  /// 両端が揃い、その両端の版の本文で答えた。
+  /// 両端が揃い、その両端の版の本文から作った答えを返せる状態か。
   var isCaughtUp: Bool {
     guard case .ready(_, let ends) = state.bounds else { return false }
     return read?.ends == ends
   }
 
-  /// 両端 `ends` の古い側と新しい側の版の本文を読み、読み終えたら作り直させる。
+  /// 両端 `ends` の古い側と新しい側の版の本文を読み、読み終えたら diff を作り直させる。
   private func load(_ ends: PullRequestState.DiffEnds) {
     guard reading != ends, let repo = state.repo else { return }
     reading = ends
@@ -81,7 +81,7 @@ final class EditorDiffPullRequest: EditorDiffSource {
   }
 }
 
-/// PR の両端が変わったら作り直させる（両端が同じなら、読んだ本文で同じ答えを返す）。
+/// PR の両端が変わったら diff を作り直させる（両端が同じなら、読んだ本文で同じ答えを返す）。
 extension EditorDiffPullRequest: PullRequestStateObserver {
   func pullRequestStateDidChange(_ state: PullRequestState) {
     onChange?(.material)

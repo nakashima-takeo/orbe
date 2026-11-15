@@ -1,6 +1,6 @@
 import Foundation
 
-/// PR のパネルと PR の diff が GitHub に問い合わせる口。既定（`live`）は本物の gh を呼ぶ。見た目の検証とテストは、これを
+/// PR のパネルと PR の diff が GitHub に問い合わせる口。`gh(_:cache:)` は本物の gh を呼ぶ。見た目の検証とテストは、これを
 /// 差し替えて gh を起動しない。git は手元のリポジトリに直に問い合わせる（ネットに出るのは、コミットを名指しする fetch
 /// だけ）。
 struct PullRequestSource {
