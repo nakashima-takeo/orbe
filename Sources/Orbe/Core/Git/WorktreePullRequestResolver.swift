@@ -81,7 +81,7 @@ final class WorktreePullRequestResolver {
           branches.mapValues { branch in
             WorktreeBranchPullRequest(
               branch: branch,
-              pullRequest: (try? found.branches[branch]?.pullRequests.get()).flatMap(Self.chosen))
+              pullRequest: found.branches[branch]?.pullRequests.flatMap(Self.chosen))
           })
       }
     }

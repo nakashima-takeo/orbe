@@ -1,6 +1,6 @@
 import Foundation
 
-/// ブランチの PR を引けない理由。
+/// ブランチの PR を引けない理由（GitHub のどのブランチかが決まらない）。
 enum GitHubBranchPullRequestsUnavailable: Error, Equatable {
   /// gh が PATH に無い。
   case ghMissing
@@ -11,8 +11,6 @@ enum GitHubBranchPullRequestsUnavailable: Error, Equatable {
   /// GitHub のどのブランチかを確かめられない（push 先の remote の正式名を確かめられない・push 先が台帳に無い・remote の
   /// 一覧を読めない）。
   case unverified
-  /// 問い合わせが失敗した。
-  case failed(GitHubFailure)
 
   /// gh の可否が「使える」でないときの、PR を引けない理由。使えるなら nil。
   init?(_ availability: GitHubAvailability) {
@@ -27,11 +25,17 @@ enum GitHubBranchPullRequestsUnavailable: Error, Equatable {
 
 /// リポジトリ 1 つの、名指ししたブランチごとの PR。
 struct GitHubBranchPullRequests: Equatable {
-  struct Branch: Equatable {
-    /// GitHub 上の同一性。gh が使えないときは台帳を求めないので nil。
-    let identity: GitHubBranchIdentity?
-    /// head が同一性と等しい PR（作成日時の新しい順）か、引けない理由。
-    let pullRequests: Result<[GitHubBranchPR], GitHubBranchPullRequestsUnavailable>
+  enum Branch: Equatable {
+    /// GitHub のどのブランチかが決まらず、PR を引けない。
+    case unavailable(GitHubBranchPullRequestsUnavailable)
+    /// GitHub のブランチ `ref` と決まった。PR は head が `ref` と等しいもの（作成日時の新しい順）か、問い合わせの失敗。
+    case gitHub(GitHubBranchRef, pullRequests: Result<[GitHubBranchPR], GitHubFailure>)
+
+    /// PR の一覧（引けない・問い合わせが失敗したなら nil）。
+    var pullRequests: [GitHubBranchPR]? {
+      guard case .gitHub(_, .success(let pullRequests)) = self else { return nil }
+      return pullRequests
+    }
   }
 
   let availability: GitHubAvailability
@@ -84,8 +88,7 @@ final class GitHubBranchPullRequestLookup {
     facts.notify(queue: .main) {
       self.gitHub.probe(cwd: repo.root, isGitHub: isGitHub) { availability in
         if let reason = GitHubBranchPullRequestsUnavailable(availability) {
-          let unavailable = GitHubBranchPullRequests.Branch(
-            identity: nil, pullRequests: .failure(reason))
+          let unavailable = GitHubBranchPullRequests.Branch.unavailable(reason)
           return completion(
             GitHubBranchPullRequests(
               availability: availability, ledger: nil,
@@ -97,20 +100,16 @@ final class GitHubBranchPullRequestLookup {
           var answers: [String: GitHubBranchPullRequests.Branch] = [:]
           var refs: [String: GitHubBranchRef] = [:]
           for branch in branches {
-            let identity = identities.local(branch)
-            switch identity {
+            switch identities.local(branch) {
             case .ref(let ref): refs[branch] = ref
-            case .notGitHub:
-              answers[branch] = .init(identity: identity, pullRequests: .failure(.notGitHub))
-            case .unverified:
-              answers[branch] = .init(identity: identity, pullRequests: .failure(.unverified))
+            case .notGitHub: answers[branch] = .unavailable(.notGitHub)
+            case .unverified: answers[branch] = .unavailable(.unverified)
             }
           }
           self.pullRequests(repo, refs: refs) { fetched in
             for (branch, result) in fetched {
-              answers[branch] = .init(
-                identity: refs[branch].map(GitHubBranchIdentity.ref),
-                pullRequests: result.mapError(GitHubBranchPullRequestsUnavailable.failed))
+              guard let ref = refs[branch] else { continue }
+              answers[branch] = .gitHub(ref, pullRequests: result)
             }
             completion(
               GitHubBranchPullRequests(availability: .ready, ledger: resolved, branches: answers))

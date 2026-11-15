@@ -1,8 +1,36 @@
 import Foundation
 
-/// PR の中身の読み取りと、変更ファイルの確認済み（GitHub の Files changed の Viewed）の書き込み。問い合わせ先はリポジトリ名で
-/// 決まるので、作業ディレクトリはリポジトリに依らない。どちらもメインスレッドで返る。
+/// PR の中身の読み取りと、変更ファイルの確認済み（GitHub の Files changed の Viewed）の書き込みと、PR を作る前のブランチが
+/// GitHub に在るかの問い合わせ。問い合わせ先はリポジトリ名で決まるので、作業ディレクトリはリポジトリに依らない。どれも
+/// メインスレッドで返る。
 extension GitHubCLI {
+  /// GitHub のリポジトリ `ref.repo` にブランチ `ref.branch` が在るか。リポジトリが見えない・答えを読めないときは失敗。
+  func branchExists(
+    _ ref: GitHubBranchRef, completion: @escaping (Result<Bool, GitHubFailure>) -> Void
+  ) {
+    queue.async {
+      let result: Result<Bool, GitHubFailure> =
+        self.resolveGh().map { gh in
+          let response: Result<BranchRefResponse, GitHubFailure> = self.decodeSync(
+            gh, Self.branchExistsArguments(ref), cwd: NSHomeDirectory())
+          return response.flatMap { response in
+            guard let repository = response.data?.repository else { return .failure(.reason("")) }
+            return .success(repository.ref != nil)
+          }
+        } ?? .failure(.reason(""))
+      DispatchQueue.main.async { completion(result) }
+    }
+  }
+
+  /// ブランチが在るかの問い合わせ引数。owner・name・ref の名前は `-f`（文字列のまま）で渡す。
+  static func branchExistsArguments(_ ref: GitHubBranchRef) -> [String] {
+    [
+      "api", "graphql", "--hostname", "github.com", "-f",
+      "query=query($o:String!,$n:String!,$q:String!){repository(owner:$o,name:$n){ref(qualifiedName:$q){name}}}",
+      "-f", "o=\(ref.repo.owner)", "-f", "n=\(ref.repo.name)", "-f", "q=refs/heads/\(ref.branch)",
+    ]
+  }
+
   /// PR 1 件の中身を、一時点のものとして揃えて読む。変更ファイルは全件、コミットは GitHub が返す新しい側の 250 件までを
   /// ページングして読む。ページの間に push やベースブランチの付け替えが入ったら（基準のベース側のコミットか PR の先頭の
   /// コミットが 1 ページ目と違えば）、最初から読み直す。読み直しは 1 回までで、なお違えば失敗（gh はエラー文を出していない
@@ -107,6 +135,15 @@ enum GitHubViewedMutation {
 
 /// 別名ごとの書き込みのレスポンス。値が載っているか（null でないか）だけを読む。
 private struct MutationPayload: Decodable {}
+
+/// ブランチが在るかの問い合わせ（`repository(owner:name:){ref(qualifiedName:){name}}`）の出力。ブランチが無ければ `ref` が
+/// null で、リポジトリが見えなければ `repository` が null。
+private struct BranchRefResponse: Decodable {
+  struct Payload: Decodable { let repository: Repository? }
+  struct Repository: Decodable { let ref: Ref? }
+  struct Ref: Decodable { let name: String }
+  let data: Payload?
+}
 
 private enum ContentReading {
   case read(GitHubPullRequestContent)
