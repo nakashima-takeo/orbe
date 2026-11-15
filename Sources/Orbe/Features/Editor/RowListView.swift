@@ -15,6 +15,9 @@ import AppKit
 /// 部品の押下に源が錨を返せば、留める行の上端を押した行の窓の中の高さに合わせ続け、押し続けの守りを張る
 /// （→ `RowListAnchor`・`RowListPressGuard`）。上へは原点が 0 に着くまでしか送らず、下へ送りきれなければ文書の下に一時の
 /// 空きを足して収める。外せば空きを取り、原点を範囲に収める。
+///
+/// 頭（`RowListHeader`）を持てば、最初の行の上に置き、行と一緒に送る。頭の高さは中身と列の幅で決まり、行の位置は頭の高さ
+/// だけ下がる。頭は行ではないので、行の番号・選択・キーの対象にならず、押下は頭の view が受ける。
 final class RowListView<Source: RowListSource>: NSView {
   let source: Source
   let rowHeight: CGFloat
@@ -32,6 +35,9 @@ final class RowListView<Source: RowListSource>: NSView {
   /// ポインタが列の中に居るか（入った・中で動いた・押したで立ち、出た・外で動いた・窓に載り直したで下りる）。
   private var pointerIsInside = false
   private var slots: [Source.RowView] = []
+  /// 最初の行の上に置く頭と、その高さ（頭が無ければ 0。→ `setHeader`・`headerDidChange`）。
+  var header: (any RowListHeader)?
+  var headerHeight: CGFloat = 0
 
   /// 選んでいる行の番号（源の選択を写したもの）。
   var selectedRow: Int? {
@@ -89,9 +95,9 @@ final class RowListView<Source: RowListSource>: NSView {
   /// 行の高さの和（最後の行の下の空きと一時の空きを含まない）。
   private var rowsHeight: CGFloat { CGFloat(rowCount) * rowHeight }
 
-  /// 文書の高さ（行・最後の行の下の 1 行分の空き・一時の空き）。
-  private func resizeDocument() {
-    let height = rowsHeight + rowHeight + bottomSpace
+  /// 文書の高さ（頭・行・最後の行の下の 1 行分の空き・一時の空き）。
+  func resizeDocument() {
+    let height = headerHeight + rowsHeight + rowHeight + bottomSpace
     guard frame.height != height else { return }
     setFrameSize(NSSize(width: frame.width, height: height))
   }
@@ -100,6 +106,7 @@ final class RowListView<Source: RowListSource>: NSView {
     guard width != frame.width else { return }
     setFrameSize(NSSize(width: width, height: frame.height))
     for slot in slots { slot.setFrameSize(NSSize(width: width, height: slot.frame.height)) }
+    headerDidChange()
   }
 
   /// 見えている行に枠を割り当てて描かせる（行が見えなくなった枠は隠す）。
@@ -113,7 +120,7 @@ final class RowListView<Source: RowListSource>: NSView {
       slots.append(slot)
     }
     let count = shownCount
-    let first = min(Int(max(0, visible.minY) / rowHeight), count)
+    let first = min(Int(max(0, visible.minY - headerHeight) / rowHeight), count)
     var shown = Set<Int>()
     var row = first
     while row < count {
@@ -161,7 +168,7 @@ final class RowListView<Source: RowListSource>: NSView {
       let offset = convert(NSPoint(x: 0, y: anchor.windowY), from: nil).y - visible.minY
       top = max(0, rect(ofRow: target).minY - offset)
     }
-    bottomSpace = max(0, top + visible.height - (rowsHeight + rowHeight))
+    bottomSpace = max(0, top + visible.height - (headerHeight + rowsHeight + rowHeight))
     resizeDocument()
     if visible.minY != top { scroll(NSPoint(x: 0, y: top)) }
     layoutRows()
@@ -211,12 +218,13 @@ final class RowListView<Source: RowListSource>: NSView {
   private var shownCount: Int { min(rowCount, source.rowCount(in: drawn)) }
 
   private func rect(ofRow row: Int) -> NSRect {
-    NSRect(x: 0, y: CGFloat(row) * rowHeight, width: bounds.width, height: rowHeight)
+    NSRect(
+      x: 0, y: headerHeight + CGFloat(row) * rowHeight, width: bounds.width, height: rowHeight)
   }
 
   private func row(at point: NSPoint) -> Int? {
-    guard point.y >= 0 else { return nil }
-    let row = Int(point.y / rowHeight)
+    guard point.y >= headerHeight else { return nil }
+    let row = Int((point.y - headerHeight) / rowHeight)
     return row < shownCount ? row : nil
   }
 
@@ -367,7 +375,9 @@ final class RowListView<Source: RowListSource>: NSView {
     slots.filter { $0.row != nil }.sorted { $0.row! < $1.row! }
   }
 
-  override func accessibilityChildren() -> [Any]? { accessibilityRows() }
+  override func accessibilityChildren() -> [Any]? {
+    (header.map { [$0] } ?? []) + (accessibilityRows() ?? [])
+  }
 
   override func accessibilityVisibleRows() -> [Any]? { accessibilityRows() }
 

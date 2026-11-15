@@ -116,8 +116,10 @@ extension EditorPaneView {
     case .unavailable(.conflicted): return .notice(.editorDiffConflicted)
     case .unavailable(.failed): return .notice(.editorDiffFailed)
     case .unavailable(.nowhere):
-      return .notice(
-        diff.id.kind == .staged ? .editorDiffNowhereStaged : .editorDiffNowhereInWorkingTree)
+      switch diff.id.kind {
+      case .workingTree: return .notice(.editorDiffNowhereInWorkingTree)
+      case .staged: return .notice(.editorDiffNowhereStaged)
+      }
     }
   }
 

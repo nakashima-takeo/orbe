@@ -352,7 +352,7 @@ extension RootFiles {
   }
 
   /// 実体のパス `url` の版 `revision`（根の外なら nil）。
-  func version(of url: URL, at revision: GitRevision) -> Version? {
+  func version(of url: URL, at revision: Revision) -> Version? {
     relativePath(of: url).map { Version(path: $0, revision: revision) }
   }
 

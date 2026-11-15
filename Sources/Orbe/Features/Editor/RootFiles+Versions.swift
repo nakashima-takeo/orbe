@@ -5,7 +5,13 @@ extension RootFiles {
   /// 関心の単位——根からの相対パスと版。
   struct Version: Hashable {
     let path: String
-    let revision: GitRevision
+    let revision: Revision
+  }
+
+  /// 追う版。関心に入るのは index と HEAD だけ——根のサービスは、この 2 つの版の OID を引いて本文を取り直す。
+  enum Revision: Hashable {
+    case index
+    case head
   }
 
   /// 版の本文の状態（OID ごとに決まる）。

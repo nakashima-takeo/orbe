@@ -40,8 +40,10 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     let ref = GitHubBranchRef(repo: mine, branch: "feat")
     XCTAssertEqual(found.availability, .ready)
     XCTAssertEqual(found.ledger?.repository(forPushRemote: nil), .github(mine))
-    XCTAssertEqual(found.branches["feat"]?.identity, .ref(ref))
-    XCTAssertEqual(try found.branches["feat"]?.pullRequests.get().map(\.number), [8, 7])
+    guard case .gitHub(ref, .success(let pullRequests))? = found.branches["feat"] else {
+      return XCTFail("GitHub のブランチと決まり、PR の一覧が返る: \(String(describing: found.branches["feat"]))")
+    }
+    XCTAssertEqual(pullRequests.map(\.number), [8, 7])
   }
 
   /// GitHub でないリポジトリは gh に問い合わせず、台帳も同一性も持たない。
@@ -54,8 +56,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     XCTAssertEqual(found.availability, .notGitHub)
     XCTAssertNil(found.ledger)
     XCTAssertEqual(
-      found.branches["feat"],
-      GitHubBranchPullRequests.Branch(identity: nil, pullRequests: .failure(.notGitHub)))
+      found.branches["feat"], GitHubBranchPullRequests.Branch.unavailable(.notGitHub))
     XCTAssertTrue(calls("H").isEmpty, "PR は問い合わせない")
   }
 
@@ -72,8 +73,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     let found = try lookup(["feat"])
 
     XCTAssertEqual(
-      found.branches["feat"],
-      GitHubBranchPullRequests.Branch(identity: .unverified, pullRequests: .failure(.unverified)))
+      found.branches["feat"], GitHubBranchPullRequests.Branch.unavailable(.unverified))
     XCTAssertTrue(calls("H").isEmpty, "PR は問い合わせない")
   }
 
@@ -90,10 +90,12 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
     let found = try lookup(["feat", "other"])
 
-    XCTAssertEqual(found.branches["feat"]?.pullRequests, .failure(.failed(.unreachable)))
     XCTAssertEqual(
-      found.branches["feat"]?.identity, .ref(GitHubBranchRef(repo: mine, branch: "feat")))
-    XCTAssertEqual(found.branches["other"]?.pullRequests, .success([]))
+      found.branches["feat"],
+      .gitHub(GitHubBranchRef(repo: mine, branch: "feat"), pullRequests: .failure(.unreachable)))
+    XCTAssertEqual(
+      found.branches["other"],
+      .gitHub(GitHubBranchRef(repo: mine, branch: "other"), pullRequests: .success([])))
   }
 
   /// 作成ページの URL は push の後に GitHub が案内するもの。ブランチ名の `/` は残し、URL で意味を持つ文字はエンコードする。

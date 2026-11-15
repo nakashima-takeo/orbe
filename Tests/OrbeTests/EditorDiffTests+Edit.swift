@@ -208,7 +208,7 @@ extension EditorDiffTests {
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     pumpMain(until: { diff.document == nil && diff.content == .ready }, "消えたファイルの diff")
     try contents.write(to: repo.url("a.txt"))
-    diff.rootFiles(diff.files, filesDidChange: .scanAll)
+    try XCTUnwrap(diff.rootObserver).rootFiles(diff.files, filesDidChange: .scanAll)
     waitRows(diff, "戻ったファイルの文書で並びが出る") { !$0.isEmpty }
     let search = pane.projectSearch
     pane.showProjectSearch(seed: nil)
