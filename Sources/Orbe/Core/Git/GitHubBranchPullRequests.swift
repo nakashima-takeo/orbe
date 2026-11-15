@@ -1,7 +1,7 @@
 import Foundation
 
 /// ブランチの PR を引けない理由（GitHub のどのブランチかが決まらない）。
-enum GitHubBranchPullRequestsUnavailable: Error, Equatable {
+enum GitHubBranchPullRequestsUnavailable: Equatable {
   /// gh が PATH に無い。
   case ghMissing
   /// gh はあるが認証情報を持っていない。
