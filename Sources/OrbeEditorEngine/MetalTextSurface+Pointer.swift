@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// 面の上の場所——行番号の数字の列・git の印の列・本文（最終行より下の空き地を含む）・俯瞰（ミニマップと縦横の
+/// 面の上の場所——行番号の数字の列・git の印の列と記号の列・本文（最終行より下の空き地を含む）・俯瞰（ミニマップと縦横の
 /// スクロールバー）。
 enum PointerArea {
   case numbers, marks, text, overview
@@ -13,42 +13,53 @@ struct PointerHit {
   var row: Int
   /// いちばん近い書記素の境（最終行より下なら本文の終わり）。
   var offset: Int
+  /// 文書の行の上か（差し込みの上は、次の文書の行に当たるが文書の行の上ではない）。
+  var onLine = true
 }
 
 extension MetalTextSurface {
-  /// view の点（flipped、pt）の場所。行は `y = 行 × 行高` で、推定が無い——遠くへ飛んだ直後でも、ポインタの下の行・字に
-  /// 当たる。`position` はスクロールの位置（省けば今の位置）。
+  /// view の点（flipped、pt）の場所。行は縦の並び（`RowLayout`）で引き、推定が無い——遠くへ飛んだ直後でも、ポインタの
+  /// 下の行・字に当たる。差し込みの上は次の文書の行の行頭（最終行の後の塊の上は本文の終わり）に当たる。`position` は
+  /// スクロールの位置（省けば今の位置）。
   func hit(_ point: CGPoint, position: SIMD2<Double>? = nil) -> PointerHit? {
-    guard let env = editingEnvironment() else { return nil }
+    guard let env = bodySite.editingEnvironment() else { return nil }
     let text = env.text
     let p = position ?? scrollPosition
-    let column = config.columnWidth(lineCount: text.lineCount)
+    let gutter = surfaceLayout.gutter
+    let column = gutter.width
     let area: PointerArea =
       textView.overview.area(at: point) != nil
       ? .overview
-      : point.x < column - config.marks.gutterWidth ? .numbers : point.x < column ? .marks : .text
+      : point.x < column - gutter.numbersInset ? .numbers : point.x < column ? .marks : .text
     let y = Double(point.y - config.topInset) + p.y
-    let lineHeight = Double(config.lineHeight)
-    guard y < Double(text.lineCount) * lineHeight else {
+    let item = rows.item(atY: y)
+    if case .block(let index) = item {
+      let line = rows.boundaries[index]
+      guard line < text.lineCount else {
+        return PointerHit(area: area, row: text.lineCount - 1, offset: text.length, onLine: false)
+      }
+      return PointerHit(area: area, row: line, offset: text.lineStart(line), onLine: false)
+    }
+    guard case .line(let line) = item, line < text.lineCount else {
       return PointerHit(area: area, row: text.lineCount - 1, offset: text.length)
     }
-    let row = min(max(0, Int((y / lineHeight).rounded(.down))), text.lineCount - 1)
+    let row = max(0, line)
     let x = CGFloat(Double(point.x - column) + p.x)
     return PointerHit(
       area: area, row: row, offset: text.lineStart(row) + env.geometry.column(atX: x, row: row))
   }
 
-  /// 点を含む書記素。点が行の字の上でなければ（行番号の列・行末より右・字の無い行・最終行より下の空き地）nil。当たりと
-  /// 同じ組版の行から引くので、右から左の字の並びでも見た目の字に当たる。`position` はスクロールの位置（省けば今の位置）。
+  /// 点を含む書記素。点が文書の行の字の上でなければ（行番号の列・行末より右・字の無い行・差し込み・最終行より下の空き
+  /// 地）nil。当たりと同じ組版の行から引くので、右から左の字の並びでも見た目の字に当たる。`position` はスクロールの位置
+  /// （省けば今の位置）。
   func character(at point: CGPoint, position: SIMD2<Double>? = nil) -> NSRange? {
     guard let text = currentContent?.text else { return nil }
     let p = position ?? scrollPosition
-    let column = config.columnWidth(lineCount: text.lineCount)
+    let column = surfaceLayout.column
     let y = Double(point.y - config.topInset) + p.y
-    let lineHeight = Double(config.lineHeight)
-    guard point.x >= column, point.y >= config.topInset, y < Double(text.lineCount) * lineHeight
+    guard point.x >= column, point.y >= config.topInset,
+      case .line(let row) = rows.item(atY: y), (0..<text.lineCount).contains(row)
     else { return nil }
-    let row = Int((y / lineHeight).rounded(.down))
     let x = CGFloat(Double(point.x - column) + p.x)
     let (source, start) = LineShaper.source(row: row, in: text)
     let stops = lineStops.stops(source, tabWidth: config.tabWidth(columns: indentation.unit))

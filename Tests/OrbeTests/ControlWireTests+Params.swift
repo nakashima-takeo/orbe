@@ -63,6 +63,7 @@ extension ControlWireTests {
       ("focus_tab", ["tabId": 8]),
       ("close_tab", ["tabId": 9]),
       ("open_file", ["tabId": 8, "path": "/tmp/f.txt"]),
+      ("open_diff", ["tabId": 8, "path": "/tmp/f.txt", "kind": "workingTree"]),
       (
         "report_agent",
         [
@@ -123,6 +124,9 @@ extension ControlWireTests {
       RequiredParam(method: "close_tab", key: "tabId", code: -32602),
       RequiredParam(method: "open_file", key: "tabId", code: -32602),
       RequiredParam(method: "open_file", key: "path", code: -32602),
+      RequiredParam(method: "open_diff", key: "tabId", code: -32602),
+      RequiredParam(method: "open_diff", key: "path", code: -32602),
+      RequiredParam(method: "open_diff", key: "kind", code: -32602),
       RequiredParam(method: "config_set", key: "key", code: -32602),
       RequiredParam(method: "config_set", key: "value", code: -32602),
       RequiredParam(method: "config_set", key: "scope", code: -32602),
@@ -196,6 +200,27 @@ extension ControlWireTests {
       errorCode(
         wire.request(id: 1, method: "send_key", params: ["tabId": fake.tabId, "key": "nosuchkey"])),
       -32602, "解けないキー指定は -32602（無視して ok を返さない）")
+  }
+
+  /// `open_diff` は知らない `kind` と空の `path` を断り、diff を開かない。既定の kind へ倒すと、エージェントが頼んだのと
+  /// 別の側の diff が成功として人に見せられる。
+  func testOpenDiffRejectsAnUnknownKindAndAnEmptyPath() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    let refused: [(params: [String: Any], message: String)] = [
+      (
+        ["tabId": 8, "path": "a.swift", "kind": "head"], "invalid kind: pass workingTree or staged"
+      ),
+      (["tabId": 8, "path": "", "kind": "staged"], "missing path"),
+    ]
+    for (index, entry) in refused.enumerated() {
+      let response = wire.request(id: index, method: "open_diff", params: entry.params)
+      XCTAssertEqual(errorCode(response), -32602, entry.message)
+      XCTAssertEqual(
+        (response?["error"] as? [String: Any])?["message"] as? String, entry.message)
+    }
+    XCTAssertTrue(fake.openedDiffs.isEmpty, "断った要求は target へ届かない")
   }
 
   /// `config_set` の `value: null` は「解除（継承へ戻す）」として受理する——欠落とは別物。

@@ -39,6 +39,7 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(
       SettingsRegistry.descriptor(.menuBarNotificationDuration).key, "menubar-notification-duration"
     )
+    XCTAssertEqual(SettingsRegistry.descriptor(.scmAutoFetch).key, "scm-auto-fetch")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.automationRunRetentionCount).key,
       "automation-run-retention-count")

@@ -108,8 +108,8 @@ final class TabGroupTests: OrbeTestCase {
     XCTAssertTrue(group.editor.activeDocument === a)
   }
 
-  /// 畳まれる連の文書は行き先の列の末尾へ移り、行き先の焦点は保たれる。同じ実ファイルは行き先のものが残る——元の文書だけが
-  /// 未保存なら元の文書がその位置に入り、行き先の焦点がその文書だったなら焦点も入れ替わる。元の連は空になる。
+  /// 畳まれる連の文書は行き先の列の末尾へ移り、行き先の焦点は保たれる。同じ実ファイルのタブは行き先の 1 枚にまとまる——元の
+  /// 文書だけが未保存なら元の文書がその位置に入り、行き先の焦点がその文書だったなら焦点も入れ替わる。元の連は空になる。
   func testAbsorbAppendsDocumentsAndKeepsTheDestinationsActive() throws {
     let dest = group()
     let from = group()
@@ -124,7 +124,8 @@ final class TabGroupTests: OrbeTestCase {
 
     dest.absorb(from)
 
-    XCTAssertEqual(dest.editor.documents.map(\.url), [a.url, shared, b.url])
+    XCTAssertEqual(
+      dest.editor.tabs.map(\.id), [.document(a.url), .document(shared), .document(b.url)])
     XCTAssertTrue(dest.editor.documents[1] === edited, "元だけが未保存なら元の文書が入る")
     XCTAssertTrue(dest.editor.activeDocument === edited, "行き先の焦点の位置を保ち、入れ替わった文書が焦点")
     XCTAssertTrue(from.editor.documents.isEmpty)
@@ -161,6 +162,21 @@ final class TabGroupTests: OrbeTestCase {
 
     XCTAssertTrue(dest.editor.activeDocument === a)
     XCTAssertTrue(dest.editor.preview === p)
+  }
+
+  /// 行き先の仮のタブの文書が元の未保存の文書に替われば、仮でなくなる——次に仮で開いたファイルが入れ替えで黙って捨てない。
+  func testAbsorbPinsTheTemporaryTabThatTakesOverAnUnsavedDocument() throws {
+    let dest = group()
+    let from = group()
+    let url = try file("a.txt")
+    _ = try dest.editor.open(url, as: .preview)
+    let edited = try from.editor.open(url, as: .pinned)
+    edited.surface.responder.perform(Selector(("insertText:")), with: "y")
+
+    dest.absorb(from)
+    _ = try dest.editor.open(try file("b.txt"), as: .preview)
+
+    XCTAssertTrue(dest.editor.documents.contains { $0 === edited })
   }
 
   /// 移った文書は外のファイルに付いていき続ける——未保存のまま外で書き換えられれば印が立ち、その変化は行き先の連の

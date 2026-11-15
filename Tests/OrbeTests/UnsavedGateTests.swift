@@ -181,12 +181,12 @@ final class UnsavedGateTests: OrbeTestCase {
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     let b = try tab.group.editor.open(repo.url("b.txt"), as: .pinned)
 
-    pane.shell.requestClose(b.url)
+    pane.shell.requestClose(.document(b.url))
     XCTAssertEqual(tab.group.editor.documents.count, 1, "未保存でなければそのまま閉じる")
     XCTAssertNil(window.attachedSheet)
 
     edit(a)
-    pane.shell.requestClose(a.url)
+    pane.shell.requestClose(.document(a.url))
     XCTAssertEqual(tab.group.editor.documents.count, 1, "未保存なら確認")
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertFirstButtonReturn)
     XCTAssertTrue(tab.group.editor.documents.isEmpty, "保存して閉じる")
@@ -266,5 +266,21 @@ final class UnsavedGateTests: OrbeTestCase {
     XCTAssertEqual(session.documents.map(\.url.lastPathComponent), ["c.txt", "a.txt", "b.txt"])
     XCTAssertTrue(session.activeDocument === c, "先に居た焦点を保つ")
     XCTAssertNil(session.preview, "先に普通に開いていた文書は仮に下げない")
+  }
+
+  /// 復元する文書が未保存で、diff のタブが既に使っているなら、仮のタブではなく普通のタブで戻る——仮のタブのまま戻ると、
+  /// 次に仮で開いたファイルと入れ替わり、未保存のタブが確認なしにタブ行から消える。
+  func testRestoringAnUnsavedDocumentADiffUsesBringsItBackPinned() throws {
+    let session = session()
+    let a = try session.open(repo.url("a.txt"), as: .pinned)
+    edit(a)
+    try session.openDiff(
+      EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree), as: .pinned)
+    session.close(.document(a.url))
+    XCTAssertTrue(a.isDirty, "前提: diff のタブが未保存の文書を使い続ける")
+
+    session.restore(paths: [a.url.path], active: a.url.path, preview: a.url.path)
+    XCTAssertTrue(session.tab(.document(a.url))?.document === a, "同じ文書のファイルタブが戻る")
+    XCTAssertNil(session.preview, "普通のタブで戻る")
   }
 }

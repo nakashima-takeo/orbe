@@ -7,13 +7,6 @@ import Foundation
 /// タブ占有・main worktree で inUse と判った行はプローブを省く（消せないと分かっている行に
 /// プロセスを割かない）。実体が無い（prunable）行は status も停止中の操作も問わない——失うものが
 /// 無いので、作業ツリー側の安全確認は自動的に満たす。
-///
-/// git は独立レーン（`isolated: true`）で走らせる。worktree 1 本あたり最大 `1 + T×5` 本
-/// （T は比較先の本数。比較先 2 本の unmerged 行で最大 11 本）を撒くので、共有の
-/// read-write lock に載せると、直後に来る掃除の実行（`worktree remove`・`update-ref -d` の
-/// `.exclusive`）が撒いた全プローブの完了を待つ（GCD barrier は submit 済み全ブロックを待つ）。
-/// パレットを閉じてもプローブは走り切るため、共有レーンのままだと閉じた後の掃除まで巻き込む。
-/// `fetchPrune` と同じ判断。
 struct WorktreeCleanProber {
   let repo: GitRepo
   let defaultBranch: String
@@ -43,7 +36,7 @@ struct WorktreeCleanProber {
         probes[worktree.path]?.operation = GitWorktreeOperationProbe.detect(
           worktreeAt: worktree.path)
         group.enter()
-        repo.worktreeStatusCounts(at: worktree.path, isolated: true) { counts in
+        repo.worktreeStatusCounts(at: worktree.path) { counts in
           probes[worktree.path]?.status = counts
           group.leave()
         }
@@ -54,7 +47,7 @@ struct WorktreeCleanProber {
       // 判定してしまう。detached は oid のままで曖昧さが無い。
       repo.branchContainment(
         branchOrCommit: worktree.branch.map { "refs/heads/\($0)" } ?? worktree.head,
-        targets: targets(for: worktree.path), isolated: true
+        targets: targets(for: worktree.path)
       ) { containment in
         probes[worktree.path]?.containment = containment
         group.leave()

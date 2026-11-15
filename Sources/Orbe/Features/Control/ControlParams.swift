@@ -73,8 +73,11 @@ struct ControlParams {
     ControlError(code: -32602, message: "missing \(prefix)\(key)")
   }
 
-  func invalid(_ key: String) -> ControlError {
-    ControlError(code: -32602, message: "invalid \(prefix)\(key)")
+  /// `guidance` は受け付ける値の案内（`pass workingTree or staged`）。
+  func invalid(_ key: String, _ guidance: String? = nil) -> ControlError {
+    let place = "\(prefix)\(key)"
+    return ControlError(
+      code: -32602, message: guidance.map { "invalid \(place): \($0)" } ?? "invalid \(place)")
   }
 
   // MARK: - 読み

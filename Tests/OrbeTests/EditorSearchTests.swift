@@ -127,14 +127,14 @@ final class EditorSearchTests: OrbeTestCase {
     bar.onNeedleChange?("needle")
     catchUp(pane)
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 9)
-    XCTAssertEqual(document.surface.viewport.firstVisible, 0, "見えている一致ではスクロールしない")
+    XCTAssertEqual(document.surface.viewport.top.line, 0, "見えている一致ではスクロールしない")
 
     bar.onNext?()
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 59)
     let visible = document.surface.viewport.visibleLines
-    pumpMain(until: { document.surface.viewport.firstVisible > 0 }, "見せる")
+    pumpMain(until: { document.surface.viewport.top.line > 0 }, "見せる")
     XCTAssertEqual(
-      CGFloat(row(hosted, document.surface.viewport.firstVisible)), 59 - visible / 2, accuracy: 1.5,
+      CGFloat(document.surface.viewport.top.line), 59 - visible / 2, accuracy: 1.5,
       "見えていない一致は中央へ")
 
     bar.onNext?()
@@ -166,7 +166,7 @@ final class EditorSearchTests: OrbeTestCase {
     catchUp(pane)
     XCTAssertEqual(document.surface.selectedRange.location, 201)
     XCTAssertGreaterThan(x(), 0, "横に寄る")
-    XCTAssertEqual(document.surface.viewport.firstVisible, 0, "縦は動かない")
+    XCTAssertEqual(document.surface.viewport.top.line, 0, "縦は動かない")
 
     bar.onNext?()
     XCTAssertEqual(document.surface.selectedRange.location, 208, "2 行目の先頭")

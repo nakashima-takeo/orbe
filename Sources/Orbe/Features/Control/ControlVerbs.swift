@@ -64,6 +64,8 @@ extension ControlServer {
     "focus_tab": ControlVerb(["tabId": .int], .window(focusTab)),
     "close_tab": ControlVerb(["tabId": .int], .window(closeTab)),
     "open_file": ControlVerb(["tabId": .int, "path": .string], .window(openFile)),
+    "open_diff": ControlVerb(
+      ["tabId": .int, "path": .string, "kind": .string], .window(openDiff)),
     "config_list": ControlVerb(["workspaceId": .workspaceId], .window(configList)),
     "config_set": ControlVerb(
       ["key": .string, "value": .any, "scope": .string, "workspaceId": .workspaceId],

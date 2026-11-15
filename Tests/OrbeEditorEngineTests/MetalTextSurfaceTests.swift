@@ -20,7 +20,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let text = opened.document.text
     opened.surface.scroll(toFirstLine: 50.25)
     let viewport = opened.surface.viewport
-    XCTAssertEqual(viewport.firstVisible, text.lineStart(50))
+    XCTAssertEqual(viewport.top, RowPosition(line: 50))
     XCTAssertEqual(viewport.visibleLines, 600.0 / 18, accuracy: 1e-9, "上端の余白を除いた高さ")
     XCTAssertEqual(opened.surface.viewportLines.first, 50.25, accuracy: 1e-9)
   }
@@ -38,7 +38,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let text = opened.document.text
     let target = text.lineStart(10) + 280
     opened.surface.reveal(NSRange(location: target, length: 1), policy: .minimal)
-    XCTAssertEqual(opened.surface.viewport.firstVisible, 0, "縦は見えているので動かない")
+    XCTAssertEqual(opened.surface.viewport.top, RowPosition(line: 0), "縦は見えているので動かない")
     _ = opened.surface.snapshot()
     pump(
       until: { opened.surface.hiddenColumns > 0 }, "横は描画スレッドが行を組んで寄せる")

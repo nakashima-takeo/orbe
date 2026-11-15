@@ -95,6 +95,7 @@ final class SettingsResolutionTests: OrbeTestCase {
       empty[SettingKeys.automationRunRetentionDays], 7, "palette/settings: 実行記録の保持日数は既定 7 日")
     XCTAssertEqual(
       empty[SettingKeys.automationEventRetentionDays], 30, "palette/settings: 追記の保持日数は既定 30 日")
+    XCTAssertEqual(empty[SettingKeys.scmAutoFetch], true, "editor/source-control: 自動 fetch は既定オン")
     var layer = SettingsLayer()
     layer[SettingKeys.theme] = .dark
     XCTAssertEqual(EffectiveSettings(layer)[SettingKeys.theme], .dark, "明示値が既定に勝つ")

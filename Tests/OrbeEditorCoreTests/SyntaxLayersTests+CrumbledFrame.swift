@@ -3,13 +3,13 @@ import XCTest
 
 @testable import OrbeEditorCore
 
-/// 誤りを含む構文木の色の枠——字の色はその字の区画の枠で決まり、誤りを含まない木には枠を掛けない。
+/// 誤りを含む構文木の色の枠——字の色はその字を含む格子の目の枠で決まり、誤りを含まない木には枠を掛けない。
 ///
-/// 壊れると何が起きるか。崩れた大きな文書で、同じ字の色が作り直しの履歴で変わる。誤りの無い大きな文書（区画をいくつも
+/// 壊れると何が起きるか。崩れた大きな文書で、同じ字の色が作り直しの履歴で変わる。誤りの無い大きな文書（格子の目をいくつも
 /// またぐコメントや文字列を持つ JSON など）で色が落ちる。どちらも色の乱択を素通りする。
 extension SyntaxLayersTests {
-  /// 誤りを含む木では、字の色はその字の区画の枠で決まり、区間の切り方に依らない。約 80K 字の Swift（閉じない `f(` と、
-  /// 区画をいくつもまたぐコメント）で、区画の格子と揃わない区間の答えを、全体の答えをその区間で切ったものと比べる。
+  /// 誤りを含む木では、字の色はその字を含む格子の目の枠で決まり、区間の切り方に依らない。約 80K 字の Swift（閉じない
+  /// `f(` と、格子の目をいくつもまたぐコメント）で、格子と揃わない区間の答えを、全体の答えをその区間で切ったものと比べる。
   func testCrumbledRolesDoNotDependOnWhereTheRangeIsCut() throws {
     var source = String(repeating: "let a = b + 1 // c\n", count: 500)
     source += "let v = f(\n"
@@ -32,7 +32,7 @@ extension SyntaxLayersTests {
     XCTAssertEqual(mismatches, [], "区間の切り方で答えが変わった")
   }
 
-  /// 誤りを含まない木には枠を掛けない——余白を超える大きな構文（区画をいくつもまたぐコメント）の真ん中にも色が付く。
+  /// 誤りを含まない木には枠を掛けない——余白を超える大きな構文（格子の目をいくつもまたぐコメント）の真ん中にも色が付く。
   func testAHealthyTreeColorsAConstructLargerThanTheMargin() throws {
     let comment = "/*\n" + String(repeating: "note\n", count: 20_000) + "*/\n"
     let source = "let a = 1\n" + comment + "let b = 2\n"

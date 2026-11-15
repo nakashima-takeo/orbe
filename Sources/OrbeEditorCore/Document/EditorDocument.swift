@@ -11,14 +11,15 @@ import os
 /// そのまま、古い版の結果はその後の編集でずらして使う（字から離れない）。面は役割の並びを写しごと引く（色をどこに置くかは
 /// 面が決める）。
 ///
-/// ディスクの姿（最後に読んだ／書いたファイルのバイト列のダイジェスト）も持ち、外部変更は監視の通知と保存の直前に
-/// 実ファイルを読み直して比べる（`reconcileWithDisk` / `save`）。baseline（比べる底の本文）を持てば、本文との行差分を
-/// 行の印（git ガター）として面へ押す。
+/// 未保存は、本文が保存時の本文（最後に開いた・保存した・ディスクから取り込んだ本文）と違うかで決める——戻し方（⌘Z・
+/// 打ち直し・変換の取り消し）を問わない。打鍵で main がするのは長さの比較だけで、長さが同じなら未保存を立てたまま裏で
+/// 中身を比べ、同じと分かった時点で下ろす（誤るときは未保存の側）。
+///
+/// ディスクと揃えた時点の姿（保存時の本文・ファイルのバイト列のダイジェスト・BOM）を持ち、外部変更は監視の通知と保存の
+/// 直前に実ファイルを読み直して比べる（`reconcileWithDisk` / `save`）。baseline（比べる底の本文）を持てば、本文との
+/// 行差分を行の印（git ガター）として面へ押す。
 @MainActor
 public final class EditorDocument {
-  /// 文書を初めて画面に出すとき、最初の色を待つ上限。
-  public static let firstColorsWait: TimeInterval = 0.05
-
   public let url: URL
   public let language: SyntaxLanguage?
   public let surface: any TextSurface
@@ -30,10 +31,8 @@ public final class EditorDocument {
   private var log = EditLog()
   /// 本文の版（編集 1 回で 1 進む）。
   public var version: Int { log.version }
-  /// 面の本文が最後に保存（または開いた）内容と違うか。⌘Z で保存時の状態に戻しても立ったまま。
-  public private(set) var isDirty = false {
-    didSet { if isDirty != oldValue { onDirtyChange?(isDirty) } }
-  }
+  /// 本文が保存時の本文と違う（または同じかを裏で確かめている）。
+  public var isDirty: Bool { diskSync.isDirty }
   public var onDirtyChange: ((Bool) -> Void)?
   /// ディスクの内容が最後に読んだ／書いたものと違い、差し替えられていない（未保存の本文がある、または
   /// UTF-8 として読めない内容が書かれている）。照合のたびに導出し直す（消えた・同じ・差し替えたなら false）。
@@ -47,12 +46,31 @@ public final class EditorDocument {
   public var baseline: String? {
     didSet {
       guard baseline != oldValue else { return }
-      baselineGeneration += 1
+      hunkRequest += 1
       requestHunks()
     }
   }
-  /// baseline と本文の行差分。編集の直後はずらした前のハンクで、裏の結果が届くと置き換わる。
+  /// 行差分の上限（越えれば共通の先頭・末尾を落とした残り全体を 1 つの区間にする——`LineDiff.Limit`）。既定はガターの
+  /// 値。変えると裏へ行差分を頼み直す。
+  public var hunkLimit = LineDiff.gutter {
+    didSet {
+      guard hunkLimit != oldValue else { return }
+      hunkRequest += 1
+      requestHunks()
+    }
+  }
+  /// baseline と本文の行差分（形は `LineDiff` の出力と同じ）。編集の直後は前のハンクを編集でずらしたもの（同じ形だが最小とは
+  /// 限らず、行の数を変えない編集の後は区間の外の行の中身が底と違いうる——`VersionedEdit.track`）で、裏の結果が届くと置き換わる。
   public private(set) var hunks: [LineHunk] = []
+  /// ハンクがどの baseline に対する差分か（ハンクと組で変わる。差分がまだ無い・baseline が無ければ nil）。baseline を置き
+  /// 直してから結果が届くまでは、前の baseline とそれに対するハンク（その後の編集でずらしたもの）の組のまま——この組と
+  /// 今の本文は、いつでも互いに食い違わない。
+  public private(set) var hunksBase: String?
+  /// ハンクが今の版・今の baseline・今の上限に対する裏の結果か（編集でずらしただけ・頼み直した結果を待っている間は
+  /// false。baseline が無ければ true）。
+  public var hunksAreCurrent: Bool { pendingHunks == nil }
+  /// ハンクが変わった（結果が届いた・編集でずらした・baseline が無くなった）。行の印と同じ時機に、印の後で届く。
+  public var onHunksChange: (() -> Void)?
   /// 字下げの作法（単位とタブか）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、面へ押す。
   public private(set) var indentation = Indentation.fallback
   /// 面の見えている範囲が変わった（スクロール・窓の高さ）。
@@ -66,22 +84,21 @@ public final class EditorDocument {
   public var onAnalysis: ((AnalysisRequest, [NSRange]) -> Void)?
 
   private let inbox: AnalysisInbox
-  private(set) var syntax: SyntaxWorker?
+  private var reception: SyntaxReception
   private let analysis: DocumentAnalysis
-  /// 最後に受け取った構文の結果の版と、そのとき見えている範囲・全体の作り直しが済んでいたか。
-  private var syntaxState = SyntaxProgress(version: 0, visibleReady: false, complete: false)
-  private var baselineGeneration = 0
+  /// 行差分の依頼を置き直す（baseline か上限が変わる）たびに進む番号。
+  private var hunkRequest = 0
   /// 行差分を頼んで、まだその結果を受け取っていない版。
   private var pendingHunks: Int?
   /// 区間の列の問いのうち、まだ結果を受け取っていないもの（種類ごとに最新の問いと版）。
   private var pendingRanges: [AnalysisRequest.Kind: (request: AnalysisRequest, version: Int)] = [:]
-  private(set) var hasBeenShown = false
-  /// 最後に読んだ／書いたファイルのバイト列のダイジェスト（ディスクの姿）。
-  private var diskDigest: SHA256Digest
-  /// 開いた／差し替えたときにファイルが UTF-8 BOM で始まっていたか。保存で同じように書き戻す。
-  private var hasBOM: Bool
-  /// ディスクの内容で本文を差し替えている間は、その編集で未保存を立てない。
+  /// ディスクと揃えた時点の姿と未保存の状態。BOM は保存で同じように書き戻す。
+  private var diskSync: DiskSync {
+    didSet { if isDirty != oldValue.isDirty { onDirtyChange?(isDirty) } }
+  }
+  /// ディスクの内容で本文を差し替えている間は、その編集で未保存を動かさない（差し替えの後に揃えた姿を置く）。
   private var isReplacingFromDisk = false
+  private var isReceiving = false
 
   /// `surface` は、まだ文書と結ばれていない面。ロープは読んだ内容から組み、面は結ばれたときに写しを引く。構文の裏の仕事はここで起き、
   /// 全体の解析と先頭の画面ぶんの役割を作り始める（待たない）。
@@ -104,14 +121,12 @@ public final class EditorDocument {
     let text = TextRope(contents.text)
     self.text = text
     roles = RoleRuns(length: text.length)
-    diskDigest = contents.digest
-    hasBOM = contents.hasBOM
+    diskSync = DiskSync(.init(text: text, digest: contents.digest, hasBOM: contents.hasBOM))
     let inbox = AnalysisInbox()
     self.inbox = inbox
-    syntax = language.flatMap { registry.rules(for: $0) }.map {
-      SyntaxWorker(
-        text: text, version: 0, rules: $0, registry: registry, inbox: inbox, quietDelay: quietDelay)
-    }
+    reception = SyntaxReception(
+      text: text, version: 0, language: language, registry: registry, inbox: inbox,
+      quietDelay: quietDelay)
     analysis = DocumentAnalysis(inbox: inbox)
     inbox.setWake { [weak self] in self?.receive() }
     surface.delegate = self
@@ -123,18 +138,23 @@ public final class EditorDocument {
     DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
   }
 
-  /// 構文の裏の仕事に走っている解析を打ち切らせ、閉じた文書の写し・役割の並び・構文木を持つ裏の仕事は裏で手放す（大きな
-  /// 木の解放を main で行わない）。裏へ渡す前に文書の欄から外す——欄は deinit の後に main で解放されるので、欄に残すと裏が
-  /// 先に済んだとき最後の解放が main で起きる。
+  /// 構文の裏の仕事に走っている解析を打ち切らせ、閉じた文書の写し・保存時の本文・役割の並び・構文木を持つ裏の仕事は
+  /// 裏で手放す（大きな木の解放を main で行わない）。裏へ渡す前に文書の欄から外す——欄は deinit の後に main で解放される
+  /// ので、欄に残すと裏が先に済んだとき最後の解放が main で起きる。
   deinit {
-    syntax?.cancel()
     let parcel = OSAllocatedUnfairLock<ReleasedParts?>(
-      initialState: ReleasedParts(text: text, roles: roles, syntax: syntax))
+      initialState: ReleasedParts(
+        text: text, synced: diskSync.releaseText(), roles: roles, syntax: reception.release()))
     text = TextRope()
     roles = RoleRuns(length: 0)
-    syntax = nil
     releaseParts(parcel)
   }
+
+  /// 構文の裏の仕事（無ければ nil）。
+  var syntax: SyntaxWorker? { reception.worker }
+
+  /// 初めて画面に出す前の上限待ちを済ませた。
+  var hasBeenShown: Bool { reception.hasBeenShown }
 
   /// 区間の列の問いを裏へ頼む。結果は `onAnalysis` に届く。
   public func analyze(_ request: AnalysisRequest) {
@@ -142,45 +162,41 @@ public final class EditorDocument {
     analysis.post(request, text: text, version: version)
   }
 
-  /// 文書を初めて画面に出す直前に呼ぶ。構文の裏の仕事が見えている範囲の役割を作り終えていなければ、最初の描画に色が
-  /// 間に合うよう最大 `firstColorsWait` 待つ（越えたら無色で出し、後から色が付く）。2 回目以降は何もしない。
-  public func prepareToShow() {
-    guard !hasBeenShown else { return }
-    hasBeenShown = true
-    guard let syntax, !isFirstColorReady else { return }
-    syntax.boost()
-    _ = wait(until: .now() + Self.firstColorsWait) { $0.isFirstColorReady }
+  /// 初めて画面に出すとき、最初の色を待つ上限。
+  public static let firstColorsWait: TimeInterval = 0.05
+
+  /// 文書を初めて画面に出す直前に呼ぶ。構文の裏の仕事が、見えている範囲の役割を作り終えていなければ、最初の描画に色が
+  /// 間に合うよう期限 `deadline`（省けば今から `EditorDocument.firstColorsWait`）まで待つ（越えたら無色で出し、後から色が
+  /// 付く）。2 回目以降は何もしない。待つ間も結果を受け取るので、受け取りの知らせの中からは呼べない——受け取りが入れ子に
+  /// なり、内側の受け取りがディスクの内容で本文を差し替えると、外側の受け取りが持つ役割の変わった区間が、差し替える前の
+  /// 座標のまま面へ届く。
+  public func prepareToShow(
+    until deadline: DispatchTime = .now() + EditorDocument.firstColorsWait
+  ) {
+    precondition(!isReceiving, "受け取りの知らせの中からは、初めて見せる前の待ちを始められない")
+    guard reception.beginShowing(ready: isFirstColorReady) else { return }
+    _ = wait(until: deadline) { $0.isFirstColorReady }
   }
 
-  /// 裏の仕事（構文・行差分・問い）がすべて今の版に追いつき、その結果を受け取るまで待つ（最大 `timeout`）。追いついたら
-  /// true。時間ではなく受け取り箱を見て待つ——描画やテストが、結果の出揃った状態を決定的に得る口。待つ間だけ、構文の
-  /// 見えていない範囲も打鍵が止むのを待たずに作らせる。
+  /// 裏の仕事（構文・比較・行差分・問い）がすべて今の版に追いつき、その結果を受け取るまで待つ（最大 `timeout`）。
+  /// 追いついたら true。時間ではなく受け取り箱を見て待つ——描画やテストが、結果の出揃った状態を決定的に得る口。待つ間
+  /// だけ、構文の見えていない範囲も打鍵が止むのを待たずに作らせる。
   @discardableResult
   public func waitUntilCaughtUp(timeout: TimeInterval = 5) -> Bool {
-    syntax?.setHurry(true)
-    defer { syntax?.setHurry(false) }
-    syntax?.boost()
-    return wait(until: .now() + timeout) { $0.isCaughtUp }
+    SyntaxReception.hurrying(syntax) { wait(until: .now() + timeout) { $0.isCaughtUp } }
   }
 
   /// 受け取り箱に結果が届くたびに受け取り、`done` が成り立つか期限が来るまで待つ。
   private func wait(until deadline: DispatchTime, _ done: (EditorDocument) -> Bool) -> Bool {
-    receive()
-    while !done(self) {
-      guard inbox.wait(until: deadline) else { break }
-      receive()
-    }
-    return done(self)
+    SyntaxReception.wait(on: inbox, until: deadline, receive: receive) { done(self) }
   }
 
-  var isFirstColorReady: Bool {
-    syntax == nil || (syntaxState.version == version && syntaxState.visibleReady)
-  }
+  var isFirstColorReady: Bool { reception.isFirstColorReady(at: version) }
 
   /// 受け取った結果で、裏の仕事がすべて今の版に追いついている（待たず、裏を急かさない）。
   var isCaughtUp: Bool {
-    (syntax == nil || (syntaxState.version == version && syntaxState.complete))
-      && pendingHunks == nil && pendingRanges.isEmpty
+    reception.isComplete(at: version) && diskSync.dirtiness != .checking && pendingHunks == nil
+      && pendingRanges.isEmpty
   }
 
   /// 本文の作法（字下げ・改行）を検出し直して面へ押す。
@@ -199,18 +215,19 @@ public final class EditorDocument {
       reconcileWithDisk()
       if isDiskChanged { throw EditorDocumentError.diskChanged(url) }
     }
+    let hasBOM = diskSync.snapshot.hasBOM
     let data = (hasBOM ? Self.bom : Data()) + text.utf8Data()
     try data.write(to: url, options: .atomic)
-    diskDigest = SHA256.hash(data: data)
-    isDirty = false
+    diskSync.sync(.init(text: text, digest: SHA256.hash(data: data), hasBOM: hasBOM))
     isDiskChanged = false
     surface.markUndoBoundary()
   }
 
-  /// 実ファイルを読み直してディスクの姿と比べる。違っていて未保存でなければ本文を差し替え（undo 可、
-  /// 未保存にならない、undo の区切り）、未保存なら `isDiskChanged` を立てて本文は保つ。
-  /// 消えた・同じ内容なら印を消す。UTF-8 でない内容（別の符号化・バイナリ）が書かれていれば一致を
-  /// 証明できないので、差し替えずに印を立てる（外の書き込みを ⌘S で潰さない）。
+  /// 実ファイルを読み直して揃えた姿と比べる。消えた・揃えた姿と同じなら印を消す。違っていて、読んだ本文が今の本文と
+  /// 同じなら、本文に触れずにそれを揃えた姿として受け入れる（未保存も印も消える）。そうでなく未保存でなければ本文を
+  /// 差し替え（undo 可、未保存にならない、undo の区切り）、未保存なら `isDiskChanged` を立てて本文は保つ。
+  /// UTF-8 でない内容（別の符号化・バイナリ）が書かれていれば一致を証明できないので、差し替えずに印を立てる（外の
+  /// 書き込みを ⌘S で潰さない）。
   public func reconcileWithDisk() {
     let onDisk: Contents
     do {
@@ -222,7 +239,12 @@ public final class EditorDocument {
       isDiskChanged = false
       return
     }
-    guard onDisk.digest != diskDigest else {
+    guard onDisk.digest != diskSync.snapshot.digest else {
+      isDiskChanged = false
+      return
+    }
+    if TextRope(onDisk.text).hasSameContent(as: text) {
+      diskSync.sync(.init(text: text, digest: onDisk.digest, hasBOM: onDisk.hasBOM))
       isDiskChanged = false
       return
     }
@@ -234,8 +256,7 @@ public final class EditorDocument {
     surface.replaceAll(with: onDisk.text)
     isReplacingFromDisk = false
     applyConventions()
-    diskDigest = onDisk.digest
-    hasBOM = onDisk.hasBOM
+    diskSync.sync(.init(text: text, digest: onDisk.digest, hasBOM: onDisk.hasBOM))
     surface.markUndoBoundary()
     isDiskChanged = false
   }
@@ -245,39 +266,36 @@ public final class EditorDocument {
     guard let baseline else {
       pendingHunks = nil
       hunks = []
+      hunksBase = nil
       pushLineMarks()
       return
     }
     pendingHunks = version
     analysis.postHunks(
-      text: text, version: version, baseline: baseline, generation: baselineGeneration)
+      text: text, version: version, baseline: baseline, limit: hunkLimit,
+      generation: hunkRequest)
   }
 
-  /// 行の印を面へ押す。印はハンクが同じでも押す——同じ行の中の打鍵でハンクは変わらず区間のオフセットだけが動く。
+  /// 行の印を面へ押す。
   private func pushLineMarks() {
-    surface.setLineMarks(LineMarks(hunks: hunks).spans(in: text))
+    surface.setLineMarks(LineMarks(hunks: hunks))
+    onHunksChange?()
   }
 
-  /// 受け取り箱の結果を取り、今の版へ写して置く。
+  /// 受け取り箱の結果を取り、今の版へ写して置く。比較が未保存を下ろしたとき外部変更の印が立っていれば、最後に照合し
+  /// 直す（未保存でなくなったので外の内容に差し替わる）——差し替えは打鍵と同じ編集の道を通るので、ほかの結果を置き
+  /// 終えるまで本文を変えない。
   private func receive() {
+    isReceiving = true
+    defer { isReceiving = false }
     let contents = inbox.take()
-    var changedRoles = IndexSet()
-    for outcome in contents.syntax {
-      guard let edits = log.edits(since: outcome.version) else { continue }
-      changedRoles.formUnion(
-        EditSweep.batches(applied: edits.map(\.edit)).reduce(outcome.changed) { $1.track($0) })
-    }
-    if let outcome = contents.syntax.last, let edits = log.edits(since: outcome.version) {
-      var latest = outcome.roles
-      for record in edits { latest.apply(record.edit) }
-      roles = latest
-      syntaxState = SyntaxProgress(
-        version: outcome.version, visibleReady: outcome.visibleReady, complete: outcome.complete)
-    }
-    if let outcome = contents.hunks, outcome.generation == baselineGeneration,
+    let synced = contents.comparison.map { diskSync.settle($0, version: version) } ?? false
+    let changedRoles = reception.receive(contents.syntax, roles: &roles) { log.edits(since: $0) }
+    if let outcome = contents.hunks, outcome.generation == hunkRequest,
       let edits = log.edits(since: outcome.version)
     {
-      hunks = edits.reduce(outcome.hunks) { $1.track($0) }
+      hunks = VersionedEdit.track(outcome.hunks, through: edits)
+      hunksBase = baseline
       if pendingHunks == outcome.version { pendingHunks = nil }
       pushLineMarks()
     }
@@ -292,13 +310,14 @@ public final class EditorDocument {
     }
     discardSettledEdits()
     if !changedRoles.isEmpty { surface.rolesDidChange(changedRoles) }
+    if synced, isDiskChanged { reconcileWithDisk() }
   }
 
   /// 結果を待っている版のうち最も古いものまでの編集を捨てる。構文の裏の仕事は、最後に受け取った版より後ろのどの版の結果も
   /// 置きうる。
   private func discardSettledEdits() {
     var oldest = version
-    if syntax != nil { oldest = min(oldest, syntaxState.version) }
+    if let received = reception.receivedVersion { oldest = min(oldest, received) }
     if let pendingHunks { oldest = min(oldest, pendingHunks) }
     for pending in pendingRanges.values { oldest = min(oldest, pending.version) }
     log.discard(through: oldest)
@@ -314,17 +333,16 @@ extension EditorDocument: TextSurfaceDelegate {
     guard !edits.isEmpty else { return }
     var applied: [VersionedEdit] = []
     applied.reserveCapacity(edits.count)
-    var tracked = hunks
     for whole in edits.reversed() {
-      let record = apply(whole.narrowed(replacing: text.units(in: whole.range)))
-      if baseline != nil { tracked = record.track(tracked) }
-      applied.append(record)
+      applied.append(apply(whole.narrowed(replacing: text.units(in: whole.range))))
     }
-    hunks = tracked
-    if !isReplacingFromDisk { isDirty = true }
+    if baseline != nil { hunks = VersionedEdit.track(hunks, through: applied) }
+    if !isReplacingFromDisk, diskSync.textDidChange(length: text.length) {
+      analysis.postComparison(text: text, version: version, synced: diskSync.snapshot.text)
+    }
     if baseline != nil {
-      pushLineMarks()
       requestHunks()
+      pushLineMarks()
     }
     // 届きうる結果が無ければ、写すための記録は要らない（結果が一つも来ない文書で、差し替えの本文が溜まり続けない）。
     if syntax == nil, pendingHunks == nil, pendingRanges.isEmpty { log.discard(through: version) }
@@ -334,23 +352,18 @@ extension EditorDocument: TextSurfaceDelegate {
   private func apply(_ edit: TextEdit) -> VersionedEdit {
     let start = text.point(at: edit.range.location)
     let oldEnd = text.point(at: NSMaxRange(edit.range))
+    let keepsStartRow = keepsStartRow(edit, start: start, oldEnd: oldEnd)
     text.replace(edit.range, with: edit.replacement)
     let newEnd = text.point(at: NSMaxRange(edit.newRange))
-    let record = log.append(edit, start: start, oldEnd: oldEnd, newEnd: newEnd)
+    let record = log.append(
+      edit, start: start, oldEnd: oldEnd, newEnd: newEnd, keepsStartRow: keepsStartRow)
     roles.apply(edit)
-    syntax?.post(record, text: text)
+    reception.worker?.post(record, text: text)
     return record
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {
-    if let syntax {
-      let viewport = surface.viewport
-      let first = text.row(containing: viewport.firstVisible)
-      let last = first + Int(viewport.visibleLines.rounded(.up))
-      syntax.setVisible(
-        NSRange(location: text.lineStart(first), length: text.lineEnd(last) - text.lineStart(first))
-      )
-    }
+    reception.setVisible(SyntaxReception.lines(of: surface.viewport))
     onViewportChange?()
   }
 

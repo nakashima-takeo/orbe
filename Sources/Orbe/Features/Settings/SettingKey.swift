@@ -9,7 +9,7 @@ enum SettingID: CaseIterable {
     defaultAgent, fontFamily, tabTitleFontFamily, emojiFont, agentStateIcons,
     worktreeDir, notificationSound, notificationSoundVolume, notificationSoundEnabled,
     notificationSoundCustomDone, notificationSoundCustomWaiting,
-    notificationSoundCustomWaitingSameAsDone, menuBarNotificationDuration,
+    notificationSoundCustomWaitingSameAsDone, menuBarNotificationDuration, scmAutoFetch,
     automationRunRetentionCount, automationRunRetentionDays, automationEventRetentionDays
 }
 
@@ -45,6 +45,8 @@ enum SettingKeys {
   static let notificationSoundCustomWaitingSameAsDone = DefaultedSettingKey<Bool>(
     .notificationSoundCustomWaitingSameAsDone)
   static let menuBarNotificationDuration = DefaultedSettingKey<Int>(.menuBarNotificationDuration)
+  /// エディター面が見えている間の裏の fetch。
+  static let scmAutoFetch = DefaultedSettingKey<Bool>(.scmAutoFetch)
   static let automationRunRetentionCount = DefaultedSettingKey<Int>(.automationRunRetentionCount)
   static let automationRunRetentionDays = DefaultedSettingKey<Int>(.automationRunRetentionDays)
   static let automationEventRetentionDays = DefaultedSettingKey<Int>(.automationEventRetentionDays)

@@ -180,7 +180,7 @@ extension WindowControllerTaskStartTests {
     let result = try start(wc, TaskStartRequest(taskId: task.id, branch: "feat/root")).get()
 
     XCTAssertEqual(
-      (result["repo"] as? String).map(GitWorktreeRoot.normalizedPath),
+      (result["repo"] as? String).map { GitWorktreeRoot.normalizedPath($0) },
       GitWorktreeRoot.normalizedPath(local))
   }
 
@@ -197,7 +197,7 @@ extension WindowControllerTaskStartTests {
     let result = try start(wc, TaskStartRequest(taskId: task.id, branch: "feat/repo", repo: local))
       .get()
     XCTAssertEqual(
-      (result["repo"] as? String).map(GitWorktreeRoot.normalizedPath),
+      (result["repo"] as? String).map { GitWorktreeRoot.normalizedPath($0) },
       GitWorktreeRoot.normalizedPath(local))
   }
 

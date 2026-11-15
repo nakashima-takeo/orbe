@@ -103,7 +103,8 @@ final class EditorTypingPerfTests: OrbeTestCase {
   /// 複数カーソルの打鍵 1 回の main の仕事——1MB で ⌘F の一致（`offset`、約 1.2 万件）を出したまま、⌘⇧L で作った
   /// カーソル 1,000 本（`marker` の出現）と 1 万本（`offset` の出現。上限で切れる）で打ったとき、キーの出来事を受けてから
   /// 面の編集係・文書・Orbe の配り先が戻るまでの main のスレッドの CPU 時間。1,000 本で p95 16ms（1 コマ）以下、1 万本で
-  /// p95 160ms 以下（手間がカーソルの数に比例するだけ）。
+  /// p95 160ms 以下（手間がカーソルの数に比例するだけ）。git 管理下（baseline あり）の Enter——行の数を変え、カーソルごとに
+  /// ハンクをずらす——も同じ予算。
   func testMultiCursorKeystrokeMainTime() throws {
     let warm = try openEditor("warm\n")
     warm.document.surface.responder.keyDown(with: .key("/", []))
@@ -124,20 +125,35 @@ final class EditorTypingPerfTests: OrbeTestCase {
       surface.selectedRange = first
       surface.responder.perform(NSSelectorFromString("selectHighlights:"), with: nil)
       let cursors = surface.cursorSelections.count
-      var cpu: [Double] = []
-      for character in String(repeating: "abc ", count: 8) {
-        let began = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
-        surface.responder.keyDown(with: .key(String(character), []))
-        cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began) / 1e6)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+      func type(_ keys: [String]) -> [Double] {
+        keys.map { key in
+          let began = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+          surface.responder.keyDown(with: .key(key, []))
+          let cpu = Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began) / 1e6
+          RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+          return cpu
+        }
       }
+      func p95(_ cpu: [Double]) -> Double {
+        let sorted = cpu.sorted()
+        return sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+      }
+      let cpu = type(String(repeating: "abc ", count: 8).map(String.init))
       reportPerf(
         "1MB cursors \(cursors) find \(matches)", "multi-cursor keystroke-main", cpu, digits: 2)
-      let sorted = cpu.sorted()
       XCTAssertEqual(cursors, expected, "前提: カーソルの数")
       XCTAssertLessThanOrEqual(
-        sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))], limit,
-        "\(expected) 本: 打鍵 1 回の main のスレッドの CPU 時間の p95")
+        p95(cpu), limit, "\(expected) 本: 打鍵 1 回の main のスレッドの CPU 時間の p95")
+
+      document.baseline = document.text.substring(
+        NSRange(location: 0, length: document.text.length))
+      pumpMain(until: { document.hunksAreCurrent }, "baseline との差が届く")
+      let enter = type(Array(repeating: "\r", count: 8))
+      reportPerf(
+        "1MB cursors \(cursors) find \(matches)", "multi-cursor enter-main (baseline あり)", enter,
+        digits: 2)
+      XCTAssertLessThanOrEqual(
+        p95(enter), limit, "\(expected) 本: git 管理下の Enter 1 回の main のスレッドの CPU 時間の p95")
       opened.window.orderOut(nil)
     }
   }

@@ -3,39 +3,6 @@ import CoreText
 import OrbeEditorCore
 import os
 
-/// 行の印（git ガター）を行に写したもの。面が印を受け取ったときに、引いた写しで写す。
-struct RowMarks: Equatable, Sendable {
-  struct Bar: Equatable, Sendable {
-    var rows: ClosedRange<Int>
-    var kind: LineMarks.Kind
-  }
-
-  /// 削除の三角。`atBottom` は行の下端（改行で終わらない本文の末尾）、そうでなければ行の上端。
-  struct Deletion: Equatable, Sendable {
-    var row: Int
-    var atBottom: Bool
-  }
-
-  var bars: [Bar] = []
-  var deletions: [Deletion] = []
-
-  static let empty = RowMarks()
-
-  init() {}
-
-  /// 区間は改行込みなので、最後の行は区間の最後の字の行。境は次の行の行頭（本文が改行で終わらない末尾なら最後の行の下端）。
-  init(_ spans: LineMarkSpans, in text: TextRope) {
-    bars = spans.marks.map { mark in
-      let rows = text.rows(of: NSRange(location: mark.range.location, length: mark.range.length))
-      return Bar(rows: rows, kind: mark.kind)
-    }
-    deletions = spans.deletions.map { offset in
-      let row = text.row(containing: offset)
-      return Deletion(row: row, atBottom: text.lineStart(row) != offset)
-    }
-  }
-}
-
 /// 面を作るときに決まり、閉じるまで変わらない見え方。フォントは不変で、Core Text はスレッドをまたいだ利用を保証する。
 struct SurfaceConfig: @unchecked Sendable {
   /// 装備の寸法。
@@ -112,12 +79,6 @@ struct SurfaceConfig: @unchecked Sendable {
     return (glyphs, sizes.map(\.width))
   }
 
-  /// 行番号の列の幅——最小の幅か、最大の行番号が右の余白と印の列を残して収まる幅の広い方。
-  func columnWidth(lineCount: Int) -> CGFloat {
-    let digits = ceil(numberWidth(max(1, lineCount)))
-    return max(gutterWidth + marks.gutterWidth, digits + gutterTrailingInset + marks.gutterWidth)
-  }
-
   /// 行番号の数字の幅。
   func numberWidth(_ number: Int) -> CGFloat {
     var n = number
@@ -187,7 +148,7 @@ struct CaretMaterial: Equatable, Sendable {
   var collapsed: [Int] = []
   /// 点滅の起点（`CACurrentMediaTime`）。キャレットが動くたびに置き直し、表示から始める。
   var epoch: Double = 0
-  /// 面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。
+  /// 場が主で、面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。
   var focused = false
   /// 点滅させるか（アクセシビリティの「点滅しない挿入ポイント」が有効なら、点滅せず描き続ける）。
   var blinks = true
@@ -214,6 +175,64 @@ struct CaretMaterial: Equatable, Sendable {
   }
 }
 
+/// 入力欄の場の描く材料——写し・キャレットと選択・横の送りの箱と頼まれた横の「見えるところまで」・見え方。main の取引が
+/// 場の確定で置く。キャレットの `focused` は「入力欄が主で、面に焦点がある」。
+struct FieldMaterial: @unchecked Sendable {
+  var content: SurfaceContent
+  var caret: CaretMaterial
+  let scroll: FieldScroll
+  var reveal: HorizontalReveal?
+  var font: CTFont
+  var lineHeight: CGFloat
+  /// 行の上端から基線まで（pt）と、タブの桁と刻み（pt）——main の場の幾何と同じ値（→ `EditingSite`）。
+  var baseline: CGFloat
+  var tabColumns: Int
+  var tabWidth: CGFloat
+  var palette: FieldPalette
+}
+
+/// 入力欄の場の横の送り（pt。入力欄の左端から隠れている幅）。main が読み（当たり・IME の矩形）、描画スレッドだけが変える
+/// ——取引が頼んだ「キャレットが見えるところまで」を、描画スレッドがその行を組んだ x で解く（本文の横の寄せと同じく、
+/// main は打鍵のたびに行を組まない）。鍵の中では値の読み書きだけをする。
+final class FieldScroll: Sendable {
+  private let state = OSAllocatedUnfairLock(initialState: (x: 0.0, serial: 0))
+
+  var x: Double { state.withLock { $0.x } }
+
+  /// 通し番号 `serial` の頼みがまだなら、x 区間 `caret` が幅 `width` に見えるところまで最小限動かす。動いたら true。
+  func reveal(serial: Int, caret: ClosedRange<Double>, width: Double) -> Bool {
+    state.withLock { s in
+      guard serial > s.serial else { return false }
+      s.serial = serial
+      let before = s.x
+      if caret.lowerBound < s.x {
+        s.x = caret.lowerBound
+      } else if caret.upperBound > s.x + width {
+        s.x = max(0, caret.upperBound - width)
+      }
+      return s.x != before
+    }
+  }
+
+  /// 送りを上限 `limit`（最も広い行の右端とキャレットが幅に収まる所）までに収める。入力欄が広がった・文が短くなったとき、
+  /// 行頭を隠したまま右を空けない（本文の横の範囲が縮めば位置を収めるのと同じ）。動いたら true。
+  func clamp(to limit: Double) -> Bool {
+    state.withLock { s in
+      guard s.x > max(0, limit) else { return false }
+      s.x = max(0, limit)
+      return true
+    }
+  }
+}
+
+/// 入力欄の外観で解いた色。
+struct FieldPalette: Equatable, Sendable {
+  var text: InkColor
+  var caret: FrameColor
+  var selection: FrameColor
+  var inactiveSelection: FrameColor
+}
+
 /// 取引が頼んだ横の「見えるところまで」。描画スレッドが区間の行を組んで x を引き、横の位置を寄せる——main は論理の位置
 /// だけを持ち、打鍵のたびに行を組まない。`serial` が進むたびに 1 回だけ解く。
 struct HorizontalReveal: Equatable, Sendable {
@@ -234,7 +253,20 @@ struct FrameMaterial: Sendable {
   var rowEdits: [RowEdit] = []
   /// 描画スレッドがまだ受け取っていない打鍵の時刻（その打鍵の取引が入ったコマで打鍵→画面の遅れを測る）。
   var keystrokes: [Double] = []
-  var marks = RowMarks.empty
+  var marks = LineMarks.empty
+  /// 縦の並び（写しと同じ書き込みで置く——描画スレッドは引き取った写しの行の並びで描く）。
+  var rows = RowLayout(lineHeight: 1)
+  /// 差し込んだ行の出どころの写し（並びと同じ書き込みで置き、出どころの役割が変われば置き直す）。
+  var rowSourceContent: SurfaceContent?
+  /// 表示の構成のうち、配置と描き方に効くもの。
+  var arrangement = SurfaceArrangement()
+  /// 絵の差し込みを描く材料（絵の差し込みの同一性で引く。並びの塊の中身と同じ書き込みで置く）。
+  var zones: [ObjectIdentifier: ZoneMaterial] = [:]
+  /// 入力欄の場の描く材料（場の通し番号で引く）。
+  var fields: [Int: FieldMaterial] = [:]
+  /// 絵の差し込みの文の選択の地（絵の差し込みの文が主の間だけ）。
+  var zoneSelection: ZoneSelectionMaterial?
+  /// 本文の選択の地とキャレット。`focused` は「本文が主で、面に焦点がある」。
   var caret = CaretMaterial()
   /// まだ解いていないかもしれない横の「見えるところまで」（本文を変えて見せない取引は、古い区間を捨てる）。
   var reveal: HorizontalReveal?
@@ -261,6 +293,12 @@ struct FrameMaterial: Sendable {
 
   static let defaultSpace = CGColorSpace(name: CGColorSpace.sRGB)!
 
+  /// 主の場のキャレット——点滅を決める（主が編集の場でなければ、焦点の無い本文のキャレット）。
+  var primaryCaret: CaretMaterial {
+    guard !caret.focused else { return caret }
+    return fields.values.first { $0.caret.focused }?.caret ?? caret
+  }
+
   /// 本文の編集を積む（描画スレッドが長く受け取らなければ、全部の行が変わったことにまとめる）。
   mutating func note(_ edit: RowEdit) {
     rowEdits = rowEdits.count < 64 ? rowEdits + [edit] : [.all(version: edit.version)]
@@ -275,19 +313,25 @@ final class MaterialBox: Sendable {
   /// 今の版。
   var revision: Int { state.withLock { $0.revision } }
 
-  /// 書き換えて版を進め、進めた後の版を返す。書き換える前の写しは裏で手放す——文書が役割の並びを丸ごと差し替えた後は、
-  /// 箱が古い並びの最後の持ち主になりうる（大きな木の解放を main で行わない）。
+  /// 書き換えて版を進め、進めた後の版を返す。書き換える前の写し（本文と差し込んだ行の出どころ）は裏で手放す——文書が役割の
+  /// 並びを丸ごと差し替えた後は、箱が古い並びの最後の持ち主になりうる（大きな木の解放を main で行わない）。
   @discardableResult
   func update(_ body: @Sendable (inout FrameMaterial) -> Void) -> Int {
     let (revision, before) = state.withLock { material in
-      let before = material.content
+      let before = Copies(content: material.content, rowSourceContent: material.rowSourceContent)
       body(&material)
       material.revision += 1
       return (material.revision, before)
     }
-    let parcel = OSAllocatedUnfairLock(initialState: consume before)
+    let parcel = OSAllocatedUnfairLock<Copies?>(initialState: consume before)
     DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
     return revision
+  }
+
+  /// 書き換える前の写し（裏で手放す。配列にしない——打鍵ごとの書き換えで main に確保を足さない）。
+  private struct Copies: Sendable {
+    let content: SurfaceContent?
+    let rowSourceContent: SurfaceContent?
   }
 
   func read() -> FrameMaterial { state.withLock { $0 } }

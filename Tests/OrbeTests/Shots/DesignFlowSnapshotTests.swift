@@ -26,14 +26,15 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
 
   /// アクションを 1 つ呼んでから現状の view を撮る、を順に繰り返し連番 PNG を書く。
   /// `name_<NN>_<label>.png` で出力。fixture と違い、状態はアクションが生む（壊れたら画に出る）。
+  /// `ready` は各手順で窓に載せた後に待つ条件（→ `renderPNG`）。
   /// 分割した拡張ファイル（+Settings / +Update）からも使うため internal。
   func flow<V: View>(
     _ name: String, size: NSSize, render: () -> V,
-    steps: [(label: String, action: () -> Void)]
+    until ready: (() -> Bool)? = nil, steps: [(label: String, action: () -> Void)]
   ) throws {
     for (idx, step) in steps.enumerated() {
       step.action()
-      let data = try XCTUnwrap(renderPNG(render(), size: size, dark: true))
+      let data = try XCTUnwrap(renderPNG(render(), size: size, dark: true, until: ready))
       let url = dir.appendingPathComponent(String(format: "%@_%02d_%@.png", name, idx, step.label))
       try data.write(to: url)
       print("[flow] wrote \(url.path)")

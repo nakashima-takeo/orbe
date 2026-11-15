@@ -45,14 +45,18 @@ private final class FocusMarkView: NSView {
   override init(frame: NSRect) {
     super.init(frame: frame)
     wantsLayer = true
+    layerContentsRedrawPolicy = .onSetNeedsDisplay
     isHidden = true
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-  override func draw(_ dirtyRect: NSRect) {
-    color?.setFill()
-    bounds.fill()
+  override var wantsUpdateLayer: Bool { true }
+
+  override func updateLayer() {
+    effectiveAppearance.performAsCurrentDrawingAppearance {
+      layer?.backgroundColor = color?.cgColor
+    }
   }
 }

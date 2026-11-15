@@ -43,7 +43,7 @@ final class GroupFacesView: NSView {
   var onFaceFocused: ((Face) -> Void)?
   private var responderObservation: NSKeyValueObservation?
 
-  /// 焦点の面の responder（エディターは文書があればそのテキスト面、無ければ pane。端末は見せている 1 枚）。
+  /// 焦点の面の responder（エディターは pane の焦点の行き先——本体の面、無ければ pane。端末は見せている 1 枚）。
   var focusTarget: NSView {
     guard faces.focus == .terminal, let shownTerminal else { return editor.focusTarget }
     return shownTerminal.surfaceView
@@ -136,14 +136,14 @@ final class GroupFacesView: NSView {
     face?.hitTest(point)?.scrollWheel(with: event)
   }
 
-  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）を面と取っ手へ配る。
+  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態・diff の見せ方）を面と取っ手へ配る。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
-    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
+    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState, diffModes: EditorDiffModeState
   ) {
     editor.configure(
       translucency: translucency, localization: localization, fontResolver: fontResolver,
-      sidebar: sidebar)
+      sidebar: sidebar, diffModes: diffModes)
     handle.translucency = translucency
     seamGround.translucency = translucency
   }

@@ -13,8 +13,8 @@ extension SettingsRegistryTests {
         .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
         .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
         .worktreeDir, .notificationSound, .notificationSoundVolume,
-        .notificationSoundEnabled, .menuBarNotificationDuration, .automationRunRetentionCount,
-        .automationRunRetentionDays, .automationEventRetentionDays,
+        .notificationSoundEnabled, .menuBarNotificationDuration, .scmAutoFetch,
+        .automationRunRetentionCount, .automationRunRetentionDays, .automationEventRetentionDays,
       ])
   }
 
