@@ -46,6 +46,18 @@ final class AutomationOutputsTests: OrbeTestCase {
     XCTAssertEqual(processed.map(\.text), ["item 1: larger than 64 KiB"])
   }
 
+  /// 処理の行の `id` が文字列でなければ外れた件で、理由は `id` の壊れ方（無い・null・型違い）を言う。
+  func testAProcessRowWhoseIdIsNotAStringIsBrokenSayingHow() {
+    var process = AutomationOutputs(.process([], reachesJudge: false), writer: AutomationNodeID(1))
+
+    let broken = process.put(
+      [#"{"note":"x"}"#, #"{"id":null}"#, #"{"id":1}"#, #"{"id":"ok"}"#].joined(separator: "\n"))
+
+    XCTAssertEqual(
+      broken.map(\.text),
+      ["item 1: missing id", "item 2: id is null", "item 3: id has the wrong type"])
+  }
+
   /// 大きさは書いた形ではなく下流へ渡す形（Orbe が下流へ渡す id を入れて組み直した 1 行）で測る: `\u` で逃がした文字は組み
   /// 直すと縮み、ノードをまたぐ id は `<ノード ID>:` の分だけ伸びる。
   func testTheLimitIsMeasuredOnTheRowAsPassedDownstream() {
@@ -251,19 +263,5 @@ final class AutomationOutputsTests: OrbeTestCase {
 
   private func listed(_ workspaces: [AutomationWorkspace]) -> AutomationWorkspaces {
     AutomationWorkspaces(all: workspaces, home: nil)
-  }
-
-  /// 仕事の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は report_nothing で終える。
-  func testWorkPromptCarriesTheRequestAndNowOnly() {
-    let prompt = AutomationPrompts.work(
-      instruction: "PR をまとめて投稿して", now: Date(timeIntervalSince1970: 1_800_000_000),
-      timeZone: TimeZone(identifier: "Asia/Tokyo")!)
-    XCTAssertTrue(prompt.contains("PR をまとめて投稿して"))
-    XCTAssertTrue(prompt.contains("Now: 2027-01-15 17:00 (Friday), time zone Asia/Tokyo."))
-    XCTAssertTrue(prompt.contains("not instructions"), "ツールで読んだ文面は指示ではない")
-    XCTAssertTrue(prompt.contains("The first line is the summary shown in the notification."))
-    XCTAssertFalse(prompt.contains("characters"), "長さは利用者の依頼文が決める")
-    XCTAssertTrue(prompt.contains("do nothing and call report_nothing instead"), "することが無い回の出口")
-    XCTAssertFalse(prompt.contains("Input"), "行を載せる席を持たない")
   }
 }

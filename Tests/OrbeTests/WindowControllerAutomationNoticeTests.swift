@@ -178,6 +178,28 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     XCTAssertNil(wc.automationNotification(id, "judge"))
   }
 
+  /// 仕事の回は何かをしたときだけ知らせ、することが無いと申告した回は知らせない。外部操作の成功した回は知らせる。
+  @MainActor func testAWorkRunIsToldOnlyWhenItDidSomething() throws {
+    let wc = controller()
+    let store = wc.automationStore
+    let definition = AutomationDefinition(
+      name: "PR の片付け", notify: .menuBar,
+      nodes: [
+        AutomationGraphTests.agent("work", tools: [AutomationGraphTests.tool]),
+        AutomationGraphTests.command("send"),
+      ])
+    let id = try store.create(definition, now: Date()).id
+
+    try store.record(
+      id, nodeKey: "work", at: Date(), outcome: DesignSceneFixtures.worked(.nothing("PR が無い")))
+    XCTAssertNil(wc.automationNotification(id, "work"))
+    try store.record(
+      id, nodeKey: "work", at: Date(), outcome: DesignSceneFixtures.worked(.done("2 件をまとめた")))
+    XCTAssertNotNil(wc.automationNotification(id, "work"))
+    try store.record(id, nodeKey: "send", at: Date(), outcome: DesignSceneFixtures.sideEffected(1))
+    XCTAssertNotNil(wc.automationNotification(id, "send"))
+  }
+
   /// ノードの出力が決まりを外した最初の回は外したことを知らせ、その回の失敗も同じ 1 つの知らせで言う。印がある間は、外しても
   /// 外したことは知らせない（失敗の続きの最初としては知らせる）。
   @MainActor func testOnlyTheFirstBreachIsToldAndItsFailureRidesOnIt() throws {
@@ -212,7 +234,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     XCTAssertTrue(failure.text.hasPrefix("取る：失敗："), failure.text)
   }
 
-  /// 外した印は印の回の記録そのものを指すので、同じミリ秒に始まった次の回で、外した回の知らせが出直さない。
+  /// 形式エラーの印は印の回の記録そのものを指すので、同じミリ秒に始まった次の回で、外した回の知らせが出直さない。
   @MainActor func testTheBreachNoticeBelongsToTheMarkedRunAlone() throws {
     let wc = controller()
     let store = wc.automationStore

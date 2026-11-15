@@ -132,13 +132,12 @@ extension AutomationStore {
 
   /// 候補を出した自動化——判定のノードの持ち主。定義を読めない自動化なら nil。
   func issuer(of proposal: AutomationProposal) -> Automation? {
-    automations.first { $0.graph.node(proposal.judge) != nil }
+    issuer(ofJudge: proposal.judge)
   }
 
-  /// 判定のノード `judge` の持ち主の自動化の ID（定義を読めない自動化も）。
-  func issuerId(ofJudge judge: AutomationNodeID) -> Int? {
-    automations.first { $0.graph.node(judge) != nil }?.id
-      ?? unreadable.first { $0.nodeIds.contains(judge) }?.id
+  /// 判定のノード `judge` の持ち主の自動化。定義を読めない自動化なら nil。
+  func issuer(ofJudge judge: AutomationNodeID) -> Automation? {
+    automations.first { $0.graph.node(judge) != nil }
   }
 
   /// 判断待ちの候補と、それを棚に出す自動化（候補を出した自動化）の ID（候補の順）。定義を読めない自動化の候補は入らない。

@@ -31,7 +31,7 @@ extension AutomationStoreTests {
   }
 
   /// 鍵を変えた書き換え（`from` の名指しも合わせて変える）の後も、ノードは同じ ID のまま、読んだ位置・まだ受け取っていない行・
-  /// 回の記録・外した印・候補を保ち、下流へ渡す id と回の ID も変わらない。鍵だけの変化は何をするかの変化に入らない（下流の
+  /// 回の記録・形式エラーの印・候補を保ち、下流へ渡す id と回の ID も変わらない。鍵だけの変化は何をするかの変化に入らない（下流の
   /// 名指しが変わっただけのノードも）。
   func testRenamingANodeKeepsItsIdentity() throws {
     let store = AutomationStore()
@@ -43,7 +43,7 @@ extension AutomationStoreTests {
     let fetch = store.nodeId(id, "fetch")
     let before = try XCTUnwrap(store.automation(id))
     let unreadBefore = try unread(store, id, "judge")
-    let anchor = before.state(fetch).anchor
+    let anchor = before.state(fetch).recordedAnchor
     XCTAssertEqual(unreadBefore, ["\(fetch):b"], "前提: b がまだ受け取られていない")
 
     var renamed = before.definition
@@ -59,7 +59,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(after.state(fetch).breach, before.state(fetch).breach)
     XCTAssertEqual(store.proposals.map(\.originNodeId), [fetch])
     XCTAssertEqual(
-      AutomationRunner.runId(id, fetch, after.state(fetch).anchor),
+      AutomationRunner.runId(id, fetch, after.state(fetch).recordedAnchor),
       AutomationRunner.runId(id, fetch, anchor))
   }
 
@@ -189,7 +189,7 @@ extension AutomationStoreTests {
   }
 
   /// 次の書き換えは断られ、定義は変わらない: 版が無い・古い（間に通知を切り替えた）、知らないノードの id・ほかの自動化のノードの
-  /// id、新しく作る定義の id、id を落として消えるノードと同じ鍵で書いたノード。
+  /// id、同じ id を 2 つのノードに書いた、新しく作る定義の id、id を落として消えるノードと同じ鍵で書いたノード。
   func testRewritesThatWouldLoseOrMixUpNodesAreRefused() throws {
     let store = AutomationStore()
     let id = try store.create(sendDefinition(), now: Self.at).id
@@ -222,6 +222,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(
       refused(2) { $0.nodes[0].id = store.nodeId(other, "fetch") },
       .invalid("nodes[0].id: \(store.nodeId(other, "fetch")) is not a node of automation \(id)"))
+    XCTAssertEqual(
+      refused(2) { $0.nodes[1].id = fetch }, .invalid("nodes[1].id: \(fetch) is named twice"))
     XCTAssertEqual(
       refused(2) { $0.nodes[0].id = nil },
       .invalid(

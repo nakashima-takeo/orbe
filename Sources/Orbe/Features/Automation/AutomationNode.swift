@@ -12,12 +12,10 @@ struct AutomationNodeID: Hashable, Comparable, CustomStringConvertible {
 }
 
 /// ノードの定義の ID。定義は書き換えずに足すので、ID がそのまま中身の版になる。
-struct AutomationNodeDefID: Hashable, Comparable {
+struct AutomationNodeDefID: Hashable {
   let rawValue: Int
 
   init(_ rawValue: Int) { self.rawValue = rawValue }
-
-  static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
 }
 
 /// 動作の定義——ノードが何をするか: 手段・上限・出力の性質・行き先。自動化のノードがどれを使うかは `AutomationNode.defId` が指す。
@@ -95,6 +93,9 @@ struct AutomationNodeEdge: Hashable {
   var take: AutomationTake
   /// 古さの上限（時間）。項目は有効になってから、出来事は作られてからの時間で数える。
   var maxAgeHours: Int?
+
+  /// 上限の 87,600 時間（10 年）は、今の集合の古い項目を絞る使い方を妨げず、時刻の計算を桁あふれさせない。
+  static let maxAgeHoursRange = 1...87_600
 }
 
 /// 受け手の取り方。

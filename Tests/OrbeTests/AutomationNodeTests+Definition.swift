@@ -71,6 +71,14 @@ extension AutomationNodeTests {
       ("agent のモデルが無い", with("model", nil), "missing nodes[0].model"),
       ("数でない出来事の日数", with("retentionDays", "long"), "invalid nodes[0].retentionDays"),
       (
+        "Int に収まらない古さの上限", with("from", [["node": "x", "maxAgeHours": 1e30]]),
+        "invalid nodes[0].from[0].maxAgeHours"
+      ),
+      (
+        "小数の間隔", with("trigger", ["kind": "interval", "minutes": 1.5]),
+        "invalid nodes[0].trigger.minutes"
+      ),
+      (
         "ノードが 2 つの形", with("command", "gh api"),
         "invalid nodes[0]: pass either command (a shell command) or instruction (an agent)"
       ),
@@ -83,6 +91,10 @@ extension AutomationNodeTests {
         "invalid nodes[0].from[0].take: pass new or all"
       ),
       ("数でない件数の上限", with("maxItems", "many"), "invalid nodes[0].maxItems"),
+      (
+        "知らない行き先", with("deliver", "slack"),
+        "invalid nodes[0].deliver: pass taskCandidates, report or none (leave it out to pass rows on)"
+      ),
       (
         "知らない予定の種類", with("trigger", ["kind": "daily"]),
         "invalid nodes[0].trigger.kind: pass interval, cron, manual or arrival"

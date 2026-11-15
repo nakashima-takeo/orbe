@@ -4,10 +4,6 @@ import Foundation
 // 名前）。ほかのツールは出さない——札の回の入力を読み結果を出すだけの口にするため。札は agent に見せず、ブリッジが添える。
 // 呼び出しは control の `run_tool` へ渡し、確かめと答えは Orbe 本体が持つ。
 
-private let itemArray = { (desc: String) -> [String: Any] in
-  ["type": "array", "items": ["type": "object"], "description": desc]
-}
-
 let runTools: [[String: Any]] = [
   obj([
     ("name", "read_run_rows"),
@@ -31,6 +27,8 @@ let runTools: [[String: Any]] = [
   ]),
   obj([
     ("name", "read_waiting_proposals"),
+    // 判断待ちの候補は件数に上限が無く、閾値を超えると read_run_rows と同じく agent に読めないパスだけが渡る。
+    ("_meta", ["anthropic/maxResultSizeChars": 500_000]),
     (
       "description",
       "Returns the task proposals this node made that are waiting for the user, one JSON object per line "
@@ -55,7 +53,7 @@ let runTools: [[String: Any]] = [
         + "(extra fields are kept; an item is at most 64 KiB). Orbe checks every item; if any is wrong it accepts "
         + "none of this call and says what to fix."
     ),
-    ("inputSchema", schema(["items": itemArray("the items")], required: ["items"])),
+    ("inputSchema", schema(["items": objArrayProp("the items")], required: ["items"])),
   ]),
   obj([
     ("name", "put_rows"),
@@ -64,7 +62,7 @@ let runTools: [[String: Any]] = [
       "Gives Orbe output items, one JSON object each with a string id (an item is at most 64 KiB). Orbe checks "
         + "every item; if any is wrong it accepts none of this call and says what to fix."
     ),
-    ("inputSchema", schema(["rows": itemArray("the output items")], required: ["rows"])),
+    ("inputSchema", schema(["rows": objArrayProp("the output items")], required: ["rows"])),
   ]),
   obj([
     ("name", "propose"),
@@ -74,7 +72,7 @@ let runTools: [[String: Any]] = [
         + "a link (an http(s) URL). Orbe checks every proposal; if any is wrong it accepts none of this call and "
         + "says what to fix."
     ),
-    ("inputSchema", schema(["proposals": itemArray("the proposals")], required: ["proposals"])),
+    ("inputSchema", schema(["proposals": objArrayProp("the proposals")], required: ["proposals"])),
   ]),
   obj([
     ("name", "resolve"),

@@ -64,6 +64,9 @@ extension AutomationDatabase {
           definition: Self.jsonText(definition), reason: reason, nodeIds: rows.map(\.id)))
     }
     let keys = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.key) })
+    if row.workspace != nil, workspace == nil {
+      return broken("invalid workspace", Self.rawDefinition(row, rows, keys))
+    }
     var definitionNodes: [AutomationDefinition.Node] = []
     for (index, nodeRow) in rows.enumerated() {
       switch Self.definitionNode(nodeRow, at: index, keys: keys) {
@@ -77,7 +80,7 @@ extension AutomationDatabase {
     do throws(AutomationError) {
       checked = try definition.checked()
     } catch {
-      return broken(Self.reason(error), AutomationWire.object(definition))
+      return broken(error.message, AutomationWire.object(definition))
     }
     let graph = AutomationGraph(
       checked.checkedNodes,
@@ -300,17 +303,12 @@ extension AutomationDatabase {
   }
 
   /// 外の形の JSON の文（キーの順に並べる）。
-  static func jsonText(_ object: Any) -> String {
+  private static func jsonText(_ object: Any) -> String {
     guard
       let data = try? JSONSerialization.data(
         withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]),
       let text = String(bytes: data, encoding: .utf8)
     else { return "{}" }
     return text
-  }
-
-  static func reason(_ error: AutomationError) -> String {
-    if case .invalid(let message) = error { return message }
-    return "\(error)"
   }
 }

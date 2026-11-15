@@ -151,6 +151,38 @@ extension AutomationStoreTests {
       [action: "unknown nodes[0].inboxLimit", trigger: "unknown nodes[0].trigger.expression"])
   }
 
+  /// 型には組めるが今の検証を通らない値か、読めない workspace を保存した自動化も、その自動化だけが定義を読めない自動化になり、
+  /// 理由がその値を言う。検証を通らない定義は、ノードの id と保存した値のまま外の形で出る（AI が値を直して戻すため）。
+  func testAStoredDefinitionThatFailsTodaysCheckStaysAsideAlone() throws {
+    var store: AutomationStore? = AutomationStore()
+    let checked = try XCTUnwrap(store?.create(Self.definition("検証"), now: Self.at).id)
+    let workspace = try XCTUnwrap(store?.create(Self.definition("場所"), now: Self.at).id)
+    let fine = try XCTUnwrap(store?.create(Self.definition("普段"), now: Self.at).id)
+    let judge = try XCTUnwrap(store?.nodeId(checked, "judge"))
+    store = nil
+    try database().run(
+      """
+      UPDATE action_defs SET action = json_set(action, '$.timeoutMinutes', 61)
+      WHERE id = (SELECT def_id FROM nodes WHERE id = ?)
+      """, [.integer(Int64(judge.rawValue))])
+    try database().run(
+      "UPDATE automations SET workspace = 'not-a-uuid' WHERE id = ?",
+      [.integer(Int64(workspace))])
+
+    let reopened = AutomationStore()
+
+    XCTAssertEqual(reopened.automations.map(\.id), [fine])
+    XCTAssertEqual(
+      Dictionary(uniqueKeysWithValues: reopened.unreadable.map { ($0.id, $0.reason) }),
+      [checked: "nodes[1].timeoutMinutes: must be 1 to 60", workspace: "invalid workspace"])
+    let aside = try XCTUnwrap(reopened.unreadable.first { $0.id == checked })
+    let object = try XCTUnwrap(
+      try JSONSerialization.jsonObject(with: Data(aside.definition.utf8)) as? [String: Any])
+    let stored = try AutomationDefinition.decode(object)
+    XCTAssertEqual(stored.nodes.map(\.id), aside.nodeIds)
+    XCTAssertEqual(stored.nodes[1].action.timeoutMinutes, 61)
+  }
+
   /// 読めない自動化の組めた定義は外の形で、壊れた値を元に戻せば元の定義として読める（AI が一覧の定義を直して
   /// `set_automation` へ戻すため。この形は保存の読みとは別に組む）。
   func testTheDefinitionOfAnUnreadableAutomationReadsBackOnceTheBrokenValueIsRestored() throws {
@@ -184,7 +216,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(try AutomationDefinition.decode(object), expected)
   }
 
-  /// 判定の動作の定義を壊した、取得に決まりを外した印のある自動化（読めない自動化として開き直したストア）。
+  /// 判定の動作の定義を壊した、取得に形式エラーの印のある自動化（読めない自動化として開き直したストア）。
   private func unreadableWithABreach() throws -> (store: AutomationStore, id: Int) {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition("壊す"), now: Self.at).id)
@@ -200,7 +232,7 @@ extension AutomationStoreTests {
   }
 
   /// 読めない自動化を直すと、残るノードは開き直したストアと同じ状態（回の記録・通し番号・足した時刻）から続き、何をするかが
-  /// 変わったものとして外した印が下りる。今の集合のまま直したノードの今有効な項目は残る。
+  /// 変わったものとして形式エラーの印が下りる。今の集合のまま直したノードの今有効な項目は残る。
   func testFixingAnUnreadableAutomationCarriesItsNodesOverAndLowersTheirMarks() throws {
     let (carried, id) = try { () throws -> (Automation, Int) in
       let (store, id) = try unreadableWithABreach()

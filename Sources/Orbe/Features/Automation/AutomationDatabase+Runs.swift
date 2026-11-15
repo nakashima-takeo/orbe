@@ -40,7 +40,7 @@ extension AutomationDatabase {
     ) { AutomationPersistence.date($0.int64(at: 0)) }.first
   }
 
-  /// 外した印の回の記録。
+  /// 形式エラーの印の回の記録。
   func breachRecord(of nodeId: AutomationNodeID) throws -> AutomationRunRecord? {
     try selectRecords(
       "WHERE r.id = (SELECT breach_run_id FROM nodes WHERE id = ?)",

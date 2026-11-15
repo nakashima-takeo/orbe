@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 提案タブのフッターの左（居場所と選択で、主なキーが何をするか。失敗は赤で置き換える）。候補の一覧に居る間は出さない——
+/// 提案タブのフッターの左（居場所と選択で、主なキーが何をするか。失敗は赤で置き換える）。絞り込み欄と候補の一覧では出さない——
 /// 候補をさばくキーは詳細のボタンに出ている。
 struct TaskPaletteAutomationAction: View {
   @Bindable var model: TaskPaletteAutomationModel

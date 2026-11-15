@@ -83,7 +83,6 @@ extension L10n {
     .automationEndExited: ("終了コード %lld で終了", "exited with code %lld"),
     .automationEndSignaled: ("シグナル %lld で強制終了", "terminated by signal %lld"),
     .automationEndTimeLimit: ("制限時間を超過", "time limit exceeded"),
-    .automationEndIdleLimit: ("出力の無い時間が上限を超えたため停止", "stopped: no output for longer than the limit"),
     .automationEndOutputLimit: ("出力量が上限を超えたため停止", "stopped: output limit exceeded"),
     .automationEndStopped: ("中断", "interrupted"),
     .automationEndAgentMissing: ("%@ がインストールされていません", "%@ is not installed"),

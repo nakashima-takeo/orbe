@@ -8,9 +8,10 @@ import XCTest
 /// 名指しした agent が何でもできる。毎回すべてを取るつながりの行から候補が作られ、同じ項目が回ごとに判定へ届く。今の集合の
 /// 処理が入力の一部だけを写して、残りの出力を無効にする。
 extension AutomationGraphTests {
+  /// `naming` は、断りが場所の次に名指すもの。
   private func assertRefused(
-    _ definitionNodes: [AutomationDefinition.Node], at place: String, _ label: String,
-    line: UInt = #line
+    _ definitionNodes: [AutomationDefinition.Node], at place: String, naming name: String = "",
+    _ label: String, line: UInt = #line
   ) {
     XCTAssertThrowsError(
       try AutomationGraph.check(definitionNodes, workspace: nil), label, line: line
@@ -18,7 +19,7 @@ extension AutomationGraphTests {
       guard case .invalid(let message) = $0 as? AutomationError else {
         return XCTFail("\(label): \($0)", line: line)
       }
-      XCTAssertTrue(message.hasPrefix("\(place): "), "\(label): \(message)", line: line)
+      XCTAssertTrue(message.hasPrefix("\(place): \(name)"), "\(label): \(message)", line: line)
     }
   }
 
@@ -52,6 +53,7 @@ extension AutomationGraphTests {
       ("鍵が 33 字", changing(1) { $0.key = String(repeating: "a", count: 33) }, "nodes[1].key"),
       ("鍵に空白", changing(1) { $0.key = "a b" }, "nodes[1].key"),
       ("鍵に英数字以外", changing(1) { $0.key = "取得" }, "nodes[1].key"),
+      ("鍵が - で始まる", changing(1) { $0.key = "-a" }, "nodes[1].key"),
       ("名前が 2 行", changing(1) { $0.name = "a\nb" }, "nodes[1].name"),
       ("1 分未満の間隔", changing(0) { $0.trigger = .scheduled(.every(30)) }, "nodes[0].trigger"),
       ("空のコマンド", changing(0) { $0.action.method = command(" ") }, "nodes[0].command"),
@@ -70,6 +72,11 @@ extension AutomationGraphTests {
       ("件数の上限が 0", changing(1) { $0.maxItems = 0 }, "nodes[1].maxItems"),
       (
         "古さの上限が 0", changing(1) { $0.from = [.init(nodeKey: "f", maxAgeHours: 0)] },
+        "nodes[1].from[0].maxAgeHours"
+      ),
+      (
+        "古さの上限が 87,601 時間",
+        changing(1) { $0.from = [.init(nodeKey: "f", maxAgeHours: 87_601)] },
         "nodes[1].from[0].maxAgeHours"
       ),
       ("入力の無いノードが届いたら", changing(0) { $0.trigger = .arrival }, "nodes[0].trigger"),
@@ -120,7 +127,7 @@ extension AutomationGraphTests {
 
   /// agent が名指せるのは MCP のツールの完全名と `Bash(<コマンドの接頭>:*)` だけ。組み込み・サーバー単位・ワイルドカードを通すと、
   /// 外の文面に仕込まれた指示でファイルの書き込みや名指しの外のツールの呼び出しが起きうる。Read を名指すと許可の規則に入り、
-  /// 作業ディレクトリの外まで読める。
+  /// 作業ディレクトリの外まで読める。断りは、並べたツールのうち断ったツールの名前を言う。
   func testAgentToolsMustBeFullMCPToolNamesOrBashRules() {
     let working = { (tool: String) in
       [Self.agent("w", tools: ["mcp__slack__search", tool], trigger: Self.everyTenMinutes)]
@@ -130,7 +137,7 @@ extension AutomationGraphTests {
       "mcp__slack__a b", "mcp__slack__search,mcp__slack", "Bash(*)", "Bash(gh:*", "Bash( :*)",
       "Bash(gh,curl:*)", "Bash(gh*:*)", "Bash(gh (x):*)", "Bash(gh\n:*)", "Bash(gh search prs)",
     ] {
-      assertRefused(working(tool), at: "nodes[0].tools", tool)
+      assertRefused(working(tool), at: "nodes[0].tools", naming: "\(tool) ", tool)
     }
     for tool in ["mcp__plugin_core_backlog__get_issues", "Bash(gh search prs:*)"] {
       XCTAssertNoThrow(try AutomationGraph.check(working(tool), workspace: nil), tool)

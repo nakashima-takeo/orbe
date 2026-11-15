@@ -149,6 +149,33 @@ final class AutomationGraphTests: OrbeTestCase {
     XCTAssertEqual(graph.byDepth.map(\.key), ["b", "a", "p", "r"])
   }
 
+  /// 行がタスク候補へ至るのは、途中で取得を通らずに判定へ届くノードだけ。入力を合図にだけ使うツールの agent は取得なので、
+  /// その上流の行は判定へ届かない。
+  func testRowsReachTaskCandidatesOnlyWhenNoFetchStandsBeforeTheJudge() throws {
+    let graph = try AutomationGraph.numbered([
+      Self.fetch("direct"),
+      Self.fetch("viaProcess"),
+      Self.agent("process", from: ["viaProcess"], deliver: .nextNode),
+      Self.fetch("viaGate"),
+      Self.taking(
+        .all,
+        Self.agent(
+          "gate", from: ["viaGate"], tools: [Self.tool], deliver: .nextNode,
+          coverage: .newArrivals)),
+      Self.agent("judge", from: ["direct", "process", "gate"], deliver: .taskCandidates),
+      Self.fetch("reported"),
+      Self.agent("report", from: ["reported"]),
+    ])
+
+    XCTAssertEqual(
+      Dictionary(
+        uniqueKeysWithValues: graph.nodes.map { ($0.key, graph.reachesTaskCandidates($0.id)) }),
+      [
+        "direct": true, "viaProcess": true, "process": true, "viaGate": false, "gate": true,
+        "judge": false, "reported": false, "report": false,
+      ])
+  }
+
   /// 処理の出力の性質は書かなければ出来事の流れで、書けば書いたとおり。行を出さないノードは持たない。
   func testAProcessCoverageDefaultsToNewArrivals() throws {
     let graph = try AutomationGraph.numbered([

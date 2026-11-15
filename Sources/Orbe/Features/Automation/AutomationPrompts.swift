@@ -98,13 +98,6 @@ enum AutomationPrompts {
       """
   }
 
-  /// 行の `id`（文字列でなければ nil）。
-  static func id(of row: String) -> String? {
-    guard let object = try? JSONSerialization.jsonObject(with: Data(row.utf8)) as? [String: Any]
-    else { return nil }
-    return object["id"] as? String
-  }
-
   // MARK: - 報告
 
   /// 報告の依頼文。`count` は入力の行の数。

@@ -10,7 +10,6 @@ enum AutomationEnding: Equatable {
   case exited(Int32)
   case signaled(Int32)
   case timeLimit
-  case idleLimit
   case outputLimit
   case stopped
   /// agent の CLI が入っていない（CLI の名前）。
@@ -29,7 +28,7 @@ enum AutomationEnding: Equatable {
     case .exited(let code): self = .exited(code)
     case .signaled(let signal): self = .signaled(signal)
     case .limited(.elapsed): self = .timeLimit
-    case .limited(.idle): self = .idleLimit
+    case .limited(.idle): preconditionFailure("a node runs without an idle limit")
     case .limited(.output): self = .outputLimit
     case .stopped: self = .stopped
     case .notStarted(.agentNotFound(let cli)): self = .agentMissing(cli)
@@ -45,7 +44,6 @@ enum AutomationEnding: Equatable {
     case .exited(let code): "exited \(code)"
     case .signaled(let signal): "killed by signal \(signal)"
     case .timeLimit: "stopped at the time limit"
-    case .idleLimit: "stopped after producing no output for too long"
     case .outputLimit: "stopped at the output limit"
     case .stopped: "stopped"
     case .agentMissing(let cli): "not started (\(cli) is not installed)"
@@ -220,7 +218,6 @@ extension AutomationEnding: Codable {
     case "exited": self = .exited(try c.decode(Int32.self, forKey: .code))
     case "signaled": self = .signaled(try c.decode(Int32.self, forKey: .signal))
     case "timeLimit": self = .timeLimit
-    case "idleLimit": self = .idleLimit
     case "outputLimit": self = .outputLimit
     case "stopped": self = .stopped
     case "agentMissing": self = .agentMissing(try c.decode(String.self, forKey: .cli))
@@ -245,7 +242,6 @@ extension AutomationEnding: Codable {
       try c.encode("signaled", forKey: .kind)
       try c.encode(signal, forKey: .signal)
     case .timeLimit: try c.encode("timeLimit", forKey: .kind)
-    case .idleLimit: try c.encode("idleLimit", forKey: .kind)
     case .outputLimit: try c.encode("outputLimit", forKey: .kind)
     case .stopped: try c.encode("stopped", forKey: .kind)
     case .agentMissing(let cli):

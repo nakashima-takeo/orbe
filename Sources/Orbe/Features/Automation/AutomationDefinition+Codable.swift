@@ -67,6 +67,24 @@ extension KeyedDecodingContainer {
     }
     return id
   }
+
+  /// 整数の欄。Int に収まらない数や小数は、ほかの型違いと同じく場所付きの読みの誤りにする——JSONDecoder はそれを場所の無い
+  /// 「JSON でない」として投げるので、AI がどの欄を直せばよいか分からなくなる。
+  fileprivate func decodeInteger(forKey key: Key) throws -> Int {
+    do {
+      return try decode(Int.self, forKey: key)
+    } catch let error as DecodingError {
+      throw error
+    } catch {
+      throw DecodingError.typeMismatch(
+        Int.self, .init(codingPath: codingPath + [key], debugDescription: "not an integer"))
+    }
+  }
+
+  fileprivate func decodeIntegerIfPresent(forKey key: Key) throws -> Int? {
+    guard contains(key), try !decodeNil(forKey: key) else { return nil }
+    return try decodeInteger(forKey: key)
+  }
 }
 
 /// ノードの欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。受ける鍵は
@@ -82,14 +100,14 @@ extension AutomationDefinition.Node: Codable {
   init(from decoder: Decoder) throws {
     try decoder.checkKeys(Self.keys)
     let c = try decoder.container(keyedBy: CodingKeys.self)
-    id = try c.decodeIfPresent(Int.self, forKey: .id).map(AutomationNodeID.init)
+    id = try c.decodeIntegerIfPresent(forKey: .id).map(AutomationNodeID.init)
     key = try c.decode(String.self, forKey: .key)
     name = try c.decode(String.self, forKey: .name)
     trigger = try c.decode(AutomationNode.Trigger.self, forKey: .trigger)
     from = try c.decodeIfPresent([AutomationDefinition.Input].self, forKey: .from) ?? []
     action = try AutomationActionDef(from: decoder)
-    maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems)
-    retentionDays = try c.decodeIfPresent(Int.self, forKey: .retentionDays)
+    maxItems = try c.decodeIntegerIfPresent(forKey: .maxItems)
+    retentionDays = try c.decodeIntegerIfPresent(forKey: .retentionDays)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -132,7 +150,7 @@ extension AutomationDefinition.Input: Codable {
     }
     self.init(
       nodeKey: try c.decode(String.self, forKey: .nodeKey), take: take,
-      maxAgeHours: try c.decodeIfPresent(Int.self, forKey: .maxAgeHours))
+      maxAgeHours: try c.decodeIntegerIfPresent(forKey: .maxAgeHours))
   }
 
   func encode(to encoder: Encoder) throws {
@@ -164,7 +182,7 @@ extension AutomationActionDef: Codable {
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     method = try Self.method(c)
-    timeoutMinutes = try c.decodeIfPresent(Int.self, forKey: .timeoutMinutes)
+    timeoutMinutes = try c.decodeIntegerIfPresent(forKey: .timeoutMinutes)
     coverage = try Self.coverage(c)
     destination = try Self.destination(c)
   }
@@ -273,7 +291,7 @@ extension AutomationNode.Trigger: Codable {
     switch try c.decode(String.self, forKey: .kind) {
     case "interval":
       try only(.kind, .minutes)
-      self = .scheduled(.every(TimeInterval(try c.decode(Int.self, forKey: .minutes)) * 60))
+      self = .scheduled(.every(TimeInterval(try c.decodeInteger(forKey: .minutes)) * 60))
     case "cron":
       try only(.kind, .expression)
       do {

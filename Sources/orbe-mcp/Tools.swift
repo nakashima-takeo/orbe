@@ -13,6 +13,10 @@ func strArrayProp(_ desc: String) -> [String: Any] {
   ["type": "array", "items": ["type": "string"], "description": desc]
 }
 
+func objArrayProp(_ desc: String) -> [String: Any] {
+  ["type": "array", "items": ["type": "object"], "description": desc]
+}
+
 /// タスクの結び付きの列（`add_task` / `update_task`）。
 func taskLinksProp(_ desc: String) -> [String: Any] {
   [

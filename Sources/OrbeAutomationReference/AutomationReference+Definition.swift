@@ -17,8 +17,9 @@ extension AutomationReference {
     it does with its output.
     - `id`: given by Orbe. Send it back to keep the node; a node without `id` is new, and cannot \
     take the key of a node the same rewrite removes.
-    - `key`: 1-32 letters, digits, _ or - (ASCII only), unique in the automation (case-sensitive). \
-    It names the node in `from` and when you point at a node; changing it keeps the node.
+    - `key`: 1-32 letters, digits, _ or - (ASCII only), not starting with -, unique in the \
+    automation (case-sensitive). It names the node in `from` and when you point at a node; \
+    changing it keeps the node.
     - `name`: one line.
     - `trigger`: `kind` `interval` with `minutes` (1-10080), `cron` with `expression` ("minute hour \
     day month weekday", in the Mac's time zone), `manual` (runs only when a flow points at it or \
@@ -31,7 +32,7 @@ extension AutomationReference {
     9:00 is "0 9 * * 1-5".
     - `from`: the upstream nodes, each a key or an object with `node` (the key), `take` and \
     `maxAgeHours`. `take` is `new` (the default: only rows not yet received) or `all` (every valid \
-    row of that upstream, every run); `maxAgeHours` (at least 1) drops older rows. Both belong to \
+    row of that upstream, every run); `maxAgeHours` (1-87600) drops older rows. Both belong to \
     the receiver. An input that takes `new` and has no `maxAgeHours` comes back as a key.
     - A command: `command` runs with /bin/sh -c. `directory` is relative to the workspace root \
     ("." for the root) and required when the node runs in a workspace (its own `workspace`, or the \
@@ -92,9 +93,10 @@ extension AutomationReference {
 
     ROWS
     A fetch puts out one item per row: {"id", "body", "link"?, "time"?}. `id` stays the same for \
-    the same thing in that service, `body` is the text, `link` an http(s) URL, `time` ISO 8601; \
-    other fields are kept and passed on. A command prints one JSON object per line (nothing when \
-    there is nothing) and exits non-zero when it fails; Orbe tells an agent how to give items. \
+    the same thing in that service and never repeats within one run, `body` is the text, `link` an \
+    http(s) URL, `time` ISO 8601; other fields are kept and passed on. A command prints one JSON \
+    object per line (nothing when there is nothing) and exits non-zero when it fails; Orbe tells \
+    an agent how to give items. \
     Proposals are made only from rows with `link`, so a fetch that feeds a judge writes `link` on \
     items that may become tasks.
     Downstream, an item's id becomes "<node id>:<written id>", so rows from several fetches never \
@@ -103,7 +105,8 @@ extension AutomationReference {
     Each process row has a string `id`, never the same `id` twice. Keep the `id` of rows passed on, \
     give a new row the same `id` for the same thing on every run, and keep `link` on rows that may \
     become tasks.
-    A row may be at most 64 KiB in the form passed downstream; a larger one breaks the rules.
+    A row may be at most 64 KiB in the form passed downstream; a larger one breaks the rules. A \
+    command whose output breaks any of these rules fails the run.
 
     WHAT A RECEIVER READS
     An upstream keeps its rows once; each receiver reads them at the start of its own run.

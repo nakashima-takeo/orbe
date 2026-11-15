@@ -26,12 +26,13 @@ extension AutomationRunner {
     case .report:
       return .report(rows)
     case .sideEffect:
-      return .sideEffect(rows, runId: Self.runId(automation.id, node.id, state.anchor))
+      return .sideEffect(rows, runId: Self.runId(automation.id, node.id, state.recordedAnchor))
     }
   }
 
-  /// やり直しの鍵（`<自動化 ID>-<ノードの ID>-<数え始めのミリ秒>`）。数え始めは記録された回でだけ進むので、止めた回・書けなかった
-  /// 回のやり直しは同じ値になる。ノードの鍵を変えても変わらない。
+  /// やり直しの鍵（`<自動化 ID>-<ノードの ID>-<記録の数え始めのミリ秒>`）。記録の数え始め（`recordedAnchor`）は記録された回でだけ
+  /// 進むので、止めた回・書けなかった回のやり直しは同じ値になる——番人の数え始めは書けなかった回の後も進むので使わない。ノードの
+  /// 鍵を変えても変わらない。
   static func runId(_ id: Int, _ nodeId: AutomationNodeID, _ anchor: Date) -> String {
     "\(id)-\(nodeId)-\(AutomationPersistence.millis(anchor))"
   }

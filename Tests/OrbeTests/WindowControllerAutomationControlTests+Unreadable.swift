@@ -43,6 +43,11 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(
       (runs["runs"] as? [[String: Any]])?.map { $0["nodeKey"] as? String },
       ["fetch"], "回の記録はノードの鍵で返る")
+    guard
+      case .failure(let nodeRuns) = wc.controlListAutomationRuns(
+        automationId: 1, nodeKey: "fetch", before: nil, limit: nil)
+    else { return XCTFail("読めない自動化のノードの回の記録は断る") }
+    XCTAssertEqual(nodeRuns.code, -32000, "ノードが無いではなく、読めない理由で断る")
     guard case .failure(let refused) = wc.controlListAutomationProposals(automationId: 1) else {
       return XCTFail("読めない自動化の候補は断る")
     }

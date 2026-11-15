@@ -195,6 +195,33 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     XCTAssertEqual(automation.store.automation(Self.github)?.paused, true)
   }
 
+  /// 地図で選んでいるノードをほかの口（AI）の書き換えが外すと、地図は同じ位置の段を選び、キーはその段から効く。
+  func testRemovingTheSelectedNodeElsewhereMovesTheMapToTheSamePosition() throws {
+    let model = board(DesignSceneFixtures.boardMapSamples())
+    let automation = model.automation
+    let window = mount(model)
+    down(window)
+    right(window)
+    for _ in 0..<12 where automation.selectedNodeKey != "digest" { down(window) }
+    XCTAssertEqual(automation.selectedNodeKey, "digest", "前提")
+    let current = try XCTUnwrap(automation.selectedAutomation)
+    let position = try XCTUnwrap(
+      automation.selectedMapStop.flatMap { automation.mapStops.firstIndex(of: $0) })
+    var definition = current.definition
+    definition.nodes.removeAll { $0.key == "digest" }
+
+    _ = try automation.runner.set(current.id, version: current.version, definition)
+    flush(window)
+
+    XCTAssertEqual(automation.place, .map)
+    XCTAssertEqual(
+      automation.selectedMapStop, automation.mapStops[min(position, automation.mapStops.count - 1)],
+      "外したノードと同じ位置の段")
+    let moved = automation.selectedNodeKey
+    up(window)
+    XCTAssertNotEqual(automation.selectedNodeKey, moved, "地図の ↑ が効く")
+  }
+
   /// 定義を読めない自動化をほかの口で消しても、ボードは同じ位置の行を選ぶ（一覧の並びは読める自動化と読めない自動化を合わせた
   /// もの）。
   func testDeletingAnUnreadableAutomationElsewhereMovesTheSelectionToTheSamePosition() throws {

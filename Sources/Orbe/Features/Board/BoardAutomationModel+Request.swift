@@ -35,4 +35,22 @@ extension BoardAutomationModel {
     }
     return false
   }
+
+  /// カードの「修正を依頼」。依頼の欄に「自動化「<名前>」のノード「<名前>」の修正：」を書き（書きかけは置き換える）、焦点を欄へ
+  /// 移す——続けて打って ↵ で、欄からふつうに頼む。`l10n` は画面の言語。
+  func draftFix(of nodeId: AutomationNodeID, l10n: LocalizationStore) {
+    guard let automation = selectedAutomation, let node = automation.graph.node(nodeId) else {
+      return
+    }
+    draft(l10n.format(.boardAskFixDraft, automation.name, node.entity.name))
+  }
+
+  /// 定義を読めない自動化の「修正を依頼」。依頼の欄に「自動化「<名前>」の修正：<理由の原文>」を書く（読むのは AI なので
+  /// 原文だけ）。
+  func draftFixOfUnreadable(l10n: LocalizationStore) {
+    guard let broken = selectedUnreadable else { return }
+    draft(
+      l10n.format(.boardAskFixAutomationDraft, BoardAutomationStanding(broken).title(l10n))
+        + broken.reason)
+  }
 }

@@ -113,38 +113,37 @@ extension BoardAutomationDetailValue {
   ) {
     let l10n = text.l10n
     let graph = automation.graph
-    let ordered = graph.byDepth
-    let judges = graph.judges.map { "\($0.id)" }
-    let reports = graph.nodes.filter { $0.action.destination == .report }.map { "\($0.id)" }
+    let judges = graph.judges.map { BoardMapLayout.Key.node($0.id) }
+    let reports = graph.nodes.filter { $0.action.destination == .report }.map {
+      BoardMapLayout.Key.node($0.id)
+    }
 
-    var plans = ordered.map { node in
-      BoardMapLayout.Row(
-        key: "\(node.id)", inputs: node.inputNodeIds.map { "\($0)" },
-        continues: node.action.destination != .sideEffect)
+    var planned = graph.byDepth.map { node in
+      (
+        plan: BoardMapLayout.Row(
+          key: .node(node.id), inputs: node.inputNodeIds.map(BoardMapLayout.Key.node),
+          continues: node.action.destination != .sideEffect),
+        content: BoardMapRow.Content.node(
+          Self.mapNode(node, in: automation, text: text, running: running(node.id)))
+      )
     }
     if !judges.isEmpty {
-      plans.append(.init(key: Self.taskCandidatesKey, inputs: judges, continues: false))
+      planned.append(
+        (
+          .init(key: .taskCandidates, inputs: judges, continues: false),
+          .taskCandidates(open: open)
+        ))
     }
     if !reports.isEmpty {
-      plans.append(.init(key: Self.reportsKey, inputs: reports, continues: false))
+      planned.append(
+        (
+          .init(key: .reports, inputs: reports, continues: false),
+          .reports(Self.reports(automation.notify, l10n))
+        ))
     }
-    let layout = BoardMapLayout(plans)
+    let layout = BoardMapLayout(planned.map(\.plan))
     laneCount = layout.laneCount
-
-    var rows = zip(ordered, layout.lanes).map { node, lanes in
-      BoardMapRow(
-        content: .node(Self.mapNode(node, in: automation, text: text, running: running(node.id))),
-        lanes: lanes)
-    }
-    var ends = layout.lanes.dropFirst(ordered.count).makeIterator()
-    if !judges.isEmpty, let lanes = ends.next() {
-      rows.append(BoardMapRow(content: .taskCandidates(open: open), lanes: lanes))
-    }
-    if !reports.isEmpty, let lanes = ends.next() {
-      rows.append(
-        BoardMapRow(content: .reports(Self.reports(automation.notify, l10n)), lanes: lanes))
-    }
-    self.rows = rows
+    rows = zip(planned, layout.lanes).map { BoardMapRow(content: $0.content, lanes: $1) }
     nodeCount = graph.nodes.count
     notify = l10n.format(
       .boardNotifyLine, l10n.string(automation.notify?.labelKey ?? .boardNotifyNone))
@@ -202,20 +201,23 @@ extension BoardAutomationDetailValue {
       },
       failure: latest?.run.flatMap { text.failure($0, node: node) })
   }
-
-  /// 出力先の行の鍵（ノードの鍵は空でないので、空の鍵と区切りの文字はノードと重ならない）。
-  private static let taskCandidatesKey = "\u{0}taskCandidates"
-  private static let reportsKey = "\u{0}reports"
 }
 
 /// 地図の溝の線の割り当て。定義だけから決まる純粋な計算。行を上から見て、この行で最後の受け手を迎える入力の線のうち最も
 /// 左の線に点を置き、無ければ空いている最も左の線に置く。この行で終わった線は空き、次の行から使える。点の出力を受ける行が
 /// 下にあれば、点の線はその行のものとして下へ続く。
 struct BoardMapLayout: Equatable {
+  /// 地図の行の鍵（ノードか出力先）。
+  enum Key: Hashable {
+    case node(AutomationNodeID)
+    case taskCandidates
+    case reports
+  }
+
   struct Row: Equatable {
-    let key: String
+    let key: Key
     /// 上の行の鍵（入力）。
-    let inputs: [String]
+    let inputs: [Key]
     /// 出力を受ける行が下にあるか。
     let continues: Bool
   }
@@ -224,11 +226,11 @@ struct BoardMapLayout: Equatable {
   let laneCount: Int
 
   init(_ rows: [Row]) {
-    var lastReceiver: [String: Int] = [:]
+    var lastReceiver: [Key: Int] = [:]
     for (index, row) in rows.enumerated() {
       for input in row.inputs { lastReceiver[input] = index }
     }
-    var owners: [Int: String] = [:]
+    var owners: [Int: Key] = [:]
     var lanes: [BoardMapLanes] = []
     var widest = 0
     for (index, row) in rows.enumerated() {

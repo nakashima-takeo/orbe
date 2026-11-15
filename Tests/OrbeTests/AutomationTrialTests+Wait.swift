@@ -58,6 +58,26 @@ extension AutomationTrialTests {
     XCTAssertEqual(replies.first?.1, false)
   }
 
+  /// 終わった試走を待つと、その試走がその場で返る（試走を始めてから待つまでの間に終わることはふつうにある）。知らない ID を待つと、
+  /// 知らない試走がその場で返る。
+  func testWaitingForAnEndedTrialOrAnUnknownIdAnswersAtOnce() throws {
+    let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
+    let trial = try trials.start(.saved(id), .init())
+    waitCalls("gh", 1)
+    finish("gh", fetched([]))
+    ended(trial)
+    var replies: [(Result<AutomationTrial, AutomationError>, Bool)] = []
+
+    trials.wait(trial.id, timeout: .seconds(10)) { replies.append(($0, $1)) }
+    trials.wait(trial.id + 1, timeout: .seconds(10)) { replies.append(($0, $1)) }
+
+    XCTAssertEqual(replies.count, 2, "待ちを積まずに返る")
+    XCTAssertTrue((try? replies.first?.0.get()) === trial)
+    XCTAssertEqual(replies.first?.1, false)
+    guard case .failure(let error) = replies.last?.0 else { return XCTFail("\(replies)") }
+    XCTAssertEqual(error, .trialNotFound(trial.id + 1))
+  }
+
   /// 時間切れは、その時点の試走を時間切れとして返す。
   func testWaitingPastTheTimeoutReturnsTheTrialSoFar() throws {
     let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])

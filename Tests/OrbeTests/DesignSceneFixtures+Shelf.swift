@@ -27,13 +27,6 @@ extension DesignSceneFixtures {
     AutomationItem(id: id, link: link, body: body, time: time)
   }
 
-  private static func shelfProposal(
-    _ nodeKey: String, _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil,
-    reason: String? = nil
-  ) -> AutomationNodePass.Proposal {
-    proposal(item, title, due: due, reason: reason)
-  }
-
   /// GitHub の 7 項目。先頭がレビュー依頼の #405、末尾が自動化 6 と重ねて取る #398。
   private static var shelfGitHubItems: [AutomationItem] {
     let review = shelfItem(
@@ -95,12 +88,11 @@ extension DesignSceneFixtures {
           nodeKey: "dev", at: automationAt(9),
           outcome: judged(
             [
-              shelfProposal(
-                "github", github[0], "#405 storefront の依存更新 をレビュー",
+              proposal(
+                github[0], "#405 storefront の依存更新 をレビュー",
                 reason: "あなたにレビューが依頼されていて、まだ応えていない。脆弱性の修正を含むので早めの確認が要る。"),
-              shelfProposal(
-                "backlog", backlog[0], "BLG-231 決済画面の文言を直す", due: TaskItem.DueDate("2025-10-07")),
-              shelfProposal("github", github[6], "#398 checkout の e2e を直す"),
+              proposal(backlog[0], "BLG-231 決済画面の文言を直す", due: TaskItem.DueDate("2025-10-07")),
+              proposal(github[6], "#398 checkout の e2e を直す"),
             ], rows: 12)),
         AutomationSamplePass(
           nodeKey: "slack", at: automationAt(12, 58), outcome: fetched(slack)),

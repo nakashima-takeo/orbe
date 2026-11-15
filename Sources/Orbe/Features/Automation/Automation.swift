@@ -32,7 +32,7 @@ struct Automation: Equatable, Identifiable {
   }
 
   /// 判定のノードを持つか。タスク候補の棚はこれを持つ自動化の単位。
-  var judges: Bool { !graph.judges.isEmpty }
+  var hasJudges: Bool { !graph.judges.isEmpty }
 
   /// ノードの状態。グラフのノードはいつも状態を持つ。
   func state(_ nodeId: AutomationNodeID) -> AutomationNodeState {
@@ -109,15 +109,17 @@ struct AutomationNodeState: Equatable {
 
   var lastRunAt: Date? { runs.first?.startedAt }
 
-  /// 番人の数え始め。回が記録されたときだけ進む。
-  var anchor: Date { lastRunAt ?? addedAt }
+  /// 記録の数え始め: 最後に記録された回の始まり（まだ無ければ足した時刻）。回が記録されたときだけ進む。やり直しの鍵の元で、
+  /// 番人の数え始め（`AutomationRunner.scheduleAnchor`）の既定。
+  var recordedAnchor: Date { lastRunAt ?? addedAt }
 }
 
 /// 受け手の「読めば取る行」。
 struct AutomationPending: Equatable {
-  /// 今読めば取る行の数（古さの上限を過ぎた行を除く）。
+  /// 今読めば取る行の数（古さの上限と出来事の残す期間を過ぎた行を除く）。
   var count = 0
-  /// 数えた行のどれかが古さの上限を過ぎる最も早い時刻（過ぎたら数え直す）。上限の無い入力だけなら nil。
+  /// 数えた行のどれかが古さの上限か出来事の残す期間を過ぎる最も早い時刻（過ぎたら数え直す）。数えた行が上限の無い入力の
+  /// 項目だけなら nil。
   var expiresAt: Date?
 }
 

@@ -99,8 +99,10 @@ extension AutomationGraph {
       guard named.insert(input.nodeKey).inserted else {
         throw .invalid("\(path).from: \"\(input.nodeKey)\" is named twice")
       }
-      if let hours = input.maxAgeHours, hours < 1 {
-        throw .invalid("\(path).from[\(index)].maxAgeHours: must be at least 1")
+      let range = AutomationNodeEdge.maxAgeHoursRange
+      if let hours = input.maxAgeHours, !range.contains(hours) {
+        throw .invalid(
+          "\(path).from[\(index)].maxAgeHours: must be \(range.lowerBound) to \(range.upperBound)")
       }
     }
     if let items = definitionNode.maxItems {
@@ -223,11 +225,11 @@ extension AutomationGraph {
 
   private static func checkKey(_ key: String, _ path: String) throws(AutomationError) {
     guard AutomationNode.keyLength.contains(key.unicodeScalars.count),
-      key.unicodeScalars.allSatisfy(isNameCharacter)
+      key.unicodeScalars.allSatisfy(isNameCharacter), key.first != "-"
     else {
       throw .invalid(
         "\(path).key: use \(AutomationNode.keyLength.lowerBound) to "
-          + "\(AutomationNode.keyLength.upperBound) letters, digits, _ or -")
+          + "\(AutomationNode.keyLength.upperBound) letters, digits, _ or -, not starting with -")
     }
   }
 

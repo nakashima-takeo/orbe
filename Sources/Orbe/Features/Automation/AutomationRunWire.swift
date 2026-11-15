@@ -57,7 +57,7 @@ enum AutomationRunWire {
     return json
   }
 
-  /// ノードの外した印（印の回の記録から）: その回の開始時刻・外れた件・回が通ったか。読めない記録の外れた件は空。
+  /// ノードの形式エラーの印（印の回の記録から）: その回の開始時刻・外れた件・回が通ったか。読めない記録の外れた件は空。
   static func breach(_ record: AutomationRunRecord) -> [String: Any] {
     let lines = record.run?.breach ?? AutomationRejections()
     return [

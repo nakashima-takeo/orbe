@@ -110,27 +110,27 @@ struct AutomationOutputs {
     return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
 
-  /// `id` の無い件・同じ `id` の 2 つ目は外れた件。
+  /// `id` が文字列でない件（無い・null・型違い）・同じ `id` の 2 つ目は外れた件。
   private mutating func processed(_ text: String, _ input: [AutomationNodeRow])
     -> [AutomationBrokenLine]
   {
-    var (objects, broken) = Self.objectRows(text)
+    let read = JSONLines<ProcessedLine>(text)
+    var broken = read.rejected.map {
+      AutomationBrokenLine(line: $0.line, fault: AutomationLineFault($0.reason))
+    }
     let inputs = Dictionary(input.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
-    for object in objects {
-      guard let id = AutomationPrompts.id(of: object.text) else {
-        broken.append(AutomationBrokenLine(line: object.line, fault: .missingKey("id")))
-        continue
-      }
-      guard fits(object.text, id: id, inherited: inputs[id]?.source != nil) else {
-        broken.append(AutomationBrokenLine(line: object.line, fault: .tooLarge))
+    for accepted in read.accepted {
+      let id = accepted.item.id
+      guard fits(accepted.text, id: id, inherited: inputs[id]?.source != nil) else {
+        broken.append(AutomationBrokenLine(line: accepted.line, fault: .tooLarge))
         continue
       }
       guard ids.insert(id).inserted else {
-        broken.append(AutomationBrokenLine(line: object.line, fault: .idTwice(id)))
+        broken.append(AutomationBrokenLine(line: accepted.line, fault: .idTwice(id)))
         continue
       }
       rows.append(
-        AutomationNodeRow(id: id, text: object.text, ref: nil, source: inputs[id]?.source))
+        AutomationNodeRow(id: id, text: accepted.text, ref: nil, source: inputs[id]?.source))
     }
     return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
@@ -198,4 +198,9 @@ struct AutomationRow: Equatable {
 /// どんな JSON オブジェクトも受ける行（オブジェクトかは `JSONLines` が見る）。
 private struct AnyObjectLine: Decodable {
   init(from decoder: Decoder) throws {}
+}
+
+/// 処理の 1 件のうち、確かめで読む欄（ほかの欄はそのまま下流へ渡す）。
+private struct ProcessedLine: Decodable {
+  let id: String
 }

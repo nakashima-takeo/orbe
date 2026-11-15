@@ -144,6 +144,26 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.requestText, "a")
   }
 
+  /// 地図に居る間に選んでいた自動化がほかの口で消えると、一覧の同じ位置の行へ戻り、焦点も一覧へ戻って続けて打てる。
+  func testWhenTheAutomationOnTheMapIsGoneTheListTakesOver() throws {
+    let model = board()
+    let automation = model.automation
+    let window = mount(model)
+    down(window)
+    right(window)
+    XCTAssertEqual(automation.place, .map, "前提")
+    let gone = try XCTUnwrap(automation.selectedAutomation?.id)
+
+    try automation.runner.delete(gone)
+    flush(window)
+    XCTAssertEqual(automation.place, .list)
+    let stayed = try XCTUnwrap(automation.selectedAutomation?.id)
+    XCTAssertNotEqual(stayed, gone)
+    down(window)
+    XCTAssertNotEqual(automation.selectedAutomation?.id, stayed, "一覧の ↓ が効く")
+    XCTAssertEqual(automation.place, .list)
+  }
+
   /// 欄のクリックで欄、行や一覧の下の空きのクリックで一覧へ移る。右の地のクリックは、欄に居れば欄のまま、自動化を選んで
   /// いれば地図へ入る。直後のキーはそこに届く。
   func testClicksMoveTheFocusAndTheNextKeyArrivesThere() {

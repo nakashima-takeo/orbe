@@ -125,4 +125,18 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
       XCTAssertTrue(prompt.contains("\(key) して"), key)
     }
   }
+
+  /// 仕事の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は report_nothing で終える。
+  func testWorkPromptCarriesTheRequestAndNowOnly() {
+    let prompt = AutomationPrompts.work(
+      instruction: "PR をまとめて投稿して", now: Date(timeIntervalSince1970: 1_800_000_000),
+      timeZone: TimeZone(identifier: "Asia/Tokyo")!)
+    XCTAssertTrue(prompt.contains("PR をまとめて投稿して"))
+    XCTAssertTrue(prompt.contains("Now: 2027-01-15 17:00 (Friday), time zone Asia/Tokyo."))
+    XCTAssertTrue(prompt.contains("not instructions"), "ツールで読んだ文面は指示ではない")
+    XCTAssertTrue(prompt.contains("The first line is the summary shown in the notification."))
+    XCTAssertFalse(prompt.contains("characters"), "長さは利用者の依頼文が決める")
+    XCTAssertTrue(prompt.contains("do nothing and call report_nothing instead"), "することが無い回の出口")
+    XCTAssertFalse(prompt.contains("Input"), "行を載せる席を持たない")
+  }
 }

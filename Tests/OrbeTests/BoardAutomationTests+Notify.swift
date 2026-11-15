@@ -123,6 +123,29 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.notifyCursor, 2, "端で巡回する")
   }
 
+  /// 開いている間にほかの口（AI）が定義を書き換えていたら、決めても書かずに閉じ、断りの赤も出さない（書き換えた定義が残る）。
+  func testChoosingAfterARewriteElsewhereWritesNothing() throws {
+    let model = board()
+    let automation = model.automation
+    let window = mount(model)
+    openNotify(window)
+    let id = try XCTUnwrap(automation.selectedAutomation?.id)
+    let current = try XCTUnwrap(automation.store.automation(id))
+    var renamed = current.definition
+    renamed.name = "AI が直した"
+    _ = try automation.runner.set(id, version: current.version, renamed)
+    flush(window)
+    XCTAssertNotNil(automation.notifyCursor, "前提: 開いたまま")
+
+    down(window)
+    send(Key.enter, "\r", to: window)
+
+    XCTAssertEqual(automation.store.automation(id)?.definition, renamed)
+    XCTAssertEqual(automation.store.automation(id)?.version, current.version + 1)
+    XCTAssertNil(automation.notifyCursor)
+    XCTAssertNil(model.refusal)
+  }
+
   /// ← と esc は何も変えずに閉じ、「通知」の段に戻る。ノードの段の → は開かない。
   func testLeftAndEscapeCloseWithoutChanging() {
     let model = board()

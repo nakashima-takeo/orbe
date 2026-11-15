@@ -9,6 +9,21 @@ import XCTest
 /// 消え、AI がなぜ失敗したかを読めずに定義を直せない。一覧が全ノードの過去の回を載せて AI の文脈を圧迫する、または過去の回を
 /// 読めない。
 extension WindowControllerAutomationControlTests {
+  /// 回の記録の読みの断りも制御 API の語彙: 未知の自動化・ノードの鍵は -32004、`limit` の値域の外は -32602。
+  func testListingRunsIsRefusedInTheControlVocabulary() throws {
+    let wc = try launch()
+    let id = try set(wc, Self.definition())
+    func refused(_ automationId: Int, _ nodeKey: String? = nil, limit: Int? = nil) -> Int? {
+      code(
+        wc.controlListAutomationRuns(
+          automationId: automationId, nodeKey: nodeKey, before: nil, limit: limit))
+    }
+
+    XCTAssertEqual(refused(99), -32004)
+    XCTAssertEqual(refused(id, "nope"), -32004)
+    XCTAssertEqual(refused(id, limit: AutomationStore.historyPageLimit + 1), -32602)
+  }
+
   /// 一覧の回の記録はノードごとに、保存の形（取った件数・実行の記録・役割ごとの結果）を持つ。
   func testListedRunsKeepTheStoredShape() throws {
     let wc = try launch()
@@ -103,7 +118,7 @@ extension WindowControllerAutomationControlTests {
       rejected["reasons"] as? [String], ["resolve https://example.com/gone: no open proposal"])
   }
 
-  /// ノードの外した印は、印の回の開始時刻・外れた件（英文つき）・その回が通ったかで出る。
+  /// ノードの形式エラーの印は、印の回の開始時刻・外れた件（英文つき）・その回が通ったかで出る。
   func testABreachMarkIsListedFromTheMarkedRun() throws {
     let wc = try launch()
     let id = try set(wc, Self.definition())
@@ -249,5 +264,25 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(wc.automationRetention.eventDays, 10, "ほかの workspace の上書きは効かない")
     wc.workspaces[home].settingsOverride = override
     XCTAssertEqual(wc.automationRetention.eventDays, 60, "Home の上書きが効く")
+  }
+
+  /// 保持の設定（全体の設定と Home の上書き）を変えると、確定を待たずに、読めば取る行を今の残す期間で数え直す。
+  func testChangingTheRetentionRecountsTheRowsToRead() throws {
+    let wc = try launch()
+    let store = wc.automationStore
+    let id = try store.create(AutomationStoreTests.definition(coverage: .newArrivals), now: Date())
+      .id
+    try AutomationStoreTests.fetch(
+      store, id, [Self.item("a")], at: Date().addingTimeInterval(-5 * 86400))
+    func pending() -> Int? { store.automation(id)?.state(key: "judge").pending.count }
+    XCTAssertEqual(pending(), 1, "前提: 5 日前の出来事は既定の 30 日の内")
+
+    wc.applySetting(SettingChange(SettingKeys.automationEventRetentionDays, 1), scope: .global)
+    XCTAssertEqual(pending(), 0, "全体の設定の 1 日を過ぎた")
+
+    let home = wc.workspaces[try XCTUnwrap(wc.store.homeIndex)]
+    wc.applySetting(
+      SettingChange(SettingKeys.automationEventRetentionDays, 30), scope: .workspace, target: home)
+    XCTAssertEqual(pending(), 1, "Home の上書きの 30 日の内")
   }
 }

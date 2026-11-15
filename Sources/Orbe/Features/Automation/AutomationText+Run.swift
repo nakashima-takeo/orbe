@@ -64,7 +64,6 @@ extension AutomationText {
     case .exited(let code): l10n.format(.automationEndExited, Int(code))
     case .signaled(let signal): l10n.format(.automationEndSignaled, Int(signal))
     case .timeLimit: l10n.string(.automationEndTimeLimit)
-    case .idleLimit: l10n.string(.automationEndIdleLimit)
     case .outputLimit: l10n.string(.automationEndOutputLimit)
     case .stopped: l10n.string(.automationEndStopped)
     case .agentMissing(let cli): l10n.format(.automationEndAgentMissing, cli)

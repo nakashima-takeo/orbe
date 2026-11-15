@@ -161,7 +161,7 @@ extension WindowControllerAutomationNoticeTests {
     let id = try wc.automationStore.create(Self.reportDefinition(notify: nil), now: Date()).id
     wc.showAutomation(id)
 
-    wc.board.automation.openNotify()
+    wc.board.automation.tapNotify()
     wc.board.automation.chooseNotify(.notificationCenter)
 
     XCTAssertEqual(wc.automationStore.automation(id)?.notify, .notificationCenter)

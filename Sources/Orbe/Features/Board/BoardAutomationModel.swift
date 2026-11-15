@@ -57,6 +57,8 @@ import SwiftUI
   }
   /// サブメニュー「通知」で選んでいる行（`notifyChoices` の番号）。nil は閉じている。
   private(set) var notifyCursor: Int?
+  /// サブメニュー「通知」を開いたときに見ていた自動化の版（決めたときに添えて書く）。
+  @ObservationIgnored private var notifySeenVersion: Int?
   /// 欄の文字（入力欄の binding）。変われば断りを消す。
   var requestText = "" {
     didSet { if requestText != oldValue { onRefusal(nil) } }
@@ -272,25 +274,8 @@ import SwiftUI
     focusToken &+= 1
   }
 
-  /// カードの「修正を依頼」。依頼の欄に「自動化「<名前>」のノード「<名前>」の修正：」を書き（書きかけは置き換える）、焦点を欄へ
-  /// 移す——続けて打って ↵ で、欄からふつうに頼む。`l10n` は画面の言語。
-  func draftFix(of nodeId: AutomationNodeID, l10n: LocalizationStore) {
-    guard let automation = selectedAutomation, let node = automation.graph.node(nodeId) else {
-      return
-    }
-    draft(l10n.format(.boardAskFixDraft, automation.name, node.entity.name))
-  }
-
-  /// 定義を読めない自動化の「修正を依頼」。依頼の欄に「自動化「<名前>」の修正：<理由の原文>」を書く（読むのは AI なので
-  /// 原文だけ）。
-  func draftFixOfUnreadable(l10n: LocalizationStore) {
-    guard let broken = selectedUnreadable else { return }
-    draft(
-      l10n.format(.boardAskFixAutomationDraft, BoardAutomationStanding(broken).title(l10n))
-        + broken.reason)
-  }
-
-  private func draft(_ text: String) {
+  /// 依頼の欄に `text` を書き（書きかけは置き換える）、焦点を欄へ移す。
+  func draft(_ text: String) {
     requestText = text
     caretAtEnd = true
     list.select(.request, in: stops)
@@ -347,11 +332,12 @@ import SwiftUI
 
   // MARK: - 通知
 
-  /// サブメニューを開く。選んでいる行は今の設定から。
+  /// サブメニューを開く。選んでいる行は今の設定から。見ていた版を覚える。
   func openNotify() {
     guard let automation = selectedAutomation, selectedMapStop == .notify else { return }
     onRefusal(nil)
     notifyCursor = Self.notifyChoices.firstIndex(of: automation.notify) ?? 0
+    notifySeenVersion = automation.version
   }
 
   /// サブメニューの ↑↓。端で巡回する。
@@ -365,16 +351,19 @@ import SwiftUI
     notifyCursor = nil
   }
 
-  /// 選んでいる自動化の通知を `notify` に決めて閉じる。今の定義の通知だけを差し替えて走らせ役の書き換えの口へ渡す（通知は
-  /// 何をするかに入らないので、走っている回は止まらない）。同じ値なら書かない。消えていたら黙る（行き違い）。
+  /// 選んでいる自動化の通知を `notify` に決めて閉じる。今の定義の通知だけを差し替え、開いたときに見ていた版を添えて走らせ役の
+  /// 書き換えの口へ渡す（通知は何をするかに入らないので、走っている回は止まらない）。同じ値なら書かない。消えていた・開いている
+  /// 間に版が変わっていたら、書き換えの口が断るので何も出さない（行き違い）。
   func chooseNotify(_ notify: AutomationNotify?) {
+    let seen = notifyCursor == nil ? nil : notifySeenVersion
     notifyCursor = nil
-    guard let automation = selectedAutomation, automation.notify != notify else {
+    notifySeenVersion = nil
+    guard let seen, let automation = selectedAutomation, automation.notify != notify else {
       return
     }
     var definition = automation.definition
     definition.notify = notify
-    _ = try? runner.set(automation.id, version: automation.version, definition)
+    _ = try? runner.set(automation.id, version: seen, definition)
     reconcile()
   }
 

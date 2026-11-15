@@ -41,7 +41,7 @@ struct BoardAutomationNodeValue: Equatable {
     let look: BoardSegmentLook
   }
 
-  /// 出力の形式エラーの枠（ノードの外した印から）。
+  /// 出力の形式エラーの枠（ノードの形式エラーの印から）。
   struct Breach: Equatable {
     /// 「出力の形式エラー · 16:30 · 2 件」。
     let heading: String
@@ -66,7 +66,6 @@ extension BoardAutomationNodeValue {
     next: Date?, open: Int, workspaces: AutomationWorkspaces
   ) {
     guard let node = automation.graph.node(nodeId) else { return nil }
-    let l10n = text.l10n
     let nodeState = automation.state(nodeId)
     id = nodeId
     role = text.role(node.role)
