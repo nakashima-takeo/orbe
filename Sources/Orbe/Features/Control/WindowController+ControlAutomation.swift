@@ -38,7 +38,8 @@ extension WindowController {
     let definition = try AutomationDefinition.decode(definition)
     try automationRunner.workspaces().checkSeats(of: definition)
     return try automationStore.check(
-      AutomationStore.Write(automationId, version: version, definition))
+      AutomationStore.Write(automationId, version: version, definition),
+      now: automationRunner.now())
   }
 
   func controlRunAutomation(automationId: Int, nodeKey: String?) -> Result<Any, ControlError> {

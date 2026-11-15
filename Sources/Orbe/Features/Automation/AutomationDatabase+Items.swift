@@ -18,13 +18,13 @@ extension AutomationDatabase {
     var fresh = 0
     /// 出来事の流れで、残す期間の内に同じ id を出したので足さなかった数。
     var duplicates = 0
-    /// 無効にした項目。
-    var invalidated: [Int] = []
+    /// 無効にした項目の数。
+    var invalidated = 0
     /// 足した版（既にある項目の中身が変わった）の数。
     var versioned = 0
 
     /// 何かが変わったか（項目が有効になる・版が足される・項目が無効になる・出来事が足される）。
-    var changed: Bool { fresh > 0 || !invalidated.isEmpty || versioned > 0 }
+    var changed: Bool { fresh > 0 || invalidated > 0 || versioned > 0 }
 
   }
 
@@ -58,20 +58,22 @@ extension AutomationDatabase {
           continue
         }
         try invalidate(item: current.id, of: nodeId, at: at)
-        written.invalidated.append(current.id)
+        written.invalidated += 1
       }
       try insertItem(of: nodeId, output, at: at)
       written.fresh += 1
     }
     for current in live.values {
       try invalidate(item: current.id, of: nodeId, at: at)
-      written.invalidated.append(current.id)
+      written.invalidated += 1
     }
     return written
   }
 
-  /// 出来事の流れのノードの出力を足す。残す期間の内に同じノードが同じ書かれた id を出していれば同じ出来事として足さない（中身が
-  /// 違っても）。行が保存の都合で残っていても、見分けは残す期間の内かで決める。
+  /// 出来事の流れのノードの出力を足す。残す期間の内に同じノードが同じ書かれた id を同じ引き継ぎ元（項目か出来事。無ければ
+  /// 無いどうし）で出していれば同じ出来事として足さない（中身が違っても）。入力の id を保った行は「この入力の行と同じもの」と
+  /// いう宣言なので、入力の行が別の行（消えてまた現れた項目など）なら別の出来事になる。同じ出来事かどうかは、行が保存の都合で
+  /// 残っていても、残す期間の内かで決める。
   func writeEvents(of nodeId: AutomationNodeID, _ outputs: [Output], at: Date) throws -> Written {
     let p = Int64(nodeId.rawValue)
     let cutoff = try eventCutoff(of: nodeId, now: at)
@@ -79,8 +81,9 @@ extension AutomationDatabase {
     for output in outputs {
       let seen = try db.select(
         """
-        SELECT 1 FROM events WHERE node_id = ? AND written_id = ? AND created_at >= ? LIMIT 1
-        """, [.integer(p), .text(output.id), cutoff]
+        SELECT 1 FROM events WHERE node_id = ? AND written_id = ? AND created_at >= ?
+          AND source_item_id IS ? AND source_event_id IS ? LIMIT 1
+        """, [.integer(p), .text(output.id), cutoff] + Self.values(output.source)
       ) { _ in true }
       if !seen.isEmpty {
         written.duplicates += 1
@@ -126,14 +129,13 @@ extension AutomationDatabase {
       ] + Self.values(output.source))
   }
 
-  /// ノードの今有効な項目をすべて無効にし、無効にした項目を返す（性質の書き換え・ノードを外す）。
-  func invalidateItems(of nodeId: AutomationNodeID, at: Date) throws -> [Int] {
+  /// ノードの今有効な項目をすべて無効にする（性質の書き換え・ノードを外す）。
+  func invalidateItems(of nodeId: AutomationNodeID, at: Date) throws {
     let ids = try db.select(
       "SELECT id FROM items WHERE node_id = ? AND valid_to IS NULL",
       [.integer(Int64(nodeId.rawValue))]
     ) { $0.int(at: 0) }
     for id in ids { try invalidate(item: id, of: nodeId, at: at) }
-    return ids
   }
 
   /// ノード `nodeId` の今有効な項目を、次の番号で無効にする。
@@ -149,17 +151,6 @@ extension AutomationDatabase {
     try db.run("UPDATE nodes SET \(column) = \(column) + 1 WHERE id = ?", [p])
     return try db.select("SELECT \(column) FROM nodes WHERE id = ?", [p]) { $0.int64(at: 0) }
       .first ?? 0
-  }
-
-  /// ノードの今有効な項目のリンク。リンクの無い項目は入らない。
-  func liveLinks(of nodeId: AutomationNodeID) throws -> Set<String> {
-    Set(
-      try db.select(
-        """
-        SELECT v.link FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
-        WHERE i.node_id = ? AND i.valid_to IS NULL AND v.link IS NOT NULL
-        """, [.integer(Int64(nodeId.rawValue))]
-      ) { $0.text(at: 0) ?? "" })
   }
 
   // MARK: - 値
@@ -183,19 +174,22 @@ extension AutomationDatabase {
     Self.instant(now.addingTimeInterval(-TimeInterval(try eventDays(of: nodeId)) * Self.day))
   }
 
-  /// 時刻 `now` に、出したノードの残す期間（ノードの `retention_days`、無ければ今の設定の値）を過ぎた出来事の ID を選ぶ SQL と、
-  /// その値。
-  func expiredEvents(at now: Date) -> (sql: String, values: [SQLiteValue]) {
+  /// 時刻 `now` に、出したノード（`node` はそのノードの ID の SQL の式）の出来事を残す期間（ノードの `retention_days`、無ければ
+  /// 今の設定の値）の始まりを求める SQL の式と、その値。これより前に作られた出来事は期限を過ぎた。
+  func retentionStart(of node: String, now: Date) -> (sql: String, values: [SQLiteValue]) {
     (
-      """
-      SELECT x.id FROM events x WHERE x.created_at < ?
-        - coalesce((SELECT retention_days FROM nodes WHERE id = x.node_id), ?) * ?
-      """,
+      "(? - coalesce((SELECT retention_days FROM nodes WHERE id = \(node)), ?) * ?)",
       [
         Self.instant(now), .integer(Int64(retention().eventDays)),
         .integer(Int64(Self.day * 1000)),
       ]
     )
+  }
+
+  /// 時刻 `now` に残す期間を過ぎた出来事の ID を選ぶ SQL と、その値。
+  func expiredEvents(at now: Date) -> (sql: String, values: [SQLiteValue]) {
+    let start = retentionStart(of: "x.node_id", now: now)
+    return ("SELECT x.id FROM events x WHERE x.created_at < \(start.sql)", start.values)
   }
 
   static let day: TimeInterval = 24 * 3600

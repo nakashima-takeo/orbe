@@ -33,11 +33,13 @@ struct AutomationDefinition: Equatable {
     }
   }
 
-  /// `from` の要素。鍵だけの文字列は、新しい行だけを取り古さの上限を持たない。
+  /// `from` の要素。鍵だけの文字列は、新しい行だけを取り、古さの上限も下限の時刻も持たない。
   struct Input: Equatable {
     var nodeKey: String
     var take: AutomationTake = .new
     var maxAgeHours: Int?
+    /// 読む行の下限の時刻（ミリ秒に丸めて持つ）。
+    var after: Date?
   }
 
   /// 名前は 1 行に整え、ノードはグラフとして検証する。名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。

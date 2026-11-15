@@ -43,8 +43,7 @@ extension AutomationStore {
     let closed = memory.closedLinks(of: nodeId)
     return try read {
       try $0.read(
-        node, baseline: baseline,
-        context: AutomationIntake.Context(closed: closed.contains, now: now))
+        node, baseline: baseline, context: AutomationIntake.Context(closed: closed, now: now))
     }
   }
 
@@ -55,28 +54,42 @@ extension AutomationStore {
     try read { try $0.positions(of: nodeId) }
   }
 
-  /// 取る行が 0 件だった契機。読んだ位置を読む上限の番号まで進め、捨てた数と読む前に期限で消えた数を受け手のノードの
-  /// 持ち越しに足す（次の成功した回の記録に載る）。
-  func discard(_ read: AutomationIntake.Read, of nodeId: AutomationNodeID, in id: Int, now: Date)
-    throws(AutomationError)
-  {
-    guard read.taken.isEmpty, automation(id)?.states[nodeId] != nil, !read.reach.isEmpty else {
-      return
-    }
-    try commit(sweepingAt: TaskItem.storedInstant(now)) { db, memory in
-      try db.advance(nodeId, read.reach)
-      var carried = try db.carried(of: nodeId)
-      for drop in read.dropped { carried.dropped.add(drop.reason) }
-      carried.dropped.add(.lapsed, read.lapsed)
-      try db.setCarried(nodeId, carried)
-      try memory.recount(id, db, now: now, nodeIds: [nodeId])
+  /// 取る行が 0 件だった契機を終える。手段を起こさず、回の記録も残さない。受け手として、読んだ位置を、読む上限の番号まで進め、
+  /// 捨てた数と読む前に期限で消えた数を持ち越しに足す（次の成功した回の記録に載る）。今の集合の処理なら、出す側として空の結果を
+  /// 確定と同じく自分の項目に照らす（今有効な項目はすべて無効になる）。この照らしは、進める位置が無い契機でも行う——予定・手動で
+  /// 回る処理と流しが起こした処理は、入力を付け替えた直後で、新しい上流がまだ 1 行も出していなくても、この契機を迎える。「届いたら」
+  /// の処理がこの契機を迎えるのは、読んでいない上流の変化で起きたときだけ（付け替えた新しいつながりは項目を始めから読むので、
+  /// 付け替え先が一度でも項目を出していれば書いた時点に起きる）。出す側の行が変わったかを返す（変わったら走らせ役が下流の起こす
+  /// 決まりを見る）。
+  @discardableResult func endEmptyTrigger(
+    _ read: AutomationIntake.Read, of nodeId: AutomationNodeID, in id: Int, now: Date
+  ) throws(AutomationError) -> Bool {
+    guard read.taken.isEmpty, let graph = automation(id)?.graph, let node = graph.node(nodeId)
+    else { return false }
+    let producing = node.role == .process && node.coverage == .currentSet
+    guard producing || !read.reach.isEmpty else { return false }
+    let at = TaskItem.storedInstant(now)
+    return try commit(sweepingAt: at) { db, memory in
+      if !read.reach.isEmpty {
+        try db.advance(nodeId, read.reach)
+        var carried = try db.carried(of: nodeId)
+        for drop in read.dropped { carried.dropped.add(drop.reason) }
+        carried.dropped.add(.lapsed, read.lapsed)
+        try db.setCarried(nodeId, carried)
+      }
+      var changed = false
+      if producing { changed = try db.writeItems(of: nodeId, [], at: at).changed }
+      try memory.recount(
+        id, db, now: now,
+        nodeIds: [nodeId] + (changed ? graph.downstream(of: nodeId).map(\.id) : []))
+      return changed
     }
   }
 
   /// ノードの 1 回を 1 トランザクションで確定する。
   ///
-  /// 成功した回は、読んだ位置を進め、持ち越しを記録に載せて空に戻し、出す側なら出した行を照らして（今の集合は項目と版、出来事の
-  /// 流れは出来事）、無効にした項目を元にした判断待ちの候補を下げる。判定なら候補を足し・対応済みにする。失敗した回は記録・
+  /// 成功した回は、読んだ位置を進め、持ち越しを記録に載せて空に戻し、出す側なら出した行を照らし（今の集合は項目と版、出来事の
+  /// 流れは出来事）、書いた直後に覚えている候補へ下げる条件を当てる。判定なら候補を足し・対応済みにする。失敗した回は記録・
   /// 回の履歴・形式エラーの印だけを書き、出す側の行・読んだ位置・持ち越しは動かさない——失敗を「0 件取れた」と読み違えて候補を一斉に
   /// 下げないため。どちらも回の履歴（読んだ行と扱い）を書き、出力が決まりを外した最初の回なら印を書く。自動化かノードがもう
   /// 無ければ何もしない。
@@ -103,7 +116,7 @@ extension AutomationStore {
     automations.flatMap { $0.states.values.compactMap(\.pending.expiresAt) }.min()
   }
 
-  /// 数えた行が古さの上限か出来事の残す期間を過ぎた（`now` が過ぎる時刻より後の）受け手の「読めば取る行」の数を数え直す。
+  /// `now` が、数えた行が古さの上限か出来事の残す期間を過ぎる時刻より後になった受け手の「読めば取る行」の数を数え直す。
   func recountExpired(now: Date) throws(AutomationError) {
     let expired = automations.map { automation in
       (
@@ -137,8 +150,7 @@ extension AutomationMemory {
     for node in automation.graph.nodes
     where !node.inputs.isEmpty && (nodeIds?.contains(node.id) ?? true) {
       let closed = closedLinks(of: node.id)
-      automations[index].states[node.id]?.pending = try db.pending(
-        node, closed: closed.contains, now: now)
+      automations[index].states[node.id]?.pending = try db.pending(node, closed: closed, now: now)
     }
   }
 

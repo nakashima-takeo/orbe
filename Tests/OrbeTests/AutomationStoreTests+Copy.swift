@@ -61,10 +61,10 @@ extension AutomationStoreTests {
 
     try store?.give(rows, as: fetch, of: id, at: Self.at)
     XCTAssertEqual(
-      state("fetch")?.liveLinks, Set(["a", "b", "c"].map { "https://example.com/\($0)" }))
+      try store?.liveLinks(id, "fetch"), Set(["a", "b", "c"].map { "https://example.com/\($0)" }))
     XCTAssertEqual(state("judge")?.pending.count, 3)
     try store?.trim(fetch, in: id, fresh: 3, keeping: 1, now: Self.at)
-    XCTAssertEqual(state("fetch")?.liveLinks, ["https://example.com/a"])
+    XCTAssertEqual(try store?.liveLinks(id, "fetch"), ["https://example.com/a"])
     XCTAssertEqual(state("judge")?.pending.count, 1)
     let automations = store?.automations
     store = nil

@@ -4,7 +4,7 @@ extension AutomationReference {
     AUTOMATIONS
     Each automation in the list has `automationId`, `version` (send it with a rewrite), \
     `definition` (as stored; each node has its `id`, `agent` is written even when it is the \
-    default, an input that takes `new` and has no `maxAgeHours` is a key, and a `workspace` is \
+    default, an input that takes `new` and has neither `maxAgeHours` nor `after` is a key, and a `workspace` is \
     the stored id, also for a removed workspace), `paused`, and `nodes`, keyed by node key:
     - `running`: a run of the node is going.
     - `paused`: the node itself is paused (pausing the automation shows in the automation's \
@@ -48,12 +48,13 @@ extension AutomationReference {
     gives their count and the English of the first five), `report` {`summary`, `text`} (both \
     absent when there was nothing to report), `sideEffect` {`count`}, `work` {`summary`, `text`, \
     `nothing`} (`nothing` gives the reason when there was nothing to do).
-    - `withdrawn`: the number of proposals that went away with this run; on a judge, of those whose \
-    events passed `retentionDays` since its last good run.
+    - `withdrawn`: the number of proposals that went away with this run; on a judge, of those that \
+    went away since its last good run outside any fetch or process run (events that passed \
+    `retentionDays`, an empty input of a `currentSet` process).
     - `failed` and `failure`: why the run failed (`failure` in English). A failed run moves \
     nothing, so read `failure` and the `reasons` to see where it broke.
-    A node with no rows to take does not start its method and records no run, except a \
-    `currentSet` process, which runs to copy an empty input. A record that cannot be \
+    A node with no rows to take does not start its method and records no run; a `currentSet` \
+    process then makes all its current items invalid. A record that cannot be \
     read has only `recordId`, `nodeKey`, `startedAt`, `endedAt`, `trigger`, `failed` (true or \
     false) and `unknown`. Each node keeps the runs that are among its newest N or started within D \
     days (settings, 20 runs and 7 days by default), and also its latest good run, the run of its \

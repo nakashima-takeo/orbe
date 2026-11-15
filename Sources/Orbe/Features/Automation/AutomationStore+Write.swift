@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSessionLog
 
 /// 定義の書き込み——作る（定義だけ）と書き換える（自動化・元にした版・定義）。どちらも確かめる（読みだけ）と掛ける（変異の 1 経路）に
 /// 分け、掛けるのは確かめた書き込みだけにする。制御の口は書く前に同じ確かめを通し（`set_automation` も試走も同じ断りを返す）、試走は
@@ -58,14 +59,23 @@ extension AutomationStore {
     let automation: Automation?
   }
 
-  /// 書き込みを確かめる（何も書かない）。作るなら、ノードは `id` を持たず、定義が検証を通ること。書き換えるなら、自動化があり（定義を
-  /// 読めない自動化も書き換えで直せる）、定義が検証を通り、版が今の版と同じで、ノードの `id` が今のノードを指すこと（`checkIds`）。
-  func check(_ write: Write) throws(AutomationError) -> CheckedWrite {
+  /// 書き込みを確かめる（何も書かない）。作るなら、ノードは `id` も、つながりの読む行の下限の時刻（`after`）も持たず（まだ
+  /// 何の行も無いので、何も除かない）、定義が検証を通ること。書き換えるなら、自動化があり（定義を読めない自動化も書き換えで
+  /// 直せる）、定義が検証を通り、版が今の版と同じで、ノードの `id` が今のノードを指し（`checkIds`）、`after` がこの書き込みで
+  /// 足すノードからのつながりに付いておらず、`now` より後でもないこと（`checkAfter`。足すノードは `checkIds` を通った後で決まる）。
+  func check(_ write: Write, now: Date) throws(AutomationError) -> CheckedWrite {
     guard available else { throw unavailableError }
     switch write {
     case .create(let definition):
       if let index = definition.nodes.firstIndex(where: { $0.id != nil }) {
         throw .invalid("nodes[\(index)].id: a new automation has no node ids yet")
+      }
+      for (index, definitionNode) in definition.nodes.enumerated() {
+        if let position = definitionNode.from.firstIndex(where: { $0.after != nil }) {
+          throw .invalid(
+            "nodes[\(index)].from[\(position)].after: a new automation has no rows yet, so after "
+              + "drops nothing; leave it out")
+        }
       }
       let (name, nodes) = try definition.checked()
       return CheckedWrite(write: write, name: name, nodes: nodes, current: nil)
@@ -91,6 +101,7 @@ extension AutomationStore {
         throw .versionMismatch(sent: version, current: current.version)
       }
       try Self.checkIds(definition.nodes, of: id, current: current.keys)
+      try Self.checkAfter(definition.nodes, now: now)
       return CheckedWrite(write: write, name: name, nodes: nodes, current: current)
     }
   }
@@ -147,9 +158,8 @@ extension AutomationStore {
       let removed = current.nodeIds.filter {
         !Set(checked.nodes.compactMap(\.definitionNode.id)).contains($0)
       }
-      var invalidated: [Int] = []
       for nodeId in removed {
-        invalidated += try db.removeNode(nodeId, at: at)
+        try db.removeNode(nodeId, at: at)
       }
       try Self.writeNodes(checked.nodes, &entities, of: id, db, at: at)
       let graph = AutomationGraph(
@@ -166,9 +176,8 @@ extension AutomationStore {
       memory.automations.removeAll { $0.id == id }
       memory.automations.append(automation)
       memory.automations.sort { $0.id < $1.id }
-      try memory.withdraw(after: invalidated + rewired.invalidated, db, now: at)
-      try memory.withdraw(reviewing: rewired.reviewed, db, now: at)
-      try memory.forgetUnheld(db, now: at)
+      // 書き換えで下げた分は数えない（変異の終わりの当てに残すと、判定の持ち越しに数えられる）。
+      _ = try memory.withdraw(db, now: at)
       try memory.recount(id, db, now: at)
       return Written(
         automation: memory.automation(id) ?? automation, reworked: rewired.reworked,
@@ -215,15 +224,11 @@ extension AutomationStore {
   private struct Rewired {
     var states: [AutomationNodeID: AutomationNodeState] = [:]
     var reworked: [AutomationNodeID] = []
-    var invalidated: [Int] = []
-    /// 判断待ちの候補を下げる決まりを当て直す判定（何をするかが変わった判定）。
-    var reviewed: [AutomationNodeID] = []
   }
 
   /// つながりを書き換え、出力の性質が変わったノードの今有効な項目を無効にし、何をするかが変わったノードの形式エラーの印を下ろし、ノードの
   /// 状態を読み直す。同じノードどうしのつながりが残れば読んだ位置も残る。定義を読めない自動化を直すときは前の性質を知らないので、
-  /// 残るノードのうち今の集合でないノードの今有効な項目を無効にし、残るノードをすべて何をするかが変わったものとして扱う。何をするかが
-  /// 変わった判定（入力を変えた判定を含む）には、下げる決まりを当て直す（入力を外すと、下げない歯止めだったリンクが抜けうるため）。
+  /// 残るノードのうち今の集合でないノードの今有効な項目を無効にし、残るノードをすべて何をするかが変わったものとして扱う。
   private static func rewire(
     _ graph: AutomationGraph, of id: Int, _ current: Current, _ db: AutomationDatabase, at: Date
   ) throws -> Rewired {
@@ -238,17 +243,39 @@ extension AutomationStore {
         ? kept && node.coverage != .currentSet
         : before?.coverage.map { $0 != node.coverage } ?? false
       if coverageChanged {
-        rewired.invalidated += try db.invalidateItems(of: node.id, at: at)
+        try db.invalidateItems(of: node.id, at: at)
       }
       let reworked = old == nil ? kept : before.map { $0.behavior != node.behavior } ?? false
       if reworked {
-        if node.role == .judge { rewired.reviewed.append(node.id) }
         rewired.reworked.append(node.id)
         try db.setBreach(node.id, run: nil)
       }
       rewired.states[node.id] = try db.state(of: node.id)
     }
     return rewired
+  }
+
+  /// つながりが読む行の下限の時刻（`after`）を確かめる: 上流がこの書き込みで足すノード（`id` を持たない）ではなく、かつ書く時点の
+  /// `now` より後でもないこと。足すノードが出す行はどれも書いた後にできるので、そこからのつながりの下限の時刻は何も除かない。未来の時刻は、
+  /// その時刻までに来た行を黙って捨て、試走でも正しい値と見分けられない。保存した定義を読むときは確かめない。
+  private static func checkAfter(_ definitionNodes: [AutomationDefinition.Node], now: Date)
+    throws(AutomationError)
+  {
+    let added = Set(definitionNodes.filter { $0.id == nil }.map(\.key))
+    for (index, definitionNode) in definitionNodes.enumerated() {
+      for (position, input) in definitionNode.from.enumerated() {
+        guard let after = input.after else { continue }
+        if added.contains(input.nodeKey) {
+          throw .invalid(
+            "nodes[\(index)].from[\(position)].after: \"\(input.nodeKey)\" is a node this write adds, so "
+              + "after drops nothing; write after on an input from a node that exists now")
+        }
+        guard after > now else { continue }
+        throw .invalid(
+          "nodes[\(index)].from[\(position)].after: \(SessionEvent.iso8601(after)) is later than now "
+            + "(\(SessionEvent.iso8601(now))); pass the current time or an earlier one")
+      }
+    }
   }
 
   /// ノードの `id` を確かめる: この自動化の今のノードだけ・重なりなし・`id` の無いノードの鍵が外れるノードの鍵と同じでない。

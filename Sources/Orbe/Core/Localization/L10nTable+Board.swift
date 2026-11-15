@@ -52,6 +52,7 @@ extension L10n {
     .boardNodeAppendSince: ("追記（前回 %@ より後を取る）", "append (fetches items after %@)"),
     .boardNodeTakeAll: ("毎回全件", "all items every run"),
     .boardNodeMaxAge: ("%lld 時間以内", "within %lld h"),
+    .boardNodeAfter: ("%@ より後", "after %@"),
     .boardNodeTaskCandidates: ("タスク候補（判断待ち %lld 件）", "Task candidates (%lld waiting)"),
     .boardNodeNothing: ("なし（コマンドの実行のみ）", "none (runs the command only)"),
     .boardNodeCount: ("%lld 件", "%lld"),

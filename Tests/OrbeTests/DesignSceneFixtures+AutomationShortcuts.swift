@@ -7,14 +7,14 @@ import Foundation
 
 extension AutomationStore {
   func create(_ definition: AutomationDefinition, now: Date) throws(AutomationError) -> Automation {
-    try apply(try check(.create(definition)), now: now).automation
+    try apply(try check(.create(definition), now: now), now: now).automation
   }
 
   /// `version` は書き換えの元にした版。
   func replace(
     _ id: Int, version: Int?, with definition: AutomationDefinition, now: Date
   ) throws(AutomationError) -> Written {
-    try apply(try check(.replace(id, version: version, definition)), now: now)
+    try apply(try check(.replace(id, version: version, definition), now: now), now: now)
   }
 }
 

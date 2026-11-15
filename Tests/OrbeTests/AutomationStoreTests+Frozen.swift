@@ -106,7 +106,8 @@ private let readDefinition = #"""
     {"id": 6, "key": "post", "name": "投稿", "trigger": {"kind": "manual"}, "agent": "claude",
      "model": "sonnet", "tools": ["Bash(gh search prs:*)"], "instruction": "投稿する",
      "deliver": "report"},
-    {"id": 7, "key": "send", "name": "送る", "trigger": {"kind": "arrival"}, "from": ["filter"],
+    {"id": 7, "key": "send", "name": "送る", "trigger": {"kind": "arrival"},
+     "from": [{"node": "filter", "after": "2026-10-26T07:33:20.000Z"}],
      "command": "~/bin/send.sh", "directory": "bin", "deliver": "none", "timeoutMinutes": 3}
    ]}
   """#

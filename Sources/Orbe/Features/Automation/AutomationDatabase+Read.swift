@@ -44,7 +44,7 @@ extension AutomationDatabase {
     let items = try db.select(
       """
       SELECT i.id, i.seq, i.written_id, i.valid_from, i.source_item_id, i.source_event_id, v.id, v.body,
-        v.link
+        v.link, v.seq
       FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
       WHERE i.node_id = ? AND i.valid_to IS NULL AND i.seq > ? AND i.seq <= ? ORDER BY i.seq
       """,
@@ -53,7 +53,8 @@ extension AutomationDatabase {
       (
         item: s.int(at: 0), seq: s.int(at: 1), written: s.text(at: 2) ?? "",
         at: AutomationPersistence.date(s.int64(at: 3)), source: Self.source(s, item: 4, event: 5),
-        version: s.int(at: 6), body: s.text(at: 7) ?? "{}", link: s.text(at: 8)
+        version: s.int(at: 6), body: s.text(at: 7) ?? "{}", link: s.text(at: 8),
+        versionSeq: s.int(at: 9)
       )
     }
     let events = try db.select(
@@ -80,7 +81,8 @@ extension AutomationDatabase {
           from: up, table: .item, seq: item.seq, ref: .version(item.version),
           source: .item(item.item), id: id,
           text: AutomationPrompts.replacing(id: id, in: item.body), at: item.at, link: item.link,
-          unread: item.seq > reading.read.item))
+          unread: item.seq > reading.read.item,
+          changed: max(item.seq, item.versionSeq) > reading.read.item))
     }
     for event in events {
       let id = Self.downstreamId(event.written, of: up, inherited: event.source != nil)
@@ -89,7 +91,7 @@ extension AutomationDatabase {
           from: up, table: .event, seq: event.seq, ref: .event(event.event),
           source: .event(event.event), id: id,
           text: AutomationPrompts.replacing(id: id, in: event.body), at: event.at, link: event.link,
-          unread: event.seq > reading.read.event))
+          unread: event.seq > reading.read.event, changed: event.seq > reading.read.event))
     }
     return rows
   }
@@ -177,9 +179,9 @@ extension AutomationDatabase {
 }
 
 extension AutomationDatabase {
-  /// 受け手 `node` が今読めば取る行の数と、そのどれかが古さの上限か出来事の残す期間を過ぎる最も早い時刻。`closed` はリンクが
-  /// 判定の判断待ちでない覚えている候補のリンクか。
-  func pending(_ node: AutomationGraph.Node, closed: @escaping (String) -> Bool, now: Date) throws
+  /// 受け手 `node` が今読めば取る行の数と、そのどれかが古さの上限か出来事の残す期間を過ぎる最も早い時刻。`closed` は判定の
+  /// 判断待ちでない覚えている候補のリンク。
+  func pending(_ node: AutomationGraph.Node, closed: AutomationIntake.Closed, now: Date) throws
     -> AutomationPending
   {
     let taken = try read(
@@ -199,27 +201,5 @@ extension AutomationDatabase {
       ].compactMap { $0 }.min()
     }
     return AutomationPending(count: taken.count, expiresAt: expiries.min())
-  }
-}
-
-extension AutomationDatabase {
-  /// 判定 `judge` が `take: all` のつながりで毎回読み直す出来事（残す期間と古さの上限の内）のリンク。
-  func linksReadAgain(by judge: AutomationGraph.Node, now: Date) throws -> Set<String> {
-    var links = Set<String>()
-    for edge in judge.inputs where edge.take == .all {
-      let since = edge.maxAgeHours.map { now.addingTimeInterval(-TimeInterval($0) * 3600) }
-      let cutoff = try eventCutoff(of: edge.from, now: now)
-      links.formUnion(
-        try db.select(
-          """
-          SELECT DISTINCT link FROM events
-          WHERE node_id = ? AND created_at >= max(?, ?) AND link IS NOT NULL
-          """,
-          [
-            .integer(Int64(edge.from.rawValue)), cutoff, since.map(Self.instant) ?? cutoff,
-          ]
-        ) { $0.text(at: 0) ?? "" })
-    }
-    return links
   }
 }

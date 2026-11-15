@@ -99,9 +99,9 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 再起動
 
-  /// 自動化・ノードの出来事の残す日数・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・形式エラーの印・
-  /// 止めた印・回の記録・読めば取る行の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・自動化とノードを止める・消す）の後に
-  /// 開き直しても同じ。回の記録は失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
+  /// 自動化・ノードの出来事の残す日数・つながりの取り方（take・古さの上限・読む行の下限の時刻）・ノードの状態（形式エラーの印・
+  /// 止めた印・回の記録・読めば取る行の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・自動化と
+  /// ノードを止める・消す）の後に開き直しても同じ。回の記録は失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
@@ -119,16 +119,16 @@ final class AutomationStoreTests: OrbeTestCase {
     rewritten.notify = .menuBar
     var digest = DesignSceneFixtures.commandNode(
       "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
-    digest.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all, maxAgeHours: 24)]
+    digest.from = [
+      AutomationDefinition.Input(nodeKey: "fetch", take: .all, maxAgeHours: 24, after: Self.at)
+    ]
     rewritten.nodes.append(digest)
     var mail = DesignSceneFixtures.commandNode(
       "mail", "メール", .manual, script: "mail", coverage: .newArrivals)
     mail.retentionDays = 60
-    rewritten.nodes += [
-      mail,
-      DesignSceneFixtures.commandNode(
-        "log", "記録", .arrival, from: ["mail"], script: "log", deliver: .sideEffect),
-    ]
+    let log = DesignSceneFixtures.commandNode(
+      "log", "記録", .arrival, from: ["mail"], script: "log", deliver: .sideEffect)
+    rewritten.nodes += [mail, log]
     _ = try store?.setPaused(id, nodeId: XCTUnwrap(store).nodeId(id, "fetch"), true, now: Self.at)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)
     XCTAssertEqual(store?.automation(id)?.state(key: "fetch").paused, true, "書き換えでノードの止めた印を引き継ぐ")

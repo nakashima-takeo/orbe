@@ -123,11 +123,12 @@ extension AutomationDefinition.Node: Codable {
   }
 }
 
-/// `"<鍵>"`（新しい行だけ・古さの上限なし）か `{"node": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n}`。書くときは、
-/// 取り方も古さの上限も省けるつながりを鍵の文字列で書く。
+/// `"<鍵>"`（新しい行だけ・古さの上限も下限の時刻もなし）か
+/// `{"node": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n, "after"?: 時刻}`。`after` は ISO 8601 の時刻で、保存の精度
+/// （ミリ秒）に丸めて読む。書くときは、取り方も古さの上限も下限の時刻も省けるつながりを鍵の文字列で書く。
 extension AutomationDefinition.Input: Codable {
   private enum CodingKeys: String, CodingKey, CaseIterable {
-    case nodeKey = "node", take, maxAgeHours
+    case nodeKey = "node", take, maxAgeHours, after
   }
 
   /// オブジェクトで書いた入力が受ける鍵。
@@ -150,11 +151,12 @@ extension AutomationDefinition.Input: Codable {
     }
     self.init(
       nodeKey: try c.decode(String.self, forKey: .nodeKey), take: take,
-      maxAgeHours: try c.decodeIntegerIfPresent(forKey: .maxAgeHours))
+      maxAgeHours: try c.decodeIntegerIfPresent(forKey: .maxAgeHours),
+      after: try c.decodeIfPresent(Date.self, forKey: .after).map(TaskItem.storedInstant))
   }
 
   func encode(to encoder: Encoder) throws {
-    guard take != .new || maxAgeHours != nil else {
+    guard take != .new || maxAgeHours != nil || after != nil else {
       var c = encoder.singleValueContainer()
       try c.encode(nodeKey)
       return
@@ -163,6 +165,7 @@ extension AutomationDefinition.Input: Codable {
     try c.encode(nodeKey, forKey: .nodeKey)
     if take != .new { try c.encode(take.rawValue, forKey: .take) }
     try c.encodeIfPresent(maxAgeHours, forKey: .maxAgeHours)
+    try c.encodeIfPresent(after, forKey: .after)
   }
 }
 

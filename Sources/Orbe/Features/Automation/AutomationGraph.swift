@@ -81,7 +81,8 @@ struct AutomationGraph: Equatable {
         entity: entity, action: checked.definitionNode.action,
         inputs: zip(checked.upstream, checked.definitionNode.from).map { index, input in
           AutomationNodeEdge(
-            from: entities[index].id, take: input.take, maxAgeHours: input.maxAgeHours)
+            from: entities[index].id, take: input.take, maxAgeHours: input.maxAgeHours,
+            after: input.after)
         }, role: checked.role, workspace: checked.workspace)
     }
     upstream = checked.map(\.upstream)
@@ -108,8 +109,9 @@ struct AutomationGraph: Equatable {
         id: node.id, key: node.key, name: node.entity.name, trigger: node.entity.trigger,
         from: node.inputs.map { edge in
           AutomationDefinition.Input(
-            nodeKey: self.node(edge.from)?.key ?? "", take: edge.take, maxAgeHours: edge.maxAgeHours
-          )
+            nodeKey: self.node(edge.from)?.key ?? "", take: edge.take,
+            maxAgeHours: edge.maxAgeHours,
+            after: edge.after)
         }, action: node.action, maxItems: node.entity.maxItems,
         retentionDays: node.entity.retentionDays)
     }
@@ -156,18 +158,6 @@ struct AutomationGraph: Equatable {
       }
     }
     return false
-  }
-
-  /// `judge` のノードへ行が届くノード——入力を上流へたどり、取得で止めたもの（取得と処理。定義の順）。
-  func feeders(of judge: AutomationNodeID) -> [Node] {
-    guard let start = index(judge) else { return [] }
-    var pending = upstream[start]
-    var seen = Set<Int>()
-    while let index = pending.popLast() {
-      guard seen.insert(index).inserted, nodes[index].role != .fetch else { continue }
-      pending += upstream[index]
-    }
-    return seen.sorted().map { nodes[$0] }
   }
 
   /// `id` のノードを入力に名指すノード（定義の順）。

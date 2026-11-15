@@ -677,6 +677,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardNodeAppendSince
   case boardNodeTakeAll
   case boardNodeMaxAge
+  case boardNodeAfter
   case boardNodeTaskCandidates
   case boardNodeNothing
   case boardNodeCount

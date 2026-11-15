@@ -95,7 +95,7 @@ extension DesignSceneFixtures {
   private static func seed(_ samples: [AutomationSample], into store: AutomationStore) {
     do {
       for sample in samples {
-        let id = try store.create(sample.definition, now: sample.createdAt).id
+        let id = try create(sample, in: store)
         var kept: [String: [AutomationItem]] = [:]
         for pass in sample.passes {
           for item in pass.kept where !(kept[pass.nodeKey] ?? []).map(\.id).contains(item.id) {
@@ -115,6 +115,26 @@ extension DesignSceneFixtures {
     }
   }
 
+  /// 見本の自動化を作る。読む行の下限の時刻は今あるノードからのつながりにしか書けないので、それを持つ見本は、時刻を外して
+  /// 作ってから、同じ時刻に元の定義で書き換える（ノードは id で同じノードのまま）。
+  private static func create(_ sample: AutomationSample, in store: AutomationStore) throws -> Int {
+    var definition = sample.definition
+    for index in definition.nodes.indices {
+      for input in definition.nodes[index].from.indices {
+        definition.nodes[index].from[input].after = nil
+      }
+    }
+    let created = try store.create(definition, now: sample.createdAt)
+    guard definition != sample.definition else { return created.id }
+    var rewritten = sample.definition
+    for index in rewritten.nodes.indices {
+      rewritten.nodes[index].id = created.graph.node(key: rewritten.nodes[index].key)?.id
+    }
+    _ = try store.replace(
+      created.id, version: created.version, with: rewritten, now: sample.createdAt)
+    return created.id
+  }
+
   /// 見本の前から出ていた項目を、回の記録を残さず `key` のノードの出力へ足し、下流の受け手は読んだものとする。
   private static func prepare(
     _ items: [AutomationItem], as key: String, of id: Int, in store: AutomationStore, at: Date
@@ -122,11 +142,8 @@ extension DesignSceneFixtures {
     let nodeId = store.nodeId(id, key)
     try store.give(items.map(row), as: nodeId, of: id, at: at)
     for receiver in store.automation(id)?.graph.downstream(of: nodeId) ?? [] {
-      guard var read = try store.read(receiver.id, of: id, baseline: nil, now: at) else { continue }
-      read.taken = []
-      read.dropped = []
-      read.lapsed = 0
-      try store.discard(read, of: receiver.id, in: id, now: at)
+      guard let read = try store.read(receiver.id, of: id, baseline: nil, now: at) else { continue }
+      try store.consume(read, of: receiver.id, in: id, now: at)
     }
   }
 

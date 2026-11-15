@@ -70,7 +70,7 @@ final class AutomationTrialTests: OrbeTestCase {
 
   /// 書く前の定義の試走の対象（本番のストアで確かめる）。
   func unsaved(_ write: AutomationStore.Write) throws -> AutomationTrial.Target {
-    let checked = try store.check(write)
+    let checked = try store.check(write, now: now)
     return .unsaved(checked.write, nodes: checked.nodes)
   }
 

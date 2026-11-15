@@ -45,7 +45,7 @@ extension AutomationTrial {
         guard let automation = copy.automation(id) else { throw .automationNotFound(id) }
         return (automation, nil)
       case .unsaved(let write, _):
-        let written = try copy.apply(try copy.check(write), now: now)
+        let written = try copy.apply(try copy.check(write, now: now), now: now)
         return (written.automation, written)
       }
     }

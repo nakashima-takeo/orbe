@@ -47,8 +47,7 @@ struct AutomationRecording {
     let judgedNow = try reconciled.map { reconciled in
       try apply(reconciled, run: recordId, &memory)
       return AutomationJudged(
-        proposals: reconciled.pending,
-        resolved: reconciled.resolving.map { memory.proposals[$0].link })
+        proposals: reconciled.pending, resolved: reconciled.resolving.map(\.link))
     }
     try finish(run: recordId, endedAt: run.endedAt, &memory)
     let recorded = memory.automations[index].state(end.nodeId).runs.first { $0.id == recordId }
@@ -66,8 +65,8 @@ struct AutomationRecording {
     try db.setCarried(end.nodeId, AutomationCarried())
   }
 
-  /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、無効にした項目と、今有効な
-  /// 項目から抜けたリンクで判断待ちの候補を下げ、下げた数をこの回に数える。
+  /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、書いた直後に覚えている
+  /// 候補へ下げる条件を当て、下げた数をこの回に数える。
   private mutating func produce(
     _ output: AutomationNodePass.Output, _ run: inout AutomationNodeRun,
     _ memory: inout AutomationMemory
@@ -77,16 +76,11 @@ struct AutomationRecording {
       let outputs = rows.map {
         AutomationDatabase.Output(id: $0.id, body: $0.text, source: $0.source)
       }
-      var lost = Set<String>()
-      if node.coverage == .currentSet {
-        lost = try db.liveLinks(of: end.nodeId)
-        written = try db.writeItems(of: end.nodeId, outputs, at: run.endedAt)
-        lost.subtract(try db.liveLinks(of: end.nodeId))
-      } else {
-        written = try db.writeEvents(of: end.nodeId, outputs, at: run.endedAt)
-      }
-      run.withdrawn = try memory.withdraw(
-        after: written.invalidated, lost: [end.nodeId: lost], db, now: run.endedAt)
+      written =
+        node.coverage == .currentSet
+        ? try db.writeItems(of: end.nodeId, outputs, at: run.endedAt)
+        : try db.writeEvents(of: end.nodeId, outputs, at: run.endedAt)
+      run.withdrawn = try memory.withdraw(db, now: run.endedAt).values.reduce(0, +)
       run.result =
         node.role == .fetch
         ? .fetch(fresh: written.fresh, duplicates: written.duplicates)
@@ -102,25 +96,36 @@ struct AutomationRecording {
   /// 判定の出力をこの時点の候補に当て直したもの。
   private struct Reconciled {
     let pending: [AutomationNodePass.Proposal]
-    let resolving: [Int]
+    /// 案に置き換わる、この判定の対応済みの候補の ID。
+    let replacing: [Int]
+    /// 対応済みにする、この判定の判断待ちの候補（案の順）。
+    let resolving: [(id: Int, link: String)]
     let dismissed: [AutomationDismissal]
   }
 
-  /// 回の途中に他の確定や人のさばきがあっても、この判定が同じリンクの候補を既に持つ案と、元にした行が今のものでなくなった案は
-  /// 理由付きで捨て、この判定の判断待ちでない候補は対応済みにしない。
+  /// 回の途中に他の確定や人のさばきがあっても、同じリンクで対応済みでない候補をこの判定が既に持っている案と、元にした行が今のもので
+  /// なくなった案（下げる条件を満たす案）は理由付きで捨て、この判定の判断待ちでない候補は対応済みにしない。同じリンクで対応済みの
+  /// 候補をこの判定が持っている案は、その候補を置き換える（判定がまだ見ていない変化を見て、案にし直したので）。
   private func reconcile(
     _ proposals: [AutomationNodePass.Proposal], _ resolved: [String], _ memory: AutomationMemory
   ) throws -> Reconciled {
     var proposed = memory.links(of: end.nodeId)
+    let resolvedIds = Dictionary(
+      memory.proposals.filter { $0.judge == end.nodeId && $0.state == .resolved }.map {
+        ($0.link, $0.id)
+      }, uniquingKeysWith: { first, _ in first })
     var pending: [AutomationNodePass.Proposal] = []
-    var resolving: [Int] = []
+    var replacing: [Int] = []
+    var resolving: [(id: Int, link: String)] = []
     var dismissed: [AutomationDismissal] = []
-    for proposal in proposals {
+    let gone = try db.noLongerCurrent(
+      proposals.map {
+        AutomationDatabase.Withdrawal(
+          row: $0.row, link: $0.fields.link, inputs: node.inputNodeIds)
+      }, now: TaskItem.storedInstant(end.endedAt))
+    for (proposal, gone) in zip(proposals, gone) {
       let link = proposal.fields.link
-      if try db.noLongerCurrent(
-        proposal.row, link: link, inputs: node.inputNodeIds,
-        now: TaskItem.storedInstant(end.endedAt))
-      {
+      if gone {
         dismissed.append(AutomationDismissal(link: link, why: .noLongerCurrent))
         continue
       }
@@ -128,28 +133,41 @@ struct AutomationRecording {
         dismissed.append(AutomationDismissal(link: link, why: .alreadyProposed))
         continue
       }
+      if let resolved = resolvedIds[link] { replacing.append(resolved) }
       pending.append(proposal)
     }
     for link in resolved {
       guard
-        let open = memory.proposals.firstIndex(where: {
+        let open = memory.proposals.first(where: {
           $0.judge == end.nodeId && $0.link == link && $0.state == .open
         }),
-        !resolving.contains(open)
+        !resolving.contains(where: { $0.id == open.id })
       else {
         dismissed.append(AutomationDismissal(link: link, why: .noOpenProposal))
         continue
       }
-      resolving.append(open)
+      resolving.append((open.id, open.link))
     }
-    return Reconciled(pending: pending, resolving: resolving, dismissed: dismissed)
+    return Reconciled(
+      pending: pending, replacing: replacing, resolving: resolving, dismissed: dismissed)
   }
 
-  /// 候補を足し（判定の回を指し、覚えている印を付ける）、対応済みにする。
+  /// 置き換わる対応済みの候補を忘れ、判断待ちの候補を対応済みにしてから、候補を足す（判定の回を指し、覚えている印を付ける）。
+  /// 覚えている印は判定とリンクで一意なので、忘れるのは足す前。置き換えは数えない。
   private func apply(_ reconciled: Reconciled, run recordId: Int, _ memory: inout AutomationMemory)
     throws
   {
     let endedAt = TaskItem.storedInstant(end.endedAt)
+    if !reconciled.replacing.isEmpty {
+      try db.forget(proposals: reconciled.replacing)
+      let replaced = Set(reconciled.replacing)
+      memory.proposals.removeAll { replaced.contains($0.id) }
+    }
+    let resolving = Set(reconciled.resolving.map(\.id))
+    for index in memory.proposals.indices where resolving.contains(memory.proposals[index].id) {
+      try db.resolve(memory.proposals[index].id, at: endedAt)
+      memory.proposals[index].state = .resolved
+    }
     for proposal in reconciled.pending {
       let proposalId = try db.insert(proposal: proposal, run: recordId, nodeId: end.nodeId)
       guard let originNodeId = try db.lineage(of: proposal.row).last?.nodeId else {
@@ -162,19 +180,14 @@ struct AutomationRecording {
           due: proposal.due, workspace: proposal.workspace, reason: proposal.reason,
           proposedAt: endedAt, state: .open))
     }
-    for open in reconciled.resolving {
-      try db.resolve(memory.proposals[open].id, at: endedAt)
-      memory.proposals[open].state = .resolved
-    }
   }
 
-  /// 外した最初の回なら印を書き、ノードの状態を読み直し、忘れる候補を忘れ、数え直す。
+  /// 外した最初の回なら印を書き、ノードの状態を読み直し、数え直す。
   private func finish(run recordId: Int, endedAt: Date, _ memory: inout AutomationMemory) throws {
     if end.outcome.breach != nil, memory.automations[index].state(end.nodeId).breach == nil {
       try db.setBreach(end.nodeId, run: recordId)
     }
     try memory.reread(end.nodeId, of: end.automationId, db)
-    try memory.forgetUnheld(db, now: endedAt)
     try memory.recount(
       end.automationId, db, now: endedAt,
       nodeIds: [end.nodeId] + memory.automations[index].graph.downstream(of: end.nodeId).map(\.id))

@@ -81,6 +81,7 @@ extension AutomationVersionTwoFixture {
       max_age_hours INTEGER CHECK (max_age_hours > 0),
       read_item_seq  INTEGER NOT NULL DEFAULT 0 CHECK (read_item_seq >= 0),
       read_event_seq INTEGER NOT NULL DEFAULT 0 CHECK (read_event_seq >= 0),
+      after_at       INTEGER,
       PRIMARY KEY (to_node_id, from_node_id),
       UNIQUE (to_node_id, position),
       CHECK (from_node_id <> to_node_id),
@@ -135,6 +136,7 @@ extension AutomationVersionTwoFixture {
     );
     CREATE INDEX events_seen ON events (node_id, written_id, created_at);
     CREATE INDEX events_node ON events (node_id, created_at);
+    CREATE INDEX events_link ON events (node_id, link, created_at);
     CREATE INDEX events_source_item ON events (source_item_id);
     CREATE INDEX events_source_event ON events (source_event_id);
     CREATE TABLE runs (
@@ -243,11 +245,11 @@ extension AutomationVersionTwoFixture {
     1793003720000,NULL,NULL,0,0,'{}');
     INSERT INTO nodes VALUES(7,1,6,'send','送る','{"kind":"arrival"}',NULL,NULL,7,1793000000000,\#
     NULL,NULL,NULL,0,0,'{}');
-    INSERT INTO node_edges VALUES(1,2,3,0,'new',48,0,2);
-    INSERT INTO node_edges VALUES(1,1,4,0,'new',NULL,5,0);
-    INSERT INTO node_edges VALUES(1,3,4,1,'new',NULL,0,2);
-    INSERT INTO node_edges VALUES(1,1,5,0,'all',24,5,0);
-    INSERT INTO node_edges VALUES(1,3,7,0,'new',NULL,0,2);
+    INSERT INTO node_edges VALUES(1,2,3,0,'new',48,0,2,NULL);
+    INSERT INTO node_edges VALUES(1,1,4,0,'new',NULL,5,0,NULL);
+    INSERT INTO node_edges VALUES(1,3,4,1,'new',NULL,0,2,NULL);
+    INSERT INTO node_edges VALUES(1,1,5,0,'all',24,5,0,NULL);
+    INSERT INTO node_edges VALUES(1,3,7,0,'new',NULL,0,2,1793000000000);
     INSERT INTO items VALUES(1,1,1,'a',NULL,NULL,1793000120000,NULL,NULL);
     INSERT INTO items VALUES(2,1,2,'b',NULL,NULL,1793000120000,1793001860000,5);
     INSERT INTO items VALUES(3,1,4,'c',NULL,NULL,1793001860000,NULL,NULL);

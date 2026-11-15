@@ -84,6 +84,7 @@ extension AutomationDatabase {
       max_age_hours INTEGER CHECK (max_age_hours > 0),
       read_item_seq  INTEGER NOT NULL DEFAULT 0 CHECK (read_item_seq >= 0),
       read_event_seq INTEGER NOT NULL DEFAULT 0 CHECK (read_event_seq >= 0),
+      after_at       INTEGER,
       PRIMARY KEY (to_node_id, from_node_id),
       UNIQUE (to_node_id, position),
       CHECK (from_node_id <> to_node_id),
@@ -138,6 +139,7 @@ extension AutomationDatabase {
     );
     CREATE INDEX events_seen ON events (node_id, written_id, created_at);
     CREATE INDEX events_node ON events (node_id, created_at);
+    CREATE INDEX events_link ON events (node_id, link, created_at);
     CREATE INDEX events_source_item ON events (source_item_id);
     CREATE INDEX events_source_event ON events (source_event_id);
     CREATE TABLE runs (

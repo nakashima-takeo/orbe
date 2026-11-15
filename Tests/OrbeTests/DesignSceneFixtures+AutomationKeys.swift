@@ -52,6 +52,20 @@ extension AutomationStore {
     }
   }
 
+  /// 鍵で指したノードの今有効な項目のリンク（DB から。テスト）。
+  func liveLinks(_ id: Int, _ key: String) throws -> Set<String> {
+    try read {
+      Set(
+        try $0.db.select(
+          """
+          SELECT v.link FROM items i
+          JOIN item_versions v ON v.id = (SELECT max(id) FROM item_versions WHERE item_id = i.id)
+          WHERE i.node_id = ? AND i.valid_to IS NULL AND v.link IS NOT NULL
+          """, [.integer(Int64(nodeId(id, key).rawValue))]
+        ) { $0.text(at: 0) ?? "" })
+    }
+  }
+
   /// 鍵で指した受け手の持ち越し（DB から。テスト）。
   func carried(_ id: Int, _ key: String) throws -> AutomationCarried {
     try read { try $0.carried(of: nodeId(id, key)) }
