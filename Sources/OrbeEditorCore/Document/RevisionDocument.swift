@@ -73,11 +73,8 @@ public final class RevisionDocument {
     reception.setVisible(lines)
   }
 
-  /// 初めて画面に出す直前に呼ぶ（2 回目以降は何もしない）。見えている範囲の色が揃っていなければ、期限 `deadline`（省けば
-  /// 今から `SyntaxReception.firstColorsWait`）まで待つ。
-  public func prepareToShow(
-    until deadline: DispatchTime = .now() + SyntaxReception.firstColorsWait
-  ) {
+  /// 初めて画面に出す直前に呼ぶ（2 回目以降は何もしない）。見えている範囲の色が揃っていなければ、期限 `deadline` まで待つ。
+  public func prepareToShow(until deadline: DispatchTime) {
     guard reception.beginShowing(ready: isFirstColorReady) else { return }
     _ = wait(until: deadline) { $0.isFirstColorReady }
   }

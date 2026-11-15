@@ -162,12 +162,16 @@ public final class EditorDocument {
     analysis.post(request, text: text, version: version)
   }
 
+  /// 初めて画面に出すとき、最初の色を待つ上限。
+  public static let firstColorsWait: TimeInterval = 0.05
+
   /// 文書を初めて画面に出す直前に呼ぶ。構文の裏の仕事が、見えている範囲の役割を作り終えていなければ、最初の描画に色が
-  /// 間に合うよう期限 `deadline`（省けば今から `SyntaxReception.firstColorsWait`）まで待つ（越えたら無色で出し、後から色が
+  /// 間に合うよう期限 `deadline`（省けば今から `EditorDocument.firstColorsWait`）まで待つ（越えたら無色で出し、後から色が
   /// 付く）。2 回目以降は何もしない。待つ間も結果を受け取るので、受け取りの知らせの中からは呼べない——受け取りが入れ子に
-  /// なり、外側の受け取りが持つ役割の変わった区間が、内側の差し替えの前の座標のまま面へ届く。
+  /// なり、内側の受け取りがディスクの内容で本文を差し替えると、外側の受け取りが持つ役割の変わった区間が、差し替える前の
+  /// 座標のまま面へ届く。
   public func prepareToShow(
-    until deadline: DispatchTime = .now() + SyntaxReception.firstColorsWait
+    until deadline: DispatchTime = .now() + EditorDocument.firstColorsWait
   ) {
     precondition(!isReceiving, "受け取りの知らせの中からは、初めて見せる前の待ちを始められない")
     guard reception.beginShowing(ready: isFirstColorReady) else { return }

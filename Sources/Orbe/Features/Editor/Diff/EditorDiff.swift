@@ -184,13 +184,13 @@ final class EditorDiff: RootFilesObserver {
   }
 
   /// 初めての位置を決めた画面を出す直前の、色の上限待ち（diff ごとに 1 回）。古い側の版の文書・新しい側の版の文書・作業
-  /// ツリーの文書を、1 つの期限（今から `SyntaxReception.firstColorsWait`）まで順に待つ。待つ前に見えている範囲——インラインの
+  /// ツリーの文書を、1 つの期限（今から `EditorDocument.firstColorsWait`）まで順に待つ。待つ前に見えている範囲——インラインの
   /// 古い側は見えている削除行——を裏へ渡す。位置を決める前に出る画面と、待った後に作り直した版の文書では待たない。
   func prepareToShow() {
     guard content == .ready, placement == .placed, !hasBeenShown else { return }
     hasBeenShown = true
     viewportDidChange()
-    let deadline = DispatchTime.now() + SyntaxReception.firstColorsWait
+    let deadline = DispatchTime.now() + EditorDocument.firstColorsWait
     old?.prepareToShow(until: deadline)
     newRevision?.prepareToShow(until: deadline)
     document?.prepareToShow(until: deadline)
