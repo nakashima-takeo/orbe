@@ -1,7 +1,7 @@
 ---
 title: エージェント通知の配管
 description: エージェント CLI の hook が状態とセッション ID を .app 同梱 CLI 経由で制御ソケットへ報告し、発信元タブに保持する配管
-updated: 2026-10-13
+updated: 2026-11-15
 ---
 
 # エージェント通知の配管
@@ -25,6 +25,7 @@ tab identity は env で運ぶ（tty 経路を要さない）。Orbe は全タ�
 ## `orbe-report <agent> <state>` の契約
 
 - `ORBE_TAB`・`ORBE_SOCK` のどちらかが無ければ即 no-op（Orbe 外）。Orbe が動いておらず socket 接続に失敗しても no-op。
+- codex からの呼び出しは、親プロセスが制御端末を持たなければ何も送らない。そうした呼び出しはデーモン経由の codex の hook で、受け継いだ環境変数が別のタブのものだから（[plugin-package](plugin-package.md#デーモン経由の呼び出しの判定)）。
 - hook の stdin JSON は 1 回だけ読んでパースし、セッション ID 抽出と後述の判定に共用する。セッション ID は claude/codex/agy それぞれのフィールド名を順に見て、無ければ agy の env にフォールバック（いずれも非空のみ）。
 - サブエージェント実行中の hook payload（親と同じセッション ID で届き、サブエージェント識別子を持つ）は報告しない——タブのセッション状態ではないため。socket へ接続する前に落とす。
   - 既知の制約: permission 待ちの通知はサブエージェント識別子を**持たない**ので、サブエージェント内の承認要求でもタブは `waiting` になる。一方その待ちを解く側（バッチ解決の報告）はサブエージェント識別子を持つので落ちる。結果、サブエージェント内で承認しても `waiting` は即座には解けず、親のバッチが解決した時点まで残る。
@@ -46,4 +47,6 @@ tab identity は env で運ぶ（tty 経路を要さない）。Orbe は全タ�
 
 ## 対象 CLI
 
-claude / codex / agy の hook 定義あり。取得できる状態は CLI のフック粒度に依存し、claude は全状態、codex は idle（中断）/working/waiting/done、agy は working/done のみ（詳細は [plugin-package](plugin-package.md)）。状態の表示（chrome）は本配管の範囲外、セッション ID の永続/resume は [persistence](../platform/persistence.md)。
+claude / codex / agy の hook 定義あり。取得できる状態は CLI のフック粒度に依存し、claude は全状態、codex は idle（中断）/working/waiting/done、agy は working/done のみ（詳細は [plugin-package](plugin-package.md)）。
+
+codex は、デーモンを使わずに動いているものの状態だけが報告される。Orbe が起こす codex はデーモンを使わない（[launch](launch.md#起動形態)）。タブのシェルで素の `codex` と打つとデーモン経由になり、そのタブにも他のタブにも状態は付かない——デーモン経由の codex がどのタブの会話かを知る手段が無いため。手で起こすときは `codex --no-daemon` と打てば報告される。状態の表示（chrome）は本配管の範囲外、セッション ID の永続/resume は [persistence](../platform/persistence.md)。

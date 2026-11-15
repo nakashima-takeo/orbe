@@ -152,7 +152,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 
 `orbe-mcp` 実行ターゲット（GhosttyKit/AppKit 非依存）。MCP stdio を喋りツール定義を保持し、tools/call を control.sock へ転送する薄い層——ツールの反復に Orbe 本体の再ビルド/再起動が要らない。応答はそのまま本文に出し、control のエラーは code を落として `isError` の文言に畳む（ツール説明はコード番号でなく文言で案内する）。ツール説明が導線を持つ——エージェントに問うなら `prompt_agent`、生の入力は `send_text`＋`send_key`、特殊な待ちだけ `wait_for_event`。
 
-配布は `.app` 同梱とエージェントプラグインで行う。`orbe-mcp` は `.app` に同梱され、タブには `ORBE_MCP_BIN` でその絶対パスが注入される。配布プラグインの MCP 定義が起こすシムが、自分のチャネルの Orbe のタブではこれへ exec し、それ以外ではツール 0 個の空サーバーとして応答する（[agent/plugin-package](../agent/plugin-package.md)）。したがって Orbe のタブで起こした claude / codex / agy には、利用者が何も設定しなくても Orbe のツールが出て、ブリッジはタブの `ORBE_SOCK` でそのタブの Orbe にだけつながり、`ORBE_TAB` で呼び出し元を名乗る。PATH から探さないのは、利用者の rc が PATH を並べ替えると別の `orbe-mcp` を掴むため。
+配布は `.app` 同梱とエージェントプラグインで行う。`orbe-mcp` は `.app` に同梱され、タブには `ORBE_MCP_BIN` でその絶対パスが注入される。配布プラグインの MCP 定義が起こすシムが、自分のチャネルの Orbe のタブではこれへ exec し、それ以外ではツール 0 個の空サーバーとして応答する（[agent/plugin-package](../agent/plugin-package.md)）。したがって Orbe のタブで起こした claude / codex / agy には、利用者が何も設定しなくても Orbe のツールが出て（codex はデーモンを使わずに動くものだけ。デーモン経由の codex には出ない——[agent/plugin-package](../agent/plugin-package.md#デーモン経由の呼び出しの判定)）、ブリッジはタブの `ORBE_SOCK` でそのタブの Orbe にだけつながり、`ORBE_TAB` で呼び出し元を名乗る。PATH から探さないのは、利用者の rc が PATH を並べ替えると別の `orbe-mcp` を掴むため。
 
 [`scripts/orbe-mcp.sh`](../../../scripts/orbe-mcp.sh) は開発用の道具で、Orbe を再起動せずにツールを試すためにある。MCP クライアントへこの絶対パスを stdio サーバーの起動コマンドとして登録すると、毎回 `swift build` を通してから exec する（stale バイナリが別チャネルの socket を掴まないため・[channel](../platform/channel.md)）。接続先 control.sock は app と同じ規則で `ORBE_STATE_DIR` を honor するため、隔離インスタンスと bridge を同じ `ORBE_STATE_DIR` で起こせば、その隔離インスタンスを MCP で駆動できる。MCP サーバーへ親の環境を渡さないクライアントに登録するときは、`ORBE_TAB` を渡す環境変数として設定に加えないと、`add_task` の既定の付き先と追加者が効かない。
 

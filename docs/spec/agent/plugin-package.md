@@ -1,12 +1,12 @@
 ---
 title: エージェントプラグイン（配布物）
-description: claude / codex / agy 兼用プラグインパッケージ app/agent-plugin/ の構造・各 CLI の導入契約・チャネル別のプラグイン名・MCP サーバー・.app 同梱と毎起動の実体化・中身の指紋による入れ直し
-updated: 2026-10-14
+description: claude / codex / agy 兼用プラグインパッケージ app/agent-plugin/ の構造・各 CLI の導入契約・codex の hook の承認・チャネル別のプラグイン名・デーモン経由の呼び出しの判定・MCP サーバー・.app 同梱と毎起動の実体化・中身の指紋による入れ直し
+updated: 2026-11-15
 ---
 
 # エージェントプラグイン（配布物）
 
-`app/agent-plugin/` は claude / codex / agy を 1 ディレクトリで兼ねるプラグインパッケージ。3 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。もう 1 つは claude のスキル（→ [自動化のスキル](#自動化のスキル)）。利用者は何も設定しない。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。プラグイン本体は `plugins/<プラグイン名>/` に 1 箇所だけ置き（スクリプト重複なし）、claude/codex の marketplace 定義をルートからそこへ向ける。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
+`app/agent-plugin/` は claude / codex / agy を 1 ディレクトリで兼ねるプラグインパッケージ。3 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。もう 1 つは claude のスキル（→ [自動化のスキル](#自動化のスキル)）。利用者は何も設定しない。ただし codex は、人が codex の画面で hook を一度承認するまで hook を走らせない（→ [codex の hook の承認](#codex-の-hook-の承認)）。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。プラグイン本体は `plugins/<プラグイン名>/` に 1 箇所だけ置き（スクリプト重複なし）、claude/codex の marketplace 定義をルートからそこへ向ける。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
 
 ## チャネル別のプラグイン名
 
@@ -25,6 +25,10 @@ updated: 2026-10-14
 - codex は marketplace の追加（冪等）のあと `plugin add` し、キャッシュのコピーを丸ごと置き換える。`plugin add` は必ず有効へ戻すので、利用者が無効にしていれば入れ直さない（unchanged）。有効に戻したあとは、次に中身が変わるまで古いコピーのまま。一覧（`plugin list --json`）を読めない（打ち切り・出力の形の変化）ときは、無効かどうか分からないので入れ直さず error にする——指紋を記録しないので次の起動でやり直す。codex の出力の形が恒久的に変わると、起動のたびに `install.sh` が走り（agy もそのたびに入れ直す）、codex のコピーは更新されない。
 - agy は `plugin install` し直す。ステージ先は中身どおりに置き換わり（消したファイルも消える）、有効/無効の設定は残る。
 
+### codex の hook の承認
+
+codex は新しい hook・変わった hook を、人が承認するまで走らせない。承認は起動時に codex が出す対話（「Hooks need review」）か `/hooks` で行う。承認は hook の定義と、導入されたプラグインのディレクトリ全体の中身に結び付くので、パッケージのどのファイルが変わって入れ直しても、承認し直すまで codex の状態は報告されない。Orbe は利用者の codex の設定に承認を書き込まず、承認を飛ばす起動引数も付けない——その引数は他のすべての hook の承認も飛ばすため。claude のフォルダの信頼と同じく、codex と人のあいだの手続きとする。承認の対話が出ている間は、最初の入力を添えた起動（タスクの開始・秘書）も人の応答を待つ。
+
 自分の枠かどうか（claude の導入済み・codex の無効）は名前の**完全一致**で見る——前方一致だと別チャネルの枠を自分のものと誤認する（claude は `<name>@<name>`、codex は JSON 出力の plugin ID）。
 
 hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそれぞれのプラグインルート env 変数を展開して絶対パスで呼ぶ。agy は変数置換が効かないため相対パスで呼ぶ（cwd がステージ済みプラグインルートである契約に依存）。
@@ -33,17 +37,27 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 
 状態追跡のシムと MCP のシムは、どちらも**自分と同じチャネルのタブからの呼び出しにだけ応える**。プラグインのルートの `channel`（実体化時に Orbe が刻む自分の bundle ID）とタブの `ORBE_BUNDLE_ID` を突き合わせ、食い違えば応えない（状態追跡は no-op、MCP は空サーバー）。dev / release の plugin は別枠として両方 enabled になり、CLI は有効な全 plugin の hook と MCP サーバーを全セッションで走らせるため。判定材料が片方でも欠けたら通す——状態追跡を黙って殺さない。刻印は 2 つのシムが共有する事実なので、片方の持ち物（`hooks/`）ではなくプラグインのルート（`plugins/<name>/` 直下）に置く。agy がステージするのはプラグイン本体の subdir だけだが、刻印はその中にあるので届く。
 
+## デーモン経由の呼び出しの判定
+
+同梱の `orbe-report` と `orbe-mcp` は、**codex からの呼び出しには、親プロセスが制御端末を持つときだけ応える**。持たなければ、`orbe-report` は何も送らずに終わり、`orbe-mcp` はツールを出さない（tools/list は空、tools/call は未知のツールのエラーを返す）。
+
+codex は hook と MCP サーバーを、会話を動かしているプロセスの直接の子として起こす。デーモンを使わない codex（Orbe が起こす codex → [launch](launch.md#起動形態)）では、そのプロセスはタブの端末で動く codex 自身で、環境はそのタブのもの。デーモン経由の codex では、そのプロセスは端末から切り離された常駐プロセスで、環境はデーモンを最初に起こした端末のもの（Orbe の外で起こしていれば `ORBE_*` を持たない）——今の会話のタブとは関係が無く、そのまま報告すると状態が別のタブに付き、MCP のツールが別のタブを名乗る。デーモン経由の codex がどのタブの会話かを知る手段は無いので、取り違えた身元で応えるより応えない。シムは exec するだけなので、同梱の実行ファイルの親はシムの親と同じ。
+
+判定が言えるのは「端末から切り離されたプロセスが起こした呼び出しではない」ことまでで、環境がそのタブのものであることは確かめない。端末を持つ仲介が環境を抱えて配る場合（tmux など）は、身元は環境の申告のまま。判定を掛けるのは codex だけ——claude・agy については、hook が会話を動かしているプロセスの直接の子として起こされるかを確かめていない。CLI 名は、`orbe-report` は第 1 引数で、`orbe-mcp` は codex の MCP 定義が渡す引数で受ける。
+
+判定をシムでなく同梱の実行ファイルに置くのは、判定が見るのが呼び出しの親プロセスの事実で、プラグインのコピーの事実ではないから。同梱に置けば、判定はタブを開いた Orbe の版と必ず一致し、直しても codex のコピーが変わらない（hook の承認が外れない）。プロセスが制御端末を持つかの読み方は、[会話へ貼ってよいタブ](launch.md#会話へ貼ってよいタブ)が報告者のグループを辿る読み方と共有する。
+
 ## MCP サーバー
 
 プラグインは状態追跡の hook に加えて MCP サーバーを 1 つ持つ。**サーバー名はプラグイン名と同じ**（[channel](../platform/channel.md)）——codex はサーバー名がプラグインをまたいで共通なので、dev と release で分けないと片方しか起動しない。宣言は hooks と同じく各 CLI のマニフェストが自分の定義だけを指し、どれも `mcp/orbe-mcp.sh`（MCP シム）を起動する。
 
 - **claude**: `.claude-plugin/plugin.json` の `mcpServers`。プラグインルート変数を展開した絶対パスで呼ぶ（相対パスでは起動に失敗する）。
-- **codex**: `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼ぶ。codex は MCP サーバーへ親の環境のうち既定の数個（`HOME`・`PATH` など）と名指しされた変数しか渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。
+- **codex**: `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼ぶ。codex は MCP サーバーへ親の環境のうち既定の数個（`HOME`・`PATH` など）と名指しされた変数しか渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。引数で CLI 名（`codex`）を渡す——ブリッジの[デーモン経由の呼び出しの判定](#デーモン経由の呼び出しの判定)が読む。
 - **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ——agy は MCP サーバーをステージ済みプラグインルートを cwd にして起こし、相対の command をそこから解く。親の環境（`ORBE_MCP_BIN` など）はそのまま MCP サーバーへ渡る。Orbe の外では空サーバーが接続できたサーバーとして扱われ、警告は出ない（HOME を一時ディレクトリに差し替えた隔離環境の agy の print モードで確かめた。対話画面の表示は見ていない）。
 
 プラグインのルートに `.mcp.json`（claude も codex も既定の置き場として読む）は置かない。
 
-MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば、タブの `.app` 同梱の `orbe-mcp` へ exec する。ブリッジはタブの env（`ORBE_SOCK`・`ORBE_TAB`）でそのタブの Orbe にだけつながり、呼び出し元のタブを名乗る。プラグインにバイナリを入れないのは、ブリッジのツール定義とつなぐ先の制御 API の版をそろえるため——実体化先や codex / agy のコピーは同じチャネルの別ビルドと共有され、古いまま残りうる。
+MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば、タブの `.app` 同梱の `orbe-mcp` へ、受けた引数をそのまま渡して exec する。ブリッジはタブの env（`ORBE_SOCK`・`ORBE_TAB`）でそのタブの Orbe にだけつながり、呼び出し元のタブを名乗る。プラグインにバイナリを入れないのは、ブリッジのツール定義とつなぐ先の制御 API の版をそろえるため——実体化先や codex / agy のコピーは同じチャネルの別ビルドと共有され、古いまま残りうる。
 
 それ以外（Orbe の外・別チャネルの Orbe のタブ・同梱の無い Orbe）では、シムは**ツール 0 個の空サーバー**（`mcp/empty-server.pl`）へ exec する。即終了させないのは、CLI がプラグインの MCP サーバーを全セッションで起こし、接続失敗を毎回警告するため。Orbe の外にはバイナリが無いので、空サーバーは macOS 標準の perl で書く。改行区切りの JSON-RPC を読み、initialize には tools を名乗らない capabilities で、tools/list には空の一覧で、ping には空で応え、それ以外の要求は method not found を返す。通知と読めない行には応えない。
 
