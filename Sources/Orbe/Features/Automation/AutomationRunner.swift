@@ -46,7 +46,8 @@ import Observation
   @ObservationIgnored private var registered = Set<String>()
   /// ノードごとの、前の契機の始まりの時点の、入力ごとの上流の最後の番号（メモリだけ。無ければ読んだ位置だけが基準線）。
   @ObservationIgnored var marks: [String: [AutomationNodeID: AutomationSeqs]] = [:]
-  /// ノードごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件など）でも進むので、次の時刻はこれから数える。
+  /// ノードごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件など）や記録に失敗した回の後でも進む（記録の数え
+  /// 始め `recordedAnchor` とは別の値）。
   @ObservationIgnored var anchors: [String: Date] = [:]
   /// 走っている契機（掃除から守る行を言う）。
   @ObservationIgnored private var active: [ObjectIdentifier: Trigger] = [:]
@@ -174,8 +175,7 @@ import Observation
         self?.begin(id, nodeId, trigger, finish) ?? BackgroundRunHandle {}
       }
       try? scheduler.register(
-        id: key, timing: timing, anchor: anchors[key] ?? automation.state(nodeId).anchor,
-        start: start)
+        id: key, timing: timing, anchor: scheduleAnchor(automation, nodeId), start: start)
       registered.insert(key)
     }
     for node in automation.graph.nodes { wake(id, node.id) }

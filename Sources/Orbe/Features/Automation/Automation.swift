@@ -109,8 +109,9 @@ struct AutomationNodeState: Equatable {
 
   var lastRunAt: Date? { runs.first?.startedAt }
 
-  /// 番人の数え始め。回が記録されたときだけ進む。
-  var anchor: Date { lastRunAt ?? addedAt }
+  /// 記録の数え始め: 最後に記録された回の始まり（まだ無ければ足した時刻）。回が記録されたときだけ進む。やり直しの鍵の元で、
+  /// 番人の数え始め（`AutomationRunner.scheduleAnchor`）の既定。
+  var recordedAnchor: Date { lastRunAt ?? addedAt }
 }
 
 /// 受け手の「読めば取る行」。

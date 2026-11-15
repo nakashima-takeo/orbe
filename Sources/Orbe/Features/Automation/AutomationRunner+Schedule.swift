@@ -22,11 +22,18 @@ extension AutomationRunner {
     guard let node = automation.graph.node(nodeId), !automation.halted(nodeId),
       case .scheduled(let timing) = node.entity.trigger
     else { return nil }
-    let anchor = anchors[Self.key(automation.id, nodeId)] ?? automation.state(nodeId).anchor
-    switch timing.next(after: anchor, deadline: nil, now: now ?? self.now(), calendar: calendar()) {
+    switch timing.next(
+      after: scheduleAnchor(automation, nodeId), deadline: nil, now: now ?? self.now(),
+      calendar: calendar())
+    {
     case .run(let date): return date
     case .expire: return nil
     }
+  }
+
+  /// ノードの番人の数え始め: 番人に最後に返した値、無ければ記録の数え始め。次に予定で回る時刻はここから数える。
+  func scheduleAnchor(_ automation: Automation, _ nodeId: AutomationNodeID) -> Date {
+    anchors[Self.key(automation.id, nodeId)] ?? automation.state(nodeId).recordedAnchor
   }
 
   /// 走らせ役 `other` が持つ、自動化 `id` の各ノードの数え始めと、前の契機の印を、この走らせ役のものにする（番人に載せる前に呼ぶ）。

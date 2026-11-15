@@ -43,7 +43,7 @@ extension AutomationStoreTests {
     let fetch = store.nodeId(id, "fetch")
     let before = try XCTUnwrap(store.automation(id))
     let unreadBefore = try unread(store, id, "judge")
-    let anchor = before.state(fetch).anchor
+    let anchor = before.state(fetch).recordedAnchor
     XCTAssertEqual(unreadBefore, ["\(fetch):b"], "前提: b がまだ受け取られていない")
 
     var renamed = before.definition
@@ -59,7 +59,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(after.state(fetch).breach, before.state(fetch).breach)
     XCTAssertEqual(store.proposals.map(\.originNodeId), [fetch])
     XCTAssertEqual(
-      AutomationRunner.runId(id, fetch, after.state(fetch).anchor),
+      AutomationRunner.runId(id, fetch, after.state(fetch).recordedAnchor),
       AutomationRunner.runId(id, fetch, anchor))
   }
 
