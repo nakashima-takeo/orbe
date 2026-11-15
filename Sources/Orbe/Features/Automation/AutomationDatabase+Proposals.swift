@@ -110,9 +110,11 @@ extension AutomationDatabase {
     let inputs: [AutomationNodeID]
   }
 
-  /// 候補が、時刻 `now` に下げる条件を満たすか（`candidates` の順）——元にした行（読んだ行と、その行が引き継ぎでたどる元の行）の
-  /// うち項目のどれかが無効か、元にした行がどれも出来事で読んだ行が残す期間を過ぎ、かつ判定の入力のどれもリンクを今の行に
-  /// 持たない。判断待ちの候補にも、判定の確定が当てる案にも、この 1 つの読みを通す。候補の数だけ SQL を出さない。
+  /// 候補が、時刻 `now` に下げる条件を満たすか（`candidates` の順）。条件は (a) か (b) のどちらかに当てはまり、かつ (c) も満たすこと。
+  /// (a) 元にした行（読んだ行と、その行が引き継ぎでたどる元の行）のうち項目のどれかが無効。
+  /// (b) 元にした行がどれも出来事で、読んだ行が残す期間を過ぎている。
+  /// (c) 判定の入力のどれもリンクを今の行に持たない。
+  /// 判断待ちの候補にも、判定の確定が当てる案にも、この 1 つの読みを通す。候補の数だけ SQL を発行しない。
   func noLongerCurrent(_ candidates: [Withdrawal], now: Date) throws -> [Bool] {
     guard !candidates.isEmpty else { return [] }
     let lineages = try lineages(of: Set(candidates.map(\.row)))
@@ -139,7 +141,7 @@ extension AutomationDatabase {
     }
   }
 
-  /// ノードの今の行が持つリンク。今の行は今有効な項目と、残す期間の内の出来事のうち元にした行に無効な項目が無いもの。
+  /// ノードの今の行が持つリンク。今の行とは、今有効な項目、および残す期間の内の出来事のうち元にした行に無効な項目が無いもの。
   struct CurrentLinks {
     /// ノードごとの、今有効な項目のリンク。
     var items: [AutomationNodeID: Set<String>] = [:]
@@ -218,7 +220,7 @@ extension AutomationDatabase {
     try lineages(of: [row])[row] ?? []
   }
 
-  /// 行ごとの `lineage(of:)`。行の数でなく、引き継ぎの深さの数だけ SQL を出す。
+  /// 行ごとの `lineage(of:)`。行の数でなく、引き継ぎの深さの数だけ SQL を発行する。
   func lineages(of rows: Set<AutomationRowRef>) throws -> [AutomationRowRef: [Lineage]] {
     var steps = Dictionary(uniqueKeysWithValues: rows.map { ($0, [Lineage]()) })
     var frontier: [Hop: [AutomationRowRef]] = [:]

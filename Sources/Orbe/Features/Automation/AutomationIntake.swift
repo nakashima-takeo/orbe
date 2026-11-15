@@ -69,8 +69,11 @@ enum AutomationIntake {
     let now: Date
   }
 
-  /// `node` が `rows` から取る行を選ぶ。古さ（古さの上限と読む行の下限の時刻）→ 判定だけの捨て方（判断待ちでない覚えている候補のリンク）→ 同じ id の古い方 →
-  /// 件数の上限 の順に捨て、残りを古い順に取る。読んだ位置は上限の番号まで進める。
+  /// `node` が `rows` から取る行を選ぶ。次の順に捨て、残りを古い順に取る。読んだ位置は上限の番号まで進める。
+  /// 1. 古さ（古さの上限を過ぎた行、読む行の下限の時刻以前の行）
+  /// 2. 判定だけ、判断待ちでない覚えている候補のリンクの行
+  /// 3. 同じ id の古い方
+  /// 4. 件数の上限
   static func read(
     by node: AutomationGraph.Node, _ rows: [Row], ceilings: [Ceiling], in context: Context
   ) -> Read {
@@ -93,7 +96,7 @@ enum AutomationIntake {
       reach: reach(ceilings))
   }
 
-  /// 古さ（古さの上限を過ぎた・読む行の下限の時刻以前）で捨て、判定だけは判断待ちでない覚えている候補のリンクの行を捨てる。
+  /// 古さ（古さの上限を過ぎた行、読む行の下限の時刻以前の行）で捨てる。判定だけは、判断待ちでない覚えている候補のリンクの行も捨てる。
   /// 残りと捨てた行（古い順）を返す。
   private static func filtered(
     _ rows: [Row], by node: AutomationGraph.Node, _ edges: [AutomationNodeID: AutomationNodeEdge],

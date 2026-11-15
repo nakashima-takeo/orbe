@@ -61,7 +61,7 @@ extension AutomationStore {
 
   /// 書き込みを確かめる（何も書かない）。作るなら、ノードは `id` を持たず、定義が検証を通ること。書き換えるなら、自動化があり（定義を
   /// 読めない自動化も書き換えで直せる）、定義が検証を通り、版が今の版と同じで、ノードの `id` が今のノードを指すこと（`checkIds`）。
-  /// どちらも、つながりの読む行の下限の時刻が `now` より後でないこと（`checkAfter`）。
+  /// どちらも、つながりが読む行の下限の時刻が `now` より後でないこと（`checkAfter`）。
   func check(_ write: Write, now: Date) throws(AutomationError) -> CheckedWrite {
     guard available else { throw unavailableError }
     switch write {
@@ -248,7 +248,7 @@ extension AutomationStore {
     return rewired
   }
 
-  /// つながりの読む行の下限の時刻が、書く時点の `now` より後でないかを確かめる。未来の時刻は、その時刻までに来た行を黙って
+  /// つながりが読む行の下限の時刻が、書く時点の `now` より後でないかを確かめる。未来の時刻は、その時刻までに来た行を黙って
   /// 捨て、試走でも正しい値と見分けられない。保存した定義を読むときは確かめない。
   private static func checkAfter(_ definitionNodes: [AutomationDefinition.Node], now: Date)
     throws(AutomationError)

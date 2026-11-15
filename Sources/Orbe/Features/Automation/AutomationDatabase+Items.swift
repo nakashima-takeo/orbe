@@ -72,8 +72,8 @@ extension AutomationDatabase {
 
   /// 出来事の流れのノードの出力を足す。残す期間の内に同じノードが同じ書かれた id を同じ引き継ぎ元（項目か出来事。無ければ
   /// 無いどうし）で出していれば同じ出来事として足さない（中身が違っても）。入力の id を保った行は「この入力の行と同じもの」と
-  /// いう宣言なので、入力の行が別の行（消えてまた現れた項目など）なら別の出来事になる。行が保存の都合で残っていても、見分けは
-  /// 残す期間の内かで決める。
+  /// いう宣言なので、入力の行が別の行（消えてまた現れた項目など）なら別の出来事になる。同じ出来事かどうかは、行が保存の都合で
+  /// 残っていても、残す期間の内かで決める。
   func writeEvents(of nodeId: AutomationNodeID, _ outputs: [Output], at: Date) throws -> Written {
     let p = Int64(nodeId.rawValue)
     let cutoff = try eventCutoff(of: nodeId, now: at)

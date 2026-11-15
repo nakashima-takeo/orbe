@@ -6,9 +6,9 @@ import Foundation
 // 候補の保ち方の 2 つの条件（下げる・覚える）は状態の決まりで、時刻付きの変異の初めと終わりに、候補すべてに当てる
 // （`AutomationStore.commit`）。何が起きたかから見直す候補を選ばないので、見直す場面の並べ漏れが起きない。
 //
-// 判断待ちの候補を Orbe が下げるのは、候補が元にした行（判定が読んだ行と、その行が引き継ぎでたどる元の行）のうち項目のどれかが
-// 無効になったか、元にした行がどれも出来事で判定が読んだ行が残す期間を過ぎ、判定の入力（直接の上流）の今の行にそのリンクが
-// 無いときだけ。
+// 判断待ちの候補を Orbe が下げるのは、(a) 候補が元にした行（判定が読んだ行と、その行が引き継ぎでたどる元の行）のうち項目の
+// どれかが無効になったか、(b) 元にした行がどれも出来事で、判定が読んだ行が残す期間を過ぎたかのどちらかで、かつ判定の入力
+// （直接の上流）の今の行にそのリンクが無いときだけ。
 //
 // 判定のノード J の候補 P を覚えるのは、J が今のノードで役割が判定のうち、P が判断待ちの間か、P のリンクの行がまた J へ届きうる
 // 間——J へ行が届くノード（入力を上流へたどり、取得で止める）の今有効な項目にリンクがあるか、J が `take: all` で読む出来事に
@@ -80,7 +80,7 @@ extension AutomationMemory {
   mutating func forgetUnheld(_ db: AutomationDatabase, now: Date) throws {
     let judges = self.judges
     let settled = proposals.filter { $0.state != .open && judges[$0.judge] != nil }
-    /// 判定ごとの、また届きうるリンク（判定が対応済みにした候補を覚える分）と、人がさばいた候補を覚える分。
+    /// 判定ごとの、再び届きうるリンク（判定が対応済みにした候補を覚える分）と、人がさばいた候補を覚える分。
     var reach: [AutomationNodeID: (again: Set<String>, rows: Set<String>)] = [:]
     if !settled.isEmpty {
       var feeders: [AutomationNodeID: [AutomationNodeID]] = [:]
