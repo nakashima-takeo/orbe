@@ -71,6 +71,14 @@ extension AutomationNodeTests {
       ("agent のモデルが無い", with("model", nil), "missing nodes[0].model"),
       ("数でない出来事の日数", with("retentionDays", "long"), "invalid nodes[0].retentionDays"),
       (
+        "Int に収まらない古さの上限", with("from", [["node": "x", "maxAgeHours": 1e30]]),
+        "invalid nodes[0].from[0].maxAgeHours"
+      ),
+      (
+        "小数の間隔", with("trigger", ["kind": "interval", "minutes": 1.5]),
+        "invalid nodes[0].trigger.minutes"
+      ),
+      (
         "ノードが 2 つの形", with("command", "gh api"),
         "invalid nodes[0]: pass either command (a shell command) or instruction (an agent)"
       ),
