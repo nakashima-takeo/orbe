@@ -1,7 +1,7 @@
 import Foundation
 
-/// PR の中身の読み取りと、変更ファイルの確認済み（GitHub の Files changed の Viewed）の書き込みと、PR を作る前のブランチが
-/// GitHub に在るかの問い合わせ。問い合わせ先はリポジトリ名で決まるので、作業ディレクトリはリポジトリに依らない。どれも
+/// PR の中身の読み取りと、変更ファイルの確認済み（GitHub の Files changed の Viewed）の書き込みと、ブランチが GitHub に在るかの
+/// 問い合わせ。問い合わせ先はリポジトリ名で決まるので、作業ディレクトリはリポジトリに依らない。どれも
 /// メインスレッドで返る。
 extension GitHubCLI {
   /// GitHub のリポジトリ `ref.repo` にブランチ `ref.branch` が在るか。リポジトリが見えない・答えを読めないときは失敗。

@@ -8,7 +8,7 @@ extension RootFiles {
     let revision: Revision
   }
 
-  /// 追う版。index と HEAD だけで、コミットの版は追わない（変わらない本文なので、読む側が `GitRepo.version` で直に読む）。
+  /// 追う版。関心に入るのは index と HEAD だけ——根のサービスは、この 2 つの表から OID を引いて本文を取り直す。
   enum Revision: Hashable {
     case index
     case head

@@ -3,11 +3,10 @@ import XCTest
 
 @testable import Orbe
 
-/// ブランチが GitHub に在るかの問い合わせ（`GitHubCLI.branchExists`）。PR の作成の入口は、「無い」と分かったときだけ押せない
-/// 状態になる。
+/// ブランチが GitHub に在るかの問い合わせ（`GitHubCLI.branchExists`）。答えは在る・無い・失敗の 3 つ。
 ///
-/// 壊れると何が起きるか: push 済みのブランチで作成の入口が塞がる（失敗や見えないリポジトリを「無い」と読む）。未公開の
-/// ブランチで、空の作成ページを開く入口が出る（「無い」を「在る」と読む）。ブランチ名が、ブランチの外の ref（タグなど）の名前として渡る。
+/// 壊れると何が起きるか: 失敗や見えないリポジトリを「無い」と読む。無いブランチを「在る」と読む。ブランチ名が、ブランチの
+/// 外の ref（タグなど）の名前として渡る。
 final class GitHubCLIBranchExistsTests: OrbeTestCase {
   private let ref = GitHubBranchRef(
     repo: GitHubRepoName(nameWithOwner: "o/2048"), branch: "feat/a")
