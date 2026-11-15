@@ -78,8 +78,8 @@ extension FramePerfTests {
   }
 
   /// 面 `opened` の文書の中ほどにキャレットを置き、打鍵の間隔 100ms と 33ms で `stroke` を流して関門（打鍵→present の
-  /// 中央値 12.5ms・p95 17ms、打鍵 1 回の main の仕事 p99 1ms）にかける。打鍵→present の中央値を、`label` と間隔の名前ごとに
-  /// 返す。
+  /// 中央値 12.5ms・p95 17ms、打鍵 1 回の main の仕事 p99 1ms）にかける。打鍵→present の中央値を、`label` に間隔を付けた
+  /// 名前（`1MB 100ms` など）ごとに返す。
   func gateStrokes(
     _ opened: Opened, scenario: String, label: String,
     stroke: @escaping @MainActor (MetalTextSurface, Int) -> Void

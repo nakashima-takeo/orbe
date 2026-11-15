@@ -103,7 +103,7 @@ extension EditorDiffTests {
     XCTAssertEqual(string(document.text), "one\nTWO\nthree仮名\nfour\n")
   }
 
-  /// 仮の diff タブで打つと普通のタブになり（次に仮で開いたものと入れ替わって未保存の本文を失わない）、未保存の印が出る。
+  /// 仮の diff タブで打つと普通のタブになり（次に仮で開いたものとの入れ替えで未保存の本文が消えない）、未保存の印が出る。
   func testEditingAPreviewDiffPinsIt() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, window) = tab()

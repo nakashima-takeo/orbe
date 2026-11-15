@@ -88,9 +88,9 @@ public final class EditorDocument {
   private var hunkRequest = 0
   /// 行差分を頼んで、まだその結果を受け取っていない版（最後に頼んだ版）。
   private var pendingHunks: Int?
-  /// まだ届きうる行差分の結果のうち最も古い版——最後に受け取った結果の版（頼んでから 1 つも受け取っていなければ、最初に
-  /// 頼んだ版）。待っている結果が無ければ nil。編集の記録はこの版までしか捨てない——裏の行差分 1 回が打鍵の間隔より長くても、
-  /// 打ち続けている間に届く古い版の結果を今の版へ写して置ける。
+  /// 行差分の結果を写すために編集の記録を残す起点の版——最後に受け取った結果の版（頼んでから 1 つも受け取っていなければ、
+  /// 最初に頼んだ版）。届きうるのはこの版以降の結果なので、編集の記録はこの版までしか捨てない——裏の行差分 1 回が打鍵の
+  /// 間隔より長くても、打ち続けている間に届く古い版の結果を今の版へ写して置ける。待っている結果が無ければ nil。
   private var oldestAwaitedHunks: Int?
   /// 区間の列の問いのうち、まだ結果を受け取っていないもの（種類ごとに最新の問いと版）。
   private var pendingRanges: [AnalysisRequest.Kind: (request: AnalysisRequest, version: Int)] = [:]
@@ -263,7 +263,8 @@ public final class EditorDocument {
     isDiskChanged = false
   }
 
-  /// 行差分の依頼を置き直す（baseline か上限が変わった）。前の番号の結果は届いても置かないので、待つ結果は今の版から数え直す。
+  /// 行差分の依頼を置き直す（baseline か上限が変わった）。前の番号の結果は届いても置かないので、編集の記録を残す起点は
+  /// 今の依頼の版から取り直す。
   private func restartHunks() {
     hunkRequest += 1
     oldestAwaitedHunks = nil
