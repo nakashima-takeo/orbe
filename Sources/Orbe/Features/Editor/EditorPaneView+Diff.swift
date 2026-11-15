@@ -103,13 +103,13 @@ extension EditorPaneView {
   /// 本体に文字だけを出す器（空状態・表示できない diff の一文・読み込み中の diff）の見え隠れと中身。
   func refreshNotice() {
     switch body {
-    case .document: emptyHost.isHidden = true
-    case .diff(let diff): emptyHost.isHidden = diff.content == .ready
-    case .empty: emptyHost.isHidden = false
+    case .document: faceHost.isHidden = true
+    case .diff(let diff): faceHost.isHidden = diff.content == .ready
+    case .empty: faceHost.isHidden = false
     }
     let content = faceContent
-    if emptyHost.rootView.content != content {
-      emptyHost.rootView = EditorFaceRoot(localization: localization, content: content)
+    if faceHost.rootView.content != content {
+      faceHost.rootView = EditorFaceRoot(localization: localization, content: content)
     }
   }
 
@@ -120,6 +120,8 @@ extension EditorPaneView {
     case .ready, .loading: return .blank
     case .unavailable(.notText): return .notice(.editorDiffNotText)
     case .unavailable(.symlink): return .notice(.editorDiffSymlink)
+    case .unavailable(.directory): return .notice(.editorDiffDirectory)
+    case .unavailable(.unreadable): return .notice(.editorDiffUnreadable)
     case .unavailable(.conflicted): return .notice(.editorDiffConflicted)
     case .unavailable(.failed): return .notice(.editorDiffFailed)
     case .unavailable(.nowhere):

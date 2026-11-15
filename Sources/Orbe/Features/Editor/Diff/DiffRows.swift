@@ -27,11 +27,7 @@ enum DiffRows {
     if let old, let new { return LineDiff.hunks(old: old, new: new, limit: limit) }
     let (old, new) = (Side(old), Side(new))
     guard !old.isAbsent || !new.isAbsent else { return [] }
-    return [
-      LineHunk(
-        oldStart: old.isAbsent ? 0 : 1, oldCount: old.lines, newStart: new.isAbsent ? 0 : 1,
-        newCount: new.lines)
-    ]
+    return [LineHunk(old: 0..<old.lines, new: 0..<new.lines)]
   }
 
   /// インライン——新しい側の面に、区間の削除行を「古い側の行を指す差し込み」として区間の新しい側の始まりの境に置き、追加の

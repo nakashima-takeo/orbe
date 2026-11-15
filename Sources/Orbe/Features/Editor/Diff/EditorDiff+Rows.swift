@@ -30,12 +30,24 @@ extension EditorDiff {
       }
     }
     placeFirstView(on: surface)
+    sendVisibleRemovedLines(on: surface)
+  }
+
+  /// インラインなら、新しい側の面 `surface` に見えている削除行（古い側の行）を古い側の文書へ渡し、その色を先に作らせる。
+  /// 並びを置くたびにも渡す——隠れている間や見せている間に作り直した古い側の文書は、見えている範囲をまだ受けていない。
+  func sendVisibleRemovedLines(on surface: any TextSurface) {
+    guard presented == .inline, let old, let hunks = currentRows?.hunks else { return }
+    let viewport = surface.viewport
+    old.setVisible(
+      lines: DiffRows.oldLines(
+        from: viewport.top, count: Int(viewport.visibleLines.rounded(.up)), hunks))
   }
 
   /// 面に初めて見せる位置へ送る——位置を決めた後に作り直した面なら前の面で先頭に見えていた所、まだなら、開いた時点に
   /// 追いついた並びで 1 回だけ最初の変更区間（無ければ送らない）。どちらも見えている高さで決まる位置なので、面がまだ大きさを
   /// 持たない（本体に置いた直後の配置の前）なら送らず、大きさが決まって見えている範囲が変わったとき（`viewportDidChange`）に
-  /// 送る。
+  /// 送る。初めての位置を決めたら pane へ知らせる——中身も面も変わらず位置だけが決まったときも、pane に配置を頼ませ、その
+  /// 配置で色を待たせる。
   func placeFirstView(on surface: any TextSurface) {
     switch placement {
     case .placed:
@@ -47,11 +59,12 @@ extension EditorDiff {
       guard surface.viewport.visibleLines > 0 else { return }
       placement = .placed
       revealFirstChange(on: surface)
+      onPresentationChange?()
     }
   }
 
   /// 並びが開いた時点に追いついている——開いた後の取り直しが済んだ後の状態から作られている。作業ツリー: 文書のハンクが
-  /// 今の index の本文に対する今の版の結果。ステージ済み: 済んだ後の status で決まる関心の版の状態が揃い、そこから頼んだ
+  /// 今の index の本文に対する今の版の結果。ステージ済み: 済んだ後の status で決まる関心の版の状態が揃い、その両側の本文の
   /// 行差分が届いた。
   var isCaughtUp: Bool {
     guard resolvedAfterCatchUp, content == .ready, currentRows != nil else { return false }
@@ -85,15 +98,15 @@ extension EditorDiff {
     guard let document else { return (revisionHunks, newRevisionSide) }
     let side = DiffRows.Side(document.text)
     guard let oldSource else { return nil }
-    guard let base = oldSource else {
-      return (DiffRows.hunks(old: nil, new: document.text, limit: Self.hunkLimit), side)
-    }
-    // サブモジュールからファイルへ置き換えた行——古い側は文書の底ではないので、丸ごとの置き換え（git が削除と追加に割るのと
-    // 同じ形）。
-    if oldIsSubmodule { return ([LineHunk(old: 0..<oldSide.lines, new: 0..<side.lines)], side) }
-    guard document.hunksBase == base else { return nil }
+    // 丸ごとの置き換え（git が削除と追加に割るのと同じ形。古い側が無ければ全部の行の追加）。
+    if oldIsNotBaseline { return ([LineHunk(old: 0..<oldSide.lines, new: 0..<side.lines)], side) }
+    guard document.hunksBase == oldSource else { return nil }
     return (document.hunks, side)
   }
+
+  /// 作業ツリー diff の古い側が文書の底ではない（index の版に無い・サブモジュールの行）。このとき文書は底を持たず、ハンクも
+  /// ハンクの知らせも無いので、並びは両側の行の数だけで決まる——文書の本文が変われば diff が自分で並びを置き直す。
+  var oldIsNotBaseline: Bool { oldSource == .some(nil) || oldIsSubmodule }
 
   /// 見え方。版が無い側（`absent`）の面は、エディターの都合で持つ空の行に番号を描かない（存在しない行を番号付きで出さない）。
   private func look(

@@ -7,7 +7,7 @@ import XCTest
 
 /// diff を開いたときの位置——最初の変更区間を削除行まで含めて見せ、開いた時点に追いついた並びで 1 回だけ送る。壊れると、
 /// 削除だけの変更の削除行が画面の外に切れる・変更の無い diff が後から跳ぶ・エージェントが書いた直後の diff が変更へ
-/// 送られない。
+/// 送られない・最初の変更へ送る前の画面で色を待ってしまい、送った先が無色で出る。
 extension EditorDiffTests {
   /// 最初の変更区間が削除だけなら、上の文脈の行から削除行の終わりまでを見せる——中ほどの区間は収まれば中央に置いて
   /// 最後の削除行まで見え、末尾の区間も削除行まで見える。インラインでも並列（右の詰め物）でも同じ。
@@ -121,5 +121,29 @@ extension EditorDiffTests {
     let surface = try engine(diff.newSurface)
     surface.flush()
     XCTAssertGreaterThan(surface.viewport.top.line, 200, "実際の変更へ送る")
+  }
+
+  /// 初めて見せる前の色の待ちは、追いつく前に出る画面の配置では始めず、初めて位置を決めた画面の配置で始める（ファイル
+  /// タブで開いている文書の作業ツリー diff は、追いつく前から並びが出る）。
+  func testTheFirstColorsWaitStartsOnlyAtTheFirstPlacedView() throws {
+    var lines = (0..<300).map { "line \($0)" }
+    try repo.write("w.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "w"]).isSuccess)
+    let (tab, _) = tab()
+    let document = try tab.group.editor.open(repo.url("w.txt"), as: .pinned)
+    pumpMain(until: { document.baseline != nil }, "前提: 文書が index の底を持つ")
+    lines[250] = "changed"
+    try repo.write("w.txt", lines.joined(separator: "\n") + "\n")
+    pumpMain(until: { document.hunks.count == 1 && document.hunksAreCurrent }, "前提: ハンクが届く")
+
+    let diff = try tab.group.editor.openDiff(id("w.txt", .workingTree), as: .pinned)
+    tab.group.view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(diff.content, .ready, "前提: 追いつく前から見せられる")
+    XCTAssertNotEqual(diff.placement, .placed, "前提: まだ位置を決めていない")
+    XCTAssertFalse(diff.hasBeenShown, "追いつく前の画面では待たない")
+    pumpMain(until: { diff.placement == .placed }, "位置を決める")
+    tab.group.view.layoutSubtreeIfNeeded()
+    XCTAssertTrue(diff.hasBeenShown, "位置を決めた画面で待つ")
   }
 }

@@ -20,8 +20,9 @@ actor SyntaxWorker {
     var text: TextRope
     var version: Int
     var edits: [VersionedEdit] = []
-    /// 見えている行（最新の版の行）。
+    /// 見えている行（最新の版の行）と、それを渡した依頼の番号。
     var visible: ClosedRange<Int>
+    var visibleRequest = 0
     var running = false
     /// 見えていない範囲の作り直しを始めてよくなる時刻（最後の編集 ＋ 待ち）。編集がまだ無ければ nil（待たない）。
     var quietAt: DispatchTime?
@@ -49,8 +50,11 @@ actor SyntaxWorker {
   private var stale = IndexSet()
   /// 前に置いてから役割が変わった字（`text` の上）。
   private var changed = IndexSet()
-  /// 最後に結果を置いた版。
+  /// 最後に結果を置いた版と、そのとき作っていた見えている行の依頼の番号。
   private var deposited: Int?
+  private var depositedRequest = 0
+  /// 今作っている見えている行の依頼の番号。
+  private var shownRequest = 0
   private var parsed = false
 
   init(
@@ -82,9 +86,13 @@ actor SyntaxWorker {
     if wake { start() }
   }
 
-  /// 見えている行（最新の版の行）。次の区切りから、そこを先に作る——待ちの間に止まっていても、そこは待たずに作る。
-  nonisolated func setVisible(_ lines: ClosedRange<Int>) {
-    wakeIfStale { $0.visible = lines }
+  /// 見えている行（最新の版の行）と、その依頼の番号 `request`（渡すたびに進む）。次の区切りから、そこを先に作る——待ちの
+  /// 間に止まっていても、そこは待たずに作る。結果はどの依頼の行に対するものかを持つ。
+  nonisolated func setVisible(_ lines: ClosedRange<Int>, request: Int) {
+    wakeIfStale { mail in
+      mail.visible = lines
+      mail.visibleRequest = request
+    }
   }
 
   /// main が結果を同期で待つ間、キューの優先度を上げる（待っている main は優先度を譲らない）。
@@ -137,16 +145,19 @@ actor SyntaxWorker {
       }
       absorb(batch)
       guard !layers.isCancelled else { return }
+      shownRequest = batch.visibleRequest
       let shown = range(of: batch.visible)
       let quiet = batch.hurry || batch.quietAt.map { DispatchTime.now() >= $0 } ?? true
       if let target = nextTarget(shown: shown, quiet: quiet) {
         rebuild(target, shown: shown)
         continue
       }
-      if deposited != version { deposit(visibleReady: true) }
+      if deposited != version || depositedRequest != shownRequest { deposit(visibleReady: true) }
       let hasStale = !stale.isEmpty
       let wait = mailbox.withLock { mail -> DispatchTime?? in
-        guard mail.edits.isEmpty, mail.visible == batch.visible, mail.hurry == batch.hurry else {
+        guard mail.edits.isEmpty, mail.visibleRequest == batch.visibleRequest,
+          mail.hurry == batch.hurry
+        else {
           return nil
         }
         mail.running = false
@@ -210,14 +221,16 @@ actor SyntaxWorker {
     deposit(visibleReady: !stale.intersects(integersIn: shown.location..<NSMaxRange(shown)))
   }
 
-  /// 今の版の役割の並びと、前に置いてから役割が変わった字を受け取り箱へ置く。取り込んだ版には必ず 1 つ置く（作り直す
-  /// 範囲が空の版——空の本文や、編集で作り直す範囲が消えた版——でも、文書が追いついたと分かるように）。
+  /// 今の版の役割の並びと、前に置いてから役割が変わった字を受け取り箱へ置く。取り込んだ版と、受けた見えている行の依頼には
+  /// 必ず 1 つ置く（作り直す範囲が空の版——空の本文や、編集で作り直す範囲が消えた版——でも、見えている行が既に作ってある
+  /// 依頼でも、文書が追いついたと分かるように）。
   private func deposit(visibleReady: Bool) {
     let outcome = SyntaxOutcome(
-      version: version, roles: roles, changed: changed, visibleReady: visibleReady,
-      complete: stale.isEmpty)
+      version: version, roles: roles, changed: changed, visibleRequest: shownRequest,
+      visibleReady: visibleReady, complete: stale.isEmpty)
     changed = IndexSet()
     deposited = version
+    depositedRequest = shownRequest
     inbox.deposit { $0.syntax.append(outcome) }
   }
 
@@ -236,7 +249,9 @@ struct SyntaxOutcome: Sendable {
   let roles: RoleRuns
   /// 前の区切りから役割が変わった字（`version` の本文の上）。
   let changed: IndexSet
-  /// 見えている範囲の作り直しが済んだ。
+  /// 作っていた見えている行の依頼の番号。
+  let visibleRequest: Int
+  /// その見えている行の作り直しが済んだ。
   let visibleReady: Bool
   /// 文書全体の作り直しが済んだ。
   let complete: Bool
@@ -245,6 +260,7 @@ struct SyntaxOutcome: Sendable {
 /// 構文の裏の仕事がどこまで進んだか（文書が最後に受け取った結果の版で）。
 struct SyntaxProgress {
   let version: Int
+  let visibleRequest: Int
   let visibleReady: Bool
   let complete: Bool
 }

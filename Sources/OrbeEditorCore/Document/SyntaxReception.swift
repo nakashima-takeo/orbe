@@ -4,12 +4,12 @@ import Foundation
 /// 仕事を起こし、受け取り箱に届いた結果の役割を今の版へ写して置き、見えている範囲を裏へ渡し、初めて見せるときの色の上限
 /// 待ちを行う。受け取り箱は持ち主のもので、持ち主が箱から取った結果のうち構文のものをここへ渡す。
 struct SyntaxReception {
-  /// 初めて画面に出すとき、最初の色を待つ上限。
-  static let firstColorsWait: TimeInterval = 0.05
-
   private(set) var worker: SyntaxWorker?
   /// 最後に受け取った結果の版と、そのとき見えている範囲・全体の作り直しが済んでいたか。
-  private var progress = SyntaxProgress(version: 0, visibleReady: false, complete: false)
+  private var progress = SyntaxProgress(
+    version: 0, visibleRequest: 0, visibleReady: false, complete: false)
+  /// 見えている行を裏へ渡した依頼の番号（渡すたびに進む）。
+  private var visibleRequest = 0
   private(set) var hasBeenShown = false
 
   /// 言語の規則があれば裏の仕事を起こし、全体の解析と先頭の画面ぶんの役割を作り始める（待たない）。
@@ -27,9 +27,12 @@ struct SyntaxReception {
   /// 最後に受け取った結果の版（裏の仕事が無ければ nil）。これより後ろの版の結果が届きうる。
   var receivedVersion: Int? { worker == nil ? nil : progress.version }
 
-  /// 版 `version` の見えている範囲の色が揃っている（裏の仕事が無ければいつも）。
+  /// 版 `version` の、最後に渡した見えている範囲の色が揃っている（裏の仕事が無ければいつも）。前に渡した範囲だけが揃った
+  /// 結果では揃ったとみなさない——最初の変更へ送った直後に、送る前の範囲の結果で待ちを抜けない。
   func isFirstColorReady(at version: Int) -> Bool {
-    worker == nil || (progress.version == version && progress.visibleReady)
+    guard worker != nil else { return true }
+    guard progress.version == version else { return false }
+    return progress.complete || (progress.visibleReady && progress.visibleRequest == visibleRequest)
   }
 
   /// 版 `version` の全体の色が揃っている（裏の仕事が無ければいつも）。
@@ -54,14 +57,16 @@ struct SyntaxReception {
       for record in applied { latest.apply(record.edit) }
       roles = latest
       progress = SyntaxProgress(
-        version: outcome.version, visibleReady: outcome.visibleReady, complete: outcome.complete)
+        version: outcome.version, visibleRequest: outcome.visibleRequest,
+        visibleReady: outcome.visibleReady, complete: outcome.complete)
     }
     return changedRoles
   }
 
   /// 見えている行 `lines`（最新の版の行）を裏へ渡す。次の区切りから、そこを先に作る。
-  func setVisible(_ lines: ClosedRange<Int>) {
-    worker?.setVisible(lines)
+  mutating func setVisible(_ lines: ClosedRange<Int>) {
+    visibleRequest += 1
+    worker?.setVisible(lines, request: visibleRequest)
   }
 
   /// 面の見えている範囲 `viewport` に掛かる行。
@@ -71,7 +76,7 @@ struct SyntaxReception {
   }
 
   /// 初めて画面に出す直前に呼ぶ。初めてで、見えている範囲の色が揃っていなければ（`ready` が偽）、裏の仕事の優先度を上げて
-  /// true を返す——持ち主は最大 `firstColorsWait` 待つ（越えたら無色で出し、後から色が付く）。
+  /// true を返す——持ち主は期限まで待つ（越えたら無色で出し、後から色が付く）。
   mutating func beginShowing(ready: Bool) -> Bool {
     guard !hasBeenShown else { return false }
     hasBeenShown = true

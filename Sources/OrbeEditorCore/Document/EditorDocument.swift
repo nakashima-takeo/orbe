@@ -98,6 +98,7 @@ public final class EditorDocument {
   }
   /// ディスクの内容で本文を差し替えている間は、その編集で未保存を動かさない（差し替えの後に揃えた姿を置く）。
   private var isReplacingFromDisk = false
+  private var isReceiving = false
 
   /// `surface` は、まだ文書と結ばれていない面。ロープは読んだ内容から組み、面は結ばれたときに写しを引く。構文の裏の仕事はここで起き、
   /// 全体の解析と先頭の画面ぶんの役割を作り始める（待たない）。
@@ -161,12 +162,20 @@ public final class EditorDocument {
     analysis.post(request, text: text, version: version)
   }
 
-  /// 文書を初めて画面に出す直前に呼ぶ。構文の裏の仕事が見えている範囲の役割を作り終えていなければ、最初の描画に色が
-  /// 間に合うよう最大 `SyntaxReception.firstColorsWait` 待つ（越えたら無色で出し、後から色が付く）。
-  /// 2 回目以降は何もしない。
-  public func prepareToShow() {
+  /// 初めて画面に出すとき、最初の色を待つ上限。
+  public static let firstColorsWait: TimeInterval = 0.05
+
+  /// 文書を初めて画面に出す直前に呼ぶ。構文の裏の仕事が、見えている範囲の役割を作り終えていなければ、最初の描画に色が
+  /// 間に合うよう期限 `deadline`（省けば今から `EditorDocument.firstColorsWait`）まで待つ（越えたら無色で出し、後から色が
+  /// 付く）。2 回目以降は何もしない。待つ間も結果を受け取るので、受け取りの知らせの中からは呼べない——受け取りが入れ子に
+  /// なり、内側の受け取りがディスクの内容で本文を差し替えると、外側の受け取りが持つ役割の変わった区間が、差し替える前の
+  /// 座標のまま面へ届く。
+  public func prepareToShow(
+    until deadline: DispatchTime = .now() + EditorDocument.firstColorsWait
+  ) {
+    precondition(!isReceiving, "受け取りの知らせの中からは、初めて見せる前の待ちを始められない")
     guard reception.beginShowing(ready: isFirstColorReady) else { return }
-    _ = wait(until: .now() + SyntaxReception.firstColorsWait) { $0.isFirstColorReady }
+    _ = wait(until: deadline) { $0.isFirstColorReady }
   }
 
   /// 裏の仕事（構文・比較・行差分・問い）がすべて今の版に追いつき、その結果を受け取るまで待つ（最大 `timeout`）。
@@ -277,6 +286,8 @@ public final class EditorDocument {
   /// 直す（未保存でなくなったので外の内容に差し替わる）——差し替えは打鍵と同じ編集の道を通るので、ほかの結果を置き
   /// 終えるまで本文を変えない。
   private func receive() {
+    isReceiving = true
+    defer { isReceiving = false }
     let contents = inbox.take()
     let synced = contents.comparison.map { diskSync.settle($0, version: version) } ?? false
     let changedRoles = reception.receive(contents.syntax, roles: &roles) { log.edits(since: $0) }
@@ -330,8 +341,8 @@ extension EditorDocument: TextSurfaceDelegate {
       analysis.postComparison(text: text, version: version, synced: diskSync.snapshot.text)
     }
     if baseline != nil {
-      pushLineMarks()
       requestHunks()
+      pushLineMarks()
     }
     // 届きうる結果が無ければ、写すための記録は要らない（結果が一つも来ない文書で、差し替えの本文が溜まり続けない）。
     if syntax == nil, pendingHunks == nil, pendingRanges.isEmpty { log.discard(through: version) }
@@ -349,29 +360,6 @@ extension EditorDocument: TextSurfaceDelegate {
     roles.apply(edit)
     reception.worker?.post(record, text: text)
     return record
-  }
-
-  /// 編集の前の本文で、行の数を変える編集の始まりの行が中身を変えないか——始まりの行の、位置から改行までの残り（LF なら
-  /// 空、CRLF なら `\r`）について、差し込む字が「残り + 改行」で始まるか、差し込む字が空で終わりの位置の残りも同じ
-  /// （行をつなぐ削除）。改行を差し込まず行もつながない編集は行を読まない（打鍵の手間を増やさない）。
-  private func keepsStartRow(_ edit: TextEdit, start: TextPoint, oldEnd: TextPoint) -> Bool {
-    let replacement = edit.replacement
-    if replacement.isEmpty {
-      guard oldEnd.row > start.row else { return false }
-      let rest = remainder(after: edit.range.location, row: start.row)
-      let end = remainder(after: NSMaxRange(edit.range), row: oldEnd.row)
-      return rest.length == end.length && text.units(in: rest) == text.units(in: end)
-    }
-    guard replacement.contains(0x0A) else { return false }
-    let rest = remainder(after: edit.range.location, row: start.row)
-    guard replacement.count > rest.length, replacement[rest.length] == 0x0A else { return false }
-    return text.units(in: rest).elementsEqual(replacement.prefix(rest.length))
-  }
-
-  /// 行 `row` の中の位置 `location` から、その行の改行の前（最終行なら本文の終わり）までの区間。
-  private func remainder(after location: Int, row: Int) -> NSRange {
-    let end = row + 1 < text.lineCount ? text.lineStart(row + 1) - 1 : text.length
-    return NSRange(location: location, length: end - location)
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {

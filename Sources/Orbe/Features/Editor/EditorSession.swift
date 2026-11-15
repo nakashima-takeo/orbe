@@ -56,9 +56,10 @@ final class EditorSession {
   /// 閉じれば失われる文書（未保存の列）。
   func documentsToDiscard() -> [EditorDocument] { documents.filter(\.isDirty) }
 
-  /// 永続から戻す。順に開き（読めないパスは黙って落とす）、`preview` のパスの文書を仮にし、`active` が残っていればそれを、
-  /// 無ければ先頭を焦点にする。既に居るものは壊さない——materialize より先に制御 API の `open_file` が文書を開いて
-  /// いれば、その文書の開き方と焦点を保つ。通知は 1 本にまとめる。
+  /// 永続から戻す。順に開き（読めないパスは黙って落とす）、`preview` のパスの文書を仮にし（diff のタブが既に使っている
+  /// 未保存の文書なら、普通のタブにする）、`active` が残っていればそれを、無ければ先頭を焦点にする。既に居るものは
+  /// 壊さない——materialize より先に制御 API の `open_file` が文書を開いていれば、その文書の開き方と焦点を保つ。通知は
+  /// 1 本にまとめる。
   func restore(paths: [String], active: String, preview: String?) {
     let previewURL = preview.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath() }
     var restored: [EditorTab.Key] = []
@@ -73,6 +74,7 @@ final class EditorSession {
     let activeURL = URL(fileURLWithPath: active).resolvingSymlinksInPath()
     activeID =
       activeID ?? restored.first { $0 == .document(activeURL) } ?? tabs.first?.id
+    settlePreview()
     onChange?()
   }
 

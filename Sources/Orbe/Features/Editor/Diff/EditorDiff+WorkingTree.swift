@@ -7,22 +7,26 @@ extension EditorDiff {
   /// 作業ツリーの姿を読み直し、新しい側の文書を合わせる。文書が替われば、前の文書をファイルタブの見え方に戻して手放す。
   /// 今の文書が未保存なら、作業ツリーの姿が変わっても手放さず新しい側のまま——未保存の本文を確認なしに失わない（ファイル
   /// タブが、消えたファイルの未保存の本文を保つのと同じ）。読み直しは保留のまま残し、未保存でなくなった後の作り直しで
-  /// 行う。
+  /// 行う。読み直しでテキスト面を作れなければ、ファイルを読めないとして表示できない。
   func updateWorkingSide() {
     if document?.isDirty == true { return }
     workingStale = false
     forgetSubmoduleHead()
     let previous = document
-    working = try? readWorkingTree(throwing: false)
+    do {
+      working = try readWorkingTree()
+    } catch {
+      working = .unavailable(.unreadable)
+    }
     guard document !== previous else { return }
     documentDidSwitch(from: previous)
     documents.switched(previous)
   }
 
-  /// 作業ツリーの姿——在るか・シンボリックリンクか・ディレクトリか・UTF-8 か。文書として読めればその文書（`documents` が
-  /// 実体ごとに 1 つ持つ。開いていればそれ）。途中のディレクトリがシンボリックリンクなら、git と同じく無い（リンク先を
-  /// 開かない）。`throwing` なら、テキスト面を作れないことを投げる（開くとき）。
-  func readWorkingTree(throwing: Bool) throws -> WorkingSide {
+  /// 作業ツリーの姿——在るか・シンボリックリンクか・ディレクトリか・UTF-8 か・読めるか。文書として読めればその文書
+  /// （`documents` が実体ごとに 1 つ持つ。開いていればそれ）。途中のディレクトリがシンボリックリンクなら、git と同じく無い
+  /// （リンク先を開かない）。テキスト面を作れなければ `EditorSurfaceError.noMetalDevice` を投げる。
+  func readWorkingTree() throws -> WorkingSide {
     let url = id.url
     let parent = (id.root as NSString).appendingPathComponent(
       (id.path as NSString).deletingLastPathComponent)
@@ -45,12 +49,12 @@ extension EditorDiff {
       // 開いている文書は読み直さないので、UTF-8 かはファイルから確かめる。
       _ = try EditorDocument.read(url)
       return .document(try documents.open(url.resolvingSymlinksInPath()))
-    } catch EditorSurfaceError.noMetalDevice where throwing {
+    } catch EditorSurfaceError.noMetalDevice {
       throw EditorSurfaceError.noMetalDevice
     } catch EditorDocumentError.notUTF8 {
       return .unavailable(.notText)
     } catch {
-      return .unavailable(.failed)
+      return .unavailable(.unreadable)
     }
   }
 
@@ -109,19 +113,19 @@ extension EditorDiff {
   }
 
   /// 作業ツリーのディレクトリをサブモジュールとして見せる本文——取り出しているコミット（取り出していなければ index の
-  /// コミット。git と同じく変わっていないとみなす）の行。中が変わっていれば -dirty。index の版がサブモジュールでなく、中も
-  /// リポジトリでなければ表示できない。コミットを読み中なら `pending`。
+  /// コミット。git と同じく変わっていないとみなす）の行。中が変わっていれば -dirty。index の版がサブモジュールでなく、中に
+  /// 取り出したコミットも無ければ、サブモジュールとして見せられないディレクトリ。コミットを読み中なら `pending`。
   private func submoduleSide(
     _ index: RootFiles.VersionState, hasRepository: Bool, pending: Content
   ) -> SubmoduleSide {
     var indexCommit: String?
     if case .submodule(let commit) = index { indexCommit = commit }
-    guard indexCommit != nil || hasRepository else { return .decided(.unavailable(.failed)) }
+    guard indexCommit != nil || hasRepository else { return .decided(.unavailable(.directory)) }
     guard let head = submoduleHead else {
       readSubmoduleHead()
       return .decided(pending)
     }
-    guard let commit = head ?? indexCommit else { return .decided(.unavailable(.failed)) }
+    guard let commit = head ?? indexCommit else { return .decided(.unavailable(.directory)) }
     return .text(Self.subproject(commit, dirty: submoduleIsDirty))
   }
 
