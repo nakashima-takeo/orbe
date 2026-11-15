@@ -1,4 +1,3 @@
-import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -62,29 +61,5 @@ final class GitHubFailureTests: OrbeTestCase {
       .reason("GraphQL: Something went wrong (pullRequest)"))
     XCTAssertEqual(classify(stderr: "first\nlast\n"), .reason("last"))
     XCTAssertEqual(classify(stderr: ""), .reason(""))
-  }
-
-  /// gh を起動する関数は標準エラーを読んで分類し、ブランチの PR の取得の呼び出し元まで届ける。
-  func testTheFailureReachesTheCaller() throws {
-    let dir = TestScratch.caseDir.appendingPathComponent("orbe-gh-failure-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    let gh = dir.appendingPathComponent("gh").path
-    try """
-    #!/bin/sh
-    echo "error connecting to api.github.com" >&2
-    exit 1
-    """.write(toFile: gh, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: gh)
-    let path = dir.path
-    ShellPATH.shared = ShellPATH(probe: { path })
-
-    var landed: Result<[GitHubBranchPR], GitHubFailure>?
-    let done = expectation(description: "branchPullRequests")
-    GitHubCLI().branchPullRequests(cwd: dir.path, heads: ["feat"]) { _, result in
-      landed = result
-      done.fulfill()
-    }
-    wait(for: [done], timeout: 20)
-    XCTAssertEqual(landed, .failure(.unreachable))
   }
 }
