@@ -46,8 +46,7 @@ public final class EditorDocument {
   public var baseline: String? {
     didSet {
       guard baseline != oldValue else { return }
-      hunkRequest += 1
-      requestHunks()
+      restartHunks()
     }
   }
   /// 行差分の上限（越えれば共通の先頭・末尾を落とした残り全体を 1 つの区間にする——`LineDiff.Limit`）。既定はガターの
@@ -55,8 +54,7 @@ public final class EditorDocument {
   public var hunkLimit = LineDiff.gutter {
     didSet {
       guard hunkLimit != oldValue else { return }
-      hunkRequest += 1
-      requestHunks()
+      restartHunks()
     }
   }
   /// baseline と本文の行差分（形は `LineDiff` の出力と同じ）。編集の直後は前のハンクを編集でずらしたもの（同じ形だが最小とは
@@ -88,8 +86,12 @@ public final class EditorDocument {
   private let analysis: DocumentAnalysis
   /// 行差分の依頼を置き直す（baseline か上限が変わる）たびに進む番号。
   private var hunkRequest = 0
-  /// 行差分を頼んで、まだその結果を受け取っていない版。
+  /// 行差分を頼んで、まだその結果を受け取っていない版（最後に頼んだ版）。
   private var pendingHunks: Int?
+  /// まだ届きうる行差分の結果のうち最も古い版——最後に受け取った結果の版（頼んでから 1 つも受け取っていなければ、最初に
+  /// 頼んだ版）。待っている結果が無ければ nil。編集の記録はこの版までしか捨てない——裏の行差分 1 回が打鍵の間隔より長くても、
+  /// 打ち続けている間に届く古い版の結果を今の版へ写して置ける。
+  private var oldestAwaitedHunks: Int?
   /// 区間の列の問いのうち、まだ結果を受け取っていないもの（種類ごとに最新の問いと版）。
   private var pendingRanges: [AnalysisRequest.Kind: (request: AnalysisRequest, version: Int)] = [:]
   /// ディスクと揃えた時点の姿と未保存の状態。BOM は保存で同じように書き戻す。
@@ -261,16 +263,25 @@ public final class EditorDocument {
     isDiskChanged = false
   }
 
+  /// 行差分の依頼を置き直す（baseline か上限が変わった）。前の番号の結果は届いても置かないので、待つ結果は今の版から数え直す。
+  private func restartHunks() {
+    hunkRequest += 1
+    oldestAwaitedHunks = nil
+    requestHunks()
+  }
+
   /// 行差分を裏へ頼む。baseline が無ければハンクは空。
   private func requestHunks() {
     guard let baseline else {
       pendingHunks = nil
+      oldestAwaitedHunks = nil
       hunks = []
       hunksBase = nil
       pushLineMarks()
       return
     }
     pendingHunks = version
+    if oldestAwaitedHunks == nil { oldestAwaitedHunks = version }
     analysis.postHunks(
       text: text, version: version, baseline: baseline, limit: hunkLimit,
       generation: hunkRequest)
@@ -296,7 +307,12 @@ public final class EditorDocument {
     {
       hunks = VersionedEdit.track(outcome.hunks, through: edits)
       hunksBase = baseline
-      if pendingHunks == outcome.version { pendingHunks = nil }
+      if pendingHunks == outcome.version {
+        pendingHunks = nil
+        oldestAwaitedHunks = nil
+      } else {
+        oldestAwaitedHunks = outcome.version
+      }
       pushLineMarks()
     }
     for outcome in contents.ranges.values {
@@ -318,7 +334,7 @@ public final class EditorDocument {
   private func discardSettledEdits() {
     var oldest = version
     if let received = reception.receivedVersion { oldest = min(oldest, received) }
-    if let pendingHunks { oldest = min(oldest, pendingHunks) }
+    if let oldestAwaitedHunks { oldest = min(oldest, oldestAwaitedHunks) }
     for pending in pendingRanges.values { oldest = min(oldest, pending.version) }
     log.discard(through: oldest)
   }
@@ -345,7 +361,9 @@ extension EditorDocument: TextSurfaceDelegate {
       pushLineMarks()
     }
     // 届きうる結果が無ければ、写すための記録は要らない（結果が一つも来ない文書で、差し替えの本文が溜まり続けない）。
-    if syntax == nil, pendingHunks == nil, pendingRanges.isEmpty { log.discard(through: version) }
+    if syntax == nil, oldestAwaitedHunks == nil, pendingRanges.isEmpty {
+      log.discard(through: version)
+    }
     onTextChange?(applied)
   }
 

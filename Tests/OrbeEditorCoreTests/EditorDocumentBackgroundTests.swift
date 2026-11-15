@@ -123,6 +123,42 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
   }
 
+  /// 大きな差分で、裏の行差分 1 回が打鍵の間隔より長くかかっても、打ち続けている間に届いた古い版の結果を今の本文へずらして
+  /// 置く——打ち止めるまで結果が 1 つも置かれないことはない。構文の結果は打鍵ごとに先に届き、そのたびに要らなくなった編集の
+  /// 記録が捨てられる。打つのは毎回別の変えていない行の頭で、行の数を変えないので、その行が区間に入るのは裏の結果が届いた
+  /// ときだけ。
+  func testHunkResultsArePlacedWhileTypingFasterThanTheDiff() throws {
+    let base = (0..<2000).map { "let line\($0) = 0\n" }
+    let current = base.enumerated().map {
+      $0.offset.isMultiple(of: 2) ? "let changed\($0.offset) = 1\n" : $0.element
+    }
+    let (document, surface) = try open("slow.swift", current.joined())
+    let limit = LineDiff.Limit.edits(10_000)
+    document.hunkLimit = limit
+    document.baseline = base.joined()
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    let clock = ContinuousClock()
+    let took = clock.measure {
+      _ = LineDiff.hunks(base: base.joined(), current: document.text, limit: limit)
+    }
+    let interval = took / 4
+    let typed = 24
+    var covered = -1
+    for keystroke in 0..<typed {
+      let row = 1 + 2 * keystroke
+      surface.replace(NSRange(location: document.text.lineStart(row), length: 0), with: "x")
+      RunLoop.main.run(until: Date().addingTimeInterval(TimeInterval(interval / .seconds(1))))
+      let rows = document.hunks.map(\.newLines)
+      covered =
+        (0...keystroke).last { typedRow in
+          rows.contains { $0.contains(1 + 2 * typedRow) }
+        } ?? covered
+    }
+    XCTAssertGreaterThanOrEqual(
+      covered, typed / 2, "打ち続けている間に、後半の打鍵を含む版の結果が置かれる（裏 1 回: \(took)）")
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+  }
+
   // MARK: - 作り直しの途中
 
   /// 文書全体の構文が変わる編集の後、裏が見えている範囲から順に作り直している途中でも、編集の前も後も役割のある字が
