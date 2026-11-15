@@ -116,7 +116,8 @@ extension AutomationReference {
     delivered again to `new` receivers; one that leaves the result is no longer valid, and one \
     that comes back later is a new item.
     - `newArrivals` rows are events that are only added; the same id within `retentionDays` is not \
-    added again (counted as `duplicates`).
+    added again (counted as `duplicates`). A process row that keeps its input row's `id` is the \
+    same event only when that input is the same row, so an item that left and came back is new.
     - With `take` `new`, a receiver gets the items and events added since it last read; with `all`, \
     every valid item and every event in the window, every run (with `maxAgeHours`, a recent window \
     each time).
@@ -155,7 +156,9 @@ extension AutomationReference {
     it was based on is no longer valid (it left its `currentSet` result, or its node was removed or \
     changed `coverage`), or, when it was based only on events, the event it read passed \
     `retentionDays`. A lost basis waits while a direct input of the judge still has a row with the \
-    `link`.
+    `link`. A proposal people took or dismissed is remembered while a node feeding the judge still \
+    has a current row with its `link` (an event until it passes `retentionDays`), so later rows \
+    with that `link`, such as replies in the same thread, do not reach the judge.
 
     REPORT, WORK, SIDE EFFECT
     - A report is text for people. Its first line, cut at 500 characters with "…", is the summary \
@@ -193,7 +196,7 @@ extension AutomationReference {
     - A node whose behavior changes (method, `command` or `instruction`, `directory`, `workspace`, \
     `model`, `tools`, `deliver`, `timeoutMinutes`, `coverage` or `from`) stops its running run, \
     discards its result and clears its broken-rules mark. A new `coverage` invalidates its current \
-    items; a judge checks its open proposals for withdrawal again.
+    items.
     - Changing only `key`, `name`, `trigger`, `maxItems`, `retentionDays` or `notify` stops nothing.
     - A removed node stops and its current items become invalid; a removed judge forgets its \
     proposals. To stop a node for a while, pause it instead.

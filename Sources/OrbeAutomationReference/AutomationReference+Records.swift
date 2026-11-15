@@ -48,8 +48,9 @@ extension AutomationReference {
     gives their count and the English of the first five), `report` {`summary`, `text`} (both \
     absent when there was nothing to report), `sideEffect` {`count`}, `work` {`summary`, `text`, \
     `nothing`} (`nothing` gives the reason when there was nothing to do).
-    - `withdrawn`: the number of proposals that went away with this run; on a judge, of those whose \
-    events passed `retentionDays` since its last good run.
+    - `withdrawn`: the number of proposals that went away with this run; on a judge, of those that \
+    went away since its last good run outside any fetch or process run (events that passed \
+    `retentionDays`, an empty input of a `currentSet` process).
     - `failed` and `failure`: why the run failed (`failure` in English). A failed run moves \
     nothing, so read `failure` and the `reasons` to see where it broke.
     A node with no rows to take does not start its method and records no run; a `currentSet` \
