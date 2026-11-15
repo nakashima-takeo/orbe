@@ -4,8 +4,8 @@ import XCTest
 @testable import Orbe
 
 /// PR の diff が使う git の読み（マージベース・rename の対応・先行と遅れ・push 先の追跡 ref・ref の値）と、コミットを指定する
-/// fetch（`GitRepo.fetch(commits:from:handle:completion:)`）。実 git の一時リポジトリと、ローカルの bare リポジトリを remote
-/// にしてテストする（ネットワークに出ない）。
+/// fetch（`GitRepo.fetch(commits:from:handle:completion:)`）。実 git の一時リポジトリでテストする。remote には、ローカルの
+/// bare リポジトリを使う（ネットワークに出ない）。
 ///
 /// 壊れると何が起きるか: PR のコミットを取りに行くたびに利用者のリポジトリへ ref・FETCH_HEAD・タグが増える（端末で
 /// FETCH_HEAD を使う手順が別のコミットを指す）。rename されたファイルを元のパスと比べられず、全部の行が追加に見える。
@@ -90,6 +90,20 @@ final class GitRepoCommitsTests: OrbeTestCase {
     XCTAssertEqual(refsAndFetchHead(), before, "ref・FETCH_HEAD・タグが変わらない")
   }
 
+  /// コミットを渡さなければ git を起こさずに成功で返り、設定の refspec で ref を書く普通の fetch にならない。
+  func testFetchingNoCommitsWritesNothing() throws {
+    temp.addOrigin()
+    try temp.advanceOrigin(writing: "b.txt", "b\n")
+    let before = refsAndFetchHead()
+
+    let failure = landed {
+      self.repo.fetch(commits: [], from: "origin", handle: GitRunner.Handle(), completion: $0)
+    }
+
+    XCTAssertEqual(failure, .some(nil))
+    XCTAssertEqual(refsAndFetchHead(), before, "origin/main が進まない")
+  }
+
   /// remote に無いコミットは取れず、git の理由つきの失敗で返る。
   func testFetchingAnUnknownCommitFails() throws {
     temp.addOrigin()
@@ -104,7 +118,7 @@ final class GitRepoCommitsTests: OrbeTestCase {
     XCTAssertFalse(reason.isEmpty)
   }
 
-  /// マージベースは共通の祖先。どちらかのコミットが手元に無ければ求まらない。
+  /// マージベースは共通の祖先。求まらなければ、コミットが手元に無いのか共通の祖先が無いのかを分けて返す。
   func testTheMergeBaseIsTheCommonAncestorOrNothing() throws {
     let base = temp.head()
     XCTAssertTrue(temp.git(["checkout", "-q", "-b", "feat"]).isSuccess)
@@ -112,10 +126,14 @@ final class GitRepoCommitsTests: OrbeTestCase {
     XCTAssertTrue(temp.git(["checkout", "-q", "main"]).isSuccess)
     let main = try commit("main", writing: "b.txt")
 
-    XCTAssertEqual(landed { self.repo.mergeBase(main, feat, completion: $0) }, .some(base))
+    XCTAssertEqual(landed { self.repo.mergeBase(main, feat, completion: $0) }, .found(base))
     XCTAssertEqual(
       landed { self.repo.mergeBase(main, String(repeating: "1", count: 40), completion: $0) },
-      .some(nil))
+      .missingCommit, "手元に無いコミット")
+    XCTAssertTrue(temp.git(["checkout", "-q", "--orphan", "other"]).isSuccess)
+    let other = try commit("other", writing: "c.txt")
+    XCTAssertEqual(
+      landed { self.repo.mergeBase(main, other, completion: $0) }, .unrelated, "共通の祖先が無い")
   }
 
   /// rename の対応は新しいパス → 元のパスで、rename でない変更は入らない。パスは空白や非 ASCII を含んでもそのまま読む。

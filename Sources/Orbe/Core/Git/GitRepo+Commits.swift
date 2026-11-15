@@ -14,16 +14,37 @@ struct GitCommitCounts: Equatable {
 enum GitPushTracking: Equatable {
   /// push 先が無い（push 先の設定も origin も無い）。
   case noDestination
-  /// push 先の remote 追跡 ref（`refs/remotes/<remote>/<ブランチ名>`）と今の値。値が nil なら、その ref は無い。
+  /// push 先の remote 追跡 ref（`refs/remotes/<remote>/<ブランチ名>`）と今の値。値が nil なら、手元にその ref は無い。
   case ref(String, commit: String?)
 }
 
+/// 2 つのコミットのマージベースを求めた結果。
+enum GitMergeBase: Equatable {
+  case found(String)
+  /// どちらかのコミットが手元に無い（取ってくれば求まりうる）。
+  case missingCommit
+  /// 共通の祖先が無い。
+  case unrelated
+  /// 読めなかった（git の失敗）。
+  case failed
+}
+
 extension GitRepo {
-  /// `a` と `b` のマージベース（`git merge-base`）。どちらかのコミットが手元に無い・共通の祖先が無い・読めなければ nil。
-  func mergeBase(_ a: String, _ b: String, completion: @escaping (String?) -> Void) {
+  /// `a` と `b` のマージベース（`git merge-base`）。求まらなければ、その理由。git は共通の祖先が無いことを終了コード 1 で
+  /// 言い、コミットが無いことを分けて言わないので、失敗したときだけ 2 つのコミットが手元に在るかを確かめる。
+  func mergeBase(_ a: String, _ b: String, completion: @escaping (GitMergeBase) -> Void) {
     runner.run(["merge-base", "--end-of-options", a, b], cwd: root) { output in
       let base = output.stdoutText.trimmingCharacters(in: .newlines)
-      completion(output.isSuccess && !base.isEmpty ? base : nil)
+      if output.isSuccess, !base.isEmpty { return completion(.found(base)) }
+      if output.ending == .completed, output.status == 1 { return completion(.unrelated) }
+      self.runner.run(
+        ["cat-file", "--batch-check"], cwd: self.root,
+        stdin: Data([a, b].map { $0 + "^{commit}\n" }.joined().utf8)
+      ) { checked in
+        let lines = checked.stdoutText.split(separator: "\n")
+        guard checked.isSuccess, lines.count == 2 else { return completion(.failed) }
+        completion(lines.contains { $0.hasSuffix(" missing") } ? .missingCommit : .failed)
+      }
     }
   }
 
@@ -74,7 +95,9 @@ extension GitRepo {
   }
 
   /// ブランチの push 先の remote 追跡 ref と今の値。push 先は push の解決（`pushRemote(ofBranch:handle:)`。設定が無ければ
-  /// origin）と同じで、ref の名前は fetch の既定の対応（`refs/remotes/<remote>/<名前>`）で組む。読めなければ nil。
+  /// origin）と同じで、ref の名前は、fetch の既定の refspec が写す先（`refs/remotes/<remote>/<名前>`）で組む。値が無いのは
+  /// 手元にその追跡 ref が無いときで、push 先にブランチが無いとは限らない（single-branch のクローンは、ほかのブランチの
+  /// 追跡 ref を作らない）。読めなければ nil。
   func pushTracking(ofBranch name: String, completion: @escaping (GitPushTracking?) -> Void) {
     pushRemote(ofBranch: name, handle: GitRunner.Handle()) { remote in
       switch remote {

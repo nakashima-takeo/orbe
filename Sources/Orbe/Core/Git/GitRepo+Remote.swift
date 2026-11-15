@@ -24,16 +24,19 @@ extension GitRepo {
   }
 
   /// コミットを名指しして取ってくる（PR の diff に要るコミットが手元に無いとき）。ref・FETCH_HEAD・タグを 1 つも書かず、
-  /// サブモジュールにも降りず、fetch の後の自動の保守も走らせない——ほかの fetch・pull と ref のロックを取り合わないので、
-  /// ネット操作の排他に載せなくてよい。人が頼んだ通信ではないので、裏の fetch と同じく askpass・資格情報の窓を出させない
-  /// （ssh-agent の側の承認は封じられない）。
+  /// コミットグラフも書かず、サブモジュールにも降りず、fetch の後の自動の保守も走らせない——ほかの fetch・pull と ref・
+  /// コミットグラフのロックを取り合わないので、ネット操作の排他に載せなくてよい。人が頼んだ通信ではないので、裏の fetch と
+  /// 同じく askpass・資格情報の窓を出させない（ssh-agent の側の承認は封じられない）。`commits` が空なら git を起こさずに
+  /// 成功で返す——コミットの無い fetch は設定の refspec で ref を書く。
   func fetch(
     commits: [String], from remote: String, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
+    guard !commits.isEmpty else { return DispatchQueue.main.async { completion(nil) } }
     runner.run(
       [
-        "fetch", "--progress", "--no-tags", "--no-write-fetch-head", "--no-auto-maintenance",
+        "-c", "fetch.writeCommitGraph=false", "fetch", "--progress", "--no-tags",
+        "--no-write-fetch-head", "--no-auto-maintenance",
         "--recurse-submodules=no", "--end-of-options", remote,
       ] + commits, cwd: root, environment: GitRunner.unattendedEnvironment, handle: handle
     ) { completion(.ofRemote($0)) }
