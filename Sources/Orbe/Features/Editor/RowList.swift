@@ -169,13 +169,13 @@ final class RowList<Source: RowListSource>: NSScrollView {
     }
   }
 
-  /// 最初の行の上に置く頭を `header` にする（nil なら外す）。頭は行と一緒に送られる。
+  /// 最初の行の上に置く頭を `header` にする（nil なら外す）。頭はスクロールで行と一緒に動く。
   func setHeader(_ header: (any RowListHeader)?) {
     list.setHeader(header)
     scrollbar.reflect(metrics)
   }
 
-  /// 頭の中身が変わり、高さが変わりうる（列が測り直して、行の位置を置き直す）。
+  /// 頭の中身が変わって高さが変わりうるときに、持ち主が呼ぶ。列が頭の高さを測り直し、行の位置を置き直す。
   func headerDidChange() {
     list.headerDidChange()
     scrollbar.reflect(metrics)
