@@ -217,7 +217,7 @@ extension AutomationStoreTests {
 
   /// 出来事を毎回すべて読む判定が対応済みにした候補は、読んだ出来事が残す期間を過ぎるまで覚え（窓を外れても）、そのリンクに
   /// 新しい変化が無い間は、その出来事を判定の前で捨てる。
-  func testAJudgeReadingAWindowEveryRunRemembersClosedProposalsWhileTheyAreInIt() throws {
+  func testAJudgeReadingAWindowEveryRunRemembersAResolvedProposalUntilItsEventExpires() throws {
     let store = AutomationStore()
     var definition = Self.definition(coverage: .newArrivals)
     definition.nodes[1].from = [
@@ -237,7 +237,7 @@ extension AutomationStoreTests {
 
     try Self.fetch(store, id, [], at: Self.at.addingTimeInterval(25 * 3600))
     XCTAssertEqual(store.proposals.map(\.state), [.resolved], "窓を外れても、出来事が残す期間の内は覚える")
-    try Self.fetch(store, id, [], at: Self.at.addingTimeInterval(31 * AutomationDatabase.day))
+    try Self.fetch(store, id, [], at: Self.at.addingTimeInterval(Self.eventRetention + 60))
     XCTAssertEqual(store.proposals, [])
   }
 

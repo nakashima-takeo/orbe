@@ -1,6 +1,6 @@
 import Foundation
 
-/// 候補（判定が出したデータ）・覚えている印・人の判断と、候補を下げる判断・覚える判断に使う読み。
+/// 候補（判定が出したデータ）・覚えている印・人の判断と、候補が下げる条件を満たすかの読み。
 extension AutomationDatabase {
   /// 判定のノード `nodeId` の回が出した候補を足し、覚えている印を付けて ID を返す。
   func insert(proposal: AutomationNodePass.Proposal, run: Int, nodeId: AutomationNodeID) throws
@@ -77,7 +77,7 @@ extension AutomationDatabase {
     return counts
   }
 
-  // MARK: - 下げる判断と覚える判断
+  // MARK: - 下げる条件
 
   /// 覚えている候補 1 つ（読めない候補も）。
   struct HeldProposal: Equatable {
