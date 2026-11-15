@@ -227,6 +227,7 @@ extension DesignGallerySnapshotTests {
     try write("board_map_first.png", map(0), .ja, size)
     try write("board_map_mail.png", map(0, nodeKey: "mail"), .ja, size)
     try write("board_map_mine.png", map(0, nodeKey: "mine"), .ja, size)
+    try write("board_map_mine_en.png", map(0, nodeKey: "mine"), .en, size)
     // 保存: 上書きの取得・追記の処理（追記の取得は slack の実行中で見る）。
     try write("board_map_github.png", map(0, nodeKey: "github"), .ja, size)
     try write("board_map_dedupe.png", map(0, nodeKey: "dedupe"), .ja, size)

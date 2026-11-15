@@ -104,7 +104,10 @@ extension DesignSceneFixtures {
     var mine = commandNode(
       "mine", "自分の担当だけ", .arrival, from: ["backlog", "sentry"],
       script: #"jq -c 'select(.assignee == "nakatake")'"#, directory: "/Users/me/work/scripts")
-    mine.from = mine.from.map { AutomationDefinition.Input(nodeKey: $0.nodeKey, maxAgeHours: 24) }
+    mine.from = [
+      AutomationDefinition.Input(nodeKey: "backlog", maxAgeHours: 24),
+      AutomationDefinition.Input(nodeKey: "sentry", after: automationAt(9, 0, daysAgo: 7)),
+    ]
     var mail = agentNode(
       "mail", "メール", .scheduled(.every(1800)), model: "haiku",
       tools: ["mcp__gmail__search_threads"],
