@@ -301,7 +301,7 @@ extension AutomationRunner {
     guard let read else { return end(trigger) }
     guard !read.taken.isEmpty else {
       let changed =
-        (try? store.discard(read, of: trigger.nodeId, in: trigger.automationId, now: now()))
+        (try? store.endEmptyTrigger(read, of: trigger.nodeId, in: trigger.automationId, now: now()))
         ?? false
       if changed { wake(below: trigger.nodeId, in: trigger.automationId) }
       return end(trigger)

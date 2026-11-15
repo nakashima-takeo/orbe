@@ -142,11 +142,8 @@ extension DesignSceneFixtures {
     let nodeId = store.nodeId(id, key)
     try store.give(items.map(row), as: nodeId, of: id, at: at)
     for receiver in store.automation(id)?.graph.downstream(of: nodeId) ?? [] {
-      guard var read = try store.read(receiver.id, of: id, baseline: nil, now: at) else { continue }
-      read.taken = []
-      read.dropped = []
-      read.lapsed = 0
-      try store.discard(read, of: receiver.id, in: id, now: at)
+      guard let read = try store.read(receiver.id, of: id, baseline: nil, now: at) else { continue }
+      try store.consume(read, of: receiver.id, in: id, now: at)
     }
   }
 

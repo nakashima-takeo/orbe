@@ -121,12 +121,12 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "p").runs.first?.run?.withdrawn, 1)
   }
 
-  /// 今の集合の処理の取る行が 0 件の契機は、入力を付け替えた直後で新しい上流がまだ何も出していなくても、処理の今有効な項目を
-  /// すべて無効にし、その行の候補を下げて判定の次の成功した回に数える。
+  /// 予定で回る今の集合の処理の取る行が 0 件の契機は、入力を付け替えた直後で新しい上流がまだ何も出していなくても、処理の今有効な
+  /// 項目をすべて無効にし、その行の候補を下げて判定の次の成功した回に数える。
   func testAnEmptyTurnOfARewiredCurrentSetProcessWithdrawsTheProposalsOfItsRows() throws {
     let store = AutomationStore()
     var process = DesignSceneFixtures.commandNode(
-      "p", "まとめ", .arrival, script: "p", coverage: .currentSet)
+      "p", "まとめ", .scheduled(.every(1800)), script: "p", coverage: .currentSet)
     process.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all)]
     var definition = Self.definition()
     definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "p")]
@@ -149,7 +149,7 @@ extension AutomationStoreTests {
     let read = try XCTUnwrap(store.read(p, of: id, baseline: nil, now: Self.at))
     XCTAssertEqual(read.taken, [], "前提: 新しい上流はまだ何も出していない")
 
-    try store.discard(read, of: p, in: id, now: Self.at)
+    try store.endEmptyTrigger(read, of: p, in: id, now: Self.at)
 
     XCTAssertEqual(try store.liveLinks(id, "p"), [])
     XCTAssertEqual(store.proposals, [])
@@ -233,7 +233,7 @@ extension AutomationStoreTests {
     var nothing = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: later))
     XCTAssertFalse(nothing.reach.isEmpty, "前提: 読む上限がある")
     nothing.taken = []
-    try store.discard(nothing, of: judge, in: id, now: later)
+    try store.endEmptyTrigger(nothing, of: judge, in: id, now: later)
     XCTAssertEqual(try store.carried(id, "judge").withdrawn, 1, "取る行が 0 件の契機")
     try store.record(id, nodeKey: "judge", at: later, outcome: DesignSceneFixtures.failed("boom"))
     XCTAssertEqual(try store.carried(id, "judge").withdrawn, 1, "失敗した回")
