@@ -98,6 +98,37 @@ final class AutomationNodeTests: OrbeTestCase {
     XCTAssertEqual((written as? [String: Any])?["retentionDays"] as? Int, 60)
   }
 
+  /// 入力が読む行の下限の時刻は ISO 8601 の時刻として読み、同じ時刻で書き戻す。時刻として読めない値は場所を示して断る。
+  func testTheAfterOfAnInputIsReadAndWrittenBackAsATime() throws {
+    let json = #"""
+      {"key": "late", "name": "後から", "trigger": {"kind": "arrival"}, "command": "late",
+       "from": [{"node": "gh", "after": "2027-01-15T08:00:00.250Z"}]}
+      """#
+    let definitionNode = try AutomationWire.decoder.decode(
+      AutomationDefinition.Node.self, from: Data(json.utf8))
+    let written = try AutomationWire.encoder().encode(definitionNode)
+
+    XCTAssertEqual(definitionNode.from.first?.after, Date(timeIntervalSince1970: 1_800_000_000.25))
+    XCTAssertEqual(
+      try AutomationWire.decoder.decode(AutomationDefinition.Node.self, from: written),
+      definitionNode, "書いて読み直しても同じ値")
+    XCTAssertThrowsError(
+      try AutomationDefinition.decode([
+        "name": "x",
+        "nodes": [
+          ["key": "gh", "name": "取る", "trigger": ["kind": "manual"], "command": "gh"],
+          [
+            "key": "late", "name": "後から", "trigger": ["kind": "arrival"], "command": "late",
+            "from": [["node": "gh", "after": "yesterday"]],
+          ],
+        ],
+      ])
+    ) {
+      XCTAssertEqual(
+        $0 as? AutomationError, .invalid("invalid nodes[1].from[0].after: not ISO 8601: yesterday"))
+    }
+  }
+
   /// 形の誤りは読む時点で断り、誤りの場所（ノードの位置と欄）を持つ。制御 API はこの場所を `nodes[1].tools` の形で返す。
   func testShapeErrorsAreRefusedAtTheirPlace() {
     let manual = #"{"kind": "manual"}"#
