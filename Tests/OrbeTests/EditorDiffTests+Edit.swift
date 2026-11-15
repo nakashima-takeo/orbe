@@ -73,6 +73,29 @@ extension EditorDiffTests {
     XCTAssertTrue(aligned())
   }
 
+  /// 未追跡のファイルの並列の diff で右に行を足し続けても、左右の高さの揃い方は開いたときのまま（古い側が文書の底では
+  /// ない diff は、本文が変わるたびに今の行の数で並びを置き直す）。
+  func testAddingLinesToAnUntrackedFileKeepsTheSideBySideAligned() throws {
+    try repo.write("new.txt", "x\ny\n")
+    let (tab, window) = tab(modes: EditorDiffModeState(mode: .side))
+    let diff = try tab.group.editor.openDiff(id("new.txt", .workingTree), as: .pinned)
+    pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
+    let document = try XCTUnwrap(diff.document)
+    let (left, right) = (try engine(diff.oldSurface), try engine(diff.newSurface))
+    let oldLines = try XCTUnwrap(diff.old).text.lineCount
+    let gap = {
+      left.rows.lastUnit(lineCount: oldLines)
+        - right.rows.lastUnit(lineCount: document.text.lineCount)
+    }
+    let opened = gap()
+    window.makeFirstResponder(right.responder)
+
+    for added in 1...3 {
+      type("\n", at: 0, on: right)
+      XCTAssertEqual(gap(), opened, "\(added) 行足した後も、揃い方は開いたときのまま")
+    }
+  }
+
   /// 変えていない行で変換を始めると、裏の行差分が届いて元の行が削除行として差し込まれ、さらに見せ方（インライン ⇄ 並列）を
   /// 切り替えても、変換は続き、確定した字が本文に入る。
   func testTheCompositionContinuesWhileTheRowsChangeUnderIt() throws {
@@ -172,4 +195,5 @@ extension EditorDiffTests {
     XCTAssertEqual(
       search.results["a.txt"]?.document?.ranges, [NSRange(location: 7, length: 6)], "一致は編集でずれる")
   }
+
 }
