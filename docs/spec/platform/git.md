@@ -18,7 +18,7 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 - エディタ（メッセージ無しの commit・rebase の todo）は、すぐ失敗するコマンドへ向ける。merge の自動編集は無効。
 - ssh には askpass を必ず使わせ（使うかを `DISPLAY` の有無で揺らさない）、その askpass をすぐ失敗するコマンドにする。パスフレーズと未知のホスト鍵の確かめは、待たずに失敗する。ただし利用者が GUI の askpass を配っていれば（launchd に `SSH_ASKPASS` を置く形）、それを使う——ダイアログで答えられるので待ちにならない。
 
-ユーザーの設定はそのまま効く——`core.sshCommand`・ssh-agent・credential helper・GUI の askpass・hook・署名・`pull.rebase` など。封じが変えるのは「失敗が速く、分類できる」ことだけ。FIDO 鍵の「触れて」の知らせも askpass を通るので、封じの askpass では出ない（認証は進む）。利用者の GUI の askpass を使うときは、知らせもそれに渡る。人が見ていない実行（自動 fetch）だけは、GUI の askpass・`GIT_ASKPASS`・Git Credential Manager の対話も使わない（→ リモートの書き込みの fetch）。
+ユーザーの設定はそのまま効く——`core.sshCommand`・ssh-agent・credential helper・GUI の askpass・hook・署名・`pull.rebase` など。封じが変えるのは「失敗が速く、分類できる」ことだけ。FIDO 鍵の「触れて」の知らせも askpass を通るので、封じの askpass では出ない（認証は進む）。利用者の GUI の askpass を使うときは、知らせもそれに渡る。人が頼んでいない fetch（自動 fetch と、コミットを指定した fetch）だけは、GUI の askpass・`GIT_ASKPASS`・Git Credential Manager の対話も使わない（→ リモートの書き込みの fetch・コミットを指定した fetch）。
 
 ## 並ばない実行
 
@@ -26,7 +26,7 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 
 順番を作るのは、同じ worktree の index への Orbe 自身の書き込みだけ——git は `index.lock` を待たずに落ち、index を書くのはその worktree の根のサービスだけなので、**同じ worktree の index への書き込みの順番は根のサービスが持つ**（→ [editor/files](../editor/files.md)）。worktree パレットの書き込み（worktree 削除・ブランチ削除・ローカル ref の前進）は他の worktree の index を書かず、順序はコールバックの連鎖で付いている。
 
-それ以外は並ばないので、同じリポジトリで同時に走った書き込みが片方失敗しうるのを受け入れる。remote 追跡 ref を書く fetch・pull 同士は、先に更新した側と期待値（読んだ時点の値）が食い違い、後の側が落ちる（ref のロック待ちの再試行では救われない）。`.git/config` を書く操作同士（upstream を付ける push と、worktree 作成の追跡設定）は `config.lock` を待たずに落ちる。どれもやり直せば通る。同じ worktree の push・pull・fetch を 1 つずつにするのは面の側の役目（→ [editor/source-control](../editor/source-control.md) のネット操作）。自動 fetch はリポジトリごとに 1 本で、ソース管理のネット操作の間は撃たず、そのネットの段の前に走っていれば止めてその終わりを待つ（同じ箇所の自動 fetch）。worktree パレットの「最新化して作成」・提示時の fetch・`start_task` の fetch とは並びうる（後の側が落ちうる。やり直せば通る）。コミットを指定した fetch（→「リモートの書き込みと失敗の分類」）は ref を書かず、fetch 後の自動 gc も走らせないので、ほかの fetch・pull と並行して走っても互いを失敗させない——同じ worktree のネット操作を 1 つずつにする面の側の排他には載せない。
+それ以外は並ばないので、同じリポジトリで同時に走った書き込みが片方失敗しうるのを受け入れる。remote 追跡 ref を書く fetch・pull 同士は、先に更新した側と期待値（読んだ時点の値）が食い違い、後の側が落ちる（ref のロック待ちの再試行では救われない）。`.git/config` を書く操作同士（upstream を付ける push と、worktree 作成の追跡設定）は `config.lock` を待たずに落ちる。どれもやり直せば通る。同じ worktree の push・pull・fetch を 1 つずつにするのは面の側の役目（→ [editor/source-control](../editor/source-control.md) のネット操作）。自動 fetch はリポジトリごとに 1 本で、ソース管理のネット操作の間は撃たず、そのネットの段の前に走っていれば止めてその終わりを待つ（同じ箇所の自動 fetch）。worktree パレットの「最新化して作成」・提示時の fetch・`start_task` の fetch とは並びうる（後の側が落ちうる。やり直せば通る）。コミットを指定した fetch（→「リモートの書き込みと失敗の分類」）は ref もコミットグラフも書かず、fetch の後の自動の保守も走らせないので、ほかの fetch・pull と並行して走っても互いを失敗させない——同じ worktree のネット操作を 1 つずつにする面の側の排他には載せない。
 
 ## 無応答の打ち切り
 
@@ -79,9 +79,9 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 - **pull**: merge か rebase かはユーザーの設定（`pull.rebase`・`pull.ff`・`branch.<name>.rebase`）のまま。fetch と merge / rebase に割らない——割ると、その解決を自前で再現することになる。
 - **push**: upstream があれば `git push` をユーザーの設定（`push.default`・`pushRemote`）のまま。無ければ利用者の push 先の設定（`branch.<name>.pushRemote` → `remote.pushDefault` → `branch.<name>.remote` の順に git が解決する）の remote へ、どれも無ければ origin へ、upstream を付けて出す（Dispatch の「push 先の無いブランチは origin とみなす」と同じ解決）。upstream を付けるのは先行/遅れを読むため。付ける名前と付け先は実行時の HEAD から git が決めるので、観測の status が古くても別のブランチを送らない。
 
-- **コミットを指定した fetch**: PR の diff に要るコミットが手元に無いとき、指定した remote から、そのコミットだけを fetch する（GitHub は到達できるコミットの指定を受け付ける）。利用者のリポジトリに ref・FETCH_HEAD・タグを 1 つも書かず、サブモジュールにも再帰せず、fetch 後の自動 gc も走らせない——Orbe の ref を残すと、その掃除の責任を負うことになるため。fetch したコミットが後で git の gc で消えても、手元に無いと分かった時点でもう一度 fetch するだけで済む。利用者が頼んだ通信ではないので、自動 fetch と同じく askpass・資格情報のダイアログを出させない（ssh-agent の側の承認は封じられない）。失敗はこの節の後半の分類（認証・ホスト鍵・その他）で返る。浅いクローンでは、fetch してもマージベースが求まらないことがある（浅いクローンを深くすることはしない）。
+- **コミットを指定した fetch**: 指定した remote から、指定したコミットと、手元に無いその祖先を fetch する（GitHub は、どれかの ref から辿れるコミットであれば、そのコミットを指定した fetch に応じる）。利用者のリポジトリに ref・FETCH_HEAD・タグを 1 つも書かない——Orbe の ref を残すと、その掃除の責任を負うことになるため。コミットグラフも書かず、サブモジュールにも降りず、fetch の後の自動の保守（`git maintenance run --auto`）も走らせない。fetch したコミットが後で git の保守で消えても、手元に無いと分かった時点でもう一度 fetch するだけで済む。コミットを 1 つも指定しなければ git を起動せずに成功を返す——コミットを指定しない `git fetch` は、設定の refspec に従って追跡 ref を書き換える普通の fetch になるため。利用者が頼んだ通信ではないので、自動 fetch と同じく askpass・資格情報のダイアログを出させない（ssh-agent の側の承認は封じられない）。失敗はこの節の後半の分類（認証・ホスト鍵・その他）で返る。浅いクローンでも、指定したコミットを fetch する。指定したコミットが浅いクローンの境界より新しい側で分かれていれば、取った後にマージベースが求まる。境界より古い側で分かれていれば、分かれ目から根までの履歴を取ることになり、それでも浅いクローンの境界があるのでマージベースは求まらない（浅いクローンを深くすることはしない）。
 
-fetch・pull・push は進捗の行（git の語のまま。割合への換算や訳はしない）を届いた順に渡す。失敗は分類を持ち、分類できない失敗は「その他」（git の実質の理由）に倒す——誤分類より安全。
+fetch・pull・push（コミットを指定した fetch を除く）は進捗の行（git の語のまま。割合への換算や訳はしない）を届いた順に渡す。失敗は分類を持ち、分類できない失敗は「その他」（git の実質の理由）に倒す——誤分類より安全。
 
 - **前提は本体の git を起こす前に判定する**: merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の pull・push →「ブランチに居ない」、upstream の無いブランチの pull →「upstream が無い」、upstream も push 先の設定も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と、push 先の解決と remote の一覧と、止まった操作の管理エントリ。pull は止まった操作を先に見る——rebase の途中は HEAD が detached で upstream も無いので、逆の順では「ブランチに居ない」「upstream が無い」に化ける。
 - **push の拒否**は `--porcelain` の機械向けの行で読む——送れなかった ref がどれも `[rejected] (fetch first)`・`[rejected] (non-fast-forward)` なら「拒否された（先に取り込みが要る）」。それ以外の行があれば（サーバの hook・保護ブランチが拒んだ `[remote rejected]`・取り込んでも直らない `[rejected] (already exists)` など）「断られた」で、送れなかった ref とその要約（`(pre-receive hook declined)` 等）を理由の頭に置く——`--porcelain` では要約が機械向けの行へ移り、stderr には「送れなかった」としか残らないため。「断られた」はリモートと話せたことも示す（自動 fetch の止まりを解く → [editor/source-control](../editor/source-control.md)）。送れなかった ref の行が無い失敗は「その他」。
@@ -96,12 +96,12 @@ diff の差分は git diff の出力でなくプロセス内で計算するの�
 
 ## コミットの間の関係
 
-PR の diff の両端と手元とのずれを求めるための読み取り。どれもコミットか ref を引数で受け、どちらかが手元に無い・読めなければ「求まらない」で返る。
+2 つのコミットの関係（マージベース・rename の対応・先行と遅れ）と、ref の今の値を読む。2 つのコミットを受ける読みは、どちらかのコミットが手元に無いときと、git が読めなかったときに「求まらない」で返る。
 
-- **マージベース**: 2 つのコミットの共通の祖先。コミットが手元に無い場合と、共通の祖先が無い場合も「求まらない」に入る——呼び出し側はこれを「コミットを取りに行く」合図にする。
+- **マージベース**: 2 つのコミットの共通の祖先。求まらなければ、その理由（コミットが手元に無い・共通の祖先が無い・git が読めなかった）を分けて返す——手元に無いなら、そのコミットを取ってくれば求まりうるが、共通の祖先が無いなら取っても求まらない。git は共通の祖先が無いことを終了コードで返し、コミットが無いことを分けて返さないので、求まらなかったときだけ 2 つのコミットが手元に在るかを確かめる。
 - **rename の対応**: 2 つのコミットの間の rename だけを、新しいパス → 元のパスの表で返す。plumbing の diff（`diff-tree`）で読み、rename の検出は明示して有効にし（利用者の `diff.renames` に依らない）、外部 diff・textconv・色を使わせない。パスは NUL 区切りで、クォートされない。
 - **先行と遅れ**: 2 つのコミットの、それぞれにしか無いコミットの数。
-- **push 先の追跡 ref**: ブランチの push 先の remote（push の解決と同じ。設定が無ければ origin、origin も無ければ「push 先が無い」）について、fetch の既定の対応で決まる remote 追跡 ref（`refs/remotes/<remote>/<ブランチ名>`）と、その現在の値。値が無ければ、そのブランチはまだ push 先に無い。
+- **push 先の追跡 ref**: ブランチの push 先の remote（push の解決と同じ。設定が無ければ origin、origin も無ければ「push 先が無い」）について、fetch の既定の refspec が写す先の remote 追跡 ref（`refs/remotes/<remote>/<ブランチ名>`）と、その現在の値。値が無いのは手元にその追跡 ref が無いときで、push 先にそのブランチが無いとは限らない（別の手元から push した後に fetch していない、fetch の refspec がそのブランチを写さない、など）。single-branch のクローン（`git clone --single-branch`・`--depth` の既定）は、fetch の refspec がクローンしたブランチだけを対象にするので、ほかのブランチの追跡 ref を作らない——ほかのブランチを push した後も、そのブランチの追跡 ref は無いまま。
 - **ref の値**: 名指しした ref ごとの今の値。在る ref だけが入る（名前の下の階層の ref は入れない）。
 
 ## コミットグラフ
