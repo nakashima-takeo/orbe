@@ -253,19 +253,20 @@ final class EditorDiff {
       oldIsBase = false
       setOld(old)
       return .ready
-    case .revisionsNow(let texts):
+    case .revisionsReplacing(let texts):
       oldIsBase = true
-      let keepsOld = oldSource == .some(texts.old)
-      setOld(texts.old)
-      setNewRevision(texts.new, keepsOld: keepsOld)
-      revisionHunks = DiffRows.hunks(
-        old: oldSide.isAbsent ? nil : old?.text,
-        new: newRevisionSide.isAbsent ? nil : newRevision?.text, limit: Self.hunkLimit)
+      swapRevisions(texts) { old, new in
+        [LineHunk(old: 0..<DiffRows.Side(old).lines, new: 0..<DiffRows.Side(new).lines)]
+      }
       return .ready
     case .revisions(let texts):
       oldIsBase = true
       // 両側の本文が今の両側の本文と同じなら、実行中の依頼を手放すだけで済む。
       guard oldSource != .some(texts.old) || newSource != .some(texts.new) else { return .ready }
+      if Self.diffsInPlace(texts) {
+        swapRevisions(texts) { DiffRows.hunks(old: $0, new: $1, limit: Self.hunkLimit) }
+        return .ready
+      }
       pending = true
       revisionsComputing = texts
       if texts != computing { requestRevisionHunks(texts) }
@@ -283,10 +284,7 @@ final class EditorDiff {
         guard let self, revisionsComputing == texts else { return }
         revisionsComputing = nil
         pending = false
-        let keepsOld = oldSource == .some(texts.old)
-        setOld(texts.old)
-        setNewRevision(texts.new, keepsOld: keepsOld)
-        revisionHunks = hunks
+        swapRevisions(texts) { _, _ in hunks }
         if content != .ready {
           content = .ready
           surfacesChanged = true
@@ -295,6 +293,25 @@ final class EditorDiff {
         settleSurfaces()
       }
     }
+  }
+
+  /// 両側の版の本文どうしの行差分を、その場で取れる——片側が無い（行差分は区間 1 つ）か、両側とも改行を含まない（1 行どうし）。
+  /// どちらも手間が本文の大きさに依らない。
+  private static func diffsInPlace(_ texts: SideTexts) -> Bool {
+    guard let old = texts.old, let new = texts.new else { return true }
+    return !old.utf8.contains(UInt8(ascii: "\n")) && !new.utf8.contains(UInt8(ascii: "\n"))
+  }
+
+  /// 両側を版の本文 `texts` にし、並びを `hunks`（入れ替えた両側の文書の本文から求める。その版に無い側は nil）にする。
+  /// 古い側が変わらなければ、作り直す新しい側の面では古い側の行を錨にして、前の面で先頭に見えていた所を先頭に置く。
+  private func swapRevisions(
+    _ texts: SideTexts, hunks: (_ old: TextRope?, _ new: TextRope?) -> [LineHunk]
+  ) {
+    let keepsOld = oldSource == .some(texts.old)
+    setOld(texts.old)
+    setNewRevision(texts.new, keepsOld: keepsOld)
+    revisionHunks = hunks(
+      oldSide.isAbsent ? nil : old?.text, newRevisionSide.isAbsent ? nil : newRevision?.text)
   }
 
   /// 古い側を本文 `text`（その版に無ければ nil——空の本文の文書で、大きさは 0 行）にする。変われば作り直す。

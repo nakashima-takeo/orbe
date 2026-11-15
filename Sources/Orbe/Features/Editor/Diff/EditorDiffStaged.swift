@@ -47,8 +47,19 @@ final class EditorDiffStaged: EditorDiffSource {
       if state == .failed { return .unavailable(.failed) }
     }
     if head == .absent, index == .absent { return .unavailable(.nowhere) }
-    return .revisions(
-      EditorDiff.SideTexts(old: EditorDiff.sideText(head), new: EditorDiff.sideText(index)))
+    let texts = EditorDiff.SideTexts(
+      old: EditorDiff.sideText(head), new: EditorDiff.sideText(index))
+    return Self.replaces(head, index) ? .revisionsReplacing(texts) : .revisions(texts)
+  }
+
+  /// 片側がファイルの本文で、もう片側がサブモジュール（ファイルとサブモジュールの置き換え）。
+  private static func replaces(_ old: RootFiles.VersionState, _ new: RootFiles.VersionState)
+    -> Bool
+  {
+    switch (old, new) {
+    case (.text, .submodule), (.submodule, .text): true
+    default: false
+    }
   }
 
   /// 開いた後の取り直しが済んだ後の status で決まる関心の版の状態から答えた。
