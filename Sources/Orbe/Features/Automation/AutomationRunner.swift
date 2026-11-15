@@ -107,7 +107,7 @@ import Observation
   func set(_ id: Int?, version: Int? = nil, _ definition: AutomationDefinition)
     throws(AutomationError) -> Automation
   {
-    try set(try store.check(AutomationStore.Write(id, version: version, definition)))
+    try set(try store.check(AutomationStore.Write(id, version: version, definition), now: now()))
   }
 
   /// 確かめた書き込みを掛ける。何をするかが変わったノードは走っている回を止めて載せ直し（結果は捨てる）、外したノードは外し、

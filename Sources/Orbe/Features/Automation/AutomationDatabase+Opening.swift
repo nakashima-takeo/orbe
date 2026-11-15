@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSessionLog
 
 /// 起動時の読み。形が合った後の値の読めなさは、その件だけに閉じ込める——定義が今の検証を通らない自動化は「定義を読めない」、
 /// 中身の JSON を読めない回の記録は「不明な記録」、指す行や値が読めない候補は「読めない候補」として残し、ほかは普段どおり読む。
@@ -108,7 +109,7 @@ extension AutomationDatabase {
     /// 組み合わせの定義を指すか。
     let composite: Bool
     let action: String?
-    /// 入力（上流のノード・取り方・古さの上限。`from` の順）。
+    /// 入力（上流のノード・取り方・古さの上限・読む行の下限の時刻。`from` の順）。
     let inputs: [AutomationNodeEdge]
   }
 
@@ -139,14 +140,15 @@ extension AutomationDatabase {
         action: row.action,
         inputs: try db.select(
           """
-          SELECT from_node_id, take, max_age_hours FROM node_edges WHERE to_node_id = ?
+          SELECT from_node_id, take, max_age_hours, after_at FROM node_edges WHERE to_node_id = ?
           ORDER BY position
           """, [.integer(Int64(row.id.rawValue))]
         ) { s in
           AutomationNodeEdge(
             from: AutomationNodeID(s.int(at: 0)),
             take: AutomationTake(rawValue: s.text(at: 1) ?? "") ?? .new,
-            maxAgeHours: s.optionalInt64(at: 2).map(Int.init))
+            maxAgeHours: s.optionalInt64(at: 2).map(Int.init),
+            after: s.optionalInt64(at: 3).map(AutomationPersistence.date))
         })
     }
   }
@@ -182,7 +184,8 @@ extension AutomationDatabase {
         id: row.id, key: row.key, name: row.name, trigger: trigger,
         from: row.inputs.map {
           AutomationDefinition.Input(
-            nodeKey: keys[$0.from] ?? "", take: $0.take, maxAgeHours: $0.maxAgeHours)
+            nodeKey: keys[$0.from] ?? "", take: $0.take, maxAgeHours: $0.maxAgeHours,
+            after: $0.after)
         }, action: action, maxItems: row.maxItems, retentionDays: row.retentionDays))
   }
 
@@ -221,14 +224,7 @@ extension AutomationDatabase {
         if let trigger = nodeRow.trigger.flatMap(jsonObject) { object["trigger"] = trigger }
         if let maxItems = nodeRow.maxItems { object["maxItems"] = maxItems }
         if let days = nodeRow.retentionDays { object["retentionDays"] = days }
-        let from = nodeRow.inputs.map { edge -> Any in
-          let key = keys[edge.from] ?? ""
-          guard edge.take != .new || edge.maxAgeHours != nil else { return key }
-          var input: [String: Any] = ["node": key]
-          if edge.take != .new { input["take"] = edge.take.rawValue }
-          if let hours = edge.maxAgeHours { input["maxAgeHours"] = hours }
-          return input
-        }
+        let from = nodeRow.inputs.map { rawInput($0, key: keys[$0.from] ?? "") }
         if !from.isEmpty { object["from"] = from }
         if !nodeRow.composite, let action = nodeRow.action.flatMap(jsonObject) {
           object.merge(action) { current, _ in current }
@@ -239,6 +235,16 @@ extension AutomationDatabase {
     if let notify = row.notify { object["notify"] = notify }
     if let workspace = row.workspace { object["workspace"] = workspace }
     return object
+  }
+
+  /// つながりの外の形（`AutomationDefinition.Input` の書き方と同じ）。
+  private static func rawInput(_ edge: AutomationNodeEdge, key: String) -> Any {
+    guard edge.take != .new || edge.maxAgeHours != nil || edge.after != nil else { return key }
+    var input: [String: Any] = ["node": key]
+    if edge.take != .new { input["take"] = edge.take.rawValue }
+    if let hours = edge.maxAgeHours { input["maxAgeHours"] = hours }
+    if let after = edge.after { input["after"] = SessionEvent.iso8601(after) }
+    return input
   }
 
   /// 覚えている候補。指す行や値が読めない候補は、リンクだけを持つ読めない候補にする。

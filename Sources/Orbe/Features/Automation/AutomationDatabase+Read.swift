@@ -203,7 +203,8 @@ extension AutomationDatabase {
 }
 
 extension AutomationDatabase {
-  /// 判定 `judge` が `take: all` のつながりで毎回読み直す出来事（残す期間と古さの上限の内）のリンク。
+  /// 判定 `judge` が `take: all` のつながりで毎回読み直す出来事（残す期間と古さの上限の内で、読む行の下限の時刻より後）の
+  /// リンク。
   func linksReadAgain(by judge: AutomationGraph.Node, now: Date) throws -> Set<String> {
     var links = Set<String>()
     for edge in judge.inputs where edge.take == .all {
@@ -213,10 +214,11 @@ extension AutomationDatabase {
         try db.select(
           """
           SELECT DISTINCT link FROM events
-          WHERE node_id = ? AND created_at >= max(?, ?) AND link IS NOT NULL
+          WHERE node_id = ? AND created_at >= max(?, ?) AND created_at > ? AND link IS NOT NULL
           """,
           [
             .integer(Int64(edge.from.rawValue)), cutoff, since.map(Self.instant) ?? cutoff,
+            edge.after.map(Self.instant) ?? .integer(Int64.min),
           ]
         ) { $0.text(at: 0) ?? "" })
     }

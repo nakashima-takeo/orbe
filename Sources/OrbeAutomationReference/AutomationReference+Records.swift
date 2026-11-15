@@ -4,7 +4,7 @@ extension AutomationReference {
     AUTOMATIONS
     Each automation in the list has `automationId`, `version` (send it with a rewrite), \
     `definition` (as stored; each node has its `id`, `agent` is written even when it is the \
-    default, an input that takes `new` and has no `maxAgeHours` is a key, and a `workspace` is \
+    default, an input that takes `new` and has neither `maxAgeHours` nor `after` is a key, and a `workspace` is \
     the stored id, also for a removed workspace), `paused`, and `nodes`, keyed by node key:
     - `running`: a run of the node is going.
     - `paused`: the node itself is paused (pausing the automation shows in the automation's \

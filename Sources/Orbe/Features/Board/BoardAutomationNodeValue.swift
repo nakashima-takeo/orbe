@@ -147,7 +147,7 @@ extension BoardAutomationNodeValue {
     if !node.inputs.isEmpty {
       fact(
         .boardNodeFrom,
-        node.inputs.map { input(graph, $0, l10n) }.joined(separator: separator), incoming: true)
+        node.inputs.map { input(graph, $0, text) }.joined(separator: separator), incoming: true)
     }
     switch action.destination {
     case .nextNode: break
@@ -210,14 +210,17 @@ extension BoardAutomationNodeValue {
     return name
   }
 
-  /// 入力 1 つ（「取得」「取得（毎回全件・24 時間以内）」）。
+  /// 入力 1 つ（「取得」「取得（毎回全件・24 時間以内・11/15 9:00 より後）」）。読む行の下限の時刻は、追記の取得の前回成功の
+  /// 目印と同じ書き方。
   private static func input(
-    _ graph: AutomationGraph, _ edge: AutomationNodeEdge, _ l10n: LocalizationStore
+    _ graph: AutomationGraph, _ edge: AutomationNodeEdge, _ text: AutomationText
   ) -> String {
+    let l10n = text.l10n
     let name = graph.node(edge.from)?.entity.name ?? "\(edge.from)"
     let notes =
       (edge.take == .all ? [l10n.string(.boardNodeTakeAll)] : [])
       + (edge.maxAgeHours.map { [l10n.format(.boardNodeMaxAge, $0)] } ?? [])
+      + (edge.after.map { [l10n.format(.boardNodeAfter, text.recent($0))] } ?? [])
     guard !notes.isEmpty else { return name }
     return l10n.format(
       .automationWithOriginal, name,

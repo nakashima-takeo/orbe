@@ -84,6 +84,7 @@ extension AutomationDatabase {
       max_age_hours INTEGER CHECK (max_age_hours > 0),
       read_item_seq  INTEGER NOT NULL DEFAULT 0 CHECK (read_item_seq >= 0),
       read_event_seq INTEGER NOT NULL DEFAULT 0 CHECK (read_event_seq >= 0),
+      after_at       INTEGER,
       PRIMARY KEY (to_node_id, from_node_id),
       UNIQUE (to_node_id, position),
       CHECK (from_node_id <> to_node_id),

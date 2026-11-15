@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSessionLog
 
 /// 定義の書き込み——作る（定義だけ）と書き換える（自動化・元にした版・定義）。どちらも確かめる（読みだけ）と掛ける（変異の 1 経路）に
 /// 分け、掛けるのは確かめた書き込みだけにする。制御の口は書く前に同じ確かめを通し（`set_automation` も試走も同じ断りを返す）、試走は
@@ -60,7 +61,8 @@ extension AutomationStore {
 
   /// 書き込みを確かめる（何も書かない）。作るなら、ノードは `id` を持たず、定義が検証を通ること。書き換えるなら、自動化があり（定義を
   /// 読めない自動化も書き換えで直せる）、定義が検証を通り、版が今の版と同じで、ノードの `id` が今のノードを指すこと（`checkIds`）。
-  func check(_ write: Write) throws(AutomationError) -> CheckedWrite {
+  /// どちらも、つながりの読む行の下限の時刻が `now` より後でないこと（`checkAfter`）。
+  func check(_ write: Write, now: Date) throws(AutomationError) -> CheckedWrite {
     guard available else { throw unavailableError }
     switch write {
     case .create(let definition):
@@ -68,6 +70,7 @@ extension AutomationStore {
         throw .invalid("nodes[\(index)].id: a new automation has no node ids yet")
       }
       let (name, nodes) = try definition.checked()
+      try Self.checkAfter(definition.nodes, now: now)
       return CheckedWrite(write: write, name: name, nodes: nodes, current: nil)
     case .replace(let id, let version, let definition):
       let current: Current
@@ -84,6 +87,7 @@ extension AutomationStore {
         throw .automationNotFound(id)
       }
       let (name, nodes) = try definition.checked()
+      try Self.checkAfter(definition.nodes, now: now)
       guard let version else {
         throw .invalid("version: pass the version you read with list_automations to rewrite")
       }
@@ -242,6 +246,21 @@ extension AutomationStore {
       rewired.states[node.id] = try db.state(of: node.id)
     }
     return rewired
+  }
+
+  /// つながりの読む行の下限の時刻が、書く時点の `now` より後でないかを確かめる。未来の時刻は、その時刻までに来た行を黙って
+  /// 捨て、試走でも正しい値と見分けられない。保存した定義を読むときは確かめない。
+  private static func checkAfter(_ definitionNodes: [AutomationDefinition.Node], now: Date)
+    throws(AutomationError)
+  {
+    for (index, definitionNode) in definitionNodes.enumerated() {
+      for (position, input) in definitionNode.from.enumerated() {
+        guard let after = input.after, after > now else { continue }
+        throw .invalid(
+          "nodes[\(index)].from[\(position)].after: \(SessionEvent.iso8601(after)) is later than now "
+            + "(\(SessionEvent.iso8601(now))); pass the current time or an earlier one")
+      }
+    }
   }
 
   /// ノードの `id` を確かめる: この自動化の今のノードだけ・重なりなし・`id` の無いノードの鍵が外れるノードの鍵と同じでない。

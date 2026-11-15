@@ -30,10 +30,12 @@ extension AutomationReference {
     also take names (JAN, MON; weekday 0 and 7 are Sunday); no @daily shorthands and no L W # ?. \
     Leave the day or the weekday as *; an expression that never matches is refused. Weekdays at \
     9:00 is "0 9 * * 1-5".
-    - `from`: the upstream nodes, each a key or an object with `node` (the key), `take` and \
-    `maxAgeHours`. `take` is `new` (the default: only rows not yet received) or `all` (every valid \
-    row of that upstream, every run); `maxAgeHours` (1-87600) drops older rows. Both belong to \
-    the receiver. An input that takes `new` and has no `maxAgeHours` comes back as a key.
+    - `from`: the upstream nodes, each a key or an object with `node` (the key), `take`, \
+    `maxAgeHours` and `after`. `take` is `new` (the default: only rows not yet received) or `all` \
+    (every valid row of that upstream, every run); `maxAgeHours` (1-87600) drops older rows; \
+    `after`, an ISO 8601 time not later than now, drops rows that became valid or were created at \
+    or before it. All belong to the receiver. An input that takes `new` and has neither \
+    `maxAgeHours` nor `after` comes back as a key.
     - A command: `command` runs with /bin/sh -c. `directory` is relative to the workspace root \
     ("." for the root) and required when the node runs in a workspace (its own `workspace`, or the \
     automation's); otherwise it is absolute, or left out for the home folder. A run whose workspace \
@@ -118,9 +120,10 @@ extension AutomationReference {
     - With `take` `new`, a receiver gets the items and events added since it last read; with `all`, \
     every valid item and every event in the window, every run (with `maxAgeHours`, a recent window \
     each time).
-    - Rows are dropped for the first of: older than `maxAgeHours`; for a judge, rows whose `link` is \
-    one of its proposals that is not open (accepted, dismissed, resolved or unreadable); an older \
-    row with the same downstream id; beyond `maxItems`. Rows with the same `link` are all kept.
+    - Rows are dropped for the first of: older than `maxAgeHours` or not after `after`; for a \
+    judge, rows whose `link` is one of its proposals that is not open (accepted, dismissed, \
+    resolved or unreadable); an older row with the same downstream id; beyond `maxItems`. Rows \
+    with the same `link` are all kept.
     - A receiver takes all its rows in one run, whatever their number and size. Without limits \
     nothing is dropped: while a node keeps failing its unread rows grow. Write `maxItems` and \
     `maxAgeHours` where cost or freshness matters.
@@ -198,8 +201,9 @@ extension AutomationReference {
     they were added), but an added `arrival` node runs on writing when its upstream already has \
     rows for it.
     - Orbe never goes back over rows a node already took because its definition changed. To judge \
-    seen items again by a new standard, or to keep a new node from taking what exists now, prepare \
-    the inputs yourself before writing.
+    seen items again by a new standard, prepare the inputs yourself before writing. To keep a node \
+    added to an existing upstream from taking what exists now, write the current time (UTC) as the \
+    `after` of its input.
     """
 
   /// 定義の例の節（`orb automation --help` に出す。MCP の説明には長さのために載せない）。

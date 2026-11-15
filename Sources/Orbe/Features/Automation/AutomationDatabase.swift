@@ -230,13 +230,13 @@ final class AutomationDatabase {
       try db.run(
         """
         INSERT INTO node_edges (automation_id, from_node_id, to_node_id, position, take,
-          max_age_hours, read_item_seq, read_event_seq)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          max_age_hours, read_item_seq, read_event_seq, after_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
           .integer(Int64(automation)), .integer(from), .integer(to), .integer(Int64(position)),
           .text(edge.take.rawValue), edge.maxAgeHours.map { .integer(Int64($0)) } ?? .null,
-          .integer(read.0), .integer(read.1),
+          .integer(read.0), .integer(read.1), edge.after.map(Self.instant) ?? .null,
         ])
     }
   }

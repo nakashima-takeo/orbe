@@ -69,7 +69,7 @@ enum AutomationIntake {
     let now: Date
   }
 
-  /// `node` が `rows` から取る行を選ぶ。古さ → 判定だけの捨て方（判断待ちでない覚えている候補のリンク）→ 同じ id の古い方 →
+  /// `node` が `rows` から取る行を選ぶ。古さ（古さの上限と読む行の下限の時刻）→ 判定だけの捨て方（判断待ちでない覚えている候補のリンク）→ 同じ id の古い方 →
   /// 件数の上限 の順に捨て、残りを古い順に取る。読んだ位置は上限の番号まで進める。
   static func read(
     by node: AutomationGraph.Node, _ rows: [Row], ceilings: [Ceiling], in context: Context
@@ -93,7 +93,8 @@ enum AutomationIntake {
       reach: reach(ceilings))
   }
 
-  /// 古さで捨て、判定だけは判断待ちでない覚えている候補のリンクの行を捨てる。残りと捨てた行（古い順）を返す。
+  /// 古さ（古さの上限を過ぎた・読む行の下限の時刻以前）で捨て、判定だけは判断待ちでない覚えている候補のリンクの行を捨てる。
+  /// 残りと捨てた行（古い順）を返す。
   private static func filtered(
     _ rows: [Row], by node: AutomationGraph.Node, _ edges: [AutomationNodeID: AutomationNodeEdge],
     _ context: Context
@@ -101,9 +102,7 @@ enum AutomationIntake {
     var remaining: [Row] = []
     var dropped: [Drop] = []
     for row in rows {
-      if let hours = edges[row.from]?.maxAgeHours,
-        context.now.timeIntervalSince(row.at) > TimeInterval(hours) * 3600
-      {
+      if let edge = edges[row.from], tooOld(row, edge, now: context.now) {
         dropped.append(Drop(row: row, reason: .expired))
       } else if node.role == .judge, let link = row.link, context.closed(link) {
         dropped.append(Drop(row: row, reason: .closed))
@@ -112,6 +111,14 @@ enum AutomationIntake {
       }
     }
     return (remaining, dropped)
+  }
+
+  /// 行が、つながりの古さの上限を過ぎたか、読む行の下限の時刻以前か。
+  private static func tooOld(_ row: Row, _ edge: AutomationNodeEdge, now: Date) -> Bool {
+    if let hours = edge.maxAgeHours, now.timeIntervalSince(row.at) > TimeInterval(hours) * 3600 {
+      return true
+    }
+    return edge.after.map { row.at <= $0 } ?? false
   }
 
   /// 読んだ位置の進め先——つながりと表ごとに上限の番号まで（その間で取らなかった番号は、読む前に無効になった項目・版の追加や
