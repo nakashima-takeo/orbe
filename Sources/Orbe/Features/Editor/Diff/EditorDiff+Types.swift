@@ -15,6 +15,8 @@ extension EditorDiff {
   enum Kind: Hashable {
     case workingTree
     case staged
+    /// PR（手元のリポジトリと PR の同一性）。コミットは識別に入れない——PR に push があっても同じタブのまま。
+    case pullRequest(PullRequestState.Key)
   }
 
   /// 見せ方（アプリ全体で 1 つ。→ `EditorDiffModeState`）。
@@ -37,8 +39,13 @@ extension EditorDiff {
     case conflicted
     /// git から取れない。
     case failed
-    /// 両側とも無い（作業ツリー: 作業ツリーにも index にも無い。ステージ済み: HEAD にも index にも無い）。
+    /// 両側とも無い（作業ツリー: 作業ツリーにも index にも無い。ステージ済み: HEAD にも index にも無い。PR: マージベースにも
+    /// PR の先頭にも無い）。
     case nowhere
+    /// PR のコミットが手元に無く、取りに行っても揃わない。
+    case pullRequestCommitsMissing
+    /// PR がベースブランチと共通のコミットを持たない。
+    case pullRequestUnrelated
   }
 
   /// 見せられる中身。

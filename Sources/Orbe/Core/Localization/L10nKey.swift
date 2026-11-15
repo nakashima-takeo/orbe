@@ -555,6 +555,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorDiffFailed
   case editorDiffNowhereInWorkingTree
   case editorDiffNowhereStaged
+  case editorDiffPullRequest
+  case editorDiffNowherePullRequest
+  case editorDiffPullRequestCommitsMissing
+  case editorDiffPullRequestUnrelated
 
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle

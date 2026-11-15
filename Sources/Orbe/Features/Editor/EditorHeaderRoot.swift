@@ -85,7 +85,7 @@ struct FileTabView: View {
         .foregroundStyle(tab.isActive ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
       if let kind = tab.diffKind {
-        Text(l10n.string(Self.note(of: kind)))
+        Text(Self.note(of: kind, l10n))
           .italic(tab.isPreview)
           .font(Font.theme.editorDiffNote)
           .foregroundStyle(Color.theme.editorCaution)
@@ -119,10 +119,11 @@ struct FileTabView: View {
   }
 
   /// diff のタブの注記。
-  private static func note(of kind: EditorDiff.Kind) -> L10nKey {
+  private static func note(of kind: EditorDiff.Kind, _ l10n: LocalizationStore) -> String {
     switch kind {
-    case .workingTree: .editorDiffWorkingTree
-    case .staged: .editorDiffStaged
+    case .workingTree: l10n.string(.editorDiffWorkingTree)
+    case .staged: l10n.string(.editorDiffStaged)
+    case .pullRequest(let key): l10n.format(.editorDiffPullRequest, key.id.number)
     }
   }
 }

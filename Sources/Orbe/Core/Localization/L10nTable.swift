@@ -18,6 +18,7 @@ enum L10n {
     .merging(automationTable) { a, _ in a }
     .merging(secretaryTable) { a, _ in a }
     .merging(boardTable) { a, _ in a }
+    .merging(pullRequestTable) { a, _ in a }
     .merging(sourceControlTable) { a, _ in a }
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
