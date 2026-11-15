@@ -34,7 +34,8 @@ extension AutomationReference {
     `maxAgeHours` and `after`. `take` is `new` (the default: only rows not yet received) or `all` \
     (every valid row of that upstream, every run); `maxAgeHours` (1-87600) drops older rows; \
     `after`, an ISO 8601 time not later than now, drops rows that became valid or were created at \
-    or before it. All belong to the receiver. An input that takes `new` and has neither \
+    or before it, and is allowed only on an input from a node that exists now (not one the same \
+    write adds, so a new automation has none). All belong to the receiver. An input that takes `new` and has neither \
     `maxAgeHours` nor `after` comes back as a key.
     - A command: `command` runs with /bin/sh -c. `directory` is relative to the workspace root \
     ("." for the root) and required when the node runs in a workspace (its own `workspace`, or the \
@@ -122,14 +123,15 @@ extension AutomationReference {
     every valid item and every event in the window, every run (with `maxAgeHours`, a recent window \
     each time).
     - Rows are dropped for the first of: older than `maxAgeHours` or not after `after`; for a \
-    judge, rows whose `link` is one of its proposals that is not open (accepted, dismissed, \
-    resolved or unreadable); an older row with the same downstream id; beyond `maxItems`. Rows \
-    with the same `link` are all kept.
+    judge, rows whose `link` is one of its proposals people took or dismissed, or an unreadable \
+    one, and rows of a `link` it resolved unless one of them was added or changed since it last \
+    read; an older row with the same downstream id; beyond `maxItems`. Rows with the same `link` \
+    are all kept.
     - A receiver takes all its rows in one run, whatever their number and size. Without limits \
     nothing is dropped: while a node keeps failing its unread rows grow. Write `maxItems` and \
     `maxAgeHours` where cost or freshness matters.
-    - A node added later reads every current item of its upstream, but only events created after \
-    it was added.
+    - A node added later reads every current item of its upstream (unless its input has `after`), \
+    but only events created after it was added.
     - A `newArrivals` fetch gets the start of its last successful run: a command as `ORBE_SINCE` \
     (ISO 8601, UTC), an agent as a sentence. Fetch what came after it; overlap is fine. Until a run \
     has succeeded, it gets none.
@@ -155,10 +157,12 @@ extension AutomationReference {
     it, an open proposal goes away when its judge resolves it, or when its basis is gone: the item \
     it was based on is no longer valid (it left its `currentSet` result, or its node was removed or \
     changed `coverage`), or, when it was based only on events, the event it read passed \
-    `retentionDays`. A lost basis waits while a direct input of the judge still has a row with the \
-    `link`. A proposal people took or dismissed is remembered while a node feeding the judge still \
-    has a current row with its `link` (an event until it passes `retentionDays`), so later rows \
-    with that `link`, such as replies in the same thread, do not reach the judge.
+    `retentionDays`. A lost basis waits while a direct input of the judge still has a current row \
+    with the `link` (a valid item, or an event within `retentionDays`, whose source items are all \
+    valid). Taken, dismissed and resolved proposals are remembered until the same happens. While a \
+    proposal people took or dismissed is remembered, rows with its `link`, such as replies in the \
+    same thread, do not reach the judge; rows of a resolved one reach it again once one of them is \
+    new or changed, and proposing it then replaces the resolved proposal.
 
     REPORT, WORK, SIDE EFFECT
     - A report is text for people. Its first line, cut at 500 characters with "…", is the summary \
@@ -204,9 +208,11 @@ extension AutomationReference {
     they were added), but an added `arrival` node runs on writing when its upstream already has \
     rows for it.
     - Orbe never goes back over rows a node already took because its definition changed. To judge \
-    seen items again by a new standard, prepare the inputs yourself before writing. To keep a node \
-    added to an existing upstream from taking what exists now, write the current time (UTC) as the \
-    `after` of its input.
+    seen items again by a new standard, prepare the inputs yourself before writing. To keep added \
+    nodes from taking what exists now, write the current time (UTC) as the `after` of the input \
+    by which they read from an existing node.
+    - An `arrival` `currentSet` process whose `from`, `instruction` or `command` changed keeps \
+    its items, and the proposals made from them, until its upstream changes next.
     """
 
   /// 定義の例の節（`orb automation --help` に出す。MCP の説明には長さのために載せない）。
