@@ -9,7 +9,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: PR のコミットを取りに行くたびに利用者のリポジトリへ ref・FETCH_HEAD・タグが増える（端末で
 /// FETCH_HEAD を使う手順が別のコミットを指す）。rename されたファイルを元のパスと比べられず、全部の行が追加に見える。
-/// 手元とのずれの数が逆になる。未公開のブランチを公開済みと読み、PR の作成のボタンが押せてしまう。
+/// 手元とのずれの数が逆になる。
 @MainActor
 final class GitRepoCommitsTests: OrbeTestCase {
   private var temp: TempGitRepo!

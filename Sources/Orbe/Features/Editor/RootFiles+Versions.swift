@@ -8,7 +8,7 @@ extension RootFiles {
     let revision: Revision
   }
 
-  /// 追う版。関心に入るのは index と HEAD だけ——根のサービスは、この 2 つの表から OID を引いて本文を取り直す。
+  /// 追う版。関心に入るのは index と HEAD だけ——根のサービスは、この 2 つの版の OID を引いて本文を取り直す。
   enum Revision: Hashable {
     case index
     case head
