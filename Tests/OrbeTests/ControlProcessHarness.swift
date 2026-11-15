@@ -129,6 +129,25 @@ final class ControlProcess {
     return env
   }
 
+  /// `run` と同じく子プロセスを起動して回収するが、実行ファイルの親を、制御端末を持たないプロセス（新しいセッションの先頭）にする。
+  /// デーモンのように端末から切り離された親が実行ファイルを起動する状況を、テストを動かす環境が端末を持つかどうかに関わらず作る。
+  static func runDetached(
+    _ executable: URL, _ args: [String], env: [String: String], stdin: String? = nil,
+    cwd: String? = nil, file: StaticString = #filePath, line: UInt = #line
+  ) -> Outcome {
+    run(
+      URL(fileURLWithPath: "/usr/bin/perl"), ["-MPOSIX", "-e", detach, executable.path] + args,
+      env: env, stdin: stdin, cwd: cwd, file: file, line: line)
+  }
+
+  /// プロセスグループの先頭は setsid できないので、fork した子が setsid で端末から切り離してから、実行ファイルを起動する。
+  private static let detach = """
+    defined(my $pid = fork) or die "fork: $!";
+    if ($pid) { waitpid($pid, 0); exit($? >> 8) }
+    POSIX::setsid() or die "setsid: $!";
+    exit(system(@ARGV) >> 8);
+    """
+
   /// 子プロセスを起こして終了・出力を回収する。main を塞がずに待つのがこの関数の要点。
   static func run(
     _ executable: URL, _ args: [String], env: [String: String], stdin: String? = nil,
