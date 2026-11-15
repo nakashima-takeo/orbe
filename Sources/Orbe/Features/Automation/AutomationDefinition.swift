@@ -33,7 +33,7 @@ struct AutomationDefinition: Equatable {
     }
   }
 
-  /// `from` の要素。鍵だけの文字列は、新しい行だけを取り古さの上限を持たない。
+  /// `from` の要素。鍵だけの文字列は、新しい行だけを取り、古さの上限も下限の時刻も持たない。
   struct Input: Equatable {
     var nodeKey: String
     var take: AutomationTake = .new

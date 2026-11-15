@@ -123,9 +123,9 @@ extension AutomationDefinition.Node: Codable {
   }
 }
 
-/// `"<鍵>"`（新しい行だけ・古さの上限なし）か `{"node": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n, "after"?: 時刻}`。
-/// `after` は ISO 8601 の時刻で、保存の精度（ミリ秒）に丸めて読む。書くときは、取り方も古さの上限も省けるつながりを鍵の文字列で
-/// 書く。
+/// `"<鍵>"`（新しい行だけ・古さの上限も下限の時刻もなし）か
+/// `{"node": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n, "after"?: 時刻}`。`after` は ISO 8601 の時刻で、保存の精度
+/// （ミリ秒）に丸めて読む。書くときは、取り方も古さの上限も下限の時刻も省けるつながりを鍵の文字列で書く。
 extension AutomationDefinition.Input: Codable {
   private enum CodingKeys: String, CodingKey, CaseIterable {
     case nodeKey = "node", take, maxAgeHours, after
