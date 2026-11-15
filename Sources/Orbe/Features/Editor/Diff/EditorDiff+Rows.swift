@@ -30,6 +30,17 @@ extension EditorDiff {
       }
     }
     placeFirstView(on: surface)
+    sendVisibleRemovedLines(on: surface)
+  }
+
+  /// インラインなら、新しい側の面 `surface` に見えている削除行（古い側の行）を古い側の文書へ渡し、その色を先に作らせる。
+  /// 並びを置くたびにも渡す——隠れている間や見せている間に作り直した古い側の文書は、見えている範囲をまだ受けていない。
+  func sendVisibleRemovedLines(on surface: any TextSurface) {
+    guard presented == .inline, let old, let hunks = currentRows?.hunks else { return }
+    let viewport = surface.viewport
+    old.setVisible(
+      lines: DiffRows.oldLines(
+        from: viewport.top, count: Int(viewport.visibleLines.rounded(.up)), hunks))
   }
 
   /// 面に初めて見せる位置へ送る——位置を決めた後に作り直した面なら前の面で先頭に見えていた所、まだなら、開いた時点に

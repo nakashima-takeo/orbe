@@ -231,11 +231,7 @@ final class EditorDiff: RootFilesObserver {
   func viewportDidChange() {
     guard presented != nil, let surface = newSurface else { return }
     if placement != .placed || carried != nil { placeFirstView(on: surface) }
-    guard presented == .inline, let old, let hunks = currentRows?.hunks else { return }
-    let viewport = surface.viewport
-    old.setVisible(
-      lines: DiffRows.oldLines(
-        from: viewport.top, count: Int(viewport.visibleLines.rounded(.up)), hunks))
+    sendVisibleRemovedLines(on: surface)
   }
 
   /// 作業ツリー diff の文書の本文が変わった（見せている間に外部変更で差し替わった）。古い側が文書の底ではない diff（古い
