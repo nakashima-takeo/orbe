@@ -87,7 +87,7 @@ extension MetalTextSurface {
     return true
   }
 
-  /// 区間の始まりが重ならない昇順で、どれも 0..<`lineCount` に収まる。
+  /// 区間の始まりが重複なく昇順に並び、どれも 0..<`lineCount` に収まる。
   private static func spansAreValid(_ spans: [LineSpan], lineCount: Int) -> Bool {
     var previous = Int.min
     for span in spans {
@@ -97,7 +97,7 @@ extension MetalTextSurface {
     return true
   }
 
-  /// 差し込んだ行が指す行（指していれば）が、どれも出どころの 0..<`sourceLines` に収まる。
+  /// 差し込んだ行が指す行は、指すものがあれば、どれも出どころの 0..<`sourceLines` に収まる。
   private static func insertedLinesAreValid(_ insertions: [RowInsertion], sourceLines: Int) -> Bool
   {
     for insertion in insertions {
