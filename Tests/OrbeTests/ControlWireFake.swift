@@ -136,15 +136,15 @@ final class FakeControlTarget: ControlTarget {
   private(set) var setWaitConditions: [SetWaitCondition] = []
   private(set) var deletedTaskIds: [Int] = []
   private(set) var startedTasks: [TaskStartRequest] = []
-  private(set) var setAutomations: [FakeSetAutomation] = []
-  private(set) var runLists: [FakeRunList] = []
+  var setAutomations: [FakeSetAutomation] = []
+  var runLists: [FakeRunList] = []
   var runTools: [FakeRunTool] = []
-  private(set) var ranAutomations: [(automationId: Int, nodeKey: String?)] = []
-  private(set) var pausedAutomations: [FakePause] = []
-  private(set) var deletedAutomationIds: [Int] = []
-  private(set) var proposalLists: [Int?] = []
+  var ranAutomations: [(automationId: Int, nodeKey: String?)] = []
+  var pausedAutomations: [FakePause] = []
+  var deletedAutomationIds: [Int] = []
+  var proposalLists: [Int?] = []
   var triedAutomations: [FakeTry] = []
-  private(set) var readTrials: [ReadTrial] = []
+  var readTrials: [ReadTrial] = []
   private(set) var boardLists: [UUID] = []
   private(set) var addedBoardWidgets: [(workspaceId: UUID, widget: BoardWidget)] = []
   private(set) var removedBoardWidgets: [(workspaceId: UUID, widget: BoardWidget)] = []
@@ -331,57 +331,6 @@ final class FakeControlTarget: ControlTarget {
   ) {
     startedTasks.append(request)
     completion(outcome(["workdir": "/w"]))
-  }
-
-  func controlListAutomations() -> Result<Any, ControlError> {
-    outcome(["automations": [Any]()])
-  }
-
-  func controlSetAutomation(
-    automationId: Int?, version: Int?, _ definition: [String: Any]
-  ) -> Result<
-    Any, ControlError
-  > {
-    setAutomations.append(FakeSetAutomation(automationId, version, definition))
-    return outcome(["automation": ["automationId": automationId ?? 1]])
-  }
-
-  func controlListAutomationRuns(automationId: Int, nodeKey: String?, before: Int?, limit: Int?)
-    -> Result<Any, ControlError>
-  {
-    runLists.append(FakeRunList(nodeKey: nodeKey, before: before, limit: limit))
-    return outcome(["runs": [Any]()])
-  }
-
-  func controlRunAutomation(automationId: Int, nodeKey: String?) -> Result<Any, ControlError> {
-    ranAutomations.append((automationId, nodeKey))
-    return outcome(["ok": true])
-  }
-
-  func controlPauseAutomation(automationId: Int, nodeKey: String?, paused: Bool) -> Result<
-    Any, ControlError
-  > {
-    pausedAutomations.append(
-      FakePause(automationId: automationId, nodeKey: nodeKey, paused: paused))
-    return outcome(["automation": ["automationId": automationId]])
-  }
-
-  func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError> {
-    deletedAutomationIds.append(automationId)
-    return outcome(["ok": true])
-  }
-
-  func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError> {
-    proposalLists.append(automationId)
-    return outcome(["proposals": [Any]()])
-  }
-
-  func controlAutomationTrial(
-    trialId: Int, wait: Bool, timeoutMs: Int,
-    completion: @escaping (Result<Any, ControlError>) -> Void
-  ) {
-    readTrials.append(ReadTrial(trialId: trialId, wait: wait, timeoutMs: timeoutMs))
-    completion(outcome(["trial": [String: Any]()]))
   }
 }
 
