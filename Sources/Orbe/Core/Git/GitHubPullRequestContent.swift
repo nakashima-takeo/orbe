@@ -39,7 +39,7 @@ struct GitHubPullRequestContent: Equatable {
   let author: String?
   let baseRefName: String
   let headRefName: String
-  /// 元のブランチの先頭のコミット（分かれ目ではない）。
+  /// ベースブランチの先頭のコミット（マージベースではない）。
   let baseCommit: String
   /// PR の先頭のコミット。
   let headCommit: String
@@ -48,8 +48,8 @@ struct GitHubPullRequestContent: Equatable {
 }
 
 /// PR の中身の問い合わせの引数と、答えの読み方。コミットと変更ファイルは `pageSize` 件ずつのページで読み、1 ページを
-/// 1 回の gh 呼び出しにする（gh のタイムアウトは 1 回の呼び出しごとに効く）。どのページでも両端のコミットを読み、読み手が 1 ページ目と
-/// 比べられるようにする。
+/// 1 回の gh 呼び出しにする（gh のタイムアウトは 1 回の呼び出しごとに効く）。どのページでもベースと PR の先頭のコミットを
+/// 読み、読み手が 1 ページ目と比べられるようにする。
 enum GitHubPullRequestQuery {
   /// 1 ページの件数（GitHub GraphQL の上限）。
   static let pageSize = 100
