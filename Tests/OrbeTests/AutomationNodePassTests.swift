@@ -15,15 +15,19 @@ import XCTest
 final class AutomationNodePassTests: AutomationNodePassTestCase {
   // MARK: - 起こし方
 
-  /// 上限はノードの経過時間だけで、無出力では打ち切らない——ノードの上限は利用者が決める `timeoutMinutes` の一本にするため。
+  /// agent もコマンドも、上限はノードの経過時間だけで、無出力では打ち切らない——ノードの上限は利用者が決める `timeoutMinutes` の
+  /// 一本にするため。
   func testNodeIsLimitedOnlyByItsTimeoutNotBySilence() {
-    var definitionNode = AutomationGraphTests.agent("r", from: ["f"])
-    definitionNode.action.timeoutMinutes = 3
+    var agent = AutomationGraphTests.agent("r", from: ["f"])
+    agent.action.timeoutMinutes = 3
+    var command = AutomationGraphTests.command("s", from: ["f"])
+    command.action.timeoutMinutes = 3
 
-    start(definitionNode, .report, .report([]))
+    start(agent, .report, .report([]))
+    start(command, .sideEffect, .sideEffect([row("a")], runId: "7-s-1"))
 
-    XCTAssertEqual(jobs.calls[0].job.limits.elapsed, 180)
-    XCTAssertNil(jobs.calls[0].job.limits.idle)
+    XCTAssertEqual(jobs.calls.map(\.job.limits.elapsed), [180, 180])
+    XCTAssertEqual(jobs.calls.map(\.job.limits.idle), [nil, nil])
   }
 
   /// 前回成功の目印は新着の流れの取得にだけ渡る（コマンドは `ORBE_SINCE`、agent は依頼文）。今の集合に渡すと前回以降の分だけが
@@ -152,20 +156,33 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
     XCTAssertNotNil(failed, "コマンドの取得は外れた件があれば失敗")
   }
 
-  /// ツールが揃わず止まった取得は失敗——0 件と読むと、今の集合の候補が一斉に下がる。
-  func testFetchThatCouldNotGetItsToolsFails() throws {
-    start(
-      AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
-      .fetch, .fetch(since: nil, reachesJudge: false))
+  /// agent の CLI が 0 以外で終わった・時間切れ・ツールが揃わず止まった・応答を返さずに終わった取得は、終わり方と標準エラーの
+  /// 抜粋を言って失敗する——0 件と読むと、今の集合の候補が一斉に下がる。
+  func testFetchWhoseAgentEndedAbnormallyFailsSayingHow() throws {
+    let endings: [(BackgroundEnding, String)] = [
+      (.exited(1), #"the node "f" ended: exited 1: boom"#),
+      (.limited(.elapsed), #"the node "f" ended: stopped at the time limit: boom"#),
+      (
+        .toolsUnavailable([Self.tool]),
+        #"the node "f" ended: tools unavailable: \#(Self.tool): boom"#
+      ),
+      (.exited(0), #"the node "f" ended without a reply: boom"#),
+    ]
+    for (ending, expected) in endings {
+      outcomes = []
+      start(
+        AutomationGraphTests.agent(
+          "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
+        .fetch, .fetch(since: nil, reachesJudge: false))
 
-    jobs.finish(
-      0,
-      BackgroundRunResult(
-        commandLine: "claude -p", startedAt: now, endedAt: now,
-        ending: .toolsUnavailable([Self.tool]), output: .agent(reply: nil, stderr: .init())))
+      jobs.finish(
+        jobs.calls.count - 1,
+        BackgroundRunResult(
+          commandLine: "claude -p", startedAt: now, endedAt: now, ending: ending,
+          output: .agent(reply: nil, stderr: .init(data: Data("boom\n".utf8)))))
 
-    XCTAssertNotNil(failed, "\(outcomes)")
+      XCTAssertEqual(failed, expected, "\(ending)")
+    }
   }
 
   /// 取得の agent が失敗を申告した回は失敗——0 件と読むと、今の集合の候補が一斉に下がる。
