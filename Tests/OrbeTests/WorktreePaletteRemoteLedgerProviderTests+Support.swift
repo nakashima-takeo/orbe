@@ -30,8 +30,9 @@ extension WorktreePaletteRemoteLedgerProviderTests {
   }
 
   /// 偽 `gh` を PATH に置く。認証確認は通り、正式名は `resolve/<owner>__<name>` の中身を返し（無ければ
-  /// 答えずに落ちる）、ブランチの PR は `branch/<name>` を返す（`branch/<name>.stderr` があれば標準エラーへ出し、
-  /// `branch/<name>.exit` があればその終了コードで終わる）。`<種別>.gate`
+  /// 答えずに落ちる）、ブランチの PR は `branch/<name>` を返す（リポジトリを `-R` で名指しした問い合わせは、
+  /// `branch/<owner>__<repo>__<name>` があればそれ。`.stderr` があれば標準エラーへ出し、`.exit` があればその終了コードで
+  /// 終わる）。`<種別>.gate`
   /// がある間はその問い合わせが着地しない。正式名とブランチの PR の問い合わせは `calls.log` に残し、
   /// それ以外の問い合わせ（open な Issue・PR の一覧など）も `U` として残す。
   func stageGh() throws {
@@ -46,12 +47,19 @@ extension WorktreePaletteRemoteLedgerProviderTests {
       D="\(d)"
       wait_gate() { while [ -e "$D/$1.gate" ]; do sleep 0.05; done; }
       if [ "$1" = "auth" ]; then wait_gate auth; echo token; exit 0; fi
-      if [ "$1" = "pr" ]; then
-        head=""
-        while [ $# -gt 0 ]; do [ "$1" = "--head" ] && head="$2"; shift; done
+      if [ "$1" = "pr" ] || [ "$1" = "-R" ]; then
+        head=""; repo=""
+        while [ $# -gt 0 ]; do
+          [ "$1" = "--head" ] && head="$2"
+          [ "$1" = "-R" ] && repo="$2"
+          shift
+        done
         echo "H $head" >> "$D/calls.log"
+        [ -n "$repo" ] && echo "P $repo $head" >> "$D/calls.log"
         wait_gate branch
         f="$D/branch/$(echo "$head" | tr / _)"
+        r="$D/branch/$(echo "$repo" | sed 's|/|__|')__$(echo "$head" | tr / _)"
+        [ -n "$repo" ] && [ -e "$r" ] && f="$r"
         if [ -e "$f" ]; then cat "$f"; else printf '[]'; fi
         [ -e "$f.stderr" ] && cat "$f.stderr" >&2
         [ -e "$f.exit" ] && exit "$(cat "$f.exit")"
@@ -87,8 +95,11 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     ShellPATH.shared = ShellPATH(probe: { "\(path):/usr/bin:/bin" })
   }
 
-  func answer(_ name: String, found canonical: String) throws {
-    try write(#"{"data":{"repository":{"nameWithOwner":"\#(canonical)"}}}"#, to: resolveFile(name))
+  func answer(_ name: String, found canonical: String, parent: String? = nil) throws {
+    let parentField = parent.map { #","parent":{"nameWithOwner":"\#($0)"}"# } ?? ""
+    try write(
+      #"{"data":{"repository":{"nameWithOwner":"\#(canonical)"\#(parentField)}}}"#,
+      to: resolveFile(name))
   }
 
   /// 実 gh と同じく、存在しない（見えない）リポジトリは部分エラーの JSON を出して非 0 で終わる。
@@ -106,12 +117,23 @@ extension WorktreePaletteRemoteLedgerProviderTests {
   /// ブランチの PR 1 件（`gh pr list --json` の 1 要素）。
   func branchPR(
     _ number: Int, head: String, state: String, base: String = "main", from repository: String,
-    url: String? = nil
+    url: String? = nil, createdAt: String? = nil
   ) -> String {
     let parts = repository.split(separator: "/").map(String.init)
     return #"{"number":\#(number),"headRefName":"\#(head)","state":"\#(state)","#
       + #""baseRefName":"\#(base)","headRepositoryOwner":{"login":"\#(parts[0])"},"#
-      + #""headRepository":{"name":"\#(parts[1])"}"# + (url.map { #","url":"\#($0)""# } ?? "") + "}"
+      + #""headRepository":{"name":"\#(parts[1])"}"# + (url.map { #","url":"\#($0)""# } ?? "")
+      + (createdAt.map { #","createdAt":"\#($0)""# } ?? "") + "}"
+  }
+
+  /// リポジトリ `repository` を名指ししたときの、ブランチ `head` の PR。
+  func serveBranchPullRequests(_ head: String, in repository: String, _ json: String) throws {
+    try write(
+      json,
+      to: ghDir.appendingPathComponent(
+        "branch/\(repository.replacingOccurrences(of: "/", with: "__"))__"
+          + head.replacingOccurrences(of: "/", with: "_")
+      ).path)
   }
 
   func serveBranchPullRequests(_ head: String, _ json: String) throws {
@@ -129,7 +151,8 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     try FileManager.default.removeItem(at: ghDir.appendingPathComponent("\(kind).gate"))
   }
 
-  /// 偽 `gh` が受けた問い合わせ（`R` = 正式名、`H` = ブランチの PR、`U` = それ以外）の対象を順に返す。
+  /// 偽 `gh` が受けた問い合わせ（`R` = 正式名、`H` = ブランチの PR、`P` = リポジトリを名指ししたブランチの PR の
+  /// 「<リポジトリ> <ブランチ>」、`U` = それ以外）の対象を順に返す。
   func calls(_ kind: String) -> [String] {
     let text =
       (try? String(contentsOf: ghDir.appendingPathComponent("calls.log"), encoding: .utf8)) ?? ""

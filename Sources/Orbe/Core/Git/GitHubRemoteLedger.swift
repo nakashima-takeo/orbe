@@ -71,7 +71,7 @@ enum GitHubRemoteLedger: Equatable {
     for (remote, url) in remotes {
       if let read = GitHubRepoName(remoteURL: url) {
         switch answers[read] {
-        case .found(let name): repositories[remote] = .github(name)
+        case .found(let name, _): repositories[remote] = .github(name)
         case .unverified: repositories[remote] = .unverified
         case nil:
           self = .pending

@@ -98,6 +98,64 @@ extension WorktreePaletteRemoteLedgerProviderTests {
       .gitHub(GitHubBranchRef(repo: mine, branch: "other"), pullRequests: .success([])))
   }
 
+  /// PR は、同一性のリポジトリを名指しして引く。fork でなければ問い合わせは 1 回。
+  func testABranchOfANonForkAsksOnlyItsOwnRepository() throws {
+    addRemote("origin", "me/r")
+    try answer("me/r", found: "me/r")
+    XCTAssertTrue(git(["branch", "feat"]).isSuccess)
+
+    _ = try lookup(["feat"])
+
+    XCTAssertEqual(calls("P"), ["me/r feat"])
+  }
+
+  /// push 先が fork なら、fork と親の両方を名指しして引き、作成日時の新しい順にまとめる——fork から親へ出した PR も、
+  /// fork の中の PR も、そのブランチの PR になる。
+  func testAForkBranchAlsoAsksTheParentAndMergesByCreation() throws {
+    addRemote("origin", "me/r")
+    try answer("me/r", found: "me/r", parent: "up/r")
+    XCTAssertTrue(git(["branch", "feat"]).isSuccess)
+    try serveBranchPullRequests(
+      "feat", in: "me/r",
+      "["
+        + branchPR(
+          3, head: "feat", state: "CLOSED", from: "me/r", createdAt: "2026-01-01T00:00:00Z")
+        + "]")
+    try serveBranchPullRequests(
+      "feat", in: "up/r",
+      "["
+        + [
+          branchPR(9, head: "feat", state: "OPEN", from: "me/r", createdAt: "2026-02-01T00:00:00Z"),
+          branchPR(
+            8, head: "feat", state: "OPEN", from: "stranger/r", createdAt: "2026-01-15T00:00:00Z"),
+        ].joined(separator: ",") + "]")
+
+    let found = try lookup(["feat"])
+
+    XCTAssertEqual(Set(calls("P")), ["me/r feat", "up/r feat"])
+    XCTAssertEqual(found.branches["feat"]?.pullRequests?.map(\.number), [9, 3])
+  }
+
+  /// fork と親のどちらかの問い合わせが失敗すれば、そのブランチの答えは失敗——引けた側の PR だけで「無い」とも
+  /// 「これだけ」とも読ませない。
+  func testAFailedQueryOnEitherSideFailsTheForkBranch() throws {
+    addRemote("origin", "me/r")
+    try answer("me/r", found: "me/r", parent: "up/r")
+    XCTAssertTrue(git(["branch", "feat"]).isSuccess)
+    try serveBranchPullRequests(
+      "feat", in: "me/r", "[" + branchPR(3, head: "feat", state: "OPEN", from: "me/r") + "]")
+    let parentFile = ghDir.appendingPathComponent("branch/up__r__feat").path
+    try write("", to: parentFile)
+    try write("error connecting to api.github.com\n", to: parentFile + ".stderr")
+    try write("1", to: parentFile + ".exit")
+
+    let found = try lookup(["feat"])
+
+    XCTAssertEqual(
+      found.branches["feat"],
+      .gitHub(GitHubBranchRef(repo: mine, branch: "feat"), pullRequests: .failure(.unreachable)))
+  }
+
   /// 作成ページの URL は push の後に GitHub が案内するもの。ブランチ名の `/` は残し、URL で意味を持つ文字はエンコードする。
   func testThePullRequestCreationURL() {
     XCTAssertEqual(

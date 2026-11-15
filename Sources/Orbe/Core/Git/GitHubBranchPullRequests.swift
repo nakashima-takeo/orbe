@@ -143,20 +143,64 @@ final class GitHubBranchPullRequestLookup {
     }
   }
 
-  /// ブランチごとの、head が同一性と等しい PR。
+  /// ブランチごとの、head が同一性と等しい PR。問い合わせ先は、同一性のリポジトリ（push 先）と、それが fork なら親の
+  /// リポジトリ——fork から親へ出した PR も、fork の中の PR も引く。gh の既定（作業ディレクトリの remote から選ぶ
+  /// リポジトリ）に任せると、remote の名前の付け方で引ける PR が変わる。どれか 1 つの問い合わせが失敗すれば、その
+  /// ブランチの答えは失敗（ほかの問い合わせの PR だけで「無い」と読ませない）。
   private func pullRequests(
     _ repo: GitRepo, refs: [String: GitHubBranchRef],
     completion: @escaping ([String: Result<[GitHubBranchPR], GitHubFailure>]) -> Void
   ) {
     guard !refs.isEmpty else { return completion([:]) }
+    let parents = Self.parents(cache.entry(for: repo.commonDir)?.repositoryNames ?? [:])
+    var targets: [String: [GitHubRepoName]] = [:]
+    for (branch, ref) in refs {
+      targets[branch] = [ref.repo] + (parents[ref.repo].map { [$0] } ?? [])
+    }
+    let queries = refs.keys.sorted().flatMap { branch in
+      (targets[branch] ?? []).map { GitHubBranchPRQuery(head: branch, repository: $0) }
+    }
+    var fetched: [GitHubBranchPRQuery: Result<[GitHubBranchPR], GitHubFailure>] = [:]
     var landed: [String: Result<[GitHubBranchPR], GitHubFailure>] = [:]
-    gitHub.branchPullRequests(cwd: repo.root, heads: Array(refs.keys)) { head, fetched in
-      guard let ref = refs[head] else { return }
-      if case .success(let pullRequests) = fetched {
-        self.cache.setBranchPullRequests(pullRequests, head: head, for: repo.commonDir)
+    gitHub.branchPullRequests(cwd: repo.root, queries: queries) { query, result in
+      let branch = query.head
+      guard let ref = refs[branch], let repositories = targets[branch] else { return }
+      fetched[query] = result
+      let results = repositories.compactMap {
+        fetched[GitHubBranchPRQuery(head: branch, repository: $0)]
       }
-      landed[head] = fetched.map { GitHubBranchPR.filter($0, headedBy: ref) }
+      guard results.count == repositories.count else { return }
+      let merged = Self.merge(results)
+      if case .success(let pullRequests) = merged {
+        self.cache.setBranchPullRequests(pullRequests, head: branch, for: repo.commonDir)
+      }
+      landed[branch] = merged.map { GitHubBranchPR.filter($0, headedBy: ref) }
       if landed.count == refs.count { completion(landed) }
     }
+  }
+
+  /// 正式名の答えから、fork の正式名 → 親の正式名。
+  private static func parents(_ answers: [GitHubRepoName: GitHubRepositoryResolution])
+    -> [GitHubRepoName: GitHubRepoName]
+  {
+    var parents: [GitHubRepoName: GitHubRepoName] = [:]
+    for case .found(let name, let parent?) in answers.values { parents[name] = parent }
+    return parents
+  }
+
+  /// 問い合わせ先ごとの答え（push 先が先）を 1 つにする。失敗があれば最初の失敗にする。問い合わせ先が 1 つなら gh の並びのまま、
+  /// 2 つなら作成日時の新しい順。
+  private static func merge(_ results: [Result<[GitHubBranchPR], GitHubFailure>])
+    -> Result<[GitHubBranchPR], GitHubFailure>
+  {
+    var all: [[GitHubBranchPR]] = []
+    for result in results {
+      switch result {
+      case .failure(let failure): return .failure(failure)
+      case .success(let pullRequests): all.append(pullRequests)
+      }
+    }
+    guard all.count > 1 else { return .success(all.first ?? []) }
+    return .success(all.joined().sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") })
   }
 }
