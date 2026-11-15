@@ -117,7 +117,7 @@ extension WindowController {
     }
     // 読めない候補は、読めない記録と同じく分かる分だけで出す。
     let unreadable = automationStore.unreadableProposals.compactMap { proposal -> [String: Any]? in
-      if let automationId, automationStore.issuerId(ofJudge: proposal.judge) != automationId {
+      if let automationId, automationStore.issuer(ofJudge: proposal.judge)?.id != automationId {
         return nil
       }
       return ["proposalId": proposal.id, "link": proposal.link, "unreadable": true]
