@@ -5,7 +5,13 @@ extension RootFiles {
   /// 関心の単位——根からの相対パスと版。
   struct Version: Hashable {
     let path: String
-    let revision: GitRevision
+    let revision: Revision
+  }
+
+  /// 追う版。index と HEAD だけで、コミットの版は追わない（変わらない本文なので、読む側が `GitRepo.version` で直に読む）。
+  enum Revision: Hashable {
+    case index
+    case head
   }
 
   /// 版の本文の状態（OID ごとに決まる）。
