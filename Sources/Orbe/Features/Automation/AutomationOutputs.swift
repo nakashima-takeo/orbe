@@ -110,15 +110,18 @@ struct AutomationOutputs {
     return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
 
-  /// `id` の無い件・同じ `id` の 2 つ目は外れた件。
+  /// `id` が文字列でない件（無い・null・型違い）・同じ `id` の 2 つ目は外れた件。
   private mutating func processed(_ text: String, _ input: [AutomationNodeRow])
     -> [AutomationBrokenLine]
   {
     var (objects, broken) = Self.objectRows(text)
     let inputs = Dictionary(input.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
     for object in objects {
-      guard let id = AutomationPrompts.id(of: object.text) else {
-        broken.append(AutomationBrokenLine(line: object.line, fault: .missingKey("id")))
+      let id: String
+      switch JSONLines<ProcessedLine>.decode(object.text) {
+      case .success(let line): id = line.id
+      case .failure(let reason):
+        broken.append(AutomationBrokenLine(line: object.line, fault: AutomationLineFault(reason)))
         continue
       }
       guard fits(object.text, id: id, inherited: inputs[id]?.source != nil) else {
@@ -198,4 +201,9 @@ struct AutomationRow: Equatable {
 /// どんな JSON オブジェクトも受ける行（オブジェクトかは `JSONLines` が見る）。
 private struct AnyObjectLine: Decodable {
   init(from decoder: Decoder) throws {}
+}
+
+/// 処理の 1 件のうち、確かめで読む欄（ほかの欄はそのまま下流へ渡す）。
+private struct ProcessedLine: Decodable {
+  let id: String
 }
