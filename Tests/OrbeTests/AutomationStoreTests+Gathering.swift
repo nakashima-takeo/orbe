@@ -62,6 +62,7 @@ extension AutomationStoreTests {
     try Self.rewrite(store, id, definition)
 
     XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(try store.carried(id, "judge").withdrawn, 0, "書き換えで下げた分は withdrawn に数えない")
   }
 
   /// 支えていた入力とのつながりだけを外しても、判定の入力が変わるので、その場で下げる。

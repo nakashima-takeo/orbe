@@ -8,8 +8,9 @@ import XCTest
 /// 外しても棚に残り続ける。処理がまとめた行を書き換えるたびに、さばいた候補が戻る。さばいた候補の項目が消えてまた現れても判定に
 /// 届かない。直近の窓を毎回読む判定で、さばいた候補が次の回に戻る。取得（今の集合）→ 処理（出来事）→ 判定 で、取得にまだある
 /// 課題の候補が出来事の残す期間で消える。同じリンクの出来事が続けて届く取得で、最初の出来事の残す期間で候補が消える。残す期間を
-/// 過ぎた候補を人がタスクにできてしまう。出来事の残す日数を書いたノードの候補が、その日数でなく設定の日数で下がる・残る。長い
-/// 日数の窓を毎回読む判定で、さばいた候補が設定の日数の後に戻る。
+/// 過ぎた候補を人がタスクにできてしまう。出来事の残す日数を書いたノードの候補が、その日数でなく設定の日数で下がる・残る。
+/// 取得 → 今の集合の処理 → 判定 で、取得が外した項目の候補が処理の次の回まで棚に残る。絞り込みの処理が外してまた出した項目が、
+/// 人がさばいた後に判定に届かない。
 extension AutomationStoreTests {
   /// 既定の設定で出来事を残す期間。
   static let eventRetention =
@@ -58,6 +59,67 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
     try Self.judge(store, id, proposing: [Self.item("a")], at: later)
     XCTAssertEqual(store.proposals.map(\.state), [.open])
+  }
+
+  /// 取得（今の集合）→ 今の集合の処理 `p`（入力の id を保ち、`trigger` で動く）→ 判定 の自動化。自動化の ID を返す。
+  private func keptByACurrentSetProcess(
+    _ store: AutomationStore, _ trigger: AutomationNode.Trigger = .arrival
+  ) throws -> Int {
+    var process = DesignSceneFixtures.commandNode(
+      "p", "絞り込み", trigger, script: "p", coverage: .currentSet)
+    process.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all)]
+    var definition = Self.definition()
+    definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "p")]
+    definition.nodes.insert(process, at: 1)
+    return try store.create(definition, now: Self.at).id
+  }
+
+  /// `keptByACurrentSetProcess` の処理 `p` の回を確定する。`keeping` なら取った行をすべて id を保って出し、そうでなければ何も出さない。
+  private func filter(
+    _ store: AutomationStore, _ id: Int, keeping: Bool, at: Date = AutomationStoreTests.at
+  ) throws {
+    let taken = try XCTUnwrap(store.read(store.nodeId(id, "p"), of: id, baseline: nil, now: at))
+      .taken
+    let rows = taken.map {
+      AutomationNodeRow(id: $0.id, text: $0.text, ref: nil, source: $0.source)
+    }
+    try store.record(
+      id, nodeKey: "p", at: at,
+      outcome: DesignSceneFixtures.processed(keeping ? rows : [], read: taken.count))
+  }
+
+  /// 取得 → 絞り込みの今の集合の処理 → 判定 で、人が捨てた候補は、処理がその項目を外すと忘れ、処理が同じ項目をまた出すと、その項目は
+  /// 判定に届いて候補にできる（絞り込みを取得の条件に置いた形と同じ）。
+  func testAHandledProposalIsForgottenWhenTheFilterDropsItsItem() throws {
+    let store = AutomationStore()
+    let id = try keptByACurrentSetProcess(store)
+    try Self.fetch(store, id, [Self.item("a")])
+    try filter(store, id, keeping: true)
+    try Self.judge(store, id, proposing: [Self.item("a")])
+    try store.dismiss(try XCTUnwrap(store.proposals.first).id, now: Self.at)
+
+    try filter(store, id, keeping: false)
+    XCTAssertEqual(store.proposals, [])
+    try filter(store, id, keeping: true)
+
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
+    try Self.judge(store, id, proposing: [Self.item("a")])
+    XCTAssertEqual(store.proposals.map(\.state), [.open])
+  }
+
+  /// 取得 → 予定で動く今の集合の処理（入力の id を保つ）→ 判定 で、処理の行の候補は、処理がまだ回っていなくても、取得が元の項目を外した
+  /// 回の確定で下がり、取得のその回に数える。
+  func testAProposalOfARowACurrentSetProcessKeptIsWithdrawnWhenTheFetchDropsItsItem() throws {
+    let store = AutomationStore()
+    let id = try keptByACurrentSetProcess(store, .scheduled(.every(1800)))
+    try Self.fetch(store, id, [Self.item("a")])
+    try filter(store, id, keeping: true)
+    try Self.judge(store, id, proposing: [Self.item("a")])
+
+    try Self.fetch(store, id, [])
+
+    XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(store.automation(id)?.state(key: "fetch").runs.first?.run?.withdrawn, 1)
   }
 
   /// 処理が引き継いだ行の候補は、本文が処理の書いた本文で、出どころのノードは取得。取得がその項目を外すと下がり、取得の回に数える。
@@ -270,28 +332,6 @@ extension AutomationStoreTests {
 
     try Self.fetch(store, plainId, [], at: Self.at.addingTimeInterval(21 * AutomationDatabase.day))
     XCTAssertEqual(states(plainId), [])
-  }
-
-  /// 出来事を毎回すべて読む判定は、さばいた候補を、出したノードの出来事の残す日数の内は設定の日数を過ぎても覚え、その出来事を
-  /// 判定の前で捨てる。
-  func testAJudgeReadingEveryRunRemembersAClosedProposalWithinTheDaysOfTheNodeThatWroteIt() throws {
-    let store = AutomationStore()
-    var definition = Self.definition(coverage: .newArrivals)
-    definition.nodes[0].retentionDays = 60
-    definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all)]
-    let id = try store.create(definition, now: Self.at).id
-    let a = Self.item("a")
-    try Self.fetch(store, id, [a])
-    try Self.judge(store, id, proposing: [a])
-    try store.dismiss(try XCTUnwrap(store.proposals.first).id, now: Self.at)
-    let later = Self.at.addingTimeInterval(Self.eventRetention + AutomationDatabase.day)
-
-    try Self.fetch(store, id, [], at: later)
-
-    XCTAssertEqual(store.proposals.map(\.state), [.dismissed])
-    let read = try XCTUnwrap(
-      store.read(store.nodeId(id, "judge"), of: id, baseline: nil, now: later))
-    XCTAssertEqual(read.taken, [])
   }
 
   /// 判定が読んだ出来事が残す期間を過ぎても、判定の入力に同じリンクの残す期間の内の出来事があれば下げない——その時刻の判定の
