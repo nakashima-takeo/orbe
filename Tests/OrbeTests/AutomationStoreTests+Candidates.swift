@@ -151,20 +151,45 @@ extension AutomationStoreTests {
     XCTAssertEqual(unresolved.map(\.why), [.noOpenProposal])
   }
 
-  /// 元にした行が出来事で人がさばいた候補は、そのリンクの出来事が上流に残る間は覚え、後の取得の回の「下げた」には数えない。
-  func testANewArrivalsProposalTheUserHandledIsRememberedAndNotCountedAsWithdrawn() throws {
+  /// 元にした行が出来事で人がさばいた候補は、そのリンクの出来事が上流に残る間は覚え、同じリンクの新しい出来事を判定の前で捨てて
+  /// 判定の回の `closed` に数える（取得の回の「下げた」には数えない）。
+  func testANewArrivalsProposalTheUserHandledKeepsLaterRowsOfItsLinkFromTheJudge() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
     let a = Self.item("a")
     try Self.fetch(store, id, [a])
     try Self.judge(store, id, proposing: [a])
     try store.dismiss(XCTUnwrap(store.proposals.first?.id), now: Self.at)
-    XCTAssertEqual(proposals(store), [Self.link("a"): .dismissed])
+    let reply = AutomationItem(id: "a2", link: Self.link("a"), body: "a への返信", time: Self.at)
 
-    try Self.fetch(store, id, [])
+    try Self.fetch(store, id, [reply, Self.item("b")])
 
-    XCTAssertEqual(proposals(store), [Self.link("a"): .dismissed])
     XCTAssertEqual(store.automation(id)?.state(key: "fetch").runs.first?.run?.withdrawn, 0)
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1, "b だけが判定に届く")
+    try Self.judge(store, id)
+    XCTAssertEqual(
+      store.automation(id)?.state(key: "judge").runs.first?.run?.dropped.counts, [.closed: 1])
+    XCTAssertEqual(proposals(store), [Self.link("a"): .dismissed])
+  }
+
+  /// 人がさばいた候補のリンクの出来事がどれも残す期間を過ぎた後に同じリンクの出来事が届けば、その間にほかの変異が無くても判定に
+  /// 届き、候補にできる。
+  func testARowOfAHandledLinkReachesTheJudgeOnceEveryEventOfTheLinkExpired() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, id, [a])
+    try Self.judge(store, id, proposing: [a])
+    try store.accept(
+      XCTUnwrap(store.proposals.first?.id), into: TaskStore(), workspace: nil, now: Self.at)
+    let later = Self.at.addingTimeInterval(Self.eventRetention + 60)
+    let reply = AutomationItem(id: "a2", link: Self.link("a"), body: "a への返信", time: later)
+
+    try Self.fetch(store, id, [reply], at: later)
+
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
+    try Self.judge(store, id, proposing: [reply], at: later)
+    XCTAssertEqual(proposals(store), [Self.link("a"): .open])
   }
 
   /// 元にした行が出来事の判断待ちの候補は、取得の性質の書き換えでは下がらず、自動化を消すと忘れる。
