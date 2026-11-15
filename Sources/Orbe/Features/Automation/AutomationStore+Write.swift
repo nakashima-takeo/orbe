@@ -59,9 +59,10 @@ extension AutomationStore {
     let automation: Automation?
   }
 
-  /// 書き込みを確かめる（何も書かない）。作るなら、ノードは `id` を持たず、定義が検証を通ること。書き換えるなら、自動化があり（定義を
-  /// 読めない自動化も書き換えで直せる）、定義が検証を通り、版が今の版と同じで、ノードの `id` が今のノードを指すこと（`checkIds`）。
-  /// どちらも、つながりが読む行の下限の時刻（`after`）が、この書き込みで足すノードからのつながりに付いておらず、`now` より後でもないこと（`checkAfter`）。
+  /// 書き込みを確かめる（何も書かない）。作るなら、ノードは `id` も、つながりの読む行の下限の時刻（`after`）も持たず（まだ
+  /// 何の行も無いので、何も除かない）、定義が検証を通ること。書き換えるなら、自動化があり（定義を読めない自動化も書き換えで
+  /// 直せる）、定義が検証を通り、版が今の版と同じで、ノードの `id` が今のノードを指し（`checkIds`）、`after` がこの書き込みで
+  /// 足すノードからのつながりに付いておらず、`now` より後でもないこと（`checkAfter`。足すノードは `checkIds` を通った後で決まる）。
   func check(_ write: Write, now: Date) throws(AutomationError) -> CheckedWrite {
     guard available else { throw unavailableError }
     switch write {
@@ -69,8 +70,14 @@ extension AutomationStore {
       if let index = definition.nodes.firstIndex(where: { $0.id != nil }) {
         throw .invalid("nodes[\(index)].id: a new automation has no node ids yet")
       }
+      for (index, definitionNode) in definition.nodes.enumerated() {
+        if let position = definitionNode.from.firstIndex(where: { $0.after != nil }) {
+          throw .invalid(
+            "nodes[\(index)].from[\(position)].after: a new automation has no rows yet, so after "
+              + "drops nothing; leave it out")
+        }
+      }
       let (name, nodes) = try definition.checked()
-      try Self.checkAfter(definition.nodes, now: now)
       return CheckedWrite(write: write, name: name, nodes: nodes, current: nil)
     case .replace(let id, let version, let definition):
       let current: Current
@@ -87,7 +94,6 @@ extension AutomationStore {
         throw .automationNotFound(id)
       }
       let (name, nodes) = try definition.checked()
-      try Self.checkAfter(definition.nodes, now: now)
       guard let version else {
         throw .invalid("version: pass the version you read with list_automations to rewrite")
       }
@@ -95,6 +101,7 @@ extension AutomationStore {
         throw .versionMismatch(sent: version, current: current.version)
       }
       try Self.checkIds(definition.nodes, of: id, current: current.keys)
+      try Self.checkAfter(definition.nodes, now: now)
       return CheckedWrite(write: write, name: name, nodes: nodes, current: current)
     }
   }
