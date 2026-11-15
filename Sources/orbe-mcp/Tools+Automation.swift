@@ -34,8 +34,8 @@ let automationTools: [[String: Any]] = [
           + "`version` read from `list_automations`, and returns it as {automation} in the "
           + "`list_automations` shape. Before writing a new or changed definition, run it with "
           + "`try_automation` and show the result to the user. A new automation runs when its "
-          + "schedules come; `run_automation` runs it now. orb automation --help also shows an "
-          + "example definition.",
+          + "schedules come; `run_automation` runs it now. If this description is cut off, read "
+          + "orb automation --help, which prints it whole with an example definition.",
         AutomationReference.definition)
     ),
     (

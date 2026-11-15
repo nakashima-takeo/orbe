@@ -93,9 +93,10 @@ extension AutomationReference {
 
     ROWS
     A fetch puts out one item per row: {"id", "body", "link"?, "time"?}. `id` stays the same for \
-    the same thing in that service, `body` is the text, `link` an http(s) URL, `time` ISO 8601; \
-    other fields are kept and passed on. A command prints one JSON object per line (nothing when \
-    there is nothing) and exits non-zero when it fails; Orbe tells an agent how to give items. \
+    the same thing in that service and never repeats within one run, `body` is the text, `link` an \
+    http(s) URL, `time` ISO 8601; other fields are kept and passed on. A command prints one JSON \
+    object per line (nothing when there is nothing) and exits non-zero when it fails; Orbe tells \
+    an agent how to give items. \
     Proposals are made only from rows with `link`, so a fetch that feeds a judge writes `link` on \
     items that may become tasks.
     Downstream, an item's id becomes "<node id>:<written id>", so rows from several fetches never \
@@ -104,7 +105,8 @@ extension AutomationReference {
     Each process row has a string `id`, never the same `id` twice. Keep the `id` of rows passed on, \
     give a new row the same `id` for the same thing on every run, and keep `link` on rows that may \
     become tasks.
-    A row may be at most 64 KiB in the form passed downstream; a larger one breaks the rules.
+    A row may be at most 64 KiB in the form passed downstream; a larger one breaks the rules. A \
+    command whose output breaks any of these rules fails the run.
 
     WHAT A RECEIVER READS
     An upstream keeps its rows once; each receiver reads them at the start of its own run.
