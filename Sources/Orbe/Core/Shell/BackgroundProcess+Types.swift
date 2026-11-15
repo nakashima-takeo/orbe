@@ -54,7 +54,5 @@ extension BackgroundProcess {
     let stdout: Captured
     let stderr: Captured
     let droppedLines: Int
-    /// 起こしてから終わるまでの長さ（秒）。経過時間の上限と同じ、スリープ中を数えない時計で測る。起こさなかったなら 0。
-    let elapsed: TimeInterval
   }
 }

@@ -59,10 +59,7 @@ final class BackgroundProcess {
     return queue.sync {
       Outcome(
         ending: ending ?? .stopped, stdout: stdoutCaptured, stderr: stderrCaptured,
-        droppedLines: lines?.dropped ?? 0,
-        elapsed: started
-          ? TimeInterval(DispatchTime.now().uptimeNanoseconds - startedAt.uptimeNanoseconds) / 1e9
-          : 0)
+        droppedLines: lines?.dropped ?? 0)
     }
   }
 

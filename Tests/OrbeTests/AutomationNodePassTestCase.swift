@@ -91,7 +91,7 @@ class AutomationNodePassTestCase: OrbeTestCase {
 
   func replied(_ text: String, isError: Bool = false) -> BackgroundRunResult {
     BackgroundRunResult(
-      commandLine: "claude -p", startedAt: now, endedAt: now, elapsed: 0, ending: .exited(0),
+      commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
       output: .agent(reply: BackgroundAgentReply(text: text, isError: isError), stderr: .init()))
   }
 
