@@ -84,6 +84,10 @@ extension AutomationNodeTests {
       ),
       ("数でない件数の上限", with("maxItems", "many"), "invalid nodes[0].maxItems"),
       (
+        "知らない行き先", with("deliver", "slack"),
+        "invalid nodes[0].deliver: pass taskCandidates, report or none (leave it out to pass rows on)"
+      ),
+      (
         "知らない予定の種類", with("trigger", ["kind": "daily"]),
         "invalid nodes[0].trigger.kind: pass interval, cron, manual or arrival"
       ),

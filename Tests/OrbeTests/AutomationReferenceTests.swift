@@ -43,6 +43,8 @@ final class AutomationReferenceTests: OrbeTestCase {
       "`key`: \(AutomationNode.keyLength.lowerBound)-\(AutomationNode.keyLength.upperBound) letters",
       "`minutes` (\(Int(BackgroundTiming.minimumInterval) / 60)-"
         + "\(Int(BackgroundTiming.maximumInterval) / 60))",
+      "`maxAgeHours` (\(AutomationNodeEdge.maxAgeHoursRange.lowerBound)-"
+        + "\(AutomationNodeEdge.maxAgeHoursRange.upperBound))",
       "`timeoutMinutes`: \(timeout.lowerBound)-\(timeout.upperBound); the default is "
         + "\(AutomationActionDef.commandTimeoutMinutes) for a command and "
         + "\(AutomationActionDef.agentTimeoutMinutes) for an agent.",
