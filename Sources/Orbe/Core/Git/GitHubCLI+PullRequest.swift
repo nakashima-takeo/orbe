@@ -3,9 +3,10 @@ import Foundation
 /// PR の中身の読み取りと、変更ファイルの確認済み（GitHub の Files changed の Viewed）の書き込み。問い合わせ先はリポジトリ名で
 /// 決まるので、作業ディレクトリはリポジトリに依らない。どちらもメインスレッドで返る。
 extension GitHubCLI {
-  /// PR 1 件の中身を、一時点のものとして揃えて読む。コミットと変更ファイルはページングして全件を読み、ページの間に push や
-  /// ベースブランチの付け替えが入った（ベースとヘッドのコミットが 1 ページ目と違う）ら最初から読み直す。読み直しは 1 回まで
-  /// で、なお違えば失敗（gh は何も言っていないので失敗の理由は空）。途中のページの失敗は全体の失敗——半分の一覧を返さない。
+  /// PR 1 件の中身を、一時点のものとして揃えて読む。変更ファイルは全件、コミットは GitHub が返す新しい側の 250 件までを
+  /// ページングして読む。ページの間に push やベースブランチの付け替えが入ったら（基準のベース側のコミットか PR の先頭の
+  /// コミットが 1 ページ目と違えば）、最初から読み直す。読み直しは 1 回までで、なお違えば失敗（gh はエラー文を出していない
+  /// ので理由は空）。途中のページの失敗は全体の失敗——半分の一覧を返さない。
   func pullRequestContent(
     _ id: GitHubItemID,
     completion: @escaping (Result<GitHubPullRequestContent, GitHubFailure>) -> Void
@@ -26,15 +27,16 @@ extension GitHubCLI {
     }
   }
 
-  /// 変更ファイルの確認済みを、`paths` まとめて付ける（`viewed` が偽なら外す）。`itemsPerQuery` 件ごとに 1 回のクエリ
-  /// にし、順に送る。一部だけ成功することがあるので、成功したパスと失敗の種類を返す。失敗した回より後の回は送らない（成功
-  /// しなかったパスに入る）。
+  /// `paths` の変更ファイルの確認済みを、まとめて付ける（`viewed` が偽なら外す）。`itemsPerQuery` 件ごとに 1 回の問い合わせ
+  /// にし、順に送る。一部だけ通ることがあるので、通ったパスと失敗の種類を返す。失敗した回より後の回は送らない。送らなかった
+  /// パスも通らなかったパスに数える。
   func setViewed(
-    _ viewed: Bool, paths: [String], pullRequest nodeID: String,
+    _ viewed: Bool, paths: Set<String>, pullRequest nodeID: String,
     completion: @escaping (GitHubViewedWrite) -> Void
   ) {
-    let chunks = stride(from: 0, to: paths.count, by: Self.itemsPerQuery).map {
-      Array(paths[$0..<min($0 + Self.itemsPerQuery, paths.count)])
+    let ordered = paths.sorted()
+    let chunks = stride(from: 0, to: ordered.count, by: Self.itemsPerQuery).map {
+      Array(ordered[$0..<min($0 + Self.itemsPerQuery, ordered.count)])
     }
     queue.async {
       var written: Set<String> = []
@@ -62,16 +64,16 @@ extension GitHubCLI {
 
 /// 確認済みの書き込みの結果。
 struct GitHubViewedWrite: Equatable {
-  /// 書き込みが成功したパス。
+  /// 書き込みが通ったパス。
   let written: Set<String>
-  /// 成功しなかったパスがあれば、その失敗。
+  /// 通らなかったパスがあれば、その失敗の種類。
   let failure: GitHubFailure?
 }
 
 /// 確認済みの書き込み（GraphQL の `markFileAsViewed` / `unmarkFileAsViewed`）の引数とレスポンスの読み方。パスごとの書き込みを
 /// 別名（`f0`）で並べて 1 回に入れる。
 enum GitHubViewedMutation {
-  /// PR の ID とパスは `-f`（文字列のまま）で渡す——パスをクエリ文に直接書かない。
+  /// PR の ID とパスは `-f`（文字列のまま）で渡す——パスを問い合わせの文に直接書かない。
   static func arguments(_ viewed: Bool, paths: [String], pullRequest nodeID: String) -> [String] {
     let field = viewed ? "markFileAsViewed" : "unmarkFileAsViewed"
     let declarations = ["$pr:ID!"] + paths.indices.map { "$p\($0):String!" }
@@ -87,7 +89,7 @@ enum GitHubViewedMutation {
     return args
   }
 
-  /// レスポンスの `data` に値が載った別名のパス。gh が 0 以外で終わっても、成功した分は `data` に載る。
+  /// レスポンスの `data` に値が載った別名のパス。gh が 0 以外で終わっても、通った分は `data` に載る。
   static func written(from stdout: Data, paths: [String]) -> Set<String> {
     guard let data = (try? JSONDecoder().decode(Response.self, from: stdout))?.data else {
       return []
@@ -109,7 +111,7 @@ private struct MutationPayload: Decodable {}
 private enum ContentReading {
   case read(GitHubPullRequestContent)
   case failed(GitHubFailure)
-  /// 読んでいる間にベースかヘッドのコミットが動いた。
+  /// 読んでいる間に、基準のベース側のコミットか PR の先頭のコミットが動いた。
   case moved
 }
 
@@ -144,7 +146,8 @@ private struct PullRequestContentRead {
     return .read(content)
   }
 
-  /// `connection` の続きのページを、最後のページまで読み足す。ベースとヘッドのコミットが `content` と違うページが来たら `.moved`。
+  /// `connection` の続きのページを、最後のページまで読み足す。基準のベース側のコミットか PR の先頭のコミットが `content` と
+  /// 違うページが来たら `.moved`。
   private func rest<Node>(
     _ connection: GitHubPullRequestQuery.Connection, after start: GitHubPage<Node>.PageInfo,
     of content: GitHubPullRequestContent,

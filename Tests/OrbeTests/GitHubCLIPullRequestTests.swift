@@ -6,16 +6,16 @@ import XCTest
 /// PR の中身の読み取り（`GitHubCLI.pullRequestContent`）と確認済みの書き込み（`GitHubCLI.setViewed`）。PATH に偽の `gh` を
 /// 置いて本物の子プロセスで測る。
 ///
-/// 壊れると何が起きるか: コミットや変更ファイルが 100 件で切れ、「N/M 確認済み」の M が少なく出る。読んでいる間に push が
+/// 壊れると何が起きるか: コミットや変更ファイルが 100 件で切れ、欠けた一覧が全件として返る。読んでいる間に push が
 /// あると、古い一覧と新しい一覧が混ざった中身が出る。途中のページの失敗で半分の一覧が出る。確認済みの書き込みが一部だけ
-/// 通ったとき、通らなかったチェックが画面に残る。
+/// 通ったとき、どのパスが通らなかったかを呼び出し側が知れず、元に戻せない。
 final class GitHubCLIPullRequestTests: OrbeTestCase {
   private var dir: URL!
   private let id = GitHubItemID(repo: "o/2048", number: 7)!
 
   /// 偽 `gh`。問い合わせを種類（`first`・`commits-<カーソル>`・`files-<カーソル>`・`viewed`）に分けて `calls.log` に残し、
   /// 中身は種類ごとのファイル（n 回目の呼び出しは `<種類>.<n>` があればそれ）から返す。`<種類>.exit` があればその終了コード
-  /// で終わり、`<種類>.stderr` を標準エラーへ出す。`viewed` はパスごとのエイリアスに答え、`reject` に書かれたパスだけ失敗にする。
+  /// で終わり、`<種類>.stderr` を標準エラーへ出す。`viewed` はパスごとの別名に答え、`reject` に書かれたパスだけ失敗にする。
   override func setUpWithError() throws {
     dir = TestScratch.caseDir.appendingPathComponent("orbe-gh-pr-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -96,13 +96,16 @@ final class GitHubCLIPullRequestTests: OrbeTestCase {
     #"{"path":"\#(path)","changeType":"\#(change)","viewerViewedState":"\#(viewed)"}"#
   }
 
+  /// 1 ページ目。コミットの列には総数（`commitCount`）を足す。
   private func firstPage(
-    head: String = "h1", commits: String, files: String, author: String = #"{"login":"me"}"#
+    head: String = "h1", commits: String, files: String, author: String = #"{"login":"me"}"#,
+    commitCount: Int = 1
   ) -> String {
-    #"{"data":{"repository":{"pullRequest":{"id":"PR_1","number":7,"title":"t","#
+    let counted = #"{"totalCount":\#(commitCount),"# + commits.dropFirst()
+    return #"{"data":{"repository":{"pullRequest":{"id":"PR_1","number":7,"title":"t","#
       + #""url":"https://github.com/o/2048/pull/7","isDraft":true,"state":"OPEN","body":"b","#
       + #""author":\#(author),"baseRefName":"main","headRefName":"feat","baseRefOid":"b1","#
-      + #""headRefOid":"\#(head)","commits":\#(commits),"files":\#(files)}}}}"#
+      + #""headRefOid":"\#(head)","commits":\#(counted),"files":\#(files)}}}}"#
   }
 
   private func nextPage(head: String = "h1", _ connection: String, _ page: String) -> String {
@@ -129,7 +132,7 @@ final class GitHubCLIPullRequestTests: OrbeTestCase {
       firstPage(
         commits: page([commit("c1")], next: "C1"),
         files: page([file("a", "ADDED", "VIEWED"), file("b", "RENAMED", "DISMISSED")], next: "F1"),
-        author: "null"))
+        author: "null", commitCount: 300))
     try serve("commits-C1", nextPage("commits", page([commit("c2")], next: "C2")))
     try serve("commits-C2", nextPage("commits", page([commit("c3")], next: nil)))
     try serve("files-F1", nextPage("files", page([file("c", "CHANGED")], next: nil)))
@@ -143,6 +146,7 @@ final class GitHubCLIPullRequestTests: OrbeTestCase {
     XCTAssertEqual(content.baseCommit, "b1")
     XCTAssertEqual(content.headCommit, "h1")
     XCTAssertEqual(content.commits.map(\.oid), ["c1", "c2", "c3"])
+    XCTAssertEqual(content.commitCount, 300, "GitHub が返さない古い側のコミットも総数に入る")
     XCTAssertEqual(content.commits.first?.headline, "m c1")
     XCTAssertEqual(
       content.files,
@@ -194,7 +198,7 @@ final class GitHubCLIPullRequestTests: OrbeTestCase {
     XCTAssertEqual(read(), .failure(.unreachable))
   }
 
-  private func setViewed(_ viewed: Bool, _ paths: [String]) -> GitHubViewedWrite? {
+  private func setViewed(_ viewed: Bool, _ paths: Set<String>) -> GitHubViewedWrite? {
     var result: GitHubViewedWrite?
     let done = expectation(description: "setViewed")
     GitHubCLI().setViewed(viewed, paths: paths, pullRequest: "PR_1") {
@@ -220,13 +224,13 @@ final class GitHubCLIPullRequestTests: OrbeTestCase {
 
   /// 件数が多ければ 50 件ごとに分けて順に送り、失敗した回より後の回は送らない。
   func testManyPathsAreSplitAndStopAtTheFirstFailedQuery() throws {
-    let paths = (0..<120).map { "p\($0)" }
-    XCTAssertEqual(setViewed(true, paths), GitHubViewedWrite(written: Set(paths), failure: nil))
+    let paths = Set((0..<120).map { "p\($0)" })
+    XCTAssertEqual(setViewed(true, paths), GitHubViewedWrite(written: paths, failure: nil))
     XCTAssertEqual(calls("viewed"), 3)
 
     try serve("reject", "p60\n")
     let partial = setViewed(true, paths)
-    XCTAssertEqual(partial?.written, Set(paths.prefix(100).filter { $0 != "p60" }))
+    XCTAssertEqual(partial?.written, Set(paths.sorted().prefix(100)).subtracting(["p60"]))
     XCTAssertNotNil(partial?.failure)
     XCTAssertEqual(calls("viewed"), 5, "失敗した 2 回目の後の 3 回目は送らない")
   }

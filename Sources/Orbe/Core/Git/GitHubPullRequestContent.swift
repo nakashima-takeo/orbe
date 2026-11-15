@@ -39,17 +39,20 @@ struct GitHubPullRequestContent: Equatable {
   let author: String?
   let baseRefName: String
   let headRefName: String
-  /// ベースブランチの先頭のコミット（マージベースではない）。
+  /// PR が比べる基準のベース側のコミット（ベースブランチに push があっても追従しない。マージベースではない）。
   let baseCommit: String
   /// PR の先頭のコミット。
   let headCommit: String
+  /// PR のコミットの総数。GitHub は新しい側の 250 件までしか返さないので、`commits` の件数より多いことがある。
+  let commitCount: Int
+  /// PR のコミット。GitHub が返す新しい側の 250 件まで。
   var commits: [Commit]
   var files: [File]
 }
 
 /// PR の中身の問い合わせの引数と、答えの読み方。コミットと変更ファイルは `pageSize` 件ずつのページで読み、1 ページを
-/// 1 回の gh 呼び出しにする（gh のタイムアウトは 1 回の呼び出しごとに効く）。どのページでもベースと PR の先頭のコミットを
-/// 読み、読み手が 1 ページ目と比べられるようにする。
+/// 1 回の gh 呼び出しにする（`GitHubCLI.timeout` の打ち切りは 1 回の呼び出しごとに効く）。どのページでも基準のベース側の
+/// コミットと PR の先頭のコミットを読み、読み手が 1 ページ目と比べられるようにする。
 enum GitHubPullRequestQuery {
   /// 1 ページの件数（GitHub GraphQL の上限）。
   static let pageSize = 100
@@ -60,16 +63,16 @@ enum GitHubPullRequestQuery {
   }
 
   private static let commitsFields =
-    "totalCount nodes{commit{oid messageHeadline}} pageInfo{hasNextPage endCursor}"
+    "nodes{commit{oid messageHeadline}} pageInfo{hasNextPage endCursor}"
   private static let filesFields =
-    "totalCount nodes{path changeType viewerViewedState} pageInfo{hasNextPage endCursor}"
+    "nodes{path changeType viewerViewedState} pageInfo{hasNextPage endCursor}"
 
   /// 1 ページ目。PR の値と、コミット・変更ファイルの先頭のページ。
   static func firstPageArguments(_ id: GitHubItemID) -> [String] {
     arguments(
       id,
       fields: "id number title url isDraft state body author{login} baseRefName headRefName "
-        + "baseRefOid headRefOid commits(first:\(pageSize)){\(commitsFields)} "
+        + "baseRefOid headRefOid commits(first:\(pageSize)){totalCount \(commitsFields)} "
         + "files(first:\(pageSize)){\(filesFields)}", after: nil)
   }
 
@@ -111,7 +114,7 @@ enum GitHubPullRequestQuery {
 
     init(from decoder: Decoder) throws {
       let node = try PullRequestNode<FirstNode>.read(decoder)
-      guard let state = Self.state(node.state) else {
+      guard let state = GitHubItemSummary.State(rawValue: node.state) else {
         throw DecodingError.dataCorrupted(
           .init(codingPath: decoder.codingPath, debugDescription: "unknown state \(node.state)"))
       }
@@ -120,18 +123,9 @@ enum GitHubPullRequestQuery {
         isDraft: node.isDraft, state: state, body: node.body, author: node.author?.login,
         baseRefName: node.baseRefName, headRefName: node.headRefName,
         baseCommit: node.baseRefOid, headCommit: node.headRefOid,
-        commits: node.commits.nodes, files: node.files.nodes)
+        commitCount: node.commits.totalCount, commits: node.commits.nodes, files: node.files.nodes)
       commits = node.commits.pageInfo
       files = node.files.pageInfo
-    }
-
-    private static func state(_ value: String) -> GitHubItemSummary.State? {
-      switch value {
-      case "OPEN": .open
-      case "CLOSED": .closed
-      case "MERGED": .merged
-      default: nil
-      }
     }
   }
 
@@ -177,8 +171,15 @@ private struct FirstNode: Decodable {
   let headRefName: String
   let baseRefOid: String
   let headRefOid: String
-  let commits: GitHubPage<GitHubPullRequestContent.Commit>
+  let commits: CountedCommits
   let files: GitHubPage<GitHubPullRequestContent.File>
+}
+
+/// 1 ページ目のコミットの列（総数つき）。
+private struct CountedCommits: Decodable {
+  let totalCount: Int
+  let nodes: [GitHubPullRequestContent.Commit]
+  let pageInfo: GitHubPage<GitHubPullRequestContent.Commit>.PageInfo
 }
 
 private struct NextNode: Decodable {
@@ -208,7 +209,7 @@ extension GitHubPullRequestContent.File: Decodable {
     case path, changeType, viewerViewedState
   }
 
-  /// GitHub が後から足した変化の種類は「変更」として読む（一覧ごと読めなくしない）。
+  /// Orbe が知らない変化の種類（GitHub が今後足すもの）は「変更」として読む（一覧ごと読めなくしない）。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     self.init(
