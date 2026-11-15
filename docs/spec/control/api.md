@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスク/自動化/ボードの部品を操作し、タスクから作業を始める out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
-updated: 2026-11-11
+updated: 2026-11-15
 ---
 
 # 制御 API（外部 → Orbe）
@@ -52,7 +52,7 @@ workspace / tab にプロセス内単調増加 ID。型をまたいで一意。�
 
 ## ツール
 
-JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`config_*`・workspace CRUD・`focus_tab`/`close_tab`/`open_file`/`open_diff`・`completion_*` は socket 専用で、MCP ブリッジには出さない（[cli](cli.md) が直に叩く）。
+JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`config_*`・workspace CRUD・`focus_tab`/`close_tab`/`open_file`/`open_diff`・`completion_*` は socket 専用で、MCP ブリッジには出さない。`report_agent` を呼ぶのは状態報告の `orbe-report`（→ [agent/notify](../agent/notify.md)）、`config_*`・workspace CRUD・`focus_tab`/`close_tab` を呼ぶのは `orb`（→ [cli](cli.md)）、`completion_*` を呼ぶのは zsh の補完の widget（→ [completion](../palette/completion.md)）。`open_file`/`open_diff` を呼ぶ同梱のクライアントは無く、呼び手が control.sock へ直に要求を書いて呼ぶ。
 
 - `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount・hasBoard。`hasBoard` はその workspace が[ボード](../chrome/board.md)を持つか（今は Home だけが true）で、ボードの部品の 3 動詞の宛先を外から選ぶ唯一の手がかり——Home の root を知らない agent でも宛先を選べ、ボードを持つ workspace が増えても呼び手は変わらない。`activated` は配下にmaterialize開始済みタブが1枚以上あるかを表す現在値で、0タブまたは全タブ未activatedならfalse。`dormantAgentCount` は現在残る未消費の復元チケット（休眠agent）タブ数で、混在workspaceでは `activated: true` と正の値が同時に成立する。0タブworkspaceを前面化した場合は `active: true, activated: false, dormantAgentCount: 0` となる。
 - `list_tabs` → `{tabs:[…], seq}` … tabId・workspaceId・workspaceName・title・cwd・agentState・agentSessionId（resume 用・未設定なら null）・active（その workspace で選択中のタブ。背景 workspace でも 1 枚 true で、前面かは `list_workspaces` の `active` と合わせて分かる。[ボード](../chrome/board.md)を選んでいる workspace ではどのタブも false）。全 workspace 横断・タブ順。ボードはタブではないので出ない。`seq` は snapshot 時点の履歴位置で、tab の状態と同じ瞬間の値。
