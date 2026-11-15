@@ -110,12 +110,11 @@ import Observation
     let at = TaskItem.storedInstant(now)
     try commit(sweepingAt: at) { db, memory in
       for nodeId in nodeIds {
-        _ = try db.removeNode(nodeId, at: at)
+        try db.removeNode(nodeId, at: at)
       }
       try db.deleteAutomation(id)
       memory.automations.removeAll { $0.id == id }
       memory.unreadable.removeAll { $0.id == id }
-      try memory.forgetUnheld(db, now: at)
     }
     return nodeIds
   }
@@ -158,8 +157,8 @@ import Observation
     try settle(proposalId, now: now) { _ in (.dismissed, ()) }
   }
 
-  /// 人の判断を 1 件残す。変異の時刻 `now` の状態（残す期間を過ぎて下げた後）でまだ判断待ちなら `decide` が判断を決め、下がって
-  /// いれば候補が無いと断る（下げたことは確定する）。判断待ちでなくなった候補は、リンクの行がまた判定へ届きうるのでなければ忘れる。
+  /// 人の判断を 1 件残す。変異の時刻 `now` の状態（下げる条件を当てた後）でまだ判断待ちなら `decide` が判断を決め、下がって
+  /// いれば候補が無いと断る（下げたことは確定する）。さばいた候補は、覚える条件から外れていれば変異の終わりに忘れる。
   private func settle<T>(
     _ proposalId: Int, now: Date,
     _ decide: (AutomationProposal) throws(AutomationError) -> (AutomationProposal.State, T)
@@ -173,7 +172,6 @@ import Observation
       let (state, result) = try decide(memory.proposals[index])
       try db.settle(proposalId, state, at: at)
       memory.proposals[index].state = state
-      try memory.forgetUnheld(db, now: at)
       return result
     }
     guard let settled else { throw .proposalNotFound(proposalId) }
@@ -191,9 +189,10 @@ import Observation
   // MARK: - 書き込み
 
   /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。`sweepingAt`（変異の時刻）が
-  /// あれば、`body` の前に、判定が読んだ出来事が残す期間を過ぎた判断待ちの候補を下げて判定の持ち越しに数え（`body` はその時刻の
-  /// 状態から進める）、`body` の後に、判断待ちでない覚えている候補のリンクが変わった判定のノードの読めば取る行を数え直し（判定の
-  /// 前に捨てる行が変わる）、最後に掃除する。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を
+  /// あれば、`body` の前と後に候補の保ち方の 2 つの条件（下げる・覚える）を候補すべてに当て（`keepProposals`。前は時刻の経過で
+  /// 変わった分で、`body` はその時刻の状態から進める。後は `body` が変えた分）、判断待ちでない覚えている候補のリンクが変わった
+  /// 判定のノードの読めば取る行を数え直し（判定の前に捨てる行が変わる）、最後に掃除する。回を持つ変異は `body` の中で自分で
+  /// 下げて回に数え、後の当てには残さない。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を
   /// 手放してストアを使えなくする。`body` が投げたものは、先に下げた候補も含めてどれも書けなかったことになる。
   func commit<T>(
     sweepingAt sweep: Date?, _ body: (AutomationDatabase, inout AutomationMemory) throws -> T
@@ -205,15 +204,10 @@ import Observation
     do {
       result = try database.transaction {
         let closed = memory.closedLinksByJudge
-        if let sweep {
-          for (judge, count) in try memory.withdrawExpired(database, now: sweep) {
-            var carried = try database.carried(of: judge)
-            carried.withdrawn += count
-            try database.setCarried(judge, carried)
-          }
-        }
+        if let sweep { try memory.keepProposals(database, now: sweep) }
         let result = try body(database, &memory)
         if let sweep {
+          try memory.keepProposals(database, now: sweep)
           let after = memory.closedLinksByJudge
           let changed = Set(closed.keys).union(after.keys).filter { closed[$0] != after[$0] }
           try memory.recountJudges(changed, database, now: sweep)

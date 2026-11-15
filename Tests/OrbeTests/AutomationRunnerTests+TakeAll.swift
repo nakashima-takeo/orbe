@@ -98,7 +98,7 @@ extension AutomationRunnerTests {
     advance(by: 1800)
     finish("gh", fetched(["a"]))
     finish("copy", printed(item("a")))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1, "前提: 写した項目が有効")
+    XCTAssertEqual(try store.liveLinks(id, "copy").count, 1, "前提: 写した項目が有効")
 
     advance(by: 1800)
     finish("gh", printed(""))
@@ -106,7 +106,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(calls("copy").count, 2, "入力が 0 件でも回る")
     XCTAssertEqual(rows(try XCTUnwrap(calls("copy").last)).count, 0)
     finish("copy", printed(""))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [])
+    XCTAssertEqual(try store.liveLinks(id, "copy"), [])
   }
 
   /// 上流の出力の性質を書き換えて今有効な項目が無効になると、毎回すべてを取るノードはすぐ起きて空の集合を写す。

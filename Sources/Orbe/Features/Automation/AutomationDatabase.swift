@@ -147,15 +147,14 @@ final class AutomationDatabase {
   }
 
   /// ノードを外す: 外した時刻を書き、今有効な項目を無効にし、つながりと形式エラーの印と持ち越しを消す。外したノードの回の記録・判断の
-  /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。無効にした項目を返す。
-  func removeNode(_ nodeId: AutomationNodeID, at: Date) throws -> [Int] {
+  /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。
+  func removeNode(_ nodeId: AutomationNodeID, at: Date) throws {
     let values: [SQLiteValue] = [.integer(Int64(nodeId.rawValue))]
-    let invalidated = try invalidateItems(of: nodeId, at: at)
+    try invalidateItems(of: nodeId, at: at)
     try db.run("DELETE FROM node_edges WHERE from_node_id = ?1 OR to_node_id = ?1", values)
     try db.run(
       "UPDATE nodes SET removed_at = ?, breach_run_id = NULL, carried = '{}' WHERE id = ?",
       [Self.instant(at)] + values)
-    return invalidated
   }
 
   /// 形式エラーの印の回。
@@ -185,7 +184,7 @@ final class AutomationDatabase {
       [.text(try Self.encode(carried)), .integer(Int64(nodeId.rawValue))])
   }
 
-  /// ノードの自分の状態（止めた時刻・直近の回・最新の成功・形式エラーの印・今有効な項目のリンク）。起動時も変化の後も、メモリのノードの
+  /// ノードの自分の状態（止めた時刻・直近の回・最新の成功・形式エラーの印）。起動時も変化の後も、メモリのノードの
   /// 状態はここから読み直す。読めば取る行は数えない（`AutomationMemory.recount`）。
   func state(of nodeId: AutomationNodeID) throws -> AutomationNodeState {
     let values: [SQLiteValue] = [.integer(Int64(nodeId.rawValue))]
@@ -204,7 +203,6 @@ final class AutomationDatabase {
     state.runs = try records(of: [nodeId], limit: AutomationNodeState.recentRuns).map(\.record)
     state.succeededAt = try succeededAt(of: nodeId)
     state.breach = try breachRecord(of: nodeId)
-    state.liveLinks = try liveLinks(of: nodeId)
     return state
   }
 

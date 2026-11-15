@@ -147,9 +147,8 @@ extension AutomationStore {
       let removed = current.nodeIds.filter {
         !Set(checked.nodes.compactMap(\.definitionNode.id)).contains($0)
       }
-      var invalidated: [Int] = []
       for nodeId in removed {
-        invalidated += try db.removeNode(nodeId, at: at)
+        try db.removeNode(nodeId, at: at)
       }
       try Self.writeNodes(checked.nodes, &entities, of: id, db, at: at)
       let graph = AutomationGraph(
@@ -166,9 +165,8 @@ extension AutomationStore {
       memory.automations.removeAll { $0.id == id }
       memory.automations.append(automation)
       memory.automations.sort { $0.id < $1.id }
-      try memory.withdraw(after: invalidated + rewired.invalidated, db, now: at)
-      try memory.withdraw(reviewing: rewired.reviewed, db, now: at)
-      try memory.forgetUnheld(db, now: at)
+      // 書き換えで下げた分は数えない（変異の終わりの当てに残すと、判定の持ち越しに数えられる）。
+      _ = try memory.withdraw(db, now: at)
       try memory.recount(id, db, now: at)
       return Written(
         automation: memory.automation(id) ?? automation, reworked: rewired.reworked,
@@ -215,15 +213,11 @@ extension AutomationStore {
   private struct Rewired {
     var states: [AutomationNodeID: AutomationNodeState] = [:]
     var reworked: [AutomationNodeID] = []
-    var invalidated: [Int] = []
-    /// 判断待ちの候補を下げる決まりを当て直す判定（何をするかが変わった判定）。
-    var reviewed: [AutomationNodeID] = []
   }
 
   /// つながりを書き換え、出力の性質が変わったノードの今有効な項目を無効にし、何をするかが変わったノードの形式エラーの印を下ろし、ノードの
   /// 状態を読み直す。同じノードどうしのつながりが残れば読んだ位置も残る。定義を読めない自動化を直すときは前の性質を知らないので、
-  /// 残るノードのうち今の集合でないノードの今有効な項目を無効にし、残るノードをすべて何をするかが変わったものとして扱う。何をするかが
-  /// 変わった判定（入力を変えた判定を含む）には、下げる決まりを当て直す（入力を外すと、下げない歯止めだったリンクが抜けうるため）。
+  /// 残るノードのうち今の集合でないノードの今有効な項目を無効にし、残るノードをすべて何をするかが変わったものとして扱う。
   private static func rewire(
     _ graph: AutomationGraph, of id: Int, _ current: Current, _ db: AutomationDatabase, at: Date
   ) throws -> Rewired {
@@ -238,11 +232,10 @@ extension AutomationStore {
         ? kept && node.coverage != .currentSet
         : before?.coverage.map { $0 != node.coverage } ?? false
       if coverageChanged {
-        rewired.invalidated += try db.invalidateItems(of: node.id, at: at)
+        try db.invalidateItems(of: node.id, at: at)
       }
       let reworked = old == nil ? kept : before.map { $0.behavior != node.behavior } ?? false
       if reworked {
-        if node.role == .judge { rewired.reviewed.append(node.id) }
         rewired.reworked.append(node.id)
         try db.setBreach(node.id, run: nil)
       }

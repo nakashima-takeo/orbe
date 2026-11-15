@@ -1,6 +1,6 @@
 import Foundation
 
-/// 候補（判定が出したデータ）・覚えている印・人の判断と、候補を下げる判断に使う読み。
+/// 候補（判定が出したデータ）・覚えている印・人の判断と、候補を下げる判断・覚える判断に使う読み。
 extension AutomationDatabase {
   /// 判定のノード `nodeId` の回が出した候補を足し、覚えている印を付けて ID を返す。
   func insert(proposal: AutomationNodePass.Proposal, run: Int, nodeId: AutomationNodeID) throws
@@ -77,7 +77,7 @@ extension AutomationDatabase {
     return counts
   }
 
-  // MARK: - 下げる判断
+  // MARK: - 下げる判断と覚える判断
 
   /// 覚えていて、判断が無く、対応済みでない候補（読めない候補も）。
   struct OpenProposal: Equatable {
@@ -87,94 +87,123 @@ extension AutomationDatabase {
     let row: AutomationRowRef
   }
 
-  /// 判断待ちの候補のうち、読んだ行が `items` の項目（の版）か、その項目から引き継ぎで降りた行のもの。
-  func openProposals(descendingFrom items: [Int]) throws -> [OpenProposal] {
-    guard !items.isEmpty else { return [] }
-    var itemIds = Set(items)
-    var eventIds = Set<Int>()
-    var frontier = (items: items, events: [Int]())
-    while !frontier.items.isEmpty || !frontier.events.isEmpty {
-      let children = try sourcedBy(items: frontier.items, events: frontier.events)
-      frontier = (
-        children.items.filter { itemIds.insert($0).inserted },
-        children.events.filter { eventIds.insert($0).inserted }
-      )
-    }
-    return try selectOpen(
+  /// 判断待ちの候補すべて（読めない候補も）。
+  func openProposals() throws -> [OpenProposal] {
+    try db.select(
       """
-      (q.version_id IN (SELECT id FROM item_versions WHERE item_id IN (\(Self.list(itemIds))))
-        OR q.event_id IN (\(Self.list(eventIds))))
-      """)
-  }
-
-  /// 判定のノード `judge` の判断待ちの候補（リンクを `links` で絞る。nil なら全部）。
-  func openProposals(of judge: AutomationNodeID, links: Set<String>? = nil) throws
-    -> [OpenProposal]
-  {
-    guard let links else {
-      return try selectOpen("q.node_id = ?", [.integer(Int64(judge.rawValue))])
+      SELECT q.id, q.node_id, q.link, q.version_id, q.event_id FROM proposals q
+      JOIN held_proposals h ON h.proposal_id = q.id
+      WHERE h.resolved_at IS NULL AND q.id NOT IN (SELECT proposal_id FROM settlements)
+      ORDER BY q.id
+      """, []
+    ) { s in
+      OpenProposal(
+        id: s.int(at: 0), judge: AutomationNodeID(s.int(at: 1)), link: s.text(at: 2) ?? "",
+        row: s.optionalInt64(at: 3).map { .version(Int($0)) } ?? .event(s.int(at: 4)))
     }
-    guard !links.isEmpty else { return [] }
-    return try selectOpen(
-      "q.node_id = ? AND q.link IN (\(Array(repeating: "?", count: links.count).joined(separator: ",")))",
-      [.integer(Int64(judge.rawValue))] + links.sorted().map { .text($0) })
   }
 
-  /// 判断待ちの候補のうち、判定が読んだ行が残す期間を過ぎた（`now` の時点で）出来事のもの。
-  func openProposals(readingEventsExpiredAt now: Date) throws -> [OpenProposal] {
-    let expired = expiredEvents(at: now)
-    return try selectOpen("q.event_id IN (\(expired.sql))", expired.values)
+  /// 下げる条件に当てる 1 件: 判定が読んだ行・リンク・判定の入力（直接の上流のノード）。
+  struct Withdrawal {
+    let row: AutomationRowRef
+    let link: String
+    let inputs: [AutomationNodeID]
   }
 
-  /// 項目 `items` のうち、今の版がリンクを持つものの、ノードとリンク。
-  func linkedItems(_ items: [Int]) throws -> [(nodeId: AutomationNodeID, link: String)] {
-    guard !items.isEmpty else { return [] }
-    return try db.select(
+  /// 候補が、時刻 `now` に下げる条件を満たすか（`candidates` の順）——元にした行（読んだ行と、その行が引き継ぎでたどる元の行）の
+  /// うち項目のどれかが無効か、元にした行がどれも出来事で読んだ行が残す期間を過ぎ、かつ判定の入力のどれもリンクを今の行に
+  /// 持たない。判断待ちの候補にも、判定の確定が当てる案にも、この 1 つの読みを通す。候補の数だけ SQL を出さない。
+  func noLongerCurrent(_ candidates: [Withdrawal], now: Date) throws -> [Bool] {
+    guard !candidates.isEmpty else { return [] }
+    let lineages = try lineages(of: Set(candidates.map(\.row)))
+    let expired = try expiredEvents(
+      Set(
+        candidates.compactMap { candidate -> Int? in
+          guard case .event(let id) = candidate.row,
+            lineages[candidate.row]?.allSatisfy(\.event) ?? true
+          else { return nil }
+          return id
+        }), now: now)
+    let stale = candidates.map { candidate in
+      let steps = lineages[candidate.row] ?? []
+      if steps.contains(where: \.invalid) { return true }
+      guard steps.allSatisfy(\.event), case .event(let id) = candidate.row else { return false }
+      return expired.contains(id)
+    }
+    let suspects = zip(candidates, stale).filter(\.1).map(\.0)
+    guard !suspects.isEmpty else { return stale }
+    let current = try currentLinks(
+      of: Set(suspects.flatMap(\.inputs)), among: Set(suspects.map(\.link)), now: now)
+    return zip(candidates, stale).map { candidate, stale in
+      stale && !current.rows(candidate.link, in: candidate.inputs)
+    }
+  }
+
+  /// ノードの今の行が持つリンク。今の行は今有効な項目と、残す期間の内の出来事のうち元にした行に無効な項目が無いもの。
+  struct CurrentLinks {
+    /// ノードごとの、今有効な項目のリンク。
+    var items: [AutomationNodeID: Set<String>] = [:]
+    /// ノードごとの、今の行である出来事のリンク。
+    var events: [AutomationNodeID: Set<String>] = [:]
+
+    /// `nodes` のどれかの今有効な項目が `link` を持つか。
+    func items(_ link: String, in nodes: some Sequence<AutomationNodeID>) -> Bool {
+      nodes.contains { items[$0]?.contains(link) == true }
+    }
+
+    /// `nodes` のどれかの今の行（項目か出来事）が `link` を持つか。
+    func rows(_ link: String, in nodes: some Sequence<AutomationNodeID>) -> Bool {
+      items(link, in: nodes) || nodes.contains { events[$0]?.contains(link) == true }
+    }
+  }
+
+  /// ノード `nodes` の今の行のうち、リンクが `links` のどれかのもの（時刻 `now` の）。下げる条件（判定の入力）と、人がさばいた
+  /// 候補を覚える条件（判定へ行が届くノード）が読む。
+  func currentLinks(of nodes: Set<AutomationNodeID>, among links: Set<String>, now: Date) throws
+    -> CurrentLinks
+  {
+    var current = CurrentLinks()
+    guard !nodes.isEmpty, !links.isEmpty else { return current }
+    guard
+      let linkList = String(
+        bytes: try JSONSerialization.data(withJSONObject: Array(links)), encoding: .utf8)
+    else { return current }
+    for (nodeId, link) in try db.select(
       """
       SELECT i.node_id, v.link FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
-      WHERE i.id IN (\(Self.list(items))) AND v.link IS NOT NULL
-      """, []
-    ) { (AutomationNodeID($0.int(at: 0)), $0.text(at: 1) ?? "") }
-  }
-
-  /// 行 `row` を元にしたリンク `link` の候補が、時刻 `now` に今のものでなくなったか——元にした行（`row` と、その行が引き継ぎで
-  /// たどる元の行）のうち項目のどれかが無効か、元にした行がどれも出来事で `row` が残す期間を過ぎ、候補を出した判定の入力（直接の
-  /// 上流のノード `inputs`）のどれもリンクを今の行に持たない。
-  func noLongerCurrent(
-    _ row: AutomationRowRef, link: String, inputs: [AutomationNodeID], now: Date
-  ) throws -> Bool {
-    let steps = try lineage(of: row)
-    let stale =
-      try steps.contains(where: \.invalid) || steps.allSatisfy(\.event) && expired(row, now: now)
-    guard stale else { return false }
-    for input in inputs where try holds(link, in: input, now: now) { return false }
-    return true
-  }
-
-  /// ノード `nodeId` がリンク `link` を時刻 `now` に今の行に持つか——今有効な項目か、残す期間の内の出来事のうち元にした行に
-  /// 無効な項目が無いもの。
-  private func holds(_ link: String, in nodeId: AutomationNodeID, now: Date) throws -> Bool {
-    if try liveLinks(of: nodeId).contains(link) { return true }
-    let events = try db.select(
-      "SELECT id FROM events WHERE node_id = ? AND link = ? AND created_at >= ? ORDER BY id DESC",
-      [.integer(Int64(nodeId.rawValue)), .text(link), try eventCutoff(of: nodeId, now: now)],
-      { $0.int(at: 0) })
-    for event in events where try !lineage(of: .event(event)).contains(where: \.invalid) {
-      return true
+      WHERE i.node_id IN (\(Self.list(nodes.map(\.rawValue)))) AND i.valid_to IS NULL
+        AND v.link IN (SELECT value FROM json_each(?))
+      """, [.text(linkList)], { (AutomationNodeID($0.int(at: 0)), $0.text(at: 1) ?? "") })
+    {
+      current.items[nodeId, default: []].insert(link)
     }
-    return false
+    let events = try db.select(
+      """
+      SELECT e.id, e.node_id, e.link FROM events e
+      WHERE e.node_id IN (\(Self.list(nodes.map(\.rawValue))))
+        AND e.link IN (SELECT value FROM json_each(?1))
+        AND e.created_at >= ?2 - coalesce((SELECT retention_days FROM nodes WHERE id = e.node_id), ?3) * ?4
+      """,
+      [
+        .text(linkList), Self.instant(now), .integer(Int64(retention().eventDays)),
+        .integer(Int64(Self.day * 1000)),
+      ]
+    ) { (id: $0.int(at: 0), nodeId: AutomationNodeID($0.int(at: 1)), link: $0.text(at: 2) ?? "") }
+    let lineages = try lineages(of: Set(events.map { .event($0.id) }))
+    for event in events where !(lineages[.event(event.id)] ?? []).contains(where: \.invalid) {
+      current.events[event.nodeId, default: []].insert(event.link)
+    }
+    return current
   }
 
-  /// 行が、時刻 `now` に残す期間を過ぎた出来事か。
-  private func expired(_ row: AutomationRowRef, now: Date) throws -> Bool {
-    guard case .event(let id) = row else { return false }
+  /// 出来事 `ids` のうち、時刻 `now` に残す期間を過ぎたもの。
+  private func expiredEvents(_ ids: Set<Int>, now: Date) throws -> Set<Int> {
+    guard !ids.isEmpty else { return [] }
     let expired = expiredEvents(at: now)
-    return
-      !(try db.select(
-        "SELECT 1 FROM events WHERE id = ? AND id IN (\(expired.sql))",
-        [.integer(Int64(id))] + expired.values,
-        { _ in true }
-      ).isEmpty)
+    return Set(
+      try db.select(
+        "SELECT id FROM events WHERE id IN (\(Self.list(ids))) AND id IN (\(expired.sql))",
+        expired.values, { $0.int(at: 0) }))
   }
 
   /// 引き継ぎをたどる 1 歩: 行を出したノードと、行が出来事か、無効になった項目か。
@@ -186,75 +215,79 @@ extension AutomationDatabase {
 
   /// 行から引き継ぎを元へたどった行（最初は `row` の行）。行が無ければ空。
   func lineage(of row: AutomationRowRef) throws -> [Lineage] {
-    var steps: [Lineage] = []
-    var next: (sql: String, id: Int)?
-    switch row {
-    case .version(let id):
-      next = (
-        """
-        SELECT i.node_id, 0, i.valid_to IS NOT NULL, i.source_item_id, i.source_event_id
-        FROM item_versions v JOIN items i ON i.id = v.item_id WHERE v.id = ?
-        """, id
-      )
-    case .event(let id): next = (Self.eventStep, id)
+    try lineages(of: [row])[row] ?? []
+  }
+
+  /// 行ごとの `lineage(of:)`。行の数でなく、引き継ぎの深さの数だけ SQL を出す。
+  func lineages(of rows: Set<AutomationRowRef>) throws -> [AutomationRowRef: [Lineage]] {
+    var steps = Dictionary(uniqueKeysWithValues: rows.map { ($0, [Lineage]()) })
+    var frontier: [Hop: [AutomationRowRef]] = [:]
+    for row in rows {
+      switch row {
+      case .version(let id): frontier[Hop(table: .version, id: id), default: []].append(row)
+      case .event(let id): frontier[Hop(table: .event, id: id), default: []].append(row)
+      }
     }
-    while case let (sql, id)? = next {
-      guard
-        let found = try db.select(
-          sql, [.integer(Int64(id))],
+    while !frontier.isEmpty {
+      var next: [Hop: [AutomationRowRef]] = [:]
+      for table in LineageTable.allCases {
+        let ids = frontier.keys.filter { $0.table == table }.map(\.id)
+        guard !ids.isEmpty else { continue }
+        for (id, step, source) in try db.select(
+          "\(table.sql) (\(Self.list(ids)))", [],
           {
             (
-              step: Lineage(
-                nodeId: AutomationNodeID($0.int(at: 0)), event: $0.int(at: 1) != 0,
-                invalid: $0.int(at: 2) != 0),
-              source: Self.source($0, item: 3, event: 4)
+              $0.int(at: 0),
+              Lineage(
+                nodeId: AutomationNodeID($0.int(at: 1)), event: $0.int(at: 2) != 0,
+                invalid: $0.int(at: 3) != 0), Self.source($0, item: 4, event: 5)
             )
+          })
+        {
+          let origins = frontier[Hop(table: table, id: id)] ?? []
+          for origin in origins { steps[origin]?.append(step) }
+          switch source {
+          case .item(let id): next[Hop(table: .item, id: id), default: []] += origins
+          case .event(let id): next[Hop(table: .event, id: id), default: []] += origins
+          case nil: break
           }
-        ).first
-      else { break }
-      steps.append(found.step)
-      switch found.source {
-      case .item(let id): next = (Self.itemStep, id)
-      case .event(let id): next = (Self.eventStep, id)
-      case nil: next = nil
+        }
       }
+      frontier = next
     }
     return steps
   }
 
-  private static let itemStep =
-    "SELECT node_id, 0, valid_to IS NOT NULL, source_item_id, source_event_id FROM items WHERE id = ?"
-  private static let eventStep =
-    "SELECT node_id, 1, 0, source_item_id, source_event_id FROM events WHERE id = ?"
-
-  /// 行を引き継いだ（`source_item_id`・`source_event_id` が指す）項目と出来事。
-  private func sourcedBy(items: [Int], events: [Int]) throws -> (items: [Int], events: [Int]) {
-    var found = (items: [Int](), events: [Int]())
-    for (column, ids) in [("source_item_id", items), ("source_event_id", events)] where !ids.isEmpty
-    {
-      found.items += try db.select(
-        "SELECT id FROM items WHERE \(column) IN (\(Self.list(ids)))", [], { $0.int(at: 0) })
-      found.events += try db.select(
-        "SELECT id FROM events WHERE \(column) IN (\(Self.list(ids)))", [], { $0.int(at: 0) })
-    }
-    return found
+  /// 引き継ぎをたどって次に読む行。
+  private struct Hop: Hashable {
+    let table: LineageTable
+    let id: Int
   }
 
-  private func selectOpen(_ condition: String, _ values: [SQLiteValue] = []) throws
-    -> [OpenProposal]
-  {
-    try db.select(
-      """
-      SELECT q.id, q.node_id, q.link, q.version_id, q.event_id FROM proposals q
-      JOIN held_proposals h ON h.proposal_id = q.id
-      WHERE h.resolved_at IS NULL AND q.id NOT IN (SELECT proposal_id FROM settlements)
-        AND \(condition)
-      ORDER BY q.id
-      """, values
-    ) { s in
-      OpenProposal(
-        id: s.int(at: 0), judge: AutomationNodeID(s.int(at: 1)), link: s.text(at: 2) ?? "",
-        row: s.optionalInt64(at: 3).map { .version(Int($0)) } ?? .event(s.int(at: 4)))
+  /// 引き継ぎをたどる表。
+  private enum LineageTable: CaseIterable {
+    case version
+    case item
+    case event
+
+    /// 行の ID・出したノード・出来事か・無効な項目か・引き継ぎ元を引く SQL（末尾に ID の並びを足す）。
+    var sql: String {
+      switch self {
+      case .version:
+        """
+        SELECT v.id, i.node_id, 0, i.valid_to IS NOT NULL, i.source_item_id, i.source_event_id
+        FROM item_versions v JOIN items i ON i.id = v.item_id WHERE v.id IN
+        """
+      case .item:
+        """
+        SELECT id, node_id, 0, valid_to IS NOT NULL, source_item_id, source_event_id FROM items
+        WHERE id IN
+        """
+      case .event:
+        """
+        SELECT id, node_id, 1, 0, source_item_id, source_event_id FROM events WHERE id IN
+        """
+      }
     }
   }
 

@@ -18,13 +18,13 @@ extension AutomationDatabase {
     var fresh = 0
     /// 出来事の流れで、残す期間の内に同じ id を出したので足さなかった数。
     var duplicates = 0
-    /// 無効にした項目。
-    var invalidated: [Int] = []
+    /// 無効にした項目の数。
+    var invalidated = 0
     /// 足した版（既にある項目の中身が変わった）の数。
     var versioned = 0
 
     /// 何かが変わったか（項目が有効になる・版が足される・項目が無効になる・出来事が足される）。
-    var changed: Bool { fresh > 0 || !invalidated.isEmpty || versioned > 0 }
+    var changed: Bool { fresh > 0 || invalidated > 0 || versioned > 0 }
 
   }
 
@@ -58,14 +58,14 @@ extension AutomationDatabase {
           continue
         }
         try invalidate(item: current.id, of: nodeId, at: at)
-        written.invalidated.append(current.id)
+        written.invalidated += 1
       }
       try insertItem(of: nodeId, output, at: at)
       written.fresh += 1
     }
     for current in live.values {
       try invalidate(item: current.id, of: nodeId, at: at)
-      written.invalidated.append(current.id)
+      written.invalidated += 1
     }
     return written
   }
@@ -126,14 +126,13 @@ extension AutomationDatabase {
       ] + Self.values(output.source))
   }
 
-  /// ノードの今有効な項目をすべて無効にし、無効にした項目を返す（性質の書き換え・ノードを外す）。
-  func invalidateItems(of nodeId: AutomationNodeID, at: Date) throws -> [Int] {
+  /// ノードの今有効な項目をすべて無効にする（性質の書き換え・ノードを外す）。
+  func invalidateItems(of nodeId: AutomationNodeID, at: Date) throws {
     let ids = try db.select(
       "SELECT id FROM items WHERE node_id = ? AND valid_to IS NULL",
       [.integer(Int64(nodeId.rawValue))]
     ) { $0.int(at: 0) }
     for id in ids { try invalidate(item: id, of: nodeId, at: at) }
-    return ids
   }
 
   /// ノード `nodeId` の今有効な項目を、次の番号で無効にする。
@@ -149,17 +148,6 @@ extension AutomationDatabase {
     try db.run("UPDATE nodes SET \(column) = \(column) + 1 WHERE id = ?", [p])
     return try db.select("SELECT \(column) FROM nodes WHERE id = ?", [p]) { $0.int64(at: 0) }
       .first ?? 0
-  }
-
-  /// ノードの今有効な項目のリンク。リンクの無い項目は入らない。
-  func liveLinks(of nodeId: AutomationNodeID) throws -> Set<String> {
-    Set(
-      try db.select(
-        """
-        SELECT v.link FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
-        WHERE i.node_id = ? AND i.valid_to IS NULL AND v.link IS NOT NULL
-        """, [.integer(Int64(nodeId.rawValue))]
-      ) { $0.text(at: 0) ?? "" })
   }
 
   // MARK: - 値

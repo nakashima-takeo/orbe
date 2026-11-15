@@ -256,11 +256,11 @@ extension AutomationStoreTests {
     try copyAll(store, id, at: Self.at.addingTimeInterval(60))
     XCTAssertEqual(
       try take(store, id, "a", at: Self.at.addingTimeInterval(60)), ["x"], "読み直しても 1 度だけ")
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1)
+    XCTAssertEqual(try store.liveLinks(id, "copy").count, 1)
 
     try fetch(store, id, [], at: Self.at.addingTimeInterval(120))
     try copyAll(store, id, at: Self.at.addingTimeInterval(120))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [], "入力が 0 件なら前の出力を無効にする")
+    XCTAssertEqual(try store.liveLinks(id, "copy"), [], "入力が 0 件なら前の出力を無効にする")
 
     try fetch(store, id, ["y"], at: Self.at.addingTimeInterval(180))
     try copyAll(store, id, at: Self.at.addingTimeInterval(180))
@@ -268,7 +268,7 @@ extension AutomationStoreTests {
     events.nodes[1].action.coverage = nil
     let version = try XCTUnwrap(store.automation(id)?.version)
     _ = try store.replace(id, version: version, with: events, now: Self.at.addingTimeInterval(200))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [], "性質を書き換えると項目は無効")
+    XCTAssertEqual(try store.liveLinks(id, "copy"), [], "性質を書き換えると項目は無効")
     XCTAssertEqual(
       store.automation(id)?.graph.node(key: "copy")?.coverage, .newArrivals, "書かなければ出来事の流れ")
   }
@@ -291,7 +291,7 @@ extension AutomationStoreTests {
     try copyAll(store, id, at: Self.at.addingTimeInterval(120))
 
     XCTAssertEqual(try take(store, id, "a", at: Self.at.addingTimeInterval(120)), ["x"])
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1, "今有効なのは新しい項目だけ")
+    XCTAssertEqual(try store.liveLinks(id, "copy").count, 1, "今有効なのは新しい項目だけ")
   }
 
   /// 入力を読むノードの回は、取った行が 0 件で失敗しても、取った数（0）を記録に持つ。確定が返す回と読み直した回は同じ。

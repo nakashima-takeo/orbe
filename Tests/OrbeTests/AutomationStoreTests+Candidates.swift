@@ -53,7 +53,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(dismissed.map(\.why), [.noLongerCurrent])
   }
 
-  /// ほかの自動化の候補は、同じリンクの行を判定が読むのを妨げない。人がさばいて覚えなくなった候補はその場で忘れる。
+  /// ほかの自動化の候補は、同じリンクの行を判定が読むのを妨げない（人がさばいた候補でも）。
   func testAnotherAutomationsProposalDoesNotKeepAJudgeFromTheSameLink() throws {
     let store = AutomationStore()
     let first = try store.create(Self.definition("一つ目", coverage: .newArrivals), now: Self.at).id
@@ -66,7 +66,7 @@ extension AutomationStoreTests {
 
     try store.dismiss(XCTUnwrap(store.proposals.first?.id), now: Self.at)
 
-    XCTAssertEqual(proposals(store), [:])
+    XCTAssertEqual(proposals(store), [Self.link("a"): .dismissed])
     XCTAssertEqual(store.automation(second)?.state(key: "judge").pending.count, 1)
   }
 
@@ -151,18 +151,19 @@ extension AutomationStoreTests {
     XCTAssertEqual(unresolved.map(\.why), [.noOpenProposal])
   }
 
-  /// 元にした行が出来事で人がさばいた候補はその場で忘れ、後の取得の回の「下げた」には数えない。
-  func testANewArrivalsProposalTheUserHandledIsForgottenAtOnceAndNotCountedAsWithdrawn() throws {
+  /// 元にした行が出来事で人がさばいた候補は、そのリンクの出来事が上流に残る間は覚え、後の取得の回の「下げた」には数えない。
+  func testANewArrivalsProposalTheUserHandledIsRememberedAndNotCountedAsWithdrawn() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
     let a = Self.item("a")
     try Self.fetch(store, id, [a])
     try Self.judge(store, id, proposing: [a])
     try store.dismiss(XCTUnwrap(store.proposals.first?.id), now: Self.at)
-    XCTAssertEqual(proposals(store), [:])
+    XCTAssertEqual(proposals(store), [Self.link("a"): .dismissed])
 
     try Self.fetch(store, id, [])
 
+    XCTAssertEqual(proposals(store), [Self.link("a"): .dismissed])
     XCTAssertEqual(store.automation(id)?.state(key: "fetch").runs.first?.run?.withdrawn, 0)
   }
 

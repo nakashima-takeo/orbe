@@ -249,7 +249,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(carried.state(key: "fetch").runs.count, 1)
     XCTAssertNil(carried.state(key: "fetch").breach)
     XCTAssertEqual(
-      carried.state(key: "fetch").liveLinks, [Self.item("a").link], "今の集合のままなら項目は残る")
+      try AutomationStore().liveLinks(id, "fetch"), [Self.link("a")],
+      "今の集合のままなら項目は残る")
     XCTAssertEqual(carried, AutomationStore().automation(id))
   }
 
@@ -263,7 +264,7 @@ extension AutomationStoreTests {
 
     _ = try store.replace(id, version: 1, with: fixed, now: Self.at)
 
-    XCTAssertEqual(store.automation(id)?.state(key: "fetch").liveLinks, [])
+    XCTAssertEqual(try store.liveLinks(id, "fetch"), [])
   }
 
   /// 読めない自動化の書き換えでも、id を落として今のノードと同じ鍵で書いたノードは断り、ノードは変わらない。

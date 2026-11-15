@@ -3,14 +3,17 @@ import Foundation
 // タスク候補の保ち方。候補は判定の出力で、出した判定のノードが持つ。同一性は（判定のノード, リンク）で、ほかの判定・ほかの自動化の
 // 候補は、読みにも確定にも効かない。棚は判定のノードの持ち主の自動化。
 //
+// 候補の保ち方の 2 つの条件（下げる・覚える）は状態の決まりで、時刻付きの変異の初めと終わりに、候補すべてに当てる
+// （`AutomationStore.commit`）。何が起きたかから見直す候補を選ばないので、見直す場面の並べ漏れが起きない。
+//
 // 判断待ちの候補を Orbe が下げるのは、候補が元にした行（判定が読んだ行と、その行が引き継ぎでたどる元の行）のうち項目のどれかが
-// 無効になったか、元にした行がどれも出来事で判定が読んだ行が残す期間を過ぎ、判定の入力（直接の上流）の今有効な項目にも残す期間の
-// 内の出来事にもそのリンクが無いときだけ。
+// 無効になったか、元にした行がどれも出来事で判定が読んだ行が残す期間を過ぎ、判定の入力（直接の上流）の今の行にそのリンクが
+// 無いときだけ。
 //
 // 判定のノード J の候補 P を覚えるのは、J が今のノードで役割が判定のうち、P が判断待ちの間か、P のリンクの行がまた J へ届きうる
 // 間——J へ行が届くノード（入力を上流へたどり、取得で止める）の今有効な項目にリンクがあるか、J が `take: all` で読む出来事に
-// リンクがある間。定義を読めない自動化は、そのノードが出した候補を持つ。読めない候補は状態が分からないので、出した判定のノードが
-// 今のノードの間は覚える。
+// リンクがある間——か、P を人がさばいていて、J へ行が届くノードの今の行にリンクがある間。定義を読めない自動化は、そのノードが
+// 出した候補を持つ。読めない候補は状態が分からないので、出した判定のノードが今のノードの間は覚える。
 
 extension AutomationMemory {
   /// 判定のノード `judge` の、判断待ちでない覚えている候補のリンク（読めない候補も含める。判定に見せない候補なので）。判定の前に
@@ -34,93 +37,86 @@ extension AutomationMemory {
         + unreadableProposals.filter { $0.judge == judge }.map(\.link))
   }
 
-  /// 覚えなくなった候補（読めない候補も）を忘れる（覚えている印を外す）。
+  /// 今のノードで役割が判定のノード。
+  private var judges: [AutomationNodeID: (graph: AutomationGraph, node: AutomationGraph.Node)] {
+    Dictionary(
+      uniqueKeysWithValues: automations.flatMap { automation in
+        automation.graph.judges.map { ($0.id, (automation.graph, $0)) }
+      })
+  }
+
+  /// 候補の保ち方の 2 つの条件を時刻 `now` に当てる: 下げる条件を満たした判断待ちの候補を下げて判定の持ち越しに数え（判定の
+  /// 次の成功した回の `withdrawn`）、覚える条件から外れた候補を忘れる。
+  mutating func keepProposals(_ db: AutomationDatabase, now: Date) throws {
+    for (judge, count) in try withdraw(db, now: now) {
+      var carried = try db.carried(of: judge)
+      carried.withdrawn += count
+      try db.setCarried(judge, carried)
+    }
+    try forgetUnheld(db, now: now)
+  }
+
+  /// 判定のノードが今のノードで役割が判定の、判断待ちの候補のうち、時刻 `now` に下げる条件を満たすものを下げ（忘れ）、判定ごとの
+  /// 下げた数を返す。
+  mutating func withdraw(_ db: AutomationDatabase, now: Date) throws -> [AutomationNodeID: Int] {
+    let judges = self.judges
+    let open = try db.openProposals().compactMap { proposal in
+      judges[proposal.judge].map { (proposal, $0.node.inputNodeIds) }
+    }
+    guard !open.isEmpty else { return [:] }
+    let gone = try db.noLongerCurrent(
+      open.map { AutomationDatabase.Withdrawal(row: $0.0.row, link: $0.0.link, inputs: $0.1) },
+      now: now)
+    let withdrawn = zip(open, gone).filter(\.1).map(\.0.0)
+    guard !withdrawn.isEmpty else { return [:] }
+    try db.forget(proposals: withdrawn.map(\.id))
+    let ids = Set(withdrawn.map(\.id))
+    proposals.removeAll { ids.contains($0.id) }
+    unreadableProposals.removeAll { ids.contains($0.id) }
+    return Dictionary(grouping: withdrawn, by: \.judge).mapValues(\.count)
+  }
+
+  /// 時刻 `now` に覚える条件から外れた候補（読めない候補も）を忘れる（覚えている印を外す）。
   mutating func forgetUnheld(_ db: AutomationDatabase, now: Date) throws {
-    var reach: [AutomationNodeID: Set<String>] = [:]
-    for automation in automations {
-      for judge in automation.graph.judges {
-        reach[judge.id] = Set(
-          automation.graph.feeders(of: judge.id).flatMap { automation.state($0.id).liveLinks }
-        ).union(try db.linksReadAgain(by: judge, now: now))
+    let judges = self.judges
+    let settled = proposals.filter { $0.state != .open && judges[$0.judge] != nil }
+    /// 判定ごとの、また届きうるリンク（判定が対応済みにした候補を覚える分）と、人がさばいた候補を覚える分。
+    var reach: [AutomationNodeID: (again: Set<String>, rows: Set<String>)] = [:]
+    if !settled.isEmpty {
+      var feeders: [AutomationNodeID: [AutomationNodeID]] = [:]
+      for judge in Set(settled.map(\.judge)) {
+        guard let (graph, _) = judges[judge] else { continue }
+        feeders[judge] = graph.feeders(of: judge).map(\.id)
+      }
+      let current = try db.currentLinks(
+        of: Set(feeders.values.joined()), among: Set(settled.map(\.link)), now: now)
+      for (judge, nodes) in feeders {
+        guard let (_, node) = judges[judge] else { continue }
+        let again = try nodes.reduce(into: db.linksReadAgain(by: node, now: now)) {
+          $0.formUnion(current.items[$1] ?? [])
+        }
+        reach[judge] = (again, nodes.reduce(into: again) { $0.formUnion(current.events[$1] ?? []) })
       }
     }
     let unreadableNodes = Set(unreadable.flatMap(\.nodeIds))
-    func held(_ judge: AutomationNodeID, open: Bool, link: String) -> Bool {
-      guard let links = reach[judge] else { return unreadableNodes.contains(judge) }
-      return open || links.contains(link)
+    func held(_ proposal: AutomationProposal) -> Bool {
+      guard judges[proposal.judge] != nil else { return unreadableNodes.contains(proposal.judge) }
+      switch proposal.state {
+      case .open: return true
+      case .resolved: return reach[proposal.judge]?.again.contains(proposal.link) == true
+      case .accepted, .dismissed: return reach[proposal.judge]?.rows.contains(proposal.link) == true
+      }
     }
     let unheld =
-      proposals.filter { !held($0.judge, open: $0.state == .open, link: $0.link) }.map(\.id)
-      + unreadableProposals.filter { !held($0.judge, open: true, link: $0.link) }.map(\.id)
+      proposals.filter { !held($0) }.map(\.id)
+      + unreadableProposals.filter {
+        judges[$0.judge] == nil && !unreadableNodes.contains($0.judge)
+      }.map(\.id)
     guard !unheld.isEmpty else { return }
     try db.forget(proposals: unheld)
     let ids = Set(unheld)
     proposals.removeAll { ids.contains($0.id) }
     unreadableProposals.removeAll { ids.contains($0.id) }
-  }
-
-  /// 項目 `items` が無効になった・ノードの今有効な項目のリンク `lost` が抜けたので、下げる条件がそろった判断待ちの候補を下げ
-  /// （忘れ）、下げた数を返す。見直すのは、読んだ行が `items` から引き継ぎで降りた行の候補と、`items` を出したノードか `lost` の
-  /// ノードを入力に持つ判定の、そのリンクの候補（版の更新でリンクだけが変わった項目も、前のリンクが `lost` に入る）。`now` は
-  /// 変異の時刻（残す期間を過ぎた出来事も今のものでない行に数える）。
-  @discardableResult mutating func withdraw(
-    after items: [Int], lost: [AutomationNodeID: Set<String>] = [:], _ db: AutomationDatabase,
-    now: Date
-  ) throws -> Int {
-    guard !items.isEmpty || lost.contains(where: { !$0.value.isEmpty }) else { return 0 }
-    var candidates = try db.openProposals(descendingFrom: items)
-    let linked = Dictionary(grouping: try db.linkedItems(items), by: \.nodeId)
-      .mapValues { Set($0.map(\.link)) }.merging(lost) { $0.union($1) }
-    for automation in automations {
-      for judge in automation.graph.judges {
-        let links = judge.inputNodeIds.reduce(into: Set<String>()) {
-          $0.formUnion(linked[$1] ?? [])
-        }
-        guard !links.isEmpty else { continue }
-        candidates += try db.openProposals(of: judge.id, links: links)
-      }
-    }
-    return try withdraw(candidates, db, now: now).count
-  }
-
-  /// 判定のノード `judges` の判断待ちの候補のうち、下げる条件が既にそろった候補を下げる（忘れる）。書き換えで何をするかが変わった
-  /// 判定（入力を変えた判定・直した読めない自動化の判定）に当てる。
-  mutating func withdraw(
-    reviewing judges: [AutomationNodeID], _ db: AutomationDatabase, now: Date
-  ) throws {
-    var candidates: [AutomationDatabase.OpenProposal] = []
-    for judge in judges { candidates += try db.openProposals(of: judge) }
-    try withdraw(candidates, db, now: now)
-  }
-
-  /// 判定が読んだ出来事が残す期間を過ぎた判断待ちの候補のうち、下げる条件がそろった候補を下げ（忘れ）、判定ごとの下げた数を
-  /// 返す。回の無い契機（掃除）で下げる分。
-  mutating func withdrawExpired(_ db: AutomationDatabase, now: Date) throws
-    -> [AutomationNodeID: Int]
-  {
-    let withdrawn = try withdraw(try db.openProposals(readingEventsExpiredAt: now), db, now: now)
-    return Dictionary(grouping: withdrawn, by: \.judge).mapValues(\.count)
-  }
-
-  /// 候補のうち、判定のノードが今のノードで、時刻 `now` に下げる条件がそろった候補を忘れて返す。
-  @discardableResult private mutating func withdraw(
-    _ candidates: [AutomationDatabase.OpenProposal], _ db: AutomationDatabase, now: Date
-  ) throws -> [AutomationDatabase.OpenProposal] {
-    var withdrawn: [Int: AutomationDatabase.OpenProposal] = [:]
-    for candidate in candidates where withdrawn[candidate.id] == nil {
-      guard
-        let judge = automations.lazy.compactMap({ $0.graph.node(candidate.judge) }).first,
-        judge.role == .judge,
-        try db.noLongerCurrent(
-          candidate.row, link: candidate.link, inputs: judge.inputNodeIds, now: now)
-      else { continue }
-      withdrawn[candidate.id] = candidate
-    }
-    guard !withdrawn.isEmpty else { return [] }
-    try db.forget(proposals: Array(withdrawn.keys))
-    proposals.removeAll { withdrawn[$0.id] != nil }
-    unreadableProposals.removeAll { withdrawn[$0.id] != nil }
-    return Array(withdrawn.values)
   }
 }
 

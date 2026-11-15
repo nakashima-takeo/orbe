@@ -99,8 +99,6 @@ struct AutomationNodeState: Equatable {
   var breach: AutomationRunRecord?
   /// 受け手として今読めば取る行。入力の無いノードは 0 件。
   var pending = AutomationPending()
-  /// 出す側の今有効な項目のリンク。
-  var liveLinks: Set<String> = []
 
   /// メモリに持つ直近の回の数（画面の実行履歴と帯の長さ）。DB に残す回の数は `AutomationRetention` が決める。
   static let recentRuns = 20

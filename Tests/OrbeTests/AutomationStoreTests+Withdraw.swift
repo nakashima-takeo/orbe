@@ -213,7 +213,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 0)
   }
 
-  /// 出来事を毎回すべて読む判定は、さばいた候補のリンクを窓の内にある間は覚え、その出来事を判定の前で捨てる。窓を外れたら忘れる。
+  /// 出来事を毎回すべて読む判定は、対応済みにした候補のリンクを窓の内にある間は覚え、その出来事を判定の前で捨てる。窓を外れたら
+  /// 忘れる。
   func testAJudgeReadingAWindowEveryRunRemembersClosedProposalsWhileTheyAreInIt() throws {
     let store = AutomationStore()
     var definition = Self.definition(coverage: .newArrivals)
@@ -224,9 +225,9 @@ extension AutomationStoreTests {
     let a = Self.item("a")
     try Self.fetch(store, id, [a])
     try Self.judge(store, id, proposing: [a])
-    try store.dismiss(try XCTUnwrap(store.proposals.first).id, now: Self.at)
+    try Self.judge(store, id, resolving: [Self.link("a")])
 
-    XCTAssertEqual(store.proposals.map(\.state), [.dismissed])
+    XCTAssertEqual(store.proposals.map(\.state), [.resolved])
     let judge = store.nodeId(id, "judge")
     let read = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: Self.at))
     XCTAssertEqual(read.taken, [])

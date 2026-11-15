@@ -135,6 +135,7 @@ extension AutomationVersionTwoFixture {
     );
     CREATE INDEX events_seen ON events (node_id, written_id, created_at);
     CREATE INDEX events_node ON events (node_id, created_at);
+    CREATE INDEX events_link ON events (node_id, link, created_at);
     CREATE INDEX events_source_item ON events (source_item_id);
     CREATE INDEX events_source_event ON events (source_event_id);
     CREATE TABLE runs (
