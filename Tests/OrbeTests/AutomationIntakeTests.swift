@@ -34,7 +34,7 @@ final class AutomationIntakeTests: OrbeTestCase {
       from: edge, table: edge == cs ? .item : .event, seq: seq,
       ref: edge == cs ? .version(seq) : .event(seq), source: .item(seq), id: id,
       text: String(repeating: "x", count: size), at: at ?? t0.addingTimeInterval(Double(seq)),
-      link: link ?? "https://example.com/\(id)", unread: unread)
+      link: link ?? "https://example.com/\(id)", unread: unread, changed: unread)
   }
 
   private func ceilings(cs item: Int = 0, na event: Int = 0) -> [AutomationIntake.Ceiling] {
@@ -46,7 +46,7 @@ final class AutomationIntakeTests: OrbeTestCase {
 
   private func context(closed: Set<String> = [], now: Date? = nil) -> AutomationIntake.Context {
     AutomationIntake.Context(
-      closed: { closed.contains($0) }, now: now ?? t0.addingTimeInterval(3600))
+      closed: AutomationIntake.Closed(settled: closed), now: now ?? t0.addingTimeInterval(3600))
   }
 
   /// 捨てた行（古い順に「id 理由」）。

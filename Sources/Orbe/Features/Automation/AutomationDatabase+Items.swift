@@ -174,19 +174,22 @@ extension AutomationDatabase {
     Self.instant(now.addingTimeInterval(-TimeInterval(try eventDays(of: nodeId)) * Self.day))
   }
 
-  /// 時刻 `now` に、出したノードの残す期間（ノードの `retention_days`、無ければ今の設定の値）を過ぎた出来事の ID を選ぶ SQL と、
-  /// その値。
-  func expiredEvents(at now: Date) -> (sql: String, values: [SQLiteValue]) {
+  /// 時刻 `now` に、出したノード（`node` はそのノードの ID の SQL の式）の出来事を残す期間（ノードの `retention_days`、無ければ
+  /// 今の設定の値）の始まりを求める SQL の式と、その値。これより前に作られた出来事は期限を過ぎた。
+  func retentionStart(of node: String, now: Date) -> (sql: String, values: [SQLiteValue]) {
     (
-      """
-      SELECT x.id FROM events x WHERE x.created_at < ?
-        - coalesce((SELECT retention_days FROM nodes WHERE id = x.node_id), ?) * ?
-      """,
+      "(? - coalesce((SELECT retention_days FROM nodes WHERE id = \(node)), ?) * ?)",
       [
         Self.instant(now), .integer(Int64(retention().eventDays)),
         .integer(Int64(Self.day * 1000)),
       ]
     )
+  }
+
+  /// 時刻 `now` に残す期間を過ぎた出来事の ID を選ぶ SQL と、その値。
+  func expiredEvents(at now: Date) -> (sql: String, values: [SQLiteValue]) {
+    let start = retentionStart(of: "x.node_id", now: now)
+    return ("SELECT x.id FROM events x WHERE x.created_at < \(start.sql)", start.values)
   }
 
   static let day: TimeInterval = 24 * 3600

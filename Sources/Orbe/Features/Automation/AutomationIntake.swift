@@ -27,8 +27,10 @@ enum AutomationIntake {
     let at: Date
     /// 行の `link`（項目は今の版の）。無ければ nil。
     let link: String?
-    /// 読んだ位置より後か（take が all の行は、前の回までに読んだ行も載る）。
+    /// 読んだ位置より後に足されたか（take が all の行は、前の回までに読んだ行も載る）。捨てた数はこれで数える。
     let unread: Bool
+    /// 読んだ位置より後に変わったか（項目は足した番号と今の版の番号の大きい方、出来事は足した番号で見る）。
+    let changed: Bool
   }
 
   /// 捨てた行と理由（`lapsed` は読みでは出ない）。
@@ -62,10 +64,18 @@ enum AutomationIntake {
     let seqs: AutomationSeqs
   }
 
+  /// 読むノード（判定）の、判断待ちでない覚えている候補のリンク。判定の前に捨てる行を決めるのに使う。
+  struct Closed: Equatable {
+    /// 人がさばいた候補と読めない候補のリンク。その行はいつも捨てる。
+    var settled: Set<String> = []
+    /// 判定が対応済みにした候補のリンク。そのリンクの行のどれにも読んだ位置より後の変化が無いときだけ、そのリンクの行をすべて
+    /// 捨てる（判定がまだ見ていない変化があれば、すべて渡す）。
+    var resolved: Set<String> = []
+  }
+
   /// 取るときの事情。
   struct Context {
-    /// リンクが、読むノード（判定）の判断待ちでない覚えている候補のリンクか。
-    let closed: (String) -> Bool
+    let closed: Closed
     let now: Date
   }
 
@@ -96,18 +106,29 @@ enum AutomationIntake {
       reach: reach(ceilings))
   }
 
-  /// 古さ（古さの上限を過ぎた行、読む行の下限の時刻以前の行）で捨てる。判定だけは、判断待ちでない覚えている候補のリンクの行も捨てる。
-  /// 残りと捨てた行（古い順）を返す。
+  /// 古さ（古さの上限を過ぎた行、読む行の下限の時刻以前の行）で捨てる。判定だけは、判断待ちでない覚えている候補のリンクの行も
+  /// 捨てる（`Closed`。変化は古さで捨てた後に残った行で見る）。残りと捨てた行（古い順）を返す。
   private static func filtered(
     _ rows: [Row], by node: AutomationGraph.Node, _ edges: [AutomationNodeID: AutomationNodeEdge],
     _ context: Context
   ) -> (remaining: [Row], dropped: [Drop]) {
-    var remaining: [Row] = []
+    var aged: [Row] = []
     var dropped: [Drop] = []
     for row in rows {
       if let edge = edges[row.from], tooOld(row, edge, now: context.now) {
         dropped.append(Drop(row: row, reason: .expired))
-      } else if node.role == .judge, let link = row.link, context.closed(link) {
+      } else {
+        aged.append(row)
+      }
+    }
+    guard node.role == .judge else { return (aged, dropped) }
+    let changed = Set(aged.filter(\.changed).compactMap(\.link))
+    var remaining: [Row] = []
+    for row in aged {
+      if let link = row.link,
+        context.closed.settled.contains(link)
+          || context.closed.resolved.contains(link) && !changed.contains(link)
+      {
         dropped.append(Drop(row: row, reason: .closed))
       } else {
         remaining.append(row)

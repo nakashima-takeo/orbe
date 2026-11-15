@@ -70,8 +70,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(second)?.state(key: "judge").pending.count, 1)
   }
 
-  /// 元にした行が出来事の候補は、取得から消えても判定が対応済みにするまで残り、対応済みになれば（リンクの行がまた届きえないので）
-  /// 忘れる。判断待ちの候補のリンクの新しい行は判定へ渡る（判定が対応済みにする手がかり）。
+  /// 元にした行が出来事の候補は、取得から消えても判定が対応済みにするまで残り、対応済みになっても、下げる条件を満たすまで（読んだ
+  /// 出来事が残す期間の内は）覚える。判断待ちの候補のリンクの新しい行は判定へ渡る（判定が対応済みにする手がかり）。
   func testANewArrivalsProposalStaysUntilTheJudgeResolvesIt() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
@@ -87,7 +87,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
 
     try Self.judge(store, id, resolving: [Self.link("a")])
-    XCTAssertEqual(proposals(store), [:])
+    XCTAssertEqual(proposals(store), [Self.link("a"): .resolved])
   }
 
   /// 同じリンクの行は判定へすべて届き、1 回でそのうち 2 つを案にしても候補は 1 つで、残りは理由付きで捨てる。

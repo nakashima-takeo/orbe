@@ -43,8 +43,7 @@ extension AutomationStore {
     let closed = memory.closedLinks(of: nodeId)
     return try read {
       try $0.read(
-        node, baseline: baseline,
-        context: AutomationIntake.Context(closed: closed.contains, now: now))
+        node, baseline: baseline, context: AutomationIntake.Context(closed: closed, now: now))
     }
   }
 
@@ -86,8 +85,8 @@ extension AutomationStore {
 
   /// ノードの 1 回を 1 トランザクションで確定する。
   ///
-  /// 成功した回は、読んだ位置を進め、持ち越しを記録に載せて空に戻し、出す側なら出した行を照らして（今の集合は項目と版、出来事の
-  /// 流れは出来事）、無効にした項目を元にした判断待ちの候補を下げる。判定なら候補を足し・対応済みにする。失敗した回は記録・
+  /// 成功した回は、読んだ位置を進め、持ち越しを記録に載せて空に戻し、出す側なら出した行を照らし（今の集合は項目と版、出来事の
+  /// 流れは出来事）、書いた直後に判断待ちの候補へ下げる条件を当てる。判定なら候補を足し・対応済みにする。失敗した回は記録・
   /// 回の履歴・形式エラーの印だけを書き、出す側の行・読んだ位置・持ち越しは動かさない——失敗を「0 件取れた」と読み違えて候補を一斉に
   /// 下げないため。どちらも回の履歴（読んだ行と扱い）を書き、出力が決まりを外した最初の回なら印を書く。自動化かノードがもう
   /// 無ければ何もしない。
@@ -148,8 +147,7 @@ extension AutomationMemory {
     for node in automation.graph.nodes
     where !node.inputs.isEmpty && (nodeIds?.contains(node.id) ?? true) {
       let closed = closedLinks(of: node.id)
-      automations[index].states[node.id]?.pending = try db.pending(
-        node, closed: closed.contains, now: now)
+      automations[index].states[node.id]?.pending = try db.pending(node, closed: closed, now: now)
     }
   }
 

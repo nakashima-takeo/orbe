@@ -79,27 +79,30 @@ extension AutomationDatabase {
 
   // MARK: - 下げる判断と覚える判断
 
-  /// 覚えていて、判断が無く、対応済みでない候補（読めない候補も）。
-  struct OpenProposal: Equatable {
+  /// 覚えている候補 1 つ（読めない候補も）。
+  struct HeldProposal: Equatable {
     let id: Int
     let judge: AutomationNodeID
     let link: String
     let row: AutomationRowRef
+    /// 判断待ち（人の判断が無く、対応済みでない）。
+    let open: Bool
   }
 
-  /// 判断待ちの候補すべて（読めない候補も）。
-  func openProposals() throws -> [OpenProposal] {
+  /// 覚えている候補すべて（読めない候補も）。
+  func heldProposals() throws -> [HeldProposal] {
     try db.select(
       """
-      SELECT q.id, q.node_id, q.link, q.version_id, q.event_id FROM proposals q
-      JOIN held_proposals h ON h.proposal_id = q.id
-      WHERE h.resolved_at IS NULL AND q.id NOT IN (SELECT proposal_id FROM settlements)
+      SELECT q.id, q.node_id, q.link, q.version_id, q.event_id,
+        h.resolved_at IS NULL AND q.id NOT IN (SELECT proposal_id FROM settlements)
+      FROM proposals q JOIN held_proposals h ON h.proposal_id = q.id
       ORDER BY q.id
       """, []
     ) { s in
-      OpenProposal(
+      HeldProposal(
         id: s.int(at: 0), judge: AutomationNodeID(s.int(at: 1)), link: s.text(at: 2) ?? "",
-        row: s.optionalInt64(at: 3).map { .version(Int($0)) } ?? .event(s.int(at: 4)))
+        row: s.optionalInt64(at: 3).map { .version(Int($0)) } ?? .event(s.int(at: 4)),
+        open: s.int(at: 5) != 0)
     }
   }
 
@@ -114,86 +117,70 @@ extension AutomationDatabase {
   /// (a) 元にした行（読んだ行と、その行が引き継ぎでたどる元の行）のうち項目のどれかが無効。
   /// (b) 元にした行がどれも出来事で、読んだ行が残す期間を過ぎている。
   /// (c) 判定の入力のどれもリンクを今の行に持たない。
-  /// 判断待ちの候補にも、判定の確定が当てる案にも、この 1 つの読みを通す。候補の数だけ SQL を発行しない。
+  /// 覚えている候補にも、判定の確定が当てる案にも、この 1 つの読みを通す。候補の数だけ SQL を発行しない。
   func noLongerCurrent(_ candidates: [Withdrawal], now: Date) throws -> [Bool] {
     guard !candidates.isEmpty else { return [] }
     let lineages = try lineages(of: Set(candidates.map(\.row)))
-    let expired = try expiredEvents(
-      Set(
-        candidates.compactMap { candidate -> Int? in
-          guard case .event(let id) = candidate.row,
-            lineages[candidate.row]?.allSatisfy(\.event) ?? true
-          else { return nil }
-          return id
-        }), now: now)
-    let stale = candidates.map { candidate in
-      let steps = lineages[candidate.row] ?? []
-      if steps.contains(where: \.invalid) { return true }
-      guard steps.allSatisfy(\.event), case .event(let id) = candidate.row else { return false }
-      return expired.contains(id)
+    let readEvents = candidates.map { candidate -> Int? in
+      guard case .event(let id) = candidate.row,
+        lineages[candidate.row]?.allSatisfy(\.event) ?? true
+      else { return nil }
+      return id
+    }
+    let expired = try expiredEvents(Set(readEvents.compactMap { $0 }), now: now)
+    let stale = zip(candidates, readEvents).map { candidate, event in
+      (lineages[candidate.row] ?? []).contains(where: \.invalid)
+        || event.map(expired.contains) ?? false
     }
     let suspects = zip(candidates, stale).filter(\.1).map(\.0)
     guard !suspects.isEmpty else { return stale }
     let current = try currentLinks(
       of: Set(suspects.flatMap(\.inputs)), among: Set(suspects.map(\.link)), now: now)
     return zip(candidates, stale).map { candidate, stale in
-      stale && !current.rows(candidate.link, in: candidate.inputs)
+      stale && !candidate.inputs.contains { current[$0]?.contains(candidate.link) == true }
     }
   }
 
-  /// ノードの今の行が持つリンク。今の行とは、今有効な項目、および残す期間の内の出来事のうち元にした行に無効な項目が無いもの。
-  struct CurrentLinks {
-    /// ノードごとの、今有効な項目のリンク。
-    var items: [AutomationNodeID: Set<String>] = [:]
-    /// ノードごとの、今の行である出来事のリンク。
-    var events: [AutomationNodeID: Set<String>] = [:]
-
-    /// `nodes` のどれかの今有効な項目が `link` を持つか。
-    func items(_ link: String, in nodes: some Sequence<AutomationNodeID>) -> Bool {
-      nodes.contains { items[$0]?.contains(link) == true }
-    }
-
-    /// `nodes` のどれかの今の行（項目か出来事）が `link` を持つか。
-    func rows(_ link: String, in nodes: some Sequence<AutomationNodeID>) -> Bool {
-      items(link, in: nodes) || nodes.contains { events[$0]?.contains(link) == true }
-    }
-  }
-
-  /// ノード `nodes` の今の行のうち、リンクが `links` のどれかのもの（時刻 `now` の）。下げる条件（判定の入力）と、人がさばいた
-  /// 候補を覚える条件（判定へ行が届くノード）が読む。
+  /// ノード `nodes` の今の行が持つリンクのうち、`links` のどれかのもの（時刻 `now` の。ノードごと）。今の行とは、今有効な項目と、
+  /// 残す期間の内の出来事のうち、元にした行（その行と、その行が引き継ぎでたどる元の行）に無効な項目が無いもの。
   func currentLinks(of nodes: Set<AutomationNodeID>, among links: Set<String>, now: Date) throws
-    -> CurrentLinks
+    -> [AutomationNodeID: Set<String>]
   {
-    var current = CurrentLinks()
-    guard !nodes.isEmpty, !links.isEmpty else { return current }
-    guard
+    guard !nodes.isEmpty, !links.isEmpty,
       let linkList = String(
         bytes: try JSONSerialization.data(withJSONObject: Array(links)), encoding: .utf8)
-    else { return current }
-    for (nodeId, link) in try db.select(
+    else { return [:] }
+    let items = try db.select(
       """
-      SELECT i.node_id, v.link FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
+      SELECT v.id, i.node_id, v.link FROM items i
+      JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
       WHERE i.node_id IN (\(Self.list(nodes.map(\.rawValue)))) AND i.valid_to IS NULL
         AND v.link IN (SELECT value FROM json_each(?))
-      """, [.text(linkList)], { (AutomationNodeID($0.int(at: 0)), $0.text(at: 1) ?? "") })
-    {
-      current.items[nodeId, default: []].insert(link)
+      """, [.text(linkList)]
+    ) {
+      (
+        row: AutomationRowRef.version($0.int(at: 0)), nodeId: AutomationNodeID($0.int(at: 1)),
+        link: $0.text(at: 2) ?? ""
+      )
     }
+    let start = retentionStart(of: "e.node_id", now: now)
     let events = try db.select(
       """
       SELECT e.id, e.node_id, e.link FROM events e
       WHERE e.node_id IN (\(Self.list(nodes.map(\.rawValue))))
-        AND e.link IN (SELECT value FROM json_each(?1))
-        AND e.created_at >= ?2 - coalesce((SELECT retention_days FROM nodes WHERE id = e.node_id), ?3) * ?4
-      """,
-      [
-        .text(linkList), Self.instant(now), .integer(Int64(retention().eventDays)),
-        .integer(Int64(Self.day * 1000)),
-      ]
-    ) { (id: $0.int(at: 0), nodeId: AutomationNodeID($0.int(at: 1)), link: $0.text(at: 2) ?? "") }
-    let lineages = try lineages(of: Set(events.map { .event($0.id) }))
-    for event in events where !(lineages[.event(event.id)] ?? []).contains(where: \.invalid) {
-      current.events[event.nodeId, default: []].insert(event.link)
+        AND e.link IN (SELECT value FROM json_each(?)) AND e.created_at >= \(start.sql)
+      """, [.text(linkList)] + start.values
+    ) {
+      (
+        row: AutomationRowRef.event($0.int(at: 0)), nodeId: AutomationNodeID($0.int(at: 1)),
+        link: $0.text(at: 2) ?? ""
+      )
+    }
+    let rows = items + events
+    let lineages = try lineages(of: Set(rows.map(\.row)))
+    var current: [AutomationNodeID: Set<String>] = [:]
+    for row in rows where !(lineages[row.row] ?? []).contains(where: \.invalid) {
+      current[row.nodeId, default: []].insert(row.link)
     }
     return current
   }
