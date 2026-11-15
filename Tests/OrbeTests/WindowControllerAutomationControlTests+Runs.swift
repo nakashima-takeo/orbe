@@ -9,6 +9,21 @@ import XCTest
 /// 消え、AI がなぜ失敗したかを読めずに定義を直せない。一覧が全ノードの過去の回を載せて AI の文脈を圧迫する、または過去の回を
 /// 読めない。
 extension WindowControllerAutomationControlTests {
+  /// 回の記録の読みの断りも制御 API の語彙: 未知の自動化・ノードの鍵は -32004、`limit` の値域の外は -32602。
+  func testListingRunsIsRefusedInTheControlVocabulary() throws {
+    let wc = try launch()
+    let id = try set(wc, Self.definition())
+    func refused(_ automationId: Int, _ nodeKey: String? = nil, limit: Int? = nil) -> Int? {
+      code(
+        wc.controlListAutomationRuns(
+          automationId: automationId, nodeKey: nodeKey, before: nil, limit: limit))
+    }
+
+    XCTAssertEqual(refused(99), -32004)
+    XCTAssertEqual(refused(id, "nope"), -32004)
+    XCTAssertEqual(refused(id, limit: AutomationStore.historyPageLimit + 1), -32602)
+  }
+
   /// 一覧の回の記録はノードごとに、保存の形（取った件数・実行の記録・役割ごとの結果）を持つ。
   func testListedRunsKeepTheStoredShape() throws {
     let wc = try launch()

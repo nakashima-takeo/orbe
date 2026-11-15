@@ -96,8 +96,9 @@ final class OrbeMcpProcessTests: OrbeTestCase {
 
   /// 裏の agent の回の道具（札があるときだけ出す）の名前と `inputSchema` の欄、説明が写すページの既定・上限・大きさ・行と報告の
   /// 上限は、Orbe 本体の正本（`AutomationRunSession.Tool` とその受ける引数・ページの定数・`AutomationOutputs.rowKiB`）と同じで、
-  /// `read_run_rows` は claude が結果をファイルに書き出す閾値を上げる。orbe-mcp は別ターゲットなので、片側だけ直してもコンパイルも
-  /// ほかのテストも通り、その道具を持つ役割の回が毎回「ツールが使えなかった」か外れた件で失敗する。
+  /// 読みの道具（`read_run_rows`・`read_waiting_proposals`）は claude が結果をファイルに書き出す閾値を上げる。orbe-mcp は
+  /// 別ターゲットなので、片側だけ直してもコンパイルもほかのテストも通り、その道具を持つ役割の回が毎回「ツールが使えなかった」か
+  /// 外れた件で失敗する。
   func testRunToolsMatchTheRunSession() throws {
     let all = AutomationRunSession.Tool.allCases.map(\.rawValue)
     let tools = ControlProcess.mcpToolsList(
@@ -123,8 +124,11 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     ] {
       XCTAssertTrue(limit.contains(copied), "\(copied): \(limit)")
     }
-    XCTAssertEqual(
-      (read["_meta"] as? [String: Any])?["anthropic/maxResultSizeChars"] as? Int, 500_000)
+    for name in ["read_run_rows", "read_waiting_proposals"] {
+      XCTAssertEqual(
+        (try tool(name)["_meta"] as? [String: Any])?["anthropic/maxResultSizeChars"] as? Int,
+        500_000, name)
+    }
     for name in ["put_items", "put_rows", "put_report"] {
       let description = try tool(name)["description"] as? String ?? ""
       XCTAssertTrue(
@@ -142,6 +146,19 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         description.utf16.count, claudeDescriptionLimit,
         "\(tool["name"] ?? "") の説明が claude の切る長さを超えている")
     }
+  }
+
+  /// `set_automation` の説明は、ツールを最初から読み込む構成の claude が説明を切る長さ（4,096 字）の内で、切れたときの読み先
+  /// （`orb automation --help`）を言う。読み先が切れた部分にあると、その構成の AI は定義の決まりの残りを読む手掛かりを失う。
+  func testTheSetAutomationDescriptionNamesWhereToReadItWholeBeforeTheEarlyCut() throws {
+    let claudeEagerDescriptionLimit = 4_096
+    let tool = try XCTUnwrap(
+      ControlProcess.mcpToolsList().first { $0["name"] as? String == "set_automation" })
+    let description = tool["description"] as? String ?? ""
+
+    XCTAssertTrue(
+      String(description.utf16.prefix(claudeEagerDescriptionLimit))?.contains(
+        "orb automation --help") == true)
   }
 
   /// `tools/list` の description が写す既定・上限は control の正本（`WaitTimeout` / `SessionLogLimits`）と

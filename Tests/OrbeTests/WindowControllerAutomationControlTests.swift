@@ -42,7 +42,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     }
   }
 
-  private func code(_ result: Result<Any, ControlError>) -> Int? {
+  func code(_ result: Result<Any, ControlError>) -> Int? {
     if case .failure(let error) = result { return error.code }
     return nil
   }
