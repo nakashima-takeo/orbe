@@ -242,8 +242,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(try take(store, id, "a", at: later), ["x"], "残す期間を過ぎた id は新しい出来事")
   }
 
-  /// 処理は出力の性質を書かなければ出来事の流れで、今の集合を書けば入力の全体を写す（入力が 0 件なら前の出力をすべて無効にする）。
-  /// 性質を書き換えると今有効な項目はすべて無効になり、出来事は残る。
+  /// 処理は出力の性質を書かなければ出来事の流れで、今の集合を書けば入力の全体を写す。性質を書き換えると今有効な項目はすべて
+  /// 無効になり、出来事は残る。
   func testAProcessCoverageDecidesHowItsRowsLive() throws {
     let store = AutomationStore()
     var copy = DesignSceneFixtures.agentNode(
@@ -257,10 +257,6 @@ extension AutomationStoreTests {
     XCTAssertEqual(
       try take(store, id, "a", at: Self.at.addingTimeInterval(60)), ["x"], "読み直しても 1 度だけ")
     XCTAssertEqual(try store.liveLinks(id, "copy").count, 1)
-
-    try fetch(store, id, [], at: Self.at.addingTimeInterval(120))
-    try copyAll(store, id, at: Self.at.addingTimeInterval(120))
-    XCTAssertEqual(try store.liveLinks(id, "copy"), [], "入力が 0 件なら前の出力を無効にする")
 
     try fetch(store, id, ["y"], at: Self.at.addingTimeInterval(180))
     try copyAll(store, id, at: Self.at.addingTimeInterval(180))

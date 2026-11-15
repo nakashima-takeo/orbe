@@ -121,6 +121,42 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "p").runs.first?.run?.withdrawn, 1)
   }
 
+  /// 今の集合の処理の取る行が 0 件の契機は、入力を付け替えた直後で新しい上流がまだ何も出していなくても、処理の今有効な項目を
+  /// すべて無効にし、その行の候補を下げて判定の次の成功した回に数える。
+  func testAnEmptyTurnOfARewiredCurrentSetProcessWithdrawsTheProposalsOfItsRows() throws {
+    let store = AutomationStore()
+    var process = DesignSceneFixtures.commandNode(
+      "p", "まとめ", .arrival, script: "p", coverage: .currentSet)
+    process.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all)]
+    var definition = Self.definition()
+    definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "p")]
+    definition.nodes.insert(process, at: 1)
+    let id = try store.create(definition, now: Self.at).id
+    try Self.fetch(store, id, [Self.item("a")])
+    let thread = AutomationNodeRow(
+      id: "t1", text: #"{"id":"t1","link":"https://example.com/t1","body":"まとめた本文"}"#, ref: nil,
+      source: nil)
+    try store.record(
+      id, nodeKey: "p", at: Self.at, outcome: DesignSceneFixtures.processed([thread], read: 1))
+    try Self.judge(
+      store, id, proposing: [AutomationItem(id: "t1", link: Self.link("t1"), body: "", time: nil)])
+    definition.nodes[0] = DesignSceneFixtures.commandNode(
+      "other", "別の取得", .scheduled(.every(1800)), script: "other", coverage: .currentSet)
+    definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "other", take: .all)]
+    try Self.rewrite(store, id, definition)
+    XCTAssertEqual(store.proposals.map(\.state), [.open], "前提: 付け替えだけでは下がらない")
+    let p = store.nodeId(id, "p")
+    let read = try XCTUnwrap(store.read(p, of: id, baseline: nil, now: Self.at))
+    XCTAssertEqual(read.taken, [], "前提: 新しい上流はまだ何も出していない")
+
+    try store.discard(read, of: p, in: id, now: Self.at)
+
+    XCTAssertEqual(try store.liveLinks(id, "p"), [])
+    XCTAssertEqual(store.proposals, [])
+    try Self.judge(store, id)
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").runs.first?.run?.withdrawn, 1)
+  }
+
   /// さばいた候補のリンクは、判定へ行が届く処理の今有効な項目にある間は覚え、処理がその行を書き換えて出し直しても判定の前で
   /// 捨てる（さばいた候補が戻らない）。
   func testAClosedProposalStaysClosedWhileAProcessStillHasItsRow() throws {
