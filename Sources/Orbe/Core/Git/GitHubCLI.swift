@@ -92,17 +92,18 @@ final class GitHubCLI {
   }
 
   /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。worktree の掃除で
-  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。タスクの worktree のブランチの PR の
-  /// 自動の結び付け（`WorktreePullRequestResolver`）も同じ取得を使う。
+  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。ブランチの PR を引く段
+  /// （`GitHubBranchPullRequestLookup`）も同じ取得を使う。
   ///
-  /// **結果は head 単位で返し、失敗もその head に閉じる**（`nil` = その head の取得失敗／
+  /// **結果は head 単位で返し、失敗もその head に閉じる**（`.failure` = その head の取得失敗／
   /// `[]` = 該当なし）——1 本の失敗で全体を捨てると、取れた head の事実まで一緒に消える。
   /// `each` は head ごとに 1 回、メインで返る（`GitRunner` / `GitHubCLI` の共通契約）。
   ///
   /// ラウンドロビンで固定本数のレーンへ静的に配り、各レーンは自分の担当を直列に回す。セマフォで
   /// 待たせる形にすると heads の本数ぶんスレッドを塞ぐ（thread explosion）。
   func branchPullRequests(
-    cwd: String, heads: [String], each: @escaping (String, [GitHubBranchPR]?) -> Void
+    cwd: String, heads: [String],
+    each: @escaping (String, Result<[GitHubBranchPR], GitHubFailure>) -> Void
   ) {
     let lanes = min(Self.branchFetchConcurrency, heads.count)
     guard lanes > 0 else { return }
@@ -110,11 +111,11 @@ final class GitHubCLI {
       let mine = heads.enumerated().filter { $0.offset % lanes == lane }.map(\.element)
       branchQueue.async {
         guard let gh = self.resolveGh() else {
-          DispatchQueue.main.async { for head in mine { each(head, nil) } }
+          DispatchQueue.main.async { for head in mine { each(head, .failure(.reason(""))) } }
           return
         }
         for head in mine {
-          let decoded: [GitHubBranchPR]? = self.fetchSync(
+          let decoded: Result<[GitHubBranchPR], GitHubFailure> = self.decodeSync(
             gh, Self.branchPRArguments(head: head), cwd: cwd)
           DispatchQueue.main.async { each(head, decoded) }
         }
@@ -185,19 +186,35 @@ final class GitHubCLI {
   /// 1 往復を同期で叩いてデコードする。`nil` = 取得失敗（非 0 終了・タイムアウト・デコード失敗）。
   /// ローカル変数だけを触るので、どのレーンから並行に呼んでも安全。
   func fetchSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String) -> T? {
+    try? decodeSync(gh, args, cwd: cwd).get()
+  }
+
+  /// 1 往復を同期で叩いてデコードする。0 以外の終了・時間切れ・起動の失敗は分類した失敗、読めない答えは `.reason("")`
+  /// （理由が空の「それ以外」）。
+  func decodeSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String) -> Result<
+    T, GitHubFailure
+  > {
     let out = runSync(gh, args, cwd: cwd)
-    guard out.status == 0 else { return nil }
-    return try? JSONDecoder().decode(T.self, from: out.stdout)
+    if let failure = out.failure { return .failure(failure) }
+    guard let value = try? JSONDecoder().decode(T.self, from: out.stdout) else {
+      return .failure(.reason(""))
+    }
+    return .success(value)
   }
 
   // MARK: - 実行基盤
 
-  private struct Output {
+  /// gh の 1 回の結果。成否は読む側が決める——GraphQL の問い合わせが一部だけ失敗すると、gh は 0 以外で終わるが、通った分の
+  /// `data` は標準出力に載る。
+  struct Output {
     let status: Int32
     let stdout: Data
+    /// 0 以外の終了・時間切れ・起動の失敗を分類したもの。0 で終わったら nil。
+    let failure: GitHubFailure?
   }
 
-  private func runSync(_ executable: String, _ args: [String], cwd: String) -> Output {
+  /// gh を 1 回、同期で呼ぶ（呼び出し元のスレッドを塞ぐ）。gh を起動するのはこの関数だけ。
+  func runSync(_ executable: String, _ args: [String], cwd: String) -> Output {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = args
@@ -211,10 +228,11 @@ final class GitHubCLI {
     do {
       try process.run()
     } catch {
-      return Output(status: -1, stdout: Data())
+      return Output(status: -1, stdout: Data(), failure: .reason(error.localizedDescription))
     }
     // stdout/stderr は別スレッドで並行に吸い出す（片方だけ読むと相手の pipe 満杯で相互デッドロック）。
     var outData = Data()
+    var errData = Data()
     let group = DispatchGroup()
     group.enter()
     DispatchQueue.global(qos: .userInitiated).async {
@@ -223,7 +241,7 @@ final class GitHubCLI {
     }
     group.enter()
     DispatchQueue.global(qos: .userInitiated).async {
-      _ = try? err.fileHandleForReading.readToEnd()
+      errData = (try? err.fileHandleForReading.readToEnd()) ?? Data()
       group.leave()
     }
     // ネット待ちのハングは時間上限で打ち切る（通常は terminate で pipe が EOF に達し読みも解ける）。
@@ -232,10 +250,16 @@ final class GitHubCLI {
     if group.wait(timeout: .now() + timeout) == .timedOut {
       process.terminate()
       _ = group.wait(timeout: .now() + Self.terminationGrace)
-      return Output(status: -1, stdout: Data())
+      return Output(status: -1, stdout: Data(), failure: .timedOut)
     }
     process.waitUntilExit()
-    return Output(status: process.terminationStatus, stdout: outData)
+    let status = process.terminationStatus
+    return Output(
+      status: status, stdout: outData,
+      failure: status == 0
+        ? nil
+        : GitHubFailure.of(
+          status: status, stderr: String(bytes: errData, encoding: .utf8) ?? "", stdout: outData))
   }
 
   private func environment() -> [String: String] {

@@ -5,8 +5,9 @@ import XCTest
 
 /// 対話の封じ: 全 git 呼び出しで、エディタと ssh の対話（パスフレーズ・未知のホスト鍵）は待たずに失敗する。対話は GUI
 /// から見えず、書き込みは打ち切らないので、封じが外れると止める手を押すまで返らない。ただし利用者が配った GUI の askpass は
-/// そのまま使う（外すと、それで通っていた ssh の認証・ホスト鍵の確かめが失敗する）。人が見ていない裏の fetch だけは、GUI の
-/// askpass も資格情報の helper の対話も使わない（使うと、周期ごとに窓が出る）。リモートの失敗の分類も持つ。
+/// そのまま使う（外すと、それで通っていた ssh の認証・ホスト鍵の確かめが失敗する）。人が頼んでいない fetch（裏の fetch と、
+/// PR のコミットを取りに行く fetch）だけは、GUI の askpass も資格情報の helper の対話も使わない（使うと、周期ごとや PR を
+/// 開くたびに窓が出る）。リモートの失敗の分類も持つ。
 @MainActor
 final class GitRunnerSealTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -38,6 +39,16 @@ final class GitRunnerSealTests: OrbeTestCase {
   private func fetchRecordingSsh(
     attended: Bool = true, recording names: [String] = ["SSH_ASKPASS_REQUIRE", "SSH_ASKPASS"]
   ) throws -> (env: String, failure: GitWriteFailure?) {
+    try recordingSsh(names) { done in
+      repo.files().fetch(attended: attended, onProgress: { _ in }, completion: done)
+    }
+  }
+
+  /// 記録用の `core.sshCommand` と ssh の remote（origin）を置いて `fetch` を走らせ、ssh が受け取った環境変数 `names` の値を
+  /// 1 行ずつ返す。
+  private func recordingSsh(
+    _ names: [String], fetch: (@escaping (GitWriteFailure?) -> Void) throws -> Void
+  ) throws -> (env: String, failure: GitWriteFailure?) {
     let record = TestScratch.caseDir.appendingPathComponent("ssh-env").path
     let script = TestScratch.caseDir.appendingPathComponent("record-ssh.sh").path
     let values = names.map { "\"$\($0)\"" }.joined(separator: " ")
@@ -51,10 +62,9 @@ final class GitRunnerSealTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["config", "core.sshCommand", script]).isSuccess)
     XCTAssertTrue(
       repo.git(["remote", "add", "origin", "ssh://git@example.invalid/r.git"]).isSuccess)
-    let files = repo.files()
     let outcome = WriteOutcome()
 
-    files.fetch(attended: attended, onProgress: { _ in }, completion: outcome.receive)
+    try fetch(outcome.receive)
     pumpMain(until: { outcome.finished }, timeout: 20)
     return (try String(contentsOfFile: record, encoding: .utf8), outcome.failure)
   }
@@ -87,6 +97,23 @@ final class GitRunnerSealTests: OrbeTestCase {
     }
     let fetched = try fetchRecordingSsh(
       attended: false, recording: ["SSH_ASKPASS", "GIT_ASKPASS", "GCM_INTERACTIVE"])
+    XCTAssertEqual(fetched.env, "/usr/bin/false\n/usr/bin/false\nnever\n")
+  }
+
+  /// PR のコミットを取りに行く fetch も、裏の fetch と同じく窓を出さない。実行を止める手が「人が見ている」（`attended`）
+  /// ものでも変わらない——PR のパネルや diff を開くたびに窓が出ない。
+  func testFetchingPullRequestCommitsNeverAsksEvenThroughTheUsersGuiAskpass() throws {
+    setenv("SSH_ASKPASS", "/opt/gui-askpass", 1)
+    setenv("GIT_ASKPASS", "/opt/gui-askpass", 1)
+    defer {
+      unsetenv("SSH_ASKPASS")
+      unsetenv("GIT_ASKPASS")
+    }
+    let fetched = try recordingSsh(["SSH_ASKPASS", "GIT_ASKPASS", "GCM_INTERACTIVE"]) { done in
+      try repo.open().fetch(
+        commits: [String(repeating: "1", count: 40)], from: "origin",
+        handle: GitRunner.Handle(attended: true), completion: done)
+    }
     XCTAssertEqual(fetched.env, "/usr/bin/false\n/usr/bin/false\nnever\n")
   }
 

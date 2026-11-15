@@ -157,6 +157,14 @@ struct GitHubRepoName: Hashable {
 struct GitHubBranchRef: Hashable {
   let repo: GitHubRepoName
   let branch: String
+
+  /// このブランチから PR を作るページ（push の後に GitHub が案内するのと同じ URL）。PR を向ける先のリポジトリとブランチは、
+  /// 開いたページで GitHub が既定を選び、利用者がそこで変えられる。
+  var pullRequestCreationURL: URL? {
+    branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed).flatMap {
+      URL(string: "https://github.com/\(repo.value)/pull/new/\($0)")
+    }
+  }
 }
 
 /// GitHub に問い合わせたリポジトリの正式名（改名後の古い名前からも新しい名前が返る）。

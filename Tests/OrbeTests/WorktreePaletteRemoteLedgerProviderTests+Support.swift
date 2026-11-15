@@ -30,7 +30,8 @@ extension WorktreePaletteRemoteLedgerProviderTests {
   }
 
   /// 偽 `gh` を PATH に置く。認証確認は通り、正式名は `resolve/<owner>__<name>` の中身を返し（無ければ
-  /// 答えずに落ちる）、ブランチの PR は `branch/<name>` を返す。`<種別>.gate`
+  /// 答えずに落ちる）、ブランチの PR は `branch/<name>` を返す（`branch/<name>.stderr` があれば標準エラーへ出し、
+  /// `branch/<name>.exit` があればその終了コードで終わる）。`<種別>.gate`
   /// がある間はその問い合わせが着地しない。正式名とブランチの PR の問い合わせは `calls.log` に残し、
   /// それ以外の問い合わせ（open な Issue・PR の一覧など）も `U` として残す。
   func stageGh() throws {
@@ -52,6 +53,8 @@ extension WorktreePaletteRemoteLedgerProviderTests {
         wait_gate branch
         f="$D/branch/$(echo "$head" | tr / _)"
         if [ -e "$f" ]; then cat "$f"; else printf '[]'; fi
+        [ -e "$f.stderr" ] && cat "$f.stderr" >&2
+        [ -e "$f.exit" ] && exit "$(cat "$f.exit")"
         exit 0
       fi
       query=""; o=""; n=""

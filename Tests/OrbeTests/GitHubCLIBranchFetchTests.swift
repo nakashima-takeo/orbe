@@ -43,11 +43,11 @@ final class GitHubCLIBranchFetchTests: OrbeTestCase {
     ShellPATH.shared = ShellPATH(probe: { path })
   }
 
-  /// head ごとに 1 回ずつ `each` が返り、**失敗した head だけが `nil`** になる。
+  /// head ごとに 1 回ずつ `each` が返り、**失敗した head だけが失敗**になる。
   /// 同時に走る本数は `branchFetchConcurrency`（4）を超えない。
   func testEachHeadLandsSeparatelyAndFailuresStayLocal() throws {
     let heads = (0..<9).map { $0 == 3 ? "bad/x" : "feat/\($0)" }
-    var landed: [String: [GitHubBranchPR]?] = [:]
+    var landed: [String: Result<[GitHubBranchPR], GitHubFailure>] = [:]
     let done = expectation(description: "branchPullRequests")
     done.expectedFulfillmentCount = heads.count
     GitHubCLI().branchPullRequests(cwd: dir.path, heads: heads) { head, prs in
@@ -57,10 +57,12 @@ final class GitHubCLIBranchFetchTests: OrbeTestCase {
     wait(for: [done], timeout: 30)
 
     XCTAssertEqual(Set(landed.keys), Set(heads), "head ごとに 1 回ずつ返る")
-    XCTAssertEqual(landed["feat/0"]??.first?.headRefName, "feat/0", "取れた head は自分の結果を受ける")
-    XCTAssertEqual(landed["bad/x"], .some(nil), "落ちた head だけが nil")
     XCTAssertEqual(
-      landed.values.filter { $0 != nil }.count, heads.count - 1, "1 本の失敗が他を巻き込まない")
+      try landed["feat/0"]?.get().first?.headRefName, "feat/0", "取れた head は自分の結果を受ける")
+    XCTAssertEqual(landed["bad/x"], .failure(.reason("")), "落ちた head だけが失敗")
+    XCTAssertEqual(
+      landed.values.filter { (try? $0.get()) != nil }.count, heads.count - 1,
+      "1 本の失敗が他を巻き込まない")
     // 契約は「上限で頭打ち」と「直列でない」の 2 つ。ピークがちょうど 4 になるかは子プロセスの
     // 起動タイミング次第なので、そこは固定しない（壊れていないのに赤くなる）。
     XCTAssertLessThanOrEqual(maxOverlap(), 4, "同時実行は上限（4）を超えない")
