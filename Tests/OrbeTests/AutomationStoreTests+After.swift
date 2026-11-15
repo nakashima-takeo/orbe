@@ -74,10 +74,21 @@ extension AutomationStoreTests {
   }
 
   /// その書き込みで足すノードから読むつながりに、読む行の下限の時刻を書いた定義は、場所を示して断り、何も書かない（足すノード
-  /// の行はどれも書き込みの後にできるので、何も除かない）。今あるノードから読むつながりの下限の時刻は書ける。
+  /// の行はどれも書き込みの後にできるので、何も除かない）。新しく作る自動化では、どのつながりにも下限の時刻を書けない。今あるノードから読む
+  /// つながりの下限の時刻は書ける。
   func testAnAfterOnAnInputFromANodeTheWriteAddsIsRefusedWithItsPlace() throws {
     let store = AutomationStore()
     var definition = Self.definition()
+    var created = definition
+    created.nodes[1].from = [AutomationDefinition.Input(nodeKey: "fetch", after: Self.at)]
+    XCTAssertThrowsError(try store.create(created, now: Self.at)) {
+      XCTAssertEqual(
+        $0 as? AutomationError,
+        .invalid(
+          "nodes[1].from[0].after: a new automation has no rows yet, so after drops nothing; "
+            + "leave it out"))
+    }
+    XCTAssertEqual(store.automations, [])
     let id = try store.create(definition, now: Self.at).id
     var process = DesignSceneFixtures.commandNode("p", "要約", .arrival, script: "p")
     process.from = [AutomationDefinition.Input(nodeKey: "fetch", after: Self.at)]
@@ -95,6 +106,14 @@ extension AutomationStoreTests {
     }
     XCTAssertEqual(store.automation(id)?.version, 1)
     definition.nodes[3].from[0].after = nil
+    XCTAssertThrowsError(try store.replace(id, version: 1, with: definition, now: Self.at)) {
+      XCTAssertEqual(
+        $0 as? AutomationError,
+        .invalid(
+          #"nodes[0].id: the key "fetch" belongs to node \#(store.nodeId(id, "fetch")); "#
+            + "send its id to keep the node, or use another key for a new node"),
+        "今あるノードの id を送らない定義は、下限の時刻より先に id の不備で断る")
+    }
     XCTAssertNoThrow(try Self.rewrite(store, id, definition))
   }
 }
