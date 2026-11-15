@@ -16,8 +16,13 @@ final class ShellPATH {
   /// テストが seam を差し替えるため `var`。本番で置き換える者はいない。
   nonisolated(unsafe) static var shared = ShellPATH()
 
+  /// テスト用に既知の設置場所を差し替える（`fileURLOverride` と同じ seam）。本番は nil。
+  nonisolated(unsafe) static var knownPathsOverride: [String]?
+
   /// union に足す既知の設置場所。この順で末尾へ追記する。
-  static let knownPaths = [
+  static var knownPaths: [String] { knownPathsOverride ?? defaultKnownPaths }
+
+  static let defaultKnownPaths = [
     "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
   ]
 
@@ -140,13 +145,13 @@ final class ShellPATH {
     return dirs.isEmpty ? nil : dirs.joined(separator: ":")
   }
 
-  /// 検査済み login PATH と既知パスの union。シェル由来が先、欠けていた既知パスを末尾へ追記する。
+  /// 検査済み login PATH と既知パス（`known`）の union。シェル由来が先、欠けていた既知パスを末尾へ追記する。
   /// 重複は初出だけ残す。`login` が nil なら既知パスだけ（floor）。
-  static func compose(login: String?) -> String {
+  static func compose(login: String?, known: [String] = knownPaths) -> String {
     let fromShell = login.map { $0.split(separator: ":").map(String.init) } ?? []
     var seen = Set<String>()
     var dirs: [String] = []
-    for dir in fromShell + knownPaths {
+    for dir in fromShell + known {
       guard seen.insert(dir).inserted else { continue }
       dirs.append(dir)
     }
