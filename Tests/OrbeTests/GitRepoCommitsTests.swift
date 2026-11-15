@@ -139,17 +139,23 @@ final class GitRepoCommitsTests: OrbeTestCase {
       landed { self.repo.mergeBase(main, other, completion: $0) }, .unrelated, "共通の祖先が無い")
   }
 
-  /// rename の対応は新しいパス → 元のパスで、rename でない変更は入らない。パスは空白や非 ASCII を含んでもそのまま読む。
+  /// rename の対応は新しいパス → 元のパスで、rename でない変更は入らない（rename が無ければ空）。パスは空白や非 ASCII を
+  /// 含んでもそのまま読む。
   func testRenamesMapTheNewPathToTheOriginal() throws {
     try temp.write("long.txt", (1...20).map { "line \($0)\n" }.joined())
-    _ = try commit("keep", writing: "keep.txt")
-    let base = temp.head()
+    try temp.write("other.txt", (1...20).map { "other \($0)\n" }.joined())
+    let base = try commit("keep", writing: "keep.txt")
     XCTAssertTrue(temp.git(["mv", "long.txt", "dir ü.txt"]).isSuccess)
+    XCTAssertTrue(temp.git(["mv", "other.txt", "moved.txt"]).isSuccess)
     let head = try commit("edit", writing: "keep.txt")
+    let edited = try commit("edit again", writing: "keep.txt")
 
     XCTAssertEqual(
       landed { self.repo.renames(from: base, to: head, completion: $0) },
-      .some(["dir ü.txt": "long.txt"]))
+      .some(["dir ü.txt": "long.txt", "moved.txt": "other.txt"]))
+    XCTAssertEqual(
+      landed { self.repo.renames(from: head, to: edited, completion: $0) }, .some([:]),
+      "rename を含まない範囲では空")
   }
 
   func testCountsAreAheadAndBehind() throws {
