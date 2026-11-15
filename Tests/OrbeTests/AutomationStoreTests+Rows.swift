@@ -273,25 +273,31 @@ extension AutomationStoreTests {
       store.automation(id)?.graph.node(key: "copy")?.coverage, .newArrivals, "書かなければ出来事の流れ")
   }
 
-  /// 今の集合の処理が引き継いだ項目は、引き継ぎ元が変わったら（上流の項目が処理の 2 回の間に消えて現れた）別の項目になり、
+  /// 処理が入力の id を保って引き継いだ行は、引き継ぎ元が同じ間は読み直しても下流に 1 度だけ届く。引き継ぎ元が変わったら（上流の
+  /// 項目が処理の 2 回の間に消えて現れた）、今の集合の処理なら別の項目、出来事の流れの処理なら残す期間の内でも別の出来事になり、
   /// 下流にもう一度届く。
-  func testACurrentSetProcessRowWhoseSourceChangedArrivesAgain() throws {
+  func testAProcessedRowWhoseSourceChangedArrivesAgain() throws {
     let store = AutomationStore()
-    var copy = DesignSceneFixtures.agentNode(
-      "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: .currentSet)
-    copy.from = [AutomationDefinition.Input(nodeKey: "gh", take: .all)]
-    let id = try define(
-      store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(nodeKey: "copy"))])
-    try fetch(store, id, ["x"], at: Self.at)
-    try copyAll(store, id, at: Self.at)
-    XCTAssertEqual(try take(store, id, "a", at: Self.at), ["x"])
+    for coverage in [AutomationCoverage.currentSet, .newArrivals] {
+      var copy = DesignSceneFixtures.agentNode(
+        "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: coverage)
+      copy.from = [AutomationDefinition.Input(nodeKey: "gh", take: .all)]
+      let id = try define(
+        store, coverage: .currentSet,
+        receivers: [copy, receiver("a", from: .init(nodeKey: "copy"))])
+      try fetch(store, id, ["x"], at: Self.at)
+      try copyAll(store, id, at: Self.at)
+      try copyAll(store, id, at: Self.at.addingTimeInterval(60))
+      XCTAssertEqual(
+        try take(store, id, "a", at: Self.at.addingTimeInterval(60)), ["x"],
+        "\(coverage): 読み直しても 1 度だけ")
 
-    try fetch(store, id, [], at: Self.at.addingTimeInterval(60))
-    try fetch(store, id, ["x"], at: Self.at.addingTimeInterval(120))
-    try copyAll(store, id, at: Self.at.addingTimeInterval(120))
-
-    XCTAssertEqual(try take(store, id, "a", at: Self.at.addingTimeInterval(120)), ["x"])
-    XCTAssertEqual(try store.liveLinks(id, "copy").count, 1, "今有効なのは新しい項目だけ")
+      try fetch(store, id, [], at: Self.at.addingTimeInterval(120))
+      try fetch(store, id, ["x"], at: Self.at.addingTimeInterval(180))
+      try copyAll(store, id, at: Self.at.addingTimeInterval(180))
+      XCTAssertEqual(
+        try take(store, id, "a", at: Self.at.addingTimeInterval(180)), ["x"], "\(coverage)")
+    }
   }
 
   /// 入力を読むノードの回は、取った行が 0 件で失敗しても、取った数（0）を記録に持つ。確定が返す回と読み直した回は同じ。
