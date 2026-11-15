@@ -34,9 +34,9 @@ extension AutomationReference {
     `maxAgeHours` and `after`. `take` is `new` (the default: only rows not yet received) or `all` \
     (every valid row of that upstream, every run); `maxAgeHours` (1-87600) drops older rows; \
     `after`, an ISO 8601 time not later than now, drops rows that became valid or were created at \
-    or before it, and is allowed only on an input from a node that exists now (not one the same \
-    write adds, so a new automation has none). All belong to the receiver. An input that takes `new` and has neither \
-    `maxAgeHours` nor `after` comes back as a key.
+    or before it, and is allowed only on an input the same write adds from a node that exists \
+    now (so a new automation has none). All belong to the receiver. An input that takes `new` and \
+    has neither `maxAgeHours` nor `after` comes back as a key.
     - A command: `command` runs with /bin/sh -c. `directory` is relative to the workspace root \
     ("." for the root) and required when the node runs in a workspace (its own `workspace`, or the \
     automation's); otherwise it is absolute, or left out for the home folder. A run whose workspace \
@@ -208,11 +208,13 @@ extension AutomationReference {
     they were added), but an added `arrival` node runs on writing when its upstream already has \
     rows for it.
     - Orbe never goes back over rows a node already took because its definition changed. To judge \
-    seen items again by a new standard, prepare the inputs yourself before writing. To keep added \
-    nodes from taking what exists now, write the current time (UTC) as the `after` of the input \
-    by which they read from an existing node.
-    - An `arrival` `currentSet` process whose `from`, `instruction` or `command` changed keeps \
-    its items, and the proposals made from them, until its upstream changes next.
+    seen items again by a new standard, prepare the inputs yourself before writing. To keep what \
+    exists now from coming through an input you add from an existing node, write the current time \
+    (UTC) as that input's `after`.
+    - An `arrival` node whose behavior changed runs on writing only for upstream changes it has \
+    not read (a new input reads items from the start; a failed run leaves its rows unread). A \
+    `currentSet` one with none keeps its items, and proposals from them, until its upstream \
+    changes.
     """
 
   /// 定義の例の節（`orb automation --help` に出す。MCP の説明には長さのために載せない）。
