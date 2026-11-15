@@ -128,22 +128,26 @@ extension AutomationStoreTests {
     XCTAssertEqual(try taken(store, id), [])
   }
 
-  /// 判定が対応済みの候補について、そのリンクの行を案にすると、対応済みの候補は新しい判断待ちの候補に置き換わる。判定のその回の記録は、その
-  /// 案を候補にした数（`proposed`）に数え、理由付きで捨てた案（`dismissed`）には載せない。
+  /// 判定が対応済みの候補について、そのリンクの行を案にすると、対応済みの候補は新しい判断待ちの候補に置き換わる。判定のその回の
+  /// 記録は、その案を候補にした数（`proposed`）に数え、理由付きで捨てた案（`dismissed`）には載せない。同じ回で別の判断待ちの
+  /// 候補が対応済みになっても、置き換わるのは前から対応済みだった候補だけで、その判断待ちだった候補は対応済みになる。
   func testProposingAResolvedLinkAgainReplacesTheResolvedProposal() throws {
     let store = AutomationStore()
     let id = try resolvedA(store, .newArrivals, take: .new)
     let resolved = try XCTUnwrap(store.proposals.first).id
+    let b = Self.item("b")
+    try Self.fetch(store, id, [b])
+    try Self.judge(store, id, proposing: [b])
     let again = AutomationItem(id: "a2", link: Self.link("a"), body: "再依頼", time: Self.at)
     try Self.fetch(store, id, [again])
 
-    try Self.judge(store, id, proposing: [again])
+    try Self.judge(store, id, proposing: [again], resolving: [Self.link("b")])
 
-    XCTAssertEqual(proposals(store), [Self.link("a"): .open])
-    XCTAssertNotEqual(store.proposals.first?.id, resolved)
+    XCTAssertEqual(proposals(store), [Self.link("a"): .open, Self.link("b"): .resolved])
+    XCTAssertFalse(store.proposals.map(\.id).contains(resolved))
     XCTAssertEqual(
       store.automation(id)?.state(key: "judge").runs.first?.run?.result,
-      .judge(proposed: 1, resolved: 0, dismissed: []))
+      .judge(proposed: 1, resolved: 1, dismissed: []))
   }
 
   /// 今の集合を毎回すべて読む判定には、対応済みの候補の項目の中身が変わると、その項目の行が渡る。

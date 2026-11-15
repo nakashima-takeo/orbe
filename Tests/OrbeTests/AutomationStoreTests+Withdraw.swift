@@ -100,6 +100,8 @@ extension AutomationStoreTests {
 
     try filter(store, id, keeping: false)
     XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(
+      store.automation(id)?.state(key: "p").runs.first?.run?.withdrawn, 0, "人がさばいた候補を忘れた分は数えない")
     try filter(store, id, keeping: true)
 
     XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
