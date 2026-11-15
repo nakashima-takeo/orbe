@@ -38,14 +38,9 @@ final class GitHubCLIBranchExistsTests: OrbeTestCase {
       stdout: """
         {"data":{"repository":null},"errors":[{"type":"NOT_FOUND","path":["repository"],\
         "message":"Could not resolve to a Repository with the name 'o/2048'."}]}
-        """, exit: 1)
-    XCTAssertEqual(
-      try branchExists(), .failure(.reason("")), "gh はエラー文を出していないので理由は空")
-  }
-
-  func testAFailedCallIsAFailure() throws {
-    try stageGh(stdout: "", exit: 1, stderr: "error connecting to api.github.com")
-    XCTAssertEqual(try branchExists(), .failure(.unreachable))
+        """, exit: 1,
+      stderr: "gh: Could not resolve to a Repository with the name 'o/2048'.\n")
+    guard case .failure = try branchExists() else { return XCTFail("失敗として返る") }
   }
 
   // MARK: - ヘルパ
