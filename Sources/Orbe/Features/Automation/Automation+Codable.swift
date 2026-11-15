@@ -6,13 +6,11 @@ extension AutomationNotify: Codable {
   init(from decoder: Decoder) throws {
     let c = try decoder.singleValueContainer()
     guard let notify = Self(rawValue: try c.decode(String.self)) else {
-      throw DecodingError.dataCorruptedError(in: c, debugDescription: Self.choices)
+      throw DecodingError.dataCorruptedError(
+        in: c, debugDescription: "pass menuBar or notificationCenter")
     }
     self = notify
   }
-
-  /// 知らない通知先を断る文（外の形の読みと、保存した値の読みで同じ文）。
-  static let choices = "pass menuBar or notificationCenter"
 
   func encode(to encoder: Encoder) throws {
     var c = encoder.singleValueContainer()
