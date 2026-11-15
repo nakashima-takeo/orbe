@@ -100,8 +100,8 @@ final class GitRunnerSealTests: OrbeTestCase {
     XCTAssertEqual(fetched.env, "/usr/bin/false\n/usr/bin/false\nnever\n")
   }
 
-  /// PR のコミットを名指しして取りに行く fetch も、裏の fetch と同じく窓を出さない——PR のパネルや diff を開くたびに窓が
-  /// 出ない。
+  /// PR のコミットを取りに行く fetch も、裏の fetch と同じく窓を出さない。実行を止める手が「人が見ている」（`attended`）
+  /// ものでも変わらない——PR のパネルや diff を開くたびに窓が出ない。
   func testFetchingPullRequestCommitsNeverAsksEvenThroughTheUsersGuiAskpass() throws {
     setenv("SSH_ASKPASS", "/opt/gui-askpass", 1)
     setenv("GIT_ASKPASS", "/opt/gui-askpass", 1)
@@ -111,8 +111,8 @@ final class GitRunnerSealTests: OrbeTestCase {
     }
     let fetched = try recordingSsh(["SSH_ASKPASS", "GIT_ASKPASS", "GCM_INTERACTIVE"]) { done in
       try repo.open().fetch(
-        commits: [String(repeating: "1", count: 40)], from: "origin", handle: GitRunner.Handle(),
-        completion: done)
+        commits: [String(repeating: "1", count: 40)], from: "origin",
+        handle: GitRunner.Handle(attended: true), completion: done)
     }
     XCTAssertEqual(fetched.env, "/usr/bin/false\n/usr/bin/false\nnever\n")
   }
