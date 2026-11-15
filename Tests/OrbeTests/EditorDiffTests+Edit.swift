@@ -196,4 +196,30 @@ extension EditorDiffTests {
       search.results["a.txt"]?.document?.ranges, [NSRange(location: 7, length: 6)], "一致は編集でずれる")
   }
 
+  /// ファイルが消えて戻り、diff の新しい側が戻ったファイルの文書に替わった後も、diff の中の編集はプロジェクト検索の一致を
+  /// ずらす（替わった文書の知らせに結び直す）。
+  func testEditsAfterTheFileComesBackStillShiftTheProjectSearchMatches() throws {
+    try repo.write("a.txt", "one\nneedle\nthree\nfour\n")
+    let (tab, window) = tab()
+    let pane = tab.group.view.editor
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    waitRows(diff, "変更が出る") { !$0.isEmpty }
+    let contents = try Data(contentsOf: repo.url("a.txt"))
+    try FileManager.default.removeItem(at: repo.url("a.txt"))
+    pumpMain(until: { diff.document == nil && diff.content == .ready }, "消えたファイルの diff")
+    try contents.write(to: repo.url("a.txt"))
+    diff.rootFiles(diff.files, filesDidChange: .scanAll)
+    waitRows(diff, "戻ったファイルの文書で並びが出る") { !$0.isEmpty }
+    let search = pane.projectSearch
+    pane.showProjectSearch(seed: nil)
+    search.setPattern("needle")
+    search.search()
+    pumpMain(until: { search.phase == .done }, "検索が終わる")
+
+    let surface = try engine(diff.newSurface)
+    window.makeFirstResponder(surface.responder)
+    type("abc", at: 4, on: surface)
+    XCTAssertEqual(
+      search.results["a.txt"]?.document?.ranges, [NSRange(location: 7, length: 6)], "一致は編集でずれる")
+  }
 }
