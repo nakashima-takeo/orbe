@@ -6,7 +6,7 @@ updated: 2026-11-16
 
 # git 実行
 
-Orbe が git に触る操作——worktree パレットの worktree 作成・掃除・ブランチの最新化（fetch → fast-forward）（[worktree](../palette/worktree.md)）、workspace 作成の clone（[workspace パレット](../palette/workspace.md)）、ブランチ・worktree の一覧、エディターの根の観測と、根のサービスを入口にした利用者の書き込み（ステージ・コミット・push 等。[editor/files](../editor/files.md)）、版の本文とコミットグラフの読み、PR の diff に要るコミットの取得とコミットの間の関係の読み、プロジェクト検索（[editor/search](../editor/search.md)）——はすべて `/usr/bin/git` の子プロセスとして走る。それらの起動を 1 箇所に集める基盤が持つ契約をここに置く。個々の面が「どう見せるか」は各面の spec が持ち、ここは「どう走らせるか」だけを持つ。
+Orbe が git に触る操作——worktree パレットの worktree 作成・掃除・ブランチの最新化（fetch → fast-forward）（[worktree](../palette/worktree.md)）、workspace 作成の clone（[workspace パレット](../palette/workspace.md)）、ブランチ・worktree の一覧、エディターの根の観測と、根のサービスを入口にした利用者の書き込み（ステージ・コミット・push 等。[editor/files](../editor/files.md)）、版の本文とコミットグラフの読み、コミットを指定した fetch とコミットの間の関係の読み、プロジェクト検索（[editor/search](../editor/search.md)）——はすべて `/usr/bin/git` の子プロセスとして走る。それらの起動を 1 箇所に集める基盤が持つ契約をここに置く。個々の面が「どう見せるか」は各面の spec が持ち、ここは「どう走らせるか」だけを持つ。
 
 hooks・署名がユーザーのシェル環境と同等に動くよう、全呼び出しがログインシェル由来の PATH を引き継ぐ（[shell-path](shell-path.md)）。
 
