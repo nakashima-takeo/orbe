@@ -202,6 +202,25 @@ extension ControlWireTests {
       -32602, "解けないキー指定は -32602（無視して ok を返さない）")
   }
 
+  /// `open_diff` は知らない `kind` と空の `path` を断り、diff を開かない。既定の kind へ倒すと、エージェントが頼んだのと
+  /// 別の側の diff が成功として人に見せられる。
+  func testOpenDiffRejectsAnUnknownKindAndAnEmptyPath() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    let refused: [(params: [String: Any], message: String)] = [
+      (["tabId": 8, "path": "a.swift", "kind": "head"], "invalid kind"),
+      (["tabId": 8, "path": "", "kind": "staged"], "missing path"),
+    ]
+    for (index, entry) in refused.enumerated() {
+      let response = wire.request(id: index, method: "open_diff", params: entry.params)
+      XCTAssertEqual(errorCode(response), -32602, entry.message)
+      XCTAssertEqual(
+        (response?["error"] as? [String: Any])?["message"] as? String, entry.message)
+    }
+    XCTAssertTrue(fake.openedDiffs.isEmpty, "断った要求は target へ届かない")
+  }
+
   /// `config_set` の `value: null` は「解除（継承へ戻す）」として受理する——欠落とは別物。
   /// `params["value"]` の存在チェックを「null も欠落扱い」へ締めると `orb config unset`
   /// （`NSNull()` を送る）が `-32602` になるが、値の意味論を見る L2 は通り続ける。
