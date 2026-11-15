@@ -34,6 +34,17 @@ extension AutomationRunner {
     scheduleRecount()
   }
 
+  /// 保持の設定が変わった: すべての受け手を数え直し、数え直しの時刻を合わせ直す——数えた時点の残す期間で決めた期限は、
+  /// 設定が変わると今の期間と合わなくなるため。
+  func retentionChanged() {
+    do throws(AutomationError) {
+      try store.recountAll(now: now())
+    } catch {
+      NSLog("[automation] cannot recount the rows to read: \(error)")
+    }
+    scheduleRecount()
+  }
+
   /// `date` より後の最初の分の境。
   static func minute(after date: Date) -> Date {
     Date(

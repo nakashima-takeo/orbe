@@ -116,6 +116,15 @@ extension AutomationStore {
       for (id, nodeIds) in expired { try memory.recount(id, db, now: now, nodeIds: nodeIds) }
     }
   }
+
+  /// すべての受け手の「読めば取る行」の数を数え直す（保持の設定が変わったとき。出来事の残す期間の既定が変わりうる）。
+  func recountAll(now: Date) throws(AutomationError) {
+    let ids = automations.map(\.id)
+    guard !ids.isEmpty else { return }
+    try commit(sweepingAt: nil) { db, memory in
+      for id in ids { try memory.recount(id, db, now: now) }
+    }
+  }
 }
 
 extension AutomationMemory {
