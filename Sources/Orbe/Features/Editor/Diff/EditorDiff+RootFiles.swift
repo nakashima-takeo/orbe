@@ -1,7 +1,7 @@
 import Foundation
 
 /// 根のサービスの知らせ——作業ツリーのファイル・status・入れ子の git dir・版の本文の変化で、中身を作り直す。
-extension EditorDiff {
+extension EditorDiff: RootFilesObserver {
   /// 作業ツリーのファイルが変わった——作業ツリー diff は、新しい側（文書・消えた・表示できない）を読み直す。
   func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
     guard id.kind == .workingTree, change.includes(id.root + "/" + id.path) else { return }

@@ -12,7 +12,7 @@ import OrbeEditorCore
 /// 見せ方（インライン / 並列）と見え方の付け外しは `present` / `dismiss` の 2 つの口だけで行う。見せていない間は版と
 /// 文書の変化を追わず、見せたときに今の版で作り直す（打鍵中に隠れた diff が裏の仕事を起こさない）。
 @MainActor
-final class EditorDiff: RootFilesObserver {
+final class EditorDiff {
   /// diff の上限——diff を出している間の行差分の上限。編集の数で切るので、大きなファイルの離れた変更も行ごとに取り、
   /// 裏の時間は 1MB 級でも 1 秒未満に収まる。
   static let hunkLimit = LineDiff.Limit.edits(10_000)
