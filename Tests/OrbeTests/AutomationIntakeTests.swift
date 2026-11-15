@@ -26,7 +26,7 @@ final class AutomationIntakeTests: OrbeTestCase {
 
   private func row(
     _ seq: Int, _ id: String? = nil, from edge: AutomationNodeID? = nil, link: String? = nil,
-    at: Date? = nil, unread: Bool = true, size: Int = 10
+    at: Date? = nil, unread: Bool = true, changed: Bool? = nil, size: Int = 10
   ) -> AutomationIntake.Row {
     let edge = edge ?? cs
     let id = id ?? "row\(seq)"
@@ -34,7 +34,7 @@ final class AutomationIntakeTests: OrbeTestCase {
       from: edge, table: edge == cs ? .item : .event, seq: seq,
       ref: edge == cs ? .version(seq) : .event(seq), source: .item(seq), id: id,
       text: String(repeating: "x", count: size), at: at ?? t0.addingTimeInterval(Double(seq)),
-      link: link ?? "https://example.com/\(id)", unread: unread, changed: unread)
+      link: link ?? "https://example.com/\(id)", unread: unread, changed: changed ?? unread)
   }
 
   private func ceilings(cs item: Int = 0, na event: Int = 0) -> [AutomationIntake.Ceiling] {
@@ -44,9 +44,12 @@ final class AutomationIntakeTests: OrbeTestCase {
     ]
   }
 
-  private func context(closed: Set<String> = [], now: Date? = nil) -> AutomationIntake.Context {
+  private func context(closed: Set<String> = [], resolved: Set<String> = [], now: Date? = nil)
+    -> AutomationIntake.Context
+  {
     AutomationIntake.Context(
-      closed: AutomationIntake.Closed(settled: closed), now: now ?? t0.addingTimeInterval(3600))
+      closed: AutomationIntake.Closed(settled: closed, resolved: resolved),
+      now: now ?? t0.addingTimeInterval(3600))
   }
 
   /// 捨てた行（古い順に「id 理由」）。
@@ -107,6 +110,28 @@ final class AutomationIntakeTests: OrbeTestCase {
     XCTAssertEqual(judged.taken.map(\.id), ["older", "newer"])
     XCTAssertEqual(drops(judged), ["closed closed"])
     XCTAssertEqual(reported.taken.count, 3)
+  }
+
+  /// 判定が対応済みにした候補のリンクの変化は、古さで捨てた後に残った行で見る。古さで捨てた行が変わっていても、そのリンクの
+  /// 他の行は捨てる。
+  func testAChangeInARowDroppedForItsAgeDoesNotPassTheOtherRowsOfAResolvedLink() throws {
+    var definitionNode = Nodes.agent("j", from: ["cs", "na"], deliver: .taskCandidates)
+    definitionNode.from = [
+      .init(nodeKey: "cs", take: .all, maxAgeHours: 1), .init(nodeKey: "na", take: .all),
+    ]
+    let judge = try node(definitionNode)
+    let link = "https://example.com/resolved"
+
+    let read = AutomationIntake.read(
+      by: judge,
+      [
+        row(
+          1, "oldChanged", link: link, at: t0.addingTimeInterval(-7200), unread: false,
+          changed: true),
+        row(2, "kept", from: na, link: link, unread: false),
+      ], ceilings: ceilings(cs: 1, na: 2), in: context(resolved: [link]))
+
+    XCTAssertEqual(read.taken.map(\.id), [])
   }
 
   /// 同じ下流の id の行が 2 つあれば新しい方を取る。件数の上限を超えたら、新しい方から上限まで取る。
