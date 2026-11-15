@@ -115,7 +115,7 @@ extension AutomationStoreTests {
   }
 
   /// 判定の確定はその時点のその判定の候補に当て直す: 別の自動化が先に候補にしたリンクの案も候補になり、同じ判定が既に候補に
-  /// したリンクの案は理由付きで捨て、人がさばいた候補を対応済みで上書きしない。
+  /// したリンクの案は理由付きで捨て、人がさばいた候補を対応済みで上書きせず、対応済みに数えずに理由付きで捨てる。
   func testAJudgeCommitIsCheckedAgainstItsOwnProposalsAtThatMoment() throws {
     let store = AutomationStore()
     let first = try store.create(Self.definition("一つ目"), now: Self.at).id
@@ -144,6 +144,11 @@ extension AutomationStoreTests {
     try store.dismiss(XCTUnwrap(store.proposals.first?.id), now: Self.at)
     try Self.judge(store, first, resolving: [Self.link("a")])
     XCTAssertEqual(store.proposals.map(\.state), [.dismissed, .open])
+    let resolving = store.automation(first)?.state(key: "judge").runs.first?.run
+    guard case .judge(0, 0, let unresolved) = resolving?.result else {
+      return XCTFail("一つ目の判定の対応済みにする回が記録されない")
+    }
+    XCTAssertEqual(unresolved.map(\.why), [.noOpenProposal])
   }
 
   /// 元にした行が出来事で人がさばいた候補はその場で忘れ、後の取得の回の「下げた」には数えない。

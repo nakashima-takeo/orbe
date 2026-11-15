@@ -189,7 +189,7 @@ extension AutomationStoreTests {
   }
 
   /// 次の書き換えは断られ、定義は変わらない: 版が無い・古い（間に通知を切り替えた）、知らないノードの id・ほかの自動化のノードの
-  /// id、新しく作る定義の id、id を落として消えるノードと同じ鍵で書いたノード。
+  /// id、同じ id を 2 つのノードに書いた、新しく作る定義の id、id を落として消えるノードと同じ鍵で書いたノード。
   func testRewritesThatWouldLoseOrMixUpNodesAreRefused() throws {
     let store = AutomationStore()
     let id = try store.create(sendDefinition(), now: Self.at).id
@@ -222,6 +222,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(
       refused(2) { $0.nodes[0].id = store.nodeId(other, "fetch") },
       .invalid("nodes[0].id: \(store.nodeId(other, "fetch")) is not a node of automation \(id)"))
+    XCTAssertEqual(
+      refused(2) { $0.nodes[1].id = fetch }, .invalid("nodes[1].id: \(fetch) is named twice"))
     XCTAssertEqual(
       refused(2) { $0.nodes[0].id = nil },
       .invalid(

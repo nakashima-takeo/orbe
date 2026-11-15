@@ -151,6 +151,38 @@ extension AutomationStoreTests {
       [action: "unknown nodes[0].inboxLimit", trigger: "unknown nodes[0].trigger.expression"])
   }
 
+  /// 型には組めるが今の検証を通らない値か、読めない workspace を保存した自動化も、その自動化だけが定義を読めない自動化になり、
+  /// 理由がその値を言う。検証を通らない定義は、ノードの id と保存した値のまま外の形で出る（AI が値を直して戻すため）。
+  func testAStoredDefinitionThatFailsTodaysCheckStaysAsideAlone() throws {
+    var store: AutomationStore? = AutomationStore()
+    let checked = try XCTUnwrap(store?.create(Self.definition("検証"), now: Self.at).id)
+    let workspace = try XCTUnwrap(store?.create(Self.definition("場所"), now: Self.at).id)
+    let fine = try XCTUnwrap(store?.create(Self.definition("普段"), now: Self.at).id)
+    let judge = try XCTUnwrap(store?.nodeId(checked, "judge"))
+    store = nil
+    try database().run(
+      """
+      UPDATE action_defs SET action = json_set(action, '$.timeoutMinutes', 61)
+      WHERE id = (SELECT def_id FROM nodes WHERE id = ?)
+      """, [.integer(Int64(judge.rawValue))])
+    try database().run(
+      "UPDATE automations SET workspace = 'not-a-uuid' WHERE id = ?",
+      [.integer(Int64(workspace))])
+
+    let reopened = AutomationStore()
+
+    XCTAssertEqual(reopened.automations.map(\.id), [fine])
+    XCTAssertEqual(
+      Dictionary(uniqueKeysWithValues: reopened.unreadable.map { ($0.id, $0.reason) }),
+      [checked: "nodes[1].timeoutMinutes: must be 1 to 60", workspace: "invalid workspace"])
+    let aside = try XCTUnwrap(reopened.unreadable.first { $0.id == checked })
+    let object = try XCTUnwrap(
+      try JSONSerialization.jsonObject(with: Data(aside.definition.utf8)) as? [String: Any])
+    let stored = try AutomationDefinition.decode(object)
+    XCTAssertEqual(stored.nodes.map(\.id), aside.nodeIds)
+    XCTAssertEqual(stored.nodes[1].action.timeoutMinutes, 61)
+  }
+
   /// 読めない自動化の組めた定義は外の形で、壊れた値を元に戻せば元の定義として読める（AI が一覧の定義を直して
   /// `set_automation` へ戻すため。この形は保存の読みとは別に組む）。
   func testTheDefinitionOfAnUnreadableAutomationReadsBackOnceTheBrokenValueIsRestored() throws {
