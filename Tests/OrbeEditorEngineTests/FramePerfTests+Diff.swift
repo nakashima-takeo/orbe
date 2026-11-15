@@ -7,7 +7,9 @@ import XCTest
 /// diff の面の計測（`FramePerfTests` と同じ場で、`ORBE_EDITOR_PERF=1` のときだけ走る）。インラインは 1MB の文書に、8 行
 /// ごとに別の 1MB の版（構文の色つき）の 3 行を指す削除の差し込みを置き（約 1.6 万行）、行の型の地と記号を付ける。並列は
 /// 1MB の 2 面に詰め物の差し込みを置き、スクロールを共にして片側だけに指を流す。関門は本文だけのときと同じ（1 コマの CPU の
-/// p99 2ms 未満・描画スレッド自身が落とすコマ 0）。壊れると、削除行の多い diff や並列の diff でスクロールのコマが落ちる。
+/// p99 2ms 未満・描画スレッド自身が落とすコマ 0）。打鍵は、同じ差し込みを置いた編集できる面（インラインと並列の右）で、
+/// コードの面の打鍵と同じ関門にかける。壊れると、削除行の多い diff や並列の diff でスクロールのコマが落ちる・diff の中で
+/// 打った字が遅れて出る。
 extension FramePerfTests {
   func testDiffInline() throws {
     let old = try open(
@@ -53,6 +55,29 @@ extension FramePerfTests {
       load?.invalidate()
       load = nil
     }
+  }
+
+  /// diff の見え方を載せた編集できる 1MB の面での打鍵——インラインは削除の差し込みと行の型、並列の右は詰め物とスクロールの
+  /// 共有。関門はコードの面の打鍵と同じ（打鍵→present の中央値 12.5ms・p95 17ms、打鍵 1 回の main の仕事 p99 1ms）。
+  func testTypingInDiff() throws {
+    let text = Self.swiftSource(bytes: 1_000_000)
+    let old = try attach(text.replacingOccurrences(of: "Item", with: "Old"))
+    let inline = try attach(text)
+    inline.surface.setPresentation(Self.diffPresentation(columns: 2))
+    inline.surface.setRows(
+      Self.inlineRows(
+        lineCount: inline.document.text.lineCount, source: DocumentRowSource(old.document)))
+    _ = gateStrokes(inline, scenario: "typing", label: "1MB diff inline", stroke: Self.type)
+
+    let right = try attach(text)
+    for (index, opened) in [old, right].enumerated() {
+      opened.surface.setPresentation(Self.diffPresentation(columns: 1))
+      opened.surface.setRows(
+        Self.paddedRows(lineCount: opened.document.text.lineCount, odd: index == 1))
+    }
+    old.surface.isEditable = false
+    old.surface.shareScroll(with: right.surface)
+    _ = gateStrokes(right, scenario: "typing", label: "1MB diff side right", stroke: Self.type)
   }
 
   /// 行の型 0（追加の地と記号）・1（削除の地と記号）・2（詰め物の地）の構成。
