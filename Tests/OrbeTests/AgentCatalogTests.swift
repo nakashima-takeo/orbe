@@ -86,7 +86,7 @@ final class AgentCatalogTests: OrbeTestCase {
       "claude --resume s-1 -- '解けた'")
     XCTAssertEqual(
       AgentCatalog.resumeCommand(forAgent: "codex", sessionId: "s-1", firstInput: "done"),
-      "codex resume s-1 -- done")
+      "codex --no-daemon resume s-1 -- done")
     XCTAssertEqual(
       AgentCatalog.resumeCommand(forAgent: "agy", sessionId: "s-1", firstInput: "done"),
       "agy --conversation s-1 -i done")
@@ -120,7 +120,7 @@ final class AgentCatalogTests: OrbeTestCase {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/sh")
     process.arguments = [
-      "-c", "set -- " + command.dropFirst("codex ".count) + "; printf %s \"$4\"",
+      "-c", "set -- " + command.dropFirst("codex ".count) + "; printf %s \"$5\"",
     ]
     process.currentDirectoryURL = dir
     let pipe = Pipe()

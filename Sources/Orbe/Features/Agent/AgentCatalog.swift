@@ -10,13 +10,17 @@ struct AgentCLI: Equatable {
 /// `ShellPATH` が解決した PATH 上で実行ファイルを絶対パスへ解決する
 /// （「ユーザーのシェルが見つけるもの＝候補」の契約。GUI アプリの素の PATH に依存しない）。
 final class AgentCatalog {
-  /// CLI 1 つぶんの静的な知識。`resumeFlag` は `<command> <resumeFlag> <sessionId>` の席。
+  /// CLI 1 つぶんの静的な知識。`resumeFlag` は `<command> <requiredArguments> <resumeFlag> <sessionId>` の席。
   /// `reportsIdleOnStart` は Orbe のプラグインがその CLI の起動時 hook に idle を配線しているか
   /// （claude の SessionStart→idle。codex CLI 自身も SessionStart を持つが `codex-hooks.json` は
   /// 配線していない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
   /// `firstInput` は起動（新規・再開）に最初の入力を添える席。`headless` は裏で非対話に回す能力。
+  /// `requiredArguments` は Orbe が起動するとき（新規・再開）コマンド名の直後に必ず置く引数。codex の `--no-daemon` は、
+  /// hook と MCP サーバーをタブの端末で動く codex の子として起動させる——共有のデーモン経由だと、hook と MCP サーバーが
+  /// デーモンを最初に起動した端末の環境で走り、別のタブを名乗る。
   struct AgentProfile {
     let command: String
+    let requiredArguments: [String]
     let resumeFlag: String
     let reportsIdleOnStart: Bool
     let firstInput: FirstInputSeat
@@ -35,18 +39,20 @@ final class AgentCatalog {
   /// 一級サポートの全体。並び＝デフォルト未設定時の優先順。
   static let profiles = [
     AgentProfile(
-      command: "claude", resumeFlag: "--resume", reportsIdleOnStart: true,
+      command: "claude", requiredArguments: [], resumeFlag: "--resume", reportsIdleOnStart: true,
       firstInput: .trailing,
       headless: .runs(
         HeadlessCLI(
           arguments: ClaudeHeadless.arguments, environment: ClaudeHeadless.environment,
           reply: ClaudeHeadless.reply, availableTools: ClaudeHeadless.availableTools))),
     AgentProfile(
-      command: "codex", resumeFlag: "resume", reportsIdleOnStart: false,
+      command: "codex", requiredArguments: ["--no-daemon"], resumeFlag: "resume",
+      reportsIdleOnStart: false,
       firstInput: .trailing,
       headless: .refuses(.toolsNotAllowListable)),
     AgentProfile(
-      command: "agy", resumeFlag: "--conversation", reportsIdleOnStart: false,
+      command: "agy", requiredArguments: [], resumeFlag: "--conversation",
+      reportsIdleOnStart: false,
       firstInput: .flag("-i"),
       headless: .refuses(.noToolOrSessionControl)),
   ]
@@ -112,17 +118,21 @@ final class AgentCatalog {
   {
     guard isSafeSessionId(sessionId), let profile = profile(command) else { return nil }
     return
-      ([profile.command, profile.resumeFlag, sessionId] + firstInputWords(profile, firstInput))
+      ([profile.command] + profile.requiredArguments + [profile.resumeFlag, sessionId]
+      + firstInputWords(profile, firstInput))
       .joined(separator: " ")
   }
 
-  /// 新しく起こすコマンド文字列（`/bin/sh -c` 経由）。実行ファイルは検出した絶対パスで起こす。`arguments` は 1 つずつ
-  /// シェルの単語として引用する。`firstInput` の添え方は `resumeCommand` と同じ。
+  /// 新規起動するコマンド文字列（`/bin/sh -c` 経由）。実行ファイルは検出した絶対パスで起動し、直後に `requiredArguments`、
+  /// 続けて `arguments` を置く。引数は 1 つずつシェルの単語として引用する。`firstInput` の添え方は `resumeCommand` と同じ。
   static func startCommand(_ agent: AgentCLI, arguments: [String] = [], firstInput: String? = nil)
     -> String
   {
-    let input = profile(agent.command).map { firstInputWords($0, firstInput) } ?? []
-    return ([ShellWord.quoted(agent.path)] + arguments.map(ShellWord.quoted) + input)
+    let known = profile(agent.command)
+    let input = known.map { firstInputWords($0, firstInput) } ?? []
+    return
+      ([ShellWord.quoted(agent.path)]
+      + ((known?.requiredArguments ?? []) + arguments).map(ShellWord.quoted) + input)
       .joined(separator: " ")
   }
 
