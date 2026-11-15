@@ -96,6 +96,13 @@ final class AgentCatalogTests: OrbeTestCase {
       "/bin/claude -- '- 箇条書き'")
   }
 
+  /// codex は新規起動でも、デーモンを使わない引数をコマンド名の直後に置く（再開の形は上のテストが固定する）。
+  func testCodexStartsWithoutTheDaemon() {
+    XCTAssertEqual(
+      AgentCatalog.startCommand(AgentCLI(command: "codex", path: "/bin/codex"), firstInput: "頼み"),
+      "/bin/codex --no-daemon -- '頼み'")
+  }
+
   /// 席に置けない制御文字（改行・タブ以外の C0・DEL・C1）は空白にして添える。NUL はコマンドの C 文字列をそこで切り、
   /// 起動を壊す。新規起動でも再開でも同じ。
   func testFirstInputControlCharactersOtherThanNewlineAndTabBecomeSpaces() {
