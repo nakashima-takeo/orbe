@@ -7,7 +7,7 @@ import XCTest
 
 /// diff の中の編集——作業ツリー diff の新しい側（インラインの本文・並列の右）で打った字は文書に入り、diff の行の並び（追加の
 /// 行・削除行・並列の詰め物）は編集に追従し、⌘S で保存できる。壊れると、diff で打った字が本文に入らない・並びが本文から
-/// ずれる・並列の左右の高さがずれる・仮の diff タブが未保存のまま入れ替わる・diff で直した変更を保存
+/// ずれる・並列の左右の高さがずれる・変換中の字が消える・仮の diff タブが未保存のまま入れ替わる・diff で直した変更を保存
 /// できない・プロジェクト検索の一致が diff で打った字からずれる。
 extension EditorDiffTests {
   private func type(_ text: String, at location: Int, on surface: MetalTextSurface) {
@@ -73,13 +73,14 @@ extension EditorDiffTests {
     XCTAssertTrue(aligned())
   }
 
-  /// 変換中に見せ方（インライン ⇄ 並列）を切り替えても、同じ面のまま変換が続き、確定した字が本文に入る。
-  func testSwitchingTheModeWhileComposingKeepsTheComposition() throws {
+  /// 変えていない行で変換を始めると、裏の行差分が届いて元の行が削除行として差し込まれ、さらに見せ方（インライン ⇄ 並列）を
+  /// 切り替えても、変換は続き、確定した字が本文に入る。
+  func testTheCompositionContinuesWhileTheRowsChangeUnderIt() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let modes = EditorDiffModeState()
     let (tab, window) = tab(modes: modes)
     let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
-    waitRows(diff, "変更が出る") { !$0.isEmpty }
+    waitRows(diff, "変更が出る") { self.removedLines($0) == [1] }
     let document = try XCTUnwrap(diff.document)
     let surface = try engine(diff.newSurface)
     window.makeFirstResponder(surface.responder)
@@ -89,10 +90,12 @@ extension EditorDiffTests {
     client.setMarkedText(
       "か", selectedRange: NSRange(location: 1, length: 0), replacementRange: whole)
 
+    waitRows(diff, "変換中の行の元の行が削除行に出る") { self.removedLines($0) == [1, 2] }
+    XCTAssertTrue(client.hasMarkedText(), "削除行が差し込まれても変換は続く")
     modes.select(.side)
     pumpMain(until: { diff.oldSurface != nil }, "並列")
     XCTAssertTrue(diff.newSurface === surface, "前提: 同じ面")
-    XCTAssertTrue(client.hasMarkedText(), "変換は続く")
+    XCTAssertTrue(client.hasMarkedText(), "見せ方を切り替えても変換は続く")
     client.setMarkedText(
       "かな", selectedRange: NSRange(location: 2, length: 0), replacementRange: whole)
     client.insertText("仮名", replacementRange: whole)
