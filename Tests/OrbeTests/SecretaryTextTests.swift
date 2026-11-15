@@ -16,6 +16,18 @@ final class SecretaryTextTests: OrbeTestCase {
       SecretaryText.firstInput(.text(" \n\u{0}\t "), l10n: ja), "空白と制御文字だけは頼めない")
   }
 
+  func testBoardInstructionsNameTheBundledAutomationSkill() {
+    XCTAssertTrue(
+      SecretaryText.instructions(for: .board, .ja, pluginName: "orbe-agent-dev")
+        .contains("`orbe-agent-dev:automation`"))
+    XCTAssertTrue(
+      SecretaryText.instructions(for: .board, .en, pluginName: nil).contains("`automation`"),
+      "同梱の無い起動ではスキル名だけを名指しする")
+    XCTAssertFalse(
+      SecretaryText.instructions(for: .palette, .ja, pluginName: "orbe-agent-dev")
+        .contains("automation"), "⌘⇧X の役目は自動化のスキルを使わない")
+  }
+
   func testAFixNamesTheAutomation() {
     let automation = DesignSceneFixtures.boardAutomations()[2]
     XCTAssertEqual(

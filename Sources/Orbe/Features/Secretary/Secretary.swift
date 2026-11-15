@@ -4,6 +4,8 @@ import Foundation
 protocol SecretaryHost: AnyObject {
   /// 検出済みの claude。
   var secretaryClaude: AgentCLI? { get }
+  /// 各 CLI へ登録した同梱プラグインの名前（自動化のスキルを名指しするため）。同梱の無い起動では nil。
+  var secretaryPluginName: String? { get }
   /// Home に新しいタブで `command` を起こし、開いている画面を閉じて Home へ切り替え、そのタブを選ぶ。起こせなければ false。
   func secretaryOpen(command: String) -> Bool
 }
@@ -44,7 +46,9 @@ final class Secretary {
     let command = AgentCatalog.startCommand(
       claude,
       arguments: [
-        "--append-system-prompt", SecretaryText.instructions(for: origin, localization.language),
+        "--append-system-prompt",
+        SecretaryText.instructions(
+          for: origin, localization.language, pluginName: host.secretaryPluginName),
       ],
       firstInput: input)
     guard host.secretaryOpen(command: command) else { throw .unavailable }

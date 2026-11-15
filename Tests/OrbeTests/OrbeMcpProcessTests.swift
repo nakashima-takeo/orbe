@@ -54,26 +54,32 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
-  /// Home の rules と秘書の役目の指示（日英）が名指しする MCP のツールは、どれも `tools/list` にある。どちらも claude が
-  /// 起動のたびに読む手引きで、orbe-mcp は別ターゲットなので、ツールを改名・削除してもコンパイルもほかのテストも通ってしまう。
+  /// Home の rules・⌘⇧X の役目の指示（日英）・同梱プラグインの自動化のスキルが名指しする MCP のツールは、どれも
+  /// `tools/list` にある。どれも claude が読む手引きで、orbe-mcp は別ターゲットなので、ツールを改名・削除しても
+  /// コンパイルもほかのテストも通ってしまう。
   func testAgentInstructionsNameOnlyToolsTheBridgeLists() throws {
     let names = Set(ControlProcess.mcpToolsList().compactMap { $0["name"] as? String })
     let pattern = try NSRegularExpression(pattern: "`([a-z]+(?:_[a-z]+)+|spawn)`")
+    let skill = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("app/agent-plugin/plugins/orbe-agent/skills/automation/SKILL.md")
+    var texts = [("自動化のスキル", try String(contentsOf: skill, encoding: .utf8))]
     for language in Language.allCases {
-      let texts = [
-        ("Home の rules", HomeTemplate.rules(language, home: "/home")),
-        ("⌘⇧X の役目の指示", SecretaryText.instructions(for: .palette, language)),
-        ("ボードの役目の指示", SecretaryText.instructions(for: .board, language)),
+      texts += [
+        ("\(language) の Home の rules", HomeTemplate.rules(language, home: "/home")),
+        (
+          "\(language) の ⌘⇧X の役目の指示",
+          SecretaryText.instructions(for: .palette, language, pluginName: nil)
+        ),
       ]
-      for (label, text) in texts {
-        let named = pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).map {
-          String(text[Range($0.range(at: 1), in: text)!])
-        }
-        XCTAssertFalse(named.isEmpty, "\(language) の\(label): 前提: ツールを名指ししている")
-        for name in named {
-          XCTAssertTrue(
-            names.contains(name), "\(language) の\(label)が tools/list に無い \(name) を名指ししている")
-        }
+    }
+    for (label, text) in texts {
+      let named = pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).map {
+        String(text[Range($0.range(at: 1), in: text)!])
+      }
+      XCTAssertFalse(named.isEmpty, "\(label): 前提: ツールを名指ししている")
+      for name in named {
+        XCTAssertTrue(names.contains(name), "\(label)が tools/list に無い \(name) を名指ししている")
       }
     }
   }
