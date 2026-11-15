@@ -56,18 +56,19 @@ extension AutomationStoreTests {
   }
 
   /// 読む行の下限の時刻に、書く時点より後の時刻を書いた定義は、場所を示して断り、何も書かない。
-  func testAnAfterLaterThanTheWriteIsRefusedWithItsPlace() {
+  func testAnAfterLaterThanTheWriteIsRefusedWithItsPlace() throws {
     let store = AutomationStore()
     var definition = Self.definition()
+    let id = try store.create(definition, now: Self.at).id
     definition.nodes.append(sideEffect("late", after: Self.at.addingTimeInterval(1)))
 
-    XCTAssertThrowsError(try store.create(definition, now: Self.at)) {
+    XCTAssertThrowsError(try Self.rewrite(store, id, definition)) {
       XCTAssertEqual(
         $0 as? AutomationError,
         .invalid(
           "nodes[2].from[0].after: 2027-01-15T08:00:01.000Z is later than now "
             + "(2027-01-15T08:00:00.000Z); pass the current time or an earlier one"))
     }
-    XCTAssertEqual(store.automations, [])
+    XCTAssertEqual(store.automation(id)?.version, 1)
   }
 }

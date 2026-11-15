@@ -61,7 +61,7 @@ extension AutomationStore {
 
   /// 書き込みを確かめる（何も書かない）。作るなら、ノードは `id` を持たず、定義が検証を通ること。書き換えるなら、自動化があり（定義を
   /// 読めない自動化も書き換えで直せる）、定義が検証を通り、版が今の版と同じで、ノードの `id` が今のノードを指すこと（`checkIds`）。
-  /// どちらも、つながりが読む行の下限の時刻が `now` より後でないこと（`checkAfter`）。
+  /// どちらも、つながりが読む行の下限の時刻（`after`）が、この書き込みで足すノードからのつながりに付いておらず、`now` より後でもないこと（`checkAfter`）。
   func check(_ write: Write, now: Date) throws(AutomationError) -> CheckedWrite {
     guard available else { throw unavailableError }
     switch write {
@@ -248,14 +248,22 @@ extension AutomationStore {
     return rewired
   }
 
-  /// つながりが読む行の下限の時刻が、書く時点の `now` より後でないかを確かめる。未来の時刻は、その時刻までに来た行を黙って
-  /// 捨て、試走でも正しい値と見分けられない。保存した定義を読むときは確かめない。
+  /// つながりが読む行の下限の時刻（`after`）を確かめる: 上流がこの書き込みで足すノード（`id` を持たない）ではなく、かつ書く時点の
+  /// `now` より後でもないこと。足すノードが出す行はどれも書いた後にできるので、そこからのつながりの下限の時刻は何も除かない。未来の時刻は、
+  /// その時刻までに来た行を黙って捨て、試走でも正しい値と見分けられない。保存した定義を読むときは確かめない。
   private static func checkAfter(_ definitionNodes: [AutomationDefinition.Node], now: Date)
     throws(AutomationError)
   {
+    let added = Set(definitionNodes.filter { $0.id == nil }.map(\.key))
     for (index, definitionNode) in definitionNodes.enumerated() {
       for (position, input) in definitionNode.from.enumerated() {
-        guard let after = input.after, after > now else { continue }
+        guard let after = input.after else { continue }
+        if added.contains(input.nodeKey) {
+          throw .invalid(
+            "nodes[\(index)].from[\(position)].after: \"\(input.nodeKey)\" is a node this write adds, so "
+              + "after drops nothing; write after on an input from a node that exists now")
+        }
+        guard after > now else { continue }
         throw .invalid(
           "nodes[\(index)].from[\(position)].after: \(SessionEvent.iso8601(after)) is later than now "
             + "(\(SessionEvent.iso8601(now))); pass the current time or an earlier one")
