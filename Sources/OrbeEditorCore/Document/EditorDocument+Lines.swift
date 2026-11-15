@@ -1,6 +1,6 @@
 import Foundation
 
-/// 文書の写しの行から答える問い合わせ——検索と出現の語と、編集が始まりの行の中身を変えないか。
+/// 文書の写しの行から答える問い合わせ——検索と出現に使う語の範囲と、編集が始まりの行の中身を変えないか。
 extension EditorDocument {
   /// 選択の先頭の位置の語（出現の強調・⌘F の種）。長い行はキャレットの前後の窓だけを読む（→ `Occurrences.wordWindow`）。
   public func word(at selection: NSRange) -> NSRange? {
