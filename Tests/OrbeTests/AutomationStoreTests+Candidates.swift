@@ -90,6 +90,88 @@ extension AutomationStoreTests {
     XCTAssertEqual(proposals(store), [Self.link("a"): .resolved])
   }
 
+  /// `coverage` の取得を `take` で読む判定が、項目 `a` を候補にして対応済みにした状態。自動化の ID を返す。
+  private func resolvedA(
+    _ store: AutomationStore, _ coverage: AutomationCoverage, take: AutomationTake
+  ) throws -> Int {
+    var definition = Self.definition(coverage: coverage)
+    definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "fetch", take: take)]
+    let id = try store.create(definition, now: Self.at).id
+    try Self.fetch(store, id, [Self.item("a")])
+    try Self.judge(store, id, proposing: [Self.item("a")])
+    try Self.judge(store, id, resolving: [Self.link("a")])
+    XCTAssertEqual(proposals(store), [Self.link("a"): .resolved], "前提")
+    return id
+  }
+
+  /// 判定が時刻 `at` に読めば取る行のリンク。
+  private func taken(_ store: AutomationStore, _ id: Int, at: Date = AutomationStoreTests.at) throws
+    -> [String]
+  {
+    try XCTUnwrap(store.read(store.nodeId(id, "judge"), of: id, baseline: nil, now: at))
+      .taken.compactMap(\.link)
+  }
+
+  /// 出来事を毎回すべて読む判定が対応済みにした候補について、そのリンクの行は、同じリンクの行が後から届いた回だけ、前に読んだ行も
+  /// 含めてすべて判定に渡る。判定が案にしなければ対応済みの候補は残り、次の回からはまた渡らない。
+  func testAResolvedLinkReachesAJudgeReadingEveryRunOnlyOnceItHasANewRow() throws {
+    let store = AutomationStore()
+    let id = try resolvedA(store, .newArrivals, take: .all)
+    XCTAssertEqual(try taken(store, id), [], "新しい行が無ければ渡らない")
+
+    try Self.fetch(
+      store, id, [AutomationItem(id: "a2", link: Self.link("a"), body: "再依頼", time: Self.at)])
+
+    XCTAssertEqual(try taken(store, id), [Self.link("a"), Self.link("a")])
+    try Self.judge(store, id)
+    XCTAssertEqual(proposals(store), [Self.link("a"): .resolved])
+    XCTAssertEqual(try taken(store, id), [])
+  }
+
+  /// 判定が対応済みの候補について、そのリンクの行を案にすると、対応済みの候補は新しい判断待ちの候補に置き換わる。判定のその回の記録は、その
+  /// 案を候補にした数（`proposed`）に数え、理由付きで捨てた案（`dismissed`）には載せない。
+  func testProposingAResolvedLinkAgainReplacesTheResolvedProposal() throws {
+    let store = AutomationStore()
+    let id = try resolvedA(store, .newArrivals, take: .new)
+    let resolved = try XCTUnwrap(store.proposals.first).id
+    let again = AutomationItem(id: "a2", link: Self.link("a"), body: "再依頼", time: Self.at)
+    try Self.fetch(store, id, [again])
+
+    try Self.judge(store, id, proposing: [again])
+
+    XCTAssertEqual(proposals(store), [Self.link("a"): .open])
+    XCTAssertNotEqual(store.proposals.first?.id, resolved)
+    XCTAssertEqual(
+      store.automation(id)?.state(key: "judge").runs.first?.run?.result,
+      .judge(proposed: 1, resolved: 0, dismissed: []))
+  }
+
+  /// 今の集合を毎回すべて読む判定には、対応済みの候補の項目の中身が変わると、その項目の行が渡る。
+  func testAResolvedItemReachesAJudgeReadingEveryRunWhenItsBodyChanges() throws {
+    let store = AutomationStore()
+    let id = try resolvedA(store, .currentSet, take: .all)
+    XCTAssertEqual(try taken(store, id), [], "前提: 変化が無ければ渡らない")
+
+    let later = Self.at.addingTimeInterval(60)
+    try Self.fetch(
+      store, id, [AutomationItem(id: "a", link: Self.link("a"), body: "差し戻し", time: Self.at)],
+      at: later)
+
+    XCTAssertEqual(try taken(store, id, at: later), [Self.link("a")])
+  }
+
+  /// 今の集合の新しい項目だけを読む判定には、対応済みの候補の項目が有効なまま、同じリンクの別の項目が届くと、その別の項目が渡る。
+  func testAResolvedLinkReachesAJudgeReadingNewItemsWhenAnotherItemOfItArrives() throws {
+    let store = AutomationStore()
+    let id = try resolvedA(store, .currentSet, take: .new)
+
+    try Self.fetch(
+      store, id,
+      [Self.item("a"), AutomationItem(id: "a2", link: Self.link("a"), body: "別の項目", time: Self.at)])
+
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
+  }
+
   /// 同じリンクの行は判定へすべて届き、1 回でそのうち 2 つを案にしても候補は 1 つで、残りは理由付きで捨てる。
   func testOneRunProposingTwoRowsOfTheSameLinkMakesOneProposal() throws {
     let store = AutomationStore()
