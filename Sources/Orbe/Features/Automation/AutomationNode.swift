@@ -95,6 +95,9 @@ struct AutomationNodeEdge: Hashable {
   var take: AutomationTake
   /// 古さの上限（時間）。項目は有効になってから、出来事は作られてからの時間で数える。
   var maxAgeHours: Int?
+
+  /// 上限の 87,600 時間（10 年）は、今の集合の古い項目を絞る使い方を妨げず、時刻の計算を桁あふれさせない。
+  static let maxAgeHoursRange = 1...87_600
 }
 
 /// 受け手の取り方。

@@ -17,8 +17,9 @@ extension AutomationReference {
     it does with its output.
     - `id`: given by Orbe. Send it back to keep the node; a node without `id` is new, and cannot \
     take the key of a node the same rewrite removes.
-    - `key`: 1-32 letters, digits, _ or - (ASCII only), unique in the automation (case-sensitive). \
-    It names the node in `from` and when you point at a node; changing it keeps the node.
+    - `key`: 1-32 letters, digits, _ or - (ASCII only), not starting with -, unique in the \
+    automation (case-sensitive). It names the node in `from` and when you point at a node; \
+    changing it keeps the node.
     - `name`: one line.
     - `trigger`: `kind` `interval` with `minutes` (1-10080), `cron` with `expression` ("minute hour \
     day month weekday", in the Mac's time zone), `manual` (runs only when a flow points at it or \
@@ -31,7 +32,7 @@ extension AutomationReference {
     9:00 is "0 9 * * 1-5".
     - `from`: the upstream nodes, each a key or an object with `node` (the key), `take` and \
     `maxAgeHours`. `take` is `new` (the default: only rows not yet received) or `all` (every valid \
-    row of that upstream, every run); `maxAgeHours` (at least 1) drops older rows. Both belong to \
+    row of that upstream, every run); `maxAgeHours` (1-87600) drops older rows. Both belong to \
     the receiver. An input that takes `new` and has no `maxAgeHours` comes back as a key.
     - A command: `command` runs with /bin/sh -c. `directory` is relative to the workspace root \
     ("." for the root) and required when the node runs in a workspace (its own `workspace`, or the \
