@@ -22,7 +22,7 @@ extension EditorDiffTests {
     pumpMain(until: { diff.document == nil && diff.content == .ready }, "消えたファイルの diff")
 
     try contents.write(to: repo.url("a.txt"))
-    diff.rootObserver?.rootFiles(diff.files, filesDidChange: .scanAll)
+    try XCTUnwrap(diff.rootObserver).rootFiles(diff.files, filesDidChange: .scanAll)
     XCTAssertNotNil(diff.document, "前提: 戻ったファイルの文書に替わる")
     XCTAssertEqual(diff.content, .loading, "並びが載るまで何も出さない")
     XCTAssertNil(diff.newSurface)
