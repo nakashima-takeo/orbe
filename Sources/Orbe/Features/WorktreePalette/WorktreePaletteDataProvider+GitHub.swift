@@ -46,7 +46,8 @@ extension WorktreePaletteDataProvider {
     let pending = heads.filter { branchPRFetches[$0] == nil }
     guard !pending.isEmpty else { return }
     for head in pending { branchPRFetches[head] = .fetching }
-    gitHub.branchPullRequests(cwd: repo.root, heads: pending) { [weak self] head, prs in
+    gitHub.branchPullRequests(cwd: repo.root, heads: pending) { [weak self] head, fetched in
+      let prs = try? fetched.get()
       // キャッシュ書き込みは `self` の生存判定より前——provider はパレットと同じ寿命で、gh の応答前に
       // 閉じられるのが常用経路。self が消えたら捨てる作りだと次回の先描きが永遠に温まらない。
       if let prs {
