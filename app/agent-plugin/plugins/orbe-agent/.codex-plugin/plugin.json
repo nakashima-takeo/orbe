@@ -7,6 +7,7 @@
   "mcpServers": {
     "orbe-agent": {
       "command": "./mcp/orbe-mcp.sh",
+      "args": ["codex"],
       "cwd": ".",
       "env_vars": ["ORBE_MCP_BIN", "ORBE_BUNDLE_ID", "ORBE_TAB", "ORBE_SOCK"]
     }

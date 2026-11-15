@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import OrbePaths
+import OrbeProcess
 
 // Orbe 制御チャネルの MCP ブリッジ。MCP(stdio・改行区切り JSON-RPC 2.0) を喋り、
 // tools/call を Orbe.app の control.sock（同じく JSON-RPC）へ、呼び出し元タブを添えて転送する薄い層。
@@ -9,6 +10,11 @@ import OrbePaths
 // control.sock の解決は OrbePaths.controlSocketPath() に一本化（GUI 本体・cli と同一実装）。
 // ORBE_STATE_DIR 直下・最優先 → ORBE_SOCK → Apple 規定の既定パス。
 let socketPath: String = OrbePaths.controlSocketPath() ?? ""
+
+// codex の MCP 定義は第 1 引数に CLI 名を渡す（claude・agy の定義は渡さない）。デーモン経由の codex が起動した
+// ブリッジは、受け継いだ環境変数（`ORBE_TAB` など）が別のタブ（または Orbe の外）のものなので、ツールを公開しない。
+let servesTools =
+  CommandLine.arguments.dropFirst().first.map { InvokerGate.admitsCaller(agent: $0) } ?? true
 
 // MARK: - control.sock クライアント（1 リクエスト 1 接続・同期）
 
@@ -129,12 +135,12 @@ func handle(_ message: [String: Any]) {
 
   case "tools/list":
     guard let id else { return }
-    reply(id: id, result: ["tools": tools])
+    reply(id: id, result: ["tools": servesTools ? tools : []])
 
   case "tools/call":
     guard let id else { return }
     let params = message["params"] as? [String: Any] ?? [:]
-    guard let name = params["name"] as? String, toolNames.contains(name) else {
+    guard servesTools, let name = params["name"] as? String, toolNames.contains(name) else {
       replyError(id: id, code: -32602, message: "unknown tool")
       return
     }
