@@ -36,6 +36,31 @@ final class RevisionDocumentTests: XCTestCase {
     XCTAssertEqual(document.rowSourceContent.roles.length, document.text.length)
   }
 
+  /// 先頭の画面の色が届いた後に見えている範囲を遠くへ移してから初めて見せると、移した先の色を待つ（diff を最初の変更へ
+  /// 送った直後の待ち）。前に見えていた範囲の色が揃ったことでは待ちを抜けない。
+  func testTheFirstShowWaitsForTheLinesMadeVisibleLast() throws {
+    // 先頭の画面を作り終えてから、遠くの行まで作り進むのに十分かかる大きさ。
+    let lineCount = 20_000
+    let text = (0..<lineCount).map { "let value\($0) = \($0)\n" }.joined()
+    let document = RevisionDocument(
+      text: text, name: URL(fileURLWithPath: "/x/big.swift"), registry: registry)
+    let roles = { (line: Int) in
+      document.roles.roles(
+        in: NSRange(location: document.text.lineStart(line), length: "let".utf16.count))
+    }
+    let deadline = Date().addingTimeInterval(10)
+    while roles(0).isEmpty, Date() < deadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.001))
+    }
+    XCTAssertFalse(roles(0).isEmpty, "前提: 先頭の画面の色が届く")
+    let far = lineCount - 100
+    XCTAssertTrue(roles(far).isEmpty, "前提: 遠くの行はまだ作っていない")
+
+    document.setVisible(lines: far...(far + 50))
+    document.prepareToShow(until: .now() + 10)
+    XCTAssertEqual(roles(far).map(\.role), [.keyword], "移した先の色が付いてから戻る")
+  }
+
   /// 言語の無い名前では色を作らず、すぐ追いつく。
   func testUnknownLanguagesStayPlain() {
     let document = RevisionDocument(
