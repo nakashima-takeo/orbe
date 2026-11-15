@@ -8,8 +8,8 @@ import XCTest
 
 /// diff の計測。`ORBE_EDITOR_PERF=1` のときだけ走る（`scripts/perf-editor.sh` が回す）。1MB の Swift の大きな書き換え
 /// ——編集の数が diff の上限の近く・上限越え・全行——で、裏の行差分の時間（上限の値の根拠）と、並びを作って面に置く main の
-/// 仕事（diff を開く・取り直すとき）を記録し、作業ツリー diff の中の打鍵 1 回の main の仕事を測って、`PERF` で始まる行に
-/// 出す。
+/// 仕事（diff を開く・取り直すとき）を記録し、作業ツリー diff の中の打鍵 1 回の main の仕事を測る。結果は `PERF` で
+/// 始まる行に出す。
 @MainActor
 final class EditorDiffPerfTests: OrbeTestCase {
   override func setUpWithError() throws {
@@ -62,12 +62,13 @@ final class EditorDiffPerfTests: OrbeTestCase {
     }
   }
 
-  /// 作業ツリー diff の中の打鍵 1 回の main の仕事——キーの出来事を受けてから、面の編集係・文書・diff（並びの置き直し）・
+  /// 作業ツリー diff の中の打鍵 1 回の main の仕事——キーの出来事を受けてから、面の編集係・文書と、diff を含む Orbe の
   /// 配り先が戻るまでの main のスレッドの CPU 時間。1MB の Swift で、変更が数十か所の普通の diff と、編集の数が上限に近い
   /// diff を、インラインと並列で、変えていない行に字と Enter（行の数を変える）を打って測る。普通の diff は p99 1ms 以下、
   /// 上限に近い diff は記録する。プロセスで最初の 1 打鍵（入力の仕組みの初期化を含む）は数えないので、測る前に別の文書で
-  /// 打つ。開いた文書の最初の数打鍵は、ファイルタブで打っても同じく 1〜2ms かかる（diff に依らない）ので関門から外し、
-  /// 参考に出す。
+  /// 打つ。開いた文書の最初の打鍵は、未保存への切り替わり（セッションの知らせからタブ行の組み直しまで）を 1 回だけ含み、
+  /// ほかの部分も 2 打鍵目以降の 2〜5 倍かかって 0.5〜3ms になる（2 打鍵目以降は普通の diff で 1ms 未満）ので、
+  /// `diff keystroke-main` から外して（関門も、上限に近い diff の記録も、外した後の値で見る）参考に別に出す。
   func testTypingInAWorkingTreeDiff() throws {
     let warm = try openEditor("warm\n")
     warm.document.surface.responder.keyDown(with: .key("/", []))
@@ -89,11 +90,8 @@ final class EditorDiffPerfTests: OrbeTestCase {
       for mode in [EditorDiff.Mode.inline, .side] {
         let name = "\(label) \(mode)"
         let cpu = try typeInWorkingTreeDiff(repo, mode: mode, name)
-        let opening = Array(cpu.prefix(Self.openingKeystrokes))
-        let steady = Array(cpu.dropFirst(Self.openingKeystrokes))
-        print(
-          "PERF", name, "diff opening-keystrokes-main (参考)",
-          opening.map { String(format: "%.3f", $0) }.joined(separator: " "))
+        let steady = Array(cpu.dropFirst())
+        print("PERF", name, "diff first-keystroke-main (参考)", String(format: "%.3f", cpu[0]))
         reportPerf(name, "diff keystroke-main", steady, digits: 3)
         guard gated else { continue }
         let sorted = steady.sorted()
@@ -105,8 +103,8 @@ final class EditorDiffPerfTests: OrbeTestCase {
   }
 
   /// `repo` の big.swift の作業ツリー diff を見せ方 `mode` で開き、変えていない行に字と Enter を打って、打鍵ごとの main の
-  /// スレッドの CPU 時間（ms）を返す。後の計測に裏の仕事を残さない——文書が追いついてから diff を閉じ、面を窓から外して根の
-  /// サービス（監視と git）を放す。
+  /// スレッドの CPU 時間（ms）を返す。後の計測に裏の仕事を残さない——文書が追いついてから diff を閉じ、pane を窓から外して
+  /// 根のサービス（監視と git）を放す。
   private func typeInWorkingTreeDiff(
     _ repo: TempGitRepo, mode: EditorDiff.Mode, _ name: String
   ) throws -> [Double] {
@@ -119,6 +117,11 @@ final class EditorDiffPerfTests: OrbeTestCase {
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
       diffModes: EditorDiffModeState(mode: mode))
     let key = EditorDiff.Key(root: repo.root, path: "big.swift", kind: .workingTree)
+    defer {
+      tab.group.editor.close(.diff(key))
+      window.orderOut(nil)
+      window.contentView = nil
+    }
     let diff = try tab.group.editor.openDiff(key, as: .pinned)
     pumpMain(
       until: { diff.content == .ready && diff.placement == .placed }, timeout: 60,
@@ -127,7 +130,17 @@ final class EditorDiffPerfTests: OrbeTestCase {
     XCTAssertTrue(pumpUntilCaughtUp(document))
     let surface = document.surface
     window.makeFirstResponder(surface.responder)
-    let caret = document.text.lineStart(document.text.lineCount / 3 + 1) + 4
+    let text = document.text
+    var row = text.lineCount / 3 + 1
+    let line = { (row: Int) in
+      text.substring(
+        NSRange(location: text.lineStart(row), length: text.lineEnd(row) - text.lineStart(row))
+      ).trimmingCharacters(in: .newlines)
+    }
+    while line(row).hasSuffix(" // changed") { row += 1 }
+    XCTAssertFalse(
+      document.hunks.contains { $0.newLines.contains(row) }, "\(name): 前提: 打つのは変えていない行")
+    let caret = text.lineStart(row) + 4
     surface.selectedRange = NSRange(location: caret, length: 0)
     surface.reveal(NSRange(location: caret, length: 0), policy: .center)
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
@@ -139,14 +152,8 @@ final class EditorDiffPerfTests: OrbeTestCase {
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
     XCTAssertTrue(pumpUntilCaughtUp(document))
-    tab.group.editor.close(.diff(key))
-    window.orderOut(nil)
-    window.contentView = nil
     return cpu
   }
-
-  /// 開いた文書の最初の数打鍵（関門から外す数）。
-  private static let openingKeystrokes = 4
 
   private func ms(_ seconds: Double) -> String { String(format: "%.1fms", seconds * 1000) }
 }
