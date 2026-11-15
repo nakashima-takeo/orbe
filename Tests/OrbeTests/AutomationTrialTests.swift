@@ -300,6 +300,33 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(trial.passes(key: "p").first?.content, AutomationTrial.Content.none)
   }
 
+  /// 判定の回の結果の案は、確定が候補に足したものだけ。同じリンクの 2 つ目の案のように確定で捨てた案は、回の記録の捨てた理由にだけ
+  /// 出る（試走の案を本番の候補と同じに読めるように）。
+  func testAJudgeRunInATrialShowsOnlyTheProposalsSettlingTookIn() throws {
+    let id = try define([
+      fetch("gh"), definitionNode("judge", from: ["gh"], deliver: .taskCandidates),
+    ])
+    let trial = try trials.start(.saved(id), .init())
+    waitCalls("gh", 1)
+    finish(
+      "gh",
+      ["b", "c"].map { #"{"id":"\#($0)","link":"https://example.com/same","body":"\#($0)"}"# }
+        .joined(separator: "\n"))
+    waitCalls("judge", 1)
+    finish(
+      "judge",
+      ["b", "c"].map { #"{"propose":"\#(downstream("gh", $0, of: id))","title":"\#($0)"}"# }
+        .joined(separator: "\n"))
+    ended(trial)
+
+    let pass = try XCTUnwrap(trial.passes(key: "judge").first)
+    guard case .judged(let judged) = pass.content,
+      case .judge(1, 0, let dismissed) = pass.run?.result
+    else { return XCTFail("判定の回の結果が無い: \(pass)") }
+    XCTAssertEqual(judged.proposals.map(\.title), ["b"])
+    XCTAssertEqual(dismissed.map(\.why), [.alreadyProposed])
+  }
+
   /// 1 つのノードが何度も回ると、回は本番の `runs` と同じく新しい順に並ぶ。
   func testRunsOfANodeAreNewestFirstAsInProduction() throws {
     let id = try define([

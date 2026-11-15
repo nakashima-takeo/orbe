@@ -66,14 +66,23 @@ extension AutomationTrialTests {
     XCTAssertEqual(trial.passes(key: "digest").first?.run?.result, .report(text: "a が来た"))
   }
 
-  /// 指した入口から届かない行き先は断る。
-  func testATargetTheEntriesDoNotReachIsRefused() throws {
+  /// 届かない指し方（どの行き先にも届かない入口、どの入口からも届かない行き先）・知らない鍵・1 未満の `limit` は断る。
+  func testARangeThatCannotRunOrALimitBelowOneIsRefused() throws {
     let id = try define([
       fetch("gh"), fetch("slack"), definitionNode("judge", from: ["gh"], deliver: .taskCandidates),
       definitionNode("digest", from: ["slack"], deliver: .report),
     ])
     XCTAssertThrowsError(try trials.start(.saved(id), .init(from: ["gh"], to: ["digest"]))) {
       XCTAssertEqual($0 as? AutomationError, .invalid(#"from[0] "gh" reaches no node in to"#))
+    }
+    XCTAssertThrowsError(
+      try trials.start(.saved(id), .init(from: ["slack"], to: ["digest", "judge"]))
+    ) {
+      XCTAssertEqual(
+        $0 as? AutomationError, .invalid(#"to[1] "judge" is not reached from any node in from"#))
+    }
+    XCTAssertThrowsError(try trials.start(.saved(id), .init(limit: 0))) {
+      XCTAssertEqual($0 as? AutomationError, .invalid("limit must be a positive integer"))
     }
     XCTAssertThrowsError(try trials.start(.saved(id), .init(to: ["nope"]))) {
       XCTAssertEqual($0 as? AutomationError, .nodeNotFound(id, "nope"))
