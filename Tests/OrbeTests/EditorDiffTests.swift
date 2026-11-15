@@ -368,3 +368,12 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertEqual(tab.location, .file(root: repo.root, relative: "a.txt"))
   }
 }
+
+extension EditorDiff {
+  /// diff の根のサービス（テストの略記。出どころが握っている間は同じもの）。
+  var files: RootFiles { RootFiles.shared(for: id.root) }
+  /// 根のサービスの知らせを受ける出どころ（テストの略記。作業ツリーとステージ済み）。
+  var rootObserver: RootFilesObserver? { source as? RootFilesObserver }
+  /// 作業ツリー diff の出どころ（テストの略記）。
+  var workingTree: EditorDiffWorkingTree? { source as? EditorDiffWorkingTree }
+}

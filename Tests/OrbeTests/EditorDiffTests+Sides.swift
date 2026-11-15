@@ -22,7 +22,7 @@ extension EditorDiffTests {
     pumpMain(until: { diff.document == nil && diff.content == .ready }, "消えたファイルの diff")
 
     try contents.write(to: repo.url("a.txt"))
-    diff.rootFiles(diff.files, filesDidChange: .scanAll)
+    diff.rootObserver?.rootFiles(diff.files, filesDidChange: .scanAll)
     XCTAssertNotNil(diff.document, "前提: 戻ったファイルの文書に替わる")
     XCTAssertEqual(diff.content, .loading, "並びが載るまで何も出さない")
     XCTAssertNil(diff.newSurface)
@@ -72,7 +72,7 @@ extension EditorDiffTests {
     let diff = try tab.group.editor.openDiff(id("u.txt", .workingTree), as: .pinned)
     waitRows(diff, "追加が出る") { $0.style(ofLine: 0) == DiffStyle.added }
     try FileManager.default.removeItem(at: repo.url("u.txt"))
-    pumpMain(until: { diff.workingStale }, "前提: 消えたと知り、読み直しを保留した")
+    pumpMain(until: { diff.workingTree?.workingStale == true }, "前提: 消えたと知り、読み直しを保留した")
     XCTAssertTrue(diff.document === document, "前提: 未保存の間は手放さない")
 
     document.surface.replaceAll(with: "u\n")

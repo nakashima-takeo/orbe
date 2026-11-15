@@ -1,14 +1,11 @@
 import Foundation
 import OrbeEditorCore
 
-/// diff 1 つ——根の下の 1 つのパスの、古い側と新しい側と、その行差分。種類が側を決める——作業ツリー: index の版 ↔ 文書
-/// （ファイルタブと同じ文書と面。開いていれば未保存を含む今の本文で、diff の中でも編集できる）／ステージ済み: HEAD の版
-/// （rename なら元のパス）↔ index の版。
-///
-/// 版の本文は根のサービスが 1 か所で持ち（→ `RootFiles.Version`）、diff はその状態から読むだけのリビジョンの文書を作る。
-/// 作業ツリー diff の差分は文書のハンク（裏・版つき・編集でずらす）そのもので、古い側はそのハンクが比べた底から作る——
-/// 底とハンクと今の本文の組は文書の中で食い違わないので、差し込みが古い側の本文とも今の本文ともずれない。
-/// ステージ済み diff は両側とも変わらない版の本文なので、どちらかが変わったときに 1 回、裏で行差分を取る。
+/// diff 1 つ——根の下の 1 つのパスの、古い側と新しい側と、その行差分。両側の本文は種類ごとの出どころ（`EditorDiffSource`）が
+/// 決める——作業ツリー: index の版 ↔ 文書（ファイルタブと同じ文書と面。開いていれば未保存を含む今の本文で、diff の中でも
+/// 編集できる）／ステージ済み: HEAD の版（rename なら元のパス）↔ index の版。diff が持つのは、種類に依らない見せ方・面・
+/// 並び・初めての位置決めと、版の本文から作る読むだけの文書。両側とも版の本文なら、どちらかが変わったときに 1 回、裏で
+/// 行差分を取る。
 ///
 /// 見せ方（インライン / 並列）と見え方の付け外しは `present` / `dismiss` の 2 つの口だけで行う。見せていない間は版と
 /// 文書の変化を追わず、見せたときに今の版で作り直す（打鍵中に隠れた diff が裏の仕事を起こさない）。
@@ -19,16 +16,7 @@ final class EditorDiff {
   static let hunkLimit = LineDiff.Limit.edits(10_000)
 
   let id: Key
-  let files: RootFiles
-  /// 作業ツリーの姿（ステージ済みなら nil）と、それを読み直すべきか（ファイルが変わった）。
-  var working: WorkingSide?
-  var workingStale = true
-  /// 作業ツリーのサブモジュールが取り出しているコミット（外側の nil はまだ読んでいない、内側の nil は取り出していない）と、
-  /// 読みの通し番号（読み直しを頼めば前の読みの結果を捨てる）。
-  var submoduleHead: String??
-  var submoduleHeadRequest = 0
-  var readsSubmoduleHead = false
-  private(set) var documents: Documents
+  let source: any EditorDiffSource
   let surfaces: EditorSurfaces
   /// 古い側と、新しい側が版の本文のときの新しい側（その面も diff が持つ）。その版に無い側も空の本文の文書を持つ（面は空の
   /// 行を 1 つ持つが、大きさ `oldSide`・`newRevisionSide` は 0 行で、その行に番号を描かない）。
@@ -37,8 +25,7 @@ final class EditorDiff {
   private var newRevisionSurface: (any TextSurface)?
   /// 並列の古い側の面（並列で見せている間だけ）。
   var oldSurface: (any TextSurface)?
-  /// 版の本文どうしの行差分（ステージ済み・作業ツリーで消したファイル。新しい側が文書の作業ツリー diff は、文書のハンクを
-  /// 直に使う——`currentRows`）。
+  /// 版の本文どうしの行差分（新しい側が文書なら、出どころが文書のハンクを直に使う——`currentRows`）。
   var revisionHunks: [LineHunk] = []
   private(set) var content: Content = .loading
   /// 面の焦点が変わった（古い側・新しい側の版の本文の面。作り直した文書にも結び直す）。
@@ -47,62 +34,49 @@ final class EditorDiff {
   private(set) var presented: Mode?
   /// 中身・面・並びが変わった・初めての位置を決めた（見せている間だけ。pane が本体を置き直す）。
   var onPresentationChange: (() -> Void)?
-  /// 古い側が index のサブモジュール（文書の底ではない「Subproject commit」の行）。
-  var oldIsSubmodule = false
   /// 今の古い側・新しい側の本文の元（その版に無ければ nil。まだ決めていなければ外側の nil）と大きさ。
   private(set) var oldSource: String??
   private var newSource: String??
   private(set) var oldSide = DiffRows.Side(nil)
   private(set) var newRevisionSide = DiffRows.Side(nil)
-  /// ステージ済みの、裏で行差分を取っている両側の本文（取っていなければ nil）。
-  private var stagedComputing: SideTexts?
-  /// ステージ済みの側と並びが、今の版の状態に揃っていない（今の関心の版の状態がまだ無い・頼んだ行差分が届いていない）。
-  private(set) var stagedPending = false
+  /// 裏で行差分を取っている両側の版の本文（取っていなければ nil）と、中身を決め直す前にそうだったもの。
+  private var revisionsComputing: SideTexts?
+  private var computingBeforeResolve: SideTexts?
+  /// 両側とも版の本文の側と並びが、今の材料に揃っていない（出どころがまだ本文を決められない・頼んだ行差分が届いていない）。
+  private(set) var revisionsPending = false
   /// 見せていない間に変わった。
   private var stale = true
   /// 初めての位置決めの段階。
   var placement = Placement.catchingUp
   /// 初めて画面に出す前の色の上限待ちを済ませた（diff ごとに 1 回。版の本文を作り直しても待ち直さない）。
   private(set) var hasBeenShown = false
-  /// 開いた後に頼んだ根のサービスの取り直し（status と版の本文）のうち、済んでいない数。
-  private(set) var awaitedRefreshes = 2
-  /// 開いた後の取り直しが済んでから、中身を決め直したか。
-  private(set) var resolvedAfterCatchUp = false
   /// 面を置き換えた・外した（pane が本体を置き直す）。
   var surfacesChanged = false
   /// 新しい側の版の面を作り直したとき、新しい面で先頭に置く所。
   var carried: Carried?
 
-  /// 作業ツリー diff は `documents`（セッション）から新しい側の文書を引く。テキスト面を作れなければ
-  /// `EditorSurfaceError.noMetalDevice` で失敗する。
-  init(id: Key, documents: Documents, surfaces: EditorSurfaces) throws {
+  init(id: Key, source: any EditorDiffSource, surfaces: EditorSurfaces) {
     self.id = id
-    self.documents = documents
+    self.source = source
     self.surfaces = surfaces
-    files = RootFiles.shared(for: id.root)
-    if id.kind == .workingTree {
-      workingStale = false
-      working = try readWorkingTree()
-      // 監視の知らせより先に開いても（エージェントが書いた直後の open_diff）、書いた中身で始める。
-      document?.reconcileWithDisk()
-    }
-    files.addObserver(self, versions: interests)
-    files.requestStatusRefresh { [weak self] in self?.refreshDidSettle() }
-    files.requestVersionRefresh { [weak self] in self?.refreshDidSettle() }
+    source.onChange = { [weak self] in self?.sourcesDidChange() }
   }
 
-  deinit {
-    let files = self.files
-    MainActor.assumeIsolated { files.removeObserver(self) }
+  /// 種類の出どころで開く。作業ツリー diff は `documents`（セッション）から新しい側の文書を引く。テキスト面を作れなければ
+  /// `EditorSurfaceError.noMetalDevice` で失敗する。
+  convenience init(id: Key, documents: Documents, surfaces: EditorSurfaces) throws {
+    let source: any EditorDiffSource =
+      switch id.kind {
+      case .workingTree: try EditorDiffWorkingTree(id: id, documents: documents)
+      case .staged: EditorDiffStaged(id: id)
+      }
+    self.init(id: id, source: source, surfaces: surfaces)
   }
 
   // MARK: - 側
 
-  /// 作業ツリー diff の新しい側の文書（作業ツリーの姿で変わる。無ければ nil）。
-  var document: EditorDocument? {
-    if case .document(let document)? = working { return document }
-    return nil
-  }
+  /// 新しい側の文書（出どころが新しい側に文書を使っていなければ nil）。
+  var document: EditorDocument? { source.document }
 
   /// 新しい側の面（作業ツリーなら文書の面、ほかは diff が持つ面。中身が見せられなければ nil）。
   var newSurface: (any TextSurface)? {
@@ -110,9 +84,9 @@ final class EditorDiff {
     return document?.surface ?? newRevisionSurface
   }
 
-  /// 新しい側の文書が `previous` から替わった——前の文書をファイルタブの見え方に戻し、今の文書のハンクを追う（見せて
-  /// いれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。今の文書で並びを置けるようになるまで、中身は
-  /// 「読み込み中」（本体に何も出さない。開くときと同じ）。
+  /// 新しい側の文書が `previous` から替わった（出どころが知らせる）——前の文書をファイルタブの見え方に戻し、今の文書の
+  /// ハンクを追う（見せていれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。今の文書で並びを置けるように
+  /// なるまで、中身は「読み込み中」（本体に何も出さない。開くときと同じ）。
   func documentDidSwitch(from previous: EditorDocument?) {
     dropOldSurface()
     surfacesChanged = true
@@ -127,16 +101,15 @@ final class EditorDiff {
 
   /// 新しい側の文書を引く口を `documents`（引き取ったセッション）に結び直す。
   func rebind(_ documents: Documents) {
-    self.documents = documents
+    source.rebind(documents)
   }
 
   /// 新しい側を、同じ実体の文書 `next` にする（セッションが勝ち負けを決めた勝者。文書を持っていなければ、作業ツリーの
   /// 姿より未保存の `next` が先に立つ）。前の文書は手放さない（結線の後始末はセッションがまとめてする）。作り直しは
-  /// 積むだけで、見せていれば `settle` で行う。
+  /// 積むだけで、見せていれば `settle` で行う。新しい側に文書を使わない diff では何もしない。
   func replaceDocument(with next: EditorDocument) {
     let previous = document
-    guard previous !== next else { return }
-    working = .document(next)
+    guard source.replaceDocument(with: next) else { return }
     documentDidSwitch(from: previous)
     stale = true
   }
@@ -144,31 +117,13 @@ final class EditorDiff {
   /// 新しい側の文書の未保存が変わった（セッションが配る）。未保存の間に保留した作業ツリーの読み直しを、未保存でなくなった
   /// 時点で行う。
   func documentDirtyDidChange() {
-    guard workingStale, document?.isDirty == false else { return }
-    sourcesDidChange()
+    source.documentDirtyDidChange()
   }
 
   /// 積んだ作り直しを、見せていれば今行う。
   func settle() {
     guard stale, presented != nil else { return }
     refresh()
-  }
-
-  /// HEAD の版を引くパス（ステージ済みの rename なら元のパス）。
-  private var headPath: String {
-    files.status?.entries[id.path]?.originalPath ?? id.path
-  }
-
-  /// 根のサービスに本文を追わせる版（作業ツリー: index。ステージ済み: HEAD——rename なら元のパス——と index）。
-  var interests: Set<RootFiles.Version> {
-    switch id.kind {
-    case .workingTree: [RootFiles.Version(path: id.path, revision: .index)]
-    case .staged:
-      [
-        RootFiles.Version(path: headPath, revision: .head),
-        RootFiles.Version(path: id.path, revision: .index),
-      ]
-    }
   }
 
   // MARK: - 見せる
@@ -235,21 +190,15 @@ final class EditorDiff {
     sendVisibleRemovedLines(on: surface)
   }
 
-  /// 作業ツリー diff の文書の本文が変わった（diff の中の編集・外部変更の差し替え）。古い側が文書の底ではない diff
-  /// （`oldIsNotBaseline`）は、並びを今の行の数で置き直す。
+  /// 新しい側の文書の本文が変わった（diff の中の編集・外部変更の差し替え）。出どころが並びを置き直すかを決める。
   func documentTextDidChange() {
-    guard presented != nil, oldIsNotBaseline else { return }
-    sourcesDidChange()
+    guard presented != nil else { return }
+    source.documentTextDidChange(in: self)
   }
 
-  // MARK: - 根のサービス
+  // MARK: - 出どころ
 
-  /// 開いた後に頼んだ取り直しが 1 つ済んだ。両方済めば、その後の状態で作り直す。
-  private func refreshDidSettle() {
-    awaitedRefreshes -= 1
-    if awaitedRefreshes == 0 { sourcesDidChange() }
-  }
-
+  /// 出どころの材料が変わった。見せていれば今作り直し、見せていなければ次に見せるときに作り直す。
   func sourcesDidChange() {
     stale = true
     guard presented != nil else { return }
@@ -271,55 +220,46 @@ final class EditorDiff {
     settleSurfaces()
   }
 
-  /// 中身を決め、見せられるなら側と行差分を今の版に合わせる。
+  /// 出どころに中身を決めさせる。実行中の行差分の依頼は、出どころが決めた両側の本文がその依頼の本文と同じときだけ
+  /// 続けて待つ。別の本文に決まった後や、表示できないと決まった後に届いた結果は使わない。
   private func resolve() -> Content {
-    // 走っているステージ済みの依頼は、決めた両側の本文がその依頼の本文と同じときだけ続けて待つ。別の本文に決まった後や、
-    // 表示できないと決まった後に届いた結果は使わない。
-    let computing = stagedComputing
-    stagedComputing = nil
-    stagedPending = false
-    if awaitedRefreshes == 0 { resolvedAfterCatchUp = true }
-    if files.status?.entries[id.path]?.isConflicted == true { return .unavailable(.conflicted) }
-    switch id.kind {
-    case .workingTree: return resolveWorkingTree()
-    case .staged: return resolveStaged(computing: computing)
-    }
+    computingBeforeResolve = revisionsComputing
+    revisionsComputing = nil
+    revisionsPending = false
+    defer { computingBeforeResolve = nil }
+    return source.resolve(in: self)
   }
 
-  /// ステージ済みは、両側の本文と行差分を裏で揃えてから一緒に入れ替える（届くまでは前の側と並びのまま）。status で関心の
-  /// 版が替わった（rename の元パス）直後など、今の関心の版の状態がまだ無い間も前の側と並びのまま待つ。行差分は両側の本文
-  /// だけで決まるので、決めた両側の本文が `computing`（裏で取っていた本文）と同じなら、頼み直さずその結果を待つ。
-  private func resolveStaged(computing: SideTexts?) -> Content {
-    let head = files.state(of: RootFiles.Version(path: headPath, revision: .head))
-    let index = files.state(of: RootFiles.Version(path: id.path, revision: .index))
-    guard let head, let index else {
-      stagedPending = true
-      return content == .ready ? .ready : .loading
-    }
-    for state in [head, index] {
-      if state == .notText { return .unavailable(.notText) }
-      if state == .failed { return .unavailable(.failed) }
-    }
-    if head == .absent, index == .absent { return .unavailable(.nowhere) }
-    let texts = SideTexts(old: Self.sideText(head), new: Self.sideText(index))
-    // 決めた両側の本文が今の側と同じなら、走っている依頼を手放すだけで済む。
+  /// まだ決められない間の中身——既に見せられる中身ならそのまま、まだなら読み込み中。
+  var pendingContent: Content { content == .ready ? .ready : .loading }
+
+  /// 両側とも版の本文の出どころが、まだ本文を決められない（材料が揃っていない）。前の側と並びのまま待つ。
+  func waitForRevisions() -> Content {
+    revisionsPending = true
+    return pendingContent
+  }
+
+  /// 両側を版の本文 `texts` にする——両側の本文と行差分を裏で揃えてから一緒に入れ替える（届くまでは前の側と並びのまま）。
+  /// 行差分は両側の本文だけで決まるので、裏で行差分を取っている本文と同じなら、頼み直さずその結果を待つ。
+  func showRevisions(_ texts: SideTexts) -> Content {
+    // 決めた両側の本文が今の側と同じなら、実行中の依頼を手放すだけで済む。
     guard oldSource != .some(texts.old) || newSource != .some(texts.new) else { return .ready }
-    stagedPending = true
-    stagedComputing = texts
-    if texts != computing { requestStagedHunks(texts) }
-    return content == .ready ? .ready : .loading
+    revisionsPending = true
+    revisionsComputing = texts
+    if texts != computingBeforeResolve { requestRevisionHunks(texts) }
+    return pendingContent
   }
 
   /// 両側の本文 `texts` の行差分を裏で取り、届いたときにまだその本文を待っていれば、両側と並びを一緒に入れ替える。
-  private func requestStagedHunks(_ texts: SideTexts) {
+  private func requestRevisionHunks(_ texts: SideTexts) {
     let limit = Self.hunkLimit
     Task.detached(priority: .userInitiated) { [weak self] in
       let hunks = DiffRows.hunks(
         old: texts.old.map(TextRope.init), new: texts.new.map(TextRope.init), limit: limit)
       await MainActor.run { [weak self] in
-        guard let self, stagedComputing == texts else { return }
-        stagedComputing = nil
-        stagedPending = false
+        guard let self, revisionsComputing == texts else { return }
+        revisionsComputing = nil
+        revisionsPending = false
         let keepsOld = oldSource == .some(texts.old)
         setOld(texts.old)
         setNewRevision(texts.new, keepsOld: keepsOld)

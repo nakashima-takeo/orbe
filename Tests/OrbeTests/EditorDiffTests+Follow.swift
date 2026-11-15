@@ -340,7 +340,7 @@ extension EditorDiffTests {
 
     let deadline = Date().addingTimeInterval(10)
     while diff.content != .ready, Date() < deadline {
-      diff.rootFilesStatusDidChange(diff.files)
+      diff.rootObserver?.rootFilesStatusDidChange(diff.files)
       RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.005))
     }
     XCTAssertEqual(diff.content, .ready, "status が変わり続けても中身が届く")
