@@ -31,6 +31,8 @@ let runTools: [[String: Any]] = [
   ]),
   obj([
     ("name", "read_waiting_proposals"),
+    // 判断待ちの候補は件数に上限が無く、閾値を超えると read_run_rows と同じく agent に読めないパスだけが渡る。
+    ("_meta", ["anthropic/maxResultSizeChars": 500_000]),
     (
       "description",
       "Returns the task proposals this node made that are waiting for the user, one JSON object per line "
