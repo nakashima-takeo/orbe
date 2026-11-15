@@ -64,10 +64,10 @@ extension EditorDiff {
     }
   }
 
-  /// 並びが開いた時点に追いついている——中身を見せられて並びがあり、出どころが追いついたと言う。
+  /// 並びが開いた時点に追いついている。条件は 3 つ——中身を見せられて並びがある、出どころが待つと答えておらず裏の行差分も
+  /// 待っていない、出どころが追いついたと言っている。
   var isCaughtUp: Bool {
-    guard content == .ready, currentRows != nil else { return false }
-    return source.isCaughtUp(in: self)
+    content == .ready && currentRows != nil && !pending && source.isCaughtUp
   }
 
   /// 作り直した新しい側の面で、前の面で先頭に見えていた所を先頭に置く。
@@ -82,10 +82,24 @@ extension EditorDiff {
     }
   }
 
-  /// 今の古い側と新しい側の本文に対して正しいと分かっている行差分と、新しい側の大きさ（出どころが答える）。
+  /// 今の古い側と新しい側の本文に対して正しいと分かっている行差分と、新しい側の大きさ。新しい側の文書は外の書き換えで
+  /// いつでも変わる。そのため、文書の今の本文と、今の本文へずらしてある文書のハンクを直に使う。ただし、ハンクが比べた底が
+  /// 今の古い側の本文でなければ（古い側を入れ替える前）、並びは返さない——面に残っている並びは面自身の編集に付いて動くので、
+  /// 返さなくても今の本文と食い違わない。
   var currentRows: (hunks: [LineHunk], newSide: DiffRows.Side)? {
-    source.rows(in: self)
+    guard let document else { return (revisionHunks, newRevisionSide) }
+    let side = DiffRows.Side(document.text)
+    guard let oldSource else { return nil }
+    // 丸ごとの置き換え（git が削除と追加に割るのと同じ形。古い側が無ければ全部の行の追加）。
+    if oldReplacesWhole { return ([LineHunk(old: 0..<oldSide.lines, new: 0..<side.lines)], side) }
+    guard document.hunksBase == oldSource else { return nil }
+    return (document.hunks, side)
   }
+
+  /// 新しい側が文書で、古い側が文書の底ではない（古い側がその版に無い、または出どころが `.documentReplacing` と答えた）。
+  /// この場合、文書は底を持たず、ハンクもハンクの知らせも無いので、並びは両側の行の数だけで決まる——文書の本文が変われば
+  /// diff が自分で並びを置き直す。
+  var oldReplacesWhole: Bool { oldSource == .some(nil) || !oldIsBase }
 
   /// 見え方。版が無い側（`absent`）の面は、エディターの都合で持つ空の行に番号を描かない（存在しない行を番号付きで出さない）。
   private func look(

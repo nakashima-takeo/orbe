@@ -1,25 +1,26 @@
 import Foundation
 import OrbeEditorCore
 
-/// diff の両側の本文の出どころ。diff の種類ごとに 1 つあり、diff（`EditorDiff`）が持つ。出どころが決めるのは、何を保持し、
-/// 何の変化で作り直すか（変われば `onChange`）、開いた後の最初の並びがいつ追いついたとみなせるか、両側の本文か、表示できない
-/// 理由のどちらか。見せ方・面・並び・位置決めは diff が持ち、種類に依らない。
+/// diff の両側の本文の出どころ。diff の種類ごとに 1 つあり、diff（`EditorDiff`）が持つ。出どころが決めるのは次の 3 つ。
 ///
-/// 両側とも版の本文である出どころは、決めた本文を `EditorDiff.showRevisions` に渡す——diff が裏で行差分を揃えてから、両側と
-/// 並びを一緒に入れ替える。新しい側に文書を使う出どころ（作業ツリー）は、文書のハンクを並びに使う。
+/// - 何を保持し、何の変化で作り直すか（変われば `onChange` に `.material`）
+/// - 今の材料で両側をどうするか（`resolve` が返す `EditorDiff.Resolution`）
+/// - 開いた後の最初の並びが、開いた時点に追いついたとみなせるか（`isCaughtUp`）
+///
+/// 出どころは diff の側・並び・面に触らない。diff は `resolve` の答えに従って、両側の文書と並びを入れ替え、見せ方・面・
+/// 初めての位置決めを行う。答えが `.revisions` なら、diff が裏で行差分を揃えてから両側と並びを一緒に入れ替え、揃うまでは
+/// 前の両側と並びのまま待つ（開く前なら読み込み中）。
 @MainActor
 protocol EditorDiffSource: AnyObject {
-  /// 材料が変わった（diff が作り直す）。diff が結ぶ。
-  var onChange: (() -> Void)? { get set }
+  /// 出どころの変化を diff へ知らせる口。diff が結ぶ。
+  var onChange: ((EditorDiff.SourceChange) -> Void)? { get set }
   /// 新しい側に使っている文書（無ければ、新しい側は diff が持つ版の本文の文書）。
   var document: EditorDocument? { get }
-  /// 中身を決め、見せられるなら `diff` の側を今の材料に合わせる。まだ決められなければ `diff.pendingContent` を返す（前の
-  /// 中身のまま待つ）。
-  func resolve(in diff: EditorDiff) -> EditorDiff.Content
-  /// 今の古い側と新しい側の本文に対して正しいと分かっている行差分と、新しい側の大きさ（並べられなければ nil）。
-  func rows(in diff: EditorDiff) -> (hunks: [LineHunk], newSide: DiffRows.Side)?
-  /// 見せている並びが、開いた時点に追いついている（diff が中身を見せられて、並びを持つときに問う）。
-  func isCaughtUp(in diff: EditorDiff) -> Bool
+  /// 今の材料で両側をどうするか。diff が作り直すたびに呼ぶ。
+  func resolve() -> EditorDiff.Resolution
+  /// `resolve` の最後の答えが開いた後の材料の取り直しが済んだ後のもので、新しい側の文書があればその行差分も今の古い側に
+  /// 対する結果であるとき true。diff はこれに加えて、見せられる中身と並びがあり、裏の行差分を待っていないことを確かめる。
+  var isCaughtUp: Bool { get }
 
   /// 新しい側を、同じ実体の文書 `next` にした（替えたら true。前の文書は手放さない）。
   func replaceDocument(with next: EditorDocument) -> Bool
@@ -27,20 +28,41 @@ protocol EditorDiffSource: AnyObject {
   func rebind(_ documents: EditorDiff.Documents)
   /// 新しい側の文書の未保存が変わった。
   func documentDirtyDidChange()
-  /// 新しい側の文書の本文が変わった（diff を見せている間だけ届く）。
-  func documentTextDidChange(in diff: EditorDiff)
 }
 
-/// 新しい側に文書を使わない出どころ——両側とも版の本文で、並びは diff が裏で揃えた行差分。文書の知らせは何もしない。
+/// 新しい側に文書を使わない出どころ——文書の知らせでは何もしない。
 extension EditorDiffSource {
   var document: EditorDocument? { nil }
-  func rows(in diff: EditorDiff) -> (hunks: [LineHunk], newSide: DiffRows.Side)? {
-    (diff.revisionHunks, diff.newRevisionSide)
-  }
   func replaceDocument(with next: EditorDocument) -> Bool { false }
   func rebind(_ documents: EditorDiff.Documents) {}
   func documentDirtyDidChange() {}
-  func documentTextDidChange(in diff: EditorDiff) {}
+}
+
+extension EditorDiff {
+  /// 出どころの答え——今の材料で両側をどうするか。
+  enum Resolution: Equatable {
+    /// まだ決められない（材料が揃っていない）。前の両側と並びのまま待つ。
+    case wait
+    case unavailable(Unavailable)
+    /// 両側とも版の本文。diff が裏で行差分を揃えてから、両側と並びを一緒に入れ替える。同じ本文の行差分を裏で取って
+    /// いれば、頼み直さずにその結果を待つ。
+    case revisions(SideTexts)
+    /// 両側とも版の本文で、行差分が小さいと分かっている（片側が無い・片側がサブモジュールの 1 行）。diff がその場で
+    /// 行差分を取って入れ替える。
+    case revisionsNow(SideTexts)
+    /// 新しい側は出どころの文書、古い側は文書の行差分が比べた底の本文 `base`。並びは文書の行差分。
+    case document(base: String)
+    /// 新しい側は出どころの文書、古い側は文書の底ではない本文 `old`（無ければ nil）。並びは丸ごとの置き換え。
+    case documentReplacing(old: String?)
+  }
+
+  /// 出どころの変化。
+  enum SourceChange {
+    /// 材料が変わった（diff が作り直す）。
+    case material
+    /// `resolve` の中で新しい側の文書が替わった（引数は前の文書。無かったなら nil）。出どころが前の文書を手放す前に届く。
+    case document(previous: EditorDocument?)
+  }
 }
 
 /// 根のサービスから両側を読む出どころ（作業ツリー・ステージ済み）が、開いた後の取り直しを待つ口。開いたときに status と

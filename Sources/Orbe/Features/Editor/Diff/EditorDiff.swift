@@ -25,8 +25,8 @@ final class EditorDiff {
   private var newRevisionSurface: (any TextSurface)?
   /// 並列の古い側の面（並列で見せている間だけ）。
   var oldSurface: (any TextSurface)?
-  /// 版の本文どうしの行差分（新しい側が文書なら、出どころが文書のハンクを直に使う——`currentRows`）。
-  var revisionHunks: [LineHunk] = []
+  /// 版の本文どうしの行差分（新しい側が文書なら、文書のハンクを直に使う——`currentRows`）。
+  private(set) var revisionHunks: [LineHunk] = []
   private(set) var content: Content = .loading
   /// 面の焦点が変わった（古い側・新しい側の版の本文の面。作り直した文書にも結び直す）。
   var onFocusChange: ((Bool) -> Void)?
@@ -39,11 +39,12 @@ final class EditorDiff {
   private var newSource: String??
   private(set) var oldSide = DiffRows.Side(nil)
   private(set) var newRevisionSide = DiffRows.Side(nil)
-  /// 裏で行差分を取っている両側の版の本文（取っていなければ nil）と、中身を決め直す前にそうだったもの。
+  /// 新しい側が文書のとき、古い側が文書の行差分の底であるか。そうでなければ、並びは丸ごとの置き換え。
+  private(set) var oldIsBase = true
+  /// 裏で行差分を取っている両側の版の本文（取っていなければ nil）。
   private var revisionsComputing: SideTexts?
-  private var computingBeforeResolve: SideTexts?
-  /// 両側とも版の本文の側と並びが、今の材料に揃っていない（出どころがまだ本文を決められない・頼んだ行差分が届いていない）。
-  private(set) var revisionsPending = false
+  /// 見せている側と並びが、出どころの今の材料に揃っていない（出どころが待つと答えた、または頼んだ行差分が届いていない）。
+  private(set) var pending = false
   /// 見せていない間に変わった。
   private var stale = true
   /// 初めての位置決めの段階。
@@ -59,7 +60,12 @@ final class EditorDiff {
     self.id = id
     self.source = source
     self.surfaces = surfaces
-    source.onChange = { [weak self] in self?.sourcesDidChange() }
+    source.onChange = { [weak self] change in
+      switch change {
+      case .material: self?.sourcesDidChange()
+      case .document(let previous): self?.documentDidSwitch(from: previous)
+      }
+    }
   }
 
   /// 種類の出どころで開く。作業ツリー diff は `documents`（セッション）から新しい側の文書を引く。テキスト面を作れなければ
@@ -87,7 +93,7 @@ final class EditorDiff {
   /// 新しい側の文書が `previous` から替わった（出どころが知らせる）——前の文書をファイルタブの見え方に戻し、今の文書の
   /// ハンクを追う（見せていれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。今の文書で並びを置けるように
   /// なるまで、中身は「読み込み中」（本体に何も出さない。開くときと同じ）。
-  func documentDidSwitch(from previous: EditorDocument?) {
+  private func documentDidSwitch(from previous: EditorDocument?) {
     dropOldSurface()
     surfacesChanged = true
     if document != nil { content = .loading }
@@ -190,10 +196,12 @@ final class EditorDiff {
     sendVisibleRemovedLines(on: surface)
   }
 
-  /// 新しい側の文書の本文が変わった（diff の中の編集・外部変更の差し替え）。出どころが並びを置き直すかを決める。
+  /// 新しい側の文書の本文が変わった（diff の中の編集・外部変更の差し替え）。古い側が文書の底ではない diff
+  /// （`oldReplacesWhole`）は、並びを今の行の数で置き直す。この diff では、新しい側の文書は底を持たず、ハンクの知らせも
+  /// 来ない。
   func documentTextDidChange() {
-    guard presented != nil else { return }
-    source.documentTextDidChange(in: self)
+    guard presented != nil, oldReplacesWhole else { return }
+    sourcesDidChange()
   }
 
   // MARK: - 出どころ
@@ -220,34 +228,49 @@ final class EditorDiff {
     settleSurfaces()
   }
 
-  /// 出どころに中身を決めさせる。実行中の行差分の依頼は、出どころが決めた両側の本文がその依頼の本文と同じときだけ
-  /// 続けて待つ。別の本文に決まった後や、表示できないと決まった後に届いた結果は使わない。
+  /// 出どころの答えに従って、両側と並びを今の材料に合わせ、中身を決める。実行中の行差分の依頼は、出どころが答えた両側の
+  /// 本文がその依頼の本文と同じときだけ続けて待つ。出どころが別の本文を答えた後や、表示できないと答えた後に届いた結果は使わない。
   private func resolve() -> Content {
-    computingBeforeResolve = revisionsComputing
+    let computing = revisionsComputing
     revisionsComputing = nil
-    revisionsPending = false
-    defer { computingBeforeResolve = nil }
-    return source.resolve(in: self)
-  }
-
-  /// まだ決められない間の中身——既に見せられる中身ならそのまま、まだなら読み込み中。
-  var pendingContent: Content { content == .ready ? .ready : .loading }
-
-  /// 両側とも版の本文の出どころが、まだ本文を決められない（材料が揃っていない）。前の側と並びのまま待つ。
-  func waitForRevisions() -> Content {
-    revisionsPending = true
-    return pendingContent
-  }
-
-  /// 両側を版の本文 `texts` にする——両側の本文と行差分を裏で揃えてから一緒に入れ替える（届くまでは前の側と並びのまま）。
-  /// 行差分は両側の本文だけで決まるので、裏で行差分を取っている本文と同じなら、頼み直さずその結果を待つ。
-  func showRevisions(_ texts: SideTexts) -> Content {
-    // 決めた両側の本文が今の側と同じなら、実行中の依頼を手放すだけで済む。
-    guard oldSource != .some(texts.old) || newSource != .some(texts.new) else { return .ready }
-    revisionsPending = true
-    revisionsComputing = texts
-    if texts != computingBeforeResolve { requestRevisionHunks(texts) }
-    return pendingContent
+    pending = false
+    // 出どころが `resolve` の中で新しい側の文書を替えると、その知らせ（→ `documentDidSwitch`）で中身が読み込み中に戻るので、
+    // 待つ間の中身は答えを受けた後で決める。
+    let resolution = source.resolve()
+    let waiting: Content = content == .ready ? .ready : .loading
+    switch resolution {
+    case .wait:
+      oldIsBase = true
+      pending = true
+      return waiting
+    case .unavailable(let reason):
+      return .unavailable(reason)
+    case .document(let base):
+      oldIsBase = true
+      setOld(base)
+      return .ready
+    case .documentReplacing(let old):
+      oldIsBase = false
+      setOld(old)
+      return .ready
+    case .revisionsNow(let texts):
+      oldIsBase = true
+      let keepsOld = oldSource == .some(texts.old)
+      setOld(texts.old)
+      setNewRevision(texts.new, keepsOld: keepsOld)
+      revisionHunks = DiffRows.hunks(
+        old: oldSide.isAbsent ? nil : old?.text,
+        new: newRevisionSide.isAbsent ? nil : newRevision?.text, limit: Self.hunkLimit)
+      return .ready
+    case .revisions(let texts):
+      oldIsBase = true
+      // 両側の本文が今の両側の本文と同じなら、実行中の依頼を手放すだけで済む。
+      guard oldSource != .some(texts.old) || newSource != .some(texts.new) else { return .ready }
+      pending = true
+      revisionsComputing = texts
+      if texts != computing { requestRevisionHunks(texts) }
+      return waiting
+    }
   }
 
   /// 両側の本文 `texts` の行差分を裏で取り、届いたときにまだその本文を待っていれば、両側と並びを一緒に入れ替える。
@@ -259,7 +282,7 @@ final class EditorDiff {
       await MainActor.run { [weak self] in
         guard let self, revisionsComputing == texts else { return }
         revisionsComputing = nil
-        revisionsPending = false
+        pending = false
         let keepsOld = oldSource == .some(texts.old)
         setOld(texts.old)
         setNewRevision(texts.new, keepsOld: keepsOld)
@@ -275,7 +298,7 @@ final class EditorDiff {
   }
 
   /// 古い側を本文 `text`（その版に無ければ nil——空の本文の文書で、大きさは 0 行）にする。変われば作り直す。
-  func setOld(_ text: String?) {
+  private func setOld(_ text: String?) {
     guard oldSource != .some(text) else { return }
     oldSource = .some(text)
     dropOldSurface()
@@ -293,7 +316,7 @@ final class EditorDiff {
   /// 作り直す——前の面で先頭に見えていた所を新しい面でも先頭に置き（`keepsOld` なら変わらない古い側の行を錨に写し、
   /// 古い側も変わるなら前の位置のまま）、並列なら古い側の面も作り直して新しい面と結ぶ。行差分（`revisionHunks`）は
   /// まだ前の並びのもの。
-  func setNewRevision(_ text: String?, keepsOld: Bool) {
+  private func setNewRevision(_ text: String?, keepsOld: Bool) {
     guard newSource != .some(text) else { return }
     newSource = .some(text)
     if let previous = newRevisionSurface {

@@ -80,16 +80,4 @@ extension EditorDiff {
     let old: String?
     let new: String?
   }
-
-  /// 作業ツリー diff の新しい側。
-  enum WorkingSide {
-    /// 開いた文書（ファイルタブと共有する）。
-    case document(EditorDocument)
-    /// 作業ツリーに無い（消した）。
-    case missing
-    /// ディレクトリ（`hasRepository` は中が取り出したリポジトリ）。index の版がサブモジュールか、中がリポジトリなら、
-    /// サブモジュールとして「Subproject commit」の行で見せる。見せられなければ、理由「ディレクトリ」で表示できない。
-    case directory(hasRepository: Bool)
-    case unavailable(Unavailable)
-  }
 }

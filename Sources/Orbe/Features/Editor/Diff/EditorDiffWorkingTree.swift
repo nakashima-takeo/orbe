@@ -11,19 +11,17 @@ import OrbeEditorCore
 final class EditorDiffWorkingTree: EditorDiffSource {
   let id: EditorDiff.Key
   let files: RootFiles
-  var onChange: (() -> Void)?
+  var onChange: ((EditorDiff.SourceChange) -> Void)?
   private var documents: EditorDiff.Documents
   private var catchUp: RootFilesCatchUp?
   /// 作業ツリーの姿と、それを読み直すべきか（ファイルが変わった）。
-  private(set) var working: EditorDiff.WorkingSide
+  private(set) var working: Side
   private(set) var workingStale = false
   /// 作業ツリーのサブモジュールが取り出しているコミット（外側の nil はまだ読んでいない、内側の nil は取り出していない）と、
   /// 読みの通し番号（読み直しを頼めば前の読みの結果を捨てる）。
   private var submoduleHead: String??
   private var submoduleHeadRequest = 0
   private var readsSubmoduleHead = false
-  /// 古い側が index のサブモジュール（文書の底ではない「Subproject commit」の行）。
-  private var oldIsSubmodule = false
 
   /// テキスト面を作れなければ `EditorSurfaceError.noMetalDevice` で失敗する。
   init(id: EditorDiff.Key, documents: EditorDiff.Documents) throws {
@@ -35,7 +33,7 @@ final class EditorDiffWorkingTree: EditorDiffSource {
     // 監視の知らせより先に開いても（エージェントが書いた直後の open_diff）、書いた中身で始める。
     document?.reconcileWithDisk()
     files.addObserver(self, versions: [RootFiles.Version(path: id.path, revision: .index)])
-    catchUp = RootFilesCatchUp(files) { [weak self] in self?.onChange?() }
+    catchUp = RootFilesCatchUp(files) { [weak self] in self?.onChange?(.material) }
   }
 
   deinit {
@@ -63,71 +61,55 @@ final class EditorDiffWorkingTree: EditorDiffSource {
   /// 未保存の間に保留した作業ツリーの読み直しを、未保存でなくなった時点で行う。
   func documentDirtyDidChange() {
     guard workingStale, document?.isDirty == false else { return }
-    onChange?()
-  }
-
-  /// 古い側が文書の底ではない diff（`oldIsNotBaseline`）は、並びを今の行の数で置き直す。
-  func documentTextDidChange(in diff: EditorDiff) {
-    guard oldIsNotBaseline(in: diff) else { return }
-    onChange?()
+    onChange?(.material)
   }
 
   // MARK: - 中身
 
-  func resolve(in diff: EditorDiff) -> EditorDiff.Content {
+  func resolve() -> EditorDiff.Resolution {
     catchUp?.willResolve()
     if files.status?.entries[id.path]?.isConflicted == true { return .unavailable(.conflicted) }
-    if workingStale { updateWorkingSide(in: diff) }
+    if workingStale { updateWorkingSide() }
     if case .unavailable(let reason) = working { return .unavailable(reason) }
-    let pending = diff.pendingContent
     let index = files.state(of: RootFiles.Version(path: id.path, revision: .index))
     var newText: String?
     if let index, case .directory(let hasRepository) = working {
-      switch submoduleSide(index, hasRepository: hasRepository, pending: pending) {
+      switch submoduleSide(index, hasRepository: hasRepository) {
       case .text(let text): newText = text
       case .decided(let decided): return decided
       }
     }
-    if let decided = resolveOldSide(index, in: diff, pending: pending) { return decided }
-    guard document == nil, let old = diff.old else { return .ready }
-    diff.setNewRevision(newText, keepsOld: true)
-    diff.revisionHunks = DiffRows.hunks(
-      old: diff.oldSide.isAbsent ? nil : old.text,
-      new: diff.newRevisionSide.isAbsent ? nil : diff.newRevision?.text,
-      limit: EditorDiff.hunkLimit)
-    return .ready
-  }
-
-  /// 新しい側が文書なら、文書の今の本文と、文書のハンク（今の本文へずらしてある）を直に使う。文書は外の書き換えで
-  /// いつでも変わるため。ハンクが比べた底が今の古い側と違う間（古い側を入れ替える前）は nil を返して並べ直さない——面に
-  /// 置いてある並びは面自身の編集に付いて動くので、その間も今の本文と食い違わない。新しい側が文書でなければ、diff が持つ
-  /// 版の本文どうしの行差分を返す。
-  func rows(in diff: EditorDiff) -> (hunks: [LineHunk], newSide: DiffRows.Side)? {
-    guard let document else { return (diff.revisionHunks, diff.newRevisionSide) }
-    let side = DiffRows.Side(document.text)
-    guard let oldSource = diff.oldSource else { return nil }
-    // 丸ごとの置き換え（git が削除と追加に割るのと同じ形。古い側が無ければ全部の行の追加）。
-    if oldIsNotBaseline(in: diff) {
-      return ([LineHunk(old: 0..<diff.oldSide.lines, new: 0..<side.lines)], side)
+    let old: String?
+    switch index {
+    case nil: return .wait
+    case .notText?: return .unavailable(.notText)
+    case .failed?: return .unavailable(.failed)
+    case .absent?:
+      if case .missing = working { return .unavailable(.nowhere) }
+      old = nil
+    case .submodule(let commit)?:
+      old = EditorDiff.subproject(commit)
+    case .text(let text)?:
+      guard let document else {
+        return .revisionsNow(EditorDiff.SideTexts(old: text, new: newText))
+      }
+      // 文書の行差分が新しい底に対する結果になるまでは、前の底とその行差分の組のまま。
+      guard let base = document.hunksBase else { return .wait }
+      return .document(base: base)
     }
-    guard document.hunksBase == oldSource else { return nil }
-    return (document.hunks, side)
+    // 古い側が文書の底ではない（index の版に無い・サブモジュールの行）。このとき文書は底を持たず、行差分もその知らせも無い。
+    if document != nil { return .documentReplacing(old: old) }
+    return .revisionsNow(EditorDiff.SideTexts(old: old, new: newText))
   }
 
-  /// 開いた後の取り直しが済んだ後の状態から中身を決めている。さらに文書があれば、そのハンクが今の index の本文に対して
-  /// 今の本文で取った結果である。
-  func isCaughtUp(in diff: EditorDiff) -> Bool {
+  /// 開いた後の取り直しが済んだ後の状態から答えた。さらに文書があれば、その行差分が今の index の本文に対して今の本文で
+  /// 取った結果である。
+  var isCaughtUp: Bool {
     guard catchUp?.resolvedAfterSettling == true else { return false }
     guard let document,
       case .text(let base)? = files.state(of: RootFiles.Version(path: id.path, revision: .index))
     else { return true }
     return document.hunksAreCurrent && document.hunksBase == base
-  }
-
-  /// 古い側が文書の底ではない（index の版に無い・サブモジュールの行）。このとき文書は底を持たず、ハンクもハンクの知らせも
-  /// 無いので、並びは両側の行の数だけで決まる——文書の本文が変われば diff が自分で並びを置き直す。
-  private func oldIsNotBaseline(in diff: EditorDiff) -> Bool {
-    diff.oldSource == .some(nil) || oldIsSubmodule
   }
 
   // MARK: - 作業ツリーの姿
@@ -136,7 +118,7 @@ final class EditorDiffWorkingTree: EditorDiffSource {
   /// 今の文書が未保存なら、作業ツリーの姿が変わっても手放さず新しい側のまま——未保存の本文を確認なしに失わない（ファイル
   /// タブが、消えたファイルの未保存の本文を保つのと同じ）。読み直しは保留のまま残し、未保存でなくなった後の作り直しで
   /// 行う。読み直しでテキスト面を作れなければ、ファイルを読めないとして表示できない。
-  private func updateWorkingSide(in diff: EditorDiff) {
+  private func updateWorkingSide() {
     if document?.isDirty == true { return }
     workingStale = false
     forgetSubmoduleHead()
@@ -147,14 +129,14 @@ final class EditorDiffWorkingTree: EditorDiffSource {
       working = .unavailable(.unreadable)
     }
     guard document !== previous else { return }
-    diff.documentDidSwitch(from: previous)
+    onChange?(.document(previous: previous))
     documents.switched(previous)
   }
 
   /// 作業ツリーの姿——在るか・シンボリックリンクか・ディレクトリか・UTF-8 か・読めるか。文書として読めればその文書
   /// （`documents` が実体ごとに 1 つ持つ。開いていればそれ）。途中のディレクトリがシンボリックリンクなら、git と同じく無い
   /// （リンク先を開かない）。テキスト面を作れなければ `EditorSurfaceError.noMetalDevice` を投げる。
-  private func readWorkingTree() throws -> EditorDiff.WorkingSide {
+  private func readWorkingTree() throws -> Side {
     let url = id.url
     let parent = (id.root as NSString).appendingPathComponent(
       (id.path as NSString).deletingLastPathComponent)
@@ -186,52 +168,37 @@ final class EditorDiffWorkingTree: EditorDiffSource {
     }
   }
 
-  /// 古い側を index の版の状態から決める（まだ決められない・表示できないなら、その中身）。文書があれば、古い側は文書の
-  /// ハンクが比べた底——ハンクが新しい底に対する結果になるまでは、前の底とそのハンクの組のまま。
-  private func resolveOldSide(
-    _ index: RootFiles.VersionState?, in diff: EditorDiff, pending: EditorDiff.Content
-  ) -> EditorDiff.Content? {
-    oldIsSubmodule = false
-    switch index {
-    case nil: return pending
-    case .notText?: return .unavailable(.notText)
-    case .failed?: return .unavailable(.failed)
-    case .absent?:
-      if case .missing = working { return .unavailable(.nowhere) }
-      diff.setOld(nil)
-    case .submodule(let commit)?:
-      oldIsSubmodule = true
-      diff.setOld(EditorDiff.subproject(commit))
-    case .text(let text)?:
-      guard let document else {
-        diff.setOld(text)
-        return nil
-      }
-      guard let base = document.hunksBase else { return pending }
-      diff.setOld(base)
-    }
-    return nil
+  /// 作業ツリーの姿（新しい側）。
+  enum Side {
+    /// 開いた文書（ファイルタブと共有する）。
+    case document(EditorDocument)
+    /// 作業ツリーに無い（消した）。
+    case missing
+    /// ディレクトリ（`hasRepository` は中が取り出したリポジトリ）。index の版がサブモジュールか、中がリポジトリなら、
+    /// サブモジュールとして「Subproject commit」の行で見せる。見せられなければ、理由「ディレクトリ」で表示できない。
+    case directory(hasRepository: Bool)
+    case unavailable(EditorDiff.Unavailable)
   }
 
   // MARK: - サブモジュール
 
   private enum SubmoduleSide {
     case text(String)
-    case decided(EditorDiff.Content)
+    case decided(EditorDiff.Resolution)
   }
 
   /// 作業ツリーのディレクトリをサブモジュールとして見せる本文——取り出しているコミット（取り出していなければ index の
   /// コミット。git と同じく変わっていないとみなす）の行。中が変わっていれば -dirty。index の版がサブモジュールでなく、中に
-  /// 取り出したコミットも無ければ、サブモジュールとして見せられないディレクトリ。コミットを読み中なら `pending`。
+  /// 取り出したコミットも無ければ、サブモジュールとして見せられないディレクトリ。コミットを読み中なら待つ。
   private func submoduleSide(
-    _ index: RootFiles.VersionState, hasRepository: Bool, pending: EditorDiff.Content
+    _ index: RootFiles.VersionState, hasRepository: Bool
   ) -> SubmoduleSide {
     var indexCommit: String?
     if case .submodule(let commit) = index { indexCommit = commit }
     guard indexCommit != nil || hasRepository else { return .decided(.unavailable(.directory)) }
     guard let head = submoduleHead else {
       readSubmoduleHead()
-      return .decided(pending)
+      return .decided(.wait)
     }
     guard let commit = head ?? indexCommit else { return .decided(.unavailable(.directory)) }
     return .text(EditorDiff.subproject(commit, dirty: submoduleIsDirty))
@@ -254,7 +221,7 @@ final class EditorDiffWorkingTree: EditorDiffSource {
       guard let self, request == submoduleHeadRequest else { return }
       readsSubmoduleHead = false
       submoduleHead = .some(head)
-      onChange?()
+      onChange?(.material)
     }
   }
 
@@ -272,13 +239,13 @@ extension EditorDiffWorkingTree: RootFilesObserver {
   func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
     guard change.includes(id.root + "/" + id.path) else { return }
     workingStale = true
-    onChange?()
+    onChange?(.material)
   }
 
   /// status が変わった——競合の出入り・サブモジュールの中の変化。
   func rootFilesStatusDidChange(_ files: RootFiles) {
     forgetSubmoduleHead()
-    onChange?()
+    onChange?(.material)
   }
 
   /// 入れ子の git dir が変わった（監視の 1 バッチに 1 回）——サブモジュールが取り出しているコミットを読み直す（中で続けて
@@ -286,10 +253,10 @@ extension EditorDiffWorkingTree: RootFilesObserver {
   func rootFilesNestedGitStateDidChange(_ files: RootFiles) {
     guard case .directory = working else { return }
     forgetSubmoduleHead()
-    onChange?()
+    onChange?(.material)
   }
 
   func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {
-    onChange?()
+    onChange?(.material)
   }
 }
