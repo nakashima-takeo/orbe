@@ -1,7 +1,7 @@
 import Foundation
 
-/// gh を呼んで GitHub がエラーを返した、または届かなかった理由。**文言は持たない**（`GitFailure` と同じく、文言への変換は
-/// 面の側が持つ）。呼ぶ前に分かる可否（gh が在るか・認証情報が手元に在るか）は `GitHubAvailability` が持つ。
+/// gh の呼び出しが失敗した理由。**文言は持たない**（`GitFailure` と同じく、文言への変換は面の側が持つ）。呼ぶ前に
+/// 分かる可否（gh が在るか・認証情報が手元に在るか）は `GitHubAvailability` が持つ。
 enum GitHubFailure: Error, Equatable {
   /// 認証が要る、または認証情報が拒まれた。
   case unauthenticated
@@ -11,7 +11,7 @@ enum GitHubFailure: Error, Equatable {
   case unreachable
   /// 1 回の呼び出しがタイムアウトした。
   case timedOut
-  /// それ以外。gh のエラー文の要点をそのまま持つ。gh が何も言わなかった（レスポンスを読めない・gh が見つからない）なら空。
+  /// それ以外。gh のエラー文の要点をそのまま持つ。エラー文が無い（レスポンスを読めない・gh が見つからない）なら空。
   case reason(String)
 
   /// 0 以外の終了コードで終わった gh の 1 回の実行を分類する。材料は終了コード（4 は認証が要る）・標準エラーの字面・標準出力に載った

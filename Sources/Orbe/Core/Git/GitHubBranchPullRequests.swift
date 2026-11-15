@@ -44,8 +44,8 @@ struct GitHubBranchPullRequests: Equatable {
 /// リポジトリとブランチ名から、ブランチごとの GitHub 上の同一性と、そのブランチを head とする PR を引く（画面に依らない）。
 /// どの PR を選ぶかは使う側が決める。
 ///
-/// 手順: ローカルブランチ・origin が GitHub か・remote の一覧を並行して読む → gh の可否 → 正式名（キャッシュに無いものだけ
-/// 問い合わせ、キャッシュへ書く）→ 台帳 → ブランチの同一性 → 同一性が GitHub のブランチと決まったものだけ `gh pr list` →
+/// 手順: ローカルブランチ・origin が GitHub か・remote の一覧を並行して読む → gh の可否 → 正式名（キャッシュに正式名が無い
+/// 名前だけ問い合わせ、キャッシュへ書く）→ 台帳 → ブランチの同一性 → 同一性が GitHub のブランチと決まったものだけ `gh pr list` →
 /// head の照合。同一性は ⌘T の clean と同じ規則（push 先の remote の正式名＋ローカル名）で、他人の fork の同名ブランチの
 /// PR を取り違えない。取れたブランチの PR はキャッシュにも書く（次に ⌘T を開いたとき、取り直しを待たずに描く材料になる）。
 /// 全メソッドはメインスレッドで呼ばれ、メインスレッドで返る。
@@ -120,7 +120,8 @@ final class GitHubBranchPullRequestLookup {
     }
   }
 
-  /// remote の台帳。正式名はキャッシュの答えがあれば使い、無ければ問い合わせてキャッシュへ書く。
+  /// remote の台帳。キャッシュに正式名がある名前はそれを使い、無い名前（「確かめられない」を含む）は問い合わせてキャッシュへ
+  /// 書く。
   private func ledger(
     _ repo: GitRepo, remotes: [String: String]?,
     completion: @escaping (GitHubRemoteLedger.Resolved) -> Void

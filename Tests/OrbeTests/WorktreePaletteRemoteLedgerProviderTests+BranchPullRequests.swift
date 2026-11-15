@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// ブランチの PR を取得する段（`GitHubBranchPullRequestLookup`）。ブランチごとに、GitHub 上の同一性と、head がそれと等しい PR
-/// または取得できない理由を答え、リポジトリの台帳も返す。
+/// ブランチの PR を引く段（`GitHubBranchPullRequestLookup`）。ブランチごとに GitHub 上の同一性と、
+/// PR の一覧（head がその同一性と等しいものだけ）または引けない理由を答え、リポジトリの台帳も返す。
 ///
-/// 壊れると何が起きるか: エディターが PR を出せない理由を取り違える（GitHub でないリポジトリに「確かめられない」と出す・
-/// gh の失敗を「PR が無い」と読んで作成の入口を出す）。他人の fork の同名ブランチの PR を自分の PR として出す。
+/// 壊れると何が起きるか: 他人の fork の同名ブランチに立った PR がタスクに付く。引けない理由を取り違える
+/// （GitHub でないリポジトリを「確かめられない」と答える・gh の失敗を「PR が無い」と答える）。
 extension WorktreePaletteRemoteLedgerProviderTests {
   private func lookup(_ branches: Set<String>) throws -> GitHubBranchPullRequests {
     var repo: GitRepo?
@@ -20,7 +20,8 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     return try XCTUnwrap(found)
   }
 
-  /// 同一性が GitHub のブランチと決まれば、head までそれと等しい PR だけを、gh の並び（作成日時の新しい順）のまま返す。
+  /// 同一性が GitHub のブランチと決まれば、head がリポジトリまで含めてその同一性と等しい PR だけを、
+  /// gh の並び（作成日時の新しい順）のまま返す。
   func testTheBranchAnswersItsIdentityAndOnlyItsOwnPullRequests() throws {
     addRemote("origin", "me/r")
     try answer("me/r", found: "me/r")

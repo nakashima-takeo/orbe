@@ -189,7 +189,8 @@ final class GitHubCLI {
     try? decodeSync(gh, args, cwd: cwd).get()
   }
 
-  /// 1 往復を同期で叩いてデコードする。0 以外の終了・時間切れは分類した失敗、読めない答えは gh が何も言わなかった失敗。
+  /// 1 往復を同期で叩いてデコードする。0 以外の終了・時間切れ・起動の失敗は分類した失敗、読めない答えは `.reason("")`
+  /// （理由が空の「それ以外」）。
   func decodeSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String) -> Result<
     T, GitHubFailure
   > {
@@ -203,8 +204,8 @@ final class GitHubCLI {
 
   // MARK: - 実行基盤
 
-  /// gh の 1 回の結果。成否は読む側が決める——GraphQL は一部だけ失敗すると、0 以外で終わっても通った分の `data` を
-  /// 標準出力に載せる。
+  /// gh の 1 回の結果。成否は読む側が決める——GraphQL の問い合わせが一部だけ失敗すると、gh は 0 以外で終わるが、通った分の
+  /// `data` は標準出力に載る。
   struct Output {
     let status: Int32
     let stdout: Data

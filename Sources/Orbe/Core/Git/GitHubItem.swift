@@ -47,8 +47,10 @@ enum GitHubItemKind: String, Codable, Equatable {
 
 /// GitHub から取った 1 項目の値。
 struct GitHubItemSummary: Equatable {
-  enum State: Equatable {
-    case open, closed, merged
+  enum State: String, Equatable {
+    case open = "OPEN"
+    case closed = "CLOSED"
+    case merged = "MERGED"
   }
 
   /// PR のレビュー状態（GraphQL の `reviewDecision`）。
@@ -220,10 +222,7 @@ private struct ItemNode: Decodable {
     case ("Issue", "CLOSED"):
       return GitHubItemSummary(title: title, state: .closed, pullRequest: nil)
     case ("PullRequest", _):
-      let states: [String: GitHubItemSummary.State] = [
-        "OPEN": .open, "CLOSED": .closed, "MERGED": .merged,
-      ]
-      guard let prState = states[state] else { return nil }
+      guard let prState = GitHubItemSummary.State(rawValue: state) else { return nil }
       return GitHubItemSummary(
         title: title, state: prState,
         pullRequest: GitHubItemSummary.PullRequest(
