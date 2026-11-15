@@ -82,8 +82,7 @@ func runAutomation(_ args: [String]) -> Never {
   case "trial": automationTrial(rest)
   case "pause": automationPause(rest, paused: true)
   case "resume": automationPause(rest, paused: false)
-  case "rm":
-    automationSimple(rest, verb: "rm", method: "delete_automation", done: "removed automation")
+  case "rm": automationRemove(rest)
   case nil:
     print(automationUsage)
     exit(2)
@@ -230,13 +229,12 @@ private func automationRun(_ rest: [String]) -> Never {
   exit(0)
 }
 
-private func automationSimple(_ rest: [String], verb: String, method: String, done: String) -> Never
-{
+private func automationRemove(_ rest: [String]) -> Never {
   exitIfAutomationHelp(rest)
   rejectLeftovers(rest, positionals: 1)
-  let id = automationIdArg(rest, verb: verb)
-  let result = callOrExit(method, ["automationId": id])
-  if wantJSON { printJSON(result) } else { print("\(done) \(id)") }
+  let id = automationIdArg(rest, verb: "rm")
+  let result = callOrExit("delete_automation", ["automationId": id])
+  if wantJSON { printJSON(result) } else { print("removed automation \(id)") }
   exit(0)
 }
 

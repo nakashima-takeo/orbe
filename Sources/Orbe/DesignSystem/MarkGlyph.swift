@@ -21,8 +21,6 @@ enum MarkGlyphKind: Equatable {
   case openOut
   /// 左向きの矢印。viewBox 10×8。
   case arrowLeft
-  /// 右向きの矢印。viewBox 10×8。
-  case arrowRight
 
   fileprivate var box: CGSize {
     switch self {
@@ -30,7 +28,7 @@ enum MarkGlyphKind: Equatable {
     case .bandFailure: CGSize(width: 8, height: 12)
     case .tray: CGSize(width: 12, height: 18)
     case .openOut: CGSize(width: 9, height: 9)
-    case .arrowLeft, .arrowRight: CGSize(width: 10, height: 8)
+    case .arrowLeft: CGSize(width: 10, height: 8)
     }
   }
 
@@ -38,7 +36,7 @@ enum MarkGlyphKind: Equatable {
     switch self {
     case .success, .failure, .paused, .bandFailure: 1.6
     case .tray: 1.3
-    case .openOut, .arrowLeft, .arrowRight: 1.2
+    case .openOut, .arrowLeft: 1.2
     }
   }
 
@@ -57,7 +55,6 @@ enum MarkGlyphKind: Equatable {
       ]
     case .openOut: return [[p(2.5, 6.5), p(6.5, 2.5)], [p(3.3, 2.5), p(6.5, 2.5), p(6.5, 5.7)]]
     case .arrowLeft: return [[p(9, 4), p(1, 4)], [p(4, 1), p(1, 4), p(4, 7)]]
-    case .arrowRight: return [[p(1, 4), p(9, 4)], [p(6, 1), p(9, 4), p(6, 7)]]
     }
   }
 

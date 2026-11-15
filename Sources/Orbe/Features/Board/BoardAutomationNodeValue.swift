@@ -66,7 +66,6 @@ extension BoardAutomationNodeValue {
     next: Date?, open: Int, workspaces: AutomationWorkspaces
   ) {
     guard let node = automation.graph.node(nodeId) else { return nil }
-    let l10n = text.l10n
     let nodeState = automation.state(nodeId)
     id = nodeId
     role = text.role(node.role)

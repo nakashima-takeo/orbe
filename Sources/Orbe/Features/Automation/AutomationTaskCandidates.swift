@@ -135,10 +135,9 @@ extension AutomationStore {
     automations.first { $0.graph.node(proposal.judge) != nil }
   }
 
-  /// 判定のノード `judge` の持ち主の自動化の ID（定義を読めない自動化も）。
+  /// 判定のノード `judge` の持ち主の自動化の ID。定義を読めない自動化なら nil。
   func issuerId(ofJudge judge: AutomationNodeID) -> Int? {
     automations.first { $0.graph.node(judge) != nil }?.id
-      ?? unreadable.first { $0.nodeIds.contains(judge) }?.id
   }
 
   /// 判断待ちの候補と、それを棚に出す自動化（候補を出した自動化）の ID（候補の順）。定義を読めない自動化の候補は入らない。

@@ -21,19 +21,18 @@ final class SQLiteDatabaseTests: OrbeTestCase {
 
   func testBoundValuesReadBackUnchanged() throws {
     let db = try openDatabase()
-    try db.exec("CREATE TABLE value (i INTEGER, r REAL, t TEXT, n TEXT)")
+    try db.exec("CREATE TABLE value (i INTEGER, t TEXT, n TEXT)")
     let text = "日本語と絵文字🙂を含む {\"json\": \"本文\"}"
 
-    let insert = try db.prepare("INSERT INTO value VALUES (?, ?, ?, ?)")
-    try insert.bind([.integer(Int64.max), .real(-1.25), .text(text), .null])
+    let insert = try db.prepare("INSERT INTO value VALUES (?, ?, ?)")
+    try insert.bind([.integer(Int64.max), .text(text), .null])
     XCTAssertFalse(try insert.step())
 
-    let select = try db.prepare("SELECT i, r, t, n FROM value")
+    let select = try db.prepare("SELECT i, t, n FROM value")
     XCTAssertTrue(try select.step())
     XCTAssertEqual(select.int64(at: 0), Int64.max)
-    XCTAssertEqual(select.double(at: 1), -1.25)
-    XCTAssertEqual(select.text(at: 2), text, "多バイトの文字列が欠けず化けずに戻る")
-    XCTAssertTrue(select.isNull(at: 3))
+    XCTAssertEqual(select.text(at: 1), text, "多バイトの文字列が欠けず化けずに戻る")
+    XCTAssertTrue(select.isNull(at: 2))
     XCTAssertFalse(try select.step(), "行は 1 つだけ")
   }
 

@@ -19,7 +19,6 @@ struct SQLiteError: Error, CustomStringConvertible {
 /// 束縛する値。
 enum SQLiteValue: Equatable {
   case integer(Int64)
-  case real(Double)
   case text(String)
   case null
 }
@@ -164,7 +163,6 @@ final class SQLiteStatement {
       let rc: Int32
       switch value {
       case .integer(let int): rc = sqlite3_bind_int64(handle, index, int)
-      case .real(let double): rc = sqlite3_bind_double(handle, index, double)
       case .text(let text):
         let length = Int32(text.utf8.count)
         rc = text.withCString { sqlite3_bind_text(handle, index, $0, length, sqliteTransient) }
@@ -188,10 +186,6 @@ final class SQLiteStatement {
 
   func int64(at column: Int) -> Int64 {
     sqlite3_column_int64(handle, Int32(column))
-  }
-
-  func double(at column: Int) -> Double {
-    sqlite3_column_double(handle, Int32(column))
   }
 
   func text(at column: Int) -> String? {

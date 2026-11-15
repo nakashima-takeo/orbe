@@ -118,10 +118,7 @@ let automationTools: [[String: Any]] = [
           ],
           "from": strArrayProp("Entry node keys"),
           "to": strArrayProp("Target node keys"),
-          "rows": [
-            "type": "array", "items": ["type": "object"],
-            "description": "Rows (JSON objects) to give the entry",
-          ],
+          "rows": objArrayProp("Rows (JSON objects) to give the entry"),
           "limit": intProp("The most new rows each root fetch passes on"),
         ])
     ),

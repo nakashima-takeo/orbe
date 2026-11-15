@@ -130,9 +130,8 @@ extension DesignSceneFixtures {
   }
 
   /// 見本の回 1 つを、走らせ役と同じ読みと確定で記録する。`kept` はそのノードの見本の前から出ていた項目で、取得の回の出力に足す。
-  static func record(
-    _ pass: AutomationSamplePass, of id: Int, in store: AutomationStore,
-    kept: [AutomationItem] = []
+  private static func record(
+    _ pass: AutomationSamplePass, of id: Int, in store: AutomationStore, kept: [AutomationItem]
   ) throws {
     guard let automation = store.automation(id), let node = automation.graph.node(key: pass.nodeKey)
     else {
