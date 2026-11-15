@@ -95,26 +95,14 @@ extension AutomationStore {
     }
   }
 
-  /// 確かめた書き込みを掛ける。
+  /// 確かめた書き込みを掛ける。書き換えはノードを `id` で今のノードに当て（無ければ新しいノード）、何も変わらなければ何も書かず、
+  /// 版も進めない。止めているかは変えない。
   func apply(_ checked: CheckedWrite, now: Date) throws(AutomationError) -> Written {
     let at = TaskItem.storedInstant(now)
     guard let current = checked.current else {
       return Written(automation: try insert(checked, at: at), reworked: [], removed: [])
     }
     return try rewrite(current, checked, at: at)
-  }
-
-  func create(_ definition: AutomationDefinition, now: Date) throws(AutomationError) -> Automation {
-    try apply(try check(.create(definition)), now: now).automation
-  }
-
-  /// 定義を書き換える。`version` は書き換えの元にした版。ノードは `id` で今のノードを指し（無ければ新しいノード）、何も変わらなければ
-  /// 何も書かず、版も進めない。定義を読めない自動化を直すときは、残るノードをすべて何をするかが変わったものとして扱う。止めているかは
-  /// 変えない。
-  func replace(
-    _ id: Int, version: Int?, with definition: AutomationDefinition, now: Date
-  ) throws(AutomationError) -> Written {
-    try apply(try check(.replace(id, version: version, definition)), now: now)
   }
 
   private func insert(_ checked: CheckedWrite, at: Date) throws(AutomationError) -> Automation {

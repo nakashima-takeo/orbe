@@ -151,14 +151,6 @@ extension AutomationDatabase {
       .first ?? 0
   }
 
-  /// ノードが項目の表（変化の番号）・出来事の表にそれぞれ最後に振った通し番号。
-  func lastSeqs(of nodeId: AutomationNodeID) throws -> AutomationSeqs {
-    try db.select(
-      "SELECT last_item_seq, last_event_seq FROM nodes WHERE id = ?",
-      [.integer(Int64(nodeId.rawValue))]
-    ) { AutomationSeqs(item: $0.int(at: 0), event: $0.int(at: 1)) }.first ?? AutomationSeqs()
-  }
-
   /// ノードの今有効な項目のリンク。リンクの無い項目は入らない。
   func liveLinks(of nodeId: AutomationNodeID) throws -> Set<String> {
     Set(

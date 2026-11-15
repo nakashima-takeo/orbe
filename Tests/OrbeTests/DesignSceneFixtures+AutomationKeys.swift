@@ -28,9 +28,15 @@ extension AutomationStore {
     return nodeId
   }
 
-  /// 鍵で指したノードが項目・出来事に最後に振った番号（DB から。テスト）。
+  /// 鍵で指したノードが項目の表（変化の番号）・出来事の表にそれぞれ最後に振った番号（DB から。テスト）。
   func lastSeqs(_ id: Int, _ key: String) throws -> AutomationSeqs {
-    try read { try $0.lastSeqs(of: nodeId(id, key)) }
+    let nodeId = nodeId(id, key)
+    return try read {
+      try $0.db.select(
+        "SELECT last_item_seq, last_event_seq FROM nodes WHERE id = ?",
+        [.integer(Int64(nodeId.rawValue))]
+      ) { AutomationSeqs(item: $0.int(at: 0), event: $0.int(at: 1)) }.first ?? AutomationSeqs()
+    }
   }
 
   /// 候補への人の判断（DB の判断の記録から。判断の無い候補は nil。テスト）。判断した候補は、どの自動化も持たなければその場で
