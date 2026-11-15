@@ -265,4 +265,24 @@ extension WindowControllerAutomationControlTests {
     wc.workspaces[home].settingsOverride = override
     XCTAssertEqual(wc.automationRetention.eventDays, 60, "Home の上書きが効く")
   }
+
+  /// 保持の設定（全体の設定と Home の上書き）を変えると、確定を待たずに、読めば取る行を今の残す期間で数え直す。
+  func testChangingTheRetentionRecountsTheRowsToRead() throws {
+    let wc = try launch()
+    let store = wc.automationStore
+    let id = try store.create(AutomationStoreTests.definition(coverage: .newArrivals), now: Date())
+      .id
+    try AutomationStoreTests.fetch(
+      store, id, [Self.item("a")], at: Date().addingTimeInterval(-5 * 86400))
+    func pending() -> Int? { store.automation(id)?.state(key: "judge").pending.count }
+    XCTAssertEqual(pending(), 1, "前提: 5 日前の出来事は既定の 30 日の内")
+
+    wc.applySetting(SettingChange(SettingKeys.automationEventRetentionDays, 1), scope: .global)
+    XCTAssertEqual(pending(), 0, "全体の設定の 1 日を過ぎた")
+
+    let home = wc.workspaces[try XCTUnwrap(wc.store.homeIndex)]
+    wc.applySetting(
+      SettingChange(SettingKeys.automationEventRetentionDays, 30), scope: .workspace, target: home)
+    XCTAssertEqual(pending(), 1, "Home の上書きの 30 日の内")
+  }
 }
