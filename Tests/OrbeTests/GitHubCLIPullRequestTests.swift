@@ -125,7 +125,7 @@ final class GitHubCLIPullRequestTests: OrbeTestCase {
   }
 
   /// 続きのページを最後まで読むと、PR の値と全件のコミット・変更ファイルが揃う。確認済みは「確認済み」だけが真で、後の push で
-  /// 外れたもの（DISMISSED）は偽。
+  /// 外れたもの（DISMISSED）は偽。Orbe が知らない変化の種類は「変更」として読み、一覧ごと読めなくしない。
   func testEveryPageIsReadIntoOneContent() throws {
     try serve(
       "first",
@@ -135,7 +135,8 @@ final class GitHubCLIPullRequestTests: OrbeTestCase {
         author: "null", commitCount: 300))
     try serve("commits-C1", nextPage("commits", page([commit("c2")], next: "C2")))
     try serve("commits-C2", nextPage("commits", page([commit("c3")], next: nil)))
-    try serve("files-F1", nextPage("files", page([file("c", "CHANGED")], next: nil)))
+    try serve(
+      "files-F1", nextPage("files", page([file("c", "CHANGED"), file("d", "NEW_KIND")], next: nil)))
 
     let content = try XCTUnwrap(read()).get()
 
@@ -154,6 +155,7 @@ final class GitHubCLIPullRequestTests: OrbeTestCase {
         .init(path: "a", change: .added, isViewed: true),
         .init(path: "b", change: .renamed, isViewed: false),
         .init(path: "c", change: .typeChanged, isViewed: false),
+        .init(path: "d", change: .modified, isViewed: false),
       ])
   }
 
