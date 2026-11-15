@@ -75,7 +75,7 @@ extension EditorPaneView {
     do {
       try group.editor.saveActive()
     } catch EditorDocumentError.diskChanged {
-      guard let window, let target = group.editor.activeDocument else { return }
+      guard let window, let target = group.editor.activeTab?.document else { return }
       let alert = UnsavedGate.overwriteAlert(language: localization.language)
       alert.beginSheetModal(for: window) { [weak self, weak target] response in
         guard let self, let group = self.group, let target,

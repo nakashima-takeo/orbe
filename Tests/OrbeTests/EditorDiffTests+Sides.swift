@@ -7,11 +7,11 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// diff の側の決まり方——新しい側の文書が替わったとき（並びが載るまで出さない・仮のタブとタブ行・未保存が下りたとき）、
-/// 両側とも無いパス、途中のシンボリックリンク、サブモジュール。壊れると、diff タブに編集できる面が一瞬出る・未保存の文書を
+/// 両側とも無いパス、途中のシンボリックリンク、サブモジュール。壊れると、diff タブに並びの無い面が一瞬出る・未保存の文書を
 /// 使う仮のタブが黙って入れ替わる・消えたファイルの diff が古いまま残る・リンク先の別のファイルが出る・空の diff が理由
 /// なしに出る・サブモジュールの行が「git から取れない」になる。
 extension EditorDiffTests {
-  /// diff だけが持つファイルが消えて戻った直後は、新しい文書の行差分が届くまで本体に何も出さず、届けば読むだけで出す。
+  /// diff だけが持つファイルが消えて戻った直後は、新しい文書の行差分が届くまで本体に何も出さず、届けば編集できる面で出す。
   func testADiffOnlyDocumentThatComesBackShowsNothingUntilItsRowsArrive() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
@@ -27,7 +27,7 @@ extension EditorDiffTests {
     XCTAssertEqual(diff.content, .loading, "並びが載るまで何も出さない")
     XCTAssertNil(diff.newSurface)
     waitRows(diff, "行差分が届く") { self.removedLines($0) == [1] }
-    XCTAssertFalse(try engine(document.surface).isEditable, "読むだけで出す")
+    XCTAssertTrue(try engine(document.surface).isEditable, "編集できる面で出す")
   }
 
   /// 未保存のファイルが外で消えて戻ると、それを新しい側に使うようになった仮の diff タブは普通のタブになり、未保存の印が

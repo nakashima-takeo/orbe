@@ -139,7 +139,8 @@ final class EditorSearch {
   }
 
   func selectionDidChange() {
-    if let document, document.surface.selectedRange != revealed {
+    guard let document else { return }
+    if document.surface.selectedRange != revealed {
       start = document.surface.caretLocation
       revealed = nil
       awaiting?.selectsFirst = false

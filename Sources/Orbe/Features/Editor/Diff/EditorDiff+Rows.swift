@@ -3,8 +3,8 @@ import OrbeEditorCore
 
 /// 並び——見せている見せ方の見え方を面に載せる。
 extension EditorDiff {
-  /// 見せている見せ方の見え方を面に載せる（並列なら古い側の面を用意して結ぶ）。新しい側は読むだけで、作業ツリーの文書は
-  /// diff の上限で行差分を取る。
+  /// 見せている見せ方の見え方を面に載せる（並列なら古い側の面を用意して結ぶ）。作業ツリーの文書は diff の上限で行差分を
+  /// 取る。文書のハンクが変わるたび（打鍵の編集の知らせの中を含む）に呼ばれ、同じ並びの押し直しは面が何もしない。
   func applyRows() {
     guard let mode = presented, content == .ready, let surface = newSurface, let old,
       let (hunks, newSide) = currentRows
@@ -114,8 +114,7 @@ extension EditorDiff {
   ) -> SurfaceLook {
     var presentation = presentation
     presentation.numbersOwnLines = !absent
-    return SurfaceLook(
-      presentation: presentation, rows: rows, isEditable: false, hunkLimit: Self.hunkLimit)
+    return SurfaceLook(presentation: presentation, rows: rows, hunkLimit: Self.hunkLimit)
   }
 
   private func makeOldSurface() -> (any TextSurface)? {

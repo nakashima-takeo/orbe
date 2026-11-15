@@ -2,7 +2,8 @@ import Foundation
 import OrbeEditorCore
 
 /// diff 1 つ——根の下の 1 つのパスの、古い側と新しい側と、その行差分。種類が側を決める——作業ツリー: index の版 ↔ 文書
-/// （ファイルタブと同じ文書。開いていれば未保存を含む今の本文）／ステージ済み: HEAD の版（rename なら元のパス）↔ index の版。
+/// （ファイルタブと同じ文書と面。開いていれば未保存を含む今の本文で、diff の中でも編集できる）／ステージ済み: HEAD の版
+/// （rename なら元のパス）↔ index の版。
 ///
 /// 版の本文は根のサービスが 1 か所で持ち（→ `RootFiles.Version`）、diff はその状態から読むだけのリビジョンの文書を作る。
 /// 作業ツリー diff の差分は文書のハンク（裏・版つき・編集でずらす）そのもので、古い側はそのハンクが比べた底から作る——
@@ -172,8 +173,8 @@ final class EditorDiff {
 
   // MARK: - 見せる
 
-  /// 見せ方 `mode` で見せる——古い側・新しい側の本文と並びを今の版に合わせ、面に diff の見え方を載せる（新しい側は読む
-  /// だけ）。並列なら古い側の面を作り、新しい側の面とスクロールを共にする。初めて見せるときは最初の変更区間へ送る。
+  /// 見せ方 `mode` で見せる——古い側・新しい側の本文と並びを今の版に合わせ、面に diff の見え方を載せる。並列なら古い側の
+  /// 面を作り、新しい側の面とスクロールを共にする。初めて見せるときは最初の変更区間へ送る。
   func present(_ mode: Mode) {
     let switching = presented != nil && presented != mode
     if switching { dropOldSurface() }
@@ -234,7 +235,7 @@ final class EditorDiff {
     sendVisibleRemovedLines(on: surface)
   }
 
-  /// 作業ツリー diff の文書の本文が変わった（見せている間に外部変更で差し替わった）。古い側が文書の底ではない diff
+  /// 作業ツリー diff の文書の本文が変わった（diff の中の編集・外部変更の差し替え）。古い側が文書の底ではない diff
   /// （`oldIsNotBaseline`）は、並びを今の行の数で置き直す。
   func documentTextDidChange() {
     guard presented != nil, oldIsNotBaseline else { return }

@@ -271,10 +271,11 @@ final class EditorSession {
     onChange?()
   }
 
-  /// 焦点の文書のタブの文書を保存する。force でなければ、ディスクが変わっていれば失敗する（→ `EditorDocument.save`）。
-  /// 仮のタブは保存しても仮のまま。diff のタブには保存が無い。
+  /// 焦点のタブが使う文書（ファイルタブはその文書、作業ツリー diff は新しい側の文書）を保存する。force でなければ、ディスクが
+  /// 変わっていれば失敗する（→ `EditorDocument.save`）。仮のタブは保存しても仮のまま。文書を使わないタブ（ステージ済み
+  /// diff など）では何もしない。
   func saveActive(force: Bool = false) throws {
-    try activeDocument?.save(force: force)
+    try activeTab?.document?.save(force: force)
   }
 
   /// タブ `id` を閉じたときに閉じる文書（その文書を使う最後のタブなら、その文書。ほかのタブが使っていれば nil）。未保存の
