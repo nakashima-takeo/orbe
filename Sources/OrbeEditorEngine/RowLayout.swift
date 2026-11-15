@@ -242,7 +242,8 @@ struct RowLayout: Sendable {
   /// 面自身の編集の束 `edits`（どれも編集前の本文 `before` の座標で、重ならない）の後の行へ、境と区間の始まりをずらす。境 r
   /// （r ≥ 1）は「行 r−1 の後」で、行 r−1 の中身の終わり（改行の手前）に付く——付き先から始まる編集では動かず、付き先を消した
   /// 編集では消した区間の始まりの行の後へ寄り、付き先より前の編集の行の増減だけずれる。境 0（文書の先頭）は動かない。区間の
-  /// 始まり r も「行 r−1 の後」の境として同じに動く。
+  /// 始まり r も「行 r−1 の後」の境として同じに動く。値の変わった境か区間の始まりがあったときだけ版を進める——行の数を変えない
+  /// 打鍵では何も動かないので、差し込みの多い並びでも列をなめず、書き換えもしない。
   mutating func shift(_ edits: [TextEdit], in before: TextRope) {
     guard !boundaries.isEmpty || !spans.isEmpty, !edits.isEmpty else { return }
     let changes = edits.map { edit in
@@ -255,80 +256,31 @@ struct RowLayout: Sendable {
     }.sorted { $0.start < $1.start }
     let shift = LineShift(changes: changes, before: before)
     var moved = shift.apply(to: &boundaries)
-    var starts = spans.map(\.line)
-    if shift.apply(to: &starts) {
-      for index in spans.indices { spans[index].line = starts[index] }
+    if shift.apply(to: &spans) {
       settleNumbers()
       moved = true
     }
     if moved { version += 1 }
   }
 
-  /// 束の行の増減（編集前の本文の座標の区間と、行の数の差）。
-  private struct LineChange {
-    var start: Int
-    var end: Int
-    var delta: Int
-  }
-
-  /// 編集の束で、境の昇順の列をずらす規則。
-  private struct LineShift {
-    let changes: [LineChange]
-    let before: TextRope
-    let total: Int
-    let firstRow: Int
-    let lastRow: Int
-
-    init(changes: [LineChange], before: TextRope) {
-      self.changes = changes
-      self.before = before
-      total = changes.reduce(0) { $0 + $1.delta }
-      firstRow = before.row(containing: changes[0].start)
-      lastRow = before.row(containing: changes.map(\.end).max() ?? 0)
-    }
-
-    /// 昇順の境の列 `lines` をずらす（境 r ≤ 最初の編集の行 は、付き先が編集より前にある）。最初の編集の行より後ろの境が
-    /// 1 つでもあれば、値がずれなくても true。
-    func apply(to lines: inout [Int]) -> Bool {
-      var index = RowLayout.count(lines, atOrBelow: firstRow)
-      guard index < lines.count else { return false }
-      while index < lines.count {
-        let boundary = lines[index]
-        if boundary - 1 > lastRow {
-          lines[index] = boundary + total
-        } else {
-          let anchor = RowLayout.anchor(of: boundary, in: before)
-          var row = boundary - 1
-          var delta = 0
-          for change in changes {
-            guard change.start < anchor else { break }
-            if anchor < change.end {
-              row = before.row(containing: change.start)
-            } else {
-              delta += change.delta
-            }
-          }
-          lines[index] = row + delta + 1
-        }
-        index += 1
-      }
-      return true
-    }
-  }
-
   /// 昇順の列 `lines` の中で `line` 以下のものの数。
-  fileprivate static func count(_ lines: [Int], atOrBelow line: Int) -> Int {
+  static func count(_ lines: [Int], atOrBelow line: Int) -> Int {
+    count(lines.count, atOrBelow: line) { lines[$0] }
+  }
+
+  /// 昇順の `count` 個の値（`lineAt` で引く）の中で `line` 以下のものの数。
+  static func count(_ count: Int, atOrBelow line: Int, _ lineAt: (Int) -> Int) -> Int {
     var low = 0
-    var high = lines.count
+    var high = count
     while low < high {
       let mid = (low + high) / 2
-      if lines[mid] <= line { low = mid + 1 } else { high = mid }
+      if lineAt(mid) <= line { low = mid + 1 } else { high = mid }
     }
     return low
   }
 
   /// 境 `boundary`（≥ 1）の付き先——行 boundary−1 の中身の終わり（改行の手前。CRLF なら CR の手前）。
-  fileprivate static func anchor(of boundary: Int, in text: TextRope) -> Int {
+  static func anchor(of boundary: Int, in text: TextRope) -> Int {
     guard boundary < text.lineCount else { return text.length }
     let newline = text.lineStart(boundary) - 1
     guard newline > 0, text.units(in: NSRange(location: newline - 1, length: 1)).first == 0x0D
