@@ -85,7 +85,7 @@ struct FileTabView: View {
         .foregroundStyle(tab.isActive ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
       if let kind = tab.diffKind {
-        Text(l10n.string(kind == .workingTree ? .editorDiffWorkingTree : .editorDiffStaged))
+        Text(l10n.string(Self.note(of: kind)))
           .italic(tab.isPreview)
           .font(Font.theme.editorDiffNote)
           .foregroundStyle(Color.theme.editorCaution)
@@ -116,6 +116,14 @@ struct FileTabView: View {
     .onHover { hovering = $0 }
     .onTapGesture { shell.activate(tab.id) }
     .simultaneousGesture(TapGesture(count: 2).onEnded { shell.pin(tab.id) })
+  }
+
+  /// diff のタブの注記。
+  private static func note(of kind: EditorDiff.Kind) -> L10nKey {
+    switch kind {
+    case .workingTree: .editorDiffWorkingTree
+    case .staged: .editorDiffStaged
+    }
   }
 }
 
