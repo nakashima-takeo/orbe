@@ -56,9 +56,12 @@ final class GitRepoCommitsTests: OrbeTestCase {
     return condition()
   }
 
-  /// remote に、どのブランチにも無い（`refs/pull/1/head` だけが指す）コミットを置く。そのコミットには remote のタグも付ける。
+  /// remote に、どのブランチにも無い（`refs/pull/1/head` だけが指す）コミットを置く。そのコミットには remote のタグも付け、
+  /// 手元は remote のタグを全部取る設定（`tagOpt=--tags`）にする——この設定が無いと、コミットを指定した fetch は
+  /// `--no-tags` を外してもタグを取らず、`--no-tags` が効いているかを確かめられない。
   private func stagePullRequestCommit() throws -> String {
     let bare = temp.addOrigin()
+    XCTAssertTrue(temp.git(["config", "remote.origin.tagOpt", "--tags"]).isSuccess)
     let other = temp.dir.path + "-pr"
     XCTAssertTrue(temp.git(["clone", "-q", bare, other]).isSuccess)
     XCTAssertTrue(temp.git(["config", "user.email", "o@example.com"], in: other).isSuccess)
