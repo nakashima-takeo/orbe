@@ -234,8 +234,8 @@ final class EditorDiff: RootFilesObserver {
     sendVisibleRemovedLines(on: surface)
   }
 
-  /// 作業ツリー diff の文書の本文が変わった（見せている間に外部変更で差し替わった）。古い側が文書の底ではない diff（古い
-  /// 側の版が無い・サブモジュールからファイルへ置き換えた）は、並びを今の行の数で置き直す。
+  /// 作業ツリー diff の文書の本文が変わった（見せている間に外部変更で差し替わった）。古い側が文書の底ではない diff
+  /// （`oldIsNotBaseline`）は、並びを今の行の数で置き直す。
   func documentTextDidChange() {
     guard presented != nil, oldIsNotBaseline else { return }
     sourcesDidChange()
@@ -272,8 +272,8 @@ final class EditorDiff: RootFilesObserver {
 
   /// 中身を決め、見せられるなら側と行差分を今の版に合わせる。
   private func resolve() -> Content {
-    // 走っているステージ済みの依頼は、両側が同じ本文に決まったときだけ続けて待つ。別の本文に決まった後や、表示できないと
-    // 決まった後に届いた結果は使わない。
+    // 走っているステージ済みの依頼は、決めた両側の本文がその依頼の本文と同じときだけ続けて待つ。別の本文に決まった後や、
+    // 表示できないと決まった後に届いた結果は使わない。
     let computing = stagedComputing
     stagedComputing = nil
     stagedPending = false

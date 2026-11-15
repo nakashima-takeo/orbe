@@ -342,7 +342,7 @@ final class EditorPaneView: NSView {
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
   /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。配置を頼み、見えるようになった本体を
-  /// 初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても抜けない）。
+  /// 初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても、見えたときにもう一度配置して待つ）。
   private func updateLiveness() {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
@@ -360,8 +360,10 @@ final class EditorPaneView: NSView {
 
   /// 面が画面に見えていれば、本体の文書・diff を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書・diff が何もしない）。
   /// 畳まれた面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置の連を復元しても main を止めない。呼ぶのは面の
-  /// 配置（`layout()`）の最後だけ。配置は画面に出る前で、AppKit が main の周の終わりに呼ぶので文書の知らせの外になる——
-  /// 知らせの中で待つと、同じ文書の受け取りが入れ子になる。
+  /// 配置（`layout()`）の最後だけ。配置は描く前に、main の runloop の 1 周の終わりか、利用者の操作の中の
+  /// `layoutSubtreeIfNeeded()` で走り、どちらも文書の受け取りの知らせの外になる。受け取りの知らせの中から pane を同期で配置
+  /// させない——`EditorDocument.prepareToShow` は受け取りの途中で呼ばれると、待たないときも precondition で止まる（待てば
+  /// 同じ文書の受け取りが入れ子になる）。
   func prepareBodyIfVisible() {
     guard window != nil, !isHiddenOrHasHiddenAncestor else { return }
     switch body {
