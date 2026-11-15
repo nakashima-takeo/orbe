@@ -53,8 +53,8 @@ final class AutomationTrial {
     case none
     /// 下流へ渡す行（取得・処理）。
     case rows([String])
-    /// 候補の案と、対応済みにするリンク（判定）。
-    case judged(proposals: [AutomationNodePass.Proposal], resolved: [String])
+    /// 確定が足した候補と、対応済みにした候補のリンク（判定）。
+    case judged(AutomationJudged)
   }
 
   /// 試走の ID（起動中だけ。使い回さない）。
@@ -290,7 +290,7 @@ final class AutomationTrial {
   }
 
   /// ノードの回の知らせ（確定の直後、下流が読む前）。取得・処理はその回が写しに足した新しい行を結果にし、道の根の取得なら先に
-  /// `limit` で写しを絞る。判定は案を結果にする。
+  /// `limit` で写しを絞る。判定は確定が候補に掛けた分を結果にする。
   private func recorded(_ record: AutomationPassRecord) {
     let nodeId = record.end.nodeId
     guard !stopped, let store, let range, let run = record.run,
@@ -298,7 +298,7 @@ final class AutomationTrial {
     else { return }
     let content: Content
     do throws(AutomationError) {
-      content = try self.content(of: node, run, record.end.outcome, in: range, store)
+      content = try self.content(of: node, run, record.judged, in: range, store)
     } catch {
       return end(failure: error.message)
     }
@@ -306,8 +306,8 @@ final class AutomationTrial {
   }
 
   private func content(
-    of node: AutomationGraph.Node, _ run: AutomationNodeRun,
-    _ outcome: AutomationNodePass.Outcome, in range: Range, _ store: AutomationStore
+    of node: AutomationGraph.Node, _ run: AutomationNodeRun, _ judged: AutomationJudged?,
+    in range: Range, _ store: AutomationStore
   ) throws(AutomationError) -> Content {
     guard !run.failed else { return .none }
     switch run.result {
@@ -322,10 +322,7 @@ final class AutomationTrial {
       }
       return .rows(try store.latestRows(of: node.id, in: range.automationId, count: count))
     case .judge:
-      guard case .succeeded(.judge(let proposals, let resolved), _, _) = outcome else {
-        return .none
-      }
-      return .judged(proposals: proposals, resolved: resolved)
+      return judged.map(Content.judged) ?? .none
     case .report, .sideEffect, .work, nil:
       return .none
     }

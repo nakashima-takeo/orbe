@@ -181,10 +181,10 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(["gh", "p", "judge"].map { trial.state(key: $0) }, [.done, .done, .done])
     XCTAssertEqual(rows(trial, "gh"), [downstream("gh", "b", of: id)])
     XCTAssertEqual(rows(trial, "p"), [downstream("gh", "b", of: id)])
-    guard case .judged(let proposed, _) = trial.passes(key: "judge").first?.content else {
+    guard case .judged(let judged) = trial.passes(key: "judge").first?.content else {
       return XCTFail("判定の回に候補の案が無い")
     }
-    XCTAssertEqual(proposed.map(\.title), ["B"])
+    XCTAssertEqual(judged.proposals.map(\.title), ["B"])
     XCTAssertEqual(
       trial.passes(key: "judge").first?.run?.result,
       .judge(proposed: 1, resolved: 0, dismissed: []))

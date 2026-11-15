@@ -20,6 +20,16 @@ struct AutomationRecorded {
   let changed: Bool
   /// 書いた回の記録。自動化かノードがもう無く、何も書かなかったなら nil。
   let run: AutomationNodeRun?
+  /// 判定の回が確定で足した候補と対応済みにした候補（当て直して捨てた案を除く）。成功した判定の回でなければ nil。
+  let judged: AutomationJudged?
+}
+
+/// 判定の回が確定で候補に掛けたもの。
+struct AutomationJudged: Equatable {
+  /// 足した候補の案（案の順）。
+  let proposals: [AutomationNodePass.Proposal]
+  /// 対応済みにした候補のリンク（案の順）。
+  let resolved: [String]
 }
 
 /// ノードの 1 回の読み書き。読みは受け手の取り方（`AutomationIntake`）を通し、行の本文は DB にだけ置く。
@@ -73,7 +83,7 @@ extension AutomationStore {
   func record(_ end: AutomationPassEnd) throws(AutomationError) -> AutomationRecorded {
     guard let index = automations.firstIndex(where: { $0.id == end.automationId }),
       let node = automations[index].graph.node(end.nodeId)
-    else { return AutomationRecorded(changed: false, run: nil) }
+    else { return AutomationRecorded(changed: false, run: nil, judged: nil) }
     var run = AutomationNodeRun(
       startedAt: TaskItem.storedInstant(end.startedAt),
       endedAt: TaskItem.storedInstant(end.endedAt), trigger: end.trigger,

@@ -65,8 +65,8 @@ extension AutomationTrial.Pass {
       switch content {
       case .rows(let rows):
         json["rows"] = Self.objects(rows)
-      case .judged(let proposals, let resolved):
-        json["proposals"] = proposals.map { proposal -> [String: Any] in
+      case .judged(let judged):
+        json["proposals"] = judged.proposals.map { proposal -> [String: Any] in
           var item: [String: Any] = [
             "id": proposal.id, "link": proposal.fields.link, "title": proposal.title,
           ]
@@ -78,7 +78,7 @@ extension AutomationTrial.Pass {
           }
           return item
         }
-        json["resolved"] = resolved
+        json["resolved"] = judged.resolved
       case .none:
         break
       }

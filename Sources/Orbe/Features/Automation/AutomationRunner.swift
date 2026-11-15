@@ -346,7 +346,7 @@ extension AutomationRunner {
       return end(trigger)
     }
     trigger.holding = AutomationHolding()
-    recorded(AutomationPassRecord(end: passEnd, run: result.run))
+    recorded(AutomationPassRecord(end: passEnd, run: result.run, judged: result.judged))
     if result.changed { wake(below: trigger.nodeId, in: trigger.automationId) }
     end(trigger)
   }

@@ -44,10 +44,15 @@ struct AutomationRecording {
         read.taken.map { ($0.ref, "taken") } + read.dropped.map { ($0.row.ref, $0.reason.rawValue) }
       )
     }
-    if let reconciled { try apply(reconciled, run: recordId, &memory) }
+    let judgedNow = try reconciled.map { reconciled in
+      try apply(reconciled, run: recordId, &memory)
+      return AutomationJudged(
+        proposals: reconciled.pending,
+        resolved: reconciled.resolving.map { memory.proposals[$0].link })
+    }
     try finish(run: recordId, endedAt: run.endedAt, &memory)
     let recorded = memory.automations[index].state(end.nodeId).runs.first { $0.id == recordId }
-    return AutomationRecorded(changed: written.changed, run: recorded?.run)
+    return AutomationRecorded(changed: written.changed, run: recorded?.run, judged: judgedNow)
   }
 
   /// 読んだ位置を進め、持ち越しを回の記録へ移す（下げた候補の数は判定の回の `withdrawn` へ）。

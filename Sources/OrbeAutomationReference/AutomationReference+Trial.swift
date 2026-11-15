@@ -50,7 +50,8 @@ extension AutomationReference {
     `given`, or `untouched` when it ended without ever running) and `runs`, newest first. A run is \
     a run record without `recordId` and `nodeKey`, plus `rows` for a fetch or process (the rows it \
     passed on), and `proposals` {`id`, `link`, `title`, `due`, `reason`, `workspaceId`, \
-    `workspaceName`} and `resolved` (links) for a judge. A held node's runs are `held` {`rows`}, one \
+    `workspaceName`} and `resolved` (links) for a judge: what settling took in, without the \
+    proposals it dropped (those are in the result's `dismissed`). A held node's runs are `held` {`rows`}, one \
     per run it would have had (rows are empty for a node without `from`; how runs split may \
     differ from a real run). A given fetch has `given` {`rows`}. Runs and holds from the moment of \
     writing have `atWrite`. Runs the flow started are `now`, even for `arrival` nodes. As in real \
