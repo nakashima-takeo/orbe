@@ -322,8 +322,8 @@ extension EditorDiffTests {
     XCTAssertTrue(window.firstResponder === diff.oldSurface?.responder, "焦点は最後に焦点のあった左の面に残る")
   }
 
-  /// ステージ済み diff の行差分を裏で取っている間、status が取り終えるより短い間隔で変わり続けても（エージェントがほかの
-  /// ファイルを次々に書く間）、両側の本文が変わらなければ中身は届く。
+  /// ステージ済み diff の行差分を裏で取っている間に、それを取り終えるより短い間隔で status が変わり続けても（エージェントが
+  /// ほかのファイルを次々に書く間）、両側の本文が変わらなければ中身は届く。
   func testAStagedDiffArrivesWhileTheStatusKeepsChanging() throws {
     // 1 行おきに書き換えた数千行——下で status を変える間隔より、裏の行差分のほうが十分長くかかる大きさ。
     let lines = (0..<3000).map { "line \($0)" }
