@@ -92,12 +92,12 @@ final class RowListView<Source: RowListSource>: NSView {
     source.row(of: selection, in: drawn)
   }
 
-  /// 頭と行の高さの和（最後の行の下の空きと一時の空きを含まない）。
-  private var rowsHeight: CGFloat { headerHeight + CGFloat(rowCount) * rowHeight }
+  /// 行の高さの和（最後の行の下の空きと一時の空きを含まない）。
+  private var rowsHeight: CGFloat { CGFloat(rowCount) * rowHeight }
 
   /// 文書の高さ（頭・行・最後の行の下の 1 行分の空き・一時の空き）。
   func resizeDocument() {
-    let height = rowsHeight + rowHeight + bottomSpace
+    let height = headerHeight + rowsHeight + rowHeight + bottomSpace
     guard frame.height != height else { return }
     setFrameSize(NSSize(width: frame.width, height: height))
   }
@@ -168,7 +168,7 @@ final class RowListView<Source: RowListSource>: NSView {
       let offset = convert(NSPoint(x: 0, y: anchor.windowY), from: nil).y - visible.minY
       top = max(0, rect(ofRow: target).minY - offset)
     }
-    bottomSpace = max(0, top + visible.height - (rowsHeight + rowHeight))
+    bottomSpace = max(0, top + visible.height - (headerHeight + rowsHeight + rowHeight))
     resizeDocument()
     if visible.minY != top { scroll(NSPoint(x: 0, y: top)) }
     layoutRows()

@@ -12,7 +12,8 @@ extension RowListView {
   }
 
   /// 頭の中身が変わった——今の幅で高さを測り直し、変わっていれば行の位置を置き直す。頭が見えなくなるまで送っていれば、
-  /// 見えている行が画面の同じ位置に残るように、高さの差だけ送る（頭が見えていれば送らない）。
+  /// 見えている行が画面の同じ位置に残るように、高さの差だけ送る（頭が見えていれば送らない）。行を留めていれば（→
+  /// `RowListAnchor`）、頭が見えていても、留める行を押した行の窓の中の高さへ送り直す。
   func headerDidChange() {
     let height = header.map { $0.height(fitting: bounds.width).rounded(.up) } ?? 0
     header?.frame = NSRect(x: 0, y: 0, width: bounds.width, height: height)
@@ -22,7 +23,7 @@ extension RowListView {
     let shift = height - headerHeight
     headerHeight = height
     resizeDocument()
-    if pastHeader { scroll(NSPoint(x: 0, y: max(0, top + shift))) }
+    if pastHeader { scroll(NSPoint(x: 0, y: top + shift)) }
     holdAnchor()
     layoutRows()
     updatePointer()
