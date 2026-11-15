@@ -209,7 +209,9 @@ extension ControlWireTests {
     let wire = startWire(target: fake)
 
     let refused: [(params: [String: Any], message: String)] = [
-      (["tabId": 8, "path": "a.swift", "kind": "head"], "invalid kind"),
+      (
+        ["tabId": 8, "path": "a.swift", "kind": "head"], "invalid kind: pass workingTree or staged"
+      ),
       (["tabId": 8, "path": "", "kind": "staged"], "missing path"),
     ]
     for (index, entry) in refused.enumerated() {

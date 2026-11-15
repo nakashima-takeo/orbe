@@ -73,7 +73,9 @@ extension ControlServer {
     let path = try p.optionalString("path")
     let kind = try p.string("kind")
     guard let path, !path.isEmpty else { throw p.missing("path") }
-    guard let diffKind = diffKinds[kind] else { throw p.invalid("kind") }
+    guard let diffKind = diffKinds[kind] else {
+      throw p.invalid("kind", "pass workingTree or staged")
+    }
     return target.controlOpenDiff(tabId: tabId, path: path, kind: diffKind)
   }
 
