@@ -187,11 +187,12 @@ extension AutomationStoreTests {
   /// `set_automation` へ戻すため。この形は保存の読みとは別に組む）。
   func testTheDefinitionOfAnUnreadableAutomationReadsBackOnceTheBrokenValueIsRestored() throws {
     var definition = Self.definition("壊す")
-    definition.nodes[1].from = [
-      AutomationDefinition.Input(nodeKey: "fetch", maxAgeHours: 24)
-    ]
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(definition, now: Self.at).id)
+    definition.nodes[1].from = [
+      AutomationDefinition.Input(nodeKey: "fetch", maxAgeHours: 24, after: Self.at)
+    ]
+    try Self.rewrite(XCTUnwrap(store), id, definition)
     let fetch = try XCTUnwrap(store?.nodeId(id, "fetch"))
     store = nil
     let trigger = try XCTUnwrap(

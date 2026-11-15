@@ -5,7 +5,8 @@ import XCTest
 /// つながりの読む行の下限の時刻（`after`）——今ある取得に足した受け手を「これから来る分だけ」にする読みと、書くときの確かめ。
 ///
 /// 壊れると何が起きるか: 今ある取得に足した受け手に、足した時点の項目がすべて流れ込み、副作用や候補が一度に起きる。未来の時刻を
-/// 書いた受け手が、その時刻までに来た行を黙って捨てる。
+/// 書いた受け手が、その時刻までに来た行を黙って捨てる。書き込みで足したノードから読むつながりに書いた下限の時刻が、黙って何も除か
+/// ない。そのため、足した経路に今ある項目が流れ込む。
 extension AutomationStoreTests {
   /// 取得 `fetch` を読む副作用の受け手 `key`。
   private func sideEffect(_ key: String, after: Date? = nil) -> AutomationDefinition.Node {
@@ -70,5 +71,30 @@ extension AutomationStoreTests {
             + "(2027-01-15T08:00:00.000Z); pass the current time or an earlier one"))
     }
     XCTAssertEqual(store.automation(id)?.version, 1)
+  }
+
+  /// その書き込みで足すノードから読むつながりに、読む行の下限の時刻を書いた定義は、場所を示して断り、何も書かない（足すノード
+  /// の行はどれも書き込みの後にできるので、何も除かない）。今あるノードから読むつながりの下限の時刻は書ける。
+  func testAnAfterOnAnInputFromANodeTheWriteAddsIsRefusedWithItsPlace() throws {
+    let store = AutomationStore()
+    var definition = Self.definition()
+    let id = try store.create(definition, now: Self.at).id
+    var process = DesignSceneFixtures.commandNode("p", "要約", .arrival, script: "p")
+    process.from = [AutomationDefinition.Input(nodeKey: "fetch", after: Self.at)]
+    var late = DesignSceneFixtures.commandNode(
+      "late", "late", .arrival, script: "late", deliver: .sideEffect)
+    late.from = [AutomationDefinition.Input(nodeKey: "p", after: Self.at)]
+    definition.nodes += [process, late]
+
+    XCTAssertThrowsError(try Self.rewrite(store, id, definition)) {
+      XCTAssertEqual(
+        $0 as? AutomationError,
+        .invalid(
+          #"nodes[3].from[0].after: "p" is a node this write adds, so after drops nothing; "#
+            + "write after on an input from a node that exists now"))
+    }
+    XCTAssertEqual(store.automation(id)?.version, 1)
+    definition.nodes[3].from[0].after = nil
+    XCTAssertNoThrow(try Self.rewrite(store, id, definition))
   }
 }
