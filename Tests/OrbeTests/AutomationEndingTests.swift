@@ -14,7 +14,6 @@ final class AutomationEndingTests: OrbeTestCase {
       (.signaled(9), "killed by signal 9"),
       (.stopped, "stopped"),
       (.limited(.elapsed), "stopped at the time limit"),
-      (.limited(.idle), "stopped after producing no output for too long"),
       (.limited(.output), "stopped at the output limit"),
       (.notStarted(.agentNotFound("claude")), "not started (claude is not installed)"),
       (

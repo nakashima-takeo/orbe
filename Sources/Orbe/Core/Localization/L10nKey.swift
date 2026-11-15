@@ -415,7 +415,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationEndExited
   case automationEndSignaled
   case automationEndTimeLimit
-  case automationEndIdleLimit
   case automationEndOutputLimit
   case automationEndStopped
   case automationEndAgentMissing
