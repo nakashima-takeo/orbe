@@ -11,16 +11,17 @@ final class ScrollbarGeometryTests: XCTestCase {
   private let pixel: CGFloat = 1.0 / 18
 
   func testSliderLengthPositionAndMappingsOfALongDocument() {
-    let top = ScrollbarGeometry(lineCount: 1000, firstLine: 0, visibleLines: 20, height: 360)
+    let top = ScrollbarGeometry(contentLines: 1000, firstLine: 0, visibleLines: 20, height: 360)
     XCTAssertTrue(top.isNeeded)
     XCTAssertEqual(top.sliderLength, 20, "最小の長さ")
     XCTAssertEqual(top.sliderPosition, 0)
     XCTAssertEqual(top.position(afterDragging: 10), 29.38888888888889, accuracy: pixel)
     XCTAssertEqual(top.position(centeringSliderAt: 200), 558.2777777777778, accuracy: pixel)
-    let mid = ScrollbarGeometry(lineCount: 1000, firstLine: 400.25, visibleLines: 20, height: 360)
+    let mid = ScrollbarGeometry(
+      contentLines: 1000, firstLine: 400.25, visibleLines: 20, height: 360)
     XCTAssertEqual(mid.sliderPosition, 136)
     XCTAssertEqual(mid.position(afterDragging: 10), 429, accuracy: pixel)
-    let end = ScrollbarGeometry(lineCount: 1000, firstLine: 999, visibleLines: 20, height: 360)
+    let end = ScrollbarGeometry(contentLines: 1000, firstLine: 999, visibleLines: 20, height: 360)
     XCTAssertEqual(end.sliderPosition, 340, "最終行が最上段でつまみは下端")
     XCTAssertEqual(end.maxPosition, 999)
     XCTAssertEqual(end.position(afterDragging: 50), 999, "上限で止まる")
@@ -28,17 +29,17 @@ final class ScrollbarGeometryTests: XCTestCase {
   }
 
   func testShortDocumentsCanStillScrollTheLastLineToTheTop() {
-    let short = ScrollbarGeometry(lineCount: 5, firstLine: 0, visibleLines: 20, height: 360)
+    let short = ScrollbarGeometry(contentLines: 5, firstLine: 0, visibleLines: 20, height: 360)
     XCTAssertTrue(short.isNeeded)
     XCTAssertEqual(short.sliderLength, 300)
     XCTAssertEqual(short.position(afterDragging: 10), 0.6666666666666666, accuracy: pixel)
     XCTAssertEqual(short.position(centeringSliderAt: 200), 3.3333333333333335, accuracy: pixel)
-    let mid = ScrollbarGeometry(lineCount: 60, firstLine: 10, visibleLines: 20.5, height: 369)
+    let mid = ScrollbarGeometry(contentLines: 60, firstLine: 10, visibleLines: 20.5, height: 369)
     XCTAssertEqual(mid.sliderLength, 95)
     XCTAssertEqual(mid.sliderPosition, 46)
     XCTAssertEqual(mid.position(afterDragging: 10), 12.055555555555555, accuracy: pixel)
     XCTAssertFalse(
-      ScrollbarGeometry(lineCount: 1, firstLine: 0, visibleLines: 20, height: 360).isNeeded)
+      ScrollbarGeometry(contentLines: 1, firstLine: 0, visibleLines: 20, height: 360).isNeeded)
   }
 
   /// 横は pt の単位で同じ式——見えている幅・全体の幅・左の位置・トラックの長さ（VS Code の横の `ScrollbarState`）。
@@ -57,22 +58,29 @@ final class ScrollbarGeometryTests: XCTestCase {
 
   func testRulerMapsRowsProportionallyWithAMinimumHeightAndMergesNeighbours() {
     let rows: [ClosedRange<Int>] = [0...0, 2...2, 99...139, 499...499, 998...999]
-    let oneX = OverviewRuler(lineCount: 1000, visibleLines: 20.5, height: 400, scale: 1)
+    let oneX = OverviewRuler(contentLines: 1000, visibleLines: 20.5, height: 400, scale: 1)
     XCTAssertEqual(
-      oneX.spans(rows).map { [$0.y1, $0.y2] }, [[0, 6], [38, 54], [192, 198], [388, 394]])
+      oneX.spans(units(rows)).map { [$0.y1, $0.y2] },
+      [[0, 6], [38, 54], [192, 198], [388, 394]])
     XCTAssertEqual(
-      oneX.spans([0...0, 28...28]).map { [$0.y1, $0.y2] }, [[0, 13]], "1 px の隙間（6 と 7）は結ぶ")
+      oneX.spans(units([0...0, 28...28])).map { [$0.y1, $0.y2] }, [[0, 13]], "1 px の隙間（6 と 7）は結ぶ")
     XCTAssertEqual(
-      oneX.spans([0...0, 29...29]).map { [$0.y1, $0.y2] }, [[0, 6], [8, 14]], "2 px 離れれば別")
-    let twoX = OverviewRuler(lineCount: 1000, visibleLines: 20.5, height: 400, scale: 2)
+      oneX.spans(units([0...0, 29...29])).map { [$0.y1, $0.y2] }, [[0, 6], [8, 14]], "2 px 離れれば別")
+    let twoX = OverviewRuler(contentLines: 1000, visibleLines: 20.5, height: 400, scale: 2)
     XCTAssertEqual(
-      twoX.spans(rows).map { [$0.y1, $0.y2] }, [[0, 12], [77, 109], [385, 397], [777, 789]])
-    XCTAssertEqual([oneX.caret(row: 0).y1, oneX.caret(row: 0).y2], [0, 2])
-    XCTAssertEqual([oneX.caret(row: 499).y1, oneX.caret(row: 499).y2], [194, 196])
-    XCTAssertEqual([twoX.caret(row: 999).y1, twoX.caret(row: 999).y2], [781, 785])
+      twoX.spans(units(rows)).map { [$0.y1, $0.y2] },
+      [[0, 12], [77, 109], [385, 397], [777, 789]])
+    XCTAssertEqual([oneX.caret(at: 0).y1, oneX.caret(at: 0).y2], [0, 2])
+    XCTAssertEqual([oneX.caret(at: 499).y1, oneX.caret(at: 499).y2], [194, 196])
+    XCTAssertEqual([twoX.caret(at: 999).y1, twoX.caret(at: 999).y2], [781, 785])
     XCTAssertEqual(
-      oneX.carets(rows: [0, 11]).map { [$0.y1, $0.y2] }, [[0, 5]], "キャレットの印も 1 px の隙間は結ぶ")
-    XCTAssertEqual(oneX.carets(rows: [0, 13]).count, 2, "2 px 離れれば別")
+      oneX.carets(at: [0, 11]).map { [$0.y1, $0.y2] }, [[0, 5]], "キャレットの印も 1 px の隙間は結ぶ")
+    XCTAssertEqual(oneX.carets(at: [0, 13]).count, 2, "2 px 離れれば別")
+  }
+
+  /// 行の区間（両端を含む）を、差し込みの無い面の表示の単位の縦の区間へ。
+  private func units(_ rows: [ClosedRange<Int>]) -> [Range<CGFloat>] {
+    rows.map { CGFloat($0.lowerBound)..<CGFloat($0.upperBound + 1) }
   }
 
   func testRulerLanesSplitTheWidthAfterTheBorderPixel() {

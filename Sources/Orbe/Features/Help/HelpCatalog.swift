@@ -1,7 +1,8 @@
 import Foundation
 
 /// ⌘H ヘルプの静的カタログ（ショートカット一覧・キーボード物理配列・チップ記号）。
-/// 掲載内容の真実の出所は Keybindings.swift / MainMenu.swift / libghostty 既定（手動棚卸し）。
+/// 掲載内容の真実の出所（どれも手動棚卸し）は、chrome キー・メニュー・libghostty の既定・面の中のキー（エディター面の
+/// ソース管理のメッセージ欄）・修飾のジェスチャ（⌘⌘）。
 /// 表示キー表記・ラベル・カテゴリ・combo はプレゼンテーション情報でコードから導出できないため
 /// 静的に持ち、内部整合（combo⊆KB・厳選⊆カテゴリ行・表示キー一意）は HelpCatalogTests が機械保証する。
 /// 掲載内容で機械保証があるのはタブ左右移動の「矢印が主・括弧が従」だけ（提示の意思決定のため）。
@@ -31,6 +32,8 @@ enum HelpCatalog {
         Row(key: "⌘E", label: .helpShortcutToggleEditorFace, combo: ["cmd", "e"]),
         Row(key: "⌘S", label: .helpShortcutSaveDocument, combo: ["cmd", "s"]),
         Row(key: "⌘⇧F", label: .helpShortcutFindInProject, combo: ["cmd", "shift", "f"]),
+        Row(key: "↵", label: .helpShortcutScmCommit, combo: ["return"]),
+        Row(key: "⌘↵", label: .helpShortcutScmCommitAndPush, combo: ["cmd", "return"]),
         Row(key: "⌘⇧E", label: .helpShortcutOpenEditor, combo: ["cmd", "shift", "e"]),
         Row(key: "⌘Q", label: .helpShortcutQuit, combo: ["cmd", "q"]),
       ]),
@@ -134,11 +137,13 @@ enum HelpCatalog {
     ],
   ]
 
-  /// 下寄せラベルで描く修飾キー id（デザイン見本 MOD_RE の集合表現）。
+  /// 修飾キー id。
   static let modifierKeys: Set<String> = [
-    "shift", "rshift", "caps", "tab", "return", "delete",
-    "cmd", "rcmd", "opt", "ropt", "ctrl", "fn",
+    "shift", "rshift", "caps", "cmd", "rcmd", "opt", "ropt", "ctrl", "fn",
   ]
+
+  /// 下寄せラベルで描くキー id（デザイン見本 MOD_RE の集合表現）。
+  static let bottomLabelKeys = modifierKeys.union(["tab", "return", "delete"])
 
   /// combo id → 表示記号（キー絞り込みチップ用）。無ければ id の大文字。
   static let symbols: [String: String] = [

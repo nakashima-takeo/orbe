@@ -253,7 +253,7 @@ extension ProjectSearch {
     } else {
       select(row(at: 0).id)
     }
-    if selection != before { selectionDidNavigate(isRepeat: isRepeat) }
+    if selection != before { navigation.didNavigate(isRepeat: isRepeat) }
   }
 
   /// ←: 一致なら親の見出しへ、見出しなら畳む。
@@ -273,7 +273,7 @@ extension ProjectSearch {
       toggleCollapse(selection.path)
     } else {
       select(RowID(path: selection.path, match: 0))
-      selectionDidNavigate(isRepeat: isRepeat)
+      navigation.didNavigate(isRepeat: isRepeat)
     }
   }
 

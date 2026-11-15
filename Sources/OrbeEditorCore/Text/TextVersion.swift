@@ -11,8 +11,30 @@ public struct TextPoint: Equatable, Sendable {
   }
 }
 
-/// 版を 1 つ進めた編集。行と桁も持つ——tree-sitter の編集と、ハンクのずらしに使う（どちらも編集の時点の本文でしか
-/// 出せない）。
+/// 編集が中身を変えた行の範囲（0 始まり、半開）。編集の前の本文では `start..<oldEnd`、後の本文では `start..<newEnd`
+/// で、範囲の外の行は両側で中身が同じ（前は `oldEnd` 以降が、後は `newEnd` 以降に 1 対 1 で並ぶ）。
+public struct EditedRows: Equatable, Sendable {
+  public let start: Int
+  public let oldEnd: Int
+  public let newEnd: Int
+
+  /// 編集の始まり・前の終わり・後の終わりの位置から。行頭から行頭への編集は行ごとの挿入・削除で、終わりの行は変わらない。
+  /// `keepsStartRow`（始まりの行の中身を変えないと、編集の前の本文から分かる）なら、始まりの行も範囲に入れない。
+  public init(start: TextPoint, oldEnd: TextPoint, newEnd: TextPoint, keepsStartRow: Bool) {
+    if start.column == 0, oldEnd.column == 0, newEnd.column == 0 {
+      self.start = start.row
+      self.oldEnd = oldEnd.row
+      self.newEnd = newEnd.row
+      return
+    }
+    self.start = keepsStartRow ? start.row + 1 : start.row
+    self.oldEnd = oldEnd.row + 1
+    self.newEnd = newEnd.row + 1
+  }
+}
+
+/// 版を 1 つ進めた編集。行と桁は tree-sitter の編集に、中身を変えた行（`rows`）はハンクのずらしに使う（どちらも編集の
+/// 時点の本文でしか出せない）。
 public struct VersionedEdit: Sendable {
   /// この編集の後の版。
   public let version: Int
@@ -22,30 +44,66 @@ public struct VersionedEdit: Sendable {
   public let oldEnd: TextPoint
   /// 置き換えた区間の終わり（編集の後の本文）。
   public let newEnd: TextPoint
+  /// 中身を変えた行。
+  public let rows: EditedRows
 
-  /// ハンクを編集の後の行へずらす。編集より後ろの行は、編集で増減した行の数だけ動く。行頭が消えた行の端は、編集の
-  /// 終わりに寄せる。
-  public func track(_ hunks: [LineHunk]) -> [LineHunk] {
-    let delta = newEnd.row - oldEnd.row
-    guard delta != 0 else { return hunks }
-    // 境 b は「0 始まりの行 b の上」。
-    func boundary(_ b: Int) -> Int {
-      if b <= start.row { return b }
-      if b > oldEnd.row { return b + delta }
-      return newEnd.row + (newEnd.column > 0 ? 1 : 0)
-    }
-    return hunks.map { hunk in
-      guard hunk.newCount > 0 else {
-        return LineHunk(
-          oldStart: hunk.oldStart, oldCount: hunk.oldCount, newStart: boundary(hunk.newStart),
-          newCount: 0)
+  /// 当てた順の編集の列（どれもその直前の本文の座標）で、最初の編集の前の本文に対するハンク（`LineDiff` の出力と同じ形）を、
+  /// 最後の編集の後の本文に対する同じ形のハンクへ写す。行の数を変える編集ごとに、変えた行を区間に入れ、それと重なる・接する
+  /// 区間と 1 つにつなぎ（最小とは限らない）、後ろの区間を行の増減ぶんずらす。行の数を変えない編集は区間を変えない（区間の
+  /// 外の行の中身は、裏の結果が届くまで底と違いうる）。
+  ///
+  /// 区間の列を「今の編集より前」と「掛かる・後ろ」に分けて持ち、後ろのずれはまとめて足すので、手間は編集の数と、続く編集の
+  /// 間にある区間の数の和に比例する（束は後ろから当てた並びなので、カーソルが多い打鍵でも区間を 1 回なめるだけ）。
+  static func track(_ hunks: [LineHunk], through edits: some Sequence<Self>) -> [LineHunk] {
+    var front = hunks
+    // 逆順（末尾が最も前）。新しい側は `shift` を足した位置。
+    var back: [LineHunk] = []
+    var shift = 0
+    for edit in edits {
+      let rows = edit.rows
+      let delta = rows.newEnd - rows.oldEnd
+      guard delta != 0 else { continue }
+      while let top = back.last, top.newLines.upperBound + shift < rows.start {
+        front.append(top.shifted(by: shift))
+        back.removeLast()
       }
-      let first = boundary(hunk.newStart - 1)
-      let end = max(first + 1, boundary(hunk.newStart - 1 + hunk.newCount))
-      return LineHunk(
-        oldStart: hunk.oldStart, oldCount: hunk.oldCount, newStart: first + 1,
-        newCount: end - first)
+      while let last = front.last, last.newLines.upperBound >= rows.start {
+        back.append(last.shifted(by: -shift))
+        front.removeLast()
+      }
+      // 区間の外の行の、古い側の行 − 新しい側の行。
+      let offset = front.last.map { $0.oldLines.upperBound - $0.newLines.upperBound } ?? 0
+      var new = rows.start..<rows.oldEnd
+      var old = (rows.start + offset)..<(rows.oldEnd + offset)
+      if let top = back.last, top.newLines.lowerBound + shift <= rows.oldEnd {
+        let first = top.shifted(by: shift)
+        var last = first
+        while let top = back.last, top.newLines.lowerBound + shift <= rows.oldEnd {
+          last = top.shifted(by: shift)
+          back.removeLast()
+        }
+        let lower = first.newLines.lowerBound <= rows.start
+        let upper = last.newLines.upperBound >= rows.oldEnd
+        let after = last.oldLines.upperBound - last.newLines.upperBound
+        let newStart = lower ? first.newLines.lowerBound : rows.start
+        let oldStart = lower ? first.oldLines.lowerBound : old.lowerBound
+        new = newStart..<(upper ? last.newLines.upperBound : rows.oldEnd)
+        old = oldStart..<(upper ? last.oldLines.upperBound : rows.oldEnd + after)
+      }
+      shift += delta
+      let edited = new.lowerBound..<(new.upperBound + delta)
+      if !old.isEmpty || !edited.isEmpty {
+        back.append(LineHunk(old: old, new: edited).shifted(by: -shift))
+      }
     }
+    guard !back.isEmpty else { return front }
+    return front + back.reversed().map { $0.shifted(by: shift) }
+  }
+}
+
+extension LineHunk {
+  fileprivate func shifted(by delta: Int) -> LineHunk {
+    LineHunk(oldStart: oldStart, oldCount: oldCount, newStart: newStart + delta, newCount: newCount)
   }
 }
 
@@ -59,14 +117,16 @@ public struct EditLog: Sendable {
 
   public init() {}
 
+  /// `keepsStartRow` は `EditedRows` のとおり。
   public mutating func append(
-    _ edit: TextEdit, start: TextPoint, oldEnd: TextPoint, newEnd: TextPoint
+    _ edit: TextEdit, start: TextPoint, oldEnd: TextPoint, newEnd: TextPoint, keepsStartRow: Bool
   )
     -> VersionedEdit
   {
     version += 1
     let record = VersionedEdit(
-      version: version, edit: edit, start: start, oldEnd: oldEnd, newEnd: newEnd)
+      version: version, edit: edit, start: start, oldEnd: oldEnd, newEnd: newEnd,
+      rows: EditedRows(start: start, oldEnd: oldEnd, newEnd: newEnd, keepsStartRow: keepsStartRow))
     edits.append(record)
     return record
   }

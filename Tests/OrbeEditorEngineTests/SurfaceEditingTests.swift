@@ -76,7 +76,7 @@ final class SurfaceEditingTests: EngineTestCase {
     _ = host(opened)
     let undo = try XCTUnwrap(opened.surface.responder.undoManager)
     type(opened, "abc def")
-    opened.surface.perform(.newline(indents: true))
+    opened.surface.editor.perform(.newline(indents: true))
     type(opened, "gh")
     undo.undo()
     XCTAssertEqual(text(opened.document), "abc def")
@@ -94,13 +94,13 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertFalse(undo.canRedo, "新しい編集で redo は消える")
   }
 
-  /// カーソルの移動と保存は undo の区切り。未保存の印は ⌘Z で戻しても消えない。
+  /// カーソルの移動と保存は undo の区切り。保存の後の編集を ⌘Z で戻せば未保存が解ける。
   func testMovesAndSavesBreakTheUndoGroup() throws {
     let opened = try open("")
     _ = host(opened)
     let undo = try XCTUnwrap(opened.surface.responder.undoManager)
     type(opened, "ab")
-    opened.surface.perform(.move(.left, extending: false))
+    opened.surface.editor.perform(.move(.left, extending: false))
     type(opened, "X")
     undo.undo()
     XCTAssertEqual(text(opened.document), "ab")
@@ -109,7 +109,8 @@ final class SurfaceEditingTests: EngineTestCase {
     type(opened, "Z")
     undo.undo()
     XCTAssertEqual(text(opened.document), "aYb")
-    XCTAssertTrue(opened.document.isDirty, "保存の後の編集を戻しても未保存のまま")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    XCTAssertFalse(opened.document.isDirty, "保存の後の編集を戻せば未保存が解ける")
   }
 
   /// 中身を変えない編集（大文字の語の大文字化・同じ字での上書き）は文書へ渡さない——版も未保存の印も進まず、undo も積まない。
@@ -119,7 +120,7 @@ final class SurfaceEditingTests: EngineTestCase {
     let undo = try XCTUnwrap(opened.surface.responder.undoManager)
     let version = opened.document.version
     opened.surface.selectedRange = NSRange(location: 0, length: 3)
-    opened.surface.perform(.changeCase(.upper))
+    opened.surface.editor.perform(.changeCase(.upper))
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 3), "変えた範囲を選ぶ")
     opened.surface.selectedRange = NSRange(location: 4, length: 1)
     type(opened, "a")
@@ -146,6 +147,32 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertEqual(text(opened.document), "one!\ntwo\n", "差し替えだけが戻る")
     undo.undo()
     XCTAssertEqual(text(opened.document), "one\ntwo\n")
+  }
+
+  /// 印の立った文書を ⌘Z で保存時の本文まで戻すと、比べ終わった時点で外の版に差し替わる。差し替えは ⌘Z で戻せるが、
+  /// redo は消える（redo の要素は差し替えた本文に当てられない）。
+  func testUndoingToTheSavedTextTakesTheExternalChangeAndDropsRedo() throws {
+    let opened = try open("one\n")
+    _ = host(opened)
+    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    opened.surface.selectedRange = NSRange(location: 3, length: 0)
+    type(opened, "!")
+    try Data("theirs\n".utf8).write(to: opened.document.url)
+    opened.document.reconcileWithDisk()
+    XCTAssertTrue(opened.document.isDiskChanged, "前提: 未保存なので印が立つ")
+
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "one\n")
+    XCTAssertTrue(undo.canRedo, "比べ終わるまでは redo が残る")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    XCTAssertEqual(text(opened.document), "theirs\n", "未保存が解けた時点で外の版に差し替わる")
+    XCTAssertFalse(opened.document.isDiskChanged)
+    XCTAssertFalse(opened.document.isDirty)
+    XCTAssertFalse(undo.canRedo, "redo は消える")
+
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "one\n", "差し替えは ⌘Z で戻せる")
+    XCTAssertTrue(opened.document.isDirty)
   }
 
   /// 遠くの行を編集した後にスクロールして戻り undo しても、本文は空にならず、その編集だけが戻る。
@@ -250,7 +277,7 @@ final class SurfaceEditingTests: EngineTestCase {
     let revision = opened.surface.drawn.revision
     let seen = OSAllocatedUnfairLock<(placed: Double, shown: Double)?>(initialState: nil)
     opened.surface.transact {
-      opened.surface.perform(.move(.documentEnd, extending: false))
+      opened.surface.editor.perform(.move(.documentEnd, extending: false))
       opened.surface.write { _ in
         let placed = scroll.peek(at: 0).position.y
         let shown = scroll.frame(at: 0, material: revision).position.y
@@ -263,7 +290,8 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertGreaterThan(placed, 0, "材料を書く前に、見せ方の位置は置いてある")
     XCTAssertEqual(shown, 0, "古い材料のコマは前の位置")
     XCTAssertEqual(opened.surface.material.revision, revision + 1)
-    XCTAssertEqual(scroll.frame(at: 0, material: revision + 1).position.y, placed)
+    XCTAssertEqual(
+      scroll.frame(at: 0, material: revision + 1).position.y, placed)
   }
 
   /// 打鍵の後の横の「見えるところまで」は、行を組む描画スレッドが解く——main は論理の位置だけを材料に添え、描画スレッドが

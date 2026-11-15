@@ -39,6 +39,7 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(
       SettingsRegistry.descriptor(.menuBarNotificationDuration).key, "menubar-notification-duration"
     )
+    XCTAssertEqual(SettingsRegistry.descriptor(.scmAutoFetch).key, "scm-auto-fetch")
     XCTAssertEqual(SettingsRegistry.confKey(.fontSize), "font-size", "confKey は descriptor.key を引く")
     let keys = SettingsRegistry.all.map(\.key)
     XCTAssertEqual(Set(keys).count, SettingsRegistry.all.count, "key は全項目で一意")

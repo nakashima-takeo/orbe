@@ -112,32 +112,6 @@ final class RoleRunsTests: XCTestCase {
     }
   }
 
-  /// ハンクのずらし——編集より後ろのハンクは増減した行の数だけ動き、前のハンクは動かない。
-  func testHunksShiftByTheLinesTheEditAddsOrRemoves() {
-    var log = EditLog()
-    let hunks = [
-      LineHunk(oldStart: 1, oldCount: 1, newStart: 1, newCount: 1),
-      LineHunk(oldStart: 5, oldCount: 0, newStart: 6, newCount: 2),
-      LineHunk(oldStart: 9, oldCount: 2, newStart: 10, newCount: 0),
-    ]
-    let insert = log.append(
-      TextEdit(range: NSRange(location: 10, length: 0), replacement: "a\nb\n"),
-      start: TextPoint(row: 3, column: 0), oldEnd: TextPoint(row: 3, column: 0),
-      newEnd: TextPoint(row: 5, column: 0))
-    XCTAssertEqual(
-      insert.track(hunks),
-      [
-        LineHunk(oldStart: 1, oldCount: 1, newStart: 1, newCount: 1),
-        LineHunk(oldStart: 5, oldCount: 0, newStart: 8, newCount: 2),
-        LineHunk(oldStart: 9, oldCount: 2, newStart: 12, newCount: 0),
-      ])
-    let delete = log.append(
-      TextEdit(range: NSRange(location: 10, length: 4), replacement: ""),
-      start: TextPoint(row: 3, column: 0), oldEnd: TextPoint(row: 5, column: 0),
-      newEnd: TextPoint(row: 3, column: 0))
-    XCTAssertEqual(delete.track(insert.track(hunks)), hunks, "挿して消せば元の行")
-  }
-
   /// 記録は結果を待っている版より後ろだけを持つ。捨てた版の結果は写せない。
   func testTheLogKeepsEditsSinceTheOldestAwaitedVersion() {
     var log = EditLog()
@@ -145,7 +119,7 @@ final class RoleRunsTests: XCTestCase {
       _ = log.append(
         TextEdit(range: NSRange(location: index, length: 0), replacement: "x"),
         start: TextPoint(row: 0, column: index), oldEnd: TextPoint(row: 0, column: index),
-        newEnd: TextPoint(row: 0, column: index + 1))
+        newEnd: TextPoint(row: 0, column: index + 1), keepsStartRow: false)
     }
     XCTAssertEqual(log.version, 5)
     XCTAssertEqual(log.edits(since: 2)?.map(\.version), [3, 4, 5])

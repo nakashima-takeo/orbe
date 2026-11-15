@@ -2,18 +2,9 @@ import AppKit
 import OrbeEditorCore
 import SwiftUI
 
-/// エディター面の空状態の SwiftUI ルート。器の中の別 root なので環境は明示注入する。
-struct EditorFaceRoot: View {
-  let localization: LocalizationStore
-
-  var body: some View {
-    EditorEmptyView().environment(\.localization, localization)
-  }
-}
-
 /// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
-/// （ファイルタブ行 → 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
-/// 文書のテキスト面。無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
+/// （タブ行 → タブがあればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点のタブ
+/// の本体——文書のテキスト面か diff の面。無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
 ///
 /// 文書の「変わった」（viewport・選択・本文・焦点）は pane が 1 つずつ受け、検索・出現の強調・プロジェクト検索・
 /// アウトラインへ配る——文書側の closure は単一のまま、扇出はここが持つ。一致の地は、ファイル内検索とプロジェクト検索の
@@ -22,21 +13,34 @@ struct EditorFaceRoot: View {
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
-/// ツリーとプロジェクト検索は面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
+/// ツリー・プロジェクト検索・ソース管理パネルは面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
 ///
 /// chrome キーは `performKeyEquivalent` で先取りし、window コマンドは連経由で上位へ、⌘S は保存、
 /// 端末のキーは消し、両面のキーのうち ⌘F はファイル内検索、残り（⌘↑↓）と通常の打鍵はテキスト面へ流す。
 /// 空状態では通常の打鍵を飲む——エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
   weak var group: TabGroup?
-  /// 骨の写し（ファイルタブ行・パンくず）。
+  /// 骨の写し（タブ行・パンくず）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
   private(set) var tree: FileTree
   let sideHost: NSHostingView<EditorSideRoot>
   let headerHost: NSHostingView<EditorHeaderRoot>
-  let emptyHost: NSHostingView<EditorFaceRoot>
-  private(set) var document: EditorDocument?
+  let faceHost: NSHostingView<EditorFaceRoot>
+  /// 本体（焦点のタブの中身）。
+  private(set) var body = EditorBody.empty
+  /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
+  private(set) var diffModes = EditorDiffModeState() {
+    didSet { observeDiffModes() }
+  }
+  /// 並列の diff で最後に焦点のあった側（焦点の行き先。既定は右）。
+  var diffFocusesLeft = false
+  /// 並列の diff の 2 面の境。
+  let diffDivider = NSView()
+  /// 本体に置いている diff の面の view（左から）。
+  var diffViews: [NSView] = []
+  /// 知らせを結んでいる、diff の新しい側の文書。
+  weak var diffDocument: EditorDocument?
   /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
   let search = EditorSearch()
   var searchBar: SearchBar?
@@ -48,6 +52,11 @@ final class EditorPaneView: NSView {
   let projectSearch: ProjectSearch
   /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
   let searchResults: RowList<SearchResultsSource>
+  /// ソース管理パネルの状態（面ごと。根が変われば作り直す）。
+  private(set) var scm: ScmPanel
+  /// ソース管理の変更の列とグラフの列（検索結果の列と同じく、パネルが隠れている間も持つ）。
+  private(set) var scmList: RowList<ScmListSource>
+  private(set) var scmGraphList: RowList<ScmGraphSource>
   /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
@@ -58,6 +67,8 @@ final class EditorPaneView: NSView {
   let sidebarHandle = SidebarResizeHandle()
   private(set) var localization = LocalizationStore(language: .systemDefault)
   private var fontResolver = ChromeFontResolver()
+  /// 面の workspace の実効設定（使う時点で読む。窓が連を作るときに配る）。
+  var settings: () -> EffectiveSettings = { EffectiveSettings(SettingsLayer()) }
   /// 地の veil。設定パレットで不透明度を変えた直後も追従する（観測して再描画）。
   var translucency: ChromeTranslucency? {
     didSet { observeTranslucency() }
@@ -70,19 +81,25 @@ final class EditorPaneView: NSView {
     let searchResults = RowList(
       source: SearchResultsSource(search: projectSearch), rowHeight: Theme.Layout.editorSearchRow)
     self.searchResults = searchResults
+    let scm = ScmPanel(root: root)
+    self.scm = scm
+    let scmList = Self.scmList(scm)
+    self.scmList = scmList
+    let scmGraphList = Self.scmGraphList(scm)
+    self.scmGraphList = scmGraphList
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
-        shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
-        sidebar: sidebar,
+        shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
+        scmList: scmList, scmGraphList: scmGraphList, sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
         shell: shell, localization: localization, fontResolver: fontResolver))
-    emptyHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
+    faceHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
-    for host in [sideHost, headerHost, emptyHost] as [NSView] {
+    for host in [sideHost, headerHost, faceHost] as [NSView] {
       // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
       host.wantsLayer = true
       host.layer?.isOpaque = false
@@ -91,6 +108,8 @@ final class EditorPaneView: NSView {
     }
     sidebarHandle.autoresizingMask = []
     addSubview(sidebarHandle)
+    diffDivider.wantsLayer = true
+    diffDivider.autoresizingMask = []
     search.onCountChange = { [weak self] selected, total, limited in
       self?.searchBar?.updateCount(selected: selected, total: total, limited: limited)
     }
@@ -101,7 +120,9 @@ final class EditorPaneView: NSView {
     wireShell()
     wireTree()
     wireProjectSearch()
+    wireSourceControl()
     observeSidebar()
+    observeDiffModes()
     registerForDraggedTypes([.fileURL])
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
@@ -112,123 +133,37 @@ final class EditorPaneView: NSView {
 
   override var isFlipped: Bool { true }
 
-  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）を面へ配る。別 root は Environment を継承
+  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態・diff の見せ方）を面へ配る。別 root は Environment を継承
   /// しないので root を作り直す。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
-    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
+    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState, diffModes: EditorDiffModeState
   ) {
     self.translucency = translucency
     self.localization = localization
     self.fontResolver = fontResolver
     self.sidebar = sidebar
+    self.diffModes = diffModes
     installRoots()
     needsLayout = true
   }
 
+  private static func scmList(_ scm: ScmPanel) -> RowList<ScmListSource> {
+    RowList(source: ScmListSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
+  }
+
+  private static func scmGraphList(_ scm: ScmPanel) -> RowList<ScmGraphSource> {
+    RowList(source: ScmGraphSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
+  }
+
   private func installRoots() {
     sideHost.rootView = EditorSideRoot(
-      shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
-      sidebar: sidebar,
-      localization: localization, fontResolver: fontResolver)
+      shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
+      scmList: scmList, scmGraphList: scmGraphList, sidebar: sidebar, localization: localization,
+      fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
-    emptyHost.rootView = EditorFaceRoot(localization: localization)
-  }
-
-  // MARK: - 骨の操作 → セッション
-
-  private func wireShell() {
-    shell.open = { [weak self] url, mode in self?.open(url, as: mode) }
-    shell.activate = { [weak self] url in
-      guard let self, let group,
-        let document = group.editor.documents.first(where: { $0.url == url })
-      else { return }
-      group.editor.activate(document)
-      tree.reveal(document.url)
-      focusEditor()
-    }
-    shell.pin = { [weak self] url in
-      guard let group = self?.group,
-        let document = group.editor.documents.first(where: { $0.url == url })
-      else { return }
-      group.editor.pin(document)
-    }
-    shell.requestClose = { [weak self] url in self?.requestClose(url) }
-    shell.revealDirectory = { [weak self] url in self?.tree.revealDirectory(url) }
-    shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
-    shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
-    shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
-    shell.selectPanel = { [weak self] panel in self?.selectPanel(panel) }
-    shell.inlineInputLostFocus = { [weak self] generation in
-      self?.inlineInputLostFocus(generation: generation)
-    }
-    shell.inlineInputMayTakeFocus = { [weak self] in
-      guard let self, let window else { return true }
-      return window.firstResponder === window || window.firstResponder === self
-    }
-  }
-
-  private func wireTree() {
-    tree.onCreated = { [weak self] url in self?.open(url, as: .pinned) }
-    tree.onInputEnded = { [weak self] in self?.inlineInputDidEnd() }
-  }
-
-  /// 骨から `mode` で開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
-  /// 選択して焦点を面へ——既に焦点の文書ならセッションは変わらないので、選択はここで明示に移す。
-  func open(_ url: URL, as mode: EditorSession.OpenMode) {
-    guard let group else { return }
-    let document: EditorDocument
-    do {
-      document = try group.editor.open(url, as: mode)
-    } catch {
-      NSSound.beep()
-      return
-    }
-    tree.reveal(document.url)
-    focusEditor()
-  }
-
-  /// ファイルタブの ×。未保存なら確認を sheet で出し、保存／保存しないで閉じる（保存が外部変更で失敗すれば
-  /// 閉じない）。応答が返るまでに文書が消えていれば何もしない。
-  private func requestClose(_ url: URL) {
-    guard let group, let document = group.editor.documents.first(where: { $0.url == url }) else {
-      return
-    }
-    guard document.isDirty, let window else {
-      group.editor.close(document)
-      return
-    }
-    let alert = UnsavedGate.alert(count: 1, language: localization.language)
-    alert.beginSheetModal(for: window) { [weak self, weak document] response in
-      guard let self, let group = self.group, let document,
-        group.editor.documents.contains(where: { $0 === document }),
-        UnsavedGate.proceed(response, discarding: [document])
-      else { return }
-      group.editor.close(document)
-    }
-  }
-
-  /// 行内入力を出す前に pane 自身を first responder にする——入力欄は焦点を面が持っている（窓か面自身）ときだけ取る
-  /// （`inlineInputMayTakeFocus`）。続けて出したときは前の入力欄がここで焦点を手放し、新しい行が「面が持っている」と
-  /// 見て取る。
-  private func beginNew(isDirectory: Bool) {
-    window?.makeFirstResponder(self)
-    tree.beginNew(isDirectory: isDirectory)
-  }
-
-  /// 入力欄が焦点を失った。別の view（端末・テキスト面・面自身）へ移ったなら取り消し＝入力の終わり。窓へ
-  /// 落ちたなら人の操作ではない（容器が行を捨てた）ので、入力は生かしたまま焦点を面が預かる——行が戻れば
-  /// 入力欄が取り直し、預かっている間に面が焦点を外へ明け渡せば `resignFirstResponder` から同じ判定を通る。
-  private func inlineInputLostFocus(generation: Int) {
-    guard let window else { return }
-    let responder = window.firstResponder
-    if responder === window {
-      window.makeFirstResponder(self)
-      return
-    }
-    guard (responder as? NSView)?.isDescendant(of: sideHost) != true else { return }
-    tree.cancelNew(generation)
+    faceHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
   }
 
   /// 行内入力を預かっている間に焦点を明け渡した。行き先が決まった次のターンに、入力欄と同じ判定へ通す
@@ -240,112 +175,154 @@ final class EditorPaneView: NSView {
     return super.resignFirstResponder()
   }
 
-  /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・作成先を畳む・
-  /// サイドバーを閉じる・cd）。
-  private func inlineInputDidEnd() {
-    reclaimSidebarFocus()
-  }
-
-  /// サイドバーの中の焦点が行き場を失った（行内入力が終わった・検索パネルが隠れた）。焦点がまだサイドバー（骨の host
-  /// 配下）か面自身（`beginNew` が停めた・預かっている）か窓に居れば、その場で面の行き先へ移す。別の view へ移って
-  /// 終わったなら（端末をクリックして抜けた）そこに居るので触らない。
-  func reclaimSidebarFocus() {
-    guard let window else { return }
-    let responder = window.firstResponder
-    let strayed =
-      responder === window || responder === self
-      || (responder as? NSView)?.isDescendant(of: sideHost) == true
-    if strayed { window.makeFirstResponder(focusTarget) }
-  }
-
-  private func focusEditor() {
-    window?.makeFirstResponder(focusTarget)
-  }
-
   // MARK: - セッション → 骨
 
-  /// セッションが変わった。写しを無条件に組み直し、焦点の文書の面を見せ、文書が変わっていればツリーの
-  /// 祖先を開いて選択する。写しを `show` に相乗りさせない——同一文書の未保存・衝突の変化は `show` の
+  /// セッションが変わった。写しを無条件に組み直し、焦点のタブの本体を見せ、タブが変わっていればツリーの
+  /// 祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同一タブの未保存・衝突の変化は `show` の
   /// guard で止まる。
   func sessionDidChange() {
     guard let group else { return }
-    let active = group.editor.activeDocument
-    let changed = active !== document
-    shell.update(from: group.editor, root: tree.root)
-    show(active)
+    let active = group.editor.activeTab
+    let changed = active?.id != shownID
+    shell.update(from: group.editor, root: tree.root, diffMode: diffModes.mode)
+    show(Self.body(of: active))
     if changed, let url = active?.url { tree.reveal(url) }
   }
 
-  /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。プロジェクト検索は結果を捨て、この面の検索パネルが
-  /// 画面に見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
+  /// 本体が見せているタブの識別。
+  var shownID: EditorTab.Key? {
+    switch body {
+    case .document(let document): .document(document.url)
+    case .diff(let diff): .diff(diff.id)
+    case .empty: nil
+    }
+  }
+
+  private static func body(of tab: EditorTab?) -> EditorBody {
+    switch tab {
+    case .document(let document)?: .document(document)
+    case .diff(let diff)?: .diff(diff)
+    case nil: .empty
+    }
+  }
+
+  /// 本体が文書のタブなら、その文書（検索・出現・プロジェクト検索・⌘S の相手）。
+  var document: EditorDocument? {
+    if case .document(let document) = body { return document }
+    return nil
+  }
+
+  /// 本体が diff のタブなら、その diff。
+  var diff: EditorDiff? {
+    if case .diff(let diff) = body { return diff }
+    return nil
+  }
+
+  /// 根が変わった（cd）。ツリーとソース管理パネルを作り直し、握っていたなら握り直す（worktree の状態——メッセージ・操作・
+  /// 失敗——は worktree ごとに残るので、戻れば同じものが見える）。プロジェクト検索は結果を捨て、この面の検索パネルが画面に
+  /// 見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
     tree.cancelNew()
     tree.isLive = false
     tree = FileTree(root: root)
     wireTree()
+    // パネルは作り直されて欄と列が窓から外れるので、外れる前に焦点を面の行き先へ移す。
+    if focusIsInSourceControl { reclaimSidebarFocus() }
+    scm.isShown = false
+    scm.isLive = false
+    scm = ScmPanel(root: root)
+    scmList = Self.scmList(scm)
+    scmGraphList = Self.scmGraphList(scm)
+    wireSourceControl()
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
     if let group {
-      shell.update(from: group.editor, root: root)
-      if let url = group.editor.activeDocument?.url { tree.reveal(url) }
+      shell.update(from: group.editor, root: root, diffMode: diffModes.mode)
+      if let url = group.editor.activeTab?.url { tree.reveal(url) }
     }
   }
 
-  /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。文書を初めて
-  /// 画面に出すときは、最初の描画に色が間に合うよう文書が上限つきで待つ（→ `prepareDocumentIfVisible`）。
-  /// 検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。前の文書の
-  /// 一致の地は消し、新しい文書に 2 つの出どころの和を敷く。
-  /// 焦点が面の中（サイドバーを除く）にあれば新しい行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が
-  /// first responder を窓へ戻すので、外した後では「中にあった」ことが分からない）。サイドバーの焦点（検索結果・行内
-  /// 入力）は面を外しても残るので動かさない。
-  func show(_ document: EditorDocument?) {
-    guard document !== self.document else { return }
+  /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の
+  /// 見え方をコードへ戻す）、新しい本体を載せる（文書の面にはコードの見え方を、diff には今の見せ方の見え方を載せる）。
+  /// 配置を頼み、文書を初めて画面に出すときはその配置で、最初の描画に色が間に合うよう上限つきで待つ（→
+  /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
+  /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が面の中（サイドバーを除く）にあれば新しい
+  /// 行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では
+  /// 「中にあった」ことが分からない）。サイドバーの焦点（検索結果・行内入力）は面を外しても残るので動かさない。
+  func show(_ next: EditorBody) {
+    guard !Self.same(next, body) else { return }
     let hadFocusInside = focusIsInside && !focusIsInSidebar
-    if let previous = self.document { unbind(previous) }
-    self.document = document
-    if let document {
-      document.surface.host = self
-      let view = document.surface.view
-      view.autoresizingMask = []
-      view.frame = bodyRect
-      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なるので、テキスト面はその下。検索バーは後から足すので面の上。
-      addSubview(view, positioned: .below, relativeTo: sidebarHandle)
+    unbind(body)
+    body = next
+    switch next {
+    case .document(let document):
+      SurfaceLook.code.apply(to: document.surface, document: document)
+      install(document.surface)
       observe(document, true)
-    } else {
+    case .diff(let diff):
+      closeSearch()
+      showDiff(diff)
+    case .empty:
       closeSearch()
     }
     search.bind(document)
     occurrences.bind(document)
     if let document { projectSearch.documentDidShow(document) }
     pushFindGround()
-    emptyHost.isHidden = document != nil
-    prepareDocumentIfVisible()
+    refreshNotice()
     needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
     }
   }
 
-  /// 見せている文書を、セッションに告げずに手放す（文書を別の連のセッションへ移す前に、この面の観測・テキスト面の親・
-  /// 一致の強調を外す。外さないと、この面の後片付けが移した先の文書を壊す）。
-  func releaseDocuments() {
-    guard let previous = document else { return }
-    unbind(previous)
-    document = nil
+  /// 同じ本体か（同じ文書・同じ diff・どちらも空）。
+  private static func same(_ a: EditorBody, _ b: EditorBody) -> Bool {
+    switch (a, b) {
+    case (.document(let x), .document(let y)): x === y
+    case (.diff(let x), .diff(let y)): x === y
+    case (.empty, .empty): true
+    default: false
+    }
+  }
+
+  /// 面を本体に載せる。境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なるので、テキスト面はその下。検索バーは後から
+  /// 足すので面の上。
+  func install(_ surface: any TextSurface) {
+    surface.host = self
+    let view = surface.view
+    view.autoresizingMask = []
+    view.frame = bodyRect
+    addSubview(view, positioned: .below, relativeTo: sidebarHandle)
+  }
+
+  /// 見せている本体を、セッションに告げずに手放す（タブの列を別の連のセッションへ移す前に、この面の観測・テキスト面の親・
+  /// 一致の強調を外し、diff は見せるのをやめる。外さないと、この面の後片付けが移した先の文書や diff を壊す）。焦点は
+  /// 動かさない。
+  func releaseBody() {
+    unbind(body)
+    body = .empty
     search.bind(nil)
     occurrences.bind(nil)
   }
 
-  private func unbind(_ document: EditorDocument) {
-    document.surface.view.removeFromSuperview()
-    observe(document, false)
-    document.surface.setHighlights([], for: .findMatch)
-    document.surface.setHighlights([], for: .currentFindMatch)
+  /// 本体を外す——文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の見え方をコードへ戻す。
+  private func unbind(_ body: EditorBody) {
+    switch body {
+    case .document(let document):
+      document.surface.view.removeFromSuperview()
+      observe(document, false)
+      document.surface.setHighlights([], for: .findMatch)
+      document.surface.setHighlights([], for: .currentFindMatch)
+    case .diff(let diff):
+      hideDiff(diff)
+    case .empty: break
+    }
   }
 
-  // MARK: - 可視性（ツリーとプロジェクト検索が根のサービスを握る寿命）
+  // MARK: - 可視性（ツリー・プロジェクト検索・ソース管理パネルが根のサービスを握る寿命）
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
@@ -364,19 +341,35 @@ final class EditorPaneView: NSView {
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。
+  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。配置を頼み、見えるようになった本体を
+  /// 初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても、見えたときにもう一度配置して待つ）。
   private func updateLiveness() {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
     projectSearch.isLive = live
+    scm.isLive = live
+    updateSourceControlShown()
     if live { group?.editor.prepareSurfaces() }
-    prepareDocumentIfVisible()
+    needsLayout = true
   }
 
-  /// 面が画面に見えていれば、結んだ文書を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書が何もしない）。畳まれた
-  /// 面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置の連を復元しても main を止めない。
-  private func prepareDocumentIfVisible() {
-    guard let document, window != nil, !isHiddenOrHasHiddenAncestor else { return }
-    document.prepareToShow()
+  /// ソース管理パネルを出しているか（面が見えていて、サイドバーがソース管理のパネルを出している）を写す。
+  func updateSourceControlShown() {
+    scm.isShown = window != nil && !isHiddenOrHasHiddenAncestor && showsSourceControl
+  }
+
+  /// 面が画面に見えていれば、本体の文書・diff を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書・diff が何もしない）。
+  /// 畳まれた面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置の連を復元しても main を止めない。呼ぶのは面の
+  /// 配置（`layout()`）の最後だけ。配置は描く前に、main の runloop の 1 周の終わりか、利用者の操作の中の
+  /// `layoutSubtreeIfNeeded()` で走り、どちらも文書の受け取りの知らせの外になる。受け取りの知らせの中から pane を同期で配置
+  /// させない——`EditorDocument.prepareToShow` は受け取りの途中で呼ばれると、待たないときも precondition で止まる（待てば
+  /// 同じ文書の受け取りが入れ子になる）。
+  func prepareBodyIfVisible() {
+    guard window != nil, !isHiddenOrHasHiddenAncestor else { return }
+    switch body {
+    case .document(let document): document.prepareToShow()
+    case .diff(let diff): diff.prepareToShow()
+    case .empty: break
+    }
   }
 }

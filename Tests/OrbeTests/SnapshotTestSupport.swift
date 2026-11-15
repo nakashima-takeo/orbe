@@ -11,7 +11,11 @@ class SnapshotTestCase: OrbeTestCase {
 
   // MARK: - 描画
 
-  func renderPNG<V: View>(_ view: V, size: NSSize, dark: Bool) -> Data? {
+  /// `ready` があれば、窓に載せた後それが成り立つまで待ってから撮る——本物の面を載せ直すと、面が見えなくなって見え直した
+  /// ことになり、観測が読み直す（gallery の撮る姿は読み終わった姿）。
+  func renderPNG<V: View>(
+    _ view: V, size: NSSize, dark: Bool, until ready: (() -> Bool)? = nil
+  ) -> Data? {
     let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
     host.frame = NSRect(origin: .zero, size: size)
@@ -22,6 +26,7 @@ class SnapshotTestCase: OrbeTestCase {
     window.appearance = appearance
     window.contentView = host
     host.layoutSubtreeIfNeeded()
+    if let ready { pumpMain(until: ready, "載せ直した面の読み直しが終わる") }
     // SwiftUI の描画コミットに猶予を与える
     RunLoop.current.run(until: Date().addingTimeInterval(0.2))
 

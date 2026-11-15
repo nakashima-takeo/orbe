@@ -152,8 +152,8 @@ final class OverviewPointer {
     }
     let lines = surface.viewportLines
     return ScrollbarGeometry(
-      lineCount: surface.currentContent?.text.lineCount ?? 1, firstLine: lines.first,
-      visibleLines: lines.visible, height: layout.verticalScrollbar.height)
+      contentLines: surface.contentLines, firstLine: lines.first, visibleLines: lines.visible,
+      height: layout.verticalScrollbar.height)
   }
 
   private func horizontalGeometry(_ layout: SurfaceLayout) -> ScrollbarGeometry {

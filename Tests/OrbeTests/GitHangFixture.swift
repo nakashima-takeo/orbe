@@ -163,6 +163,17 @@ final class GitHangFixture {
     return false
   }
 
+  /// main を回しながら、待ちに入るまで待つ。止まるまでに main を経由する段（根のサービスの書き込みの前段・取り直しの
+  /// 連鎖）がある実行は、main を塞ぐ `waitUntilHung` では始まりもしない。
+  @MainActor
+  func pumpUntilHung(timeout: TimeInterval = 30) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !FileManager.default.fileExists(atPath: started), Date() < deadline {
+      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    }
+    return FileManager.default.fileExists(atPath: started)
+  }
+
   /// 待ちを解く。何度呼んでもよい。
   func release() {
     FileManager.default.createFile(atPath: sentinel, contents: Data())

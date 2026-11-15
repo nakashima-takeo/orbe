@@ -205,8 +205,8 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// git が**自力で正常終了**したら、孫が pipe を握っていてもアイドル上限を待たずに返る。
   ///
   /// 待ちを EOF に賭けると、hook が背景へ投げたプロセス（`npm run dev &`・gpg-agent・言語サーバ）が
-  /// 生きている限り EOF が来ないので、成功した実行が本番の 120 秒を丸ごと待ち、`.exclusive` なら
-  /// その間ずっと barrier を占有する——打ち切り機構が解こうとした詰まりを、成功した実行で作り直す。
+  /// 生きている限り EOF が来ないので、成功した実行が本番の 120 秒を丸ごと待ち、根のサービスの書き込みなら
+  /// その間ずっと同じ worktree の順番を占有する——打ち切り機構が解こうとした詰まりを、成功した実行で作り直す。
   /// 実行の完了を決めるのは**子の終了**であって EOF ではない、という契約をここで固定する。
   func testSuccessfulRunReturnsWhileGrandchildHoldsThePipes() throws {
     try fixture.installHook("pre-commit", body: GitHangFixture.daemonizingBody)

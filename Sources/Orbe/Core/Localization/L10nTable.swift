@@ -4,8 +4,8 @@ import Foundation
 /// 両方がここを通す（`language == .ja` 分岐を 1 箇所へ集約）。全 `L10nKey` の網羅は `L10nCompletenessTests`。
 /// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`＋
 /// `L10nTable+Attention.swift`＋`L10nTable+WorktreePalette.swift`＋`L10nTable+ClosedAgents.swift`＋
-/// `L10nTable+Tasks.swift`＋`L10nTable+Automation.swift`＋`L10nTable+Secretary.swift`＋`L10nTable+Board.swift`）を `table` が
-/// 結合する。
+/// `L10nTable+Tasks.swift`＋`L10nTable+Automation.swift`＋`L10nTable+Secretary.swift`＋`L10nTable+Board.swift`＋
+/// `L10nTable+SourceControl.swift`）を `table` が結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
     baseTable
@@ -18,6 +18,7 @@ enum L10n {
     .merging(automationTable) { a, _ in a }
     .merging(secretaryTable) { a, _ in a }
     .merging(boardTable) { a, _ in a }
+    .merging(sourceControlTable) { a, _ in a }
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
     // MARK: Menu
@@ -146,6 +147,40 @@ enum L10n {
     .editorEmptyLead: ("ファイルを開いて編集を開始", "Open a file to start editing"),
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
+
+    // MARK: Editor 面（diff）
+    .editorDiffWorkingTree: ("（作業ツリー）", "(Working Tree)"),
+    .editorDiffStaged: ("（ステージ済み）", "(Staged)"),
+    .editorDiffInline: ("インライン", "Inline"),
+    .editorDiffSide: ("並列", "Side by Side"),
+    .editorDiffNotText: (
+      "バイナリか UTF-8 でないファイルのため、差分を表示できません",
+      "Can't show the diff: the file is binary or not UTF-8"
+    ),
+    .editorDiffSymlink: (
+      "シンボリックリンクのため、差分を表示できません", "Can't show the diff: the file is a symbolic link"
+    ),
+    .editorDiffDirectory: (
+      "ディレクトリのため、差分を表示できません", "Can't show the diff: the path is a directory"
+    ),
+    .editorDiffUnreadable: (
+      "ファイルを読み込めないため、差分を表示できません", "Can't show the diff: the file couldn't be read"
+    ),
+    .editorDiffConflicted: (
+      "競合中のため、差分を表示できません", "Can't show the diff: the file has merge conflicts"
+    ),
+    .editorDiffFailed: (
+      "git から版を取得できないため、差分を表示できません",
+      "Can't show the diff: git couldn't read the file's versions"
+    ),
+    .editorDiffNowhereInWorkingTree: (
+      "このパスは index にも作業ツリーにもないため、差分を表示できません",
+      "Can't show the diff: the path is neither in the index nor in the working tree"
+    ),
+    .editorDiffNowhereStaged: (
+      "このパスは HEAD にも index にもないため、差分を表示できません",
+      "Can't show the diff: the path is neither in HEAD nor in the index"
+    ),
 
     // MARK: Editor 面（骨: エクスプローラー）
     .editorExplorerTitle: ("エクスプローラー", "Explorer"),

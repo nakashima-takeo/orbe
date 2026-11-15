@@ -10,7 +10,7 @@ extension CleanTone {
   var foreground: Color {
     switch self {
     case .loss: return Color.theme.stateWaiting
-    case .safe: return Color.theme.diffAdded
+    case .safe: return Color.theme.success
     case .neutral: return Color.theme.textMuted
     case .danger: return Color.theme.danger
     case .status: return Color.theme.stateWorking
@@ -21,7 +21,7 @@ extension CleanTone {
   var fill: Color {
     switch self {
     case .loss: return Color.theme.tintWaiting
-    case .safe: return Color.theme.tintDiffAdded
+    case .safe: return Color.theme.tintSuccess
     case .neutral: return Color.theme.plainPillFill
     case .danger: return Color.theme.tintRed
     case .status: return .clear

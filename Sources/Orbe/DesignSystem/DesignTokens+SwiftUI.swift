@@ -36,8 +36,7 @@ struct ThemeColors {
       Color(red: 0x5b / 255, green: 0x34 / 255, blue: 0xc4 / 255),
     ],
     startPoint: UnitPoint(x: 0, y: 0), endPoint: UnitPoint(x: 0.6, y: 1))
-  // diff / 成功・エラー・競合
-  let diffAdded = Color(nsColor: Theme.Color.diffAdded)
+  // 成功・エラー・競合
   let success = Color(nsColor: Theme.Color.success)
   let danger = Color(nsColor: Theme.Color.danger)
   let conflict = Color(nsColor: Theme.Color.conflict)
@@ -77,7 +76,7 @@ struct ThemeColors {
   let tintWorking = Color(nsColor: Theme.Color.tintWorking)
   let tintWaiting = Color(nsColor: Theme.Color.tintWaiting)
   let tintDone = Color(nsColor: Theme.Color.tintDone)
-  let tintDiffAdded = Color(nsColor: Theme.Color.tintDiffAdded)
+  let tintSuccess = Color(nsColor: Theme.Color.tintSuccess)
   let tintRed = Color(nsColor: Theme.Color.tintRed)
   // オーバーレイ暗幕
   let scrim = Color(nsColor: Theme.Color.scrim)
@@ -96,9 +95,12 @@ struct ThemeColors {
   let editorIcon = Color(nsColor: Theme.Color.editorIcon)
   let editorText = Color(nsColor: Theme.Color.editorText)
   let editorTertiary = Color(nsColor: Theme.Color.editorTertiary)
-  let editorModified = Color(nsColor: Theme.Color.editorModified)
+  let editorCaution = Color(nsColor: Theme.Color.editorCaution)
   let editorTabCloseHover = Color(nsColor: Theme.Color.editorTabCloseHover)
   let editorPreviewHatch = Color(nsColor: Theme.Color.editorPreviewHatch)
+  // git の変化の種類（エクスプローラーのバッジと名前）
+  let diffAdded = Color(nsColor: Theme.Color.diffAdded)
+  let diffModified = Color(nsColor: Theme.Color.diffModified)
 }
 
 extension Font {
@@ -148,6 +150,16 @@ struct ThemeFonts {
   let editorSearchField = Font(Theme.Typography.editorSearchField as CTFont)
   let editorSearchOption = Font(Theme.Typography.editorSearchOption as CTFont)
   let editorSearchNote = Font(Theme.Typography.editorSearchNote as CTFont)
+  let editorDiffNote = Font(Theme.Typography.editorDiffNote as CTFont)
+  let editorDiffSegment = Font(Theme.Typography.editorDiffSegment as CTFont)
+  // エディター面のソース管理
+  let editorRailBadge = Font(Theme.Typography.editorRailBadge as CTFont)
+  let editorScmSection = Font(Theme.Typography.editorScmSection as CTFont)
+  let editorScmButton = Font(Theme.Typography.editorScmButton as CTFont)
+  let editorScmNote = Font(Theme.Typography.editorScmNote as CTFont)
+  let editorScmBandName = Font(Theme.Typography.editorScmBandName as CTFont)
+  let editorScmBandProgress = Font(Theme.Typography.editorScmBandProgress as CTFont)
+  let editorScmStop = Font(Theme.Typography.editorScmStop as CTFont)
 }
 
 extension NSFont {

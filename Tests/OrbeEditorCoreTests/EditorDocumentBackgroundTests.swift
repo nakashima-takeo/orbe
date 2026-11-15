@@ -29,6 +29,47 @@ final class EditorDocumentBackgroundTests: XCTestCase {
 
   // MARK: - 古い版の結果
 
+  /// 行差分の上限は文書が受け取る値で、変えると裏へ頼み直し、既定（ガター）では 1 区間に畳む大きな書き換えも行ごとの区間に
+  /// なる。上限を戻せば畳んだ区間に戻る。ハンクの底（`hunksBase`）は、底を置き直したときだけ、届くまで前の底のまま。
+  func testTheHunkLimitIsTheDocumentsAndRequestsAgain() throws {
+    let n = LineDiff.maximumComparedLines
+    let old = (0..<n).map { "old \($0)\n" }.joined()
+    let new = (0..<n).map { $0 % 100 == 0 ? "new \($0)\n" : "old \($0)\n" }.joined()
+    let (document, _) = try open("big.txt", new)
+    document.baseline = old
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(document.hunks.count, 1, "前提: 既定の上限では 1 区間に畳む")
+    var notified = 0
+    document.onHunksChange = { notified += 1 }
+    document.hunkLimit = .edits(n)
+    XCTAssertEqual(document.hunksBase, old, "上限だけを変えた間は、前の上限の結果のまま今の底のハンク")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(document.hunks.count, n / 100, "変えた上限で行ごとに取り直す")
+    XCTAssertGreaterThan(notified, 0, "結果が届けば知らせる")
+    document.baseline = old + "tail\n"
+    XCTAssertEqual(document.hunksBase, old, "底を変えたら、届くまで前の底とそのハンク")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(document.hunksBase, old + "tail\n")
+    document.baseline = old
+    document.hunkLimit = LineDiff.gutter
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(document.hunks.count, 1)
+  }
+
+  /// 同じ上限を置き直しても頼み直さない——見え方を載せ直すたびに上限を押す呼び手が、届いた結果の知らせでまた載せ直しても、
+  /// 裏の行差分が回り続けない。
+  func testSettingTheSameHunkLimitAgainRequestsNothing() throws {
+    let (document, _) = try open("same.txt", "a\nb\n")
+    document.baseline = "a\n"
+    document.hunkLimit = .edits(10)
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    var notified = 0
+    document.onHunksChange = { notified += 1 }
+    document.hunkLimit = .edits(10)
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(notified, 0, "同じ上限では結果が届かない")
+  }
+
   /// 問いを頼んでから結果が届くまでに本文が変われば、結果はその後の編集に合わせてずらして届く——編集より後ろの一致は
   /// 動いた字に付いていき、編集に掛かった一致は落ちる。
   func testAnAnswerReachesTheTextAsEditedAfterItWasAsked() throws {
@@ -139,8 +180,8 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     }
   }
 
-  /// 構文木が誤りを含まなくなれば、その構文木の範囲を丸ごと作り直す——誤りを含む間に枠で落ちた、余白を超える構文（区画
-  /// をいくつもまたぐコメント）の色が、誤りから遠い編集していない行にも戻る。
+  /// 構文木が誤りを含まなくなれば、その構文木の範囲を丸ごと作り直す——誤りを含む間に枠で落ちた、余白を超える構文
+  /// （格子の目をいくつもまたぐコメント）の色が、誤りから遠い編集していない行にも戻る。
   func testFixingTheLastErrorRestoresColorsDroppedByTheFrame() throws {
     let comment = "/*\n" + String(repeating: "note\n", count: 30_000) + "*/\n"
     let source = "let = 1\n" + comment + "let b = 2\n"
@@ -228,6 +269,18 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertEqual(role(ofRow: 1500, in: document), .keyword)
   }
 
+  /// 見えている行より上で、行の数を変えずに字の数が大きく変わる編集（上の行に長い文を足すなど）の後も、打鍵が続く間に
+  /// 見えている行を作り直す。見えている行の番号は変わらないので、面は見えている範囲を知らせ直さない。
+  func testVisibleLinesAreRebuiltAfterAnEditAboveThemWithoutBeingToldAgain() throws {
+    let (document, surface) = try open("above.js", Self.template, quietDelay: .seconds(3600))
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    show(row: 2500, of: surface)
+
+    surface.replace(NSRange(location: 4, length: 1), with: String(repeating: " ", count: 40_000))
+    XCTAssertTrue(
+      pump(document) { self.role(ofRow: 2500, in: $0) == .keyword }, "見えている行を作り直した")
+  }
+
   /// 打鍵が止んで待ちが明ければ、急かさなくても文書全体を作り直す。
   func testTheRestIsRebuiltWithoutHurryingOnceTypingStops() throws {
     let (document, surface) = try open("quiet.js", Self.template, quietDelay: .milliseconds(10))
@@ -249,9 +302,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
 
   /// 面の見えている範囲を、行 `row` から 10 行にする。
   private func show(row: Int, of surface: FakeTextSurface) {
-    let document = try? XCTUnwrap(surface.delegate as? EditorDocument)
-    surface.viewport = TextViewport(
-      firstVisible: document?.text.lineStart(row) ?? 0, visibleLines: 10)
+    surface.viewport = TextViewport(top: RowPosition(line: row), visibleLines: 10)
     surface.delegate?.surfaceDidChangeViewport(surface)
   }
 

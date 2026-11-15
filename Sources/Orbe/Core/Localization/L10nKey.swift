@@ -542,6 +542,20 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorEmptySearchProject
   case editorEmptyBackToTerminal
 
+  // MARK: - Editor 面（diff）
+  case editorDiffWorkingTree
+  case editorDiffStaged
+  case editorDiffInline
+  case editorDiffSide
+  case editorDiffNotText
+  case editorDiffSymlink
+  case editorDiffDirectory
+  case editorDiffUnreadable
+  case editorDiffConflicted
+  case editorDiffFailed
+  case editorDiffNowhereInWorkingTree
+  case editorDiffNowhereStaged
+
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle
   case editorNewFile
@@ -568,6 +582,71 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorSearchNoResults
   case editorSearchInvalidRegex
   case editorSearchCouldNotStart
+
+  // MARK: - Editor 面（ソース管理。L10nTable+SourceControl）
+  case editorRailSourceControl
+  case editorScmTitle
+  case editorScmStaged
+  case editorScmChanges
+  case editorScmGraph
+  case editorScmPlaceholderBranch
+  case editorScmPlaceholder
+  case editorScmCommit
+  case editorScmSync
+  case editorScmPublish
+  case editorScmMoreActions
+  case editorScmCommitActions
+  case editorScmAmend
+  case editorScmCommitAndPush
+  case editorScmUndo
+  case editorScmPull
+  case editorScmPush
+  case editorScmFetch
+  case editorScmRefresh
+  case editorScmOpenFile
+  case editorScmStage
+  case editorScmUnstage
+  case editorScmDiscard
+  case editorScmStageAll
+  case editorScmUnstageAll
+  case editorScmDiscardAll
+  case editorScmShowMore
+  case editorScmStop
+  case editorScmRunningStage
+  case editorScmRunningUnstage
+  case editorScmRunningDiscard
+  case editorScmRunningCommit
+  case editorScmRunningAmend
+  case editorScmRunningUndo
+  case editorScmRunningPull
+  case editorScmRunningPush
+  case editorScmRunningFetch
+  case editorScmRunningSync
+  case editorScmRunningPublish
+  case editorScmRunningCommitAndPush
+  case editorScmNotManaged
+  case editorScmDiscardTitleOne
+  case editorScmDiscardTitleOther
+  case editorScmDiscardMessage
+  case editorScmDiscardToTrashOne
+  case editorScmDiscardToTrashOther
+  case editorScmDiscardConfirm
+  case editorScmFailureAuthentication
+  case editorScmFailureHostKey
+  case editorScmFailurePushRejected
+  case editorScmFailureConflicted
+  case editorScmFailureInProgress
+  case editorScmFailureDetached
+  case editorScmFailureUndoDetached
+  case editorScmFailureNoUpstream
+  case editorScmFailureNoPushDestination
+  case editorScmFailureHeadPushed
+  case editorScmFailureShallow
+  case editorScmFailureConflictsRemain
+  case editorScmFailureContentMismatch
+  case editorScmFailureNetworkBusy
+  case editorScmFailureRewriteDuringNetwork
+  case editorScmFailurePushDuringRewrite
 
   // MARK: - Editor 面（未保存の確認・外部変更の上書き）
   case editorUnsavedTitle
@@ -676,6 +755,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsSoundCustomWaitingRow
   case settingsSoundCustomSameAsDone
   case settingsMenuBarNotificationDuration
+  case settingsScmAutoFetch
   case settingsSecondsValue
   case settingsUnset
   case settingsToggleOn
@@ -791,6 +871,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutToggleEditorFace
   case helpShortcutSaveDocument
   case helpShortcutFindInProject
+  case helpShortcutScmCommit
+  case helpShortcutScmCommitAndPush
   case helpShortcutQuit
   case helpShortcutSwitchWorkspace
   case helpShortcutNewTab

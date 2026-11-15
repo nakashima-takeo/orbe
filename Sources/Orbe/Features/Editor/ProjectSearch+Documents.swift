@@ -190,5 +190,5 @@ extension ProjectSearch: RootFilesObserver {
 
   func rootFilesStatusDidChange(_ files: RootFiles) {}
 
-  func rootFiles(_ files: RootFiles, baselineDidChange url: URL) {}
+  func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
 }

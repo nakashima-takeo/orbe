@@ -1,94 +1,160 @@
 import Foundation
 import OrbeEditorCore
 
-/// 連（`TabGroup`）1 つが持つ、開いた文書の列と焦点の文書。文書 1 つにテキスト面 1 つを対で持ち（開いてから
-/// 閉じるまで）、切り替えは「どの文書の面を見せるか」を変えるだけなので undo・選択・スクロールは
-/// 文書ごとに残る。変化は `onChange` 1 本で連へ上がる。
+/// 連（`TabGroup`）1 つが持つ、エディター面のタブの列（文書のタブと diff のタブ）と焦点のタブ。連のタブはどれも同じ
+/// セッションを見る。文書は実体の URL ごとに 1 つで、テキスト面 1 つを開いてから閉じるまで対で持ち、その文書を使うタブ
+/// （ファイルタブと、それを新しい側に使う作業ツリー diff）が持ち主になる——最後の持ち主が離れたら閉じる。切り替えは
+/// 「どのタブの本体を見せるか」を変えるだけなので、undo・選択・スクロールは文書ごとに残る（同じ文書のファイルタブと作業
+/// ツリー diff は、同じ面の位置・選択・undo を共有する）。変化は `onChange` 1 本で連へ上がる。
 ///
-/// 列の中に仮の文書（見るだけのファイル）を高々 1 つ持つ。仮で開くと今の仮の文書をその位置で入れ替えるので、見て回る
-/// だけなら列が伸びない。仮の文書は常に未保存でない——未保存になった瞬間に普通の文書へ戻すので、入れ替えで中身を失わない。
-/// 普通の文書は仮に戻らない。
+/// 列の中に仮のタブ（見るだけのタブ）を高々 1 つ持つ——文書と diff で枠は 1 つ。仮で開くと今の仮のタブをその位置で入れ替える
+/// ので、見て回るだけなら列が伸びない。仮のタブの文書は常に未保存でない——未保存になった瞬間に普通のタブへ戻すので、入れ替えで
+/// 中身を失わない。普通のタブは仮に戻らない。
 @MainActor
 final class EditorSession {
   /// 開き方。入口ごとにどちらかを必ず選ぶ（どの入口が仮かは `docs/spec/editor/shell.md` の「仮のタブ」が持つ）。
   enum OpenMode {
-    /// 仮の文書として開く。既に開いていれば焦点を移すだけ（普通の文書は普通のまま）。
+    /// 仮のタブとして開く。既に開いていれば焦点を移すだけ（普通のタブは普通のまま）。
     case preview
-    /// 普通の文書として開く。既に開いている仮の文書なら普通に変える。
+    /// 普通のタブとして開く。既に開いている仮のタブなら普通に変える。
     case pinned
   }
 
   private let surfaces: EditorSurfaces
-  private(set) var documents: [EditorDocument] = []
-  private(set) var activeDocument: EditorDocument?
-  /// 仮の文書（列の中の 1 つか nil）。
-  private(set) var preview: EditorDocument?
+  private(set) var tabs: [EditorTab] = []
+  private(set) var activeID: EditorTab.Key?
+  /// 仮のタブ（列の中の 1 つか nil）。
+  private(set) var previewID: EditorTab.Key?
   /// 文書ごとの根のサービスとの結線。文書と同寿命（閉じれば捨てる）。
   private var links: [ObjectIdentifier: DocumentLink] = [:]
-  /// 列・焦点・仮の文書・未保存の有無・「ディスクが変わった」の有無が変わった。
+  /// 列・焦点・仮のタブ・未保存の有無・「ディスクが変わった」の有無が変わった。
   var onChange: (() -> Void)?
-  /// 文書のテキスト面が first responder になった／やめた。
+  /// 本体のテキスト面が first responder になった／やめた。
   var onFocusChange: (() -> Void)?
 
   init(surfaces: EditorSurfaces) {
     self.surfaces = surfaces
   }
 
+  /// 焦点のタブ。
+  var activeTab: EditorTab? { activeID.flatMap(tab) }
+
+  /// 焦点のタブが文書のタブなら、その文書。
+  var activeDocument: EditorDocument? {
+    if case .document(let document)? = activeTab { return document }
+    return nil
+  }
+
+  func tab(_ id: EditorTab.Key) -> EditorTab? { tabs.first { $0.id == id } }
+
+  /// 開いている文書（タブの列の順に、それを使う最初のタブの位置で 1 つずつ）。
+  var documents: [EditorDocument] {
+    var seen = Set<ObjectIdentifier>()
+    return tabs.compactMap(\.document).filter { seen.insert(ObjectIdentifier($0)).inserted }
+  }
+
   /// 閉じれば失われる文書（未保存の列）。
   func documentsToDiscard() -> [EditorDocument] { documents.filter(\.isDirty) }
 
-  /// 永続から戻す。順に開き（読めないパスは黙って落とす）、`preview` のパスの文書を仮にし、`active` が残っていればそれを、
-  /// 無ければ先頭を焦点にする。既に居るものは壊さない——materialize より先に制御 API の `open_file` が文書を開いて
-  /// いれば、その文書の開き方と焦点を保つ。通知は 1 本にまとめる。
+  /// 永続から戻す。順に開き（読めないパスは黙って落とす）、`preview` のパスの文書を仮にし（diff のタブが既に使っている
+  /// 未保存の文書なら、普通のタブにする）、`active` が残っていればそれを、無ければ先頭を焦点にする。既に居るものは
+  /// 壊さない——materialize より先に制御 API の `open_file` が文書を開いていれば、その文書の開き方と焦点を保つ。通知は
+  /// 1 本にまとめる。
   func restore(paths: [String], active: String, preview: String?) {
     let previewURL = preview.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath() }
+    var restored: [EditorTab.Key] = []
     for path in paths {
       let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
-      guard !documents.contains(where: { $0.url == url }), let document = try? make(url) else {
-        continue
-      }
-      documents.append(document)
-      if self.preview == nil, url == previewURL { self.preview = document }
+      guard tab(.document(url)) == nil, let document = try? document(for: url) else { continue }
+      tabs.append(.document(document))
+      restored.append(.document(url))
+      if previewID == nil, url == previewURL { previewID = .document(url) }
     }
-    guard !documents.isEmpty else { return }
+    guard !restored.isEmpty else { return }
     let activeURL = URL(fileURLWithPath: active).resolvingSymlinksInPath()
-    activeDocument = activeDocument ?? documents.first { $0.url == activeURL } ?? documents[0]
+    activeID =
+      activeID ?? restored.first { $0 == .document(activeURL) } ?? tabs.first?.id
+    settlePreview()
     onChange?()
   }
 
-  /// ファイルを `mode` で開いて焦点にする。既に開いていれば焦点を移すだけ（`.pinned` なら仮の文書を普通に変える）。仮で
-  /// 新しく開けば、今の仮の文書をその位置で入れ替える（閉じる＋開くを 1 本の通知で）。読めない・UTF-8 でなければ文書の
-  /// エラー、テキスト面を作れなければ `EditorSurfaceError.noMetalDevice` で失敗し、列・仮の文書は変わらない。
-  /// 文書の識別は symlink を解いた実体のパス——保存は一時ファイルの rename なので、リンクのパスへ書くと
-  /// リンク自体が通常ファイルに置き換わり実体へ届かない。同じ実体を別の綴りで開いても文書が割れない。
+  /// ファイルを `mode` のファイルタブで開いて焦点にする。既に開いていれば焦点を移すだけ（`.pinned` なら仮のタブを普通に
+  /// 変える）。仮で新しく開けば、今の仮のタブをその位置で入れ替える（閉じる＋開くを 1 本の通知で）。文書が diff のために
+  /// 既に開いていればそれを使う。読めない・UTF-8 でなければ文書のエラー、テキスト面を作れなければ
+  /// `EditorSurfaceError.noMetalDevice` で失敗し、列・仮のタブは変わらない。文書の識別は symlink を解いた実体のパス——
+  /// 保存は一時ファイルの rename なので、リンクのパスへ書くとリンク自体が通常ファイルに置き換わり実体へ届かない。同じ実体を
+  /// 別の綴りで開いても文書が割れない。
   @discardableResult
   func open(_ url: URL, as mode: OpenMode) throws -> EditorDocument {
     let url = url.resolvingSymlinksInPath()
-    if let existing = documents.first(where: { $0.url == url }) {
-      let pins = mode == .pinned && existing === preview
-      guard pins || activeDocument !== existing else { return existing }
-      if pins { preview = nil }
-      activeDocument = existing
-      onChange?()
+    if case .document(let existing)? = tab(.document(url)) {
+      focus(.document(url), as: mode)
       return existing
     }
-    let document = try make(url)
-    if mode == .preview, let old = preview,
-      let index = documents.firstIndex(where: { $0 === old })
-    {
-      documents[index] = document
-      links[ObjectIdentifier(old)] = nil
-    } else {
-      documents.append(document)
-    }
-    if mode == .preview { preview = document }
-    activeDocument = document
-    onChange?()
+    let document = try document(for: url)
+    place(.document(document), as: mode)
     return document
   }
 
-  /// 文書を読み、面を作って結線する（列には入れない）。
-  private func make(_ url: URL) throws -> EditorDocument {
+  /// diff `id` を `mode` の diff タブで開いて焦点にする（既に開いていれば焦点を移すだけ）。作業ツリー diff の新しい側は
+  /// その実体の文書——開いていればそれを使い、無ければ開いて持つ（タブには出ない）。どの文書を使うかは diff が作業ツリーの
+  /// 姿から決め直す。テキスト面を作れなければ `EditorSurfaceError.noMetalDevice` で失敗する。
+  @discardableResult
+  func openDiff(_ id: EditorDiff.Key, as mode: OpenMode) throws -> EditorDiff {
+    if case .diff(let existing)? = tab(.diff(id)) {
+      focus(.diff(id), as: mode)
+      return existing
+    }
+    let diff = try EditorDiff(id: id, documents: diffDocuments, surfaces: surfaces)
+    place(.diff(diff), as: mode)
+    return diff
+  }
+
+  /// diff が新しい側の文書を引く口と、替わったと知らせる口（このセッション）。
+  private var diffDocuments: EditorDiff.Documents {
+    EditorDiff.Documents(
+      open: { [unowned self] url in try document(for: url) },
+      switched: { [weak self] previous in self?.diffDocumentSwitched(from: previous) })
+  }
+
+  /// diff の新しい側の文書が替わった——前の文書は、ほかに使うタブが無ければ閉じる。今の文書が未保存なら仮のタブを普通に
+  /// 戻し、タブ行を作り直す。
+  private func diffDocumentSwitched(from previous: EditorDocument?) {
+    if let previous, !tabs.contains(where: { $0.document === previous }) {
+      links[ObjectIdentifier(previous)] = nil
+    }
+    settlePreview()
+    onChange?()
+  }
+
+  /// 開いているタブ `id` へ焦点を移す（`.pinned` なら仮のタブを普通に変える）。
+  private func focus(_ id: EditorTab.Key, as mode: OpenMode) {
+    let pins = mode == .pinned && previewID == id
+    guard pins || activeID != id else { return }
+    if pins { previewID = nil }
+    activeID = id
+    onChange?()
+  }
+
+  /// 新しいタブを列へ置いて焦点にする（仮なら今の仮のタブをその位置で入れ替える）。未保存の文書を使うタブは、仮で頼まれても
+  /// はじめから普通のタブ（末尾）にする——仮のタブの文書は常に未保存でない。
+  private func place(_ tab: EditorTab, as mode: OpenMode) {
+    let mode = tab.document?.isDirty == true ? .pinned : mode
+    if mode == .preview, let old = previewID, let index = tabs.firstIndex(where: { $0.id == old }) {
+      let replaced = tabs[index]
+      tabs[index] = tab
+      release(replaced)
+    } else {
+      tabs.append(tab)
+    }
+    if mode == .preview { previewID = tab.id }
+    activeID = tab.id
+    onChange?()
+  }
+
+  /// 実体 `url` の文書（開いていればそれ、無ければ読んで面を作って結線する。列に入るのは、使うタブを置いたとき）。
+  private func document(for url: URL) throws -> EditorDocument {
+    if let existing = documents.first(where: { $0.url == url }) { return existing }
     let contents = try EditorDocument.read(url)
     guard let surface = surfaces.make() else { throw EditorSurfaceError.noMetalDevice }
     let document = EditorDocument(
@@ -99,9 +165,12 @@ final class EditorSession {
 
   /// 文書の通知をこのセッションへ結び、結線を持つ。
   private func own(_ document: EditorDocument, link: DocumentLink?) {
-    document.onDirtyChange = { [weak self, weak document] dirty in
+    document.onDirtyChange = { [weak self, weak document] _ in
       guard let self else { return }
-      if dirty, let document, document === preview { preview = nil }
+      for case .diff(let diff) in tabs where diff.document === document {
+        diff.documentDirtyDidChange()
+      }
+      settlePreview()
       onChange?()
     }
     document.onDiskChange = { [weak self] _ in self?.onChange?() }
@@ -109,41 +178,79 @@ final class EditorSession {
     links[ObjectIdentifier(document)] = link
   }
 
-  /// 別のセッションの文書を列の末尾へ引き取る（cd で連が畳まれたとき）。`other` の列の順に見て、同じ実体が自分に
-  /// 無ければ結線ごと移す。あれば、`other` の文書だけが未保存のときに限り自分の文書をその位置で置き換え、それ以外は
-  /// `other` の文書を捨てる（未保存でも）。仮の文書は自分に仮が無いときだけ仮のまま移り、あれば普通の文書になる。
-  /// 焦点は自分のものを保ち、自分に文書が無かったときだけ `other` の焦点にする。`other` は通知なしに空になり、
-  /// 自分の変化は 1 本の通知で上げる。文書の面を見せていた pane は、呼ぶ前に手放しておく。
+  /// 別のセッションのタブを列の末尾へ引き取る（cd で連が畳まれたとき）。文書（diff だけが使う文書を含む）は実体ごとに
+  /// 勝ち負けを決める——自分に無ければ結線ごと移す。あれば、`other` の文書だけが未保存のときに限り `other` の文書が
+  /// 勝ち、それ以外は自分の文書が勝つ（負けた側は未保存でも捨てる）。タブは `other` の列の順に見て、同じタブが自分に
+  /// あれば捨て、無ければ末尾へ足す。捨てる diff の文書が未保存で、自分の同じ diff が文書を持たない（消えた・表示できない
+  /// と読んだまま）なら、自分の diff がその実体の勝者を新しい側に使う——未保存の本文は作業ツリーの姿より先に立つ。仮の
+  /// タブは自分に仮が無いときだけ仮のまま移り、あれば普通のタブになる。足した後、列のすべての文書のタブと diff の新しい
+  /// 側を勝った文書に揃える。焦点は自分のものを保ち、自分にタブが無かったときだけ `other` の焦点にする。`other` は
+  /// 通知なしに空になり、自分の変化は 1 本の通知で上げる。本体を見せていた pane は、呼ぶ前に手放しておく。
   func adopt(from other: EditorSession) {
-    guard !other.documents.isEmpty else { return }
-    let wasEmpty = documents.isEmpty
-    for document in other.documents {
-      let link = other.links[ObjectIdentifier(document)]
-      guard let index = documents.firstIndex(where: { $0.url == document.url }) else {
-        documents.append(document)
-        own(document, link: link)
-        if document === other.preview, preview == nil { preview = document }
+    guard !other.tabs.isEmpty else { return }
+    let wasEmpty = tabs.isEmpty
+    let winners = settleDocuments(from: other)
+    for tab in other.tabs {
+      if let mine = self.tab(tab.id) {
+        if case .diff(let diff) = mine, diff.document == nil, let theirs = tab.document,
+          theirs.isDirty
+        {
+          diff.replaceDocument(with: winners[theirs.url] ?? theirs)
+        }
         continue
       }
-      let mine = documents[index]
-      guard document.isDirty, !mine.isDirty else { continue }
-      links[ObjectIdentifier(mine)] = nil
-      if preview === mine { preview = nil }
-      documents[index] = document
-      own(document, link: link)
-      if activeDocument === mine { activeDocument = document }
+      if case .diff(let diff) = tab { diff.rebind(diffDocuments) }
+      tabs.append(tab)
+      if tab.id == other.previewID, previewID == nil { previewID = tab.id }
     }
+    replaceLosers(with: winners)
     if wasEmpty {
-      activeDocument =
-        other.activeDocument.flatMap { active in
-          documents.first { $0 === active }
-        } ?? documents.first
+      activeID = other.activeID.flatMap { tab($0)?.id } ?? tabs.first?.id
     }
-    other.documents = []
+    let used = Set(documents.map(ObjectIdentifier.init))
+    links = links.filter { used.contains($0.key) }
+    other.tabs = []
     other.links = [:]
-    other.activeDocument = nil
-    other.preview = nil
+    other.activeID = nil
+    other.previewID = nil
+    settlePreview()
+    for case .diff(let diff) in tabs { diff.settle() }
     onChange?()
+  }
+
+  /// `other` の文書の勝ち負けを実体ごとに決め、移る文書（自分に無いもの・勝ったもの）を結線ごと引き取る。戻り値は両方に
+  /// あった実体の勝者。
+  private func settleDocuments(from other: EditorSession) -> [URL: EditorDocument] {
+    var winners: [URL: EditorDocument] = [:]
+    for document in other.documents {
+      let link = other.links[ObjectIdentifier(document)]
+      guard let mine = documents.first(where: { $0.url == document.url }) else {
+        own(document, link: link)
+        continue
+      }
+      let theirs = document.isDirty && !mine.isDirty
+      winners[document.url] = theirs ? document : mine
+      if theirs { own(document, link: link) }
+    }
+    return winners
+  }
+
+  /// 列の文書のタブと diff の新しい側を、その実体の勝者に揃える（文書のタブは同じ位置で置き換える）。
+  private func replaceLosers(with winners: [URL: EditorDocument]) {
+    for (index, tab) in tabs.enumerated() {
+      guard let document = tab.document, let winner = winners[document.url], winner !== document
+      else { continue }
+      switch tab {
+      case .document: tabs[index] = .document(winner)
+      case .diff(let diff): diff.replaceDocument(with: winner)
+      }
+    }
+  }
+
+  /// 仮のタブの文書が未保存なら普通のタブにする（入れ替えで中身を失わない）。
+  private func settlePreview() {
+    guard let previewID, tab(previewID)?.document?.isDirty == true else { return }
+    self.previewID = nil
   }
 
   /// テキスト面を描く用意を裏で始める（エディター面が初めて見えたとき。何度呼んでもよい）。
@@ -151,36 +258,50 @@ final class EditorSession {
     surfaces.prepare()
   }
 
-  func activate(_ document: EditorDocument) {
-    guard activeDocument !== document, documents.contains(where: { $0 === document }) else {
-      return
-    }
-    activeDocument = document
+  func activate(_ id: EditorTab.Key) {
+    guard activeID != id, tab(id) != nil else { return }
+    activeID = id
     onChange?()
   }
 
-  /// 仮の文書を普通の文書にする（仮でなければ何もしない）。
-  func pin(_ document: EditorDocument) {
-    guard document === preview else { return }
-    preview = nil
+  /// 仮のタブを普通のタブにする（仮でなければ何もしない）。
+  func pin(_ id: EditorTab.Key) {
+    guard previewID == id else { return }
+    previewID = nil
     onChange?()
   }
 
-  /// 焦点の文書を保存する。force でなければ、ディスクが変わっていれば失敗する（→ `EditorDocument.save`）。仮の文書は
-  /// 保存しても仮のまま。
+  /// 焦点の文書のタブの文書を保存する。force でなければ、ディスクが変わっていれば失敗する（→ `EditorDocument.save`）。
+  /// 仮のタブは保存しても仮のまま。diff のタブには保存が無い。
   func saveActive(force: Bool = false) throws {
     try activeDocument?.save(force: force)
   }
 
-  /// 文書を閉じる（面も一緒に消える）。未保存でも黙って捨てる。焦点だった文書を閉じれば隣の文書へ。
-  func close(_ document: EditorDocument) {
-    guard let index = documents.firstIndex(where: { $0 === document }) else { return }
-    documents.remove(at: index)
-    links[ObjectIdentifier(document)] = nil
-    if preview === document { preview = nil }
-    if activeDocument === document {
-      activeDocument = documents.isEmpty ? nil : documents[min(index, documents.count - 1)]
+  /// タブ `id` を閉じたときに閉じる文書（その文書を使う最後のタブなら、その文書。ほかのタブが使っていれば nil）。未保存の
+  /// 確認は、これが未保存のときだけ出す。
+  func documentClosed(byClosing id: EditorTab.Key) -> EditorDocument? {
+    guard let document = tab(id)?.document else { return nil }
+    return tabs.contains { $0.id != id && $0.document === document } ? nil : document
+  }
+
+  /// タブを閉じる。未保存でも黙って捨てる（その文書を使う最後のタブなら文書と面も閉じる）。焦点だったタブを閉じれば隣の
+  /// タブへ。
+  func close(_ id: EditorTab.Key) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    let closed = tabs.remove(at: index)
+    release(closed)
+    if previewID == id { previewID = nil }
+    if activeID == id {
+      activeID = tabs.isEmpty ? nil : tabs[min(index, tabs.count - 1)].id
     }
+    settlePreview()
     onChange?()
+  }
+
+  /// 列から外したタブの文書を、もう使うタブが無ければ閉じる。
+  private func release(_ closed: EditorTab) {
+    guard let document = closed.document, !tabs.contains(where: { $0.document === document })
+    else { return }
+    links[ObjectIdentifier(document)] = nil
   }
 }

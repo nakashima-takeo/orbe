@@ -22,31 +22,48 @@ extension MetalTextSurface {
   /// まだ出していない位置と範囲があれば、出来事より前のことなので先に出す。
   func scroll(_ input: ScrollInput) {
     inputScope {
-      if pending.position != nil || pending.limits != nil { flush() }
+      if scrollGroup.contains(where: { $0.pending.position != nil || $0.pending.limits != nil }) {
+        flush()
+      }
       guard scroll.apply(input) else { return }
       wake()
-      refreshViewport()
+      for surface in scrollGroup { surface.refreshViewport() }
     }
   }
 
-  /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲）が変わった。
+  /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲・入力欄の横の送り）が変わった。入力欄で
+  /// 変換していれば、候補窓を新しい送りに付いてこさせる。
   func scrollDidAdvance() {
-    refreshViewport()
+    for surface in scrollGroup { surface.refreshViewport() }
+    if let site = primarySite, !site.isBody, site.editor.isComposing {
+      site.inputMethodCoordinatesDidChange()
+    }
   }
 
-  /// 先頭に見えている行（小数。行 + 隠れている割合）と見えている行数——俯瞰の式の入力。取引の中で置いた位置も当てた
-  /// 今の位置から出す（トラックを押して飛んだ直後の同じ押下の中でも、飛んだ後の値）。端を越えて見せている分は端で数える。
+  /// 先頭に見えている所と見えている高さ（表示の単位。差し込みが無ければ行 + 隠れている割合と行数）——俯瞰の式の入力。
+  /// 取引の中で置いた位置も当てた今の位置から出す（トラックを押して飛んだ直後の同じ押下の中でも、飛んだ後の値）。端を
+  /// 越えて見せている分は端で数える。
   var viewportLines: (first: CGFloat, visible: CGFloat) {
     let (position, limits) = scrollState()
     guard limits.viewport.y > 0, let text = currentContent?.text else { return (0, 0) }
-    return limits.viewportLines(at: position, lineCount: text.lineCount)
+    return limits.viewportLines(at: position, rows: rows, lineCount: text.lineCount)
   }
 
-  /// 先頭行（小数）の位置へ置く（`viewportLines` の逆。行は行の数に収める。横位置は動かさない）。
+  /// 縦の全体の量（表示の単位。→ `ScrollPhysics.Limits.contentLines`）——取引の中で置いた範囲も当てた今の値。
+  var contentLines: CGFloat {
+    let limits = scrollState().limits
+    return limits.contentLines(rows: rows, lineCount: currentContent?.text.lineCount ?? 1)
+  }
+
+  /// 先頭（表示の単位）の位置へ置く（`viewportLines` の逆。最後の項目の上端——スクロールを共にする面では、長い方の面の
+  /// 最後の項目の上端——までに収める。横位置は動かさない）。
   func scroll(toFirstLine line: CGFloat) {
-    guard let text = currentContent?.text else { return }
-    let clamped = min(max(0, line), CGFloat(text.lineCount - 1))
-    place(SIMD2(scrollPosition.x, Double(clamped) * Double(config.lineHeight)))
+    let last = scrollGroup.compactMap { surface in
+      surface.currentContent.map { surface.rows.lastUnit(lineCount: $0.text.lineCount) }
+    }.max()
+    guard let last else { return }
+    let clamped = min(max(0, Double(line)), last)
+    place(SIMD2(scrollPosition.x, clamped * Double(config.lineHeight)))
   }
 
   /// 横の位置を置く（縦は動かさない）。
@@ -57,7 +74,21 @@ extension MetalTextSurface {
   /// 区間を方針どおりに見せる。縦の位置は取引の終わりに出す前の位置から決め、横は描画スレッドが区間の行を組んで寄せる
   /// （動けば見えている範囲を知らせ直す）。
   func reveal(_ range: NSRange, policy: TextReveal) {
-    transact(reveal: .showing(policy), of: range)
+    bodySite.transact(reveal: .showing(policy), of: range)
+  }
+
+  func scroll(to position: RowPosition) {
+    guard let text = currentContent?.text else { return }
+    scroll(toFirstLine: CGFloat(rows.unit(of: position, lineCount: text.lineCount)))
+  }
+
+  /// 2 つの位置の間を見せる。横は `from` の行の行頭を区間として、本文の横の寄せに渡す。
+  func reveal(from: RowPosition, to: RowPosition, policy: TextReveal) {
+    guard let text = currentContent?.text else { return }
+    let head = text.lineStart(min(max(0, from.line), text.lineCount - 1))
+    bodySite.transact(reveal: .showing(policy), of: NSRange(location: head, length: 0)) {
+      transaction?.revealingRows = (from, to)
+    }
   }
 
   // MARK: - スクロールだけのキー（キャレットは動かない）
@@ -72,11 +103,15 @@ extension MetalTextSurface {
     scrollBy(Double(lines) * Double(config.lineHeight))
   }
 
-  /// Home は先頭、End は最後の 1 画面（最終行を下端に）。
+  /// Home は先頭、End は最後の 1 画面（最後の項目を下端に。スクロールを共にする面では長い方の面の最後）。
   func scrollToDocumentEdge(end: Bool) {
-    guard let text = currentContent?.text else { return }
-    let bottom =
-      Double(text.lineCount) * Double(config.lineHeight) - scrollState().limits.viewport.y
+    let bottom = scrollGroup.compactMap { surface in
+      surface.currentContent.map {
+        surface.rows.totalHeight(lineCount: $0.text.lineCount)
+          - surface.scrollState().limits.viewport.y
+      }
+    }.max()
+    guard let bottom else { return }
     place(SIMD2(scrollPosition.x, end ? max(0, bottom) : 0))
   }
 
@@ -95,52 +130,53 @@ extension MetalTextSurface {
 
   // MARK: - 位置の計算
 
-  /// 取引の後に置く位置——頼まれた位置から、見せ方に従って区間（無ければ主のキャレット）の行を縦に置いた位置（横は描画
-  /// スレッドが行を組んで寄せる）。今の位置から動かなければ nil。
-  func position(after transaction: Transaction, cursors: CursorList, _ text: TextRope)
-    -> SIMD2<Double>?
-  {
+  /// 取引の後に置く位置——頼まれた位置から、見せ方に従って縦の範囲 `span`（見せ方を頼んだ場が出した、区間の行の縦の
+  /// 範囲。表示の単位）を縦に置いた位置（本文の横は描画スレッドが行を組んで寄せる）。ページ送りの量は本文の場だけが
+  /// 送る。今の位置から動かなければ nil。
+  func position(after transaction: Transaction, span: Range<Double>?) -> SIMD2<Double>? {
     let now = scrollPosition
     var p = transaction.scrollTo ?? now
+    let lineHeight = Double(config.lineHeight)
     let policy: TextReveal
     switch transaction.reveal {
     case .none: return p == now ? nil : p
     case .showing(let shown): policy = shown
     case .page(let lines):
-      p.y += Double(lines) * Double(config.lineHeight)
+      if transaction.revealSite?.isBody != false { p.y += Double(lines) * lineHeight }
       policy = .minimal
     }
-    let caret = NSRange(location: cursors.primary.position, length: 0)
-    let range = transaction.revealing ?? caret
-    let location = min(max(0, range.location), text.length)
-    let end = min(max(location, NSMaxRange(range)), text.length)
-    let lineHeight = Double(config.lineHeight)
+    guard let span else { return p == now ? nil : p }
     let current = p.y / lineHeight
     let first = policy.firstLine(
-      showing: text.rows(of: NSRange(location: location, length: end - location)),
-      first: current, visible: scrollState().limits.viewport.y / lineHeight)
+      showing: span, first: current, visible: scrollState().limits.viewport.y / lineHeight)
     // 方針が動かさないときは今の先頭をそのまま返すので、置き直さない（行高との往復で 1ulp ずれた位置を置くと、端を越えて
     // 見せている間の位置が端へ収められる）。
     if first != current { p.y = first * lineHeight }
     return p == now ? nil : p
   }
 
-  /// 行の数が `lineCount` のときの範囲の値。見えている大きさは本文の区画から上端の余白を除いたもの。
+  /// 行の数が `lineCount` のときの範囲の値（縦の端は今の縦の並びの最後の項目）。見えている大きさは本文の区画から上端の
+  /// 余白を除いたもの。
   func limits(lineCount: Int) -> LimitsUpdate {
-    let text = config.layout(size: size, lineCount: lineCount).text
+    let text = config.layout(
+      size: size, lineCount: lineCount, rows: rows, arrangement: arrangement
+    ).text
     return LimitsUpdate(
-      lineCount: lineCount, lineHeight: Double(config.lineHeight),
+      lastTop: rows.lastTop(lineCount: lineCount), lineHeight: Double(config.lineHeight),
       viewport: SIMD2(Double(text.width), Double(max(0, text.height - config.topInset))),
       cell: Double(config.cell))
   }
 
   /// 今の区画の配置（出す前の写しの行の数で）。
   var surfaceLayout: SurfaceLayout {
-    config.layout(size: size, lineCount: currentContent?.text.lineCount ?? 1)
+    config.layout(
+      size: size, lineCount: currentContent?.text.lineCount ?? 1, rows: rows,
+      arrangement: arrangement)
   }
 
   /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。本文が動いていれば、変換中の IME にも知らせる
-  /// （候補窓が追従する）。
+  /// （候補窓が追従する）。絵の差し込みの押せる場所がポインタの下を動いたかもしれないので、ホバーとポインタの形も引き
+  /// 直す。
   func refreshViewport() {
     let (position, limits) = scrollState()
     if let current = measureViewport(position: position, limits: limits), current != viewport {
@@ -148,6 +184,7 @@ extension MetalTextSurface {
       delegate?.surfaceDidChangeViewport(self)
     }
     inputMethodScrollDidChange(position)
+    refreshPointer()
   }
 
   /// 見せている位置（端を越えて見せている分を含む）が前回から動いたら、変換中の IME へ文字の座標が変わったと知らせる。
@@ -156,19 +193,21 @@ extension MetalTextSurface {
   private func inputMethodScrollDidChange(_ position: SIMD2<Double>) {
     guard position != inputMethodPosition else { return }
     inputMethodPosition = position
-    guard editor.isComposing, let context = textView.inputContext else { return }
+    guard primarySite?.editor.isComposing == true, let context = textView.inputContext else {
+      return
+    }
     context.invalidateCharacterCoordinates()
     context.textInputClientDidScroll()
   }
 
-  /// 見えている範囲。行は y = 行 × 行高で並び、端を越えて見せている分は端で数える。見えている高さが無ければ nil。
+  /// 見えている範囲。先頭は縦の並びで先頭に見えている所（段の粒度の位置）で、端を越えて見せている分は端で数える。見えて
+  /// いる高さが無ければ nil。
   private func measureViewport(position: SIMD2<Double>, limits: ScrollPhysics.Limits)
     -> TextViewport?
   {
     guard limits.viewport.y > 0, let text = currentContent?.text else { return nil }
-    let row = limits.firstVisible(at: position, lineCount: text.lineCount).row
     return TextViewport(
-      firstVisible: text.lineStart(row),
+      top: rows.position(atY: limits.clampedY(position), lineCount: text.lineCount),
       visibleLines: CGFloat(limits.viewport.y / limits.lineHeight))
   }
 }

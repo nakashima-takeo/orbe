@@ -117,7 +117,8 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
     let record = log.append(
       TextEdit(range: NSRange(location: at, length: 0), replacement: insertion), start: start,
       oldEnd: start,
-      newEnd: TextPoint(row: start.row, column: start.column + insertion.utf16.count))
+      newEnd: TextPoint(row: start.row, column: start.column + insertion.utf16.count),
+      keepsStartRow: false)
     let started = DispatchTime.now().uptimeNanoseconds
     _ = layers.apply([record], text: edited)
     return Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000

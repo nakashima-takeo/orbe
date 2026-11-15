@@ -129,6 +129,7 @@ final class PipelineGate: Sendable {
     let shape: MTLRenderPipelineState
     let minimap: MTLRenderPipelineState
     let layer: MTLRenderPipelineState
+    let box: MTLRenderPipelineState
   }
 
   private let state = OSAllocatedUnfairLock<Pipelines?>(initialState: nil)
@@ -188,6 +189,7 @@ final class PipelineGate: Sendable {
       color: try pipeline("glyph_vertex", "color_fragment"),
       shape: try pipeline("shape_vertex", "shape_fragment"),
       minimap: try pipeline("minimap_vertex", "minimap_fragment"),
-      layer: try pipeline("glyph_vertex", "layer_fragment"))
+      layer: try pipeline("glyph_vertex", "layer_fragment"),
+      box: try pipeline("box_vertex", "box_fragment"))
   }
 }

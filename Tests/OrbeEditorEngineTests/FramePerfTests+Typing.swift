@@ -102,7 +102,7 @@ extension FramePerfTests {
 
   /// 打鍵 `k`——7 打鍵に 1 回は空白、それ以外は字。
   private static func type(_ surface: MetalTextSurface, _ k: Int) {
-    surface.perform(.insert(k % 7 == 6 ? " " : "x"))
+    surface.editor.perform(.insert(k % 7 == 6 ? " " : "x"))
   }
 
   /// ライブ変換の打鍵 `k`——未確定を 1 字伸ばして全体を置き換え、20 字目で確定する。

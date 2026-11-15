@@ -9,21 +9,28 @@ import simd
 /// 1 か所（`flush`）で描く材料の箱に置く」だけで、組版も描画も描画スレッドが行う。写しは自分の欄に持たず、要るとき
 /// （`viewport` の計算・編集の規則・行の印の行への写像）は出す前の状態か箱から読む。
 ///
-/// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME の変換も同じ道で文書に
-/// 入る。アクセシビリティは持たない。
+/// 編集は面の編集の場（`EditingSite`）の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。
+/// IME の変換も同じ道で文書に入る。契約の選択・キャレット・undo の区切り・丸ごとの置き換えは、本文の場を指す。
+/// アクセシビリティは持たない。
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
+  /// 置く位置を出す前の状態に置いた通し番号（→ `Pending.placement`）。
+  static var placementSerial = 0
 
   let id: Int
   let config: SurfaceConfig
   let material = MaterialBox()
   let scroll: ScrollBox
+  /// スクロールを共にする相手と、自分が先に結んだ面か（→ `shareScroll`）。
+  weak var partner: MetalTextSurface?
+  var leadsScroll = false
   /// 最後に描いたミニマップの配置（描画スレッドが書く）。
   let placementBox = MinimapPlacementBox()
-  private let style: TextSurfaceStyle
+  let style: TextSurfaceStyle
   let textView = MetalTextView()
-  private(set) lazy var editor = SurfaceEditor(surface: self)
+  /// 本文の場（文書）。
+  private(set) lazy var bodySite = EditingSite(surface: self, body: DocumentText(surface: self))
   let lineStops: LineStopsCache
 
   var view: NSView { textView }
@@ -35,7 +42,7 @@ final class MetalTextSurface: TextSurface {
   var viewport = TextViewport.empty
   /// 面の大きさ（pt）・倍率・描く色空間。
   var size = CGSize.zero
-  private var scale: CGFloat = 2
+  private(set) var scale: CGFloat = 2
   private(set) var space = FrameMaterial.defaultSpace
   private(set) var indentation = Indentation.fallback
   private(set) var lineBreak = LineBreak.lf
@@ -50,6 +57,29 @@ final class MetalTextSurface: TextSurface {
   var pending = Pending()
   /// 押された強調の地（同じ列の押し直しを書かない）。
   private var highlights = Highlights()
+  /// 縦の並び（main の最新。取引の中で置き・ずらし・測り直し、出すときに材料へ書く）。
+  var rows: RowLayout
+  /// 差し込んだ行の出どころ（並びと一緒に置く）。
+  weak var rowSource: (any SurfaceRowSource)?
+  /// 表示の構成と、そのうち配置と描き方に効くもの。
+  var presentation = SurfacePresentation.code
+  var arrangement = SurfaceArrangement()
+  /// 置いている絵の差し込み（同一性で引く）と、絵を材料に写す係。
+  var zones: [ObjectIdentifier: ZoneEntry] = [:]
+  let painter = ZonePainter()
+  /// 入力欄の場（入力欄の id で引く）と、場に振る通し番号。
+  var fields: [AnyHashable: EditingSite] = [:]
+  var nextFieldSerial = 0
+  /// 主（→ `Primary`）と、絵の差し込みの文が主の間の、その文の選択。
+  var primary = Primary.body
+  var zoneSelection: ZoneTextSelection?
+  /// ポインタの下の押せる場所と、ホバーを知らせている最中か。
+  var hoveredButton: HoveredButton?
+  var hovering = false
+  /// 取引の中で、絵の高さが並びの高さと違う絵の差し込みを写した（取引の終わりに並びを組み直す）。
+  var zoneHeightsChanged = false
+  /// 取引の中で、絵の差し込みを写したか外した（取引の終わりに、どの絵の差し込みも指さない画像の覚えを手放す）。
+  var zonesRepainted = false
   /// 面自身の入力の処理の入れ子の深さ（→ `inputScope`）。
   var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
@@ -63,7 +93,8 @@ final class MetalTextSurface: TextSurface {
     id = Self.nextID
     self.style = style
     config = SurfaceConfig(style: style, omittedLabel: omittedLabel)
-    scroll = ScrollBox()
+    rows = RowLayout(lineHeight: Double(style.lineHeight))
+    scroll = ScrollBox(surface: id)
     lineStops = LineStopsCache(font: config.font)
     textView.surface = self
     let id = id
@@ -82,21 +113,46 @@ final class MetalTextSurface: TextSurface {
         config: config, notify: notify)
     }
     appearanceDidChange()
+    let rows = rows
+    write { $0.rows = rows }
   }
 
   deinit {
     let id = id
+    scroll.leave()
     RenderThread.shared.perform { $0.detach(id) }
   }
 
   // MARK: - 選択と編集（契約）
 
+  /// 本文の場の編集係。
+  var editor: SurfaceEditor { bodySite.editor }
+
   var selectedRange: NSRange {
     get { editor.state.cursors.primary.selection }
-    set { editor.setSelection(newValue) }
+    set {
+      transact {
+        setPrimary(.body)
+        editor.setSelection(newValue)
+      }
+    }
   }
 
   var caretLocation: Int { editor.state.cursors.primary.position }
+
+  /// 本文の場を編集できるか。読むだけにするときは、本文の変換を確定し、AppKit に入力の文脈を取り直させる（読むだけの本文は
+  /// 文脈を返さない）。
+  var isEditable: Bool {
+    get { bodySite.isEditable }
+    set {
+      guard newValue != bodySite.isEditable else { return }
+      transact {
+        bodySite.editor.finishComposition(.commit)
+        bodySite.isEditable = newValue
+        if textView.window?.firstResponder === textView { _ = NSTextInputContext.current }
+      }
+    }
+  }
 
   var cursorSelections: [NSRange] { editor.state.cursors.selections }
 
@@ -107,11 +163,12 @@ final class MetalTextSurface: TextSurface {
   }
 
   func commitMarkedText() {
-    editor.finishComposition(.commit)
+    primarySite?.editor.finishComposition(.commit)
   }
 
-  /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る。この面から始めた本文のドラッグの途中
-  /// なら、運んでいる範囲は古い本文の位置なので手放し、以後はコピーとして落とす（元の字は消さない）。
+  /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る（読むだけの面では載せず、それまでの
+  /// 取り消しも捨てる）。この面から始めた本文のドラッグの途中なら、運んでいる範囲は古い本文の位置なので手放し、以後は
+  /// コピーとして落とす（元の字は消さない）。
   func replaceAll(with text: String) {
     textView.draggedRange = nil
     editor.replaceAll(with: text)
@@ -133,20 +190,15 @@ final class MetalTextSurface: TextSurface {
     self.lineBreak = lineBreak
   }
 
-  /// 標準のセレクタが写ったコマンドを、面の編集係で行う。
-  func perform(_ command: EditCommand) {
-    editor.perform(command)
-  }
-
   // MARK: - 写しと材料
 
   /// 文書の写しを引いて箱に置く（結ばれたとき・役割が変わったとき・行の印を受けたとき）。取引の中なら、その取引の終わりに
   /// まとめて置く。
-  private func pullContent(marks spans: LineMarkSpans? = nil) {
+  private func pullContent(marks: LineMarks? = nil) {
     guard let delegate else { return }
     transact {
-      transaction?.content = delegate.surfaceContent(self)
-      if let spans { transaction?.marks = spans }
+      bodySite.change?.content = delegate.surfaceContent(self)
+      if let marks { transaction?.marks = marks }
     }
   }
 
@@ -155,9 +207,9 @@ final class MetalTextSurface: TextSurface {
     guard let delegate else { return }
     transact {
       let content = delegate.surfaceContent(self)
-      transaction?.content = content
+      bodySite.change?.content = content
       let text = content.text
-      transaction?.rowEdits += ranges.rangeView.map { range in
+      bodySite.change?.rowEdits += ranges.rangeView.map { range in
         let rows = text.rows(of: NSRange(range))
         return RowEdit(
           rows: rows.lowerBound..<rows.upperBound + 1, inserted: rows.count,
@@ -166,9 +218,9 @@ final class MetalTextSurface: TextSurface {
     }
   }
 
-  /// 印は文書がオフセットで押してくる。引いた写しで行へ写してから箱に置く。
-  func setLineMarks(_ spans: LineMarkSpans) {
-    pullContent(marks: spans)
+  /// 印は、文書が押した時点の写しの行で書かれている。その写しを引き、同じ書き込みで箱に置く。
+  func setLineMarks(_ marks: LineMarks) {
+    pullContent(marks: marks)
   }
 
   /// 色付きで写す HTML の見え方（今の外観で sRGB に解いた色。HTML の色は sRGB）。
@@ -195,8 +247,10 @@ final class MetalTextSurface: TextSurface {
   /// 外観・色空間・倍率で色を解き直して置く。
   func appearanceDidChange() {
     let palette = FramePalette(
-      style: style, appearance: textView.effectiveAppearance, space: space, scale: scale)
+      style: style, lineStyles: presentation.lineStyles, appearance: textView.effectiveAppearance,
+      space: space, scale: scale)
     write { $0.palette = palette }
+    zonesAppearanceDidChange()
   }
 
   /// view の大きさ・倍率・描く色空間・見えているかが変わった。
@@ -235,31 +289,60 @@ final class MetalTextSurface: TextSurface {
 
   private var hasDisplayLink = false
 
+  /// 描画スレッドを起こす（スクロールを共にする相手も）。
   func wake() {
-    let id = id
-    RenderThread.shared.perform { $0.wake(id) }
+    let ids = scrollGroup.map(\.id)
+    RenderThread.shared.perform { renderer in
+      for id in ids { renderer.wake(id) }
+    }
+  }
+
+  /// スクロールの状態を `other` と共にする。位置はこの面のものを引き継ぎ、先に結んだ面はこの面だけになる。
+  func shareScroll(with other: any TextSurface) {
+    guard let other = other as? MetalTextSurface, other !== self else {
+      preconditionFailure("スクロールを共にできるのは、同じエンジンの別の面だけ")
+    }
+    precondition(partner == nil && other.partner == nil, "いまスクロールを共にしていない面どうしで結ぶ")
+    flush()
+    other.flush()
+    scroll.share(with: other.scroll)
+    partner = other
+    other.partner = self
+    leadsScroll = true
+    other.leadsScroll = false
+    wake()
+    refreshViewport()
+    other.refreshViewport()
   }
 
   // MARK: - 焦点と撮影
 
-  /// ⌘ を押している間の、本文の上のポインタの位置（押していない・本文の外なら nil）。
+  /// ⌘ を押している間の、本文の上のポインタの位置（押していない・本文の外・面に焦点が無いなら nil）。取引に書くだけで、
+  /// 出すきっかけは呼び手が決める（出来事の入口は処理の終わり、Orbe から始まる呼び出しは runloop の 1 周の終わり）。
   func setLinkPointer(_ point: CGPoint?) {
     guard point != linkPointer else { return }
     linkPointer = point
-    inputScope { write { $0.linkPointer = point } }
+    write { $0.linkPointer = point }
   }
 
   /// 焦点（first responder で、窓が key）が変わりうる。変われば点滅を表示からやり直し、選択の地の色を替える。
   func updateFocus(_ focused: Bool) {
     guard focused != self.focused else { return }
-    transact { self.focused = focused }
+    transact {
+      self.focused = focused
+      if !focused { setLinkPointer(nil) }
+      zoneSelectionFocusDidChange()
+    }
   }
 
   /// キャレットを点滅させるか（アクセシビリティの「点滅しない挿入ポイント」の設定が変わった）。点滅しなければ、止まって
   /// いる間の描画スレッドの起床は 0。
   func setCaretBlinks(_ blinks: Bool) {
     guard blinks != caretBlinks else { return }
-    transact { caretBlinks = blinks }
+    transact {
+      caretBlinks = blinks
+      for site in fields.values { site.touch() }
+    }
   }
 
   func focusDidChange(_ focused: Bool) {

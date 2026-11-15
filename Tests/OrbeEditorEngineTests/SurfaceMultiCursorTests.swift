@@ -85,8 +85,8 @@ final class SurfaceMultiCursorTests: EngineTestCase {
     _ = host(opened)
     let surface = opened.surface
     surface.selectedRange = NSRange(location: 0, length: 0)
-    surface.perform(.addNextOccurrence)
-    surface.perform(.addNextOccurrence)
+    surface.editor.perform(.addNextOccurrence)
+    surface.editor.perform(.addNextOccurrence)
     XCTAssertEqual(selections(opened).count, 2)
     let farAway = opened.document.text.lineStart(150)
     surface.inputScope { surface.editor.select(CursorList(Cursor(farAway)), reveal: .center) }
@@ -97,7 +97,7 @@ final class SurfaceMultiCursorTests: EngineTestCase {
     XCTAssertEqual(surface.scrollPosition.y, 0, "そのときのスクロールの位置へ")
     surface.inputScope { surface.editor.undoCursors() }
     XCTAssertEqual(selections(opened), [NSRange(location: 0, length: 3)])
-    surface.perform(.insert("z"))
+    surface.editor.perform(.insert("z"))
     let afterEdit = selections(opened)
     surface.inputScope { surface.editor.undoCursors() }
     XCTAssertEqual(selections(opened), afterEdit, "本文を変えると履歴は消える")
@@ -111,7 +111,7 @@ final class SurfaceMultiCursorTests: EngineTestCase {
     opened.surface.host = recorder
     recorder.escapesToConsume = 1
     opened.surface.selectedRange = NSRange(location: 0, length: 2)
-    opened.surface.perform(.addNextOccurrence)
+    opened.surface.editor.perform(.addNextOccurrence)
     let view = opened.surface.textView
     view.cancelOperation(nil)
     XCTAssertEqual(selections(opened).count, 2, "載せる側が使えば面は使わない")
@@ -129,7 +129,7 @@ final class SurfaceMultiCursorTests: EngineTestCase {
     var announced = 0
     opened.document.onSelectionChange = { announced += 1 }
     opened.surface.selectedRange = NSRange(location: 0, length: 2)
-    opened.surface.perform(.addNextOccurrence)
+    opened.surface.editor.perform(.addNextOccurrence)
     announced = 0
     let state = opened.surface.editor.state
     var others = state.cursors.others
@@ -140,7 +140,7 @@ final class SurfaceMultiCursorTests: EngineTestCase {
     XCTAssertEqual(announced, 1, "主は動かず他が動いた")
     opened.surface.selectedRange = NSRange(location: 0, length: 2)
     announced = 0
-    opened.surface.perform(.addNextOccurrence)
+    opened.surface.editor.perform(.addNextOccurrence)
     XCTAssertNotNil(opened.surface.searchContinuation)
     XCTAssertEqual(announced, 1)
     announced = 0
