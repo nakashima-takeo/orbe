@@ -8,7 +8,7 @@ import XCTest
 ///
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
 /// **libghostty ランタイムを起動する**（GhosttyKit 必須）。tab の id は `IdGen` 採番で予測不能なので、直書きせず
-/// `controlListTabs()` の戻りから読む。workspace の id も、外の口から見える値を確かめるため `controlListWorkspaces()` の
+/// `controlListTabs(workspaceId:)` の戻りから読む。workspace の id も、外の口から見える値を確かめるため `controlListWorkspaces()` の
 /// 戻りから読む。
 final class WindowControllerTabControlTests: OrbeTestCase {
 
