@@ -92,9 +92,26 @@ extension AutomationRunnerTests {
     XCTAssertEqual(calls("copy").count, 2, "扱い終えた変化では起き直さない")
   }
 
-  /// 今の集合の処理は、入力が 0 件になると手段を起こさず回の記録も残さずに、前の出力をすべて無効にする（空の集合を写す）。その
-  /// 下流の毎回すべてを取る今の集合の処理も起きて、同じく空の集合を写す。
+  /// 今の集合の処理は、入力が 0 件になると手段を起こさず回の記録も残さずに、前の出力をすべて無効にする（空の集合を写す）。
   func testACurrentSetProcessDropsItsOutputOnAnEmptyInputWithoutRunning() throws {
+    let id = try defineCopy()
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+    finish("copy", printed(item("a")))
+    XCTAssertEqual(try store.liveLinks(id, "copy").count, 1, "前提: 写した項目が有効")
+
+    advance(by: 1800)
+    finish("gh", printed(""))
+
+    XCTAssertEqual(calls("copy").count, 1, "入力が 0 件なら手段を起こさない")
+    XCTAssertEqual(store.automation(id)?.state(key: "copy").runs.count, 1, "回の記録を残さない")
+    XCTAssertEqual(try store.liveLinks(id, "copy"), [])
+  }
+
+  /// 今の集合の処理が、取る行が 0 件の契機で項目を無効にすると、その下流にある毎回すべてを取る今の集合の処理もすぐ起きて、
+  /// 手段を起こさずに空の集合を写す。上流の取得が空になった時点で上の処理の前の回がまだ走っていて、その回を終えてから
+  /// 上の処理が 0 件の契機を迎える場合も、下流の処理は取得の次の予定を待たずに起きる。
+  func testAnEmptyTurnOfACurrentSetProcessWakesTheTakeAllProcessBelowIt() throws {
     var again = definitionNode("again", .arrival, coverage: .currentSet)
     again.from = [AutomationDefinition.Input(nodeKey: "copy", take: .all)]
     let id = try define(
@@ -103,13 +120,15 @@ extension AutomationRunnerTests {
     finish("gh", fetched(["a"]))
     finish("copy", printed(item("a")))
     finish("again", printed(item("a")))
-    XCTAssertEqual(try store.liveLinks(id, "again").count, 1, "前提: 写した項目が有効")
+    advance(by: 1800)
+    finish("gh", fetched(["a", "b"]))
+    XCTAssertEqual(calls("copy").count, 2, "前提: copy が走っている")
 
     advance(by: 1800)
     finish("gh", printed(""))
+    finish("copy", printed(item("a")))
 
-    XCTAssertEqual([calls("copy").count, calls("again").count], [1, 1], "入力が 0 件なら手段を起こさない")
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").runs.count, 1, "回の記録を残さない")
+    XCTAssertEqual([calls("copy").count, calls("again").count], [2, 1], "前提: どちらも手段を起こさない")
     XCTAssertEqual(try store.liveLinks(id, "copy"), [])
     XCTAssertEqual(try store.liveLinks(id, "again"), [])
   }
