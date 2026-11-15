@@ -6,10 +6,10 @@ import SwiftUI
 /// （タブ行 → タブがあればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点のタブ
 /// の本体——文書のテキスト面か diff の面。無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
 ///
-/// 文書の「変わった」（viewport・選択・本文・焦点）は pane が 1 つずつ受け、検索・出現の強調・プロジェクト検索・
-/// アウトラインへ配る——文書側の closure は単一のまま、扇出はここが持つ。一致の地は、ファイル内検索とプロジェクト検索の
-/// 2 つの出どころの和を pane が面へ押す（`pushFindGround`）。俯瞰（ミニマップ・スクロールバーと印・影）は面が、押された
-/// 強調の地から自分で描く。
+/// 本体で編集する文書（文書の本体ならその文書、diff の本体なら新しい側の文書）の「変わった」（viewport・選択・本文）は
+/// pane が 1 つずつ受け、検索・出現の強調・diff・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。
+/// 一致の地は、ファイル内検索とプロジェクト検索の 2 つの出どころの和を pane が面へ押す（`pushFindGround`）。
+/// 俯瞰（ミニマップ・スクロールバーと印・影）は面が、押された強調の地から自分で描く。
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
@@ -39,8 +39,8 @@ final class EditorPaneView: NSView {
   let diffDivider = NSView()
   /// 本体に置いている diff の面の view（左から）。
   var diffViews: [NSView] = []
-  /// 知らせを結んでいる、diff の新しい側の文書。
-  weak var diffDocument: EditorDocument?
+  /// 知らせを結んでいる文書（本体で編集する文書を結んだもの——`bindEditedDocument`）。
+  weak var boundDocument: EditorDocument?
   /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
   let search = EditorSearch()
   var searchBar: SearchBar?
@@ -206,11 +206,14 @@ final class EditorPaneView: NSView {
     }
   }
 
-  /// 本体が文書のタブなら、その文書（検索・出現・プロジェクト検索・⌘S の相手）。
+  /// 本体が文書のタブなら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
   var document: EditorDocument? {
     if case .document(let document) = body { return document }
     return nil
   }
+
+  /// 本体で編集する文書——文書の本体ならその文書、diff の本体なら新しい側の文書（無ければ nil）。
+  var editedDocument: EditorDocument? { document ?? diff?.document }
 
   /// 本体が diff のタブなら、その diff。
   var diff: EditorDiff? {
@@ -248,6 +251,7 @@ final class EditorPaneView: NSView {
   /// 見え方をコードへ戻す）、新しい本体を載せる（文書の面にはコードの見え方を、diff には今の見せ方の見え方を載せる）。
   /// 配置を頼み、文書を初めて画面に出すときはその配置で、最初の描画に色が間に合うよう上限つきで待つ（→
   /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
+  /// 文書の知らせは、本体で編集する文書へ結び直す（→ `bindEditedDocument`）。
   /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が面の中（サイドバーを除く）にあれば新しい
   /// 行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では
   /// 「中にあった」ことが分からない）。サイドバーの焦点（検索結果・行内入力）は面を外しても残るので動かさない。
@@ -260,7 +264,6 @@ final class EditorPaneView: NSView {
     case .document(let document):
       SurfaceLook.code.apply(to: document.surface, document: document)
       install(document.surface)
-      observe(document, true)
     case .diff(let diff):
       closeSearch()
       showDiff(diff)
@@ -269,7 +272,7 @@ final class EditorPaneView: NSView {
     }
     search.bind(document)
     occurrences.bind(document)
-    if let document { projectSearch.documentDidShow(document) }
+    bindEditedDocument()
     pushFindGround()
     refreshNotice()
     needsLayout = true
@@ -306,6 +309,7 @@ final class EditorPaneView: NSView {
     body = .empty
     search.bind(nil)
     occurrences.bind(nil)
+    bindEditedDocument()
   }
 
   /// 本体を外す——文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の見え方をコードへ戻す。
@@ -313,7 +317,6 @@ final class EditorPaneView: NSView {
     switch body {
     case .document(let document):
       document.surface.view.removeFromSuperview()
-      observe(document, false)
       document.surface.setHighlights([], for: .findMatch)
       document.surface.setHighlights([], for: .currentFindMatch)
     case .diff(let diff):

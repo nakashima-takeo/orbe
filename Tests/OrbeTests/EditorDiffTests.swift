@@ -63,7 +63,7 @@ final class EditorDiffTests: OrbeTestCase {
   // MARK: - 作業ツリー
 
   /// 作業ツリー diff は index の版 ↔ 文書。インラインでは削除行が古い側（index の本文）の行を指す差し込みになり、追加の
-  /// 区間に型が付く。新しい側の面はファイルタブと同じ文書の面で、diff の間は読むだけ、ファイルタブに戻れば編集できる。
+  /// 区間に型が付く。新しい側の面はファイルタブと同じ文書の面で、ファイルタブに戻ればコードの見え方に戻る。
   /// 同じ diff をもう一度開いてもタブは増えない。
   func testAWorkingTreeDiffShowsTheIndexAgainstTheDocument() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\nfive\n")
@@ -82,7 +82,6 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertEqual(surface.rows.style(ofLine: 1), DiffStyle.added)
     XCTAssertNil(surface.rows.style(ofLine: 2))
     XCTAssertEqual(surface.rows.style(ofLine: 4), DiffStyle.added)
-    XCTAssertFalse(surface.isEditable, "diff の間は読むだけ")
     XCTAssertEqual(surface.presentation, DiffStyle.inline)
     XCTAssertTrue(pane.focusTarget === surface.responder, "焦点の行き先は diff の面")
     XCTAssertEqual(pane.shell.tabs.map(\.diffKind), [nil, .workingTree])
@@ -92,8 +91,7 @@ final class EditorDiffTests: OrbeTestCase {
 
     tab.group.editor.activate(document)
     XCTAssertTrue(pane.document === document)
-    XCTAssertTrue(surface.isEditable, "ファイルタブではコードの見え方")
-    XCTAssertTrue(surface.rows.isEmpty)
+    XCTAssertTrue(surface.rows.isEmpty, "ファイルタブではコードの見え方")
     XCTAssertEqual(surface.presentation, .code)
   }
 

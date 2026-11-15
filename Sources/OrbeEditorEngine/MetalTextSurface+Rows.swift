@@ -11,28 +11,28 @@ extension MetalTextSurface {
     }
     precondition(
       insertions.isEmpty || !presentation.showsMinimap, "差し込みはミニマップを出していない面にだけ置く")
+    // 差し込みの多い並び（1MB の diff で数千）を打鍵のたびに置き直しうるので、契約の検査は 1 回の走査で一時の列を作らずに行う。
     let lineCount = bodySite.sourceContent?.text.lineCount ?? 1
     precondition(
-      zip(insertions, insertions.dropFirst()).allSatisfy { $0.line <= $1.line }
-        && insertions.allSatisfy { (0...lineCount).contains($0.line) },
+      Self.boundariesAreValid(insertions, lineCount: lineCount),
       "差し込みの境は昇順で、置く時点の文書の写しの行の範囲（0...行数）に収める")
     precondition(
-      zip(rows.spans, rows.spans.dropFirst()).allSatisfy { $0.line < $1.line }
-        && rows.spans.allSatisfy { (0..<lineCount).contains($0.line) },
+      Self.spansAreValid(rows.spans, lineCount: lineCount),
       "区間の始まりは重ならない昇順で、置く時点の文書の写しの行の範囲（0..<行数）に収める")
     let sourceContent = rows.source?.rowSourceContent
     let sourceLines = sourceContent?.text.lineCount ?? 0
     precondition(
-      insertions.allSatisfy { insertion in
-        guard case .lines(let lines) = insertion.content else { return true }
-        return lines.allSatisfy { $0.line.map { (0..<sourceLines).contains($0) } ?? true }
-      }, "差し込んだ行が指す行は、出どころの写しの行の範囲（0..<行数）に収める")
-    let zoneList = insertions.compactMap { insertion -> SurfaceZone? in
-      if case .zone(let zone) = insertion.content { return zone }
-      return nil
+      Self.insertedLinesAreValid(insertions, sourceLines: sourceLines),
+      "差し込んだ行が指す行は、出どころの写しの行の範囲（0..<行数）に収める")
+    var zoneList: [SurfaceZone] = []
+    var zoneIDs = Set<ObjectIdentifier>()
+    var zonesAreUnique = true
+    for insertion in insertions {
+      guard case .zone(let zone) = insertion.content else { continue }
+      zoneList.append(zone)
+      if !zoneIDs.insert(ObjectIdentifier(zone)).inserted { zonesAreUnique = false }
     }
-    precondition(
-      Set(zoneList.map(ObjectIdentifier.init)).count == zoneList.count, "同じ絵の差し込みは並びに 1 度だけ置く")
+    precondition(zonesAreUnique, "同じ絵の差し込みは並びに 1 度だけ置く")
     transact {
       noteRowsChange()
       rowSource = rows.source
@@ -73,6 +73,40 @@ extension MetalTextSurface {
       write { $0.arrangement = arrangement }
       if restyles { appearanceDidChange() }
     }
+  }
+
+  /// 差し込みの境が昇順で、どれも 0...`lineCount` に収まる。
+  private static func boundariesAreValid(_ insertions: [RowInsertion], lineCount: Int) -> Bool {
+    var previous = Int.min
+    for insertion in insertions {
+      guard previous <= insertion.line, (0...lineCount).contains(insertion.line) else {
+        return false
+      }
+      previous = insertion.line
+    }
+    return true
+  }
+
+  /// 区間の始まりが重複なく昇順に並び、どれも 0..<`lineCount` に収まる。
+  private static func spansAreValid(_ spans: [LineSpan], lineCount: Int) -> Bool {
+    var previous = Int.min
+    for span in spans {
+      guard previous < span.line, (0..<lineCount).contains(span.line) else { return false }
+      previous = span.line
+    }
+    return true
+  }
+
+  /// 差し込んだ行が指す行は、指すものがあれば、どれも出どころの 0..<`sourceLines` に収まる。
+  private static func insertedLinesAreValid(_ insertions: [RowInsertion], sourceLines: Int) -> Bool
+  {
+    for insertion in insertions {
+      guard case .lines(let lines) = insertion.content else { continue }
+      for inserted in lines {
+        if let line = inserted.line, !(0..<sourceLines).contains(line) { return false }
+      }
+    }
+    return true
   }
 
   /// 今の並びが `insertions` と同じ（境と中身。絵の差し込みは同一性）か。
