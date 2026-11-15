@@ -55,21 +55,32 @@ extension AutomationStore {
     try read { try $0.positions(of: nodeId) }
   }
 
-  /// 取る行が 0 件だった契機。読んだ位置を読む上限の番号まで進め、捨てた数と読む前に期限で消えた数を受け手のノードの
-  /// 持ち越しに足す（次の成功した回の記録に載る）。
-  func discard(_ read: AutomationIntake.Read, of nodeId: AutomationNodeID, in id: Int, now: Date)
-    throws(AutomationError)
-  {
-    guard read.taken.isEmpty, automation(id)?.states[nodeId] != nil, !read.reach.isEmpty else {
-      return
-    }
-    try commit(sweepingAt: TaskItem.storedInstant(now)) { db, memory in
-      try db.advance(nodeId, read.reach)
-      var carried = try db.carried(of: nodeId)
-      for drop in read.dropped { carried.dropped.add(drop.reason) }
-      carried.dropped.add(.lapsed, read.lapsed)
-      try db.setCarried(nodeId, carried)
-      try memory.recount(id, db, now: now, nodeIds: [nodeId])
+  /// 取る行が 0 件だった契機。手段を起こさず、回の記録も残さない。受け手として、読んだ位置を読む上限の番号まで進め、捨てた数と
+  /// 読む前に期限で消えた数を持ち越しに足す（次の成功した回の記録に載る）。今の集合の処理なら、出す側として空の結果を確定と同じく
+  /// 自分の項目に照らす（今有効な項目はすべて無効になる。入力を付け替えた直後のように、進める位置が無くても照らす）。出す側の行が
+  /// 変わったかを返す（変わったら走らせ役が下流の起こす決まりを見る）。
+  @discardableResult func discard(
+    _ read: AutomationIntake.Read, of nodeId: AutomationNodeID, in id: Int, now: Date
+  ) throws(AutomationError) -> Bool {
+    guard read.taken.isEmpty, let graph = automation(id)?.graph, let node = graph.node(nodeId)
+    else { return false }
+    let producing = node.role == .process && node.coverage == .currentSet
+    guard producing || !read.reach.isEmpty else { return false }
+    let at = TaskItem.storedInstant(now)
+    return try commit(sweepingAt: at) { db, memory in
+      if !read.reach.isEmpty {
+        try db.advance(nodeId, read.reach)
+        var carried = try db.carried(of: nodeId)
+        for drop in read.dropped { carried.dropped.add(drop.reason) }
+        carried.dropped.add(.lapsed, read.lapsed)
+        try db.setCarried(nodeId, carried)
+      }
+      var changed = false
+      if producing { changed = try db.writeItems(of: nodeId, [], at: at).changed }
+      try memory.recount(
+        id, db, now: now,
+        nodeIds: [nodeId] + (changed ? graph.downstream(of: nodeId).map(\.id) : []))
+      return changed
     }
   }
 

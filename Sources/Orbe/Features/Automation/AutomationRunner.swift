@@ -287,8 +287,8 @@ extension AutomationRunner {
     }
   }
 
-  /// 契機の始まりの時点までの上流の行を読む。取る行が 0 件なら手段を起こさず、読んだ位置を読む上限の番号まで進めて終える。
-  /// ただし今の集合の処理は 0 件でも回す（空の集合を写す）。
+  /// 契機の始まりの時点までの上流の行を読む。取る行が 0 件なら手段を起こさず、0 件の契機の変異（読んだ位置を進める。今の集合の
+  /// 処理は空の結果を自分の項目に照らす）で終える。出す側の行が変わったら、成功した回と同じく下流の起こす決まりを見る。
   private func read(_ trigger: Trigger) {
     let read: AutomationIntake.Read?
     do throws(AutomationError) {
@@ -298,10 +298,12 @@ extension AutomationRunner {
       NSLog("[automation] cannot read the rows of node \(trigger.nodeId): \(error)")
       return end(trigger)
     }
-    guard let read, let node = store.automation(trigger.automationId)?.graph.node(trigger.nodeId)
-    else { return end(trigger) }
-    guard !read.taken.isEmpty || (node.role == .process && node.coverage == .currentSet) else {
-      try? store.discard(read, of: trigger.nodeId, in: trigger.automationId, now: now())
+    guard let read else { return end(trigger) }
+    guard !read.taken.isEmpty else {
+      let changed =
+        (try? store.discard(read, of: trigger.nodeId, in: trigger.automationId, now: now()))
+        ?? false
+      if changed { wake(below: trigger.nodeId, in: trigger.automationId) }
       return end(trigger)
     }
     pass(trigger, read: read)

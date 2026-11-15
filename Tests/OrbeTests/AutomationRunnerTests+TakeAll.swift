@@ -92,8 +92,8 @@ extension AutomationRunnerTests {
     XCTAssertEqual(calls("copy").count, 2, "扱い終えた変化では起き直さない")
   }
 
-  /// 今の集合の処理は、入力が 0 件になっても回り（空の集合を写す）、前の出力をすべて無効にする。
-  func testACurrentSetProcessRunsOnAnEmptyInputAndDropsItsOutput() throws {
+  /// 今の集合の処理は、入力が 0 件になると手段を起こさず回の記録も残さずに、前の出力をすべて無効にする（空の集合を写す）。
+  func testACurrentSetProcessDropsItsOutputOnAnEmptyInputWithoutRunning() throws {
     let id = try defineCopy()
     advance(by: 1800)
     finish("gh", fetched(["a"]))
@@ -103,13 +103,13 @@ extension AutomationRunnerTests {
     advance(by: 1800)
     finish("gh", printed(""))
 
-    XCTAssertEqual(calls("copy").count, 2, "入力が 0 件でも回る")
-    XCTAssertEqual(rows(try XCTUnwrap(calls("copy").last)).count, 0)
-    finish("copy", printed(""))
+    XCTAssertEqual(calls("copy").count, 1, "入力が 0 件なら手段を起こさない")
+    XCTAssertEqual(store.automation(id)?.state(key: "copy").runs.count, 1, "回の記録を残さない")
     XCTAssertEqual(try store.liveLinks(id, "copy"), [])
   }
 
-  /// 上流の出力の性質を書き換えて今有効な項目が無効になると、毎回すべてを取るノードはすぐ起きて空の集合を写す。
+  /// 上流の出力の性質を書き換えて今有効な項目が無効になると、毎回すべてを取るノードはすぐ起きて（手段を起こさずに）空の集合を
+  /// 写す。
   func testRewritingTheUpstreamsCoverageWakesATakeAllNode() throws {
     let id = try defineCopy()
     advance(by: 1800)
@@ -118,7 +118,7 @@ extension AutomationRunnerTests {
 
     try rewrite(id, AutomationDefinition(name: "自動化", notify: nil, nodes: copyNodes(.newArrivals)))
 
-    XCTAssertEqual(calls("copy").count, 2)
-    XCTAssertEqual(rows(try XCTUnwrap(calls("copy").last)).count, 0)
+    XCTAssertEqual(calls("copy").count, 1)
+    XCTAssertEqual(try store.liveLinks(id, "copy"), [])
   }
 }

@@ -136,7 +136,8 @@ extension AutomationTrialTests {
   }
 
   /// 直す試走は、上流の出力の性質を変えたとき、変えていない毎回すべてを取るノードも本番で書いた時点と同じに起こす: そのノードは
-  /// 無効になった上流を空の集合として写し、流しで写し直した a も新しい行として副作用に渡る（本番では a の副作用がもう一度走る）。
+  /// 無効になった上流を、手段を起こさずに空の集合として写し、流しで写し直した a も新しい行として副作用に渡る（本番では a の副作用が
+  /// もう一度走る）。
   func testARewriteOfTheUpstreamsCoverageHoldsWhatTheSideEffectGetsAgainAsInProduction() throws {
     var copy = DesignSceneFixtures.commandNode(
       "copy", "copy", .arrival, script: "copy", coverage: .currentSet)
@@ -174,7 +175,7 @@ extension AutomationTrialTests {
     let flowing = jobs.calls.count
     try runner.flow(id, to: .ends)
     written.merge(answer(from: flowing, output)) { $0 + $1 }
-    XCTAssertEqual(written["copy"]?.first, [], "前提: 本番では書いた時点で copy が空の集合を写す")
+    XCTAssertEqual(written["copy"]?.count, 1, "前提: 本番では書いた時点の copy は手段を起こさずに空の集合を写す")
     XCTAssertEqual(
       written["post"], [[downstream("copy", "a", of: id), downstream("copy", "b", of: id)]],
       "前提: 本番では a の副作用がもう一度走る")

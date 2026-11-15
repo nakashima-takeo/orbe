@@ -52,8 +52,8 @@ extension AutomationReference {
     events passed `retentionDays` since its last good run.
     - `failed` and `failure`: why the run failed (`failure` in English). A failed run moves \
     nothing, so read `failure` and the `reasons` to see where it broke.
-    A node with no rows to take does not start its method and records no run, except a \
-    `currentSet` process, which runs to copy an empty input. A record that cannot be \
+    A node with no rows to take does not start its method and records no run; a `currentSet` \
+    process then makes all its current items invalid. A record that cannot be \
     read has only `recordId`, `nodeKey`, `startedAt`, `endedAt`, `trigger`, `failed` (true or \
     false) and `unknown`. Each node keeps the runs that are among its newest N or started within D \
     days (settings, 20 runs and 7 days by default), and also its latest good run, the run of its \
