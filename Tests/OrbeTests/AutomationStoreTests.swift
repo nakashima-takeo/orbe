@@ -6,9 +6,9 @@ import XCTest
 /// 自動化のストアの保存——再起動の往復、DB の版と形の確かめ、読めない定義・記録の閉じ込め、2 つ目の Orbe の締め出し、
 /// 回の記録と判断の記録の保持。DB は caseDir の本物。
 ///
-/// 壊れると何が起きるか: 再起動で読んだ位置・候補・回の記録・決まりを外した印が巻き戻るか消える。古い版の DB や形の違う DB で
+/// 壊れると何が起きるか: 再起動で読んだ位置・候補・回の記録・形式エラーの印が巻き戻るか消える。古い版の DB や形の違う DB で
 /// 起動が落ちる、または読み違える。新しい版の DB を退避して利用者の自動化を失う。読めない定義が 1 つあるだけで全部の自動化を
-/// 失う。同じ state の 2 つ目の Orbe が予定を回して副作用を二重に起こす。回の記録が際限なく溜まる、または候補・目印・外した印が
+/// 失う。同じ state の 2 つ目の Orbe が予定を回して副作用を二重に起こす。回の記録が際限なく溜まる、または候補・目印・形式エラーの印が
 /// 指す回を消して読めなくなる。
 final class AutomationStoreTests: OrbeTestCase {
   static let at = Date(timeIntervalSince1970: 1_800_000_000)
@@ -99,7 +99,7 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 再起動
 
-  /// 自動化・ノードの出来事の残す日数・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・決まりを外した印・
+  /// 自動化・ノードの出来事の残す日数・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・形式エラーの印・
   /// 止めた印・回の記録・読めば取る行の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・自動化とノードを止める・消す）の後に
   /// 開き直しても同じ。回の記録は失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
   func testEverythingSurvivesARestart() throws {
@@ -171,9 +171,9 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(AutomationStore().automations.map(\.name), ["一つ目", "三つ目"])
   }
 
-  // MARK: - 決まりを外した印
+  // MARK: - 形式エラーの印
 
-  /// 出力が決まりを外した印は最初の回に付き、何をするかが変わるまで残る（名前だけの書き換えでは残る）。
+  /// 形式エラーの印は出力が決まりを外した最初の回に付き、何をするかが変わるまで残る（名前だけの書き換えでは残る）。
   func testTheBreachMarkStaysFromTheFirstBreachUntilTheNodesBehaviorChanges() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
@@ -242,7 +242,7 @@ final class AutomationStoreTests: OrbeTestCase {
   }
 
   /// 回の記録はノードごとに新しい 20 件か 7 日以内（既定の保持）のものを残し、どちらにも入らない回は消える。ただし最新の成功した
-  /// 回・外した印の回・残っている候補を出した回は消えない。開き直しても同じ。
+  /// 回・形式エラーの印の回・残っている候補を出した回は消えない。開き直しても同じ。
   func testOldRunsAreSweptExceptTheOnesSomethingPointsAt() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
@@ -272,7 +272,7 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(
       kept,
       [Self.at] + (4...count).map { Self.at.addingTimeInterval(TimeInterval(86400 * $0)) },
-      "外した印の回で、最新の成功した回でもある最初の回は残る")
+      "形式エラーの印の回で、最新の成功した回でもある最初の回は残る")
     XCTAssertEqual(fetches.succeededAt, Self.at)
     XCTAssertEqual(fetches.breach?.startedAt, Self.at)
     XCTAssertEqual(

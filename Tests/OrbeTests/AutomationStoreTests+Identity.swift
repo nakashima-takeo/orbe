@@ -31,7 +31,7 @@ extension AutomationStoreTests {
   }
 
   /// 鍵を変えた書き換え（`from` の名指しも合わせて変える）の後も、ノードは同じ ID のまま、読んだ位置・まだ受け取っていない行・
-  /// 回の記録・外した印・候補を保ち、下流へ渡す id と回の ID も変わらない。鍵だけの変化は何をするかの変化に入らない（下流の
+  /// 回の記録・形式エラーの印・候補を保ち、下流へ渡す id と回の ID も変わらない。鍵だけの変化は何をするかの変化に入らない（下流の
   /// 名指しが変わっただけのノードも）。
   func testRenamingANodeKeepsItsIdentity() throws {
     let store = AutomationStore()

@@ -216,7 +216,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(try AutomationDefinition.decode(object), expected)
   }
 
-  /// 判定の動作の定義を壊した、取得に決まりを外した印のある自動化（読めない自動化として開き直したストア）。
+  /// 判定の動作の定義を壊した、取得に形式エラーの印のある自動化（読めない自動化として開き直したストア）。
   private func unreadableWithABreach() throws -> (store: AutomationStore, id: Int) {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition("壊す"), now: Self.at).id)
@@ -232,7 +232,7 @@ extension AutomationStoreTests {
   }
 
   /// 読めない自動化を直すと、残るノードは開き直したストアと同じ状態（回の記録・通し番号・足した時刻）から続き、何をするかが
-  /// 変わったものとして外した印が下りる。今の集合のまま直したノードの今有効な項目は残る。
+  /// 変わったものとして形式エラーの印が下りる。今の集合のまま直したノードの今有効な項目は残る。
   func testFixingAnUnreadableAutomationCarriesItsNodesOverAndLowersTheirMarks() throws {
     let (carried, id) = try { () throws -> (Automation, Int) in
       let (store, id) = try unreadableWithABreach()

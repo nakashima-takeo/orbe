@@ -118,7 +118,7 @@ extension WindowControllerAutomationControlTests {
       rejected["reasons"] as? [String], ["resolve https://example.com/gone: no open proposal"])
   }
 
-  /// ノードの外した印は、印の回の開始時刻・外れた件（英文つき）・その回が通ったかで出る。
+  /// ノードの形式エラーの印は、印の回の開始時刻・外れた件（英文つき）・その回が通ったかで出る。
   func testABreachMarkIsListedFromTheMarkedRun() throws {
     let wc = try launch()
     let id = try set(wc, Self.definition())

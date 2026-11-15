@@ -234,7 +234,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     XCTAssertTrue(failure.text.hasPrefix("取る：失敗："), failure.text)
   }
 
-  /// 外した印は印の回の記録そのものを指すので、同じミリ秒に始まった次の回で、外した回の知らせが出直さない。
+  /// 形式エラーの印は印の回の記録そのものを指すので、同じミリ秒に始まった次の回で、外した回の知らせが出直さない。
   @MainActor func testTheBreachNoticeBelongsToTheMarkedRunAlone() throws {
     let wc = controller()
     let store = wc.automationStore
