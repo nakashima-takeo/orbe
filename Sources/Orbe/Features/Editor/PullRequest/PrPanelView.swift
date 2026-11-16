@@ -9,6 +9,7 @@ struct PrPanelView: View {
   let panel: PrPanel
   let list: RowList<PrListSource>
   let header: PrDescriptionHeader
+  @Environment(\.chromeFontResolver) private var fontResolver
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -42,8 +43,14 @@ struct PrPanelView: View {
         PrListHost(
           list: list, header: header, panel: panel, description: content.body,
           descriptionTitle: l10n.string(.editorPrDescription), rowsVersion: panel.rowsVersion,
-          selection: panel.selection, emoji: nil, wantsFocus: panel.focusRequest,
-          language: l10n.language)
+          selection: panel.selection, emoji: fontResolver.emojiFont,
+          wantsFocus: panel.focusRequest
+        )
+        .onChange(of: l10n.language, initial: true) { _, language in
+          guard list.list.source.language != language else { return }
+          list.list.source.language = language
+          list.list.reloadRows()
+        }
       } else if let failure = state.failure {
         PrNote(text: PrPanelText.failure(failure, l10n), color: Color.theme.danger)
       }
@@ -206,7 +213,6 @@ private struct PrListHost: NSViewRepresentable {
   let selection: PrRowID?
   let emoji: NSFont?
   let wantsFocus: Bool
-  let language: Language
 
   func makeNSView(context: Context) -> RowList<PrListSource> {
     list.setHeader(header)
@@ -224,7 +230,6 @@ private struct PrListHost: NSViewRepresentable {
     if header.show(description, isOpen: panel.isDescriptionOpen, title: descriptionTitle) {
       list.headerDidChange()
     }
-    list.list.source.language = language
     list.update(
       rowsVersion: rowsVersion, selection: selection, emoji: emoji, wantsFocus: wantsFocus)
   }
