@@ -265,6 +265,49 @@ extension EditorDiffTests {
     waitRows(diff, "元の index の版の全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
   }
 
+  /// 消したファイルを短い本文で戻して index に入れた後、中にコミットを持つリポジトリのディレクトリに置き換えると、見せた
+  /// ままでも、隠している間に置き換えて見せ直しても、並びは今の index の版とサブモジュールの行の丸ごとの置き換えになる。
+  /// 中の HEAD を読む間は、前の並びを面に置かない。
+  func testReplacingARestoredFileWithARepositoryReplacesTheRowsWholeVisibleOrHidden() throws {
+    for hidden in [false, true] {
+      if hidden { try setUpWithError() }
+      let (tab, _) = tab()
+      try FileManager.default.removeItem(at: repo.url("a.txt"))
+      let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+      waitRows(diff, "全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
+      try repo.write("a.txt", "x\n")
+      XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+      pumpMain(
+        until: { diff.document != nil && diff.oldSource == .some("x\n") && diff.content == .ready },
+        "前提: 戻した文書と新しい index")
+      if hidden { diff.dismiss() }
+
+      let nested = repo.dir.path + "-nested-\(hidden)"
+      for args in [
+        ["init", "-q", "-b", "main", nested],
+        [
+          "-C", nested, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-q",
+          "--allow-empty",
+          "-m", "t",
+        ],
+      ] {
+        XCTAssertTrue(repo.git(args).isSuccess, "\(args)")
+      }
+      try FileManager.default.removeItem(at: repo.url("a.txt"))
+      try FileManager.default.moveItem(atPath: nested, toPath: repo.root + "/a.txt")
+      if hidden {
+        let working = try XCTUnwrap(diff.workingTree)
+        pumpMain(until: { working.workingStale }, "前提: 隠している間に作業ツリーが変わったと知る")
+        diff.present(.inline)
+      }
+
+      waitRows(diff, hidden ? "見せ直した後の置き換え" : "見せたままの置き換え") { _ in
+        diff.document == nil && diff.newRevisionSide.lines == 1
+      }
+      XCTAssertEqual(diff.revisionHunks, [LineHunk(old: 0..<2, new: 0..<1)], "丸ごとの置き換え")
+    }
+  }
+
   private func text(_ revision: RevisionDocument?) -> String? {
     revision.map { String(decoding: $0.text.contiguousUnits(), as: UTF16.self) }
   }
