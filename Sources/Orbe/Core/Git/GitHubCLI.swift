@@ -88,23 +88,19 @@ final class GitHubCLI {
   /// `repository` を名指しすれば、そのリポジトリの PR を引く（`-R`）。nil なら gh が作業ディレクトリの remote から選ぶ
   /// リポジトリ。
   static func branchPRArguments(head: String, repository: GitHubRepoName? = nil) -> [String] {
-    (repository.map { ["-R", $0.value] } ?? [])
+    (repository.map { ["-R", "github.com/\($0.value)"] } ?? [])
       + [
         "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
         "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner,url,createdAt",
       ]
   }
 
-  /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。worktree の掃除で
-  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。ブランチの PR を引く段
-  /// （`GitHubBranchPullRequestLookup`）も同じ取得を使う。
+  /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。リポジトリは名指しせず、gh が作業ディレクトリの
+  /// remote から選ぶ。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。
   ///
   /// **結果は head 単位で返し、失敗もその head に閉じる**（`.failure` = その head の取得失敗／
   /// `[]` = 該当なし）——1 本の失敗で全体を捨てると、取れた head の事実まで一緒に消える。
   /// `each` は head ごとに 1 回、メインで返る（`GitRunner` / `GitHubCLI` の共通契約）。
-  ///
-  /// ラウンドロビンで固定本数のレーンへ静的に配り、各レーンは自分の担当を直列に回す。セマフォで
-  /// 待たせる形にすると heads の本数ぶんスレッドを塞ぐ（thread explosion）。
   func branchPullRequests(
     cwd: String, heads: [String],
     each: @escaping (String, Result<[GitHubBranchPR], GitHubFailure>) -> Void
@@ -114,8 +110,11 @@ final class GitHubCLI {
     ) { query, fetched in each(query.head, fetched) }
   }
 
-  /// 問い合わせ（ブランチ名と、名指しするリポジトリ）ごとの PR。`each` は問い合わせごとに 1 回、メインで返る。レーンの
-  /// 配り方は `branchPullRequests(cwd:heads:each:)` と同じ。
+  /// 問い合わせ（ブランチ名と、名指しするリポジトリ）ごとの PR。ブランチの PR を引く段（`GitHubBranchPullRequestLookup`）が
+  /// 使う。`each` は問い合わせごとに 1 回、メインで返る。
+  ///
+  /// ラウンドロビンで固定本数のレーンへ静的に配り、各レーンは自分の担当を直列に回す。セマフォで
+  /// 待たせる形にすると queries の本数ぶんスレッドを塞ぐ（thread explosion）。
   func branchPullRequests(
     cwd: String, queries: [GitHubBranchPRQuery],
     each: @escaping (GitHubBranchPRQuery, Result<[GitHubBranchPR], GitHubFailure>) -> Void

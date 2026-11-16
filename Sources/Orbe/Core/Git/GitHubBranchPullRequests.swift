@@ -186,8 +186,7 @@ final class GitHubBranchPullRequestLookup {
     return parents
   }
 
-  /// 問い合わせ先ごとの答え（push 先が先）を 1 つにする。失敗があれば最初の失敗にする。問い合わせ先が 1 つなら gh の並びのまま、
-  /// 2 つなら作成日時の新しい順。
+  /// 問い合わせ先ごとの答え（push 先が先）を 1 つにする。失敗があれば最初の失敗にする。PR は作成日時の新しい順。
   private static func merge(_ results: [Result<[GitHubBranchPR], GitHubFailure>])
     -> Result<[GitHubBranchPR], GitHubFailure>
   {
@@ -198,7 +197,6 @@ final class GitHubBranchPullRequestLookup {
       case .success(let pullRequests): all.append(pullRequests)
       }
     }
-    guard all.count > 1 else { return .success(all.first ?? []) }
     return .success(all.joined().sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") })
   }
 }

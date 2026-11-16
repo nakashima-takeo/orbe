@@ -51,7 +51,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
         head=""; repo=""
         while [ $# -gt 0 ]; do
           [ "$1" = "--head" ] && head="$2"
-          [ "$1" = "-R" ] && repo="$2"
+          [ "$1" = "-R" ] && repo="${2#github.com/}"
           shift
         done
         echo "H $head" >> "$D/calls.log"
