@@ -5,13 +5,13 @@ import XCTest
 
 /// エディター面に結んだ PR のパネル——レールで出したら、今の答えで行を組んでから、行があるときだけ列に焦点を入れる。列が
 /// 消える・パネルを隠す・cd で根が変わるとき、列にあった焦点は面の本文へ戻り、当てる列の無い焦点の要求は残らない。cd で
-/// 根が変わったら前の根の PR を見るのをやめる。ツリーかリストかをほかの面で選べば、この面の行も組み直す。GitHub は、面を
-/// 作る前に登録した差し替えの出どころが答える。
+/// 根が変わったら前の根の PR を見るのをやめる。ツリーかリストかをほかの面で選べば、この面の行も組み直し、言語を切り替え
+/// れば見えている行を読み直す。GitHub は、面を作る前に登録した差し替えの出どころが答える。
 ///
 /// 壊れると何が起きるか: 新しい面や cd の後にレールで PR のパネルを出しても列に焦点が入らない。PR が無くなったのに残った
 /// 焦点の要求が、後で PR が現れた瞬間に本文や端末から焦点を奪う。PR がマージされた・ブランチを替えたときに焦点が窓へ落ち、
 /// 打鍵がどこにも届かない。cd の後も前の worktree の PR を GitHub に問い合わせ続ける。ほかの面でリストにしても、この面が
-/// ツリーのまま。
+/// ツリーのまま。言語を切り替えても、見えている見出しが前の言語のまま。
 @MainActor
 final class PullRequestPaneTests: OrbeTestCase {
   private struct Hosted {
@@ -168,6 +168,27 @@ final class PullRequestPaneTests: OrbeTestCase {
     XCTAssertTrue(try XCTUnwrap(hosted.pane.pullRequest.state).isWatched)
     settle()
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "焦点は本文へ")
+  }
+
+  /// 出しているパネルで言語を切り替えれば、見えている行をその言語で読み直す。
+  func testSwitchingTheLanguageRereadsTheVisibleRows() throws {
+    let hosted = host(try registeredRoot())
+    shownWithRows(hosted)
+    let header = { (language: Language) in
+      L10n.string(.editorPrFiles, language) + ", "
+        + L10n.format(.editorPrViewedCount, language, 0, 2)
+    }
+    let labels = { self.rowViews(in: hosted.list).compactMap { $0.accessibilityLabel() } }
+    let before = hosted.pane.localization.language
+    let after: Language = before == .ja ? .en : .ja
+    pumpMain(until: { labels().contains(header(before)) }, "前提: 見出しの行が見えている")
+
+    hosted.pane.localization.language = after
+    pumpMain(until: { labels().contains(header(after)) }, "切り替えた言語で読み直す")
+  }
+
+  private func rowViews(in view: NSView) -> [PrRowView] {
+    view.subviews.flatMap { ($0 as? PrRowView).map { [$0] } ?? rowViews(in: $0) }
   }
 
   /// ツリーかリストかがほかの面で選ばれても（アプリ全体の選択が変わる）、この面の行を組み直す。
