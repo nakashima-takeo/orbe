@@ -68,7 +68,16 @@ extension EditorDiffTests {
       FileHandle.standardError.write(Data("遷移 種 \(seed) \(log.joined(separator: " "))\n".utf8))
       try op()
 
-      if let mismatch = settle(pane, working: working, staged: staged, unsaved: unsaved.text) {
+      let truth: Truth
+      do {
+        truth = try readTruth()
+      } catch {
+        XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後、期待を読む git が失敗: \(error)")
+        return false
+      }
+      if let mismatch = settle(
+        pane, truth: truth, working: working, unsaved: unsaved.text)
+      {
         XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後: \(mismatch)")
         return false
       }
@@ -101,16 +110,18 @@ extension EditorDiffTests {
     )
   }
 
-  /// 見せている diff が今の両側に落ち着くまで main を回す。10 秒で落ち着かなければ、その食い違い。
+  /// 見せている diff が、手の後の git と作業ツリーの姿 `truth` に落ち着くまで main を回す。10 秒で落ち着かなければ、その
+  /// 食い違い。
   private func settle(
-    _ pane: EditorPaneView, working: EditorDiff, staged: EditorDiff, unsaved: String?
+    _ pane: EditorPaneView, truth: Truth, working: EditorDiff, unsaved: String?
   ) -> String? {
     var mismatch: String?
     let deadline = Date().addingTimeInterval(10)
     repeat {
       RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
       mismatch = self.mismatch(
-        pane.diff, working: working, staged: staged, mode: pane.diffModes.mode, unsaved: unsaved)
+        pane.diff, truth: truth, working: working, mode: pane.diffModes.mode,
+        unsaved: unsaved)
     } while mismatch != nil && Date() < deadline
     return mismatch
   }
@@ -180,17 +191,14 @@ extension EditorDiffTests {
   /// 見せている diff が今の両側に落ち着いていなければ、その食い違い（落ち着いていれば nil）。未保存の本文が残っているかも
   /// 見る。
   private func mismatch(
-    _ shown: EditorDiff?, working: EditorDiff, staged: EditorDiff, mode: EditorDiff.Mode,
-    unsaved: String?
+    _ shown: EditorDiff?, truth: Truth, working: EditorDiff,
+    mode: EditorDiff.Mode, unsaved: String?
   ) -> String? {
     if let unsaved, string(working.document?.text) != unsaved {
       return "未保存の本文が失われた: \(String(describing: string(working.document?.text)))"
     }
     guard let shown else { return nil }
-    guard let expected = expectation(shown === working ? .workingTree : .staged, working) else {
-      return "前提: git の状態を読めない"
-    }
-    switch expected {
+    switch expectation(shown === working ? .workingTree : .staged, truth, working) {
     case .unavailable(let reason):
       return shown.content == .unavailable(reason) ? nil : "中身 \(shown.content)・期待 \(reason)"
     case .sides(let old, let new):
@@ -221,41 +229,63 @@ extension EditorDiffTests {
     case sides(old: String?, new: String?)
   }
 
-  /// git と作業ツリーから読み直した、種類 `kind` の diff が出すべきもの。作業ツリー diff の新しい側は、未保存の文書が
-  /// あればその本文。
-  private func expectation(_ kind: EditorDiff.Kind, _ working: EditorDiff) -> Expected? {
-    let staged = repo.git(["ls-files", "-s", "--", "a.txt"]).stdoutText.split(separator: "\n")
-    let entries = staged.map { $0.split(separator: " ", maxSplits: 2).map(String.init) }
-    if entries.contains(where: { $0.count == 3 && !$0[2].hasPrefix("0") }) {
-      return .unavailable(.conflicted)
+  /// 手の後の git と作業ツリーの姿——index が競合か、index の版の本文、作業ツリーの姿の本文（どちらも無ければ nil。
+  /// サブモジュールは「Subproject commit」の行）。
+  private struct Truth {
+    let conflicted: Bool
+    let index: String?
+    let tree: String?
+  }
+
+  /// 期待を作るための git の読みの失敗（git を起動できない・答えが読めない）。並びの食い違いとは分けて出す。
+  private struct GitReadFailure: Error, CustomStringConvertible {
+    let args: [String]
+    let output: GitRunner.Output
+    var description: String {
+      "git \(args.joined(separator: " ")) が終了コード \(output.status)・\(output.stderrText)"
     }
+  }
+
+  private func read(_ args: [String]) throws -> String {
+    let output = repo.git(args)
+    guard output.isSuccess else { throw GitReadFailure(args: args, output: output) }
+    return output.stdoutText
+  }
+
+  /// 手の後の git と作業ツリーの姿を読む（手ごとに 1 回）。
+  private func readTruth() throws -> Truth {
+    let staged = try read(["ls-files", "-s", "--", "a.txt"]).split(separator: "\n")
+    let entries = staged.map { $0.split(separator: " ", maxSplits: 2).map(String.init) }
     var index: String?
     if let entry = entries.first, entry.count == 3 {
-      if entry[0] == "160000" {
-        index = EditorDiff.subproject(entry[1])
-      } else {
-        let blob = repo.git(["cat-file", "blob", entry[1]])
-        guard blob.isSuccess else { return nil }
-        index = blob.stdoutText
-      }
-    }
-    if case .staged = kind {
-      return .sides(old: "one\ntwo\nthree\nfour\n", new: index)
+      index =
+        entry[0] == "160000"
+        ? EditorDiff.subproject(entry[1]) : try read(["cat-file", "blob", entry[1]])
     }
     var tree: String?
     var isDirectory: ObjCBool = false
     if FileManager.default.fileExists(atPath: entry.path, isDirectory: &isDirectory) {
-      if isDirectory.boolValue {
-        let head = repo.git(["-C", entry.path, "rev-parse", "HEAD"])
-        guard head.isSuccess else { return nil }
-        tree = EditorDiff.subproject(head.stdoutText.trimmingCharacters(in: .newlines))
-      } else {
-        tree = try? String(contentsOf: entry, encoding: .utf8)
-      }
+      tree =
+        isDirectory.boolValue
+        ? EditorDiff.subproject(
+          try read(["-C", entry.path, "rev-parse", "HEAD"]).trimmingCharacters(in: .newlines))
+        : try String(contentsOf: entry, encoding: .utf8)
     }
+    return Truth(
+      conflicted: entries.contains { $0.count == 3 && !$0[2].hasPrefix("0") }, index: index,
+      tree: tree)
+  }
+
+  /// 姿 `truth` で、種類 `kind` の diff が出すべきもの。作業ツリー diff の新しい側は、未保存の文書があればその本文。
+  private func expectation(_ kind: EditorDiff.Kind, _ truth: Truth, _ working: EditorDiff)
+    -> Expected
+  {
+    if truth.conflicted { return .unavailable(.conflicted) }
+    if case .staged = kind { return .sides(old: "one\ntwo\nthree\nfour\n", new: truth.index) }
+    var tree = truth.tree
     if let document = working.document, document.isDirty { tree = string(document.text) }
-    if index == nil, tree == nil { return .unavailable(.nowhere) }
-    return .sides(old: index, new: tree)
+    if truth.index == nil, tree == nil { return .unavailable(.nowhere) }
+    return .sides(old: truth.index, new: tree)
   }
 
   /// 両側の並び——片側だけがサブモジュールの行なら丸ごとの置き換え、ほかは行差分。
