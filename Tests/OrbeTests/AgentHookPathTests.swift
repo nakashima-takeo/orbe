@@ -95,28 +95,36 @@ final class AgentHookPathTests: OrbeTestCase {
       waitUntil(5) { !tab.acceptsConversationInput }, "タブの外から来た報告で前面を覚えたまま")
   }
 
-  /// タブの端末で動く codex（デーモンを使わない codex）が実行した hook は、そのタブに状態とセッション ID を付ける。
-  /// hook は codex と同じく新しいセッションで起動し、端末を持つのは親（タブのシェル）だけにする。
-  func testCodexHookFromTheTabsTerminalReportsToItsOwnTab() throws {
+  /// タブの端末で動く codex（デーモンを使わない codex）が実行した hook は、そのタブに状態とセッション ID を付ける。codex と
+  /// 同じく、このテストは hook をタブのシェルの子として新しいセッションの先頭で起動する。間のシェルが hook のコマンドを exec で置き換える
+  /// 場合も、置き換えない場合（ログイン設定の EXIT の trap など）も、報告の結果は同じ。
+  func testCodexHookFromTheTabsTerminalReportsToItsOwnTabWhetherOrNotTheShellExecs() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let shim = try stagePlugin()
-    let hook = TestScratch.caseDir.appendingPathComponent("codex-hook.sh")
-    let run = ControlProcess.shellCommandInNewSession(["/bin/sh", shim.path, "codex", "working"])
-    try Data(
-      """
-      printf '%s' '{"session_id":"s-1"}' | \(run)
-      exec /bin/sleep 600
-      """.utf8
-    ).write(to: hook)
-    let tabId = try XCTUnwrap(
-      control.target.controlSpawn(
-        workspaceId: nil, cwd: nil, command: "/bin/sh \(ShellWord.quoted(hook.path))"))
-    let tab = try XCTUnwrap(control.target.controlResolveTab(tabId))
+    let hook = ["/bin/sh", shim.path, "codex", "working"]
+    let shapes = [
+      ("間のシェルが exec する", hook),
+      ("間のシェルが exec しない", ["/bin/sh", "-c", hook.map(ShellWord.quoted).joined(separator: " ") + "; :"]),
+    ]
+    for (index, (shape, words)) in shapes.enumerated() {
+      let script = TestScratch.caseDir.appendingPathComponent("codex-hook-\(index).sh")
+      try Data(
+        """
+        printf '%s' '{"session_id":"s-\(index)"}' | \(ControlProcess.shellCommand(words, as: .newSession))
+        exec /bin/sleep 600
+        """.utf8
+      ).write(to: script)
+      let tabId = try XCTUnwrap(
+        control.target.controlSpawn(
+          workspaceId: nil, cwd: nil, command: "/bin/sh \(ShellWord.quoted(script.path))"))
+      let tab = try XCTUnwrap(control.target.controlResolveTab(tabId))
 
-    XCTAssertTrue(
-      waitUntil(ControlProcess.tabSettleTimeout) { tab.agentState == "working" },
-      "タブの codex の hook の報告がタブに届かない（agentState=\(tab.agentState ?? "nil")）")
-    XCTAssertEqual(tab.agentSlot.session, AgentSession(command: "codex", sessionId: "s-1"))
+      XCTAssertTrue(
+        waitUntil(ControlProcess.tabSettleTimeout) { tab.agentState == "working" },
+        "\(shape): タブ上の codex が実行した hook の報告がそのタブに届かない（agentState=\(tab.agentState ?? "nil")）")
+      XCTAssertEqual(
+        tab.agentSlot.session, AgentSession(command: "codex", sessionId: "s-\(index)"), shape)
+    }
   }
 
   /// 端末から切り離されたプロセス（デーモン経由の codex）が実行した codex の hook は、タブの env を受け継いでいても
