@@ -65,7 +65,7 @@ extension MetalTextSurface {
     let (material, hits) = painter.paint(
       entry.picture,
       ZonePainter.Look(appearance: textView.effectiveAppearance, space: space, scale: scale),
-      serial: { fieldSite(for: $0).serial })
+      reusing: entry.hits, serial: { fieldSite(for: $0).serial })
     orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)))
     entry.material = material
     entry.hits = hits

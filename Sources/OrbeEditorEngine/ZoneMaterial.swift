@@ -111,6 +111,8 @@ struct ZoneHits {
   var lines: [Line] = []
   /// 選べる文のまとまりの文。
   var texts: [AnyHashable: TextRope] = [:]
+  /// 選べる文のまとまりを組んだもの（次の描き直しで、文と見え方と行の範囲が同じなら使い回す）。
+  var typeset: [AnyHashable: ZoneTextTypeset] = [:]
 
   /// 絵の差し込みの中の点の下の選べる文（まとまりと、いちばん近い位置）。字の行の帯と、その左右に少しの余白の上だけ。
   func text(at point: CGPoint) -> (AnyHashable, Int)? {
@@ -164,10 +166,12 @@ final class ZonePainter {
     var scale: CGFloat
   }
 
-  /// 絵 `picture` を外観 `look` で材料に、入力欄を `serial` で場の通し番号に写す。
-  func paint(_ picture: ZonePicture, _ look: Look, serial: (ZoneTextField) -> Int)
-    -> (ZoneMaterial, ZoneHits)
-  {
+  /// 絵 `picture` を外観 `look` で材料に、入力欄を `serial` で場の通し番号に写す。選べる文のまとまりは、前の当たりの表
+  /// `previous` に、文と見え方と行の範囲が同じものを組んだものがあれば、組み直さずに使い回す。
+  func paint(
+    _ picture: ZonePicture, _ look: Look, reusing previous: ZoneHits = ZoneHits(),
+    serial: (ZoneTextField) -> Int
+  ) -> (ZoneMaterial, ZoneHits) {
     if look.scale != imageScale || look.space != imageSpace {
       images.removeAll()
       imageScale = look.scale
@@ -193,8 +197,8 @@ final class ZonePainter {
             shadowBlur: Float(box.shadow?.blur ?? 0)))
       case .text(let line):
         material.runs += runs(
-          ZoneTextLayout.line(line.runs), colors: line.runs.map(\.color), origin: line.origin,
-          look)
+          ZoneTextLayout.line(line.runs).runs, colors: line.runs.map(\.color),
+          origin: line.origin, look)
       case .image(let image):
         if let pixels = pixels(image, look) {
           material.images.append(ZoneMaterial.Image(frame: image.frame, pixels: pixels))
@@ -207,7 +211,9 @@ final class ZonePainter {
         material.fields.append(ZoneMaterial.Field(serial: serial(field.field), frame: field.frame))
       }
     }
-    for text in picture.texts { paint(text, look, into: &material, hits: &hits) }
+    for text in picture.texts {
+      paint(text, look, reusing: previous.typeset[text.id], into: &material, hits: &hits)
+    }
     precondition(hits.texts.count == picture.texts.count, "選べる文のまとまりの id は絵の差し込みの中で一意")
     precondition(
       Set(hits.buttons.map(\.id)).count == hits.buttons.count, "押せる場所の id は絵の差し込みの中で一意")
@@ -216,14 +222,18 @@ final class ZonePainter {
     return (material, hits)
   }
 
-  /// 選べる文のまとまり `text` の文を当たりの表に、その行を材料と当たりの表の行に写す。
+  /// 選べる文のまとまり `text` の文を当たりの表に、その行を材料と当たりの表の行に写す。組んだもの `cached` が同じ文・
+  /// 見え方・行の範囲のものなら、組み直さない。
   private func paint(
-    _ text: ZoneText, _ look: Look, into material: inout ZoneMaterial, hits: inout ZoneHits
+    _ text: ZoneText, _ look: Look, reusing cached: ZoneTextTypeset?,
+    into material: inout ZoneMaterial, hits: inout ZoneHits
   ) {
-    hits.texts[text.id] = TextRope(text.string)
+    let typeset = cached.flatMap { $0.matches(text) ? $0 : nil } ?? ZoneTextTypeset(text)
+    hits.typeset[text.id] = typeset
+    hits.texts[text.id] = typeset.rope
     let colors = text.styles.map(\.color)
-    for (line, layout) in zip(text.lines, ZoneTextLayout.lines(of: text)) {
-      material.runs += runs(layout, colors: colors, origin: line.origin, look)
+    for (index, (line, layout)) in zip(text.lines, typeset.lines).enumerated() {
+      material.runs += runs(typeset.runs[index], colors: colors, origin: line.origin, look)
       let font = Self.font(at: layout.range.location, text.styles) ?? .systemFont(ofSize: 12)
       hits.lines.append(
         ZoneHits.Line(
@@ -244,9 +254,9 @@ final class ZonePainter {
 
   /// 組んだ行のグリフの連なりを、字の連なり（フォントと色ごと）に写す。色は連なりの見え方の色 `colors` から引く。
   private func runs(
-    _ line: ZoneTextLayout.TypesetLine, colors: [NSColor], origin: CGPoint, _ look: Look
+    _ glyphRuns: [ZoneTextLayout.GlyphRun], colors: [NSColor], origin: CGPoint, _ look: Look
   ) -> [ZoneMaterial.Run] {
-    line.runs.compactMap { run in
+    glyphRuns.compactMap { run in
       guard colors.indices.contains(run.style) else { return nil }
       let raised = run.positions.contains { $0.y != 0 }
       return ZoneMaterial.Run(
@@ -302,5 +312,38 @@ final class ZonePainter {
     let pixels = ZonePixels(key: nextImage, width: width, height: height, bytes: bytes)
     images[key] = (image.image, pixels)
     return pixels
+  }
+}
+
+/// 選べる文のまとまりを組んだもの——組んだ文と見え方と行の範囲（覚えの鍵）と、組んだ行・行ごとのグリフの連なり・文。面は
+/// 当たりの表と一緒に持ち、次の描き直しで鍵が同じなら組み直さない（ホバーや印の出し入れの描き直しで段落を組まない）。
+/// 色は鍵に入れない（組み方を変えないので、写すときに今の色で引く）。覚えは当たりの表と同じく、絵の差し込みが外れれば
+/// 消え、描き直した絵に無いまとまりの分は次の表に移らない。
+struct ZoneTextTypeset {
+  let string: String
+  let styles: [ZoneTextStyle]
+  let ranges: [NSRange]
+  let lines: [ZoneTextLayout.TypesetLine]
+  let runs: [[ZoneTextLayout.GlyphRun]]
+  let rope: TextRope
+
+  init(_ text: ZoneText) {
+    string = text.string
+    styles = text.styles
+    ranges = text.lines.map(\.range)
+    lines = ZoneTextLayout.lines(of: text)
+    runs = lines.map(\.runs)
+    rope = TextRope(text.string)
+  }
+
+  /// `text` を同じに組めるか——文（UTF-16 の単位）と、見え方の組み方に効くもの（長さ・字体・余白）と、行の範囲が同じ。
+  func matches(_ text: ZoneText) -> Bool {
+    guard ranges == text.lines.map(\.range), styles.count == text.styles.count,
+      string.utf16.elementsEqual(text.string.utf16)
+    else { return false }
+    return zip(styles, text.styles).allSatisfy {
+      $0.length == $1.length && $0.font == $1.font && $0.leadingPadding == $1.leadingPadding
+        && $0.trailingPadding == $1.trailingPadding
+    }
   }
 }
