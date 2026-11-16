@@ -13,7 +13,7 @@ extension ScmRowView {
     }
     let chevron = Theme.Layout.editorChevron
     let indent = Theme.Space.tick + Theme.Layout.editorScmIndent
-    (header.isOpen ? ScmGlyphShape.chevronOpen : .chevron).draw(
+    (header.isOpen ? RowGlyphShape.chevronOpen : .chevron).draw(
       in: NSRect(x: indent, y: bounds.midY - chevron / 2, width: chevron, height: chevron),
       scm.icon, in: context)
     let rects = buttonRects()

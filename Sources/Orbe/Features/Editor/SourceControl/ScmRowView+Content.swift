@@ -40,7 +40,7 @@ extension ScmRowView {
   private static func header(
     _ section: ScmSection, count: Int, isOpen: Bool, bulk: ScmLayout.Bulk, _ language: Language
   ) -> Header {
-    let button = { (control: ScmControl, glyph: ScmGlyphShape, enabled: Bool, help: L10nKey) in
+    let button = { (control: ScmControl, glyph: RowGlyphShape, enabled: Bool, help: L10nKey) in
       Button(control: control, glyph: glyph, isEnabled: enabled, help: L10n.string(help, language))
     }
     let buttons: [Button] =
@@ -65,7 +65,7 @@ extension ScmRowView {
   private static func file(
     _ section: ScmSection, _ file: ScmChanges.File, _ language: Language, _ emoji: NSFont?
   ) -> File {
-    let button = { (control: ScmControl, glyph: ScmGlyphShape, enabled: Bool, help: L10nKey) in
+    let button = { (control: ScmControl, glyph: RowGlyphShape, enabled: Bool, help: L10nKey) in
       Button(control: control, glyph: glyph, isEnabled: enabled, help: L10n.string(help, language))
     }
     let open = button(.openFile, .openFile, file.opensAsFile, .editorScmOpenFile)

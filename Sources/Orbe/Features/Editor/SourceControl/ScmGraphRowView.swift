@@ -122,7 +122,7 @@ final class ScmGraphRowView: ListRowView {
   ) {
     let glyph: CGFloat = 9
     let center = Self.column + Theme.Layout.editorScmDotColumn / 2
-    ScmGlyphShape.branch.draw(
+    RowGlyphShape.branch.draw(
       in: NSRect(x: center - glyph / 2, y: bounds.midY - glyph / 2, width: glyph, height: glyph),
       scm.accent, in: context)
     let gap = Theme.Space.note
@@ -216,7 +216,7 @@ final class ScmGraphRowView: ListRowView {
         cornerHeight: Theme.Radius.xs - 0.5, transform: nil))
     context.strokePath()
     let glyph: CGFloat = 8
-    ScmGlyphShape.branch.draw(
+    RowGlyphShape.branch.draw(
       in: NSRect(x: rect.minX + 5, y: rect.midY - glyph / 2, width: glyph, height: glyph),
       color, in: context)
     label.draw(
