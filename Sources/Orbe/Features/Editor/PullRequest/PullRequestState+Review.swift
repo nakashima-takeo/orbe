@@ -73,6 +73,7 @@ extension PullRequestState {
       guard let self else { return }
       isReadingReview = false
       if order > reviewWrittenOrder {
+        reviewAnsweredOrder = order
         switch result {
         case .success(let read):
           review = read
@@ -87,7 +88,7 @@ extension PullRequestState {
         readReviewAgain = false
         readReview()
       }
-      catchUpHeads()
+      alignHeads()
       notify()
     }
   }

@@ -121,11 +121,15 @@ final class PullRequestState {
   @ObservationIgnored var reviewReadWaiters: [() -> Void] = []
   /// 書き込みが名指しする自分の保留中のレビュー（読みの答えと、書き込みの答えで分かったもの）。
   @ObservationIgnored var pendingReviewID: String?
-  /// 今の中身と、今のレビューのやりとりを読んだ問い合わせの通し番号（どちらが先に出した読みか）。
+  /// 今の中身と、今のレビューのやりとりを読んだ問い合わせの通し番号（読みが通った時点で進む）。
   @ObservationIgnored private var contentOrder = 0
   @ObservationIgnored var reviewOrder = 0
-  /// 先頭のコミットの食い違い（中身の先頭とレビューのやりとりの先頭）のうち、読み直して揃えようとしたもの。
-  @ObservationIgnored private var caughtUpHeads: (content: String, review: String)?
+  /// 最後に答えが届いた（通った・失敗した）中身とレビューのやりとりの読みの通し番号。
+  @ObservationIgnored private var contentAnsweredOrder = 0
+  @ObservationIgnored var reviewAnsweredOrder = 0
+  /// 先頭のコミットを揃える読み直し（→ `alignHeads`）。走っていれば、その読みを出す直前の通し番号と、揃え始めてから
+  /// 読んだ先頭のコミット。
+  @ObservationIgnored private var alignment: (start: Int, seen: Set<String>)?
   /// 読み直しと書き込みに付ける、出した順の通し番号。
   @ObservationIgnored private var nextOrder = 0
 
@@ -219,19 +223,22 @@ final class PullRequestState {
       readAgain = true
       return
     }
-    failure = nil
+    // 新しいきっかけでは、先頭のコミットを揃える読み直しを最初から数える。
+    alignment = nil
     startReadingContent { [weak self] in self?.readReview() }
   }
 
-  /// 中身を読む（`then` は問い合わせる直前に呼ぶ）。問い合わせる前の追跡 ref の値を覚えてから問い合わせる（→ worktree の今の
-  /// PR と同じ）。
+  /// 中身を読む（`then` は中身を問い合わせる直前に呼ぶ）。中身を読む道はこの 1 つ。問い合わせる前の追跡 ref の値を覚えてから
+  /// 問い合わせる（→ worktree の今の PR と同じ）。読めたら前の失敗を外し、読めなければその失敗を持つ。
   private func startReadingContent(then: @escaping () -> Void = {}) {
     isReading = true
     let order = issueOrder()
     notify()
     tracking.record { [weak self] in
-      self?.readContent(order: order)
+      // 中身の読みが印の付いたまま（`isReading`）で、ほかの読みを先に出す——答えがすぐ返っても、中身の答えより先に
+      // 先頭のコミットを見比べない。
       then()
+      self?.readContent(order: order)
     }
   }
 
@@ -241,10 +248,12 @@ final class PullRequestState {
     source.content(key.id) { [weak self] result in
       guard let self else { return }
       isReading = false
+      contentAnsweredOrder = order
       switch result {
       case .success(let read):
         apply(read, order: order)
         contentOrder = order
+        failure = nil
         // 中身が読めて追跡 ref が新しく分かったら、その値も覚える。
         if trackedRefs.contains(where: tracking.lacks) { tracking.record() }
       case .failure(let reason): failure = .read(reason)
@@ -254,26 +263,42 @@ final class PullRequestState {
         reload()
       }
       resolveBounds()
-      catchUpHeads()
+      alignHeads()
       notify()
     }
   }
 
-  /// 中身とレビューのやりとりを読んだ時点の PR の先頭のコミットが食い違っていたら、先に出した方の読みを読み直す（書き込みの
-  /// 後の読み直しはレビューのやりとりだけなので、その間に push があると、レビューのやりとりだけが新しい先頭を読む。そのままでは
-  /// スレッドを置けず、新しいスレッドも受け付けない状態が次のきっかけまで続く）。どちらかを読んでいる間は待ち、届いた後に
-  /// 見直す。同じ食い違いで読み直すのは 1 回だけ——読み直しても同じ組で食い違う（GitHub の答えの遅れなど）なら、次の
-  /// きっかけまで読まない（問い合わせを往復させ続けない）。
-  func catchUpHeads() {
+  /// 中身とレビューのやりとりを読んだ時点の PR の先頭のコミットが食い違っていたら、両方を読み直して揃える（書き込みの後の
+  /// 読み直しはレビューのやりとりだけなので、その間に push があると、レビューのやりとりだけが新しい先頭を読む。中身とレビューの
+  /// やりとりを並べて読む間に push があっても食い違う。そのままではスレッドを置けず、新しいスレッドも受け付けない）。
+  ///
+  /// どちらの答えが古いかは、出した順からも届いた順からも決まらないので、当てにいかない。両方の答えが届いて食い違っていたら、
+  /// それより後に出す読みで両方を読み直す。GitHub の答えが一貫していれば、その 2 本の間に push が無い限り揃う。なお食い
+  /// 違い、揃え始めてから見ていない先頭のコミットが現れたら（間に push があった）、もう一度読み直す。現れなければ（GitHub の
+  /// 答えが一貫していない）、次のきっかけまで読まない。揃える読みが失敗したら、その失敗を見せて揃えるのをやめ、次のきっかけで
+  /// また揃えにいく。どちらかを読んでいる間は待ち、両方が届いた後に見直す。誰も見ていない間は読まない。
+  func alignHeads() {
+    guard !isReading, !isReadingReview else { return }
     guard let content, let review, content.headCommit != review.headCommit else {
-      caughtUpHeads = nil
+      alignment = nil
       return
     }
-    guard isWatched, !isReading, !isReadingReview,
-      caughtUpHeads.map({ $0 != (content.headCommit, review.headCommit) }) ?? true
-    else { return }
-    caughtUpHeads = (content.headCommit, review.headCommit)
-    if contentOrder < reviewOrder { startReadingContent() } else { readReview() }
+    let heads: Set = [content.headCommit, review.headCommit]
+    var seen = heads
+    if let alignment {
+      // 揃える読みの答えが両方届くまで待つ。
+      guard contentAnsweredOrder > alignment.start, reviewAnsweredOrder > alignment.start else {
+        return
+      }
+      self.alignment = nil
+      // 揃える読みのどちらかが失敗した。
+      guard contentOrder > alignment.start, reviewOrder > alignment.start else { return }
+      guard !heads.isSubset(of: alignment.seen) else { return }
+      seen.formUnion(alignment.seen)
+    }
+    guard isWatched else { return }
+    alignment = (issueOrder(), seen)
+    startReadingContent { [weak self] in self?.readReview() }
   }
 
   /// 問い合わせずに読むのをやめる（積んだ読み直しも捨てる）。
