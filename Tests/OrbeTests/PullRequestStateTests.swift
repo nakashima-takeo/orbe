@@ -207,6 +207,30 @@ final class PullRequestStateTests: OrbeTestCase {
       "取ってきても ref は書かない")
   }
 
+  /// 浅いクローンで、取ってある範囲より古い所で分かれた PR は、共通のコミットが無いとは言わず、取得できなかったとする。
+  func testBoundsBeyondAShallowBoundaryAreCommitsMissingNotUnrelated() throws {
+    let repo = try TempGitRepo()
+    let bare = repo.addOrigin()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "pr"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pr"]).isSuccess)
+    let head = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "main"]).isSuccess)
+    let base = repo.head()
+    XCTAssertTrue(repo.git(["push", "-q", "origin", "main", "pr"]).isSuccess)
+    let shallow = try TempGitRepo(name: "orbe-shallow", initialCommit: false)
+    XCTAssertTrue(shallow.git(["remote", "add", "origin", "file://" + bare]).isSuccess)
+    XCTAssertTrue(shallow.git(["fetch", "-q", "--depth", "1", "origin", "main", "pr"]).isSuccess)
+
+    let state = watchedState()
+    gitHub.content = .success(content(base: base, head: head))
+    state.reload()
+    state.attach(repo: try shallow.open(), fetchRemote: "origin")
+
+    pumpMain(until: { if case .failed = state.bounds { true } else { false } }, "求まらない")
+    guard case .failed(_, .commitsMissing) = state.bounds else { return XCTFail("\(state.bounds)") }
+  }
+
   /// 取りに行っても手元に揃わないコミットは、取りに行き続けず、取得できなかったとして理由を持つ。読み直しで求め直す。
   func testBoundsThatStayMissingAfterAFetchFailAndAReloadRetries() throws {
     let repo = try TempGitRepo()
