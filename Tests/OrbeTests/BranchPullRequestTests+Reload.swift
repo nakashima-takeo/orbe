@@ -205,6 +205,8 @@ extension BranchPullRequestTests {
     letTheLookUpSettle()
     XCTAssertEqual(lookups, ["feat"])
     XCTAssertTrue(root.isResolved, "前提: 根のサービスは判定済みのまま（問い合わせに進める状態）")
+    pullRequest.beginWatching()
+    pumpMain(until: { self.lookups.count == 2 }, "戻ったら問い直す")
   }
 
   /// PR が無いブランチで、ブランチの PR の答えが届く前に見ている者が去れば、ブランチが GitHub に在るかを問い合わせない。

@@ -5,7 +5,8 @@ import XCTest
 /// worktree の今の PR の、手元とのずれ——手元の HEAD と PR の先頭の間で数え、diff の両端には依らない。
 ///
 /// 壊れると何が起きるか: PR のベースブランチが動いたり両端が取れなくなったりすると、ずれの帯が消えるか「違う」に化ける。
-/// 見直した後に PR の中身が変わっても、ずれが数え直されない。浅いクローンで、浅い境界までの誤った数が出る。
+/// 見直した後に PR の中身が変わっても、ずれが数え直されない。浅いクローンで、浅い境界までの誤った数が出る。共通の
+/// 祖先が無い PR で、数が出ない。
 extension BranchPullRequestTests {
   /// PR のベースブランチだけが進んで両端が変わっても、両端を求め直している間も揃った後も、手元とのずれは一致のまま。
   func testTheDriftStaysCountedWhenOnlyTheBaseMoves() throws {
@@ -56,30 +57,42 @@ extension BranchPullRequestTests {
     XCTAssertTrue(root.isResolved, "前提: 根のサービスは持ったまま")
   }
 
-  /// 浅いクローンで、手元の HEAD と PR の先頭が浅い境界より古い所で分かれていれば、ずれを数にせず、違うとだけ持つ。
-  func testADriftBeyondAShallowBoundaryIsOnlyADifference() throws {
+  /// 浅いクローンでは、手元の HEAD と PR の先頭のマージベースが手元で求まっても、ずれを数にせず、違うとだけ持つ。浅く
+  /// なくなれば、次に PR の中身を読み直したときに数える。
+  func testADriftInAShallowCloneIsOnlyADifferenceUntilItIsUnshallowed() throws {
     let bare = repo.addOrigin()
-    XCTAssertTrue(repo.git(["switch", "-q", "-c", "pr"]).isSuccess)
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pr"]).isSuccess)
     let head = repo.head()
-    XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
-    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "main"]).isSuccess)
-    let base = repo.head()
-    XCTAssertTrue(repo.git(["push", "-q", "origin", "main", "pr"]).isSuccess)
+    XCTAssertTrue(repo.git(["push", "-q", "origin", "feat"]).isSuccess)
+    let base = try commit("main")
     let shallow = try TempGitRepo(name: "orbe-shallow", initialCommit: false)
     XCTAssertTrue(shallow.git(["remote", "add", "origin", "file://" + bare]).isSuccess)
-    XCTAssertTrue(shallow.git(["fetch", "-q", "--depth", "1", "origin", "main", "pr"]).isSuccess)
-    XCTAssertTrue(shallow.git(["switch", "-q", "-c", "feat", "FETCH_HEAD"]).isSuccess)
-    XCTAssertTrue(shallow.git(["reset", "-q", "--hard", base]).isSuccess)
+    XCTAssertTrue(shallow.git(["fetch", "-q", "--depth", "1", "origin", "feat"]).isSuccess)
+    XCTAssertTrue(shallow.git(["switch", "-q", "-c", "feat", head]).isSuccess)
+    XCTAssertTrue(shallow.git(["commit", "-q", "--allow-empty", "-m", "local"]).isSuccess)
     repo = shallow
     content = pullRequestContent(base: base, head: head)
     answers["feat"] = .gitHub(
       GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([pr(9, state: "OPEN")]))
-
     let pullRequest = watch()
+    pumpMain(until: { pullRequest.drift == .differs }, "浅い間は数にしない")
 
-    pumpMain(until: { pullRequest.state?.content != nil }, "前提: PR の中身が届く")
-    pumpMain(until: { pullRequest.drift == .differs }, "数にしない")
+    XCTAssertTrue(shallow.git(["fetch", "-q", "--unshallow", "origin"]).isSuccess)
+    try XCTUnwrap(pullRequest.state).reload()
+    pumpMain(until: { pullRequest.drift == .diverged(ahead: 1, behind: 0) }, "浅くなくなれば数える")
+  }
+
+  /// 浅くないリポジトリでは、PR の先頭が手元の HEAD と共通の祖先を持たなくても、それぞれにしか無いコミットの数を出す。
+  func testADriftWithoutACommonAncestorIsCounted() throws {
+    XCTAssertTrue(repo.git(["switch", "-q", "--orphan", "unrelated"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "unrelated"]).isSuccess)
+    let unrelated = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "-f", "main"]).isSuccess)
+    let pullRequest = try watchAnOpenPullRequest(head: unrelated)
+    pumpMain(
+      until: { pullRequest.drift == .diverged(ahead: 2, behind: 1) },
+      "手元の 2 つと PR の 1 つ")
   }
 
   /// `revision` のコミット。
