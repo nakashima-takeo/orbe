@@ -309,23 +309,33 @@ final class ZoneTextLayoutTests: XCTestCase {
     }
   }
 
-  /// 描く行（まとまりの行の範囲から切り出したもの）は、測った行と幅も地も同じ——余白のあるコードが折り返しをまたぐ段落でも。
+  /// 描く行（測った行の範囲から切り出したもの）の範囲も幅も、どの見え方の地も、測った行と同じ——余白のあるコードが
+  /// 折り返しをまたぐ段落でも、右から左の字・和文・括弧・改行・コードを乱択で混ぜた文でも。
   func testDrawnLinesMatchTheMeasuredLines() {
-    let parts = ["和文の段落に ", "merges(event) と長いコード", "が入り、", "שלום", " で終わる。"]
-    let string = parts.joined()
-    let styles = styles(parts, codes: [1, 3], padding: padding)
-    for width in stride(from: CGFloat(50), through: 200, by: 7) {
+    var wrong: [String] = []
+    let compare = { (parts: [String], codes: [Int], width: CGFloat) in
+      let string = parts.joined()
+      let styles = self.styles(parts, codes: codes, padding: self.padding)
       let measured = ZoneTextLayout.lines(string, styles: styles, width: width)
       let drawn = ZoneTextLayout.lines(
         of: ZoneText(
           id: 0, string: string, styles: styles,
           lines: measured.map { ZoneSelectableLine(origin: .zero, range: $0.range) }))
-      for (a, b) in zip(measured, drawn) {
-        XCTAssertEqual(a.range, b.range)
-        XCTAssertEqual(a.width, b.width, accuracy: 0.001, "幅 \(width) の行 \(a.range)")
-        XCTAssertEqual(a.spans(of: 1), b.spans(of: 1), "幅 \(width) の行 \(a.range)")
-      }
+      if drawn.map(\.measured) != measured { wrong.append("\(string) を幅 \(width) で測った行と描く行が食い違う") }
     }
+    for width in stride(from: CGFloat(50), through: 200, by: 7) {
+      compare(["和文の段落に ", "merges(event) と長いコード", "が入り、", "שלום", " で終わる。"], [1, 3], width)
+    }
+    var random = SplitMix(seed: 11)
+    let words = ["あいう", "漢字", "abc", "de f", "אבג", " ", "、", "(", ")", "กำ", "「", "」", "\n"]
+    for _ in 0..<1_000 {
+      let parts = (0..<(2 + random.next(8))).map { _ in
+        words[random.next(words.count)] + words[random.next(words.count)]
+      }
+      compare(
+        parts, parts.indices.filter { _ in random.next(3) == 0 }, CGFloat(40 + random.next(160)))
+    }
+    XCTAssertEqual(wrong.prefix(5), [])
   }
 
   /// 組んだ字の連なりは見え方の境で分かれる（同じ字体でも）。
