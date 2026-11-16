@@ -30,7 +30,7 @@ updated: 2026-11-16
 
 アクティブタブの実効 cwd（0 タブ・ボード選択中は workspace の root path → [layout](../chrome/layout.md)）を引き継いだ新タブで、シェルの代わりに絶対パスのエージェント CLI を直接起動する（新規も再開も。この文書のコマンドの例は CLI の名前で書くが、先頭には絶対パスが入る）。環境変数 `PATH` には子プロセス PATH（[shell-path](../platform/shell-path.md)）を注入する——エージェントの子プロセスにも Orbe 自身と同じコマンド解決を保証するため。エージェント終了はシェル exit と同じ経路でタブが閉じる。永続スナップショットでは、hook 由来のエージェントセッションを持つペインは resume 起動、持たない／未対応 CLI のペインは保存 cwd の通常シェルタブで復元される。resume の解決はタブ起床（materialize 開始）時に行う（→ [persistence](../platform/persistence.md)）。
 
-CLI によっては、Orbe が起動するとき必ず付ける引数がある。codex には共有のデーモンを使わない引数（`--no-daemon`）を付ける（`codex --no-daemon …`・`codex --no-daemon resume <id> …`）。Orbe のタブのモデルは「タブで動くプロセスが agent」で、hook と MCP サーバーもタブで動く agent の子として起動し、タブの環境（[notify](notify.md) の tab identity）を受け継ぐことを前提にしている。デーモン経由の codex では、hook と MCP サーバーを起動するのはデーモンで、その環境はデーモンを最初に起動した端末のもの——状態が別のタブに付き、MCP のツールが別のタブを名乗る。引数は CLI ごとの静的な知識として、新規と再開のコマンドを組む 1 か所が置く。GUI・worktree パレット・タスクの開始・制御 API・復元のどの経路から起動しても付き、経路ごとの付け忘れが起きない。現行の codex（0.157 以上）が前提で、それより古い codex はこの引数を知らず起動に失敗する。
+CLI によっては、Orbe が起動するとき必ず付ける引数がある。codex には共有のデーモンを使わない引数（`--no-daemon`）を付ける（`codex --no-daemon …`・`codex --no-daemon resume <id> …`）。Orbe のタブのモデルは「タブで動くプロセスが agent」で、hook と MCP サーバーもタブで動く agent の子として起動し、タブの環境（[notify](notify.md) の tab identity）を受け継ぐことを前提にしている。デーモン経由の codex では、hook と MCP サーバーを起動するのはデーモンで、その環境はデーモンを最初に起動した端末のもの——状態が別のタブに付き、MCP のツールが別のタブを名乗る。引数は CLI ごとの静的な知識として、新規と再開のコマンドを組む 1 か所が置く。GUI・worktree パレット・タスクの開始・制御 API・復元のどの経路から起動しても付き、経路ごとの付け忘れが起きない。この引数を持つ codex（0.156 以上）が前提で、それより古い codex は引数を知らず起動に失敗する。デーモンを既定で起動するのは 0.157 以上の codex。
 
 ## 外部からの起動
 
