@@ -21,7 +21,7 @@ final class BranchPullRequest {
   @ObservationIgnored private var watchers = 0
   @ObservationIgnored private var isReading = false
   @ObservationIgnored private var readAgain = false
-  /// 読み直しを、根のサービスの判定か status が届くまで待っている（届いたら、ブランチ名が前と同じでも読み直す）。
+  /// 読み直しを、status が届くまで待っている（届いたら、ブランチ名が前と同じでも読み直す）。
   @ObservationIgnored private var awaitingStatus = false
   /// 答えを出した通し番号（`settle` のたびに増える）。答えに続く問い合わせの結果は、その答えを出した番号のままのときだけ
   /// 入れる——答えの値が同じでも、別の読みが出した答えには入れない。
@@ -92,10 +92,7 @@ final class BranchPullRequest {
   func reload() {
     guard watchers > 0, let files else { return }
     awaitingStatus = false
-    guard files.isResolved else {
-      awaitingStatus = true
-      return
-    }
+    guard files.isResolved else { return }
     guard let repo = files.repo else {
       branch = nil
       return settle(.unavailable(.notGit))
