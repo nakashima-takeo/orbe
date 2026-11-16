@@ -17,21 +17,17 @@ public enum InvokerGate {
     case mcpServer
   }
 
+  /// 起点またはその親のプロセス情報を取得できなければ応えない（取り違えた身元で応えるより、応えない）。
   public static func admitsCaller(agent: String, as invocation: Invocation) -> Bool {
+    guard agent == "codex" else { return true }
     let origin =
       switch invocation {
       case .hook: getsid(0)
       case .mcpServer: getpgrp()
       }
-    return admits(agent: agent, origin: origin, process: ProcessEntry.init(pid:))
-  }
-
-  /// 起点またはその親のプロセス情報を取得できなければ応えない（取り違えた身元で応えるより、応えない）。
-  static func admits(agent: String, origin: pid_t, process: (pid_t) -> ProcessEntry?) -> Bool {
-    guard agent == "codex" else { return true }
-    guard origin > 0, let parent = process(origin)?.parent, let entry = process(parent) else {
-      return false
-    }
+    guard origin > 0, let parent = ProcessEntry(pid: origin)?.parent,
+      let entry = ProcessEntry(pid: parent)
+    else { return false }
     return entry.hasControllingTerminal
   }
 }
