@@ -168,7 +168,9 @@ public struct ZoneText {
 /// かたまりの向きの始まりの側に、末尾の余白はその反対の側に付く——右から左の字のコードでも、余白はコードの外に出る。
 /// 地は、余白を含めたかたまりの x 範囲に置く（→ `ZoneTextLayout.Line.spans(of:)`）。折り返しで割れた側と、改行で割れた
 /// 側には余白が付かない。
-public struct ZoneTextStyle: Equatable {
+///
+/// 値はどのスレッドへも渡せる——字体（NSFont は CTFont と同じ物）は不変で、Core Text はスレッドをまたいだ利用を保証する。
+public struct ZoneTextStyle: Equatable, @unchecked Sendable {
   public var length: Int
   public var font: NSFont
   public var color: NSColor

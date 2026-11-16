@@ -20,7 +20,7 @@ extension ZoneTextLayoutTests {
     _ parts: [String], code: Int, width: CGFloat, codes: [Int]? = nil, measuresPadding: Bool = true
   ) -> [String] {
     let string = parts.joined()
-    let lines = ZoneTextLayout.lines(
+    let lines = ZoneTextLayout.typeset(
       string, styles: styles(parts, codes: codes ?? [code], padding: padding), width: width)
     let start = parts[..<code].reduce(0) { $0 + $1.utf16.count }
     let end = start + parts[code].utf16.count
@@ -38,7 +38,7 @@ extension ZoneTextLayoutTests {
 
   /// 行 `line` でコード `code` の地が守らない約束——地は 1 つの続いた範囲で、コードの字を含み、字より余白 `edges` 個分だけ
   /// 広く（コードの端がこの行にある数。nil なら幅を問わない）、ほかの見え方の字にかぶらない。
-  func misplaced(_ line: ZoneTextLayout.Line, code: Int, edges: Int? = 2) -> [String] {
+  func misplaced(_ line: ZoneTextLayout.TypesetLine, code: Int, edges: Int? = 2) -> [String] {
     let spans = line.spans(of: code)
     guard let glyphs = glyphs(of: code, in: line) else {
       return spans.count > 1 ? ["字の無い行で地が \(spans.count) 個"] : []
@@ -61,7 +61,7 @@ extension ZoneTextLayoutTests {
   }
 
   /// 見え方 `style` の元の文の字のグリフの x 範囲を結んだもの（グリフが無ければ nil）。
-  func glyphs(of style: Int, in line: ZoneTextLayout.Line) -> Range<CGFloat>? {
+  func glyphs(of style: Int, in line: ZoneTextLayout.TypesetLine) -> Range<CGFloat>? {
     let all = extents(in: line).filter { $0.style == style }.map(\.x)
     guard let lower = all.map(\.lowerBound).min(), let upper = all.map(\.upperBound).max() else {
       return nil
@@ -71,7 +71,7 @@ extension ZoneTextLayoutTests {
 
   /// 行の、元の文の字のグリフごとの見え方と、組んだ送りでの x 範囲（幅 0 のもの・行末の空白・包みの字は除く）。包みの字は、
   /// 元の文の位置が次の字と同じ字（包みの頭と尾）と、段落の終わりを指す字（段落の末尾の包みの尾）。
-  func extents(in line: ZoneTextLayout.Line) -> [(style: Int, x: Range<CGFloat>)] {
+  func extents(in line: ZoneTextLayout.TypesetLine) -> [(style: Int, x: Range<CGFloat>)] {
     let composition = line.composition
     let hanging = line.hangingStart
     var result: [(style: Int, x: Range<CGFloat>)] = []
@@ -85,7 +85,7 @@ extension ZoneTextLayoutTests {
     return result
   }
 
-  func glyphCount(_ line: ZoneTextLayout.Line) -> Int {
+  func glyphCount(_ line: ZoneTextLayout.TypesetLine) -> Int {
     line.runs.reduce(0) { $0 + $1.glyphs.count }
   }
 }

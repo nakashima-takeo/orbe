@@ -59,9 +59,9 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testPaddingPushesTheNeighboursAndWidensTheGround() throws {
     let parts = ["see ", "code", " here"]
     let bare = try XCTUnwrap(
-      ZoneTextLayout.lines(parts.joined(), styles: styles(parts, padding: 0), width: 500).first)
+      ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: 0), width: 500).first)
     let padded = try XCTUnwrap(
-      ZoneTextLayout.lines(parts.joined(), styles: styles(parts, padding: 4), width: 500).first)
+      ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: 4), width: 500).first)
     let code = try XCTUnwrap(glyphs(of: 1, in: padded))
     let ground = try XCTUnwrap(padded.spans(of: 1).first)
     XCTAssertEqual(ground.lowerBound, code.lowerBound - 4, accuracy: 0.01)
@@ -73,7 +73,7 @@ final class ZoneTextLayoutTests: XCTestCase {
       try XCTUnwrap(glyphs(of: 2, in: bare)).lowerBound + 8, accuracy: 0.01)
     XCTAssertEqual(padded.width, bare.width + 8, accuracy: 0.01)
     let leading = try XCTUnwrap(
-      ZoneTextLayout.lines(
+      ZoneTextLayout.typeset(
         "code", styles: [ZoneTextStyle(length: 4, font: mono, color: .red, padding: 4)],
         width: 500
       ).first)
@@ -94,9 +94,9 @@ final class ZoneTextLayoutTests: XCTestCase {
     for (name, code) in cases {
       let parts = ["see ", code, " z"]
       let bare = try XCTUnwrap(
-        ZoneTextLayout.lines(parts.joined(), styles: styles(parts, padding: 0), width: 500).first)
+        ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: 0), width: 500).first)
       let padded = try XCTUnwrap(
-        ZoneTextLayout.lines(parts.joined(), styles: styles(parts, padding: 4), width: 500).first)
+        ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: 4), width: 500).first)
       XCTAssertEqual(glyphCount(padded), glyphCount(bare), "\(name): 字を割らない")
       XCTAssertEqual(padded.width, bare.width + 8, accuracy: 0.01, "\(name): 幅は余白の分だけ増える")
       let (a, b) = (
@@ -243,12 +243,13 @@ final class ZoneTextLayoutTests: XCTestCase {
     ]
     for (name, parts) in cases {
       let string = parts.joined()
-      let lines = ZoneTextLayout.lines(string, styles: styles(parts, padding: padding), width: 500)
+      let lines = ZoneTextLayout.typeset(
+        string, styles: styles(parts, padding: padding), width: 500)
       XCTAssertEqual(lines.map(\.range), [NSRange(location: 0, length: string.utf16.count)], name)
       let line = try XCTUnwrap(lines.first)
       XCTAssertEqual(misplaced(line, code: 1), [], name)
       let bare = try XCTUnwrap(
-        ZoneTextLayout.lines(string, styles: styles(parts, padding: 0), width: 500).first)
+        ZoneTextLayout.typeset(string, styles: styles(parts, padding: 0), width: 500).first)
       XCTAssertEqual(glyphCount(line), glyphCount(bare), "\(name): 包みの字は描かない")
       if parts[2].hasSuffix("def ghi") {
         let tail = line.runs.filter { $0.style == 2 }.flatMap(\.positions).map(\.x)
@@ -262,7 +263,7 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testHitsOnThePaddingLandOnTheCodeEdges() throws {
     let parts = ["see ", "code", " here"]
     let line = try XCTUnwrap(
-      ZoneTextLayout.lines(parts.joined(), styles: styles(parts, padding: padding), width: 500)
+      ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: padding), width: 500)
         .first)
     let ground = try XCTUnwrap(line.spans(of: 1).first)
     let code = try XCTUnwrap(glyphs(of: 1, in: line))

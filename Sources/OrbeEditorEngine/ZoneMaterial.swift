@@ -91,7 +91,7 @@ struct ZoneHits {
     var origin: CGPoint
     var ascent: CGFloat
     var descent: CGFloat
-    var layout: ZoneTextLayout.Line
+    var layout: ZoneTextLayout.TypesetLine
 
     /// まとまりの中の範囲。
     var range: NSRange { layout.range }
@@ -244,7 +244,7 @@ final class ZonePainter {
 
   /// 組んだ行のグリフの連なりを、字の連なり（フォントと色ごと）に写す。色は連なりの見え方の色 `colors` から引く。
   private func runs(
-    _ line: ZoneTextLayout.Line, colors: [NSColor], origin: CGPoint, _ look: Look
+    _ line: ZoneTextLayout.TypesetLine, colors: [NSColor], origin: CGPoint, _ look: Look
   ) -> [ZoneMaterial.Run] {
     line.runs.compactMap { run in
       guard colors.indices.contains(run.style) else { return nil }
