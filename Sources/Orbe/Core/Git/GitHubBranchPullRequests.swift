@@ -51,7 +51,8 @@ struct GitHubBranchPullRequests: Equatable {
 /// 手順: ローカルブランチ・origin が GitHub か・remote の一覧を並行して読む → gh の可否 → 正式名（キャッシュに正式名が無い
 /// 名前だけ問い合わせ、キャッシュへ書く）→ 台帳 → ブランチの同一性 → 同一性が GitHub のブランチと決まったものだけ `gh pr list` →
 /// head の照合。同一性は ⌘T の clean と同じ規則（push 先の remote の正式名＋ローカル名）で、他人の fork の同名ブランチの
-/// PR を取り違えない。取れたブランチの PR はキャッシュにも書く（次に ⌘T を開いたとき、取り直しを待たずに描く材料になる）。
+/// PR を取り違えない。取れたブランチの PR はキャッシュに書かない——キャッシュのブランチの PR は ⌘T の clean が gh の既定の
+/// リポジトリから取った値で、この段は問い合わせ先が違う（push 先と親）。
 /// 全メソッドはメインスレッドで呼ばれ、メインスレッドで返る。
 final class GitHubBranchPullRequestLookup {
   private let gitHub: GitHubCLI
@@ -171,9 +172,6 @@ final class GitHubBranchPullRequestLookup {
       }
       guard results.count == repositories.count else { return }
       let merged = Self.merge(results)
-      if case .success(let pullRequests) = merged {
-        self.cache.setBranchPullRequests(pullRequests, head: branch, for: repo.commonDir)
-      }
       landed[branch] = merged.map { GitHubBranchPR.filter($0, headedBy: ref) }
       if landed.count == refs.count { completion(landed) }
     }
