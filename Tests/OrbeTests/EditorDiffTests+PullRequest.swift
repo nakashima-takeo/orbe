@@ -7,6 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: rename したファイルの diff が全部の行の追加になる。PR に push があっても古い diff のまま。手元の
 /// 作業ツリーの本文が新しい側に出る。打鍵で PR の diff の本文が変わる。PR が動かしたサブモジュールの diff が出ない。
+/// TopBar の現在地が PR の diff でなく作業ツリーのファイルの姿になる。
 extension EditorDiffTests {
   /// 差し替えの構造体が返す中身（テストが書き換えて、次の読み直しに答えさせる）。
   private final class Reply {
@@ -58,6 +59,8 @@ extension EditorDiffTests {
     let (tab, _) = tab()
 
     let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state)), as: .pinned)
+    XCTAssertEqual(
+      tab.location, .pullRequest(number: 5, relative: "b.txt"), "TopBar の現在地は PR の diff")
 
     waitRows(diff, "元のパスと比べた 1 行の変更") { self.removedLines($0) == [2] }
     XCTAssertNil(diff.document, "新しい側は版の本文で、作業ツリーの文書ではない")
