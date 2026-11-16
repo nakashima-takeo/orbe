@@ -50,7 +50,7 @@ final class PrRowView: ListRowView {
 
   private(set) var content: Content?
   /// 描いている中身の同一性（同じなら組み直さない）。
-  private var key: String?
+  private var key: Key?
   /// 部品の説明の文（ツリー表示・リスト表示）。
   private var helps: [PrControl: String] = [:]
 
@@ -69,7 +69,7 @@ final class PrRowView: ListRowView {
 
   /// 行 `item` を見せる。中身の同一性（`key`）が変わったときだけ字を組み直す。
   func show(_ item: PrLayout.Item, facts: Facts, language: Language, emoji: NSFont?) {
-    let key = Self.key(item, facts, language) + (emoji.map { "\u{0}\($0.fontName)" } ?? "")
+    let key = Key(item: item, facts: facts, language: language, emoji: emoji?.fontName)
     guard key != self.key else { return }
     self.key = key
     content = Self.content(item, facts, language, emoji)

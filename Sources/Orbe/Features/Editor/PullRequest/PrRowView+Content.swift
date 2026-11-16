@@ -9,17 +9,12 @@ extension PrRowView {
     let asTree: Bool
   }
 
-  static func key(_ item: PrLayout.Item, _ facts: Facts, _ language: Language) -> String {
-    switch item {
-    case .section(let section, let isOpen, let count):
-      "s\(section)\(isOpen)\(count)\(facts.viewed)\(facts.asTree)\(language)"
-    case .olderCommits(let hidden): "o\(hidden)\(language)"
-    case .commit(let commit): "m\(commit.oid)\u{0}\(commit.headline)"
-    case .folder(let path, let depth, let isOpen, let files):
-      "d\(path)\u{0}\(depth)\(isOpen)\(facts.viewed)/\(files.count)"
-    case .file(let path, let change, let depth):
-      "f\(path)\u{0}\(depth)\(change)\(facts.viewed)\(facts.asTree)"
-    }
+  /// 行の中身の同一性——行の組の行・行の組の外の事実・言語・絵文字の字体を、値のまま比べる。
+  struct Key: Equatable {
+    let item: PrLayout.Item
+    let facts: Facts
+    let language: Language
+    let emoji: String?
   }
 
   /// VoiceOver に渡す中身の文字列。
