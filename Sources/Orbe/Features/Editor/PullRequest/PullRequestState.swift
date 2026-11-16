@@ -36,7 +36,7 @@ final class PullRequestState {
 
   /// diff の両端が求まらない理由。
   enum BoundsFailure: Equatable {
-    /// PR のコミットが手元に無く、取りに行っても揃わない。
+    /// PR のコミットが手元に無く、取りに行っても揃わない（浅いクローンで、共通の祖先が浅い境界より古いときを含む）。
     case commitsMissing
     /// ベースブランチと共通のコミットがない。
     case unrelated
@@ -240,6 +240,10 @@ final class PullRequestState {
           completion: fetched)
       case .unrelated:
         bounds = .failed(ends, .unrelated)
+        notify()
+      case .shallow:
+        // 両端は手元に在り、浅い境界でたどれない——取ってきても求まらないので、fetch しない。
+        bounds = .failed(ends, .commitsMissing)
         notify()
       case .failed:
         bounds = .failed(ends, .unreadable)
