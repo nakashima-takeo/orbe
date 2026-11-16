@@ -67,12 +67,14 @@ final class PrRowView: ListRowView {
     ])
   }
 
-  func show(_ content: Content, key: String, label: String, helps: [PrControl: String]) {
+  /// 行 `item` を見せる。中身の同一性（`key`）が変わったときだけ字を組み直す。
+  func show(_ item: PrLayout.Item, facts: Facts, language: Language, emoji: NSFont?) {
+    let key = Self.key(item, facts, language) + (emoji.map { "\u{0}\($0.fontName)" } ?? "")
     guard key != self.key else { return }
     self.key = key
-    self.content = content
-    self.helps = helps
-    setAccessibilityLabel(label)
+    content = Self.content(item, facts, language, emoji)
+    helps = Self.helps(language)
+    setAccessibilityLabel(Self.label(item, facts, language))
     needsDisplay = true
   }
 
