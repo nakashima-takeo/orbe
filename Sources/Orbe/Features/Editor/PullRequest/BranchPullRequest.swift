@@ -22,6 +22,9 @@ final class BranchPullRequest {
   private(set) var answer = Answer.reading
   /// 手元とのずれ（PR が無い・数え終わっていないなら nil）。
   private(set) var drift: Drift?
+  /// PR を保ったまま、今のブランチの PR を引き直せなかった理由（問い合わせの失敗・GitHub のどのリポジトリか確かめられ
+  /// ない）。次に答えを出したら消える。
+  private(set) var lookupFailure: Unavailable?
 
   @ObservationIgnored private var files: RootFiles?
   @ObservationIgnored private var watchers = 0
@@ -157,9 +160,10 @@ final class BranchPullRequest {
     source.branchPullRequests(repo, name) { [weak self] found in
       guard let self else { return }
       switch found.branches[name] {
-      case nil: finish(.unavailable(.failed(.reason(""))), name)
+      case nil: failed(.failed(.reason("")), name)
+      case .unavailable(.unverified)?: failed(.unverified, name)
       case .unavailable(let reason)?: finish(.unavailable(Self.unavailable(reason)), name)
-      case .gitHub(_, .failure(let reason))?: finish(.unavailable(.failed(reason)), name)
+      case .gitHub(_, .failure(let reason))?: failed(.failed(reason), name)
       case .gitHub(let ref, .success(let pullRequests))?:
         let open = pullRequests.first { $0.state == "OPEN" }
         if let id = open?.url.flatMap(GitHubItemID.init(pullRequestURL:)) {
@@ -211,9 +215,10 @@ final class BranchPullRequest {
   }
 
   /// 読み終えた。読んでいる間にブランチが変わっていれば答えを捨てる（前のブランチの答えは出さない）。ブランチが
-  /// 変わっていたか、きっかけが来ていれば読み直す。答えを出したなら、その答えの通し番号を返す。
+  /// 変わっていたか、きっかけが来ていれば読み直す。答えを出したなら、その答えの通し番号を返す。`next` が nil なら、今の
+  /// 答えを保つ。
   @discardableResult
-  private func finish(_ next: Answer, _ name: String) -> Int? {
+  private func finish(_ next: Answer?, _ name: String) -> Int? {
     // 読んでいる間に見ている者がいなくなったら、答えは出さない（PR の状態を見始めない。次に見ている者が現れたら読み直す）。
     guard watchers > 0 else {
       stopReading()
@@ -222,7 +227,7 @@ final class BranchPullRequest {
     isReading = false
     let current = files?.status?.branch?.name
     var settled: Int?
-    if name == current {
+    if name == current, let next {
       settle(next)
       settled = settlement
     }
@@ -231,6 +236,18 @@ final class BranchPullRequest {
       reload()
     }
     return settled
+  }
+
+  /// 引き直しが失敗した（問い合わせの失敗・確かめられない）。PR を引けていれば、答えを替えずに PR を保ち（PR の状態を
+  /// 見続ける）、理由だけを持つ——一時的な失敗のたびに PR が消えて、PR の中身の追従が止まらないように。PR を引けて
+  /// いなければ、出せない理由にする。
+  private func failed(_ reason: Unavailable, _ name: String) {
+    guard case .pullRequest = answer else {
+      finish(.unavailable(reason), name)
+      return
+    }
+    finish(nil, name)
+    if case .pullRequest = answer { lookupFailure = reason }
   }
 
   /// 見ている者がいなくなったので、答えを出さずに読むのをやめる（積んだ読み直しも捨てる）。
@@ -243,6 +260,7 @@ final class BranchPullRequest {
   /// 中身を読み直す）、受ける者へ知らせる。
   private func settle(_ next: Answer) {
     settlement += 1
+    lookupFailure = nil
     let previous = state
     if answer != next { answer = next }
     let current = state

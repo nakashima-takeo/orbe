@@ -37,8 +37,8 @@ struct PrPanelView: View {
     case .pullRequest(let state):
       if let content = state.content {
         PrHead(content: content, drift: panel.pullRequest.drift)
-        if let failure = state.failure {
-          PrNote(text: PrPanelText.failure(failure, l10n), color: Color.theme.danger)
+        if let failure = failureText(state) {
+          PrNote(text: failure, color: Color.theme.danger)
         }
         PrListHost(
           list: list, header: header, panel: panel, description: content.body,
@@ -51,10 +51,16 @@ struct PrPanelView: View {
           list.list.source.language = language
           list.list.reloadRows()
         }
-      } else if let failure = state.failure {
-        PrNote(text: PrPanelText.failure(failure, l10n), color: Color.theme.danger)
+      } else if let failure = failureText(state) {
+        PrNote(text: failure, color: Color.theme.danger)
       }
     }
+  }
+
+  /// 失敗の文——PR の中身の読み直し・確認済みの書き込みの失敗か、PR を保ったまま今のブランチの PR を引き直せなかった理由。
+  private func failureText(_ state: PullRequestState) -> String? {
+    if let failure = state.failure { return PrPanelText.failure(failure, l10n) }
+    return panel.pullRequest.lookupFailure.map { PrPanelText.unavailable($0, l10n) }
   }
 }
 
