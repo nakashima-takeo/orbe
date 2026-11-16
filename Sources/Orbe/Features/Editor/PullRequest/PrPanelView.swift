@@ -133,7 +133,7 @@ private struct PrHead: View {
   }
 }
 
-/// 手元とのずれの帯 24（padding 0 8・radius 3・地は色の .10）: 一致は success とレ点、未 push・未取得は注意の色。先行と
+/// 手元とのずれの帯 24（padding 0 8・radius 3・地は色の .10）: 一致は success とレ点、未 push・未取得・数えない違いは注意の色。先行と
 /// 遅れの両方があれば、2 つの文を「・」でつないで 1 行に出す。
 private struct PrBand: View {
   let drift: BranchPullRequest.Drift
@@ -268,7 +268,7 @@ enum PrPanelText {
   static func drift(_ drift: BranchPullRequest.Drift, _ l10n: LocalizationStore) -> String {
     switch drift {
     case .inSync: return l10n.string(.editorPrInSync)
-    case .differs: return l10n.string(.editorPrUnfetchedUncounted)
+    case .differs: return l10n.string(.editorPrHeadDiffers)
     case .diverged(let ahead, let behind):
       var parts: [String] = []
       if ahead > 0 { parts.append(l10n.format(.editorPrUnpushed, ahead)) }

@@ -20,7 +20,9 @@ extension L10n {
     .editorPrInSync: ("この worktree でチェックアウト済み", "Checked out in this worktree"),
     .editorPrUnpushed: ("未 push のコミットが %lld 件あります", "Unpushed commits: %lld"),
     .editorPrUnfetched: ("PR に未取得のコミットが %lld 件あります", "Commits in the PR not fetched: %lld"),
-    .editorPrUnfetchedUncounted: ("PR に未取得のコミットがあります", "The PR has commits not fetched"),
+    .editorPrHeadDiffers: (
+      "この worktree の HEAD は PR の先頭と違います", "This worktree’s HEAD differs from the PR’s head"
+    ),
     .editorPrDescription: ("説明", "Description"),
     .editorPrCommits: ("コミット", "Commits"),
     .editorPrFiles: ("変更ファイル", "Files Changed"),
@@ -33,8 +35,8 @@ extension L10n {
     .editorPrPublishFirst: ("先にブランチを公開してください", "Publish the branch first"),
     .editorPrNotDetached: ("ブランチにいません", "Not on a branch"),
     .editorPrNotDefaultBranch: (
-      "既定のブランチではプルリクエストを作成できません",
-      "Can’t create a pull request from the default branch"
+      "既定のブランチではプルリクエストを表示・作成しません",
+      "Pull requests aren’t shown or created for the default branch"
     ),
     .editorPrNotGitHub: ("GitHub のリポジトリではありません", "Not a GitHub repository"),
     .editorPrUnverified: (

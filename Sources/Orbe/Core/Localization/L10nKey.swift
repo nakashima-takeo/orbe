@@ -568,7 +568,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrInSync
   case editorPrUnpushed
   case editorPrUnfetched
-  case editorPrUnfetchedUncounted
+  case editorPrHeadDiffers
   case editorPrDescription
   case editorPrCommits
   case editorPrFiles
