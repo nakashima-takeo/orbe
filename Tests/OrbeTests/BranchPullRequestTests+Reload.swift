@@ -1,0 +1,205 @@
+import XCTest
+
+@testable import Orbe
+
+/// worktree の今の PR を GitHub に問い直すきっかけ——Orbe の中のネット操作の終わり、push 先と PR のベースブランチの追跡
+/// ref の動き、ブランチの切り替え、問い合わせの最中に来たきっかけ、見ている者の出入り。
+///
+/// 壊れると何が起きるか: 端末やほかの所での push の後も古い PR のまま。無関係なブランチの fetch のたびに GitHub へ問い合わせる。
+/// ブランチを切り替えた直後に前のブランチの PR が出る。detached から戻ると「ブランチに居ない」のまま止まる。面やタブを
+/// 開くたびに GitHub へ問い合わせる。見ていない PR を問い合わせ続ける。
+extension BranchPullRequestTests {
+  /// Orbe の中のネット操作が終わったら、GitHub に問い直す。
+  func testANetworkOperationInOrbeLooksUpAgain() throws {
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    answers["feat"] = .unavailable(.notGitHub)
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.answer == .unavailable(.notGitHub) })
+    SourceControl.shared(for: repo.root).fetch()
+    pumpMain(until: { self.lookups.count == 2 }, timeout: 20, "フェッチの後に問い直す")
+  }
+
+  /// リモート追跡の ref が動いたとき、このブランチの push 先の追跡 ref が動いていれば問い直し、無関係なブランチの追跡 ref
+  /// だけなら問い直さない。
+  func testOnlyAMoveOfTheBranchsTrackingRefLooksUpAgain() throws {
+    let refs = try trackedBranch()
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.answer == .unavailable(.notGitHub) })
+    letTheLookUpSettle()
+
+    try moveRemoteRef("refs/remotes/origin/other", to: refs.main, watchedBy: refs.recorder)
+    letTheLookUpSettle()
+    XCTAssertEqual(lookups, ["feat"], "無関係なブランチの追跡 ref では問い直さない")
+
+    try moveRemoteRef("refs/remotes/origin/feat", to: refs.main, watchedBy: refs.recorder)
+    pumpMain(until: { self.lookups.count == 2 }, "push 先の追跡 ref が動いたら問い直す")
+  }
+
+  /// GitHub に問い合わせている間にブランチを切り替えたら、前のブランチの答えを出さず、読んでいる状態になる。
+  func testSwitchingTheBranchWhileReadingDropsTheOldAnswerAtOnce() throws {
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    answers["feat"] = .unavailable(.notGitHub)
+    answers["other"] = .unavailable(.unverified)
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.answer == .unavailable(.notGitHub) })
+    holdsLookups = true
+    pullRequest.reload()
+    pumpMain(until: { self.held.count == 1 }, "前提: 問い合わせの最中")
+
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "other"]).isSuccess)
+    let files = RootFiles.shared(for: repo.root)
+    pumpMain(until: { files.status?.branch?.name == "other" }, "前提: 切り替えを知る")
+    XCTAssertEqual(pullRequest.answer, .reading)
+
+    holdsLookups = false
+    release()
+    pumpMain(until: { pullRequest.answer == .unavailable(.unverified) }, "新しいブランチの答え")
+  }
+
+  /// GitHub に問い合わせている間（最初の問い合わせも）に push 先の追跡 ref が動いたら、その問い合わせが終わった後に 1 回
+  /// だけ問い直す。
+  func testATrackingRefMoveWhileReadingLooksUpAgainAfterwards() throws {
+    let refs = try trackedBranch()
+    holdsLookups = true
+    _ = watch()
+    pumpMain(until: { self.held.count == 1 }, "前提: 最初の問い合わせの最中")
+
+    try moveRemoteRef("refs/remotes/origin/feat", to: refs.main, watchedBy: refs.recorder)
+    letTheLookUpSettle()
+    XCTAssertEqual(lookups.count, 1, "前提: 問い合わせの最中は問い直さない")
+    holdsLookups = false
+    release()
+    pumpMain(until: { self.lookups.count == 2 }, "終わった後に問い直す")
+    letTheLookUpSettle()
+    XCTAssertEqual(lookups.count, 2, "1 回だけ")
+  }
+
+  /// どのブランチにも居ない状態から同じブランチに戻ったら、GitHub に問い直す（「ブランチに居ない」のまま止まらない）。
+  func testComingBackToTheSameBranchFromADetachedHeadLooksUpAgain() {
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    answers["feat"] = .unavailable(.notGitHub)
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.answer == .unavailable(.notGitHub) })
+    XCTAssertTrue(repo.git(["switch", "-q", "--detach"]).isSuccess)
+    pumpMain(until: { pullRequest.answer == .unavailable(.detached) }, "ブランチに居ない")
+
+    XCTAssertTrue(repo.git(["switch", "-q", "feat"]).isSuccess)
+    pumpMain(until: { pullRequest.answer == .unavailable(.notGitHub) }, "戻ったブランチの答え")
+    XCTAssertEqual(lookups, ["feat", "feat"])
+  }
+
+  /// 見ている者が増えただけでは問い直さない（誰も見ていない状態から現れたときだけ問い直す）。
+  func testAnotherWatcherDoesNotLookUpAgain() {
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    answers["feat"] = .unavailable(.notGitHub)
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.answer == .unavailable(.notGitHub) })
+
+    pullRequest.beginWatching()
+    addTeardownBlock { @MainActor in pullRequest.endWatching() }
+    letTheLookUpSettle()
+    XCTAssertEqual(lookups, ["feat"])
+  }
+
+  /// 問い合わせの最中に見ている者がいなくなったら、答えが届いても PR の状態を見始めない（見ていない PR を GitHub に
+  /// 問い合わせ続けない）。
+  func testAnAnswerArrivingAfterTheLastWatcherLeftDoesNotWatchThePullRequest() throws {
+    holdsLookups = true
+    let pullRequest = try watchAnOpenPullRequest()
+    pumpMain(until: { self.held.count == 1 }, "前提: 問い合わせの最中")
+    pullRequest.endWatching()
+    holdsLookups = false
+    release()
+    letTheLookUpSettle()
+
+    let state = PullRequestState.shared(
+      for: PullRequestState.Key(
+        commonDir: try repo.open().commonDir,
+        id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 9))),
+      source: source)
+    XCTAssertFalse(state.isWatched)
+    XCTAssertNil(pullRequest.state, "答えは出さない")
+  }
+
+  /// PR があれば、PR のベースブランチの追跡 ref が動いたときも問い直す。無関係なブランチの追跡 ref では問い直さない
+  /// （PR の中身が届いてベースブランチが分かった後も）。
+  func testAMoveOfThePullRequestsBaseTrackingRefLooksUpAgain() throws {
+    let refs = try trackedBranch()
+    repositories = ["origin": .github(me)]
+    content = pullRequestContent(base: refs.main)
+    answers["feat"] = .gitHub(
+      GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([pr(9, state: "OPEN")]))
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.drift == .inSync }, "前提: PR の中身が届く")
+    letTheLookUpSettle()
+    let looked = lookups.count
+
+    try moveRemoteRef("refs/remotes/origin/other", to: refs.main, watchedBy: refs.recorder)
+    letTheLookUpSettle()
+    XCTAssertEqual(lookups.count, looked, "無関係なブランチの追跡 ref では問い直さない")
+
+    let advanced = repo.git(["commit-tree", "main^{tree}", "-p", "main", "-m", "base"]).stdoutText
+      .trimmingCharacters(in: .newlines)
+    try moveRemoteRef("refs/remotes/origin/main", to: advanced, watchedBy: refs.recorder)
+    pumpMain(until: { self.lookups.count == looked + 1 }, "ベースブランチの追跡 ref が動いたら問い直す")
+  }
+
+  // MARK: - ヘルパ
+
+  /// 留めた問い合わせに答える。
+  private func release() {
+    let answers = held
+    held = []
+    for answer in answers { answer() }
+  }
+
+  /// 問い合わせの後の、追跡 ref の値を覚える git の読み取りが終わるまで main を回す（終わったことは外から見えない）。
+  private func letTheLookUpSettle() {
+    let until = Date().addingTimeInterval(1)
+    while Date() < until {
+      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    }
+  }
+
+  /// origin に送って upstream を付けたブランチ feat（main より 1 コミット先）。根のサービスのリモート追跡の ref の知らせを
+  /// 数える観測者を付ける。
+  private func trackedBranch() throws -> (main: String, recorder: RemoteRefsRecorder) {
+    repo.addOrigin()
+    let main = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    try repo.write("b.txt", "b\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "b"]).isSuccess)
+    XCTAssertTrue(repo.git(["push", "-q", "-u", "origin", "feat"]).isSuccess)
+    answers["feat"] = .unavailable(.notGitHub)
+    let recorder = RemoteRefsRecorder()
+    let files = RootFiles.shared(for: repo.root)
+    files.addObserver(recorder)
+    addTeardownBlock { @MainActor in files.removeObserver(recorder) }
+    return (main, recorder)
+  }
+
+  /// リモート追跡の ref `ref` を `commit` に動かし、根のサービスがそれを知らせるまで待つ。
+  private func moveRemoteRef(
+    _ ref: String, to commit: String, watchedBy recorder: RemoteRefsRecorder
+  )
+    throws
+  {
+    let before = recorder.moves
+    XCTAssertTrue(repo.git(["update-ref", ref, commit]).isSuccess)
+    pumpMain(until: { recorder.moves > before }, "前提: リモート追跡の ref が動いたと知らせる")
+  }
+}
+
+/// 根のサービスの、リモート追跡の ref が動いたという知らせを数える。
+@MainActor
+private final class RemoteRefsRecorder: RootFilesObserver {
+  var moves = 0
+  func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {}
+  func rootFilesStatusDidChange(_ files: RootFiles) {}
+  func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
+  func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
+    if remoteRefsChanged { moves += 1 }
+  }
+}
