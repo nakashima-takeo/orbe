@@ -158,6 +158,20 @@ final class PullRequestStateTests: OrbeTestCase {
     XCTAssertTrue(state.isViewed("b"))
   }
 
+  /// 書き込みは、見ている者がいなくなっても順に最後まで送られ、結果は状態に入る。
+  func testWritesKeepGoingAfterTheWatchersLeave() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+    state.setViewed(true, paths: ["a"])
+    state.setViewed(true, paths: ["b"])
+    state.endWatching()
+    gitHub.finishWrite()
+    XCTAssertEqual(gitHub.writes.map(\.paths), [["b"]], "後の書き込みも送る")
+    gitHub.finishWrite()
+    XCTAssertTrue(state.isViewed("a") && state.isViewed("b"))
+  }
+
   /// 書き込みが失敗した後に、その間に出した読み直しの答えが届けば、GitHub の値で見せる。
   func testAReloadAnsweredAfterAFailedWriteShowsGitHubsValue() {
     let state = watchedState()
@@ -205,6 +219,39 @@ final class PullRequestStateTests: OrbeTestCase {
     XCTAssertTrue(
       clone.git(["for-each-ref", "refs/remotes/origin/feat"]).stdoutText.isEmpty,
       "取ってきても ref は書かない")
+  }
+
+  /// 両端を求めている間に見ている者が去れば、手元に無いコミットを取りに行かない。戻ったときに求め直して両端が揃う。
+  func testBoundsAreNotFetchedAfterTheWatchersLeaveAndAreResolvedOnReturn() throws {
+    let repo = try TempGitRepo()
+    let bare = repo.addOrigin()
+    let base = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pr"]).isSuccess)
+    let head = repo.head()
+    XCTAssertTrue(repo.git(["push", "-q", "origin", "feat"]).isSuccess)
+    let clone = try TempGitRepo(name: "orbe-clone", initialCommit: false)
+    XCTAssertTrue(clone.git(["remote", "add", "origin", bare]).isSuccess)
+    XCTAssertTrue(clone.git(["fetch", "-q", "origin", "main"]).isSuccess)
+    let state = PullRequestState.shared(for: key, source: gitHub.source)
+    state.beginWatching()
+    gitHub.content = .success(content(base: base, head: head))
+    state.reload()
+    state.attach(repo: try clone.open(), fetchRemote: "origin")
+    state.endWatching()
+
+    pumpMain(until: { state.bounds == .none }, "求めるのをやめる")
+    let until = Date().addingTimeInterval(1)
+    while Date() < until {
+      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    }
+    XCTAssertNotEqual(clone.git(["cat-file", "-e", head + "^{commit}"]).status, 0, "取りに行かない")
+
+    state.beginWatching()
+    addTeardownBlock { @MainActor in state.endWatching() }
+    state.reload()
+    pumpMain(
+      until: { if case .ready = state.bounds { true } else { false } }, "戻ったら求め直して揃う")
   }
 
   /// 浅いクローンで、取ってある範囲より古い所で分かれた PR は、共通のコミットが無いとは言わず、取得できなかったとする。
