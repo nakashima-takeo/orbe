@@ -22,6 +22,8 @@ final class PrPanelTests: OrbeTestCase {
   private var files = ["src/a/x.swift", "src/a/y.swift", "src/b.swift", "README.md"]
   /// ツリーかリストか（アプリ全体の選択の代わり）。
   private var asTree = true
+  /// ブランチに open の PR があるか（偽なら、PR が無いと答える）。
+  private var open = true
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
@@ -29,6 +31,7 @@ final class PrPanelTests: OrbeTestCase {
     writes = []
     opened = []
     asTree = true
+    open = true
     panel = PrPanel(root: repo.root, source: source)
     panel.filesAsTree = { [unowned self] in asTree }
     panel.onViewAsTree = { [unowned self] in asTree = $0 }
@@ -47,11 +50,11 @@ final class PrPanelTests: OrbeTestCase {
       number: 9, headRefName: "feat", state: "OPEN", baseRefName: "main", headRepository: me,
       url: "https://github.com/me/r/pull/9")
     return PullRequestSource(
-      branchPullRequests: { _, branch, completion in
+      branchPullRequests: { [unowned self] _, branch, completion in
         completion(
           GitHubBranchPullRequests(
             availability: .ready, ledger: nil,
-            branches: [branch: .gitHub(ref, pullRequests: .success([pullRequest]))]))
+            branches: [branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))]))
       },
       branchExists: { _, completion in completion(.success(true)) },
       content: { [unowned self] _, completion in completion(.success(content)) },
@@ -247,6 +250,21 @@ final class PrPanelTests: OrbeTestCase {
     reload(files: [])
     XCTAssertNil(panel.selection, "区分に行が無ければ外す")
     XCTAssertTrue(opened.isEmpty, "選び直しでは開かない")
+  }
+
+  /// 列に当てる前に PR が無くなって行の組が空になれば、焦点の要求を捨て、列が消えることを知らせる（後で列が現れた瞬間に
+  /// 焦点を奪わない）。
+  func testAFocusRequestIsDroppedWhenTheRowsGoAway() throws {
+    _ = try shown()
+    var closings = 0
+    panel.onListWillClose = { closings += 1 }
+    panel.requestFocus()
+
+    open = false
+    panel.refresh()
+    pumpMain(until: { self.panel.layout.items.isEmpty }, "PR が無いと分かる")
+    XCTAssertFalse(panel.focusRequest, "当てる列の無い要求は捨てる")
+    XCTAssertEqual(closings, 1, "列が消える前に 1 回知らせる")
   }
 
   /// 見出しの切り替えでリストにすれば、その場で行を組み直す。消えたフォルダの選択は配下の最初のファイルへ移り、ファイルの
