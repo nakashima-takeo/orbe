@@ -315,7 +315,7 @@ extension BranchPullRequestTests {
 
 /// 根のサービスの、リモート追跡の ref が動いたという知らせを数える。
 @MainActor
-private final class RemoteRefsRecorder: RootFilesObserver {
+final class RemoteRefsRecorder: RootFilesObserver {
   var moves = 0
   func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {}
   func rootFilesStatusDidChange(_ files: RootFiles) {}

@@ -10,8 +10,8 @@ import XCTest
 /// 手元に無いと diff が出ないまま止まる。
 @MainActor
 final class PullRequestStateTests: OrbeTestCase {
-  private var gitHub: PullRequestFakeGitHub!
-  private var key: PullRequestState.Key!
+  var gitHub: PullRequestFakeGitHub!
+  var key: PullRequestState.Key!
 
   override func setUpWithError() throws {
     gitHub = PullRequestFakeGitHub()
@@ -20,7 +20,7 @@ final class PullRequestStateTests: OrbeTestCase {
       id: try XCTUnwrap(GitHubItemID(repo: "o/r", number: 7)))
   }
 
-  private func content(
+  func content(
     viewed: Set<String> = [], base: String = "b", head: String = "h", files: [String] = ["a", "b"]
   ) -> GitHubPullRequestContent {
     GitHubPullRequestContent(
