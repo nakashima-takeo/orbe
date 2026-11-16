@@ -8,16 +8,23 @@ import XCTest
 /// 壊れると何が起きるか: 他人の fork の同名ブランチに立った PR がタスクに付く。引けない理由を取り違える
 /// （GitHub でないリポジトリを「確かめられない」と答える・gh の失敗を「PR が無い」と答える）。
 extension WorktreePaletteRemoteLedgerProviderTests {
-  private func lookup(_ branches: Set<String>) throws -> GitHubBranchPullRequests {
-    var repo: GitRepo?
-    GitRepo.open(cwd: root) { repo = $0 }
-    XCTAssertTrue(pump { repo != nil })
+  private func lookup(_ branches: Set<String>, cache: GitHubCache = GitHubCache()) throws
+    -> GitHubBranchPullRequests
+  {
+    let repo = try openRepo()
     var found: GitHubBranchPullRequests?
-    GitHubBranchPullRequestLookup(gitHub: GitHubCLI(), cache: GitHubCache()).lookup(
-      try XCTUnwrap(repo), branches: branches
+    GitHubBranchPullRequestLookup(gitHub: GitHubCLI(), cache: cache).lookup(
+      repo, branches: branches
     ) { found = $0 }
     XCTAssertTrue(pump { found != nil })
     return try XCTUnwrap(found)
+  }
+
+  private func openRepo() throws -> GitRepo {
+    var repo: GitRepo?
+    GitRepo.open(cwd: root) { repo = $0 }
+    XCTAssertTrue(pump { repo != nil })
+    return try XCTUnwrap(repo)
   }
 
   /// 同一性が GitHub のブランチと決まれば、head がリポジトリまで含めてその同一性と等しい PR だけを、
@@ -137,6 +144,28 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
     XCTAssertEqual(Set(calls("P")), ["me/r feat", "up/r feat"])
     XCTAssertEqual(found.branches["feat"]?.pullRequests?.map(\.number), [5, 9, 3])
+  }
+
+  /// ブランチの PR を引く段は、⌘T の clean が持つブランチの PR のキャッシュを書き換えない——clean は gh の既定の
+  /// リポジトリから取った値で先に判定するので、問い合わせ先の違う（push 先と親の）値が混ざると、判定が描いた後に変わる。
+  func testTheLookupLeavesTheCleansCachedPullRequestsAlone() throws {
+    addRemote("origin", "me/r")
+    try answer("me/r", found: "me/r", parent: "up/r")
+    XCTAssertTrue(git(["branch", "feat"]).isSuccess)
+    try serveBranchPullRequests(
+      "feat", in: "up/r", "[" + branchPR(9, head: "feat", state: "MERGED", from: "me/r") + "]")
+    let cache = GitHubCache()
+    let commonDir = try openRepo().commonDir
+    let cleans = [
+      GitHubBranchPR(
+        number: 4, headRefName: "feat", state: "OPEN", baseRefName: "main", headRepository: mine,
+        url: "https://github.com/me/r/pull/4")
+    ]
+    cache.setBranchPullRequests(cleans, head: "feat", for: commonDir)
+
+    _ = try lookup(["feat"], cache: cache)
+
+    XCTAssertEqual(cache.entry(for: commonDir)?.branchPullRequests, ["feat": cleans])
   }
 
   /// fork と親のどちらかの問い合わせが失敗すれば、そのブランチの答えは失敗——引けた側の PR だけで「無い」とも

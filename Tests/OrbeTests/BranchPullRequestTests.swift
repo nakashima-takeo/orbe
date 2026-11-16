@@ -17,6 +17,8 @@ final class BranchPullRequestTests: OrbeTestCase {
   private var content: GitHubPullRequestContent?
   /// ブランチの PR の問い合わせを、`release` まで答えずに留めるか。
   private var holdsLookups = false
+  /// 台帳の remote → GitHub のリポジトリ（PR のコミットを取りに行く remote と、PR のベースブランチの追跡 ref を決める）。
+  private var repositories: [String: GitHubRemoteRepository] = [:]
   private var held: [() -> Void] = []
   private let me = GitHubRepoName(nameWithOwner: "me/r")
 
@@ -33,7 +35,7 @@ final class BranchPullRequestTests: OrbeTestCase {
         let answer = { [unowned self] in
           completion(
             GitHubBranchPullRequests(
-              availability: .ready, ledger: GitHubRemoteLedger.Resolved(repositories: [:]),
+              availability: .ready, ledger: GitHubRemoteLedger.Resolved(repositories: repositories),
               branches: answers[branch].map { [branch: $0] } ?? [:]))
         }
         if holdsLookups { held.append(answer) } else { answer() }
@@ -231,6 +233,29 @@ final class BranchPullRequestTests: OrbeTestCase {
     release()
     letTheLookUpSettle()
     XCTAssertEqual(lookups.count, 3, "最初・最中・終わった後")
+  }
+
+  /// PR があれば、PR のベースブランチの追跡 ref が動いたときも問い直す。無関係なブランチの追跡 ref では問い直さない
+  /// （PR の中身が届いてベースブランチが分かった後も）。
+  func testAMoveOfThePullRequestsBaseTrackingRefLooksUpAgain() throws {
+    let refs = try trackedBranch()
+    repositories = ["origin": .github(me)]
+    content = pullRequestContent(base: refs.main)
+    answers["feat"] = .gitHub(
+      GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([pr(9, state: "OPEN")]))
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.drift == .inSync }, "前提: PR の中身が届く")
+    letTheLookUpSettle()
+    let looked = lookups.count
+
+    try moveRemoteRef("refs/remotes/origin/other", to: refs.main, watchedBy: refs.recorder)
+    letTheLookUpSettle()
+    XCTAssertEqual(lookups.count, looked, "無関係なブランチの追跡 ref では問い直さない")
+
+    let advanced = repo.git(["commit-tree", "main^{tree}", "-p", "main", "-m", "base"]).stdoutText
+      .trimmingCharacters(in: .newlines)
+    try moveRemoteRef("refs/remotes/origin/main", to: advanced, watchedBy: refs.recorder)
+    pumpMain(until: { self.lookups.count == looked + 1 }, "ベースブランチの追跡 ref が動いたら問い直す")
   }
 
   // MARK: - ヘルパ
