@@ -93,11 +93,13 @@ final class GitHubCLIReviewTests: OrbeTestCase {
   // MARK: - 読み
 
   private func thread(
-    _ id: String, line: String = "3", side: String = "RIGHT", subject: String = "LINE"
+    _ id: String, line: String = "3", side: String = "RIGHT", subject: String = "LINE",
+    outdated: Bool = false
   )
     -> String
   {
-    #"{"id":"\#(id)","isResolved":false,"path":"a.swift","line":\#(line),"diffSide":"\#(side)","#
+    #"{"id":"\#(id)","isResolved":false,"isOutdated":\#(outdated),"path":"a.swift","line":\#(line),"#
+      + #""diffSide":"\#(side)","#
       + #""subjectType":"\#(subject)","viewerCanResolve":true,"viewerCanUnresolve":false,"#
       + #""viewerCanReply":true,"comments":{"nodes":[{"id":"C\#(id)","author":{"login":"you"},"#
       + #""body":"b","createdAt":"2026-11-17T01:02:03Z","state":"PENDING"},{"id":"D\#(id)","#
@@ -139,7 +141,10 @@ final class GitHubCLIReviewTests: OrbeTestCase {
       "threads-P1",
       nextPage(
         threads(
-          [thread("F", subject: "FILE"), thread("O", line: "null", side: "LEFT")], next: nil)))
+          [
+            thread("F", subject: "FILE"), thread("O", line: "null", side: "LEFT"),
+            thread("K", line: "5", outdated: true),
+          ], next: nil)))
 
     let review = try XCTUnwrap(read()).get()
 
@@ -147,7 +152,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     XCTAssertTrue(review.viewerIsAuthor)
     XCTAssertEqual(review.headCommit, "h1")
     XCTAssertEqual(review.pendingReview, .init(id: "R1", commentCount: 2))
-    XCTAssertEqual(review.threads.count, 102)
+    XCTAssertEqual(review.threads.count, 103)
     XCTAssertEqual(review.threads[0].line, 3)
     XCTAssertEqual(review.threads[0].side, .new)
     XCTAssertTrue(review.threads[0].canReply)
@@ -158,6 +163,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     XCTAssertNil(review.threads[100].line, "ファイル単位")
     XCTAssertNil(review.threads[101].line, "古い版に付いた")
     XCTAssertEqual(review.threads[101].side, .old)
+    XCTAssertNil(review.threads[102].line, "古い版に付いたスレッドは、行の値が残っていても置かない")
   }
 
   /// ページの間に push があれば、最初から読み直して新しい時点のスレッドだけを返す。読み直した後も PR の先頭のコミットが動けば失敗。

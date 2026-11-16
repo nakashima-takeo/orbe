@@ -65,7 +65,7 @@ enum GitHubReviewQuery {
   static let pageSize = 100
 
   private static let threadsFields =
-    "nodes{id isResolved path line diffSide subjectType viewerCanResolve viewerCanUnresolve "
+    "nodes{id isResolved isOutdated path line diffSide subjectType viewerCanResolve viewerCanUnresolve "
     + "viewerCanReply comments(first:\(pageSize)){nodes{id author{login} body createdAt state}}} "
     + "pageInfo{hasNextPage endCursor}"
 
@@ -172,18 +172,22 @@ private struct NextNode: Decodable {
 
 extension GitHubPullRequestReview.Thread: Decodable {
   private enum CodingKeys: String, CodingKey {
-    case id, isResolved, path, line, diffSide, subjectType, viewerCanResolve, viewerCanUnresolve
+    case id, isResolved, isOutdated, path, line, diffSide, subjectType, viewerCanResolve
+    case viewerCanUnresolve
     case viewerCanReply, comments
   }
 
   private struct Comments: Decodable { let nodes: [GitHubPullRequestReview.Comment] }
 
-  /// ファイル単位のスレッドと、Orbe が知らない側のスレッドは、行を持たない（今の diff に置けない）として読む（一覧ごと読めなく
-  /// しない）。
+  /// 古い版に付いた（outdated の）スレッド・ファイル単位のスレッド・Orbe が知らない側のスレッドは、行を持たない（今の diff に
+  /// 置けない）として読む。outdated は行の値が残っていても置かない（GitHub の diff でも古い版の行のスレッドとして扱われる）。
+  /// 知らない側でも一覧ごと読めなくしない。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     let side = GitHubDiffSide(rawValue: try c.decodeIfPresent(String.self, forKey: .diffSide) ?? "")
-    let isLine = try c.decodeIfPresent(String.self, forKey: .subjectType) != "FILE"
+    let isLine =
+      try c.decodeIfPresent(String.self, forKey: .subjectType) != "FILE"
+      && !(c.decodeIfPresent(Bool.self, forKey: .isOutdated) ?? false)
     self.init(
       id: try c.decode(String.self, forKey: .id), path: try c.decode(String.self, forKey: .path),
       side: side ?? .new,
