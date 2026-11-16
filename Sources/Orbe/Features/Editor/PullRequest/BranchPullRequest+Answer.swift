@@ -57,7 +57,7 @@ extension BranchPullRequest {
     case inSync
     /// 手元にしか無いコミット（未 push）の数と、PR にしか無いコミット（未取得）の数。
     case diverged(ahead: Int, behind: Int)
-    /// PR の先頭のコミットが手元に無く数えられないが、手元の HEAD が PR の先頭と違う。
+    /// ずれを数えない（PR の先頭のコミットが手元に無い・読めない・浅いクローン）が、手元の HEAD が PR の先頭と違う。
     case differs
   }
 }

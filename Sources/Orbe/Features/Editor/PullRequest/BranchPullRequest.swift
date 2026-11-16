@@ -254,10 +254,10 @@ final class BranchPullRequest {
   // MARK: - 手元とのずれ
 
   /// 手元の HEAD と PR の先頭の間で、手元とのずれを数える（PR の中身が読めた後。diff の両端には依らない。数えた組と同じ
-  /// なら数え直さない）。手元の HEAD と PR の先頭のマージベースが手元で求まるときだけ数え、求まらなければ、手元の HEAD が
-  /// PR の先頭と違うとだけ持つ——PR の先頭のコミットが手元に無い・読めないなら、次に PR の状態か手元の HEAD が変わったときに数え直す
-  /// （両端を求めるために取ってきた後に数えられる）。浅いクローンで浅い境界より古い所で分かれている・共通の祖先が無いなら
-  /// 数え直さない（git は浅い境界までの、誤った数を返す）。
+  /// なら数え直さない）。浅いクローンでは数えず、手元の HEAD が PR の先頭と同じなら一致、違えば違うことだけを持つ——
+  /// マージベースが求まっても、git は浅い境界の先をたどれず、数が誤りうる（浅くなくなった後、次に PR の状態か手元の HEAD
+  /// が変わったときに数え直す）。PR の先頭のコミットが手元に無い・読めないなら、違うことだけを持ち、次に PR の状態か手元の
+  /// HEAD が変わったときに数え直す（両端を求めるために取ってきた後に数えられる）。
   private func countDrift() {
     guard let prHead = state?.content?.headCommit else {
       counted = nil
@@ -271,33 +271,22 @@ final class BranchPullRequest {
       drift = .differs
       return
     }
-    counted = (local, prHead)
-    let counting: () -> Bool = { [weak self] in
-      self?.counted?.local == local && self?.counted?.pullRequest == prHead
+    guard !repo.isShallow else {
+      counted = nil
+      drift = local == prHead ? .inSync : .differs
+      return
     }
-    repo.mergeBase(local, prHead) { [weak self] found in
-      guard let self, counting() else { return }
-      switch found {
-      case .found: break
-      case .shallow, .unrelated:
-        drift = .differs
-        return
-      case .missingCommit, .failed:
+    counted = (local, prHead)
+    repo.counts(local, against: prHead) { [weak self] counts in
+      guard let self, counted?.local == local, counted?.pullRequest == prHead else { return }
+      guard let counts else {
         counted = nil
         drift = .differs
         return
       }
-      repo.counts(local, against: prHead) { [weak self] counts in
-        guard let self, counting() else { return }
-        guard let counts else {
-          counted = nil
-          drift = .differs
-          return
-        }
-        drift =
-          counts.ahead == 0 && counts.behind == 0
-          ? .inSync : .diverged(ahead: counts.ahead, behind: counts.behind)
-      }
+      drift =
+        counts.ahead == 0 && counts.behind == 0
+        ? .inSync : .diverged(ahead: counts.ahead, behind: counts.behind)
     }
   }
 

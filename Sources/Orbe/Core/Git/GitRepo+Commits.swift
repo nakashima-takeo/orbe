@@ -55,7 +55,7 @@ extension GitRepo {
   }
 
   /// 浅いリポジトリか（共有 git dir に `shallow` があり、境界が 1 つ以上載る）。
-  private var isShallow: Bool {
+  var isShallow: Bool {
     let shallow = (commonDir as NSString).appendingPathComponent("shallow")
     guard let text = try? String(contentsOfFile: shallow, encoding: .utf8) else { return false }
     return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
