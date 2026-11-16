@@ -26,12 +26,13 @@ final class EditorDiff {
   private var newRevisionSurface: (any TextSurface)?
   /// 並列の古い側の面（並列で見せている間だけ）。
   var oldSurface: (any TextSurface)?
-  /// 版の本文どうしの行差分（新しい側が文書なら、文書のハンクを直に使う——`currentRows`）。
+  /// 版の本文どうしの並び——行差分。ファイルとサブモジュールの置き換えなら、丸ごとの置き換え（新しい側が文書なら、
+  /// 文書のハンクを直に使う——`currentRows`）。
   private(set) var revisionHunks: [LineHunk] = []
-  /// `revisionHunks` が今の両側の本文の行差分であるとき、その両側の本文（そうでなければ nil）。両側を入れ替えて行差分を
-  /// 置いたときだけ付け、どちらかの側が替われば外す——どの経路で側が替わっても、今の並びが今の両側の行差分かを、この値
-  /// だけで判る。
-  private var revisionHunksTexts: SideTexts?
+  /// `revisionHunks` を作った両側の本文と、`revisionHunks` が行差分か。この値は、両側を入れ替えて並びを置いたときだけ
+  /// 付け、どちらかの側が替われば外す——どの経路で側が替わっても、この値が付いている間だけ、`revisionHunks` は今の両側の
+  /// 並びである（→ `currentRows`）。
+  private(set) var revisionHunksSides: (texts: SideTexts, lineDiff: Bool)?
   private(set) var content: Content = .loading
   /// 面の焦点が変わった（古い側・新しい側の版の本文の面。作り直した文書にも結び直す）。
   var onFocusChange: ((Bool) -> Void)?
@@ -99,12 +100,12 @@ final class EditorDiff {
   }
 
   /// 新しい側の文書が `previous` から替わった（出どころが知らせる）——前の文書をファイルタブの見え方に戻し、今の文書の
-  /// ハンクを追う（見せていれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。今の文書で並びを置けるように
-  /// なるまで、中身は「読み込み中」（本体に何も出さない。開くときと同じ）。
+  /// ハンクを追う（見せていれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。新しい側で並びを置けるように
+  /// なるまで、中身は「読み込み中」（本体に何も出さない。開くときと同じ）——文書が無くなって版の本文に替わるときも同じ。
   private func documentDidSwitch(from previous: EditorDocument?) {
     dropOldSurface()
     surfacesChanged = true
-    if document != nil { content = .loading }
+    content = .loading
     if presented != nil, let previous { restoreCode(previous) }
     guard presented != nil, let document else { return }
     document.onHunksChange = { [weak self] in self?.sourcesDidChange() }
@@ -270,7 +271,7 @@ final class EditorDiff {
     case .revisions(let texts):
       oldIsBase = true
       // 今の並びがこの両側の本文の行差分なら、実行中の依頼を手放すだけで済む。
-      guard revisionHunksTexts != texts else { return .ready }
+      if let made = revisionHunksSides, made.lineDiff, made.texts == texts { return .ready }
       if Self.diffsInPlace(texts) {
         swapRevisions(texts, lineDiff: true) {
           DiffRows.hunks(old: $0, new: $1, limit: Self.hunkLimit)
@@ -321,14 +322,14 @@ final class EditorDiff {
     setNewRevision(texts.new, keepsOld: keepsOld)
     revisionHunks = hunks(
       oldSide.isAbsent ? nil : old?.text, newRevisionSide.isAbsent ? nil : newRevision?.text)
-    revisionHunksTexts = lineDiff ? texts : nil
+    revisionHunksSides = (texts, lineDiff)
   }
 
   /// 古い側を本文 `text`（その版に無ければ nil——空の本文の文書で、大きさは 0 行）にする。変われば作り直す。
   private func setOld(_ text: String?) {
     guard oldSource != .some(text) else { return }
     oldSource = .some(text)
-    revisionHunksTexts = nil
+    revisionHunksSides = nil
     dropOldSurface()
     let revision = RevisionDocument(text: text ?? "", name: id.url, registry: surfaces.registry)
     revision.onRolesChange = { [weak self] ranges in
@@ -347,7 +348,7 @@ final class EditorDiff {
   private func setNewRevision(_ text: String?, keepsOld: Bool) {
     guard newSource != .some(text) else { return }
     newSource = .some(text)
-    revisionHunksTexts = nil
+    revisionHunksSides = nil
     if let previous = newRevisionSurface {
       let top = previous.viewport.top
       // 位置を決める前の作り直しは引き継がない（追いついた並びで 1 回だけ決める）。
