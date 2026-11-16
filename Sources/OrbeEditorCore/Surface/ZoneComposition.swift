@@ -125,14 +125,14 @@ private struct Builder {
   var composed: [Int]
   var owners: [Int32] = []
   /// 組んだ文の字ごとの種類と字体（字体が無ければ Core Text の既定）。
-  var kinds: [(kind: Kind, font: NSFont?)] = []
+  var kinds: [(kind: Kind, font: CTFont?)] = []
 
   init(paragraph: Range<Int>) {
     self.paragraph = paragraph
     composed = [Int](repeating: 0, count: paragraph.count + 1)
   }
 
-  mutating func plain(_ source: [UInt16], _ range: Range<Int>, style: Int, font: NSFont?) {
+  mutating func plain(_ source: [UInt16], _ range: Range<Int>, style: Int, font: CTFont?) {
     for offset in range {
       composed[offset - paragraph.lowerBound] = units.count
       append(source[offset], original: offset, owner: style, .text(style), font)
@@ -141,7 +141,7 @@ private struct Builder {
 
   /// 範囲 `range`（見え方 `style` の字）を向きを独立させて包み、左右に置き字を置く（幅 0 の余白には置かない）。
   mutating func isolate(
-    _ source: [UInt16], _ range: Range<Int>, style: Int, font: NSFont,
+    _ source: [UInt16], _ range: Range<Int>, style: Int, font: CTFont,
     padding: (leading: CGFloat, trailing: CGFloat)
   ) {
     let (start, end) = (range.lowerBound, range.upperBound)
@@ -190,7 +190,7 @@ private struct Builder {
   }
 
   private mutating func append(
-    _ unit: UInt16, original: Int, owner: Int, _ kind: Kind, _ font: NSFont?
+    _ unit: UInt16, original: Int, owner: Int, _ kind: Kind, _ font: CTFont?
   ) {
     units.append(unit)
     originals.append(original)
@@ -222,7 +222,7 @@ private struct Builder {
       while end < kinds.count, Self.same(kinds[start], kinds[end]) { end += 1 }
       let range = CFRange(location: start, length: end - start)
       if let font = kinds[start].font {
-        CFAttributedStringSetAttribute(attributed, range, kCTFontAttributeName, font as CTFont)
+        CFAttributedStringSetAttribute(attributed, range, kCTFontAttributeName, font)
       }
       switch kinds[start].kind {
       case .text(let style) where style >= 0:
@@ -244,7 +244,7 @@ private struct Builder {
   }
 
   /// 続く字を同じ属性でまとめられるか（置き字は 1 字ずつ）。
-  private static func same(_ a: (kind: Kind, font: NSFont?), _ b: (kind: Kind, font: NSFont?))
+  private static func same(_ a: (kind: Kind, font: CTFont?), _ b: (kind: Kind, font: CTFont?))
     -> Bool
   {
     guard a.font == b.font else { return false }

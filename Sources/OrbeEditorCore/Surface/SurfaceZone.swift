@@ -169,20 +169,30 @@ public struct ZoneText {
 /// 地は、余白を含めたかたまりの x 範囲に置く（→ `ZoneTextLayout.Line.spans(of:)`）。折り返しで割れた側と、改行で割れた
 /// 側には余白が付かない。
 ///
-/// 値はどのスレッドへも渡せる——字体（NSFont は CTFont と同じ物）は不変で、Core Text はスレッドをまたいだ利用を保証する。
-public struct ZoneTextStyle: Equatable, @unchecked Sendable {
+/// 字体は CTFont で持ち（載せる側の NSFont は、ここで受けるときに CTFont として持つ）、値はどのスレッドへも渡せる。
+public struct ZoneTextStyle: Equatable, Sendable {
   public var length: Int
-  public var font: NSFont
+  public var font: CTFont {
+    get { typeface.font }
+    set { typeface = Typeface(font: newValue) }
+  }
   public var color: NSColor
   public var leadingPadding: CGFloat
   public var trailingPadding: CGFloat
+  private var typeface: Typeface
 
   public init(length: Int, font: NSFont, color: NSColor, padding: CGFloat = 0) {
     self.length = length
-    self.font = font
+    self.typeface = Typeface(font: font as CTFont)
     self.color = color
     self.leadingPadding = padding
     self.trailingPadding = padding
+  }
+
+  /// 字体。Core Text は字体のオブジェクト（CTFont・CTFontDescriptor）を複数のスレッドから同時に使えると保証する
+  /// （CTFont は不変で、変える API が無い）。SDK は CTFont を Sendable と宣言しないので、検査を外すのはこの型だけにする。
+  private struct Typeface: Equatable, @unchecked Sendable {
+    let font: CTFont
   }
 }
 

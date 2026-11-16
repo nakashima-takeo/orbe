@@ -87,7 +87,8 @@ extension SurfaceZonesTests {
     let index = Int.random(in: 0..<text.styles.count, using: &random)
     switch change {
     case 1: text.styles[index].color = .systemBlue
-    case 2: text.styles[index].font = text.styles[index].font == big ? body : big
+    case 2:
+      text.styles[index].font = (text.styles[index].font == big as CTFont ? body : big) as CTFont
     case 3:
       text.styles[index].leadingPadding = text.styles[index].leadingPadding == 0 ? 3 : 0
       text.styles[index].trailingPadding = 2

@@ -374,8 +374,9 @@ struct ZoneTextTypeset {
       }
       let font =
         text.styles.indices.contains(index)
-        ? text.styles[index].font : (text.styles.last?.font ?? .systemFont(ofSize: 12))
-      return (font.ascender, -font.descender)
+        ? text.styles[index].font
+        : (text.styles.last?.font ?? NSFont.systemFont(ofSize: 12) as CTFont)
+      return (CTFontGetAscent(font), CTFontGetDescent(font))
     }
     rope = TextRope(text.string)
   }

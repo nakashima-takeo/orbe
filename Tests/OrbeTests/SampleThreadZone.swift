@@ -287,7 +287,7 @@ final class SampleThreadZone: SurfaceZone {
     for (index, line) in lines.enumerated() {
       let lineTop = top + CGFloat(index) * lineHeight
       let baseline = Self.baseline(top: lineTop, height: lineHeight, font: sans)
-      for (styleIndex, style) in styles.enumerated() where style.font == mono {
+      for (styleIndex, style) in styles.enumerated() where style.font == mono as CTFont {
         for ground in line.spans(of: styleIndex) {
           canvas.elements.append(
             .box(
