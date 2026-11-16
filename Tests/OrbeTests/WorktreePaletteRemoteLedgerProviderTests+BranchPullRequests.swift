@@ -27,8 +27,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     return try XCTUnwrap(repo)
   }
 
-  /// 同一性が GitHub のブランチと決まれば、head がリポジトリまで含めてその同一性と等しい PR だけを、
-  /// gh の並び（作成日時の新しい順）のまま返す。
+  /// 同一性が GitHub のブランチと決まれば、head がリポジトリまで含めてその同一性と等しい PR だけを返す。
   func testTheBranchAnswersItsIdentityAndOnlyItsOwnPullRequests() throws {
     addRemote("origin", "me/r")
     try answer("me/r", found: "me/r")

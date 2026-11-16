@@ -202,7 +202,8 @@ extension BranchPullRequestTests {
     for answer in answers { answer() }
   }
 
-  /// 問い合わせの後の、追跡 ref の値を覚える git の読み取りが終わるまで main を回す（終わったことは外から見えない）。
+  /// 問い合わせと、その前後の git の読み取り（追跡 ref の値を覚える・ずれを数える）が、起きるなら終わるまで main を
+  /// 回す（終わったことも、起きなかったことも外から見えない）。
   private func letTheLookUpSettle() {
     let until = Date().addingTimeInterval(1)
     while Date() < until {

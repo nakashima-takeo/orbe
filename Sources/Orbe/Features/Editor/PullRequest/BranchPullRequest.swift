@@ -4,10 +4,11 @@ import Foundation
 /// PR があるときの手元とのずれ。worktree の根（正準形）ごとに 1 つで、アプリが動いている間持つ。PR そのものの中身は PR
 /// ごとの状態（`PullRequestState`）が持つ——ブランチを切り替えても、開いている PR の diff タブはその PR を見続ける。
 ///
-/// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。読み直すきっかけは、誰も見ていない状態から見ている者が
-/// 現れた・`reload`・今のブランチ名が変わった・Orbe の中のネット操作が終わった・リモート追跡の ref が動き、このブランチの
-/// push 先の追跡 ref か PR のベースブランチの追跡 ref の値が前と変わった、のどれか。読んでいる間に次のきっかけが来たら、
-/// 終わった後に 1 回だけ読み直す。手元の HEAD が動いただけなら、GitHub に問い合わせずに手元とのずれを数え直す。
+/// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。読み直すきっかけは、誰も見ていない状態から
+/// 見ている者が現れた・`reload`・今のブランチ名が変わった・Orbe の中のネット操作が終わった・リモート追跡の ref が動き、
+/// このブランチの push 先の追跡 ref か PR のベースブランチの追跡 ref の値が前と変わった、のどれか。読んでいる間に次の
+/// きっかけが来たら、終わった後に 1 回だけ読み直す。手元の HEAD が動いただけなら、GitHub に問い合わせずに手元とのずれを
+/// 数え直す。
 @MainActor @Observable
 final class BranchPullRequest {
   let root: String
@@ -254,16 +255,32 @@ final class BranchPullRequest {
       return
     }
     counted = (local, prHead)
-    repo.counts(local, against: prHead) { [weak self] counts in
-      guard let self, counted?.local == local, counted?.pullRequest == prHead else { return }
-      guard let counts else {
+    let counting: () -> Bool = { [weak self] in
+      self?.counted?.local == local && self?.counted?.pullRequest == prHead
+    }
+    repo.mergeBase(local, prHead) { [weak self] found in
+      guard let self, counting() else { return }
+      switch found {
+      case .found: break
+      case .shallow, .unrelated:
+        drift = .differs
+        return
+      case .missingCommit, .failed:
         counted = nil
         drift = .differs
         return
       }
-      drift =
-        counts.ahead == 0 && counts.behind == 0
-        ? .inSync : .diverged(ahead: counts.ahead, behind: counts.behind)
+      repo.counts(local, against: prHead) { [weak self] counts in
+        guard let self, counting() else { return }
+        guard let counts else {
+          counted = nil
+          drift = .differs
+          return
+        }
+        drift =
+          counts.ahead == 0 && counts.behind == 0
+          ? .inSync : .diverged(ahead: counts.ahead, behind: counts.behind)
+      }
     }
   }
 
