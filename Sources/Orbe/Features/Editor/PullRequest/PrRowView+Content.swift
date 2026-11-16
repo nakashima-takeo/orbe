@@ -48,21 +48,27 @@ extension PrRowView {
   ) -> Content {
     switch item {
     case .section(let section, let isOpen, let count):
-      .section(self.section(section, isOpen: isOpen, count: count, facts, language))
+      return .section(self.section(section, isOpen: isOpen, count: count, facts, language))
     case .olderCommits(let hidden):
-      .note(
+      return .note(
         TextLine(
           L10n.format(.editorPrOlderCommitsHidden, language, hidden),
           Theme.Typography.editorScmDirectory))
     case .commit(let commit):
-      .commit(
+      return .commit(
         message: TextLine(
           commit.headline, Theme.Typography.editorScmCommit, glyphs: .chrome(emoji: emoji)),
         sha: TextLine(String(commit.oid.prefix(7)), Theme.Typography.editorPrCount))
     case .folder(let path, let depth, let isOpen, let files):
-      .folder(folder(path, depth: depth, isOpen: isOpen, total: files.count, facts, emoji))
+      // 配下の確認済みが全部なら付いた姿、一部なら横線、無ければ空。
+      let check: Check = facts.viewed == files.count ? .on : facts.viewed > 0 ? .partial : .off
+      return .folder(
+        Folder(
+          check: check, depth: depth, isOpen: isOpen, name: name(path, emoji),
+          count: TextLine("\(facts.viewed)/\(files.count)", Theme.Typography.editorPrCount),
+          dimmed: check == .on))
     case .file(let path, let change, let depth):
-      .file(file(path, change: change, depth: depth, facts, emoji))
+      return .file(file(path, change: change, depth: depth, facts, emoji))
     }
   }
 
@@ -91,17 +97,11 @@ extension PrRowView {
     L10n.format(.editorPrViewedCount, language, facts.viewed, count)
   }
 
-  private static func folder(
-    _ path: String, depth: Int, isOpen: Bool, total: Int, _ facts: Facts, _ emoji: NSFont?
-  ) -> Folder {
-    let check: Check = facts.viewed == total ? .on : facts.viewed > 0 ? .partial : .off
-    return Folder(
-      check: check, depth: depth, isOpen: isOpen,
-      name: TextLine(
-        (path as NSString).lastPathComponent, Theme.Typography.editorScmFile,
-        glyphs: .chrome(emoji: emoji)),
-      count: TextLine("\(facts.viewed)/\(total)", Theme.Typography.editorPrCount),
-      dimmed: check == .on)
+  /// フォルダ・ファイルの名前（パスの最後の要素）。
+  private static func name(_ path: String, _ emoji: NSFont?) -> TextLine {
+    TextLine(
+      (path as NSString).lastPathComponent, Theme.Typography.editorScmFile,
+      glyphs: .chrome(emoji: emoji))
   }
 
   /// ファイルの行。変化の印は、追加は A、ほかは M（ソース管理と同じ 2 色の印に寄せる）。リストならディレクトリも出す。
@@ -110,15 +110,14 @@ extension PrRowView {
     _ emoji: NSFont?
   ) -> File {
     let viewed = facts.viewed > 0
-    let name = (path as NSString).lastPathComponent
-    let chip = FileChip.resolve(URL(fileURLWithPath: name))
+    let chip = FileChip.resolve(URL(fileURLWithPath: (path as NSString).lastPathComponent))
     let badge: GitStatus.Badge = change == .added ? .added : .modified
     return File(
       check: viewed ? .on : .off, depth: depth, chip: chip,
       chipText: TextLine(
         chip.glyph,
         Theme.Typography.editorChip(size: chip.fontSize(for: Theme.Layout.editorScmChip))),
-      name: TextLine(name, Theme.Typography.editorScmFile, glyphs: .chrome(emoji: emoji)),
+      name: name(path, emoji),
       directory: facts.asTree
         ? nil
         : TextLine(
