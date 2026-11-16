@@ -180,6 +180,7 @@ final class ZonePainter {
     let resolve = { (color: NSColor?) -> FrameColor in
       color.map { FrameColor($0, appearance: look.appearance, space: look.space) } ?? .clear
     }
+    var inks = Inks(look: look)
     var material = ZoneMaterial()
     var hits = ZoneHits()
     for element in picture.elements {
@@ -197,8 +198,8 @@ final class ZonePainter {
             shadowBlur: Float(box.shadow?.blur ?? 0)))
       case .text(let line):
         material.runs += runs(
-          ZoneTextLayout.line(line.runs).runs, colors: line.runs.map(\.color),
-          origin: line.origin, look)
+          prepared(ZoneTextLayout.line(line.runs).runs), colors: line.runs.map(\.color),
+          origin: line.origin, inks: &inks)
       case .image(let image):
         if let pixels = pixels(image, look) {
           material.images.append(ZoneMaterial.Image(frame: image.frame, pixels: pixels))
@@ -212,7 +213,8 @@ final class ZonePainter {
       }
     }
     for text in picture.texts {
-      paint(text, look, reusing: previous.typeset[text.id], into: &material, hits: &hits)
+      paint(
+        text, reusing: previous.typeset[text.id], inks: &inks, into: &material, hits: &hits)
     }
     precondition(hits.texts.count == picture.texts.count, "選べる文のまとまりの id は絵の差し込みの中で一意")
     precondition(
@@ -225,46 +227,46 @@ final class ZonePainter {
   /// 選べる文のまとまり `text` の文を当たりの表に、その行を材料と当たりの表の行に写す。組んだもの `cached` が同じ文・
   /// 見え方・行の範囲のものなら、組み直さない。
   private func paint(
-    _ text: ZoneText, _ look: Look, reusing cached: ZoneTextTypeset?,
+    _ text: ZoneText, reusing cached: ZoneTextTypeset?, inks: inout Inks,
     into material: inout ZoneMaterial, hits: inout ZoneHits
   ) {
-    let typeset = cached.flatMap { $0.matches(text) ? $0 : nil } ?? ZoneTextTypeset(text)
+    let typeset =
+      cached.flatMap { $0.matches(text) ? $0 : nil }
+      ?? ZoneTextTypeset(text, prepare: prepared)
     hits.typeset[text.id] = typeset
     hits.texts[text.id] = typeset.rope
     let colors = text.styles.map(\.color)
     for (index, (line, layout)) in zip(text.lines, typeset.lines).enumerated() {
-      material.runs += runs(typeset.runs[index], colors: colors, origin: line.origin, look)
-      let font = Self.font(at: layout.range.location, text.styles) ?? .systemFont(ofSize: 12)
+      material.runs += runs(
+        typeset.runs[index], colors: colors, origin: line.origin, inks: &inks)
+      let metrics = typeset.metrics[index]
       hits.lines.append(
         ZoneHits.Line(
-          text: text.id, origin: line.origin, ascent: font.ascender, descent: -font.descender,
+          text: text.id, origin: line.origin, ascent: metrics.ascent, descent: metrics.descent,
           layout: layout))
     }
   }
 
-  /// 位置 `offset` の字の見え方の字体（位置が見え方の外なら最後の見え方の字体）。
-  private static func font(at offset: Int, _ styles: [ZoneTextStyle]) -> NSFont? {
-    var end = 0
-    for style in styles {
-      end += style.length
-      if offset < end { return style.font }
+  /// 組んだ行のグリフの連なりを、外観に依らない形（揃えたフォント・縦の位置）に写す。
+  private func prepared(_ glyphRuns: [ZoneTextLayout.GlyphRun]) -> [ZoneTextTypeset.Run] {
+    glyphRuns.map { run in
+      let raised = run.positions.contains { $0.y != 0 }
+      return ZoneTextTypeset.Run(
+        style: run.style, font: canonical(run.font), glyphs: run.glyphs, positions: run.positions,
+        ys: raised ? run.positions.map { Float($0.y) } : [])
     }
-    return styles.last?.font
   }
 
-  /// 組んだ行のグリフの連なりを、字の連なり（フォントと色ごと）に写す。色は連なりの見え方の色 `colors` から引く。
+  /// 外観に依らない形のグリフの連なりを、字の連なり（フォントと色ごと）に写す。色は連なりの見え方の色 `colors` から引き、
+  /// `inks` で解く。
   private func runs(
-    _ glyphRuns: [ZoneTextLayout.GlyphRun], colors: [NSColor], origin: CGPoint, _ look: Look
+    _ prepared: [ZoneTextTypeset.Run], colors: [NSColor], origin: CGPoint, inks: inout Inks
   ) -> [ZoneMaterial.Run] {
-    glyphRuns.compactMap { run in
+    prepared.compactMap { run in
       guard colors.indices.contains(run.style) else { return nil }
-      let raised = run.positions.contains { $0.y != 0 }
       return ZoneMaterial.Run(
-        font: canonical(run.font), glyphs: run.glyphs,
-        xs: run.positions.map { Float(origin.x + $0.x) },
-        ys: raised ? run.positions.map { Float($0.y) } : [], baseline: Float(origin.y),
-        ink: InkColor(
-          colors[run.style], appearance: look.appearance, space: look.space, scale: look.scale))
+        font: run.font, glyphs: run.glyphs, xs: run.positions.map { Float(origin.x + $0.x) },
+        ys: run.ys, baseline: Float(origin.y), ink: inks.ink(colors[run.style]))
     }
   }
 
@@ -315,24 +317,66 @@ final class ZonePainter {
   }
 }
 
-/// 選べる文のまとまりを組んだもの——組んだ文と見え方と行の範囲（覚えの鍵）と、組んだ行・行ごとのグリフの連なり・文。面は
-/// 当たりの表と一緒に持ち、次の描き直しで鍵が同じなら組み直さない（ホバーや印の出し入れの描き直しで段落を組まない）。
-/// 色は鍵に入れない（組み方を変えないので、写すときに今の色で引く）。覚えは当たりの表と同じく、絵の差し込みが外れれば
-/// 消え、描き直した絵に無いまとまりの分は次の表に移らない。
+/// 1 回の写しの中で、色を外観で解いた字の色の覚え（同じ色を解き直さない）。
+@MainActor
+private struct Inks {
+  let look: ZonePainter.Look
+  var known: [NSColor: InkColor] = [:]
+
+  mutating func ink(_ color: NSColor) -> InkColor {
+    if let ink = known[color] { return ink }
+    let ink = InkColor(color, appearance: look.appearance, space: look.space, scale: look.scale)
+    known[color] = ink
+    return ink
+  }
+}
+
+/// 選べる文のまとまりを組んだもの——組んだ文と見え方と行の範囲（覚えの鍵）と、そこから決まるもの（組んだ行・行ごとの
+/// 外観に依らない形のグリフの連なり・行の字体の高さ・文）。面は当たりの表と一緒に持ち、次の描き直しで鍵が同じなら
+/// 組み直さない（ホバーや印の出し入れの描き直しで段落を組まない）。色は鍵に入れない（組み方を変えないので、写すときに
+/// 今の外観で解く）。覚えは当たりの表と同じく、絵の差し込みが外れれば消え、描き直した絵に無いまとまりの分は次の表に
+/// 移らない。
 struct ZoneTextTypeset {
+  /// 外観に依らない形のグリフの連なり（フォントは面の中で揃えたもの。縦の位置は、どれかのグリフが基線から外れるときだけ）。
+  struct Run {
+    let style: Int
+    let font: CTFont
+    let glyphs: [CGGlyph]
+    let positions: [CGPoint]
+    let ys: [Float]
+  }
+
   let string: String
   let styles: [ZoneTextStyle]
   let ranges: [NSRange]
   let lines: [ZoneTextLayout.TypesetLine]
-  let runs: [[ZoneTextLayout.GlyphRun]]
+  let runs: [[Run]]
+  /// 行ごとの、行の始まりの字の見え方の字体（位置が見え方の外なら最後の見え方の字体）の上下の高さ。
+  let metrics: [(ascent: CGFloat, descent: CGFloat)]
   let rope: TextRope
 
-  init(_ text: ZoneText) {
+  init(_ text: ZoneText, prepare: ([ZoneTextLayout.GlyphRun]) -> [Run]) {
     string = text.string
     styles = text.styles
     ranges = text.lines.map(\.range)
     lines = ZoneTextLayout.lines(of: text)
-    runs = lines.map(\.runs)
+    runs = lines.map { prepare($0.runs) }
+    var end = 0
+    let ends = text.styles.map { style -> Int in
+      end += style.length
+      return end
+    }
+    metrics = lines.map { line in
+      var (index, upper) = (0, ends.count)
+      while index < upper {
+        let middle = (index + upper) / 2
+        if line.range.location < ends[middle] { upper = middle } else { index = middle + 1 }
+      }
+      let font =
+        text.styles.indices.contains(index)
+        ? text.styles[index].font : (text.styles.last?.font ?? .systemFont(ofSize: 12))
+      return (font.ascender, -font.descender)
+    }
     rope = TextRope(text.string)
   }
 
