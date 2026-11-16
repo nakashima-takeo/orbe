@@ -13,6 +13,8 @@ enum GitRevision: Hashable {
 enum GitVersionText: Equatable {
   /// 作業ツリーに出したときの姿（baseline と同じ底）。
   case present(Data)
+  /// サブモジュール（gitlink が指すコミット）。本文は取らない。
+  case submodule(String)
   /// その版に無い（初回コミット前の HEAD を含む）。
   case absent
   /// 取れなかった（git の失敗・手元に無いコミット）。
@@ -20,7 +22,7 @@ enum GitVersionText: Equatable {
 }
 
 extension GitRepo {
-  /// あるパスの、ある版での本文。在るかを先に確かめてから、baseline と同じ取り方（`blob(oid:relativePath:)`。smudge と
+  /// あるパスの、ある版での本文（サブモジュールなら gitlink が指すコミット）。在るかを先に確かめてから、baseline と同じ取り方（`blob(oid:relativePath:)`。smudge と
   /// eol を通し、textconv・外部 diff は通らない）で本文を取る——「その版に無い」を git の失敗と取り違えないため。
   /// コミットの版はコミット自体が手元に在るかも同じ問い合わせで確かめ、無ければ「取れなかった」にする（無いコミットの
   /// パスを「その版に無い」と答えると、呼び出し側がそのコミットを取りに行く合図を失う）。
@@ -51,6 +53,8 @@ extension GitRepo {
       guard fields.count == 2, fields[0].allSatisfy(\.isHexDigit) else {
         return completion(fields.last == "missing" ? .absent : .failed)
       }
+      // gitlink は `<コミット> submodule` と答える（サブモジュールのコミットはこのリポジトリに無い）。
+      if fields[1] == "submodule" { return completion(.submodule(String(fields[0]))) }
       guard fields[1] == "blob" else { return completion(.absent) }
       self.blob(oid: String(fields[0]), relativePath: relativePath) { data in
         completion(data.map(GitVersionText.present) ?? .failed)

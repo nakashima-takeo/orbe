@@ -63,6 +63,8 @@ final class EditorDiffPullRequest: EditorDiffSource {
     }
   }
 
+  /// 両側の版から答えを決める。サブモジュールは「Subproject commit」の行で見せ（作業ツリー diff・ステージ済み diff と
+  /// 同じ）、ファイルとサブモジュールの置き換えは丸ごとの置き換え。
   private static func resolution(old: GitVersionText, new: GitVersionText) -> EditorDiff.Resolution
   {
     var texts: [String?] = []
@@ -70,13 +72,23 @@ final class EditorDiffPullRequest: EditorDiffSource {
       switch version {
       case .failed: return .unavailable(.failed)
       case .absent: texts.append(nil)
+      case .submodule(let commit): texts.append(EditorDiff.subproject(commit))
       case .present(let data):
         guard let text = String(data: data, encoding: .utf8) else { return .unavailable(.notText) }
         texts.append(text)
       }
     }
     guard texts[0] != nil || texts[1] != nil else { return .unavailable(.nowhere) }
-    return .revisions(EditorDiff.SideTexts(old: texts[0], new: texts[1]))
+    let sides = EditorDiff.SideTexts(old: texts[0], new: texts[1])
+    return replaces(old, new) ? .revisionsReplacing(sides) : .revisions(sides)
+  }
+
+  /// 片側がファイルの本文で、もう片側がサブモジュール（ファイルとサブモジュールの置き換え）。
+  private static func replaces(_ old: GitVersionText, _ new: GitVersionText) -> Bool {
+    switch (old, new) {
+    case (.present, .submodule), (.submodule, .present): true
+    default: false
+    }
   }
 }
 
