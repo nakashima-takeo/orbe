@@ -2,18 +2,19 @@ import XCTest
 
 @testable import Orbe
 
-/// PR ごとの状態が持つレビューへの書き込みを、書き込み・読み直し・それぞれの応答・見ている者の出入り・PR への push が入り乱れる
-/// 順序で、種を決めた乱数により実行する。どの順序でも、書き込みの規則（pull-request.md の「レビューのやりとり」）が保たれる。
-/// PR の中身とレビューのやりとりが読んだ先頭のコミットを揃える読み直しは、際限なく続くことはなく、手順を終えて読み直しを
-/// 頼めば、両方が GitHub の今の先頭で揃う。食い違いで読み直すこと自体は `PullRequestStateTests+Review` が守る。
+/// PR ごとの状態が持つレビューへの書き込みを、書き込み・中身とレビューのやりとりの読み直し・それぞれの答え（出した順と関係なく
+/// 届く）・見ている者の出入り・PR への push が入り乱れる順序で、種を決めた乱数により実行する。どの順序でも、書き込みの規則と、
+/// 先頭のコミットを揃える規則（pull-request.md の「レビューのやりとり」）が保たれる。種の半分は、GitHub の答えが一貫していて
+/// 読みが失敗しない場合で、そのときは読みが出尽くすたびに中身とレビューのやりとりの先頭が揃っている。
 ///
 /// 壊れると何が起きるか: 書き込みの結果が返らないままになり、そのスレッドへの返信やレビューの送信が、アプリを再起動するまで
 /// できなくなる。書き込みの応答が届くより前に問い合わせた読みの応答を取り込み、書いたコメントが消えて見える・失敗の文が
-/// 残る。2 回押した送信が 2 回送られる。承認が、利用者の見ていないコミットに付く。push の後、GitHub への問い合わせが止まらない。
+/// 残る。2 回押した送信が 2 回送られる。承認が、利用者の見ていないコミットに付く。push の後、先頭が食い違ったまま読むのを
+/// やめ、diff にスレッドを置けず新しいスレッドも書けない。GitHub への問い合わせが止まらない。
 /// 失敗した種と手順はメッセージに出る（同じ種で回せば同じ手順になる）。
 extension PullRequestStateTests {
   func testInterleavedWritesAndRereadsKeepTheWriteRules() throws {
-    for seed: UInt64 in 1...40 {
+    for seed: UInt64 in 1...400 {
       gitHub = PullRequestFakeGitHub()
       key = PullRequestState.Key(
         commonDir: "/tmp/\(UUID().uuidString)",
@@ -23,11 +24,13 @@ extension PullRequestStateTests {
       addTeardownBlock { @MainActor in state.endWatching() }
       gitHub.content = .success(content(head: "h0"))
       state.reload()
+      gitHub.answersAtOnce = false
       gitHub.answersReviewAtOnce = false
 
       let run = ReviewWriteRun(
-        state: state, gitHub: gitHub, seed: seed, content: { self.content(head: $0) })
-      run.play(steps: 80)
+        state: state, gitHub: gitHub, seed: seed, consistent: seed % 2 == 1,
+        content: { self.content(head: $0) })
+      run.play(steps: 150)
       run.drain()
       if let violation = run.violation {
         XCTFail("種 \(seed): \(violation)\n手順: \(run.log.joined(separator: " → "))")
@@ -53,17 +56,19 @@ private final class ReviewWriteRun {
   private let state: PullRequestState
   private let gitHub: PullRequestFakeGitHub
   private let content: (String) -> GitHubPullRequestContent
+  /// GitHub の答えが一貫していて（読んだ時点の今の先頭を返す）、読みが失敗しない。
+  private let consistent: Bool
   private var random: SplitMix
   private var accepted: [Accepted] = []
   private var sent = 0
   /// 届いた書き込みの応答の数。
   private var writeAnswers = 0
-  /// 走っている読みを出した時点の `writeAnswers`。
+  /// 走っているレビューのやりとりの読みを出した時点の `writeAnswers`。
   private var readIssuedAt: Int?
   private var reads: Int
   private var contentReads: Int
   private var watching = true
-  /// GitHub 上の PR の先頭のコミットと、その 1 つ前（答えの遅れた読みが返す）。
+  /// GitHub 上の PR の先頭のコミットと、その 1 つ前（一貫していない答えが返す）。
   private var head = "h0"
   private var previousHead: String?
   private var pushes = 0
@@ -76,12 +81,13 @@ private final class ReviewWriteRun {
   private(set) var violation: String?
 
   init(
-    state: PullRequestState, gitHub: PullRequestFakeGitHub, seed: UInt64,
+    state: PullRequestState, gitHub: PullRequestFakeGitHub, seed: UInt64, consistent: Bool,
     content: @escaping (String) -> GitHubPullRequestContent
   ) {
     self.state = state
     self.gitHub = gitHub
     self.content = content
+    self.consistent = consistent
     random = SplitMix(seed: seed)
     reads = gitHub.reviewReads
     contentReads = gitHub.contentReads
@@ -89,14 +95,14 @@ private final class ReviewWriteRun {
 
   func play(steps: Int) {
     for _ in 0..<steps where violation == nil {
-      switch random.next(below: 12) {
-      case 0..<3: write()
-      case 3:
+      switch random.next(below: 13) {
+      case 0..<2: write()
+      case 2..<4:
         log.append("reload")
         state.reload()
-      case 4..<7:
-        answerRead(failing: random.next(below: 4) == 0, lagging: random.next(below: 4) == 0)
-      case 7..<10: answerWrite()
+      case 4..<6: answerRead(failing: odd(), inconsistent: odd())
+      case 6..<8: answerContent(failing: odd(), inconsistent: odd())
+      case 8..<10: answerWrite()
       case 10: toggleWatching()
       default: push()
       }
@@ -104,22 +110,20 @@ private final class ReviewWriteRun {
     }
   }
 
-  /// 見ている者を戻して読み直しを頼み、走っている読みと書き込みに、応答が尽きるまで遅れの無い成功を返す。受け付けた書き込みは、
-  /// どれも 1 回だけ結果を返し、中身とレビューのやりとりは GitHub の今の先頭で揃う。
+  /// 答えが一貫していない種のとき、4 回に 1 回真を返す。
+  private func odd() -> Bool { !consistent && random.next(below: 4) == 0 }
+
+  /// 見ている者を戻し、走っている読みと書き込みに、応答が尽きるまで一貫した成功を返す（問い合わせが止まらなければ違反）。
+  /// その後に読み直しを頼んで同じように答える。受け付けた書き込みは、どれも 1 回だけ結果を返し、中身とレビューのやりとりは
+  /// GitHub の今の先頭で揃う。
   func drain() {
     if !watching { toggleWatching() }
+    check()
+    answerAll()
+    log.append("reload")
     state.reload()
     check()
-    for _ in 0..<200 where violation == nil {
-      if readIssuedAt != nil {
-        answerRead(failing: false, lagging: false)
-      } else if !gitHub.reviewWrites.isEmpty {
-        answerWrite(failing: false)
-      } else {
-        break
-      }
-      check()
-    }
+    answerAll()
     guard violation == nil else { return }
     if let index = accepted.firstIndex(where: { $0.results != 1 }) {
       violation = "受け付けた書き込み \(index) が、応答が尽きても結果を返さない"
@@ -128,6 +132,22 @@ private final class ReviewWriteRun {
         "中身の先頭 \(state.content?.headCommit ?? "無し") とレビューのやりとりの先頭 "
         + "\(state.review?.headCommit ?? "無し") が、GitHub の先頭 \(head) で揃わない"
     }
+  }
+
+  private func answerAll() {
+    for _ in 0..<200 where violation == nil {
+      if readIssuedAt != nil {
+        answerRead(failing: false, inconsistent: false)
+      } else if !gitHub.contentRequests.isEmpty {
+        answerContent(failing: false, inconsistent: false)
+      } else if !gitHub.reviewWrites.isEmpty {
+        answerWrite(failing: false)
+      } else {
+        return
+      }
+      check()
+    }
+    if violation == nil { violation = "GitHub の答えが変わらないのに、問い合わせが止まらない" }
   }
 
   // MARK: - 操作
@@ -158,23 +178,29 @@ private final class ReviewWriteRun {
     if taken { accepted.append(Accepted(write: write, reviewedCommit: seen)) }
   }
 
-  private func answerRead(failing: Bool, lagging: Bool) {
+  /// 答えを返す時点の GitHub の先頭（一貫していない答えは 1 つ前）。
+  private func answeredHead(_ inconsistent: Bool) -> String {
+    inconsistent ? previousHead ?? head : head
+  }
+
+  private func answerRead(failing: Bool, inconsistent: Bool) {
     guard let issuedAt = readIssuedAt else { return }
     tag += 1
     let pending = random.next(below: 2) == 0 ? "P\(tag)" : nil
     let read = GitHubPullRequestReview(
-      viewer: "r\(tag)", viewerIsAuthor: false,
-      headCommit: lagging ? previousHead ?? head : head,
+      viewer: "r\(tag)", viewerIsAuthor: false, headCommit: answeredHead(inconsistent),
       pendingReview: pending.map { .init(id: $0, commentCount: 1) }, threads: [])
     gitHub.review = failing ? .failure(.unreachable) : .success(read)
-    log.append("answerRead(\(failing ? "失敗" : lagging ? "遅れ" : "成功"))")
-    let before = (state.review, state.reviewFailure)
+    log.append("answerRead(\(failing ? "失敗" : read.headCommit))")
+    let before = (state.review, state.reviewFailure, state.failure)
     let current = issuedAt == writeAnswers
     readIssuedAt = nil
     answeringReadIssuedAt = issuedAt
     gitHub.answerReview()
     answeringReadIssuedAt = nil
-    if !current {
+    if state.failure != before.2 {
+      violation = "レビューのやりとりの読みが、中身の失敗を変えた"
+    } else if !current {
       if state.review != before.0 || state.reviewFailure != before.1 {
         violation = "書き込みの応答より前に出した読みを取り込んだ"
       }
@@ -187,6 +213,20 @@ private final class ReviewWriteRun {
       if state.review != read || state.reviewFailure != nil {
         violation = "書き込みの応答の後に出した読みを取り込んで失敗を消す、にならない"
       }
+    }
+  }
+
+  private func answerContent(failing: Bool, inconsistent: Bool) {
+    guard !gitHub.contentRequests.isEmpty else { return }
+    let read = content(answeredHead(inconsistent))
+    gitHub.content = failing ? .failure(.unreachable) : .success(read)
+    log.append("answerContent(\(failing ? "失敗" : read.headCommit))")
+    let before = state.content
+    gitHub.answerContent()
+    if failing, state.content != before || state.failure != .read(.unreachable) {
+      violation = "中身の読みが失敗したのに、前に読めた中身を残したまま失敗を持っていない"
+    } else if !failing, state.content?.headCommit != read.headCommit || state.failure != nil {
+      violation = "中身が読めたのに、取り込まれていない、または前の失敗が消えていない"
     }
   }
 
@@ -226,7 +266,6 @@ private final class ReviewWriteRun {
     pushes += 1
     previousHead = head
     head = "h\(pushes)"
-    gitHub.content = .success(content(head))
     log.append("push(\(head))")
   }
 
@@ -255,14 +294,12 @@ private final class ReviewWriteRun {
     }
   }
 
-  /// 操作の後の状態。読みは見ている者がいる間だけ出て、レビューのやりとりの読みは 1 本ずつで、1 回の操作で問い合わせが続かない。
-  /// 書き込みは 1 本ずつ受け付けた順に送られ、保留中のレビューと、受け付けた時点の先頭のコミットを正しく名指しする。走っている
-  /// 対象は、結果を返していない書き込みの対象。レビューのやりとりの読みの失敗は、中身の失敗に入らない。
+  /// 操作の後の状態。読みは見ている者がいる間だけ出て、中身とレビューのやりとりはそれぞれ 1 本ずつ。答えが一貫している種では、
+  /// 読みが出尽くしたら先頭が揃っている。書き込みは 1 本ずつ受け付けた順に送られ、保留中のレビューと、受け付けた時点の先頭の
+  /// コミットを正しく名指しする。走っている対象は、結果を返していない書き込みの対象。
   private func check() {
     guard violation == nil else { return }
-    violation =
-      checkReads() ?? checkSending() ?? checkTargets()
-      ?? (state.failure == nil ? nil : "レビューのやりとりの読みの失敗が、中身の失敗に入った")
+    violation = checkReads() ?? checkAligned() ?? checkSending() ?? checkTargets()
   }
 
   private func checkReads() -> String? {
@@ -272,11 +309,20 @@ private final class ReviewWriteRun {
     contentReads = gitHub.contentReads
     guard issued > 0 || issuedContent > 0 else { return nil }
     guard watching else { return "見ている者がいないのに問い合わせた" }
-    guard issuedContent <= 3 else { return "中身の問い合わせが止まらない（1 回の操作で \(issuedContent) 回）" }
+    guard gitHub.contentRequests.count <= 1 else { return "中身の読みを 2 本同時に出した" }
     guard issued > 0 else { return nil }
     guard issued == 1, readIssuedAt == nil else { return "レビューのやりとりの読みを 2 本同時に出した" }
     readIssuedAt = writeAnswers
     return nil
+  }
+
+  private func checkAligned() -> String? {
+    guard consistent, watching, readIssuedAt == nil, gitHub.contentRequests.isEmpty,
+      state.content?.headCommit != state.review?.headCommit
+    else { return nil }
+    return
+      "中身の先頭 \(state.content?.headCommit ?? "無し") とレビューのやりとりの先頭 "
+      + "\(state.review?.headCommit ?? "無し") が食い違ったまま、読むのをやめた"
   }
 
   private func checkSending() -> String? {

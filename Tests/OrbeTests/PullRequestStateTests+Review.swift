@@ -61,39 +61,101 @@ extension PullRequestStateTests {
     XCTAssertNil(state.threads(at: "h2"), "diff が見せている先頭と違う間は、スレッドはまだ無い")
   }
 
-  /// 書き込みの後の読み直しが、中身より新しい先頭を読んだら（書いている間の push）、次のきっかけを待たずに中身を読み直して
-  /// 揃える——スレッドを置け、新しいスレッドも受け付ける。
-  func testAReviewReadAheadOfTheContentReadsTheContentAgain() {
+  // MARK: - 先頭のコミットを揃える
+
+  private var reads: Int { gitHub.contentReads + gitHub.reviewReads }
+
+  /// 中身とレビューのやりとりを並べて読む間に push があり、中身が push の後を、レビューのやりとりが push の前を答えても（届く
+  /// 順が出した順と逆でも）、続く 2 本の読み直しで揃う。読みは、push 1 回の読み直しで 4 本まで。
+  func testHeadsReadAcrossAPushAreAlignedByRereadingBoth() {
+    let state = readState()
+    gitHub.answersAtOnce = false
+    gitHub.answersReviewAtOnce = false
+    let before = reads
+    state.reload()
+    gitHub.content = .success(content(head: "h1"))
+    gitHub.answerContent()
+    gitHub.answerReview()
+    gitHub.review = nil
+
+    gitHub.answerReview()
+    gitHub.answerContent()
+
+    XCTAssertEqual(reads, before + 4)
+    XCTAssertNotNil(state.threads(at: "h1"))
+    XCTAssertTrue(
+      state.writeReview(.addThread(path: "a", side: .new, line: 1, commit: "h1", body: "x")) { _ in
+      })
+  }
+
+  /// 書き込みの後の読み直しが中身より新しい先頭を読んだら（書いている間の push）、次のきっかけを待たずに両方を読み直して
+  /// 揃える。読みは、書き込みの後の 1 本と揃える 2 本。
+  func testAReviewReadAheadOfTheContentAfterAWriteIsAligned() {
     let state = readState()
     XCTAssertTrue(state.writeReview(.setResolved(thread: "T1", true)) { _ in })
     gitHub.review = .success(review(head: "h2", threads: ["T1"]))
     gitHub.content = .success(content(head: "h2"))
+    let before = reads
 
     gitHub.finishReviewWrite()
 
-    XCTAssertEqual(state.content?.headCommit, "h2")
+    XCTAssertEqual(reads, before + 3)
     XCTAssertEqual(state.threads(at: "h2")?.map(\.id), ["T1"])
-    XCTAssertTrue(
-      state.writeReview(.addThread(path: "a", side: .new, line: 1, commit: "h2", body: "x")) { _ in
-      })
   }
 
-  /// 読み直しても同じ 2 つの先頭で食い違う（GitHub の答えの遅れ）なら、問い合わせを往復させない。次の push で食い違いが
-  /// 変われば、また読み直す。
-  func testAMismatchThatSurvivesTheRereadIsNotReadAgainUntilItChanges() {
+  /// 揃える 2 本が前と同じ 2 つの先頭で食い違って返ったら（GitHub の答えが一貫していない）、問い合わせを往復させない。次の
+  /// きっかけで、また揃えにいく。
+  func testAMismatchThatSurvivesTheRereadWaitsForTheNextTrigger() {
     let state = readState()
     gitHub.review = .success(review(head: "h2"))
     XCTAssertTrue(state.writeReview(.setResolved(thread: "T1", true)) { _ in })
-    let contentReads = gitHub.contentReads
+    let before = reads
     gitHub.finishReviewWrite()
-    XCTAssertEqual(gitHub.contentReads, contentReads + 1, "食い違いで 1 回だけ読み直す")
+    XCTAssertEqual(reads, before + 3, "揃える 2 本の後は読まない")
     XCTAssertEqual(state.content?.headCommit, "h", "前提: 中身の答えが遅れている")
 
-    gitHub.review = .success(review(head: "h3"))
-    gitHub.content = .success(content(head: "h3"))
+    gitHub.content = .success(content(head: "h2"))
+    state.reload()
+    XCTAssertEqual(state.content?.headCommit, "h2")
+  }
+
+  /// 揃える読みが失敗したら、もう一方がまだ見ていない先頭を読んでいても、その失敗を持って揃えるのをやめる。次のきっかけで
+  /// 揃い、中身が読めたら失敗は消える。
+  func testAFailedAligningReadStopsWithTheFailureUntilTheNextTrigger() {
+    let state = readState()
+    gitHub.answersReviewAtOnce = false
     XCTAssertTrue(state.writeReview(.setResolved(thread: "T1", true)) { _ in })
+    let before = reads
     gitHub.finishReviewWrite()
+    gitHub.review = .success(review(head: "h2"))
+    gitHub.content = .failure(.unreachable)
+    gitHub.answerReview()
+    gitHub.review = .success(review(head: "h3"))
+    gitHub.answerReview()
+    XCTAssertEqual(reads, before + 3, "揃える 2 本の後は読まない")
+    XCTAssertEqual(state.failure, .read(.unreachable))
+
+    gitHub.content = .success(content(head: "h3"))
+    state.reload()
+    gitHub.answerReview()
     XCTAssertEqual(state.content?.headCommit, "h3")
+    XCTAssertEqual(state.review?.headCommit, "h3")
+    XCTAssertNil(state.failure)
+  }
+
+  /// 中身とレビューのやりとりの問い合わせにすぐ答えが返っても、push の後の読み直しで中身とレビューのやりとりが同じ先頭を
+  /// 読めば、揃えるための読みは出ない（前に読んだレビューのやりとりの先頭と、届いた新しい中身の先頭とを、新しいレビューの
+  /// やりとりの答えが届く前に見比べることはしない）。
+  func testHeadsThatAgreeAfterAPushNeedNoMoreReads() {
+    let state = readState()
+    gitHub.content = .success(content(head: "h1"))
+    gitHub.review = nil
+    let before = reads
+
+    state.reload()
+
+    XCTAssertEqual(reads, before + 2)
+    XCTAssertNotNil(state.threads(at: "h1"))
   }
 
   // MARK: - 書き込み
