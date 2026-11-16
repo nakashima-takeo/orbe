@@ -34,8 +34,22 @@ final class GitHubCLI {
   /// 一度外した結果を焼くと、PATH が整った後も gh が永久に「未導入」のままになる。
   private var cachedGh: String?
 
-  /// gh 呼び出しの時間上限（ネット待ちのハングを引きずらない）。open 一覧では 1 ページごとにかかる。
-  private let timeout: TimeInterval = 15
+  /// gh の 1 回の呼び出しの種類。時間上限が違う。
+  enum Call {
+    case read
+    /// 書き込み。打ち切ると GitHub に届いたかが分からなくなるので、読みより長く待つ。
+    case write
+  }
+
+  /// 呼び出しの種類ごとの時間上限（ネット待ちのハングを引きずらない）。open 一覧では 1 ページごとにかかる。
+  private let readTimeout: TimeInterval
+  private let writeTimeout: TimeInterval
+
+  /// テストだけが短い上限を渡す（本番の上限を待つテストは書けないため）。
+  init(readTimeout: TimeInterval = 15, writeTimeout: TimeInterval = 60) {
+    self.readTimeout = readTimeout
+    self.writeTimeout = writeTimeout
+  }
 
   /// 打ち切り後に EOF を待つ猶予。pipe の書き込み端を握る子孫がいると EOF は来ないことがあり、
   /// **無期限に待つと、待ちそのものが新しいハングになる**（`GitRunner.terminationGrace` と同じ規範）。
@@ -176,7 +190,7 @@ final class GitHubCLI {
       })
   }
 
-  /// 1 回の問い合わせに載せる項目の上限。1 回を `timeout` に収めるため。
+  /// 1 回の問い合わせに載せる項目の上限。1 回を読みの時間上限に収めるため。
   static let itemsPerQuery = 50
 
   /// 結び付いた項目の値を、番号で直接まとめて問い合わせる。`itemsPerQuery` ごとの問い合わせに分けて続けて
@@ -231,8 +245,11 @@ final class GitHubCLI {
     let failure: GitHubFailure?
   }
 
-  /// gh を 1 回、同期で呼ぶ（呼び出し元のスレッドを塞ぐ）。gh を起動するのはこの関数だけ。
-  func runSync(_ executable: String, _ args: [String], cwd: String) -> Output {
+  /// gh を 1 回、同期で呼ぶ（呼び出し元のスレッドを塞ぐ）。gh を起動するのはこの関数だけ。`stdin` は標準入力へ渡す
+  /// （argv に載せない本文など）。時間上限は `call` の種類で決まる。
+  func runSync(
+    _ executable: String, _ args: [String], cwd: String, call: Call = .read, stdin: Data? = nil
+  ) -> Output {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = args
@@ -243,10 +260,20 @@ final class GitHubCLI {
     let err = Pipe()
     process.standardOutput = out
     process.standardError = err
+    let input: Pipe? = stdin != nil ? Pipe() : nil
+    if let input { process.standardInput = input }
     do {
       try process.run()
     } catch {
       return Output(status: -1, stdout: Data(), failure: .reason(error.localizedDescription))
+    }
+    // 標準入力は裏のスレッドで書く。このスレッドで書くと、gh が読まないまま pipe の容量（64KB）を超えたときに、時間上限の
+    // 待ちに入る前に固まる（`GitRunner` と同じ）。
+    if let input, let stdin {
+      DispatchQueue.global(qos: .userInitiated).async {
+        try? input.fileHandleForWriting.write(contentsOf: stdin)
+        try? input.fileHandleForWriting.close()
+      }
     }
     // stdout/stderr は別スレッドで並行に吸い出す（片方だけ読むと相手の pipe 満杯で相互デッドロック）。
     var outData = Data()
@@ -265,6 +292,11 @@ final class GitHubCLI {
     // ネット待ちのハングは時間上限で打ち切る（通常は terminate で pipe が EOF に達し読みも解ける）。
     // EOF が来るかは書き込み端を握る子孫次第なので、打ち切り後の読み終わり待ちも猶予で有界にする
     // ——ここを無期限にすると、打ち切ったのに返らないという新しいハングになる。
+    let timeout =
+      switch call {
+      case .read: readTimeout
+      case .write: writeTimeout
+      }
     if group.wait(timeout: .now() + timeout) == .timedOut {
       process.terminate()
       _ = group.wait(timeout: .now() + Self.terminationGrace)
