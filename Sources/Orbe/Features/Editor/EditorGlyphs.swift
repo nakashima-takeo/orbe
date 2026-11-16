@@ -177,6 +177,12 @@ extension EditorGlyphs {
   /// コミットボタンのレ点（同じ形で stroke 1.6）。
   static let commitCheck = Glyph(viewBox: 16, stroke: 1.6) { k in [(checkPath(k), 1)] }
 
+  /// チェックボックスのレ点（同じ形で stroke 2.2。見本 Checkbox）。
+  static let checkboxCheck = Glyph(viewBox: 16, stroke: 2.2) { k in [(checkPath(k), 1)] }
+
+  /// 帯のレ点（同じ形で stroke 1.6。見本 PR の頭の帯の CheckIcon）。
+  static let bandCheck = Glyph(viewBox: 16, stroke: 1.6) { k in [(checkPath(k), 1)] }
+
   private static func checkPath(_ k: CGFloat) -> Path {
     var path = Path()
     path.move(to: CGPoint(x: 3 * k, y: 8.5 * k))

@@ -160,6 +160,12 @@ struct ThemeFonts {
   let editorScmBandName = Font(Theme.Typography.editorScmBandName as CTFont)
   let editorScmBandProgress = Font(Theme.Typography.editorScmBandProgress as CTFont)
   let editorScmStop = Font(Theme.Typography.editorScmStop as CTFont)
+  // エディター面の PR のパネル
+  let editorPrTitle = Font(Theme.Typography.editorPrTitle as CTFont)
+  let editorPrMeta = Font(Theme.Typography.editorPrMeta as CTFont)
+  let editorPrBand = Font(Theme.Typography.editorPrBand as CTFont)
+  let editorPrCreateMeta = Font(Theme.Typography.editorPrCreateMeta as CTFont)
+  let editorPrMarkViewed = Font(Theme.Typography.editorPrMarkViewed as CTFont)
 }
 
 extension NSFont {

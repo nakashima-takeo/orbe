@@ -9,22 +9,29 @@ extension TerminalTab {
   }
 
   /// chrome の現在地（事実。表現は chrome が持つ）。端末焦点は cwd 1 本、エディター焦点で根の下のファイル（文書のタブ・
-  /// diff のタブ）は根と相対パス、根の外のファイルは絶対パス、タブが無ければ根だけ。cwd と根の外の絶対パスは別の事実
+  /// 作業ツリーとステージ済みの diff のタブ）は根と相対パス、PR の diff のタブは PR の番号と相対パス、根の外のファイルは
+  /// 絶対パス、タブが無ければ根だけ。cwd と根の外の絶対パスは別の事実
   /// （常態の居場所と、根から外れたファイル）で、chrome は別のトーンで描く。
   enum Location: Equatable {
     case cwd(String)
     case root(String)
     case file(root: String, relative: String)
     case absolute(String)
+    /// PR の diff（PR の番号と、根からの相対パス）。
+    case pullRequest(number: Int, relative: String)
   }
 
   var location: Location {
     guard group.faces.focus == .editor else { return .cwd(cwd) }
     let root = group.key
-    guard let path = MainActor.assumeIsolated({ group.editor.activeTab?.url.path }) else {
-      return .root(root)
+    return MainActor.assumeIsolated {
+      guard let tab = group.editor.activeTab else { return .root(root) }
+      if case .diff(let diff) = tab, case .pullRequest(let state) = diff.id.kind {
+        return .pullRequest(number: state.key.id.number, relative: diff.id.path)
+      }
+      let path = tab.url.path
+      guard path.hasPrefix(root + "/") else { return .absolute(path) }
+      return .file(root: root, relative: String(path.dropFirst(root.count + 1)))
     }
-    guard path.hasPrefix(root + "/") else { return .absolute(path) }
-    return .file(root: root, relative: String(path.dropFirst(root.count + 1)))
   }
 }

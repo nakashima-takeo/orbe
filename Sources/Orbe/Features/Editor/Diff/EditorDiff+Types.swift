@@ -15,8 +15,27 @@ extension EditorDiff {
   enum Kind: Hashable {
     case workingTree
     case staged
-    /// PR（手元のリポジトリと PR の同一性）。コミットは識別に入れない——PR に push があっても同じタブのまま。
-    case pullRequest(PullRequestState.Key)
+    /// PR。PR ごとの状態そのものを持ち、識別は状態の key（手元のリポジトリと PR の同一性）——状態を手にしている者
+    /// だけが開ける。コミットは識別に入れない——PR に push があっても同じタブのまま。
+    case pullRequest(PullRequestState)
+
+    static func == (lhs: Kind, rhs: Kind) -> Bool {
+      switch (lhs, rhs) {
+      case (.workingTree, .workingTree), (.staged, .staged): true
+      case (.pullRequest(let a), .pullRequest(let b)): a.key == b.key
+      default: false
+      }
+    }
+
+    func hash(into hasher: inout Hasher) {
+      switch self {
+      case .workingTree: hasher.combine(0)
+      case .staged: hasher.combine(1)
+      case .pullRequest(let state):
+        hasher.combine(2)
+        hasher.combine(state.key)
+      }
+    }
   }
 
   /// 見せ方（アプリ全体で 1 つ。→ `EditorDiffModeState`）。

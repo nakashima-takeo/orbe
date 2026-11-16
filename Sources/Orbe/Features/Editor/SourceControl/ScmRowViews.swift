@@ -6,7 +6,7 @@ import AppKit
 final class ScmRowView: ListRowView {
   struct Button {
     let control: ScmControl
-    let glyph: ScmGlyphShape
+    let glyph: RowGlyphShape
     let isEnabled: Bool
     let help: String
   }

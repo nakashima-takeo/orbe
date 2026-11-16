@@ -57,6 +57,10 @@ final class EditorPaneView: NSView {
   /// ソース管理の変更の列とグラフの列（検索結果の列と同じく、パネルが隠れている間も持つ）。
   private(set) var scmList: RowList<ScmListSource>
   private(set) var scmGraphList: RowList<ScmGraphSource>
+  /// PR のパネルの状態と列と列の頭（面ごと。根が変われば作り直す）。
+  private(set) var pullRequest: PrPanel
+  private(set) var pullRequestList: RowList<PrListSource>
+  private(set) var pullRequestHeader = PrDescriptionHeader(frame: .zero)
   /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
@@ -87,10 +91,15 @@ final class EditorPaneView: NSView {
     self.scmList = scmList
     let scmGraphList = Self.scmGraphList(scm)
     self.scmGraphList = scmGraphList
+    let pullRequest = PrPanel(root: root, source: .gh())
+    self.pullRequest = pullRequest
+    let pullRequestList = Self.pullRequestList(pullRequest)
+    self.pullRequestList = pullRequestList
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-        scmList: scmList, scmGraphList: scmGraphList, sidebar: sidebar,
+        scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
+        pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
@@ -121,6 +130,7 @@ final class EditorPaneView: NSView {
     wireTree()
     wireProjectSearch()
     wireSourceControl()
+    wirePullRequest()
     observeSidebar()
     observeDiffModes()
     registerForDraggedTypes([.fileURL])
@@ -159,8 +169,9 @@ final class EditorPaneView: NSView {
   private func installRoots() {
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-      scmList: scmList, scmGraphList: scmGraphList, sidebar: sidebar, localization: localization,
-      fontResolver: fontResolver)
+      scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
+      pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
+      localization: localization, fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
     faceHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
@@ -238,6 +249,12 @@ final class EditorPaneView: NSView {
     scmList = Self.scmList(scm)
     scmGraphList = Self.scmGraphList(scm)
     wireSourceControl()
+    if focusIsInPullRequest { reclaimSidebarFocus() }
+    pullRequest.isShown = false
+    pullRequest = PrPanel(root: root, source: .gh())
+    pullRequestList = Self.pullRequestList(pullRequest)
+    pullRequestHeader = PrDescriptionHeader(frame: .zero)
+    wirePullRequest()
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
@@ -344,21 +361,23 @@ final class EditorPaneView: NSView {
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。配置を頼み、見えるようになった本体を
+  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。PR のパネルは、出しているときだけ worktree の今の PR を見る。配置を頼み、見えるようになった本体を
   /// 初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても、見えたときにもう一度配置して待つ）。
   private func updateLiveness() {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
     projectSearch.isLive = live
     scm.isLive = live
-    updateSourceControlShown()
+    updatePanelsShown()
     if live { group?.editor.prepareSurfaces() }
     needsLayout = true
   }
 
-  /// ソース管理パネルを出しているか（面が見えていて、サイドバーがソース管理のパネルを出している）を写す。
-  func updateSourceControlShown() {
-    scm.isShown = window != nil && !isHiddenOrHasHiddenAncestor && showsSourceControl
+  /// ソース管理パネルと PR のパネルを出しているか（面が見えていて、サイドバーがそのパネルを出している）を写す。
+  func updatePanelsShown() {
+    let visible = window != nil && !isHiddenOrHasHiddenAncestor
+    scm.isShown = visible && showsSourceControl
+    pullRequest.isShown = visible && showsPullRequest
   }
 
   /// 面が画面に見えていれば、本体の文書・diff を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書・diff が何もしない）。

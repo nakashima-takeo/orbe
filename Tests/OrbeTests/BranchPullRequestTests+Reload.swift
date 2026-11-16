@@ -145,6 +145,34 @@ extension BranchPullRequestTests {
     pumpMain(until: { self.lookups.count == looked + 1 }, "ベースブランチの追跡 ref が動いたら問い直す")
   }
 
+  /// 同じきっかけでは、worktree の今の PR と PR の diff タブが同じ PR を見ていても、中身の問い合わせは 1 回。パネルを隠して
+  /// PR の diff タブだけが見ていても、きっかけで中身を読み直す（ブランチの PR は問い直さない）。
+  func testATriggerReadsTheContentOnceAndTheTabAloneKeepsFollowing() throws {
+    let refs = try trackedBranch()
+    repositories = ["origin": .github(me)]
+    content = pullRequestContent(base: refs.main)
+    answers["feat"] = .gitHub(
+      GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([pr(9, state: "OPEN")]))
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.state?.content != nil }, "前提: PR の中身が届く")
+    let state = try XCTUnwrap(pullRequest.state)
+    state.beginWatching()
+    addTeardownBlock { @MainActor in state.endWatching() }
+    letTheLookUpSettle()
+    contentReads = 0
+
+    SourceControl.shared(for: repo.root).fetch()
+    pumpMain(until: { self.lookups.count == 2 }, timeout: 20, "前提: フェッチの後に問い直す")
+    letTheLookUpSettle()
+    XCTAssertEqual(contentReads, 1, "中身の問い合わせは 1 回")
+
+    pullRequest.endWatching()
+    contentReads = 0
+    try moveRemoteRef("refs/remotes/origin/feat", to: refs.main, watchedBy: refs.recorder)
+    pumpMain(until: { self.contentReads == 1 }, "PR の diff タブだけで読み直す")
+    XCTAssertEqual(lookups.count, 2, "ブランチの PR は問い直さない")
+  }
+
   /// 去った後、根のサービスをほかに誰も持っていない状態で戻っても、1 回問い直す（根のサービスを作り直して status を待つ間も、
   /// 同じブランチ名だからと読み直しを捨てない）。
   func testComingBackWithNobodyHoldingTheRootLooksUpAgain() {
@@ -315,7 +343,7 @@ extension BranchPullRequestTests {
 
 /// 根のサービスの、リモート追跡の ref が動いたという知らせを数える。
 @MainActor
-private final class RemoteRefsRecorder: RootFilesObserver {
+final class RemoteRefsRecorder: RootFilesObserver {
   var moves = 0
   func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {}
   func rootFilesStatusDidChange(_ files: RootFiles) {}

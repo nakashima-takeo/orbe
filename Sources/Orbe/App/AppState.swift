@@ -51,13 +51,18 @@ struct EditorSidebarRecord: Codable, Equatable {
   var panel: String?
   /// ソース管理パネルのグラフの枠の高さ。
   var graphHeight: Double?
+  /// PR のパネルの変更ファイルをツリーで見せるか。
+  var pullRequestFilesAsTree: Bool?
 
-  init(width: Double? = nil, isOpen: Bool? = nil, panel: String? = nil, graphHeight: Double? = nil)
-  {
+  init(
+    width: Double? = nil, isOpen: Bool? = nil, panel: String? = nil, graphHeight: Double? = nil,
+    pullRequestFilesAsTree: Bool? = nil
+  ) {
     self.width = width
     self.isOpen = isOpen
     self.panel = panel
     self.graphHeight = graphHeight
+    self.pullRequestFilesAsTree = pullRequestFilesAsTree
   }
 
   init(from decoder: Decoder) throws {
@@ -66,6 +71,7 @@ struct EditorSidebarRecord: Codable, Equatable {
     isOpen = try? c.decodeIfPresent(Bool.self, forKey: .isOpen)
     panel = try? c.decodeIfPresent(String.self, forKey: .panel)
     graphHeight = try? c.decodeIfPresent(Double.self, forKey: .graphHeight)
+    pullRequestFilesAsTree = try? c.decodeIfPresent(Bool.self, forKey: .pullRequestFilesAsTree)
   }
 }
 

@@ -6,7 +6,8 @@ import XCTest
 /// push があれば新しい両端で作り直す。PR の中身は差し替えの構造体が答える。
 ///
 /// 壊れると何が起きるか: rename したファイルの diff が全部の行の追加になる。PR に push があっても古い diff のまま。手元の
-/// 作業ツリーの本文が新しい側に出る。打鍵で PR の diff の本文が変わる。
+/// 作業ツリーの本文が新しい側に出る。打鍵で PR の diff の本文が変わる。PR が動かしたサブモジュールの diff が出ない。
+/// TopBar の現在地が PR の diff でなく作業ツリーのファイルの姿になる。
 extension EditorDiffTests {
   /// 差し替えの構造体が返す中身（テストが書き換えて、次の読み直しに答えさせる）。
   private final class Reply {
@@ -37,7 +38,7 @@ extension EditorDiffTests {
           completion(reply.content.map { .success($0) } ?? .failure(.reason("")))
         },
         setViewed: { _, _, _, _ in }))
-    state.attach(repo: try repo.open(), fetchRemote: nil)
+    state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
     return state
   }
 
@@ -57,7 +58,9 @@ extension EditorDiffTests {
     let state = try pullRequest(reply)
     let (tab, _) = tab()
 
-    let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state.key)), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state)), as: .pinned)
+    XCTAssertEqual(
+      tab.location, .pullRequest(number: 5, relative: "b.txt"), "TopBar の現在地は PR の diff")
 
     waitRows(diff, "元のパスと比べた 1 行の変更") { self.removedLines($0) == [2] }
     XCTAssertNil(diff.document, "新しい側は版の本文で、作業ツリーの文書ではない")
@@ -74,6 +77,31 @@ extension EditorDiffTests {
     XCTAssertEqual(diff.revisionHunks.count, 2, "変えた行と足した行")
   }
 
+  /// PR が動かしたサブモジュールは、両側とも「Subproject commit」の 1 行で、その 1 行の差になる。
+  func testAPullRequestDiffOfASubmoduleShowsTheSubprojectCommitLines() throws {
+    try repo.addSubmodule("sub")
+    let commit = {
+      self.repo.git(["-C", "sub", "rev-parse", "HEAD"]).stdoutText.trimmingCharacters(in: .newlines)
+    }
+    let base = repo.head()
+    let first = commit()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    XCTAssertTrue(
+      repo.git(["-C", "sub", "commit", "-q", "--allow-empty", "-m", "inside"]).isSuccess)
+    let second = commit()
+    XCTAssertTrue(repo.git(["commit", "-qam", "move sub"]).isSuccess)
+    let reply = Reply()
+    reply.content = content(base: base, head: repo.head())
+    let (tab, _) = tab()
+
+    let diff = try tab.group.editor.openDiff(
+      id("sub", .pullRequest(try pullRequest(reply))), as: .pinned)
+
+    waitRows(diff, "1 行の差") { self.removedLines($0) == [0] }
+    XCTAssertEqual(text(diff.old), "Subproject commit \(first)")
+    XCTAssertEqual(text(diff.newRevision), "Subproject commit \(second)")
+  }
+
   /// 表示できない PR の diff は、PR の種類の理由の一文を出す——両側とも無いパスと、手元に揃わない PR のコミット。
   func testAPullRequestDiffThatCannotBeShownSaysWhy() throws {
     let (tab, _) = tab()
@@ -81,14 +109,14 @@ extension EditorDiffTests {
     let reply = Reply()
     reply.content = content(base: repo.head(), head: repo.head())
     let nowhere = try tab.group.editor.openDiff(
-      id("nope.txt", .pullRequest(try pullRequest(reply).key)), as: .pinned)
+      id("nope.txt", .pullRequest(try pullRequest(reply))), as: .pinned)
     pumpMain(until: { pane.faceContent == .notice(.editorDiffNowherePullRequest) }, "どちらの側にもない")
     XCTAssertEqual(nowhere.content, .unavailable(.nowhere))
 
     let missing = Reply()
     missing.content = content(base: repo.head(), head: String(repeating: "0", count: 40), number: 6)
     _ = try tab.group.editor.openDiff(
-      id("a.txt", .pullRequest(try pullRequest(missing, number: 6).key)), as: .pinned)
+      id("a.txt", .pullRequest(try pullRequest(missing, number: 6))), as: .pinned)
     pumpMain(
       until: { pane.faceContent == .notice(.editorDiffPullRequestCommitsMissing) }, "コミットを取得できない")
   }
@@ -103,11 +131,10 @@ extension EditorDiffTests {
     let state = try pullRequest(reply)
     state.beginWatching()
     addTeardownBlock { @MainActor in state.endWatching() }
-    state.reload()
-    XCTAssertEqual(reply.requests, 1, "前提: ほかの者が読んだ")
+    pumpMain(until: { reply.requests == 1 }, "前提: ほかの者が見始めて読んだ")
     let (tab, _) = tab()
 
-    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state.key)), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)), as: .pinned)
 
     waitRows(diff, "先に読んである中身で出る") { _ in diff.newRevision != nil }
     XCTAssertEqual(reply.requests, 1, "開いても問い直さない")

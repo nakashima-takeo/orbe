@@ -81,9 +81,7 @@ final class EditorDiff {
       switch id.kind {
       case .workingTree: try EditorDiffWorkingTree(id: id, documents: documents)
       case .staged: EditorDiffStaged(id: id)
-      case .pullRequest(let key):
-        // PR ごとの状態は、worktree の今の PR が PR を見つけたときに作っている。
-        EditorDiffPullRequest(id: id, state: PullRequestState.shared(for: key, source: .gh()))
+      case .pullRequest(let state): EditorDiffPullRequest(id: id, state: state)
       }
     self.init(id: id, source: source, surfaces: surfaces)
   }

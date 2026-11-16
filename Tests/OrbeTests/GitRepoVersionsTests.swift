@@ -6,7 +6,7 @@ import XCTest
 /// 通す。baseline と同じ底）で取り、「その版に無い」と「git の失敗」を区別する。
 ///
 /// 壊れると何が起きるか。diff の左が作業ツリーと違う改行で全行が差分になる・新規ファイルの diff が「読めなかった」になる・
-/// filter の失敗が「無い」に見えて全行が追加になる。
+/// filter の失敗が「無い」に見えて全行が追加になる。PR が動かしたサブモジュールの diff が「どちらの側にもない」になる。
 final class GitRepoVersionsTests: OrbeTestCase {
   private var repo: TempGitRepo!
 
@@ -85,5 +85,27 @@ final class GitRepoVersionsTests: OrbeTestCase {
 
     let fresh = try TempGitRepo(initialCommit: false)
     XCTAssertEqual(version(try fresh.open(), "a.txt", .head), .absent, "初回コミット前の HEAD")
+  }
+
+  /// コミットの版のサブモジュールは、gitlink の指すコミット——そのコミットが親のリポジトリに在っても。コミットの版の
+  /// ディレクトリは本文を持たない。
+  func testACommitsSubmoduleIsItsCommitEvenWhenTheParentHoldsIt() throws {
+    try repo.addSubmodule("sub")
+    try repo.write("dir/x.txt", "x\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "dir"]).isSuccess)
+    let git = try repo.open()
+    let head = repo.head()
+    let sub = repo.git(["-C", "sub", "rev-parse", "HEAD"]).stdoutText
+      .trimmingCharacters(in: .newlines)
+
+    XCTAssertEqual(version(git, "sub", .commit(head)), .submodule(sub))
+    XCTAssertEqual(version(git, "dir", .commit(head)), .absent, "ディレクトリは本文を持たない")
+
+    XCTAssertTrue(repo.git(["fetch", "-q", "./sub", "HEAD"]).isSuccess)
+    XCTAssertEqual(
+      repo.git(["cat-file", "-t", sub]).stdoutText.trimmingCharacters(in: .newlines), "commit",
+      "前提: gitlink の指すコミットが親のリポジトリに在る")
+    XCTAssertEqual(version(git, "sub", .commit(head)), .submodule(sub), "親に在っても")
   }
 }
