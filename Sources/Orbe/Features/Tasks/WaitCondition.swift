@@ -203,7 +203,7 @@ extension WaitCheck.Result {
     case .limited(let limit): self = .limited(limit)
     case .stopped: self = .stopped
     case .notStarted(let failure): self = .notStarted(failure.text)
-    case .toolsUnavailable: self = .notStarted(ending.text)
+    case .toolsUnavailable(let tools): self = .notStarted(BackgroundEnding.unavailable(tools))
     }
   }
 }

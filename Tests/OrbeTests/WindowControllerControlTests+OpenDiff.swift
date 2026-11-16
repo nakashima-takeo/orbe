@@ -16,7 +16,7 @@ extension WindowControllerControlTests {
     let wc = try restore(
       activeWorkspace: 0,
       [tabbed("main", tabs: [TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])])
-    let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
+    let tabId = try XCTUnwrap(wc.controlListTabs(workspaceId: nil).get()[0]["tabId"] as? Int)
     let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
 
     let result = wc.controlOpenDiff(tabId: tabId, path: "a.txt", kind: .workingTree)
@@ -52,7 +52,7 @@ extension WindowControllerControlTests {
     let wc = try restore(
       activeWorkspace: 0,
       [tabbed("main", tabs: [TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])])
-    let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
+    let tabId = try XCTUnwrap(wc.controlListTabs(workspaceId: nil).get()[0]["tabId"] as? Int)
     let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
 
     let result = wc.controlOpenDiff(
@@ -65,7 +65,7 @@ extension WindowControllerControlTests {
 
   func testOpenDiffErrors() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
+    let tabId = try XCTUnwrap(wc.controlListTabs(workspaceId: nil).get()[0]["tabId"] as? Int)
     if case .failure(let error) = wc.controlOpenDiff(tabId: 999_999, path: "/tmp/x", kind: .staged)
     {
       XCTAssertEqual(error.code, -32004)

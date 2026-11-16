@@ -32,7 +32,7 @@ extension TaskPaletteCardKeyTests {
 
   func testCommandEnterHeldDownInTheFieldAsksOnce() {
     let model = model()
-    var asks: [SecretaryAsk] = []
+    var asks: [String] = []
     model.onAskSecretary = {
       asks.append($0)
       return nil
@@ -46,7 +46,7 @@ extension TaskPaletteCardKeyTests {
     send(Key.enter, "\r", .command, repeating: true, to: window)
     send(Key.enter, "\r", .command, repeating: true, to: window)
 
-    XCTAssertEqual(asks, [.text("見積もり")])
+    XCTAssertEqual(asks, ["見積もり"])
     XCTAssertEqual(opened, [], "空になった入力欄から先頭のタスクの agent を開かない")
   }
 

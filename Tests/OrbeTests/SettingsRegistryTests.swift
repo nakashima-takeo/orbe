@@ -40,6 +40,14 @@ final class SettingsRegistryTests: OrbeTestCase {
       SettingsRegistry.descriptor(.menuBarNotificationDuration).key, "menubar-notification-duration"
     )
     XCTAssertEqual(SettingsRegistry.descriptor(.scmAutoFetch).key, "scm-auto-fetch")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.automationRunRetentionCount).key,
+      "automation-run-retention-count")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.automationRunRetentionDays).key, "automation-run-retention-days")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.automationEventRetentionDays).key,
+      "automation-event-retention-days")
     XCTAssertEqual(SettingsRegistry.confKey(.fontSize), "font-size", "confKey は descriptor.key を引く")
     let keys = SettingsRegistry.all.map(\.key)
     XCTAssertEqual(Set(keys).count, SettingsRegistry.all.count, "key は全項目で一意")
@@ -75,9 +83,20 @@ final class SettingsRegistryTests: OrbeTestCase {
           SoundRenderer.level(forVolume: volume.range.lowerBound + volume.step)
             / SoundRenderer.level(forVolume: volume.range.lowerBound)),
       1.3695, accuracy: 1e-4, "1 押しの効きは全域 1.3695 dB")
+    let runCount = SettingsRegistry.stepperDomain(.automationRunRetentionCount)
+    XCTAssertEqual(runCount.range, 1...1000)
+    XCTAssertEqual(runCount.step, 1)
+    XCTAssertEqual(runCount.unit, "runs")
+    for id in [SettingID.automationRunRetentionDays, .automationEventRetentionDays] {
+      let days = SettingsRegistry.stepperDomain(id)
+      XCTAssertEqual(days.range, 1...365, "\(id)")
+      XCTAssertEqual(days.step, 1, "\(id)")
+      XCTAssertEqual(days.unit, "days", "\(id)")
+    }
     for id in [
       SettingID.fontSize, .backgroundOpacity, .notificationSoundVolume,
-      .menuBarNotificationDuration,
+      .menuBarNotificationDuration, .automationRunRetentionCount, .automationRunRetentionDays,
+      .automationEventRetentionDays,
     ] {
       XCTAssertEqual(SettingsRegistry.descriptor(id).activation, .stepper)
     }

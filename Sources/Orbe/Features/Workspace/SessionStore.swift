@@ -39,14 +39,14 @@ struct TabRef {
 /// タブ配列の不変条件「同じ `groupKey` のタブは配列上で必ず隣接する」の唯一の保証者。変異点
 /// （挿入・cd 再判定・並び替え・セグメント移動・load の正規化）がすべてこれを守り、
 /// 「セグメント」はドメイン型ではなく `segments(of:)` が配列から導く連。
-/// 選択（`Workspace.selection`）の不変条件と、ボードの部品の並び（`Workspace.boardParts`）の「1 種類 1 つ」の
+/// 選択（`Workspace.selection`）の不変条件と、ボードのウィジェットの並び（`Workspace.boardWidgets`）の「1 種類 1 つ」の
 /// 唯一の保証者でもある。
 /// Foundation のみに依存する（同モジュール型 `Workspace`/`TerminalTab` の名前参照は
 /// フレームワーク import を要さない）。
 final class SessionStore {
   private(set) var workspaces: [Workspace]
   private(set) var activeWorkspace: Int
-  /// Home（Orbe 自身の窓口になる、消せない workspace）の `persistentId`。一覧の側が 1 つだけを指す。
+  /// Home（Orbe 自身の窓口になる、消せない workspace）の `Workspace.id`。一覧の側が 1 つだけを指す。
   /// 指す先が一覧に無ければ Home は無い。それ以外の workspace を「通常の workspace」と呼ぶ。
   private(set) var homeWorkspaceId: UUID?
   var current: Workspace { workspaces[activeWorkspace] }
@@ -65,7 +65,7 @@ final class SessionStore {
     self.homeWorkspaceId = homeWorkspaceId
     for ws in workspaces {
       ws.tabs = Self.grouped(ws.tabs)
-      ws.boardParts = ws.boardParts.map(Self.distinct)
+      ws.boardWidgets = ws.boardWidgets.map(Self.distinct)
       settle(ws)
     }
   }
@@ -74,7 +74,7 @@ final class SessionStore {
 
   /// ボードを持つか。今は Home だけが持つ。
   func hasBoard(_ workspace: Workspace) -> Bool {
-    homeWorkspaceId != nil && workspace.persistentId == homeWorkspaceId
+    homeWorkspaceId != nil && workspace.id == homeWorkspaceId
   }
 
   /// 選択が不変条件を満たしていなければ、休む先（ボード → 先頭のタブ → 空）へ寄せる。
@@ -108,14 +108,14 @@ final class SessionStore {
     }
     let ws = Workspace(name: "Home", rootPath: rootPath)
     workspaces.append(ws)
-    homeWorkspaceId = ws.persistentId
+    homeWorkspaceId = ws.id
     settle(ws)
   }
 
   /// Home の位置。無ければ nil。
   var homeIndex: Int? {
     guard let homeWorkspaceId else { return nil }
-    return workspaces.firstIndex { $0.persistentId == homeWorkspaceId }
+    return workspaces.firstIndex { $0.id == homeWorkspaceId }
   }
 
   func isHome(_ index: Int) -> Bool { index == homeIndex }

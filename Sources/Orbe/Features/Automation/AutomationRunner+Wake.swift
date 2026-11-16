@@ -1,0 +1,93 @@
+import Foundation
+
+/// 「届いたら」のノードを起こす決まりは 1 つ: 入力のどれかに、その契機の基準線より新しい上流の番号があり、走っていなければ起こす。
+/// 基準線は入力ごと・表ごとに「読んだ位置」と「前の契機の始まりの時点の上流の最後の番号」の大きい方で、取り方によらない——項目の
+/// 表の番号は変化の番号（項目の追加・版の追加・無効化で進む）なので、毎回すべてを取る入力も同じ比べ方で上流の変化に起きる。
+/// 読んだ位置と上流の最後の番号は、見るたびに DB から読む（再起動の後も、読んでいない変化で起こす）。この決まりは、
+/// 上流の行が変わったとき（上流の確定）・登録したとき（起動・書き換え・再開）・そのノードの契機が終わったときに見る。失敗した
+/// 契機の行は基準線以下なので、この決まりでは起こさない（同じ行で失敗をすぐ繰り返さない）。代わりに、「届いたら」でないノードの
+/// 契機が終わるたびに、下流の「届いたら」のノードを、読んだ位置より後の上流の番号があればすべて起こす（祖先の予定の間隔でやり
+/// 直す）。どちらの入口も、実効で止めたノード（`Automation.halted`）は起こさない——未処理は積もり、再開で起こす決まりを見る。
+extension AutomationRunner {
+  /// 受け手の 1 つのつながりの今: 読んだ位置と、上流の最後の番号。
+  struct Inlet: Equatable {
+    let read: AutomationSeqs
+    let up: AutomationSeqs
+  }
+
+  /// 受け手のつながりごとの今（DB から読む）。読めなければ nil（ログに残す。起こす決まりは起こさない）。
+  func inlets(of nodeId: AutomationNodeID) -> [AutomationNodeID: Inlet]? {
+    do throws(AutomationError) {
+      let positions = try store.positions(of: nodeId)
+      return positions.mapValues { Inlet(read: $0.read, up: $0.last) }
+    } catch {
+      NSLog("[automation] cannot read the inputs of node \(nodeId): \(error)")
+      return nil
+    }
+  }
+
+  /// 入力のどれかに、基準線より新しい上流の番号があるか。`previous` は前の契機の始まりの時点の、入力ごとの上流の最後の番号。
+  static func hasNew(
+    _ node: AutomationGraph.Node, _ inlets: [AutomationNodeID: Inlet],
+    since previous: [AutomationNodeID: AutomationSeqs]
+  ) -> Bool {
+    node.inputs.contains { edge in
+      guard let now = inlets[edge.from] else { return false }
+      let before = previous[edge.from] ?? AutomationSeqs()
+      return now.up.item > max(now.read.item, before.item)
+        || now.up.event > max(now.read.event, before.event)
+    }
+  }
+
+  /// 祖先の予定でのやり直しで起こすか: 入力のどれかに、読んだ位置より後の上流の番号があるか（失敗した契機は読んだ位置を
+  /// 進めないので、その行と変化が残る）。
+  static func needsRetry(_ node: AutomationGraph.Node, _ inlets: [AutomationNodeID: Inlet]) -> Bool
+  {
+    node.inputs.contains { edge in
+      guard let now = inlets[edge.from] else { return false }
+      return now.up.item > now.read.item || now.up.event > now.read.event
+    }
+  }
+
+  /// 契機の終わりの時点で、その契機の基準線（`baseline`）より新しい上流の行が無いか。入力を読まなかった契機（基準線が空）は偽。
+  func covered(
+    _ nodeId: AutomationNodeID, of id: Int, since baseline: [AutomationNodeID: AutomationSeqs]
+  ) -> Bool {
+    guard !baseline.isEmpty, let node = store.automation(id)?.graph.node(nodeId),
+      let inlets = inlets(of: nodeId)
+    else { return false }
+    return !Self.hasNew(node, inlets, since: baseline)
+  }
+
+  /// 起こす決まり。実効で止めていない「届いたら」のノードに、基準線より新しい上流の行があり、走っていなければ起こす。
+  func wake(_ id: Int, _ nodeId: AutomationNodeID) {
+    guard let automation = store.automation(id), let node = automation.graph.node(nodeId),
+      node.entity.trigger == .arrival, !automation.halted(nodeId)
+    else { return }
+    let key = Self.key(id, nodeId)
+    guard !scheduler.isRunning(id: key), let inlets = inlets(of: nodeId),
+      Self.hasNew(node, inlets, since: marks[key] ?? [:])
+    else { return }
+    scheduler.runNow(id: key)
+  }
+
+  /// ノードの出力の行が変わった後に、下流のノードに起こす決まりを見る。
+  func wake(below nodeId: AutomationNodeID, in id: Int) {
+    guard let automation = store.automation(id) else { return }
+    for node in automation.graph.downstream(of: nodeId) { wake(id, node.id) }
+  }
+
+  /// 失敗のやり直し。「届いたら」でないノードの契機が終わったら、実効で止めていない下流の「届いたら」のノードを、読んだ位置より
+  /// 後の上流の番号があればすべて起こす（`needsRetry`）。
+  func retry(below nodeId: AutomationNodeID, in id: Int) {
+    guard let automation = store.automation(id) else { return }
+    for node in automation.graph.descendants(of: nodeId)
+    where node.entity.trigger == .arrival && !automation.halted(node.id) {
+      let key = Self.key(id, node.id)
+      guard let inlets = inlets(of: node.id), Self.needsRetry(node, inlets) else {
+        continue
+      }
+      scheduler.runNow(id: key)
+    }
+  }
+}

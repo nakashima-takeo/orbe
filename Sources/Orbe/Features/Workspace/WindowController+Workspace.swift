@@ -36,7 +36,7 @@ extension WindowController {
   /// workspace を新規作成してアクティブ化し、その id を返す（name 空なら nil）。作成フォームの確定と
   /// control `create_workspace` が共用する。root は呼び手が決めて渡す。
   @discardableResult
-  func createWorkspace(name: String, rootPath: String) -> Int? {
+  func createWorkspace(name: String, rootPath: String) -> UUID? {
     let trimmed = name.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return nil }
     store.createWorkspace(name: trimmed, rootPath: rootPath)  // 空 WS を作りアクティブ化する（`~` 展開して格納）

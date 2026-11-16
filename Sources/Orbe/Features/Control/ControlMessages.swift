@@ -1,19 +1,13 @@
 import Carbon.HIToolbox
 import GhosttyKit
 
-/// 制御チャネルの宛先 ID 発番（プロセス内で単調増加・型をまたいで一意）。
-/// workspace / tab(TerminalTab) が同じ空間から引く。
+/// タブ（TerminalTab）の宛先 ID 発番（プロセス内で単調増加）。
 /// main スレッド規律下でのみ呼ばれる（全オブジェクト生成は main）。
 enum IdGen {
   nonisolated(unsafe) private static var counter = 0
   static func next() -> Int {
     counter += 1
     return counter
-  }
-  /// カウンタを少なくとも `value` まで前進させる。復元カードの id（前回 run の値）と、以後
-  /// 新規採番される tab/card の id の衝突を避けるため load 時に呼ぶ。
-  static func bump(atLeast value: Int) {
-    if counter < value { counter = value }
   }
 }
 
@@ -89,7 +83,7 @@ struct ControlEventRecord {
   }
 }
 
-/// 待機動詞（wait_for_event / prompt_agent / spawn_agent / resume_agent）の `timeoutMs` 検証。
+/// 待機動詞（wait_for_event / prompt_agent / spawn_agent / resume_agent / get_automation_trial）の `timeoutMs` 検証。
 /// 既定値は動詞ごとに違うので呼び出し側が渡す。CLI help と MCP description はその値を写しており、
 /// ドリフトは L4 の help / `tools/list` テストが突き合わせて落とす（`KINDS:` / `KEYS:` と同じ守り方）。
 enum WaitTimeout {
@@ -107,10 +101,10 @@ enum WaitTimeout {
   /// hook 報告までを負荷時も含めて覆う長さ（L4 のタブ安定待ち 15 秒の倍）。
   static let launchDefaultMs = 30_000
 
-  /// 省略なら既定、正の Int で上限内ならその値、それ以外は nil（呼び出し側が -32602）。
-  static func parse(_ params: [String: Any], default defaultMs: Int) -> Int? {
-    guard let raw = params["timeoutMs"] else { return defaultMs }
-    guard let ms = raw as? Int, ms > 0, ms <= maxMs else { return nil }
+  /// 省略なら既定、正の整数で上限内ならその値、それ以外は -32602 invalid timeoutMs。
+  static func parse(_ params: ControlParams, default defaultMs: Int) throws(ControlError) -> Int {
+    guard let ms = try params.optionalInt("timeoutMs") else { return defaultMs }
+    guard ms > 0, ms <= maxMs else { throw params.invalid("timeoutMs") }
     return ms
   }
 }

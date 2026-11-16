@@ -14,7 +14,7 @@ protocol SecretaryHost: AnyObject {
 enum SecretaryOrigin {
   /// ⌘⇧X の入力の行き先。
   case palette
-  /// Home のボード（依頼の欄・直しを依頼）。
+  /// Home のボード（依頼の欄）。
   case board
 }
 
@@ -38,7 +38,7 @@ final class Secretary {
     self.localization = localization
   }
 
-  func ask(_ ask: SecretaryAsk, from origin: SecretaryOrigin) throws(Refusal) {
+  func ask(_ ask: String, from origin: SecretaryOrigin) throws(Refusal) {
     guard let input = SecretaryText.firstInput(ask, l10n: localization) else {
       throw .empty
     }

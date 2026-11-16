@@ -42,7 +42,7 @@ final class TestIsolationTests: OrbeTestCase {
       AppStatePersistence.fileURLOverride, GuiConfig.fileURLOverride,
       AgentPluginInstaller.stablePluginDirOverride, BundledResources.root,
       CustomSoundStore.directoryURLOverride, TaskPersistence.fileURLOverride,
-      AutomationPersistence.fileURLOverride,
+      AutomationPersistence.folderOverride,
       HomeFolder.urlOverride, AgentSessionLog.fileURLOverride, Config.userFileURLOverride,
       GitRepo.trashDirectoryOverride,
     ] {

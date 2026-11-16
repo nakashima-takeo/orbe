@@ -57,7 +57,7 @@ extension ControlWireTests {
       let launched = result(response)
       XCTAssertEqual(launched?["tabId"] as? Int, entry.1, "\(entry.0) の launch が載る")
       XCTAssertNotNil(launched?["tabId"] as? Int)
-      XCTAssertNotNil(launched?["workspaceId"] as? Int)
+      XCTAssertNotNil(launched?["workspaceId"] as? String)
       XCTAssertEqual(
         (launched?["agent"] as? [String: Any])?["command"] as? String, "claude")
       XCTAssertEqual(launched?["ready"] as? Bool, true, "\(entry.0) は idle を見て ready:true")

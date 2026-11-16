@@ -1,0 +1,256 @@
+import Foundation
+
+/// 地図のノードの行の見え方（点・名前の色・状態の欄）。ノードの状態（走っている・止めている）を最新の回の成否より先に言う。
+enum BoardNodeLook: Equatable {
+  case idle
+  /// 最新の回が失敗。
+  case failed
+  /// 走っている（点の代わりに回る輪と「実行中」）。
+  case running
+  /// 走っていなくてノード自身を止めている（停止の 2 本線と「一時停止中」、沈んだ色の名前）。
+  case paused
+
+  init(_ state: BoardAutomationStanding.State?, failed: Bool) {
+    switch state {
+    case .running: self = .running
+    case .paused: self = .paused
+    case nil: self = failed ? .failed : .idle
+    }
+  }
+}
+
+/// 地図のノードの行。文言まで解いた値。
+struct BoardMapNode: Equatable {
+  let id: AutomationNodeID
+  /// 役割の名前（「取得」「判定」）。
+  let role: String
+  let name: String
+  /// 予定の札（「30分ごと」「手動」）。前のノードに連動するノードは札を持たない。
+  let schedule: String?
+  /// 入力のノードの名前（「A・B」）。入力の無いノードは nil。
+  let inputs: String?
+  /// 未処理の件数。入力のあるノードだけ。
+  let pending: Int?
+  /// 出力の形式エラーの印があるか。
+  let breached: Bool
+  /// 自動化を止めていても、ノード自身の印で決める。
+  let look: BoardNodeLook
+  /// 前回の列。まだ動いていなければ nil。
+  let last: Last?
+  /// 最新の回が失敗なら、その理由（「日本語（原文）」）。行の下に出す。
+  let failure: String?
+
+  struct Last: Equatable {
+    let mark: BoardRunMark
+    /// 「16:40」「昨日 23:00」。
+    let at: String
+    /// 「新着 2 件」「1 件を出力」「候補 2 件」「失敗」。報告・作業・外部操作は量を言わない。
+    let amount: (text: String, shade: BoardRunShade)?
+
+    static func == (a: Last, b: Last) -> Bool {
+      a.mark == b.mark && a.at == b.at && a.amount?.text == b.amount?.text
+        && a.amount?.shade == b.amount?.shade
+    }
+  }
+}
+
+/// 地図の 1 行の溝の線。番号は左からの線の位置。
+struct BoardMapLanes: Equatable {
+  /// 点を置く線。
+  let lane: Int
+  /// 点の線が上から点へ届く（この行で最後の受け手を迎える入力）。
+  let fromAbove: Bool
+  /// 点から下へ続く（出力を受ける行が下にある）。
+  let below: Bool
+  /// 上から点へ曲がり込む線（点の線を除く入力の線）。
+  let bends: [Int]
+  /// 上から下まで通る線（曲がり込みつつ下の受け手へも続く線を含む）。
+  let through: [Int]
+
+  /// この行の下へ続く線（行の下に足す理由の行は、これをそのまま縦に続ける）。
+  var continuing: [Int] { (through + (below ? [lane] : [])).sorted() }
+}
+
+/// 地図の 1 行。ノードの行に続けて、出力先の行（タスク候補・報告の出し先。その出力先のノードがある分だけ）が並ぶ。
+struct BoardMapRow: Equatable {
+  enum Content: Equatable {
+    case node(BoardMapNode)
+    /// `open` はこの自動化の棚に出ている判断待ちの候補の数。
+    case taskCandidates(open: Int)
+    /// 報告と作業の文の出し先（「メニューバー」）。
+    case reports(String)
+  }
+
+  let content: Content
+  let lanes: BoardMapLanes
+}
+
+/// 選んだ自動化の詳細の値（見出し・帯・地図）。地図はノードを入力の深さ順（同じ深さは定義の順）に 1 行ずつ並べ、溝の線で
+/// 入力のつながりを `git log --graph` の流儀で描く。
+struct BoardAutomationDetailValue: Equatable {
+  /// 「通知：メニューバー」。
+  let notify: String
+  /// 「workspace：orbe」。自動化に workspace の設定が無ければ nil。
+  let workspace: String?
+  /// 「次回 16:50」「手動」「ノードを一時停止中」（予定のあるノードがすべて止まっている）。自動化を止めていれば nil（見出しは一時停止中を出す）。
+  let next: String?
+  /// 直近の回の区分（全ノードを混ぜた新しい `stripLength` 回。古い回が左）。
+  let strip: [BoardRunTone]
+  let rows: [BoardMapRow]
+  /// 溝の線の本数（自動化ごと。溝の幅はこれで決まる）。
+  let laneCount: Int
+  let nodeCount: Int
+
+  static let stripLength = 20
+}
+
+extension BoardAutomationDetailValue {
+  /// `running` はノードが走っているか、`open` はこの自動化の棚に出ている判断待ちの候補の数、`next` は次に予定で回る時刻、
+  /// `workspaces` は描くときの今の workspace（自動化の workspace の名前を引く）。
+  init(
+    _ automation: Automation, text: AutomationText, running: (AutomationNodeID) -> Bool, open: Int,
+    next: Date?, workspaces: AutomationWorkspaces
+  ) {
+    let l10n = text.l10n
+    let graph = automation.graph
+    let judges = graph.judges.map { BoardMapLayout.Key.node($0.id) }
+    let reports = graph.nodes.filter { $0.action.destination == .report }.map {
+      BoardMapLayout.Key.node($0.id)
+    }
+
+    var planned = graph.byDepth.map { node in
+      (
+        plan: BoardMapLayout.Row(
+          key: .node(node.id), inputs: node.inputNodeIds.map(BoardMapLayout.Key.node),
+          continues: node.action.destination != .sideEffect),
+        content: BoardMapRow.Content.node(
+          Self.mapNode(node, in: automation, text: text, running: running(node.id)))
+      )
+    }
+    if !judges.isEmpty {
+      planned.append(
+        (
+          .init(key: .taskCandidates, inputs: judges, continues: false),
+          .taskCandidates(open: open)
+        ))
+    }
+    if !reports.isEmpty {
+      planned.append(
+        (
+          .init(key: .reports, inputs: reports, continues: false),
+          .reports(Self.reports(automation.notify, l10n))
+        ))
+    }
+    let layout = BoardMapLayout(planned.map(\.plan))
+    laneCount = layout.laneCount
+    rows = zip(planned, layout.lanes).map { BoardMapRow(content: $0.content, lanes: $1) }
+    nodeCount = graph.nodes.count
+    notify = l10n.format(
+      .boardNotifyLine, l10n.string(automation.notify?.labelKey ?? .boardNotifyNone))
+    workspace = graph.workspace.map {
+      l10n.format(.boardWorkspaceLine, Self.workspace($0, workspaces, l10n))
+    }
+    let summary = BoardAutomationSummary(automation, text: text, next: next)
+    self.next = summary.next
+    strip = automation.runs.prefix(Self.stripLength).reversed().map(BoardAutomationSummary.tone)
+  }
+
+  /// workspace の名前（描くときの今の名前）。今の workspace に無ければ「削除済み」。
+  static func workspace(
+    _ id: UUID, _ workspaces: AutomationWorkspaces, _ l10n: LocalizationStore
+  ) -> String {
+    workspaces.workspace(id)?.name ?? l10n.string(.boardWorkspaceRemoved)
+  }
+
+  /// 報告と作業の文の出し先（「メニューバー」）。役割の名前（報告・作業）は使わない。
+  static func reports(_ notify: AutomationNotify?, _ l10n: LocalizationStore) -> String {
+    switch notify {
+    case .menuBar: l10n.string(.boardOutputMenuBar)
+    case .notificationCenter: l10n.string(.boardOutputNotificationCenter)
+    case nil: l10n.string(.boardOutputBoard)
+    }
+  }
+
+  /// 地図のノードの行。
+  private static func mapNode(
+    _ node: AutomationGraph.Node, in automation: Automation, text: AutomationText, running: Bool
+  ) -> BoardMapNode {
+    let l10n = text.l10n
+    let state = automation.state(node.id)
+    let latest = state.runs.first
+    let inputs = node.inputNodeIds
+    let schedule: String? =
+      switch node.entity.trigger {
+      case .arrival: nil
+      case .scheduled, .manual: text.schedule(node.entity.trigger)
+      }
+    return BoardMapNode(
+      id: node.id, role: text.role(node.role), name: node.entity.name, schedule: schedule,
+      inputs: inputs.isEmpty
+        ? nil
+        : inputs.map { automation.graph.node($0)?.entity.name ?? "\($0)" }.joined(
+          separator: l10n.string(.automationListSeparator)),
+      pending: inputs.isEmpty ? nil : state.pending.count, breached: state.breach != nil,
+      look: BoardNodeLook(
+        BoardAutomationStanding.State(running: running, paused: state.paused),
+        failed: latest?.failed == true),
+      last: latest.map {
+        BoardMapNode.Last(
+          mark: $0.failed ? .failure : .success, at: text.recent($0.startedAt),
+          amount: $0.run.flatMap { BoardAutomationSummary.amount($0, text: text) })
+      },
+      failure: latest?.run.flatMap { text.failure($0, node: node) })
+  }
+}
+
+/// 地図の溝の線の割り当て。定義だけから決まる純粋な計算。行を上から見て、この行で最後の受け手を迎える入力の線のうち最も
+/// 左の線に点を置き、無ければ空いている最も左の線に置く。この行で終わった線は空き、次の行から使える。点の出力を受ける行が
+/// 下にあれば、点の線はその行のものとして下へ続く。
+struct BoardMapLayout: Equatable {
+  /// 地図の行の鍵（ノードか出力先）。
+  enum Key: Hashable {
+    case node(AutomationNodeID)
+    case taskCandidates
+    case reports
+  }
+
+  struct Row: Equatable {
+    let key: Key
+    /// 上の行の鍵（入力）。
+    let inputs: [Key]
+    /// 出力を受ける行が下にあるか。
+    let continues: Bool
+  }
+
+  let lanes: [BoardMapLanes]
+  let laneCount: Int
+
+  init(_ rows: [Row]) {
+    var lastReceiver: [Key: Int] = [:]
+    for (index, row) in rows.enumerated() {
+      for input in row.inputs { lastReceiver[input] = index }
+    }
+    var owners: [Int: Key] = [:]
+    var lanes: [BoardMapLanes] = []
+    var widest = 0
+    for (index, row) in rows.enumerated() {
+      let inputs = Set(row.inputs)
+      let inputLanes = owners.filter { inputs.contains($0.value) }
+      let ending = Set(inputLanes.filter { lastReceiver[$0.value] == index }.keys)
+      var lane = ending.min() ?? 0
+      if ending.isEmpty {
+        while owners[lane] != nil { lane += 1 }
+      }
+      let through = owners.keys.filter { !ending.contains($0) }.sorted()
+      for ended in ending { owners[ended] = nil }
+      if row.continues { owners[lane] = row.key }
+      widest = max(widest, lane + 1, (through.last ?? -1) + 1)
+      lanes.append(
+        BoardMapLanes(
+          lane: lane, fromAbove: ending.contains(lane), below: row.continues,
+          bends: inputLanes.keys.filter { $0 != lane }.sorted(), through: through))
+    }
+    self.lanes = lanes
+    laneCount = widest
+  }
+}

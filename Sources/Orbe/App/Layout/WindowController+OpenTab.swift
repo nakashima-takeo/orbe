@@ -6,7 +6,7 @@ extension WindowController {
   /// これをそのまま写す。
   struct OpenedTab {
     let tabId: Int
-    let workspaceId: Int
+    let workspaceId: UUID
   }
 
   /// 新タブを 1 枚起こす唯一の経路。GUI（初回起動・エージェント起動・worktree パレット（Cmd+T・タブ行の

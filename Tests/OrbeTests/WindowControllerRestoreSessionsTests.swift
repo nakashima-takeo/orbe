@@ -55,7 +55,7 @@ final class WindowControllerRestoreSessionsTests: OrbeTestCase {
     let rows = try results(wc.controlRestoreSessions(sessionIds: ["b-1", "m-1"]))
 
     XCTAssertEqual(rows.map { $0["status"] as? String }, ["restored", "restored"])
-    XCTAssertEqual(rows[0]["workspaceId"] as? Int, wc.workspaces[1].id)
+    XCTAssertEqual(workspaceUUID(rows[0]["workspaceId"]), wc.workspaces[1].id)
     let tab = try XCTUnwrap(wc.workspaces[1].tabs.last)
     XCTAssertEqual(rows[0]["tabId"] as? Int, tab.id)
     XCTAssertTrue(tab.isDormant, "休眠チケットのまま（起こさない）")
@@ -94,7 +94,7 @@ final class WindowControllerRestoreSessionsTests: OrbeTestCase {
     XCTAssertEqual(created.name, "newws")
     XCTAssertEqual(created.rootPath, "/tmp/new")
     XCTAssertEqual(created.tabs.count, 1)
-    XCTAssertEqual(rows[0]["workspaceId"] as? Int, created.id)
+    XCTAssertEqual(workspaceUUID(rows[0]["workspaceId"]), created.id)
     XCTAssertEqual(wc.activeWorkspace, 0, "作った workspace をアクティブ化しない")
   }
 

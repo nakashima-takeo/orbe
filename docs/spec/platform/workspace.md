@@ -1,7 +1,7 @@
 ---
 title: workspace
 description: 名前付きコンテナの保持・切替・keep-alive、リポジトリに属さないタスクの居場所 Home とそのタスクの作業場、workspace 毎の設定上書き。切替・作成の UI は palette/workspace が持つ
-updated: 2026-10-13
+updated: 2026-11-11
 ---
 
 # workspace
@@ -11,6 +11,10 @@ updated: 2026-10-13
 host 所有。ドメイン状態（workspace 配列とアクティブ index と Home を指す値）の実体は Foundation 純粋型 `SessionStore` が所有し、配列 CRUD・選択の規則・MRU 退避先選定はその純メソッド経由で行う。`WindowController` は store を持つ薄いコーディネータで、ビュー mount/reparent・focus・chrome 投影・永続・制御チャネルを担う。タブ閉鎖・選択のような危険な操作は store が「決定（outcome）」を返し、controller がビュー副作用を実行する——判断と副作用を分けてテスト可能に保つ形。
 
 起動時は default（root はホームディレクトリ）と [Home](#home) の 2 つ、または永続からの復元に Home を保証したもの（→ [persistence](persistence.md)）。workspace は root path を持つ。worktree パレットで新しいブランチを作れたときのベースを「前回」として workspace ごとに覚え、次の作成で最初に選ぶ（→ [worktree](../palette/worktree.md)）。書くのはウィンドウだけで、パレットは読むだけ。
+
+## workspace の ID
+
+workspace は ID を 1 つだけ持つ。UUID で、workspace の間で一意、起動をまたいで変わらず、改名・root の変更でも変わらず、使い回さない。[制御 API](../control/api.md#宛先-id)・MCP・`orb` の宛先も、[タスク](tasks.md)の付き先と[自動化](automation.md)の定義・候補の付け先が workspace を指すのも、この ID——種類が 1 つなので、外で書き留めた ID と保存が指す ID が食い違わず、再起動の後に古い ID が別の workspace に当たることが無い。保存（[persistence](persistence.md)）から復元するとき、同じ ID を持つ workspace が 2 つ以上あれば、先の 1 つが元の ID を保ち、後ろには新しい ID を振る（制御から後ろの workspace に届かなくなることを防ぐ）。
 
 ## 保持・切替
 
@@ -33,11 +37,11 @@ host 所有。ドメイン状態（workspace 配列とアクティブ index と 
 リポジトリに属さないタスクの居場所で、agent を動かす場所。通常の workspace とは別に必ず 1 つあり、表示名は「Home」（日英同じ）。[秘書](../agent/secretary.md)が頼みのたびに起こす claude も、ここで起きる。Home 以外の workspace を「通常の workspace」と呼ぶ。
 
 - **ボードを持つ。** タブ行の左端に固定のボードがあり、最後のタブを閉じるとボードへ戻る（→ [board](../chrome/board.md)）。どの workspace がボードを持つかは SessionStore の判定 1 か所が決め、今は「Home であること」。
-- **一覧の側が 1 つを指す。** どれが Home かは、アクティブ workspace と同じく一覧が持つ 1 つの値（対象の永続 ID）で表し、workspace 自身は自分の役割を知らない——「ちょうど 1 つ」を要素ごとの印で表すと 0 個や 2 個も表せてしまうため。
+- **一覧の側が 1 つを指す。** どれが Home かは、アクティブ workspace と同じく一覧が持つ 1 つの値（対象の workspace の ID）で表し、workspace 自身は自分の役割を知らない——「ちょうど 1 つ」を要素ごとの印で表すと 0 個や 2 個も表せてしまうため。
 - **起動時の保証。** 復元（または新規の default 作成）の後に 1 回、「Home がちょうど 1 つあり、root が専用フォルダ」へそろえる。指している workspace があれば root だけを専用フォルダへ上書きし（名前・位置・タブは保つ）、無い・指す先が見つからなければ「Home」という名前の workspace を末尾に足して指す。active は動かさず、タブも起こさない（作っただけではタブは起きない。足した Home はボードを選んでいる）。指す先が見つからず足し直したとき、同じフォルダを root に持つ既存の workspace は通常の workspace のまま残る——root の一致では、同じフォルダで作った通常の workspace と区別できないため。
 - **専用フォルダ。** state フォルダ（[persistence](persistence.md)。`ORBE_STATE_DIR` があればその下）の `home/`。root は永続値ではなく state フォルダから毎起動導く値で、隔離起動でも本物のフォルダに触れない。state フォルダが決まらなければ保証もフォルダの用意もしない。
 - **フォルダの中身は 2 つに分かれる。** Orbe の操作手段（MCP・`orb`）は Orbe 側の事情で変わるので Orbe が持ち、人と AI が書くことは CLAUDE.md が持つ。
-  - **Orbe の MCP の使い方**（`.claude/rules/orbe.md`）は、Home で動く claude 全員——秘書が起こした claude も、タスクの作業場で動く claude も、人が手で起こした claude も——が読む。読むのは claude だけで、codex・agy はこのファイルを読まない（Orbe の口の手引きは MCP のツールの説明だけ）。Home とは何か（Home の root の実パスを書き、`list_workspaces` の rootPath がそれの workspace を Home と見分けさせる——「root が祖先の workspace」では root が `~` の default も当てはまる）・利用者のやりたいこと（タスクを足す・直す／タスクに作業を始めさせる〔[`start_task`](../control/api.md)〕／何かが起きるまで待つ〔待ちの条件〕／予定どおり拾い、タスクの候補にする・コマンドを走らせる・報告する〔自動化〕／Home の[ボード](../chrome/board.md)に出すものを変える〔ボードの部品。宛先は `list_workspaces` で `hasBoard` が true の workspace〕／タブと agent を操作する）ごとの Orbe の口と、「Orbe で〜できる？」と聞かれたらまずこの一覧から Orbe の機能で答えること、Orbe の中で予定どおり繰り返し動くのは待ちの条件の確認と自動化の 2 つであること、MCP が使えないときの `orb` を書く。用意のたびにその言語の今の雛形へ書き直す。人や AI の書き換えは残らない。
+  - **Orbe の MCP の使い方**（`.claude/rules/orbe.md`）は、Home で動く claude 全員——秘書が起こした claude も、タスクの作業場で動く claude も、人が手で起こした claude も——が読む。読むのは claude だけで、codex・agy はこのファイルを読まない（Orbe の口の手引きは MCP のツールの説明だけ）。Home とは何か（Home の root の実パスを書き、`list_workspaces` の rootPath がそれの workspace を Home と見分けさせる——「root が祖先の workspace」では root が `~` の default も当てはまる）・利用者のやりたいこと（タスクを足す・直す／タスクに作業を始めさせる〔[`start_task`](../control/api.md)〕／何かが起きるまで待つ〔待ちの条件〕／予定どおり外から拾い、判定してタスクの候補にする・報告する・コマンドを走らせる・agent に作業をさせる〔自動化。手引きは道具の名前と、自動化はノードをつないだグラフでノードはそれぞれ自分の予定で動くこと、判定が出した候補は人が ⌘⇧X の提案タブで受けたものだけがタスクになること、作る・直すときは同梱の[自動化のスキル](../agent/plugin-package.md#自動化のスキル)の手順で進めること、定義の形と仕組みは `set_automation` の説明にあることを書く〕／Home の[ボード](../chrome/board.md)に出すものを変える〔ボードのウィジェット。宛先は `list_workspaces` で `hasBoard` が true の workspace〕／タブと agent を操作する）ごとの Orbe の口と、「Orbe で〜できる？」と聞かれたらまずこの一覧から Orbe の機能で答えること、Orbe の中で予定どおり繰り返し動くのは待ちの条件の確認と自動化の 2 つであること、MCP が使えないときの `orb` を書く。用意のたびにその言語の今の雛形へ書き直す。人や AI の書き換えは残らない。
   - **CLAUDE.md** は、フォルダを作るときにその言語の最小の雛形で 1 回だけ置き、以後は中身を一切見ない——人や AI が書き換えた内容を上書きしないため。CLAUDE.md だけを消しても戻さず、フォルダごと消すと次の用意で作り直す。
   - **秘書が起こす claude の役目の指示はフォルダに置かない。** rules は Home で動く claude 全員が読むので、置くとタスクの作業場で動く claude まで同じ役目だと思う。役目は、秘書が起こすときにだけ claude に渡す（[秘書](../agent/secretary.md#役目の指示)）。
 - **用意は UI 言語（日本語／英語）が確定した時点。** 言語選択済みなら起動時の復元より前（復元したタブがフォルダの無いまま起きないため）、初回なら言語選択の確定時。フォルダの作成は作りかけを残さない（一時領域で組んでから置く）。失敗しても次の起動で再挑戦する。

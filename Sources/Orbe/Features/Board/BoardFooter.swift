@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// フッターの左に並べるキー 1 つ（キーと名前）。並びは部品が出す。
+/// フッターの左に並べるキー 1 つ（キーと名前）。並びはウィジェットが出す。
 struct BoardKeyHint: Hashable {
   let key: String
   let label: L10nKey
@@ -11,7 +11,7 @@ struct BoardKeyHint: Hashable {
   }
 }
 
-/// ボードのフッター。左に焦点のある場所で効くキー（部品が出す。ボタンは置かない）、右にボードの断り（赤）。
+/// ボードのフッター。左に焦点のある場所で効くキー（ウィジェットが出す。ボタンは置かない）、右にボードの断り（赤）。
 struct BoardFooter: View {
   let model: BoardModel
   @Environment(\.localization) private var l10n

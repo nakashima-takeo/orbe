@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 提案タブの本体。左に棚、真ん中に提案の一覧、右に選んだ提案の詳細。中身に居る間は、真ん中と右をまたいで受信の中身を
-/// 1 枚で出す。棚はカードの幅の 1/4 で、狭い窓では下限で止めて真ん中を縮める。
+/// 提案タブの本体。左に棚、真ん中に候補の一覧、右に選ばれている候補の詳細。棚はカードの幅の 1/4 で、狭い窓では下限で止めて
+/// 真ん中を縮める。
 struct TaskPaletteAutomationBody: View {
   @Bindable var model: TaskPaletteAutomationModel
   let detailWidth: CGFloat
@@ -14,14 +14,10 @@ struct TaskPaletteAutomationBody: View {
         TaskPaletteAutomationShelf(model: model)
           .frame(width: max(Self.minShelfWidth, geometry.size.width / 4))
         rule
-        if model.place == .contents, let automation = model.selectedAutomation {
-          TaskPaletteAutomationContents(model: model, automation: automation)
-        } else {
-          TaskPaletteAutomationList(model: model)
-          rule
-          TaskPaletteAutomationDetail(model: model)
-            .frame(width: detailWidth)
-        }
+        TaskPaletteAutomationList(model: model)
+        rule
+        TaskPaletteAutomationDetail(model: model)
+          .frame(width: detailWidth)
       }
     }
   }
@@ -31,7 +27,7 @@ struct TaskPaletteAutomationBody: View {
   }
 }
 
-/// 真ん中の提案の一覧。受信を選んでいれば、頭に前回の回の要約と「中身 →」を出す。
+/// 真ん中の候補の一覧。自動化を選んでいれば、頭に判定のノードごとの最新の回を出す。
 struct TaskPaletteAutomationList: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -68,42 +64,64 @@ struct TaskPaletteAutomationList: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
-  /// 「13:00 の回 · 9 件取得 → 新しい 4 件を処理 → 候補 2」と「中身 →」。狭い欄では要約を 2 行まで折り返す。
+  /// 判定のノードごとの最新の回を入力の深さ順に 1 行ずつ（「9:00 開発の依頼を選ぶ　候補 2 件」。失敗は赤で
+  /// 「失敗：<説明>」）。狭い欄では各行を 2 行まで折り返す。
   private func headline(_ automation: Automation) -> some View {
     let text = AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone)
-    return HStack(alignment: .firstTextBaseline, spacing: Theme.Space.step) {
-      Text(text.runHeadline(automation.runs.first))
-        .foregroundStyle(
-          automation.runs.first?.failure == nil ? Color.theme.textMuted : Color.theme.danger
-        )
-        .lineLimit(2)
-        .truncationMode(.tail)
-        .fixedSize(horizontal: false, vertical: true)
-      Spacer(minLength: Theme.Space.step)
-      Button {
-        model.enterContents()
-      } label: {
-        Text(l10n.string(.taskPaletteAutomationContents) + " →")
-          .foregroundStyle(Color.theme.textSecondary)
-          .fixedSize()
-          .contentShape(Rectangle())
+    let judges = automation.graph.byDepth.filter { $0.role == .judge }
+    return VStack(alignment: .leading, spacing: 3) {
+      ForEach(judges, id: \.id) { node in
+        let run = automation.state(node.id).runs.first
+        Text(Self.latest(node, run, text))
+          .foregroundStyle(run?.failed == true ? Color.theme.danger : Color.theme.textMuted)
+          .lineLimit(2)
+          .truncationMode(.tail)
+          .fixedSize(horizontal: false, vertical: true)
       }
-      .buttonStyle(.plain)
-      .focusable(false)
     }
     .font(Font.theme.meta)
+    .lineSpacing(2)
+    .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, Theme.Space.phrase)
     .padding(.vertical, Theme.Space.step)
-    .frame(minHeight: 30)
     .padding(.top, Theme.Space.tick)
+  }
+
+  /// 判定のノードの最新の回の 1 行。ノードは名前だけで言う。
+  static func latest(
+    _ node: AutomationGraph.Node, _ record: AutomationRunRecord?, _ text: AutomationText
+  )
+    -> String
+  {
+    let l10n = text.l10n
+    guard let record else {
+      return node.entity.name + "\u{3000}" + l10n.string(.taskPaletteAutomationNeverJudged)
+    }
+    let head = text.stamp(record.startedAt) + " " + node.entity.name + "\u{3000}"
+    guard let run = record.run else {
+      return head
+        + l10n.string(record.failed ? .automationRunUnknownFailed : .automationRunUnknownPassed)
+    }
+    let result: String
+    if let failure = run.failure {
+      result = l10n.format(
+        .automationFailedWith,
+        text.failureHead(failure, ending: run.execution.ending, node: node))
+    } else if case .judge(let proposed, _, _) = run.result, proposed > 0 {
+      result = l10n.plural(
+        proposed, one: .taskPaletteAutomationProposedCountOne,
+        other: .taskPaletteAutomationProposedCountOther)
+    } else {
+      result = l10n.string(.automationNoProposals)
+    }
+    return head + result
   }
 
   private func row(_ proposal: AutomationProposal) -> some View {
     TaskPaletteAutomationProposalRow(
-      proposal: proposal,
+      proposal: proposal, originNodeName: model.originNodeName(of: proposal),
       text: AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone),
-      selected: model.proposalList.selectedID == proposal.id,
-      focused: model.place == .proposals
+      selected: model.selectedProposal?.id == proposal.id
     )
     .contentShape(Rectangle())
     .onTapGesture { model.tapProposal(proposal.id) }
@@ -112,13 +130,13 @@ struct TaskPaletteAutomationList: View {
   }
 }
 
-/// 提案の行。タイトル・期限の札・右に時刻、下に本文の先頭 1 行。提案の一覧に居ない間は、選択の地を薄くする（キーが届く
-/// 場所を見せる）。
+/// 候補の行。タイトル・期限の札・右に時刻（あれば）、下に出どころのノードの名前と本文の先頭 1 行（あれば）。印は選ばれている
+/// 候補の行だけ。
 private struct TaskPaletteAutomationProposalRow: View {
   let proposal: AutomationProposal
+  let originNodeName: String?
   let text: AutomationText
   let selected: Bool
-  let focused: Bool
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -138,26 +156,29 @@ private struct TaskPaletteAutomationProposalRow: View {
             foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill)
         }
         Spacer(minLength: Theme.Space.step)
-        Text(text.short(proposal.item.time))
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .fixedSize()
+        if let time = proposal.fields.time {
+          Text(text.short(time))
+            .font(Font.theme.meta)
+            .foregroundStyle(Color.theme.textMuted)
+            .fixedSize()
+        }
       }
-      fontResolver.text(Self.firstLine(proposal.item.body), base: Theme.Typography.meta)
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.textMuted)
-        .lineLimit(1)
-        .truncationMode(.tail)
+      fontResolver.text(
+        [originNodeName, proposal.fields.body.map(Self.firstLine)].compactMap { $0 }.joined(
+          separator: " · "),
+        base: Theme.Typography.meta
+      )
+      .font(Font.theme.meta)
+      .foregroundStyle(Color.theme.textMuted)
+      .lineLimit(1)
+      .truncationMode(.tail)
     }
     .padding(.vertical, Theme.Space.step + Theme.Space.hair)
     .padding(.horizontal, Theme.Space.bar - Theme.Space.hair)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row)
-        .fill(
-          selected
-            ? (focused ? Color.theme.selectionFill : Color.theme.surfaceInk.opacity(0.06))
-            : .clear))
+        .fill(selected ? Color.theme.selectionFill : .clear))
   }
 
   /// 本文の先頭 1 行（空の行は飛ばす）。

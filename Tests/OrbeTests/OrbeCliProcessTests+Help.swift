@@ -35,6 +35,23 @@ extension OrbeCliProcessTests {
       "wait --help の既定が WaitTimeout.eventDefaultMs と食い違っている: \(wait.stdout)")
   }
 
+  /// `orb automation --help` にコピーされている、`trial --wait` の待ち時間（`--timeout-ms`）の既定・上限と、
+  /// `runs` の 1 ページの件数（`--limit`）の既定・上限は、control と同じ値。
+  func testAutomationHelpLimitsMatchControl() {
+    let outcome = ControlProcess.orbWithoutServer(["automation", "--help"])
+    XCTAssertEqual(outcome.status, 0, "automation --help は socket 不達でも exit 0: \(outcome.stderr)")
+    let help = outcome.stdout.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    XCTAssertTrue(
+      help.contains(
+        "`--timeout-ms` (default \(WaitTimeout.promptDefaultMs), max \(WaitTimeout.maxMs))"),
+      "trial の --timeout-ms の既定 / 上限が WaitTimeout と食い違っている: \(help)")
+    XCTAssertTrue(
+      help.contains(
+        "`--limit` (default \(AutomationStore.historyPage), max \(AutomationStore.historyPageLimit))"
+      ),
+      "runs の --limit の既定 / 上限が AutomationStore と食い違っている: \(help)")
+  }
+
   /// `orb tab --help` の `KEYS:` は control の `ControlKey.namedKeys` と同じ集合。
   ///
   /// 弾くのは control（`ControlKey.parse` が -32602）だが、help は socket 不達でも出す必要が
@@ -53,10 +70,10 @@ extension OrbeCliProcessTests {
       "tab --help の KEYS が ControlKey と食い違っている")
   }
 
-  /// `orb board --help` の `KINDS:` は control の `BoardPart` と同じ集合。種類の後の括弧は説明で、行をまたぐ。
+  /// `orb board --help` の `KINDS:` は control の `BoardWidget` と同じ集合。種類の後の括弧は説明で、行をまたぐ。
   ///
   /// 弾くのは control（知らない種類は -32602）だが、help は socket 不達でも出す必要があるため CLI に種類を写している。
-  /// 写しが欠けると、置ける部品が help を読む人と AI から見えなくなる。
+  /// 写しが欠けると、置けるウィジェットが help を読む人と AI から見えなくなる。
   func testBoardHelpListsEveryKind() throws {
     let outcome = ControlProcess.orbWithoutServer(["board", "--help"])
     XCTAssertEqual(outcome.status, 0, "board --help は socket 不達でも exit 0: \(outcome.stderr)")
@@ -78,8 +95,8 @@ extension OrbeCliProcessTests {
     }
     let listed = names.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
     XCTAssertEqual(
-      Set(listed), Set(BoardPart.allCases.map(\.rawValue)),
-      "board --help の KINDS が BoardPart と食い違っている")
+      Set(listed), Set(BoardWidget.allCases.map(\.rawValue)),
+      "board --help の KINDS が BoardWidget と食い違っている")
   }
 
   /// `orb task --help` の `STATUSES:` / `PRIORITIES:` は control の `TaskItem.Status` / `Priority` と同じ集合。

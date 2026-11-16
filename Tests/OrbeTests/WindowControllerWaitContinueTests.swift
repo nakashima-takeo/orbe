@@ -26,7 +26,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
           tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
         WorkspaceState(
           name: "conversation", rootPath: "/tmp", activeTab: 0, tabs: tabs,
-          persistentId: conversationWorkspace),
+          id: conversationWorkspace),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
@@ -74,7 +74,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
   }
 
   private func conversationTabs(_ wc: WindowController) throws -> [TerminalTab] {
-    try XCTUnwrap(wc.workspaces.first { $0.persistentId == conversationWorkspace }?.tabs)
+    try XCTUnwrap(wc.workspaces.first { $0.id == conversationWorkspace }?.tabs)
   }
 
   private func waitForDetection(_ wc: WindowController) {
