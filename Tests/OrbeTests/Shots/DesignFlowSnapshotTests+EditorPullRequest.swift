@@ -6,7 +6,8 @@ import XCTest
 
 /// PR のパネルの flow（fixture は `PrFixtures`——本物の git の場と、見本 `editor/data.ts` の PR #131 を答える差し替えの
 /// 出どころ）: 見本の姿 → 確認済みを付ける → フォルダの配下をまとめて外す → リスト表示 → 説明とコミットを畳む → 変更
-/// ファイルを開く（PR の diff。タブ行に「確認済みにする」）→ 確認済みにする → PR が無い（作成の入口）→ ブランチが未公開 → gh が認証されていない。
+/// ファイルを開く（PR の diff。タブ行に「確認済みにする」）→ 確認済みにする → PR が無い（作成の入口）→ ブランチが未公開
+/// → gh が認証されていない → PR の先頭が手元に無い（数えない違いの帯）→ 既定のブランチ → コミットの題とファイル名に絵文字。
 extension DesignFlowSnapshotTests {
   func testEditorPr() throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -55,6 +56,9 @@ extension DesignFlowSnapshotTests {
         ("no_pull_request", { switchTo(.noPullRequest(published: true)) }),
         ("unpublished", { switchTo(.noPullRequest(published: false)) }),
         ("gh_unauthed", { switchTo(.unavailable(.ghUnauthed)) }),
+        ("not_fetched", { switchTo(.notFetched) }),
+        ("default_branch", { switchTo(.defaultBranch) }),
+        ("emoji", { switchTo(.emoji) }),
       ])
   }
 }

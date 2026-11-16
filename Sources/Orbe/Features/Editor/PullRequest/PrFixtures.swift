@@ -14,6 +14,12 @@
     enum Answer {
       /// open の PR #131（見本の中身）。
       case pullRequest
+      /// open の PR #131 だが、PR の先頭のコミットが手元に無い（数えない違いの帯）。
+      case notFetched
+      /// open の PR #131 で、コミットの題とファイル名に絵文字がある。
+      case emoji
+      /// worktree が既定のブランチ（main）に居る（GitHub に問い合わせない）。
+      case defaultBranch
       /// open の PR が無い（作成の入口）。`published` はブランチが GitHub に在るか。
       case noPullRequest(published: Bool)
       /// GitHub のどのブランチかが決まらない（gh が無い・認証されていない など）。
@@ -68,6 +74,7 @@
     ) throws -> Scene {
       let dir = place.appendingPathComponent("orbe-pr-\(UUID().uuidString)", isDirectory: true)
       let base = try makeRepository(dir)
+      if case .defaultBranch = answer { try FixtureGit(directory: dir)(["switch", "-q", "main"]) }
       let root = GitWorktreeRoot.root(of: dir.path)
       _ = BranchPullRequest.shared(for: root, source: source(answer, base: base, dir: dir))
       let group = TabGroup(
@@ -90,7 +97,7 @@
       let ref = GitHubBranchRef(repo: me, branch: branch)
       let found: GitHubBranchPullRequests.Branch
       switch answer {
-      case .pullRequest:
+      case .pullRequest, .notFetched, .emoji:
         found = .gitHub(
           ref,
           pullRequests: .success([
@@ -98,12 +105,17 @@
               number: 131, headRefName: branch, state: "OPEN", baseRefName: "main",
               headRepository: me, url: "https://github.com/orbe/orbe/pull/131")
           ]))
-      case .noPullRequest: found = .gitHub(ref, pullRequests: .success([]))
+      // 既定のブランチでは問い合わせないので、答えは使われない。
+      case .noPullRequest, .defaultBranch: found = .gitHub(ref, pullRequests: .success([]))
       case .unavailable(let reason): found = .unavailable(reason)
       }
       let published: Bool
       if case .noPullRequest(let value) = answer { published = value } else { published = true }
-      let head = revision("HEAD", in: dir)
+      let head =
+        if case .notFetched = answer { String(repeating: "0", count: 40) } else {
+          revision("HEAD", in: dir)
+        }
+      let emoji: Bool = if case .emoji = answer { true } else { false }
       let commits = ["HEAD~2", "HEAD~1", "HEAD"].map { revision($0, in: dir) }
       let viewed = Viewed()
       return PullRequestSource(
@@ -117,7 +129,9 @@
         branchExists: { _, completion in completion(.success(published)) },
         content: { _, completion in
           completion(
-            .success(content(base: base, head: head, commits: commits, viewed: viewed.paths)))
+            .success(
+              content(
+                base: base, head: head, commits: commits, viewed: viewed.paths, emoji: emoji)))
         },
         setViewed: { value, paths, _, completion in
           if value { viewed.paths.formUnion(paths) } else { viewed.paths.subtract(paths) }
@@ -130,17 +144,18 @@
       var paths: Set<String> = ["src/agent/EmitBuffer.swift", "src/agent/HookRegistry.swift"]
     }
 
-    /// 見本の PR #131 の中身。
+    /// 見本の PR #131 の中身。`emoji` なら、コミットの題と README の名前に絵文字を混ぜる。
     private static func content(
-      base: String, head: String, commits: [String], viewed: Set<String>
+      base: String, head: String, commits: [String], viewed: Set<String>, emoji: Bool
     ) -> GitHubPullRequestContent {
       let headlines = [
         "StateHooks: emit(coalesce:) を実装", "EmitBuffer: tail merge を追加",
         "StateHooksTests: testCoalesceSkipsUnrelated",
-      ]
+      ].map { emoji ? "✨ " + $0 + " 🚀" : $0 }
       let files: [(String, GitHubPullRequestContent.Change)] = [
         ("src/agent/StateHooks.swift", .modified), ("src/agent/EmitBuffer.swift", .added),
-        ("src/agent/HookRegistry.swift", .modified), ("README.md", .modified),
+        ("src/agent/HookRegistry.swift", .modified),
+        (emoji ? "📝 README.md" : "README.md", .modified),
       ]
       return GitHubPullRequestContent(
         nodeID: "PR_131", number: 131, title: "StateHooks: emit(coalesce:) で renderer への通知を統一",
