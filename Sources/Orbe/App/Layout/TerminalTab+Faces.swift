@@ -24,18 +24,14 @@ extension TerminalTab {
   var location: Location {
     guard group.faces.focus == .editor else { return .cwd(cwd) }
     let root = group.key
-    let active = MainActor.assumeIsolated { () -> (path: String, pullRequest: Int?)? in
-      guard let tab = group.editor.activeTab else { return nil }
+    return MainActor.assumeIsolated {
+      guard let tab = group.editor.activeTab else { return .root(root) }
       if case .diff(let diff) = tab, case .pullRequest(let state) = diff.id.kind {
-        return (diff.id.path, state.key.id.number)
+        return .pullRequest(number: state.key.id.number, relative: diff.id.path)
       }
-      return (tab.url.path, nil)
+      let path = tab.url.path
+      guard path.hasPrefix(root + "/") else { return .absolute(path) }
+      return .file(root: root, relative: String(path.dropFirst(root.count + 1)))
     }
-    guard let active else { return .root(root) }
-    if let number = active.pullRequest {
-      return .pullRequest(number: number, relative: active.path)
-    }
-    guard active.path.hasPrefix(root + "/") else { return .absolute(active.path) }
-    return .file(root: root, relative: String(active.path.dropFirst(root.count + 1)))
   }
 }
