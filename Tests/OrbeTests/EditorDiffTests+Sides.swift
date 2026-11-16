@@ -299,7 +299,13 @@ extension EditorDiffTests {
         let working = try XCTUnwrap(diff.workingTree)
         pumpMain(until: { working.workingStale }, "前提: 隠している間に作業ツリーが変わったと知る")
         diff.present(.inline)
+      } else {
+        try XCTUnwrap(diff.rootObserver).rootFiles(diff.files, filesDidChange: .scanAll)
       }
+      XCTAssertNil(diff.document, "前提: 文書が無くなった")
+      XCTAssertTrue(diff.pending, "前提: 中の HEAD を読んでいる")
+      XCTAssertEqual(diff.content, .loading, "中の HEAD を読む間は何も出さない")
+      XCTAssertNil(diff.newSurface)
 
       waitRows(diff, hidden ? "見せ直した後の置き換え" : "見せたままの置き換え") { _ in
         diff.document == nil && diff.newRevisionSide.lines == 1

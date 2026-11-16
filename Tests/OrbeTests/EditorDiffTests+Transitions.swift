@@ -6,12 +6,14 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// 1 つのパスの作業ツリー diff とステージ済み diff を開いたまま、作業ツリー・index・見せ方・打鍵を、種を決めた乱数の順で
-/// 次々に変える。どの順で側が替わっても、落ち着いた時点の面の並びが、その時点の両側（git と作業ツリーから読み直した本文）
-/// の行差分（ファイルとサブモジュールの置き換えなら丸ごとの置き換え）と一致し、未保存の本文が失われない。
+/// 1 つのパスの作業ツリー diff とステージ済み diff を開いたまま、作業ツリー・index・見せ方を、種を決めた乱数の順で次々に
+/// 変える。手を当てて落ち着いた後、見せている diff の両側が、git と作業ツリーから読み直した本文と一致し、並び（`currentRows`。
+/// インラインなら面の削除行と追加の行も）が、その両側の行差分（ファイルとサブモジュールの置き換えなら丸ごとの置き換え）と
+/// 一致する。落ち着く前の途中の並びは見ない——既知の、途中で前の並びを置いて落ちる経路は、個別のテスト
+/// （`testReplacingARestoredFileWithARepositoryReplacesTheRowsWholeVisibleOrHidden` ほか）が決まった手順で守る。
 ///
-/// 壊れると何が起きるか: 前の両側の並びを今の側に置いて precondition でアプリが落ちる。並びが今の両側と食い違ったまま
-/// 残る。未保存の本文が消える。失敗した種と手順はメッセージに出る（同じ種で回せば同じ手順になる）。
+/// 壊れると何が起きるか: 側が替わった後も、並びが前の両側のまま残るか、今の両側と食い違う。失敗した種と手順はメッセージに
+/// 出る（同じ種で回せば同じ手順になる）。
 extension EditorDiffTests {
   func testRandomTransitionsKeepTheRowsMatchingBothSides() throws {
     // 種ごとに別のリポジトリで回し、前の種のタブはテストの終わりまで持つ（窓がタブより長く生きるので、タブを先に
@@ -36,11 +38,10 @@ extension EditorDiffTests {
     let staged = try session.openDiff(id("a.txt", .staged), as: .pinned)
     var random = SplitMix(seed: seed)
     var log: [String] = []
-    let unsaved = Unsaved()
 
     for step in 0..<steps {
       let shown = pane.diff
-      // 作業ツリーと index の手を、見せ方の手より多く引く（側の替わり方の順が、落ちた経路を作る）。
+      // 作業ツリーと index の手を、見せ方の手より多く引く（側の替わり方を多く試す）。
       var ops: [(String, () throws -> Void)] = [
         ("write", { try self.writeFile(self.randomText(&random)) }),
         ("write", { try self.writeFile(self.randomText(&random)) }),
@@ -61,7 +62,6 @@ extension EditorDiffTests {
         ("show staged", { session.activate(.diff(staged.id)) }),
         ("mode", { modes.select(modes.mode == .inline ? .side : .inline) }),
       ]
-      if shown === working, let edit = editing(working, unsaved: unsaved) { ops.append(edit) }
       let (name, op) = ops[random.next(below: ops.count)]
       log.append("\(step):\(name)")
       // 落ちたときにも種と手順が残るように、当てる前に標準エラーへ出す。
@@ -75,9 +75,7 @@ extension EditorDiffTests {
         XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後、期待を読む git が失敗: \(error)")
         return false
       }
-      if let mismatch = settle(
-        pane, truth: truth, working: working, unsaved: unsaved.text)
-      {
+      if let mismatch = settle(pane, truth: truth, working: working) {
         XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後: \(mismatch)")
         return false
       }
@@ -85,43 +83,17 @@ extension EditorDiffTests {
     return true
   }
 
-  /// 作業ツリー diff の文書を打つ手（未保存でなければ打ち、未保存なら undo で戻す）。文書の面を見せていなければ nil。
-  private func editing(_ working: EditorDiff, unsaved: Unsaved) -> (String, () throws -> Void)? {
-    guard let document = working.document,
-      let surface = working.newSurface as? MetalTextSurface, surface === document.surface
-    else { return nil }
-    if unsaved.text == nil {
-      return (
-        "type",
-        { [self] in
-          surface.selectedRange = NSRange(location: 0, length: 0)
-          surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "Z\n")
-          unsaved.text = string(document.text)
-        }
-      )
-    }
-    return (
-      "undo",
-      {
-        try XCTUnwrap(surface.responder.undoManager).undo()
-        pumpMain(until: { !document.isDirty }, "undo で未保存でなくなる")
-        unsaved.text = nil
-      }
-    )
-  }
-
   /// 見せている diff が、手の後の git と作業ツリーの姿 `truth` に落ち着くまで main を回す。10 秒で落ち着かなければ、その
   /// 食い違い。
   private func settle(
-    _ pane: EditorPaneView, truth: Truth, working: EditorDiff, unsaved: String?
+    _ pane: EditorPaneView, truth: Truth, working: EditorDiff
   ) -> String? {
     var mismatch: String?
     let deadline = Date().addingTimeInterval(10)
     repeat {
       RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
       mismatch = self.mismatch(
-        pane.diff, truth: truth, working: working, mode: pane.diffModes.mode,
-        unsaved: unsaved)
+        pane.diff, truth: truth, working: working, mode: pane.diffModes.mode)
     } while mismatch != nil && Date() < deadline
     return mismatch
   }
@@ -178,7 +150,7 @@ extension EditorDiffTests {
       return try XCTUnwrap(output.stdoutText.split(separator: "\n").first.map(String.init))
     }
     let info =
-      "0 \(String(repeating: "0", count: 40))\ta.txt\n"
+      "0 \(String(repeating: "0", count: blobs[0].count))\ta.txt\n"
       + blobs.enumerated().map { "100644 \($1) \($0 + 1)\ta.txt\n" }.joined()
     XCTAssertTrue(
       GitRunner.shared.runSync(
@@ -188,17 +160,13 @@ extension EditorDiffTests {
 
   // MARK: - 確かめ
 
-  /// 見せている diff が今の両側に落ち着いていなければ、その食い違い（落ち着いていれば nil）。未保存の本文が残っているかも
+  /// 見せている diff が今の両側に落ち着いていなければ、その食い違い（落ち着いていれば nil）。並列では面を見ず、並びだけを
   /// 見る。
   private func mismatch(
-    _ shown: EditorDiff?, truth: Truth, working: EditorDiff,
-    mode: EditorDiff.Mode, unsaved: String?
+    _ shown: EditorDiff?, truth: Truth, working: EditorDiff, mode: EditorDiff.Mode
   ) -> String? {
-    if let unsaved, string(working.document?.text) != unsaved {
-      return "未保存の本文が失われた: \(String(describing: string(working.document?.text)))"
-    }
     guard let shown else { return nil }
-    switch expectation(shown === working ? .workingTree : .staged, truth, working) {
+    switch expectation(shown === working ? .workingTree : .staged, truth) {
     case .unavailable(let reason):
       return shown.content == .unavailable(reason) ? nil : "中身 \(shown.content)・期待 \(reason)"
     case .sides(let old, let new):
@@ -257,10 +225,10 @@ extension EditorDiffTests {
     let staged = try read(["ls-files", "-s", "--", "a.txt"]).split(separator: "\n")
     let entries = staged.map { $0.split(separator: " ", maxSplits: 2).map(String.init) }
     var index: String?
-    if let entry = entries.first, entry.count == 3 {
+    if let fields = entries.first, fields.count == 3 {
       index =
-        entry[0] == "160000"
-        ? EditorDiff.subproject(entry[1]) : try read(["cat-file", "blob", entry[1]])
+        fields[0] == "160000"
+        ? EditorDiff.subproject(fields[1]) : try read(["cat-file", "blob", fields[1]])
     }
     var tree: String?
     var isDirectory: ObjCBool = false
@@ -276,16 +244,12 @@ extension EditorDiffTests {
       tree: tree)
   }
 
-  /// 姿 `truth` で、種類 `kind` の diff が出すべきもの。作業ツリー diff の新しい側は、未保存の文書があればその本文。
-  private func expectation(_ kind: EditorDiff.Kind, _ truth: Truth, _ working: EditorDiff)
-    -> Expected
-  {
+  /// 姿 `truth` で、種類 `kind` の diff が出すべきもの。
+  private func expectation(_ kind: EditorDiff.Kind, _ truth: Truth) -> Expected {
     if truth.conflicted { return .unavailable(.conflicted) }
     if case .staged = kind { return .sides(old: "one\ntwo\nthree\nfour\n", new: truth.index) }
-    var tree = truth.tree
-    if let document = working.document, document.isDirty { tree = string(document.text) }
-    if truth.index == nil, tree == nil { return .unavailable(.nowhere) }
-    return .sides(old: truth.index, new: tree)
+    if truth.index == nil, truth.tree == nil { return .unavailable(.nowhere) }
+    return .sides(old: truth.index, new: truth.tree)
   }
 
   /// 両側の並び——片側だけがサブモジュールの行なら丸ごとの置き換え、ほかは行差分。
@@ -311,11 +275,6 @@ extension EditorDiffTests {
   private func string(_ text: TextRope?) -> String? { text.map(string) }
 
   private func debug(_ text: String?) -> String { text.map { "\"\($0)\"" } ?? "無し" }
-}
-
-/// 打って未保存にした文書の本文（未保存でなければ nil）。手の中から書き換える。
-private final class Unsaved {
-  var text: String?
 }
 
 /// 種を決めた乱数（SplitMix64）。同じ種なら同じ列を返す。
