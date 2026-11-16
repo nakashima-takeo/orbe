@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -162,18 +163,28 @@ extension SurfaceZonesTests {
     XCTAssertEqual(next.pressed, [.document(3)])
   }
 
-  /// 表示の構成が印の絵を持たない面と、並びに印を出せる行が無い面では、印は出ず、ポインタの引き直しも起きない。
-  func testNoMarkWithoutAPictureOrMarkableRows() throws {
-    let opened = try hostedRows()
+  /// スクロールの後と並びを置き直した後は、絵の差し込みの無い面でも、今のポインタの位置で印を引き直す——ポインタの下へ
+  /// 来た行に印が移り、置き直した並びで出せなくなった行からは消える。
+  func testTheMarkIsPickedAgainUnderThePointerAfterScrollingAndNewRows() throws {
+    let opened = try open(rows(80), size: CGSize(width: 600, height: 400))
     let surface = opened.surface
-    surface.setRows(SurfaceRows(spans: [LineSpan(line: 0, allowsTrailingMark: true)]))
-    surface.hover(at: rowPoint(surface, row: 2))
-    XCTAssertNil(surface.drawn.trailingMark, "絵が無い")
-    XCTAssertFalse(surface.showsTrailingMarks)
+    let window = PointerWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.answersAsKey = true
+    window.contentView = surface.view
+    surface.viewStateDidChange(size: CGSize(width: 600, height: 400), scale: 2, visible: false)
+    addTeardownBlock { @MainActor in window.contentView = nil }
     surface.setPresentation(SurfacePresentation(showsMinimap: false, trailingMark: Self.mark))
-    surface.setRows(SurfaceRows(spans: [LineSpan(line: 0)]))
-    surface.hover(at: rowPoint(surface, row: 2))
-    XCTAssertNil(surface.drawn.trailingMark, "出せる行が無い")
-    XCTAssertFalse(surface.showsTrailingMarks)
+    let markable = [LineSpan(line: 0, allowsTrailingMark: true)]
+    surface.setRows(SurfaceRows(spans: markable))
+    window.pointer = surface.textView.convert(rowPoint(surface, row: 4), to: nil)
+    surface.refreshPointer()
+    XCTAssertEqual(surface.drawn.trailingMark?.row, .document(4), "前提: ポインタの下の行に印が出る")
+    surface.scroll(to: RowPosition(line: 2))
+    XCTAssertEqual(surface.drawn.trailingMark?.row, .document(6), "スクロールの後は印がポインタの下へ来た行に移る")
+    surface.setRows(SurfaceRows(spans: markable + [LineSpan(line: 5)]))
+    XCTAssertNil(surface.drawn.trailingMark, "置き直した並びで出せなくなった行からは印が消える")
   }
 }
