@@ -192,6 +192,10 @@ final class SourceControl {
     observers.append(WeakObserver(value: observer))
   }
 
+  func removeObserver(_ observer: SourceControlObserver) {
+    observers.removeAll { $0.value == nil || $0.value === observer }
+  }
+
   // MARK: - 列（`SourceControl+Operations` が使う）
 
   /// 操作を列に載せる（最後の失敗はここで消える——次の操作を始めると消える）。列にある操作と重なる操作は載せず、断った

@@ -192,9 +192,7 @@ final class BranchPullRequestTests: OrbeTestCase {
         if case .ready(let ends, _) = state.bounds { ends.base == advanced } else { false }
       },
       "新しいベースで両端が揃う")
-    XCTExpectFailure("両端を求め直す間にずれを消し、同じ先頭で揃い直したときに数えた組が同じとして数え直さない") {
-      XCTAssertEqual(pullRequest.drift, .inSync)
-    }
+    XCTAssertEqual(pullRequest.drift, .inSync)
   }
 
   /// GitHub に問い合わせている間にブランチを切り替えたら、前のブランチの答えを出さず、読んでいる状態になる。
@@ -211,9 +209,7 @@ final class BranchPullRequestTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "other"]).isSuccess)
     let files = RootFiles.shared(for: repo.root)
     pumpMain(until: { files.status?.branch?.name == "other" }, "前提: 切り替えを知る")
-    XCTExpectFailure("問い合わせの最中は読み直しを積むだけで、読んでいる状態に戻さない") {
-      XCTAssertEqual(pullRequest.answer, .reading)
-    }
+    XCTAssertEqual(pullRequest.answer, .reading)
 
     holdsLookups = false
     release()
@@ -234,9 +230,7 @@ final class BranchPullRequestTests: OrbeTestCase {
     holdsLookups = false
     release()
     letTheLookUpSettle()
-    XCTExpectFailure("問い合わせの最中に届いた追跡 ref の知らせを捨て、終わった後の値を次に比べる相手にする") {
-      XCTAssertEqual(lookups.count, 3, "最初・最中・終わった後")
-    }
+    XCTAssertEqual(lookups.count, 3, "最初・最中・終わった後")
   }
 
   // MARK: - ヘルパ

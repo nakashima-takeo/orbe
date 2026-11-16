@@ -82,9 +82,21 @@ final class BranchPullRequest {
   /// 最後に引いたブランチ名・手元の HEAD・追跡 ref の値。
   @ObservationIgnored private var branch: String?
   @ObservationIgnored private var head: String?
-  @ObservationIgnored private var tracked: [String: String]?
-  /// ずれを数えた手元の HEAD と PR の先頭。
-  @ObservationIgnored private var counted: (local: String?, pullRequest: String)?
+  @ObservationIgnored private var tracked: Tracked?
+  /// ずれを数えた手元の HEAD と PR の先頭と、数えた答え（数えている間は nil）。
+  @ObservationIgnored private var counted: Counted?
+
+  private struct Counted {
+    let local: String?
+    let pullRequest: String
+    var drift: Drift?
+  }
+
+  /// 覚えた追跡 ref の名前と値。値を比べるのは、同じ名前の組どうしだけ。
+  private struct Tracked: Equatable {
+    let refs: [String]
+    let values: [String: String]
+  }
 
   private static var registry: [String: BranchPullRequest] = [:]
 
@@ -128,6 +140,7 @@ final class BranchPullRequest {
     guard watchers == 0 else { return }
     files?.removeObserver(self)
     files = nil
+    SourceControl.shared(for: root).removeObserver(self)
     state?.endWatching()
   }
 
@@ -139,13 +152,13 @@ final class BranchPullRequest {
     guard let status = files.status else { return }
     guard let name = status.branch?.name else { return settle(.unavailable(.detached)) }
     head = status.branch?.commit
-    if isReading {
-      readAgain = true
-      return
-    }
     if name != branch {
       branch = name
       settle(.reading)
+    }
+    if isReading {
+      readAgain = true
+      return
     }
     isReading = true
     repo.defaultBranch { [weak self] remoteDefault in
@@ -268,45 +281,56 @@ final class BranchPullRequest {
     case .failed:
       drift = local == content.headCommit ? .inSync : .differs
     case .ready(_, let ends):
-      if let counted, counted.local == local, counted.pullRequest == ends.head { return }
-      counted = (local, ends.head)
+      // 数えた組と同じなら、数えた答えを出し直す（ベースブランチだけが動いて両端を求め直したときも、数え直さない）。
+      if let counted, counted.local == local, counted.pullRequest == ends.head {
+        drift = counted.drift
+        return
+      }
+      counted = Counted(local: local, pullRequest: ends.head, drift: nil)
       guard let local, let repo = files?.repo else {
         drift = .differs
+        counted?.drift = .differs
         return
       }
       repo.counts(local, against: ends.head) { [weak self] counts in
-        guard let self, self.counted?.local == local, self.counted?.pullRequest == ends.head else {
-          return
-        }
-        drift =
+        guard let self, counted?.local == local, counted?.pullRequest == ends.head else { return }
+        let result: Drift =
           counts.map {
             $0.ahead == 0 && $0.behind == 0
               ? .inSync : .diverged(ahead: $0.ahead, behind: $0.behind)
           }
           ?? .differs
+        counted?.drift = result
+        if case .ready(_, let now) = self.state?.bounds, now.head == ends.head { drift = result }
       }
     }
   }
 
   // MARK: - 追跡 ref
 
-  /// このブランチの push 先の追跡 ref と、PR のベースブランチの追跡 ref の今の値。
-  private func readTracking(_ completion: @escaping ([String: String]?) -> Void) {
+  /// このブランチの push 先の追跡 ref と、PR のベースブランチの追跡 ref（PR の中身が読めていれば）の名前と今の値。
+  private func readTracking(_ completion: @escaping (Tracked?) -> Void) {
     guard let repo = files?.repo, let branch else { return completion(nil) }
     repo.pushTracking(ofBranch: branch) { [weak self] push in
       guard let self else { return }
       var refs: [String] = []
       if case .ref(let ref, _)? = push { refs.append(ref) }
-      if let remote = state?.fetchRemote, let base = state?.content?.baseRefName {
-        refs.append("refs/remotes/\(remote)/\(base)")
-      }
-      repo.refValues(refs, completion: completion)
+      if let base = baseTrackingRef { refs.append(base) }
+      repo.refValues(refs) { values in completion(values.map { Tracked(refs: refs, values: $0) }) }
     }
   }
 
-  /// 読み終えた時点の追跡 ref の値を覚える（次にリモート追跡の ref が動いたとき、比べる相手）。
+  /// PR のベースブランチの追跡 ref（PR が無い・中身が読めていなければ nil）。
+  private var baseTrackingRef: String? {
+    guard let remote = state?.fetchRemote, let base = state?.content?.baseRefName else {
+      return nil
+    }
+    return "refs/remotes/\(remote)/\(base)"
+  }
+
+  /// 今の追跡 ref の値を覚える（次にリモート追跡の ref が動いたとき、比べる相手）。
   private func recordTracking() {
-    readTracking { [weak self] values in self?.tracked = values }
+    readTracking { [weak self] read in self?.tracked = read }
   }
 }
 
@@ -329,12 +353,14 @@ extension BranchPullRequest: RootFilesObserver {
   }
 
   /// リモート追跡の ref が動いたかもしれない——このブランチの push 先か PR のベースブランチの追跡 ref の値が変わって
-  /// いたときだけ読み直す（無関係なブランチが fetch で動くたびに GitHub へ問い合わせない）。
+  /// いたときだけ読み直す（無関係なブランチが fetch で動くたびに GitHub へ問い合わせない）。問い合わせの最中なら、
+  /// 終わった後に 1 回読み直す。
   func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
-    guard remoteRefsChanged, !isReading, let previous = tracked else { return }
-    readTracking { [weak self] values in
-      guard let self, let values, values != previous else { return }
-      tracked = values
+    guard remoteRefsChanged, let previous = tracked else { return }
+    readTracking { [weak self] read in
+      guard let self, let read else { return }
+      tracked = read
+      guard read.refs == previous.refs, read.values != previous.values else { return }
       reload()
     }
   }
@@ -353,9 +379,11 @@ extension BranchPullRequest: SourceControlObserver {
   }
 }
 
-/// PR の中身・両端が変わったら、手元とのずれを数え直す。
+/// PR の中身・両端が変わったら、手元とのずれを数え直す。PR のベースブランチの追跡 ref が新しく分かったら、その値も
+/// 覚える。
 extension BranchPullRequest: PullRequestStateObserver {
   func pullRequestStateDidChange(_ state: PullRequestState) {
     countDrift()
+    if let base = baseTrackingRef, tracked?.refs.contains(base) == false { recordTracking() }
   }
 }
