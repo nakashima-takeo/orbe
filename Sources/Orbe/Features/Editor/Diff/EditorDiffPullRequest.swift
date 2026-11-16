@@ -18,8 +18,10 @@ final class EditorDiffPullRequest: EditorDiffSource {
     self.id = id
     self.state = state
     state.addObserver(self)
+    // 誰も見ていなかった PR なら、読み直す（ほかの者が見ている間は、その者のきっかけで読み直している）。
+    let unwatched = !state.isWatched
     state.beginWatching()
-    state.reload()
+    if unwatched { state.reload() }
   }
 
   deinit {

@@ -65,7 +65,7 @@ final class BranchPullRequest {
     case inSync
     /// 手元にしか無いコミット（未 push）の数と、PR にしか無いコミット（未取得）の数。
     case diverged(ahead: Int, behind: Int)
-    /// PR の両端を取れず数えられないが、手元の HEAD が PR の先頭と違う。
+    /// PR の先頭のコミットが手元に無く数えられないが、手元の HEAD が PR の先頭と違う。
     case differs
   }
 
@@ -79,18 +79,12 @@ final class BranchPullRequest {
   @ObservationIgnored private var watchers = 0
   @ObservationIgnored private var isReading = false
   @ObservationIgnored private var readAgain = false
-  /// 最後に引いたブランチ名・手元の HEAD・追跡 ref の値。
+  /// 答えを出している・読んでいるブランチ名（ブランチに居ない・git の管理下でないなら nil）・手元の HEAD・追跡 ref の値。
   @ObservationIgnored private var branch: String?
   @ObservationIgnored private var head: String?
   @ObservationIgnored private var tracked: Tracked?
-  /// ずれを数えた手元の HEAD と PR の先頭と、数えた答え（数えている間は nil）。
-  @ObservationIgnored private var counted: Counted?
-
-  private struct Counted {
-    let local: String?
-    let pullRequest: String
-    var drift: Drift?
-  }
+  /// ずれを数えた（数えている）手元の HEAD と PR の先頭。
+  @ObservationIgnored private var counted: (local: String, pullRequest: String)?
 
   /// 覚えた追跡 ref の名前と値。値を比べるのは、同じ名前の組どうしだけ。
   private struct Tracked: Equatable {
@@ -121,14 +115,16 @@ final class BranchPullRequest {
 
   // MARK: - 見ている者
 
-  /// 見ている者が現れた。最初の 1 人なら根のサービスを握って観測し、読み直す。
+  /// 見ている者が現れた。誰も見ていなかったなら、根のサービスを握って観測し、読み直す（見ている者が増えただけなら、
+  /// 読み直さない）。
   func beginWatching() {
     watchers += 1
-    guard watchers == 1 else { return reload() }
+    guard watchers == 1 else { return }
     let files = RootFiles.shared(for: root)
     self.files = files
     files.addObserver(self)
     SourceControl.shared(for: root).addObserver(self)
+    state?.addObserver(self)
     state?.beginWatching()
     reload()
   }
@@ -141,6 +137,7 @@ final class BranchPullRequest {
     files?.removeObserver(self)
     files = nil
     SourceControl.shared(for: root).removeObserver(self)
+    state?.removeObserver(self)
     state?.endWatching()
   }
 
@@ -148,9 +145,15 @@ final class BranchPullRequest {
   func reload() {
     guard watchers > 0, let files else { return }
     guard files.isResolved else { return }
-    guard let repo = files.repo else { return settle(.unavailable(.notGit)) }
+    guard let repo = files.repo else {
+      branch = nil
+      return settle(.unavailable(.notGit))
+    }
     guard let status = files.status else { return }
-    guard let name = status.branch?.name else { return settle(.unavailable(.detached)) }
+    guard let name = status.branch?.name else {
+      branch = nil
+      return settle(.unavailable(.detached))
+    }
     head = status.branch?.commit
     if name != branch {
       branch = name
@@ -161,8 +164,12 @@ final class BranchPullRequest {
       return
     }
     isReading = true
-    repo.defaultBranch { [weak self] remoteDefault in
-      self?.lookUp(name, in: repo, remoteDefault: remoteDefault)
+    // 問い合わせる前の追跡 ref の値を覚えてから問い合わせる——覚えた後に動けば比べて読み直し、覚える前に動いたなら、
+    // この問い合わせは、動いた後の GitHub を読む。
+    recordTracking { [weak self] in
+      repo.defaultBranch { [weak self] remoteDefault in
+        self?.lookUp(name, in: repo, remoteDefault: remoteDefault)
+      }
     }
   }
 
@@ -224,9 +231,13 @@ final class BranchPullRequest {
   /// 変わっていたか、きっかけが来ていれば読み直す。
   private func finish(_ next: Answer, _ name: String) {
     isReading = false
+    // 読んでいる間に見ている者がいなくなったら、答えは出さない（PR の状態を見始めない。次に見ている者が現れたら読み直す）。
+    guard watchers > 0 else {
+      readAgain = false
+      return
+    }
     let current = files?.status?.branch?.name
     if name == current { settle(next) }
-    recordTracking()
     if readAgain || name != current {
       readAgain = false
       reload()
@@ -267,42 +278,33 @@ final class BranchPullRequest {
 
   // MARK: - 手元とのずれ
 
-  /// 手元の HEAD と PR の先頭の間で、手元とのずれを数える（両端が揃った後。数えた組と同じなら数え直さない）。両端を
-  /// 取れなかったときは数えず、手元の HEAD が PR の先頭と違うかだけを見る。
+  /// 手元の HEAD と PR の先頭の間で、手元とのずれを数える（PR の中身が読めた後。diff の両端には依らない。数えた組と同じ
+  /// なら数え直さない）。PR の先頭のコミットが手元に無ければ数えず、手元の HEAD が PR の先頭と違うとだけ持ち、次に PR の状態か
+  /// 手元の HEAD が変わったときに数え直す（両端を求めるために取ってきた後に数えられる）。
   private func countDrift() {
-    guard let state, let content = state.content else {
+    guard let prHead = state?.content?.headCommit else {
+      counted = nil
       drift = nil
       return
     }
     let local = head
-    switch state.bounds {
-    case .none, .fetching:
-      drift = nil
-    case .failed:
-      drift = local == content.headCommit ? .inSync : .differs
-    case .ready(_, let ends):
-      // 数えた組と同じなら、数えた答えを出し直す（ベースブランチだけが動いて両端を求め直したときも、数え直さない）。
-      if let counted, counted.local == local, counted.pullRequest == ends.head {
-        drift = counted.drift
-        return
-      }
-      counted = Counted(local: local, pullRequest: ends.head, drift: nil)
-      guard let local, let repo = files?.repo else {
+    if let counted, counted.local == local, counted.pullRequest == prHead { return }
+    guard let local, let repo = files?.repo else {
+      counted = nil
+      drift = .differs
+      return
+    }
+    counted = (local, prHead)
+    repo.counts(local, against: prHead) { [weak self] counts in
+      guard let self, counted?.local == local, counted?.pullRequest == prHead else { return }
+      guard let counts else {
+        counted = nil
         drift = .differs
-        counted?.drift = .differs
         return
       }
-      repo.counts(local, against: ends.head) { [weak self] counts in
-        guard let self, counted?.local == local, counted?.pullRequest == ends.head else { return }
-        let result: Drift =
-          counts.map {
-            $0.ahead == 0 && $0.behind == 0
-              ? .inSync : .diverged(ahead: $0.ahead, behind: $0.behind)
-          }
-          ?? .differs
-        counted?.drift = result
-        if case .ready(_, let now) = self.state?.bounds, now.head == ends.head { drift = result }
-      }
+      drift =
+        counts.ahead == 0 && counts.behind == 0
+        ? .inSync : .diverged(ahead: counts.ahead, behind: counts.behind)
     }
   }
 
@@ -328,9 +330,12 @@ final class BranchPullRequest {
     return "refs/remotes/\(remote)/\(base)"
   }
 
-  /// 今の追跡 ref の値を覚える（次にリモート追跡の ref が動いたとき、比べる相手）。
-  private func recordTracking() {
-    readTracking { [weak self] read in self?.tracked = read }
+  /// 今の追跡 ref の値を覚え（次にリモート追跡の ref が動いたとき、比べる相手）、`completion` を呼ぶ。
+  private func recordTracking(_ completion: @escaping () -> Void = {}) {
+    readTracking { [weak self] read in
+      self?.tracked = read
+      completion()
+    }
   }
 }
 
