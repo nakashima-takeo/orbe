@@ -104,7 +104,10 @@ final class AgentHookPathTests: OrbeTestCase {
     let hook = ["/bin/sh", shim.path, "codex", "working"]
     let shapes = [
       ("間のシェルが exec する", hook),
-      ("間のシェルが exec しない", ["/bin/sh", "-c", hook.map(ShellWord.quoted).joined(separator: " ") + "; :"]),
+      (
+        "間のシェルが exec しない",
+        ["/bin/sh", "-c", hook.map(ShellWord.quoted).joined(separator: " ") + "; :"]
+      ),
     ]
     for (index, (shape, words)) in shapes.enumerated() {
       let script = TestScratch.caseDir.appendingPathComponent("codex-hook-\(index).sh")
