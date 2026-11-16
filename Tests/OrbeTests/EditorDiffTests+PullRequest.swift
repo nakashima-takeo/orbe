@@ -6,7 +6,7 @@ import XCTest
 /// push があれば新しい両端で作り直す。PR の中身は差し替えの構造体が答える。
 ///
 /// 壊れると何が起きるか: rename したファイルの diff が全部の行の追加になる。PR に push があっても古い diff のまま。手元の
-/// 作業ツリーの本文が新しい側に出る。打鍵で PR の diff の本文が変わる。
+/// 作業ツリーの本文が新しい側に出る。打鍵で PR の diff の本文が変わる。PR が動かしたサブモジュールの diff が出ない。
 extension EditorDiffTests {
   /// 差し替えの構造体が返す中身（テストが書き換えて、次の読み直しに答えさせる）。
   private final class Reply {
@@ -72,6 +72,31 @@ extension EditorDiffTests {
     state.reload()
     waitRows(diff, "新しい先頭で作り直す") { _ in diff.newRevision?.text.lineCount == 6 }
     XCTAssertEqual(diff.revisionHunks.count, 2, "変えた行と足した行")
+  }
+
+  /// PR が動かしたサブモジュールは、両側とも「Subproject commit」の 1 行で、その 1 行の差になる。
+  func testAPullRequestDiffOfASubmoduleShowsTheSubprojectCommitLines() throws {
+    try repo.addSubmodule("sub")
+    let commit = {
+      self.repo.git(["-C", "sub", "rev-parse", "HEAD"]).stdoutText.trimmingCharacters(in: .newlines)
+    }
+    let base = repo.head()
+    let first = commit()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    XCTAssertTrue(
+      repo.git(["-C", "sub", "commit", "-q", "--allow-empty", "-m", "inside"]).isSuccess)
+    let second = commit()
+    XCTAssertTrue(repo.git(["commit", "-qam", "move sub"]).isSuccess)
+    let reply = Reply()
+    reply.content = content(base: base, head: repo.head())
+    let (tab, _) = tab()
+
+    let diff = try tab.group.editor.openDiff(
+      id("sub", .pullRequest(try pullRequest(reply))), as: .pinned)
+
+    waitRows(diff, "1 行の差") { self.removedLines($0) == [0] }
+    XCTAssertEqual(text(diff.old), "Subproject commit \(first)")
+    XCTAssertEqual(text(diff.newRevision), "Subproject commit \(second)")
   }
 
   /// 表示できない PR の diff は、PR の種類の理由の一文を出す——両側とも無いパスと、手元に揃わない PR のコミット。

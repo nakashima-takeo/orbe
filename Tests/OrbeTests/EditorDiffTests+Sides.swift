@@ -314,7 +314,7 @@ extension EditorDiffTests {
     }
   }
 
-  private func text(_ revision: RevisionDocument?) -> String? {
+  func text(_ revision: RevisionDocument?) -> String? {
     revision.map { String(decoding: $0.text.contiguousUnits(), as: UTF16.self) }
   }
 }
