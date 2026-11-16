@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// TopBar の現在地の断片。`dim` は cwd・根（`textMuted`）、`text` は根の下の相対パス・根の外の絶対パス
-/// （`statusText`）。
+/// TopBar の現在地の断片。`dim` は cwd・根・区切り（`textMuted`）、`text` は根の下の相対パス・根の外の絶対パス・PR の
+/// diff のファイル名（`statusText`）、`accent` は PR の diff の `PR #N`（`accentBright`）。
 struct LocationPart: Equatable {
   enum Tone: Equatable {
-    case dim, text
+    case dim, text, accent
   }
   let text: String
   let tone: Tone
 
   static func dim(_ text: String) -> LocationPart { LocationPart(text: text, tone: .dim) }
   static func text(_ text: String) -> LocationPart { LocationPart(text: text, tone: .text) }
+  static func accent(_ text: String) -> LocationPart { LocationPart(text: text, tone: .accent) }
 }
 
 /// 信号機（close ボタン）の chrome に対する置かれ方。実窓を読む probe（`AppShell` が付ける）が書く。
@@ -123,6 +124,11 @@ enum TrafficLights: Equatable {
     case .root(let root): return [.dim(short(root))]
     case .file(let root, let relative): return [.dim(short(root) + "/"), .text(relative)]
     case .absolute(let path): return [.text(short(path))]
+    case .pullRequest(let number, let relative):
+      let directory = (relative as NSString).deletingLastPathComponent
+      return [.accent("PR #\(number)"), .dim(" · ")]
+        + (directory.isEmpty ? [] : [.dim(directory + "/")])
+        + [.text((relative as NSString).lastPathComponent)]
     }
   }
 
