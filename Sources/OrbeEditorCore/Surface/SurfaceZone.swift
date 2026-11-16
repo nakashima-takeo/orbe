@@ -117,25 +117,30 @@ public struct ZoneTextLine {
   }
 }
 
-/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。絵の差し込みの中で一意）と文と、文を描く行の列。
+/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。絵の差し込みの中で一意）と文と、文の見え方と、文を
+/// 描く行の列。
 public struct ZoneText {
   public var id: AnyHashable
   public var string: String
+  /// 文の見え方（文の先頭から順に当てる）。
+  public var styles: [ZoneTextStyle]
   public var lines: [ZoneSelectableLine]
 
-  public init(id: AnyHashable, string: String, lines: [ZoneSelectableLine]) {
+  public init(
+    id: AnyHashable, string: String, styles: [ZoneTextStyle], lines: [ZoneSelectableLine]
+  ) {
     self.id = id
     self.string = string
+    self.styles = styles
     self.lines = lines
   }
 }
 
-/// 字の見え方を、文の範囲の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの左右の字をその幅ずつ
-/// 押し出す（CSS のインラインの padding）。地は、連なりの字の x 範囲を余白の幅ずつ広げて置く（→ `ZoneTextLayout.Line`
-/// の `ground(_:)`）。先頭の余白は段落の向きの始まりの側（左から右の段落では左、右から左の段落では右）に、末尾の余白は
-/// その反対の側に付く。余白は組版で 1 つにまとまる字の塊の外に付き、絵文字や結合文字を割らない。ただし、余白に接する
-/// 字の塊にタイ語の ำ やラオ語の ຳ（1 字を 2 つのグリフで描く字）が入ると、塊の中にも余白の幅の隙間ができる。折り返しで
-/// 割れた側には付かない（→ `ZoneTextLayout.styles(_:in:)`）。
+/// 字の見え方を、文の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの左右の字をその幅ずつ
+/// 押し出す（CSS のインラインの padding）。余白のある見え方は、周りの文と独立した向きのかたまりとして並び、先頭の余白は
+/// かたまりの向きの始まりの側に、末尾の余白はその反対の側に付く——右から左の字のコードでも、余白はコードの外に出る。
+/// 地は、余白を含めたかたまりの x 範囲に置く（→ `ZoneTextLayout.Line.spans(of:)`）。折り返しで割れた側と、改行で割れた
+/// 側には余白が付かない。
 public struct ZoneTextStyle: Equatable {
   public var length: Int
   public var font: NSFont
@@ -152,17 +157,15 @@ public struct ZoneTextStyle: Equatable {
   }
 }
 
-/// 選べる字の行——まとまりの文の範囲 `range` を、基線の左端 `origin` から描く（折り返さない）。字はまとまりの文から引く
-/// （文の正は 1 か所）。行は、まとまりの文の中で範囲を含む段落の向きで組む（→ `ZoneTextLayout.Line`）。
+/// 選べる字の行——まとまりの文の範囲 `range` を、基線の左端 `origin` から描く（折り返さない）。字と見え方はまとまりから
+/// 引く（文の正は 1 か所）。行は、まとまりの文の中で範囲を含む段落を組んだものから切り出す（→ `ZoneTextLayout.lines(of:)`）。
 public struct ZoneSelectableLine {
   public var origin: CGPoint
   public var range: NSRange
-  public var styles: [ZoneTextStyle]
 
-  public init(origin: CGPoint, range: NSRange, styles: [ZoneTextStyle]) {
+  public init(origin: CGPoint, range: NSRange) {
     self.origin = origin
     self.range = range
-    self.styles = styles
   }
 }
 

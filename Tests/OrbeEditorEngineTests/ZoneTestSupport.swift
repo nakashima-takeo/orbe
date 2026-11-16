@@ -63,6 +63,8 @@ final class ThreadZone: SurfaceZone {
   static let lineHeight: CGFloat = 19
 
   var comment: String
+  /// 本文の見え方（省けば全体を本文の字体で）。
+  var styles: [ZoneTextStyle]?
   let field: ZoneTextField?
   /// 入力欄の行の数が変われば描き直させる面（載せた後に置く。打鍵ごとには描き直さない）。
   weak var surface: (any TextSurface)?
@@ -72,8 +74,9 @@ final class ThreadZone: SurfaceZone {
   private(set) var widths: [CGFloat] = []
   private var fieldLines = 0
 
-  init(comment: String, field: ZoneTextField? = nil) {
+  init(comment: String, styles: [ZoneTextStyle]? = nil, field: ZoneTextField? = nil) {
     self.comment = comment
+    self.styles = styles
     self.field = field
     fieldLines = field?.lineCount ?? 0
     field?.didChange = { [weak self] field in
@@ -101,7 +104,10 @@ final class ThreadZone: SurfaceZone {
       height: frame.minY + height + 8,
       elements: chrome(CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: height))
         + body,
-      texts: [ZoneText(id: Self.commentText, string: comment, lines: lines)])
+      texts: [
+        ZoneText(
+          id: Self.commentText, string: comment, styles: styles ?? Self.styles(comment), lines: lines)
+      ])
   }
 
   /// 頭の帯の高さ。
@@ -165,12 +171,11 @@ final class ThreadZone: SurfaceZone {
           image: Self.glyph)),
     ]
     let lines = ZoneTextLayout.lines(
-      comment, styles: Self.styles(comment), width: max(10, inner - 30))
+      comment, styles: styles ?? Self.styles(comment), width: max(10, inner - 30))
     for line in lines {
       selectable.append(
         ZoneSelectableLine(
-          origin: CGPoint(x: frame.minX + Self.inset + 30, y: y + 14), range: line.range,
-          styles: line.styles))
+          origin: CGPoint(x: frame.minX + Self.inset + 30, y: y + 14), range: line.range))
       y += Self.lineHeight
     }
     y += 8

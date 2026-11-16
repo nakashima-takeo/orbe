@@ -35,13 +35,12 @@ extension SurfaceZonesTests {
         texts: [
           ZoneText(
             id: "t", string: "redgreen",
+            styles: [
+              ZoneTextStyle(length: 3, font: font, color: Self.red),
+              ZoneTextStyle(length: 5, font: font, color: Self.green),
+            ],
             lines: [
-              ZoneSelectableLine(
-                origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8),
-                styles: [
-                  ZoneTextStyle(length: 3, font: font, color: Self.red),
-                  ZoneTextStyle(length: 5, font: font, color: Self.green),
-                ])
+              ZoneSelectableLine(origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8))
             ])
         ])
     }
@@ -57,7 +56,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(runs.map(\.glyphs.count), [3, 5, 3, 5])
   }
 
-  /// 選べる字の行の余白は、行頭の見え方なら字を右へ寄せ（当たりの行の左端も）、行の途中なら前後の字を押し出す。
+  /// 選べる字の行の余白は、行頭の見え方なら字を右へ寄せ、行の途中なら前後の字を押し出す。余白の上はコードの端に当たる。
   func testPaddingPushesTheTextOfASelectableLine() throws {
     let opened = try hostedRows()
     let surface = opened.surface
@@ -70,13 +69,13 @@ extension SurfaceZonesTests {
           texts: [
             ZoneText(
               id: "t", string: "code after",
+              styles: [
+                ZoneTextStyle(length: 4, font: mono, color: Self.red, padding: padding),
+                ZoneTextStyle(length: 6, font: font, color: Self.green),
+              ],
               lines: [
                 ZoneSelectableLine(
-                  origin: CGPoint(x: 10, y: 14), range: NSRange(location: 0, length: 10),
-                  styles: [
-                    ZoneTextStyle(length: 4, font: mono, color: Self.red, padding: padding),
-                    ZoneTextStyle(length: 6, font: font, color: Self.green),
-                  ])
+                  origin: CGPoint(x: 10, y: 14), range: NSRange(location: 0, length: 10))
               ])
           ])
       }
@@ -97,7 +96,8 @@ extension SurfaceZonesTests {
     XCTAssertEqual(
       first(pushed, Self.green), first(bare, Self.green) + 8, accuracy: 1e-4, "後ろの字は両側の余白の分")
     let line = try XCTUnwrap(surface.zones[ObjectIdentifier(padded)]?.hits.lines.first)
-    XCTAssertEqual(line.origin.x, 14, "当たりの行の左端も余白の分")
+    XCTAssertEqual(line.offset(atX: 12), 0, "余白の上はコードの始まりに当たる")
+    XCTAssertEqual(line.x(of: 0), 10, accuracy: 1e-4, "コードの始まりのキャレットは余白の外")
   }
 
   /// 画像は辺が地図の上限（`ImageAtlas.maximumSide`）までなら描き、超えれば描かない。描き直しをまたいで同じ画像は同じ

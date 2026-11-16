@@ -94,28 +94,41 @@ extension FramePerfTests {
 
   /// 長い 1 段落の本文を持つスレッドを材料と当たりの表に写す main の仕事は、段落の長さに比例する——本文が 2,000 字と
   /// 8,000 字の 1 段落のスレッドで、写す時間の中央値の比が 6 倍以内（比例なら 4 倍、段落の長さの 2 乗なら 16 倍）。
-  /// 壊れると、長いコメントのスレッドでホバーの出入りや幅の変化のたびに main が長く止まる。
+  /// インラインコード（余白つき）が文ごとに入る段落でも同じ。壊れると、長いコメントのスレッドでホバーの出入りや幅の変化の
+  /// たびに main が長く止まる。
   func testPaintingALongParagraphGrowsLinearly() throws {
     let look = ZonePainter.Look(
       appearance: try XCTUnwrap(NSAppearance(named: .darkAqua)),
       space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)), scale: 2)
     let sentence = "tail だけ見ると、間に別種のイベントが挟まったときに畳み損ねない？"
-    let costs = [2_000, 8_000].map { length -> Double in
-      let comment = String(
-        String(repeating: sentence, count: length / sentence.count + 1).prefix(length))
-      let picture = ThreadZone(comment: comment).picture(width: 700)
-      let painter = ZonePainter()
-      let times = (0..<9).map { _ -> Double in
-        let started = CACurrentMediaTime()
-        _ = painter.paint(picture, look) { _ in 0 }
-        return CACurrentMediaTime() - started
+    let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    for coded in [false, true] {
+      let costs = [2_000, 8_000].map { length -> Double in
+        let comment = String(
+          String(repeating: sentence, count: length / sentence.count + 1).prefix(length))
+        let styles: [ZoneTextStyle]? =
+          coded
+          ? stride(from: 0, to: comment.utf16.count, by: 20).map { start in
+            let length = min(20, comment.utf16.count - start)
+            return start / 20 % 2 == 0
+              ? ZoneTextStyle(length: length, font: ThreadZone.bodyFont, color: ThreadZone.ink)
+              : ZoneTextStyle(length: length, font: mono, color: ThreadZone.accent, padding: 4)
+          } : nil
+        let picture = ThreadZone(comment: comment, styles: styles).picture(width: 700)
+        let painter = ZonePainter()
+        let times = (0..<9).map { _ -> Double in
+          let started = CACurrentMediaTime()
+          _ = painter.paint(picture, look) { _ in 0 }
+          return CACurrentMediaTime() - started
+        }
+        return Self.quantile(times.sorted(), 0.5)
       }
-      return Self.quantile(times.sorted(), 0.5)
+      print(
+        "PERF-FRAMES zone long paragraph paint main\(coded ? " (inline code)" : ""): 2000 chars",
+        Self.ms(costs[0]), "/ 8000 chars", Self.ms(costs[1]), "/ ratio",
+        String(format: "%.2f", costs[1] / costs[0]))
+      XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "写す時間は段落の長さに比例する（コード: \(coded)）")
     }
-    print(
-      "PERF-FRAMES zone long paragraph paint main: 2000 chars", Self.ms(costs[0]), "/ 8000 chars",
-      Self.ms(costs[1]), "/ ratio", String(format: "%.2f", costs[1] / costs[0]))
-    XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "写す時間は段落の長さに比例する")
   }
 
   /// ミニマップを出さない構成にし、差し込みの列（→ `rowInsertions`）を置く。
