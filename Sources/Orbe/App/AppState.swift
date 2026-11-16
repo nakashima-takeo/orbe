@@ -71,6 +71,7 @@ struct EditorSidebarRecord: Codable, Equatable {
     isOpen = try? c.decodeIfPresent(Bool.self, forKey: .isOpen)
     panel = try? c.decodeIfPresent(String.self, forKey: .panel)
     graphHeight = try? c.decodeIfPresent(Double.self, forKey: .graphHeight)
+    pullRequestFilesAsTree = try? c.decodeIfPresent(Bool.self, forKey: .pullRequestFilesAsTree)
   }
 }
 
