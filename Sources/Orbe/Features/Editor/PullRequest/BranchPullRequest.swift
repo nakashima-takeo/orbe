@@ -23,6 +23,9 @@ final class BranchPullRequest {
   @ObservationIgnored private var readAgain = false
   /// 読み直しを、根のサービスの判定か status が届くまで待っている（届いたら、ブランチ名が前と同じでも読み直す）。
   @ObservationIgnored private var awaitingStatus = false
+  /// 答えを出した通し番号（`settle` のたびに増える）。答えに続く問い合わせの結果は、その答えを出した番号のままのときだけ
+  /// 入れる——答えの値が同じでも、別の読みが出した答えには入れない。
+  @ObservationIgnored private var settlement = 0
   /// 答えを出している・読んでいるブランチ名（ブランチに居ない・git の管理下でないなら nil）・手元の HEAD・追跡 ref の値。
   @ObservationIgnored private var branch: String?
   @ObservationIgnored private var head: String?
@@ -128,7 +131,10 @@ final class BranchPullRequest {
     // 追跡 ref と既定のブランチを読む間に見ている者がいなくなったら、GitHub に問い合わせない。
     guard watchers > 0 else { return stopReading() }
     let defaultBranch = GitBranch.localName(fromRemote: remoteDefault)
-    guard name != defaultBranch else { return finish(.unavailable(.defaultBranch), name) }
+    guard name != defaultBranch else {
+      finish(.unavailable(.defaultBranch), name)
+      return
+    }
     source.branchPullRequests(repo, name) { [weak self] found in
       guard let self else { return }
       switch found.branches[name] {
@@ -165,11 +171,12 @@ final class BranchPullRequest {
       let creation = Creation(
         branch: name, defaultBranch: defaultBranch, ahead: ahead,
         url: ref.pullRequestCreationURL, ref: ref, published: .checking)
-      finish(.noPullRequest(creation), name)
-      // 答えを出せたときだけ問い合わせる（見ている者がいなくなった・ブランチが変わったなら、出していない答えを確かめない）。
-      guard answer == .noPullRequest(creation) else { return }
+      // この読みが答えを出したときだけ問い合わせる（見ている者がいなくなった・ブランチが変わったなら、答えを出していない）。
+      guard let settled = finish(.noPullRequest(creation), name), settled == settlement else {
+        return
+      }
       source.branchExists(ref) { [weak self] exists in
-        guard let self, case .noPullRequest(var current) = answer, current.ref == ref else {
+        guard let self, settlement == settled, case .noPullRequest(var current) = answer else {
           return
         }
         switch exists {
@@ -183,17 +190,26 @@ final class BranchPullRequest {
   }
 
   /// 読み終えた。読んでいる間にブランチが変わっていれば答えを捨てる（前のブランチの答えは出さない）。ブランチが
-  /// 変わっていたか、きっかけが来ていれば読み直す。
-  private func finish(_ next: Answer, _ name: String) {
+  /// 変わっていたか、きっかけが来ていれば読み直す。答えを出したなら、その答えの通し番号を返す。
+  @discardableResult
+  private func finish(_ next: Answer, _ name: String) -> Int? {
     // 読んでいる間に見ている者がいなくなったら、答えは出さない（PR の状態を見始めない。次に見ている者が現れたら読み直す）。
-    guard watchers > 0 else { return stopReading() }
+    guard watchers > 0 else {
+      stopReading()
+      return nil
+    }
     isReading = false
     let current = files?.status?.branch?.name
-    if name == current { settle(next) }
+    var settled: Int?
+    if name == current {
+      settle(next)
+      settled = settlement
+    }
     if readAgain || name != current {
       readAgain = false
       reload()
     }
+    return settled
   }
 
   /// 見ている者がいなくなったので、答えを出さずに読むのをやめる（積んだ読み直しも捨てる）。
@@ -204,6 +220,7 @@ final class BranchPullRequest {
 
   /// 答えを `next` にする。PR が替われば、前の PR を見るのをやめ、今の PR を見て中身を読み直す。
   private func settle(_ next: Answer) {
+    settlement += 1
     let previous = state
     if answer != next { answer = next }
     let current = state
