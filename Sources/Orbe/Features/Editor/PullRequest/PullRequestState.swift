@@ -89,7 +89,7 @@ final class PullRequestState {
   @ObservationIgnored private var nextOrder = 0
 
   @ObservationIgnored private var watchers = 0
-  @ObservationIgnored private var rereadQueued = false
+  @ObservationIgnored private var readAgain = false
   @ObservationIgnored private var observers: [WeakObserver] = []
 
   struct PendingViewed: Equatable {
@@ -163,7 +163,7 @@ final class PullRequestState {
     guard isWatched else { return }
     if case .failed = bounds { bounds = .none }
     guard !isReading else {
-      rereadQueued = true
+      readAgain = true
       return
     }
     isReading = true
@@ -177,8 +177,8 @@ final class PullRequestState {
       case .success(let read): apply(read, order: order)
       case .failure(let reason): failure = .read(reason)
       }
-      if rereadQueued {
-        rereadQueued = false
+      if readAgain {
+        readAgain = false
         reload()
       }
       resolveBounds()

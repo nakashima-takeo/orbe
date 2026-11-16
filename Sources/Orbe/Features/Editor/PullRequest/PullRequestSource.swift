@@ -1,8 +1,8 @@
 import Foundation
 
-/// PR のパネルと PR の diff が GitHub に問い合わせる口。`gh(_:cache:)` は本物の gh を呼ぶ。見た目の検証とテストは、これを
-/// 差し替えて gh を起動しない。git は手元のリポジトリに直に問い合わせる（ネットに出るのは、コミットを名指しする fetch
-/// だけ）。
+/// worktree の今の PR と PR ごとの状態が GitHub に問い合わせる口。`gh(_:cache:)` は本物の gh を呼ぶ。見た目の検証と
+/// テストは、これを差し替えて gh を起動しない。git は手元のリポジトリに直に問い合わせる（ネットに出るのは、コミットを
+/// 名指しする fetch だけ）。
 struct PullRequestSource {
   /// リポジトリ `repo` のブランチ `branch` の PR（→ `GitHubBranchPullRequestLookup`）。
   var branchPullRequests:
