@@ -57,7 +57,7 @@ extension EditorDiffTests {
     let state = try pullRequest(reply)
     let (tab, _) = tab()
 
-    let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state.key)), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state)), as: .pinned)
 
     waitRows(diff, "元のパスと比べた 1 行の変更") { self.removedLines($0) == [2] }
     XCTAssertNil(diff.document, "新しい側は版の本文で、作業ツリーの文書ではない")
@@ -81,14 +81,14 @@ extension EditorDiffTests {
     let reply = Reply()
     reply.content = content(base: repo.head(), head: repo.head())
     let nowhere = try tab.group.editor.openDiff(
-      id("nope.txt", .pullRequest(try pullRequest(reply).key)), as: .pinned)
+      id("nope.txt", .pullRequest(try pullRequest(reply))), as: .pinned)
     pumpMain(until: { pane.faceContent == .notice(.editorDiffNowherePullRequest) }, "どちらの側にもない")
     XCTAssertEqual(nowhere.content, .unavailable(.nowhere))
 
     let missing = Reply()
     missing.content = content(base: repo.head(), head: String(repeating: "0", count: 40), number: 6)
     _ = try tab.group.editor.openDiff(
-      id("a.txt", .pullRequest(try pullRequest(missing, number: 6).key)), as: .pinned)
+      id("a.txt", .pullRequest(try pullRequest(missing, number: 6))), as: .pinned)
     pumpMain(
       until: { pane.faceContent == .notice(.editorDiffPullRequestCommitsMissing) }, "コミットを取得できない")
   }
@@ -107,7 +107,7 @@ extension EditorDiffTests {
     XCTAssertEqual(reply.requests, 1, "前提: ほかの者が読んだ")
     let (tab, _) = tab()
 
-    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state.key)), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)), as: .pinned)
 
     waitRows(diff, "先に読んである中身で出る") { _ in diff.newRevision != nil }
     XCTAssertEqual(reply.requests, 1, "開いても問い直さない")

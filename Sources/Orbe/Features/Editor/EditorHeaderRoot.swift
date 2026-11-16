@@ -123,7 +123,7 @@ struct FileTabView: View {
     switch kind {
     case .workingTree: l10n.string(.editorDiffWorkingTree)
     case .staged: l10n.string(.editorDiffStaged)
-    case .pullRequest(let key): l10n.format(.editorDiffPullRequest, key.id.number)
+    case .pullRequest(let state): l10n.format(.editorDiffPullRequest, state.key.id.number)
     }
   }
 }
