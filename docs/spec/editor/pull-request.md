@@ -6,7 +6,7 @@ updated: 2026-11-16
 
 # PR の状態
 
-エディター面が GitHub の PR を読むための状態。PR の diff（→ [diff](diff.md#pr-の-diff)）が見るものを 1 か所に置くことで、同じ PR を見る面やタブのあいだで、確認済みや両端が食い違わないようにする。GitHub の読み書きの規則（ブランチの PR の引き方・PR の中身の読み方・確認済みの書き込み）は [GitHub の読み書き](../platform/github.md) が持つ。
+エディター面が GitHub の PR を読むための状態。PR のパネル（→ [pull-request-panel](pull-request-panel.md)）と PR の diff（→ [diff](diff.md#pr-の-diff)）が見るものを 1 か所に置くことで、同じ PR を見る面やタブのあいだで、確認済みや両端が食い違わないようにする。GitHub の読み書きの規則（ブランチの PR の引き方・PR の中身の読み方・確認済みの書き込み）は [GitHub の読み書き](../platform/github.md) が持つ。
 
 見せるのは GitHub 上の PR の中身で、手元の作業ツリーではない——手元に未 push のコミットがあっても、PR の diff に出るのは GitHub が持つ PR の先頭まで（GitHub の Files changed と同じ差分）。確認済みは GitHub 上のコミットに付くので、PR の diff も GitHub 上のコミットを基準にする。
 
