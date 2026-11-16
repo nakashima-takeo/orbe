@@ -1,0 +1,301 @@
+import Foundation
+
+/// PR のレビューのやりとりの読み取りと書き込み。問い合わせ先はリポジトリ名と node ID で決まるので、作業ディレクトリは
+/// リポジトリに依らない。どれもメインスレッドで返る。
+extension GitHubCLI {
+  /// PR 1 件のレビューのやりとりを、一時点のものとして揃えて読む。スレッドは全件をページングして読む。ページの間に push が
+  /// 入ったら（PR の先頭のコミットが 1 ページ目と違えば）、最初から読み直す。読み直しは 1 回までで、なお違えば失敗（理由は
+  /// 空）。途中のページの失敗は全体の失敗。
+  func pullRequestReview(
+    _ id: GitHubItemID,
+    completion: @escaping (Result<GitHubPullRequestReview, GitHubFailure>) -> Void
+  ) {
+    queue.async {
+      let result: Result<GitHubPullRequestReview, GitHubFailure> =
+        self.resolveGh().map { gh in
+          for _ in 0..<2 {
+            switch ReviewRead(cli: self, gh: gh, id: id).read() {
+            case .read(let review): return .success(review)
+            case .failed(let failure): return .failure(failure)
+            case .moved: continue
+            }
+          }
+          return .failure(.reason(""))
+        } ?? .failure(.reason(""))
+      DispatchQueue.main.async { completion(result) }
+    }
+  }
+
+  /// レビューへの書き込み 1 つを、PR `nodeID` に送る。`pendingReview` は送る前に分かっている自分の保留中のレビュー。
+  /// 書き込みが何回の呼び出しになるかは `GitHubReviewWriting` が決める。
+  func writeReview(
+    _ write: GitHubReviewWrite, pullRequest nodeID: String, pendingReview: String?,
+    completion: @escaping (GitHubReviewWriteResult) -> Void
+  ) {
+    queue.async {
+      let result =
+        self.resolveGh().map { gh in
+          GitHubReviewWriting(
+            cli: self, gh: gh, pullRequest: nodeID, pendingReview: pendingReview
+          ).write(write)
+        } ?? GitHubReviewWriteResult(pendingReview: pendingReview, failure: .reason(""))
+      DispatchQueue.main.async { completion(result) }
+    }
+  }
+}
+
+/// レビューへの書き込み。どれも保留中のレビューに積む（解決と、その取り消しと、レビューの送信を除く）。
+enum GitHubReviewWrite: Equatable {
+  /// 行 `line` に新しいスレッドを付ける。
+  case addThread(path: String, side: GitHubDiffSide, line: Int, body: String)
+  /// スレッドに返信する。`resolve` なら、返信が通った後にスレッドを解決する。
+  case reply(thread: String, body: String, resolve: Bool)
+  /// スレッドを解決する（偽なら解決を取り消す）。
+  case setResolved(thread: String, Bool)
+  /// レビューを送信する（保留中のコメントがあれば、まとめて公開する）。`body` が空なら全体へのコメントを付けない。
+  case submit(GitHubReviewEvent, body: String)
+}
+
+/// レビューへの書き込みの結果。
+struct GitHubReviewWriteResult: Equatable {
+  /// 書き込みの後の自分の保留中のレビュー（分かった限り。送信が通れば nil）。
+  let pendingReview: String?
+  /// 通らなかった呼び出しがあれば、その失敗の種類。失敗した呼び出しより後の呼び出しは送らない。
+  let failure: GitHubFailure?
+}
+
+/// 書き込み 1 つを、GraphQL の mutation の呼び出しに分けて順に送る。保留中のレビューがあればその ID を名指しする。無いときの
+/// スレッドの追加は、レビューの作成と最初のスレッドを 1 回の呼び出しで送る（スレッドが通らなければ、空の保留中のレビューを
+/// GitHub に残さない）。無いときの返信は、レビューを作ってから返信する。
+struct GitHubReviewWriting {
+  let cli: GitHubCLI
+  let gh: String
+  let pullRequest: String
+  let pendingReview: String?
+
+  func write(_ write: GitHubReviewWrite) -> GitHubReviewWriteResult {
+    switch write {
+    case .addThread(let path, let side, let line, let body):
+      let thread = GitHubReviewMutation.Thread(path: path, side: side, line: line, body: body)
+      guard let review = pendingReview else {
+        return finish(
+          send(.createReview(pullRequest: pullRequest, thread: thread)).map { $0 }, else: nil)
+      }
+      return finish(send(.addThread(review: review, thread)).map { _ in review }, else: review)
+    case .reply(let thread, let body, let resolve):
+      let review: String
+      if let pendingReview {
+        review = pendingReview
+      } else {
+        switch send(.createReview(pullRequest: pullRequest, thread: nil)) {
+        case .failure(let failure):
+          return GitHubReviewWriteResult(pendingReview: nil, failure: failure)
+        case .success(let created): review = created
+        }
+      }
+      if case .failure(let failure) = send(.reply(thread: thread, review: review, body: body)) {
+        return GitHubReviewWriteResult(pendingReview: review, failure: failure)
+      }
+      guard resolve else { return GitHubReviewWriteResult(pendingReview: review, failure: nil) }
+      return finish(
+        send(.setResolved(thread: thread, true)).map { _ in review }, else: review)
+    case .setResolved(let thread, let resolved):
+      return finish(
+        send(.setResolved(thread: thread, resolved)).map { _ in pendingReview },
+        else: pendingReview)
+    case .submit(let event, let body):
+      let mutation: GitHubReviewMutation =
+        if let review = pendingReview {
+          .submit(review: review, event: event, body: body)
+        } else {
+          .submitNew(pullRequest: pullRequest, event: event, body: body)
+        }
+      return finish(send(mutation).map { _ in nil }, else: pendingReview)
+    }
+  }
+
+  /// 通れば、その後の保留中のレビュー。通らなければ `fallback`（送る前に分かっていたもの）。
+  private func finish(
+    _ sent: Result<String?, GitHubFailure>, else fallback: String?
+  ) -> GitHubReviewWriteResult {
+    switch sent {
+    case .success(let review): GitHubReviewWriteResult(pendingReview: review, failure: nil)
+    case .failure(let failure): GitHubReviewWriteResult(pendingReview: fallback, failure: failure)
+    }
+  }
+
+  /// mutation を 1 回送り、レスポンスに載った ID を返す。クエリと変数は JSON にまとめて標準入力で渡す——本文を argv に載せず、`@` で
+  /// 始まる本文をファイル名と取り違えさせない。
+  private func send(_ mutation: GitHubReviewMutation) -> Result<String, GitHubFailure> {
+    guard let input = try? mutation.requestBody() else { return .failure(.reason("")) }
+    let out = cli.runSync(
+      gh, GitHubReviewMutation.arguments, cwd: NSHomeDirectory(), call: .write, stdin: input)
+    if let failure = out.failure { return .failure(failure) }
+    guard let id = GitHubReviewMutation.writtenID(from: out.stdout) else {
+      return .failure(.reason(""))
+    }
+    return .success(id)
+  }
+}
+
+/// レビューの mutation 1 回分。レスポンスは、エイリアス `m` の下にある値 1 つの `id` だけを読む（通ったかと、作ったものの ID）。
+enum GitHubReviewMutation {
+  struct Thread {
+    let path: String
+    let side: GitHubDiffSide
+    let line: Int
+    let body: String
+  }
+
+  /// 保留中のレビューを作る（`thread` があれば、最初のスレッドも 1 回で付ける）。
+  case createReview(pullRequest: String, thread: Thread?)
+  case addThread(review: String, Thread)
+  case reply(thread: String, review: String, body: String)
+  case setResolved(thread: String, Bool)
+  case submit(review: String, event: GitHubReviewEvent, body: String)
+  /// 保留中のレビューが無いときの送信（作って、すぐ送る）。
+  case submitNew(pullRequest: String, event: GitHubReviewEvent, body: String)
+
+  /// どの mutation も同じ引数で、リクエストの本文は標準入力から読ませる。
+  static let arguments = ["api", "graphql", "--hostname", "github.com", "--input", "-"]
+
+  /// GraphQL のリクエストの本文（`{"query":…,"variables":…}`）。
+  func requestBody() throws -> Data {
+    let (query, variables) = request
+    return try JSONEncoder().encode(Request(query: query, variables: variables))
+  }
+
+  private var request: (String, [String: Value]) {
+    switch self {
+    case .createReview(let pullRequest, nil):
+      return (
+        "mutation($pr:ID!){m:addPullRequestReview(input:{pullRequestId:$pr})"
+          + "{pullRequestReview{id}}}", ["pr": .string(pullRequest)]
+      )
+    case .createReview(let pullRequest, let thread?):
+      return (
+        "mutation($pr:ID!,$path:String!,$line:Int!,$side:DiffSide!,$body:String!)"
+          + "{m:addPullRequestReview(input:{pullRequestId:$pr,"
+          + "threads:[{path:$path,line:$line,side:$side,body:$body}]}){pullRequestReview{id}}}",
+        Self.variables(thread).merging(["pr": .string(pullRequest)]) { $1 }
+      )
+    case .addThread(let review, let thread):
+      return (
+        "mutation($review:ID!,$path:String!,$line:Int!,$side:DiffSide!,$body:String!)"
+          + "{m:addPullRequestReviewThread(input:{pullRequestReviewId:$review,path:$path,"
+          + "line:$line,side:$side,body:$body}){thread{id}}}",
+        Self.variables(thread).merging(["review": .string(review)]) { $1 }
+      )
+    case .reply(let thread, let review, let body):
+      return (
+        "mutation($thread:ID!,$review:ID!,$body:String!){m:addPullRequestReviewThreadReply("
+          + "input:{pullRequestReviewThreadId:$thread,pullRequestReviewId:$review,body:$body})"
+          + "{comment{id}}}",
+        ["thread": .string(thread), "review": .string(review), "body": .string(body)]
+      )
+    case .setResolved(let thread, let resolved):
+      let field = resolved ? "resolveReviewThread" : "unresolveReviewThread"
+      return (
+        "mutation($thread:ID!){m:\(field)(input:{threadId:$thread}){thread{id}}}",
+        ["thread": .string(thread)]
+      )
+    case .submit(let review, let event, let body):
+      return (
+        "mutation($review:ID!,$event:PullRequestReviewEvent!,$body:String){"
+          + "m:submitPullRequestReview(input:{pullRequestReviewId:$review,event:$event,"
+          + "body:$body}){pullRequestReview{id}}}",
+        ["review": .string(review), "event": .string(event.rawValue), "body": .optional(body)]
+      )
+    case .submitNew(let pullRequest, let event, let body):
+      return (
+        "mutation($pr:ID!,$event:PullRequestReviewEvent!,$body:String){"
+          + "m:addPullRequestReview(input:{pullRequestId:$pr,event:$event,body:$body})"
+          + "{pullRequestReview{id}}}",
+        ["pr": .string(pullRequest), "event": .string(event.rawValue), "body": .optional(body)]
+      )
+    }
+  }
+
+  /// レスポンスの `data.m` に載った値の ID。gh が終了コード 0 で終了しても、`m` が null なら書き込みは通っていない。
+  static func writtenID(from stdout: Data) -> String? {
+    (try? JSONDecoder().decode(MutationResponse.self, from: stdout))?.data?.m?.values.lazy
+      .compactMap { $0?.id }.first
+  }
+
+  private static func variables(_ thread: Thread) -> [String: Value] {
+    [
+      "path": .string(thread.path), "line": .int(thread.line),
+      "side": .string(thread.side.rawValue),
+      "body": .string(thread.body),
+    ]
+  }
+
+  private struct Request: Encodable {
+    let query: String
+    let variables: [String: Value]
+  }
+
+  /// GraphQL の変数の値。
+  private enum Value: Encodable {
+    case string(String)
+    case int(Int)
+    case null
+
+    /// 空の文字列は null（そのフィールドを送らない）。
+    static func optional(_ text: String) -> Value { text.isEmpty ? .null : .string(text) }
+
+    func encode(to encoder: Encoder) throws {
+      var container = encoder.singleValueContainer()
+      switch self {
+      case .string(let text): try container.encode(text)
+      case .int(let number): try container.encode(number)
+      case .null: try container.encodeNil()
+      }
+    }
+  }
+}
+
+/// mutation のレスポンス（`{"data":{"m":{"<値>":{"id":…}}}}`）。
+private struct MutationResponse: Decodable {
+  struct Payload: Decodable { let m: [String: IdentifiedNode?]? }
+  let data: Payload?
+}
+
+private struct IdentifiedNode: Decodable { let id: String }
+
+private enum ReviewReading {
+  case read(GitHubPullRequestReview)
+  case failed(GitHubFailure)
+  /// 読んでいる間に、PR の先頭のコミットが動いた。
+  case moved
+}
+
+/// レビューのやりとりを最初のページから読む 1 回分の処理。
+private struct ReviewRead {
+  let cli: GitHubCLI
+  let gh: String
+  let id: GitHubItemID
+
+  func read() -> ReviewReading {
+    let first: Result<GitHubReviewQuery.FirstPage, GitHubFailure> = cli.decodeSync(
+      gh, GitHubReviewQuery.firstPageArguments(id), cwd: NSHomeDirectory())
+    var review: GitHubPullRequestReview
+    var pageInfo: GitHubPage<GitHubPullRequestReview.Thread>.PageInfo
+    switch first {
+    case .failure(let failure): return .failed(failure)
+    case .success(let page): (review, pageInfo) = (page.review, page.threads)
+    }
+    while pageInfo.hasNextPage, let cursor = pageInfo.endCursor {
+      let next: Result<GitHubReviewQuery.NextPage, GitHubFailure> = cli.decodeSync(
+        gh, GitHubReviewQuery.nextPageArguments(id, after: cursor), cwd: NSHomeDirectory())
+      switch next {
+      case .failure(let failure): return .failed(failure)
+      case .success(let page):
+        guard page.headCommit == review.headCommit else { return .moved }
+        review.threads += page.threads.nodes
+        pageInfo = page.threads.pageInfo
+      }
+    }
+    return .read(review)
+  }
+}
