@@ -20,6 +20,8 @@ final class BranchPullRequestTests: OrbeTestCase {
   /// 台帳の remote → GitHub のリポジトリ（PR のコミットを取りに行く remote と、PR のベースブランチの追跡 ref を決める）。
   var repositories: [String: GitHubRemoteRepository] = [:]
   var held: [() -> Void] = []
+  /// ブランチが GitHub に在るかを問い合わせたブランチ。
+  var publishedChecks: [GitHubBranchRef] = []
   let me = GitHubRepoName(nameWithOwner: "me/r")
 
   override func setUpWithError() throws {
@@ -40,7 +42,10 @@ final class BranchPullRequestTests: OrbeTestCase {
         }
         if holdsLookups { held.append(answer) } else { answer() }
       },
-      branchExists: { [unowned self] _, completion in completion(exists) },
+      branchExists: { [unowned self] ref, completion in
+        publishedChecks.append(ref)
+        completion(exists)
+      },
       content: { [unowned self] _, completion in
         completion(content.map { .success($0) } ?? .failure(.reason("")))
       },

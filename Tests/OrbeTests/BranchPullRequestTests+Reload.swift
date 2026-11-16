@@ -145,6 +145,54 @@ extension BranchPullRequestTests {
     pumpMain(until: { self.lookups.count == looked + 1 }, "ベースブランチの追跡 ref が動いたら問い直す")
   }
 
+  /// 去った後、根のサービスをほかに誰も持っていない状態で戻っても、1 回問い直す（根のサービスを作り直して status を待つ間も、
+  /// 同じブランチ名だからと読み直しを捨てない）。
+  func testComingBackWithNobodyHoldingTheRootLooksUpAgain() {
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    answers["feat"] = .unavailable(.notGitHub)
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.answer == .unavailable(.notGitHub) })
+    weak var root = RootFiles.shared(for: repo.root)
+    letTheLookUpSettle()
+    pullRequest.endWatching()
+    pumpMain(until: { root == nil }, "前提: 根のサービスをほかに誰も持っていない")
+
+    pullRequest.beginWatching()
+    pumpMain(until: { self.lookups.count == 2 }, "戻ったら問い直す")
+    letTheLookUpSettle()
+    XCTAssertEqual(lookups.count, 2, "1 回だけ")
+  }
+
+  /// 見始めてすぐ、GitHub に問い合わせを出す前に去れば、GitHub に問い合わせない。
+  func testLeavingBeforeTheQueryIsSentAsksGitHubNothing() {
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    answers["feat"] = .unavailable(.notGitHub)
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.answer == .unavailable(.notGitHub) })
+    let root = RootFiles.shared(for: repo.root)
+    letTheLookUpSettle()
+    pullRequest.endWatching()
+
+    pullRequest.beginWatching()
+    pullRequest.endWatching()
+    letTheLookUpSettle()
+    XCTAssertEqual(lookups, ["feat"])
+    XCTAssertTrue(root.isResolved, "前提: 根のサービスは判定済みのまま（問い合わせに進める状態）")
+  }
+
+  /// PR が無いブランチで、ブランチの PR の答えが届く前に見ている者が去れば、ブランチが GitHub に在るかを問い合わせない。
+  func testLeavingBeforeTheAnswerSkipsThePublishedCheck() {
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    answers["feat"] = .gitHub(GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([]))
+    holdsLookups = true
+    let pullRequest = watch()
+    pumpMain(until: { self.held.count == 1 }, "前提: 問い合わせの最中")
+    pullRequest.endWatching()
+    release()
+    letTheLookUpSettle()
+    XCTAssertEqual(publishedChecks, [])
+  }
+
   // MARK: - ヘルパ
 
   /// 留めた問い合わせに答える。
