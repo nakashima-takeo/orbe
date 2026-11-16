@@ -3,12 +3,14 @@ import XCTest
 @testable import Orbe
 
 /// PR のパネルの面ごとの見せ方（`PrPanel`）——出している間だけ worktree の今の PR を見ること、列のキー（↑↓ は選べる行だけを
-/// 渡り、ファイル行なら PR の diff を仮のタブで開く。← → はフォルダと区分の開閉と親・子への移動）、フォルダのチェック。
+/// 渡り、ファイル行なら PR の diff を仮のタブで開く。← → はフォルダと区分の開閉と親・子への移動。Enter はファイル行を
+/// 普通のタブで開き、フォルダと見出しは開閉。押し続けた ↑↓ は離すまで開かない）、選択の選び直し、フォルダのチェック。
 /// GitHub は差し替えの構造体が答え、git は一時リポジトリで実際に問う。
 ///
 /// 壊れると何が起きるか: パネルを隠しても GitHub に問い合わせ続ける・出しても PR が出ない。↓ がコミットの行に止まる・
-/// フォルダへ動いただけで diff が開く。← で親へ戻れない。畳んだ後や、選んでいた行が読み直しで消えた後の ↑↓ が列の先頭へ飛ぶ。一部だけ確認済みのフォルダのチェックを押すと、付けるはずが
-/// 配下の確認済みを全部外す。
+/// フォルダへ動いただけで diff が開く。← で親へ戻れない。畳んだ後や、選んでいた行が読み直しで消えた後の ↑↓ が列の先頭へ
+/// 飛ぶ。Enter でファイルが普通のタブで開かない。↓ を押し続けると 1 行ごとに diff を開く・Enter や本文へ移った後に、待って
+/// いた前の行の diff が開く。一部だけ確認済みのフォルダのチェックを押すと、付けるはずが配下の確認済みを全部外す。
 @MainActor
 final class PrPanelTests: OrbeTestCase {
   private var repo: TempGitRepo!
@@ -152,6 +154,63 @@ final class PrPanelTests: OrbeTestCase {
       walked, [.folder("src"), .folder("src/a"), .folder("src/a"), .file("src/a/x.swift")])
     XCTAssertEqual(panel.closedFolders, [], "畳んだフォルダは → で開く")
     XCTAssertEqual(opened.map(\.key.path), ["src/a/x.swift"], "ファイルへ動いたときだけ開く")
+  }
+
+  /// Enter はファイル行を普通のタブで開き、フォルダと区分の見出しは開閉するだけで開かない。
+  func testEnterOpensAFileForGoodAndTogglesFoldersAndHeaders() throws {
+    _ = try shown()
+    let list = PrListSource(panel: panel)
+    let enter = RowListKey(action: .enter, isRepeat: false)
+
+    panel.select(.file("README.md"))
+    list.perform(enter, in: panel.layout)
+    XCTAssertEqual(opened.map(\.key.path), ["README.md"])
+    XCTAssertEqual(opened.last?.opening, .commit, "普通のタブ")
+
+    panel.select(.folder("src"))
+    list.perform(enter, in: panel.layout)
+    XCTAssertEqual(panel.closedFolders, ["src"], "フォルダは畳む")
+    panel.select(.section(.commits))
+    list.perform(enter, in: panel.layout)
+    XCTAssertFalse(panel.isOpen(.commits), "見出しは畳む")
+    XCTAssertEqual(opened.count, 1, "フォルダと見出しでは開かない")
+  }
+
+  /// ↓ を押し続けると、押し始めの行はすぐ開き、押している間は開かず、離したら最後の行を開く。
+  func testHoldingDownOpensOnlyTheFirstAndTheLastFile() throws {
+    _ = try shown()
+    let list = PrListSource(panel: panel)
+    panel.select(.folder("src/a"))
+
+    list.perform(RowListKey(action: .down, isRepeat: false), in: panel.layout)
+    XCTAssertEqual(opened.map(\.key.path), ["src/a/x.swift"], "押し始めはすぐ開く")
+    list.perform(RowListKey(action: .down, isRepeat: true), in: panel.layout)
+    XCTAssertEqual(panel.selection, .file("src/a/y.swift"))
+    XCTAssertEqual(opened.count, 1, "押している間は開かない")
+    list.keyDidRelease()
+    XCTAssertEqual(opened.map(\.key.path), ["src/a/x.swift", "src/a/y.swift"], "離したら最後の行")
+    XCTAssertEqual(opened.last?.opening, .browse)
+  }
+
+  /// 押し続けて待っている開きは、列から焦点が外れた・Enter で開いた・パネルが隠れたら捨てる（離しても前の行が開かない）。
+  func testAPendingOpenIsDroppedWhenAttentionLeavesTheList() throws {
+    _ = try shown()
+    let list = PrListSource(panel: panel)
+    let enter = RowListKey(action: .enter, isRepeat: false)
+    let leaves: [(String, () -> Void)] = [
+      ("列から焦点が外れた", { list.focusDidChange(false) }),
+      ("Enter", { list.perform(enter, in: self.panel.layout) }),
+      ("パネルが隠れた", { self.panel.isShown = false }),
+    ]
+    for (name, leave) in leaves {
+      panel.select(.file("src/b.swift"))
+      list.perform(RowListKey(action: .up, isRepeat: true), in: panel.layout)
+      XCTAssertEqual(panel.selection, .file("src/a/y.swift"), name)
+      leave()
+      let count = opened.count
+      list.keyDidRelease()
+      XCTAssertEqual(opened.count, count, "\(name): 待っていた開きは走らない")
+    }
   }
 
   /// 選択はいつも見えている行にある——フォルダを畳めば、その下の選択（ファイルでもフォルダでも）はそのフォルダへ、
