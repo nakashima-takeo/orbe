@@ -39,6 +39,8 @@ struct RowLayout: Sendable {
   private var prefix: [Double] = [0]
   /// 絵の差し込みを持つか。
   private(set) var hasZones = false
+  /// 行の右端の印を出せる行（区間か差し込んだ行）を持つか。
+  private(set) var hasTrailingMarks = false
   /// 絵の差し込みの同一性 → 塊の番号。
   private var zoneBlocks: [ObjectIdentifier: Int] = [:]
   /// 文書の行の区間（始まりの行の昇順）。
@@ -77,6 +79,12 @@ struct RowLayout: Sendable {
       if case .zone(let id) = content { zoneBlocks[id] = index }
     }
     hasZones = !zoneBlocks.isEmpty
+    hasTrailingMarks =
+      spans.contains(where: \.allowsTrailingMark)
+      || contents.contains {
+        guard case .lines(let lines) = $0 else { return false }
+        return lines.contains { $0.allowsTrailingMark && $0.line != nil }
+      }
     settleNumbers()
     version += 1
   }
@@ -293,6 +301,29 @@ struct RowLayout: Sendable {
     return newline - 1
   }
 
+  // MARK: - 行の右端の印
+
+  /// y にある、印を出せる行（`lineCount` 行の文書。出せない行なら nil）。
+  func trailingMarkSpot(atY y: Double, lineCount: Int) -> TrailingMarkSpot? {
+    guard hasTrailingMarks else { return nil }
+    switch item(atY: y) {
+    case .line(let line):
+      guard (0..<lineCount).contains(line), let span = span(containing: line),
+        spans[span].allowsTrailingMark
+      else { return nil }
+      return TrailingMarkSpot(
+        row: .document(line), line: .document(line), top: self.y(ofLine: line))
+    case .block(let index):
+      guard case .lines(let lines) = contents[index], !lines.isEmpty else { return nil }
+      let top = top(ofBlock: index)
+      let offset = min(max(0, Int(((y - top) / lineHeight).rounded(.down))), lines.count - 1)
+      guard lines[offset].allowsTrailingMark, let source = lines[offset].line else { return nil }
+      return TrailingMarkSpot(
+        row: .inserted(block: index, line: offset), line: .source(source),
+        top: top + Double(offset) * lineHeight)
+    }
+  }
+
   // MARK: - 絵の差し込み
 
   /// 絵の差し込み `id` の塊の番号（無ければ nil）。
@@ -343,4 +374,17 @@ struct RowLayout: Sendable {
     }
     settledNumberMax = result
   }
+}
+
+/// 行の右端の印を描く行——文書の行か、塊 `block` の中の `line` 行目の差し込んだ行。
+enum TrailingMarkRow: Equatable, Sendable {
+  case document(Int)
+  case inserted(block: Int, line: Int)
+}
+
+/// 印を出せる行 1 つ——描く行・押下で知らせる行・行の上端（pt）。
+struct TrailingMarkSpot {
+  var row: TrailingMarkRow
+  var line: TrailingMarkLine
+  var top: Double
 }

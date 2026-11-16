@@ -59,8 +59,12 @@ final class MetalTextSurface: TextSurface {
   private var highlights = Highlights()
   /// 縦の並び（main の最新。取引の中で置き・ずらし・測り直し、出すときに材料へ書く）。
   var rows: RowLayout
-  /// 差し込んだ行の出どころ（並びと一緒に置く）。
+  /// 差し込んだ行の出どころと、行の右端の印の押下の受け手（どちらも並びと一緒に置く）。
   weak var rowSource: (any SurfaceRowSource)?
+  weak var trailingMarkTarget: (any SurfaceTrailingMarkTarget)?
+  /// ポインタの下の、印を出せる行と、表示の構成の印の絵を描いた材料（通常・印の上）。
+  var trailingMarkHover: TrailingMarkHover?
+  var trailingMarkLooks: (normal: ZoneMaterial, hovered: ZoneMaterial)?
   /// 表示の構成と、そのうち配置と描き方に効くもの。
   var presentation = SurfacePresentation.code
   var arrangement = SurfaceArrangement()
@@ -251,6 +255,12 @@ final class MetalTextSurface: TextSurface {
       space: space, scale: scale)
     write { $0.palette = palette }
     zonesAppearanceDidChange()
+    if presentation.trailingMark != nil {
+      transact {
+        paintTrailingMark()
+        publishTrailingMark()
+      }
+    }
   }
 
   /// view の大きさ・倍率・描く色空間・見えているかが変わった。

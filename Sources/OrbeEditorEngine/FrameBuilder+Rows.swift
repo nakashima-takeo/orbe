@@ -10,6 +10,7 @@ extension FrameBuilder {
     let rows = g.rows
     let bottom = g.scrollY + g.height - g.top
     drawZones(source, c)
+    drawTrailingMark(source, c)
     drawInsertedLines(
       rows.blocks(from: g.scrollY, to: bottom, scale: g.scale), source, cache: cache, c)
     guard

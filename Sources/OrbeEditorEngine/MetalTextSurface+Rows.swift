@@ -6,9 +6,10 @@ import OrbeEditorCore
 extension MetalTextSurface {
   func setRows(_ rows: SurfaceRows) {
     let insertions = rows.insertions
-    guard !holds(insertions) || rows.spans != self.rows.spans || rows.source !== rowSource else {
-      return
-    }
+    guard
+      !holds(insertions) || rows.spans != self.rows.spans || rows.source !== rowSource
+        || rows.trailingMarkTarget !== trailingMarkTarget
+    else { return }
     precondition(
       insertions.isEmpty || !presentation.showsMinimap, "差し込みはミニマップを出していない面にだけ置く")
     // 差し込みの多い並び（1MB の diff で数千）を打鍵のたびに置き直しうるので、契約の検査は 1 回の走査で一時の列を作らずに行う。
@@ -36,6 +37,7 @@ extension MetalTextSurface {
     transact {
       noteRowsChange()
       rowSource = rows.source
+      trailingMarkTarget = rows.trailingMarkTarget
       write { $0.rowSourceContent = sourceContent }
       syncZones(zoneList)
       let lineHeight = Double(config.lineHeight)
@@ -66,12 +68,18 @@ extension MetalTextSurface {
     guard presentation != self.presentation else { return }
     precondition(!presentation.showsMinimap || rows.isEmpty, "差し込みのある面ではミニマップを出さない")
     let restyles = presentation.lineStyles != self.presentation.lineStyles
+    let previousMark = self.presentation.trailingMark
     transact {
       self.presentation = presentation
       let arrangement = SurfaceArrangement(presentation)
       self.arrangement = arrangement
       write { $0.arrangement = arrangement }
       if restyles { appearanceDidChange() }
+      if presentation.trailingMark != previousMark {
+        paintTrailingMark()
+        if presentation.trailingMark == nil { trailingMarkHover = nil }
+        publishTrailingMark()
+      }
     }
   }
 

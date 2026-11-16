@@ -71,13 +71,57 @@ extension FrameBuilder {
     }
   }
 
+  /// 行の右端の印——ポインタの下の、印を出せる行の右端（本文の区画の右端から距離を空けて）の、行の縦の中央に描く。
+  func drawTrailingMark(_ source: Source, _ c: Context) {
+    guard let mark = source.material.trailingMark else { return }
+    let g = c.g
+    let s = g.scale
+    let top: Double
+    switch mark.row {
+    case .document(let row):
+      guard row < source.material.content?.text.lineCount ?? 0 else { return }
+      top = g.rowTop(row)
+    case .inserted(let block, let line):
+      guard block < g.rows.count else { return }
+      top = g.insertedTop(block: block, line: line)
+    }
+    drawPicture(
+      mark.look, left: (g.textRight - Double(mark.inset + mark.size.width) * s).rounded(),
+      top: top + ((g.lineHeight - Double(mark.size.height) * s) / 2).rounded(), source, c)
+  }
+
   private func drawZone(
     _ zone: ZoneMaterial, id: ObjectIdentifier, top: Double, _ source: Source, _ c: Context
   ) {
     let s = c.g.scale
     let left = c.g.column
-    for box in zone.boxes { zoneBoxes.append(Self.instance(box, left: left, top: top, scale: s)) }
+    drawPicture(zone, left: left, top: top, source, c)
+    if let selection = source.material.zoneSelection, selection.zone == id {
+      let ink = selection.focused ? c.palette.selection : c.palette.inactiveSelection
+      for rect in selection.rects {
+        let x0 = (left + Double(rect.minX) * s).rounded()
+        let x1 = (left + Double(rect.maxX) * s).rounded()
+        let y0 = (top + Double(rect.minY) * s).rounded()
+        let y1 = (top + Double(rect.maxY) * s).rounded()
+        zoneSelectionShapes.append(
+          ShapeInstance(
+            rect: SIMD4(Float(x0), Float(y0), Float(x1 - x0), Float(y1 - y0)), color: ink.packed,
+            radius: 0, kind: 0))
+      }
+    }
+    for field in zone.fields {
+      guard let material = source.material.fields[field.serial] else { continue }
+      drawField(field, material, origin: (left, top), source, c)
+    }
+  }
+
+  /// 絵の箱・画像・字を、左上 (`left`, `top`)（px）に置く。
+  private func drawPicture(
+    _ zone: ZoneMaterial, left: Double, top: Double, _ source: Source, _ c: Context
+  ) {
     let g = c.g
+    let s = g.scale
+    for box in zone.boxes { zoneBoxes.append(Self.instance(box, left: left, top: top, scale: s)) }
     for image in zone.images {
       let x = (left + Double(image.frame.minX) * s).rounded()
       let y = (top + Double(image.frame.minY) * s).rounded()
@@ -92,19 +136,6 @@ extension FrameBuilder {
           uv: SIMD2(Float(entry.x), Float(entry.y)), color: 0xFFFF_FFFF),
         to: &zoneImages, page: entry.page)
     }
-    if let selection = source.material.zoneSelection, selection.zone == id {
-      let ink = selection.focused ? c.palette.selection : c.palette.inactiveSelection
-      for rect in selection.rects {
-        let x0 = (left + Double(rect.minX) * s).rounded()
-        let x1 = (left + Double(rect.maxX) * s).rounded()
-        let y0 = (top + Double(rect.minY) * s).rounded()
-        let y1 = (top + Double(rect.maxY) * s).rounded()
-        zoneSelectionShapes.append(
-          ShapeInstance(
-            rect: SIMD4(Float(x0), Float(y0), Float(x1 - x0), Float(y1 - y0)), color: ink.packed,
-            radius: 0, kind: 0))
-      }
-    }
     for run in zone.runs {
       let font = c.fonts.id(instance: run.font)
       let baseline = top + Double(run.baseline) * s
@@ -114,10 +145,6 @@ extension FrameBuilder {
           Glyph(font: font, glyph: run.glyphs[i], x: left + Double(run.xs[i]) * s, baseline: y),
           run.ink, .text, c)
       }
-    }
-    for field in zone.fields {
-      guard let material = source.material.fields[field.serial] else { continue }
-      drawField(field, material, origin: (left, top), source, c)
     }
   }
 
