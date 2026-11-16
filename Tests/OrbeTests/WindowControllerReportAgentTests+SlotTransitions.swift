@@ -98,7 +98,7 @@ extension WindowControllerReportAgentTests {
       f.tab.surface.initialCommand, "\(ShellWord.quoted(f.cli.path)) --resume resume-1",
       "解決した resume 指示が spawn に効く（CLI はタブの PATH で絶対パスへ解く）")
     XCTAssertNotNil(
-      f.tab.surface.initialEnv["PATH"], "起動環境には PATH が入る（値は login shell の probe 次第なので見ない）")
+      f.tab.surface.initialEnv["PATH"], "起動環境には PATH が入る")
   }
 
   // MARK: - .dormant × clear（破棄）
