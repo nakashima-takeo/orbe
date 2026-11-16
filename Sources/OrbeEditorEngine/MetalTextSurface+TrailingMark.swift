@@ -17,7 +17,7 @@ struct TrailingMarkHover: Equatable {
 }
 
 /// 行の右端の印——表示の構成が印の絵を持ち、並びが印を出せる行を持つ面で、ポインタが乗った行の右端に印を描き、押下を
-/// 並びの受け手へ知らせる。印の出し入れは材料の 1 欄の書き換えだけで、絵の差し込みも行も描き直さない。
+/// 並びの受け手へ知らせる。印の出し入れは材料の 1 欄の書き換えだけで、行も絵の差し込みも描き直さない。
 extension MetalTextSurface {
   /// 印を出しうるか（表示の構成が印の絵を持ち、並びに印を出せる行がある）。
   var showsTrailingMarks: Bool { presentation.trailingMark != nil && rows.hasTrailingMarks }

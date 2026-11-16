@@ -178,9 +178,11 @@ public enum ZoneTextLayout {
     line(runs).width
   }
 
-  /// 段落を幅 `width` で行に割る。割る位置は、元の文の位置が同じ組んだ文の境のうち決まった 1 つ（コードの始まりは包みの頭の
-  /// 前、終わりは包みの尾の後）に揃える——描く側（`lines(of:)`）が元の文の位置から同じ境を引ける。包みの頭で始まる行を
-  /// Core Text が包みの頭の中で割れば（コードの最初の字と余白が幅に収まらない）、次の揃えられる境まで行を伸ばす。
+  /// 段落を幅 `width` で行に割る。コードの前には向きの始まりの制御字と置き字、後ろには置き字と向きの終わりの制御字が
+  /// 並ぶ（→ `ZoneComposition`）ので、元の文の 1 つの位置に組んだ文の境が幾つもある。割る位置はそのうち決まった 1 つ
+  /// （コードの始まりは前の並びの前、終わりは後ろの並びの後）に揃える——描く側（`lines(of:)`）が元の文の位置から同じ境を
+  /// 引ける。前の並びで始まる行を Core Text がその並びの中で割れば（コードの最初の字と余白が幅に収まらない）、次の揃え
+  /// られる境まで行を伸ばす。
   private static func wrap(_ composition: ZoneComposition, width: CGFloat) -> [Line] {
     guard composition.count > 0 else { return [Line(composition, 0..<0)] }
     var lines: [Line] = []

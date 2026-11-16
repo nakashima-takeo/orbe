@@ -232,7 +232,7 @@ private struct Builder {
         CFAttributedStringSetAttribute(
           attributed, range, kCTRunDelegateAttributeName, Self.delegate(width: width))
       case .control:
-        // 字体の代わりに選ばれた字体が、制御字に幅のあるグリフを返すことがある。
+        // 見え方の字体に無い字のために Core Text が選ぶ代わりの字体は、制御字に幅のあるグリフを返すことがある。
         CFAttributedStringSetAttribute(
           attributed, range, kCTRunDelegateAttributeName, Self.delegate(width: 0))
       case .text: break
