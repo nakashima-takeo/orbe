@@ -19,7 +19,7 @@ extension Theme.Typography {
 
 extension Theme.Layout {
   /// PR のパネル（見本 PrReviewPanel の値）。確認済みのチェック・字下げの線の幅とその後の空き・「ツリー表示」「リスト表示」の
-  /// 印の枠・帯の高さ・説明の本文の行の数。
+  /// 印の枠・帯の 1 行のときの高さ（折り返せば伸びる）・説明の本文の行の数。
   static let editorPrCheckbox: CGFloat = 14
   static let editorPrGuide: CGFloat = 8
   static let editorPrGuideGap: CGFloat = 6

@@ -133,28 +133,36 @@ private struct PrHead: View {
   }
 }
 
-/// 手元とのずれの帯 24（padding 0 8・radius 3・地は色の .10）: 一致は success とレ点、未 push・未取得・数えない違いは注意の色。先行と
-/// 遅れの両方があれば、2 つの文を「・」でつないで 1 行に出す。
+/// 手元とのずれの帯（1 行なら 24・padding 0 8・radius 3・地は色の .10）: 一致は success とレ点、未 push・未取得・数えない
+/// 違いは注意の色。先行と遅れの両方があれば、2 つの文を「・」でつなぐ。文は省かず、幅に収まらなければ折り返して全文を
+/// 出し、帯は行数に従って伸びる（レ点は 1 行目に揃える）。
 private struct PrBand: View {
   let drift: BranchPullRequest.Drift
   @Environment(\.localization) private var l10n
 
   private static let groundAlpha = 0.10
+  /// 帯の字の 1 行の高さと、1 行のとき帯が 24 になる上下の余白。
+  private static let lineHeight = NSLayoutManager().defaultLineHeight(
+    for: Theme.Typography.editorPrBand)
+  private static let verticalPadding = max(0, (Theme.Layout.editorPrBand - lineHeight) / 2)
 
   var body: some View {
     let inSync = drift == .inSync
     let color = inSync ? Color.theme.success : Color.theme.editorCaution
-    HStack(spacing: Theme.Space.note) {
-      if inSync { EditorGlyphView(glyph: EditorGlyphs.bandCheck, size: 12, color: color) }
+    HStack(alignment: .top, spacing: Theme.Space.note) {
+      if inSync {
+        EditorGlyphView(glyph: EditorGlyphs.bandCheck, size: 12, color: color)
+          .frame(height: Self.lineHeight)
+      }
       Text(PrPanelText.drift(drift, l10n))
         .font(Font.theme.editorPrBand)
-        .lineLimit(1)
-        .truncationMode(.tail)
+        .fixedSize(horizontal: false, vertical: true)
       Spacer(minLength: 0)
     }
     .foregroundStyle(color)
     .padding(.horizontal, Theme.Space.step)
-    .frame(height: Theme.Layout.editorPrBand)
+    .padding(.vertical, Self.verticalPadding)
+    .frame(minHeight: Theme.Layout.editorPrBand)
     .background(RoundedRectangle(cornerRadius: 3).fill(color.opacity(Self.groundAlpha)))
   }
 }
