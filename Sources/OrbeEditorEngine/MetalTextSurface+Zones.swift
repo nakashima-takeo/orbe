@@ -110,7 +110,8 @@ extension MetalTextSurface {
   /// 取引の終わりに、絵の差し込みを今に合わせる（取引の中）——本文の区画の幅が変わっていれば絵を問い直し、どの
   /// 絵の差し込みも描いていない入力欄の場を閉じ（主なら本文が主になる）、高さが変わった絵の差し込みで並びを組み直す
   /// （閉じた場の知らせの中で描き直した高さも同じ取引に入る）。絵の差し込みを写したか外したなら、どの材料も指さない
-  /// 画像の覚えを手放す。
+  /// 画像の覚えを手放し、スクロールを共にする相手の面の空きを揃える（相手の取引になり、2 面は一緒に出すので同じコマに
+  /// 揃う）。
   func settleZones() {
     guard !zones.isEmpty || !fields.isEmpty || zonesRepainted else { return }
     let width = zoneWidth
@@ -129,6 +130,7 @@ extension MetalTextSurface {
     if zoneHeightsChanged { applyZoneHeights() }
     if zonesRepainted {
       zonesRepainted = false
+      partner?.settleGaps()
       let marks = [trailingMarkLooks?.normal, trailingMarkLooks?.hovered].compactMap { $0 }
       painter.keep(
         images: Set((zones.values.map(\.material) + marks).flatMap { $0.images.map(\.pixels.key) }))

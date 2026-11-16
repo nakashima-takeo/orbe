@@ -79,11 +79,16 @@ public struct RowInsertion: Equatable {
     case lines([InsertedLine])
     /// 絵の差し込み。面は本文の区画の幅を渡して絵を問い、返った高さで並べ、本文と同じコマに描く（→ `SurfaceZone`）。
     case zone(SurfaceZone)
+    /// スクロールを共にする相手の面（→ `TextSurface.shareScroll`）に置いた絵の差し込みと同じ高さの空き（並列の diff の、
+    /// スレッドの反対側）。高さは面が相手の絵の高さから解き、相手の絵の高さが変わった取引の中で揃える。相手が無い間と、
+    /// 相手の面にその絵の差し込みが無い間は高さ 0。文書の行でも絵でもなく、何も描かず、選べず、当たらない。
+    case gap(SurfaceZone)
 
     public static func == (lhs: Content, rhs: Content) -> Bool {
       switch (lhs, rhs) {
       case (.lines(let a), .lines(let b)): a == b
       case (.zone(let a), .zone(let b)): a === b
+      case (.gap(let a), .gap(let b)): a === b
       default: false
       }
     }

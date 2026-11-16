@@ -121,10 +121,11 @@ final class MetalTextSurface: TextSurface {
     write { $0.rows = rows }
   }
 
-  deinit {
+  isolated deinit {
     let id = id
     scroll.leave()
     RenderThread.shared.perform { $0.detach(id) }
+    partner?.settleGaps()
   }
 
   // MARK: - 選択と編集（契約）
@@ -320,6 +321,8 @@ final class MetalTextSurface: TextSurface {
     other.partner = self
     leadsScroll = true
     other.leadsScroll = false
+    settleGaps()
+    other.settleGaps()
     wake()
     refreshViewport()
     other.refreshViewport()

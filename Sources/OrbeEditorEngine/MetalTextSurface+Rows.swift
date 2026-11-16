@@ -53,6 +53,10 @@ extension MetalTextSurface {
               line: insertion.line,
               height: Double(max(0, zones[ObjectIdentifier(zone)]?.picture.height ?? 0)),
               content: .zone(ObjectIdentifier(zone)))
+          case .gap(let zone):
+            RowLayout.Block(
+              line: insertion.line, height: gapHeight(ObjectIdentifier(zone)),
+              content: .gap(ObjectIdentifier(zone)))
           }
         }, spans: rows.spans)
     }
@@ -123,7 +127,8 @@ extension MetalTextSurface {
     return zip(insertions, rows.contents).allSatisfy { insertion, content in
       switch (insertion.content, content) {
       case (.lines(let lines), .lines(let laid)): lines == laid
-      case (.zone(let zone), .zone(let id)): ObjectIdentifier(zone) == id
+      case (.zone(let zone), .zone(let id)), (.gap(let zone), .gap(let id)):
+        ObjectIdentifier(zone) == id
       default: false
       }
     }
@@ -143,6 +148,36 @@ extension MetalTextSurface {
       pending.position = SIMD2(placed.x, placed.y + dy)
     } else {
       pending.shift += dy
+    }
+  }
+
+  /// 相手と同じ高さの空きの高さ——スクロールを共にする相手の面に置いた絵の差し込み `zone` の絵の高さ（無ければ 0）。
+  func gapHeight(_ zone: ObjectIdentifier) -> Double {
+    Double(max(0, partner?.zones[zone]?.picture.height ?? 0))
+  }
+
+  /// 相手と同じ高さの空きを、相手の今の絵の高さに揃える（相手の絵の差し込みの出入りと高さの変化・相手が付いた・外れた）。
+  /// 変われば取引の中で並びを組み直す（見えている先頭の文書の行は確定で保つ）。
+  func settleGaps() {
+    guard rows.hasGaps else { return }
+    let current = rows
+    var changed = false
+    let blocks = current.contents.indices.map { index -> RowLayout.Block in
+      var height = current.heights[index]
+      if case .gap(let zone) = current.contents[index] {
+        let mirrored = gapHeight(zone)
+        if mirrored != height {
+          height = mirrored
+          changed = true
+        }
+      }
+      return RowLayout.Block(
+        line: current.boundaries[index], height: height, content: current.contents[index])
+    }
+    guard changed else { return }
+    transact {
+      noteRowsChange()
+      rows.replace(blocks, spans: current.spans)
     }
   }
 }

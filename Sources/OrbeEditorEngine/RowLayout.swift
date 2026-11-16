@@ -22,6 +22,8 @@ struct RowLayout: Sendable {
   enum Content: Sendable {
     case lines([InsertedLine])
     case zone(ObjectIdentifier)
+    /// スクロールを共にする相手の面の絵の差し込み（同一性）と同じ高さの空き。
+    case gap(ObjectIdentifier)
   }
 
   /// 縦の位置にあるもの——文書の行か、塊。
@@ -37,8 +39,9 @@ struct RowLayout: Sendable {
   private(set) var contents: [Content] = []
   /// 塊 `i` より前の塊の高さの合計（`prefix[i]`。要素は塊の数 + 1）。
   private var prefix: [Double] = [0]
-  /// 絵の差し込みを持つか。
+  /// 絵の差し込みを持つか・相手と同じ高さの空きを持つか。
   private(set) var hasZones = false
+  private(set) var hasGaps = false
   /// 行の右端の印を出せる行（区間か差し込んだ行）を持つか。
   private(set) var hasTrailingMarks = false
   /// 絵の差し込みの同一性 → 塊の番号。
@@ -79,6 +82,10 @@ struct RowLayout: Sendable {
       if case .zone(let id) = content { zoneBlocks[id] = index }
     }
     hasZones = !zoneBlocks.isEmpty
+    hasGaps = contents.contains {
+      if case .gap = $0 { return true }
+      return false
+    }
     hasTrailingMarks =
       spans.contains(where: \.allowsTrailingMark)
       || contents.contains {
