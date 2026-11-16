@@ -37,7 +37,7 @@ extension EditorDiffTests {
           reply.requests += 1
           completion(reply.content.map { .success($0) } ?? .failure(.reason("")))
         },
-        setViewed: { _, _, _, _ in }))
+        setViewed: { _, _, _, _ in }, review: { _, _ in }, writeReview: { _, _, _, _ in }))
     state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
     return state
   }

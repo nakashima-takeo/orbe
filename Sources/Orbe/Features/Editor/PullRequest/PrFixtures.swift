@@ -92,7 +92,7 @@
     private static let me = GitHubRepoName(nameWithOwner: "orbe/orbe")
 
     /// 差し替えの出どころ。確認済みの書き込みは覚えておき、読み直しの答えに載せる（GitHub と同じく、書いた値が次の読み直しに
-    /// 出る）。
+    /// 出る）。レビューのやりとりはスレッドの無い姿を答え、レビューへの書き込みは通ったと答える。
     private static func source(_ answer: Answer, base: String, dir: URL) -> PullRequestSource {
       let ref = GitHubBranchRef(repo: me, branch: branch)
       let found: GitHubBranchPullRequests.Branch
@@ -136,6 +136,16 @@
         setViewed: { value, paths, _, completion in
           if value { viewed.paths.formUnion(paths) } else { viewed.paths.subtract(paths) }
           completion(GitHubViewedWrite(written: paths, failure: nil))
+        },
+        review: { _, completion in
+          completion(
+            .success(
+              GitHubPullRequestReview(
+                viewer: "you", viewerIsAuthor: false, headCommit: head, pendingReview: nil,
+                threads: [])))
+        },
+        writeReview: { _, _, pendingReview, completion in
+          completion(GitHubReviewWriteResult(pendingReview: pendingReview, failure: nil))
         })
     }
 

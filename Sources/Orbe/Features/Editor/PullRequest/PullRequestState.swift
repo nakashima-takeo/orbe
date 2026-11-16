@@ -6,11 +6,11 @@ protocol PullRequestStateObserver: AnyObject {
   func pullRequestStateDidChange(_ state: PullRequestState)
 }
 
-/// PR ごとの状態——最後に読めた中身、確認済み（GitHub が返した値と、書いている途中の値）、diff の両端、最後の失敗。手元の
-/// リポジトリ（`git-common-dir`）と PR の同一性ごとに 1 つで、アプリが動いている間持つ。PR のパネル・PR の diff タブ・
-/// タブ行のチェックが同じものを見るので、確認済みが面やウインドウで食い違わない。
+/// PR ごとの状態——最後に読めた中身、確認済み（GitHub が返した値と、書いている途中の値）、レビューのやりとり、diff の両端、
+/// 最後の失敗。手元のリポジトリ（`git-common-dir`）と PR の同一性ごとに 1 つで、アプリが動いている間持つ。PR のパネル・
+/// PR の diff タブ・タブ行のチェックが同じものを見るので、確認済みが面やウインドウで食い違わない。
 ///
-/// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。中身を読み直すきっかけは、誰も見ていない状態から
+/// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。中身とレビューのやりとりを読み直すきっかけは、誰も見ていない状態から
 /// 見ている者が現れた・`reload`・PR のリポジトリで Orbe の中のネット操作が終わった・PR の先頭のブランチかベースブランチの
 /// 追跡 ref の値が前と変わった、のどれか（→ `PullRequestState+Watch`）。読んでいる間に次の読み直しが来たら、終わった後に
 /// 1 回だけ読み直す。読み直しに失敗しても、前に読めた中身は残す。
@@ -100,6 +100,27 @@ final class PullRequestState {
   private(set) var viewedVersion = 0
   @ObservationIgnored var writes: [ViewedWrite] = []
   @ObservationIgnored var isWriting = false
+
+  /// 最後に読めたレビューのやりとり（→ `PullRequestState+Review`）。
+  var review: GitHubPullRequestReview? {
+    didSet { reviewVersion &+= 1 }
+  }
+  /// `review` が変わるたびに進む（列が見えている行を描き直す合図）。
+  private(set) var reviewVersion = 0
+  /// レビューへの書き込みが走っている対象と、順番を待っている対象。
+  var reviewWriteTargets: Set<ReviewTarget> = []
+  /// 全体へのコメントの書きかけと、選んだレビューの種類（メモリだけに持つ）。
+  var reviewDraft = ReviewDraft()
+  @ObservationIgnored var reviewWrites: [ReviewWrite] = []
+  @ObservationIgnored var isSendingReviewWrite = false
+  @ObservationIgnored var isReadingReview = false
+  @ObservationIgnored var readReviewAgain = false
+  /// 最後にレビューへの書き込みの答えが届いた時点の通し番号。これより前に出した読みの答えは入れない。
+  @ObservationIgnored var reviewWrittenOrder = 0
+  /// 次に届く新しい読みを待っている書き込みの続き。
+  @ObservationIgnored var reviewReadWaiters: [() -> Void] = []
+  /// 書き込みが名指しする自分の保留中のレビュー（読みの答えと、書き込みの答えで分かったもの）。
+  @ObservationIgnored var pendingReviewID: String?
   /// 読み直しと書き込みに付ける、出した順の通し番号。
   @ObservationIgnored private var nextOrder = 0
 
@@ -185,7 +206,7 @@ final class PullRequestState {
 
   // MARK: - 中身
 
-  /// 中身を読み直す（見ている者がいるときだけ）。両端が求まらなかったなら、求め直す。
+  /// 中身とレビューのやりとりを読み直す（見ている者がいるときだけ）。両端が求まらなかったなら、求め直す。
   func reload() {
     guard isWatched else { return }
     if case .failed = bounds { bounds = .none }
@@ -198,7 +219,10 @@ final class PullRequestState {
     let order = issueOrder()
     notify()
     // 問い合わせる前の追跡 ref の値を覚えてから問い合わせる（→ worktree の今の PR と同じ）。
-    tracking.record { [weak self] in self?.readContent(order: order) }
+    tracking.record { [weak self] in
+      self?.readContent(order: order)
+      self?.readReview()
+    }
   }
 
   private func readContent(order: Int) {

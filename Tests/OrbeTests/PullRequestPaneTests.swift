@@ -46,7 +46,7 @@ final class PullRequestPaneTests: OrbeTestCase {
         },
         branchExists: { _, completion in completion(.success(true)) },
         content: { _, completion in completion(.success(content)) },
-        setViewed: { _, _, _, _ in })
+        setViewed: { _, _, _, _ in }, review: { _, _ in }, writeReview: { _, _, _, _ in })
     }
   }
 

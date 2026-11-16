@@ -26,6 +26,18 @@ struct PullRequestSource {
       _ viewed: Bool, _ paths: Set<String>, _ nodeID: String,
       _ completion: @escaping (GitHubViewedWrite) -> Void
     ) -> Void
+  /// PR のレビューのやりとり（→ `GitHubCLI.pullRequestReview`）。
+  var review:
+    (
+      _ id: GitHubItemID,
+      _ completion: @escaping (Result<GitHubPullRequestReview, GitHubFailure>) -> Void
+    ) -> Void
+  /// レビューへの書き込み 1 つ（→ `GitHubCLI.writeReview`）。
+  var writeReview:
+    (
+      _ write: GitHubReviewWrite, _ nodeID: String, _ pendingReview: String?,
+      _ completion: @escaping (GitHubReviewWriteResult) -> Void
+    ) -> Void
 
   static func gh(_ cli: GitHubCLI = .shared, cache: GitHubCache = .shared) -> PullRequestSource {
     PullRequestSource(
@@ -35,6 +47,10 @@ struct PullRequestSource {
       },
       branchExists: { cli.branchExists($0, completion: $1) },
       content: { cli.pullRequestContent($0, completion: $1) },
-      setViewed: { cli.setViewed($0, paths: $1, pullRequest: $2, completion: $3) })
+      setViewed: { cli.setViewed($0, paths: $1, pullRequest: $2, completion: $3) },
+      review: { cli.pullRequestReview($0, completion: $1) },
+      writeReview: {
+        cli.writeReview($0, pullRequest: $1, pendingReview: $2, completion: $3)
+      })
   }
 }
