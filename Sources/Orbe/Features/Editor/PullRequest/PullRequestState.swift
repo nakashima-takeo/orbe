@@ -6,11 +6,11 @@ protocol PullRequestStateObserver: AnyObject {
   func pullRequestStateDidChange(_ state: PullRequestState)
 }
 
-/// PR ごとの状態——最後に読めた中身、確認済み（GitHub が返した値と、書いている途中の値）、diff の両端、最後の失敗。手元の
-/// リポジトリ（`git-common-dir`）と PR の同一性ごとに 1 つで、アプリが動いている間持つ。PR のパネル・PR の diff タブ・
-/// タブ行のチェックが同じものを見るので、確認済みが面やウインドウで食い違わない。
+/// PR ごとの状態——最後に読めた中身、確認済み（GitHub が返した値と、書いている途中の値）、レビューのやりとり、diff の両端、
+/// 最後の失敗。手元のリポジトリ（`git-common-dir`）と PR の同一性ごとに 1 つで、アプリが動いている間持つ。PR のパネル・
+/// PR の diff タブ・タブ行のチェックが同じものを見るので、確認済みが面やウインドウで食い違わない。
 ///
-/// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。中身を読み直すきっかけは、誰も見ていない状態から
+/// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。中身とレビューのやりとりを読み直すきっかけは、誰も見ていない状態から
 /// 見ている者が現れた・`reload`・PR のリポジトリで Orbe の中のネット操作が終わった・PR の先頭のブランチかベースブランチの
 /// 追跡 ref の値が前と変わった、のどれか（→ `PullRequestState+Watch`）。読んでいる間に次の読み直しが来たら、終わった後に
 /// 1 回だけ読み直す。読み直しに失敗しても、前に読めた中身は残す。
@@ -100,6 +100,36 @@ final class PullRequestState {
   private(set) var viewedVersion = 0
   @ObservationIgnored var writes: [ViewedWrite] = []
   @ObservationIgnored var isWriting = false
+
+  /// 最後に読めたレビューのやりとり（→ `PullRequestState+Review`）。
+  var review: GitHubPullRequestReview? {
+    didSet { reviewVersion &+= 1 }
+  }
+  /// `review` が変わるたびに進む（列が見えている行を描き直す合図）。
+  private(set) var reviewVersion = 0
+  /// レビューのやりとりの最後の読みの失敗。中身の失敗（`failure`）とは分けて持ち、次に読めたら消える。
+  var reviewFailure: GitHubFailure?
+  /// レビューへの書き込みが走っている対象と、順番を待っている対象。
+  var reviewWriteTargets: Set<ReviewTarget> = []
+  @ObservationIgnored var reviewWrites: [ReviewWrite] = []
+  @ObservationIgnored var isSendingReviewWrite = false
+  @ObservationIgnored var isReadingReview = false
+  @ObservationIgnored var readReviewAgain = false
+  /// 最後にレビューへの書き込みの答えが届いた時点の通し番号。これより前に出した読みの答えは入れない。
+  @ObservationIgnored var reviewWrittenOrder = 0
+  /// 次に届く新しい読みを待っている書き込みの続き。
+  @ObservationIgnored var reviewReadWaiters: [() -> Void] = []
+  /// 書き込みが名指しする自分の保留中のレビュー（読みの答えと、書き込みの答えで分かったもの）。
+  @ObservationIgnored var pendingReviewID: String?
+  /// 今の中身と、今のレビューのやりとりを読んだ問い合わせの通し番号（読みが通った時点で進む）。
+  @ObservationIgnored private var contentOrder = 0
+  @ObservationIgnored var reviewOrder = 0
+  /// 最後に答えが届いた（通った・失敗した）中身とレビューのやりとりの読みの通し番号。
+  @ObservationIgnored private var contentAnsweredOrder = 0
+  @ObservationIgnored var reviewAnsweredOrder = 0
+  /// 先頭のコミットを揃える読み直し（→ `alignHeads`）。走っていれば、その読みを出す直前の通し番号と、揃え始めてから
+  /// 読んだ先頭のコミット。
+  @ObservationIgnored private var alignment: (start: Int, seen: Set<String>)?
   /// 読み直しと書き込みに付ける、出した順の通し番号。
   @ObservationIgnored private var nextOrder = 0
 
@@ -185,7 +215,7 @@ final class PullRequestState {
 
   // MARK: - 中身
 
-  /// 中身を読み直す（見ている者がいるときだけ）。両端が求まらなかったなら、求め直す。
+  /// 中身とレビューのやりとりを読み直す（見ている者がいるときだけ）。両端が求まらなかったなら、求め直す。
   func reload() {
     guard isWatched else { return }
     if case .failed = bounds { bounds = .none }
@@ -193,12 +223,23 @@ final class PullRequestState {
       readAgain = true
       return
     }
+    // 新しいきっかけでは、先頭のコミットを揃える読み直しを最初から数える。
+    alignment = nil
+    startReadingContent { [weak self] in self?.readReview() }
+  }
+
+  /// 中身を読む（`then` は中身を問い合わせる直前に呼ぶ）。中身を読む道はこの 1 つ。問い合わせる前の追跡 ref の値を覚えてから
+  /// 問い合わせる（→ worktree の今の PR と同じ）。読めたら前の失敗を外し、読めなければその失敗を持つ。
+  private func startReadingContent(then: @escaping () -> Void = {}) {
     isReading = true
-    failure = nil
     let order = issueOrder()
     notify()
-    // 問い合わせる前の追跡 ref の値を覚えてから問い合わせる（→ worktree の今の PR と同じ）。
-    tracking.record { [weak self] in self?.readContent(order: order) }
+    tracking.record { [weak self] in
+      // 中身の読みが印の付いたまま（`isReading`）で、ほかの読みを先に出す——答えがすぐ返っても、中身の答えより先に
+      // 先頭のコミットを見比べない。
+      then()
+      self?.readContent(order: order)
+    }
   }
 
   private func readContent(order: Int) {
@@ -207,9 +248,12 @@ final class PullRequestState {
     source.content(key.id) { [weak self] result in
       guard let self else { return }
       isReading = false
+      contentAnsweredOrder = order
       switch result {
       case .success(let read):
         apply(read, order: order)
+        contentOrder = order
+        failure = nil
         // 中身が読めて追跡 ref が新しく分かったら、その値も覚える。
         if trackedRefs.contains(where: tracking.lacks) { tracking.record() }
       case .failure(let reason): failure = .read(reason)
@@ -219,8 +263,42 @@ final class PullRequestState {
         reload()
       }
       resolveBounds()
+      alignHeads()
       notify()
     }
+  }
+
+  /// 中身とレビューのやりとりを読んだ時点の PR の先頭のコミットが食い違っていたら、両方を読み直して揃える（書き込みの後の
+  /// 読み直しはレビューのやりとりだけなので、その間に push があると、レビューのやりとりだけが新しい先頭を読む。中身とレビューの
+  /// やりとりを並べて読む間に push があっても食い違う。そのままではスレッドを置けず、新しいスレッドも受け付けない）。
+  ///
+  /// どちらの答えが古いかは、出した順からも届いた順からも決まらないので、当てにいかない。両方の答えが届いて食い違っていたら、
+  /// それより後に出す読みで両方を読み直す。GitHub の答えが一貫していれば、その 2 本の間に push が無い限り揃う。なお食い
+  /// 違っていて、揃え始めてから見ていない先頭のコミットが現れたら（間に push があった）、もう一度読み直す。現れなければ（GitHub の
+  /// 答えが一貫していない）、次のきっかけまで読まない。揃える読みが失敗したら、その失敗を見せて揃えるのをやめ、次のきっかけで
+  /// また揃えにいく。どちらかを読んでいる間は待ち、両方が届いた後に見直す。誰も見ていない間は読まない。
+  func alignHeads() {
+    guard !isReading, !isReadingReview else { return }
+    guard let content, let review, content.headCommit != review.headCommit else {
+      alignment = nil
+      return
+    }
+    let heads: Set = [content.headCommit, review.headCommit]
+    var seen = heads
+    if let alignment {
+      // 揃える読みの答えが両方届くまで待つ。
+      guard contentAnsweredOrder > alignment.start, reviewAnsweredOrder > alignment.start else {
+        return
+      }
+      self.alignment = nil
+      // 揃える読みのどちらかが失敗した。
+      guard contentOrder > alignment.start, reviewOrder > alignment.start else { return }
+      guard !heads.isSubset(of: alignment.seen) else { return }
+      seen.formUnion(alignment.seen)
+    }
+    guard isWatched else { return }
+    alignment = (issueOrder(), seen)
+    startReadingContent { [weak self] in self?.readReview() }
   }
 
   /// 問い合わせずに読むのをやめる（積んだ読み直しも捨てる）。

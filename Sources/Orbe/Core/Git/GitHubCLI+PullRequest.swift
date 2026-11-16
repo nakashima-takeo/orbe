@@ -73,7 +73,7 @@ extension GitHubCLI {
         for chunk in chunks {
           let out = self.runSync(
             gh, GitHubViewedMutation.arguments(viewed, paths: chunk, pullRequest: nodeID),
-            cwd: NSHomeDirectory())
+            cwd: NSHomeDirectory(), call: .write)
           let passed = GitHubViewedMutation.written(from: out.stdout, paths: chunk)
           written.formUnion(passed)
           guard passed.count == chunk.count else {

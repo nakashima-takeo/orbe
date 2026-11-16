@@ -55,7 +55,7 @@ final class BranchPullRequestTests: OrbeTestCase {
         contentReads += 1
         completion(content.map { .success($0) } ?? .failure(.reason("")))
       },
-      setViewed: { _, _, _, _ in })
+      setViewed: { _, _, _, _ in }, review: { _, _ in }, writeReview: { _, _, _, _, _ in })
   }
 
   func watch() -> BranchPullRequest {
