@@ -130,7 +130,7 @@ final class AgentMcpPathTests: OrbeTestCase {
       responses(
         ControlProcess.runDetached(
           URL(fileURLWithPath: "/bin/sh"), [server.command] + args, env: env, stdin: stdin,
-          cwd: pluginRoot.appendingPathComponent(server.cwd).path
+          cwd: pluginRoot.appendingPathComponent(server.cwd).path, child: .newGroup
         ).stdout)
     }
 

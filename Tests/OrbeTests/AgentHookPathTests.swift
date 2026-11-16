@@ -27,9 +27,13 @@ final class AgentHookPathTests: OrbeTestCase {
     _ shim: URL, agent: String = "claude", env: [String: String], state: String, stdin: String,
     detached: Bool = false, file: StaticString = #filePath, line: UInt = #line
   ) -> ControlProcess.Outcome {
-    let launch = detached ? ControlProcess.runDetached : ControlProcess.run
-    let outcome = launch(
-      URL(fileURLWithPath: "/bin/sh"), [shim.path, agent, state], env, stdin, nil, file, line)
+    let sh = URL(fileURLWithPath: "/bin/sh")
+    let args = [shim.path, agent, state]
+    let outcome =
+      detached
+      ? ControlProcess.runDetached(
+        sh, args, env: env, stdin: stdin, child: .newSession, file: file, line: line)
+      : ControlProcess.run(sh, args, env: env, stdin: stdin, file: file, line: line)
     XCTAssertEqual(
       outcome.status, 0, "シムは常に exit 0（hook を落とさない）: \(outcome.stderr)", file: file, line: line)
     return outcome
