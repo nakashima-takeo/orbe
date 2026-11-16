@@ -165,6 +165,7 @@ struct ThemeFonts {
   let editorPrMeta = Font(Theme.Typography.editorPrMeta as CTFont)
   let editorPrBand = Font(Theme.Typography.editorPrBand as CTFont)
   let editorPrCreateMeta = Font(Theme.Typography.editorPrCreateMeta as CTFont)
+  let editorPrMarkViewed = Font(Theme.Typography.editorPrMarkViewed as CTFont)
 }
 
 extension NSFont {

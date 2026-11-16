@@ -10,6 +10,8 @@ extension Theme.Typography {
   static let editorPrDescription = NSFont.systemFont(ofSize: 11.5, weight: .regular)
   static let editorPrCount = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
   static let editorPrCreateMeta = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+  /// タブ行の「確認済みにする」（sans 11.5。見本 DiffTabs）。
+  static let editorPrMarkViewed = NSFont.systemFont(ofSize: 11.5, weight: .regular)
   /// 頭の題の行の高さ（倍率）と、説明の本文の行の高さ（倍率）。
   static let editorPrTitleLineHeight: CGFloat = 1.4
   static let editorPrDescriptionLineHeight: CGFloat = 1.6

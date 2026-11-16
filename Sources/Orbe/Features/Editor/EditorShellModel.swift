@@ -20,6 +20,16 @@ final class EditorShellModel {
     let isPreview: Bool
   }
 
+  /// 焦点の PR の diff のタブが見ている PR とパス（タブ行の「確認済みにする」が読み書きする）。
+  struct PullRequestFile: Equatable {
+    let state: PullRequestState
+    let path: String
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+      lhs.state === rhs.state && lhs.path == rhs.path
+    }
+  }
+
   struct Crumb: Identifiable, Equatable {
     let id: Int
     let name: String
@@ -32,6 +42,8 @@ final class EditorShellModel {
   /// 焦点のタブが diff のタブか（タブ行の右端に見せ方の切り替えを出す）と、今の見せ方。
   var showsDiffModes = false
   var diffMode = EditorDiff.Mode.inline
+  /// 焦点のタブが PR の diff のタブなら、その PR とパス。
+  var pullRequestFile: PullRequestFile?
   /// 焦点の文書のディレクトリの断片（末尾のファイルは `activeName` / `activeChip`）。
   var crumbs: [Crumb] = []
   var activeName: String?
@@ -76,12 +88,19 @@ final class EditorShellModel {
     switch active {
     case .diff(let diff)?:
       showsDiffModes = true
+      if case .pullRequest(let state) = diff.id.kind {
+        pullRequestFile = PullRequestFile(state: state, path: diff.id.path)
+      } else {
+        pullRequestFile = nil
+      }
       crumbs = Self.crumbs(of: diff.id.url, root: diff.id.root, pressable: diff.id.root == root)
     case .document(let document)?:
       showsDiffModes = false
+      pullRequestFile = nil
       crumbs = Self.crumbs(of: document.url, root: root, pressable: true)
     case nil:
       showsDiffModes = false
+      pullRequestFile = nil
       crumbs = []
     }
   }
