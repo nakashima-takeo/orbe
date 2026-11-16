@@ -21,9 +21,14 @@ final class GitHubCacheTests: OrbeTestCase {
     XCTAssertTrue(pairs.contains { $0 == ("--head", "refactor/phase2-2b") }, "ブランチを名指しする")
     XCTAssertTrue(pairs.contains { $0 == ("--state", "all") }, "閉じた PR も引く")
     XCTAssertTrue(pairs.contains { $0 == ("--limit", "100") }, "gh の上限まで引く")
+    let named = GitHubCLI.branchPRArguments(
+      head: "feat", repository: GitHubRepoName(nameWithOwner: "o/r"))
+    XCTAssertTrue(
+      zip(named, named.dropFirst()).contains { $0 == ("-R", "github.com/o/r") },
+      "名指しするリポジトリはホストも付ける（GH_HOST に左右されない）")
   }
 
-  /// gh に頼む欄（`--json`）だけを持つ出力から、clean と PR の自動の結び付けが読む値（head と URL）が揃う。
+  /// gh に頼む欄（`--json`）だけを持つ出力から、clean と PR の自動の結び付けが読む値（head・URL・作成日時）が揃う。
   func testBranchPRFetchRequestsEveryFieldThePullRequestIsReadFrom() throws {
     let arguments = GitHubCLI.branchPRArguments(head: "feat")
     let fields = try XCTUnwrap(arguments.firstIndex(of: "--json")) + 1
@@ -31,7 +36,7 @@ final class GitHubCacheTests: OrbeTestCase {
     let output: [String: Any] = [
       "number": 7, "headRefName": "feat", "state": "OPEN", "baseRefName": "main",
       "headRepository": ["name": "r"], "headRepositoryOwner": ["login": "o"],
-      "url": "https://github.com/o/r/pull/7",
+      "url": "https://github.com/o/r/pull/7", "createdAt": "2026-01-01T00:00:00Z",
     ]
 
     let pr = try JSONDecoder().decode(
@@ -41,6 +46,7 @@ final class GitHubCacheTests: OrbeTestCase {
     XCTAssertEqual(
       pr.head, GitHubBranchRef(repo: GitHubRepoName(nameWithOwner: "o/r"), branch: "feat"))
     XCTAssertEqual(pr.url, "https://github.com/o/r/pull/7")
+    XCTAssertEqual(pr.createdAt, "2026-01-01T00:00:00Z", "fork と親の PR を並べる作成日時")
   }
 
   /// 対象は worktree にあるブランチだけ（main worktree は掃除の対象外・detached は PR の head に

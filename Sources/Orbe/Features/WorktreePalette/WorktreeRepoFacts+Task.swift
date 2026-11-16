@@ -164,7 +164,7 @@ extension WorktreeRepoFacts {
     let matched = remotes.compactMap { remote, url -> String? in
       guard let read = GitHubRepoName(remoteURL: url) else { return nil }
       if read == repo { return remote }
-      if case .found(let name) = answers[read], name == repo { return remote }
+      if case .found(let name, _) = answers[read], name == repo { return remote }
       return nil
     }
     if !matched.isEmpty {

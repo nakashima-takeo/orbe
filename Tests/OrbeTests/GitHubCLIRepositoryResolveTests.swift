@@ -53,6 +53,19 @@ final class GitHubCLIRepositoryResolveTests: OrbeTestCase {
     XCTAssertEqual(read(""), .unverified, "出力の無い失敗（起動失敗・打ち切り）")
   }
 
+  /// fork なら親の正式名も読む。fork でなければ（`parent` が null）親は無い。
+  func testTheParentOfAForkIsRead() {
+    let fork =
+      #"{"data":{"repository":{"nameWithOwner":"me/r","parent":{"nameWithOwner":"Up/R"}}}}"#
+    let plain = #"{"data":{"repository":{"nameWithOwner":"me/r","parent":null}}}"#
+    XCTAssertEqual(
+      GitHubCLI.repositoryResolution(from: Data(fork.utf8)),
+      .found(GitHubRepoName(nameWithOwner: "me/r"), parent: GitHubRepoName(nameWithOwner: "up/r")))
+    XCTAssertEqual(
+      GitHubCLI.repositoryResolution(from: Data(plain.utf8)),
+      .found(GitHubRepoName(nameWithOwner: "me/r"), parent: nil))
+  }
+
   /// gh は正式名を返しても非 0 で終わることがあるので、終了コードでなく出力で読む。
   func testCanonicalNameIsReadDespiteNonZeroExit() throws {
     try stageGh(stdout: Output.found, exit: 1)

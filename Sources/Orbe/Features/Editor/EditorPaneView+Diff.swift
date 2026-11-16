@@ -119,7 +119,12 @@ extension EditorPaneView {
       switch diff.id.kind {
       case .workingTree: return .notice(.editorDiffNowhereInWorkingTree)
       case .staged: return .notice(.editorDiffNowhereStaged)
+      case .pullRequest: return .notice(.editorDiffNowherePullRequest)
       }
+    case .unavailable(.pullRequestCommitsMissing):
+      return .notice(.editorDiffPullRequestCommitsMissing)
+    case .unavailable(.pullRequestUnrelated):
+      return .notice(.editorDiffPullRequestUnrelated)
     }
   }
 

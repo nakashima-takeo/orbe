@@ -1,7 +1,8 @@
 import Foundation
 
 /// ステージ済み diff の出どころ——古い側は HEAD の版（rename なら元のパス）、新しい側は index の版。両側とも編集されない版の
-/// 本文なので、どちらかの版が替わったときに、diff が裏で行差分を揃えてから入れ替える（→ `EditorDiff.Resolution.revisions`）。
+/// 本文なので、どちらかの版が替わったときに 1 回、diff が両側と並びを入れ替える（その場か裏かは diff が決める →
+/// `EditorDiff.Resolution.revisions`）。
 @MainActor
 final class EditorDiffStaged: EditorDiffSource {
   let id: EditorDiff.Key
@@ -47,8 +48,19 @@ final class EditorDiffStaged: EditorDiffSource {
       if state == .failed { return .unavailable(.failed) }
     }
     if head == .absent, index == .absent { return .unavailable(.nowhere) }
-    return .revisions(
-      EditorDiff.SideTexts(old: EditorDiff.sideText(head), new: EditorDiff.sideText(index)))
+    let texts = EditorDiff.SideTexts(
+      old: EditorDiff.sideText(head), new: EditorDiff.sideText(index))
+    return Self.replaces(head, index) ? .revisionsReplacing(texts) : .revisions(texts)
+  }
+
+  /// 片側がファイルの本文で、もう片側がサブモジュール（ファイルとサブモジュールの置き換え）。
+  private static func replaces(_ old: RootFiles.VersionState, _ new: RootFiles.VersionState)
+    -> Bool
+  {
+    switch (old, new) {
+    case (.text, .submodule), (.submodule, .text): true
+    default: false
+    }
   }
 
   /// 開いた後の取り直しが済んだ後の status で決まる関心の版の状態から答えた。

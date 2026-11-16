@@ -25,18 +25,24 @@ enum GitMergeBase: Equatable {
   case missingCommit
   /// 共通の祖先が無い。
   case unrelated
+  /// 手元の履歴が浅く（shallow clone）、共通の祖先までたどれない（両端のコミットを取ってきても求まらない）。浅い
+  /// リポジトリでは、本当に共通の祖先が無いこととは分けられない。
+  case shallow
   /// 読めなかった（git の失敗）。
   case failed
 }
 
 extension GitRepo {
   /// `a` と `b` のマージベース（`git merge-base`）。求まらなければ、その理由。git は共通の祖先が無いことを終了コード 1 で
-  /// 言い、コミットが無いことを分けて言わないので、失敗したときだけ 2 つのコミットが手元に在るかを確かめる。
+  /// 言い、コミットが無いことを分けて言わないので、失敗したときだけ 2 つのコミットが手元に在るかを確かめる。浅いリポジトリ
+  /// では、浅い境界でたどれないことも終了コード 1 で言うので、浅ければ共通の祖先が無いとは言わない。
   func mergeBase(_ a: String, _ b: String, completion: @escaping (GitMergeBase) -> Void) {
     runner.run(["merge-base", "--end-of-options", a, b], cwd: root) { output in
       let base = output.stdoutText.trimmingCharacters(in: .newlines)
       if output.isSuccess, !base.isEmpty { return completion(.found(base)) }
-      if output.ending == .completed, output.status == 1 { return completion(.unrelated) }
+      if output.ending == .completed, output.status == 1 {
+        return completion(self.isShallow ? .shallow : .unrelated)
+      }
       self.runner.run(
         ["cat-file", "--batch-check"], cwd: self.root,
         stdin: Data([a, b].map { $0 + "^{commit}\n" }.joined().utf8)
@@ -46,6 +52,13 @@ extension GitRepo {
         completion(lines.contains { $0.hasSuffix(" missing") } ? .missingCommit : .failed)
       }
     }
+  }
+
+  /// 浅いリポジトリか（共有 git dir に `shallow` があり、境界が 1 つ以上載る）。
+  var isShallow: Bool {
+    let shallow = (commonDir as NSString).appendingPathComponent("shallow")
+    guard let text = try? String(contentsOfFile: shallow, encoding: .utf8) else { return false }
+    return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   /// `base` から `head` の間の rename（新しいパス → 元のパス）。読めなければ nil。

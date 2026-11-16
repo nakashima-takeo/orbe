@@ -91,7 +91,9 @@ final class EditorDiffWorkingTree: EditorDiffSource {
       old = EditorDiff.subproject(commit)
     case .text(let text)?:
       guard let document else {
-        return .revisionsNow(EditorDiff.SideTexts(old: text, new: newText))
+        let texts = EditorDiff.SideTexts(old: text, new: newText)
+        // 作業ツリーのディレクトリをサブモジュールの行で見せるなら、ファイルとサブモジュールの置き換え。
+        return newText == nil ? .revisions(texts) : .revisionsReplacing(texts)
       }
       // 文書の行差分が新しい底に対する結果になるまでは、前の底とその行差分の組のまま。
       guard let base = document.hunksBase else { return .wait }
@@ -99,7 +101,7 @@ final class EditorDiffWorkingTree: EditorDiffSource {
     }
     // 古い側が文書の底ではない（index の版に無い・サブモジュールの行）。このとき文書は底を持たず、行差分もその知らせも無い。
     if document != nil { return .documentReplacing(old: old) }
-    return .revisionsNow(EditorDiff.SideTexts(old: old, new: newText))
+    return .revisions(EditorDiff.SideTexts(old: old, new: newText))
   }
 
   /// 開いた後の取り直しが済んだ後の状態から答えた。さらに文書があれば、その行差分が今の index の本文に対して今の本文で

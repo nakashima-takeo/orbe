@@ -80,8 +80,8 @@ extension ControlServer {
         guard let path = params["path"] as? String, !path.isEmpty else {
           return .failure(ControlError(code: -32602, message: "missing path"))
         }
-        let kinds: [String: EditorDiff.Kind] = ["workingTree": .workingTree, "staged": .staged]
-        guard let kind = (params["kind"] as? String).flatMap({ kinds[$0] }) else {
+        let raw = params["kind"] as? String
+        guard let kind = Self.openDiffKinds.first(where: { Self.controlName(of: $0) == raw }) else {
           return .failure(
             ControlError(code: -32602, message: "kind must be workingTree or staged"))
         }
@@ -239,6 +239,20 @@ extension ControlServer {
       }
     default:
       return nil
+    }
+  }
+}
+
+extension ControlServer {
+  /// `open_diff` が受ける diff の種類。
+  fileprivate static let openDiffKinds: [EditorDiff.Kind] = [.workingTree, .staged]
+
+  /// diff の種類の、制御 API での名前（制御 API で開かない種類は nil。PR の diff は PR のパネルから開く）。
+  fileprivate static func controlName(of kind: EditorDiff.Kind) -> String? {
+    switch kind {
+    case .workingTree: "workingTree"
+    case .staged: "staged"
+    case .pullRequest: nil
     }
   }
 }

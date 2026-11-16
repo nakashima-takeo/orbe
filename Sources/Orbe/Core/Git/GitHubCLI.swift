@@ -84,46 +84,60 @@ final class GitHubCLI {
   /// が同じ）ので、ここを絞る動機が無い一方、絞ると `--head` に混ざる他人の fork の同名ブランチの PR
   /// （呼び出し側が head のリポジトリで落とす）で埋まって自分の PR が窓落ちしうる。上限まで取れば、
   /// このブランチ名の PR が 100 件を超えない限り窓落ちは起きない。
-  static func branchPRArguments(head: String) -> [String] {
-    [
-      "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
-      "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner,url",
-    ]
+  ///
+  /// `repository` を名指しすれば、そのリポジトリの PR を引く（`-R`）。nil なら gh が作業ディレクトリの remote から選ぶ
+  /// リポジトリ。
+  static func branchPRArguments(head: String, repository: GitHubRepoName? = nil) -> [String] {
+    (repository.map { ["-R", "github.com/\($0.value)"] } ?? [])
+      + [
+        "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
+        "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner,url,createdAt",
+      ]
   }
 
-  /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。worktree の掃除で
-  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。ブランチの PR を引く段
-  /// （`GitHubBranchPullRequestLookup`）も同じ取得を使う。
+  /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。リポジトリは名指しせず、gh が作業ディレクトリの
+  /// remote から選ぶ。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。
   ///
   /// **結果は head 単位で返し、失敗もその head に閉じる**（`.failure` = その head の取得失敗／
   /// `[]` = 該当なし）——1 本の失敗で全体を捨てると、取れた head の事実まで一緒に消える。
   /// `each` は head ごとに 1 回、メインで返る（`GitRunner` / `GitHubCLI` の共通契約）。
-  ///
-  /// ラウンドロビンで固定本数のレーンへ静的に配り、各レーンは自分の担当を直列に回す。セマフォで
-  /// 待たせる形にすると heads の本数ぶんスレッドを塞ぐ（thread explosion）。
   func branchPullRequests(
     cwd: String, heads: [String],
     each: @escaping (String, Result<[GitHubBranchPR], GitHubFailure>) -> Void
   ) {
-    let lanes = min(Self.branchFetchConcurrency, heads.count)
+    branchPullRequests(
+      cwd: cwd, queries: heads.map { GitHubBranchPRQuery(head: $0, repository: nil) }
+    ) { query, fetched in each(query.head, fetched) }
+  }
+
+  /// 問い合わせ（ブランチ名と、名指しするリポジトリ）ごとの PR。ブランチの PR を引く段（`GitHubBranchPullRequestLookup`）が
+  /// 使う。`each` は問い合わせごとに 1 回、メインで返る。
+  ///
+  /// ラウンドロビンで固定本数のレーンへ静的に配り、各レーンは自分の担当を直列に回す。セマフォで
+  /// 待たせる形にすると queries の本数ぶんスレッドを塞ぐ（thread explosion）。
+  func branchPullRequests(
+    cwd: String, queries: [GitHubBranchPRQuery],
+    each: @escaping (GitHubBranchPRQuery, Result<[GitHubBranchPR], GitHubFailure>) -> Void
+  ) {
+    let lanes = min(Self.branchFetchConcurrency, queries.count)
     guard lanes > 0 else { return }
     for lane in 0..<lanes {
-      let mine = heads.enumerated().filter { $0.offset % lanes == lane }.map(\.element)
+      let mine = queries.enumerated().filter { $0.offset % lanes == lane }.map(\.element)
       branchQueue.async {
         guard let gh = self.resolveGh() else {
-          DispatchQueue.main.async { for head in mine { each(head, .failure(.reason(""))) } }
+          DispatchQueue.main.async { for query in mine { each(query, .failure(.reason(""))) } }
           return
         }
-        for head in mine {
+        for query in mine {
           let decoded: Result<[GitHubBranchPR], GitHubFailure> = self.decodeSync(
-            gh, Self.branchPRArguments(head: head), cwd: cwd)
-          DispatchQueue.main.async { each(head, decoded) }
+            gh, Self.branchPRArguments(head: query.head, repository: query.repository), cwd: cwd)
+          DispatchQueue.main.async { each(query, decoded) }
         }
       }
     }
   }
 
-  /// リポジトリの正式名を GitHub に問い合わせる（改名後の古い名前からも新しい名前が返る）。gh を
+  /// リポジトリの正式名と、fork なら親の正式名を GitHub に問い合わせる（改名後の古い名前からも新しい名前が返る）。gh を
   /// 解決できないときも `.unverified`。メインで返る。
   func resolveRepository(
     cwd: String, name: GitHubRepoName,
@@ -144,7 +158,7 @@ final class GitHubCLI {
   static func resolveRepositoryArguments(_ name: GitHubRepoName) -> [String] {
     [
       "api", "graphql", "--hostname", "github.com", "-f",
-      "query=query($o:String!,$n:String!){repository(owner:$o,name:$n){nameWithOwner}}",
+      "query=query($o:String!,$n:String!){repository(owner:$o,name:$n){nameWithOwner parent{nameWithOwner}}}",
       "-f", "o=\(name.owner)", "-f", "n=\(name.name)",
     ]
   }
@@ -155,7 +169,11 @@ final class GitHubCLI {
     guard let response = try? JSONDecoder().decode(RepositoryResponse.self, from: stdout),
       let name = response.data?.repository?.nameWithOwner
     else { return .unverified }
-    return .found(GitHubRepoName(nameWithOwner: name))
+    return .found(
+      GitHubRepoName(nameWithOwner: name),
+      parent: response.data?.repository?.parent.map {
+        GitHubRepoName(nameWithOwner: $0.nameWithOwner)
+      })
   }
 
   /// 1 回の問い合わせに載せる項目の上限。1 回を `timeout` に収めるため。
@@ -284,9 +302,13 @@ final class GitHubCLI {
   }
 }
 
-/// 正式名の問い合わせ（`repository(owner:name:){nameWithOwner}`）の出力。
+/// 正式名の問い合わせ（`repository(owner:name:){nameWithOwner parent{nameWithOwner}}`）の出力。
 private struct RepositoryResponse: Decodable {
   struct Payload: Decodable { let repository: Repository? }
-  struct Repository: Decodable { let nameWithOwner: String }
+  struct Repository: Decodable {
+    let nameWithOwner: String
+    let parent: Parent?
+  }
+  struct Parent: Decodable { let nameWithOwner: String }
   let data: Payload?
 }
