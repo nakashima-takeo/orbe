@@ -53,6 +53,9 @@ struct RowLayout: Sendable {
     self.lineHeight = lineHeight
   }
 
+  /// 項目と段の境のわずかに上を境とみなす許容（行高に対する割合）。
+  private static let slack = 1e-9
+
   /// 塊 1 つ——境（文書の行 `line` の前）・高さ（pt）・中身。
   struct Block {
     var line: Int
@@ -108,8 +111,11 @@ struct RowLayout: Sendable {
     Double(boundaries[index]) + prefix[index] / lineHeight
   }
 
-  /// y にある項目。文書の行は範囲に収めない——先頭より上は負の行、最後の項目より下は行数以上の行。
+  /// y にある項目。文書の行は範囲に収めない——先頭より上は負の行、最後の項目より下は行数以上の行。項目の上端のわずかに
+  /// 上は、その項目とみなす——項目の上端に置いた y が、行と y の間の丸め（表示の単位との行き来・端数の高さの累積）で
+  /// 上の項目に化けない。丸めを吸収するのはここだけで、y から項目・行・位置を引く道はどれもここを通る。
   func item(atY y: Double, scale: Double = 1) -> Item {
+    let y = y + lineHeight * scale * Self.slack
     var low = 0
     var high = boundaries.count
     while low < high {
@@ -200,15 +206,14 @@ struct RowLayout: Sendable {
 
   /// 縦の位置 `y` にある所を、縦の並びの中の位置で（段の粒度。`lineCount` 行の文書）。文書の行の中ならその行の段 0（範囲に
   /// 収める）、塊の中なら塊の下の文書の行（最終行の後の塊なら行数）と、その上端からの負の段。段の境のわずかに上は境の段と
-  /// みなす——位置の上端（`unit(of:lineCount:)`）に置いた y が、表示の単位から y への丸めで上の段に化けない。
+  /// みなす（`item(atY:)` と同じ許容）。
   func position(atY y: Double, lineCount: Int) -> RowPosition {
-    let y = y + lineHeight * 1e-9
     switch item(atY: y) {
     case .line(let line):
       return RowPosition(line: min(max(0, line), max(0, lineCount - 1)))
     case .block(let index):
       let line = boundaries[index]
-      let offset = (y / lineHeight - unit(ofLine: line)).rounded(.down)
+      let offset = (y / lineHeight + Self.slack - unit(ofLine: line)).rounded(.down)
       return RowPosition(line: line, offset: Int(offset))
     }
   }
