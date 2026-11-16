@@ -1,0 +1,118 @@
+import OrbeTestSupport
+import XCTest
+
+@testable import Orbe
+
+/// 2 つのコミットの間の、1 つのファイルの diff の区間が覆う行（`GitRepo.hunkLines`）。実 git の一時リポジトリで測る。
+///
+/// 壊れると何が起きるか: GitHub がコメントを受ける行と、Orbe が受けると考える行が食い違う——変更から 4 行目以降にも印が出て
+/// 書き込みが GitHub に断られる、前後 3 行の文脈に印が出ない。利用者の git 設定（文脈の行数・アルゴリズム・外部 diff）で
+/// 答えが変わる。
+@MainActor
+final class GitRepoHunkLinesTests: OrbeTestCase {
+  private var temp: TempGitRepo!
+  private var repo: GitRepo!
+
+  override func setUpWithError() throws {
+    temp = try TempGitRepo()
+    var opened: GitRepo?
+    GitRepo.open(cwd: temp.root) { opened = $0 }
+    pumpMain(until: { opened != nil }, "開く")
+    repo = try XCTUnwrap(opened)
+  }
+
+  private func commit(_ files: [String: String?]) throws -> String {
+    for (path, text) in files {
+      if let text {
+        try temp.write(path, text)
+      } else {
+        XCTAssertTrue(temp.git(["rm", "-q", path]).isSuccess)
+      }
+    }
+    XCTAssertTrue(temp.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(temp.git(["commit", "-qm", "c"]).isSuccess)
+    return temp.head()
+  }
+
+  private func hunkLines(
+    _ base: String, _ head: String, _ path: String, from original: String? = nil
+  ) -> GitDiffHunkLines? {
+    var result: GitDiffHunkLines??
+    repo.hunkLines(from: base, to: head, path: path, originalPath: original) { result = .some($0) }
+    pumpMain(until: { result != nil }, "区間が読める")
+    return result ?? nil
+  }
+
+  private static func lines(_ range: ClosedRange<Int>, replacing changed: [Int: String] = [:])
+    -> String
+  {
+    range.map { changed[$0] ?? "line \($0)" }.joined(separator: "\n") + "\n"
+  }
+
+  /// 変更の前後 3 行までが区間に入り、それより外は入らない。離れた 2 か所の変更は別の区間になる。
+  func testTheHunksCoverThreeLinesAroundEachChange() throws {
+    let base = try commit(["a.txt": Self.lines(1...40)])
+    let head = try commit(["a.txt": Self.lines(1...40, replacing: [10: "changed", 30: "changed"])])
+
+    XCTAssertEqual(
+      hunkLines(base, head, "a.txt"),
+      GitDiffHunkLines(old: [7...13, 27...33], new: [7...13, 27...33]))
+  }
+
+  /// 追加だけのファイルは新しい側の全行、削除だけのファイルは古い側の全行。行の追加は、新しい側だけ行が増える。
+  func testAddedAndDeletedFilesCoverOneSide() throws {
+    let base = try commit(["gone.txt": Self.lines(1...5), "grow.txt": Self.lines(1...10)])
+    let head = try commit([
+      "gone.txt": nil, "new.txt": Self.lines(1...4),
+      "grow.txt": Self.lines(1...10, replacing: [5: "line 5\ninserted"]),
+    ])
+
+    XCTAssertEqual(hunkLines(base, head, "new.txt"), GitDiffHunkLines(old: [], new: [1...4]))
+    XCTAssertEqual(hunkLines(base, head, "gone.txt"), GitDiffHunkLines(old: [1...5], new: []))
+    XCTAssertEqual(hunkLines(base, head, "grow.txt"), GitDiffHunkLines(old: [3...8], new: [3...9]))
+  }
+
+  /// rename は元のパスの版と比べる。末尾に改行の無い行の変更も、行の数え方は変わらない。
+  func testARenameComparesWithTheOriginalAndAMissingFinalNewlineCounts() throws {
+    let base = try commit(["old.txt": Self.lines(1...20)])
+    let renamed = Self.lines(1...20, replacing: [20: "line 20\ntail"]).dropLast()
+    XCTAssertTrue(temp.git(["mv", "old.txt", "new.txt"]).isSuccess)
+    let head = try commit(["new.txt": String(renamed)])
+
+    XCTAssertEqual(
+      hunkLines(base, head, "new.txt", from: "old.txt"),
+      GitDiffHunkLines(old: [18...20], new: [18...21]))
+  }
+
+  /// 利用者の git 設定（アルゴリズム・文脈の行数・区間をつなげる行数・外部 diff・インデントヒューリスティック）が違っても同じ答え。
+  func testTheUsersDiffSettingsDoNotChangeTheAnswer() throws {
+    let base = try commit(["a.txt": Self.lines(1...40)])
+    let head = try commit(["a.txt": Self.lines(1...40, replacing: [10: "changed", 20: "changed"])])
+    let plain = hunkLines(base, head, "a.txt")
+    XCTAssertEqual(plain, GitDiffHunkLines(old: [7...13, 17...23], new: [7...13, 17...23]))
+
+    for setting in [
+      ["diff.algorithm", "patience"], ["diff.context", "10"], ["diff.interHunkContext", "10"],
+      ["diff.external", "/usr/bin/false"], ["diff.indentHeuristic", "false"],
+    ] {
+      XCTAssertTrue(temp.git(["config"] + setting).isSuccess)
+    }
+    XCTAssertEqual(hunkLines(base, head, "a.txt"), plain)
+  }
+
+  /// pathspec の記号を含むパスも、そのファイルだけを読む。
+  func testPathsAreNotPathspecs() throws {
+    let base = try commit(["*.txt": Self.lines(1...3), "b.txt": Self.lines(1...3)])
+    let head = try commit([
+      "*.txt": Self.lines(1...3, replacing: [1: "x"]),
+      "b.txt": Self.lines(1...3, replacing: [3: "y"]),
+    ])
+
+    XCTAssertEqual(hunkLines(base, head, "*.txt"), GitDiffHunkLines(old: [1...3], new: [1...3]))
+  }
+
+  /// 手元に無いコミットは読めない。
+  func testAMissingCommitIsUnreadable() throws {
+    XCTAssertNil(hunkLines(temp.head(), String(repeating: "0", count: 40), "a.txt"))
+  }
+}
