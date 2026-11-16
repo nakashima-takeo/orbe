@@ -140,9 +140,66 @@ final class PullRequestStateTests: OrbeTestCase {
     state.reload()
     gitHub.finishWrite()
     gitHub.answerContent()
-    XCTExpectFailure("書き込みの番号を押した時点で付けるので、押した後に出した読み直しの古い値が、通った書き込みを上書きする") {
-      XCTAssertTrue(state.isViewed("a"), "最後に押した値が残る")
-    }
+    XCTAssertTrue(state.isViewed("a"), "最後に押した値が残る")
+  }
+
+  /// 押す前に出した読み直しの答えが、押した後・書き込みの答えの前に届いても、押した値のまま。書き込みが通った後も残る。
+  func testAReloadIssuedBeforePressingAndAnsweredBeforeTheWriteKeepsThePress() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+    gitHub.answersAtOnce = false
+    state.reload()
+    state.setViewed(true, paths: ["a"])
+    gitHub.answerContent()
+    XCTAssertTrue(state.isViewed("a"), "書いている途中は押した値")
+    gitHub.finishWrite()
+    XCTAssertTrue(state.isViewed("a"))
+  }
+
+  /// 付ける→外すと続けて押し、1 つ目の書き込みの答えと 2 つ目の答えの間に読み直しの答えが届いても、最後に押した値
+  /// （外した）のまま。2 つ目が通った後も残る。
+  func testAReloadBetweenTwoWritesOfTheSamePathKeepsTheLastPress() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+    gitHub.answersAtOnce = false
+    state.setViewed(true, paths: ["a"])
+    state.setViewed(false, paths: ["a"])
+    state.reload()
+    gitHub.finishWrite()
+    gitHub.content = .success(content(viewed: ["a"]))
+    gitHub.answerContent()
+    XCTAssertFalse(state.isViewed("a"), "2 つ目の書き込みの途中は、最後に押した値")
+    gitHub.finishWrite()
+    XCTAssertFalse(state.isViewed("a"))
+  }
+
+  /// 書き込みが失敗した後に、その間に出した読み直しの答えが届けば、GitHub の値で見せる。
+  func testAReloadAnsweredAfterAFailedWriteShowsGitHubsValue() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+    gitHub.answersAtOnce = false
+    state.setViewed(true, paths: ["a"])
+    state.reload()
+    gitHub.finishWrite(written: [], failure: .unreachable)
+    XCTAssertFalse(state.isViewed("a"), "失敗したら戻る")
+    gitHub.content = .success(content(viewed: ["a"]))
+    gitHub.answerContent()
+    XCTAssertTrue(state.isViewed("a"), "GitHub の値（ほかで付いた）")
+  }
+
+  /// 書き込みの答えが届いた後に出した読み直しは、GitHub の今の値で上書きする（ブラウザで外したチェックが反映される）。
+  func testAReloadIssuedAfterTheWriteLandedTakesGitHubsValue() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+    state.setViewed(true, paths: ["a"])
+    gitHub.finishWrite()
+    XCTAssertTrue(state.isViewed("a"))
+    state.reload()
+    XCTAssertFalse(state.isViewed("a"), "GitHub の今の値（外れた）")
   }
 
   // MARK: - diff の両端

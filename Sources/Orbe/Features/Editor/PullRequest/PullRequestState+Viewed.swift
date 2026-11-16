@@ -1,10 +1,10 @@
 import Foundation
 
 /// 確認済み——押した瞬間に書いている途中の値を重ねて見せ、GitHub への書き込みは 1 つずつ順に送る。通ったパスは GitHub の
-/// 値として確定し、通らなかったパスは重ねた値を外して元に戻す。読み直しと書き込みには出した順の通し番号を付け、読み直しの答えは、
-/// そのパスに最後に確定した書き込みより前に出した読み直しのものであれば、そのパスを上書きしない（書き込みより前に出して後から届いた
-/// 読み直しが、通ったチェックを外さない）。書いている途中のパスも上書きしない。走っている書き込みは、見ている者が
-/// いなくなっても最後まで走る。
+/// 値として確定し、通らなかったパスは重ねた値を外して元に戻す。読み直しには出した順の通し番号を付け、通った書き込みには、
+/// GitHub が書き込みを受けたと分かった時点の番号を付ける。読み直しの答えは、そのパスに最後に確定した書き込みの番号より前に
+/// 出した読み直しのものであれば、そのパスを上書きしない——書き込みを受ける前の GitHub の値を返しうるので、通ったチェックを
+/// 外させない。書いている途中のパスも上書きしない。走っている書き込みは、見ている者がいなくなっても最後まで走る。
 extension PullRequestState {
   /// 変更ファイル `path` が確認済みか（書いている途中なら、その値）。
   func isViewed(_ path: String) -> Bool {
@@ -38,10 +38,13 @@ extension PullRequestState {
       guard let self else { return }
       writes.removeFirst()
       isWriting = false
+      // 通ったパスの番号は、GitHub が書き込みを受けたと分かった今の番号——これより前に出した読み直しは、書き込み前の
+      // 値を返しうる。
+      let accepted = issueOrder()
       for path in next.paths {
         if result.written.contains(path) {
           viewed[path] = next.value
-          viewedOrder[path] = next.order
+          viewedOrder[path] = accepted
         }
         if pendingViewed[path]?.order == next.order { pendingViewed[path] = nil }
       }
