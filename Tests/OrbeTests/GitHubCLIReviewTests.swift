@@ -184,6 +184,15 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     XCTAssertEqual(read(), .failure(.reason("")))
   }
 
+  /// 続きのページの失敗は、それまでのページを返さず、全体の失敗。
+  func testAFailedThreadPageFailsTheWholeRead() throws {
+    try serve("first", firstPage(threads([thread("T1")], next: "P1")))
+    try serve("threads-P1.stderr", "error connecting to api.github.com\n")
+    try serve("threads-P1.exit", "1")
+
+    XCTAssertEqual(read(), .failure(.unreachable))
+  }
+
   // MARK: - 書き込み
 
   private func write(
@@ -192,7 +201,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     var result: GitHubReviewWriteResult?
     let done = expectation(description: "writeReview")
     cli.writeReview(
-      write, pullRequest: "PR_1", pendingReview: pendingReview, reviewedCommit: "h1"
+      write, pullRequest: "PR_1", pendingReview: pendingReview, reviewedCommit: "seen"
     ) {
       result = $0
       done.fulfill()
@@ -242,11 +251,15 @@ final class GitHubCLIReviewTests: OrbeTestCase {
 
     XCTAssertEqual(calls(), ["resolve", "unresolve", "submit"])
     XCTAssertEqual(try call(1).variables["thread"] as? String, "T1")
-    XCTAssertTrue(try call(3).variables["body"] is NSNull)
+    XCTAssertNil(try call(3).variables["body"])
+    XCTAssertFalse(
+      try String(contentsOf: dir.appendingPathComponent("in.3"), encoding: .utf8).contains("$body"),
+      "本文の変数を宣言もしない")
   }
 
   /// 保留中のレビューが無いときのスレッドの追加は、レビューの作成と最初のスレッドを 1 回で送る。無いときの返信は作ってから
-  /// 返信し、在るときは作らない。無いときの送信は、作ってすぐ送る 1 回。
+  /// 返信し、在るときは作らない。無いときの送信は、作ってすぐ送る 1 回で、利用者が見ていた先頭のコミットに結ぶ。在るときの
+  /// 送信は結ばない。
   func testAMissingPendingReviewIsCreatedInTheFewestCalls() throws {
     XCTAssertEqual(
       write(
@@ -280,6 +293,11 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     _ = write(.submit(.comment, body: "b"), pendingReview: nil)
     XCTAssertEqual(calls().last, "create")
     XCTAssertEqual(try call(6).variables["event"] as? String, "COMMENT")
+    XCTAssertEqual(try call(6).variables["commit"] as? String, "seen", "見ていた先頭に結ぶ")
+
+    _ = write(.submit(.comment, body: "b"), pendingReview: "R1")
+    XCTAssertEqual(calls().last, "submit")
+    XCTAssertNil(try call(7).variables["commit"])
   }
 
   /// 「解決して返信」は返信 → 解決の順で、返信が通らなければ解決を送らない。作った保留中のレビューは、返信が通らなくても返す。

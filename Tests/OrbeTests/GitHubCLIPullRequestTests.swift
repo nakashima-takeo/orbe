@@ -159,14 +159,18 @@ final class GitHubCLIPullRequestTests: OrbeTestCase {
       ])
   }
 
-  /// owner・name・PR の ID・パスは文字列のまま（`-f`）渡す——`-F` は数字だけの名前を整数に変えて PR を読めなくし、`@` で
-  /// 始まるパスをファイルの中身に置き換える。ホストは認証確認と同じ github.com を名指しする。
+  /// owner・name・カーソル・PR の ID・パスは文字列のまま（`-f`）渡す——`-F` は数字だけの名前を整数に変えて PR を読めなく
+  /// し、`@` で始まるパスをファイルの中身に置き換える。ホストは認証確認と同じ github.com を名指しする。この渡し方は、中身の読みとレビューの
+  /// やりとりの読みで同じ。
   func testValuesArePassedAsStringsToGitHubDotCom() throws {
     let read = GitHubPullRequestQuery.firstPageArguments(id)
     let write = GitHubViewedMutation.arguments(true, paths: ["@a", "2048"], pullRequest: "PR_1")
+    let review = GitHubReviewQuery.firstPageArguments(id)
+    let reviewPage = GitHubReviewQuery.nextPageArguments(id, after: "123")
 
     for (arguments, values) in [
       (read, ["owner=o", "name=2048"]), (write, ["pr=PR_1", "p0=@a", "p1=2048"]),
+      (review, ["owner=o", "name=2048"]), (reviewPage, ["owner=o", "name=2048", "after=123"]),
     ] {
       XCTAssertEqual(Array(arguments.prefix(4)), ["api", "graphql", "--hostname", "github.com"])
       for value in values {
