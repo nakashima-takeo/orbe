@@ -64,7 +64,7 @@ final class AgentPluginInstallerTests: OrbeTestCase {
   /// 指紋は「CLI に登録するもの」が変われば変わり、変わらなければ同じ。起動時の入れ直しはこれだけで
   /// 決まるので、変化を見逃すと codex / agy に古いコピーが残り、変化の無い起動で拾うと毎回入れ直す。
   func testDigestTracksContentsPathsAndHiddenFiles() throws {
-    try write("plugins/orbe-agent-dev/.codex-plugin/plugin.json", "{}")
+    try write("codex/orbe-agent-dev/.codex-plugin/plugin.json", "{}")
     try write("plugins/orbe-agent-dev/channel", "dev.orbe.app.dev\n")
     let base = try XCTUnwrap(AgentPluginInstaller.digest(of: pkg))
 
@@ -73,9 +73,9 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     try write("plugins/orbe-agent-dev/channel", "dev.orbe.app.dev\n")
     XCTAssertEqual(AgentPluginInstaller.digest(of: pkg), base)
 
-    try write("plugins/orbe-agent-dev/.codex-plugin/plugin.json", #"{"mcpServers":{}}"#)
+    try write("codex/orbe-agent-dev/.codex-plugin/plugin.json", #"{"mcpServers":{}}"#)
     XCTAssertNotEqual(AgentPluginInstaller.digest(of: pkg), base, "隠しディレクトリの中の定義")
-    try write("plugins/orbe-agent-dev/.codex-plugin/plugin.json", "{}")
+    try write("codex/orbe-agent-dev/.codex-plugin/plugin.json", "{}")
 
     try FileManager.default.moveItem(
       at: pkg.appendingPathComponent("plugins/orbe-agent-dev"),
