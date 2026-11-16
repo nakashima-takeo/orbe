@@ -62,15 +62,18 @@ enum AgentPluginInstaller {
       .appendingPathComponent("agent-plugin.tmp-\(UUID().uuidString)", isDirectory: true)
     do {
       try fm.copyItem(at: src, to: tmp)
-      // 自分のチャネル（bundle ID）をプラグインのルートへ刻む。状態追跡と MCP の両シムがこれと
-      // タブの ORBE_BUNDLE_ID を突き合わせ、他チャネルの Orbe から来た呼び出しを通さない。
+      // 自分のチャネル（bundle ID）を 2 つのプラグインのルート（claude・agy が読む `plugins/<名前>/` と
+      // codex 専用の `codex/<名前>/`）へ刻む。状態追跡と MCP の両シムがこれとタブの ORBE_BUNDLE_ID を
+      // 突き合わせ、他チャネルの Orbe から来た呼び出しを通さない。
       // 差し替えの前に書くので、実体化先が channel を持たない瞬間は生じない。
       guard let name = pluginName(in: tmp) else {
         try? fm.removeItem(at: tmp)
         return nil
       }
-      try Data("\(StateDir.bundleId)\n".utf8).write(
-        to: tmp.appendingPathComponent("plugins/\(name)/channel"))
+      for root in ["plugins", "codex"] {
+        try Data("\(StateDir.bundleId)\n".utf8).write(
+          to: tmp.appendingPathComponent("\(root)/\(name)/channel"))
+      }
       if fm.fileExists(atPath: dst.path) {
         _ = try fm.replaceItemAt(dst, withItemAt: tmp)
       } else {
