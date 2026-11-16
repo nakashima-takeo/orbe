@@ -2,11 +2,14 @@ import XCTest
 
 @testable import Orbe
 
-/// PR ごとの状態が持つレビューへの書き込みを、書き込み・読み直し・それぞれの応答・見ている者の出入りが入り乱れる順序で、種を
-/// 決めた乱数により実行する。どの順序でも、書き込みの規則（pull-request.md の「レビューのやりとり」）が保たれる。
+/// PR ごとの状態が持つレビューへの書き込みを、書き込み・読み直し・それぞれの応答・見ている者の出入り・PR への push が入り乱れる
+/// 順序で、種を決めた乱数により実行する。どの順序でも、書き込みの規則（pull-request.md の「レビューのやりとり」）が保たれる。
+/// PR の中身とレビューのやりとりが読んだ先頭のコミットを揃える読み直しは、際限なく続くことはなく、手順を終えて読み直しを
+/// 頼めば、両方が GitHub の今の先頭で揃う。食い違いで読み直すこと自体は `PullRequestStateTests+Review` が守る。
 ///
 /// 壊れると何が起きるか: 書き込みの結果が返らないままになり、そのスレッドへの返信やレビューの送信が、アプリを再起動するまで
-/// できなくなる。書き込みの応答より前に出した読みの応答で、書いたコメントが消えて見える。2 回押した送信が 2 回送られる。
+/// できなくなる。書き込みの応答が届くより前に問い合わせた読みの応答を取り込み、書いたコメントが消えて見える・失敗の文が
+/// 残る。2 回押した送信が 2 回送られる。承認が、利用者の見ていないコミットに付く。push の後、GitHub への問い合わせが止まらない。
 /// 失敗した種と手順はメッセージに出る（同じ種で回せば同じ手順になる）。
 extension PullRequestStateTests {
   func testInterleavedWritesAndRereadsKeepTheWriteRules() throws {
@@ -18,11 +21,12 @@ extension PullRequestStateTests {
       let state = PullRequestState.shared(for: key, source: gitHub.source)
       state.beginWatching()
       addTeardownBlock { @MainActor in state.endWatching() }
-      gitHub.content = .success(content())
+      gitHub.content = .success(content(head: "h0"))
       state.reload()
       gitHub.answersReviewAtOnce = false
 
-      let run = ReviewWriteRun(state: state, gitHub: gitHub, seed: seed)
+      let run = ReviewWriteRun(
+        state: state, gitHub: gitHub, seed: seed, content: { self.content(head: $0) })
       run.play(steps: 80)
       run.drain()
       if let violation = run.violation {
@@ -38,6 +42,8 @@ extension PullRequestStateTests {
 private final class ReviewWriteRun {
   struct Accepted {
     let write: GitHubReviewWrite
+    /// 受け付けた時点に状態が持っていたレビューのやりとりの先頭のコミット（利用者が見ていたもの）。
+    let reviewedCommit: String
     /// 届いた書き込みの応答の何番目がこの書き込みの応答か。
     var answeredAt: Int?
     var answer: GitHubFailure?
@@ -46,6 +52,7 @@ private final class ReviewWriteRun {
 
   private let state: PullRequestState
   private let gitHub: PullRequestFakeGitHub
+  private let content: (String) -> GitHubPullRequestContent
   private var random: SplitMix
   private var accepted: [Accepted] = []
   private var sent = 0
@@ -54,7 +61,12 @@ private final class ReviewWriteRun {
   /// 走っている読みを出した時点の `writeAnswers`。
   private var readIssuedAt: Int?
   private var reads: Int
+  private var contentReads: Int
   private var watching = true
+  /// GitHub 上の PR の先頭のコミットと、その 1 つ前（答えの遅れた読みが返す）。
+  private var head = "h0"
+  private var previousHead: String?
+  private var pushes = 0
   /// 次に送る書き込みが名指しすべき保留中のレビュー（最後に取り込んだ読みか、その後の書き込みの応答で分かったもの）。
   private var pendingReview: String?
   /// 今の操作で届いた読みを出した時点の `writeAnswers`（読みの応答を返す操作の間だけ）。
@@ -63,41 +75,44 @@ private final class ReviewWriteRun {
   private(set) var log: [String] = []
   private(set) var violation: String?
 
-  init(state: PullRequestState, gitHub: PullRequestFakeGitHub, seed: UInt64) {
+  init(
+    state: PullRequestState, gitHub: PullRequestFakeGitHub, seed: UInt64,
+    content: @escaping (String) -> GitHubPullRequestContent
+  ) {
     self.state = state
     self.gitHub = gitHub
+    self.content = content
     random = SplitMix(seed: seed)
     reads = gitHub.reviewReads
+    contentReads = gitHub.contentReads
   }
-
-  private static let writes: [GitHubReviewWrite] = [
-    .reply(thread: "T1", body: "x", resolve: false), .setResolved(thread: "T1", true),
-    .reply(thread: "T2", body: "x", resolve: true), .submit(.approve, body: ""),
-    .addThread(path: "a", side: .new, line: 1, commit: "h", body: "x"),
-  ]
 
   func play(steps: Int) {
     for _ in 0..<steps where violation == nil {
-      switch random.next(below: 11) {
-      case 0..<3: write(Self.writes[random.next(below: Self.writes.count)])
+      switch random.next(below: 12) {
+      case 0..<3: write()
       case 3:
         log.append("reload")
         state.reload()
-      case 4..<7: answerRead(failing: random.next(below: 4) == 0)
+      case 4..<7:
+        answerRead(failing: random.next(below: 4) == 0, lagging: random.next(below: 4) == 0)
       case 7..<10: answerWrite()
-      default: toggleWatching()
+      case 10: toggleWatching()
+      default: push()
       }
       check()
     }
   }
 
-  /// 見ている者を戻し、走っている読みと書き込みに、応答が尽きるまで成功を返す。受け付けた書き込みは、どれも 1 回だけ結果を返す。
+  /// 見ている者を戻して読み直しを頼み、走っている読みと書き込みに、応答が尽きるまで遅れの無い成功を返す。受け付けた書き込みは、
+  /// どれも 1 回だけ結果を返し、中身とレビューのやりとりは GitHub の今の先頭で揃う。
   func drain() {
     if !watching { toggleWatching() }
+    state.reload()
     check()
     for _ in 0..<200 where violation == nil {
       if readIssuedAt != nil {
-        answerRead(failing: false)
+        answerRead(failing: false, lagging: false)
       } else if !gitHub.reviewWrites.isEmpty {
         answerWrite(failing: false)
       } else {
@@ -108,46 +123,70 @@ private final class ReviewWriteRun {
     guard violation == nil else { return }
     if let index = accepted.firstIndex(where: { $0.results != 1 }) {
       violation = "受け付けた書き込み \(index) が、応答が尽きても結果を返さない"
+    } else if state.content?.headCommit != head || state.review?.headCommit != head {
+      violation =
+        "中身の先頭 \(state.content?.headCommit ?? "無し") とレビューのやりとりの先頭 "
+        + "\(state.review?.headCommit ?? "無し") が、GitHub の先頭 \(head) で揃わない"
     }
   }
 
   // MARK: - 操作
 
-  private func write(_ write: GitHubReviewWrite) {
-    let target = Self.target(of: write)
-    let busy = target.map { target in unfinished.contains { Self.target(of: $0.write) == target } }
+  private func write() {
+    let seen = state.review?.headCommit ?? ""
+    let writes: [GitHubReviewWrite] = [
+      .reply(thread: "T1", body: "x", resolve: false), .setResolved(thread: "T1", true),
+      .reply(thread: "T2", body: "x", resolve: true), .submit(.approve, body: ""),
+      .addThread(
+        path: "a", side: .new, line: 1, commit: random.next(below: 2) == 0 ? seen : head, body: "x"),
+    ]
+    let write = writes[random.next(below: writes.count)]
+    let expected: Bool
+    if case .addThread(_, _, _, let commit, _) = write {
+      expected = commit == seen
+    } else {
+      let target = Self.target(of: write)
+      expected = !unfinished.contains { Self.target(of: $0.write) == target }
+    }
     let index = accepted.count
     let taken = state.writeReview(write) { [weak self] in self?.finish(index, $0) }
-    log.append("write(\(target ?? "new"))=\(taken)")
-    guard taken == !(busy ?? false) else {
-      violation = taken ? "走っている対象への書き込みを受け付けた" : "空いている対象への書き込みを拒否した"
+    log.append("write(\(Self.target(of: write) ?? "new"))=\(taken)")
+    guard taken == expected else {
+      violation = taken ? "受け付けてはいけない書き込みを受け付けた" : "受け付けるべき書き込みを拒否した"
       return
     }
-    if taken { accepted.append(Accepted(write: write)) }
+    if taken { accepted.append(Accepted(write: write, reviewedCommit: seen)) }
   }
 
-  private func answerRead(failing: Bool) {
+  private func answerRead(failing: Bool, lagging: Bool) {
     guard let issuedAt = readIssuedAt else { return }
     tag += 1
     let pending = random.next(below: 2) == 0 ? "P\(tag)" : nil
     let read = GitHubPullRequestReview(
-      viewer: "r\(tag)", viewerIsAuthor: false, headCommit: "h",
+      viewer: "r\(tag)", viewerIsAuthor: false,
+      headCommit: lagging ? previousHead ?? head : head,
       pendingReview: pending.map { .init(id: $0, commentCount: 1) }, threads: [])
     gitHub.review = failing ? .failure(.unreachable) : .success(read)
-    log.append("answerRead(\(failing ? "失敗" : "成功"))")
-    let before = state.review
+    log.append("answerRead(\(failing ? "失敗" : lagging ? "遅れ" : "成功"))")
+    let before = (state.review, state.reviewFailure)
     let current = issuedAt == writeAnswers
     readIssuedAt = nil
     answeringReadIssuedAt = issuedAt
     gitHub.answerReview()
     answeringReadIssuedAt = nil
-    if !failing, current {
+    if !current {
+      if state.review != before.0 || state.reviewFailure != before.1 {
+        violation = "書き込みの応答より前に出した読みを取り込んだ"
+      }
+    } else if failing {
+      if state.review != before.0 || state.reviewFailure != .unreachable {
+        violation = "読み直しの失敗で、前に読めたものを残して失敗を持つ、にならない"
+      }
+    } else {
       pendingReview = pending
-      if state.review != read { violation = "書き込みの応答の後に出した読みを取り込まない" }
-    } else if failing, current, state.failure != .read(.unreachable) {
-      violation = "読み直しの失敗を、状態が持たない"
-    } else if state.review != before {
-      violation = failing ? "失敗した読みで、前に読めたものが変わった" : "書き込みの応答より前に出した読みを取り込んだ"
+      if state.review != read || state.reviewFailure != nil {
+        violation = "書き込みの応答の後に出した読みを取り込んで失敗を消す、にならない"
+      }
     }
   }
 
@@ -182,6 +221,15 @@ private final class ReviewWriteRun {
     log.append(watching ? "beginWatching" : "endWatching")
   }
 
+  /// GitHub 上の PR に push が入る（Orbe はまだ知らない）。
+  private func push() {
+    pushes += 1
+    previousHead = head
+    head = "h\(pushes)"
+    gitHub.content = .success(content(head))
+    log.append("push(\(head))")
+  }
+
   // MARK: - 規則
 
   private var unfinished: [Accepted] { accepted.filter { $0.results == 0 } }
@@ -207,19 +255,26 @@ private final class ReviewWriteRun {
     }
   }
 
-  /// 操作の後の状態。読みは 1 本ずつで、見ている者がいる間だけ出る。書き込みは 1 本ずつ受け付けた順に送られ、保留中のレビューを
-  /// 正しく名指しする。走っている対象は、結果を返していない書き込みの対象。
+  /// 操作の後の状態。読みは見ている者がいる間だけ出て、レビューのやりとりの読みは 1 本ずつで、1 回の操作で問い合わせが続かない。
+  /// 書き込みは 1 本ずつ受け付けた順に送られ、保留中のレビューと、受け付けた時点の先頭のコミットを正しく名指しする。走っている
+  /// 対象は、結果を返していない書き込みの対象。レビューのやりとりの読みの失敗は、中身の失敗に入らない。
   private func check() {
     guard violation == nil else { return }
-    violation = checkReads() ?? checkSending() ?? checkTargets()
+    violation =
+      checkReads() ?? checkSending() ?? checkTargets()
+      ?? (state.failure == nil ? nil : "レビューのやりとりの読みの失敗が、中身の失敗に入った")
   }
 
   private func checkReads() -> String? {
     let issued = gitHub.reviewReads - reads
+    let issuedContent = gitHub.contentReads - contentReads
     reads = gitHub.reviewReads
-    guard issued > 0 else { return nil }
+    contentReads = gitHub.contentReads
+    guard issued > 0 || issuedContent > 0 else { return nil }
     guard watching else { return "見ている者がいないのに問い合わせた" }
-    guard issued == 1, readIssuedAt == nil else { return "読みを 2 本同時に出した" }
+    guard issuedContent <= 3 else { return "中身の問い合わせが止まらない（1 回の操作で \(issuedContent) 回）" }
+    guard issued > 0 else { return nil }
+    guard issued == 1, readIssuedAt == nil else { return "レビューのやりとりの読みを 2 本同時に出した" }
     readIssuedAt = writeAnswers
     return nil
   }
@@ -234,6 +289,9 @@ private final class ReviewWriteRun {
     sent += 1
     guard sending.pendingReview == pendingReview else {
       return "保留中のレビューを \(pendingReview ?? "無し") でなく \(sending.pendingReview ?? "無し") と名指しした"
+    }
+    guard sending.reviewedCommit == accepted[index].reviewedCommit else {
+      return "受け付けた時点の先頭 \(accepted[index].reviewedCommit) でなく \(sending.reviewedCommit) を添えた"
     }
     return nil
   }

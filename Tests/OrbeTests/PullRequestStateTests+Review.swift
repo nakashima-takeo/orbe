@@ -2,12 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// PR ごとの状態が持つレビューのやりとり——読むきっかけ、先頭のコミットが古いときのスレッド、書き込みを受け付けない場合。
-/// 書き込みの順番・結果の返し方・書き込みの後の読み直しは `PullRequestStateTests+ReviewOrder` が守る。GitHub は差し替えの
-/// 構造体が答える。
+/// PR ごとの状態が持つレビューのやりとり——読むきっかけ、先頭のコミットが古いときのスレッド、中身との先頭の食い違いで読み直す
+/// こと、書き込みを受け付けない場合。書き込みの順番・結果の返し方・書き込みの後の読み直しは `PullRequestStateTests+ReviewOrder`
+/// が守る。GitHub は差し替えの構造体が答える。
 ///
 /// 壊れると何が起きるか: 誰も見ていない PR を問い合わせる。push の後に、古い版の行のスレッドを新しい版の行に置く・古い版の
-/// 行番号で新しいスレッドを書く。
+/// 行番号で新しいスレッドを書く。書いている間に push があると、次のきっかけまでスレッドを置けず、新しいスレッドも書けない。
 extension PullRequestStateTests {
   private func review(head: String = "h", threads: [String] = []) -> GitHubPullRequestReview {
     GitHubPullRequestReview(
@@ -59,6 +59,41 @@ extension PullRequestStateTests {
     state.reload()
     XCTAssertEqual(state.threads(at: "h")?.map(\.id), ["T1"])
     XCTAssertNil(state.threads(at: "h2"), "diff が見せている先頭と違う間は、スレッドはまだ無い")
+  }
+
+  /// 書き込みの後の読み直しが、中身より新しい先頭を読んだら（書いている間の push）、次のきっかけを待たずに中身を読み直して
+  /// 揃える——スレッドを置け、新しいスレッドも受け付ける。
+  func testAReviewReadAheadOfTheContentReadsTheContentAgain() {
+    let state = readState()
+    XCTAssertTrue(state.writeReview(.setResolved(thread: "T1", true)) { _ in })
+    gitHub.review = .success(review(head: "h2", threads: ["T1"]))
+    gitHub.content = .success(content(head: "h2"))
+
+    gitHub.finishReviewWrite()
+
+    XCTAssertEqual(state.content?.headCommit, "h2")
+    XCTAssertEqual(state.threads(at: "h2")?.map(\.id), ["T1"])
+    XCTAssertTrue(
+      state.writeReview(.addThread(path: "a", side: .new, line: 1, commit: "h2", body: "x")) { _ in
+      })
+  }
+
+  /// 読み直しても同じ 2 つの先頭で食い違う（GitHub の答えの遅れ）なら、問い合わせを往復させない。次の push で食い違いが
+  /// 変われば、また読み直す。
+  func testAMismatchThatSurvivesTheRereadIsNotReadAgainUntilItChanges() {
+    let state = readState()
+    gitHub.review = .success(review(head: "h2"))
+    XCTAssertTrue(state.writeReview(.setResolved(thread: "T1", true)) { _ in })
+    let contentReads = gitHub.contentReads
+    gitHub.finishReviewWrite()
+    XCTAssertEqual(gitHub.contentReads, contentReads + 1, "食い違いで 1 回だけ読み直す")
+    XCTAssertEqual(state.content?.headCommit, "h", "前提: 中身の答えが遅れている")
+
+    gitHub.review = .success(review(head: "h3"))
+    gitHub.content = .success(content(head: "h3"))
+    XCTAssertTrue(state.writeReview(.setResolved(thread: "T1", true)) { _ in })
+    gitHub.finishReviewWrite()
+    XCTAssertEqual(state.content?.headCommit, "h3")
   }
 
   // MARK: - 書き込み
