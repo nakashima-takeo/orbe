@@ -26,18 +26,16 @@ final class BranchPullRequest {
   /// 答えを出した通し番号（`settle` のたびに増える）。答えに続く問い合わせの結果は、その答えを出した番号のままのときだけ
   /// 入れる——答えの値が同じでも、別の読みが出した答えには入れない。
   @ObservationIgnored private var settlement = 0
-  /// 答えを出している・読んでいるブランチ名（ブランチに居ない・git の管理下でないなら nil）・手元の HEAD・追跡 ref の値。
+  /// 答えを出している・読んでいるブランチ名（ブランチに居ない・git の管理下でないなら nil）・手元の HEAD。
   @ObservationIgnored private var branch: String?
   @ObservationIgnored private var head: String?
-  @ObservationIgnored private var tracked: Tracked?
+  /// このブランチの push 先の追跡 ref と、PR のベースブランチの追跡 ref（PR の中身が読めていれば）。
+  @ObservationIgnored private lazy var tracking = TrackingRefs { [weak self] done in
+    guard let self else { return }
+    trackedRefs(done)
+  }
   /// ずれを数えた（数えている）手元の HEAD と PR の先頭。
   @ObservationIgnored private var counted: (local: String, pullRequest: String)?
-
-  /// 覚えた追跡 ref の名前と値。値を比べるのは、同じ名前の組どうしだけ。
-  private struct Tracked: Equatable {
-    let refs: [String]
-    let values: [String: String]
-  }
 
   private static var registry: [String: BranchPullRequest] = [:]
 
@@ -117,7 +115,7 @@ final class BranchPullRequest {
     isReading = true
     // 問い合わせる前の追跡 ref の値を覚えてから問い合わせる——覚えた後に動けば比べて読み直し、覚える前に動いたなら、
     // この問い合わせは、動いた後の GitHub を読む。
-    recordTracking { [weak self] in
+    tracking.record { [weak self] in
       repo.defaultBranch { [weak self] remoteDefault in
         self?.lookUp(name, in: repo, remoteDefault: remoteDefault)
       }
@@ -289,15 +287,15 @@ final class BranchPullRequest {
 
   // MARK: - 追跡 ref
 
-  /// このブランチの push 先の追跡 ref と、PR のベースブランチの追跡 ref（PR の中身が読めていれば）の名前と今の値。
-  private func readTracking(_ completion: @escaping (Tracked?) -> Void) {
+  /// このブランチの push 先の追跡 ref と、PR のベースブランチの追跡 ref（PR の中身が読めていれば）の名前。
+  private func trackedRefs(_ completion: @escaping ((repo: GitRepo, refs: [String])?) -> Void) {
     guard let repo = files?.repo, let branch else { return completion(nil) }
     repo.pushTracking(ofBranch: branch) { [weak self] push in
       guard let self else { return }
       var refs: [String] = []
       if case .ref(let ref, _)? = push { refs.append(ref) }
       if let base = baseTrackingRef { refs.append(base) }
-      repo.refValues(refs) { values in completion(values.map { Tracked(refs: refs, values: $0) }) }
+      completion((repo, refs))
     }
   }
 
@@ -307,14 +305,6 @@ final class BranchPullRequest {
       return nil
     }
     return "refs/remotes/\(remote)/\(base)"
-  }
-
-  /// 今の追跡 ref の値を覚え（次にリモート追跡の ref が動いたとき、比べる相手）、`completion` を呼ぶ。
-  private func recordTracking(_ completion: @escaping () -> Void = {}) {
-    readTracking { [weak self] read in
-      self?.tracked = read
-      completion()
-    }
   }
 }
 
@@ -340,13 +330,8 @@ extension BranchPullRequest: RootFilesObserver {
   /// いたときだけ読み直す（無関係なブランチが fetch で動くたびに GitHub へ問い合わせない）。問い合わせの最中なら、
   /// 終わった後に 1 回読み直す。
   func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
-    guard remoteRefsChanged, let previous = tracked else { return }
-    readTracking { [weak self] read in
-      guard let self, let read else { return }
-      tracked = read
-      guard read.refs == previous.refs, read.values != previous.values else { return }
-      reload()
-    }
+    guard remoteRefsChanged else { return }
+    tracking.check { [weak self] in self?.reload() }
   }
 }
 
@@ -368,6 +353,6 @@ extension BranchPullRequest: SourceControlObserver {
 extension BranchPullRequest: PullRequestStateObserver {
   func pullRequestStateDidChange(_ state: PullRequestState) {
     countDrift()
-    if let base = baseTrackingRef, tracked?.refs.contains(base) == false { recordTracking() }
+    if let base = baseTrackingRef, tracking.lacks(base) { tracking.record() }
   }
 }
