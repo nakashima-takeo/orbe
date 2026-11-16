@@ -560,6 +560,38 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorDiffPullRequestCommitsMissing
   case editorDiffPullRequestUnrelated
 
+  // MARK: - Editor 面（PR）
+  case editorRailPullRequest
+  case editorPrTitle
+  case editorPrRefresh
+  case editorPrOpenOnGitHub
+  case editorPrInSync
+  case editorPrUnpushed
+  case editorPrUnfetched
+  case editorPrUnfetchedUncounted
+  case editorPrDescription
+  case editorPrCommits
+  case editorPrFiles
+  case editorPrViewedCount
+  case editorPrTreeView
+  case editorPrListView
+  case editorPrOlderCommitsHidden
+  case editorPrMarkViewed
+  case editorPrCreate
+  case editorPrPublishFirst
+  case editorPrNotDetached
+  case editorPrNotDefaultBranch
+  case editorPrNotGitHub
+  case editorPrUnverified
+  case editorPrGhMissing
+  case editorPrGhUnauthed
+  case editorPrFailedUnauthenticated
+  case editorPrFailedRateLimited
+  case editorPrFailedUnreachable
+  case editorPrFailedTimedOut
+  case editorPrFailedRead
+  case editorPrFailedWrite
+
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle
   case editorNewFile

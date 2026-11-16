@@ -88,10 +88,16 @@ final class PullRequestState {
   private(set) var bounds = Bounds.none
 
   /// 確認済みの GitHub の値（パス → 値）と、その値を決めた問い合わせの通し番号。
-  var viewed: [String: Bool] = [:]
+  var viewed: [String: Bool] = [:] {
+    didSet { viewedVersion &+= 1 }
+  }
   @ObservationIgnored var viewedOrder: [String: Int] = [:]
   /// 書いている途中・書く順番を待っている値（パス → 値と、その書き込みの通し番号）。
-  var pendingViewed: [String: PendingViewed] = [:]
+  var pendingViewed: [String: PendingViewed] = [:] {
+    didSet { viewedVersion &+= 1 }
+  }
+  /// 見せる確認済み（`isViewed`）が変わりうるたびに進む（列が見えている行を描き直す合図）。
+  private(set) var viewedVersion = 0
   @ObservationIgnored var writes: [ViewedWrite] = []
   @ObservationIgnored var isWriting = false
   /// 読み直しと書き込みに付ける、出した順の通し番号。

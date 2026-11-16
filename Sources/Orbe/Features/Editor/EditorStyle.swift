@@ -116,6 +116,14 @@ enum EditorStyle {
     }
   }
 
+  /// 見本の sunk(α) を外観で換算した沈み面（`EditorInk.sunk` の NSColor 版）。
+  static func sunk(_ alpha: Double) -> NSColor {
+    NSColor(name: nil) { appearance in
+      Theme.Color.sunkInk.withAlphaComponent(
+        isDark(appearance) ? alpha : alpha * Theme.Opacity.editorSunkLight)
+    }
+  }
+
   /// 外観ごとの α に `factor` を掛けた色。
   private static func scaledAlpha(_ color: NSColor, _ factor: CGFloat) -> NSColor {
     NSColor(name: nil) { appearance in

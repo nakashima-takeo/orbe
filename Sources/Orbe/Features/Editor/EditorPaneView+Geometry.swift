@@ -51,7 +51,7 @@ extension EditorPaneView {
         if let held, !self.sidebar.isOpen || self.sidebar.panel != held {
           self.reclaimSidebarFocus()
         }
-        self.updateSourceControlShown()
+        self.updatePanelsShown()
         self.pushFindGround()
         self.observeSidebar()
       }
@@ -64,6 +64,7 @@ extension EditorPaneView {
     case .files: return nil
     case .search: return focusIsInSearchPanel ? .search : nil
     case .sourceControl: return focusIsInSourceControl ? .sourceControl : nil
+    case .pullRequest: return focusIsInPullRequest ? .pullRequest : nil
     }
   }
 
