@@ -7,7 +7,7 @@ extension PullRequestState {
   /// 見られていて、リポジトリが結ばれていれば、その根の根のサービスとソース管理を観測する（既に観測していれば、根が
   /// 替わったときだけ結び直す）。
   func observe() {
-    guard let repo else { return }
+    guard isWatched, let repo else { return }
     let root = GitWorktreeRoot.normalizedPath(repo.root)
     if let files, files.root == root { return }
     unobserve()
@@ -29,8 +29,14 @@ extension PullRequestState {
     guard let content else { return [] }
     var refs: [String] = []
     if let headRemote { refs.append("refs/remotes/\(headRemote)/\(content.headRefName)") }
-    if let fetchRemote { refs.append("refs/remotes/\(fetchRemote)/\(content.baseRefName)") }
+    if let baseTrackingRef { refs.append(baseTrackingRef) }
     return refs
+  }
+
+  /// ベースブランチの追跡 ref（PR が置かれたリポジトリを指す remote の下。中身が読めていない・remote が分からなければ nil）。
+  var baseTrackingRef: String? {
+    guard let fetchRemote, let content else { return nil }
+    return "refs/remotes/\(fetchRemote)/\(content.baseRefName)"
   }
 }
 

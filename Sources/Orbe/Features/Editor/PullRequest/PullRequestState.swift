@@ -146,7 +146,7 @@ final class PullRequestState {
     self.repo = repo
     self.fetchRemote = fetchRemote
     self.headRemote = headRemote
-    if isWatched { observe() }
+    observe()
     resolveBounds()
   }
 

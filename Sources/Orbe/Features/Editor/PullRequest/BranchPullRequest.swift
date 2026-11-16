@@ -321,17 +321,9 @@ final class BranchPullRequest {
       guard let self else { return }
       var refs: [String] = []
       if case .ref(let ref, _)? = push { refs.append(ref) }
-      if let base = baseTrackingRef { refs.append(base) }
+      if let base = state?.baseTrackingRef { refs.append(base) }
       completion((repo, refs))
     }
-  }
-
-  /// PR のベースブランチの追跡 ref（PR が無い・中身が読めていなければ nil）。
-  private var baseTrackingRef: String? {
-    guard let remote = state?.fetchRemote, let base = state?.content?.baseRefName else {
-      return nil
-    }
-    return "refs/remotes/\(remote)/\(base)"
   }
 }
 
@@ -381,6 +373,6 @@ extension BranchPullRequest: PullRequestStateObserver {
   func pullRequestStateDidChange(_ state: PullRequestState) {
     countDrift()
     notify()
-    if let base = baseTrackingRef, tracking.lacks(base) { tracking.record() }
+    if let base = self.state?.baseTrackingRef, tracking.lacks(base) { tracking.record() }
   }
 }
