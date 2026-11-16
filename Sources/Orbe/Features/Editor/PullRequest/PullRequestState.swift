@@ -202,6 +202,8 @@ final class PullRequestState {
   }
 
   private func readContent(order: Int) {
+    // 追跡 ref を読む間に見ている者がいなくなったら、GitHub に問い合わせない（次に見ている者が現れたときに読み直す）。
+    guard isWatched else { return stopReading() }
     source.content(key.id) { [weak self] result in
       guard let self else { return }
       isReading = false
@@ -219,6 +221,13 @@ final class PullRequestState {
       resolveBounds()
       notify()
     }
+  }
+
+  /// 問い合わせずに読むのをやめる（積んだ読み直しも捨てる）。
+  private func stopReading() {
+    isReading = false
+    readAgain = false
+    notify()
   }
 
   /// 出した順の通し番号を 1 つ出す。
