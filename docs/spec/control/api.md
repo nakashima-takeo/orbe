@@ -175,7 +175,7 @@ JSON-RPC メソッド = MCP の普段のツール名の 1:1 で、各ツール�
 
 環境に `ORBE_RUN_TOKEN`（裏で動く agent の回の札）があれば、`ORBE_RUN_TOOLS` に並んだその回の道具だけを出し、呼び出しを札付きの `run_tool` に渡して、答えの塊をそのまま本文に、断った答えを `isError` にする。普段のツールは出さない（→ [background](../platform/background.md#非対話の-agent)）。
 
-配布は `.app` 同梱とエージェントプラグインで行う。`orbe-mcp` は `.app` に同梱され、タブには `ORBE_MCP_BIN` でその絶対パスが注入される。配布プラグインの MCP 定義が起こすシムが、自分のチャネルの Orbe のタブではこれへ exec し、それ以外ではツール 0 個の空サーバーとして応答する（[agent/plugin-package](../agent/plugin-package.md)）。したがって Orbe のタブで起こした claude / codex / agy には、利用者が何も設定しなくても Orbe のツールが出て、ブリッジはタブの `ORBE_SOCK` でそのタブの Orbe にだけつながり、`ORBE_TAB` を呼び出し元として封筒に載せる。PATH から探さないのは、利用者の rc が PATH を並べ替えると別の `orbe-mcp` を掴むため。
+配布は `.app` 同梱とエージェントプラグインで行う。`orbe-mcp` は `.app` に同梱され、タブには `ORBE_MCP_BIN` でその絶対パスが注入される。配布プラグインの MCP 定義が起こすシムが、自分のチャネルの Orbe のタブではこれへ exec し、それ以外ではツール 0 個の空サーバーとして応答する（[agent/plugin-package](../agent/plugin-package.md)）。したがって Orbe のタブで起こした claude / codex / agy には、利用者が何も設定しなくても Orbe のツールが出て（codex はデーモンを使わずに動くものだけ。デーモン経由の codex には出ない——[agent/plugin-package](../agent/plugin-package.md#デーモン経由の呼び出しの判定)）、ブリッジはタブの `ORBE_SOCK` でそのタブの Orbe にだけつながり、`ORBE_TAB` を呼び出し元として封筒に載せる。PATH から探さないのは、利用者の rc が PATH を並べ替えると別の `orbe-mcp` を掴むため。
 
 [`scripts/orbe-mcp.sh`](../../../scripts/orbe-mcp.sh) は開発用の道具で、Orbe を再起動せずにツールを試すためにある。MCP クライアントへこの絶対パスを stdio サーバーの起動コマンドとして登録すると、毎回 `swift build` を通してから exec する（stale バイナリが別チャネルの socket を掴まないため・[channel](../platform/channel.md)）。接続先 control.sock は app と同じ規則で `ORBE_STATE_DIR` を honor するため、隔離インスタンスと bridge を同じ `ORBE_STATE_DIR` で起こせば、その隔離インスタンスを MCP で駆動できる。MCP サーバーへ親の環境を渡さないクライアントに登録するときは、`ORBE_TAB` を渡す環境変数として設定に加えないと、`add_task` の既定の付き先と追加者が効かない。
 

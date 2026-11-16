@@ -114,6 +114,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
       cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "d-1"), explicitTitle: nil)
     let unknown = TabState(
       cwd: "/tmp", agent: AgentSession(command: "unknown", sessionId: "u-1"), explicitTitle: nil)
+    _ = try stageFakeAgent("claude")
     let wc = try restore(
       [
         WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [ticket, unknown]),

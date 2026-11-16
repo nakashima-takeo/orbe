@@ -1,4 +1,5 @@
 import Darwin
+import OrbeProcess
 
 /// OS のプロセス表から読むプロセスグループの事実。
 enum ProcessGroup {
@@ -26,12 +27,9 @@ enum ProcessGroup {
     var current = pid
     // 親の鎖は有限だが、読む間に pid が使い回されて輪になることに備えて打ち切る。
     for _ in 0..<64 where current > 1 {
-      var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, current]
-      var info = kinfo_proc()
-      var size = MemoryLayout<kinfo_proc>.stride
-      guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
-      if info.kp_proc.p_flag & P_CONTROLT != 0 { return info.kp_eproc.e_pgid }
-      current = info.kp_eproc.e_ppid
+      guard let entry = ProcessEntry(pid: current) else { return nil }
+      if entry.hasControllingTerminal { return entry.group }
+      current = entry.parent
     }
     return nil
   }

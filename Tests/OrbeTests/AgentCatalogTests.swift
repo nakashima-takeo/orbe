@@ -63,37 +63,55 @@ final class AgentCatalogTests: OrbeTestCase {
   // MARK: - resume コマンド構築
 
   func testResumeCommandRejectsUnknownAgent() {
-    XCTAssertNil(AgentCatalog.resumeCommand(forAgent: "bash", sessionId: "abc-123"))
+    XCTAssertNil(
+      AgentCatalog.resumeCommand(AgentCLI(command: "bash", path: "/bin/bash"), sessionId: "abc-123")
+    )
   }
 
   /// sessionId は安全な文字集合（UUID 等）のみ許可し、shell インジェクションを防ぐ。
   func testResumeCommandRejectsUnsafeSessionId() {
-    XCTAssertNil(AgentCatalog.resumeCommand(forAgent: "claude", sessionId: ""), "空は不可")
-    XCTAssertNil(AgentCatalog.resumeCommand(forAgent: "claude", sessionId: "a b"), "空白は不可")
     XCTAssertNil(
-      AgentCatalog.resumeCommand(forAgent: "claude", sessionId: "x; rm -rf /"), "メタ文字は不可")
+      AgentCatalog.resumeCommand(AgentCLI(command: "claude", path: "/bin/claude"), sessionId: ""),
+      "空は不可")
+    XCTAssertNil(
+      AgentCatalog.resumeCommand(
+        AgentCLI(command: "claude", path: "/bin/claude"), sessionId: "a b"), "空白は不可")
+    XCTAssertNil(
+      AgentCatalog.resumeCommand(
+        AgentCLI(command: "claude", path: "/bin/claude"), sessionId: "x; rm -rf /"), "メタ文字は不可")
     XCTAssertEqual(
       AgentCatalog.resumeCommand(
-        forAgent: "claude", sessionId: "27d05777-57b4-4baa-9532-bc4cac1375cb"),
-      "claude --resume 27d05777-57b4-4baa-9532-bc4cac1375cb", "UUID は許可")
+        AgentCLI(command: "claude", path: "/bin/claude"),
+        sessionId: "27d05777-57b4-4baa-9532-bc4cac1375cb"),
+      "/bin/claude --resume 27d05777-57b4-4baa-9532-bc4cac1375cb", "UUID は許可")
   }
 
   /// 会話の最初の入力は、その CLI の席に 1 つのシェルの単語として添える（位置引数ならオプションの終わり `--` の後ろ、
   /// agy は `-i` の値）。`-` で始まる入力も、CLI のオプションとしては読まれない。
   func testResumeCommandAddsTheFirstInputAtEachCLIsSeat() {
     XCTAssertEqual(
-      AgentCatalog.resumeCommand(forAgent: "claude", sessionId: "s-1", firstInput: "解けた"),
-      "claude --resume s-1 -- '解けた'")
+      AgentCatalog.resumeCommand(
+        AgentCLI(command: "claude", path: "/bin/claude"), sessionId: "s-1", firstInput: "解けた"),
+      "/bin/claude --resume s-1 -- '解けた'")
     XCTAssertEqual(
-      AgentCatalog.resumeCommand(forAgent: "codex", sessionId: "s-1", firstInput: "done"),
-      "codex resume s-1 -- done")
+      AgentCatalog.resumeCommand(
+        AgentCLI(command: "codex", path: "/bin/codex"), sessionId: "s-1", firstInput: "done"),
+      "/bin/codex --no-daemon resume s-1 -- done")
     XCTAssertEqual(
-      AgentCatalog.resumeCommand(forAgent: "agy", sessionId: "s-1", firstInput: "done"),
-      "agy --conversation s-1 -i done")
+      AgentCatalog.resumeCommand(
+        AgentCLI(command: "agy", path: "/bin/agy"), sessionId: "s-1", firstInput: "done"),
+      "/bin/agy --conversation s-1 -i done")
     XCTAssertEqual(
       AgentCatalog.startCommand(
         AgentCLI(command: "claude", path: "/bin/claude"), firstInput: "- 箇条書き"),
       "/bin/claude -- '- 箇条書き'")
+  }
+
+  /// codex は新規起動でも、デーモンを使わない引数をコマンド名の直後に置く（再開の形は上のテストが固定する）。
+  func testCodexStartsWithoutTheDaemon() {
+    XCTAssertEqual(
+      AgentCatalog.startCommand(AgentCLI(command: "codex", path: "/bin/codex"), firstInput: "頼み"),
+      "/bin/codex --no-daemon -- '頼み'")
   }
 
   /// 席に置けない制御文字（改行・タブ以外の C0・DEL・C1）は空白にして添える。NUL はコマンドの C 文字列をそこで切り、
@@ -106,21 +124,23 @@ final class AgentCatalogTests: OrbeTestCase {
         AgentCLI(command: "claude", path: "/bin/claude"), firstInput: input),
       "/bin/claude -- \(seated)")
     XCTAssertEqual(
-      AgentCatalog.resumeCommand(forAgent: "claude", sessionId: "s-1", firstInput: input),
-      "claude --resume s-1 -- \(seated)")
+      AgentCatalog.resumeCommand(
+        AgentCLI(command: "claude", path: "/bin/claude"), sessionId: "s-1", firstInput: input),
+      "/bin/claude --resume s-1 -- \(seated)")
   }
 
   /// 外の人が書いた文面（確認の出力）を含む入力でも、シェルは 1 語として読み、何も実行しない。
   func testFirstInputReachesTheCLIAsOneWordWithoutRunningAnything() throws {
     let input = "レビューが付いた\n@sato: it's $(touch pwned) `touch pwned2`; \"x\""
     let command = try XCTUnwrap(
-      AgentCatalog.resumeCommand(forAgent: "codex", sessionId: "s-1", firstInput: input))
+      AgentCatalog.resumeCommand(
+        AgentCLI(command: "codex", path: "/bin/codex"), sessionId: "s-1", firstInput: input))
     let dir = TestScratch.caseDir.appendingPathComponent("run")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/sh")
     process.arguments = [
-      "-c", "set -- " + command.dropFirst("codex ".count) + "; printf %s \"$4\"",
+      "-c", "set -- " + command.dropFirst("/bin/codex ".count) + "; printf %s \"$5\"",
     ]
     process.currentDirectoryURL = dir
     let pipe = Pipe()

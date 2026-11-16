@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
 description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/自動化/ボードのウィジェット/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/automation/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-11-11
+updated: 2026-11-16
 ---
 
 # Orbe CLI（`orb`）
@@ -47,7 +47,7 @@ updated: 2026-11-11
 
 `--workspace` でその workspace にタブを開けるが、**前面化はしない**——見ている画面を CLI が勝手に奪わないため。前面化は `orb tab focus` が明示的に担う。開いたタブは前面化を待たずに `tab text` / `tab send` / `tab key` が効く。
 
-`spawn` は解決済みの絶対パスを起動し、`resume` はエージェント自身の再開コマンド形を注入済み PATH に解決させる（永続復元の resume と同じ形）。どちらも既定で「準備できた」（起動後の最初の `idle` 報告）まで待つ——待てるのは起動時に報告する agent（claude）だけで、報告しない agent（codex / agy）は待たず即返る。人間向け出力は準備できたときだけ行末に ` ready (session <id>)` を添え、`--json` は `ready` / `agentSessionId` / `timedOut` で区別できる（[api](api.md)）。既定 timeout は 30 秒で、時間切れは exit 124 だがタブは開いている（`--json` は tabId を含む result を stdout に出し、人間向けは spawned 行を stdout・`timed out` を stderr に書く）。
+`spawn` も `resume` も解決済みの絶対パスを起動する。`resume` はエージェント自身の再開コマンド形で、CLI は起床の時点で注入する PATH から解く（永続復元の resume と同じ形）。どちらも既定で「準備できた」（起動後の最初の `idle` 報告）まで待つ——待てるのは起動時に報告する agent（claude）だけで、報告しない agent（codex / agy）は待たず即返る。人間向け出力は準備できたときだけ行末に ` ready (session <id>)` を添え、`--json` は `ready` / `agentSessionId` / `timedOut` で区別できる（[api](api.md)）。既定 timeout は 30 秒で、時間切れは exit 124 だがタブは開いている（`--json` は tabId を含む result を stdout に出し、人間向けは spawned 行を stdout・`timed out` を stderr に書く）。
 
 `prompt` は「入力欄が空いている状態にだけ届く」動詞で、対象が `working` / `waiting` なら何も送らずエラー（exit 1）——`waiting` へのテキスト送信は承認の確定になるため。waiting への応答は `tab key` で行う。既定 timeout は 1 時間。人間向け stdout は**答えの文言だけ**（`done` の最終応答・`waiting` の質問文。無ければ空）で、`answer=$(orb agent prompt …)` の形で受けられる。止まった状態は終了コードで伝える（下記）。
 

@@ -9,6 +9,8 @@ struct DormantTicketFixture {
   let wc: WindowController
   let tab: TerminalTab
   let ticket: AgentSession
+  /// 起床で再開する CLI として PATH に置いた偽の実行体。
+  let cli: FakeAgent
 }
 
 /// `report_agent` が `AgentSlot`（none / dormant / live）へ与える**遷移そのもの**を固定する。
@@ -43,12 +45,13 @@ extension WindowControllerReportAgentTests {
           tabs: [TabState(cwd: "/w", agent: ticket, explicitTitle: nil)]),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
+    let cli = try stageFakeAgent(command)
     let wc = WindowController()
     let workspace = try XCTUnwrap(wc.workspaces.first { $0.name == "sleeping" })
     XCTAssertFalse(workspace.activated, "前提: 未 activate の workspace はタブを mount しない")
     let tab = try XCTUnwrap(workspace.tabs.first)
     XCTAssertEqual(tab.agentSlot, .dormant(ticket), "前提: 復元直後は未消費のチケット")
-    return DormantTicketFixture(wc: wc, tab: tab, ticket: ticket)
+    return DormantTicketFixture(wc: wc, tab: tab, ticket: ticket, cli: cli)
   }
 
   /// `list_tabs` から当該タブの行を引く。
@@ -92,9 +95,10 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(
       f.tab.agentSlot, .live(session: f.ticket, report: nil), "チケットの同一性がそのまま live へ移る")
     XCTAssertEqual(
-      f.tab.surface.initialCommand, "claude --resume resume-1", "解決した resume 指示が spawn に効く")
+      f.tab.surface.initialCommand, "\(ShellWord.quoted(f.cli.path)) --resume resume-1",
+      "解決した resume 指示が spawn に効く（CLI はタブの PATH で絶対パスへ解く）")
     XCTAssertNotNil(
-      f.tab.surface.initialEnv["PATH"], "起動環境には PATH が入る（値は login shell の probe 次第なので見ない）")
+      f.tab.surface.initialEnv["PATH"], "起動環境には PATH が入る")
   }
 
   // MARK: - .dormant × clear（破棄）

@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import OrbePaths
+import OrbeProcess
 
 // Orbe 制御チャネルの MCP ブリッジ。MCP(stdio・改行区切り JSON-RPC 2.0) を喋り、
 // tools/call を Orbe.app の control.sock（同じく JSON-RPC）へ、要求の封筒に呼び出し元タブを載せて転送する薄い層。
@@ -10,6 +11,12 @@ import OrbePaths
 // ORBE_STATE_DIR 直下・最優先 → ORBE_SOCK → Apple 規定の既定パス。
 let socketPath: String = OrbePaths.controlSocketPath() ?? ""
 
+// codex の MCP 定義は第 1 引数に CLI 名を渡す（claude・agy の定義は渡さない）。デーモン経由の codex が起動した
+// ブリッジは、受け継いだ環境変数（`ORBE_TAB` など）が別のタブ（または Orbe の外）のものなので、ツールを公開しない。
+let servesTools =
+  CommandLine.arguments.dropFirst().first.map {
+    InvokerGate.admitsCaller(agent: $0, as: .mcpServer)
+  } ?? true
 /// 裏で動く agent に Orbe が渡したときの、その回の札（環境の ORBE_RUN_TOKEN）。あれば、その回の道具（ORBE_RUN_TOOLS）だけを出す。
 let runToken = ProcessInfo.processInfo.environment["ORBE_RUN_TOKEN"].flatMap {
   $0.isEmpty ? nil : $0
@@ -17,8 +24,14 @@ let runToken = ProcessInfo.processInfo.environment["ORBE_RUN_TOKEN"].flatMap {
 let runToolNames = Set(
   (ProcessInfo.processInfo.environment["ORBE_RUN_TOOLS"] ?? "").split(separator: ",").map(
     String.init))
-let servedTools =
-  runToken == nil ? tools : runTools.filter { runToolNames.contains($0["name"] as? String ?? "") }
+let servedTools: [[String: Any]] =
+  if !servesTools {
+    []
+  } else if runToken == nil {
+    tools
+  } else {
+    runTools.filter { runToolNames.contains($0["name"] as? String ?? "") }
+  }
 let servedToolNames = Set(servedTools.compactMap { $0["name"] as? String })
 /// 呼び出し元タブは、ブリッジを起こした agent のタブ（環境の ORBE_TAB）。どの動詞が読むかを知らずに全呼び出しの封筒へ載せ、
 /// agent の引数には触れない（agent が名乗る手間も名乗り間違いも生まれない）。
