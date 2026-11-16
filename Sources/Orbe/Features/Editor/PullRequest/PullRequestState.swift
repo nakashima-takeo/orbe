@@ -121,6 +121,11 @@ final class PullRequestState {
   @ObservationIgnored var reviewReadWaiters: [() -> Void] = []
   /// 書き込みが名指しする自分の保留中のレビュー（読みの答えと、書き込みの答えで分かったもの）。
   @ObservationIgnored var pendingReviewID: String?
+  /// 今の中身と、今のレビューのやりとりを読んだ問い合わせの通し番号（どちらが先に出した読みか）。
+  @ObservationIgnored private var contentOrder = 0
+  @ObservationIgnored var reviewOrder = 0
+  /// 先頭のコミットの食い違い（中身の先頭とレビューのやりとりの先頭）のうち、読み直して揃えようとしたもの。
+  @ObservationIgnored private var caughtUpHeads: (content: String, review: String)?
   /// 読み直しと書き込みに付ける、出した順の通し番号。
   @ObservationIgnored private var nextOrder = 0
 
@@ -214,14 +219,19 @@ final class PullRequestState {
       readAgain = true
       return
     }
-    isReading = true
     failure = nil
+    startReadingContent { [weak self] in self?.readReview() }
+  }
+
+  /// 中身を読む（`then` は問い合わせる直前に呼ぶ）。問い合わせる前の追跡 ref の値を覚えてから問い合わせる（→ worktree の今の
+  /// PR と同じ）。
+  private func startReadingContent(then: @escaping () -> Void = {}) {
+    isReading = true
     let order = issueOrder()
     notify()
-    // 問い合わせる前の追跡 ref の値を覚えてから問い合わせる（→ worktree の今の PR と同じ）。
     tracking.record { [weak self] in
       self?.readContent(order: order)
-      self?.readReview()
+      then()
     }
   }
 
@@ -234,6 +244,7 @@ final class PullRequestState {
       switch result {
       case .success(let read):
         apply(read, order: order)
+        contentOrder = order
         // 中身が読めて追跡 ref が新しく分かったら、その値も覚える。
         if trackedRefs.contains(where: tracking.lacks) { tracking.record() }
       case .failure(let reason): failure = .read(reason)
@@ -243,8 +254,26 @@ final class PullRequestState {
         reload()
       }
       resolveBounds()
+      catchUpHeads()
       notify()
     }
+  }
+
+  /// 中身とレビューのやりとりを読んだ時点の PR の先頭のコミットが食い違っていたら、先に出した方の読みを読み直す（書き込みの
+  /// 後の読み直しはレビューのやりとりだけなので、その間に push があると、レビューのやりとりだけが新しい先頭を読む。そのままでは
+  /// スレッドを置けず、新しいスレッドも受け付けない状態が次のきっかけまで続く）。どちらかを読んでいる間は待ち、届いた後に
+  /// 見直す。同じ食い違いで読み直すのは 1 回だけ——読み直しても同じ組で食い違う（GitHub の答えの遅れなど）なら、次の
+  /// きっかけまで読まない（問い合わせを往復させ続けない）。
+  func catchUpHeads() {
+    guard let content, let review, content.headCommit != review.headCommit else {
+      caughtUpHeads = nil
+      return
+    }
+    guard isWatched, !isReading, !isReadingReview,
+      caughtUpHeads.map({ $0 != (content.headCommit, review.headCommit) }) ?? true
+    else { return }
+    caughtUpHeads = (content.headCommit, review.headCommit)
+    if contentOrder < reviewOrder { startReadingContent() } else { readReview() }
   }
 
   /// 問い合わせずに読むのをやめる（積んだ読み直しも捨てる）。

@@ -74,6 +74,7 @@ extension PullRequestState {
         switch result {
         case .success(let read):
           review = read
+          reviewOrder = order
           reviewFailure = nil
           pendingReviewID = read.pendingReview?.id
         case .failure(let reason): reviewFailure = reason
@@ -84,6 +85,7 @@ extension PullRequestState {
         readReviewAgain = false
         readReview()
       }
+      catchUpHeads()
       notify()
     }
   }
