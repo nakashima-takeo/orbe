@@ -97,17 +97,17 @@ final class AgentHookPathTests: OrbeTestCase {
 
   /// タブの端末で動く codex（デーモンを使わない codex）が実行した hook は、そのタブに状態とセッション ID を付ける。codex と
   /// 同じく、このテストは hook をタブのシェルの子として新しいセッションの先頭で起動する。間のシェルが hook のコマンドを exec で置き換える
-  /// 場合も、置き換えない場合（ログイン設定の EXIT の trap など）も、報告の結果は同じ。
-  func testCodexHookFromTheTabsTerminalReportsToItsOwnTabWhetherOrNotTheShellExecs() throws {
+  /// 場合も、置き換えない場合（ログイン設定の EXIT の trap など）も、ジョブ制御で hook を別のプロセスグループへ移す場合（ログイン
+  /// 設定の `set -m` など）も、報告の結果は同じ。
+  func testCodexHookFromTheTabsTerminalReportsToItsOwnTabWhateverTheShellDoesWithIt() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let shim = try stagePlugin()
     let hook = ["/bin/sh", shim.path, "codex", "working"]
+    let command = hook.map(ShellWord.quoted).joined(separator: " ")
     let shapes = [
       ("間のシェルが exec する", hook),
-      (
-        "間のシェルが exec しない",
-        ["/bin/sh", "-c", hook.map(ShellWord.quoted).joined(separator: " ") + "; :"]
-      ),
+      ("間のシェルが exec しない", ["/bin/sh", "-c", command + "; :"]),
+      ("間のシェルが hook を別のプロセスグループへ移す", ["/bin/sh", "-c", "set -m; " + command + "; :"]),
     ]
     for (index, (shape, words)) in shapes.enumerated() {
       let script = TestScratch.caseDir.appendingPathComponent("codex-hook-\(index).sh")
