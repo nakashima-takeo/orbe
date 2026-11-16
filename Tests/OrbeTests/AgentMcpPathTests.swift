@@ -75,12 +75,14 @@ final class AgentMcpPathTests: OrbeTestCase {
     try Data(try requestLines([toolsList, addTask]).utf8).write(to: requests)
     // codex が既定で通す変数のうち PATH だけを置き、名指しされた変数はタブの env の実値を渡す。
     let passed = ["PATH=/usr/bin:/bin"] + server.envVars.map { "\($0)=\"$\($0)\"" }
-    let launch = ([server.command] + server.args).map(ShellWord.quoted).joined(separator: " ")
+    // サーバーは新しいセッションで起動し、端末を持つのは親（タブのシェル）だけにする。`orbe-mcp` が応答するかを
+    // 決めるのは、親が端末を持つかどうか。
+    let launch = ControlProcess.shellCommandInNewSession(["/bin/sh", server.command] + server.args)
     let script = TestScratch.caseDir.appendingPathComponent("codex-mcp.sh")
     try Data(
       """
       cd \(ShellWord.quoted(pluginRoot.appendingPathComponent(server.cwd).path))
-      /usr/bin/env -i \(passed.joined(separator: " ")) /bin/sh \(launch) \
+      /usr/bin/env -i \(passed.joined(separator: " ")) \(launch) \
         < \(ShellWord.quoted(requests.path)) > \(ShellWord.quoted(out.path)).part
       mv \(ShellWord.quoted(out.path)).part \(ShellWord.quoted(out.path))
       exec /bin/sleep 600

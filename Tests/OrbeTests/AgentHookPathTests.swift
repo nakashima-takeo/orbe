@@ -92,13 +92,15 @@ final class AgentHookPathTests: OrbeTestCase {
   }
 
   /// タブの端末で動く codex（デーモンを使わない codex）が実行した hook は、そのタブに状態とセッション ID を付ける。
+  /// hook は codex と同じく新しいセッションで起動し、端末を持つのは親（タブのシェル）だけにする。
   func testCodexHookFromTheTabsTerminalReportsToItsOwnTab() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let shim = try stagePlugin()
     let hook = TestScratch.caseDir.appendingPathComponent("codex-hook.sh")
+    let run = ControlProcess.shellCommandInNewSession(["/bin/sh", shim.path, "codex", "working"])
     try Data(
       """
-      printf '%s' '{"session_id":"s-1"}' | /bin/sh \(ShellWord.quoted(shim.path)) codex working
+      printf '%s' '{"session_id":"s-1"}' | \(run)
       exec /bin/sleep 600
       """.utf8
     ).write(to: hook)
