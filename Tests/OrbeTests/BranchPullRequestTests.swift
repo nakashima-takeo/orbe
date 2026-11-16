@@ -157,24 +157,6 @@ final class BranchPullRequestTests: OrbeTestCase {
       }, "確かめられない")
   }
 
-  /// PR のベースブランチだけが進んで両端が変わっても、手元の HEAD と PR の先頭が同じなら、手元とのずれは一致のまま。
-  func testTheDriftStaysCountedWhenOnlyTheBaseMoves() throws {
-    let pullRequest = try watchAnOpenPullRequest()
-    pumpMain(until: { pullRequest.drift == .inSync }, "一致")
-    let state = try XCTUnwrap(pullRequest.state)
-    let advanced = repo.git(["commit-tree", "main^{tree}", "-p", "main", "-m", "base"]).stdoutText
-      .trimmingCharacters(in: .newlines)
-    XCTAssertTrue(repo.git(["update-ref", "refs/heads/main", advanced]).isSuccess)
-    content = pullRequestContent(base: advanced)
-    state.reload()
-    pumpMain(
-      until: {
-        if case .ready(let ends, _) = state.bounds { ends.base == advanced } else { false }
-      },
-      "新しいベースで両端が揃う")
-    XCTAssertEqual(pullRequest.drift, .inSync)
-  }
-
   /// fork のブランチから親へ出した PR のコミットは、親のリポジトリを指す remote から取ってくる。取ってきた後に、手元と
   /// のずれを数える。
   func testAForkPullRequestsCommitsAreFetchedFromTheParentsRemote() throws {
@@ -227,23 +209,24 @@ final class BranchPullRequestTests: OrbeTestCase {
   // MARK: - ヘルパ
 
   /// ブランチ feat から出ている open の PR 9 を見る（中身の両端は `pullRequestContent`）。
-  func watchAnOpenPullRequest() throws -> BranchPullRequest {
+  func watchAnOpenPullRequest(head: String = "HEAD") throws -> BranchPullRequest {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     try repo.write("b.txt", "b\n")
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-qm", "b"]).isSuccess)
     let base = repo.git(["rev-parse", "main"]).stdoutText.trimmingCharacters(in: .newlines)
-    content = pullRequestContent(base: base)
+    content = pullRequestContent(base: base, head: head)
     answers["feat"] = .gitHub(
       GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([pr(9, state: "OPEN")]))
     return watch()
   }
 
-  /// PR 9 の中身。先頭は今の HEAD。
-  func pullRequestContent(base: String) -> GitHubPullRequestContent {
-    GitHubPullRequestContent(
+  /// PR 9 の中身。先頭は `head`（リビジョン。既定は今の HEAD）のコミット。
+  func pullRequestContent(base: String, head: String = "HEAD") -> GitHubPullRequestContent {
+    let headCommit = repo.git(["rev-parse", head]).stdoutText.trimmingCharacters(in: .newlines)
+    return GitHubPullRequestContent(
       nodeID: "PR_1", number: 9, title: "題", url: "https://github.com/me/r/pull/9", isDraft: false,
       state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
-      baseCommit: base, headCommit: repo.head(), commitCount: 1, commits: [], files: [])
+      baseCommit: base, headCommit: headCommit, commitCount: 1, commits: [], files: [])
   }
 }

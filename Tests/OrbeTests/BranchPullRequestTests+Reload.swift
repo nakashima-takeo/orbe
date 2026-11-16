@@ -163,6 +163,33 @@ extension BranchPullRequestTests {
     XCTAssertEqual(lookups.count, 2, "1 回だけ")
   }
 
+  /// 根のサービスがまだ無いまま、どのブランチにも居ない worktree を初めて見始めると、「ブランチに居ない」が出る（読んで
+  /// いるのまま止まらない）。
+  func testWatchingADetachedHeadForTheFirstTimeSaysSo() {
+    XCTAssertTrue(repo.git(["switch", "-q", "--detach"]).isSuccess)
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.answer == .unavailable(.detached) }, "ブランチに居ない")
+  }
+
+  /// 問い合わせの最中に去り、答えが去った後に届き、根のサービスがほかに誰にも持たれず解けた後に戻っても、答えが出る（読んで
+  /// いるのまま止まらない）。
+  func testLeavingDuringAQueryAndComingBackWithNobodyHoldingTheRootAnswers() {
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    answers["feat"] = .unavailable(.notGitHub)
+    holdsLookups = true
+    let pullRequest = watch()
+    weak var root = RootFiles.shared(for: repo.root)
+    pumpMain(until: { self.held.count == 1 }, "前提: 問い合わせの最中")
+    pullRequest.endWatching()
+    pumpMain(until: { root == nil }, "前提: 根のサービスをほかに誰も持っていない")
+    holdsLookups = false
+    release()
+    XCTAssertEqual(pullRequest.answer, .reading, "前提: 去った後に届いた答えは出さない")
+
+    pullRequest.beginWatching()
+    pumpMain(until: { pullRequest.answer == .unavailable(.notGitHub) }, "答えが出る")
+  }
+
   /// 見始めてすぐ、GitHub に問い合わせを出す前に去れば、GitHub に問い合わせない。
   func testLeavingBeforeTheQueryIsSentAsksGitHubNothing() {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
