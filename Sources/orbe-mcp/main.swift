@@ -14,7 +14,7 @@ let socketPath: String = OrbePaths.controlSocketPath() ?? ""
 // codex の MCP 定義は第 1 引数に CLI 名を渡す（claude・agy の定義は渡さない）。デーモン経由の codex が起動した
 // ブリッジは、受け継いだ環境変数（`ORBE_TAB` など）が別のタブ（または Orbe の外）のものなので、ツールを公開しない。
 let servesTools =
-  CommandLine.arguments.dropFirst().first.map { InvokerGate.admitsCaller(agent: $0) } ?? true
+  CommandLine.arguments.dropFirst().first.map { InvokerGate.admitsCaller(agent: $0, as: .mcpServer) } ?? true
 
 // MARK: - control.sock クライアント（1 リクエスト 1 接続・同期）
 

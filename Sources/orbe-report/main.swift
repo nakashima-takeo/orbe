@@ -22,7 +22,7 @@ let agent = args[1]
 let state = args[2]
 guard !agent.isEmpty, !state.isEmpty else { exit(0) }
 // デーモン経由の codex の hook は、受け継いだ環境変数（`ORBE_TAB` など）が別のタブ（または Orbe の外）のものなので報告しない。
-guard InvokerGate.admitsCaller(agent: agent) else { exit(0) }
+guard InvokerGate.admitsCaller(agent: agent, as: .hook) else { exit(0) }
 
 // hook の stdin JSON は一度しか読めないため、パースは 1 回にまとめて
 // session_id 抽出と background_tasks 判定（ReportLogic.swift）の両方に使う。
