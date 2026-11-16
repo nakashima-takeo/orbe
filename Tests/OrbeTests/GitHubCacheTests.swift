@@ -21,6 +21,11 @@ final class GitHubCacheTests: OrbeTestCase {
     XCTAssertTrue(pairs.contains { $0 == ("--head", "refactor/phase2-2b") }, "ブランチを名指しする")
     XCTAssertTrue(pairs.contains { $0 == ("--state", "all") }, "閉じた PR も引く")
     XCTAssertTrue(pairs.contains { $0 == ("--limit", "100") }, "gh の上限まで引く")
+    let named = GitHubCLI.branchPRArguments(
+      head: "feat", repository: GitHubRepoName(nameWithOwner: "o/r"))
+    XCTAssertTrue(
+      zip(named, named.dropFirst()).contains { $0 == ("-R", "github.com/o/r") },
+      "名指しするリポジトリはホストも付ける（GH_HOST に左右されない）")
   }
 
   /// gh に頼む欄（`--json`）だけを持つ出力から、clean と PR の自動の結び付けが読む値（head・URL・作成日時）が揃う。

@@ -174,18 +174,29 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     addRemote("origin", "me/r")
     try answer("me/r", found: "me/r", parent: "up/r")
     XCTAssertTrue(git(["branch", "feat"]).isSuccess)
-    try serveBranchPullRequests(
-      "feat", in: "me/r", "[" + branchPR(3, head: "feat", state: "OPEN", from: "me/r") + "]")
-    let parentFile = ghDir.appendingPathComponent("branch/up__r__feat").path
-    try write("", to: parentFile)
-    try write("error connecting to api.github.com\n", to: parentFile + ".stderr")
-    try write("1", to: parentFile + ".exit")
+    for (failing, answering) in [("me/r", "up/r"), ("up/r", "me/r")] {
+      let failingFile = ghDir.appendingPathComponent(
+        "branch/\(failing.replacingOccurrences(of: "/", with: "__"))__feat"
+      ).path
+      let answeringFile = ghDir.appendingPathComponent(
+        "branch/\(answering.replacingOccurrences(of: "/", with: "__"))__feat"
+      ).path
+      for leftover in [answeringFile + ".stderr", answeringFile + ".exit"] {
+        try? FileManager.default.removeItem(atPath: leftover)
+      }
+      try serveBranchPullRequests(
+        "feat", in: answering, "[" + branchPR(3, head: "feat", state: "OPEN", from: "me/r") + "]")
+      try write("", to: failingFile)
+      try write("error connecting to api.github.com\n", to: failingFile + ".stderr")
+      try write("1", to: failingFile + ".exit")
 
-    let found = try lookup(["feat"])
+      let found = try lookup(["feat"])
 
-    XCTAssertEqual(
-      found.branches["feat"],
-      .gitHub(GitHubBranchRef(repo: mine, branch: "feat"), pullRequests: .failure(.unreachable)))
+      XCTAssertEqual(
+        found.branches["feat"],
+        .gitHub(GitHubBranchRef(repo: mine, branch: "feat"), pullRequests: .failure(.unreachable)),
+        "\(failing) の問い合わせが失敗")
+    }
   }
 
   /// 作成ページの URL は push の後に GitHub が案内するもの。ブランチ名の `/` は残し、URL で意味を持つ文字はエンコードする。
