@@ -1,7 +1,8 @@
 import Foundation
 
 /// ステージ済み diff の出どころ——古い側は HEAD の版（rename なら元のパス）、新しい側は index の版。両側とも編集されない版の
-/// 本文なので、どちらかの版が替わったときに、diff が裏で行差分を揃えてから入れ替える（→ `EditorDiff.Resolution.revisions`）。
+/// 本文なので、どちらかの版が替わったときに 1 回、diff が両側と並びを入れ替える（その場か裏かは diff が決める →
+/// `EditorDiff.Resolution.revisions`）。
 @MainActor
 final class EditorDiffStaged: EditorDiffSource {
   let id: EditorDiff.Key
