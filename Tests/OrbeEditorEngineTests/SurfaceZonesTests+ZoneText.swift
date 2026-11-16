@@ -39,7 +39,8 @@ extension SurfaceZonesTests {
     let surface = opened.surface
     let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     let parts = [
-      "前の文 \u{FFFC} と ", "merges(\u{2067}event)", " の後ろ \u{200F}右から ", "שלום\u{2069}", " で終わる本文。続く文もある。",
+      "前の文 \u{FFFC} と ", "merges(\u{2067}event)", " の後ろ \u{200F}右から ", "שלום\u{2069}",
+      " で終わる本文。続く文もある。",
     ]
     let comment = parts.joined()
     let styles = parts.enumerated().map { index, part in

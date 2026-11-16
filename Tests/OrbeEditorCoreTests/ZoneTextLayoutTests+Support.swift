@@ -47,7 +47,8 @@ extension ZoneTextLayoutTests {
     var wrong: [String] = []
     let extra = (ground.upperBound - ground.lowerBound) - (glyphs.upperBound - glyphs.lowerBound)
     if let edges, abs(extra - CGFloat(edges) * padding) > 0.01 { wrong.append("余白の合計 \(extra)") }
-    if ground.lowerBound > glyphs.lowerBound + 0.01 || ground.upperBound < glyphs.upperBound - 0.01 {
+    if ground.lowerBound > glyphs.lowerBound + 0.01 || ground.upperBound < glyphs.upperBound - 0.01
+    {
       wrong.append("地 \(ground) が字 \(glyphs) を含まない")
     }
     for glyph in extents(in: line)

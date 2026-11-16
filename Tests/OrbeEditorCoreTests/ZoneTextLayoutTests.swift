@@ -99,7 +99,9 @@ final class ZoneTextLayoutTests: XCTestCase {
         ZoneTextLayout.lines(parts.joined(), styles: styles(parts, padding: 4), width: 500).first)
       XCTAssertEqual(glyphCount(padded), glyphCount(bare), "\(name): 字を割らない")
       XCTAssertEqual(padded.width, bare.width + 8, accuracy: 0.01, "\(name): 幅は余白の分だけ増える")
-      let (a, b) = (try XCTUnwrap(glyphs(of: 1, in: bare)), try XCTUnwrap(glyphs(of: 1, in: padded)))
+      let (a, b) = (
+        try XCTUnwrap(glyphs(of: 1, in: bare)), try XCTUnwrap(glyphs(of: 1, in: padded))
+      )
       XCTAssertEqual(
         b.upperBound - b.lowerBound, a.upperBound - a.lowerBound, accuracy: 0.01,
         "\(name): コードの字の幅は変わらない")
@@ -156,7 +158,8 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testRandomMixedParagraphsNeverSplitTheCodeGround() {
     var random = SplitMix(seed: 7)
     let words = [
-      "あいう", "漢字", "abc", "de f", "אבג", "דה ו", " ", "、", "(", ")", "12", "กำ", "。", "x-y", "「", "」", ": ",
+      "あいう", "漢字", "abc", "de f", "אבג", "דה ו", " ", "、", "(", ")", "12", "กำ", "。", "x-y", "「",
+      "」", ": ",
     ]
     var wrong: [String] = []
     for _ in 0..<5_000 {
@@ -212,7 +215,8 @@ final class ZoneTextLayoutTests: XCTestCase {
   /// 和文と、右から左の字のインラインコードが同じ行にあっても、折り返したどの行も幅に収まる。
   func testWrappedLinesFitTheWidthWithPaddedCodeNextToCJKAndRightToLeftText() {
     for parts in [
-      ["see the ", "קוד ארוך", " and more words here"], ["הריצו את ", "git commit -m", " ואז את זה"],
+      ["see the ", "קוד ארוך", " and more words here"],
+      ["הריצו את ", "git commit -m", " ואז את זה"],
       ["これは", "קוד ארוך", "の例です。続きの文もある"], ["和文の後に ", "שלום עולם", " と続く和文の段落"],
     ] {
       let string = parts.joined()

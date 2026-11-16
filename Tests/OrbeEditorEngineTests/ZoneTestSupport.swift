@@ -106,7 +106,8 @@ final class ThreadZone: SurfaceZone {
         + body,
       texts: [
         ZoneText(
-          id: Self.commentText, string: comment, styles: styles ?? Self.styles(comment), lines: lines)
+          id: Self.commentText, string: comment, styles: styles ?? Self.styles(comment),
+          lines: lines)
       ])
   }
 
