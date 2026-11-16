@@ -359,15 +359,13 @@ final class PullRequestFakeGitHub {
       })
   }
 
-  func answerReview(at index: Int = 0) {
-    reviewRequests.remove(at: index)(review)
+  func answerReview() {
+    reviewRequests.removeFirst()(review)
   }
 
-  /// レビューへの書き込み `index` を、その後の保留中のレビューが `pendingReview`（省けば送る前のまま）として返す。
-  func finishReviewWrite(
-    _ index: Int = 0, pendingReview: String?? = .none, failure: GitHubFailure? = nil
-  ) {
-    let write = reviewWrites.remove(at: index)
+  /// 最初のレビューへの書き込みを、その後の保留中のレビューが `pendingReview`（省けば送る前のまま）として返す。
+  func finishReviewWrite(pendingReview: String?? = .none, failure: GitHubFailure? = nil) {
+    let write = reviewWrites.removeFirst()
     write.done(
       GitHubReviewWriteResult(
         pendingReview: pendingReview ?? write.pendingReview, failure: failure))
