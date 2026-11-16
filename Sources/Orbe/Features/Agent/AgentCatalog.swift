@@ -17,7 +17,7 @@ final class AgentCatalog {
   /// `firstInput` は起動（新規・再開）に最初の入力を添える席。`headless` は裏で非対話に回す能力。
   /// `requiredArguments` は Orbe が起動するとき（新規・再開）コマンド名の直後に必ず置く引数。codex の `--no-daemon` は、
   /// hook と MCP サーバーをタブの端末で動く codex の子として起動させる——共有のデーモン経由だと、hook と MCP サーバーが
-  /// デーモンを最初に起動した端末の環境で走り、別のタブを名乗る。
+  /// デーモンを起動した時点の端末の環境で走り、別のタブを名乗る。
   struct AgentProfile {
     let command: String
     let requiredArguments: [String]
