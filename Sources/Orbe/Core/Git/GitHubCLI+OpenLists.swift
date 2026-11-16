@@ -159,10 +159,12 @@ extension GitHubCLI {
         let args = Self.addSelfArguments(as: role, to: item, login: login)
         switch role {
         case .assignee:
-          let response: AssigneesResponse? = self.fetchSync(gh, args, cwd: NSHomeDirectory())
+          let response: AssigneesResponse? = self.fetchSync(
+            gh, args, cwd: NSHomeDirectory(), call: .write)
           return response?.assignees.map(\.login)
         case .reviewer:
-          let response: ReviewersResponse? = self.fetchSync(gh, args, cwd: NSHomeDirectory())
+          let response: ReviewersResponse? = self.fetchSync(
+            gh, args, cwd: NSHomeDirectory(), call: .write)
           return response?.requestedReviewers.map(\.login)
         }
       }

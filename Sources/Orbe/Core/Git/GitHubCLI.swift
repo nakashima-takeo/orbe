@@ -217,16 +217,18 @@ final class GitHubCLI {
 
   /// 1 往復を同期で叩いてデコードする。`nil` = 取得失敗（非 0 終了・タイムアウト・デコード失敗）。
   /// ローカル変数だけを触るので、どのレーンから並行に呼んでも安全。
-  func fetchSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String) -> T? {
-    try? decodeSync(gh, args, cwd: cwd).get()
+  func fetchSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String, call: Call = .read)
+    -> T?
+  {
+    try? decodeSync(gh, args, cwd: cwd, call: call).get()
   }
 
   /// 1 往復を同期で叩いてデコードする。0 以外の終了・時間切れ・起動の失敗は分類した失敗、読めない答えは `.reason("")`
   /// （理由が空の「それ以外」）。
-  func decodeSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String) -> Result<
-    T, GitHubFailure
-  > {
-    let out = runSync(gh, args, cwd: cwd)
+  func decodeSync<T: Decodable>(
+    _ gh: String, _ args: [String], cwd: String, call: Call = .read
+  ) -> Result<T, GitHubFailure> {
+    let out = runSync(gh, args, cwd: cwd, call: call)
     if let failure = out.failure { return .failure(failure) }
     guard let value = try? JSONDecoder().decode(T.self, from: out.stdout) else {
       return .failure(.reason(""))
