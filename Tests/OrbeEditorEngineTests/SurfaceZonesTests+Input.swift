@@ -57,6 +57,38 @@ extension SurfaceZonesTests {
     XCTAssertNotEqual(text(opened.document), body, "続きは本文に入る")
   }
 
+  /// 入力欄が主の間の ⌘↵（テンキーの Enter も）は、載せる側に 1 回だけ「送る」を知らせ、文を変えない。変換中は知らせない。
+  /// 本文が主の間の ⌘↵ は入力欄に知らせない。
+  func testCommandReturnInAFieldSubmitsOnce() throws {
+    let setup = try threaded()
+    let (opened, field) = (setup.opened, setup.field)
+    let surface = opened.surface
+    let window = try XCTUnwrap(surface.textView.window)
+    var submitted = 0
+    field.didSubmit = { _ in submitted += 1 }
+    let commandReturn = { (characters: String) throws -> Bool in
+      let event = try XCTUnwrap(
+        NSEvent.keyEvent(
+          with: .keyDown, location: .zero, modifierFlags: .command,
+          timestamp: CACurrentMediaTime(), windowNumber: window.windowNumber, context: nil,
+          characters: characters, charactersIgnoringModifiers: characters, isARepeat: false,
+          keyCode: characters == "\r" ? 36 : 76))
+      return window.performKeyEquivalent(with: event)
+    }
+    XCTAssertFalse(try commandReturn("\r"), "本文が主なら面は使わない")
+    XCTAssertEqual(submitted, 0)
+    surface.focus(field)
+    surface.textView.insertText("返信")
+    XCTAssertTrue(try commandReturn("\r"))
+    XCTAssertEqual(submitted, 1)
+    XCTAssertEqual(field.string, "返信", "⌘↵ は改行を入れない")
+    XCTAssertTrue(try commandReturn("\u{3}"))
+    XCTAssertEqual(submitted, 2, "テンキーの Enter")
+    IMECall.mark("へ").send(to: surface.textView)
+    XCTAssertTrue(try commandReturn("\r"))
+    XCTAssertEqual(submitted, 2, "変換中は知らせない")
+  }
+
   /// 本文が読むだけでも、入力欄は打て（IME の文脈もある）、undo できる。本文は変わらない。
   func testAFieldTakesTypingOnAReadOnlySurface() throws {
     let setup = try threaded()

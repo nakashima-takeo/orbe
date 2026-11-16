@@ -96,16 +96,32 @@ final class MetalTextView: TextSurfaceInputView {
     KeyChord(.downArrow, [.command, .option]): #selector(insertCursorBelow(_:)),
   ]
 
-  /// 複数カーソルのキーは key equivalent の段で引く——view の階層を回るこの段はメインメニュー（サービスを含む）より先なので、
-  /// 選択を渡せるサービスの受け手でも、同じキーのサービス（⌘⇧L の「Google で検索」など）に先を越されない。焦点が自分に
-  /// あるときだけ引くので、端末に焦点があるときのキーには当たらない。変換中は窓の根が先に IME へ渡し、IME が使わなかった
-  /// キーだけがここへ来る（コマンドは変換を確定してから動く）。
+  /// 複数カーソルのキーと入力欄の ⌘↵ は key equivalent の段で引く——view の階層を回るこの段はメインメニュー（サービスを
+  /// 含む）より先なので、選択を渡せるサービスの受け手でも、同じキーのサービス（⌘⇧L の「Google で検索」など）に先を
+  /// 越されない。焦点が自分にあるときだけ引くので、端末に焦点があるときのキーには当たらない。変換中は窓の根が先に IME へ
+  /// 渡し、IME が使わなかったキーだけがここへ来る（コマンドは変換を確定してから動く。⌘↵ は変換中なら何もしない——変換の
+  /// 確定が先）。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    guard window?.firstResponder === self, let selector = Self.multiCursorKeys[KeyChord(event)]
-    else { return super.performKeyEquivalent(with: event) }
+    guard window?.firstResponder === self else { return super.performKeyEquivalent(with: event) }
+    let chord = KeyChord(event)
+    if Self.submitKeys.contains(chord), let surface, case .field = surface.primary,
+      let site = surface.primarySite, let field = site.field
+    {
+      guard !site.editor.isComposing else { return true }
+      surface.input(keystroke: event.timestamp) { field.didSubmit?(field) }
+      return true
+    }
+    guard let selector = Self.multiCursorKeys[chord] else {
+      return super.performKeyEquivalent(with: event)
+    }
     surface?.input(keystroke: event.timestamp) { _ = perform(selector, with: nil) }
     return true
   }
+
+  /// 入力欄の「送る」のキー（⌘↵。テンキーの Enter も）。
+  static let submitKeys: Set<KeyChord> = [
+    KeyChord("\r", [.command]), KeyChord("\u{3}", [.command]),
+  ]
 
   /// IME が ⌘ キーの間に確定と次の未確定を続けて返しても、描くのは 1 状態だけ。
   override func offerKeyEquivalentToInputMethod(_ event: NSEvent) -> Bool {
