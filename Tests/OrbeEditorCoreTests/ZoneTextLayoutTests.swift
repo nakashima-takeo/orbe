@@ -237,6 +237,7 @@ final class ZoneTextLayoutTests: XCTestCase {
       ("コードの中の閉じない上書き", ["abc ", "x\u{202E}y", " def ghi"]),
       ("コードの中の閉じない isolate", ["abc ", "x\u{2067}y", " def ghi"]),
       ("コードの中の対にならない終わり", ["abc ", "x\u{2069}y\u{202C}", " def ghi"]),
+      ("右から左の段落の、コードの中の対にならない終わり", ["שלום ", "ab\u{2069}cd", " עולם"]),
       ("コードの外の閉じない始まり", ["a \u{2067}b ", "code", " c d"]),
       ("コードの外の向きの印", ["\u{200F}abc ", "co\u{200E}de", " \u{202A}def ghi"]),
     ]
