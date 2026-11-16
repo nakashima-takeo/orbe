@@ -8,6 +8,10 @@ extension EditorPaneView {
 
   func wirePullRequest() {
     pullRequest.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
+    pullRequest.onListWillClose = { [weak self] in
+      guard let self, focusIsInPullRequest else { return }
+      reclaimSidebarFocus()
+    }
     pullRequest.filesAsTree = { [weak self] in self?.sidebar.pullRequestFilesAsTree ?? true }
     pullRequest.onViewAsTree = { [weak self] asTree in
       self?.sidebar.setPullRequestFilesAsTree(asTree)

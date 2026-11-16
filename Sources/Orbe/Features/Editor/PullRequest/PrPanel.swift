@@ -25,6 +25,8 @@ final class PrPanel {
   /// 焦点を入れる要求（当てたら外す）。
   private(set) var focusRequest = false
 
+  /// 列が消える直前（行の組が空になる。列がまだ窓に居るうち）。焦点が列にあれば、面の本文へ移す。
+  @ObservationIgnored var onListWillClose: () -> Void = {}
   /// 行の diff を開く。
   @ObservationIgnored var onOpenDiff: (EditorDiff.Key, ScmPanel.Opening) -> Void = { _, _ in }
   /// 変更ファイルをツリーで見せるか（アプリ全体の選択を読む）と、ツリーかリストかを選んだ（アプリ全体の選択へ書く）。
@@ -77,7 +79,8 @@ final class PrPanel {
 
   /// 行の組を、元（PR の中身・ツリーかリストか・開閉）が変わっていれば組み直し、選んでいた行が無くなっていれば選び直す
   /// ——畳んで隠れたなら、見えている祖先（畳んだフォルダか区分の見出し）へ、消えたなら変更ファイルの区分の同じ位置の行へ
-  /// （開かない）。
+  /// （開かない）。行の組が空になる（PR が無くなった・替わって中身がまだ無い）と列が消えるので、その前に知らせ、当てる列の
+  /// 無い焦点の要求を捨てる（残すと、後で列が現れた瞬間に焦点を奪う）。
   func rebuild() {
     let content = state?.content
     let key = LayoutKey(
@@ -85,6 +88,10 @@ final class PrPanel {
     guard key != builtFrom else { return }
     builtFrom = key
     let previous = layout
+    if content == nil {
+      if !previous.items.isEmpty { onListWillClose() }
+      focusRequest = false
+    }
     layout =
       content.map {
         PrLayout.build($0, asTree: key.asTree, closed: closed, closedFolders: closedFolders)
