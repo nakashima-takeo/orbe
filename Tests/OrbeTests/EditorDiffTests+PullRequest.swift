@@ -37,7 +37,7 @@ extension EditorDiffTests {
           completion(reply.content.map { .success($0) } ?? .failure(.reason("")))
         },
         setViewed: { _, _, _, _ in }))
-    state.attach(repo: try repo.open(), fetchRemote: nil)
+    state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
     return state
   }
 
@@ -103,8 +103,7 @@ extension EditorDiffTests {
     let state = try pullRequest(reply)
     state.beginWatching()
     addTeardownBlock { @MainActor in state.endWatching() }
-    state.reload()
-    XCTAssertEqual(reply.requests, 1, "前提: ほかの者が読んだ")
+    pumpMain(until: { reply.requests == 1 }, "前提: ほかの者が見始めて読んだ")
     let (tab, _) = tab()
 
     let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)), as: .pinned)

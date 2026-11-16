@@ -10,9 +10,10 @@ protocol PullRequestStateObserver: AnyObject {
 /// リポジトリ（`git-common-dir`）と PR の同一性ごとに 1 つで、アプリが動いている間持つ。PR のパネル・PR の diff タブ・
 /// タブ行のチェックが同じものを見るので、確認済みが面やウインドウで食い違わない。
 ///
-/// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけで、`reload` で中身を読み直す（見ている者が現れたときと、
-/// 読み直すきっかけで呼ばれる）。読んでいる間に次の読み直しが来たら、終わった後に 1 回だけ読み直す。読み直しに失敗しても、
-/// 前に読めた中身は残す。
+/// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。中身を読み直すきっかけは、誰も見ていない状態から
+/// 見ている者が現れた・`reload`・PR のリポジトリで Orbe の中のネット操作が終わった・PR の先頭のブランチかベースブランチの
+/// 追跡 ref の値が前と変わった、のどれか（→ `PullRequestState+Watch`）。読んでいる間に次の読み直しが来たら、終わった後に
+/// 1 回だけ読み直す。読み直しに失敗しても、前に読めた中身は残す。
 @MainActor @Observable
 final class PullRequestState {
   struct Key: Hashable {
@@ -68,10 +69,18 @@ final class PullRequestState {
 
   let key: Key
   @ObservationIgnored let source: PullRequestSource
-  /// git に問い合わせるリポジトリと、PR のコミットを取りに行く remote（PR が置かれたリポジトリを指す remote）。worktree の
-  /// 今の PR が結ぶ。
+  /// git に問い合わせるリポジトリと、PR のコミットを取りに行く remote（PR が置かれたリポジトリを指す remote）と、PR の
+  /// 先頭のブランチが置かれたリポジトリを指す remote。worktree の今の PR が結ぶ。
   @ObservationIgnored private(set) var repo: GitRepo?
   @ObservationIgnored private(set) var fetchRemote: String?
+  @ObservationIgnored private(set) var headRemote: String?
+  /// 見られている間に観測している根のサービス（`repo` の根）。
+  @ObservationIgnored var files: RootFiles?
+  /// PR の先頭のブランチとベースブランチの追跡 ref。
+  @ObservationIgnored lazy var tracking = TrackingRefs { [weak self] done in
+    guard let self, let repo else { return done(nil) }
+    done((repo, trackedRefs))
+  }
   /// 最後に読めた中身。
   private(set) var content: GitHubPullRequestContent?
   var failure: Failure?
@@ -125,10 +134,13 @@ final class PullRequestState {
 
   // MARK: - 結び付け・観測
 
-  /// git に問い合わせるリポジトリと、コミットを取りに行く remote を結ぶ。結んだ後に両端を求められるなら求める。
-  func attach(repo: GitRepo, fetchRemote: String?) {
+  /// git に問い合わせるリポジトリと、コミットを取りに行く remote と、PR の先頭のブランチの remote を結ぶ。見られていれば
+  /// そのリポジトリを観測し、両端を求められるなら求める。
+  func attach(repo: GitRepo, fetchRemote: String?, headRemote: String?) {
     self.repo = repo
     self.fetchRemote = fetchRemote
+    self.headRemote = headRemote
+    if isWatched { observe() }
     resolveBounds()
   }
 
@@ -145,16 +157,22 @@ final class PullRequestState {
     for observer in observers { observer.value?.pullRequestStateDidChange(self) }
   }
 
-  /// 見ている者が現れた（中身の読み直しは、誰も見ていなかったときに見始めた者が `reload` で頼む）。誰も見ていなかったなら、
-  /// PR ごとの状態が自分で両端を求め直す——見ている者がいない間に求めるのをやめた両端（見ている者が、取りに行く前に・中身を
-  /// 読む間に去った）を、見始めた者が読み直しを頼むかに依らず揃える。
+  /// 見ている者が現れた。誰も見ていなかったなら、PR のリポジトリを観測し、中身を読み直し、両端を求め直す——見ている者が
+  /// いない間に求めるのをやめた両端（見ている者が、取りに行く前に・中身を読む間に去った）も揃える。見ている者が増えた
+  /// だけなら、読み直さない。
   func beginWatching() {
     watchers += 1
-    if watchers == 1 { resolveBounds() }
+    guard watchers == 1 else { return }
+    observe()
+    reload()
+    resolveBounds()
   }
 
+  /// 見ている者が去った。最後の 1 人なら観測をやめる。
   func endWatching() {
-    watchers = max(0, watchers - 1)
+    guard watchers > 0 else { return }
+    watchers -= 1
+    if watchers == 0 { unobserve() }
   }
 
   var isWatched: Bool { watchers > 0 }
@@ -173,11 +191,19 @@ final class PullRequestState {
     failure = nil
     let order = issueOrder()
     notify()
+    // 問い合わせる前の追跡 ref の値を覚えてから問い合わせる（→ worktree の今の PR と同じ）。
+    tracking.record { [weak self] in self?.readContent(order: order) }
+  }
+
+  private func readContent(order: Int) {
     source.content(key.id) { [weak self] result in
       guard let self else { return }
       isReading = false
       switch result {
-      case .success(let read): apply(read, order: order)
+      case .success(let read):
+        apply(read, order: order)
+        // 中身が読めて追跡 ref が新しく分かったら、その値も覚える。
+        if trackedRefs.contains(where: tracking.lacks) { tracking.record() }
       case .failure(let reason): failure = .read(reason)
       }
       if readAgain {

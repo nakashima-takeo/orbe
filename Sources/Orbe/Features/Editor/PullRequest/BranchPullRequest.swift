@@ -86,7 +86,7 @@ final class BranchPullRequest {
     state?.endWatching()
   }
 
-  /// 読み直す。PR があれば、その中身も読み直す。
+  /// 読み直す——今のブランチの PR を引き直す。PR の中身は、PR ごとの状態が自分のきっかけで読み直す。
   func reload() {
     guard watchers > 0, let files else { return }
     awaitingStatus = false
@@ -141,7 +141,9 @@ final class BranchPullRequest {
         if let id = open?.url.flatMap(GitHubItemID.init(pullRequestURL:)) {
           let state = PullRequestState.shared(
             for: PullRequestState.Key(commonDir: repo.commonDir, id: id), source: source)
-          state.attach(repo: repo, fetchRemote: Self.remote(of: id.repo, in: found.ledger))
+          state.attach(
+            repo: repo, fetchRemote: Self.remote(of: id.repo, in: found.ledger),
+            headRemote: Self.remote(of: ref.repo, in: found.ledger))
           finish(.pullRequest(state), name)
         } else {
           creation(
@@ -213,7 +215,8 @@ final class BranchPullRequest {
     readAgain = false
   }
 
-  /// 答えを `next` にする。PR が替われば、前の PR を見るのをやめ、今の PR を見て中身を読み直す。
+  /// 答えを `next` にする。PR が替われば、前の PR を見るのをやめ、今の PR を見る（誰も見ていなかった PR なら、PR ごとの状態が
+  /// 中身を読み直す）。
   private func settle(_ next: Answer) {
     settlement += 1
     let previous = state
@@ -226,7 +229,6 @@ final class BranchPullRequest {
       current?.beginWatching()
       counted = nil
     }
-    current?.reload()
     countDrift()
   }
 

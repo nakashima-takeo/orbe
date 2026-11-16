@@ -208,7 +208,7 @@ final class PullRequestStateTests: OrbeTestCase {
     let state = watchedState()
     gitHub.content = .success(content(base: base, head: head, files: ["b.txt"]))
     state.reload()
-    state.attach(repo: try clone.open(), fetchRemote: "origin")
+    state.attach(repo: try clone.open(), fetchRemote: "origin", headRemote: nil)
 
     pumpMain(
       until: { if case .ready = state.bounds { return true } else { return false } }, "両端が揃う")
@@ -238,7 +238,7 @@ final class PullRequestStateTests: OrbeTestCase {
     state.beginWatching()
     gitHub.content = .success(content(base: base, head: head))
     state.reload()
-    state.attach(repo: try clone.open(), fetchRemote: "origin")
+    state.attach(repo: try clone.open(), fetchRemote: "origin", headRemote: nil)
     state.endWatching()
 
     pumpMain(until: { state.bounds == .none }, "求めるのをやめる")
@@ -261,7 +261,7 @@ final class PullRequestStateTests: OrbeTestCase {
     let base = repo.head()
     XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pr"]).isSuccess)
     let state = PullRequestState.shared(for: key, source: gitHub.source)
-    state.attach(repo: try repo.open(), fetchRemote: nil)
+    state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
     state.beginWatching()
     gitHub.answersAtOnce = false
     gitHub.content = .success(content(base: base, head: repo.head()))
@@ -294,7 +294,7 @@ final class PullRequestStateTests: OrbeTestCase {
     let state = watchedState()
     gitHub.content = .success(content(base: base, head: head))
     state.reload()
-    state.attach(repo: try shallow.open(), fetchRemote: "origin")
+    state.attach(repo: try shallow.open(), fetchRemote: "origin", headRemote: nil)
 
     pumpMain(until: { if case .failed = state.bounds { true } else { false } }, "求まらない")
     guard case .failed(_, .commitsMissing) = state.bounds else { return XCTFail("\(state.bounds)") }
@@ -307,13 +307,14 @@ final class PullRequestStateTests: OrbeTestCase {
     let state = watchedState()
     gitHub.content = .success(content(base: repo.head(), head: String(repeating: "0", count: 40)))
     state.reload()
-    state.attach(repo: try repo.open(), fetchRemote: "origin")
+    state.attach(repo: try repo.open(), fetchRemote: "origin", headRemote: nil)
     pumpMain(until: { if case .failed = state.bounds { return true } else { return false } })
     XCTAssertEqual(state.bounds.ends?.head, String(repeating: "0", count: 40))
     guard case .failed(_, .commitsMissing) = state.bounds else { return XCTFail("\(state.bounds)") }
 
     state.reload()
-    guard case .fetching = state.bounds else { return XCTFail("読み直しで求め直す: \(state.bounds)") }
+    XCTAssertEqual(state.bounds, .none, "読み直しで、求まらなかった両端を外す")
+    pumpMain(until: { state.bounds != .none }, "読み直した中身で求め直す")
   }
 }
 
