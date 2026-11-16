@@ -221,7 +221,8 @@ final class PullRequestStateTests: OrbeTestCase {
       "取ってきても ref は書かない")
   }
 
-  /// 両端を求めている間に見ている者が去れば、手元に無いコミットを取りに行かない。戻ったときに求め直して両端が揃う。
+  /// 両端を求めている間に見ている者が去れば、手元に無いコミットを取りに行かない。戻れば、読み直しを頼まなくても求め直して
+  /// 両端が揃う。
   func testBoundsAreNotFetchedAfterTheWatchersLeaveAndAreResolvedOnReturn() throws {
     let repo = try TempGitRepo()
     let bare = repo.addOrigin()
@@ -249,9 +250,30 @@ final class PullRequestStateTests: OrbeTestCase {
 
     state.beginWatching()
     addTeardownBlock { @MainActor in state.endWatching() }
-    state.reload()
     pumpMain(
-      until: { if case .ready = state.bounds { true } else { false } }, "戻ったら求め直して揃う")
+      until: { if case .ready = state.bounds { true } else { false } },
+      "戻ったら、読み直しを頼まなくても求め直して揃う")
+  }
+
+  /// 中身を読む間に見ている者が去って両端を求めなかったときも、戻れば、読み直しを頼まなくても求めて揃う。
+  func testBoundsAreResolvedOnReturnAfterLeavingWhileTheContentIsRead() throws {
+    let repo = try TempGitRepo()
+    let base = repo.head()
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pr"]).isSuccess)
+    let state = PullRequestState.shared(for: key, source: gitHub.source)
+    state.attach(repo: try repo.open(), fetchRemote: nil)
+    state.beginWatching()
+    gitHub.answersAtOnce = false
+    gitHub.content = .success(content(base: base, head: repo.head()))
+    state.reload()
+    state.endWatching()
+    gitHub.answerContent()
+    XCTAssertEqual(state.bounds, .none, "前提: 見ている者がいないので求めない")
+
+    state.beginWatching()
+    addTeardownBlock { @MainActor in state.endWatching() }
+    pumpMain(
+      until: { if case .ready = state.bounds { true } else { false } }, "戻ったら求めて揃う")
   }
 
   /// 浅いクローンで、取ってある範囲より古い所で分かれた PR は、共通のコミットが無いとは言わず、取得できなかったとする。
