@@ -13,11 +13,6 @@ extension PullRequestState {
     case submission
   }
 
-  struct ReviewDraft: Equatable {
-    var body = ""
-    var event = GitHubReviewEvent.comment
-  }
-
   struct ReviewWrite {
     let write: GitHubReviewWrite
     let target: ReviewTarget?

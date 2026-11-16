@@ -109,8 +109,6 @@ final class PullRequestState {
   private(set) var reviewVersion = 0
   /// レビューへの書き込みが走っている対象と、順番を待っている対象。
   var reviewWriteTargets: Set<ReviewTarget> = []
-  /// 全体へのコメントの書きかけと、選んだレビューの種類（メモリだけに持つ）。
-  var reviewDraft = ReviewDraft()
   @ObservationIgnored var reviewWrites: [ReviewWrite] = []
   @ObservationIgnored var isSendingReviewWrite = false
   @ObservationIgnored var isReadingReview = false
