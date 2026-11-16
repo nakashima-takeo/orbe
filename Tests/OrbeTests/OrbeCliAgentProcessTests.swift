@@ -53,7 +53,8 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     let spawned = control.orbJSON(["agent", "spawn", "codex"])
     let tab = try XCTUnwrap(spawned["tabId"] as? Int, "spawn_agent が tabId を返さない")
     XCTAssertFalse(tabsBefore.contains(tab), "既存タブを使い回さず新タブに生える")
-    let workspaceId = try XCTUnwrap(spawned["workspaceId"] as? Int, "spawn_agent は workspaceId も返す")
+    let workspaceId = try XCTUnwrap(
+      spawned["workspaceId"] as? String, "spawn_agent は workspaceId も返す")
     let agent = try XCTUnwrap(spawned["agent"] as? [String: Any], "spawn_agent は agent を返す")
     XCTAssertEqual(agent["command"] as? String, "codex")
     XCTAssertEqual(agent["path"] as? String, fake.path, "起動に使うのは解決済み絶対パス")
@@ -65,7 +66,7 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
 
     let tabs = try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
     XCTAssertEqual(
-      tabs.first { $0["tabId"] as? Int == tab }?["workspaceId"] as? Int, workspaceId,
+      tabs.first { $0["tabId"] as? Int == tab }?["workspaceId"] as? String, workspaceId,
       "返った workspaceId は実際の所属 workspace")
   }
 
@@ -84,9 +85,9 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
 
     let list = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
     let activeId = try XCTUnwrap(
-      list.first(where: { $0["active"] as? Bool == true })?["id"] as? Int, "アクティブ WS が無い")
+      list.first(where: { $0["active"] as? Bool == true })?["id"] as? String, "アクティブ WS が無い")
     let backgroundId = try XCTUnwrap(
-      list.first(where: { $0["active"] as? Bool == false })?["id"] as? Int, "背景 WS が無い")
+      list.first(where: { $0["active"] as? Bool == false })?["id"] as? String, "背景 WS が無い")
     for (id, agent) in [(activeId, "agy"), (backgroundId, "codex")] {
       let written = control.orb(
         ["config", "set", "default-agent", agent, "--workspace", "\(id)"])
@@ -120,22 +121,22 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
 
     let before = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
     let activeId = try XCTUnwrap(
-      before.first(where: { $0["active"] as? Bool == true })?["id"] as? Int, "アクティブ WS が無い")
+      before.first(where: { $0["active"] as? Bool == true })?["id"] as? String, "アクティブ WS が無い")
     let backgroundId = try XCTUnwrap(
-      before.first(where: { $0["active"] as? Bool == false })?["id"] as? Int, "背景 WS が無い")
+      before.first(where: { $0["active"] as? Bool == false })?["id"] as? String, "背景 WS が無い")
 
     let spawned = control.orbJSON(
       ["agent", "spawn", "codex", "--workspace", "\(backgroundId)"])
     let tab = try XCTUnwrap(spawned["tabId"] as? Int, "背景 WS への spawn が tabId を返さない")
     XCTAssertEqual(
-      spawned["workspaceId"] as? Int, backgroundId, "指定した背景 WS に生える")
+      spawned["workspaceId"] as? String, backgroundId, "指定した背景 WS に生える")
 
     // (a) 画面が飛んでいない。
     let after = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
     XCTAssertEqual(
-      after.first(where: { $0["active"] as? Bool == true })?["id"] as? Int, activeId,
+      after.first(where: { $0["active"] as? Bool == true })?["id"] as? String, activeId,
       "背景 WS への spawn がアクティブ WS を奪っている（前面化しないのが契約）")
-    let background = try XCTUnwrap(after.first { $0["id"] as? Int == backgroundId })
+    let background = try XCTUnwrap(after.first { $0["id"] as? String == backgroundId })
     XCTAssertEqual(background["active"] as? Bool, false, "背景のまま")
     XCTAssertEqual(
       background["activated"] as? Bool, true,
@@ -226,8 +227,8 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       injected.stderr.contains("-32602") && injected.stderr.contains("invalid sessionId"),
       "不正 session ID の理由が残る: \(injected.stderr)")
 
-    // 未知 workspaceId は**フォールバックしない**（既存 spawn の「黙ってアクティブへ」を継がない）。
-    let stray = control.orb(["agent", "spawn", "codex", "--workspace", "999999"])
+    // 未知 workspaceId は**フォールバックしない**（黙ってアクティブへ逸れない）。
+    let stray = control.orb(["agent", "spawn", "codex", "--workspace", UUID().uuidString])
     XCTAssertEqual(stray.status, 1, "未知 workspaceId は RPC エラー")
     XCTAssertTrue(
       stray.stderr.contains("-32004") && stray.stderr.contains("workspace not found"),

@@ -33,14 +33,15 @@ extension ControlWireTests {
     var id = 0
 
     let resultReturning = [
-      "focus_tab", "close_tab", "open_file", "open_diff",
+      "list_tabs", "spawn", "focus_tab", "close_tab", "open_file", "open_diff",
       "spawn_agent", "resume_agent", "prompt_agent",
       "config_list", "config_set", "create_workspace", "rename_workspace",
       "set_workspace_root", "remove_workspace", "restore_sessions",
       "list_tasks", "add_task", "update_task", "delete_task", "start_task",
-      "list_automations", "set_automation", "run_automation", "pause_automation",
-      "delete_automation", "list_automation_proposals", "list_board_parts", "add_board_part",
-      "remove_board_part",
+      "list_automations", "set_automation", "list_automation_runs", "run_automation",
+      "pause_automation",
+      "delete_automation", "list_automation_proposals", "try_automation", "get_automation_trial",
+      "list_board_widgets", "add_board_widget", "remove_board_widget",
     ]
     let fixtures = fixtures(fake)
 
@@ -82,9 +83,9 @@ extension ControlWireTests {
     id += 1
     XCTAssertNotEqual(
       errorCode(wire.request(id: id, method: "wait_for_event", params: ["timeoutMs": 10])), -32601,
-      "wait_for_event は handle が直接引き受ける（改名すると windowedHandler の未知メソッドへ落ちる）")
+      "wait_for_event は動詞の表にある（改名すると -32601 に落ちる）")
 
-    // 無応答契約の 2 つ。改名されると runCompletion の default に落ちて -32601 の行を書くので、
+    // 無応答契約の 2 つ。改名されると動詞の表から外れて -32601 の行を書くので、
     // barrier の応答より先に届く＝ここで捕まる。
     wire.send([
       "jsonrpc": "2.0", "id": 900, "method": "completion_update",
@@ -148,15 +149,18 @@ extension ControlWireTests {
   /// 実際に読めるタブを指すことは L4（`OrbeMcpProcessTests`）が実 `WindowController` で見る。
   func testActivateWorkspaceReturnsActiveIdAndTabIds() {
     let fake = FakeControlTarget()
-    fake.activateResult = (activeWorkspaceId: 3, tabIds: [11, 12])
+    let workspace = UUID()
+    fake.activateResult = (activeWorkspaceId: workspace, tabIds: [11, 12])
     let wire = startWire(target: fake)
 
     let result =
-      wire.request(id: 1, method: "activate_workspace", params: ["workspaceId": 3])?["result"]
-      as? [String: Any]
+      wire.request(
+        id: 1, method: "activate_workspace", params: ["workspaceId": workspace.uuidString])?[
+        "result"] as? [String: Any]
 
     XCTAssertEqual(
-      result?["activeWorkspaceId"] as? Int, 3, "前面化した workspace を activeWorkspaceId で返す")
+      result?["activeWorkspaceId"] as? String, workspace.uuidString,
+      "前面化した workspace を activeWorkspaceId で返す")
     XCTAssertEqual(result?["tabIds"] as? [Int], [11, 12], "mount したタブ一式を tabIds で返す")
   }
 
@@ -166,17 +170,22 @@ extension ControlWireTests {
   func testDestinationIdsReachTheirOwnDomainVerb() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
+    let (renamed, rooted, removed, activated) = (UUID(), UUID(), UUID(), UUID())
 
     _ = wire.request(id: 2, method: "focus_tab", params: ["tabId": 82])
     _ = wire.request(id: 3, method: "close_tab", params: ["tabId": 83])
     _ = wire.request(id: 9, method: "open_file", params: ["tabId": 89, "path": "a.swift"])
     _ = wire.request(
       id: 10, method: "open_diff", params: ["tabId": 90, "path": "b.swift", "kind": "staged"])
-    _ = wire.request(id: 4, method: "rename_workspace", params: ["workspaceId": 84, "name": "r"])
     _ = wire.request(
-      id: 5, method: "set_workspace_root", params: ["workspaceId": 85, "rootPath": "/tmp/r"])
-    _ = wire.request(id: 6, method: "remove_workspace", params: ["workspaceId": 86])
-    _ = wire.request(id: 7, method: "activate_workspace", params: ["workspaceId": 87])
+      id: 4, method: "rename_workspace", params: ["workspaceId": renamed.uuidString, "name": "r"])
+    _ = wire.request(
+      id: 5, method: "set_workspace_root",
+      params: ["workspaceId": rooted.uuidString, "rootPath": "/tmp/r"])
+    _ = wire.request(
+      id: 6, method: "remove_workspace", params: ["workspaceId": removed.uuidString])
+    _ = wire.request(
+      id: 7, method: "activate_workspace", params: ["workspaceId": activated.uuidString])
     _ = wire.request(
       id: 8, method: "prompt_agent", params: ["tabId": fake.tabId, "text": "p", "timeoutMs": 10])
 
@@ -188,14 +197,15 @@ extension ControlWireTests {
     XCTAssertEqual(fake.openedDiffs.last?.path, "b.swift")
     XCTAssertEqual(fake.openedDiffs.last?.kind, .staged)
     XCTAssertEqual(
-      fake.renamedWorkspaces.last?.workspaceId, 84, "rename_workspace は workspaceId を渡す")
+      fake.renamedWorkspaces.last?.workspaceId, renamed, "rename_workspace は workspaceId を渡す")
     XCTAssertEqual(fake.renamedWorkspaces.last?.name, "r", "rename_workspace は name を渡す")
     XCTAssertEqual(
-      fake.workspaceRoots.last?.workspaceId, 85, "set_workspace_root は workspaceId を渡す")
+      fake.workspaceRoots.last?.workspaceId, rooted, "set_workspace_root は workspaceId を渡す")
     XCTAssertEqual(
       fake.workspaceRoots.last?.rootPath, "/tmp/r", "set_workspace_root は rootPath を渡す")
-    XCTAssertEqual(fake.removedWorkspaceIds, [86], "remove_workspace は workspaceId を渡す")
-    XCTAssertEqual(fake.activatedWorkspaceIds, [87], "activate_workspace は workspaceId を渡す")
+    XCTAssertEqual(fake.removedWorkspaceIds, [removed], "remove_workspace は workspaceId を渡す")
+    XCTAssertEqual(
+      fake.activatedWorkspaceIds, [activated], "activate_workspace は workspaceId を渡す")
     XCTAssertEqual(
       fake.prompts.map(\.tabId), [fake.tabId], "prompt_agent は解決したタブを controlPromptAgent へ渡す")
   }

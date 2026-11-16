@@ -73,13 +73,15 @@ func readResponseLine(_ fd: Int32) -> Data {
   return buf
 }
 
-func controlRequest(method: String, params: [String: Any]) -> RPCResult {
+/// `callerTabId` は要求の封筒に載せる呼び出し元タブ（読む動詞を呼ぶサブコマンドだけが渡す）。
+func controlRequest(method: String, params: [String: Any], callerTabId: Int?) -> RPCResult {
   guard let fd = connectControl() else {
     return .transport("Orbe not running (cannot connect \(socketPath))")
   }
   defer { close(fd) }
 
-  let req: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": method, "params": params]
+  var req: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": method, "params": params]
+  if let callerTabId { req["caller"] = ["tabId": callerTabId] }
   guard var data = try? JSONSerialization.data(withJSONObject: req) else {
     return .transport("request encode failed")
   }

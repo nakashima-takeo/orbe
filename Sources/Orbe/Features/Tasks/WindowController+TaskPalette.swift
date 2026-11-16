@@ -89,7 +89,7 @@ extension WindowController {
 extension TaskPaletteWorkspaces {
   /// 今の workspace の値（画面を開いた workspace は今の workspace）。
   init(_ session: SessionStore) {
-    let entry = { (ws: Workspace) in Entry(id: ws.persistentId, name: ws.name) }
+    let entry = { (ws: Workspace) in Entry(id: ws.id, name: ws.name) }
     self.init(
       opened: entry(session.current), all: session.workspaces.map(entry),
       home: session.homeWorkspaceId)

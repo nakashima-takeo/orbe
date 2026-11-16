@@ -126,33 +126,16 @@ final class Connection: Hashable {
     write(msg)
   }
 
-  func waitForEvent(id: Any?, params: [String: Any]) {
-    // 宛先・フィルタ・期限は待機を張る**前**に検証する。素通しすると待機はどちらかへ倒れ、
-    // どちらも呼び出し側から時間切れと区別できない——絞り込みが黙って消えれば「別タブ・別種の
-    // イベントで起きる」、一致しない語で張られれば「永遠に起きない」。
-    func reject(_ message: String) {
-      respond(id: id, result: .failure(ControlError(code: -32602, message: message)))
-    }
-    let purpose: WaitPurpose
-    switch WaitPurpose.eventFilter(params) {
-    case .success(let parsed): purpose = parsed
-    case .failure(let error): return respond(id: id, result: .failure(error))
-    }
-    var after: Int?
-    if let raw = params["after"] {
-      guard let seq = raw as? Int, seq >= 0 else { return reject("invalid after") }
-      after = seq
-    }
-    guard let timeoutMs = WaitTimeout.parse(params, default: WaitTimeout.eventDefaultMs) else {
-      return reject("invalid timeoutMs")
-    }
-
+  /// `after` があれば、それより後の履歴に一致があれば即返し、無ければ待機を張る。
+  func waitForEvent(id: Any?, purpose: WaitPurpose, after: Int?, timeoutMs: Int) {
     if let after, let server {
       switch server.replay(after: after, where: purpose.matches) {
       case .match(let record):
         return respond(id: id, result: purpose.reply(record), seq: record.seq)
       case .future:
-        return reject("after is beyond the latest seq")
+        return respond(
+          id: id,
+          result: .failure(ControlError(code: -32602, message: "after is beyond the latest seq")))
       case .evicted:
         return respond(
           id: id, result: .failure(ControlError(code: -32006, message: "event history evicted")))

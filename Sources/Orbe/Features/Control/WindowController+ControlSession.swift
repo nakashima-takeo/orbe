@@ -28,7 +28,7 @@ extension WindowController {
         intoWorkspaceAt: index)
       present.insert(id)  // 同一リクエスト内の重複 id は 2 枚目を already-present にする
       return [
-        "sessionId": id, "status": "restored", "workspaceId": workspaces[index].id,
+        "sessionId": id, "status": "restored", "workspaceId": workspaces[index].id.uuidString,
         "tabId": restored.tab.id,
       ]
     }

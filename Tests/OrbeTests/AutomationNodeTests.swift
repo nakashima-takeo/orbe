@@ -1,0 +1,181 @@
+import XCTest
+
+@testable import Orbe
+
+/// ノードの JSON の形——外から受けた定義の読み書き。
+///
+/// 壊れると何が起きるか: AI が書いたノードが別の意味で読まれる（`none` が報告に化ける・入力や取り方が落ちる・ノードの id が
+/// 落ちて別のノードになる・出来事の残す日数が落ちる）。モデルを書かない agent のノードが通り、隠れた既定で走る。コマンドに書いた
+/// ツールや知らない行き先・取り方が黙って捨てられ、書いた AI が誤りの場所を知らされない。
+final class AutomationNodeTests: OrbeTestCase {
+  private func definitionNode(
+    _ id: Int?, _ key: String, _ name: String, _ trigger: AutomationNode.Trigger,
+    from: [AutomationDefinition.Input] = [], _ action: AutomationActionDef, maxItems: Int? = nil,
+    retentionDays: Int? = nil
+  ) -> AutomationDefinition.Node {
+    AutomationDefinition.Node(
+      id: id.map(AutomationNodeID.init), key: key, name: name, trigger: trigger, from: from,
+      action: action, maxItems: maxItems, retentionDays: retentionDays)
+  }
+
+  func testTheJSONFormReadsIntoNodesAndWritesBackTheSame() throws {
+    let json = #"""
+      [
+        {"id": 3, "key": "gh", "name": "GitHub", "trigger": {"kind": "interval", "minutes": 10},
+         "command": "gh search prs", "directory": "/Users/me/repo", "coverage": "currentSet"},
+        {"key": "judge", "name": "判定", "trigger": {"kind": "cron", "expression": "0 9 * * *"},
+         "from": [{"node": "gh", "maxAgeHours": 72}], "model": "sonnet", "instruction": "判定して",
+         "deliver": "taskCandidates", "maxItems": 30, "timeoutMinutes": 10},
+        {"key": "post", "name": "投稿", "trigger": {"kind": "manual"}, "agent": "claude",
+         "model": "opus", "tools": ["mcp__slack__post"], "instruction": "投稿して", "deliver": "report"},
+        {"key": "say", "name": "知らせ", "trigger": {"kind": "arrival"},
+         "from": ["gh", {"node": "post", "take": "all"}], "command": "say hi", "deliver": "none"},
+        {"key": "sum", "name": "まとめ", "trigger": {"kind": "arrival"},
+         "from": [{"node": "gh", "take": "all"}], "model": "haiku", "instruction": "まとめて",
+         "coverage": "currentSet"}
+      ]
+      """#
+    let expected = [
+      definitionNode(
+        3, "gh", "GitHub", .scheduled(.every(600)),
+        AutomationActionDef(
+          method: .command(
+            AutomationNodeCommand(script: "gh search prs", directory: "/Users/me/repo")),
+          timeoutMinutes: nil, coverage: .currentSet, destination: .nextNode)),
+      definitionNode(
+        nil, "judge", "判定", .scheduled(.cron(try BackgroundCron("0 9 * * *"))),
+        from: [.init(nodeKey: "gh", maxAgeHours: 72)],
+        AutomationActionDef(
+          method: .agent(
+            AutomationNodeAgent(cli: "claude", model: "sonnet", tools: [], instruction: "判定して")),
+          timeoutMinutes: 10, coverage: nil, destination: .taskCandidates), maxItems: 30),
+      definitionNode(
+        nil, "post", "投稿", .manual,
+        AutomationActionDef(
+          method: .agent(
+            AutomationNodeAgent(
+              cli: "claude", model: "opus", tools: ["mcp__slack__post"], instruction: "投稿して")),
+          timeoutMinutes: nil, coverage: nil, destination: .report)),
+      definitionNode(
+        nil, "say", "知らせ", .arrival,
+        from: [.init(nodeKey: "gh"), .init(nodeKey: "post", take: .all)],
+        AutomationActionDef(
+          method: .command(AutomationNodeCommand(script: "say hi", directory: nil)),
+          timeoutMinutes: nil, coverage: nil, destination: .sideEffect)),
+      definitionNode(
+        nil, "sum", "まとめ", .arrival, from: [.init(nodeKey: "gh", take: .all)],
+        AutomationActionDef(
+          method: .agent(
+            AutomationNodeAgent(cli: "claude", model: "haiku", tools: [], instruction: "まとめて")),
+          timeoutMinutes: nil, coverage: .currentSet, destination: .nextNode)),
+    ]
+
+    let definitionNodes = try AutomationWire.decoder.decode(
+      [AutomationDefinition.Node].self, from: Data(json.utf8))
+    let written = try AutomationWire.encoder().encode(definitionNodes)
+    let from = try XCTUnwrap(
+      (JSONSerialization.jsonObject(with: written) as? [[String: Any]])?[3]["from"] as? [Any])
+
+    XCTAssertEqual(definitionNodes, expected)
+    XCTAssertEqual(
+      try AutomationWire.decoder.decode([AutomationDefinition.Node].self, from: written),
+      definitionNodes, "書いて読み直しても同じ値")
+    XCTAssertEqual(from.first as? String, "gh", "取り方も古さの上限も省いた入力は鍵だけで書く")
+  }
+
+  /// 出来事の残す日数はノードの欄として読み、書き戻す。
+  func testRetentionDaysIsReadAndWrittenBack() throws {
+    let json = #"""
+      {"key": "dm", "name": "DM", "trigger": {"kind": "manual"}, "command": "dm",
+       "coverage": "newArrivals", "retentionDays": 60}
+      """#
+    let definitionNode = try AutomationWire.decoder.decode(
+      AutomationDefinition.Node.self, from: Data(json.utf8))
+    let written = try JSONSerialization.jsonObject(
+      with: try AutomationWire.encoder().encode(definitionNode))
+
+    XCTAssertEqual(definitionNode.retentionDays, 60)
+    XCTAssertEqual((written as? [String: Any])?["retentionDays"] as? Int, 60)
+  }
+
+  /// 入力が読む行の下限の時刻は ISO 8601 の時刻として読み、同じ時刻で書き戻す。時刻として読めない値は場所を示して断る。
+  func testTheAfterOfAnInputIsReadAndWrittenBackAsATime() throws {
+    let json = #"""
+      {"key": "late", "name": "後から", "trigger": {"kind": "arrival"}, "command": "late",
+       "from": [{"node": "gh", "after": "2027-01-15T08:00:00.250Z"}]}
+      """#
+    let definitionNode = try AutomationWire.decoder.decode(
+      AutomationDefinition.Node.self, from: Data(json.utf8))
+    let written = try AutomationWire.encoder().encode(definitionNode)
+
+    XCTAssertEqual(definitionNode.from.first?.after, Date(timeIntervalSince1970: 1_800_000_000.25))
+    XCTAssertEqual(
+      try AutomationWire.decoder.decode(AutomationDefinition.Node.self, from: written),
+      definitionNode, "書いて読み直しても同じ値")
+    XCTAssertThrowsError(
+      try AutomationDefinition.decode([
+        "name": "x",
+        "nodes": [
+          ["key": "gh", "name": "取る", "trigger": ["kind": "manual"], "command": "gh"],
+          [
+            "key": "late", "name": "後から", "trigger": ["kind": "arrival"], "command": "late",
+            "from": [["node": "gh", "after": "yesterday"]],
+          ],
+        ],
+      ])
+    ) {
+      XCTAssertEqual(
+        $0 as? AutomationError, .invalid("invalid nodes[1].from[0].after: not ISO 8601: yesterday"))
+    }
+  }
+
+  /// 形の誤りは読む時点で断り、誤りの場所（ノードの位置と欄）を持つ。制御 API はこの場所を `nodes[1].tools` の形で返す。
+  func testShapeErrorsAreRefusedAtTheirPlace() {
+    let manual = #"{"kind": "manual"}"#
+    for (label, trigger, fields, place) in [
+      ("コマンドと指示文の両方", manual, #""command": "x", "instruction": "y""#, "[1]"),
+      ("手段が無い", manual, #""coverage": "currentSet""#, "[1]"),
+      ("コマンドにツール", manual, #""command": "x", "tools": ["mcp__a__b"]"#, "[1].tools"),
+      ("コマンドにモデル", manual, #""command": "x", "model": "haiku""#, "[1].model"),
+      ("agent にモデルが無い", manual, #""instruction": "y""#, "[1].model"),
+      ("agent に作業ディレクトリ", manual, #""instruction": "y", "directory": "/a""#, "[1].directory"),
+      ("知らない予定", #"{"kind": "weekly"}"#, #""command": "x""#, "[1].trigger.kind"),
+      (
+        "cron 式の誤り", #"{"kind": "cron", "expression": "0 25 * * *"}"#, #""command": "x""#,
+        "[1].trigger.expression"
+      ),
+      ("毎回全件の性質", manual, #""command": "x", "coverage": "everything""#, "[1].coverage"),
+      (
+        "知らない取り方", manual, #""command": "x", "from": [{"node": "ok", "take": "x"}]"#,
+        "[1].from[0].take"
+      ),
+      (
+        "数でない件数の上限", manual, #""command": "x", "maxItems": "many""#, "[1].maxItems"
+      ),
+      ("知らない行き先", manual, #""command": "x", "deliver": "slack""#, "[1].deliver"),
+    ] {
+      let json =
+        #"[{"key": "ok", "name": "ok", "trigger": {"kind": "manual"}, "command": "x"}, "#
+        + #"{"key": "a", "name": "a", "trigger": \#(trigger), \#(fields)}]"#
+      XCTAssertThrowsError(
+        try AutomationWire.decoder.decode([AutomationDefinition.Node].self, from: Data(json.utf8)),
+        label
+      ) {
+        XCTAssertEqual(location(of: $0), place, label)
+      }
+    }
+  }
+
+  /// 読む誤りの場所（`[1].trigger.kind` の形）。
+  private func location(of error: Error) -> String? {
+    let keys: [CodingKey]
+    switch error as? DecodingError {
+    case .dataCorrupted(let context)?, .typeMismatch(_, let context)?,
+      .valueNotFound(_, let context)?:
+      keys = context.codingPath
+    case .keyNotFound(let key, let context)?: keys = context.codingPath + [key]
+    default: return nil
+    }
+    return keys.map { $0.intValue.map { "[\($0)]" } ?? ".\($0.stringValue)" }.joined()
+  }
+}

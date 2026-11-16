@@ -88,10 +88,10 @@ final class AgentMcpPathTests: OrbeTestCase {
       exec /bin/sleep 600
       """.utf8
     ).write(to: script)
-    let tabId = try XCTUnwrap(
-      control.target.controlSpawn(
-        workspaceId: background.id, cwd: nil, command: "/bin/sh \(ShellWord.quoted(script.path))",
-        selects: false))
+    let tabId = try control.target.controlSpawn(
+      workspaceId: background.id, cwd: nil, command: "/bin/sh \(ShellWord.quoted(script.path))",
+      selects: false
+    ).get()
     var injected: [String: String] = [:]
     OrbeRuntimeEnv.inject(into: &injected, tabId: tabId)
     XCTAssertEqual(

@@ -1,14 +1,14 @@
 import Foundation
 import Observation
 
-/// 提案タブで居る場所。→ が一段深く、← が一段浅い（棚 ← 提案の一覧 → 中身）。
+/// 提案タブで居る場所。候補が選ばれているのは候補の一覧に居る間だけ。
 enum TaskPaletteAutomationPlace: Equatable {
-  /// 提案の一覧（入力欄に焦点）。
-  case proposals
+  /// 絞り込み欄（開いた直後。入力欄に焦点）。
+  case field
   /// 左の棚（カードの器に焦点）。
   case shelf
-  /// 棚で選んだ受信の中身（カードの器に焦点）。どの受信かは棚の選択が持つ。
-  case contents
+  /// 候補の一覧（入力欄に焦点）。
+  case proposals
 }
 
 /// 棚の段の同一性。
@@ -25,24 +25,43 @@ struct TaskPaletteAutomationShelfRow: Equatable, Identifiable {
   let count: Int
 }
 
+/// 棚の段の 2 行目。左に前回の判定、右に今の状態。ビューは文言と色だけを決める。
+struct TaskPaletteAutomationShelfStatus: Equatable {
+  /// 最も新しく回った判定のノードの最新の回。まだどの判定も回っていなければ nil。
+  let last: Judged?
+  let state: State?
+
+  struct Judged: Equatable {
+    let at: Date
+    let failed: Bool
+  }
+
+  enum State: Equatable {
+    /// 候補を更新している一巡の間。
+    case refreshing
+    case paused
+  }
+}
+
 /// 提案タブの失敗（フッターに赤で出す）。
 enum TaskPaletteAutomationError: Equatable {
   /// タスクにするを、タスクのストアが受け付けなかった。
   case accept
-  /// 自動追加への手の操作を断った。
-  case refused(AutomationHand.Refusal)
+  /// 候補の更新を、一巡の途中なので断った。
+  case refreshing
 
   var message: L10nKey {
     switch self {
     case .accept: .taskPaletteAutomationErrAccept
-    case .refused(let refusal): refusal.message
+    case .refreshing: .taskPaletteAutomationErrRefreshing
     }
   }
 }
 
-/// ⌘⇧X の提案タブの状態（@Observable）。受信・提案・回の記録は受信のストアから、走っているか・次の時刻は走らせ役から
-/// 毎回読み、写さない。ここが持つのは棚と提案の一覧の状態（入力・同一性での選択）・居場所・失敗だけ。
-/// ストアが変わったら `reconcile()` で選択と居場所を付け直す（カードの `.onChange` が届ける）。
+/// ⌘⇧X の提案タブの状態（@Observable）。自動化・候補・回の記録はストアから、一巡の有無は走らせ役から毎回読み、
+/// 写さない。ここが持つのは棚と候補の一覧の状態（入力・同一性での選択）・居場所・失敗だけ。候補の一覧の選択は覚えている行で、
+/// それが「選ばれている」のは候補の一覧に居る間だけ（印・詳細・さばく操作はすべて `selectedProposal` を読む）。
+/// ストアが変わったら `reconcile()` で選択を付け直す（カードの `.onChange` が届ける）。
 @Observable final class TaskPaletteAutomationModel {
   let runner: AutomationRunner
   let tasks: TaskStore
@@ -54,7 +73,7 @@ enum TaskPaletteAutomationError: Equatable {
 
   private(set) var shelfList = ListState<TaskPaletteAutomationShelfID>()
   private(set) var proposalList = ListState<Int>()
-  private(set) var place: TaskPaletteAutomationPlace = .proposals {
+  private(set) var place: TaskPaletteAutomationPlace = .field {
     didSet { if place != oldValue { onPlaceChange() } }
   }
   private(set) var error: TaskPaletteAutomationError?
@@ -64,7 +83,7 @@ enum TaskPaletteAutomationError: Equatable {
     error = nil
   }
 
-  /// 居場所が変わった（焦点の行き先が入力欄とカードの器の間で移る）。
+  /// 居場所が変わった（焦点の行き先が入力欄とカードの器の間で移りうる）。
   @ObservationIgnored var onPlaceChange: () -> Void = {}
   @ObservationIgnored var onOpenURL: (URL) -> Void = { _ in }
   /// そのタスクのための agent を開く口（タスクの ID）。
@@ -86,22 +105,17 @@ enum TaskPaletteAutomationError: Equatable {
 
   // MARK: - 行
 
-  /// 人の判断待ちの提案と、それを出す棚の受信。
-  private var shelved: [(proposal: AutomationProposal, shelf: Int)] {
-    store.proposals.compactMap { proposal in
-      guard proposal.state == .open, let shelf = store.shelf(of: proposal) else { return nil }
-      return (proposal, shelf.id)
-    }
-  }
+  /// 人の判断待ちの提案と、それを出す棚の自動化の ID。
+  private var shelved: [(proposal: AutomationProposal, shelf: Int)] { store.shelvedProposals }
 
   /// ヘッダーのタブの件数（入力の絞り込みに左右されない）。
   var openCount: Int { shelved.count }
 
-  /// 「すべて」と、出力先がタスク候補の受信を ID 順に。
+  /// 「すべて」と、判定のノードを持つ自動化を ID 順に。
   var shelfRows: [TaskPaletteAutomationShelfRow] {
     let counts = Dictionary(grouping: shelved, by: \.shelf).mapValues(\.count)
     return [TaskPaletteAutomationShelfRow(id: .all, automation: nil, count: shelved.count)]
-      + store.automations.filter { $0.definition.sink == .taskCandidates }
+      + store.automations.filter(\.hasJudges)
       .sorted { $0.id < $1.id }.map {
         TaskPaletteAutomationShelfRow(
           id: .automation($0.id), automation: $0, count: counts[$0.id] ?? 0)
@@ -123,7 +137,7 @@ enum TaskPaletteAutomationError: Equatable {
     .map(\.proposal)
     .filter {
       query.isEmpty || $0.title.localizedStandardContains(query)
-        || $0.item.body.localizedStandardContains(query)
+        || $0.fields.body?.localizedStandardContains(query) == true
     }
     .sorted { ($0.proposedAt, -$0.id) > ($1.proposedAt, -$1.id) }
   }
@@ -135,8 +149,9 @@ enum TaskPaletteAutomationError: Equatable {
     return store.automation(id)
   }
 
+  /// 選ばれている候補。候補の一覧に居る間だけ、覚えている行を返す。
   var selectedProposal: AutomationProposal? {
-    guard let id = proposalList.selectedID else { return nil }
+    guard place == .proposals, let id = proposalList.selectedID else { return nil }
     return store.proposals.first { $0.id == id && $0.state == .open }
   }
 
@@ -145,9 +160,32 @@ enum TaskPaletteAutomationError: Equatable {
     workspaces().destination(of: proposal.workspace)
   }
 
-  func isRunning(_ automation: Automation) -> Bool { runner.isRunning(automation.id) }
+  /// 候補の出どころのノード（読んだ行から引き継ぎをたどった先の行を出したノード）の名前。候補を出した自動化の定義から引き、
+  /// ノードか自動化が消えていれば nil。
+  func originNodeName(of proposal: AutomationProposal) -> String? {
+    store.issuer(of: proposal)?.graph.node(proposal.originNodeId)?.entity.name
+  }
 
-  func nextRunAt(_ automation: Automation) -> Date? { runner.nextRunAt(automation) }
+  /// 候補を出した判定のノードの名前。ノードか自動化が消えていれば nil。
+  func judgeName(of proposal: AutomationProposal) -> String? {
+    store.issuer(of: proposal)?.graph.node(proposal.judge)?.entity.name
+  }
+
+  /// 棚の段の 2 行目。前回の判定は、判定のノードのうち最も新しく回ったものの最新の回（他の判定の失敗は一覧の頭で見る）。今の
+  /// 状態は、判定とその祖先のどれかを通る一巡の間なら更新中（棚の更新が断られる間と一致する）、自動化を止めているか判定のノードが
+  /// すべて実効で止まっていれば一時停止中。
+  func status(of automation: Automation) -> TaskPaletteAutomationShelfStatus {
+    let judges = automation.graph.judges
+    let last = judges.compactMap { automation.state($0.id).runs.first }
+      .max { $0.startedAt < $1.startedAt }
+    let reach = Set(judges.flatMap { [$0.id] + automation.graph.ancestors(of: $0.id).map(\.id) })
+    let state: TaskPaletteAutomationShelfStatus.State? =
+      runner.isFlowing(automation.id, through: reach)
+      ? .refreshing
+      : judges.allSatisfy({ automation.halted($0.id) }) ? .paused : nil
+    return TaskPaletteAutomationShelfStatus(
+      last: last.map { .init(at: $0.startedAt, failed: $0.failed) }, state: state)
+  }
 
   // MARK: - 入力・選択
 
@@ -170,15 +208,10 @@ enum TaskPaletteAutomationError: Equatable {
     }
   }
 
-  /// ストアが変わったあとの付け直し。どちらの一覧も同一性で選び直し、消えたら同じ位置へ移る。中身に居る間に棚の選択の
-  /// 同一性が変わった（受信が消えた）ら、提案の一覧へ戻る。
+  /// ストアが変わったあとの付け直し。どちらの一覧も同一性で選び直し、消えたら同じ位置へ移る。
   func reconcile() {
-    let shelf = shelfList.selectedID
     shelfList.reconcile(shelfIDs)
     proposalList.reconcile(proposalIDs)
-    if place == .contents, shelfList.selectedID != shelf || selectedAutomation == nil {
-      place = .proposals
-    }
   }
 
   func moveProposal(_ direction: Int) {
@@ -191,22 +224,29 @@ enum TaskPaletteAutomationError: Equatable {
     proposalList.jump(direction, in: proposalIDs)
   }
 
+  /// 棚は端で巡回しない。先頭の ↑ は絞り込み欄へ戻る。
   func moveShelf(_ direction: Int) {
     error = nil
-    shelfList.move(direction, in: shelfIDs)
+    let ids = shelfIDs
+    guard let index = shelfList.selectedID.flatMap({ ids.firstIndex(of: $0) }) else { return }
+    let target = index + direction
+    if target < 0 { return enterField() }
+    guard target < ids.count else { return }
+    shelfList.select(ids[target], in: ids)
     proposalList.selectFirst(in: proposalIDs)
   }
 
   func jumpShelf(_ direction: Int) {
     error = nil
+    let previous = shelfList.selectedID
     shelfList.jump(direction, in: shelfIDs)
-    proposalList.selectFirst(in: proposalIDs)
+    if shelfList.selectedID != previous { proposalList.selectFirst(in: proposalIDs) }
   }
 
-  /// 棚の段のクリック。選んで提案の一覧に居る。
+  /// 棚の段のクリック。選んで棚に居る（焦点のある列だけが選ばれているので、候補は選ばれない）。
   func tapShelf(_ id: TaskPaletteAutomationShelfID) {
     error = nil
-    place = .proposals
+    place = .shelf
     guard shelfList.selectedID != id, shelfList.select(id, in: shelfIDs) else { return }
     proposalList.selectFirst(in: proposalIDs)
   }
@@ -232,21 +272,20 @@ enum TaskPaletteAutomationError: Equatable {
 
   // MARK: - 居場所
 
+  func enterField() {
+    error = nil
+    place = .field
+  }
+
   func enterShelf() {
     error = nil
     place = .shelf
   }
 
-  func showProposals() {
+  /// 覚えている行が選ばれる。
+  func enterProposals() {
     error = nil
     place = .proposals
-  }
-
-  /// 受信を選んでいるときだけ（「すべて」の中身は無い）。
-  func enterContents() {
-    guard selectedAutomation != nil else { return }
-    error = nil
-    place = .contents
   }
 
   // MARK: - 提案をさばく
@@ -268,7 +307,8 @@ enum TaskPaletteAutomationError: Equatable {
     error = nil
     var task: TaskItem?
     do throws(AutomationError) {
-      task = try store.accept(proposal.id, into: tasks, workspace: destination(of: proposal)?.id)
+      task = try store.accept(
+        proposal.id, into: tasks, workspace: destination(of: proposal)?.id, now: runner.now())
     } catch {
       if case .invalid = error { self.error = .accept }
     }
@@ -280,13 +320,13 @@ enum TaskPaletteAutomationError: Equatable {
   func dismiss() {
     guard let proposal = selectedProposal else { return }
     error = nil
-    try? store.dismiss(proposal.id)
+    try? store.dismiss(proposal.id, now: runner.now())
     settle()
   }
 
   /// ⌘O・リンクのクリック。
   func openLink() {
-    guard let proposal = selectedProposal, let url = URL(string: proposal.item.link) else { return }
+    guard let proposal = selectedProposal, let url = URL(string: proposal.link) else { return }
     onOpenURL(url)
   }
 
@@ -295,15 +335,17 @@ enum TaskPaletteAutomationError: Equatable {
     proposalList.follow()
   }
 
-  // MARK: - 受信の中身
+  // MARK: - 候補の更新
 
-  /// 選んでいる自動追加への手の操作。削除は確認なしで消し、提案の一覧へ戻る（棚は同じ位置の段を選ぶ）。
-  func perform(_ operation: AutomationHand.Operation) {
+  /// 棚の ⌘↵。選んでいる自動化の候補を今すぐ更新する（タスク候補を行き先にするノードすべてまで流す）。断るのは、判定とその祖先の
+  /// どれかを通る一巡の途中だけで、行き違い（消えていた・使えない）は黙る。「すべて」では何もしない。
+  func refresh() {
     guard let automation = selectedAutomation else { return }
-    error = AutomationHand.perform(operation, on: automation, runner: runner).map { .refused($0) }
-    guard operation == .delete else { return }
-    reconcile()
-    place = .proposals
-    proposalList.selectFirst(in: proposalIDs)
+    error = nil
+    do throws(AutomationError) {
+      try runner.flow(automation.id, to: .judges)
+    } catch {
+      if case .flowing = error { self.error = .refreshing }
+    }
   }
 }

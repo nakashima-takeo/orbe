@@ -2,18 +2,23 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの自動化が番人に載ること、
-/// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること、
-/// 一覧の回の記録が保存と同じ形であること。候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で出ること。
+/// 自動化の 9 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みのノードが番人に載ること、
+/// 候補が出した自動化の棚に出ること、判定のノードに人の判断の数が出ること、拒否が制御 API の語彙になること、一覧の定義を
+/// `set_automation` へ戻せること。
+/// 候補の付け先は今ある workspace に解けるときだけその workspace の id と名前で、候補にした理由は判定が書いたときだけ出ること。
+/// 試走は始めた応答で道の上のノードを返し、待って読むとノードごとの回の結果（取得の rows・止めた副作用の held.rows）を返し、
+/// 始める前と自動化を消した後は -32004 で読めないこと。
 ///
-/// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
-/// もう取っていない提案が混ざる・取っている自動化に出ない。走っている自動化への `run_automation` が別の誤りに化ける。
-/// 一覧の定義を書き換えて戻すと、間隔や取得元が別物になる。回の記録を読む AI・秘書が、段ごとの件数や出力先の結果を読めなくなる。
-/// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。
+/// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、元の項目がもう無い
+/// 候補が混ざる・ほかの自動化の候補につられて消える・外したノードを出どころとして読む。
+/// AI が判定の採用・見送りの数を読めない、または指示文を直す前の数で読む。
+/// 一覧の定義を書き換えて戻すと、予定やノードが別物になる。
+/// AI が候補の付け先や候補にした理由を読めない、または消えた workspace を付け先として読む。AI が試走を始めても結果を読めない、止めた副作用に
+/// 何が渡るはずだったかを確かめられず本番で初めて誤りに気づく、試走をまだ始めていないのに自動化が無いと読んで作り直す。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationControlTests: OrbeTestCase {
-  private func launch() throws -> WindowController {
+  func launch() throws -> WindowController {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -25,7 +30,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     return WindowController()
   }
 
-  private func success(
+  func success(
     _ result: Result<Any, ControlError>, file: StaticString = #filePath, line: UInt = #line
   ) throws -> [String: Any] {
     switch result {
@@ -37,12 +42,12 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     }
   }
 
-  private func code(_ result: Result<Any, ControlError>) -> Int? {
+  func code(_ result: Result<Any, ControlError>) -> Int? {
     if case .failure(let error) = result { return error.code }
     return nil
   }
 
-  private func listed(_ wc: WindowController) throws -> [Int: [String: Any]] {
+  func listed(_ wc: WindowController) throws -> [Int: [String: Any]] {
     let automations = try XCTUnwrap(
       success(wc.controlListAutomations())["automations"] as? [[String: Any]])
     return Dictionary(
@@ -55,197 +60,317 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         as? [[String: Any]])
   }
 
-  private func set(_ wc: WindowController, _ definition: AutomationDefinition) throws -> Int {
+  func set(_ wc: WindowController, _ definition: AutomationDefinition) throws -> Int {
     try XCTUnwrap(
-      (success(wc.controlSetAutomation(automationId: nil, definition))["automation"]
+      (success(wc.controlSetAutomation(automationId: nil, version: nil, definition))["automation"]
         as? [String: Any])?["automationId"] as? Int)
   }
 
-  /// 成功した回を確定する（`proposing` の項目に提案を出す）。
-  private func commit(
-    _ wc: WindowController, _ id: Int, fetched: [AutomationItem], proposing: [AutomationItem] = []
-  ) {
-    AutomationStoreTests.commit(
-      wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: fetched,
-      decisions: proposing.map {
-        .propose(itemId: $0.id, title: "対応: \($0.id)", due: nil, workspace: nil)
-      })
+  /// 取得のノード `fetch`（既定は今の集合）と、届いたらタスク候補を出す判定のノード `judge`。
+  static func definition(
+    _ name: String = "受信", script: String = "true", coverage: AutomationCoverage = .currentSet
+  ) -> AutomationDefinition {
+    DesignSceneFixtures.candidatesDefinition(
+      name,
+      fetch: DesignSceneFixtures.commandNode(
+        "fetch", "取る", .scheduled(.every(1800)), script: script, coverage: coverage))
+  }
+
+  static func item(_ id: String) -> AutomationItem {
+    AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: Date())
+  }
+
+  /// 取得の回を時刻 `now` で確定し、`proposing` があれば読める行をすべて取った判定の回で候補にする（タイトルは `titles`、付け先は
+  /// `workspaces`、候補にした理由は `reasons` の順。省けば「対応: <id>」・付け先なし・理由なし）。
+  static func round(
+    _ store: AutomationStore, _ id: Int, fetched items: [AutomationItem],
+    proposing: [AutomationItem] = [], titles: [String]? = nil, workspaces: [UUID?]? = nil,
+    reasons: [String?]? = nil, now: Date = Date()
+  ) throws {
+    try store.record(id, nodeKey: "fetch", at: now, outcome: DesignSceneFixtures.fetched(items))
+    guard !proposing.isEmpty else { return }
+    let judge = store.nodeId(id, "judge")
+    let taken = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: now)).taken
+    let proposals = proposing.enumerated().compactMap { index, item in
+      taken.first { $0.link == item.link }?.proposal(
+        titles?[index] ?? "対応: \(item.id)", workspace: workspaces?[index] ?? nil,
+        reason: reasons?[index] ?? nil)
+    }
+    try store.record(
+      id, nodeKey: "judge", trigger: .arrival, at: now,
+      outcome: DesignSceneFixtures.judged(proposals, rows: taken.count))
   }
 
   // MARK: - 起動
 
-  /// 起動で保存済みの受信を番人へ載せ、過ぎていた回を走らせる。止めた受信は予定では走らない。
+  /// 起動で保存済みのノードを番人へ載せ、過ぎていた回を走らせる。止めた自動化のノードは予定では走らない。
   func testLaunchSchedulesStoredAutomationsExceptPausedOnes() throws {
     let longAgo = Date().addingTimeInterval(-86400)
-    let saved = AutomationStore(file: nil)
-    let active = try saved.create(
-      AutomationStoreTests.definition("動いている", script: "true"), now: longAgo)
-    let paused = try saved.create(
-      AutomationStoreTests.definition("止めた", script: "true"), now: longAgo)
-    _ = try saved.setPaused(paused.id, true)
+    let (active, paused) = try {
+      let saved = AutomationStore()
+      let active = try saved.create(Self.definition("動いている"), now: longAgo)
+      let paused = try saved.create(Self.definition("止めた"), now: longAgo)
+      _ = try saved.setPaused(paused.id, true, now: longAgo)
+      return (active, paused)
+    }()
 
     let wc = try launch()
 
     XCTAssertTrue(wc.automationRunner.isRunning(active.id), "過ぎていた回が起動で始まる")
-    XCTAssertFalse(wc.automationRunner.isRunning(paused.id), "止めた受信は予定では走らない")
+    XCTAssertFalse(wc.automationRunner.isRunning(paused.id), "止めた自動化は予定では走らない")
     XCTAssertTrue(
       waitUntil(10) { wc.automationStore.automation(active.id)?.runs.isEmpty == false },
       "起動で始まった回が確定しない")
     XCTAssertEqual(wc.automationStore.automation(active.id)?.runs.first?.trigger, .schedule)
   }
 
-  // MARK: - 棚と重なり
+  // MARK: - 棚
 
-  /// 提案は棚に出す受信の側に出る。提案した受信が取らなくなった提案は、まだ取っている受信の棚へ移り、
-  /// 重なりは両方の受信に相手と件数で出る。
-  func testProposalsAndOverlapsAppearOnTheShelfAutomation() throws {
+  /// 候補は出した自動化の棚に出て、同じリンクを両方の自動化の判定が候補にすれば両方に出る。取得が元の項目を出さなくなると、その
+  /// 自動化の候補だけが下がる。判定のノードを外すと、その判定の候補は判断待ちも忘れ、ほかの自動化の候補は残る。
+  func testEachAutomationShelvesItsOwnProposals() throws {
     let wc = try launch()
-    let first = try set(wc, AutomationStoreTests.definition("受信 1"))
-    let second = try set(wc, AutomationStoreTests.definition("受信 2"))
-    let kept = AutomationStoreTests.item("kept")
-    let moved = AutomationStoreTests.item("moved")
-    commit(wc, first, fetched: [kept, moved], proposing: [kept, moved])
-    commit(wc, second, fetched: [moved, kept])
-    commit(wc, first, fetched: [kept])
-
-    XCTAssertEqual(try proposals(wc, of: first).map { $0["link"] as? String }, [kept.link])
-    let shelved = try proposals(wc, of: second)
-    XCTAssertEqual(
-      shelved.map { $0["link"] as? String }, [moved.link], "提案した受信が取らなくなったら、取っている受信の棚へ")
-    XCTAssertEqual(shelved.first?["automationId"] as? Int, second)
-    XCTAssertEqual(shelved.first?["automationName"] as? String, "受信 2")
+    let store = wc.automationStore
+    let first = try set(wc, Self.definition("受信 1"))
+    let second = try set(wc, Self.definition("受信 2"))
+    let gone = Self.item("gone")
+    let moved = Self.item("moved")
+    try Self.round(store, first, fetched: [gone, moved], proposing: [gone, moved])
+    try Self.round(store, second, fetched: [moved, gone], proposing: [moved, gone])
 
     let candidates = try listed(wc).compactMapValues { $0["taskCandidates"] as? [String: Any] }
-    XCTAssertEqual(candidates[first]?["openProposals"] as? Int, 1)
-    XCTAssertEqual(candidates[second]?["openProposals"] as? Int, 1)
-    for (id, other, name) in [(first, second, "受信 2"), (second, first, "受信 1")] {
-      let overlaps = candidates[id]?["overlaps"] as? [[String: Any]]
-      XCTAssertEqual(
-        overlaps?.map { $0["automationId"] as? Int }, [other], "自動化 \(id) に相手が出る")
-      XCTAssertEqual(overlaps?.first?["name"] as? String, name)
-      XCTAssertEqual(overlaps?.first?["count"] as? Int, 1)
-    }
+    XCTAssertEqual(candidates[first]?["openProposals"] as? Int, 2)
+    XCTAssertEqual(candidates[second]?["openProposals"] as? Int, 2)
+    XCTAssertEqual(candidates[first]?.keys.sorted(), ["openProposals"])
+
+    try Self.round(store, first, fetched: [moved])
+    XCTAssertEqual(
+      try proposals(wc, of: first).map { $0["link"] as? String }, [moved.link],
+      "元の項目が消えた提案は下がる")
+    XCTAssertEqual(
+      try proposals(wc, of: second).map { $0["link"] as? String }, [moved.link, gone.link],
+      "ほかの自動化の同じリンクの候補は残る")
+
+    var reporting = try XCTUnwrap(store.automation(first)?.definition)
+    reporting.nodes[1] = DesignSceneFixtures.commandNode(
+      "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
+    _ = try success(
+      wc.controlSetAutomation(
+        automationId: first, version: store.automation(first)?.version, reporting))
+    XCTAssertTrue(try proposals(wc, of: first).isEmpty, "判定を外せば候補を忘れる")
+    let shelved = try proposals(wc, of: second)
+    XCTAssertEqual(shelved.map { $0["link"] as? String }, [moved.link, gone.link])
+    XCTAssertEqual(shelved.first?["automationId"] as? Int, second)
+    XCTAssertEqual(shelved.first?["automationName"] as? String, "受信 2")
   }
 
-  /// 候補は付け先が今ある workspace に解けるときだけ、起動ごとの id と名前を持つ（永続 ID は出さない）。付け先が無い・
-  /// 消えた候補はキーごと出さない。
+  /// 判定のノードの状態に、今の定義が出した候補への人の判断の数（採用・見送り）が出る。指示文を書き換えると 0 から数える。
+  func testAJudgeNodeListsTheSettlementsOfItsCurrentDefinition() throws {
+    let wc = try launch()
+    let store = wc.automationStore
+    let id = try set(wc, Self.definition())
+    let (a, b) = (Self.item("a"), Self.item("b"))
+    try Self.round(store, id, fetched: [a, b], proposing: [a, b])
+    let ids = store.proposals.map(\.id)
+    _ = try store.accept(ids[0], into: TaskStore(), workspace: nil, now: Date())
+    try store.dismiss(ids[1], now: Date())
+    func settled() throws -> [Int?] {
+      let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
+      return [nodes["judge"]?["accepted"] as? Int, nodes["judge"]?["dismissed"] as? Int]
+    }
+    XCTAssertEqual(try settled(), [1, 1])
+
+    var rewritten = try XCTUnwrap(store.automation(id)?.definition)
+    if case .agent(var agent) = rewritten.nodes[1].action.method {
+      agent.instruction = "期限のある項目だけ"
+      rewritten.nodes[1].action.method = .agent(agent)
+    }
+    _ = try success(
+      wc.controlSetAutomation(automationId: id, version: store.automation(id)?.version, rewritten))
+    XCTAssertEqual(try settled(), [0, 0])
+  }
+
+  /// 候補を出した判定のノードと出どころのノードは、要素の直下に今の鍵で出す。出どころのノードを外した後も残る候補（出来事の行の
+  /// 候補は残す期間まで残る）は、出どころの鍵を出さない。出した自動化を消したら候補ごと消える。
+  func testProposalsNameTheirJudgeAndOriginNodesByTheCurrentKeys() throws {
+    let wc = try launch()
+    let store = wc.automationStore
+    let id = try set(wc, Self.definition("受信", coverage: .newArrivals))
+    let item = Self.item("a")
+    try Self.round(store, id, fetched: [item], proposing: [item])
+    var renamed = try XCTUnwrap(store.automation(id)?.definition)
+    renamed.nodes[0].key = "source"
+    renamed.nodes[1].from = [AutomationDefinition.Input(nodeKey: "source")]
+    _ = try success(wc.controlSetAutomation(automationId: id, version: 1, renamed))
+
+    let proposal = try XCTUnwrap(try proposals(wc, of: id).first)
+    XCTAssertEqual(proposal["automationId"] as? Int, id)
+    XCTAssertEqual(proposal["nodeKey"] as? String, "judge")
+    XCTAssertEqual(proposal["originNodeKey"] as? String, "source")
+
+    renamed.nodes[0].id = nil
+    renamed.nodes[0].key = "other"
+    renamed.nodes[1].from = [AutomationDefinition.Input(nodeKey: "other")]
+    _ = try success(wc.controlSetAutomation(automationId: id, version: 2, renamed))
+
+    XCTAssertEqual(try proposals(wc, of: id).map { $0["originNodeKey"] as? String }, [nil])
+
+    _ = wc.controlDeleteAutomation(automationId: id)
+    XCTAssertTrue(store.proposals.isEmpty)
+  }
+
+  /// 候補は付け先が今ある workspace に解けるときだけ、その workspace の id と名前を持つ。付け先が無い・消えた候補はキーごと
+  /// 出さない。
   func testProposalsCarryTheirWorkspaceOnlyWhenItResolves() throws {
     let wc = try launch()
-    let id = try set(wc, AutomationStoreTests.definition())
+    let id = try set(wc, Self.definition())
     let main = try XCTUnwrap(wc.workspaces.first { $0.name == "main" })
-    let items = ["a", "b", "c"].map { AutomationStoreTests.item($0) }
-    AutomationStoreTests.commit(
-      wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: items,
-      decisions: [
-        .propose(itemId: "a", title: "main の作業", due: nil, workspace: main.persistentId),
-        .propose(itemId: "b", title: "付け先なし", due: nil, workspace: nil),
-        .propose(itemId: "c", title: "消えた付け先", due: nil, workspace: UUID()),
-      ])
+    let items = ["a", "b", "c"].map { Self.item($0) }
+    try Self.round(
+      wc.automationStore, id, fetched: items, proposing: items,
+      workspaces: [main.id, nil, UUID()])
 
     let listed = Dictionary(
       uniqueKeysWithValues: try proposals(wc, of: id).map { ($0["title"] as? String ?? "", $0) })
 
-    XCTAssertEqual(listed["main の作業"]?["workspaceId"] as? Int, main.id)
-    XCTAssertEqual(listed["main の作業"]?["workspaceName"] as? String, "main")
-    for title in ["付け先なし", "消えた付け先"] {
+    XCTAssertEqual(listed["対応: a"]?["workspaceId"] as? String, main.id.uuidString)
+    XCTAssertEqual(listed["対応: a"]?["workspaceName"] as? String, "main")
+    XCTAssertEqual(listed["対応: a"]?["automationId"] as? Int, id)
+    XCTAssertEqual(listed["対応: a"]?["nodeKey"] as? String, "judge")
+    XCTAssertEqual(listed["対応: a"]?["originNodeKey"] as? String, "fetch")
+    for title in ["対応: b", "対応: c"] {
       XCTAssertNil(listed[title]?["workspaceId"], title)
       XCTAssertNil(listed[title]?["workspaceName"], title)
     }
   }
 
-  // MARK: - 拒否
-
-  /// 走っている回がある間は一覧にそう出て、`run_automation` は「実行できない」で断られる。
-  func testRunningAutomationIsListedAsRunningAndRefusesRunNow() throws {
+  /// 判定が書いた候補にした理由は、その候補にだけ `reason` として出る。
+  func testProposalsCarryTheReasonOnlyWhenTheJudgeWroteOne() throws {
     let wc = try launch()
-    let id = try set(wc, AutomationStoreTests.definition(script: "sleep 30"))
-    addTeardownBlock { _ = wc.controlDeleteAutomation(automationId: id) }
+    let id = try set(wc, Self.definition())
+    let items = ["a", "b"].map { Self.item($0) }
+    try Self.round(
+      wc.automationStore, id, fetched: items, proposing: items,
+      reasons: ["レビューを頼まれている。", nil])
 
-    _ = try success(wc.controlRunAutomation(automationId: id))
+    let listed = Dictionary(
+      uniqueKeysWithValues: try proposals(wc, of: id).map { ($0["title"] as? String ?? "", $0) })
 
-    XCTAssertEqual(try listed(wc)[id]?["running"] as? Bool, true)
-    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id)), -32000)
+    XCTAssertEqual(listed["対応: a"]?["reason"] as? String, "レビューを頼まれている。")
+    XCTAssertNotNil(listed["対応: b"], "前提")
+    XCTAssertNil(listed["対応: b"]?["reason"], "書かなかった候補はキーごと出さない")
   }
+
+  // MARK: - 拒否
 
   /// 未知の ID は -32004、不変条件に反する定義は -32602 で、受信は変わらない。
   func testRejectionsMapToTheControlVocabulary() throws {
     let wc = try launch()
-    let id = try set(wc, AutomationStoreTests.definition())
-    var codex = AutomationStoreTests.definition("codex に判定させる")
-    codex.steps = [AutomationStoreTests.judgeStep(cli: "codex")]
+    let id = try set(wc, Self.definition())
+    var codex = Self.definition("codex に判定させる")
+    if case .agent(var agent) = codex.nodes[1].action.method {
+      agent.cli = "codex"
+      codex.nodes[1].action.method = .agent(agent)
+    }
 
-    XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99)), -32004)
-    XCTAssertEqual(code(wc.controlPauseAutomation(automationId: 99, paused: true)), -32004)
+    XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99, nodeKey: nil)), -32004)
+    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, nodeKey: "nope")), -32004)
+    XCTAssertEqual(
+      code(wc.controlPauseAutomation(automationId: 99, nodeKey: nil, paused: true)), -32004)
     XCTAssertEqual(code(wc.controlDeleteAutomation(automationId: 99)), -32004)
     XCTAssertEqual(code(wc.controlListAutomationProposals(automationId: 99)), -32004)
     XCTAssertEqual(
-      code(wc.controlSetAutomation(automationId: 99, AutomationStoreTests.definition())), -32004)
-    XCTAssertEqual(code(wc.controlSetAutomation(automationId: id, codex)), -32602)
-    XCTAssertEqual(code(wc.controlSetAutomation(automationId: nil, codex)), -32602)
+      code(wc.controlSetAutomation(automationId: 99, version: 1, Self.definition())), -32004)
+    XCTAssertEqual(code(wc.controlSetAutomation(automationId: id, version: 1, codex)), -32602)
+    XCTAssertEqual(code(wc.controlSetAutomation(automationId: nil, version: nil, codex)), -32602)
     XCTAssertEqual(
-      wc.automationStore.automations.map(\.definition), [AutomationStoreTests.definition()])
+      wc.automationStore.automations.map { $0.definition.nodes.map(\.key) }, [["fetch", "judge"]])
+    XCTAssertEqual(wc.automationStore.automations.map(\.version), [1])
   }
 
   // MARK: - 定義の往復
 
-  /// 一覧の定義は `set_automation` と同じ形で、そのまま読み戻すと同じ定義になる（AI が読んで直して戻せる）。省略した
-  /// モデルは省略のまま返る——解いた値で返すと、書き戻した定義のモデルが固定され、段を並べ替えても既定が追従しない。
+  /// 一覧の定義は `set_automation` と同じ形で、そのまま読み戻すと同じ定義になる（AI が読んで直して戻せる）。
   func testListedDefinitionReadsBackAsTheSameDefinition() throws {
     let wc = try launch()
-    var definition = AutomationStoreTests.definition(
-      trigger: .cron(try BackgroundCron("30 9 * * mon-fri")))
-    definition.source?.method = .agent(
-      AutomationSourceAgent(
-        cli: "claude", model: nil, tools: ["mcp__slack__search"], request: "自分宛の DM"))
-    definition.steps = [
-      AutomationStep(name: "絞り込み", method: .command(BackgroundCommand(script: "jq -c ."))),
-      AutomationStep(
-        name: "判定",
-        method: .agent(AutomationStepAgent(cli: "claude", model: nil, instruction: "判定して"))),
-    ]
+    let definition = AutomationDefinition(
+      name: "Slack", notify: .menuBar,
+      nodes: [
+        DesignSceneFixtures.agentNode(
+          "slack", "取る", .scheduled(.cron(try BackgroundCron("30 9 * * mon-fri"))),
+          tools: ["mcp__slack__search"], instruction: "自分宛の DM", coverage: .newArrivals),
+        DesignSceneFixtures.commandNode(
+          "narrow", "絞り込み", .arrival, from: ["slack"], script: "jq -c ."),
+        DesignSceneFixtures.agentNode(
+          "judge", "判定", .manual, from: ["narrow"], instruction: "判定して", deliver: .taskCandidates),
+      ])
     let id = try set(wc, definition)
 
     let listedDefinition = try XCTUnwrap(try listed(wc)[id]?["definition"])
     let data = try JSONSerialization.data(withJSONObject: listedDefinition)
+    var stored = definition
+    for index in stored.nodes.indices {
+      stored.nodes[index].id = wc.automationStore.nodeId(id, stored.nodes[index].key)
+    }
 
     XCTAssertEqual(
-      try AutomationWire.decoder.decode(AutomationDefinition.self, from: data), definition)
+      try AutomationWire.decoder.decode(AutomationDefinition.self, from: data), stored)
   }
 
-  /// 一覧の回の記録は保存と同じ形（取得元・新しい件数・各段・出力先）。
-  func testListedRunsKeepTheStoredShape() throws {
+  /// 試走は始めた応答で試走の ID と道の上のノードを並べ、その ID で待って読むとノードの回の結果を返す。知らない ID と、自動化を
+  /// 消した後の ID は読めない。
+  func testATrialStartsAtOnceAndReadsBackItsNodesWhenWaitedFor() throws {
     let wc = try launch()
-    let id = try set(wc, AutomationStoreTests.definition())
-    let a = AutomationStoreTests.item("a")
-    var run = AutomationStoreTests.run(at: Date())
-    run.source?.count = 1
-    run.fresh = 1
-    run.steps = [
-      AutomationStepReport(
-        name: "判定", commandLine: "claude -p", ending: "exited 0", count: 1,
-        rejected: AutomationRejections())
-    ]
-    run.lastStepCountedBySink = true
-    AutomationStoreTests.commit(
-      wc.automationStore, id, run, fetched: [a],
-      decisions: [.propose(itemId: "a", title: "対応する", due: nil, workspace: nil)])
+    let id = try set(
+      wc,
+      AutomationDefinition(
+        name: "試す", notify: nil,
+        nodes: [
+          DesignSceneFixtures.commandNode(
+            "fetch", "取る", .manual, script: "exit 1", coverage: .currentSet),
+          DesignSceneFixtures.commandNode(
+            "send", "送る", .arrival, from: ["fetch"], script: "exit 1", deliver: .sideEffect),
+        ]))
+    let row = #"{"id":"a","link":"https://example.com/a","body":"a","time":"2026-10-10T09:00:00Z"}"#
+    var none: Result<Any, ControlError>?
+    wc.controlAutomationTrial(trialId: 1, wait: false, timeoutMs: 1) { none = $0 }
+    guard case .failure(let noTrial) = try XCTUnwrap(none) else { return XCTFail("試走が無いのに読めた") }
+    XCTAssertEqual(noTrial.code, -32004)
+    XCTAssertEqual(noTrial.message, "trial not found: 1")
 
-    let listedRun = try XCTUnwrap((try listed(wc)[id]?["runs"] as? [[String: Any]])?.first)
-
+    let started = try success(
+      wc.controlTryAutomation(
+        automationId: id, version: nil, definition: nil, AutomationTrial.Request(rows: [row])))
+    let trial = try XCTUnwrap(started["trial"] as? [String: Any])
+    let trialId = try XCTUnwrap(trial["trialId"] as? Int)
+    XCTAssertEqual(trial["automationId"] as? Int, id)
+    XCTAssertEqual(trial["preparing"] as? Bool, true)
     XCTAssertEqual(
-      Set(listedRun.keys),
-      [
-        "startedAt", "endedAt", "trigger", "source", "fresh", "steps", "lastStepCountedBySink",
-        "sink",
-      ])
-    XCTAssertEqual((listedRun["source"] as? [String: Any])?["count"] as? Int, 1)
-    XCTAssertEqual(listedRun["fresh"] as? Int, 1)
-    let step = try XCTUnwrap((listedRun["steps"] as? [[String: Any]])?.first)
-    XCTAssertEqual(step["name"] as? String, "判定")
-    XCTAssertEqual(step["commandLine"] as? String, "claude -p")
-    XCTAssertEqual(listedRun["lastStepCountedBySink"] as? Bool, true)
-    let sink = try XCTUnwrap(listedRun["sink"] as? [String: Any])
-    XCTAssertEqual(sink["kind"] as? String, "taskCandidates")
-    XCTAssertEqual(sink["proposed"] as? Int, 1)
+      (trial["nodes"] as? [[String: Any]])?.map { $0["key"] as? String }, ["fetch", "send"])
+
+    var reply: Result<Any, ControlError>?
+    wc.controlAutomationTrial(trialId: trialId, wait: true, timeoutMs: 5000) { reply = $0 }
+    let deadline = Date().addingTimeInterval(5)
+    while reply == nil && Date() < deadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    let read = try success(try XCTUnwrap(reply))
+    XCTAssertNil(read["timedOut"])
+    let ended = try XCTUnwrap(read["trial"] as? [String: Any])
+    XCTAssertEqual(ended["running"] as? Bool, false)
+    let nodes = try XCTUnwrap(ended["nodes"] as? [[String: Any]])
+    XCTAssertEqual(nodes.map { $0["state"] as? String }, ["given", "held"])
+    let fetchId = "\(wc.automationStore.nodeId(id, "fetch")):a"
+    let given = try XCTUnwrap(
+      (nodes[0]["runs"] as? [[String: Any]])?.first?["given"] as? [String: Any])
+    XCTAssertEqual((given["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, [fetchId])
+    let held = try XCTUnwrap(
+      (nodes[1]["runs"] as? [[String: Any]])?.first?["held"] as? [String: Any])
+    XCTAssertEqual((held["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, [fetchId])
+
+    _ = wc.controlDeleteAutomation(automationId: id)
+    var gone: Result<Any, ControlError>?
+    wc.controlAutomationTrial(trialId: trialId, wait: false, timeoutMs: 1) { gone = $0 }
+    XCTAssertEqual(code(try XCTUnwrap(gone)), -32004)
   }
 }

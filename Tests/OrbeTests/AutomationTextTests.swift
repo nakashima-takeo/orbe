@@ -2,12 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 提案タブの文——回の要約（処理した回・新しい項目が無かった回・失敗した回・まだ回っていない）、時刻の今日 / ほかの日、
-/// いつ（cron の言い換え）。
+/// 自動化の文——失敗と外れた行の言い方、時刻の今日 / 昨日 / ほかの日、いつ（cron の言い換え）。
 ///
-/// 壊れると何が起きるか。新しい項目が無かった回が「新しい 0 件を処理 → 候補 0」と読め、処理が走ったように見える。失敗した回が
-/// 件数で出て、壊れた受信に気づけない。昨日の回が今日の時刻に見える。cron の言い換えが元の時刻と食い違い、表示と違う時刻に
-/// 走ると読ませる（1・7 月だけの式が「毎日」に見える）。
+/// 壊れると何が起きるか。失敗が英文だけで出て、何が起きたか読めない。原文が消えて AI に渡す文と照らせない。
+/// 昨日の回が今日の時刻に見える。cron の言い換えが元の時刻と食い違い、表示と違う時刻に走ると読ませる
+/// （1・7 月だけの式が「毎日」に見える）。
 @MainActor
 final class AutomationTextTests: OrbeTestCase {
   private let text = automationText(.ja)
@@ -20,45 +19,81 @@ final class AutomationTextTests: OrbeTestCase {
       timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
 
-  func testRunSummaries() {
-    let at = DesignSceneFixtures.automationAt
-    XCTAssertEqual(
-      text.runHeadline(
-        DesignSceneFixtures.automationRun(at: at(13, 0, 0), items: 9, fresh: 4, proposed: 2)),
-      "13:00 の回 · 9 件取得 → 新しい 4 件を処理 → 候補 2")
-    XCTAssertEqual(
-      text.runDetail(
-        DesignSceneFixtures.automationRun(at: at(9, 12, 0), items: 14, fresh: 3, proposed: 1)),
-      "今日 9:12 · 14 件取得 → 新しい 3 件を処理 → 候補 1 件")
-    XCTAssertEqual(
-      text.runHeadline(DesignSceneFixtures.automationRun(at: at(13, 0, 1), items: 9, fresh: 0)),
-      "10/3 13:00 の回 · 9 件取得 → 新しい項目なし")
-    XCTAssertEqual(
-      text.runHeadline(
-        DesignSceneFixtures.automationRun(at: at(9, 0, 0), items: 0, fresh: 0, failure: "boom")),
-      "9:00 の回 · 失敗 — boom")
-    XCTAssertEqual(text.runHeadline(nil), "まだ回っていない")
+  private func failed(_ failure: AutomationFailure, ending: AutomationEnding) -> AutomationNodeRun {
+    let at = DesignSceneFixtures.automationAt(13)
+    var run = AutomationNodeRun(
+      startedAt: at, endedAt: at, trigger: .schedule, taken: 3,
+      execution: AutomationNodePass.Execution(commandLine: "claude -p", ending: ending, count: 0))
+    run.failure = failure
+    return run
   }
 
-  /// 英語は候補が 1 件なら単数で言う。日本語は助数詞で単複不変。
-  func testProposedCountSingularAndPlural() {
-    let at = DesignSceneFixtures.automationAt
-    let one = DesignSceneFixtures.automationRun(
-      at: at(13, 0, 0), items: 9, fresh: 4, proposed: 1)
-    let two = DesignSceneFixtures.automationRun(
-      at: at(13, 0, 0), items: 9, fresh: 4, proposed: 2)
-    let en = Self.automationText(.en)
-    XCTAssertEqual(en.runHeadline(one), "13:00 run · fetched 9 → processed 4 new → 1 candidate")
-    XCTAssertEqual(en.runHeadline(two), "13:00 run · fetched 9 → processed 4 new → 2 candidates")
-    XCTAssertEqual(en.runDetail(one), "today 13:00 · fetched 9 → processed 4 new → 1 candidate")
-    XCTAssertEqual(en.runDetail(two), "today 13:00 · fetched 9 → processed 4 new → 2 candidates")
-    XCTAssertEqual(text.runHeadline(one), "13:00 の回 · 9 件取得 → 新しい 4 件を処理 → 候補 1")
-    XCTAssertEqual(text.runDetail(two), "今日 13:00 · 9 件取得 → 新しい 4 件を処理 → 候補 2 件")
+  private static let judge = node("dev", "開発の依頼を選ぶ")
+
+  private static func node(_ key: String, _ name: String) -> AutomationGraph.Node {
+    let graph = try? AutomationGraph.numbered([
+      DesignSceneFixtures.commandNode(
+        "fetch", "取得", .manual, script: "cat", coverage: .newArrivals),
+      DesignSceneFixtures.agentNode(
+        key, name, .arrival, from: ["fetch"], instruction: "i", deliver: .taskCandidates),
+    ])
+    guard let node = graph?.node(key: key) else { preconditionFailure("the graph is valid") }
+    return node
+  }
+
+  /// 失敗は日本語の説明に原文を括弧で添える。ノードの申告は説明の頭に文を添え、原文を重ねない。英語の画面は原文を重ねず
+  /// （説明も原文も英語で、同じことを 2 度言うため）、原文にだけある抜粋（標準エラー・最初の外れた行）だけを添える。
+  func testFailureSaysTheKindWithTheOriginal() {
+    XCTAssertEqual(
+      text.failure(failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
+      #"制限時間を超過（the node "dev" ended: stopped at the time limit）"#)
+    XCTAssertEqual(
+      text.failure(failed(.ended(detail: "boom"), ending: .exited(1)), node: Self.judge),
+      #"終了コード 1 で終了（the node "dev" ended: exited 1: boom）"#)
+    XCTAssertEqual(
+      text.failure(failed(.reported("Slack に届かない"), ending: .exited(0)), node: Self.judge),
+      "ノードが失敗を報告：Slack に届かない")
+    XCTAssertEqual(
+      Self.automationText(.en).failure(
+        failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
+      "time limit exceeded")
+    XCTAssertEqual(
+      Self.automationText(.en).failure(
+        failed(.ended(detail: "boom"), ending: .exited(1)), node: Self.judge),
+      "exited with code 1: boom")
+    var broke = failed(.brokeRules, ending: .exited(0))
+    broke.breach = AutomationRejections([
+      AutomationBrokenLine(line: 2, fault: .notJSON),
+      AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+    ])
+    XCTAssertEqual(
+      Self.automationText(.en).failure(broke, node: Self.judge),
+      "output format error: item 2: not valid JSON", "最初の外れた件")
+    XCTAssertEqual(
+      text.failure(failed(.unreadInput(2), ending: .exited(0)), node: Self.judge),
+      "入力 2 件を読まずに終了（the node \"dev\" ended without reading 2 of its input items）")
+    XCTAssertEqual(
+      text.failure(failed(.noResult, ending: .exited(0)), node: Self.judge),
+      "結果を渡さずに終了（the node \"dev\" ended without giving a result）")
+  }
+
+  /// 外れた件は「n 件目：<説明>」。
+  func testBrokenLine() {
+    XCTAssertEqual(
+      text.line(AutomationBrokenLine(line: 3, fault: .missingKey("link"))), "3 件目：link がありません")
+    XCTAssertEqual(
+      text.line(AutomationBrokenLine(line: 5, fault: .notJSON)), "5 件目：JSON として解析できません")
+  }
+
+  /// 一覧の時刻は、今日なら時刻だけ、昨日なら「昨日」、ほかは日付付き。
+  func testRecent() {
+    XCTAssertEqual(text.recent(DesignSceneFixtures.automationAt(16, 41)), "16:41")
+    XCTAssertEqual(text.recent(DesignSceneFixtures.automationAt(23, 0, daysAgo: 1)), "昨日 23:00")
+    XCTAssertEqual(text.recent(DesignSceneFixtures.automationAt(10, 0, daysAgo: 2)), "10/2 10:00")
   }
 
   func testWhen() {
     XCTAssertEqual(text.when(.every(1800)), "30分ごと")
-    XCTAssertEqual(text.next(DesignSceneFixtures.automationAt(17, 0)), "次回 17:00")
   }
 
   /// よくある形だけを言葉にし、言葉は元の時刻の集合を一意に表す（範囲は最初と最後の該当時刻）。

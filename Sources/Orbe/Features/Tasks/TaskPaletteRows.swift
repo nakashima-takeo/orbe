@@ -13,7 +13,7 @@ struct TaskPaletteWorkspaces: Equatable {
   let opened: Entry
   /// 全 workspace（サイドバーの順）。
   let all: [Entry]
-  /// Home の永続 ID（付け先を持たない、または解けない候補をタスクにすると、ここに付く）。
+  /// Home の ID（付け先を持たない、または解けない候補をタスクにすると、ここに付く）。
   let home: UUID?
 
   /// 解決できない参照（削除された workspace）は nil＝「なし」。

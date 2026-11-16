@@ -9,30 +9,17 @@ enum WaitPurpose {
   /// `spawn_agent` / `resume_agent`。起動より後の最初の idle で返す。
   case agentReady(tabId: Int, launch: AgentLaunch)
 
-  /// `wait_for_event` の params（tabId / kinds / value）を `.event` へ解く。失敗は -32602。
-  static func eventFilter(_ params: [String: Any]) -> Result<WaitPurpose, ControlError> {
-    func invalid(_ message: String) -> Result<WaitPurpose, ControlError> {
-      .failure(ControlError(code: -32602, message: message))
-    }
-    var tabId: Int?
-    if let raw = params["tabId"] {
-      guard let tid = raw as? Int else { return invalid("invalid tabId") }
-      tabId = tid
-    }
-    var kinds: Set<String>?
-    if let raw = params["kinds"] {
-      guard let list = raw as? [String], !list.isEmpty else { return invalid("invalid kinds") }
-      if let unknown = list.first(where: { !ControlEvent.kinds.contains($0) }) {
-        return invalid("unknown kind: \(unknown)")
+  /// `wait_for_event` のフィルタ（tabId / kinds / value）を `.event` へ解く。kinds は空でなく既知の語だけ（-32602）。
+  static func eventFilter(tabId: Int?, kinds: [String]?, value: String?) throws(ControlError)
+    -> WaitPurpose
+  {
+    if let kinds {
+      guard !kinds.isEmpty else { throw ControlError(code: -32602, message: "invalid kinds") }
+      if let unknown = kinds.first(where: { !ControlEvent.kinds.contains($0) }) {
+        throw ControlError(code: -32602, message: "unknown kind: \(unknown)")
       }
-      kinds = Set(list)
     }
-    var value: String?
-    if let raw = params["value"] {
-      guard let v = raw as? String else { return invalid("invalid value") }
-      value = v
-    }
-    return .success(.event(tabId: tabId, kinds: kinds, value: value))
+    return .event(tabId: tabId, kinds: kinds.map(Set.init), value: value)
   }
 
   func matches(_ event: ControlEvent) -> Bool {

@@ -54,16 +54,26 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
-  /// Home の rules・⌘⇧X の役目の指示（日英）・同梱プラグインの自動化のスキルが名指しする MCP のツールは、どれも
-  /// `tools/list` にある。どれも claude が読む手引きで、orbe-mcp は別ターゲットなので、ツールを改名・削除しても
-  /// コンパイルもほかのテストも通ってしまう。
+  /// 次の文書が名指しする MCP のツールは、どれも `tools/list` にある。対象は Home の rules、⌘⇧X の役目の指示（日英）、
+  /// 同梱プラグインの自動化のスキルとその型。いずれも claude が読む手引きで、orbe-mcp は別ターゲットなので、
+  /// ツールを改名・削除してもコンパイルもほかのテストも通ってしまう。
   func testAgentInstructionsNameOnlyToolsTheBridgeLists() throws {
     let names = Set(ControlProcess.mcpToolsList().compactMap { $0["name"] as? String })
     let pattern = try NSRegularExpression(pattern: "`([a-z]+(?:_[a-z]+)+|spawn)`")
     let skill = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-      .appendingPathComponent("app/agent-plugin/plugins/orbe-agent/skills/automation/SKILL.md")
-    var texts = [("自動化のスキル", try String(contentsOf: skill, encoding: .utf8))]
+      .appendingPathComponent("app/agent-plugin/plugins/orbe-agent/skills/automation")
+    var texts = [
+      (
+        "自動化のスキル",
+        try String(contentsOf: skill.appendingPathComponent("SKILL.md"), encoding: .utf8)
+      ),
+      (
+        "自動化のスキルの型",
+        try String(
+          contentsOf: skill.appendingPathComponent("references/patterns.md"), encoding: .utf8)
+      ),
+    ]
     for language in Language.allCases {
       texts += [
         ("\(language) の Home の rules", HomeTemplate.rules(language, home: "/home")),
@@ -82,6 +92,73 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         XCTAssertTrue(names.contains(name), "\(label)が tools/list に無い \(name) を名指ししている")
       }
     }
+  }
+
+  /// 裏の agent の回の道具（札があるときだけ出す）の名前と `inputSchema` の欄、説明が写すページの既定・上限・大きさ・行と報告の
+  /// 上限は、Orbe 本体の正本（`AutomationRunSession.Tool` とその受ける引数・ページの定数・`AutomationOutputs.rowKiB`）と同じで、
+  /// 読みの道具（`read_run_rows`・`read_waiting_proposals`）は claude が結果をファイルに書き出す閾値を上げる。orbe-mcp は
+  /// 別ターゲットなので、片側だけ直してもコンパイルもほかのテストも通り、その道具を持つ役割の回が毎回「ツールが使えなかった」か
+  /// 外れた件で失敗する。
+  func testRunToolsMatchTheRunSession() throws {
+    let all = AutomationRunSession.Tool.allCases.map(\.rawValue)
+    let tools = ControlProcess.mcpToolsList(
+      env: ["ORBE_RUN_TOKEN": "t", "ORBE_RUN_TOOLS": all.joined(separator: ",")])
+    func tool(_ name: String) throws -> [String: Any] {
+      try XCTUnwrap(tools.first { $0["name"] as? String == name }, "\(name) が tools/list に無い")
+    }
+
+    XCTAssertEqual(Set(tools.compactMap { $0["name"] as? String }), Set(all))
+    for runTool in AutomationRunSession.Tool.allCases {
+      let schema = try tool(runTool.rawValue)["inputSchema"] as? [String: Any]
+      let properties = schema?["properties"] as? [String: Any] ?? [:]
+      XCTAssertEqual(
+        Set(properties.keys), runTool.arguments,
+        "\(runTool.rawValue) の inputSchema の欄と、その道具が受ける引数（片側だけ足すとその鍵付きの呼び出しが毎回外れる）")
+    }
+    let read = try tool("read_run_rows")
+    let properties = (read["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
+    let limit = (properties?["limit"] as? [String: Any])?["description"] as? String ?? ""
+    for copied in [
+      "1 to \(AutomationRunSession.pageLimit);", "default \(AutomationRunSession.pageDefault);",
+      "about \(AutomationRunSession.pageBytes >> 10) KiB)",
+    ] {
+      XCTAssertTrue(limit.contains(copied), "\(copied): \(limit)")
+    }
+    for name in ["read_run_rows", "read_waiting_proposals"] {
+      XCTAssertEqual(
+        (try tool(name)["_meta"] as? [String: Any])?["anthropic/maxResultSizeChars"] as? Int,
+        500_000, name)
+    }
+    for name in ["put_items", "put_rows", "put_report"] {
+      let description = try tool(name)["description"] as? String ?? ""
+      XCTAssertTrue(
+        description.contains("at most \(AutomationOutputs.rowKiB) KiB"), "\(name): \(description)")
+    }
+  }
+
+  /// `tools/list` のどのツールの説明も、claude がツールを探して読み込むときに説明を切る長さ（16,384 字）に収まる。超えると説明の
+  /// 末尾が AI に届かない。
+  func testEveryToolDescriptionFitsWhereClaudeCutsIt() {
+    let claudeDescriptionLimit = 16_384
+    for tool in ControlProcess.mcpToolsList() {
+      let description = tool["description"] as? String ?? ""
+      XCTAssertLessThanOrEqual(
+        description.utf16.count, claudeDescriptionLimit,
+        "\(tool["name"] ?? "") の説明が claude の切る長さを超えている")
+    }
+  }
+
+  /// `set_automation` の説明は、ツールを最初から読み込む構成の claude が説明を切る長さ（4,096 字）の内で、切れたときの読み先
+  /// （`orb automation --help`）を言う。読み先が切れた部分にあると、その構成の AI は定義の決まりの残りを読む手掛かりを失う。
+  func testTheSetAutomationDescriptionNamesWhereToReadItWholeBeforeTheEarlyCut() throws {
+    let claudeEagerDescriptionLimit = 4_096
+    let tool = try XCTUnwrap(
+      ControlProcess.mcpToolsList().first { $0["name"] as? String == "set_automation" })
+    let description = tool["description"] as? String ?? ""
+
+    XCTAssertTrue(
+      String(description.utf16.prefix(claudeEagerDescriptionLimit))?.contains(
+        "orb automation --help") == true)
   }
 
   /// `tools/list` の description が写す既定・上限は control の正本（`WaitTimeout` / `SessionLogLimits`）と
@@ -109,6 +186,14 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         && description(prompt, property: "timeoutMs")
           .contains("既定 \(WaitTimeout.promptDefaultMs)・上限 \(WaitTimeout.maxMs)"),
       "prompt_agent の既定 / 上限が WaitTimeout と食い違っている: \(description(prompt))")
+    XCTAssertTrue(
+      description(try tool("get_automation_trial")).contains(
+        "`timeoutMs` (default \(WaitTimeout.promptDefaultMs), max \(WaitTimeout.maxMs))"),
+      "get_automation_trial の既定 / 上限が WaitTimeout と食い違っている")
+    XCTAssertTrue(
+      description(try tool("list_automation_runs"), property: "limit").contains(
+        "(default \(AutomationStore.historyPage), max \(AutomationStore.historyPageLimit))"),
+      "list_automation_runs の limit の既定 / 上限が AutomationStore と食い違っている")
     for name in ["spawn_agent", "resume_agent"] {
       XCTAssertTrue(
         description(try tool(name), property: "timeoutMs")
@@ -123,9 +208,6 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       description(try tool("restore_sessions"), property: "sessionIds")
         .contains("\(SessionLogLimits.restoreMaxIds) 件"),
       "sessionIds の上限を写す")
-    XCTAssertTrue(
-      description(try tool("list_automations")).contains("新しい順に \(Automation.retainedRuns) 件まで。"),
-      "回の記録を残す件数を写す")
   }
 
   /// `tools/list` に出る全ツールが control の method として通る。ブリッジはツール名をそのまま method 名へ
@@ -135,41 +217,115 @@ final class OrbeMcpProcessTests: OrbeTestCase {
   /// control の拒否は MCP の `isError` へ畳まれ、本文に理由が残る——畳まれなければ AI は失敗を成功と読む。
   func testEveryListedToolReachesControlAndRejectionsBecomeIsError() throws {
     let control = try startControlProcess()
-    let names = ControlProcess.mcpToolsList().compactMap { $0["name"] as? String }
-    XCTAssertFalse(names.isEmpty, "tools/list が空")
+    let tools = ControlProcess.mcpToolsList()
+    XCTAssertFalse(tools.isEmpty, "tools/list が空")
     let nowhere: [String: Any] = [
-      "tabId": 999_999, "workspaceId": 999_999, "taskId": 999_999, "timeoutMs": 1,
+      "tabId": 999_999, "workspaceId": UUID().uuidString, "taskId": 999_999, "timeoutMs": 1,
     ]
-    for name in names {
-      let call = control.mcpCall(name, nowhere)
+    for tool in tools {
+      let name = try XCTUnwrap(tool["name"] as? String)
+      let properties = (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
+      let call = control.mcpCall(
+        name, nowhere.filter { properties?[$0.key] != nil })
       XCTAssertFalse(
         call.text.hasPrefix("method not found"), "\(name) が control の method として通らない: \(call.text)")
     }
 
-    let rejected = control.mcpCall("activate_workspace", ["workspaceId": 999_999])
+    let rejected = control.mcpCall("activate_workspace", ["workspaceId": UUID().uuidString])
     XCTAssertTrue(rejected.isError, "control の拒否は isError:true になる")
     XCTAssertTrue(
       rejected.text.contains("workspace not found"), "error 本文に理由が残る: \(rejected.text)")
   }
 
-  /// AI が MCP だけで、`hasBoard` の workspace（Home の root を知らなくても選べる）のボードの部品を読み・外し・置ける。
-  func testBoardPartsAreReachableByHasBoard() throws {
+  /// workspaceId を取るツールは、どれも workspace の ID を文字列で受けると説明する（タスクの付き先だけは null で「なし」も）。
+  /// 整数と説明すると、AI が送る値はどれも control に断られる。
+  func testEveryWorkspaceIdIsDescribedAsAString() throws {
+    let clearable: Set<String> = ["add_task", "update_task"]
+    var described: [String] = []
+    for tool in ControlProcess.mcpToolsList() {
+      let name = try XCTUnwrap(tool["name"] as? String)
+      let properties =
+        (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: [String: Any]]
+      guard let property = properties?["workspaceId"] else { continue }
+      described.append(name)
+      if clearable.contains(name) {
+        XCTAssertEqual(property["type"] as? [String], ["string", "null"], name)
+      } else {
+        XCTAssertEqual(property["type"] as? String, "string", name)
+      }
+    }
+    XCTAssertFalse(described.isEmpty, "workspaceId を取るツールが無い")
+  }
+
+  /// どのツールの `inputSchema` の欄も、その動詞が受ける鍵（動詞の表の行）とちょうど一致する。orbe-mcp は本体に依れない
+  /// 別ターゲットなので、片側だけ鍵を足すと、AI が書いたその鍵は control に知らない鍵として断られ、control だけに足した
+  /// 鍵は AI に見えない。
+  func testEveryToolListsExactlyTheKeysItsVerbTakes() throws {
+    for tool in ControlProcess.mcpToolsList() {
+      let name = try XCTUnwrap(tool["name"] as? String)
+      let verb = try XCTUnwrap(ControlServer.verbs[name], "\(name) が動詞の表に無い")
+      let properties = (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
+      XCTAssertEqual(Set(properties?.keys ?? [:].keys), Set(verb.params.keys), name)
+    }
+  }
+
+  /// どのツールが `inputSchema` に挙げる引数も、control が同じ名前と型で読む。読んだことは、型の違う値を渡してその名前で
+  /// 断られることで見る（表にあってハンドラが読まない鍵は断られない）。型違いを省略と読むと、AI が渡した
+  /// `get_tab_text` の `scrollback` が既定に倒れ、`spawn` の `cwd` がホームに倒れる。
+  func testEveryArgumentTheToolsListIsReadByControl() throws {
+    let control = try startControlProcess()
+    let tools = ControlProcess.mcpToolsList()
+    XCTAssertFalse(tools.isEmpty, "tools/list が空")
+    func value(ofKey key: String, type: Any?, matching: Bool) -> Any {
+      if key == "workspaceId" { return matching ? UUID().uuidString : 1 }
+      switch type as? String {
+      case "integer": return matching ? 999_999 : "x"
+      case "boolean": return matching ? false : "x"
+      case "array": return matching ? [Any]() : "x"
+      case "object": return matching ? [String: Any]() : "x"
+      default: return matching ? "x" : 1
+      }
+    }
+
+    for tool in tools {
+      let name = try XCTUnwrap(tool["name"] as? String)
+      let schema = try XCTUnwrap(tool["inputSchema"] as? [String: Any])
+      let properties = schema["properties"] as? [String: [String: Any]] ?? [:]
+      let required = schema["required"] as? [String] ?? []
+      for (key, property) in properties {
+        var arguments: [String: Any] = [:]
+        for other in required where other != key {
+          arguments[other] = value(ofKey: other, type: properties[other]?["type"], matching: true)
+        }
+        arguments[key] = value(ofKey: key, type: property["type"], matching: false)
+
+        let call = control.mcpCall(name, arguments)
+
+        XCTAssertTrue(
+          call.isError && call.text.contains("invalid \(key)"),
+          "\(name) の \(key) を control が読まない: \(call.text)")
+      }
+    }
+  }
+
+  /// AI が MCP だけで、`hasBoard` の workspace（Home の root を知らなくても選べる）のボードのウィジェットを読み・外し・置ける。
+  func testBoardWidgetsAreReachableByHasBoard() throws {
     let control = try startControlProcess()
     let workspaces = try XCTUnwrap(
       control.mcpJSON("list_workspaces")["workspaces"] as? [[String: Any]])
     let home = try XCTUnwrap(
-      workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? Int,
+      workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? String,
       "list_workspaces に hasBoard")
     func kinds(_ tool: String, _ arguments: [String: Any]) -> [String]? {
-      (control.mcpJSON(tool, arguments)["parts"] as? [[String: Any]])?.compactMap {
+      (control.mcpJSON(tool, arguments)["widgets"] as? [[String: Any]])?.compactMap {
         $0["kind"] as? String
       }
     }
 
-    XCTAssertEqual(kinds("list_board_parts", ["workspaceId": home]), ["automation"], "決めていなければ既定")
-    XCTAssertEqual(kinds("remove_board_part", ["workspaceId": home, "kind": "automation"]), [])
+    XCTAssertEqual(kinds("list_board_widgets", ["workspaceId": home]), ["automation"], "決めていなければ既定")
+    XCTAssertEqual(kinds("remove_board_widget", ["workspaceId": home, "kind": "automation"]), [])
     XCTAssertEqual(
-      kinds("add_board_part", ["workspaceId": home, "kind": "automation"]), ["automation"])
+      kinds("add_board_widget", ["workspaceId": home, "kind": "automation"]), ["automation"])
   }
 
   /// 背景 workspace を `activate_workspace` すると、返る `tabIds` の先頭が実際に読めるタブになる
@@ -180,7 +336,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       control.mcpJSON("list_workspaces")["workspaces"] as? [[String: Any]])
     let background = try XCTUnwrap(
       workspaces.first { $0["active"] as? Bool == false }, "背景 workspace が fixture に無い")
-    let backgroundId = try XCTUnwrap(background["id"] as? Int)
+    let backgroundId = try XCTUnwrap(background["id"] as? String)
 
     let activated = control.mcpJSON("activate_workspace", ["workspaceId": backgroundId])
     let tabIds = try XCTUnwrap(activated["tabIds"] as? [Int], "activate が tabIds を返さない")

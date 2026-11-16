@@ -63,7 +63,7 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
         main,
-        WorkspaceState(name: "web", rootPath: local, activeTab: 0, tabs: [], persistentId: webId),
+        WorkspaceState(name: "web", rootPath: local, activeTab: 0, tabs: [], id: webId),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))

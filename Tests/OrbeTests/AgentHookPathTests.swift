@@ -80,10 +80,10 @@ final class AgentHookPathTests: OrbeTestCase {
   func testOnlyAHookFromTheTabsForegroundLetsTheConversationTakeInput() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let shim = try stagePlugin()
-    let tabId = try XCTUnwrap(
-      control.target.controlSpawn(
-        workspaceId: nil, cwd: nil,
-        command: "/bin/sh -c 'echo {} | /bin/sh \(shim.path) claude idle; exec /bin/sleep 600'"))
+    let tabId = try control.target.controlSpawn(
+      workspaceId: nil, cwd: nil,
+      command: "/bin/sh -c 'echo {} | /bin/sh \(shim.path) claude idle; exec /bin/sleep 600'"
+    ).get()
     let tab = try XCTUnwrap(control.target.controlResolveTab(tabId))
 
     XCTAssertTrue(
@@ -117,9 +117,9 @@ final class AgentHookPathTests: OrbeTestCase {
         exec /bin/sleep 600
         """.utf8
       ).write(to: script)
-      let tabId = try XCTUnwrap(
-        control.target.controlSpawn(
-          workspaceId: nil, cwd: nil, command: "/bin/sh \(ShellWord.quoted(script.path))"))
+      let tabId = try control.target.controlSpawn(
+        workspaceId: nil, cwd: nil, command: "/bin/sh \(ShellWord.quoted(script.path))"
+      ).get()
       let tab = try XCTUnwrap(control.target.controlResolveTab(tabId))
 
       XCTAssertTrue(

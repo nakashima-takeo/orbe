@@ -244,8 +244,8 @@ final class ControlProcess {
       file: file, line: line)
   }
 
-  /// `orb <args> --json` の stdout を JSON オブジェクトとして読む。workspace / tab の id は
-  /// `IdGen` 採番で予測不能なので、テストは必ずこの出力から読む（直書きしない）。
+  /// `orb <args> --json` の stdout を JSON オブジェクトとして読む。tab の id は `IdGen` 採番で予測不能なので、テストは
+  /// 必ずこの出力から読む（直書きしない）。
   func orbJSON(
     _ args: [String], env extra: [String: String] = [:],
     file: StaticString = #filePath, line: UInt = #line
@@ -318,10 +318,12 @@ final class ControlProcess {
   }
 
   /// `tools/list` を 1 往復させ `tools` 配列を返す。socket に触れないのでサーバは要らない。
-  static func mcpToolsList(file: StaticString = #filePath, line: UInt = #line) -> [[String: Any]] {
+  static func mcpToolsList(
+    env: [String: String] = [:], file: StaticString = #filePath, line: UInt = #line
+  ) -> [[String: Any]] {
     guard
       let result = mcpRoundTrip(
-        method: "tools/list", params: [:], label: "tools/list", file: file, line: line)
+        method: "tools/list", params: [:], label: "tools/list", env: env, file: file, line: line)
     else { return [] }
     guard let tools = result["tools"] as? [[String: Any]] else {
       XCTFail("tools/list の result に tools が無い: \(result)", file: file, line: line)

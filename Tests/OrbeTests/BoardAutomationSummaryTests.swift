@@ -2,283 +2,248 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの読み替え——自動化の回の記録から、流れの段の件数・回の結果の文・回の区分を作る規則。
+/// ボードの読み替え——一覧の行（状態と、それと混ぜない前回の成否と時刻）と、地図の溝の線の割り当て、カードの実行履歴の文。
 ///
-/// 壊れると何が起きるか: 取得で落ちた回に件数が出て、どこまで届いたかを読み違える。判定が全部を落とした回が「新着なし」と読め、
-/// 判定の指示文の誤りに気づけない。失敗した回が帯や履歴で失敗の色にならず、一覧の右端に理由の全文があふれる。
+/// 壊れると何が起きるか: 失敗したノードがあるのに一覧の印が成功に見え、壊れたノードに気づけない。流している間や止めている間に
+/// 前回の結果が見えなくなる。地図の線が入力と違う行へつながり、
+/// どのノードの出力がどこへ行くかを読み違える。英語の実行履歴と知らせが「judged 1 items」と言う。新着なしの回が他の回を
+/// 押し出す、または畳んではいけない回（新着のある回・形式エラーを修正した回）が畳まれて見えなくなる。止めた自動化のノードの
+/// カードの「次回」が空になり、止まっていることが分からない。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
-  let text = AutomationText(
+  private let text = AutomationText(
     l10n: LocalizationStore(language: .ja),
     today: .today(
       DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone),
     timeZone: DesignSceneFixtures.taskCalendar.timeZone)
 
-  private func automation(
-    _ runs: [AutomationRun], steps: [AutomationStep]? = nil, sourced: Bool = true
-  ) -> Automation {
-    var definition = DesignSceneFixtures.automationDefinition(
-      "Slack",
-      source: AutomationSource(
-        method: .command(BackgroundCommand(script: "~/bin/slack-dm.sh", directory: "~/work")),
-        coverage: .newArrivals),
-      trigger: .every(600))
-    if let steps { definition.steps = steps }
-    if !sourced { definition.source = nil }
-    return Automation(
-      id: 1, definition: definition, paused: false,
-      createdAt: DesignSceneFixtures.automationAt(9), lastFetched: [], reviewAll: false,
-      lastRunAt: runs.first?.startedAt, runs: runs)
-  }
-
-  /// 段が出した数は、最後の段では提案と対応済みの行の和。`steps` を渡せば各段の出した数を、`names` の段名で記録にし、
-  /// 最後の段は `countedBySink` なら出力先が数えた段（偽なら 0 行を出して止めた段）にする。
-  private func run(
-    _ hour: Int, _ minute: Int, items: Int, fresh: Int, proposed: Int = 0, resolved: Int = 0,
-    steps: [Int]? = nil, names: [String] = ["判定"], countedBySink: Bool = true,
-    failure: String? = nil, failedInStep: Bool = false
-  ) -> AutomationRun {
-    var run = DesignSceneFixtures.automationRun(
-      at: DesignSceneFixtures.automationAt(hour, minute), items: items, fresh: fresh,
-      proposed: proposed, failure: failure)
-    if failedInStep {
-      run.fresh = fresh
-      run.steps = [Self.report(0, name: names[0])]
-    }
-    if let steps {
-      run.steps = zip(steps, names).map { Self.report($0, name: $1) }
-      run.lastStepCountedBySink = countedBySink
-    }
-    if resolved > 0 {
-      run.steps[run.steps.count - 1].count = proposed + resolved
-      run.sink = .taskCandidates(
-        AutomationTaskCandidatesReport(proposed: proposed, resolved: resolved))
-    }
-    return run
-  }
-
-  private static func report(_ count: Int, name: String) -> AutomationStepReport {
-    AutomationStepReport(
-      name: name, commandLine: "claude -p", ending: "exited 0", count: count,
-      rejected: AutomationRejections())
-  }
-
-  private static func agentStep(_ name: String) -> AutomationStep {
-    AutomationStep(
-      name: name, method: .agent(AutomationStepAgent(cli: "claude", model: nil, instruction: name)))
-  }
-
-  /// 前回の件数は最新の回の段ごとの件数から取り、その回が届いた段までを出す。出力先は提案の数。
-  func testStageCountsAreTheLatestRunsUpToTheStageItReached() {
-    let older = run(14, 30, items: 9, fresh: 9, proposed: 9)
-    func counts(_ latest: AutomationRun) -> [Int?] {
-      BoardAutomationSummary(automation([latest, older]), text: text).nodes.map(\.count)
-    }
-    XCTAssertEqual(
-      counts(run(14, 40, items: 6, fresh: 5, proposed: 2, resolved: 1)), [nil, 6, 5, 3, 2])
-    XCTAssertEqual(
-      counts(run(14, 40, items: 6, fresh: 0)), [nil, 6, 0, nil, nil],
-      "新しい項目が無かった回は処理と出力先へ届いていない")
-    XCTAssertEqual(
-      counts(run(14, 40, items: 6, fresh: 4, failure: "exited 1", failedInStep: true)),
-      [nil, 6, 4, nil, nil], "段で落ちた回は、その段の手前まで")
-    var sinkFailed = run(
-      14, 40, items: 6, fresh: 4, steps: [3], failure: "the sink command ended: exited 1",
-      failedInStep: true)
-    sinkFailed.sink = .command(
-      AutomationCommandReport(commandLine: "~/bin/post.sh", ending: "exited 1", count: 3))
-    var commanding = automation([sinkFailed])
-    commanding.redefine { $0.sink = AutomationRunnerTests.commandSink() }
-    XCTAssertEqual(
-      BoardAutomationSummary(commanding, text: text).nodes.map(\.count), [nil, 6, 4, 3, nil],
-      "出力先で落ちた回は最後の段まで出し、出力先は出さない")
-    XCTAssertEqual(
-      counts(run(14, 40, items: 0, fresh: 0, failure: "exited 1")), [nil, nil, nil, nil, nil],
-      "取得元で落ちた回は何も数えない")
-  }
-
-  /// 段を並べた自動化は段ごとに名前・手段・解いたモデルと件数を出す。途中の段が 0 件を出した回は、その先へ届いていない。
-  func testStepsAreListedWithTheirResolvedModelsAndCounts() {
-    let summary = BoardAutomationSummary(
-      automation(
-        [
-          run(
-            14, 40, items: 6, fresh: 5, steps: [3, 0], names: ["雑談を除く", "依頼を絞る"],
-            countedBySink: false)
-        ],
-        steps: [Self.agentStep("雑談を除く"), Self.agentStep("依頼を絞る"), Self.agentStep("判定")]),
-      text: text)
-    XCTAssertEqual(
-      summary.nodes.map(\.role),
-      [.trigger, .source, .orbe, .step(1), .step(2), .step(3), .output])
-    XCTAssertEqual(summary.nodes[3].title, "雑談を除く")
-    XCTAssertEqual(
-      summary.nodes.compactMap(\.means),
-      [.command("コマンド"), .model("haiku"), .model("haiku"), .model("sonnet")])
-    XCTAssertEqual(summary.nodes.map(\.count), [nil, 6, 5, 3, 0, nil, nil])
-    XCTAssertEqual(summary.runs.map(\.result), ["処理 2 ですべて除外"])
-  }
-
-  /// 書き換えても回の記録は残る。前回の件数は段名の並びと出力先の種類が合う段にだけ出し、最初に食い違った段から先と、種類の
-  /// 違う出力先（とそれが数えた最後の段）には出さない。今の最後の段には、出力先が数えた数だけを出す。
-  func testCountsAreShownOnlyOnStagesTheLatestRunRanAs() {
-    let ran = run(14, 40, items: 6, fresh: 5, proposed: 2, steps: [5, 2], names: ["A", "B"])
-    func counts(_ steps: [String], sink: AutomationSink = .taskCandidates) -> [Int?] {
-      var rewritten = automation([ran], steps: steps.map(Self.agentStep))
-      rewritten.redefine { $0.sink = sink }
-      return BoardAutomationSummary(rewritten, text: text).nodes.map(\.count)
-    }
-    XCTAssertEqual(counts(["A", "B"]), [nil, 6, 5, 5, 2, 2], "同じ並びなら全段に出す")
-    XCTAssertEqual(
-      counts(["A", "X", "B"]), [nil, 6, 5, 5, nil, nil, nil], "足した段から先と出力先は出さない")
-    XCTAssertEqual(counts(["X", "B"]), [nil, 6, 5, nil, nil, nil], "名前の変わった段から先は出さない")
-    XCTAssertEqual(
-      counts(["A"]), [nil, 6, 5, nil, nil], "段を消すと、最後の段になった段の数は出力先が数えたものでない")
-    XCTAssertEqual(
-      counts(["A", "B"], sink: .report), [nil, 6, 5, 5, nil, nil],
-      "出力先の種類が違えば、出力先とそれが数えた最後の段は出さない")
-  }
-
-  /// 出力先が報告の回を、報告の定義のまま段を書き換えた直後の件数。最後の段の数は報告の有無（1・0）で、出した行の数ではない。
-  private func reportCounts(after steps: [String]) -> [Int?] {
-    var ran = run(14, 40, items: 6, fresh: 5, steps: [5, 1], names: ["A", "B"])
-    ran.sink = .report(text: "PR は 2 件")
-    var rewritten = automation([ran], steps: steps.map(Self.agentStep))
-    rewritten.redefine { $0.sink = .report }
-    return BoardAutomationSummary(rewritten, text: text).nodes.map(\.count)
-  }
-
-  func testAStepAddedAfterTheLastStepOfAReportHidesTheReportCount() {
-    XCTAssertEqual(reportCounts(after: ["A", "B"]), [nil, 6, 5, 5, 1, 1])
-    XCTAssertEqual(
-      reportCounts(after: ["A", "B", "C"]), [nil, 6, 5, 5, nil, nil, nil],
-      "報告の有無を、中間の段が出した行の数として出さない")
-  }
-
-  func testRemovingTheLastStepOfAReportHidesTheRowsOfTheNewLastStep() {
-    XCTAssertEqual(
-      reportCounts(after: ["A"]), [nil, 6, 5, nil, nil], "中間の段が出した行の数を、報告の有無として出さない")
-  }
-
-  /// 途中の段が 0 行で止まった回の最後の段は、その段が出した数。出力先の種類だけを変えても段の数は出し、出力先は出さない。
-  func testChangingOnlyTheSinkKeepsTheCountsOfARunStoppedByAnEmptyStep() {
-    let stopped = run(
-      14, 40, items: 6, fresh: 5, steps: [3, 0], names: ["A", "B"], countedBySink: false)
-    for sink in [AutomationSink.report, AutomationRunnerTests.commandSink()] {
-      var rewritten = automation([stopped], steps: ["A", "B", "C"].map(Self.agentStep))
-      rewritten.redefine { $0.sink = sink }
-      XCTAssertEqual(
-        BoardAutomationSummary(rewritten, text: text).nodes.map(\.count),
-        [nil, 6, 5, 3, 0, nil, nil])
-    }
-  }
-
-  /// タスク候補の出力先は、0 件でも採用・見送りの累計を出力先の段の注記に出す。
-  func testTheTaskCandidatesOutputNotesTheTally() throws {
-    var counted = automation([])
-    XCTAssertEqual(
-      BoardAutomationSummary(counted, text: text).nodes.last?.notes, ["これまでに採用 0件 / 見送り 0件"])
-
-    counted = Automation(
-      id: 1, definition: counted.definition,
-      sinkState: .taskCandidates(AutomationTaskCandidatesState(accepted: 9, dismissed: 3)),
-      paused: false, createdAt: counted.createdAt, lastFetched: [], reviewAll: false, runs: [])
-    let output = try XCTUnwrap(BoardAutomationSummary(counted, text: text).nodes.last)
-    XCTAssertEqual(output.role, .output)
-    XCTAssertEqual(output.notes, ["これまでに採用 9件 / 見送り 3件"])
-  }
-
-  func testAnAutomationWithoutASourceIsTriggerThenOutput() {
-    let summary = BoardAutomationSummary(automation([], steps: [], sourced: false), text: text)
-    XCTAssertEqual(summary.nodes.map(\.role), [.trigger, .output])
-    XCTAssertFalse(summary.counted)
-  }
-
-  func testRunResultsAndTones() {
-    let summary = BoardAutomationSummary(
-      automation([
-        run(14, 40, items: 6, fresh: 5, proposed: 2),
-        run(14, 30, items: 6, fresh: 0),
-        run(14, 20, items: 6, fresh: 3),
-        run(14, 10, items: 6, fresh: 3, resolved: 2),
-        run(14, 0, items: 0, fresh: 0, failure: "取得元が終了コード 1"),
-      ]), text: text)
-    XCTAssertEqual(
-      summary.runs.map(\.result),
-      ["2件を追加", "新着なし", "処理 1 ですべて除外", "追加なし", "失敗：取得元が終了コード 1"])
-    XCTAssertEqual(summary.runs.map(\.tone), [.produced, .quiet, .quiet, .quiet, .failed])
-    XCTAssertEqual(summary.strip, [.failed, .quiet, .quiet, .quiet, .produced], "帯は古い回が左")
-    XCTAssertEqual(summary.mark, "14:40 に 2件を追加")
-    XCTAssertEqual(summary.last, "前回 今日 14:40　2件をタスク候補に追加")
-  }
-
-  /// 出力先のコマンドは、コマンドの全文・作業ディレクトリを出力先の段に出し（手段の札は題と同じ語なので出さない）、走った回を
-  /// 「完了」として出した回に数える。件数の列の出力先は渡した行の数で、新着の無い回は出力先へ届いていないので出さない。
-  func testACommandOutputShowsItsCommandAndCountsRunsAsDone() throws {
-    func ran(_ hour: Int, count: Int, sourced: Bool) -> AutomationRun {
-      var run = DesignSceneFixtures.automationRun(
-        at: DesignSceneFixtures.automationAt(hour), items: 3, fresh: 3)
-      if !sourced {
-        run.source = nil
-        run.fresh = nil
+  /// カードの実行履歴の各行の文（畳んだ行は期間の文）。
+  private func said(_ lines: [BoardRunLine]) -> [String] {
+    lines.map {
+      switch $0 {
+      case .run(let entry): entry.result
+      case .fold(let span): span
       }
-      run.steps = []
-      run.lastStepCountedBySink = false
-      run.sink = .command(
-        AutomationCommandReport(
-          commandLine: "~/bin/daily-note.sh", ending: "exited 0", count: count))
-      return run
     }
-    func commanding(_ runs: [AutomationRun], sourced: Bool) -> Automation {
-      var definition = automation([], steps: [], sourced: sourced).definition
-      definition.sink = AutomationRunnerTests.commandSink(
-        "~/bin/daily-note.sh", directory: "/Users/me")
-      return Automation(
-        id: 1, definition: definition, paused: false,
-        createdAt: DesignSceneFixtures.automationAt(9), lastFetched: [], reviewAll: false,
-        runs: runs)
-    }
-
-    let alone = BoardAutomationSummary(
-      commanding([ran(23, count: 0, sourced: false)], sourced: false), text: text)
-    XCTAssertEqual(alone.output, "コマンド")
-    let output = try XCTUnwrap(alone.nodes.last)
-    XCTAssertEqual(output.role, .output)
-    XCTAssertNil(output.means)
-    XCTAssertEqual(output.verbatim, "~/bin/daily-note.sh")
-    XCTAssertEqual(output.notes, ["作業ディレクトリ  /Users/me"])
-    XCTAssertEqual(alone.runs.map(\.result), ["完了"])
-    XCTAssertEqual(alone.runs.map(\.tone), [.produced])
-    XCTAssertEqual(alone.mark, "23:00 に完了")
-    XCTAssertEqual(alone.last, "前回 今日 23:00　完了")
-
-    let sourced = BoardAutomationSummary(
-      commanding(
-        [ran(23, count: 3, sourced: true), run(22, 0, items: 3, fresh: 0)], sourced: true),
-      text: text)
-    XCTAssertEqual(sourced.nodes.map(\.count), [nil, 3, 3, 3])
-    XCTAssertEqual(sourced.runs.map(\.result), ["完了", "新着なし"])
-    XCTAssertEqual(sourced.runs.map(\.tone), [.produced, .quiet])
-
-    var nothingNew = run(22, 0, items: 3, fresh: 0)
-    nothingNew.sink = nil
-    let quiet = BoardAutomationSummary(commanding([nothingNew], sourced: true), text: text)
-    XCTAssertEqual(quiet.nodes.map(\.count), [nil, 3, 0, nil])
   }
 
-  func testMarksOfALatestFailureAndOfNoRun() {
-    let failed = BoardAutomationSummary(
-      automation([run(13, 0, items: 0, fresh: 0, failure: "boom")]), text: text)
-    XCTAssertEqual(failed.mark, "13:00 に失敗")
-    XCTAssertEqual(failed.last, "前回 今日 13:00　失敗")
+  private func automations() -> [Automation] {
+    DesignSceneFixtures.automationStore(DesignSceneFixtures.boardMapSamples()).automations
+  }
 
-    let quiet = BoardAutomationSummary(
-      automation([run(16, 0, items: 6, fresh: 0)]), text: text)
-    XCTAssertEqual(quiet.mark, "16:00 に新着なし")
+  /// 失敗したノードがあれば失敗の印。時刻はどのノードかを問わず最後に動いた時刻で、昨日なら「昨日」。
+  func testListRowSaysTheLastMarkAndTime() throws {
+    let all = automations()
+    let charge = BoardAutomationSummary(all[0], text: text, next: nil)
+    XCTAssertEqual(charge.mark, .failure)
+    XCTAssertEqual(charge.last, "前回 14:56")
 
-    let never = BoardAutomationSummary(automation([]), text: text)
-    XCTAssertNil(never.mark)
-    XCTAssertEqual(never.last, "まだ回っていない")
-    XCTAssertEqual(never.runs, [])
+    let script = BoardAutomationSummary(all[1], text: text, next: nil)
+    XCTAssertEqual(script.mark, .success)
+    XCTAssertEqual(script.last, "前回 昨日 23:00")
+
+    let wide = BoardAutomationSummary(all[2], text: text, next: nil)
+    XCTAssertNil(wide.mark)
+    XCTAssertEqual(wide.last, "未実行")
+  }
+
+  /// 次回: 予定のあるノードがすべて止まっていれば「ノードを一時停止中」、一部だけなら出さない（残りの次の時刻は走らせ役が渡す）。
+  func testTheNextSaysPausedWhenEveryScheduledNodeIsPaused() throws {
+    var automation = try XCTUnwrap(automations().first)
+    let scheduled = automation.graph.nodes.filter {
+      if case .scheduled = $0.entity.trigger { true } else { false }
+    }
+    XCTAssertGreaterThan(scheduled.count, 1, "前提: 予定のあるノードが 2 つ以上")
+    automation.states[scheduled[0].id]?.pausedAt = DesignSceneFixtures.taskToday
+    XCTAssertNil(BoardAutomationSummary(automation, text: text, next: nil).next)
+    for node in scheduled { automation.states[node.id]?.pausedAt = DesignSceneFixtures.taskToday }
+    XCTAssertEqual(BoardAutomationSummary(automation, text: text, next: nil).next, "ノードを一時停止中")
+  }
+
+  /// 名前の右の状態（実行中・停止中）と前回の印は混ぜない。失敗したノードのある自動化を流している間も印は失敗のまま、止めて
+  /// いる自動化の印は前回の成否のまま。
+  func testListRowKeepsTheStateApartFromTheLastResult() throws {
+    let model = BoardAutomationModel(
+      runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardMapSamples()))
+    let all = model.store.automations
+    let (charge, weekend) = (all[0].id, all[3].id)
+    try model.runner.flow(charge, to: .ends)
+    let now = model.runner.now()
+    let text = model.text(LocalizationStore(language: .ja), now: now)
+    let states = Dictionary(
+      uniqueKeysWithValues: model.standings.map { ($0.id, $0.state) })
+
+    XCTAssertEqual(states[charge], .running)
+    XCTAssertEqual(model.summary(charge, text: text, now: now)?.mark, .failure, "流している間も前回の印")
+    XCTAssertEqual(states[weekend], .paused)
+    XCTAssertEqual(model.summary(weekend, text: text, now: now)?.mark, .success, "止めていても前回の印")
+  }
+
+  /// 地図の行の見え方は、走っている → ノード自身を止めている → 最新の回が失敗の順に言う。カードの頭は状態だけを言い、前回の
+  /// 成否の印は止めても失敗のまま。
+  func testAPausedNodeSaysItIsPausedBeforeItsFailure() throws {
+    var automation = try XCTUnwrap(automations().first)
+    let failing = try XCTUnwrap(
+      automation.graph.nodes.first { automation.state($0.id).runs.first?.failed == true }?.id,
+      "前提: 最新の回が失敗したノード")
+    func look(running: Bool) -> BoardNodeLook? {
+      let detail = BoardAutomationDetailValue(
+        automation, text: text, running: { $0 == failing && running }, open: 0, next: nil,
+        workspaces: AutomationWorkspaces(all: [], home: nil))
+      return detail.rows.lazy.compactMap { row -> BoardNodeLook? in
+        guard case .node(let node) = row.content, node.id == failing else { return nil }
+        return node.look
+      }.first
+    }
+    XCTAssertEqual(look(running: false), .failed)
+
+    automation.states[failing]?.pausedAt = DesignSceneFixtures.taskToday
+    XCTAssertEqual(look(running: false), .paused, "止めていれば失敗より先に言う")
+    XCTAssertEqual(look(running: true), .running, "走っていれば止めているより先に言う")
+    let card = try XCTUnwrap(
+      BoardAutomationNodeValue(
+        automation, nodeId: failing, text: text, running: false, next: nil, open: 0,
+        workspaces: AutomationWorkspaces(all: [], home: nil)))
+    XCTAssertEqual(card.state, .paused)
+    XCTAssertEqual(card.mark, .failure, "頭の印は前回の成否のまま")
+  }
+
+  /// カードの「次回」は、ノード自身を止めていなくても自動化を止めていれば「一時停止中」。
+  func testTheCardNextSaysPausedWhileTheAutomationIsPaused() throws {
+    var automation = try XCTUnwrap(automations().first)
+    XCTAssertFalse(automation.state(key: "github").paused, "前提: ノード自身は止めていない")
+    automation.pausedAt = DesignSceneFixtures.taskToday
+    let card = try XCTUnwrap(
+      BoardAutomationNodeValue(
+        automation, key: "github", text: text, running: false, next: nil, open: 0))
+
+    XCTAssertEqual(
+      card.facts.first { $0.label == .boardNodeNext }?.value.map(\.text), ["一時停止中"])
+  }
+
+  /// 見本の 12 ノードの線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
+  func testMapLanesFollowTheInputs() throws {
+    let detail = BoardAutomationDetailValue(
+      automations()[0], text: text, running: { _ in false }, open: 0, next: nil,
+      workspaces: AutomationWorkspaces(all: [], home: nil))
+
+    XCTAssertEqual(detail.rows.map(\.lanes.lane), [0, 1, 2, 3, 4, 5, 3, 4, 5, 2, 0, 4, 0, 2])
+    XCTAssertEqual(detail.laneCount, 6)
+    let develop = detail.rows[10].lanes
+    XCTAssertEqual(develop.bends, [1, 3], "CI と自分の担当だけの線が点へ曲がり込む")
+    XCTAssertEqual(develop.through, [2, 4, 5])
+  }
+
+  /// カードの「ツール」: MCP は `__` までをサーバー名とし、claude.ai のコネクタ・プラグインの出どころの頭は落とす。Bash 規則は
+  /// 末尾の `:*` の手前までがコマンド。同じ表示は最初の 1 つだけ。
+  func testCardToolsNameTheServerOrCommandOnce() throws {
+    var samples = DesignSceneFixtures.boardMapSamples()
+    let index = try XCTUnwrap(samples[0].definition.nodes.firstIndex { $0.key == "backlog" })
+    samples[0].definition.nodes[index].action.method = .agent(
+      AutomationNodeAgent(
+        cli: "claude", model: "haiku",
+        tools: [
+          "mcp__claude_ai_Gmail__search_threads", "mcp__plugin_core_backlog__get_issues",
+          "mcp__claude_ai_Gmail__get_thread", "Bash(npm run test:unit:*)",
+          "Bash(npm run test:unit:*)",
+        ],
+        instruction: "取る。"))
+    let automation = DesignSceneFixtures.automationStore(samples).automations[0]
+    let card = try XCTUnwrap(
+      BoardAutomationNodeValue(
+        automation, key: "backlog", text: text, running: false, next: nil, open: 0))
+
+    XCTAssertEqual(
+      card.facts.first { $0.label == .boardNodeTools }?.value.map(\.text),
+      ["Gmail（MCP）・Backlog（MCP）・npm run test:unit コマンド"])
+  }
+
+  /// 一覧の失敗の印は、最後の回が失敗したノードだけで決まる。失敗の後に成功したノードは数えない。
+  func testListMarkCountsOnlyNodesWhoseLatestRunFailed() throws {
+    let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
+    func fetch(_ key: String) -> AutomationDefinition.Node {
+      DesignSceneFixtures.commandNode(
+        key, key, .scheduled(.every(3600)), script: key, coverage: .newArrivals)
+    }
+    func mark(_ failing: [String]) throws -> BoardRunMark? {
+      let failed = DesignSceneFixtures.failed("boom")
+      let sample = AutomationSample(
+        definition: AutomationDefinition(
+          name: "失敗", notify: nil,
+          nodes: [
+            fetch("broken"), fetch("recovered"),
+            DesignSceneFixtures.agentNode(
+              "judge", "判定", .manual, from: ["broken", "recovered"], instruction: "i",
+              deliver: .taskCandidates),
+          ]),
+        createdAt: DesignSceneFixtures.automationAt(9, daysAgo: 3),
+        passes: failing.map { AutomationSamplePass(nodeKey: $0, at: at(9), outcome: failed) } + [
+          AutomationSamplePass(nodeKey: "recovered", at: at(8), outcome: failed),
+          AutomationSamplePass(
+            nodeKey: "recovered", at: at(10),
+            outcome: DesignSceneFixtures.fetched(
+              DesignSceneFixtures.sampleItems("recovered", 1, at: at(10)))),
+        ])
+      let automation = try XCTUnwrap(
+        DesignSceneFixtures.automationStore([sample]).automations.first)
+      return BoardAutomationSummary(automation, text: text, next: nil).mark
+    }
+
+    XCTAssertEqual(try mark(["broken"]), .failure)
+    XCTAssertEqual(try mark([]), .success, "失敗の後に成功したノードは数えない")
+  }
+
+  /// 処理の回の「N 件中 M 件を出力」の M は出した件数——今の集合の処理が毎回全件を写す回も、新しく届く行の数で「0 件を出力」と
+  /// 言わない。
+  func testAProcessRunSaysHowManyRowsItGave() throws {
+    let run = AutomationNodeRun(
+      startedAt: DesignSceneFixtures.automationAt(9), endedAt: DesignSceneFixtures.automationAt(9),
+      trigger: .arrival, taken: 10,
+      execution: DesignSceneFixtures.execution(10), result: .process(fresh: 0, duplicates: 0))
+    let node = try XCTUnwrap(automations().first?.graph.nodes.first)
+
+    XCTAssertEqual(BoardAutomationSummary.amount(run, text: text)?.text, "10 件を出力")
+    XCTAssertEqual(BoardAutomationSummary.amount(run, text: text)?.shade, .plain)
+    XCTAssertEqual(
+      BoardAutomationSummary.result(run, node: node, text: text).text, "10 件中 10 件を出力")
+  }
+
+  /// 英語の判定の回は、判定した件数が 1 なら単数で言う。
+  func testJudgedRunSaysItemsInTheSingularWhenOneInEnglish() throws {
+    let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
+    let sample = AutomationSample(
+      definition: DesignSceneFixtures.candidatesDefinition(
+        "判定",
+        fetch: DesignSceneFixtures.commandNode(
+          "fetch", "取得", .scheduled(.every(3600)), script: "f", coverage: .newArrivals)),
+      createdAt: at(8),
+      passes: DesignSceneFixtures.round("one", at: at(9), items: 1, fresh: 1, proposed: 1)
+        + DesignSceneFixtures.round("three", at: at(10), items: 3, fresh: 3, proposed: 2))
+    let automation = try XCTUnwrap(DesignSceneFixtures.automationStore([sample]).automations.first)
+    let english = AutomationText(
+      l10n: LocalizationStore(language: .en), today: text.today, timeZone: text.timeZone)
+
+    let card = try XCTUnwrap(
+      BoardAutomationNodeValue(
+        automation, key: "judge", text: english, running: false, next: nil, open: 0))
+
+    XCTAssertEqual(said(card.runs), ["judged 3 items, 2 proposed", "judged 1 item, 1 proposed"])
+  }
+
+  /// カードの実行履歴は、添え書きの無い新着なしが 3 回以上続く区間だけを期間の 1 行に畳む。1 回だけの新着なしと、形式エラーを
+  /// 修正して通った回（末尾に添え書き）は 1 行ずつ残す。
+  func testCardHistoryFoldsOnlyLongStretchesOfNothingNew() throws {
+    let automation = automations()[0]
+    func card(_ nodeKey: String) throws -> [String] {
+      said(
+        try XCTUnwrap(
+          BoardAutomationNodeValue(
+            automation, key: nodeKey, text: text, running: false, next: nil, open: 0)
+        ).runs)
+    }
+
+    XCTAssertEqual(
+      try card("slack"), ["13:10〜14:55 は新着なし", "新着 4 件", "新着 5 件", "新着 6 件"])
+    XCTAssertEqual(try card("mail"), ["新着 2 件（形式エラーを agent が修正済み）", "新着なし", "新着 1 件"])
   }
 }
