@@ -62,7 +62,8 @@ struct PrLayout {
   func id(at row: Int) -> PrRowID { Self.id(of: items[row]) }
 
   /// 選ばれていた行 `selection` が、組み直した後のこの組に無い。畳んで隠れたなら、見えている祖先のうち一番深いもの
-  /// （畳んだフォルダか区分の見出し）を返す。消えたなら（PR の中身から外れた・ツリーとリストを切り替えた）、前の組
+  /// （畳んだフォルダか区分の見出し）を返す。フォルダの行が消えて配下のファイルが見えている（ツリーからリストへ切り替えた）
+  /// なら、配下の最初のファイルを返す——見ていた場所の近くに残す。そのほかで消えたなら（PR の中身から外れた）、前の組
   /// `previous` の変更ファイルの区分の中の同じ位置の行（無ければ最後の行）を返す。区分に行が無ければ nil。
   func reselect(_ selection: PrRowID, from previous: PrLayout, isCollapsed: (PrRowID) -> Bool)
     -> PrRowID?
@@ -71,6 +72,13 @@ struct PrLayout {
       isCollapsed(visible)
     {
       return visible
+    }
+    if case .folder(let folder) = selection,
+      let first = filesRows.lazy.map(id(at:)).first(where: {
+        if case .file(let path) = $0 { path.hasPrefix(folder + "/") } else { false }
+      })
+    {
+      return first
     }
     guard let old = previous.index[selection], previous.filesRows.contains(old),
       !filesRows.isEmpty
