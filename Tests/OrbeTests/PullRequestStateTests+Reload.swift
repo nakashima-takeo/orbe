@@ -8,17 +8,18 @@ import XCTest
 /// 壊れると何が起きるか: 端末での push や fetch の後も PR のパネルと PR の diff タブが古い中身のまま。無関係なブランチの
 /// fetch のたびに GitHub へ問い合わせる。パネルもタブも閉じた PR を問い合わせ続ける。
 extension PullRequestStateTests {
-  /// PR の先頭のブランチかベースブランチの追跡 ref が動けば読み直し、無関係なブランチの追跡 ref では読み直さない。
+  /// PR の先頭のブランチかベースブランチの追跡 ref が動けば読み直し、無関係なブランチの追跡 ref では読み直さない。最初の
+  /// 中身が届いた時点で追跡 ref の値を覚えるので、開いた後の最初の動きにも追従する。
   func testOnlyAMoveOfThePullRequestsTrackingRefsReadsAgain() throws {
     let tracked = try trackedState()
-
-    tracked.move("refs/remotes/origin/other", to: tracked.main)
-    letGitSettle()
-    XCTAssertTrue(gitHub.contentRequests.isEmpty, "無関係なブランチの追跡 ref では読み直さない")
 
     tracked.move("refs/remotes/origin/feat", to: tracked.main)
     pumpMain(until: { self.gitHub.contentRequests.count == 1 }, "先頭のブランチの追跡 ref で読み直す")
     gitHub.answerContent()
+
+    tracked.move("refs/remotes/origin/other", to: tracked.main)
+    letGitSettle()
+    XCTAssertTrue(gitHub.contentRequests.isEmpty, "無関係なブランチの追跡 ref では読み直さない")
 
     tracked.move("refs/remotes/origin/main", to: tracked.head)
     pumpMain(until: { self.gitHub.contentRequests.count == 1 }, "ベースブランチの追跡 ref で読み直す")
@@ -39,7 +40,7 @@ extension PullRequestStateTests {
     XCTAssertTrue(gitHub.contentRequests.isEmpty, "見ている者がいなければ読まない")
   }
 
-  /// 読み直しが追跡 ref の値を読んでいる間に最後の見ている者が去れば、GitHub に問い合わせない。
+  /// 読み直しが追跡 ref の値を読んでいる間に最後の見ている者が去れば、GitHub に問い合わせず、戻ったら読み直す。
   func testLeavingWhileTheTrackingRefsAreReadAsksGitHubNothing() throws {
     let tracked = try trackedState()
 
@@ -47,12 +48,15 @@ extension PullRequestStateTests {
     tracked.state.endWatching()
     letGitSettle()
     XCTAssertTrue(gitHub.contentRequests.isEmpty, "見ている者がいなければ問い合わせない")
+
+    tracked.state.beginWatching()
+    pumpMain(until: { self.gitHub.contentRequests.count == 1 }, "戻ったら読み直す")
   }
 
   // MARK: - 道具
 
-  /// origin に送ったブランチ feat（main より 1 コミット先）の PR の状態。見ている者が 1 人いて、中身を 1 回読み、追跡 ref の
-  /// 値を覚えたところ。以後の中身の問い合わせは答えずに留める。
+  /// origin に送ったブランチ feat（main より 1 コミット先）の PR の状態。見ている者が 1 人いて、最初の中身を読み、その
+  /// 中身から分かった追跡 ref の値を覚えたところ。以後の中身の問い合わせは答えずに留める。
   private func trackedState() throws -> TrackedState {
     let repo = try TempGitRepo()
     repo.addOrigin()
@@ -73,10 +77,7 @@ extension PullRequestStateTests {
     addTeardownBlock { @MainActor in state.endWatching() }
     pumpMain(until: { state.content != nil }, "前提: 中身が読める")
     gitHub.answersAtOnce = false
-    state.reload()
-    pumpMain(
-      until: { self.gitHub.contentRequests.count == 1 }, "前提: 追跡 ref の値を覚えてから問い合わせる")
-    gitHub.answerContent()
+    letGitSettle()
     return TrackedState(repo: repo, state: state, main: main, head: head, recorder: recorder)
   }
 
