@@ -7,7 +7,7 @@ import XCTest
 /// GitHub は差し替えの構造体が答え、git は一時リポジトリで実際に問う。
 ///
 /// 壊れると何が起きるか: パネルを隠しても GitHub に問い合わせ続ける・出しても PR が出ない。↓ がコミットの行に止まる・
-/// フォルダへ動いただけで diff が開く。← で親へ戻れない。畳んだ後の ↑↓ が列の先頭へ飛ぶ。一部だけ確認済みのフォルダのチェックを押すと、付けるはずが
+/// フォルダへ動いただけで diff が開く。← で親へ戻れない。畳んだ後や、選んでいた行が読み直しで消えた後の ↑↓ が列の先頭へ飛ぶ。一部だけ確認済みのフォルダのチェックを押すと、付けるはずが
 /// 配下の確認済みを全部外す。
 @MainActor
 final class PrPanelTests: OrbeTestCase {
@@ -16,15 +16,20 @@ final class PrPanelTests: OrbeTestCase {
   private var writes: [(viewed: Bool, paths: Set<String>)] = []
   private var opened: [(key: EditorDiff.Key, opening: ScmPanel.Opening)] = []
   private let me = GitHubRepoName(nameWithOwner: "me/r")
-  /// 変更ファイル。src/a/x.swift だけが確認済み。
-  private let files = ["src/a/x.swift", "src/a/y.swift", "src/b.swift", "README.md"]
+  /// 変更ファイル（テストが書き換えて、次の読み直しに答えさせる）。src/a/x.swift だけが確認済み。
+  private var files = ["src/a/x.swift", "src/a/y.swift", "src/b.swift", "README.md"]
+  /// ツリーかリストか（アプリ全体の選択の代わり）。
+  private var asTree = true
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     writes = []
     opened = []
+    asTree = true
     panel = PrPanel(root: repo.root, source: source)
+    panel.filesAsTree = { [unowned self] in asTree }
+    panel.onViewAsTree = { [unowned self] in asTree = $0 }
     panel.navigation.delay.schedule = { _, fire in fire() }
     panel.onOpenDiff = { [unowned self] key, opening in opened.append((key, opening)) }
   }
@@ -39,12 +44,6 @@ final class PrPanelTests: OrbeTestCase {
     let pullRequest = GitHubBranchPR(
       number: 9, headRefName: "feat", state: "OPEN", baseRefName: "main", headRepository: me,
       url: "https://github.com/me/r/pull/9")
-    let content = GitHubPullRequestContent(
-      nodeID: "PR_1", number: 9, title: "題", url: "https://github.com/me/r/pull/9", isDraft: false,
-      state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
-      baseCommit: "b", headCommit: "h", commitCount: 2,
-      commits: [.init(oid: "c1", headline: "一"), .init(oid: "c2", headline: "二")],
-      files: files.map { .init(path: $0, change: .modified, isViewed: $0 == "src/a/x.swift") })
     return PullRequestSource(
       branchPullRequests: { _, branch, completion in
         completion(
@@ -53,11 +52,32 @@ final class PrPanelTests: OrbeTestCase {
             branches: [branch: .gitHub(ref, pullRequests: .success([pullRequest]))]))
       },
       branchExists: { _, completion in completion(.success(true)) },
-      content: { _, completion in completion(.success(content)) },
+      content: { [unowned self] _, completion in completion(.success(content)) },
       setViewed: { [unowned self] viewed, paths, _, completion in
         writes.append((viewed, paths))
         completion(GitHubViewedWrite(written: paths, failure: nil))
       })
+  }
+
+  private var content: GitHubPullRequestContent {
+    GitHubPullRequestContent(
+      nodeID: "PR_1", number: 9, title: "題", url: "https://github.com/me/r/pull/9", isDraft: false,
+      state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
+      baseCommit: "b", headCommit: "h", commitCount: 2,
+      commits: [.init(oid: "c1", headline: "一"), .init(oid: "c2", headline: "二")],
+      files: files.map { .init(path: $0, change: .modified, isViewed: $0 == "src/a/x.swift") })
+  }
+
+  /// 変更ファイルを `next` にして読み直し、列の行が組み直されるまで待つ。
+  private func reload(files next: [String]) {
+    files = next
+    panel.refresh()
+    pumpMain(
+      until: {
+        self.panel.layout.items.count(where: { if case .file = $0 { true } else { false } })
+          == next.count
+      },
+      "前提: 読み直した中身で行を組み直す")
   }
 
   /// パネルを出して、PR の中身が届くまで待つ。
@@ -145,16 +165,44 @@ final class PrPanelTests: OrbeTestCase {
 
     panel.select(.folder("src/a"))
     panel.toggleFolder("src")
-    XCTExpectFailure("畳んだフォルダの下のフォルダの選択を移さない") {
-      XCTAssertEqual(panel.selection, .folder("src"), "下のフォルダ")
-    }
+    XCTAssertEqual(panel.selection, .folder("src"), "下のフォルダ")
     panel.toggleFolder("src")
 
     panel.select(.file("README.md"))
     panel.toggle(.files)
-    XCTExpectFailure("区分を畳んでも選択を移さない") {
-      XCTAssertEqual(panel.selection, .section(.files), "区分の下")
-    }
+    XCTAssertEqual(panel.selection, .section(.files), "区分の下")
+  }
+
+  /// 読み直しで選んでいた行が PR から消えれば、変更ファイルの区分の同じ位置の行（無ければ最後の行）を選び、区分に行が
+  /// 無くなれば選択を外す。消えた行を選び直しても開かない。
+  func testARowThatLeavesThePullRequestHandsTheSelectionToTheRowInItsPlace() throws {
+    _ = try shown()
+    panel.select(.file("src/a/y.swift"))
+    reload(files: ["src/a/x.swift", "src/b.swift", "README.md"])
+    XCTAssertEqual(panel.selection, .file("src/b.swift"), "同じ位置の行")
+
+    panel.select(.file("README.md"))
+    reload(files: ["src/b.swift"])
+    XCTAssertEqual(panel.selection, .file("src/b.swift"), "同じ位置に行が無ければ最後の行")
+
+    reload(files: [])
+    XCTAssertNil(panel.selection, "区分に行が無ければ外す")
+    XCTAssertTrue(opened.isEmpty, "選び直しでは開かない")
+  }
+
+  /// 見出しの切り替えでリストにすれば、その場で行を組み直す。ファイルの選択はそのまま、消えたフォルダの選択は同じ位置の
+  /// 行へ移る。
+  func testSwitchingToTheListRebuildsTheRowsAtOnce() throws {
+    _ = try shown()
+    panel.select(.folder("src/a"))
+    panel.press(try row(.section(.files)), .list, in: panel.layout)
+    XCTAssertFalse(asTree, "アプリ全体の選択へ書く")
+    XCTAssertNil(panel.layout.index[.folder("src")], "リストにはフォルダの行が無い")
+    XCTAssertEqual(panel.selection, .file("src/b.swift"), "同じ位置の行")
+
+    panel.press(try row(.section(.files)), .tree, in: panel.layout)
+    XCTAssertNotNil(panel.layout.index[.folder("src")], "ツリーに戻す")
+    XCTAssertEqual(panel.selection, .file("src/b.swift"), "ファイルの選択はそのまま")
   }
 
   // MARK: - フォルダのチェック
