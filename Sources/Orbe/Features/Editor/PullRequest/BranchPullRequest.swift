@@ -20,6 +20,8 @@ final class BranchPullRequest {
   @ObservationIgnored private var watchers = 0
   @ObservationIgnored private var isReading = false
   @ObservationIgnored private var readAgain = false
+  /// 読み直しを、根のサービスの判定か status が届くまで待っている（届いたら、ブランチ名が前と同じでも読み直す）。
+  @ObservationIgnored private var awaitingStatus = false
   /// 答えを出している・読んでいるブランチ名（ブランチに居ない・git の管理下でないなら nil）・手元の HEAD・追跡 ref の値。
   @ObservationIgnored private var branch: String?
   @ObservationIgnored private var head: String?
@@ -85,12 +87,19 @@ final class BranchPullRequest {
   /// 読み直す。PR があれば、その中身も読み直す。
   func reload() {
     guard watchers > 0, let files else { return }
-    guard files.isResolved else { return }
+    awaitingStatus = false
+    guard files.isResolved else {
+      awaitingStatus = true
+      return
+    }
     guard let repo = files.repo else {
       branch = nil
       return settle(.unavailable(.notGit))
     }
-    guard let status = files.status else { return }
+    guard let status = files.status else {
+      awaitingStatus = true
+      return
+    }
     guard let name = status.branch?.name else {
       branch = nil
       return settle(.unavailable(.detached))
@@ -115,6 +124,8 @@ final class BranchPullRequest {
   }
 
   private func lookUp(_ name: String, in repo: GitRepo, remoteDefault: String) {
+    // 追跡 ref と既定のブランチを読む間に見ている者がいなくなったら、GitHub に問い合わせない。
+    guard watchers > 0 else { return stopReading() }
     let defaultBranch = GitBranch.localName(fromRemote: remoteDefault)
     guard name != defaultBranch else { return finish(.unavailable(.defaultBranch), name) }
     source.branchPullRequests(repo, name) { [weak self] found in
@@ -154,6 +165,8 @@ final class BranchPullRequest {
         branch: name, defaultBranch: defaultBranch, ahead: ahead,
         url: ref.pullRequestCreationURL, ref: ref, published: .checking)
       finish(.noPullRequest(creation), name)
+      // 答えを出せたときだけ問い合わせる（見ている者がいなくなった・ブランチが変わったなら、出していない答えを確かめない）。
+      guard answer == .noPullRequest(creation) else { return }
       source.branchExists(ref) { [weak self] exists in
         guard let self, case .noPullRequest(var current) = answer, current.ref == ref else {
           return
@@ -171,18 +184,21 @@ final class BranchPullRequest {
   /// 読み終えた。読んでいる間にブランチが変わっていれば答えを捨てる（前のブランチの答えは出さない）。ブランチが
   /// 変わっていたか、きっかけが来ていれば読み直す。
   private func finish(_ next: Answer, _ name: String) {
-    isReading = false
     // 読んでいる間に見ている者がいなくなったら、答えは出さない（PR の状態を見始めない。次に見ている者が現れたら読み直す）。
-    guard watchers > 0 else {
-      readAgain = false
-      return
-    }
+    guard watchers > 0 else { return stopReading() }
+    isReading = false
     let current = files?.status?.branch?.name
     if name == current { settle(next) }
     if readAgain || name != current {
       readAgain = false
       reload()
     }
+  }
+
+  /// 見ている者がいなくなったので、答えを出さずに読むのをやめる（積んだ読み直しも捨てる）。
+  private func stopReading() {
+    isReading = false
+    readAgain = false
   }
 
   /// 答えを `next` にする。PR が替われば、前の PR を見るのをやめ、今の PR を見て中身を読み直す。
@@ -290,10 +306,10 @@ extension BranchPullRequest: RootFilesObserver {
     reload()
   }
 
-  /// ブランチ名が変われば引き直す。HEAD だけが動いたなら、手元とのずれを数え直す。
+  /// ブランチ名が変わったか、status を待っていた読み直しがあれば引き直す。HEAD だけが動いたなら、手元とのずれを数え直す。
   func rootFilesStatusDidChange(_ files: RootFiles) {
     let name = files.status?.branch?.name
-    if name != branch { return reload() }
+    if name != branch || awaitingStatus { return reload() }
     head = files.status?.branch?.commit
     countDrift()
   }

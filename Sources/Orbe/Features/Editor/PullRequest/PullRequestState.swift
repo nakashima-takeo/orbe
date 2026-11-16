@@ -228,6 +228,11 @@ final class PullRequestState {
           notify()
         }
       case .missingCommit:
+        // 求める間に見ている者がいなくなったら、取りに行かない（次に見ている者が現れたときに求め直す）。
+        guard isWatched else {
+          bounds = .none
+          return
+        }
         guard !fetched, let remote = fetchRemote else {
           bounds = .failed(ends, .commitsMissing)
           return notify()
