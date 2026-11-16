@@ -6,7 +6,7 @@ import XCTest
 /// 2 つのコミットの間の、1 つのファイルの diff の区間が覆う行（`GitRepo.hunkLines`）。実 git の一時リポジトリで測る。
 ///
 /// 壊れると何が起きるか: GitHub がコメントを受ける行と、Orbe が受けると考える行が食い違う——変更から 4 行目以降にも印が出て
-/// 書き込みが GitHub に断られる、前後 3 行の文脈に印が出ない。利用者の git 設定（文脈の行数・アルゴリズム・外部 diff）で
+/// 書き込みが GitHub に断られる、前後 3 行の文脈に印が出ない。GitHub から見えない手元の値（git の設定・属性・環境変数）で
 /// 答えが変わる。
 @MainActor
 final class GitRepoHunkLinesTests: OrbeTestCase {
@@ -84,20 +84,83 @@ final class GitRepoHunkLinesTests: OrbeTestCase {
       GitDiffHunkLines(old: [18...20], new: [18...21]))
   }
 
-  /// 利用者の git 設定（アルゴリズム・文脈の行数・区間をつなげる行数・外部 diff・インデントヒューリスティック）が違っても同じ答え。
-  func testTheUsersDiffSettingsDoNotChangeTheAnswer() throws {
-    let base = try commit(["a.txt": Self.lines(1...40)])
-    let head = try commit(["a.txt": Self.lines(1...40, replacing: [10: "changed", 20: "changed"])])
-    let plain = hunkLines(base, head, "a.txt")
-    XCTAssertEqual(plain, GitDiffHunkLines(old: [7...13, 17...23], new: [7...13, 17...23]))
+  private struct ShapedChanges {
+    let base: String
+    let head: String
+    /// パスごとの、GitHub と同じ形の答え。
+    let answers: [String: GitDiffHunkLines]
+  }
 
+  /// 文脈の行数・区間をつなげる行数・インデントヒューリスティック・アルゴリズムのどれかが違えば区間が変わる 3 つのファイルを
+  /// コミットし、GitHub と同じ形（前後 3 行・つなげない・myers とインデントヒューリスティック）の答えと一緒に返す。
+  private func changesThatDependOnTheDiffShape() throws -> ShapedChanges {
+    let before = (1...5).map { "head \($0)" }
+    let after = (1...5).map { "tail \($0)" }
+    func text(_ middle: [String]) -> String {
+      (before + middle + after).joined(separator: "\n") + "\n"
+    }
+    // slide.txt はインデントヒューリスティックで、anchor.txt は patience で、足した行の置き場所が変わる中身。
+    let base = try commit([
+      "a.txt": Self.lines(1...40), "slide.txt": text(["  x()", "", "f() {"]),
+      "anchor.txt": text(["f() {", "", ""]),
+    ])
+    let head = try commit([
+      "a.txt": Self.lines(1...40, replacing: [10: "changed", 20: "changed"]),
+      "slide.txt": text(["  x()", "", "f() {", "f() {"]),
+      "anchor.txt": text(["", "f() {", "f() {", "", "", ""]),
+    ])
+    return ShapedChanges(
+      base: base, head: head,
+      answers: [
+        "a.txt": GitDiffHunkLines(old: [7...13, 17...23], new: [7...13, 17...23]),
+        "slide.txt": GitDiffHunkLines(old: [5...10], new: [5...11]),
+        "anchor.txt": GitDiffHunkLines(old: [3...11], new: [3...14]),
+      ]
+    )
+  }
+
+  private func answers(_ base: String, _ head: String) -> [String: GitDiffHunkLines] {
+    var answers: [String: GitDiffHunkLines] = [:]
+    for path in ["a.txt", "slide.txt", "anchor.txt"] { answers[path] = hunkLines(base, head, path) }
+    return answers
+  }
+
+  /// 利用者の git 設定（アルゴリズム・文脈の行数・区間をつなげる行数・外部 diff・インデントヒューリスティック）が違っても、
+  /// GitHub と同じ形の答え。
+  func testTheUsersDiffSettingsDoNotChangeTheAnswer() throws {
+    let changes = try changesThatDependOnTheDiffShape()
     for setting in [
       ["diff.algorithm", "patience"], ["diff.context", "10"], ["diff.interHunkContext", "10"],
       ["diff.external", "/usr/bin/false"], ["diff.indentHeuristic", "false"],
     ] {
       XCTAssertTrue(temp.git(["config"] + setting).isSuccess)
     }
-    XCTAssertEqual(hunkLines(base, head, "a.txt"), plain)
+
+    XCTAssertEqual(answers(changes.base, changes.head), changes.answers)
+  }
+
+  /// 手元の属性（作業ツリーの `.gitattributes`・`info/attributes`・`core.attributesFile`）で、diff を無効にされたファイル・バイナリの
+  /// ファイル・別のアルゴリズムのファイルにされても、GitHub と同じ形の答え。
+  func testLocalAttributesDoNotChangeTheAnswer() throws {
+    let changes = try changesThatDependOnTheDiffShape()
+    try temp.write(".gitattributes", "anchor.txt diff=patient\n")
+    XCTAssertTrue(temp.git(["config", "diff.patient.algorithm", "patience"]).isSuccess)
+    try temp.write(".git/info/attributes", "a.txt -diff\n")
+    try temp.write(".git/orbe-attributes", "slide.txt diff=raw\n")
+    XCTAssertTrue(
+      temp.git(["config", "core.attributesFile", temp.root + "/.git/orbe-attributes"]).isSuccess)
+    XCTAssertTrue(temp.git(["config", "diff.raw.binary", "true"]).isSuccess)
+
+    XCTAssertEqual(answers(changes.base, changes.head), changes.answers)
+  }
+
+  /// Orbe の環境に `GIT_DIFF_OPTS`（文脈の行数を変える）があっても、GitHub と同じ形の答え。
+  func testGitDiffOptionsInTheEnvironmentDoNotChangeTheAnswer() throws {
+    let changes = try changesThatDependOnTheDiffShape()
+    setenv("GIT_DIFF_OPTS", "--unified=0", 1)
+    defer { unsetenv("GIT_DIFF_OPTS") }
+
+    XCTAssertEqual(hunkLines(changes.base, changes.head, "a.txt"), changes.answers["a.txt"])
   }
 
   /// pathspec の記号を含むパスも、そのファイルだけを読む。
