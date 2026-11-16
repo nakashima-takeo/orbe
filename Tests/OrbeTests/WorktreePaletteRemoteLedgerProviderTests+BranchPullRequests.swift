@@ -118,9 +118,12 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     try serveBranchPullRequests(
       "feat", in: "me/r",
       "["
-        + branchPR(
-          3, head: "feat", state: "CLOSED", from: "me/r", createdAt: "2026-01-01T00:00:00Z")
-        + "]")
+        + [
+          branchPR(
+            5, head: "feat", state: "CLOSED", from: "me/r", createdAt: "2026-03-01T00:00:00Z"),
+          branchPR(
+            3, head: "feat", state: "CLOSED", from: "me/r", createdAt: "2026-01-01T00:00:00Z"),
+        ].joined(separator: ",") + "]")
     try serveBranchPullRequests(
       "feat", in: "up/r",
       "["
@@ -133,7 +136,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     let found = try lookup(["feat"])
 
     XCTAssertEqual(Set(calls("P")), ["me/r feat", "up/r feat"])
-    XCTAssertEqual(found.branches["feat"]?.pullRequests?.map(\.number), [9, 3])
+    XCTAssertEqual(found.branches["feat"]?.pullRequests?.map(\.number), [5, 9, 3])
   }
 
   /// fork と親のどちらかの問い合わせが失敗すれば、そのブランチの答えは失敗——引けた側の PR だけで「無い」とも
