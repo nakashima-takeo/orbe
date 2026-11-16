@@ -25,9 +25,11 @@ extension EditorPaneView {
 
   /// レールの項目を押した。検索・ソース管理のパネルを出したら入力欄に焦点を入れる（VS Code のアクティビティバーと同じ）。
   /// ソース管理の親「ソース管理」を畳んでいれば、欄も列も無いので焦点を求めない（当たらない要求を残すと、親を開いた瞬間に
-  /// 焦点を奪う）。PR のパネルは、列に行があれば列に焦点を入れる（行が無ければ求めない——同じ理由）。
+  /// 焦点を奪う）。PR のパネルは、列に行があれば列に焦点を入れる（行が無ければ求めない——同じ理由）。行があるかは、パネルを
+  /// 出して今の答えで行を組み直してから見る（サイドバーの観測の知らせは次のターンなので、待たずにここで出し入れを写す）。
   func selectPanel(_ panel: EditorSidebarState.Panel) {
     sidebar.select(panel)
+    updatePanelsShown()
     if showsSearchPanel { projectSearch.requestFocus(.field) }
     if showsSourceControl, scm.isRepositoryOpen { scm.requestFocus(.message) }
     if showsPullRequest, !pullRequest.layout.items.isEmpty { pullRequest.requestFocus() }
