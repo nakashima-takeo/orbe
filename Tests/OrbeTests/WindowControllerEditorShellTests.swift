@@ -64,7 +64,8 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     XCTAssertTrue(first.group.view.editor.sidebar.isOpen, "どの連で開いても全連に効く")
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar,
-      EditorSidebarRecord(width: 300, isOpen: true, panel: "files", graphHeight: 198),
+      EditorSidebarRecord(
+        width: 300, isOpen: true, panel: "files", graphHeight: 198, pullRequestFilesAsTree: true),
       "開閉は app-state へ書き戻る")
     XCTAssertEqual(AppStatePersistence.load()?.preferredLanguage, "ja", "他の項目は巻き込まない")
   }

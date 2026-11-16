@@ -190,19 +190,19 @@ final class PrPanelTests: OrbeTestCase {
     XCTAssertTrue(opened.isEmpty, "選び直しでは開かない")
   }
 
-  /// 見出しの切り替えでリストにすれば、その場で行を組み直す。ファイルの選択はそのまま、消えたフォルダの選択は同じ位置の
-  /// 行へ移る。
+  /// 見出しの切り替えでリストにすれば、その場で行を組み直す。消えたフォルダの選択は配下の最初のファイルへ移り、ファイルの
+  /// 選択はツリーに戻してもそのまま。
   func testSwitchingToTheListRebuildsTheRowsAtOnce() throws {
     _ = try shown()
     panel.select(.folder("src/a"))
     panel.press(try row(.section(.files)), .list, in: panel.layout)
     XCTAssertFalse(asTree, "アプリ全体の選択へ書く")
     XCTAssertNil(panel.layout.index[.folder("src")], "リストにはフォルダの行が無い")
-    XCTAssertEqual(panel.selection, .file("src/b.swift"), "同じ位置の行")
+    XCTAssertEqual(panel.selection, .file("src/a/x.swift"), "配下の最初のファイル")
 
     panel.press(try row(.section(.files)), .tree, in: panel.layout)
     XCTAssertNotNil(panel.layout.index[.folder("src")], "ツリーに戻す")
-    XCTAssertEqual(panel.selection, .file("src/b.swift"), "ファイルの選択はそのまま")
+    XCTAssertEqual(panel.selection, .file("src/a/x.swift"), "ファイルの選択はそのまま")
   }
 
   // MARK: - フォルダのチェック
