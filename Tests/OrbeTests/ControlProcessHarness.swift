@@ -63,12 +63,18 @@ final class ControlProcess {
     return resources
   }
 
-  /// リポジトリ実体のプラグインパッケージ。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
-  private static let sourcePluginPackage = URL(fileURLWithPath: #filePath)
+  /// このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
+  private static let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // OrbeTests
     .deletingLastPathComponent()  // Tests
     .deletingLastPathComponent()  // repo root
-    .appendingPathComponent("app/agent-plugin")
+
+  /// リポジトリ実体のプラグインパッケージ。
+  private static let sourcePluginPackage = repoRoot.appendingPathComponent("app/agent-plugin")
+
+  /// `.app` 同梱時に codex 専用のディレクトリを完成させるスクリプト。
+  private static let assembleCodexPlugin = repoRoot.appendingPathComponent(
+    "scripts/assemble-codex-plugin.sh")
 
   /// リポジトリ実体のプラグインを同梱物レイアウトへ置き、本番と同じ `materializeStablePlugin()` で
   /// 実体化して、実体化先の claude・agy が読むプラグインのルートを返す（チャネルの刻印も本番の実体化が書く）。
@@ -87,16 +93,13 @@ final class ControlProcess {
     try? FileManager.default.removeItem(at: bundled)
     // copyItem は POSIX permission を保つ（.app へのコピーと同じ性質）。
     try FileManager.default.copyItem(at: sourcePluginPackage, to: bundled)
-    // `.app` 同梱時に codex 専用のディレクトリへシムと空サーバーをコピーすることを、ここでも再現する。
     let name = try XCTUnwrap(
       AgentPluginInstaller.pluginName(in: bundled), "プラグイン名を読めない（パッケージが壊れている）")
-    for file in ["hooks/orbe-agent-status.sh", "mcp/orbe-mcp.sh", "mcp/empty-server.pl"] {
-      let copy = bundled.appendingPathComponent("codex/\(name)/\(file)")
-      try FileManager.default.createDirectory(
-        at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try FileManager.default.copyItem(
-        at: bundled.appendingPathComponent("plugins/\(name)/\(file)"), to: copy)
-    }
+    // codex 専用のディレクトリは、`.app` 同梱時と同じスクリプトで完成させる。
+    let assembled = run(
+      URL(fileURLWithPath: "/bin/sh"), [assembleCodexPlugin.path, bundled.path, name],
+      env: ["PATH": "/usr/bin:/bin"])
+    XCTAssertEqual(assembled.status, 0, "codex 専用のディレクトリを完成させられない: \(assembled.stderr)")
     let package = try XCTUnwrap(AgentPluginInstaller.materializeStablePlugin(), "実体化できない")
     return package.appendingPathComponent("\(root)/\(name)", isDirectory: true)
   }
