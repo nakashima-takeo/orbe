@@ -29,6 +29,11 @@ extension GitRunner {
     return env
   }
 
+  /// patch を読む呼び出しに足す環境。`GIT_DIFF_OPTS` の `-u`・`--unified` は引数の `-U` より強く、区間の文脈の行数を変えるので、
+  /// 空にして効かせない（git は空の値を何も指定していないとして読む）。共通の環境から消さないのは、利用者の書き込みで走る hook
+  /// が見る環境を変えないため。
+  static let patchEnvironment = ["GIT_DIFF_OPTS": ""]
+
   /// 人が頼んでいない fetch（裏の fetch と、コミットを名指しする fetch）に足す環境。人の前に何も出さない——利用者の GUI の askpass があっても使わず、
   /// 資格情報の helper にも対話しない合図を渡す（Git Credential Manager）。ssh-agent の側の承認は封じられない。
   static let unattendedEnvironment = [

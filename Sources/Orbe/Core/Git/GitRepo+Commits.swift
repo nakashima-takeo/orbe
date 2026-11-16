@@ -130,9 +130,12 @@ extension GitRepo {
 
   /// `base` から `head` の間の、ファイル `path`（`originalPath` は rename の元のパス）の diff の区間が覆う行。読めなければ nil。
   ///
-  /// 区間の形は GitHub の PR の diff に合わせて引数で決め、利用者の設定に依らせない——前後 3 行の文脈・既定のアルゴリズム
-  /// （myers）と `--indent-heuristic`・区間どうしをつなげない・外部 diff と textconv と色を使わない。rename の検出は明示して有効に
-  /// する。パスは pathspec として解釈させない。
+  /// 区間の形は GitHub の PR の diff に合わせて引数で決め、GitHub から見えない手元の値（設定・属性・環境変数）に依らせない
+  /// ——前後 3 行の文脈・既定のアルゴリズム（myers）と `--indent-heuristic`・区間どうしをつなげない・外部 diff と textconv と色を
+  /// 使わない・どのファイルもテキストとして比べる（`--text`。属性でバイナリ扱いにされても区間を出す。属性の出どころは作業
+  /// ツリー・`info/attributes`・`core.attributesFile`・システムにもあり、比べるコミットの木だけに絞れないため）・
+  /// `GIT_DIFF_OPTS` を効かせない。明示したアルゴリズムは、属性の diff ドライバーが決めるアルゴリズムにも勝つ。rename の検出は
+  /// 明示して有効にする。パスは pathspec として解釈させない。
   func hunkLines(
     from base: String, to head: String, path: String, originalPath: String?,
     completion: @escaping (GitDiffHunkLines?) -> Void
@@ -141,9 +144,10 @@ extension GitRepo {
     runner.run(
       [
         "diff-tree", "-p", "-r", "-M", "-U3", "--inter-hunk-context=0", "--diff-algorithm=myers",
-        "--indent-heuristic", "--no-ext-diff", "--no-textconv", "--no-color", "--end-of-options",
-        base, head, "--",
+        "--indent-heuristic", "--no-ext-diff", "--no-textconv", "--no-color", "--text",
+        "--end-of-options", base, head, "--",
       ] + Set(paths).sorted().map { ":(literal)" + $0 }, cwd: root,
+      environment: GitRunner.patchEnvironment,
       transform: { $0.isSuccess ? GitDiffHunkLines(patch: $0.stdout) : nil },
       completion: completion)
   }
