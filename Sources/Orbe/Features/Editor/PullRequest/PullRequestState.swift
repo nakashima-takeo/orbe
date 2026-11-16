@@ -145,9 +145,12 @@ final class PullRequestState {
     for observer in observers { observer.value?.pullRequestStateDidChange(self) }
   }
 
-  /// 見ている者が現れた（中身の読み直しは、誰も見ていなかったときに見始めた者が `reload` で頼む）。
+  /// 見ている者が現れた（中身の読み直しは、誰も見ていなかったときに見始めた者が `reload` で頼む）。誰も見ていなかったなら、
+  /// PR ごとの状態が自分で両端を求め直す——見ている者がいない間に求めるのをやめた両端（見ている者が、取りに行く前に・中身を
+  /// 読む間に去った）を、見始めた者が読み直しを頼むかに依らず揃える。
   func beginWatching() {
     watchers += 1
+    if watchers == 1 { resolveBounds() }
   }
 
   func endWatching() {
