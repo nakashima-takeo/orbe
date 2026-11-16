@@ -1,23 +1,30 @@
 ---
 title: エージェントプラグイン（配布物）
-description: claude / codex / agy 兼用プラグインパッケージ app/agent-plugin/ の構造・各 CLI の導入契約・codex の hook の承認・チャネル別のプラグイン名・デーモン経由の呼び出しの判定・MCP サーバー・.app 同梱と毎起動の実体化・中身の指紋による入れ直し
+description: claude / codex / agy へ届けるプラグインパッケージ app/agent-plugin/ の構造（claude・agy が共有するディレクトリと codex 専用のディレクトリ）・各 CLI の導入契約・codex の hook の承認・チャネル別のプラグイン名・デーモン経由の呼び出しの判定・MCP サーバー・.app 同梱と毎起動の実体化・中身の指紋による入れ直し
 updated: 2026-11-16
 ---
 
 # エージェントプラグイン（配布物）
 
-`app/agent-plugin/` は claude / codex / agy を 1 ディレクトリで兼ねるプラグインパッケージ。3 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。もう 1 つは claude のスキル（→ [自動化のスキル](#自動化のスキル)）。利用者は何も設定しない。ただし codex は、人が codex の画面で hook を一度承認するまで hook を走らせない（→ [codex の hook の承認](#codex-の-hook-の承認)）。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。プラグイン本体は `plugins/<プラグイン名>/` に 1 箇所だけ置き（スクリプト重複なし）、claude/codex の marketplace 定義をルートからそこへ向ける。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
+`app/agent-plugin/` は claude / codex / agy へ届けるプラグインパッケージ。3 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。もう 1 つは claude のスキル（→ [自動化のスキル](#自動化のスキル)）。利用者は何も設定しない。ただし codex は、人が codex の画面で hook を一度承認するまで hook を走らせない（→ [codex の hook の承認](#codex-の-hook-の承認)）。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
+
+プラグイン本体は 2 つのディレクトリに分かれる。
+
+- **`plugins/<プラグイン名>/`**: claude と agy が読む。claude・agy のマニフェストと hook 定義、MCP 定義、claude のスキル、状態追跡のシム・MCP のシム・空サーバーを持つ。claude の marketplace 定義はここを指し、agy はここを直接導入する。
+- **`codex/<プラグイン名>/`**: codex だけが読む。codex のマニフェスト、codex の hook 定義、2 つのシム、空サーバー、チャネルの刻印だけを持つ。codex の marketplace 定義はここを指す。
+
+codex を分けるのは、codex が hook の承認を、導入したディレクトリ全体の中身に結び付けるため（→ [codex の hook の承認](#codex-の-hook-の承認)）。claude・agy のファイルと同じディレクトリに置くと、claude のスキルの文面を直すだけで codex の hook が止まる。シムと空サーバーは `plugins/<プラグイン名>/` を正とし、リポジトリの `codex/<プラグイン名>/` には置かない。`.app` へ同梱するときにビルドがコピーして、codex のディレクトリが完成する（→ [`.app` 同梱と実体化](#app-同梱と実体化)）。シンボリックリンクにしないのは、codex が導入のコピーにリンクを含めないため。
 
 ## チャネル別のプラグイン名
 
-**プラグイン名（＝marketplace 名＝`plugins/` 直下のディレクトリ名）はチャネルごとに別**で、1 つの名前がパッケージの全出現箇所（両 marketplace 定義の name と source・3 つの plugin 定義の name・agy hooks のトップキー・3 つの MCP 定義のサーバー名・ディレクトリ名）を通る（[channel](../platform/channel.md)）。**agy は marketplace を持たず plugin 名だけで枠が分かれる**ため、marketplace 名だけ分けても 3 CLI が揃って分かれない。
+**プラグイン名（＝marketplace 名＝`plugins/` 直下と `codex/` 直下のディレクトリ名）はチャネルごとに別**で、1 つの名前がパッケージの全出現箇所（両 marketplace 定義の name と source・3 つの plugin 定義の name・agy hooks のトップキー・3 つの MCP 定義のサーバー名・`plugins/` 直下と `codex/` 直下のディレクトリ名）を通る（[channel](../platform/channel.md)）。**agy は marketplace を持たず plugin 名だけで枠が分かれる**ため、marketplace 名だけ分けても 3 CLI が揃って分かれない。
 
 ## 各 CLI の marketplace/導入契約
 
 実機で確定した契約（「marketplace add 成功」≠「plugin install 成功」）。
 
 - **claude**: ルートの `.claude-plugin/marketplace.json` を読む。`plugin marketplace add <dir>` ＋ `plugin install`。**登録先をライブ参照する**ので、登録後に中身を書き換えれば次のセッションから新しい定義が走る。
-- **codex**: ルートの `.agents/plugins/marketplace.json` を読み、プラグインは `plugins/<name>/` サブディレクトリに置く規約（`source.path` がルート自身だと取り込まれない）。`plugin marketplace add <dir>` ＋ `plugin add`。**導入時のキャッシュコピーを読む**ので、登録先を書き換えても再導入まで新しい定義は届かない（`plugin list` の PATH 列は登録先を表示するため見分けにくい）。
+- **codex**: ルートの `.agents/plugins/marketplace.json` を読み、その `source.path` が指すサブディレクトリ（`codex/<name>/`）を導入する（`source.path` がルート自身だと取り込まれない）。`plugin marketplace add <dir>` ＋ `plugin add`。**導入時のキャッシュコピーを読む**ので、登録先を書き換えても再導入まで新しい定義は届かない（`plugin list` の PATH 列は登録先を表示するため見分けにくい）。
 - **agy**: marketplace 不要。本体 subdir を直接指す `plugin install`。導入はステージ先へコピーされ、フック実行 cwd はこのステージ済みプラグインルートになる。**ステージ済みコピーを読む**ので、codex と同じく再導入まで新しい定義は届かない。
 
 `install.sh` はプラグインディレクトリとプラグイン名を引数で受け、「渡したディレクトリの中身を、各 CLI が読むものにそろえる」。claude は登録先をライブ参照するので、未導入のときだけ導入する（導入済みなら unchanged）。codex と agy はコピーを読むので入れ直す。利用者がプラグインを無効にした設定は、どの CLI でも残す。
@@ -27,7 +34,7 @@ updated: 2026-11-16
 
 ### codex の hook の承認
 
-codex は新しい hook・変わった hook を、人が承認するまで走らせない。承認は起動時に codex が出す対話（「Hooks need review」）か `/hooks` で行う。承認は hook の定義と、導入されたプラグインのディレクトリ全体の中身に結び付くので、パッケージのどのファイルが変わって入れ直しても、承認し直すまで codex の状態は報告されない。Orbe は利用者の codex の設定に承認を書き込まず、承認を飛ばす起動引数も付けない——その引数は他のすべての hook の承認も飛ばすため。claude のフォルダの信頼と同じく、codex と人のあいだの手続きとする。承認の対話が出ている間は、最初の入力を添えた起動（タスクの開始）も人の応答を待つ。
+codex は新しい hook・変わった hook を、人が承認するまで走らせない。承認は起動時に codex が出す対話（「Hooks need review」）か `/hooks` で行う。承認は hook の定義と、導入されたプラグインのディレクトリ全体の中身に結び付く。codex が導入するのは codex 専用のディレクトリだけなので、claude・agy のファイル（スキル・hook 定義など）だけが変わって入れ直しても承認は保たれる。codex 専用のディレクトリの中身（codex のマニフェスト・hook 定義・シム・空サーバー）が変わって入れ直すと、承認し直すまで codex の状態は報告されない。Orbe は利用者の codex の設定に承認を書き込まず、承認を飛ばす起動引数も付けない——その引数は他のすべての hook の承認も飛ばすため。claude のフォルダの信頼と同じく、codex と人のあいだの手続きとする。承認の対話が出ている間は、最初の入力を添えた起動（タスクの開始）も人の応答を待つ。
 
 自分の枠かどうか（claude の導入済み・codex の無効）は名前の**完全一致**で見る——前方一致だと別チャネルの枠を自分のものと誤認する（claude は `<name>@<name>`、codex は JSON 出力の plugin ID）。
 
@@ -35,7 +42,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 
 ## チャネル判定
 
-状態追跡のシムと MCP のシムは、どちらも**自分と同じチャネルのタブからの呼び出しにだけ応える**。プラグインのルートの `channel`（実体化時に Orbe が刻む自分の bundle ID）とタブの `ORBE_BUNDLE_ID` を突き合わせ、食い違えば応えない（状態追跡は no-op、MCP は空サーバー）。dev / release の plugin は別枠として両方 enabled になり、CLI は有効な全 plugin の hook と MCP サーバーを全セッションで走らせるため。判定材料が片方でも欠けたら通す——状態追跡を黙って殺さない。刻印は 2 つのシムが共有する事実なので、片方の持ち物（`hooks/`）ではなくプラグインのルート（`plugins/<name>/` 直下）に置く。agy がステージするのはプラグイン本体の subdir だけだが、刻印はその中にあるので届く。
+状態追跡のシムと MCP のシムは、どちらも**自分と同じチャネルのタブからの呼び出しにだけ応える**。プラグインのルートの `channel`（実体化時に Orbe が刻む自分の bundle ID）とタブの `ORBE_BUNDLE_ID` を突き合わせ、食い違えば応えない（状態追跡は no-op、MCP は空サーバー）。dev / release の plugin は別枠として両方 enabled になり、CLI は有効な全 plugin の hook と MCP サーバーを全セッションで走らせるため。判定材料が片方でも欠けたら通す——状態追跡を黙って殺さない。刻印は 2 つのシムが共有する事実なので、片方の持ち物（`hooks/`）ではなくプラグインのルートに置く。ルートは 2 つ（`plugins/<name>/` と `codex/<name>/`）あり、実体化が両方の直下に同じ刻印を書く。codex と agy はそれぞれのプラグインのディレクトリだけをコピーして導入するが、刻印はその中にあるので届く（claude は実体化先をそのまま読む）。
 
 ## デーモン経由の呼び出しの判定
 
@@ -59,7 +66,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 プラグインは状態追跡の hook に加えて MCP サーバーを 1 つ持つ。**サーバー名はプラグイン名と同じ**（[channel](../platform/channel.md)）——codex はサーバー名がプラグインをまたいで共通なので、dev と release で分けないと片方しか起動しない。宣言は hooks と同じく各 CLI のマニフェストが自分の定義だけを指し、どれも `mcp/orbe-mcp.sh`（MCP シム）を起動する。
 
 - **claude**: `.claude-plugin/plugin.json` の `mcpServers`。プラグインルート変数を展開した絶対パスで呼ぶ（相対パスでは起動に失敗する）。
-- **codex**: `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼ぶ。codex は MCP サーバーへ親の環境のうち既定の数個（`HOME`・`PATH` など）と名指しされた変数しか渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。引数で CLI 名（`codex`）を渡す——ブリッジの[デーモン経由の呼び出しの判定](#デーモン経由の呼び出しの判定)が読む。
+- **codex**: codex 専用のディレクトリの `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼び、そのディレクトリにコピーした MCP シムを起動する。codex は MCP サーバーへ親の環境のうち既定の数個（`HOME`・`PATH` など）と名指しされた変数しか渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。引数で CLI 名（`codex`）を渡す——ブリッジの[デーモン経由の呼び出しの判定](#デーモン経由の呼び出しの判定)が読む。
 - **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ——agy は MCP サーバーをステージ済みプラグインルートを cwd にして起こし、相対の command をそこから解く。親の環境（`ORBE_MCP_BIN` など）はそのまま MCP サーバーへ渡る。Orbe の外では空サーバーが接続できたサーバーとして扱われ、警告は出ない（HOME を一時ディレクトリに差し替えた隔離環境の agy の print モードで確かめた。対話画面の表示は見ていない）。
 
 プラグインのルートに `.mcp.json`（claude も codex も既定の置き場として読む）は置かない。
@@ -70,7 +77,7 @@ MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば�
 
 ## 自動化のスキル
 
-プラグインは `skills/automation/` に、Orbe の[自動化](../platform/automation.md)を人の一言から作る・直すスキルを 1 つ持つ（claude が読む形式。codex / agy には届かない）。スキルが持つのは進め方で、調べる → 案を立てる → 決め所（出どころと範囲・判定の基準・予定・型から外れること・書いて動かし始めること）を AskUserQuestion で聞く → 定義を組む → 初期セットアップ（次の回以降の入力を整える → 書く前の定義を[試走](../platform/automation.md#試走)で入口から終わりまで流す）→ 試走の結果を読む → 見せて聞く、を人が「このまま」と言うまで繰り返し、人が良いと言ってから `set_automation` で書く。作るときも直すときもこの道を通るので、人が確かめる前に本番の定義は変わらず、新しい判定の基準や副作用が本番で動かない。判定の基準は出どころごとに別の質問で聞く。重いノードは時間を見積もって上限時間を書く。設計の参考として型（見張ってタスク候補・MCP でしか読めない出どころを見張ってタスク候補・出どころごとの予定で集めてまとめて判定・定時の報告・定時にツールで作業・定時のコマンド・届いたら外部操作・組み合わせ）を、そのまま定義として通るノードのグラフの JSON とともに `references/` に持つ。型は参考で、頼みに合わなければ外れてよい。定義の項目と仕組み・既定の値と上限は MCP の `set_automation` ほかの説明が持つので、スキルにはコピーせず、理由が仕組みにあるときは説明の節を名前で指す。
+プラグインは `plugins/<プラグイン名>/skills/automation/` に、Orbe の[自動化](../platform/automation.md)を人の一言から作る・直すスキルを 1 つ持つ（claude が読む形式。agy には届かず、codex 専用のディレクトリには置かないので codex にも届かない）。スキルが持つのは進め方で、調べる → 案を立てる → 決め所（出どころと範囲・判定の基準・予定・型から外れること・書いて動かし始めること）を AskUserQuestion で聞く → 定義を組む → 初期セットアップ（次の回以降の入力を整える → 書く前の定義を[試走](../platform/automation.md#試走)で入口から終わりまで流す）→ 試走の結果を読む → 見せて聞く、を人が「このまま」と言うまで繰り返し、人が良いと言ってから `set_automation` で書く。作るときも直すときもこの道を通るので、人が確かめる前に本番の定義は変わらず、新しい判定の基準や副作用が本番で動かない。判定の基準は出どころごとに別の質問で聞く。重いノードは時間を見積もって上限時間を書く。設計の参考として型（見張ってタスク候補・MCP でしか読めない出どころを見張ってタスク候補・出どころごとの予定で集めてまとめて判定・定時の報告・定時にツールで作業・定時のコマンド・届いたら外部操作・組み合わせ）を、そのまま定義として通るノードのグラフの JSON とともに `references/` に持つ。型は参考で、頼みに合わなければ外れてよい。定義の項目と仕組み・既定の値と上限は MCP の `set_automation` ほかの説明が持つので、スキルにはコピーせず、理由が仕組みにあるときは説明の節を名前で指す。
 
 [秘書](secretary.md#役目の指示)はこのスキルを役目の指示で名指しする。Orbe のプラグインが入っている claude なら、人が手で起こしたものでも、スキルの説明（description）から同じ進め方で自動化を書ける。スキルの本文は日本語 1 つで、人とのやり取りは頼みの言語に合わせる。
 
@@ -82,13 +89,13 @@ MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば�
 
 ## `.app` 同梱と実体化
 
-`build-app.sh` が `app/agent-plugin/` と、状態報告 CLI `orbe-report`・MCP ブリッジ `orbe-mcp` をバンドルへ同梱する（実行ビット保持・binary は app 署名対象）。シムはこれらの binary を env 越しに `exec` する。
+`build-app.sh` が `app/agent-plugin/` と、状態報告 CLI `orbe-report`・MCP ブリッジ `orbe-mcp` をバンドルへ同梱する（実行ビット保持・binary は app 署名対象）。シムはこれらの binary を env 越しに `exec` する。同梱するとき、`plugins/<プラグイン名>/` の 2 つのシムと空サーバーを `codex/<プラグイン名>/` へコピーし、プラグイン名を dev チャネルの名前へ置き換える処理を両方のディレクトリに掛ける。同梱物は完成した配布物で、実体化はそれを安定パスへコピーして刻印を足すだけ。
 
-Orbe は**起動ごとに**同梱パッケージを **state フォルダの下の安定パス**（[persistence](../platform/persistence.md)。常用なら Application Support 配下で、bundle id 由来なのでチャネルごとに別——[channel](../platform/channel.md)。テスト用に実体化先を差し替える seam を持つ）へ実体化する（tmp へコピー→原子的差し替え＝冪等・途中失敗でも既存を壊さない・実行ビット保持）。毎起動やり直すのは、claude が登録先ディレクトリをライブ参照するため——同梱が更新されても実体化が走らなければ古い定義が読まれ続ける。安定パスを使うのは `marketplace add` が記録する登録先が消えて dangling しないため（`.app` を消しても manifest は読める）。実体化のとき自分の bundle ID をプラグインのルートの `channel` へ刻む。
+Orbe は**起動ごとに**同梱パッケージを **state フォルダの下の安定パス**（[persistence](../platform/persistence.md)。常用なら Application Support 配下で、bundle id 由来なのでチャネルごとに別——[channel](../platform/channel.md)。テスト用に実体化先を差し替える seam を持つ）へ実体化する（tmp へコピー→原子的差し替え＝冪等・途中失敗でも既存を壊さない・実行ビット保持）。毎起動やり直すのは、claude が登録先ディレクトリをライブ参照するため——同梱が更新されても実体化が走らなければ古い定義が読まれ続ける。安定パスを使うのは `marketplace add` が記録する登録先が消えて dangling しないため（`.app` を消しても manifest は読める）。実体化のとき自分の bundle ID を 2 つのプラグインのルートの `channel` へ刻む。
 
 **隔離インスタンス（`ORBE_STATE_DIR`）は実体化も各 CLI への登録もしない**（下の入れ直しも初回オンボーディングもしない）。実体化を読むのは登録だけなので、登録しないなら実体化も要らない。登録は利用者の CLI の設定そのもの——claude の marketplace の登録先、codex / agy のコピー——を書き換え、検証のために起こした Orbe が利用者の agent の中身を差し替えてしまう。隔離インスタンスのタブの agent は、常用の Orbe が登録したプラグイン（hook・MCP のシム）で動き、シムが env 越しに exec する `orbe-report` / `orbe-mcp` は隔離インスタンスの `.app` のもの。
 
-登録は**中身の指紋が変わったときだけ**やり直す: 最後に登録できた実体化済みパッケージの指紋（全ファイルの相対パスと中身から作る SHA-256）を覚え、今回実体化した中身の指紋と違えば `install.sh` を無音でバックグラウンド実行する。codex / agy は自分のコピーを読むので、入れ直さなければ中身の更新が届かない。名前も刻印もパッケージの中にあるので、チャネルの違いも指紋の違いに含まれる。1 つでも CLI が失敗したら指紋を記録せず、次回起動で再試行する。記録をまだ持たない利用者は、食い違いとして一度入れ直される。
+登録は**中身の指紋が変わったときだけ**やり直す: 最後に登録できた実体化済みパッケージの指紋（全ファイルの相対パスと中身から作る SHA-256）を覚え、今回実体化した中身の指紋と違えば `install.sh` を無音でバックグラウンド実行する。codex / agy は自分のコピーを読むので、入れ直さなければ中身の更新が届かない。名前も刻印もパッケージの中にあるので、チャネルの違いも指紋の違いに含まれる。指紋はパッケージ全体から作るので、claude・agy のファイルだけが変わっても codex は入れ直されるが、codex 専用のディレクトリの中身が同じなら codex の hook の承認は保たれる。1 つでも CLI が失敗したら指紋を記録せず、次回起動で再試行する。記録をまだ持たない利用者は、食い違いとして一度入れ直される。
 
 指紋の記録は導入済みの印と同じ `app-state.json` に置く（[persistence](../platform/persistence.md)）。
 

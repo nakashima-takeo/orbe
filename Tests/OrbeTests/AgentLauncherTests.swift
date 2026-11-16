@@ -27,6 +27,7 @@ final class AgentLauncherTests: OrbeTestCase {
     try FileManager.default.setAttributes(
       [.posixPermissions: 0o755], ofItemAtPath: bundled.appendingPathComponent("install.sh").path)
     try write("plugins/orbe-agent-dev/mcp_config.json", "{}")
+    try write("codex/orbe-agent-dev/.codex-plugin/plugin.json", "{}")
     AppStatePersistence.save(AppStateFile(agentPluginsInstalled: true))
   }
 

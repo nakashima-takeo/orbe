@@ -20,6 +20,11 @@ final class AgentHookPathTests: OrbeTestCase {
     try ControlProcess.stagePlugin().appendingPathComponent("hooks/orbe-agent-status.sh")
   }
 
+  /// codex が呼ぶ、codex 専用のプラグインのルートの同梱シム。
+  private func stageCodexPlugin() throws -> URL {
+    try ControlProcess.stageCodexPlugin().appendingPathComponent("hooks/orbe-agent-status.sh")
+  }
+
   /// 同梱シムを実 `/bin/sh` で起動する。env はタブから受け取った実値そのままで、親からは継承しない。`detached` なら
   /// 制御端末を持たない親から起動する。
   @discardableResult
@@ -101,7 +106,7 @@ final class AgentHookPathTests: OrbeTestCase {
   /// 設定の `set -m` など）も、報告の結果は同じ。
   func testCodexHookFromTheTabsTerminalReportsToItsOwnTabWhateverTheShellDoesWithIt() throws {
     let control = try startControlProcess(workspaces: ["main"])
-    let shim = try stagePlugin()
+    let shim = try stageCodexPlugin()
     let hook = ["/bin/sh", shim.path, "codex", "working"]
     let command = hook.map(ShellWord.quoted).joined(separator: " ")
     let shapes = [
@@ -134,11 +139,12 @@ final class AgentHookPathTests: OrbeTestCase {
   /// 報告しない。同じ起動方法の claude の hook は報告する——判定は codex だけに掛かる。
   func testCodexHookFromADetachedProcessReportsNothingEvenWithTheTabsEnv() throws {
     let control = try startControlProcess(workspaces: ["main"])
+    let codexShim = try stageCodexPlugin()
     let shim = try stagePlugin()
     let tab = try firstTab(control)
     let env = tabEnv(tab)
 
-    runShim(shim, agent: "codex", env: env, state: "working", stdin: "{}", detached: true)
+    runShim(codexShim, agent: "codex", env: env, state: "working", stdin: "{}", detached: true)
     XCTAssertFalse(
       waitUntil(0.5) { tab.agentState != nil },
       "切り離した codex の hook でタブ状態が動いた（agentState=\(tab.agentState ?? "nil")）")

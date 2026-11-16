@@ -9,11 +9,11 @@ import XCTest
 /// resume が別 CLI で立ち上がる、`spawn_agent` / `resume_agent` が来ない idle を待つ。
 final class AgentHookWiringTests: OrbeTestCase {
   /// このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
-  private static let pluginRoot = URL(fileURLWithPath: #filePath)
+  private static let packageRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // OrbeTests
     .deletingLastPathComponent()  // Tests
     .deletingLastPathComponent()  // repo root
-    .appendingPathComponent("app/agent-plugin/plugins/orbe-agent")
+    .appendingPathComponent("app/agent-plugin")
 
   /// hook 1 エントリ。`matcher` キーを持たないエントリは nil。`command` はシム呼び出し
   /// （`... orbe-agent-status.sh <agent> <state>`）。
@@ -136,7 +136,10 @@ final class AgentHookWiringTests: OrbeTestCase {
   /// `{"hooks": {event: [{matcher?, hooks: [{command}]}]}}`、agy はプラグイン名直下に `{event: [{command}]}`。
   private func definitions() throws -> [String: [String: [Entry]]] {
     var out: [String: [String: [Entry]]] = [:]
-    let files = [("claude", "hooks/claude-hooks.json"), ("codex", "hooks/codex-hooks.json")]
+    let files = [
+      ("claude", "plugins/orbe-agent/hooks/claude-hooks.json"),
+      ("codex", "codex/orbe-agent/hooks/codex-hooks.json"),
+    ]
     for (cli, path) in files {
       let hooks = try XCTUnwrap(try json(path)["hooks"] as? [String: [[String: Any]]])
       out[cli] = hooks.mapValues { groups in
@@ -147,7 +150,8 @@ final class AgentHookWiringTests: OrbeTestCase {
         }
       }
     }
-    let agy = try XCTUnwrap(try json("hooks.json")["orbe-agent"] as? [String: [[String: Any]]])
+    let agy = try XCTUnwrap(
+      try json("plugins/orbe-agent/hooks.json")["orbe-agent"] as? [String: [[String: Any]]])
     out["agy"] = agy.mapValues { groups in
       groups.map { Entry(matcher: nil, command: $0["command"] as? String ?? "") }
     }
@@ -155,7 +159,7 @@ final class AgentHookWiringTests: OrbeTestCase {
   }
 
   private func json(_ relativePath: String) throws -> [String: Any] {
-    let data = try Data(contentsOf: Self.pluginRoot.appendingPathComponent(relativePath))
+    let data = try Data(contentsOf: Self.packageRoot.appendingPathComponent(relativePath))
     return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
   }
 }

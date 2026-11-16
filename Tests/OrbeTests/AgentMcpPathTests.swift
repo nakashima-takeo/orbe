@@ -67,7 +67,7 @@ final class AgentMcpPathTests: OrbeTestCase {
   /// 注入 env → MCP シム → 同梱 `orbe-mcp` → control の経路で、add_task が呼んだタブの workspace に付く。
   func testCodexDeclarationConnectsBridgeAsTheCallingTab() throws {
     let control = try startControlProcess()
-    let pluginRoot = try ControlProcess.stagePlugin()
+    let pluginRoot = try ControlProcess.stageCodexPlugin()
     let server = try codexServer(in: pluginRoot)
     let background = try XCTUnwrap(control.target.workspaces.first { $0.name == "background" })
     let requests = TestScratch.caseDir.appendingPathComponent("requests")
@@ -118,7 +118,7 @@ final class AgentMcpPathTests: OrbeTestCase {
   /// ツールが並ぶ——判定は codex だけに掛かる。
   func testCodexDeclarationFromADetachedProcessServesNoTools() throws {
     let control = try startControlProcess()
-    let pluginRoot = try ControlProcess.stagePlugin()
+    let pluginRoot = try ControlProcess.stageCodexPlugin()
     let server = try codexServer(in: pluginRoot)
     let tab = try XCTUnwrap(control.target.workspaces.first { $0.name == "background" }?.tabs.first)
     var injected: [String: String] = [:]
