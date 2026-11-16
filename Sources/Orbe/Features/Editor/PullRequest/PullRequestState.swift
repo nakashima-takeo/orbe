@@ -107,6 +107,8 @@ final class PullRequestState {
   }
   /// `review` が変わるたびに進む（列が見えている行を描き直す合図）。
   private(set) var reviewVersion = 0
+  /// レビューのやりとりの最後の読みの失敗。中身の失敗（`failure`）とは分けて持ち、次に読めたら消える。
+  var reviewFailure: GitHubFailure?
   /// レビューへの書き込みが走っている対象と、順番を待っている対象。
   var reviewWriteTargets: Set<ReviewTarget> = []
   @ObservationIgnored var reviewWrites: [ReviewWrite] = []

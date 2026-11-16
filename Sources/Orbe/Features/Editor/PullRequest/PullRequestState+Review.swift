@@ -54,7 +54,8 @@ extension PullRequestState {
   }
 
   /// レビューのやりとりを読む（見ている者がいるときだけ）。読んでいる間に次の読み直しが来たら、終わった後に 1 回だけ読み直す。
-  /// 見ている者がいなければ GitHub に問い合わせず、読み直しを待っている書き込みをその場で終える。
+  /// 見ている者がいなければ GitHub に問い合わせず、読み直しを待っている書き込みをその場で終える。読みの失敗は `reviewFailure`
+  /// に持ち、次に読めたら消える。
   func readReview() {
     guard isWatched else {
       readReviewAgain = false
@@ -73,8 +74,9 @@ extension PullRequestState {
         switch result {
         case .success(let read):
           review = read
+          reviewFailure = nil
           pendingReviewID = read.pendingReview?.id
-        case .failure(let reason): failure = .read(reason)
+        case .failure(let reason): reviewFailure = reason
         }
         finishReviewReadWaiters()
       }
