@@ -11,24 +11,29 @@ extension EditorDiffTests {
   /// 差し替えの構造体が返す中身（テストが書き換えて、次の読み直しに答えさせる）。
   private final class Reply {
     var content: GitHubPullRequestContent?
+    /// 中身を問い合わせた回数。
+    var requests = 0
   }
 
-  private func content(base: String, head: String) -> GitHubPullRequestContent {
+  private func content(base: String, head: String, number: Int = 5) -> GitHubPullRequestContent {
     GitHubPullRequestContent(
-      nodeID: "PR_1", number: 5, title: "題", url: "https://github.com/me/r/pull/5", isDraft: false,
+      nodeID: "PR_1", number: number, title: "題", url: "https://github.com/me/r/pull/\(number)",
+      isDraft: false,
       state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
       baseCommit: base, headCommit: head, commitCount: 1, commits: [],
       files: [.init(path: "b.txt", change: .renamed, isViewed: false)])
   }
 
   /// `reply` の中身を答える PR の状態を作り、手元のリポジトリを結ぶ。
-  private func pullRequest(_ reply: Reply) throws -> PullRequestState {
+  private func pullRequest(_ reply: Reply, number: Int = 5) throws -> PullRequestState {
     let state = PullRequestState.shared(
       for: PullRequestState.Key(
-        commonDir: repo.root + "/.git", id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 5))),
+        commonDir: repo.root + "/.git",
+        id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: number))),
       source: PullRequestSource(
         branchPullRequests: { _, _, _ in }, branchExists: { _, _ in },
         content: { _, completion in
+          reply.requests += 1
           completion(reply.content.map { .success($0) } ?? .failure(.reason("")))
         },
         setViewed: { _, _, _, _ in }))
@@ -67,5 +72,44 @@ extension EditorDiffTests {
     state.reload()
     waitRows(diff, "新しい先頭で作り直す") { _ in diff.newRevision?.text.lineCount == 6 }
     XCTAssertEqual(diff.revisionHunks.count, 2, "変えた行と足した行")
+  }
+
+  /// 表示できない PR の diff は、PR の種類の理由の一文を出す——両側とも無いパスと、手元に揃わない PR のコミット。
+  func testAPullRequestDiffThatCannotBeShownSaysWhy() throws {
+    let (tab, _) = tab()
+    let pane = tab.group.view.editor
+    let reply = Reply()
+    reply.content = content(base: repo.head(), head: repo.head())
+    let nowhere = try tab.group.editor.openDiff(
+      id("nope.txt", .pullRequest(try pullRequest(reply).key)), as: .pinned)
+    pumpMain(until: { pane.faceContent == .notice(.editorDiffNowherePullRequest) }, "どちらの側にもない")
+    XCTAssertEqual(nowhere.content, .unavailable(.nowhere))
+
+    let missing = Reply()
+    missing.content = content(base: repo.head(), head: String(repeating: "0", count: 40), number: 6)
+    _ = try tab.group.editor.openDiff(
+      id("a.txt", .pullRequest(try pullRequest(missing, number: 6).key)), as: .pinned)
+    pumpMain(
+      until: { pane.faceContent == .notice(.editorDiffPullRequestCommitsMissing) }, "コミットを取得できない")
+  }
+
+  /// ほかの者が見ている PR の diff を開いても、GitHub に問い直さない（先に読んである中身で出す）。
+  func testOpeningAPullRequestDiffThatIsAlreadyWatchedDoesNotAskGitHubAgain() throws {
+    let base = repo.head()
+    try repo.write("a.txt", "changed\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "change"]).isSuccess)
+    let reply = Reply()
+    reply.content = content(base: base, head: repo.head())
+    let state = try pullRequest(reply)
+    state.beginWatching()
+    addTeardownBlock { @MainActor in state.endWatching() }
+    state.reload()
+    XCTAssertEqual(reply.requests, 1, "前提: ほかの者が読んだ")
+    let (tab, _) = tab()
+
+    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state.key)), as: .pinned)
+
+    waitRows(diff, "先に読んである中身で出る") { _ in diff.newRevision != nil }
+    XCTAssertEqual(reply.requests, 1, "開いても問い直さない")
   }
 }

@@ -223,6 +223,7 @@ extension EditorDiffTests {
       self.text(diff.newRevision) == "Subproject commit \(inner)"
     }
     XCTAssertEqual(text(diff.old), "x\ny\nz\n", "古い側は index のファイル")
+    XCTAssertEqual(diff.revisionHunks, [LineHunk(old: 0..<4, new: 0..<1)], "丸ごとの置き換え")
     diff.dismiss()
 
     XCTAssertTrue(repo.git(["add", "sub"]).isSuccess)
@@ -235,6 +236,33 @@ extension EditorDiffTests {
     diff.present(.inline)
     pumpMain(
       until: { diff.revisionHunks.isEmpty && diff.oldSide.lines == 1 }, "中の HEAD が届くと 1 行どうし")
+
+    let staged = try tab.group.editor.openDiff(id("sub", .staged), as: .pinned)
+    pumpMain(until: { staged.content == .ready && staged.newRevision != nil }, "ステージ済み")
+    XCTAssertEqual(
+      staged.revisionHunks, [LineHunk(old: 0..<4, new: 0..<1)], "ステージ済みも丸ごとの置き換え")
+  }
+
+  /// 消したファイルの diff を開いたまま、ファイルを別の中身で戻して index に入れ、もう一度消すと、並びは今の index の版の
+  /// 全部の行の削除になる。index を元の本文に戻せば、その全部の行の削除に並び直す。
+  func testDeletingAFileAgainAfterItsIndexChangedShowsTheNewIndexAsRemoved() throws {
+    let (tab, _) = tab()
+    try FileManager.default.removeItem(at: repo.url("a.txt"))
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    waitRows(diff, "全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
+
+    try repo.write("a.txt", "x\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    pumpMain(
+      until: { diff.document != nil && diff.oldSource == .some("x\n") }, "前提: 戻した文書と新しい index")
+    try FileManager.default.removeItem(at: repo.url("a.txt"))
+    waitRows(diff, "新しい index の版の全部の行が削除") { _ in
+      diff.document == nil && diff.oldSide.lines == 2
+    }
+    XCTAssertEqual(removedLines(try engine(diff.newSurface).rows), [0, 1])
+
+    XCTAssertTrue(repo.git(["restore", "--staged", "a.txt"]).isSuccess)
+    waitRows(diff, "元の index の版の全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
   }
 
   private func text(_ revision: RevisionDocument?) -> String? {
