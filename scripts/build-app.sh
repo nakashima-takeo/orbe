@@ -135,14 +135,7 @@ cp "$ROOT/app/themes/OrbeLight" "$APP/Contents/Resources/ghostty/themes/OrbeLigh
 cp -R "$GHOSTTYKIT/share/terminfo" "$APP/Contents/Resources/terminfo"
 PKG="$APP/Contents/Resources/agent-plugin"
 cp -R "$ROOT/app/agent-plugin" "$PKG"  # エージェントプラグイン（各 CLI へ自動導入する配布物）
-# codex 専用のディレクトリ（codex/<name>/）へ、plugins/<name>/ が正として持つシムと空サーバーをコピーする。codex は
-# hook の承認を導入したディレクトリ全体の中身に結び付けるので、claude・agy のファイルと同じディレクトリに置くと、
-# それらが変わるたびに承認が外れる。シンボリックリンクにしないのは、codex plugin add がリンクを導入コピーに
-# 含めないため。
-for F in hooks/orbe-agent-status.sh mcp/orbe-mcp.sh mcp/empty-server.pl; do
-  mkdir -p "$(dirname "$PKG/codex/$SRC_PLUGIN_NAME/$F")"
-  cp -p "$PKG/plugins/$SRC_PLUGIN_NAME/$F" "$PKG/codex/$SRC_PLUGIN_NAME/$F"
-done
+"$ROOT/scripts/assemble-codex-plugin.sh" "$PKG" "$SRC_PLUGIN_NAME"  # codex 専用のディレクトリ（codex/<name>/）を完成させる
 # プラグイン名（marketplace 名＝plugin 名＝MCP サーバー名＝plugins/<name>/・codex/<name>/ のディレクトリ名）を
 # dev チャネルだけ焼き直す。
 # claude / codex / agy はどれも名前で 1 枠を取るため、名前を分けないと dev と release が枠を奪い合う
