@@ -69,13 +69,13 @@ enum GitHubReviewQuery {
     + "viewerCanReply comments(first:\(pageSize)){nodes{id author{login} body createdAt state}}} "
     + "pageInfo{hasNextPage endCursor}"
 
-  /// 1 ページ目。自分・PR の先頭のコミット・自分が作者か・保留中のレビューと、スレッドの先頭のページ。保留中のレビューは
-  /// 書いた本人にしか見えないので、レスポンスに載るのは自分のものだけ。
+  /// 1 ページ目。自分・PR の先頭のコミット・自分が作者か・保留中のレビューと、スレッドの先頭のページ。GitHub は保留中の
+  /// レビューを書いた本人にしか返さないので、載るのは自分のもの（多くて 1 つ）だけとして、作者で絞らずに読む。
   static func firstPageArguments(_ id: GitHubItemID) -> [String] {
     arguments(
       id, root: "viewer{login} ",
       fields: "headRefOid viewerDidAuthor "
-        + "reviews(states:[PENDING],first:1){nodes{id viewerDidAuthor comments{totalCount}}} "
+        + "reviews(states:[PENDING],first:1){nodes{id comments{totalCount}}} "
         + "reviewThreads(first:\(pageSize)){\(threadsFields)}", after: nil)
   }
 
@@ -114,7 +114,7 @@ enum GitHubReviewQuery {
       review = GitHubPullRequestReview(
         viewer: payload.viewer.login, viewerIsAuthor: node.viewerDidAuthor,
         headCommit: node.headRefOid,
-        pendingReview: node.reviews.nodes.first { $0.viewerDidAuthor }.map {
+        pendingReview: node.reviews.nodes.first.map {
           .init(id: $0.id, commentCount: $0.comments.totalCount)
         }, threads: node.reviewThreads.nodes)
       threads = node.reviewThreads.pageInfo
@@ -153,7 +153,6 @@ private struct TotalCount: Decodable { let totalCount: Int }
 /// 保留中のレビュー（`reviews(states:[PENDING])` の 1 項目）。
 private struct PendingNode: Decodable {
   let id: String
-  let viewerDidAuthor: Bool
   let comments: TotalCount
 }
 
