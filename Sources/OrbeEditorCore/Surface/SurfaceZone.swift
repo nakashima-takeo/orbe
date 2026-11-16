@@ -49,14 +49,41 @@ public enum ZoneElement {
   case field(ZoneField)
 }
 
-/// 角の丸い矩形（円は、半径が辺の半分の箱）。塗り・枠線・影はどれも省ける。枠線は箱の内側に引く。影は箱の外へはみ
-/// 出してよい（CSS の box-shadow と同じく、絵の差し込みの外の行にも落ちる）。
+/// 角の丸い矩形（円は、半径が辺の半分の箱）。角の半径は角ごとに持てる。塗り・枠線・影はどれも省ける。枠線は箱の内側に
+/// 引く。影は箱の外へはみ出してよい（CSS の box-shadow と同じく、絵の差し込みの外の行にも落ちる）。
 public struct ZoneBox {
   public var frame: CGRect
-  public var radius: CGFloat
+  public var radius: Radius
   public var fill: NSColor?
   public var stroke: Stroke?
   public var shadow: Shadow?
+
+  /// 角ごとの半径（CSS の border-radius と同じく、辺の半分を超える分は辺の半分に収める）。数の字は 4 つの角に同じ半径。
+  public struct Radius: Equatable, ExpressibleByFloatLiteral, ExpressibleByIntegerLiteral {
+    public var topLeft: CGFloat
+    public var topRight: CGFloat
+    public var bottomRight: CGFloat
+    public var bottomLeft: CGFloat
+
+    public init(topLeft: CGFloat, topRight: CGFloat, bottomRight: CGFloat, bottomLeft: CGFloat) {
+      self.topLeft = topLeft
+      self.topRight = topRight
+      self.bottomRight = bottomRight
+      self.bottomLeft = bottomLeft
+    }
+
+    /// 上の 2 角と下の 2 角。
+    public init(top: CGFloat, bottom: CGFloat) {
+      self.init(topLeft: top, topRight: top, bottomRight: bottom, bottomLeft: bottom)
+    }
+
+    public init(_ radius: CGFloat) {
+      self.init(top: radius, bottom: radius)
+    }
+
+    public init(floatLiteral value: Double) { self.init(CGFloat(value)) }
+    public init(integerLiteral value: Int) { self.init(CGFloat(value)) }
+  }
 
   public struct Stroke {
     public var color: NSColor
@@ -82,7 +109,7 @@ public struct ZoneBox {
   }
 
   public init(
-    frame: CGRect, radius: CGFloat = 0, fill: NSColor? = nil, stroke: Stroke? = nil,
+    frame: CGRect, radius: Radius = 0, fill: NSColor? = nil, stroke: Stroke? = nil,
     shadow: Shadow? = nil
   ) {
     self.frame = frame

@@ -40,7 +40,8 @@ extension SurfaceZonesTests {
               ZoneTextStyle(length: 5, font: font, color: Self.green),
             ],
             lines: [
-              ZoneSelectableLine(origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8))
+              ZoneSelectableLine(
+                origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8))
             ])
         ])
     }
@@ -186,6 +187,31 @@ extension SurfaceZonesTests {
     let top = surface.config.topInset + CGFloat(surface.rows.top(ofBlock: 0))
     let x = surface.surfaceLayout.text.minX - 2
     XCTAssertLessThan(shot.rgb(x, top + 32)[0], 250, "箱の左下の外の行番号の列に影")
+  }
+
+  /// 箱の角の半径は角ごとに効く——上の 2 角だけ丸い箱は、上の角の点が塗られず、下の角の点は塗られる。
+  func testBoxCornersTakeTheirOwnRadius() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let zone = PictureZone { _ in
+      ZonePicture(
+        height: 40,
+        elements: [
+          .box(
+            ZoneBox(
+              frame: CGRect(x: 20, y: 0, width: 100, height: 40),
+              radius: .init(top: 12, bottom: 0), fill: Self.red))
+        ])
+    }
+    surface.setRows(self.zone(zone, at: 2))
+    let shot = try pixelShot(opened)
+    let top = surface.config.topInset + CGFloat(surface.rows.top(ofBlock: 0))
+    let left = surface.surfaceLayout.text.minX + 20
+    XCTAssertNotEqual(shot.rgb(left + 1, top + 1), [255, 0, 0], "左上は丸い")
+    XCTAssertNotEqual(shot.rgb(left + 99, top + 1), [255, 0, 0], "右上は丸い")
+    XCTAssertEqual(shot.rgb(left + 1, top + 39), [255, 0, 0], "左下は角")
+    XCTAssertEqual(shot.rgb(left + 99, top + 39), [255, 0, 0], "右下は角")
+    XCTAssertEqual(shot.rgb(left + 50, top + 1), [255, 0, 0], "上の辺の中ほどは塗る")
   }
 
   /// 入力欄が主で面に焦点があれば入力欄のキャレットを描き、Esc で本文が主に戻れば消える。

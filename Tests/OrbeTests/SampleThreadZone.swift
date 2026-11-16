@@ -5,7 +5,8 @@ import OrbeEditorCore
 /// として組んだもの。差し込みの flow（`editor_rows`）と、画面に出す試しの場（`EditorRowsTrialTests`）と、編集メニューの経路の
 /// テスト（`EditorZoneEditingMenuTests`）が載せる。
 ///
-/// 枠（半透明の地・枠線・影）・頭（行と話題・状態の点・押せる「解決」「折りたたむ」）・コメント（アバターの円と頭文字か
+/// 枠（半透明の地・枠線 1・影）・頭（枠線の内側に高さ 26 の帯と下縁 1。帯は上の 2 角だけ丸い。行と話題・状態の点・押せる
+/// 「解決」「折りたたむ」）・コメント（アバターの円と頭文字か
 /// OrbeGlyph・名前と時刻と保留中の札・幅で折り返す本文とインラインコードの地・関連コミット）・返信の入力欄と 2 つの
 /// ボタン。本文と関連コミットは選べる文。押せる場所はホバーで見た目を変え、押すと頭に「押した: …」を出す。入力欄は
 /// 行の数か空 ↔ 空でないが変わったときだけ描き直させる（打鍵ごとには描き直さない）。
@@ -99,9 +100,10 @@ final class SampleThreadZone: SurfaceZone {
   func picture(width: CGFloat) -> ZonePicture {
     var canvas = Canvas()
     let frame = CGRect(x: 0, y: 4, width: max(160, width - 16), height: 0)
-    var y = frame.minY
-    let head = header(frame, into: &canvas)
-    y += head
+    let border: CGFloat = 1
+    var y = frame.minY + border
+    let head = header(frame.offsetBy(dx: 0, dy: border), into: &canvas)
+    y += head + 1
     y += 10
     for (index, comment) in comments.enumerated() {
       y += self.comment(comment, index: index, top: y, frame: frame, into: &canvas)
@@ -109,23 +111,22 @@ final class SampleThreadZone: SurfaceZone {
     }
     y += 10
     y += reply(frame, top: y, into: &canvas)
-    y += 10
+    y += 10 + border
     let outer = CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: y - frame.minY)
+    let inner = outer.insetBy(dx: border, dy: border)
     let background: [ZoneElement] = [
       .box(
         ZoneBox(
           frame: outer, radius: 6, fill: Self.panel(0.85),
-          stroke: .init(color: Self.tint(Self.accent, 0.35), width: 1),
+          stroke: .init(color: Self.tint(Self.accent, 0.35), width: border),
           shadow: .init(color: Self.shadow(0.35), offset: 10, blur: 30))),
       .box(
         ZoneBox(
-          frame: CGRect(
-            x: outer.minX + 1, y: outer.minY + 1, width: outer.width - 2, height: head - 1),
-          radius: 5, fill: Self.tint(Self.accent, 0.08))),
+          frame: CGRect(x: inner.minX, y: inner.minY, width: inner.width, height: head),
+          radius: .init(top: 6 - border, bottom: 0), fill: Self.tint(Self.accent, 0.08))),
       .box(
         ZoneBox(
-          frame: CGRect(
-            x: outer.minX + 1, y: outer.minY + head - 1, width: outer.width - 2, height: 1),
+          frame: CGRect(x: inner.minX, y: inner.minY + head, width: inner.width, height: 1),
           fill: Self.hairline(0.08))),
     ]
     return ZonePicture(

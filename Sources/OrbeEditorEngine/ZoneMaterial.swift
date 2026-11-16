@@ -11,7 +11,8 @@ struct ZoneMaterial: @unchecked Sendable {
   /// 箱 1 つ（塗り・枠線・影は無ければ透明）。
   struct Box {
     var frame: CGRect
-    var radius: Float
+    /// 角ごとの半径（左上・右上・右下・左下）。
+    var radius: SIMD4<Float>
     var fill: FrameColor
     var stroke: FrameColor
     var strokeWidth: Float
@@ -182,7 +183,11 @@ final class ZonePainter {
       case .box(let box):
         material.boxes.append(
           ZoneMaterial.Box(
-            frame: box.frame, radius: Float(box.radius), fill: resolve(box.fill),
+            frame: box.frame,
+            radius: SIMD4(
+              Float(box.radius.topLeft), Float(box.radius.topRight),
+              Float(box.radius.bottomRight), Float(box.radius.bottomLeft)),
+            fill: resolve(box.fill),
             stroke: resolve(box.stroke?.color), strokeWidth: Float(box.stroke?.width ?? 0),
             shadow: resolve(box.shadow?.color), shadowOffset: Float(box.shadow?.offset ?? 0),
             shadowBlur: Float(box.shadow?.blur ?? 0)))

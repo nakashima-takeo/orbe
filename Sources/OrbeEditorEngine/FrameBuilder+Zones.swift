@@ -6,7 +6,8 @@ import OrbeEditorCore
 struct BoxInstance {
   var quad: SIMD4<Float>
   var box: SIMD4<Float>
-  var radius: Float
+  /// 角ごとの半径（左上・右上・右下・左下。px）。
+  var radius: SIMD4<Float>
   var strokeWidth: Float
   var sigma: Float
   var shadowOffset: Float
