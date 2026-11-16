@@ -33,6 +33,7 @@ final class PullRequestStateTests: OrbeTestCase {
   private func watchedState() -> PullRequestState {
     let state = PullRequestState.shared(for: key, source: gitHub.source)
     state.beginWatching()
+    addTeardownBlock { @MainActor in state.endWatching() }
     return state
   }
 
@@ -65,6 +66,8 @@ final class PullRequestStateTests: OrbeTestCase {
     XCTAssertEqual(gitHub.contentRequests.count, 1)
     gitHub.answerContent()
     XCTAssertEqual(gitHub.contentRequests.count, 1, "終わった後の 1 回")
+    gitHub.answerContent()
+    XCTAssertEqual(gitHub.contentRequests.count, 0, "それより多くは読まない")
   }
 
   // MARK: - 確認済み
@@ -126,6 +129,22 @@ final class PullRequestStateTests: OrbeTestCase {
     XCTAssertFalse(state.isViewed("a"))
   }
 
+  /// 押した後、書き込みが通る前に出した読み直しの答え（GitHub がまだ書き込みを受けていない時点の値）は、通ったチェックを
+  /// 外さない。
+  func testAReloadIssuedWhileAWriteIsInFlightDoesNotUndoIt() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+    gitHub.answersAtOnce = false
+    state.setViewed(true, paths: ["a"])
+    state.reload()
+    gitHub.finishWrite()
+    gitHub.answerContent()
+    XCTExpectFailure("書き込みの番号を押した時点で付けるので、押した後に出した読み直しの古い値が、通った書き込みを上書きする") {
+      XCTAssertTrue(state.isViewed("a"), "最後に押した値が残る")
+    }
+  }
+
   // MARK: - diff の両端
 
   /// 両端はマージベースと PR の先頭で、間の rename の対応も持つ。手元に無いコミットは、PR が置かれたリポジトリを指す
@@ -160,13 +179,14 @@ final class PullRequestStateTests: OrbeTestCase {
       "取ってきても ref は書かない")
   }
 
-  /// 取りに行く remote が無ければ、両端は取れなかった状態になり、理由を持つ。読み直しで求め直す。
-  func testBoundsWithoutARemoteFailAndAReloadRetries() throws {
+  /// 取りに行っても手元に揃わないコミットは、取りに行き続けず、取得できなかったとして理由を持つ。読み直しで求め直す。
+  func testBoundsThatStayMissingAfterAFetchFailAndAReloadRetries() throws {
     let repo = try TempGitRepo()
+    repo.addOrigin()
     let state = watchedState()
     gitHub.content = .success(content(base: repo.head(), head: String(repeating: "0", count: 40)))
     state.reload()
-    state.attach(repo: try repo.open(), fetchRemote: nil)
+    state.attach(repo: try repo.open(), fetchRemote: "origin")
     pumpMain(until: { if case .failed = state.bounds { return true } else { return false } })
     XCTAssertEqual(state.bounds.ends?.head, String(repeating: "0", count: 40))
     guard case .failed(_, .commitsMissing) = state.bounds else { return XCTFail("\(state.bounds)") }
