@@ -71,7 +71,7 @@ extension PullRequestStateTests {
     state.beginWatching()
     addTeardownBlock { @MainActor in state.endWatching() }
     XCTAssertNotNil(state.content)
-    XCTAssertFalse(state.write(.submit(.comment, body: "x")) { _ in })
+    XCTAssertFalse(state.writeReview(.submit(.comment, body: "x")) { _ in })
     XCTAssertTrue(gitHub.reviewWrites.isEmpty)
   }
 
@@ -80,9 +80,11 @@ extension PullRequestStateTests {
   func testANewThreadOnAnotherHeadIsRefused() {
     let state = readState()
     XCTAssertFalse(
-      state.write(.addThread(path: "a", side: .new, line: 1, commit: "h2", body: "x")) { _ in })
+      state.writeReview(.addThread(path: "a", side: .new, line: 1, commit: "h2", body: "x")) { _ in
+      })
     XCTAssertTrue(gitHub.reviewWrites.isEmpty)
     XCTAssertTrue(
-      state.write(.addThread(path: "a", side: .new, line: 1, commit: "h", body: "x")) { _ in })
+      state.writeReview(.addThread(path: "a", side: .new, line: 1, commit: "h", body: "x")) { _ in }
+    )
   }
 }

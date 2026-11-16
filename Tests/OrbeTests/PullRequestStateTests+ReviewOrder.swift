@@ -117,7 +117,7 @@ private final class ReviewWriteRun {
     let target = Self.target(of: write)
     let busy = target.map { target in unfinished.contains { Self.target(of: $0.write) == target } }
     let index = accepted.count
-    let taken = state.write(write) { [weak self] in self?.finish(index, $0) }
+    let taken = state.writeReview(write) { [weak self] in self?.finish(index, $0) }
     log.append("write(\(target ?? "new"))=\(taken)")
     guard taken == !(busy ?? false) else {
       violation = taken ? "走っている対象への書き込みを受け付けた" : "空いている対象への書き込みを拒否した"
@@ -241,7 +241,7 @@ private final class ReviewWriteRun {
   private func checkTargets() -> String? {
     for target in ["T1", "T2", "submit"] {
       let busy = unfinished.contains { Self.target(of: $0.write) == target }
-      let shown = state.isWriting(target == "submit" ? .submission : .thread(target))
+      let shown = state.isWritingReview(target == "submit" ? .submission : .thread(target))
       if shown != busy { return "\(target) が走っているかの状態が \(shown) で、\(busy) でない" }
     }
     return nil
