@@ -10,7 +10,7 @@ struct AgentCLI: Equatable {
 /// `ShellPATH` が解決した PATH 上で実行ファイルを絶対パスへ解決する
 /// （「ユーザーのシェルが見つけるもの＝候補」の契約。GUI アプリの素の PATH に依存しない）。
 final class AgentCatalog {
-  /// CLI 1 つぶんの静的な知識。`resumeFlag` は `<command> <requiredArguments> <resumeFlag> <sessionId>` の席。
+  /// CLI 1 つぶんの静的な知識。`resumeFlag` は `<絶対パス> <requiredArguments> <resumeFlag> <sessionId>` の席。
   /// `reportsIdleOnStart` は Orbe のプラグインがその CLI の起動時 hook に idle を配線しているか
   /// （claude の SessionStart→idle。codex CLI 自身も SessionStart を持つが `codex-hooks.json` は
   /// 配線していない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
@@ -109,22 +109,19 @@ final class AgentCatalog {
       && sessionId.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
   }
 
-  /// 各 CLI の resume コマンド文字列（`/bin/sh -c` 経由で実行される前提）。`firstInput` があれば、会話の最初の入力と
-  /// してその CLI の席に添える。未対応 agent・安全な文字集合（UUID 等）外の sessionId は nil（呼び出し側が素のシェルへ
-  /// fallback）。command は表のリテラルでのみ一致し、sessionId は文字集合検証し、入力はシェルの単語として引用するため
-  /// shell インジェクションを防ぐ。
-  static func resumeCommand(forAgent command: String, sessionId: String, firstInput: String? = nil)
+  /// 会話を再開するコマンド文字列（`/bin/sh -c` 経由）。新規起動と同じく解決済みの絶対パスで起動し、`<resumeFlag> <sessionId>`
+  /// を引数に置く。未対応の agent、または安全な文字集合（UUID 等）に収まらない sessionId は nil（呼び出し側が素のシェルへ
+  /// fallback）。
+  static func resumeCommand(_ agent: AgentCLI, sessionId: String, firstInput: String? = nil)
     -> String?
   {
-    guard isSafeSessionId(sessionId), let profile = profile(command) else { return nil }
-    return
-      ([profile.command] + profile.requiredArguments + [profile.resumeFlag, sessionId]
-      + firstInputWords(profile, firstInput))
-      .joined(separator: " ")
+    guard isSafeSessionId(sessionId), let profile = profile(agent.command) else { return nil }
+    return startCommand(agent, arguments: [profile.resumeFlag, sessionId], firstInput: firstInput)
   }
 
-  /// 新規起動するコマンド文字列（`/bin/sh -c` 経由）。実行ファイルは検出した絶対パスで起動し、直後に `requiredArguments`、
-  /// 続けて `arguments` を置く。引数は 1 つずつシェルの単語として引用する。`firstInput` の添え方は `resumeCommand` と同じ。
+  /// 起動するコマンド文字列（`/bin/sh -c` 経由）。実行ファイルは解決済みの絶対パスで起動し、直後に `requiredArguments`、
+  /// 続けて `arguments` を置く。`firstInput` があれば、会話の最初の入力としてその CLI の席に添える。引数と入力は 1 つずつ
+  /// シェルの単語として引用する。
   static func startCommand(_ agent: AgentCLI, arguments: [String] = [], firstInput: String? = nil)
     -> String
   {
