@@ -209,7 +209,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     var n = 0
     for body in bodies {
       for kind in [
-        GitHubReviewWrite.addThread(path: "a.swift", side: .new, line: 3, body: body),
+        GitHubReviewWrite.addThread(path: "a.swift", side: .new, line: 3, commit: "h1", body: body),
         .reply(thread: "T1", body: body, resolve: false),
         .submit(.approve, body: body), .submit(.comment, body: body),
         .submit(.requestChanges, body: body),
@@ -247,22 +247,31 @@ final class GitHubCLIReviewTests: OrbeTestCase {
   /// 返信し、在るときは作らない。無いときの送信は、作ってすぐ送る 1 回。
   func testAMissingPendingReviewIsCreatedInTheFewestCalls() throws {
     XCTAssertEqual(
-      write(.addThread(path: "a.swift", side: .old, line: 9, body: "b"), pendingReview: nil),
+      write(
+        .addThread(path: "a.swift", side: .old, line: 9, commit: "h1", body: "b"),
+        pendingReview: nil),
       GitHubReviewWriteResult(pendingReview: "create-id", failure: nil))
     XCTAssertEqual(calls(), ["create"])
     let created = try call(1).variables
     XCTAssertEqual(created["pr"] as? String, "PR_1")
     XCTAssertEqual(created["side"] as? String, "LEFT")
     XCTAssertEqual(created["line"] as? Int, 9)
+    XCTAssertEqual(created["commit"] as? String, "h1", "行を数えた先頭のコミットにレビューを結ぶ")
+    XCTAssertFalse(
+      try String(contentsOf: dir.appendingPathComponent("in.1"), encoding: .utf8)
+        .contains("event"), "作るときは送信の種類を渡さない")
 
     XCTAssertEqual(
       write(.reply(thread: "T1", body: "b", resolve: false), pendingReview: nil),
       GitHubReviewWriteResult(pendingReview: "create-id", failure: nil))
     XCTAssertEqual(calls(), ["create", "create", "reply"])
     XCTAssertEqual(try call(3).variables["review"] as? String, "create-id")
+    XCTAssertNil(try call(2).variables["commit"], "行を持たない返信では、今の先頭に結ぶ")
 
     _ = write(.reply(thread: "T1", body: "b", resolve: false), pendingReview: "R1")
-    _ = write(.addThread(path: "a.swift", side: .new, line: 1, body: "b"), pendingReview: "R1")
+    _ = write(
+      .addThread(path: "a.swift", side: .new, line: 1, commit: "h1", body: "b"), pendingReview: "R1"
+    )
     XCTAssertEqual(calls().suffix(2), ["reply", "thread"], "在れば作らない")
     XCTAssertEqual(try call(5).variables["review"] as? String, "R1")
 
@@ -293,7 +302,9 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     try serve("thread.stderr", "gh: Line could not be resolved\n")
     try serve("thread.exit", "1")
     XCTAssertEqual(
-      write(.addThread(path: "a.swift", side: .new, line: 99, body: "b"), pendingReview: "R1"),
+      write(
+        .addThread(path: "a.swift", side: .new, line: 99, commit: "h1", body: "b"),
+        pendingReview: "R1"),
       GitHubReviewWriteResult(
         pendingReview: "R1", failure: .reason("gh: Line could not be resolved")))
 

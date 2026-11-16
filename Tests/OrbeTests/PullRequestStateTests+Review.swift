@@ -81,8 +81,11 @@ extension PullRequestStateTests {
     let state = readState()
     let first = Results()
     let second = Results()
-    XCTAssertTrue(write(state, .addThread(path: "a", side: .new, line: 1, body: "x"), into: first))
-    XCTAssertTrue(write(state, .addThread(path: "a", side: .new, line: 2, body: "y"), into: second))
+    XCTAssertTrue(
+      write(state, .addThread(path: "a", side: .new, line: 1, commit: "h", body: "x"), into: first))
+    XCTAssertTrue(
+      write(state, .addThread(path: "a", side: .new, line: 2, commit: "h", body: "y"), into: second)
+    )
     XCTAssertEqual(gitHub.reviewWrites.count, 1, "前の書き込みが終わってから次を送る")
 
     gitHub.answersReviewAtOnce = false
@@ -165,7 +168,8 @@ extension PullRequestStateTests {
     let state = readState()
     let results = Results()
     XCTAssertTrue(
-      write(state, .addThread(path: "a", side: .new, line: 1, body: "x"), into: results))
+      write(
+        state, .addThread(path: "a", side: .new, line: 1, commit: "h", body: "x"), into: results))
     XCTAssertTrue(write(state, .reply(thread: "T1", body: "y", resolve: false), into: results))
     state.endWatching()
     let reads = gitHub.reviewReads
@@ -191,5 +195,16 @@ extension PullRequestStateTests {
     XCTAssertNotNil(state.content)
     XCTAssertFalse(state.write(.submit(.comment, body: "x")) { _ in })
     XCTAssertTrue(gitHub.reviewWrites.isEmpty)
+  }
+
+  /// 新しいスレッドは、行を数えた先頭のコミットが、レビューのやりとりを読んだ時点の先頭のコミットと同じときだけ受け付ける
+  /// （push の後、読み直しが届くまでは、古い版の行番号で書かせない）。
+  func testANewThreadOnAnotherHeadIsRefused() {
+    let state = readState()
+    XCTAssertFalse(
+      state.write(.addThread(path: "a", side: .new, line: 1, commit: "h2", body: "x")) { _ in })
+    XCTAssertTrue(gitHub.reviewWrites.isEmpty)
+    XCTAssertTrue(
+      state.write(.addThread(path: "a", side: .new, line: 1, commit: "h", body: "x")) { _ in })
   }
 }

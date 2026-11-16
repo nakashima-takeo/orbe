@@ -46,8 +46,8 @@ extension GitHubCLI {
 
 /// レビューへの書き込み。どれも保留中のレビューに積む（解決と、その取り消しと、レビューの送信を除く）。
 enum GitHubReviewWrite: Equatable {
-  /// 行 `line` に新しいスレッドを付ける。
-  case addThread(path: String, side: GitHubDiffSide, line: Int, body: String)
+  /// 行 `line` に新しいスレッドを付ける。`commit` は、行の番号を数えた diff の PR の先頭のコミット。
+  case addThread(path: String, side: GitHubDiffSide, line: Int, commit: String, body: String)
   /// スレッドに返信する。`resolve` なら、返信が通った後にスレッドを解決する。
   case reply(thread: String, body: String, resolve: Bool)
   /// スレッドを解決する（偽なら解決を取り消す）。
@@ -75,11 +75,12 @@ struct GitHubReviewWriting {
 
   func write(_ write: GitHubReviewWrite) -> GitHubReviewWriteResult {
     switch write {
-    case .addThread(let path, let side, let line, let body):
+    case .addThread(let path, let side, let line, let commit, let body):
       let thread = GitHubReviewMutation.Thread(path: path, side: side, line: line, body: body)
       guard let review = pendingReview else {
         return finish(
-          send(.createReview(pullRequest: pullRequest, thread: thread)).map { $0 }, else: nil)
+          send(.createReview(pullRequest: pullRequest, commit: commit, thread: thread)).map { $0 },
+          else: nil)
       }
       return finish(send(.addThread(review: review, thread)).map { _ in review }, else: review)
     case .reply(let thread, let body, let resolve):
@@ -87,7 +88,7 @@ struct GitHubReviewWriting {
       if let pendingReview {
         review = pendingReview
       } else {
-        switch send(.createReview(pullRequest: pullRequest, thread: nil)) {
+        switch send(.createReview(pullRequest: pullRequest, commit: nil, thread: nil)) {
         case .failure(let failure):
           return GitHubReviewWriteResult(pendingReview: nil, failure: failure)
         case .success(let created): review = created
@@ -147,8 +148,10 @@ enum GitHubReviewMutation {
     let body: String
   }
 
-  /// 保留中のレビューを作る（`thread` があれば、最初のスレッドも 1 回で付ける）。
-  case createReview(pullRequest: String, thread: Thread?)
+  /// 保留中のレビューを作る（`thread` があれば、最初のスレッドも 1 回で付ける）。`commit` を渡せば、レビューをその
+  /// コミットに結ぶ（スレッドの行は、そのコミットの diff の行として読まれる）。渡さなければ PR の今の先頭のコミット。送信の
+  /// `event` は渡さない（渡すと作った時点で送信になる）。
+  case createReview(pullRequest: String, commit: String?, thread: Thread?)
   case addThread(review: String, Thread)
   case reply(thread: String, review: String, body: String)
   case setResolved(thread: String, Bool)
@@ -167,17 +170,24 @@ enum GitHubReviewMutation {
 
   private var request: (String, [String: Value]) {
     switch self {
-    case .createReview(let pullRequest, nil):
+    case .createReview(let pullRequest, let commit, let thread):
+      // 渡さない欄は null でなく欄ごと省く（null を「今の先頭」と読むかは公開文書に書かれていない）。
+      var declarations = ["$pr:ID!"]
+      var fields = ["pullRequestId:$pr"]
+      var variables: [String: Value] = ["pr": .string(pullRequest)]
+      if let commit {
+        declarations.append("$commit:GitObjectID!")
+        fields.append("commitOID:$commit")
+        variables["commit"] = .string(commit)
+      }
+      if let thread {
+        declarations += ["$path:String!", "$line:Int!", "$side:DiffSide!", "$body:String!"]
+        fields.append("threads:[{path:$path,line:$line,side:$side,body:$body}]")
+        variables.merge(Self.variables(thread)) { $1 }
+      }
       return (
-        "mutation($pr:ID!){m:addPullRequestReview(input:{pullRequestId:$pr})"
-          + "{pullRequestReview{id}}}", ["pr": .string(pullRequest)]
-      )
-    case .createReview(let pullRequest, let thread?):
-      return (
-        "mutation($pr:ID!,$path:String!,$line:Int!,$side:DiffSide!,$body:String!)"
-          + "{m:addPullRequestReview(input:{pullRequestId:$pr,"
-          + "threads:[{path:$path,line:$line,side:$side,body:$body}]}){pullRequestReview{id}}}",
-        Self.variables(thread).merging(["pr": .string(pullRequest)]) { $1 }
+        "mutation(\(declarations.joined(separator: ","))){m:addPullRequestReview(input:{"
+          + "\(fields.joined(separator: ","))}){pullRequestReview{id}}}", variables
       )
     case .addThread(let review, let thread):
       return (

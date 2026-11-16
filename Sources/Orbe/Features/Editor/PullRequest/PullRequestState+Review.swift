@@ -29,11 +29,14 @@ extension PullRequestState {
 
   func isWriting(_ target: ReviewTarget) -> Bool { reviewWriteTargets.contains(target) }
 
-  /// レビューへの書き込みを順番に積む。中身とレビューのやりとりがまだ読めていないとき、または対象への書き込みが走っているときは
-  /// 受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は失敗の種類。通れば nil）。
+  /// レビューへの書き込みを順番に積む。中身とレビューのやりとりがまだ読めていないとき、対象への書き込みが走っているとき、
+  /// 新しいスレッドの行を数えた先頭のコミットが、レビューのやりとりを読んだ時点の先頭のコミットと違うとき（`threads(at:)` が
+  /// nil の間）は受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は失敗の種類。通れば
+  /// nil）。
   @discardableResult
   func write(_ write: GitHubReviewWrite, completion: @escaping (GitHubFailure?) -> Void) -> Bool {
-    guard let content, review != nil else { return false }
+    guard let content, let review else { return false }
+    if case .addThread(_, _, _, let commit, _) = write, commit != review.headCommit { return false }
     let target = Self.target(of: write)
     if let target {
       guard !reviewWriteTargets.contains(target) else { return false }
