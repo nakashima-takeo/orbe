@@ -46,9 +46,7 @@ extension PullRequestStateTests {
     tracked.state.reload()
     tracked.state.endWatching()
     letGitSettle()
-    XCTExpectFailure("追跡 ref の値を読んだ後、見ている者がいるかを確かめずに中身を問い合わせる") {
-      XCTAssertTrue(gitHub.contentRequests.isEmpty, "見ている者がいなければ問い合わせない")
-    }
+    XCTAssertTrue(gitHub.contentRequests.isEmpty, "見ている者がいなければ問い合わせない")
   }
 
   // MARK: - 道具
