@@ -15,6 +15,8 @@ final class BranchPullRequestTests: OrbeTestCase {
   var answers: [String: GitHubBranchPullRequests.Branch] = [:]
   var exists: Result<Bool, GitHubFailure> = .success(true)
   var content: GitHubPullRequestContent?
+  /// PR の中身を問い合わせた回数。
+  var contentReads = 0
   /// ブランチの PR の問い合わせを、`release` まで答えずに留めるか。
   var holdsLookups = false
   /// 台帳の remote → GitHub のリポジトリ（PR のコミットを取りに行く remote と、PR のベースブランチの追跡 ref を決める）。
@@ -50,6 +52,7 @@ final class BranchPullRequestTests: OrbeTestCase {
         if holdsPublishedChecks { heldChecks.append(completion) } else { completion(exists) }
       },
       content: { [unowned self] _, completion in
+        contentReads += 1
         completion(content.map { .success($0) } ?? .failure(.reason("")))
       },
       setViewed: { _, _, _, _ in })
