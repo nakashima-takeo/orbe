@@ -17,6 +17,8 @@ extension PullRequestState {
     let write: GitHubReviewWrite
     let target: ReviewTarget?
     let nodeID: String
+    /// 受け付けた時点のレビューのやりとりを読んだ PR の先頭のコミット（利用者が見ていたもの）。
+    let reviewedCommit: String
     let completion: (GitHubFailure?) -> Void
   }
 
@@ -43,7 +45,9 @@ extension PullRequestState {
       reviewWriteTargets.insert(target)
     }
     reviewWrites.append(
-      ReviewWrite(write: write, target: target, nodeID: content.nodeID, completion: completion))
+      ReviewWrite(
+        write: write, target: target, nodeID: content.nodeID, reviewedCommit: review.headCommit,
+        completion: completion))
     sendNextReviewWrite()
     notify()
     return true
@@ -93,7 +97,7 @@ extension PullRequestState {
   private func sendNextReviewWrite() {
     guard !isSendingReviewWrite, let next = reviewWrites.first else { return }
     isSendingReviewWrite = true
-    source.writeReview(next.write, next.nodeID, pendingReviewID) { [weak self] result in
+    let answered: (GitHubReviewWriteResult) -> Void = { [weak self] result in
       guard let self else { return }
       pendingReviewID = result.pendingReview
       reviewWrittenOrder = issueOrder()
@@ -101,6 +105,7 @@ extension PullRequestState {
       reviewReadWaiters.append { [weak self] in self?.finishReviewWrite(failure: result.failure) }
       readReview()
     }
+    source.writeReview(next.write, next.nodeID, pendingReviewID, next.reviewedCommit, answered)
   }
 
   private func finishReviewWrite(failure: GitHubFailure?) {

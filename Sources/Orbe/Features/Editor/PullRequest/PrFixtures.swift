@@ -144,7 +144,7 @@
                 viewer: "you", viewerIsAuthor: false, headCommit: head, pendingReview: nil,
                 threads: [])))
         },
-        writeReview: { _, _, pendingReview, completion in
+        writeReview: { _, _, pendingReview, _, completion in
           completion(GitHubReviewWriteResult(pendingReview: pendingReview, failure: nil))
         })
     }

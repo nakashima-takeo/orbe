@@ -353,7 +353,7 @@ final class PullRequestFakeGitHub {
         reviewReads += 1
         if answersReviewAtOnce { completion(review) } else { reviewRequests.append(completion) }
       },
-      writeReview: { [unowned self] write, _, pendingReview, completion in
+      writeReview: { [unowned self] write, _, pendingReview, _, completion in
         reviewWrites.append(
           PullRequestFakeReviewWrite(write: write, pendingReview: pendingReview, done: completion))
       })

@@ -191,7 +191,9 @@ final class GitHubCLIReviewTests: OrbeTestCase {
   ) -> GitHubReviewWriteResult? {
     var result: GitHubReviewWriteResult?
     let done = expectation(description: "writeReview")
-    cli.writeReview(write, pullRequest: "PR_1", pendingReview: pendingReview) {
+    cli.writeReview(
+      write, pullRequest: "PR_1", pendingReview: pendingReview, reviewedCommit: "h1"
+    ) {
       result = $0
       done.fulfill()
     }

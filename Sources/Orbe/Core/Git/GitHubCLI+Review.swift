@@ -27,16 +27,18 @@ extension GitHubCLI {
   }
 
   /// レビューへの書き込み 1 つを、PR `nodeID` に送る。`pendingReview` は送る前に分かっている自分の保留中のレビュー。
-  /// 書き込みが何回の呼び出しになるかは `GitHubReviewWriting` が決める。
+  /// `reviewedCommit` は、利用者が見ていたレビューのやりとりを読んだ時点の PR の先頭のコミット。書き込みが何回の呼び出しに
+  /// なるかは `GitHubReviewWriting` が決める。
   func writeReview(
     _ write: GitHubReviewWrite, pullRequest nodeID: String, pendingReview: String?,
-    completion: @escaping (GitHubReviewWriteResult) -> Void
+    reviewedCommit: String, completion: @escaping (GitHubReviewWriteResult) -> Void
   ) {
     queue.async {
       let result =
         self.resolveGh().map { gh in
           GitHubReviewWriting(
-            cli: self, gh: gh, pullRequest: nodeID, pendingReview: pendingReview
+            cli: self, gh: gh, pullRequest: nodeID, pendingReview: pendingReview,
+            reviewedCommit: reviewedCommit
           ).write(write)
         } ?? GitHubReviewWriteResult(pendingReview: pendingReview, failure: .reason(""))
       DispatchQueue.main.async { completion(result) }
@@ -46,13 +48,17 @@ extension GitHubCLI {
 
 /// レビューへの書き込み。どれも保留中のレビューに積む（解決と、その取り消しと、レビューの送信を除く）。
 enum GitHubReviewWrite: Equatable {
-  /// 行 `line` に新しいスレッドを付ける。`commit` は、行の番号を数えた diff の PR の先頭のコミット。
+  /// 行 `line` に新しいスレッドを付ける。`commit` は、行の番号を数えた diff の PR の先頭のコミット。保留中のレビューが
+  /// 無ければ、作るレビューをこのコミットに結ぶ。在れば使わない（足すスレッドの入力にコミットの欄が無く、行は GitHub が
+  /// 決めるコミットの diff の行として読まれる）。
   case addThread(path: String, side: GitHubDiffSide, line: Int, commit: String, body: String)
   /// スレッドに返信する。`resolve` なら、返信が通った後にスレッドを解決する。
   case reply(thread: String, body: String, resolve: Bool)
   /// スレッドを解決する（偽なら解決を取り消す）。
   case setResolved(thread: String, Bool)
   /// レビューを送信する（保留中のコメントがあれば、まとめて公開する）。`body` が空なら全体へのコメントを付けない。
+  /// 保留中のレビューが無ければ、作って送るレビューを、レビューのやりとりを読んだ時点の先頭のコミットに結ぶ（承認を、
+  /// 利用者が見ていないコミットに付けない）。在れば、送信の入力にコミットの欄が無いので結ばない。
   case submit(GitHubReviewEvent, body: String)
 }
 
@@ -72,6 +78,7 @@ struct GitHubReviewWriting {
   let gh: String
   let pullRequest: String
   let pendingReview: String?
+  let reviewedCommit: String
 
   func write(_ write: GitHubReviewWrite) -> GitHubReviewWriteResult {
     switch write {
@@ -109,7 +116,7 @@ struct GitHubReviewWriting {
         if let review = pendingReview {
           .submit(review: review, event: event, body: body)
         } else {
-          .submitNew(pullRequest: pullRequest, event: event, body: body)
+          .submitNew(pullRequest: pullRequest, commit: reviewedCommit, event: event, body: body)
         }
       return finish(send(mutation).map { _ in nil }, else: pendingReview)
     }
@@ -125,8 +132,9 @@ struct GitHubReviewWriting {
     }
   }
 
-  /// mutation を 1 回送り、レスポンスに載った ID を返す。クエリと変数は JSON にまとめて標準入力で渡す——本文を argv に載せず、`@` で
-  /// 始まる本文をファイル名と取り違えさせない。
+  /// mutation を 1 回送り、レスポンスに載った ID を返す。クエリと変数は 1 つの JSON にまとめて標準入力で渡す——本文を argv に
+  /// 載せない（プロセスの一覧から見えない）。値の型は JSON が持つので、値ごとに `-f`（文字列のまま）と `-F`（`@` で始まる値を
+  /// ファイルとして読み、`true`・`null`・数字を読み替える）を選び分けずに済む。
   private func send(_ mutation: GitHubReviewMutation) -> Result<String, GitHubFailure> {
     guard let input = try? mutation.requestBody() else { return .failure(.reason("")) }
     let out = cli.runSync(
@@ -156,8 +164,8 @@ enum GitHubReviewMutation {
   case reply(thread: String, review: String, body: String)
   case setResolved(thread: String, Bool)
   case submit(review: String, event: GitHubReviewEvent, body: String)
-  /// 保留中のレビューが無いときの送信（作って、すぐ送る）。
-  case submitNew(pullRequest: String, event: GitHubReviewEvent, body: String)
+  /// 保留中のレビューが無いときの送信（作って、すぐ送る）。レビューを `commit` に結ぶ。
+  case submitNew(pullRequest: String, commit: String, event: GitHubReviewEvent, body: String)
 
   /// どの mutation も同じ引数で、リクエストの本文は標準入力から読ませる。
   static let arguments = ["api", "graphql", "--hostname", "github.com", "--input", "-"]
@@ -171,7 +179,6 @@ enum GitHubReviewMutation {
   private var request: (String, [String: Value]) {
     switch self {
     case .createReview(let pullRequest, let commit, let thread):
-      // 渡さない欄は null でなく欄ごと省く（null を「今の先頭」と読むかは公開文書に書かれていない）。
       var declarations = ["$pr:ID!"]
       var fields = ["pullRequestId:$pr"]
       var variables: [String: Value] = ["pr": .string(pullRequest)]
@@ -210,20 +217,32 @@ enum GitHubReviewMutation {
         ["thread": .string(thread)]
       )
     case .submit(let review, let event, let body):
-      return (
-        "mutation($review:ID!,$event:PullRequestReviewEvent!,$body:String){"
-          + "m:submitPullRequestReview(input:{pullRequestReviewId:$review,event:$event,"
-          + "body:$body}){pullRequestReview{id}}}",
-        ["review": .string(review), "event": .string(event.rawValue), "body": .optional(body)]
-      )
-    case .submitNew(let pullRequest, let event, let body):
-      return (
-        "mutation($pr:ID!,$event:PullRequestReviewEvent!,$body:String){"
-          + "m:addPullRequestReview(input:{pullRequestId:$pr,event:$event,body:$body})"
-          + "{pullRequestReview{id}}}",
-        ["pr": .string(pullRequest), "event": .string(event.rawValue), "body": .optional(body)]
-      )
+      return Self.submission(
+        "submitPullRequestReview",
+        [Input("review", "ID!", "pullRequestReviewId", .string(review))], event: event, body: body)
+    case .submitNew(let pullRequest, let commit, let event, let body):
+      return Self.submission(
+        "addPullRequestReview",
+        [
+          Input("pr", "ID!", "pullRequestId", .string(pullRequest)),
+          Input("commit", "GitObjectID!", "commitOID", .string(commit)),
+        ], event: event, body: body)
     }
+  }
+
+  /// 送信の mutation。全体へのコメントが空なら、本文の変数を欄ごと省く。
+  private static func submission(
+    _ field: String, _ inputs: [Input], event: GitHubReviewEvent, body: String
+  ) -> (String, [String: Value]) {
+    var inputs =
+      inputs + [Input("event", "PullRequestReviewEvent!", "event", .string(event.rawValue))]
+    if !body.isEmpty { inputs.append(Input("body", "String!", "body", .string(body))) }
+    let declarations = inputs.map { "$\($0.variable):\($0.type)" }.joined(separator: ",")
+    let fields = inputs.map { "\($0.field):$\($0.variable)" }.joined(separator: ",")
+    return (
+      "mutation(\(declarations)){m:\(field)(input:{\(fields)}){pullRequestReview{id}}}",
+      Dictionary(uniqueKeysWithValues: inputs.map { ($0.variable, $0.value) })
+    )
   }
 
   /// レスポンスの `data.m` に載った値の ID。gh が終了コード 0 で終了しても、`m` が null なら書き込みは通っていない。
@@ -240,26 +259,37 @@ enum GitHubReviewMutation {
     ]
   }
 
+  /// mutation の入力の欄 1 つと、それに渡す変数。
+  private struct Input {
+    let variable: String
+    let type: String
+    let field: String
+    let value: Value
+
+    init(_ variable: String, _ type: String, _ field: String, _ value: Value) {
+      self.variable = variable
+      self.type = type
+      self.field = field
+      self.value = value
+    }
+  }
+
   private struct Request: Encodable {
     let query: String
     let variables: [String: Value]
   }
 
-  /// GraphQL の変数の値。
+  /// GraphQL の変数の値。渡さない値は null にせず、変数と入力の欄ごと省く（null を「渡さない」と読むかは公開文書に
+  /// 書かれていない）。
   private enum Value: Encodable {
     case string(String)
     case int(Int)
-    case null
-
-    /// 空の文字列は null（そのフィールドを送らない）。
-    static func optional(_ text: String) -> Value { text.isEmpty ? .null : .string(text) }
 
     func encode(to encoder: Encoder) throws {
       var container = encoder.singleValueContainer()
       switch self {
       case .string(let text): try container.encode(text)
       case .int(let number): try container.encode(number)
-      case .null: try container.encodeNil()
       }
     }
   }

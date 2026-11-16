@@ -36,7 +36,7 @@ struct PullRequestSource {
   var writeReview:
     (
       _ write: GitHubReviewWrite, _ nodeID: String, _ pendingReview: String?,
-      _ completion: @escaping (GitHubReviewWriteResult) -> Void
+      _ reviewedCommit: String, _ completion: @escaping (GitHubReviewWriteResult) -> Void
     ) -> Void
 
   static func gh(_ cli: GitHubCLI = .shared, cache: GitHubCache = .shared) -> PullRequestSource {
@@ -50,7 +50,8 @@ struct PullRequestSource {
       setViewed: { cli.setViewed($0, paths: $1, pullRequest: $2, completion: $3) },
       review: { cli.pullRequestReview($0, completion: $1) },
       writeReview: {
-        cli.writeReview($0, pullRequest: $1, pendingReview: $2, completion: $3)
+        cli.writeReview(
+          $0, pullRequest: $1, pendingReview: $2, reviewedCommit: $3, completion: $4)
       })
   }
 }

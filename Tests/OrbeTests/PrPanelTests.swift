@@ -61,7 +61,7 @@ final class PrPanelTests: OrbeTestCase {
       setViewed: { [unowned self] viewed, paths, _, completion in
         writes.append((viewed, paths))
         completion(GitHubViewedWrite(written: paths, failure: nil))
-      }, review: { _, _ in }, writeReview: { _, _, _, _ in })
+      }, review: { _, _ in }, writeReview: { _, _, _, _, _ in })
   }
 
   private var content: GitHubPullRequestContent {
