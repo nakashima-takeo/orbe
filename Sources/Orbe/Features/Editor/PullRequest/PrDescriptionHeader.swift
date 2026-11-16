@@ -91,16 +91,9 @@ final class PrDescriptionHeader: NSView, RowListHeader {
       context.fill(row)
     }
     let chevron = Theme.Layout.editorChevron
-    let path = ListRowView.chevron(size: chevron)
-    context.saveGState()
-    context.translateBy(x: Theme.Space.tick + chevron / 2, y: row.midY)
-    if isOpen { context.rotate(by: .pi / 2) }
-    context.translateBy(x: -chevron / 2, y: -chevron / 2)
-    context.setStrokeColor(scm.icon)
-    context.setLineWidth(path.lineWidth)
-    context.addPath(path.path)
-    context.strokePath()
-    context.restoreGState()
+    (isOpen ? RowGlyphShape.chevronOpen : .chevron).draw(
+      in: NSRect(x: Theme.Space.tick, y: row.midY - chevron / 2, width: chevron, height: chevron),
+      scm.icon, in: context)
     let x = Theme.Space.tick + chevron
     title.draw(
       at: x, top: ((row.height - title.height) / 2).rounded(), width: bounds.width - x - 12,

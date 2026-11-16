@@ -154,8 +154,6 @@ private struct PrCreation: View {
   let creation: BranchPullRequest.Creation
   @Environment(\.localization) private var l10n
 
-  private static let disabledAlpha = 0.45
-
   var body: some View {
     let enabled = creation.published != .no
     VStack(spacing: 6) {
@@ -169,7 +167,7 @@ private struct PrCreation: View {
       .frame(maxWidth: .infinity)
       .frame(height: Theme.Layout.editorScmCommitButton)
       .background(RoundedRectangle(cornerRadius: 3).fill(Color.theme.accentPrimary))
-      .opacity(enabled ? 1 : Self.disabledAlpha)
+      .opacity(enabled ? 1 : Theme.Opacity.disabled)
       .contentShape(Rectangle())
       .onTapGesture { if enabled { panel.createPullRequest() } }
       Text(meta)
