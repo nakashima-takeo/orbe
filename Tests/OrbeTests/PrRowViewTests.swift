@@ -68,8 +68,6 @@ final class PrRowViewTests: OrbeTestCase {
     view.show(
       .section(.files, isOpen: true, count: 121), facts: .init(viewed: 0, asTree: true),
       language: .ja, emoji: nil)
-    XCTExpectFailure("見出しの中身の同一性が、ファイルの数と確認済みの数を区切らずに並べる（12 と 10、121 と 0 が同じ）") {
-      XCTAssertEqual(view.accessibilityLabel(), viewedHeader(0, of: 121, .ja))
-    }
+    XCTAssertEqual(view.accessibilityLabel(), viewedHeader(0, of: 121, .ja))
   }
 }
