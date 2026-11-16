@@ -4,8 +4,10 @@ import AppKit
 /// 開閉、選択、列の焦点。PR の事実（どの PR か・中身・確認済み・両端）は 2 つの状態が持ち、ここは見せ方だけ。
 ///
 /// パネルを出している間（`isShown`）だけ worktree の今の PR を見る——GitHub に問い合わせるのは見ている間だけ。列の行は、
-/// PR の中身・ツリーかリストか・開閉で決まり、変わったときだけ組み直す（確認済みは描くときに状態から読む）。区分と
-/// フォルダの開閉・選択は面ごとで永続しない。ツリーかリストかはアプリ全体で 1 つ（`EditorSidebarState`）。
+/// PR の中身・ツリーかリストか・開閉で決まり、そのどれかが変わったときに 1 か所（`rebuild`）で組み直す（確認済みは描くときに
+/// 状態から読む）。選択は常に見えている行にある——組み直した後に選んでいた行が無ければ、そこで選び直す（ソース管理の
+/// 変更の列と同じ）。区分とフォルダの開閉・選択は面ごとで永続しない。ツリーかリストかはアプリ全体で 1 つ
+/// （`EditorSidebarState`）。
 @MainActor @Observable
 final class PrPanel {
   /// 根（正準形）。
@@ -16,6 +18,8 @@ final class PrPanel {
   var isDescriptionOpen = true
   private(set) var closed: Set<PrSection> = []
   private(set) var closedFolders: Set<String> = []
+  /// 今の行の組（PR が無い・中身がまだ無ければ空）。
+  private(set) var layout = PrLayout.empty
   private(set) var selection: PrRowID?
   private(set) var isListFocused = false
   /// 焦点を入れる要求（当てたら外す）。
@@ -30,24 +34,27 @@ final class PrPanel {
   @ObservationIgnored var onOpenURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
   /// キーで行へ動いたときの開きの間引き。
   @ObservationIgnored let navigation = RowNavigationThrottle()
-  /// 組んだ行と、その元（同じ元なら組み直さない）。
-  @ObservationIgnored private var built: (key: LayoutKey, layout: PrLayout)?
-  @ObservationIgnored private var builtVersion = 0
+  /// 行の組の元（同じ元なら組み直さない）と、組み直した回数。
+  @ObservationIgnored private var builtFrom: LayoutKey?
+  private var builtVersion = 0
 
   private struct LayoutKey: Equatable {
-    let content: GitHubPullRequestContent
+    let content: GitHubPullRequestContent?
     let asTree: Bool
     let closed: Set<PrSection>
     let closedFolders: Set<String>
   }
 
-  /// パネルを出している間 true。立てると worktree の今の PR を見始め、下ろすと見るのをやめる。
+  /// パネルを出している間 true。立てると worktree の今の PR を見始めて行を組み、下ろすと見るのをやめる。
   @ObservationIgnored var isShown = false {
     didSet {
       guard isShown != oldValue else { return }
       if isShown {
+        pullRequest.addObserver(self)
         pullRequest.beginWatching()
+        rebuild()
       } else {
+        pullRequest.removeObserver(self)
         pullRequest.endWatching()
         panelDidHide()
       }
@@ -68,22 +75,36 @@ final class PrPanel {
 
   // MARK: - 行
 
-  /// 今の行の組（PR が無い・中身がまだ無ければ空）。元が変わったときだけ組み直す。
-  var layout: PrLayout {
-    guard let content = state?.content else { return .empty }
+  /// 行の組を、元（PR の中身・ツリーかリストか・開閉）が変わっていれば組み直し、選んでいた行が無くなっていれば選び直す
+  /// ——畳んで隠れたなら、見えている祖先（畳んだフォルダか区分の見出し）へ、消えたなら変更ファイルの区分の同じ位置の行へ
+  /// （開かない）。
+  func rebuild() {
+    let content = state?.content
     let key = LayoutKey(
       content: content, asTree: asTree, closed: closed, closedFolders: closedFolders)
-    if let built, built.key == key { return built.layout }
-    let layout = PrLayout.build(
-      content, asTree: asTree, closed: closed, closedFolders: closedFolders)
-    built = (key, layout)
+    guard key != builtFrom else { return }
+    builtFrom = key
+    let previous = layout
+    layout =
+      content.map {
+        PrLayout.build($0, asTree: key.asTree, closed: closed, closedFolders: closedFolders)
+      } ?? .empty
     builtVersion += 1
-    return layout
+    guard let selection, layout.index[selection] == nil else { return }
+    self.selection = layout.reselect(selection, from: previous, isCollapsed: isCollapsed)
+  }
+
+  /// 行 `id`（区分の見出しかフォルダ）が畳まれている。
+  private func isCollapsed(_ id: PrRowID) -> Bool {
+    switch id {
+    case .section(let section): closed.contains(section)
+    case .folder(let path): closedFolders.contains(path)
+    case .commit, .olderCommits, .file: false
+    }
   }
 
   /// 列が読み直す版——行の組か確認済みが変わるたびに変わる（確認済みは行を組み直さず、見えている行を描き直す）。
   var rowsVersion: Int {
-    _ = layout
     var hasher = Hasher()
     hasher.combine(builtVersion)
     hasher.combine(state.map(ObjectIdentifier.init))
@@ -96,16 +117,13 @@ final class PrPanel {
   func isOpen(_ section: PrSection) -> Bool { !closed.contains(section) }
 
   func toggle(_ section: PrSection) {
-    if closed.contains(section) { closed.remove(section) } else { closed.insert(section) }
+    if closed.remove(section) == nil { closed.insert(section) }
+    rebuild()
   }
 
   func toggleFolder(_ path: String) {
-    if closedFolders.contains(path) {
-      closedFolders.remove(path)
-    } else {
-      closedFolders.insert(path)
-      if case .file(let file)? = selection, file.hasPrefix(path + "/") { selection = .folder(path) }
-    }
+    if closedFolders.remove(path) == nil { closedFolders.insert(path) }
+    rebuild()
   }
 
   func select(_ id: PrRowID?) {
@@ -170,5 +188,12 @@ final class PrPanel {
       let url = creation.url
     else { return }
     onOpenURL(url)
+  }
+}
+
+/// worktree の今の PR が替わった・その PR の状態が変わったら、行の組を組み直す（中身が同じなら組み直さない）。
+extension PrPanel: BranchPullRequestObserver {
+  func branchPullRequestDidChange(_ pullRequest: BranchPullRequest) {
+    rebuild()
   }
 }

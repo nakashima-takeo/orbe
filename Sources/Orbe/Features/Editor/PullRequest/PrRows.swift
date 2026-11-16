@@ -47,27 +47,52 @@ struct PrLayout {
 
   let items: [Item]
   let index: [PrRowID: Int]
-  /// 変更ファイルの区分のファイルの行の番号。
-  let fileRows: Range<Int>
+  /// 変更ファイルの区分の見出しの下の行（フォルダとファイル）の番号。
+  let filesRows: Range<Int>
 
   init(items: [Item]) {
     self.items = items
     var index: [PrRowID: Int] = [:]
-    var first: Int?
-    var last = 0
-    for (row, item) in items.enumerated() {
-      let id = Self.id(of: item)
-      index[id] = row
-      if case .file = item {
-        first = first ?? row
-        last = row + 1
-      }
-    }
+    for (row, item) in items.enumerated() { index[Self.id(of: item)] = row }
     self.index = index
-    fileRows = first.map { $0..<last } ?? items.count..<items.count
+    let start = index[.section(.files)].map { $0 + 1 } ?? items.count
+    filesRows = start..<items.count
   }
 
   func id(at row: Int) -> PrRowID { Self.id(of: items[row]) }
+
+  /// 選ばれていた行 `selection` が、組み直した後のこの組に無い。畳んで隠れたなら、見えている祖先のうち一番深いもの
+  /// （畳んだフォルダか区分の見出し）を返す。消えたなら（PR の中身から外れた・ツリーとリストを切り替えた）、前の組
+  /// `previous` の変更ファイルの区分の中の同じ位置の行（無ければ最後の行）を返す。区分に行が無ければ nil。
+  func reselect(_ selection: PrRowID, from previous: PrLayout, isCollapsed: (PrRowID) -> Bool)
+    -> PrRowID?
+  {
+    if let visible = Self.ancestors(of: selection).first(where: { index[$0] != nil }),
+      isCollapsed(visible)
+    {
+      return visible
+    }
+    guard let old = previous.index[selection], previous.filesRows.contains(old),
+      !filesRows.isEmpty
+    else { return nil }
+    let offset = min(old - previous.filesRows.lowerBound, filesRows.count - 1)
+    return id(at: filesRows.lowerBound + offset)
+  }
+
+  /// 選べる行 `id` の祖先（深い順に、フォルダ、変更ファイルの区分の見出し）。区分の見出しには無い。
+  private static func ancestors(of id: PrRowID) -> [PrRowID] {
+    switch id {
+    case .file(let path), .folder(let path):
+      var folders: [PrRowID] = []
+      var directory = (path as NSString).deletingLastPathComponent
+      while !directory.isEmpty {
+        folders.append(.folder(directory))
+        directory = (directory as NSString).deletingLastPathComponent
+      }
+      return folders + [.section(.files)]
+    case .section, .commit, .olderCommits: return []
+    }
+  }
 
   private static func id(of item: Item) -> PrRowID {
     switch item {

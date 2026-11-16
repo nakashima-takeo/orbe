@@ -1,5 +1,11 @@
 import Foundation
 
+/// worktree の今の PR が見せる PR か、その PR の状態が変わったことを受ける者（PR のパネル）。
+@MainActor
+protocol BranchPullRequestObserver: AnyObject {
+  func branchPullRequestDidChange(_ pullRequest: BranchPullRequest)
+}
+
 /// worktree の今の PR——今のブランチから出ている open の PR はどれか（無ければ作成の入口の材料、出せなければその理由）と、
 /// PR があるときの手元とのずれ。worktree の根（正準形）ごとに 1 つで、アプリが動いている間持つ。PR そのものの中身は PR
 /// ごとの状態（`PullRequestState`）が持つ——ブランチを切り替えても、開いている PR の diff タブはその PR を見続ける。
@@ -36,6 +42,11 @@ final class BranchPullRequest {
   }
   /// ずれを数えた（数えている）手元の HEAD と PR の先頭。
   @ObservationIgnored private var counted: (local: String, pullRequest: String)?
+  @ObservationIgnored private var observers: [WeakObserver] = []
+
+  private struct WeakObserver {
+    weak var value: BranchPullRequestObserver?
+  }
 
   private static var registry: [String: BranchPullRequest] = [:]
 
@@ -56,6 +67,19 @@ final class BranchPullRequest {
   var state: PullRequestState? {
     if case .pullRequest(let state) = answer { return state }
     return nil
+  }
+
+  func addObserver(_ observer: BranchPullRequestObserver) {
+    observers.removeAll { $0.value == nil || $0.value === observer }
+    observers.append(WeakObserver(value: observer))
+  }
+
+  func removeObserver(_ observer: BranchPullRequestObserver) {
+    observers.removeAll { $0.value == nil || $0.value === observer }
+  }
+
+  private func notify() {
+    for observer in observers { observer.value?.branchPullRequestDidChange(self) }
   }
 
   // MARK: - 見ている者
@@ -215,8 +239,8 @@ final class BranchPullRequest {
     readAgain = false
   }
 
-  /// 答えを `next` にする。PR が替われば、前の PR を見るのをやめ、今の PR を見る（誰も見ていなかった PR なら、PR ごとの状態が
-  /// 中身を読み直す）。
+  /// 答えを `next` にする。PR が替われば、前の PR を見るのをやめ、今の PR を見て（誰も見ていなかった PR なら、PR ごとの状態が
+  /// 中身を読み直す）、受ける者へ知らせる。
   private func settle(_ next: Answer) {
     settlement += 1
     let previous = state
@@ -228,6 +252,7 @@ final class BranchPullRequest {
       current?.addObserver(self)
       current?.beginWatching()
       counted = nil
+      notify()
     }
     countDrift()
   }
@@ -350,11 +375,12 @@ extension BranchPullRequest: SourceControlObserver {
   }
 }
 
-/// PR の中身・両端が変わったら、手元とのずれを数え直す。PR のベースブランチの追跡 ref が新しく分かったら、その値も
-/// 覚える。
+/// PR の中身・両端が変わったら、手元とのずれを数え直し、受ける者へ知らせる。PR のベースブランチの追跡 ref が新しく
+/// 分かったら、その値も覚える。
 extension BranchPullRequest: PullRequestStateObserver {
   func pullRequestStateDidChange(_ state: PullRequestState) {
     countDrift()
+    notify()
     if let base = baseTrackingRef, tracking.lacks(base) { tracking.record() }
   }
 }

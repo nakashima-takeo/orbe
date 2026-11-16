@@ -96,8 +96,12 @@ extension PrPanel {
     switch (layout.items[row], control) {
     case (.file(let path, _, _), .viewed): toggleViewed(path)
     case (.folder(_, _, _, let files), .viewed): toggleViewed(folder: files)
-    case (.section(.files, _, _), .tree): onViewAsTree(true)
-    case (.section(.files, _, _), .list): onViewAsTree(false)
+    case (.section(.files, _, _), .tree):
+      onViewAsTree(true)
+      rebuild()
+    case (.section(.files, _, _), .list):
+      onViewAsTree(false)
+      rebuild()
     default: break
     }
   }
