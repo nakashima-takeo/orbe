@@ -331,9 +331,9 @@ private struct Inks {
   }
 }
 
-/// 選べる文のまとまりを組んだもの——組んだ文と見え方と行の範囲（覚えの鍵）と、そこから決まるもの（組んだ行・行ごとの
+/// 選べる文のまとまりを組んだもの——文と見え方と行の範囲（覚えの鍵）と、そこから決まるもの（組んだ行・行ごとの
 /// 外観に依らない形のグリフの連なり・行の字体の高さ・文）。面は当たりの表と一緒に持ち、次の描き直しで鍵が同じなら
-/// 組み直さない（ホバーや印の出し入れの描き直しで段落を組まない）。色は鍵に入れない（組み方を変えないので、写すときに
+/// 組み直さない（ホバーの描き直しで段落を組まない）。色は鍵に入れない（組み方を変えないので、写すときに
 /// 今の外観で解く）。覚えは当たりの表と同じく、絵の差し込みが外れれば消え、描き直した絵に無いまとまりの分は次の表に
 /// 移らない。
 struct ZoneTextTypeset {
@@ -381,14 +381,15 @@ struct ZoneTextTypeset {
     rope = TextRope(text.string)
   }
 
-  /// `text` を同じに組めるか——文（UTF-16 の単位）と、見え方の組み方に効くもの（長さ・字体・余白）と、行の範囲が同じ。
+  /// `text` を同じに組めるか——文（UTF-16 の単位）と、色を除く見え方と、行の範囲が同じ。
   func matches(_ text: ZoneText) -> Bool {
     guard ranges == text.lines.map(\.range), styles.count == text.styles.count,
       string.utf16.elementsEqual(text.string.utf16)
     else { return false }
     return zip(styles, text.styles).allSatisfy {
-      $0.length == $1.length && $0.font == $1.font && $0.leadingPadding == $1.leadingPadding
-        && $0.trailingPadding == $1.trailingPadding
+      var style = $0
+      style.color = $1.color
+      return style == $1
     }
   }
 }

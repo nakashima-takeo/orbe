@@ -58,7 +58,7 @@ public struct ZoneBox {
   public var stroke: Stroke?
   public var shadow: Shadow?
 
-  /// 角ごとの半径（CSS の border-radius と同じく、辺の半分を超える分は辺の半分に収める）。数の字は 4 つの角に同じ半径。
+  /// 角ごとの半径（どの角も、短い辺の半分を超える分は短い辺の半分に収める）。数の字は 4 つの角に同じ半径。
   public struct Radius: Equatable, ExpressibleByFloatLiteral, ExpressibleByIntegerLiteral {
     public var topLeft: CGFloat
     public var topRight: CGFloat

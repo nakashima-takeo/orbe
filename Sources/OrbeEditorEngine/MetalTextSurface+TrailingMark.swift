@@ -22,8 +22,8 @@ extension MetalTextSurface {
   /// 印を出しうるか（表示の構成が印の絵を持ち、並びに印を出せる行がある）。
   var showsTrailingMarks: Bool { presentation.trailingMark != nil && rows.hasTrailingMarks }
 
-  /// 点（view の座標）の下の、印を出せる行と、その行の印の矩形（view の座標）。本文の区画と行番号の列の上だけ。
-  func trailingMarkRow(at point: CGPoint) -> (hover: TrailingMarkHover, mark: CGRect)? {
+  /// 点（view の座標）の下の、印を出せる行と、点が印の上か。本文の区画と行番号の列の上だけ。
+  func trailingMarkRow(at point: CGPoint) -> TrailingMarkHover? {
     guard showsTrailingMarks, let mark = presentation.trailingMark,
       let text = currentContent?.text, textView.overview.area(at: point) == nil
     else { return nil }
@@ -37,12 +37,12 @@ extension MetalTextSurface {
       x: area.maxX - mark.inset - mark.size.width,
       y: CGFloat(found.top + offset) + (config.lineHeight - mark.size.height) / 2,
       width: mark.size.width, height: mark.size.height)
-    return (TrailingMarkHover(row: found.row, line: found.line, onMark: rect.contains(point)), rect)
+    return TrailingMarkHover(row: found.row, line: found.line, onMark: rect.contains(point))
   }
 
   /// ポインタ（view の座標。view の外なら nil）の下の行へ印を移す（変われば材料に書く）。
   func hoverTrailingMark(at point: CGPoint?) {
-    let next = point.flatMap { trailingMarkRow(at: $0)?.hover }
+    let next = point.flatMap { trailingMarkRow(at: $0) }
     guard next != trailingMarkHover else { return }
     trailingMarkHover = next
     publishTrailingMark()

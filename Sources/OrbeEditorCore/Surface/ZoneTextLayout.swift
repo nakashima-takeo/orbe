@@ -63,7 +63,7 @@ public enum ZoneTextLayout {
     }
 
     /// 見え方 `style` の地の x 範囲の列（→ `Line.spans(of:)`）。
-    public func spans(of style: Int) -> [Range<CGFloat>] { grounds()[style] ?? [] }
+    func spans(of style: Int) -> [Range<CGFloat>] { grounds()[style] ?? [] }
 
     /// 測った行（値）。
     var measured: Line { Line(range: range, width: width, grounds: grounds()) }
@@ -180,16 +180,19 @@ public enum ZoneTextLayout {
     var composition: ZoneComposition?
     return text.lines.map { line in
       let lower = min(max(0, line.range.location), units.count)
-      if composition.map({ !($0.paragraph.lowerBound...$0.paragraph.upperBound).contains(lower) })
-        ?? true
+      let current: ZoneComposition
+      if let composition,
+        (composition.paragraph.lowerBound...composition.paragraph.upperBound).contains(lower)
       {
-        composition = ZoneComposition(
+        current = composition
+      } else {
+        current = ZoneComposition(
           units, paragraph: paragraphSpan(around: lower, in: units), styles: text.styles)
+        composition = current
       }
-      let paragraph = composition!
-      let upper = min(max(lower, NSMaxRange(line.range)), paragraph.paragraph.upperBound)
-      let from = paragraph.composed(lower)
-      return TypesetLine(paragraph, from..<max(from, paragraph.composed(upper)))
+      let upper = min(max(lower, NSMaxRange(line.range)), current.paragraph.upperBound)
+      let from = current.composed(lower)
+      return TypesetLine(current, from..<max(from, current.composed(upper)))
     }
   }
 
