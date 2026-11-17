@@ -59,6 +59,8 @@ final class FrameBuilder {
   var zoneBoxes: [BoxInstance] = []
   var zoneImages: [[GlyphInstance]] = []
   var zoneSelectionShapes: [ShapeInstance] = []
+  /// 行の右端の印の画像（画像の地図の頁ごと。本文の字の上に描く）。
+  var markImages: [[GlyphInstance]] = []
   /// 見えている入力欄の層。
   var fieldLayers: [FieldLayer] = []
   /// このコマで入力欄の横の送りが動いた（main へ知らせる）。
@@ -67,7 +69,8 @@ final class FrameBuilder {
   /// GPU の buffer に要る大きさ（配列ごとに 256 バイトに揃える）。
   var byteCount: Int {
     let fields = fieldLayers
-    let glyphArrays = text + color + gutter + zoneImages + fields.flatMap { $0.text + $0.color }
+    let glyphArrays =
+      text + color + gutter + zoneImages + markImages + fields.flatMap { $0.text + $0.color }
     let glyphs = glyphArrays.reduce(0) {
       $0 + (($1.count * MemoryLayout<GlyphInstance>.stride + 255) & ~255)
     }
@@ -183,6 +186,7 @@ final class FrameBuilder {
     overviewShapes.removeAll(keepingCapacity: true)
     zoneBoxes.removeAll(keepingCapacity: true)
     for i in zoneImages.indices { zoneImages[i].removeAll(keepingCapacity: true) }
+    for i in markImages.indices { markImages[i].removeAll(keepingCapacity: true) }
     zoneSelectionShapes.removeAll(keepingCapacity: true)
     fieldLayers.removeAll(keepingCapacity: true)
     fieldRevealed = false

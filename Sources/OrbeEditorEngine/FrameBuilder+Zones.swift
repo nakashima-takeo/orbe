@@ -71,7 +71,8 @@ extension FrameBuilder {
     }
   }
 
-  /// 行の右端の印——ポインタの下の、印を出せる行の右端（本文の区画の右端から距離を空けて）の、行の縦の中央に描く。
+  /// 行の右端の印——ポインタの下の、印を出せる行の右端（本文の区画の右端から距離を空けて）の、行の縦の中央に描く。印の
+  /// 画像は本文の字の上の層（`markImages`）に積む——当たりでも印が字より先に取るので、見えている順と押せる順を揃える。
   func drawTrailingMark(_ source: Source, _ c: Context) {
     guard let mark = source.material.trailingMark else { return }
     let g = c.g
@@ -86,8 +87,11 @@ extension FrameBuilder {
       top = g.insertedTop(block: block, line: line)
     }
     drawPicture(
-      mark.look, left: (g.textRight - Double(mark.inset + mark.size.width) * s).rounded(),
-      top: top + ((g.lineHeight - Double(mark.size.height) * s) / 2).rounded(), source, c)
+      mark.look,
+      at: (
+        (g.textRight - Double(mark.inset + mark.size.width) * s).rounded(),
+        top + ((g.lineHeight - Double(mark.size.height) * s) / 2).rounded()
+      ), images: &markImages, source, c)
   }
 
   private func drawZone(
@@ -95,7 +99,7 @@ extension FrameBuilder {
   ) {
     let s = c.g.scale
     let left = c.g.column
-    drawPicture(zone, left: left, top: top, source, c)
+    drawPicture(zone, at: (left, top), images: &zoneImages, source, c)
     if let selection = source.material.zoneSelection, selection.zone == id {
       let ink = selection.focused ? c.palette.selection : c.palette.inactiveSelection
       for rect in selection.rects {
@@ -115,10 +119,12 @@ extension FrameBuilder {
     }
   }
 
-  /// 絵の箱・画像・字を、左上 (`left`, `top`)（px）に置く。
+  /// 絵の箱・画像・字を、左上 `origin`（px）に置く。画像は `images`（画像の地図の頁ごと）に積む。
   private func drawPicture(
-    _ zone: ZoneMaterial, left: Double, top: Double, _ source: Source, _ c: Context
+    _ zone: ZoneMaterial, at origin: (left: Double, top: Double),
+    images: inout [[GlyphInstance]], _ source: Source, _ c: Context
   ) {
+    let (left, top) = origin
     let g = c.g
     let s = g.scale
     for box in zone.boxes { zoneBoxes.append(Self.instance(box, left: left, top: top, scale: s)) }
@@ -134,7 +140,7 @@ extension FrameBuilder {
         GlyphInstance(
           position: SIMD2(Float(x), Float(y)), size: SIMD2(Float(entry.width), Float(entry.height)),
           uv: SIMD2(Float(entry.x), Float(entry.y)), color: 0xFFFF_FFFF),
-        to: &zoneImages, page: entry.page)
+        to: &images, page: entry.page)
     }
     for run in zone.runs {
       let font = c.fonts.id(instance: run.font)
