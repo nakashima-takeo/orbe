@@ -322,7 +322,7 @@ final class MetalTextSurface: TextSurface {
     leadsScroll = true
     other.leadsScroll = false
     settleGaps()
-    other.settleGaps()
+    other.settleGaps(keepingFirstVisibleLine: false)
     wake()
     refreshViewport()
     other.refreshViewport()

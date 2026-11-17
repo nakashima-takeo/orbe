@@ -157,8 +157,10 @@ extension MetalTextSurface {
   }
 
   /// 相手と同じ高さの空きを、相手の今の絵の高さに揃える（相手の絵の差し込みの出入りと高さの変化・相手が付いた・外れた）。
-  /// 変われば取引の中で並びを組み直す（見えている先頭の文書の行は確定で保つ）。
-  func settleGaps() {
+  /// 変われば取引の中で並びを組み直す。`keepingFirstVisibleLine` なら見えている先頭の文書の行を確定で保つ——今の位置で
+  /// 描いたことのない並び（後から結んで、相手の位置を引き継いだ面の並び）から揃えるときは保たない。保つと、引き継いだ
+  /// 位置を描いたことのない並びとの差の分だけ共にするスクロールがずれ、相手の面の見えている行も動く。
+  func settleGaps(keepingFirstVisibleLine: Bool = true) {
     guard rows.hasGaps else { return }
     let current = rows
     var changed = false
@@ -176,7 +178,7 @@ extension MetalTextSurface {
     }
     guard changed else { return }
     transact {
-      noteRowsChange()
+      if keepingFirstVisibleLine { noteRowsChange() }
       rows.replace(blocks, spans: current.spans)
     }
   }
