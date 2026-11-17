@@ -99,16 +99,19 @@ final class MetalTextView: TextSurfaceInputView {
   /// 複数カーソルのキーと入力欄の ⌘↵ は key equivalent の段で引く——view の階層を回るこの段はメインメニュー（サービスを
   /// 含む）より先なので、選択を渡せるサービスの受け手でも、同じキーのサービス（⌘⇧L の「Google で検索」など）に先を
   /// 越されない。焦点が自分にあるときだけ引くので、端末に焦点があるときのキーには当たらない。変換中は窓の根が先に IME へ
-  /// 渡し、IME が使わなかったキーだけがここへ来る（コマンドは変換を確定してから動く。⌘↵ は変換中なら何もしない——変換の
-  /// 確定が先）。
+  /// 渡し、IME が使わなかったキーだけがここへ来る（コマンドも ⌘↵ も変換を確定してから動く。押し続けた ⌘↵ の繰り返しは
+  /// 食って何もしない——「送る」は押した瞬間に 1 回だけ）。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     guard window?.firstResponder === self else { return super.performKeyEquivalent(with: event) }
     let chord = KeyChord(event)
-    if Self.submitKeys.contains(chord), let surface, case .field = surface.primary,
-      let site = surface.primarySite, let field = site.field
+    if Self.submitKeys.contains(chord), let surface, let site = surface.primarySite,
+      let field = site.field
     {
-      guard !site.editor.isComposing else { return true }
-      surface.input(keystroke: event.timestamp) { field.didSubmit?(field) }
+      guard !event.isARepeat else { return true }
+      surface.input(keystroke: event.timestamp) {
+        site.editor.finishComposition(.commit)
+        field.didSubmit?(field)
+      }
       return true
     }
     guard let selector = Self.multiCursorKeys[chord] else {
