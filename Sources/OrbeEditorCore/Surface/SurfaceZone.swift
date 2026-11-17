@@ -144,34 +144,58 @@ public struct ZoneTextLine {
   }
 }
 
-/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。絵の差し込みの中で一意）と文と、文の見え方と、文を
+/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。絵の差し込みの中で一意）と、見え方つきの文と、文を
 /// 描く行の列。
 public struct ZoneText {
   public var id: AnyHashable
-  public var string: String
-  /// 文の見え方（文の先頭から順に当てる）。
-  public var styles: [ZoneTextStyle]
+  public var content: ZoneStyledText
   public var lines: [ZoneSelectableLine]
 
-  public init(
-    id: AnyHashable, string: String, styles: [ZoneTextStyle], lines: [ZoneSelectableLine]
-  ) {
+  public init(id: AnyHashable, content: ZoneStyledText, lines: [ZoneSelectableLine]) {
     self.id = id
-    self.string = string
-    self.styles = styles
+    self.content = content
     self.lines = lines
   }
 }
 
-/// 字の見え方を、文の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの左右の字をその幅ずつ
-/// 押し出す（CSS のインラインの padding）。余白のある見え方は、周りの文と独立した向きのかたまりとして並び、先頭の余白は
+/// 見え方つきの文——字の連なりを、見え方とともに先頭から順に足して作る。見え方の長さは足した字の連なりの長さで決まるので、
+/// 見え方は文の全部を、余りも重なりもなく覆う。どのスレッドへも渡せる。
+public struct ZoneStyledText: Equatable, Sendable {
+  public private(set) var string = ""
+  /// 見え方（文の先頭から順に。長さは足した字の連なりの UTF-16 の長さ）。
+  public private(set) var styles: [ZoneTextStyle] = []
+
+  public init() {}
+
+  /// 字の連なりと見え方の組を、順に足したもの。
+  public init(_ runs: [(String, ZoneTextStyle)]) {
+    for (string, style) in runs { append(string, style) }
+  }
+
+  /// 字の連なり `string` を見え方 `style` で後ろに足す。
+  public mutating func append(_ string: String, _ style: ZoneTextStyle) {
+    var style = style
+    style.length = string.utf16.count
+    self.string += string
+    styles.append(style)
+  }
+
+  /// 文は UTF-16 の単位で比べる（String の == は正準等価で比べ、字の並びの違う文を同じとみなす）。
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.styles == rhs.styles && lhs.string.utf16.elementsEqual(rhs.string.utf16)
+  }
+}
+
+/// 字の見え方。見え方つきの文の中で、文の先頭から順に `length` 単位（UTF-16）ずつ当てる。余白（pt）は連なりの左右の字を
+/// その幅ずつ押し出す（CSS のインラインの padding）。余白のある見え方は、周りの文と独立した向きのかたまりとして並び、先頭の余白は
 /// かたまりの向きの始まりの側に、末尾の余白はその反対の側に付く——右から左の字のコードでも、余白はコードの外に出る。
 /// 地は、余白を含めたかたまりの x 範囲に置く（→ `ZoneTextLayout.Line.spans(of:)`）。折り返しで割れた側と、改行で割れた
 /// 側には余白が付かない。
 ///
 /// 字体は CTFont で持ち（載せる側の NSFont は、ここで受けるときに CTFont として持つ）、値はどのスレッドへも渡せる。
 public struct ZoneTextStyle: Equatable, Sendable {
-  public var length: Int
+  /// 当てる長さ（UTF-16 の単位。見え方つきの文に足すときに決まる）。
+  public internal(set) var length = 0
   public var font: CTFont {
     get { typeface.font }
     set { typeface = Typeface(font: newValue) }
@@ -181,8 +205,7 @@ public struct ZoneTextStyle: Equatable, Sendable {
   public var trailingPadding: CGFloat
   private var typeface: Typeface
 
-  public init(length: Int, font: NSFont, color: NSColor, padding: CGFloat = 0) {
-    self.length = length
+  public init(font: NSFont, color: NSColor, padding: CGFloat = 0) {
     self.typeface = Typeface(font: font as CTFont)
     self.color = color
     self.leadingPadding = padding

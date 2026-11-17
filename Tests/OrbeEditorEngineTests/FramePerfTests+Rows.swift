@@ -102,8 +102,8 @@ extension FramePerfTests {
       space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)), scale: 2)
     for coded in [false, true] {
       let costs = [2_000, 8_000].map { length -> Double in
-        let (comment, styles) = Self.longParagraph(length, coded: coded)
-        let picture = ThreadZone(comment: comment, styles: styles).picture(width: 700)
+        let (comment, content) = Self.longParagraph(length, coded: coded)
+        let picture = ThreadZone(comment: comment, content: content).picture(width: 700)
         let painter = ZonePainter()
         let times = (0..<9).map { _ -> Double in
           let started = CACurrentMediaTime()
@@ -128,15 +128,11 @@ extension FramePerfTests {
   func testMeasuringALongParagraphGrowsLinearly() {
     for coded in [false, true] {
       let costs = [2_000, 8_000].map { length -> Double in
-        let (comment, styles) = Self.longParagraph(length, coded: coded)
-        let measured =
-          styles ?? [
-            ZoneTextStyle(
-              length: comment.utf16.count, font: ThreadZone.bodyFont, color: ThreadZone.ink)
-          ]
+        let (comment, content) = Self.longParagraph(length, coded: coded)
+        let measured = content ?? ThreadZone.content(comment)
         let times = (0..<9).map { _ -> Double in
           let started = CACurrentMediaTime()
-          _ = ZoneTextLayout.lines(comment, styles: measured, width: 700)
+          _ = ZoneTextLayout.lines(measured, width: 700)
           return CACurrentMediaTime() - started
         }
         return Self.quantile(times.sorted(), 0.5)
@@ -158,21 +154,26 @@ extension FramePerfTests {
     }
   }
 
-  /// 長さ `length` の 1 段落の本文と、その見え方（`coded` なら 20 字ごとに本文の字とインラインコードを交互に並べた見え方、
-  /// でなければ nil でスレッドの既定の見え方）。
-  static func longParagraph(_ length: Int, coded: Bool) -> (String, [ZoneTextStyle]?) {
+  /// 長さ `length` の 1 段落の本文と、その見え方つきの文（`coded` なら 20 字ごとに本文の字とインラインコードを交互に
+  /// 並べたもの、でなければ nil でスレッドの既定の見え方）。
+  static func longParagraph(_ length: Int, coded: Bool) -> (String, ZoneStyledText?) {
     let sentence = "tail だけ見ると、間に別種のイベントが挟まったときに畳み損ねない？"
     let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     let comment = String(
       String(repeating: sentence, count: length / sentence.count + 1).prefix(length))
     guard coded else { return (comment, nil) }
-    let styles = stride(from: 0, to: comment.utf16.count, by: 20).map { start in
-      let length = min(20, comment.utf16.count - start)
-      return start / 20 % 2 == 0
-        ? ZoneTextStyle(length: length, font: ThreadZone.bodyFont, color: ThreadZone.ink)
-        : ZoneTextStyle(length: length, font: mono, color: ThreadZone.accent, padding: 4)
-    }
-    return (comment, styles)
+    let units = Array(comment.utf16)
+    let content = ZoneStyledText(
+      stride(from: 0, to: units.count, by: 20).map { start in
+        let part = String(decoding: units[start..<min(start + 20, units.count)], as: UTF16.self)
+        return (
+          part,
+          start / 20 % 2 == 0
+            ? ZoneTextStyle(font: ThreadZone.bodyFont, color: ThreadZone.ink)
+            : ZoneTextStyle(font: mono, color: ThreadZone.accent, padding: 4)
+        )
+      })
+    return (comment, content)
   }
 
   /// ミニマップを出さない構成にし、差し込みの列（→ `rowInsertions`）を置く。

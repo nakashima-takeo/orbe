@@ -235,7 +235,7 @@ final class ZonePainter {
       ?? ZoneTextTypeset(text, prepare: prepared)
     hits.typeset[text.id] = typeset
     hits.texts[text.id] = typeset.rope
-    let colors = text.styles.map(\.color)
+    let colors = text.content.styles.map(\.color)
     for (index, (line, layout)) in zip(text.lines, typeset.lines).enumerated() {
       material.runs += runs(
         typeset.runs[index], colors: colors, origin: line.origin, inks: &inks)
@@ -346,23 +346,22 @@ struct ZoneTextTypeset {
     let ys: [Float]
   }
 
-  let string: String
-  let styles: [ZoneTextStyle]
+  let content: ZoneStyledText
   let ranges: [NSRange]
   let lines: [ZoneTextLayout.TypesetLine]
   let runs: [[Run]]
-  /// 行ごとの、行の始まりの字の見え方の字体（位置が見え方の外なら最後の見え方の字体）の上下の高さ。
+  /// 行ごとの、行の始まりの字の見え方の字体（文の終わりの位置なら最後の見え方の字体）の上下の高さ。
   let metrics: [(ascent: CGFloat, descent: CGFloat)]
   let rope: TextRope
 
   init(_ text: ZoneText, prepare: ([ZoneTextLayout.GlyphRun]) -> [Run]) {
-    string = text.string
-    styles = text.styles
+    content = text.content
     ranges = text.lines.map(\.range)
     lines = ZoneTextLayout.lines(of: text)
     runs = lines.map { prepare($0.runs) }
     var end = 0
-    let ends = text.styles.map { style -> Int in
+    let styles = text.content.styles
+    let ends = styles.map { style -> Int in
       end += style.length
       return end
     }
@@ -373,20 +372,19 @@ struct ZoneTextTypeset {
         if line.range.location < ends[middle] { upper = middle } else { index = middle + 1 }
       }
       let font =
-        text.styles.indices.contains(index)
-        ? text.styles[index].font
-        : (text.styles.last?.font ?? NSFont.systemFont(ofSize: 12) as CTFont)
+        styles.indices.contains(index)
+        ? styles[index].font : (styles.last?.font ?? NSFont.systemFont(ofSize: 12) as CTFont)
       return (CTFontGetAscent(font), CTFontGetDescent(font))
     }
-    rope = TextRope(text.string)
+    rope = TextRope(text.content.string)
   }
 
-  /// `text` を同じに組めるか——文（UTF-16 の単位）と、色を除く見え方と、行の範囲が同じ。
+  /// `text` を同じに組めるか——色を除く見え方つきの文と、行の範囲が同じ。
   func matches(_ text: ZoneText) -> Bool {
-    guard ranges == text.lines.map(\.range), styles.count == text.styles.count,
-      string.utf16.elementsEqual(text.string.utf16)
+    guard ranges == text.lines.map(\.range), content.styles.count == text.content.styles.count,
+      content.string.utf16.elementsEqual(text.content.string.utf16)
     else { return false }
-    return zip(styles, text.styles).allSatisfy {
+    return zip(content.styles, text.content.styles).allSatisfy {
       var style = $0
       style.color = $1.color
       return style == $1

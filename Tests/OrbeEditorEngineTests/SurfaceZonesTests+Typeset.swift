@@ -17,9 +17,9 @@ extension SurfaceZonesTests {
     var random = SplitMix(seed: 0x7e57)
     var wrong: [String] = []
     for round in 0..<300 {
-      let (string, styles) = Self.randomText(&random)
+      let content = Self.randomText(&random)
       let width = CGFloat(Int.random(in: 60...260, using: &random))
-      picture = Self.picture(string, styles, width: width)
+      picture = Self.picture(content, width: width)
       if round == 0 { surface.setRows(self.zone(zone, at: 2)) } else { surface.redrawZone(zone) }
       let change = Int.random(in: 0...8, using: &random)
       if change == 8 {
@@ -41,26 +41,35 @@ extension SurfaceZonesTests {
     XCTAssertEqual(wrong.prefix(5), [])
   }
 
-  /// 本文の字とインラインコードを乱択で混ぜた文と見え方（長さ 0 の見え方や、文の終わりまで届かない見え方の列も混ぜる）。
-  static func randomText(_ random: inout SplitMix) -> (String, [ZoneTextStyle]) {
+  /// 本文の字とインラインコードを乱択で混ぜた見え方つきの文（長さ 0 の見え方も混ぜる）。
+  static func randomText(_ random: inout SplitMix) -> ZoneStyledText {
     let words = ["see ", "the ", "שלום ", "漢字", "merges(event)", "กำ", "abc", " ", "、", "x", "\n"]
-    var string = ""
-    var styles: [ZoneTextStyle] = []
+    var content = ZoneStyledText()
     for _ in 0..<Int.random(in: 2...8, using: &random) {
       let part = words[Int.random(in: 0..<words.count, using: &random)]
       let coded = Bool.random(using: &random)
-      string += part
-      styles.append(
+      content.append(
+        part,
         ZoneTextStyle(
-          length: part.utf16.count, font: coded ? mono : body,
-          color: coded ? .systemRed : .labelColor,
+          font: coded ? mono : body, color: coded ? .systemRed : .labelColor,
           padding: coded ? 4 : 0))
       if Int.random(in: 0..<6, using: &random) == 0 {
-        styles.append(ZoneTextStyle(length: 0, font: big, color: .labelColor))
+        content.append("", ZoneTextStyle(font: big, color: .labelColor))
       }
     }
-    if styles.count > 1, Int.random(in: 0..<4, using: &random) == 0 { styles.removeLast() }
-    return (string, styles)
+    return content
+  }
+
+  /// 文の UTF-16 の単位 `units` を、長さ `lengths` ずつ見え方 `styles` で足した見え方つきの文。
+  static func content(_ units: [UInt16], _ styles: [ZoneTextStyle], _ lengths: [Int])
+    -> ZoneStyledText
+  {
+    var start = 0
+    return ZoneStyledText(
+      zip(styles, lengths).map { style, length in
+        defer { start += length }
+        return (String(decoding: units[start..<start + length], as: UTF16.self), style)
+      })
   }
 
   static let body = NSFont.systemFont(ofSize: 12)
@@ -68,14 +77,14 @@ extension SurfaceZonesTests {
   static let big = NSFont.systemFont(ofSize: 15)
 
   /// 文を幅 `width` で測った行の範囲を、選べる字の行に並べた絵。
-  static func picture(_ string: String, _ styles: [ZoneTextStyle], width: CGFloat) -> ZonePicture {
-    let lines = ZoneTextLayout.lines(string, styles: styles, width: width).enumerated().map {
+  static func picture(_ content: ZoneStyledText, width: CGFloat) -> ZonePicture {
+    let lines = ZoneTextLayout.lines(content, width: width).enumerated().map {
       ZoneSelectableLine(
         origin: CGPoint(x: 8, y: 14 + 16 * CGFloat($0.offset)), range: $0.element.range)
     }
     return ZonePicture(
       height: 16 * CGFloat(lines.count) + 8,
-      texts: [ZoneText(id: "body", string: string, styles: styles, lines: lines)])
+      texts: [ZoneText(id: "body", content: content, lines: lines)])
   }
 
   /// 絵 `picture` の選べる文の 1 つを変えたもの（0: 変えない、1: 色、2: 字体、3: 余白、4: 隣り合う見え方の境、5: 字、
@@ -84,36 +93,38 @@ extension SurfaceZonesTests {
     -> ZonePicture
   {
     var text = picture.texts[0]
-    let index = Int.random(in: 0..<text.styles.count, using: &random)
+    var units = Array(text.content.string.utf16)
+    var styles = text.content.styles
+    var lengths = styles.map(\.length)
+    let index = Int.random(in: 0..<styles.count, using: &random)
     switch change {
-    case 1: text.styles[index].color = .systemBlue
+    case 1: styles[index].color = .systemBlue
     case 2:
-      text.styles[index].font = (text.styles[index].font == big as CTFont ? body : big) as CTFont
+      styles[index].font = (styles[index].font == big as CTFont ? body : big) as CTFont
     case 3:
-      text.styles[index].leadingPadding = text.styles[index].leadingPadding == 0 ? 3 : 0
-      text.styles[index].trailingPadding = 2
+      styles[index].leadingPadding = styles[index].leadingPadding == 0 ? 3 : 0
+      styles[index].trailingPadding = 2
     case 4:
-      if index + 1 < text.styles.count, text.styles[index].length > 0 {
-        text.styles[index].length -= 1
-        text.styles[index + 1].length += 1
+      if index + 1 < styles.count, lengths[index] > 0 {
+        lengths[index] -= 1
+        lengths[index + 1] += 1
       }
     case 5:
-      var units = Array(text.string.utf16)
       if let at = units.indices.filter({ units[$0] < 0x80 && units[$0] != 0x0A }).randomElement(
         using: &random)
       {
         units[at] = units[at] == 0x57 ? 0x69 : 0x57
-        text.string = String(decoding: units, as: UTF16.self)
       }
     case 6:
       return Self.picture(
-        text.string, text.styles, width: CGFloat(Int.random(in: 60...260, using: &random)))
+        text.content, width: CGFloat(Int.random(in: 60...260, using: &random)))
     case 7:
       text.lines = text.lines.map {
         ZoneSelectableLine(origin: CGPoint(x: $0.origin.x + 3, y: $0.origin.y + 1), range: $0.range)
       }
     default: break
     }
+    text.content = Self.content(units, styles, lengths)
     var next = picture
     next.texts = [text]
     return next

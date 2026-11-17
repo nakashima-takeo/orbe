@@ -13,8 +13,8 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   func testLinesPartitionTheTextAndFitTheWidth() {
     let string = "tail だけ見ると、間に別種のイベントが挟まったときに畳み損ねない？ merges(event) の前に種別チェックが要る気がする。"
-    let styles = [ZoneTextStyle(length: string.utf16.count, font: font, color: .white)]
-    let lines = ZoneTextLayout.lines(string, styles: styles, width: 160)
+    let lines = ZoneTextLayout.lines(
+      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 160)
     XCTAssertGreaterThan(lines.count, 2)
     XCTAssertEqual(lines.first?.range.location, 0)
     for (a, b) in zip(lines, lines.dropFirst()) {
@@ -26,8 +26,8 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   func testNewlinesAlwaysBreakAndAreNotInLines() {
     let string = "一行目\n\n三行目"
-    let styles = [ZoneTextStyle(length: string.utf16.count, font: font, color: .white)]
-    let lines = ZoneTextLayout.lines(string, styles: styles, width: 500)
+    let lines = ZoneTextLayout.lines(
+      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 500)
     XCTAssertEqual(
       lines.map(\.range),
       [
@@ -38,14 +38,13 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   /// 行末の空白は前の行に残り、見え方の地はその見え方の字がある行にだけある。
   func testSpansBelongToTheLinesThatHoldTheirGlyphs() {
-    let string = "aaaa bbbb cccc"
-    let styles = [
-      ZoneTextStyle(length: 5, font: font, color: .white),
-      ZoneTextStyle(length: 4, font: mono, color: .red),
-      ZoneTextStyle(length: 5, font: font, color: .white),
-    ]
+    let text = ZoneStyledText([
+      ("aaaa ", ZoneTextStyle(font: font, color: .white)),
+      ("bbbb", ZoneTextStyle(font: mono, color: .red)),
+      (" cccc", ZoneTextStyle(font: font, color: .white)),
+    ])
     let lines = ZoneTextLayout.lines(
-      string, styles: styles,
+      text,
       width: ZoneTextLayout.width([ZoneTextRun("aaaa bbbb", font: font, color: .white)]) + 1)
     XCTAssertEqual(
       lines.map(\.range), [NSRange(location: 0, length: 10), NSRange(location: 10, length: 4)],
@@ -59,9 +58,9 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testPaddingPushesTheNeighboursAndWidensTheGround() throws {
     let parts = ["see ", "code", " here"]
     let bare = try XCTUnwrap(
-      ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: 0), width: 500).first)
+      ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).first)
     let padded = try XCTUnwrap(
-      ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: 4), width: 500).first)
+      ZoneTextLayout.typeset(styled(parts, padding: 4), width: 500).first)
     let code = try XCTUnwrap(glyphs(of: 1, in: padded))
     let ground = try XCTUnwrap(padded.spans(of: 1).first)
     XCTAssertEqual(ground.lowerBound, code.lowerBound - 4, accuracy: 0.01)
@@ -74,7 +73,7 @@ final class ZoneTextLayoutTests: XCTestCase {
     XCTAssertEqual(padded.width, bare.width + 8, accuracy: 0.01)
     let leading = try XCTUnwrap(
       ZoneTextLayout.typeset(
-        "code", styles: [ZoneTextStyle(length: 4, font: mono, color: .red, padding: 4)],
+        ZoneStyledText([("code", ZoneTextStyle(font: mono, color: .red, padding: 4))]),
         width: 500
       ).first)
     XCTAssertEqual(try XCTUnwrap(glyphs(of: 0, in: leading)).lowerBound, 4, accuracy: 0.01)
@@ -94,9 +93,9 @@ final class ZoneTextLayoutTests: XCTestCase {
     for (name, code) in cases {
       let parts = ["see ", code, " z"]
       let bare = try XCTUnwrap(
-        ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: 0), width: 500).first)
+        ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).first)
       let padded = try XCTUnwrap(
-        ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: 4), width: 500).first)
+        ZoneTextLayout.typeset(styled(parts, padding: 4), width: 500).first)
       XCTAssertEqual(glyphCount(padded), glyphCount(bare), "\(name): 字を割らない")
       XCTAssertEqual(padded.width, bare.width + 8, accuracy: 0.01, "\(name): 幅は余白の分だけ増える")
       let (a, b) = (
@@ -194,7 +193,7 @@ final class ZoneTextLayoutTests: XCTestCase {
       var allowed = Set<Int>()
       for width in stride(from: CGFloat(10), through: 300, by: 0.5) {
         for line in ZoneTextLayout.lines(
-          string, styles: styles(parts, codes: codes, padding: 0), width: width)
+          styled(parts, codes: codes, padding: 0), width: width)
         {
           allowed.insert(line.range.location)
         }
@@ -204,7 +203,7 @@ final class ZoneTextLayoutTests: XCTestCase {
       }.max()!
       for width in stride(from: widest + 12, through: 300, by: 0.5) {
         let starts = ZoneTextLayout.lines(
-          string, styles: styles(parts, codes: codes, padding: padding), width: width
+          styled(parts, codes: codes, padding: padding), width: width
         ).map(\.range.location)
         XCTAssertTrue(
           starts.allSatisfy(allowed.contains), "\(string) を幅 \(width) で割った行の始まり \(starts)")
@@ -221,7 +220,7 @@ final class ZoneTextLayoutTests: XCTestCase {
     ] {
       let string = parts.joined()
       let over = stride(from: CGFloat(40), through: 200, by: 0.5).filter { width in
-        ZoneTextLayout.lines(string, styles: styles(parts, padding: padding), width: width)
+        ZoneTextLayout.lines(styled(parts, padding: padding), width: width)
           .contains { $0.width > width + 0.001 }
       }
       XCTAssertEqual(over, [], "\(string) を折り返すと幅を超える行が出る幅")
@@ -244,12 +243,12 @@ final class ZoneTextLayoutTests: XCTestCase {
     for (name, parts) in cases {
       let string = parts.joined()
       let lines = ZoneTextLayout.typeset(
-        string, styles: styles(parts, padding: padding), width: 500)
+        styled(parts, padding: padding), width: 500)
       XCTAssertEqual(lines.map(\.range), [NSRange(location: 0, length: string.utf16.count)], name)
       let line = try XCTUnwrap(lines.first)
       XCTAssertEqual(misplaced(line, code: 1), [], name)
       let bare = try XCTUnwrap(
-        ZoneTextLayout.typeset(string, styles: styles(parts, padding: 0), width: 500).first)
+        ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).first)
       XCTAssertEqual(glyphCount(line), glyphCount(bare), "\(name): 包みの字は描かない")
       if parts[2].hasSuffix("def ghi") {
         let tail = line.runs.filter { $0.style == 2 }.flatMap(\.positions).map(\.x)
@@ -263,7 +262,7 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testHitsOnThePaddingLandOnTheCodeEdges() throws {
     let parts = ["see ", "code", " here"]
     let line = try XCTUnwrap(
-      ZoneTextLayout.typeset(parts.joined(), styles: styles(parts, padding: padding), width: 500)
+      ZoneTextLayout.typeset(styled(parts, padding: padding), width: 500)
         .first)
     let ground = try XCTUnwrap(line.spans(of: 1).first)
     let code = try XCTUnwrap(glyphs(of: 1, in: line))
@@ -285,8 +284,8 @@ final class ZoneTextLayoutTests: XCTestCase {
       (["שלום ", "aaaa bbbb cccc dddd", " עולם"], 90, true),
     ] {
       let string = parts.joined()
-      let styles = styles(parts, padding: padding)
-      let lines = ZoneTextLayout.lines(string, styles: styles, width: width)
+      let styles = styled(parts, padding: padding)
+      let lines = ZoneTextLayout.lines(styles, width: width)
       let index = try XCTUnwrap(
         lines.lastIndex {
           $0.range.location > parts[0].utf16.count && !$0.spans(of: 1).isEmpty
@@ -301,7 +300,7 @@ final class ZoneTextLayoutTests: XCTestCase {
       }
       let drawn = ZoneTextLayout.lines(
         of: ZoneText(
-          id: 0, string: string, styles: styles,
+          id: 0, content: styles,
           lines: lines.map { ZoneSelectableLine(origin: .zero, range: $0.range) }))
       XCTAssertEqual(drawn.map(\.range), lines.map(\.range), string)
       XCTAssertEqual(drawn[index].width, line.width, accuracy: 0.001, string)
@@ -315,11 +314,11 @@ final class ZoneTextLayoutTests: XCTestCase {
     var wrong: [String] = []
     let compare = { (parts: [String], codes: [Int], width: CGFloat) in
       let string = parts.joined()
-      let styles = self.styles(parts, codes: codes, padding: self.padding)
-      let measured = ZoneTextLayout.lines(string, styles: styles, width: width)
+      let styles = self.styled(parts, codes: codes, padding: self.padding)
+      let measured = ZoneTextLayout.lines(styles, width: width)
       let drawn = ZoneTextLayout.lines(
         of: ZoneText(
-          id: 0, string: string, styles: styles,
+          id: 0, content: styles,
           lines: measured.map { ZoneSelectableLine(origin: .zero, range: $0.range) }))
       if drawn.map(\.measured) != measured { wrong.append("\(string) を幅 \(width) で測った行と描く行が食い違う") }
     }

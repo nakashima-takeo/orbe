@@ -4,15 +4,19 @@ import XCTest
 @testable import OrbeEditorCore
 
 extension ZoneTextLayoutTests {
-  /// 部分 `parts` のうち `codes` をコード（余白 `padding` の等幅）、ほかを本文の字体にした見え方。`codes` を省けば真ん中の
-  /// 1 つだけがコード。
-  func styles(_ parts: [String], codes: [Int]? = nil, padding: CGFloat) -> [ZoneTextStyle] {
+  /// 部分 `parts` を順に足し、`codes` をコード（余白 `padding` の等幅）、ほかを本文の字体にした見え方つきの文。`codes` を
+  /// 省けば真ん中の 1 つだけがコード。
+  func styled(_ parts: [String], codes: [Int]? = nil, padding: CGFloat) -> ZoneStyledText {
     let codes = codes ?? [1]
-    return parts.enumerated().map { index, part in
-      codes.contains(index)
-        ? ZoneTextStyle(length: part.utf16.count, font: mono, color: .red, padding: padding)
-        : ZoneTextStyle(length: part.utf16.count, font: font, color: .white)
-    }
+    return ZoneStyledText(
+      parts.enumerated().map { index, part in
+        (
+          part,
+          codes.contains(index)
+            ? ZoneTextStyle(font: mono, color: .red, padding: padding)
+            : ZoneTextStyle(font: font, color: .white)
+        )
+      })
   }
 
   /// 部分 `parts` を幅 `width` で組み、コード `code` の地が守らない約束を返す（→ `misplaced`）。
@@ -21,7 +25,7 @@ extension ZoneTextLayoutTests {
   ) -> [String] {
     let string = parts.joined()
     let lines = ZoneTextLayout.typeset(
-      string, styles: styles(parts, codes: codes ?? [code], padding: padding), width: width)
+      styled(parts, codes: codes ?? [code], padding: padding), width: width)
     let start = parts[..<code].reduce(0) { $0 + $1.utf16.count }
     let end = start + parts[code].utf16.count
     var wrong: [String] = []

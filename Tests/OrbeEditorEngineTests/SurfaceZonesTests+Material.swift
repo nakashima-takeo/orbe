@@ -34,11 +34,11 @@ extension SurfaceZonesTests {
         ],
         texts: [
           ZoneText(
-            id: "t", string: "redgreen",
-            styles: [
-              ZoneTextStyle(length: 3, font: font, color: Self.red),
-              ZoneTextStyle(length: 5, font: font, color: Self.green),
-            ],
+            id: "t",
+            content: ZoneStyledText([
+              ("red", ZoneTextStyle(font: font, color: Self.red)),
+              ("green", ZoneTextStyle(font: font, color: Self.green)),
+            ]),
             lines: [
               ZoneSelectableLine(
                 origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8))
@@ -69,11 +69,11 @@ extension SurfaceZonesTests {
           height: 30,
           texts: [
             ZoneText(
-              id: "t", string: "code after",
-              styles: [
-                ZoneTextStyle(length: 4, font: mono, color: Self.red, padding: padding),
-                ZoneTextStyle(length: 6, font: font, color: Self.green),
-              ],
+              id: "t",
+              content: ZoneStyledText([
+                ("code", ZoneTextStyle(font: mono, color: Self.red, padding: padding)),
+                (" after", ZoneTextStyle(font: font, color: Self.green)),
+              ]),
               lines: [
                 ZoneSelectableLine(
                   origin: CGPoint(x: 10, y: 14), range: NSRange(location: 0, length: 10))

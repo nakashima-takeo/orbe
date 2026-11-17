@@ -63,8 +63,8 @@ final class ThreadZone: SurfaceZone {
   static let lineHeight: CGFloat = 19
 
   var comment: String
-  /// 本文の見え方（省けば全体を本文の字体で）。
-  var styles: [ZoneTextStyle]?
+  /// 本文の見え方つきの文（省けば `comment` の全体を本文の字体で）。
+  var content: ZoneStyledText?
   let field: ZoneTextField?
   /// 入力欄の行の数が変われば描き直させる面（載せた後に置く。打鍵ごとには描き直さない）。
   weak var surface: (any TextSurface)?
@@ -74,9 +74,9 @@ final class ThreadZone: SurfaceZone {
   private(set) var widths: [CGFloat] = []
   private var fieldLines = 0
 
-  init(comment: String, styles: [ZoneTextStyle]? = nil, field: ZoneTextField? = nil) {
+  init(comment: String, content: ZoneStyledText? = nil, field: ZoneTextField? = nil) {
     self.comment = comment
-    self.styles = styles
+    self.content = content
     self.field = field
     fieldLines = field?.lineCount ?? 0
     field?.didChange = { [weak self] field in
@@ -106,8 +106,7 @@ final class ThreadZone: SurfaceZone {
         + body,
       texts: [
         ZoneText(
-          id: Self.commentText, string: comment, styles: styles ?? Self.styles(comment),
-          lines: lines)
+          id: Self.commentText, content: content ?? Self.content(comment), lines: lines)
       ])
   }
 
@@ -171,8 +170,7 @@ final class ThreadZone: SurfaceZone {
           frame: CGRect(x: frame.minX + Self.inset + 4, y: y + 24, width: 12, height: 12),
           image: Self.glyph)),
     ]
-    let lines = ZoneTextLayout.lines(
-      comment, styles: styles ?? Self.styles(comment), width: max(10, inner - 30))
+    let lines = ZoneTextLayout.lines(content ?? Self.content(comment), width: max(10, inner - 30))
     for line in lines {
       selectable.append(
         ZoneSelectableLine(
@@ -203,9 +201,9 @@ final class ThreadZone: SurfaceZone {
     }
   }
 
-  /// 本文の見え方（全体を本文の字体で）。
-  static func styles(_ string: String) -> [ZoneTextStyle] {
-    [ZoneTextStyle(length: string.utf16.count, font: bodyFont, color: ink)]
+  /// 全体を本文の字体にした見え方つきの文。
+  static func content(_ string: String) -> ZoneStyledText {
+    ZoneStyledText([(string, ZoneTextStyle(font: bodyFont, color: ink))])
   }
 
   /// 入力欄の見え方。

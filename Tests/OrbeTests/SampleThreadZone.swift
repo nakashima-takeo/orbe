@@ -246,8 +246,8 @@ final class SampleThreadZone: SurfaceZone {
         range: NSRange(location: 0, length: commit.utf16.count))
       canvas.texts.append(
         ZoneText(
-          id: "commit-\(index)", string: commit,
-          styles: [ZoneTextStyle(length: commit.utf16.count, font: mono, color: Self.muted)],
+          id: "commit-\(index)",
+          content: ZoneStyledText([(commit, ZoneTextStyle(font: mono, color: Self.muted))]),
           lines: [line]))
       y += headLine
     }
@@ -266,28 +266,23 @@ final class SampleThreadZone: SurfaceZone {
     let (left, width, top) = (area.minX, area.width, area.minY)
     let sans = NSFont.systemFont(ofSize: 12)
     let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-    var string = ""
-    var styles: [ZoneTextStyle] = []
+    var content = ZoneStyledText()
     for part in parts {
       switch part {
       case .text(let text):
-        string += text
-        styles.append(ZoneTextStyle(length: text.utf16.count, font: sans, color: Self.text2))
+        content.append(text, ZoneTextStyle(font: sans, color: Self.text2))
       case .code(let code):
-        string += code
-        styles.append(
-          ZoneTextStyle(
-            length: code.utf16.count, font: mono, color: Self.accentBright,
-            padding: Self.codePadding))
+        content.append(
+          code, ZoneTextStyle(font: mono, color: Self.accentBright, padding: Self.codePadding))
       }
     }
     let lineHeight: CGFloat = 12 * 1.6
-    let lines = ZoneTextLayout.lines(string, styles: styles, width: width)
+    let lines = ZoneTextLayout.lines(content, width: width)
     var selectable: [ZoneSelectableLine] = []
     for (index, line) in lines.enumerated() {
       let lineTop = top + CGFloat(index) * lineHeight
       let baseline = Self.baseline(top: lineTop, height: lineHeight, font: sans)
-      for (styleIndex, style) in styles.enumerated() where style.font == mono as CTFont {
+      for (styleIndex, style) in content.styles.enumerated() where style.font == mono as CTFont {
         for ground in line.spans(of: styleIndex) {
           canvas.elements.append(
             .box(
@@ -302,7 +297,7 @@ final class SampleThreadZone: SurfaceZone {
       selectable.append(
         ZoneSelectableLine(origin: CGPoint(x: left, y: baseline), range: line.range))
     }
-    canvas.texts.append(ZoneText(id: id, string: string, styles: styles, lines: selectable))
+    canvas.texts.append(ZoneText(id: id, content: content, lines: selectable))
     return CGFloat(lines.count) * lineHeight
   }
 }

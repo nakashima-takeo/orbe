@@ -43,12 +43,16 @@ extension SurfaceZonesTests {
       " で終わる本文。続く文もある。",
     ]
     let comment = parts.joined()
-    let styles = parts.enumerated().map { index, part in
-      index % 2 == 1
-        ? ZoneTextStyle(length: part.utf16.count, font: mono, color: ThreadZone.accent, padding: 4)
-        : ZoneTextStyle(length: part.utf16.count, font: ThreadZone.bodyFont, color: ThreadZone.ink)
-    }
-    let thread = ThreadZone(comment: comment, styles: styles)
+    let content = ZoneStyledText(
+      parts.enumerated().map { index, part in
+        (
+          part,
+          index % 2 == 1
+            ? ZoneTextStyle(font: mono, color: ThreadZone.accent, padding: 4)
+            : ZoneTextStyle(font: ThreadZone.bodyFont, color: ThreadZone.ink)
+        )
+      })
+    let thread = ThreadZone(comment: comment, content: content)
     surface.setRows(zone(thread, at: 4))
     let board = privatePasteboard(opened)
     let lines = try XCTUnwrap(surface.zones[ObjectIdentifier(thread)]?.hits.lines)
@@ -131,7 +135,7 @@ private final class CommentsZone: SurfaceZone {
       height: 20 * CGFloat(comments.count) + 8,
       texts: comments.enumerated().map { index, comment in
         ZoneText(
-          id: comment.0, string: comment.1, styles: ThreadZone.styles(comment.1),
+          id: comment.0, content: ThreadZone.content(comment.1),
           lines: [
             ZoneSelectableLine(
               origin: CGPoint(x: 10, y: 20 * CGFloat(index) + 16),

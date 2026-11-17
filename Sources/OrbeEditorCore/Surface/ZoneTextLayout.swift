@@ -150,23 +150,23 @@ public enum ZoneTextLayout {
     public let positions: [CGPoint]
   }
 
-  /// 文 `string` を、見え方 `styles`（文の先頭から順に当てる）で組み、幅 `width` で行に割って測る。どのスレッドからも呼べる
+  /// 見え方つきの文 `text` を組み、幅 `width` で行に割って測る。どのスレッドからも呼べる
   /// （載せる側は裏で測り、結果の行を main で覚えて、絵を問われたら覚えから組める）。改行（`\n`）では必ず割る。
   /// 割る位置は Core Text の行の割り方（語の境。日本語は字の境）。置き字の外側は余白を付けないときと同じ位置で割れ、
   /// 置き字とコードの間では割らない（コードと余白が 1 行に収まらない幅でだけ、Core Text が語の途中で割り、余白がコードから
   /// 離れうる）。空の文は空の 1 行。
-  public static func lines(_ string: String, styles: [ZoneTextStyle], width: CGFloat) -> [Line] {
-    typeset(string, styles: styles, width: width).map(\.measured)
+  public static func lines(_ text: ZoneStyledText, width: CGFloat) -> [Line] {
+    typeset(text, width: width).map(\.measured)
   }
 
   /// 文を幅で行に割り、組んだ行を返す（測る口と、測った行を確かめる所が使う）。
-  static func typeset(_ string: String, styles: [ZoneTextStyle], width: CGFloat) -> [TypesetLine] {
-    let units = Array(string.utf16)
+  static func typeset(_ text: ZoneStyledText, width: CGFloat) -> [TypesetLine] {
+    let units = Array(text.string.utf16)
     var lines: [TypesetLine] = []
     var start = 0
     repeat {
       let span = paragraphSpan(around: start, in: units)
-      let composition = ZoneComposition(units, paragraph: span, styles: styles)
+      let composition = ZoneComposition(units, paragraph: span, styles: text.styles)
       lines += wrap(composition, width: width)
       start = span.upperBound + 1
     } while start <= units.count
@@ -176,7 +176,7 @@ public enum ZoneTextLayout {
   /// 選べる文のまとまり `text` の行を、`text.lines` の順に組む（折り返さない）。行の範囲は、範囲の始まりを含む段落の中へ
   /// 切り詰める。段落は 1 回だけ組み、同じ段落の行はそこから切り出す——`lines` で測った行と同じ字組みになる。
   public static func lines(of text: ZoneText) -> [TypesetLine] {
-    let units = Array(text.string.utf16)
+    let units = Array(text.content.string.utf16)
     var composition: ZoneComposition?
     return text.lines.map { line in
       let lower = min(max(0, line.range.location), units.count)
@@ -187,7 +187,7 @@ public enum ZoneTextLayout {
         current = composition
       } else {
         current = ZoneComposition(
-          units, paragraph: paragraphSpan(around: lower, in: units), styles: text.styles)
+          units, paragraph: paragraphSpan(around: lower, in: units), styles: text.content.styles)
         composition = current
       }
       let upper = min(max(lower, NSMaxRange(line.range)), current.paragraph.upperBound)
@@ -198,12 +198,10 @@ public enum ZoneTextLayout {
 
   /// 字の連なりを 1 つの段落として 1 行に組む（折り返さない。見え方の番号は連なりの添字）。
   public static func line(_ runs: [ZoneTextRun]) -> TypesetLine {
-    let units = Array(runs.map(\.string).joined().utf16)
-    let composition = ZoneComposition(
-      units, paragraph: 0..<units.count,
-      styles: runs.map {
-        ZoneTextStyle(length: $0.string.utf16.count, font: $0.font, color: $0.color)
-      })
+    let text = ZoneStyledText(
+      runs.map { ($0.string, ZoneTextStyle(font: $0.font, color: $0.color)) })
+    let units = Array(text.string.utf16)
+    let composition = ZoneComposition(units, paragraph: 0..<units.count, styles: text.styles)
     return TypesetLine(composition, 0..<composition.count)
   }
 
