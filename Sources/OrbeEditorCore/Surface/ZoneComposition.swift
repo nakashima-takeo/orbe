@@ -4,12 +4,12 @@ import CoreText
 /// 絵の差し込みの字組みで組む文——元の文の段落 1 つに、余白のある見え方（インラインコード）ごとに次の並びを足したもの。
 ///
 /// ```
-/// [U+2068] [置き字] [U+2060] コード [U+2060] [置き字] [U+2069]
+/// [U+2068] [置き字] コード [置き字] [U+2069]
 /// ```
 ///
-/// 置き字は U+FFFC に余白の幅だけを返す run delegate を付けた字。U+2060 は置き字とコードの間だけを折らせない（置き字の外側は
-/// 元の文と同じ位置で折れる）。U+2068・U+2069 は包んだ範囲を周りと独立した向きのかたまりにする（向きは Core Text が中の字から
-/// 決める）。コードの中の対にならない isolate の終わりは幅 0 の U+2060 に置き換え、閉じていない isolate と埋め込み・上書きは
+/// 置き字は U+FFFC に余白の幅だけを返す run delegate を付けた字。U+2068・U+2069 は包んだ範囲を周りと独立した向きのかたまりに
+/// する（向きは Core Text が中の字から決める）。行を割る位置はこの文では探さない（→ `ZoneTextLayout`。余白を付けずに組んだ
+/// 段落で探す）。コードの中の対にならない isolate の終わりは幅 0 の U+2060 に置き換え、閉じていない isolate と埋め込み・上書きは
 /// 後ろの置き字の前で閉じる——元の文の制御字が、置き字の位置と包みの向きの独立を壊さない。
 ///
 /// 元の文と組んだ文の位置の対応はこの型に閉じ、字組みの口（`ZoneTextLayout.Line`・`ZoneTextLayout.TypesetLine`）は
@@ -27,6 +27,8 @@ final class ZoneComposition {
   private let composed: [Int]
   /// 組んだ文の字の見え方（包みの字は包んだ見え方。見え方の無い字は -1）。
   let owners: [Int32]
+  /// 置き字の位置（組んだ文の位置）。
+  let placeholders: Set<Int>
   /// 組んだ文の字が空白か（行末の空白を幅と地に数えない）。
   let whitespace: [Bool]
 
@@ -60,6 +62,7 @@ final class ZoneComposition {
     originals = builder.originals
     composed = builder.composed
     owners = builder.owners
+    placeholders = builder.placeholders
     whitespace = builder.units.map { Unicode.Scalar($0)?.properties.isWhitespace ?? false }
     typesetter = CTTypesetterCreateWithAttributedString(
       builder.attributed(rightToLeft: Self.isRightToLeft(source[paragraph])))
@@ -80,12 +83,6 @@ final class ZoneComposition {
     }
     return CTTypesetterCreateLine(
       typesetter, CFRange(location: range.lowerBound, length: range.count))
-  }
-
-  /// 組んだ文の境 `index` で行を割れるか——元の文の位置から引ける境（→ `composed(_:)`）で、サロゲートの対を割らない。
-  func isBreakable(_ index: Int) -> Bool {
-    guard index > 0, index < count else { return true }
-    return composed(original(index)) == index && !UTF16.isTrailSurrogate(units[index])
   }
 
   /// 段落 `units` が右から左か——段落の最初の、向きを持つ字で決まる（UAX #9 の P2・P3。向きを持つ字が無ければ左から
@@ -127,6 +124,10 @@ private struct Builder {
   var owners: [Int32] = []
   /// 組んだ文の字ごとの種類と字体（字体が無ければ Core Text の既定）。
   var kinds: [(kind: Kind, font: CTFont?)] = []
+  /// 置き字の位置（組んだ文の位置）。
+  var placeholders: Set<Int> = []
+  /// 包んだコードの字の範囲（組んだ文の位置。包みの制御字と置き字は含まない）。
+  var codes: [Range<Int>] = []
 
   init(paragraph: Range<Int>) {
     self.paragraph = paragraph
@@ -150,9 +151,10 @@ private struct Builder {
     composed[start - paragraph.lowerBound] = units.count
     append(0x2068, original: start, owner: style, .control, font)
     if leading > 0 {
+      placeholders.insert(units.count)
       append(0xFFFC, original: start, owner: style, .placeholder(leading), font)
-      append(0x2060, original: start, owner: style, .control, font)
     }
+    let head = units.count
     // 開いている isolate（true）と埋め込み・上書き（false）。
     var open: [Bool] = []
     for offset in range {
@@ -174,15 +176,17 @@ private struct Builder {
         unit, original: offset, owner: style, unit == source[offset] ? .text(style) : .control,
         font)
     }
+    let tail = units.count
     for isolate in open.reversed() {
       append(isolate ? 0x2069 : 0x202C, original: end, owner: style, .control, font)
     }
     if trailing > 0 {
-      append(0x2060, original: end, owner: style, .control, font)
+      placeholders.insert(units.count)
       append(0xFFFC, original: end, owner: style, .placeholder(trailing), font)
     }
     append(0x2069, original: end, owner: style, .control, font)
     composed[end - paragraph.lowerBound] = units.count
+    codes.append(head..<tail)
   }
 
   mutating func finish() {
@@ -239,6 +243,14 @@ private struct Builder {
       case .text: break
       }
       start = end
+    }
+    // コードの字は言語を持たない字として組む——Core Text は言語（既定は利用者の環境の言語）で和文の約物を詰め、括弧の
+    // 送りの片側を空ける。向きの逆なコードでは空きが余白の側に出て、余白が渡した幅より広く見える。包みの制御字と置き字
+    // には付けない（付けると、コードの外の隣の約物の詰め方が変わり、その字がコードの地にかぶる）。
+    for code in codes {
+      CFAttributedStringSetAttribute(
+        attributed, CFRange(location: code.lowerBound, length: code.count),
+        kCTLanguageAttributeName, "zxx" as CFString)
     }
     CFAttributedStringEndEditing(attributed)
     return attributed

@@ -46,12 +46,21 @@ public enum ZoneTextLayout {
           - CGFloat(CTLineGetTrailingWhitespaceWidth(line)))
     }
 
-    /// 行の左端から x の所にいちばん近い、元の文の位置（行の範囲の中）。置き字の上はコードの端に当たる。
+    /// 行の左端から x の所にいちばん近い、元の文の位置（行の範囲の中）。置き字の上はコードの端に当たる——置き字の
+    /// グリフの上かを先に見る（Core Text の位置の当て方は、利用者の文の双方向の制御字があると置き字の外の字を返しうる）。
     public func offset(atX x: CGFloat) -> Int {
       guard x > 0 else { return range.location }
       guard x < width else { return NSMaxRange(range) }
-      let index = CTLineGetStringIndexForPosition(line, CGPoint(x: x, y: 0))
-      return min(max(range.location, composition.original(index)), NSMaxRange(range))
+      var edge: Int?
+      forEachGlyph { index, extent in
+        if edge == nil, composition.placeholders.contains(index), extent.contains(x) {
+          edge = composition.original(index)
+        }
+      }
+      let offset =
+        edge
+        ?? composition.original(CTLineGetStringIndexForPosition(line, CGPoint(x: x, y: 0)))
+      return min(max(range.location, offset), NSMaxRange(range))
     }
 
     /// 元の文の位置 `offset` のキャレットの、行の左端からの x。コードの始まりと終わりは、置き字の外側。
@@ -152,9 +161,9 @@ public enum ZoneTextLayout {
 
   /// 見え方つきの文 `text` を組み、幅 `width` で行に割って測る。どのスレッドからも呼べる
   /// （載せる側は裏で測り、結果の行を main で覚えて、絵を問われたら覚えから組める）。改行（`\n`）では必ず割る。
-  /// 割る位置は Core Text の行の割り方（語の境。日本語は字の境）。置き字の外側は余白を付けないときと同じ位置で割れ、
-  /// 置き字とコードの間では割らない（コードと余白が 1 行に収まらない幅でだけ、Core Text が語の途中で割り、余白がコードから
-  /// 離れうる）。空の文は空の 1 行。
+  /// 割る位置は、余白を付けずに組んだ段落で Core Text が選ぶ位置だけ（語の境。日本語は字の境。禁則も余白なしと同じ）で、
+  /// 置き字はコードから離れない。余白を付けた行が幅に収まる所で割り、語が幅に入らなければ、余白なしで狭い幅に組んだとき
+  /// と同じく語の途中で割る。1 つの割れない塊（字 1 つなど）と余白が幅に入らない行だけが幅を超える。空の文は空の 1 行。
   public static func lines(_ text: ZoneStyledText, width: CGFloat) -> [Line] {
     typeset(text, width: width).map(\.measured)
   }
@@ -167,7 +176,8 @@ public enum ZoneTextLayout {
     repeat {
       let span = paragraphSpan(around: start, in: units)
       let composition = ZoneComposition(units, paragraph: span, styles: text.styles)
-      lines += wrap(composition, width: width)
+      let bare = ZoneComposition(units, paragraph: span, styles: text.styles.map(\.bare))
+      lines += wrap(composition, breakingAs: bare, width: width)
       start = span.upperBound + 1
     } while start <= units.count
     return lines
@@ -210,26 +220,45 @@ public enum ZoneTextLayout {
     line(runs).width
   }
 
-  /// 段落を幅 `width` で行に割る。コードの前には向きの始まりの制御字と置き字、後ろには置き字と向きの終わりの制御字が
-  /// 並ぶ（→ `ZoneComposition`）ので、元の文の 1 つの位置に組んだ文の境が幾つもある。割る位置はそのうち決まった 1 つ
-  /// （コードの始まりは前の並びの前、終わりは後ろの並びの後）に揃える——描く側（`lines(of:)`）が元の文の位置から同じ境を
-  /// 引ける。前の並びで始まる行を Core Text がその並びの中で割れば（コードの最初の字と余白が幅に収まらない）、次の揃え
-  /// られる境まで行を伸ばす。
-  private static func wrap(_ composition: ZoneComposition, width: CGFloat) -> [TypesetLine] {
-    guard composition.count > 0 else { return [TypesetLine(composition, 0..<0)] }
+  /// 段落を幅 `width` で行に割る。割る位置は、同じ段落を余白を付けずに組んだもの `bare`（元の文と同じ並び）で Core Text が
+  /// 選ぶ位置だけ——余白を付けても、余白なしでは割れない所（コードの外の語の続き・禁則）で割れない。行は余白を付けて組んだ
+  /// 幅で確かめ、幅を超えれば、余白なしで探す幅を超えた分だけ狭めて探し直す（行は短くなるだけで、狭め方は倍々に広げる
+  /// ので、探し直しは数回で止まる）。それ以上狭められない（行が 1 つの割れない塊だけ）ときは、その行が幅を超える。行の境は元の文の位置から組んだ
+  /// 文の境へ写す（コードの始まりは包みの頭の前、終わりは包みの尾の後）——描く側（`lines(of:)`）も同じ境を引く。余白なしで
+  /// 探すのは、置き字の run delegate があると、Core Text が分け目を 1 つ探す仕事が段落の終わりまでの長さに比例するため
+  /// でもある（余白なしで探せば、段落を割る仕事は段落の長さに比例する）。
+  private static func wrap(
+    _ composition: ZoneComposition, breakingAs bare: ZoneComposition, width: CGFloat
+  ) -> [TypesetLine] {
+    let paragraph = composition.paragraph
+    guard !paragraph.isEmpty else { return [TypesetLine(composition, 0..<0)] }
+    let limit = Double(max(1, width))
     var lines: [TypesetLine] = []
-    var start = 0
-    while start < composition.count {
-      let suggested = CTTypesetterSuggestLineBreak(
-        composition.typesetter, start, Double(max(1, width)))
-      var end = min(start + max(1, suggested), composition.count)
-      let canonical = composition.composed(composition.original(end))
-      if canonical > start {
-        end = canonical
-      } else {
-        while end < composition.count, !composition.isBreakable(end) { end += 1 }
+    var start = paragraph.lowerBound
+    while start < paragraph.upperBound {
+      let from = start - paragraph.lowerBound
+      let breakAt = { (width: Double) in
+        start + max(1, CTTypesetterSuggestLineBreak(bare.typesetter, from, max(0, width)))
       }
-      lines.append(TypesetLine(composition, start..<end))
+      var available = limit
+      var end = breakAt(available)
+      var line = TypesetLine(composition, composition.composed(start)..<composition.composed(end))
+      while Double(line.width) > limit {
+        let bareWidth = Double(TypesetLine(bare, from..<end - paragraph.lowerBound).width)
+        available = min(available - (Double(line.width) - limit), bareWidth)
+        var shorter = breakAt(available)
+        // Core Text は約物を詰めて、測った幅より少し広い行も幅に収める。収めた分だけ狭めて探す。
+        var step = 1.0
+        while shorter >= end, available > 0 {
+          available -= step
+          step *= 2
+          shorter = breakAt(available)
+        }
+        guard shorter < end else { break }
+        end = shorter
+        line = TypesetLine(composition, composition.composed(start)..<composition.composed(end))
+      }
+      lines.append(line)
       start = end
     }
     return lines

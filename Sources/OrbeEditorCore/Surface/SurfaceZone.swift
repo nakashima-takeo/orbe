@@ -212,6 +212,14 @@ public struct ZoneTextStyle: Equatable, Sendable {
     self.trailingPadding = padding
   }
 
+  /// 余白を外した見え方（行を割る位置を探す段落を組む）。
+  var bare: ZoneTextStyle {
+    var style = self
+    style.leadingPadding = 0
+    style.trailingPadding = 0
+    return style
+  }
+
   /// 字体。Core Text は字体のオブジェクト（CTFont・CTFontDescriptor）を複数のスレッドから同時に使えると保証する
   /// （CTFont は不変で、変える API が無い）。SDK は CTFont を Sendable と宣言しないので、検査を外すのはこの型だけにする。
   private struct Typeface: Equatable, @unchecked Sendable {
