@@ -259,7 +259,7 @@ final class SourceControlPaneTests: OrbeTestCase {
 
   /// 欄の上限は既定の行の 10 行分の高さで、1 行が既定より高い文字（タイ文字）でも低くならない。
   func testTheMessageOfTallLinesStopsAtTheSameHeight() throws {
-    let field = ScmMessageTextView()
+    let field = MessageTextView()
     let line = try XCTUnwrap(field.layoutManager).defaultLineHeight(for: try XCTUnwrap(field.font))
     field.string = Array(repeating: "ปั้ญู", count: 12).joined(separator: "\n")
     XCTAssertEqual(
@@ -357,13 +357,13 @@ final class SourceControlPaneTests: OrbeTestCase {
   }
 
   /// 面のメッセージ欄（載っていなければ nil）。
-  func messageField(in view: NSView) -> ScmMessageTextView? {
-    (view as? ScmMessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
+  func messageField(in view: NSView) -> MessageTextView? {
+    (view as? MessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
   }
 
   /// メッセージ欄に焦点を入れ、末尾に `text` を打つ（打った文が欄の外へ届くまで待つ）。
   @discardableResult
-  func type(_ text: String, in hosted: Hosted) throws -> ScmMessageTextView {
+  func type(_ text: String, in hosted: Hosted) throws -> MessageTextView {
     pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "メッセージ欄")
     let field = try XCTUnwrap(messageField(in: hosted.pane))
     hosted.window.makeFirstResponder(field)
