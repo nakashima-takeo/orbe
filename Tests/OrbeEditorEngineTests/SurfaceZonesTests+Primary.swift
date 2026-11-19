@@ -90,7 +90,7 @@ extension SurfaceZonesTests {
     var showsField = true
     var height: CGFloat = 60
     let zone = PictureZone { _ in
-      ZonePicture(
+      ZonePicture.single(
         height: height,
         elements: showsField
           ? [.field(ZoneField(frame: CGRect(x: 10, y: 10, width: 200, height: 20), field: field))]

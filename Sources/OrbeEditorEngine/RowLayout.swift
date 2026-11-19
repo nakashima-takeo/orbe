@@ -38,7 +38,7 @@ struct RowLayout: Sendable {
   private(set) var heights: [Double] = []
   private(set) var contents: [Content] = []
   /// 塊 `i` より前の塊の高さの合計（`prefix[i]`。要素は塊の数 + 1）。
-  private var prefix: [Double] = [0]
+  private(set) var prefix: [Double] = [0]
   /// 絵の差し込みを持つか・相手と同じ高さの空きを持つか。
   private(set) var hasZones = false
   private(set) var hasGaps = false
@@ -59,7 +59,7 @@ struct RowLayout: Sendable {
   }
 
   /// 項目と段の境のわずかに上を境とみなす許容（行高に対する割合）。
-  private static let slack = 1e-9
+  static let slack = 1e-9
 
   /// 塊 1 つ——境（文書の行 `line` の前）・高さ（pt）・中身。
   struct Block {
@@ -149,11 +149,6 @@ struct RowLayout: Sendable {
     case .line(let line): line
     case .block(let index): boundaries[index]
     }
-  }
-
-  /// 縦の位置 `y` で先頭に見えている文書の行（塊の上なら次の文書の行。`lineCount` 行の文書の範囲に収める）。
-  func firstVisibleLine(atY y: Double, lineCount: Int) -> Int {
-    min(max(0, line(atY: y)), max(0, lineCount - 1))
   }
 
   /// y の範囲 `from...to` に掛かる文書の行（行数 `lineCount` の文書。無ければ nil）。

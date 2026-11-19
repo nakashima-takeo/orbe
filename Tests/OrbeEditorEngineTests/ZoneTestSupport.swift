@@ -1,6 +1,66 @@
 import AppKit
 import OrbeEditorCore
 
+@testable import OrbeEditorEngine
+
+extension ZonePicture {
+  /// 層 1 つ（原点は絵の差し込みの左上）の絵（テストで絵を組む）。
+  static func single(height: CGFloat, elements: [ZoneElement] = [], texts: [ZoneText] = [])
+    -> ZonePicture
+  {
+    ZonePicture(height: height, layers: [(.zero, ZoneLayer(elements: elements, texts: texts))])
+  }
+}
+
+extension ZoneText {
+  /// 文 `content` を幅 `width` で組み、行の基線の左端を `origin` から `lineHeight` ずつ下へ並べたまとまり（テストで絵を組む）。
+  static func laid(
+    _ id: AnyHashable, _ content: ZoneStyledText, width: CGFloat = 100_000, origin: CGPoint,
+    lineHeight: CGFloat = 16
+  ) -> ZoneText {
+    let typeset = ZoneTextLayout.typeset(content, width: width)
+    return ZoneText(
+      id: id, typeset: typeset,
+      origins: typeset.lines.indices.map {
+        CGPoint(x: origin.x, y: origin.y + CGFloat($0) * lineHeight)
+      })
+  }
+}
+
+extension ZoneHits {
+  /// 字の行（原点は絵の差し込みの座標。絵の層の順）。
+  var lines: [Line] {
+    layers.flatMap { placed in placed.hits.lines.map { $0.moved(by: placed.origin) } }
+  }
+
+  /// 押せる場所（矩形は絵の差し込みの座標。絵の層の順）。
+  var buttons: [Button] {
+    layers.flatMap { placed in
+      placed.hits.buttons.map {
+        var button = $0
+        button.frame = button.frame.offsetBy(dx: placed.origin.x, dy: placed.origin.y)
+        return button
+      }
+    }
+  }
+}
+
+extension ZoneMaterial {
+  /// 字の連なり（基線の左端は絵の差し込みの座標。絵の層の順）。
+  var runs: [Run] {
+    layers.flatMap { placed in
+      placed.layer.runs.map {
+        var run = $0
+        run.origin = CGPoint(x: run.origin.x + placed.origin.x, y: run.origin.y + placed.origin.y)
+        return run
+      }
+    }
+  }
+
+  /// 画像（絵の層の順）。
+  var images: [Image] { layers.flatMap(\.layer.images) }
+}
+
 /// 高さの決まった絵の差し込み——絵の差し込みいっぱいの箱 1 つ（色 `color`）。
 @MainActor
 final class BoxZone: SurfaceZone {
@@ -15,7 +75,7 @@ final class BoxZone: SurfaceZone {
 
   func picture(width: CGFloat) -> ZonePicture {
     widths.append(width)
-    return ZonePicture(
+    return ZonePicture.single(
       height: height,
       elements: [
         .box(ZoneBox(frame: CGRect(x: 0, y: 0, width: width, height: height), fill: color))
@@ -97,17 +157,14 @@ final class ThreadZone: SurfaceZone {
       x: Self.margin.width, y: Self.margin.height,
       width: max(80, width - Self.margin.width - 16), height: 0)
     var body: [ZoneElement] = []
-    var lines: [ZoneSelectableLine] = []
-    let bottom = layOutComment(in: frame, into: &body, lines: &lines)
+    var text: ZoneText?
+    let bottom = layOutComment(in: frame, into: &body, text: &text)
     let height = bottom - frame.minY
-    return ZonePicture(
+    return ZonePicture.single(
       height: frame.minY + height + 8,
       elements: chrome(CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: height))
         + body,
-      texts: [
-        ZoneText(
-          id: Self.commentText, content: content ?? Self.content(comment), lines: lines)
-      ])
+      texts: text.map { [$0] } ?? [])
   }
 
   /// 頭の帯の高さ。
@@ -150,9 +207,9 @@ final class ThreadZone: SurfaceZone {
     return elements
   }
 
-  /// アバター（円・頭文字・画像）・折り返す本文・入力欄を積み（本文の行は `lines` へ）、下端の y を返す。
+  /// アバター（円・頭文字・画像）・折り返す本文・入力欄を積み（本文のまとまりは `text` へ）、下端の y を返す。
   private func layOutComment(
-    in frame: CGRect, into body: inout [ZoneElement], lines selectable: inout [ZoneSelectableLine]
+    in frame: CGRect, into body: inout [ZoneElement], text: inout ZoneText?
   ) -> CGFloat {
     let inner = frame.width - 2 * Self.inset
     var y = frame.minY + Self.head + 10
@@ -170,13 +227,11 @@ final class ThreadZone: SurfaceZone {
           frame: CGRect(x: frame.minX + Self.inset + 4, y: y + 24, width: 12, height: 12),
           image: Self.glyph)),
     ]
-    let lines = ZoneTextLayout.lines(content ?? Self.content(comment), width: max(10, inner - 30))
-    for line in lines {
-      selectable.append(
-        ZoneSelectableLine(
-          origin: CGPoint(x: frame.minX + Self.inset + 30, y: y + 14), range: line.range))
-      y += Self.lineHeight
-    }
+    let laid = ZoneText.laid(
+      Self.commentText, content ?? Self.content(comment), width: max(10, inner - 30),
+      origin: CGPoint(x: frame.minX + Self.inset + 30, y: y + 14), lineHeight: Self.lineHeight)
+    text = laid
+    y += CGFloat(laid.typeset.lines.count) * Self.lineHeight
     y += 8
     guard let field else { return y }
     let box = CGRect(

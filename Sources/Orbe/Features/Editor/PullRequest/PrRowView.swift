@@ -45,6 +45,8 @@ final class PrRowView: ListRowView {
     let directory: TextLine?
     let badge: TextLine
     let badgeKind: GitStatus.Badge
+    /// コメントの数（無ければ nil）。
+    let comments: TextLine?
     let dimmed: Bool
   }
 
@@ -159,6 +161,8 @@ struct PrRowColors {
   /// 選んでいる「ツリー表示」「リスト表示」の地（fill .10）と印（chromeText）。
   let toggleOn: CGColor
   let toggleOnGlyph: CGColor
+  /// ファイルの行のコメントの数と印（accentBright）。
+  let comments: CGColor
 
   @MainActor private static let resolved = PerAppearance { PrRowColors() }
 
@@ -173,5 +177,6 @@ struct PrRowColors {
     checkGround = EditorStyle.sunk(0.25).cgColor
     toggleOn = EditorStyle.fill(0.10).cgColor
     toggleOnGlyph = Theme.Color.textPrimary.cgColor
+    comments = Theme.Color.accentBright.cgColor
   }
 }

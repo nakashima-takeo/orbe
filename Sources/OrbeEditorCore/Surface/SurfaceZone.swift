@@ -5,8 +5,8 @@ import AppKit
 /// ずれて動く余地は無い。
 ///
 /// 面は本文の区画の幅を渡して絵を問い（置いたとき・幅が変わったとき・`TextSurface.redrawZone` のとき）、返った高さを
-/// 絵の差し込みの高さにする。面は配置の仕組みを持たない。要素の座標は、載せる側が絵の差し込みの中の pt で決める（字の
-/// 折り返しは `ZoneTextLayout`）。押せる場所のホバーと押下は `zone(_:)` で載せる側へ知らせる。
+/// 絵の差し込みの高さにする。面は配置の仕組みを持たない。要素の座標は、載せる側が層の中の pt で決める（字の折り返しは
+/// `ZoneTextLayout`）。押せる場所のホバーと押下は `zone(_:)` で載せる側へ知らせる。
 @MainActor
 public protocol SurfaceZone: AnyObject {
   /// 幅 `width`（本文の区画の幅、pt）で組んだ絵。
@@ -24,23 +24,39 @@ public enum ZoneEvent: Equatable {
   case pressed(AnyHashable)
 }
 
-/// 載せる側が描く絵——高さと、要素の列（重ね順は種類で決まる → `ZoneElement`）と、選べる文のまとまり。座標は、
-/// 絵の差し込みの左上を原点にした pt（y は下向き）。
+/// 載せる側が描く絵——高さと、層を原点つきで重ねた列。層（`ZoneLayer`）は要素の列と選べる文を持ち、自分の原点の座標で
+/// 描く。座標は、絵の差し込みの左上を原点にした pt（y は下向き）で、層の原点もこの座標。重ね順は要素の種類で決まり
+/// （→ `ZoneElement`）、同じ種類の中は層の順、層の中は要素の列の順（選べる文の字は、その層の字の行の後）。
+///
+/// 面は層ごとに写した材料と当たりの表を、層の同一性と外観で覚える——描き直した絵が前の絵と同じ層（同じ参照）を持てば、
+/// 原点が変わっても写し直さない。変わらない部分（長い本文など）を同じ層で渡し続ければ、描き直しの仕事はその中身の大きさに
+/// 依らない。入力欄を持つ層だけは、描き直しのたびに写し直す（入力欄の場は描き直しで作り直されうる）。
 public struct ZonePicture {
   public var height: CGFloat
-  public var elements: [ZoneElement]
-  /// 選べる文のまとまり——文と、それを描く行。コピーで渡す文の正。
-  public var texts: [ZoneText]
+  public var layers: [(origin: CGPoint, layer: ZoneLayer)]
 
-  public init(height: CGFloat, elements: [ZoneElement] = [], texts: [ZoneText] = []) {
+  public init(height: CGFloat, layers: [(origin: CGPoint, layer: ZoneLayer)] = []) {
     self.height = height
+    self.layers = layers
+  }
+}
+
+/// 絵の層——要素の列と、選べる文のまとまり（座標は層の原点からの pt）。作り終えた後は変わらない。作ったスレッドから別の
+/// スレッドへ渡せる（載せる側が裏で組んだ本文の層を main へ渡す）。渡した後に中身を使うのは渡した先だけ（組んだ文の行と
+/// 画像は同時に複数のスレッドで使わない。入力欄の型は main だけが使う）。
+public final class ZoneLayer: @unchecked Sendable {
+  public let elements: [ZoneElement]
+  /// 選べる文のまとまり——組んだ文と、行ごとの原点。コピーで渡す文の正。
+  public let texts: [ZoneText]
+
+  public init(elements: [ZoneElement] = [], texts: [ZoneText] = []) {
     self.elements = elements
     self.texts = texts
   }
 }
 
 /// 絵の差し込みの要素。重ね順は種類で決まる（下から 箱 → 画像 → 選んだ文の地 → 字 → 入力欄の中身）。同じ種類の中は
-/// 列の順。
+/// 層の順、層の中は列の順。
 public enum ZoneElement {
   case box(ZoneBox)
   case text(ZoneTextLine)
@@ -144,17 +160,19 @@ public struct ZoneTextLine {
   }
 }
 
-/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。絵の差し込みの中で一意）と、見え方つきの文と、文を
-/// 描く行の列。
+/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。絵の差し込みの中で一意）と、組んだ文
+/// （`ZoneTextLayout.typeset(_:width:)`）と、組んだ行ごとの基線の左端（層の座標。組んだ行と同じ数・順）。面は組んだ行を
+/// そのまま描き、当たりと選択とコピーに使う（文の正は組んだ文の 1 か所）。
 public struct ZoneText {
-  public var id: AnyHashable
-  public var content: ZoneStyledText
-  public var lines: [ZoneSelectableLine]
+  public let id: AnyHashable
+  public let typeset: ZoneTypeset
+  public let origins: [CGPoint]
 
-  public init(id: AnyHashable, content: ZoneStyledText, lines: [ZoneSelectableLine]) {
+  public init(id: AnyHashable, typeset: ZoneTypeset, origins: [CGPoint]) {
+    precondition(origins.count == typeset.lines.count, "選べる文の原点は組んだ行と同じ数")
     self.id = id
-    self.content = content
-    self.lines = lines
+    self.typeset = typeset
+    self.origins = origins
   }
 }
 
@@ -189,7 +207,7 @@ public struct ZoneStyledText: Equatable, Sendable {
 /// 字の見え方。見え方つきの文の中で、文の先頭から順に `length` 単位（UTF-16）ずつ当てる。余白（pt）は連なりの左右の字を
 /// その幅ずつ押し出す（CSS のインラインの padding）。余白のある見え方は、周りの文と独立した向きのかたまりとして並び、先頭の余白は
 /// かたまりの向きの始まりの側に、末尾の余白はその反対の側に付く——右から左の字のコードでも、余白はコードの外に出る。
-/// 地は、余白を含めたかたまりの x 範囲に置く（→ `ZoneTextLayout.Line.spans(of:)`）。折り返しで割れた側と、改行で割れた
+/// 地は、余白を含めたかたまりの x 範囲に置く（→ `ZoneTextLayout.TypesetLine.spans(of:)`）。折り返しで割れた側と、改行で割れた
 /// 側には余白が付かない。
 ///
 /// 字体は CTFont で持ち（載せる側の NSFont は、ここで受けるときに CTFont として持つ）、値はどのスレッドへも渡せる。
@@ -224,18 +242,6 @@ public struct ZoneTextStyle: Equatable, Sendable {
   /// （CTFont は不変で、変える API が無い）。SDK は CTFont を Sendable と宣言しないので、検査を外すのはこの型だけにする。
   private struct Typeface: Equatable, @unchecked Sendable {
     let font: CTFont
-  }
-}
-
-/// 選べる字の行——まとまりの文の範囲 `range` を、基線の左端 `origin` から描く（折り返さない）。字と見え方はまとまりから
-/// 引く（文の正は 1 か所）。行は、まとまりの文の中で範囲を含む段落を組んだものから切り出す（→ `ZoneTextLayout.lines(of:)`）。
-public struct ZoneSelectableLine {
-  public var origin: CGPoint
-  public var range: NSRange
-
-  public init(origin: CGPoint, range: NSRange) {
-    self.origin = origin
-    self.range = range
   }
 }
 

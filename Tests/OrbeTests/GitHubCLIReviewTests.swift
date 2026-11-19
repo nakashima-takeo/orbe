@@ -257,9 +257,9 @@ final class GitHubCLIReviewTests: OrbeTestCase {
       "本文の変数を宣言もしない")
   }
 
-  /// 保留中のレビューが無いときのスレッドの追加は、レビューの作成と最初のスレッドを 1 回で送る。無いときの返信は作ってから
-  /// 返信し、在るときは作らない。無いときの送信は、作ってすぐ送る 1 回で、利用者が見ていた先頭のコミットに結ぶ。在るときの
-  /// 送信は結ばない。
+  /// 保留中のレビューが無いときのスレッドの追加は、レビューの作成と最初のスレッドを 1 回で送る。無いときの返信は、利用者が
+  /// 見ていた先頭のコミットに結んで作ってから返信し、在るときは作らない。無いときの送信は、作ってすぐ送る 1 回で、利用者が
+  /// 見ていた先頭のコミットに結ぶ。在るときの送信は結ばない。
   func testAMissingPendingReviewIsCreatedInTheFewestCalls() throws {
     XCTAssertEqual(
       write(
@@ -281,7 +281,8 @@ final class GitHubCLIReviewTests: OrbeTestCase {
       GitHubReviewWriteResult(pendingReview: "create-id", failure: nil))
     XCTAssertEqual(calls(), ["create", "create", "reply"])
     XCTAssertEqual(try call(3).variables["review"] as? String, "create-id")
-    XCTAssertNil(try call(2).variables["commit"], "行を持たない返信では、今の先頭に結ぶ")
+    XCTAssertEqual(
+      try call(2).variables["commit"] as? String, "seen", "行を持たない返信でも、見ていた先頭に結ぶ")
 
     _ = write(.reply(thread: "T1", body: "b", resolve: false), pendingReview: "R1")
     _ = write(

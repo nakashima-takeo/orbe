@@ -29,18 +29,47 @@ extension PullRequestState {
     return review.threads
   }
 
+  /// ファイル `path` が rename かの判定が、GitHub（中身のファイルの列）と手元の diff の両端 `ends` で同じか。違えば、古い側の
+  /// 行の対応が GitHub と手元で変わる。
+  func agreesOnRename(of path: String, _ ends: DiffEnds) -> Bool {
+    (content?.files.first { $0.path == path }?.change == .renamed) == (ends.renames[path] != nil)
+  }
+
+  /// スレッド `thread` を、両端 `ends` の diff の行に置けるか——今の diff の行に付いていて、古い側の行なら rename の判定が
+  /// GitHub と手元で同じ。古い側の行のスレッドで両端が分からなければ、決められない（nil）。
+  func canPlace(_ thread: GitHubPullRequestReview.Thread, in ends: DiffEnds?) -> Bool? {
+    guard thread.line != nil else { return false }
+    guard thread.side == .old else { return true }
+    return ends.map { agreesOnRename(of: thread.path, $0) }
+  }
+
+  /// 今の PR の diff の両端——求め終えていて、その先頭が中身の先頭と同じとき（求めている・求められない・中身が新しい先頭を
+  /// 読んだ後で求め直す前は nil）。PR ごとの値で、diff タブの有無と数に依らない。
+  var diffEnds: DiffEnds? {
+    guard case .ready(_, let ends) = bounds, ends.head == content?.headCommit else { return nil }
+    return ends
+  }
+
   func isWritingReview(_ target: ReviewTarget) -> Bool { reviewWriteTargets.contains(target) }
+
+  /// diff の両端を求め終え、その先頭のコミットで中身とレビューのやりとりも読んでいる（diff・ファイルの列・スレッドと、送る
+  /// レビューの版が揃う）。
+  var isReviewAligned: Bool {
+    guard let content, let review, let ends = diffEnds else { return false }
+    return content.headCommit == review.headCommit && ends.head == review.headCommit
+  }
 
   /// レビューへの書き込みを順番に積む。中身とレビューのやりとりがまだ読めていないとき、対象への書き込みが走っているとき、
   /// 新しいスレッドの行を数えた先頭のコミットが、レビューのやりとりを読んだ時点の先頭のコミットと違うとき（`threads(at:)` が
-  /// nil の間）は受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は失敗の種類。通れば
-  /// nil）。
+  /// nil の間）、レビューの送信で diff の両端・中身・レビューのやりとりの版が揃っていないとき（`isReviewAligned` が偽の間）
+  /// は受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は失敗の種類。通れば nil）。
   @discardableResult
   func writeReview(_ write: GitHubReviewWrite, completion: @escaping (GitHubFailure?) -> Void)
     -> Bool
   {
     guard let content, let review else { return false }
     if case .addThread(_, _, _, let commit, _) = write, commit != review.headCommit { return false }
+    if case .submit = write, !isReviewAligned { return false }
     let target = Self.target(of: write)
     if let target {
       guard !reviewWriteTargets.contains(target) else { return false }

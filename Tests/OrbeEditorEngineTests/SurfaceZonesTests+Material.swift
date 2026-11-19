@@ -21,7 +21,7 @@ extension SurfaceZonesTests {
     let surface = opened.surface
     let font = NSFont.systemFont(ofSize: 12)
     let zone = PictureZone { _ in
-      ZonePicture(
+      ZonePicture.single(
         height: 40,
         elements: [
           .text(
@@ -33,16 +33,12 @@ extension SurfaceZonesTests {
               ]))
         ],
         texts: [
-          ZoneText(
-            id: "t",
-            content: ZoneStyledText([
+          ZoneText.laid(
+            "t",
+            ZoneStyledText([
               ("red", ZoneTextStyle(font: font, color: Self.red)),
               ("green", ZoneTextStyle(font: font, color: Self.green)),
-            ]),
-            lines: [
-              ZoneSelectableLine(
-                origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8))
-            ])
+            ]), origin: CGPoint(x: 0, y: 32))
         ])
     }
     surface.setRows(self.zone(zone, at: 2))
@@ -65,19 +61,15 @@ extension SurfaceZonesTests {
     let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     let picture = { (padding: CGFloat) in
       PictureZone { _ in
-        ZonePicture(
+        ZonePicture.single(
           height: 30,
           texts: [
-            ZoneText(
-              id: "t",
-              content: ZoneStyledText([
+            ZoneText.laid(
+              "t",
+              ZoneStyledText([
                 ("code", ZoneTextStyle(font: mono, color: Self.red, padding: padding)),
                 (" after", ZoneTextStyle(font: font, color: Self.green)),
-              ]),
-              lines: [
-                ZoneSelectableLine(
-                  origin: CGPoint(x: 10, y: 14), range: NSRange(location: 0, length: 10))
-              ])
+              ]), origin: CGPoint(x: 10, y: 14))
           ])
       }
     }
@@ -108,7 +100,7 @@ extension SurfaceZonesTests {
     let surface = opened.surface
     let side = CGFloat(ImageAtlas.maximumSide) / surface.scale
     let zone = PictureZone { _ in
-      ZonePicture(
+      ZonePicture.single(
         height: 300,
         elements: [
           .image(
@@ -145,7 +137,7 @@ extension SurfaceZonesTests {
       }
     }
     let zone = PictureZone { _ in
-      ZonePicture(
+      ZonePicture.single(
         height: CGFloat(images.count) * (side + 4),
         elements: images.enumerated().map { k, image in
           .image(
@@ -173,7 +165,7 @@ extension SurfaceZonesTests {
     let opened = try hostedRows()
     let surface = opened.surface
     let zone = PictureZone { width in
-      ZonePicture(
+      ZonePicture.single(
         height: 40,
         elements: [
           .box(
@@ -194,7 +186,7 @@ extension SurfaceZonesTests {
     let opened = try hostedRows()
     let surface = opened.surface
     let zone = PictureZone { _ in
-      ZonePicture(
+      ZonePicture.single(
         height: 40,
         elements: [
           .box(

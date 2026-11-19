@@ -14,7 +14,7 @@ import XCTest
 @MainActor
 final class PrPanelTests: OrbeTestCase {
   private var repo: TempGitRepo!
-  private var panel: PrPanel!
+  var panel: PrPanel!
   private var writes: [(viewed: Bool, paths: Set<String>)] = []
   private var opened: [(key: EditorDiff.Key, opening: ScmPanel.Opening)] = []
   private let me = GitHubRepoName(nameWithOwner: "me/r")
@@ -24,10 +24,21 @@ final class PrPanelTests: OrbeTestCase {
   private var asTree = true
   /// ブランチに open の PR があるか（偽なら、PR が無いと答える）。
   private var open = true
+  /// レビューのやりとりの答え（自分が作者か・保留中のコメントの数・スレッド）と、届いたレビューへの書き込みとその答えの失敗。
+  var viewerIsAuthor = false
+  var pendingComments = 0
+  var threads: [GitHubPullRequestReview.Thread] = []
+  var reviewWrites: [GitHubReviewWrite] = []
+  var reviewFailure: GitHubFailure?
+  /// PR の先頭のコミット（手元の feat の先頭。ベースも同じコミット）と、レビューのやりとりが答える先頭のコミット。
+  var head = ""
+  var reviewHead = ""
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    head = repo.head()
+    reviewHead = head
     writes = []
     opened = []
     asTree = true
@@ -61,14 +72,26 @@ final class PrPanelTests: OrbeTestCase {
       setViewed: { [unowned self] viewed, paths, _, completion in
         writes.append((viewed, paths))
         completion(GitHubViewedWrite(written: paths, failure: nil))
-      }, review: { _, _ in }, writeReview: { _, _, _, _, _ in })
+      },
+      review: { [unowned self] _, completion in
+        completion(
+          .success(
+            GitHubPullRequestReview(
+              viewer: "me", viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
+              pendingReview: pendingComments > 0
+                ? .init(id: "R", commentCount: pendingComments) : nil, threads: threads)))
+      },
+      writeReview: { [unowned self] write, _, pending, _, completion in
+        reviewWrites.append(write)
+        completion(GitHubReviewWriteResult(pendingReview: pending, failure: reviewFailure))
+      })
   }
 
   private var content: GitHubPullRequestContent {
     GitHubPullRequestContent(
       nodeID: "PR_1", number: 9, title: "題", url: "https://github.com/me/r/pull/9", isDraft: false,
       state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
-      baseCommit: "b", headCommit: "h", commitCount: 2,
+      baseCommit: head, headCommit: head, commitCount: 2,
       commits: [.init(oid: "c1", headline: "一"), .init(oid: "c2", headline: "二")],
       files: files.map { .init(path: $0, change: .modified, isViewed: $0 == "src/a/x.swift") })
   }
@@ -85,8 +108,15 @@ final class PrPanelTests: OrbeTestCase {
       "前提: 読み直した中身で行を組み直す")
   }
 
+  /// パネルを出して、PR の中身・レビューのやりとり・diff の両端が揃うまで待つ。
+  func reviewed() throws -> PullRequestState {
+    let state = try shown()
+    pumpMain(until: { state.review != nil && state.diffEnds != nil }, "前提: レビューのやりとりと diff の両端が届く")
+    return state
+  }
+
   /// パネルを出して、PR の中身が届くまで待つ。
-  private func shown() throws -> PullRequestState {
+  func shown() throws -> PullRequestState {
     panel.isShown = true
     pumpMain(until: { self.panel.state?.content != nil }, "前提: PR の中身が届く")
     return try XCTUnwrap(panel.state)
@@ -257,7 +287,7 @@ final class PrPanelTests: OrbeTestCase {
   func testAFocusRequestIsDroppedWhenTheRowsGoAway() throws {
     _ = try shown()
     var closings = 0
-    panel.onListWillClose = { closings += 1 }
+    panel.onFocusWillClose = { closings += 1 }
     panel.requestFocus()
 
     open = false

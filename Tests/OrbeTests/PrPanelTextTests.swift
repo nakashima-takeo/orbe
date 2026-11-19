@@ -5,7 +5,8 @@ import XCTest
 /// PR のパネルの文——手元とのずれの帯と、gh の失敗の文。
 ///
 /// 壊れると何が起きるか: 未 push だけなのに「未取得 0 件」まで並ぶ。gh が理由を返さなかった書き込みの失敗が、読み込みの
-/// 失敗の文で出る。
+/// 失敗の文で出る。時間切れの書き込みの失敗の文が、GitHub に届いていたかもしれないことを告げず、送り直した同じコメントが
+/// 二重に付く。
 @MainActor
 final class PrPanelTextTests: OrbeTestCase {
   private let l10n = LocalizationStore(language: .ja)
@@ -27,5 +28,13 @@ final class PrPanelTextTests: OrbeTestCase {
     XCTAssertEqual(
       PrPanelText.failure(.write(.reason("")), l10n), l10n.string(.editorPrFailedWrite))
     XCTAssertEqual(PrPanelText.failure(.write(.reason("denied")), l10n), "denied")
+  }
+
+  /// レビューへの書き込みの時間切れでは、届いていたかもしれないことを告げる文が出て、ほかの書き込みの失敗の文と違う。
+  func testATimedOutReviewWriteSaysItMayHaveReachedGitHub() {
+    XCTAssertEqual(
+      PrPanelText.writeFailure(.timedOut, .ja), l10n.string(.editorPrWriteTimedOut))
+    XCTAssertEqual(
+      PrPanelText.writeFailure(.reason(""), .ja), l10n.string(.editorPrFailedWrite))
   }
 }

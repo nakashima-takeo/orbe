@@ -24,9 +24,16 @@ final class PrPanel {
   private(set) var isListFocused = false
   /// 焦点を入れる要求（当てたら外す）。
   private(set) var focusRequest = false
+  /// 下端の区画の全体へのコメント欄に焦点がある。
+  var isReviewFieldFocused = false
+  /// 全体へのコメント欄の変換中の字（確定するまで書きかけに入れない。欄が写す）。
+  var reviewComposition = ""
 
-  /// 列が消える直前（行の組が空になる。列がまだ窓に居るうち）。焦点が列にあれば、面の本文へ移す。
-  @ObservationIgnored var onListWillClose: () -> Void = {}
+  /// 焦点を持てる所が消える直前（行の組が空になって列が消える・PR が替わって下端の区画を作り直す。まだ窓に居るうち）。
+  /// 焦点がパネルの列か全体へのコメント欄にあれば、面の本文へ移す。
+  @ObservationIgnored var onFocusWillClose: () -> Void = {}
+  /// 下端の区画を作った PR の状態（替われば、区画を作り直す前に欄の後始末をする）。
+  @ObservationIgnored private var reviewedState: ObjectIdentifier?
   /// 行の diff を開く。
   @ObservationIgnored var onOpenDiff: (EditorDiff.Key, ScmPanel.Opening) -> Void = { _, _ in }
   /// 変更ファイルをツリーで見せるか（アプリ全体の選択を読む）と、ツリーかリストかを選んだ（アプリ全体の選択へ書く）。
@@ -34,6 +41,20 @@ final class PrPanel {
   @ObservationIgnored var onViewAsTree: (Bool) -> Void = { _ in }
   /// URL をブラウザで開く。
   @ObservationIgnored var onOpenURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
+  /// 全体へのコメント欄の変換中の字を確定する（欄が結ぶ）。
+  @ObservationIgnored var confirmReviewComposition: () -> Void = {}
+  /// ファイルごとのコメントの数と、それを数えたレビューのやりとり。
+  @ObservationIgnored private var counted: CommentCounts?
+
+  /// ファイルごとのコメントの数（PR の状態 `state`・そのレビューのやりとりの版 `version`・diff の両端 `ends`（分からなければ
+  /// 先頭のコミット `head`）で数えた）。
+  private struct CommentCounts {
+    let state: ObjectIdentifier
+    let version: Int
+    let head: String
+    let ends: PullRequestState.DiffEnds?
+    let counts: [String: Int]
+  }
   /// キーで行へ動いたときの開きの間引き。
   @ObservationIgnored let navigation = RowNavigationThrottle()
   /// 行の組の元（同じ元なら組み直さない）と、組み直した回数。
@@ -47,11 +68,13 @@ final class PrPanel {
     let closedFolders: Set<String>
   }
 
-  /// パネルを出している間 true。立てると worktree の今の PR を見始めて行を組み、下ろすと見るのをやめる。
+  /// パネルを出している間 true。立てると worktree の今の PR を見始めて行を組み、下ろすと見るのをやめる。隠している間は
+  /// 知らせを受けないので、出すときに下端の区画を作る元の状態を覚え直す。
   @ObservationIgnored var isShown = false {
     didSet {
       guard isShown != oldValue else { return }
       if isShown {
+        reviewedState = state.map(ObjectIdentifier.init)
         pullRequest.addObserver(self)
         pullRequest.beginWatching()
         rebuild()
@@ -89,7 +112,7 @@ final class PrPanel {
     builtFrom = key
     let previous = layout
     if content == nil {
-      if !previous.items.isEmpty { onListWillClose() }
+      if !previous.items.isEmpty { onFocusWillClose() }
       focusRequest = false
     }
     layout =
@@ -110,12 +133,14 @@ final class PrPanel {
     }
   }
 
-  /// 列が読み直す版——行の組か確認済みが変わるたびに変わる（確認済みは行を組み直さず、見えている行を描き直す）。
+  /// 列が読み直す版——行の組・確認済み・レビューのやりとりが変わるたびに変わる（確認済みとコメントの数は行を組み直さず、
+  /// 見えている行を描き直す）。
   var rowsVersion: Int {
     var hasher = Hasher()
     hasher.combine(builtVersion)
     hasher.combine(state.map(ObjectIdentifier.init))
     hasher.combine(state?.viewedVersion)
+    hasher.combine(state?.reviewVersion)
     return hasher.finalize()
   }
 
@@ -151,7 +176,40 @@ final class PrPanel {
   func panelDidHide() {
     navigation.drop()
     isListFocused = false
+    isReviewFieldFocused = false
+    reviewComposition = ""
     focusRequest = false
+  }
+
+  // MARK: - コメント
+
+  /// ファイル `path` の、今の diff に置けるスレッド（`PullRequestState.canPlace`）のコメントの総数。レビューのやりとりか
+  /// diff の両端が変わったときだけ数え直す（3,000 件のファイルでも、見えている行を描くたびにスレッドを数えない）。
+  func commentCount(of path: String) -> Int {
+    guard let state, let head = state.content?.headCommit else { return 0 }
+    let id = ObjectIdentifier(state)
+    let ends = state.diffEnds
+    if counted?.state != id || counted?.version != state.reviewVersion || counted?.head != head
+      || counted?.ends != ends
+    {
+      var counts: [String: Int] = [:]
+      for thread in state.threads(at: head) ?? [] where state.canPlace(thread, in: ends) == true {
+        counts[thread.path, default: 0] += thread.comments.count
+      }
+      counted = CommentCounts(
+        state: id, version: state.reviewVersion, head: head, ends: ends, counts: counts)
+    }
+    return counted?.counts[path] ?? 0
+  }
+
+  /// 今の diff に置けない未解決のスレッド（古い版の行に付いた・ファイル単位・rename の判定が GitHub と手元で食い違う
+  /// ファイルの古い側の行に付いた）の数。
+  var outdatedThreadCount: Int {
+    guard let state, let head = state.content?.headCommit else { return 0 }
+    let ends = state.diffEnds
+    return (state.threads(at: head) ?? []).count {
+      !$0.isResolved && state.canPlace($0, in: ends) == false
+    }
   }
 
   // MARK: - 確認済み
@@ -201,6 +259,21 @@ final class PrPanel {
 /// worktree の今の PR が替わった・その PR の状態が変わったら、行の組を組み直す（中身が同じなら組み直さない）。
 extension PrPanel: BranchPullRequestObserver {
   func branchPullRequestDidChange(_ pullRequest: BranchPullRequest) {
+    reviewStateDidChange()
     rebuild()
+  }
+
+  /// PR の状態が替わったら、下端の区画を作り直す前に、前の PR の欄の変換中の字を前の PR の書きかけへ確定し、写していた変換中の
+  /// 字を空にし、焦点が欄にあれば面の本文へ移す（作り直しで欄が窓から外れても、AppKit は焦点の抜けを知らせない）。
+  private func reviewStateDidChange() {
+    let next = state.map(ObjectIdentifier.init)
+    guard next != reviewedState else { return }
+    defer { reviewedState = next }
+    guard reviewedState != nil else { return }
+    confirmReviewComposition()
+    reviewComposition = ""
+    guard isReviewFieldFocused else { return }
+    onFocusWillClose()
+    isReviewFieldFocused = false
   }
 }

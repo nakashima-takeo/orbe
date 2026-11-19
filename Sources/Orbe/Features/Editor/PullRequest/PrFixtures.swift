@@ -3,10 +3,12 @@
   import SwiftUI
 
   /// PR のパネルの gallery / flow の fixture。渡された置き場に本物の git の場を作り、GitHub の代わりに差し替えの出どころが
-  /// 見本（orbe_design の `editor/data.ts` の `pr`・`prCommits`・`prFiles`・`initialViewed`）と同じ中身を答える——main に 1 件、
-  /// main から切ったブランチ `feature/agent-hooks` に 3 件（StateHooks.swift の変更・EmitBuffer.swift の追加・HookRegistry.swift
-  /// と README.md の変更）。PR の先頭は手元の HEAD なので、帯は「この worktree でチェックアウト済み」になる。出どころは面より
-  /// 先に根へ結ぶ（worktree の今の PR は根ごとに 1 つで、最初に作った者の出どころを使う）。面は PR のパネルを出して窓に載せる。
+  /// 見本（orbe_design の `editor/data.ts` の `pr`・`prCommits`・`prFiles`・`initialViewed`・`thread`）と同じ中身を答える——main
+  /// に 1 件、main から切ったブランチ `feature/agent-hooks` に 3 件（StateHooks.swift の変更・EmitBuffer.swift の追加・
+  /// HookRegistry.swift と README.md の変更）。PR の先頭とコミットの列は手元の HEAD のもの（`Scene.push` で進む）なので、帯は
+  /// 「この worktree でチェックアウト済み」になる。
+  /// レビューのやりとりは `PrFixtureReview` が答える。出どころは面より先に根へ結ぶ（worktree の今の PR は根ごとに 1 つで、最初に
+  /// 作った者の出どころを使う）。面は PR のパネルを出して窓に載せる。
   enum PrFixtures {
     static let branch = "feature/agent-hooks"
 
@@ -29,14 +31,17 @@
     @MainActor final class Scene {
       private let tab: TerminalTab
       let directory: URL
+      /// 差し替えの GitHub のレビューのやりとり（書き込みの答え方を変えられる）。
+      let review: PrFixtureReview
       var group: TabGroup { tab.group }
       var pane: EditorPaneView { group.view.editor }
       var panel: PrPanel { pane.pullRequest }
       private var warmWindow: NSWindow?
 
-      init(tab: TerminalTab, directory: URL) {
+      init(tab: TerminalTab, directory: URL, review: PrFixtureReview) {
         self.tab = tab
         self.directory = directory
+        self.review = review
       }
 
       func cleanup() {
@@ -66,6 +71,27 @@
       }
 
       var view: some View { PrPane(pane: pane) }
+
+      /// PR に push する——`PrFixtureReview.path` の本文を `text` にしたコミットを PR のブランチに足し（差し替えの GitHub の
+      /// 先頭も進む）、PR の状態を読み直す。
+      func push(_ text: String, subject: String) throws {
+        try Data(text.utf8).write(to: directory.appendingPathComponent(PrFixtureReview.path))
+        try FixtureGit(directory: directory)(["commit", "-qam", subject])
+        panel.state?.reload()
+      }
+
+      /// 変更ファイル `path` の PR の diff を普通のタブで開く。
+      func openDiff(_ path: String = PrFixtureReview.path) {
+        panel.select(.file(path))
+        panel.openSelection(.commit)
+      }
+
+      /// 開いた PR の diff の中身・並び・最初の位置・スレッドの絵（本文の測り・印を出せる行）が揃った。
+      var isDiffReady: Bool {
+        guard let diff = pane.diff else { return false }
+        return diff.content == .ready && diff.placement == .placed && !diff.pending
+          && diff.comments?.isSettled ?? true
+      }
     }
 
     /// リポジトリは `place` の下に作る。git が失敗すれば投げる（→ `FixtureGit`）。
@@ -76,7 +102,9 @@
       let base = try makeRepository(dir)
       if case .defaultBranch = answer { try FixtureGit(directory: dir)(["switch", "-q", "main"]) }
       let root = GitWorktreeRoot.root(of: dir.path)
-      _ = BranchPullRequest.shared(for: root, source: source(answer, base: base, dir: dir))
+      let review = PrFixtureReview(head: { headCommit(answer, dir: dir) })
+      _ = BranchPullRequest.shared(
+        for: root, source: source(answer, base: base, dir: dir, review: review))
       let group = TabGroup(
         key: root, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
       var settings = SettingsLayer()
@@ -86,14 +114,16 @@
       group.view.add(terminal: tab.terminal)
       group.view.show(terminal: tab.terminal)
       group.view.editor.selectPanel(.pullRequest)
-      return Scene(tab: tab, directory: dir)
+      return Scene(tab: tab, directory: dir, review: review)
     }
 
     private static let me = GitHubRepoName(nameWithOwner: "orbe/orbe")
 
     /// 差し替えの出どころ。確認済みの書き込みは覚えておき、読み直しの答えに載せる（GitHub と同じく、書いた値が次の読み直しに
-    /// 出る）。レビューのやりとりはスレッドの無い姿を答え、レビューへの書き込みは通ったと答える。
-    private static func source(_ answer: Answer, base: String, dir: URL) -> PullRequestSource {
+    /// 出る）。レビューのやりとりは `review` が答える。
+    private static func source(
+      _ answer: Answer, base: String, dir: URL, review: PrFixtureReview
+    ) -> PullRequestSource {
       let ref = GitHubBranchRef(repo: me, branch: branch)
       let found: GitHubBranchPullRequests.Branch
       switch answer {
@@ -111,12 +141,7 @@
       }
       let published: Bool
       if case .noPullRequest(let value) = answer { published = value } else { published = true }
-      let head =
-        if case .notFetched = answer { String(repeating: "0", count: 40) } else {
-          revision("HEAD", in: dir)
-        }
       let emoji: Bool = if case .emoji = answer { true } else { false }
-      let commits = ["HEAD~2", "HEAD~1", "HEAD"].map { revision($0, in: dir) }
       let viewed = Viewed()
       return PullRequestSource(
         branchPullRequests: { _, name, completion in
@@ -131,22 +156,22 @@
           completion(
             .success(
               content(
-                base: base, head: head, commits: commits, viewed: viewed.paths, emoji: emoji)))
+                base: base, head: headCommit(answer, dir: dir),
+                commits: commits(since: base, in: dir),
+                viewed: viewed.paths, emoji: emoji)))
         },
         setViewed: { value, paths, _, completion in
           if value { viewed.paths.formUnion(paths) } else { viewed.paths.subtract(paths) }
           completion(GitHubViewedWrite(written: paths, failure: nil))
         },
-        review: { _, completion in
-          completion(
-            .success(
-              GitHubPullRequestReview(
-                viewer: "you", viewerIsAuthor: false, headCommit: head, pendingReview: nil,
-                threads: [])))
-        },
-        writeReview: { _, _, pendingReview, _, completion in
-          completion(GitHubReviewWriteResult(pendingReview: pendingReview, failure: nil))
-        })
+        review: { _, completion in completion(.success(review.read())) },
+        writeReview: { write, _, _, _, completion in review.write(write, completion: completion) })
+    }
+
+    /// PR の先頭のコミット（`notFetched` なら手元に無いコミット）。
+    private static func headCommit(_ answer: Answer, dir: URL) -> String {
+      if case .notFetched = answer { return String(repeating: "0", count: 40) }
+      return revision("HEAD", in: dir)
     }
 
     /// 差し替えの GitHub の確認済みのパス（見本の `initialViewed` から始まる）。
@@ -156,12 +181,9 @@
 
     /// 見本の PR #131 の中身。`emoji` なら、コミットの題と README の名前に絵文字を混ぜる。
     private static func content(
-      base: String, head: String, commits: [String], viewed: Set<String>, emoji: Bool
+      base: String, head: String, commits: [GitHubPullRequestContent.Commit], viewed: Set<String>,
+      emoji: Bool
     ) -> GitHubPullRequestContent {
-      let headlines = [
-        "StateHooks: emit(coalesce:) を実装", "EmitBuffer: tail merge を追加",
-        "StateHooksTests: testCoalesceSkipsUnrelated",
-      ].map { emoji ? "✨ " + $0 + " 🚀" : $0 }
       let files: [(String, GitHubPullRequestContent.Change)] = [
         ("src/agent/StateHooks.swift", .modified), ("src/agent/EmitBuffer.swift", .added),
         ("src/agent/HookRegistry.swift", .modified),
@@ -173,8 +195,10 @@
         body: "renderer への通知経路を applyEmit から StateHooks.emit(_:coalesce:) に統一する。"
           + "連続する AgentEvent は EmitBuffer の tail で畳み込み、メニューバー側の再描画回数を抑える。",
         author: "claude", baseRefName: "main", headRefName: branch, baseCommit: base,
-        headCommit: head, commitCount: 3,
-        commits: zip(commits, headlines).map { .init(oid: $0, headline: $1) },
+        headCommit: head, commitCount: commits.count,
+        commits: commits.map {
+          .init(oid: $0.oid, headline: emoji ? "✨ " + $0.headline + " 🚀" : $0.headline)
+        },
         files: files.map { .init(path: $0.0, change: $0.1, isViewed: viewed.contains($0.0)) })
     }
 
@@ -219,6 +243,18 @@
           ("README.md", "# agent hooks\n\nエージェントの状態の知らせを、畳んでから描画へ渡す。\n"),
         ])
       return base
+    }
+
+    /// `base` から手元の HEAD までのコミット（古い順）。
+    private static func commits(
+      since base: String, in dir: URL
+    ) -> [GitHubPullRequestContent.Commit] {
+      let output = GitRunner.shared.runSync(
+        ["log", "--reverse", "--format=%H%x09%s", "\(base)..HEAD"], cwd: dir.path)
+      return (String(bytes: output.stdout, encoding: .utf8) ?? "").split(separator: "\n").map {
+        let fields = $0.split(separator: "\t", maxSplits: 1)
+        return .init(oid: String(fields[0]), headline: String(fields[1]))
+      }
     }
 
     private static func revision(_ name: String, in dir: URL) -> String {

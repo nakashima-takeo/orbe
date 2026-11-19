@@ -23,7 +23,7 @@ extension MetalTextSurface {
   func beginZoneSelection(
     _ entry: ZoneEntry, text: AnyHashable, offset: Int, clicks: Int, extending: Bool
   ) {
-    guard let rope = entry.hits.texts[text] else { return }
+    guard let rope = entry.hits.rope(of: text) else { return }
     let zone = ObjectIdentifier(entry.zone)
     transact {
       if extending, let current = zoneSelection, current.zone == zone, current.text == text {
@@ -50,7 +50,7 @@ extension MetalTextSurface {
   /// 近いまとまりの位置へ伸ばす（点が絵の差し込みの外なら、まとまりの端）。
   func extendZoneSelection(to point: CGPoint, position: SIMD2<Double>? = nil) {
     guard let selection = zoneSelection, let entry = zones[selection.zone],
-      let rope = entry.hits.texts[selection.text],
+      let rope = entry.hits.rope(of: selection.text),
       let local = zonePoint(point, in: selection.zone, position: position),
       let offset = entry.hits.offset(in: selection.text, at: local)
     else { return }
@@ -65,7 +65,7 @@ extension MetalTextSurface {
   /// ⌘A——まとまり全体を選ぶ。
   func selectAllZoneText() {
     guard let selection = zoneSelection,
-      let rope = zones[selection.zone]?.hits.texts[selection.text]
+      let rope = zones[selection.zone]?.hits.rope(of: selection.text)
     else { return }
     transact {
       zoneSelection?.cursor = .selecting(NSRange(location: 0, length: rope.length))
@@ -76,7 +76,7 @@ extension MetalTextSurface {
   /// 選んでいる絵の差し込みの文（空なら nil）。
   var zoneSelectedText: String? {
     guard let selection = zoneSelection, selection.range.length > 0,
-      let rope = zones[selection.zone]?.hits.texts[selection.text]
+      let rope = zones[selection.zone]?.hits.rope(of: selection.text)
     else { return nil }
     return rope.substring(selection.range)
   }
@@ -89,10 +89,17 @@ extension MetalTextSurface {
   }
 
   /// 絵の差し込みを描き直した——まとまりが描き直した絵に無いか、範囲がまとまりの文の外になれば主を本文に、そうでなければ
-  /// 選択の地を描き直す。
-  func validateZoneSelection(_ entry: ZoneEntry) {
+  /// 選択の地を描き直す。まとまりを持つ層が前の当たりの表 `previous` と同じ層・同じ原点なら、文も行も変わらないので何も
+  /// しない（ホバーの描き直しで、選んだまとまりの行をなめない）。
+  func validateZoneSelection(_ entry: ZoneEntry, previous: ZoneHits) {
     guard let selection = zoneSelection else { return }
-    guard let rope = entry.hits.texts[selection.text],
+    let placed = entry.hits.layer(containing: selection.text)
+    if let placed, let before = previous.layer(containing: selection.text),
+      placed.layer === before.layer, placed.origin == before.origin
+    {
+      return
+    }
+    guard let rope = placed?.hits.texts[selection.text]?.rope,
       NSMaxRange(selection.cursor.selectionStart) <= rope.length,
       selection.cursor.position <= rope.length
     else { return setPrimary(.body) }
@@ -105,7 +112,7 @@ extension MetalTextSurface {
     let range = selection.range
     var rects: [CGRect] = []
     if range.length > 0 {
-      for line in entry.hits.lines where line.text == selection.text {
+      for line in entry.hits.lines(of: selection.text) {
         let lower = max(range.location, line.range.location)
         let upper = min(NSMaxRange(range), NSMaxRange(line.range))
         guard lower < upper else { continue }

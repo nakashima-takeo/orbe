@@ -113,22 +113,40 @@ extension FrameBuilder {
             radius: 0, kind: 0))
       }
     }
-    for field in zone.fields {
-      guard let material = source.material.fields[field.serial] else { continue }
-      drawField(field, material, origin: (left, top), source, c)
+    for (origin, layer) in zone.layers {
+      let at = (left + Double(origin.x) * s, top + Double(origin.y) * s)
+      for field in layer.fields {
+        guard let material = source.material.fields[field.serial] else { continue }
+        drawField(field, material, origin: at, source, c)
+      }
     }
   }
 
-  /// 絵の箱・画像・字を、左上 `origin`（px）に置く。画像は `images`（画像の地図の頁ごと）に積む。
+  /// 絵の箱・画像・字を、左上 `origin`（px）に置く（層ごとに、層の原点の分ずらす）。画像は `images`（画像の地図の頁ごと）に
+  /// 積む。
   private func drawPicture(
     _ zone: ZoneMaterial, at origin: (left: Double, top: Double),
+    images: inout [[GlyphInstance]], _ source: Source, _ c: Context
+  ) {
+    let s = c.g.scale
+    for (layerOrigin, layer) in zone.layers {
+      drawLayer(
+        layer,
+        at: (origin.left + Double(layerOrigin.x) * s, origin.top + Double(layerOrigin.y) * s),
+        images: &images, source, c)
+    }
+  }
+
+  /// 層 1 つの箱・画像・字を、層の原点 `origin`（px）に置く。
+  private func drawLayer(
+    _ layer: ZoneMaterial.Layer, at origin: (left: Double, top: Double),
     images: inout [[GlyphInstance]], _ source: Source, _ c: Context
   ) {
     let (left, top) = origin
     let g = c.g
     let s = g.scale
-    for box in zone.boxes { zoneBoxes.append(Self.instance(box, left: left, top: top, scale: s)) }
-    for image in zone.images {
+    for box in layer.boxes { zoneBoxes.append(Self.instance(box, left: left, top: top, scale: s)) }
+    for image in layer.images {
       let x = (left + Double(image.frame.minX) * s).rounded()
       let y = (top + Double(image.frame.minY) * s).rounded()
       // 画像は本文の区画の切り取りの中に描く。その外の画像は地図に入れない（見えている画像の場所を取らない）。
@@ -142,13 +160,19 @@ extension FrameBuilder {
           uv: SIMD2(Float(entry.x), Float(entry.y)), color: 0xFFFF_FFFF),
         to: &images, page: entry.page)
     }
-    for run in zone.runs {
+    for run in layer.runs {
+      let baseline = top + Double(run.origin.y) * s
+      // 見えている範囲の外の字の行は置かない（長い本文の絵の差し込みの一部だけが見えている間も、字のアトラスに見えない字を
+      // 入れない）。行の上下は字の大きさの 2 倍まで見る。
+      let reach = Double(CTFontGetSize(run.font)) * 2 * s
+      guard baseline + reach > g.top, baseline - reach < g.height else { continue }
       let font = c.fonts.id(instance: run.font)
-      let baseline = top + Double(run.baseline) * s
+      let x = Double(run.origin.x)
       for i in run.glyphs.indices {
         let y = run.ys.isEmpty ? baseline : baseline - Double(run.ys[i]) * s
         place(
-          Glyph(font: font, glyph: run.glyphs[i], x: left + Double(run.xs[i]) * s, baseline: y),
+          Glyph(
+            font: font, glyph: run.glyphs[i], x: left + (x + Double(run.xs[i])) * s, baseline: y),
           run.ink, .text, c)
       }
     }
@@ -179,8 +203,7 @@ extension FrameBuilder {
   }
 
   /// 入力欄の場の文を、入力欄の矩形に描く（入力欄の矩形と本文の区画の交わりで切り取る。横は場の送りの分だけ
-  /// 左へずらす）。選択・キャレット・未確定の文字は本文と同じ描き方で、場の色で描く。`origin` は絵の差し込みの左上
-  /// （px）。
+  /// 左へずらす）。選択・キャレット・未確定の文字は本文と同じ描き方で、場の色で描く。`origin` は入力欄の層の原点（px）。
   private func drawField(
     _ field: ZoneMaterial.Field, _ material: FieldMaterial, origin: (x: Double, y: Double),
     _ source: Source, _ c: Context

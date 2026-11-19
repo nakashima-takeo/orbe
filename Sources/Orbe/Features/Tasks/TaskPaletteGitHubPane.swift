@@ -321,7 +321,7 @@ extension TaskPaletteGitHubPane {
             agent.state == .working
               ? [
                 agent.name, l10n.string(.taskPaletteAgentWorkingBadge),
-                TaskElapsedText.label(since: agent.since, now: context.date, l10n: l10n),
+                ElapsedText.label(since: agent.since, now: context.date, language: l10n.language),
               ].joined(separator: " ")
               : "\(agent.name) \(l10n.string(.taskPaletteAgentWaitingBadge))")
         }

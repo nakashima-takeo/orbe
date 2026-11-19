@@ -150,7 +150,7 @@ final class EditorZoneEditingMenuTests: OrbeTestCase {
   /// 変わらない。
   func testOnlySelectAllAndCopyWorkOnZoneText() throws {
     let scene = try scene()
-    let body = try XCTUnwrap(try hits(scene).lines.first { $0.text == AnyHashable("body-0") })
+    let body = try XCTUnwrap(try hits(scene).lines(of: "body-0").first)
     let at = CGPoint(x: body.origin.x + 20, y: body.origin.y - 4)
     XCTAssertEqual(
       try contextMenu(at: at, choose: #selector(NSText.paste(_:)), scene), nil,

@@ -61,29 +61,40 @@ final class EditorDiff {
   var surfacesChanged = false
   /// 新しい側の版の面を作り直したとき、新しい面で先頭に置く所。
   var carried: Carried?
+  /// PR の diff のコメントの層（ほかの種類の diff には無い）。
+  let comments: PrCommentLayer?
 
-  init(id: Key, source: any EditorDiffSource, surfaces: EditorSurfaces) {
+  init(
+    id: Key, source: any EditorDiffSource, surfaces: EditorSurfaces,
+    comments: PrCommentLayer? = nil
+  ) {
     self.id = id
     self.source = source
     self.surfaces = surfaces
+    self.comments = comments
     source.onChange = { [weak self] change in
       switch change {
       case .material: self?.sourcesDidChange()
       case .document(let previous): self?.documentDidSwitch(from: previous)
       }
     }
+    comments?.onRowsChange = { [weak self] in self?.applyRows() }
   }
 
   /// 種類の出どころで開く。作業ツリー diff は `documents`（セッション）から新しい側の文書を引く。テキスト面を作れなければ
   /// `EditorSurfaceError.noMetalDevice` で失敗する。
   convenience init(id: Key, documents: Documents, surfaces: EditorSurfaces) throws {
-    let source: any EditorDiffSource =
-      switch id.kind {
-      case .workingTree: try EditorDiffWorkingTree(id: id, documents: documents)
-      case .staged: EditorDiffStaged(id: id)
-      case .pullRequest(let state): EditorDiffPullRequest(id: id, state: state)
-      }
-    self.init(id: id, source: source, surfaces: surfaces)
+    switch id.kind {
+    case .workingTree:
+      try self.init(
+        id: id, source: EditorDiffWorkingTree(id: id, documents: documents), surfaces: surfaces)
+    case .staged: self.init(id: id, source: EditorDiffStaged(id: id), surfaces: surfaces)
+    case .pullRequest(let state):
+      let source = EditorDiffPullRequest(id: id, state: state)
+      self.init(
+        id: id, source: source, surfaces: surfaces,
+        comments: PrCommentLayer(pullRequest: source, language: surfaces.language))
+    }
   }
 
   // MARK: - 側
@@ -353,7 +364,8 @@ final class EditorDiff {
       if placement == .placed {
         carried =
           keepsOld
-          ? .anchor(DiffRows.anchor(at: top, revisionHunks, side: presented == .side))
+          ? .anchor(
+            DiffRows.anchor(at: previous.lineRow(of: top), revisionHunks, side: presented == .side))
           : .position(top)
       }
       dropOldSurface()

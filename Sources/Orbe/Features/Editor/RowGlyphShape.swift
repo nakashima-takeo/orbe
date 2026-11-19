@@ -3,7 +3,7 @@ import AppKit
 /// 列の行の中で描く印（`EditorGlyphs` を CGPath にしたもの。寸法ごとに 1 度だけ作る）。
 enum RowGlyphShape: Hashable {
   case chevron, chevronOpen, openFile, discard, plus, minus, branch
-  case check, viewAsTree, viewAsList
+  case check, viewAsTree, viewAsList, comment
 
   private var glyph: EditorGlyphs.Glyph {
     switch self {
@@ -16,6 +16,7 @@ enum RowGlyphShape: Hashable {
     case .check: EditorGlyphs.checkboxCheck
     case .viewAsTree: EditorGlyphs.viewAsTree
     case .viewAsList: EditorGlyphs.viewAsList
+    case .comment: EditorGlyphs.comment
     }
   }
 

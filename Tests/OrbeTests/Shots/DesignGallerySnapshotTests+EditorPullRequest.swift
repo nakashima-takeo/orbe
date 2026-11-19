@@ -5,8 +5,8 @@ import XCTest
 @testable import Orbe
 
 /// PR のパネルの gallery（見本 `editor/PrReviewPanel.tsx`・`PrListPanel.tsx`・`Rail.tsx` の突合用）。fixture は本物の git の場と、
-/// 見本の `editor/data.ts` の PR #131 を答える差し替えの出どころで、見本と同じく StateHooks.swift を選んだ姿と、PR が無いときの
-/// 作成の入口を dark / light で撮る。
+/// 見本の `editor/data.ts` の PR #131 を答える差し替えの出どころで、見本と同じく StateHooks.swift を選んだ姿と、その PR の diff の
+/// スレッドと下端のレビューの送信の区画、PR が無いときの作成の入口を dark / light で撮る。
 extension DesignGallerySnapshotTests {
   func renderEditorPullRequestSnapshots(dir: URL) throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -18,6 +18,11 @@ extension DesignGallerySnapshotTests {
     scene.panel.select(.file("src/agent/StateHooks.swift"))
     try writePNG(
       scene.view, size: size, name: "editor_pr.png", dir: dir, until: { scene.isReady })
+    scene.openDiff()
+    pumpMain(until: { scene.isDiffReady }, "PR の diff とスレッドが揃う")
+    try writePNG(
+      scene.view, size: NSSize(width: 1100, height: 760), name: "editor_pr_comments.png", dir: dir,
+      until: { scene.isReady && scene.isDiffReady })
     let none = try PrFixtures.scene(
       .noPullRequest(published: true), queriesRoot: queriesRoot, in: TestScratch.caseDir)
     defer { none.cleanup() }

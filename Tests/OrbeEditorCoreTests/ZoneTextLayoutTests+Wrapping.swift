@@ -32,9 +32,9 @@ extension ZoneTextLayoutTests {
       let units = Array(string.utf16)
       let bare = bareTypesetter(parts, codes: codes)
       for width in stride(from: CGFloat(20), through: 260, by: index < 8 ? 1.5 : 30) {
-        for line in ZoneTextLayout.lines(
-          styled(parts, codes: codes, padding: padding), width: width)
-        {
+        for line in ZoneTextLayout.typeset(
+          styled(parts, codes: codes, padding: padding), width: width
+        ).lines {
           let end = NSMaxRange(line.range)
           guard end < units.count, units[end] != 0x0A else { continue }
           if !breaks(bare, count: units.count, from: line.range.location, at: end) {
@@ -58,7 +58,7 @@ extension ZoneTextLayoutTests {
       let string = parts.joined()
       let bare = bareTypesetter(parts, codes: [1])
       let over = stride(from: CGFloat(5), through: 200, by: 0.5).filter { width in
-        ZoneTextLayout.lines(styled(parts, padding: padding), width: width).contains {
+        ZoneTextLayout.typeset(styled(parts, padding: padding), width: width).lines.contains {
           $0.width > width + 0.001
             && CTTypesetterSuggestLineBreak(bare, $0.range.location, 0) != $0.range.length
         }
@@ -76,7 +76,7 @@ extension ZoneTextLayoutTests {
   func testTheGlyphBeforeABreakInARightToLeftWordKeepsTheKerningAcrossTheBreak() throws {
     let parts = ["see the", "קוד", "مرحبا بكم"]
     let codeEnd = parts[0].utf16.count + parts[1].utf16.count
-    let lines = ZoneTextLayout.typeset(styled(parts, padding: padding), width: 60)
+    let lines = ZoneTextLayout.typeset(styled(parts, padding: padding), width: 60).lines
     let line = try XCTUnwrap(
       lines.first { NSMaxRange($0.range) > codeEnd && NSMaxRange($0.range) < codeEnd + 5 },
       "前提: コードの後ろのアラビア語の語「مرحبا」を途中で割った行がある")
@@ -88,5 +88,35 @@ extension ZoneTextLayoutTests {
     ) {
       XCTAssertLessThanOrEqual(overlap, 0.01, "分け目の前の字はコードの地にかぶらない")
     }
+  }
+
+  /// 余白付きの幅が余白なしの幅の 2 倍を超える行（1 字のコードが並ぶ行）も、幅を埋めて割る——探し直す幅が負になって
+  /// 1 字ずつの行に割れない。壊れると、短いコードの多い本文が縦に長く伸び、組む仕事が行の数だけ膨らむ。
+  func testLinesOfOneCharacterCodesFillTheWidth() {
+    let code = ZoneTextStyle(font: mono, color: .labelColor, padding: 4)
+    let typeset = ZoneTextLayout.typeset(
+      ZoneStyledText(Array(repeating: ("x", code), count: 400)), width: 600)
+    XCTAssertGreaterThan(typeset.lines.count, 1, "前提: 折り返す")
+    for line in typeset.lines.dropLast() {
+      XCTAssertLessThanOrEqual(line.width, 600)
+      XCTAssertGreaterThan(line.width, 300, "\(line.range)")
+    }
+  }
+
+  /// 区切って組む長い段落でも、行は隙間なく続いて段落を覆い、どの行も幅に収まり、区切りの境で語の途中を割らない（語の
+  /// 途中で割れるのは、幅に入らない語だけ）。壊れると、長いコメントの本文の字が欠けたり、区切りの位置で行が不自然に割れる。
+  func testALongParagraphIsTypesetInPartsWithoutGapsOrExtraBreaks() {
+    let word = "word "
+    let source = String(repeating: word, count: 3_000) + "end"
+    let style = ZoneTextStyle(font: NSFont.systemFont(ofSize: 12), color: .labelColor)
+    let typeset = ZoneTextLayout.typeset(ZoneStyledText([(source, style)]), width: 200)
+    var next = 0
+    for line in typeset.lines {
+      XCTAssertEqual(line.range.location, next, "行は隙間なく続く")
+      XCTAssertLessThanOrEqual(line.width, 200)
+      XCTAssertEqual(line.range.location % word.utf16.count, 0, "語の頭から始まる")
+      next = NSMaxRange(line.range)
+    }
+    XCTAssertEqual(next, source.utf16.count, "段落を覆う")
   }
 }

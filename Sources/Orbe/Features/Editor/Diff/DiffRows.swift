@@ -31,36 +31,65 @@ enum DiffRows {
   }
 
   /// インライン——新しい側の面に、区間の削除行を「古い側の行を指す差し込み」として区間の新しい側の始まりの境に置き、追加の
-  /// 区間に型「追加」、文脈の区間に旧番号の始まりを渡す（差し込みの出どころは呼び手が添える）。
-  static func inline(_ hunks: [LineHunk], new: Side) -> SurfaceRows {
+  /// 区間に型「追加」、文脈の区間に旧番号の始まりを渡す（差し込みの出どころは呼び手が添える）。注記（`notes`）があれば、絵の
+  /// 差し込みを行の下に置き、印を出せる行とスレッドのある行の型を付ける——新しい側の行の絵はその行の後（次の区間の削除行より
+  /// 上）、古い側の行の絵は、削除行ならその削除行の直後（削除行の塊を割る）、文脈の行なら対応する新しい側の行の後。
+  static func inline(_ hunks: [LineHunk], new: Side, notes: Notes = Notes()) -> SurfaceRows {
     var spans = Spans(limit: new.lines)
-    var insertions: [RowInsertion] = []
+    var runs: [Int: [InsertedLine]] = [:]
     var oldNext = 0
     var newNext = 0
     for hunk in hunks {
       let block = (old: hunk.oldLines, new: hunk.newLines)
       if block.new.lowerBound > newNext { spans.add(newNext, otherNumber: oldNext + 1) }
       if !block.old.isEmpty {
-        insertions.append(
-          RowInsertion(
-            line: block.new.lowerBound,
-            content: .lines(block.old.map { InsertedLine(line: $0, style: DiffStyle.removed) })))
+        runs[block.new.lowerBound] = block.old.map { line in
+          let threaded = notes.threads.old.contains(line)
+          return InsertedLine(
+            line: line, style: threaded ? DiffStyle.thread(DiffStyle.removed) : DiffStyle.removed,
+            allowsTrailingMark: contains(notes.commentable.old, line))
+        }
       }
       if !block.new.isEmpty { spans.add(block.new.lowerBound, style: DiffStyle.added) }
       oldNext = block.old.upperBound
       newNext = block.new.upperBound
     }
     if newNext < new.lines { spans.add(newNext, otherNumber: oldNext + 1) }
-    return SurfaceRows(insertions: insertions, spans: spans.items)
+    var slots = Slots()
+    for zone in notes.zones {
+      let slot: Slot?
+      switch zone.version {
+      case .new: slot = zone.line < new.lines ? Slot(boundary: zone.line + 1, depth: 0) : nil
+      case .old:
+        switch row(ofOld: zone.line, hunks) {
+        case .changed(let hunk, let k):
+          slot = Slot(boundary: hunk.newLines.lowerBound, depth: k + 1)
+        case .context(let line):
+          slot = line < new.lines ? Slot(boundary: line + 1, depth: 0) : nil
+        }
+      }
+      if let slot { slots.add(.zone(zone.zone), at: slot) }
+    }
+    let threaded = notes.threads.new.union(
+      notes.threads.old.compactMap { line in
+        if case .context(let new) = row(ofOld: line, hunks) { return new }
+        return nil
+      })
+    return SurfaceRows(
+      insertions: slots.insertions(runs: runs),
+      spans: refine(
+        spans.items, lines: new.lines, commentable: notes.commentable.new, threads: threaded))
   }
 
   /// 並列の左（古い側）と右（新しい側）——文脈は両側とも型なし。区間は両側の同じ行から始め、左は型「削除」、右は型「追加」で、
-  /// 削除と追加の数の差だけ短い側の区間の後ろに詰め物（何も指さない差し込み・型「詰め物」）を置く。
-  static func side(_ hunks: [LineHunk], old: Side, new: Side) -> (
+  /// 削除と追加の数の差だけ短い側の区間の後ろに詰め物（何も指さない差し込み・型「詰め物」）を置く。注記（`notes`）があれば、
+  /// 古い側の行の絵は左、新しい側の行の絵は右の、その行の後に置き、反対側の同じ段の後（詰め物の塊の途中を含む）に相手と同じ
+  /// 高さの空きを置く。
+  static func side(_ hunks: [LineHunk], old: Side, new: Side, notes: Notes = Notes()) -> (
     left: SurfaceRows, right: SurfaceRows
   ) {
-    var left = (spans: Spans(limit: old.lines), insertions: [RowInsertion]())
-    var right = (spans: Spans(limit: new.lines), insertions: [RowInsertion]())
+    var left = (spans: Spans(limit: old.lines), runs: [Int: [InsertedLine]]())
+    var right = (spans: Spans(limit: new.lines), runs: [Int: [InsertedLine]]())
     let pads = { (count: Int) in
       Array(repeating: InsertedLine(style: DiffStyle.pad), count: count)
     }
@@ -70,22 +99,40 @@ enum DiffRows {
       if !block.new.isEmpty { right.spans.add(block.new.lowerBound, style: DiffStyle.added) }
       let difference = block.new.count - block.old.count
       if difference > 0 {
-        left.insertions.append(
-          RowInsertion(line: block.old.upperBound, content: .lines(pads(difference))))
+        left.runs[block.old.upperBound] = pads(difference)
       } else if difference < 0 {
-        right.insertions.append(
-          RowInsertion(line: block.new.upperBound, content: .lines(pads(-difference))))
+        right.runs[block.new.upperBound] = pads(-difference)
       }
       left.spans.add(block.old.upperBound)
       right.spans.add(block.new.upperBound)
     }
+    var slots = (left: Slots(), right: Slots())
+    for zone in notes.zones {
+      guard let (own, other) = sideSlots(zone, hunks, old: old, new: new) else { continue }
+      switch zone.version {
+      case .old:
+        slots.left.add(.zone(zone.zone), at: own)
+        slots.right.add(.gap(zone.zone), at: other)
+      case .new:
+        slots.right.add(.zone(zone.zone), at: own)
+        slots.left.add(.gap(zone.zone), at: other)
+      }
+    }
     return (
-      SurfaceRows(insertions: left.insertions, spans: left.spans.items),
-      SurfaceRows(insertions: right.insertions, spans: right.spans.items)
+      SurfaceRows(
+        insertions: slots.left.insertions(runs: left.runs),
+        spans: refine(
+          left.spans.items, lines: old.lines, commentable: notes.commentable.old,
+          threads: notes.threads.old)),
+      SurfaceRows(
+        insertions: slots.right.insertions(runs: right.runs),
+        spans: refine(
+          right.spans.items, lines: new.lines, commentable: notes.commentable.new,
+          threads: notes.threads.new))
     )
   }
 
-  /// インラインで、新しい側の面の見えている先頭 `top` から `count` 段の中に出る古い側の行を含む範囲——先頭の段の次に出る
+  /// インラインで、新しい側の面の見えている先頭 `top`（差し込んだ行だけを数えた段 → `TextSurface.lineRow(of:)`）から `count` 段の中に出る古い側の行を含む範囲——先頭の段の次に出る
   /// 古い側の行から `count` 行（インラインに出る古い側の行は単調に増え、1 段に高々 1 行）。
   static func oldLines(from top: RowPosition, count: Int, _ hunks: [LineHunk]) -> ClosedRange<Int> {
     let start = anchor(at: top, hunks, side: false).line
@@ -100,7 +147,8 @@ enum DiffRows {
     let added: Int
   }
 
-  /// 新しい側の面の位置 `top` を、行差分 `hunks` の並び（`side` なら並列の右、そうでなければインライン）で古い側の錨に直す。
+  /// 新しい側の面の位置 `top`（差し込んだ行だけを数えた段 → `TextSurface.lineRow(of:)`）を、行差分 `hunks` の並び（`side`
+  /// なら並列の右、そうでなければインライン）で古い側の錨に直す。
   static func anchor(at top: RowPosition, _ hunks: [LineHunk], side: Bool) -> Anchor {
     var shift = 0
     for hunk in hunks {
@@ -132,8 +180,8 @@ enum DiffRows {
     return Anchor(line: max(0, top.line + shift), added: 0)
   }
 
-  /// 古い側の錨 `anchor` を、行差分 `hunks` の並びの新しい側の面の位置に戻す（`anchor(at:_:side:)` の逆）。錨の追加の行が
-  /// 新しい並びに無ければ、同じ区間の頭に寄せる。
+  /// 古い側の錨 `anchor` を、行差分 `hunks` の並びの新しい側の面の位置（差し込んだ行だけを数えた段）に戻す
+  /// （`anchor(at:_:side:)` の逆）。錨の追加の行が新しい並びに無ければ、同じ区間の頭に寄せる。
   static func position(of anchor: Anchor, _ hunks: [LineHunk], side: Bool) -> RowPosition {
     var shift = 0
     for hunk in hunks {
@@ -153,6 +201,16 @@ enum DiffRows {
       shift = new.upperBound - old.upperBound
     }
     return RowPosition(line: max(0, anchor.line + shift))
+  }
+
+  /// 昇順の重ならない区間の列 `ranges` のどれかが `line` を含む。
+  static func contains(_ ranges: [Range<Int>], _ line: Int) -> Bool {
+    var (low, high) = (0, ranges.count)
+    while low < high {
+      let mid = (low + high) / 2
+      if ranges[mid].upperBound <= line { low = mid + 1 } else { high = mid }
+    }
+    return low < ranges.count && ranges[low].contains(line)
   }
 
   /// 区間の始まりの昇順の列。同じ行に重ねて置けば後の方を残し、面の行の外（`limit` 以上）は置かない。

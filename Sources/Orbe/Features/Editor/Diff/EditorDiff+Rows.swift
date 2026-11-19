@@ -10,19 +10,29 @@ extension EditorDiff {
     guard let mode = presented, content == .ready, let surface = newSurface, let old,
       let (hunks, newSide) = currentRows
     else { return }
+    let notes = comments?.notes(shown: revisionHunksSides?.texts) ?? DiffRows.Notes()
     switch mode {
     case .inline:
-      var rows = DiffRows.inline(hunks, new: newSide)
+      var rows = DiffRows.inline(hunks, new: newSide, notes: notes)
       rows.source = old
-      look(DiffStyle.inline, rows, absent: newSide.isAbsent).apply(to: surface, document: document)
+      rows.trailingMarkTarget = comments
+      look(
+        comments == nil ? DiffStyle.inline : DiffStyle.pullRequestInline, rows,
+        absent: newSide.isAbsent
+      ).apply(to: surface, document: document)
+      comments?.place(old: nil, new: surface)
     case .side:
-      let rows = DiffRows.side(hunks, old: oldSide, new: newSide)
+      var rows = DiffRows.side(hunks, old: oldSide, new: newSide, notes: notes)
+      rows.left.trailingMarkTarget = comments
+      rows.right.trailingMarkTarget = comments
+      let presentation = comments == nil ? DiffStyle.side : DiffStyle.pullRequestSide
       let left = oldSurface ?? makeOldSurface()
       if let left {
-        look(DiffStyle.side, rows.left, absent: oldSide.isAbsent).apply(to: left, document: nil)
+        look(presentation, rows.left, absent: oldSide.isAbsent).apply(to: left, document: nil)
       }
-      look(DiffStyle.side, rows.right, absent: newSide.isAbsent)
+      look(presentation, rows.right, absent: newSide.isAbsent)
         .apply(to: surface, document: document)
+      comments?.place(old: left, new: surface)
       if let left, oldSurface == nil {
         carryTop(to: surface)
         oldSurface = left
@@ -41,7 +51,8 @@ extension EditorDiff {
     let viewport = surface.viewport
     old.setVisible(
       lines: DiffRows.oldLines(
-        from: viewport.top, count: Int(viewport.visibleLines.rounded(.up)), hunks))
+        from: surface.lineRow(of: viewport.top), count: Int(viewport.visibleLines.rounded(.up)),
+        hunks))
   }
 
   /// 面に初めて見せる位置へ送る——位置を決めた後に作り直した面なら前の面で先頭に見えていた所、まだなら、開いた時点に
@@ -76,7 +87,9 @@ extension EditorDiff {
     self.carried = nil
     switch carried {
     case .anchor(let anchor):
-      surface.scroll(to: DiffRows.position(of: anchor, hunks, side: presented == .side))
+      surface.scroll(
+        to: surface.position(
+          ofLineRow: DiffRows.position(of: anchor, hunks, side: presented == .side)))
     case .position(let position):
       surface.scroll(to: position)
     }

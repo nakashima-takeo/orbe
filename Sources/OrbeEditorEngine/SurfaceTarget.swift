@@ -46,12 +46,10 @@ extension MetalTextSurface {
       let entry = zones[id]
     else { return .body }
     let local = CGPoint(x: point.x - area.minX, y: CGFloat(y - rows.top(ofBlock: index)))
-    if let field = entry.hits.fields.last(where: { $0.frame.contains(local) }),
-      let site = fields[field.field.id]
-    {
+    if let field = entry.hits.field(at: local), let site = fields[field.field.id] {
       return .field(site)
     }
-    if let button = entry.hits.buttons.last(where: { $0.frame.contains(local) }) {
+    if let button = entry.hits.button(at: local) {
       return .button(entry, button)
     }
     if let (text, offset) = entry.hits.text(at: local) {

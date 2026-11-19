@@ -95,7 +95,8 @@ extension PrRowView {
   }
 
   /// ファイルの行 22（padding 0 12・gap 6）: チェック・字下げの線・種別チップ 16・名前（13・バッジの色）・リストなら
-  /// ディレクトリ（11 tertiary）・右端にバッジの字（mono 11）。確認済みなら全体を薄くする。
+  /// ディレクトリ（11 tertiary）・右端にコメントの数（印 11 と数 mono 10.5、間 3、accentBright）とバッジの字（mono 11）。
+  /// 確認済みなら全体を薄くする。
   func draw(
     _ file: File, _ colors: RowColors, _ scm: ScmRowColors, _ pr: PrRowColors,
     in context: CGContext
@@ -114,7 +115,17 @@ extension PrRowView {
       let color = scm.badge(file.badgeKind)
       let badgeX = bounds.width - 12 - snap(file.badge.width, .up)
       file.badge.draw(at: badgeX, top: top(file.badge), color, context)
-      let limit = badgeX - Theme.Space.note * 2
+      var right = badgeX
+      if let comments = file.comments {
+        right -= Theme.Space.note + snap(comments.width, .up)
+        comments.draw(at: right, top: top(comments), pr.comments, context)
+        let glyph: CGFloat = 11
+        right -= 3 + glyph
+        RowGlyphShape.comment.draw(
+          in: NSRect(x: right, y: snap(bounds.midY - glyph / 2), width: glyph, height: glyph),
+          pr.comments, in: context)
+      }
+      let limit = right - Theme.Space.note * 2
       let nameWidth = min(snap(file.name.width, .up), max(0, limit - x))
       file.name.draw(at: x, top: top(file.name), width: nameWidth, color, context)
       x += nameWidth + Theme.Space.note

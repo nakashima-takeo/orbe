@@ -69,6 +69,10 @@ final class FakeTextSurface: TextSurface {
 
   func scroll(to position: RowPosition) {}
 
+  func lineRow(of position: RowPosition) -> RowPosition { position }
+
+  func position(ofLineRow row: RowPosition) -> RowPosition { row }
+
   func reveal(from: RowPosition, to: RowPosition, policy: TextReveal) {}
 
   func setRows(_ rows: SurfaceRows) {}

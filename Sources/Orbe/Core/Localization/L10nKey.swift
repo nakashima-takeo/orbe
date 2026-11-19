@@ -48,6 +48,10 @@ enum L10nKey: String, CaseIterable, Sendable {
 
   // MARK: - Relative date
   case relativeJustNow
+  case relativeAgo
+  case elapsedMinutes
+  case elapsedHours
+  case elapsedDays
 
   // MARK: - Agent（共有: 状態名・検出無し）
   case agentNotFoundCLI
@@ -231,8 +235,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteReview
   case taskPaletteUnlink
   case taskPaletteActionOpenLink
-  case taskPaletteElapsedMinutes
-  case taskPaletteElapsedHours
   case taskPaletteAgentWaitingBadge
   case taskPaletteAgentWorkingBadge
   case taskPaletteAgentWorking
@@ -315,8 +317,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskWaitContinueNote
   case taskWaitSatisfied
   case taskWaitExpired
-  case taskWaitJustNow
-  case taskWaitAgo
   case taskWaitConversationToday
   case taskWaitConversationDays
   case taskWaitResultSuccess
@@ -591,6 +591,35 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrFailedTimedOut
   case editorPrFailedRead
   case editorPrFailedWrite
+  case editorPrThreadLine
+  case editorPrThreadPending
+  case editorPrThreadResolved
+  case editorPrThreadResolve
+  case editorPrThreadUnresolve
+  case editorPrThreadCollapse
+  case editorPrThreadExpand
+  case editorPrThreadAdd
+  case editorPrThreadResolveReply
+  case editorPrThreadCancel
+  case editorPrThreadReplyPlaceholder
+  case editorPrThreadNotReady
+  case editorPrThreadLineGone
+  case editorPrThreadDetached
+  case editorPrThreadDeleted
+  case editorPrWriteTimedOut
+  case editorPrReview
+  case editorPrReviewPending
+  case editorPrReviewPlaceholder
+  case editorPrReviewApprove
+  case editorPrReviewComment
+  case editorPrReviewRequestChanges
+  case editorPrReviewSubmit
+  case editorPrReviewAwaitsLatest
+  case editorPrReviewStoppedAligning
+  case editorPrReviewNoDiff
+  case editorPrReviewReadFailed
+  case editorPrOutdatedThreads
+  case editorPrCommentCount
 
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle

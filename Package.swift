@@ -7,6 +7,8 @@ let package = Package(
   dependencies: [
     // CommonMark + GFM パーサ（公式）。リリースノートの markdown を AST へ起こし SwiftUI へ描画する。
     .package(url: "https://github.com/apple/swift-markdown.git", from: "0.6.0"),
+    // swift-markdown が使う cmark-gfm。PR のコメントの本文は、入れ子の深さに依らない走査で段にする（→ PrCommentMarkdown）。
+    .package(url: "https://github.com/swiftlang/swift-cmark.git", from: "0.8.0"),
     // アプリ内アップデート（appcast + EdDSA 署名検証 + 終了時適用）。UI は自前（SPUUserDriver 実装）。
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
     // tree-sitter 本体（C API を OrbeEditorCore から直接呼ぶ）。0.26.12 以降はエラー回復が退行して大きな Swift が
@@ -110,6 +112,8 @@ let package = Package(
         "OrbeEditorCore",
         "OrbeEditorEngine",
         .product(name: "Markdown", package: "swift-markdown"),
+        .product(name: "cmark-gfm", package: "swift-cmark"),
+        .product(name: "cmark-gfm-extensions", package: "swift-cmark"),
         .product(name: "Sparkle", package: "Sparkle"),
       ],
       // v1 土台: libghostty の C コールバックはスレッド保証が API 上不明確で、

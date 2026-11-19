@@ -3,7 +3,7 @@ import SwiftUI
 
 /// サイドバー: PR のパネル（見本 PrReviewPanel）。上から、パネルヘッダー（再読込・GitHub で開く）→ 答えに応じた中身。PR が
 /// あれば頭（PR の印・題・番号・作者 · `head → base`・手元とのずれの帯）と失敗の文と列（説明・コミット・変更ファイル。
-/// AppKit）。PR が無ければ作成の入口（見本 PrListPanel の作成ボタンと下の 1 行）、出せなければ理由の一文だけ。根が変わると
+/// AppKit）と下端のレビューの送信の区画。PR が無ければ作成の入口（見本 PrListPanel の作成ボタンと下の 1 行）、出せなければ理由の一文だけ。根が変わると
 /// 面はパネルと列を組で作り直すので、中身はパネルで同一視する。
 struct PrPanelView: View {
   let panel: PrPanel
@@ -50,6 +50,12 @@ struct PrPanelView: View {
           guard list.list.source.language != language else { return }
           list.list.source.language = language
           list.list.reloadRows()
+        }
+        if let review = state.review {
+          PrReviewSection(panel: panel, state: state, review: review)
+            .id(ObjectIdentifier(state))
+        } else if let failure = state.reviewFailure {
+          PrReviewReadFailure(failure: failure)
         }
       } else if let failure = failureText(state) {
         PrNote(text: failure, color: Color.theme.danger)
@@ -262,14 +268,14 @@ enum PrPanelText {
     case .ghUnauthed: l10n.string(.editorPrGhUnauthed)
     case .notGitHub: l10n.string(.editorPrNotGitHub)
     case .unverified: l10n.string(.editorPrUnverified)
-    case .failed(let failure): text(failure, empty: .editorPrFailedRead, l10n)
+    case .failed(let failure): text(failure, empty: .editorPrFailedRead, l10n.language)
     }
   }
 
   static func failure(_ failure: PullRequestState.Failure, _ l10n: LocalizationStore) -> String {
     switch failure {
-    case .read(let reason): text(reason, empty: .editorPrFailedRead, l10n)
-    case .write(let reason): text(reason, empty: .editorPrFailedWrite, l10n)
+    case .read(let reason): text(reason, empty: .editorPrFailedRead, l10n.language)
+    case .write(let reason): text(reason, empty: .editorPrFailedWrite, l10n.language)
     }
   }
 
@@ -285,16 +291,28 @@ enum PrPanelText {
     }
   }
 
+  /// レビューのやりとりの読みの失敗の文。
+  static func reviewReadFailure(_ failure: GitHubFailure, _ l10n: LocalizationStore) -> String {
+    l10n.format(.editorPrReviewReadFailed, text(failure, empty: .editorPrFailedRead, l10n.language))
+  }
+
+  /// レビューへの書き込み（コメント・返信・解決・レビューの送信）の失敗の文。時間切れは、GitHub に届いていたかもしれないことを
+  /// 告げる。
+  static func writeFailure(_ failure: GitHubFailure, _ language: Language) -> String {
+    if failure == .timedOut { return L10n.string(.editorPrWriteTimedOut, language) }
+    return text(failure, empty: .editorPrFailedWrite, language)
+  }
+
   /// gh の失敗の文。決まった文の種類はその文、それ以外は gh のエラー文の要点（空なら `empty`）。
-  private static func text(_ failure: GitHubFailure, empty: L10nKey, _ l10n: LocalizationStore)
+  private static func text(_ failure: GitHubFailure, empty: L10nKey, _ language: Language)
     -> String
   {
     switch failure {
-    case .unauthenticated: l10n.string(.editorPrFailedUnauthenticated)
-    case .rateLimited: l10n.string(.editorPrFailedRateLimited)
-    case .unreachable: l10n.string(.editorPrFailedUnreachable)
-    case .timedOut: l10n.string(.editorPrFailedTimedOut)
-    case .reason(let reason): reason.isEmpty ? l10n.string(empty) : reason
+    case .unauthenticated: L10n.string(.editorPrFailedUnauthenticated, language)
+    case .rateLimited: L10n.string(.editorPrFailedRateLimited, language)
+    case .unreachable: L10n.string(.editorPrFailedUnreachable, language)
+    case .timedOut: L10n.string(.editorPrFailedTimedOut, language)
+    case .reason(let reason): reason.isEmpty ? L10n.string(empty, language) : reason
     }
   }
 }

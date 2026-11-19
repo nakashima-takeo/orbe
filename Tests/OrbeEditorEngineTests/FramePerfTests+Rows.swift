@@ -94,7 +94,7 @@ extension FramePerfTests {
 
   /// 長い 1 段落の本文を持つスレッドを材料と当たりの表に写す main の仕事は、段落の長さに比例する——本文が 2,000 字と
   /// 8,000 字の 1 段落のスレッドで、写す時間の中央値の比が 6 倍以内（比例なら 4 倍、段落の長さの 2 乗なら 16 倍）。
-  /// インラインコード（余白つき）が文ごとに入る段落でも同じ。壊れると、長いコメントのスレッドでホバーの出入りや幅の変化の
+  /// インラインコード（余白つき）が文ごとに入る段落でも同じ。壊れると、長いコメントのスレッドを置いたときや幅の変化の
   /// たびに main が長く止まる。
   func testPaintingALongParagraphGrowsLinearly() throws {
     let look = ZonePainter.Look(
@@ -120,26 +120,26 @@ extension FramePerfTests {
     }
   }
 
-  /// 載せる側が長い 1 段落の本文を幅で折り返して測る時間は、段落の長さに比例する——2,000 字と 8,000 字の 1 段落で、測る時間の
+  /// 載せる側が長い 1 段落の本文を幅で折り返して組む時間は、段落の長さに比例する——2,000 字と 8,000 字の 1 段落で、組む時間の
   /// 中央値の比が 6 倍以内。インラインコード（余白つき）が 20 字ごとに入る段落でも比例する。比例しなくなると、長いコメントのスレッドで幅を
-  /// 変えるたびに、測り終えるまで待たされる。
-  func testMeasuringALongParagraphGrowsLinearly() {
+  /// 変えるたびに、組み終えるまで待たされる。
+  func testTypesettingALongParagraphGrowsLinearly() {
     for coded in [false, true] {
       let costs = [2_000, 8_000].map { length -> Double in
         let (comment, content) = Self.longParagraph(length, coded: coded)
-        let measured = content ?? ThreadZone.content(comment)
+        let text = content ?? ThreadZone.content(comment)
         let times = (0..<9).map { _ -> Double in
           let started = CACurrentMediaTime()
-          _ = ZoneTextLayout.lines(measured, width: 700)
+          _ = ZoneTextLayout.typeset(text, width: 700)
           return CACurrentMediaTime() - started
         }
         return Self.quantile(times.sorted(), 0.5)
       }
       print(
-        "PERF-FRAMES zone long paragraph measure main\(coded ? " (inline code)" : ""): 2000 chars",
+        "PERF-FRAMES zone long paragraph typeset\(coded ? " (inline code)" : ""): 2000 chars",
         Self.ms(costs[0]), "/ 8000 chars", Self.ms(costs[1]), "/ ratio",
         String(format: "%.2f", costs[1] / costs[0]))
-      XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "測る時間は段落の長さに比例する（コード: \(coded)）")
+      XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "組む時間は段落の長さに比例する（コード: \(coded)）")
     }
   }
 

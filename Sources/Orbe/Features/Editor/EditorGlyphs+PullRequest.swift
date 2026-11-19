@@ -64,6 +64,18 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
+  /// コメント（stroke 1.4。見本 CommentIcon）。
+  static let comment = Glyph(viewBox: 16, stroke: 1.4) { k in
+    var path = Path()
+    let points: [(CGFloat, CGFloat)] = [
+      (2.5, 3.5), (13.5, 3.5), (13.5, 10.5), (7.5, 10.5), (5, 13), (5, 10.5), (2.5, 10.5),
+    ]
+    path.move(to: CGPoint(x: points[0].0 * k, y: points[0].1 * k))
+    for (x, y) in points.dropFirst() { path.addLine(to: CGPoint(x: x * k, y: y * k)) }
+    path.closeSubpath()
+    return [(path, 1)]
+  }
+
   /// PR の印の 3 つの点と、2 本の枝（`PrOpenIcon`・`PrCreateIcon` に共通）。
   private static func pullRequestBranches(_ k: CGFloat) -> Path {
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }

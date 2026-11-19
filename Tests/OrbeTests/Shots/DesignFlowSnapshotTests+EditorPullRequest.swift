@@ -30,7 +30,7 @@ extension DesignFlowSnapshotTests {
     let panel = scene.panel
     try flow(
       "editor_pr", size: NSSize(width: 1100, height: 640), render: { current.view },
-      until: { current.isReady },
+      until: { current.isReady && (current.pane.diff == nil || current.isDiffReady) },
       steps: [
         ("open", { panel.select(.file("src/agent/StateHooks.swift")) }),
         ("viewed", { panel.toggleViewed("README.md") }),

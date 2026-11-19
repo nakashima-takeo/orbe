@@ -70,6 +70,56 @@ final class RowLayoutTests: XCTestCase {
     }
   }
 
+  /// 差し込んだ行だけを数えた段は、同じ境の絵の差し込みの高さに依らず同じ差し込んだ行を指し、位置との行き来で戻る。絵の
+  /// 差し込みの中の位置は、その下の差し込んだ行の頭になる（壊れると、スレッドを置いた削除行の塊の中で面を作り直したとき、
+  /// 先頭が絵の高さの段数だけ前の削除行へずれる）。
+  func testALineRowCountsOnlyTheInsertedLinesOfTheBlock() {
+    var rows = RowLayout(lineHeight: lineHeight)
+    rows.replace(
+      [
+        .init(line: 4, height: 36, content: .lines([InsertedLine(), InsertedLine()])),
+        .init(line: 4, height: 45, content: .zone(ObjectIdentifier(NSObject()))),
+        .init(line: 4, height: 18, content: .lines([InsertedLine()])),
+      ], spans: [])
+    let total = (36.0 + 45 + 18) / lineHeight
+    XCTAssertEqual(rows.lineRow(of: .head(of: 4)), RowPosition(line: 4, offset: -3))
+    XCTAssertEqual(
+      rows.lineRow(of: RowPosition(line: 4, offset: Int((1.5 - total).rounded(.up)))),
+      RowPosition(line: 4, offset: -2), "2 つ目の差し込んだ行")
+    XCTAssertEqual(
+      rows.lineRow(of: RowPosition(line: 4, offset: -2)), RowPosition(line: 4, offset: -1),
+      "絵の差し込みの中は、その下の差し込んだ行")
+    XCTAssertEqual(rows.lineRow(of: RowPosition(line: 4, offset: 0)), RowPosition(line: 4))
+    for offset in -3 ... -1 {
+      let row = RowPosition(line: 4, offset: offset)
+      XCTAssertEqual(rows.lineRow(of: rows.position(ofLineRow: row)), row, "\(row)")
+    }
+    XCTAssertEqual(
+      rows.position(ofLineRow: RowPosition(line: 4, offset: -1)), RowPosition(line: 4, offset: -1))
+  }
+
+  /// 行高で割り切れない高さの絵の差し込みがあっても、差し込んだ行だけを数えた段は浮動小数の誤差で隣の行に化けない。
+  func testALineRowSurvivesFractionalZoneHeights() {
+    for heights in [[40.0], [96, 125.4]] {
+      var rows = RowLayout(lineHeight: lineHeight)
+      var blocks: [RowLayout.Block] = [
+        .init(line: 4, height: 18 * 2, content: .lines([InsertedLine(), InsertedLine()]))
+      ]
+      for height in heights {
+        blocks.append(.init(line: 4, height: height, content: .zone(ObjectIdentifier(NSObject()))))
+      }
+      blocks.append(
+        .init(
+          line: 4, height: 18 * 3,
+          content: .lines([InsertedLine(), InsertedLine(), InsertedLine()])))
+      rows.replace(blocks, spans: [])
+      for offset in -5 ... -1 {
+        let row = RowPosition(line: 4, offset: offset)
+        XCTAssertEqual(rows.lineRow(of: rows.position(ofLineRow: row)), row, "\(heights) \(row)")
+      }
+    }
+  }
+
   /// 縦の端は最後の項目の上端——最終行の後の塊があれば、その最後の行。
   func testTheEndIsTheTopOfTheLastItem() {
     let rows = layout()

@@ -68,7 +68,7 @@ final class PrListSource: RowListSource {
 
   // MARK: - 行の中身
 
-  /// 行 `item` を描くのに要る、行の組の外の事実（確認済みの数・ツリーで見せているか）。
+  /// 行 `item` を描くのに要る、行の組の外の事実（確認済みの数・ツリーで見せているか・ファイルのコメントの数）。
   private func facts(of item: PrLayout.Item) -> PrRowView.Facts {
     let state = panel.state
     let viewed =
@@ -78,6 +78,7 @@ final class PrListSource: RowListSource {
       case .file(let path, _, _): state?.isViewed(path) == true ? 1 : 0
       case .section(.commits, _, _), .olderCommits, .commit: 0
       }
-    return PrRowView.Facts(viewed: viewed, asTree: panel.asTree)
+    let comments = if case .file(let path, _, _) = item { panel.commentCount(of: path) } else { 0 }
+    return PrRowView.Facts(viewed: viewed, asTree: panel.asTree, comments: comments)
   }
 }
