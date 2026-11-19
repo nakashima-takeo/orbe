@@ -133,8 +133,25 @@ extension SurfaceZonesTests {
     XCTAssertEqual(shot.rgb(center.x, center.y), [0, 0, 255], "明るい外観の絵")
   }
 
+  /// 本文の区画の右端まで字が届く行でも、印は本文の字の上に描かれる（押すと印が押下を受けるので、見えている順と押せる順が同じになる）。
+  func testTheMarkIsDrawnOverTheTextOfALongRow() throws {
+    let opened = try hostedRows(long: true)
+    let surface = opened.surface
+    surface.setPresentation(SurfacePresentation(showsMinimap: false, trailingMark: Self.mark))
+    surface.setRows(SurfaceRows(spans: [LineSpan(line: 0, allowsTrailingMark: true)]))
+    let center = markPoint(surface, rowPoint(surface, row: 4))
+    let area = stride(from: center.x - 8, through: center.x + 8, by: 1).flatMap { x in
+      stride(from: center.y - 8, through: center.y + 8, by: 1).map { CGPoint(x: x, y: $0) }
+    }
+    let before = try pixelShot(opened)
+    XCTAssertTrue(area.contains { before.hasInk($0.x, $0.y) }, "前提: 印の所に本文の字がある")
+    surface.hover(at: rowPoint(surface, row: 4))
+    let shot = try pixelShot(opened)
+    XCTAssertEqual(area.filter { shot.rgb($0.x, $0.y) != [255, 0, 0] }, [], "印の上に字が乗らない")
+  }
+
   /// 印を押して同じ印の上で離すと、行つきで 1 回だけ並びの受け手へ知らせ、選択と主は変えない。印の外で離せば知らせない。
-  /// 並びを置き直した後は、置き直した並びの受け手だけが受ける。
+  /// 並びを置き直した後は、置き直した並びの受け手だけが受ける（形の同じ並びで受け手だけを替えても）。
   func testPressingTheMarkTellsTheTargetOfTheCurrentRows() throws {
     let setup = try marked()
     let (opened, target) = (setup.opened, setup.target)
@@ -154,13 +171,18 @@ extension SurfaceZonesTests {
     try mouse(opened, .leftMouseUp, at: rowPoint(surface, row: 3))
     XCTAssertEqual(target.pressed.count, 2, "印の外で離せば知らせない")
     let next = MarkRecorder()
-    surface.setRows(
-      SurfaceRows(
-        spans: [LineSpan(line: 0, allowsTrailingMark: true)], trailingMarkTarget: next))
+    let markable = [LineSpan(line: 0, allowsTrailingMark: true)]
+    surface.setRows(SurfaceRows(spans: markable, trailingMarkTarget: next))
     try mouse(opened, .leftMouseDown, at: mark)
     try mouse(opened, .leftMouseUp, at: mark)
     XCTAssertEqual(target.pressed.count, 2, "古い並びの受け手へは届かない")
     XCTAssertEqual(next.pressed, [.document(3)])
+    let latest = MarkRecorder()
+    surface.setRows(SurfaceRows(spans: markable, trailingMarkTarget: latest))
+    try mouse(opened, .leftMouseDown, at: mark)
+    try mouse(opened, .leftMouseUp, at: mark)
+    XCTAssertEqual(next.pressed.count, 1, "形の同じ並びでも、受け手を替えれば前の受け手へは届かない")
+    XCTAssertEqual(latest.pressed, [.document(3)])
   }
 
   /// スクロールの後と並びを置き直した後は、絵の差し込みの無い面でも、今のポインタの位置で印を引き直す——ポインタの下へ
