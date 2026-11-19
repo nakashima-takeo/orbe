@@ -89,4 +89,21 @@ extension ZoneTextLayoutTests {
       XCTAssertLessThanOrEqual(overlap, 0.01, "分け目の前の字はコードの地にかぶらない")
     }
   }
+
+  /// 区切って組む長い段落でも、行は隙間なく続いて段落を覆い、どの行も幅に収まり、区切りの境で語の途中を割らない（語の
+  /// 途中で割れるのは、幅に入らない語だけ）。壊れると、長いコメントの本文の字が欠けたり、区切りの位置で行が不自然に割れる。
+  func testALongParagraphIsTypesetInPartsWithoutGapsOrExtraBreaks() {
+    let word = "word "
+    let source = String(repeating: word, count: 3_000) + "end"
+    let style = ZoneTextStyle(font: NSFont.systemFont(ofSize: 12), color: .labelColor)
+    let typeset = ZoneTextLayout.typeset(ZoneStyledText([(source, style)]), width: 200)
+    var next = 0
+    for line in typeset.lines {
+      XCTAssertEqual(line.range.location, next, "行は隙間なく続く")
+      XCTAssertLessThanOrEqual(line.width, 200)
+      XCTAssertEqual(line.range.location % word.utf16.count, 0, "語の頭から始まる")
+      next = NSMaxRange(line.range)
+    }
+    XCTAssertEqual(next, source.utf16.count, "段落を覆う")
+  }
 }

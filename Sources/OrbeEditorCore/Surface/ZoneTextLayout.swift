@@ -171,17 +171,66 @@ public enum ZoneTextLayout {
   /// と同じく語の途中で割る。1 つの割れない塊（字 1 つなど）と余白が幅に入らない行だけが幅を超える。空の文は空の 1 行。
   public static func typeset(_ text: ZoneStyledText, width: CGFloat) -> ZoneTypeset {
     let units = Array(text.string.utf16)
+    let bareStyles = text.styles.map(\.bare)
     var lines: [TypesetLine] = []
     var start = 0
+    // 位置 `offset` より後ろで終わる最初の見え方（段落と区切りは前から順に組むので、見え方を前から 1 度だけたどる）。
+    var first = (index: 0, offset: 0)
+    let advance = { (offset: Int) in
+      while first.index < text.styles.count,
+        first.offset + text.styles[first.index].length <= offset
+      {
+        first = (first.index + 1, first.offset + text.styles[first.index].length)
+      }
+    }
     repeat {
       let span = paragraphSpan(around: start, in: units)
-      let composition = ZoneComposition(units, paragraph: span, styles: text.styles)
-      let bare = ZoneComposition(units, paragraph: span, styles: text.styles.map(\.bare))
-      lines += wrap(composition, breakingAs: bare, width: width)
+      advance(span.lowerBound)
+      guard span.count > window else {
+        let composition = ZoneComposition(
+          units, paragraph: span, styles: text.styles, from: first)
+        let bare = ZoneComposition(units, paragraph: span, styles: bareStyles, from: first)
+        lines += wrap(composition, breakingAs: bare, width: width)
+        start = span.upperBound + 1
+        continue
+      }
+      // 長い段落は区切って組む。Core Text が段落の 1 行を割る・組む仕事は、字によって（双方向の制御字・タイ語やラオ語の
+      // 語の境など）段落の長さに比例するので、段落ごと組むと段落を組む仕事が長さの 2 乗になる。区切りは行の頭から始め、
+      // 区切りの終わりから `lookahead` 以上手前で終わる行だけを採る（行の割れ目は後ろの字にも依るので、区切りの終わりの
+      // 近くの行は次の区切りで組み直す）。1 行も採れなければ区切りを倍に広げる。向きは段落全体の向きに揃える。区切りの前で
+      // 閉じていない埋め込みと isolate は、区切りの中には及ばない。
+      let rightToLeft = ZoneComposition.isRightToLeft(units[span])
+      var lineStart = span.lowerBound
+      var size = window
+      while lineStart < span.upperBound {
+        let end = min(span.upperBound, lineStart + size)
+        advance(lineStart)
+        let part = lineStart..<end
+        let composition = ZoneComposition(
+          units, paragraph: part, styles: text.styles, from: first, rightToLeft: rightToLeft)
+        let bare = ZoneComposition(
+          units, paragraph: part, styles: bareStyles, from: first, rightToLeft: rightToLeft)
+        let made = wrap(composition, breakingAs: bare, width: width)
+        let taken =
+          end == span.upperBound
+          ? made[...] : made.prefix { NSMaxRange($0.range) <= end - lookahead }
+        guard let last = taken.last, NSMaxRange(last.range) > lineStart else {
+          size *= 2
+          continue
+        }
+        lines += taken
+        lineStart = NSMaxRange(last.range)
+        size = window
+      }
       start = span.upperBound + 1
     } while start <= units.count
     return ZoneTypeset(text, lines: lines)
   }
+
+  /// 区切って組む段落の長さと、1 つの区切りの長さ（UTF-16）。
+  private static let window = 4_096
+  /// 区切りの終わりから、採る行の終わりまでに空ける字の数（行の割れ目が見る後ろの字）。
+  private static let lookahead = 512
 
   /// 字の連なりを 1 つの段落として 1 行に組む（折り返さない。見え方の番号は連なりの添字）。
   public static func line(_ runs: [ZoneTextRun]) -> TypesetLine {

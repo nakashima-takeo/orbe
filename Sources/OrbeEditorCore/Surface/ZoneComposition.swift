@@ -32,12 +32,19 @@ final class ZoneComposition {
   let whitespace: [Bool]
 
   /// 文 `source` の範囲 `paragraph` を、見え方 `styles`（文の先頭から順に当てる）で組む。段落の向きは元の段落の最初の、
-  /// 向きを持つ字で決める。
-  init(_ source: [UInt16], paragraph: Range<Int>, styles: [ZoneTextStyle]) {
+  /// 向きを持つ字で決める。見え方は `first`（番号と、その見え方が当たり始める文の位置。段落の始まりより後ろで終わる最初の
+  /// 見え方）から見て、段落の終わりで止める——段落を組む仕事は、文の見え方の数に依らない。
+  /// `rightToLeft` を渡せば、段落の向きはそれに従う（長い段落を区切って組むとき、区切りの向きを段落全体の向きに揃える）。
+  init(
+    _ source: [UInt16], paragraph: Range<Int>, styles: [ZoneTextStyle],
+    from first: (index: Int, offset: Int) = (0, 0), rightToLeft: Bool? = nil
+  ) {
     self.paragraph = paragraph
     var builder = Builder(paragraph: paragraph)
-    var offset = 0
-    for (index, style) in styles.enumerated() {
+    var offset = first.offset
+    for index in first.index..<styles.count {
+      guard offset < paragraph.upperBound else { break }
+      let style = styles[index]
       let start = offset
       offset += style.length
       let lower = max(start, paragraph.lowerBound)
@@ -64,7 +71,7 @@ final class ZoneComposition {
     placeholders = builder.placeholders
     whitespace = builder.units.map { Unicode.Scalar($0)?.properties.isWhitespace ?? false }
     typesetter = CTTypesetterCreateWithAttributedString(
-      builder.attributed(rightToLeft: Self.isRightToLeft(source[paragraph])))
+      builder.attributed(rightToLeft: rightToLeft ?? Self.isRightToLeft(source[paragraph])))
   }
 
   /// 組んだ文の境 `index` の、元の文の境。
@@ -98,7 +105,7 @@ final class ZoneComposition {
   /// 段落 `units` が右から左か——段落の最初の、向きを持つ字で決まる（UAX #9 の P2・P3。向きを持つ字が無ければ左から
   /// 右）。Core Text は段落の向きを返さないので、末尾に空白を 1 つ足して組み、その空白の向きを読む（行末の空白は段落の
   /// 向きで組まれる。UAX #9 の L1）。
-  private static func isRightToLeft(_ units: ArraySlice<UInt16>) -> Bool {
+  static func isRightToLeft(_ units: ArraySlice<UInt16>) -> Bool {
     let probe = Array(units) + [0x20]
     let string = probe.withUnsafeBufferPointer {
       CFStringCreateWithCharacters(nil, $0.baseAddress, $0.count)!
