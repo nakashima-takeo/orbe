@@ -66,4 +66,27 @@ extension ZoneTextLayoutTests {
       XCTAssertEqual(over, [], "\(string) を折り返すと、縮められるのに幅を超える行が出る幅")
     }
   }
+
+  /// 右から左の語を途中で割った行の、分け目の前の字の置き場所の現状——Core Text は段落を 1 回組んだグリフの並びから行を
+  /// 切り出すので、分け目をまたぐ字の組み合わせの詰め（字体の kern）が残り、分け目の前の字がその量だけ寄る（余白の有無と
+  /// 絵の差し込みに依らない。`docs/spec/editor/code.md` の「テキストエンジンの境界」）。この行では、ر が次の行へ送った ح
+  /// との詰めの分（SF の 12pt で 0.41pt）コードの地にかぶる。寄らないことの検証を `XCTExpectFailure`（期待する失敗）で
+  /// 包む——Core Text が分け目をまたぐ詰めを残さなくなればこの期待が外れてテストが落ち、spec の現状とこの期待の書き直しを
+  /// 知らせる。
+  func testTheGlyphBeforeABreakInARightToLeftWordKeepsTheKerningAcrossTheBreak() throws {
+    let parts = ["see the", "קוד", "مرحبا بكم"]
+    let codeEnd = parts[0].utf16.count + parts[1].utf16.count
+    let lines = ZoneTextLayout.typeset(styled(parts, padding: padding), width: 60)
+    let line = try XCTUnwrap(
+      lines.first { NSMaxRange($0.range) > codeEnd && NSMaxRange($0.range) < codeEnd + 5 },
+      "前提: コードの後ろのアラビア語の語「مرحبا」を途中で割った行がある")
+    let ground = try XCTUnwrap(line.spans(of: 1).first, "前提: 行にコードの地がある")
+    let word = try XCTUnwrap(glyphs(of: 2, in: line), "前提: 行に分け目の前のアラビア語の字がある")
+    let overlap = min(ground.upperBound, word.upperBound) - max(ground.lowerBound, word.lowerBound)
+    XCTExpectFailure(
+      "現状: 分け目をまたぐ字体の詰めが残り、分け目の前の字が詰めの分だけ寄る（code.md の「テキストエンジンの境界」）"
+    ) {
+      XCTAssertLessThanOrEqual(overlap, 0.01, "分け目の前の字はコードの地にかぶらない")
+    }
+  }
 }
