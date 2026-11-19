@@ -135,13 +135,15 @@ final class ZoneTextLayoutTests: XCTestCase {
   }
 
   /// 和文の隣、和文＋空白の隣、コードの端のタイ語 ำ・ラオ語 ຳ、左右の字が混ざったコード、字を挟まず隣り合うコード、
-  /// 複数のコードにまたがる括弧でも、どの行でも同じ約束が守られる。
+  /// 複数のコードにまたがる括弧、改行をまたぐコード（改行の側には余白が付かない）、端に鉤括弧のある右から左のコードのどの場合も、
+  /// どの行でも、コードの地が 1 つの続いた範囲で、余白が渡した幅で入り、隣の字が地にかぶらない。
   func testCodePaddingHoldsNextToCJKAndAcrossMixedCodes() {
     let cases: [([String], [Int])] = [
       (["これは", "code", "です"], [1]), (["これは ", "code", " です"], [1]), (["見て", "กำ", "ที่นี่"], [1]),
       (["ເບິ່ງ ", "ກຳ", " ນີ້"], [1]), (["mix ", "abc שלום def", " end"], [1]),
       (["שלום ", "abc שלום def", " עולם"], [1]), (["a ", "first", "second", " b"], [1, 2]),
-      (["(", "a(", "b)", ")"], [1, 2]), (["和文", "שלום", "和文"], [1]),
+      (["(", "a(", "b)", ")"], [1, 2]), (["和文", "שלום", "和文"], [1]), (["a ", "co\nde", " b"], [1]),
+      ([": ", "דה ו「", "。"], [1]), (["前の文 ", "」שלום「", " 後の文"], [1]),
     ]
     var wrong: [String] = []
     for (parts, codes) in cases {
@@ -153,7 +155,8 @@ final class ZoneTextLayoutTests: XCTestCase {
   }
 
   /// 右から左の字・和文・括弧・コードを乱択で混ぜた段落 5,000 本で、コードの地が 1 行の中で割れず、コードの字を含み、
-  /// ほかの字にかぶらない（余白の幅は問わない——右から左の向きで鏡像になる鉤括弧には、Core Text がコードの中で空きを置く）。
+  /// 余白が渡した幅で入り、ほかの字にかぶらない（右から左の字の語を途中で割った行では、Core Text がその字をコードの地へ
+  /// 0.5pt 未満寄せて置くことがあるので、それより小さいかぶりは数えない。余白なしで組んでも同じ）。
   func testRandomMixedParagraphsNeverSplitTheCodeGround() {
     var random = SplitMix(seed: 7)
     let words = [
@@ -175,7 +178,7 @@ final class ZoneTextLayoutTests: XCTestCase {
       guard !codes.isEmpty else { continue }
       let width = CGFloat(60 + random.next(140))
       for code in codes {
-        wrong += check(parts, code: code, width: width, codes: codes, measuresPadding: false)
+        wrong += check(parts, code: code, width: width, codes: codes, overlap: 0.5)
       }
     }
     XCTAssertEqual(wrong.prefix(10), [])
@@ -185,16 +188,7 @@ final class ZoneTextLayoutTests: XCTestCase {
   /// グリフにも包みの字は入らない。コードの中の閉じない制御字や対にならない終わり、コードの外の閉じない始まりがあっても、
   /// コードを包む向きの独立が壊れず、コードの後ろの字の並びが変わらない。
   func testControlCharactersInTheTextNeitherLeakNorBreakTheIsolate() throws {
-    let cases: [(String, [String])] = [
-      ("元の文の置き字と U+2060", ["a\u{FFFC}b ", "x\u{2060}y", " \u{FFFC} tail words"]),
-      ("コードの中の閉じない上書き", ["abc ", "x\u{202E}y", " def ghi"]),
-      ("コードの中の閉じない isolate", ["abc ", "x\u{2067}y", " def ghi"]),
-      ("コードの中の対にならない終わり", ["abc ", "x\u{2069}y\u{202C}", " def ghi"]),
-      ("右から左の段落の、コードの中の対にならない終わり", ["שלום ", "ab\u{2069}cd", " עולם"]),
-      ("コードの外の閉じない始まり", ["a \u{2067}b ", "code", " c d"]),
-      ("コードの外の向きの印", ["\u{200F}abc ", "co\u{200E}de", " \u{202A}def ghi"]),
-    ]
-    for (name, parts) in cases {
+    for (name, parts) in Self.controlCases {
       let string = parts.joined()
       let lines = ZoneTextLayout.typeset(
         styled(parts, padding: padding), width: 500)
@@ -207,6 +201,35 @@ final class ZoneTextLayoutTests: XCTestCase {
       if parts[2].hasSuffix("def ghi") {
         let tail = line.runs.filter { $0.style == 2 }.flatMap(\.positions).map(\.x)
         XCTAssertEqual(tail, tail.sorted(), "\(name): コードの後ろの字は左から右に並ぶ")
+      }
+    }
+  }
+
+  /// 元の文に置き字や双方向の制御字を入れた例（名前と、真ん中がコードの 3 つの部分）。
+  static let controlCases: [(String, [String])] = [
+    ("元の文の置き字と U+2060", ["a\u{FFFC}b ", "x\u{2060}y", " \u{FFFC} tail words"]),
+    ("コードの中の閉じない上書き", ["abc ", "x\u{202E}y", " def ghi"]),
+    ("コードの中の閉じない isolate", ["abc ", "x\u{2067}y", " def ghi"]),
+    ("コードの中の対にならない終わり", ["abc ", "x\u{2069}y\u{202C}", " def ghi"]),
+    ("右から左の段落の、コードの中の対にならない終わり", ["שלום ", "ab\u{2069}cd", " עולם"]),
+    ("コードの外の閉じない始まり", ["a \u{2067}b ", "code", " c d"]),
+    ("コードの外の向きの印", ["\u{200F}abc ", "co\u{200E}de", " \u{202A}def ghi"]),
+  ]
+
+  /// 元の文に双方向の制御字があっても、余白の上の当たりはコードの端——地の両端から 1pt と 3pt 内側（置き字の上）を押すと、
+  /// コードの始まりか終わりに当たり、コードの外の字にも中の字にも当たらない。
+  func testHitsOnThePaddingLandOnTheCodeEdgesEvenWithBidiControls() throws {
+    for (name, parts) in Self.controlCases {
+      let line = try XCTUnwrap(
+        ZoneTextLayout.typeset(styled(parts, padding: padding), width: 500).first)
+      let ground = try XCTUnwrap(line.spans(of: 1).first)
+      let start = parts[0].utf16.count
+      let edges = [start, start + parts[1].utf16.count]
+      for x in [
+        ground.lowerBound + 1, ground.lowerBound + 3, ground.upperBound - 3, ground.upperBound - 1,
+      ] {
+        XCTAssertTrue(
+          edges.contains(line.offset(atX: x)), "\(name): x \(x) の当たり \(line.offset(atX: x))")
       }
     }
   }

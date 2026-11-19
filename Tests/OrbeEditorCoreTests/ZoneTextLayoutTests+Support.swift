@@ -21,7 +21,8 @@ extension ZoneTextLayoutTests {
 
   /// 部分 `parts` を幅 `width` で組み、コード `code` の地が守らない約束を返す（→ `misplaced`）。
   func check(
-    _ parts: [String], code: Int, width: CGFloat, codes: [Int]? = nil, measuresPadding: Bool = true
+    _ parts: [String], code: Int, width: CGFloat, codes: [Int]? = nil, measuresPadding: Bool = true,
+    overlap: CGFloat = 0.01
   ) -> [String] {
     let string = parts.joined()
     let lines = ZoneTextLayout.typeset(
@@ -33,16 +34,19 @@ extension ZoneTextLayoutTests {
       let edges =
         (NSLocationInRange(start, line.range) ? 1 : 0)
         + (line.range.location < end && end <= NSMaxRange(line.range) ? 1 : 0)
-      wrong += misplaced(line, code: code, edges: measuresPadding ? edges : nil).map {
-        "\(string) の幅 \(width) の行 \(line.range): \($0)"
-      }
+      wrong += misplaced(line, code: code, edges: measuresPadding ? edges : nil, overlap: overlap)
+        .map {
+          "\(string) の幅 \(width) の行 \(line.range): \($0)"
+        }
     }
     return wrong
   }
 
   /// 行 `line` でコード `code` の地が守らない約束——地は 1 つの続いた範囲で、コードの字を含み、字より余白 `edges` 個分だけ
-  /// 広く（コードの端がこの行にある数。nil なら幅を問わない）、ほかの見え方の字にかぶらない。
-  func misplaced(_ line: ZoneTextLayout.TypesetLine, code: Int, edges: Int? = 2) -> [String] {
+  /// 広く（コードの端がこの行にある数。nil なら幅を問わない）、ほかの見え方の字に `overlap` 以上かぶらない。
+  func misplaced(
+    _ line: ZoneTextLayout.TypesetLine, code: Int, edges: Int? = 2, overlap: CGFloat = 0.01
+  ) -> [String] {
     let spans = line.spans(of: code)
     guard let glyphs = glyphs(of: code, in: line) else {
       return spans.count > 1 ? ["字の無い行で地が \(spans.count) 個"] : []
@@ -56,8 +60,8 @@ extension ZoneTextLayoutTests {
       wrong.append("地 \(ground) が字 \(glyphs) を含まない")
     }
     for glyph in extents(in: line)
-    where glyph.style != code && glyph.x.lowerBound < ground.upperBound - 0.01
-      && glyph.x.upperBound > ground.lowerBound + 0.01
+    where glyph.style != code && glyph.x.lowerBound < ground.upperBound - overlap
+      && glyph.x.upperBound > ground.lowerBound + overlap
     {
       wrong.append("見え方 \(glyph.style) の字 \(glyph.x) が地 \(ground) にかぶる")
     }
