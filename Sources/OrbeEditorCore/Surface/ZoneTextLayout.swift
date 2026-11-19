@@ -208,6 +208,7 @@ public enum ZoneTextLayout {
       // 手前で終わる行だけを採り（割る位置は後ろの字にも依るので、区切りの終わりの近くの行は次の区切りで組み直す）、1 行も
       // 採れなければ区切りを倍に広げる。区切りは段落の向きと、区切りの前で開いた埋め込み・上書き・isolate を引き継ぐ。
       let rightToLeft = ZoneComposition.isRightToLeft(units, span)
+      let codes = ZoneComposition.CodeDirections()
       // 行の頭の前で開いた制御字（`head` は行を組む文の頭の、`line` は割る位置を探す文の頭の）。
       var carried = (
         head: CarriedControls(units, styles: text.styles, from: span.lowerBound, style: first),
@@ -224,10 +225,12 @@ public enum ZoneTextLayout {
         carried.line.read(to: lineStart)
         let composition = ZoneComposition(
           units, paragraph: head..<end, styles: text.styles, from: carried.head.style,
-          context: .init(paragraph: span, rightToLeft: rightToLeft, open: carried.head.composed))
+          context: .init(
+            paragraph: span, rightToLeft: rightToLeft, open: carried.head.composed, codes: codes))
         let bare = ZoneComposition(
           units, paragraph: lineStart..<end, styles: bareStyles, from: carried.line.style,
-          context: .init(paragraph: span, rightToLeft: rightToLeft, open: carried.line.bare))
+          context: .init(
+            paragraph: span, rightToLeft: rightToLeft, open: carried.line.bare, codes: codes))
         let made = wrap(composition, breakingAs: bare, width: width)
         let taken =
           end == span.upperBound

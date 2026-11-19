@@ -81,11 +81,27 @@ final class ZoneComposition {
     typesetter = Self.typesetter(builder.attributed(rightToLeft: rightToLeft))
   }
 
-  /// 段落の途中の区切りが引き継ぐ、段落の範囲と向きと、区切りの前で開いた埋め込み・上書き・isolate。
+  /// 段落の途中の区切りが引き継ぐ、段落の範囲と向きと、区切りの前で開いた埋め込み・上書き・isolate と、段落の区切りで
+  /// 切れたコードの向きの覚え（段落の区切りどうしで共にする）。
   struct Context {
     let paragraph: Range<Int>
     let rightToLeft: Bool
     let open: OpenControls
+    let codes: CodeDirections
+  }
+
+  /// 段落の区切りで切れたコードの向き（コードの元の文の範囲 → 右から左か）。段落を区切って組む間だけ持ち、区切りごとに
+  /// コード全体から求め直さない——強い字の無いコードや isolate の中にしか強い字の無いコードでは、求める仕事がコードの
+  /// 長さに比例する。
+  final class CodeDirections {
+    private var directions: [Range<Int>: Bool] = [:]
+
+    func isRightToLeft(_ code: Range<Int>, in source: [UInt16]) -> Bool {
+      if let known = directions[code] { return known }
+      let direction = ZoneComposition.isRightToLeft(source, code)
+      directions[code] = direction
+      return direction
+    }
   }
 
   /// コード `code`（元の文の範囲）を組んだ文の範囲 `part` だけ包むときの、包みの頭の字。区切りで切れていなければ U+2068
@@ -97,7 +113,7 @@ final class ZoneComposition {
     guard let context else { return 0x2068 }
     let whole = code.clamped(to: context.paragraph)
     guard part != whole else { return 0x2068 }
-    return isRightToLeft(source, whole) ? 0x2067 : 0x2066
+    return context.codes.isRightToLeft(whole, in: source) ? 0x2067 : 0x2066
   }
 
   /// 組んだ文の境 `index` の、元の文の境。
