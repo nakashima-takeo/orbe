@@ -100,7 +100,7 @@ extension L10n {
     ),
     .editorPrReviewNoDiff: (
       "PR の diff を表示できないため、送信できません。再読込するか、GitHub で送信してください",
-      "Can’t submit because the pull request diff can’t be shown. Reload, or submit on GitHub"
+      "Can’t submit because the pull request diff can’t be shown. Refresh, or submit on GitHub"
     ),
     .editorPrReviewReadFailed: (
       "レビューのコメントを読み込めません（%@）", "Couldn’t load review comments (%@)"

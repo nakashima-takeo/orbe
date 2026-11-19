@@ -82,8 +82,9 @@ final class PrCommentLayer {
     let language = language()
     var notes = DiffRows.Notes()
     notes.commentable = commentableLines(ends)
-    // diff が見せている両端が PR の今の両端でない間（ベースの付け替えを読んで、diff が新しい両端の本文を読み終える前）は、
-    // 古い側の行のスレッドを前の並びに置かない（GitHub は古い側の行を今のマージベースの diff の行として読む）。
+    // diff が見せている両端が PR の今の両端でない間（PR への push・ベースの付け替えを読んで、両端を求め直し、diff が
+    // 新しい両端の本文を読み終えるまで）は、古い側の行のスレッドを前の並びに置かない（GitHub は古い側の行を今の
+    // マージベースの diff の行として読む）。
     let isCurrent = state.diffEnds == ends
     if let read = state.threads(at: ends.head) {
       let ids = Set(read.map(\.id))
