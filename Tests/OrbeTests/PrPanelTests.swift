@@ -114,6 +114,7 @@ final class PrPanelTests: OrbeTestCase {
   var reviewWritesSent: [GitHubReviewWrite] { reviewWrites }
   func setReviewFailure(_ failure: GitHubFailure?) { reviewFailure = failure }
   func setViewerIsAuthor() { viewerIsAuthor = true }
+  func setPendingComments(_ count: Int) { pendingComments = count }
   func setThreads(_ next: [GitHubPullRequestReview.Thread]) { threads = next }
 
   /// パネルを出して、PR の中身が届くまで待つ。
