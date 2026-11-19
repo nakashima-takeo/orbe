@@ -24,6 +24,12 @@ final class PrPanelTests: OrbeTestCase {
   private var asTree = true
   /// ブランチに open の PR があるか（偽なら、PR が無いと答える）。
   private var open = true
+  /// レビューのやりとりの答え（自分が作者か・保留中のコメントの数・スレッド）と、届いたレビューへの書き込みとその答えの失敗。
+  private var viewerIsAuthor = false
+  private var pendingComments = 0
+  private var threads: [GitHubPullRequestReview.Thread] = []
+  private var reviewWrites: [GitHubReviewWrite] = []
+  private var reviewFailure: GitHubFailure?
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
@@ -61,7 +67,19 @@ final class PrPanelTests: OrbeTestCase {
       setViewed: { [unowned self] viewed, paths, _, completion in
         writes.append((viewed, paths))
         completion(GitHubViewedWrite(written: paths, failure: nil))
-      }, review: { _, _ in }, writeReview: { _, _, _, _, _ in })
+      },
+      review: { [unowned self] _, completion in
+        completion(
+          .success(
+            GitHubPullRequestReview(
+              viewer: "me", viewerIsAuthor: viewerIsAuthor, headCommit: "h",
+              pendingReview: pendingComments > 0
+                ? .init(id: "R", commentCount: pendingComments) : nil, threads: threads)))
+      },
+      writeReview: { [unowned self] write, _, pending, _, completion in
+        reviewWrites.append(write)
+        completion(GitHubReviewWriteResult(pendingReview: pending, failure: reviewFailure))
+      })
   }
 
   private var content: GitHubPullRequestContent {
@@ -84,6 +102,19 @@ final class PrPanelTests: OrbeTestCase {
       },
       "前提: 読み直した中身で行を組み直す")
   }
+
+  /// パネルを出して、PR の中身とレビューのやりとりが届くまで待つ。
+  func reviewed() throws -> PullRequestState {
+    let state = try shown()
+    pumpMain(until: { state.review != nil }, "前提: レビューのやりとりが届く")
+    return state
+  }
+
+  var reviewPanel: PrPanel { panel }
+  var reviewWritesSent: [GitHubReviewWrite] { reviewWrites }
+  func setReviewFailure(_ failure: GitHubFailure?) { reviewFailure = failure }
+  func setViewerIsAuthor() { viewerIsAuthor = true }
+  func setThreads(_ next: [GitHubPullRequestReview.Thread]) { threads = next }
 
   /// パネルを出して、PR の中身が届くまで待つ。
   private func shown() throws -> PullRequestState {
