@@ -40,8 +40,8 @@ fi
 flow="$1"
 for f in $FLOWS; do
   if [[ "$f" == "$flow" ]]; then
-    run "DesignFlowSnapshotTests/$(to_method "$flow")"
-    open .preview/flows/"${flow}"_*.png
+    run "DesignFlowSnapshotTests/$(to_method "$flow")\$"
+    open .preview/flows/"${flow}"_[0-9][0-9]_*.png
     exit 0
   fi
 done

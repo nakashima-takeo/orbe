@@ -42,7 +42,7 @@ enum PrCommentMarkdown {
     var quoted = false
   }
 
-  /// 字の見え方の組（太字・斜体・取り消し線・リンク・見出し）。
+  /// 字の見え方の組（太字・斜体・取り消し線・リンク）。
   fileprivate struct Inline {
     var strong = false
     var emphasis = false

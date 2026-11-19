@@ -5,7 +5,7 @@ import Foundation
 /// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`＋
 /// `L10nTable+Attention.swift`＋`L10nTable+WorktreePalette.swift`＋`L10nTable+ClosedAgents.swift`＋
 /// `L10nTable+Tasks.swift`＋`L10nTable+Automation.swift`＋`L10nTable+Secretary.swift`＋`L10nTable+Board.swift`＋
-/// `L10nTable+SourceControl.swift`）を `table` が結合する。
+/// `L10nTable+PullRequest.swift`＋`L10nTable+SourceControl.swift`）を `table` が結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
     baseTable
