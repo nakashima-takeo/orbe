@@ -29,8 +29,11 @@ final class PrPanel {
   /// 全体へのコメント欄の変換中の字（確定するまで書きかけに入れない。欄が写す）。
   var reviewComposition = ""
 
-  /// 列が消える直前（行の組が空になる。列がまだ窓に居るうち）。焦点が列にあれば、面の本文へ移す。
-  @ObservationIgnored var onListWillClose: () -> Void = {}
+  /// 焦点を持てる所が消える直前（行の組が空になって列が消える・PR が替わって下端の区画を作り直す。まだ窓に居るうち）。
+  /// 焦点がパネルの列か全体へのコメント欄にあれば、面の本文へ移す。
+  @ObservationIgnored var onFocusWillClose: () -> Void = {}
+  /// 下端の区画を作った PR の状態（替われば、区画を作り直す前に欄の後始末をする）。
+  @ObservationIgnored private var reviewedState: ObjectIdentifier?
   /// 行の diff を開く。
   @ObservationIgnored var onOpenDiff: (EditorDiff.Key, ScmPanel.Opening) -> Void = { _, _ in }
   /// 変更ファイルをツリーで見せるか（アプリ全体の選択を読む）と、ツリーかリストかを選んだ（アプリ全体の選択へ書く）。
@@ -107,7 +110,7 @@ final class PrPanel {
     builtFrom = key
     let previous = layout
     if content == nil {
-      if !previous.items.isEmpty { onListWillClose() }
+      if !previous.items.isEmpty { onFocusWillClose() }
       focusRequest = false
     }
     layout =
@@ -254,6 +257,21 @@ final class PrPanel {
 /// worktree の今の PR が替わった・その PR の状態が変わったら、行の組を組み直す（中身が同じなら組み直さない）。
 extension PrPanel: BranchPullRequestObserver {
   func branchPullRequestDidChange(_ pullRequest: BranchPullRequest) {
+    reviewStateDidChange()
     rebuild()
+  }
+
+  /// PR の状態が替わったら、下端の区画を作り直す前に、前の PR の欄の変換中の字を前の PR の書きかけへ確定し、写していた変換中の
+  /// 字を空にし、焦点が欄にあれば面の本文へ移す（作り直しで欄が窓から外れても、AppKit は焦点の抜けを知らせない）。
+  private func reviewStateDidChange() {
+    let next = state.map(ObjectIdentifier.init)
+    guard next != reviewedState else { return }
+    defer { reviewedState = next }
+    guard reviewedState != nil else { return }
+    confirmReviewComposition()
+    reviewComposition = ""
+    guard isReviewFieldFocused else { return }
+    onFocusWillClose()
+    isReviewFieldFocused = false
   }
 }

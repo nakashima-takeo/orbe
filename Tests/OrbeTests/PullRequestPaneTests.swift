@@ -27,6 +27,8 @@ final class PullRequestPaneTests: OrbeTestCase {
   private final class FakeGitHub {
     var open = true
     var reviewWrites: [GitHubReviewWrite] = []
+    /// PR の先頭のコミット（ベースも同じ）。手元のコミットにすると diff の両端が求まる。
+    var head = "h"
     private let me = GitHubRepoName(nameWithOwner: "me/r")
 
     var source: PullRequestSource {
@@ -37,7 +39,7 @@ final class PullRequestPaneTests: OrbeTestCase {
       let content = GitHubPullRequestContent(
         nodeID: "PR_1", number: 9, title: "題", url: "https://github.com/me/r/pull/9",
         isDraft: false, state: .open, body: "", author: "me", baseRefName: "main",
-        headRefName: "feat", baseCommit: "b", headCommit: "h", commitCount: 0, commits: [],
+        headRefName: "feat", baseCommit: head, headCommit: head, commitCount: 0, commits: [],
         files: ["src/a.swift", "b.swift"].map {
           .init(path: $0, change: .modified, isViewed: false)
         })
@@ -51,11 +53,11 @@ final class PullRequestPaneTests: OrbeTestCase {
         branchExists: { _, completion in completion(.success(true)) },
         content: { _, completion in completion(.success(content)) },
         setViewed: { _, _, _, _ in },
-        review: { _, completion in
+        review: { [head] _, completion in
           completion(
             .success(
               GitHubPullRequestReview(
-                viewer: "me", viewerIsAuthor: false, headCommit: "h", pendingReview: nil,
+                viewer: "me", viewerIsAuthor: false, headCommit: head, pendingReview: nil,
                 threads: [])))
         },
         writeReview: { [unowned self] write, _, pending, _, completion in
@@ -76,6 +78,7 @@ final class PullRequestPaneTests: OrbeTestCase {
   private func registeredRoot() throws -> String {
     let repo = try TempGitRepo()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    gitHub.head = repo.head()
     let root = GitWorktreeRoot.root(of: repo.root)
     _ = BranchPullRequest.shared(for: root, source: gitHub.source)
     return root
@@ -225,7 +228,11 @@ final class PullRequestPaneTests: OrbeTestCase {
   /// PR のパネルを出して、全体へのコメント欄に焦点を入れる。
   private func reviewField(_ hosted: Hosted) throws -> MessageTextView {
     shownWithRows(hosted)
-    pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "前提: 全体へのコメント欄")
+    pumpMain(
+      until: {
+        self.messageField(in: hosted.pane) != nil
+          && hosted.pane.pullRequest.state?.diffEnds != nil
+      }, "前提: 全体へのコメント欄と diff の両端")
     let field = try XCTUnwrap(messageField(in: hosted.pane))
     hosted.window.makeFirstResponder(field)
     XCTAssertTrue(hosted.pane.pullRequest.isReviewFieldFocused, "前提: 欄に焦点")

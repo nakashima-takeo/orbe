@@ -287,7 +287,7 @@ final class PrPanelTests: OrbeTestCase {
   func testAFocusRequestIsDroppedWhenTheRowsGoAway() throws {
     _ = try shown()
     var closings = 0
-    panel.onListWillClose = { closings += 1 }
+    panel.onFocusWillClose = { closings += 1 }
     panel.requestFocus()
 
     open = false

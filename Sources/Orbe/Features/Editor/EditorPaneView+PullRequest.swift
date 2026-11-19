@@ -8,7 +8,7 @@ extension EditorPaneView {
 
   func wirePullRequest() {
     pullRequest.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
-    pullRequest.onListWillClose = { [weak self] in
+    pullRequest.onFocusWillClose = { [weak self] in
       guard let self, focusIsInPullRequest else { return }
       reclaimSidebarFocus()
     }

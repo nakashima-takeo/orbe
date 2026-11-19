@@ -291,13 +291,13 @@ enum PrPanelText {
     }
   }
 
-  /// レビューへの書き込み（コメント・返信・解決・レビューの送信）の失敗の文。時間切れは、GitHub に届いていたかもしれないことを
-  /// 告げる。
   /// レビューのやりとりの読みの失敗の文。
   static func reviewReadFailure(_ failure: GitHubFailure, _ l10n: LocalizationStore) -> String {
     l10n.format(.editorPrReviewReadFailed, text(failure, empty: .editorPrFailedRead, l10n.language))
   }
 
+  /// レビューへの書き込み（コメント・返信・解決・レビューの送信）の失敗の文。時間切れは、GitHub に届いていたかもしれないことを
+  /// 告げる。
   static func writeFailure(_ failure: GitHubFailure, _ language: Language) -> String {
     if failure == .timedOut { return L10n.string(.editorPrWriteTimedOut, language) }
     return text(failure, empty: .editorPrFailedWrite, language)
