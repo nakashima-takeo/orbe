@@ -58,6 +58,10 @@ enum L10n {
 
     // MARK: Relative date
     .relativeJustNow: ("たった今", "just now"),
+    .relativeAgo: ("%@前", "%@ ago"),
+    .elapsedMinutes: ("%lld分", "%lldm"),
+    .elapsedHours: ("%lld時間", "%lldh"),
+    .elapsedDays: ("%lld日", "%lldd"),
 
     // MARK: Agent（共有）
     .agentNotFoundCLI: (

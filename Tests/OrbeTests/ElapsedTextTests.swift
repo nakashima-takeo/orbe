@@ -6,13 +6,11 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 半日動き続けている agent が「720分」と出て、どれだけ放っているか一目で分からない。
 /// 単位の境で 1 つ下の単位に戻ると、経過が縮んだように見える。
-final class TaskElapsedTextTests: OrbeTestCase {
+final class ElapsedTextTests: OrbeTestCase {
   private let since = Date(timeIntervalSince1970: 1_800_000_000)
 
   private func label(afterMinutes minutes: Double) -> String {
-    TaskElapsedText.label(
-      since: since, now: since.addingTimeInterval(minutes * 60),
-      l10n: LocalizationStore(language: .ja))
+    ElapsedText.label(since: since, now: since.addingTimeInterval(minutes * 60), language: .ja)
   }
 
   func testMinutesUnderAnHourHoursUnderADayThenDays() {

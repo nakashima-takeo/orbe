@@ -48,6 +48,10 @@ enum L10nKey: String, CaseIterable, Sendable {
 
   // MARK: - Relative date
   case relativeJustNow
+  case relativeAgo
+  case elapsedMinutes
+  case elapsedHours
+  case elapsedDays
 
   // MARK: - Agent（共有: 状態名・検出無し）
   case agentNotFoundCLI
@@ -231,8 +235,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteReview
   case taskPaletteUnlink
   case taskPaletteActionOpenLink
-  case taskPaletteElapsedMinutes
-  case taskPaletteElapsedHours
   case taskPaletteAgentWaitingBadge
   case taskPaletteAgentWorkingBadge
   case taskPaletteAgentWorking
@@ -315,8 +317,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskWaitContinueNote
   case taskWaitSatisfied
   case taskWaitExpired
-  case taskWaitJustNow
-  case taskWaitAgo
   case taskWaitConversationToday
   case taskWaitConversationDays
   case taskWaitResultSuccess
