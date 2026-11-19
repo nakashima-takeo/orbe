@@ -262,14 +262,14 @@ enum PrPanelText {
     case .ghUnauthed: l10n.string(.editorPrGhUnauthed)
     case .notGitHub: l10n.string(.editorPrNotGitHub)
     case .unverified: l10n.string(.editorPrUnverified)
-    case .failed(let failure): text(failure, empty: .editorPrFailedRead, l10n)
+    case .failed(let failure): text(failure, empty: .editorPrFailedRead, l10n.language)
     }
   }
 
   static func failure(_ failure: PullRequestState.Failure, _ l10n: LocalizationStore) -> String {
     switch failure {
-    case .read(let reason): text(reason, empty: .editorPrFailedRead, l10n)
-    case .write(let reason): text(reason, empty: .editorPrFailedWrite, l10n)
+    case .read(let reason): text(reason, empty: .editorPrFailedRead, l10n.language)
+    case .write(let reason): text(reason, empty: .editorPrFailedWrite, l10n.language)
     }
   }
 
@@ -285,16 +285,23 @@ enum PrPanelText {
     }
   }
 
+  /// レビューへの書き込み（コメント・返信・解決・レビューの送信）の失敗の文。時間切れは、GitHub に届いていたかもしれないことを
+  /// 告げる。
+  static func writeFailure(_ failure: GitHubFailure, _ language: Language) -> String {
+    if failure == .timedOut { return L10n.string(.editorPrWriteTimedOut, language) }
+    return text(failure, empty: .editorPrFailedWrite, language)
+  }
+
   /// gh の失敗の文。決まった文の種類はその文、それ以外は gh のエラー文の要点（空なら `empty`）。
-  private static func text(_ failure: GitHubFailure, empty: L10nKey, _ l10n: LocalizationStore)
+  private static func text(_ failure: GitHubFailure, empty: L10nKey, _ language: Language)
     -> String
   {
     switch failure {
-    case .unauthenticated: l10n.string(.editorPrFailedUnauthenticated)
-    case .rateLimited: l10n.string(.editorPrFailedRateLimited)
-    case .unreachable: l10n.string(.editorPrFailedUnreachable)
-    case .timedOut: l10n.string(.editorPrFailedTimedOut)
-    case .reason(let reason): reason.isEmpty ? l10n.string(empty) : reason
+    case .unauthenticated: L10n.string(.editorPrFailedUnauthenticated, language)
+    case .rateLimited: L10n.string(.editorPrFailedRateLimited, language)
+    case .unreachable: L10n.string(.editorPrFailedUnreachable, language)
+    case .timedOut: L10n.string(.editorPrFailedTimedOut, language)
+    case .reason(let reason): reason.isEmpty ? L10n.string(empty, language) : reason
     }
   }
 }

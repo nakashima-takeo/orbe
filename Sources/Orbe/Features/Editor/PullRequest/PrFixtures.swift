@@ -3,10 +3,11 @@
   import SwiftUI
 
   /// PR のパネルの gallery / flow の fixture。渡された置き場に本物の git の場を作り、GitHub の代わりに差し替えの出どころが
-  /// 見本（orbe_design の `editor/data.ts` の `pr`・`prCommits`・`prFiles`・`initialViewed`）と同じ中身を答える——main に 1 件、
-  /// main から切ったブランチ `feature/agent-hooks` に 3 件（StateHooks.swift の変更・EmitBuffer.swift の追加・HookRegistry.swift
-  /// と README.md の変更）。PR の先頭は手元の HEAD なので、帯は「この worktree でチェックアウト済み」になる。出どころは面より
-  /// 先に根へ結ぶ（worktree の今の PR は根ごとに 1 つで、最初に作った者の出どころを使う）。面は PR のパネルを出して窓に載せる。
+  /// 見本（orbe_design の `editor/data.ts` の `pr`・`prCommits`・`prFiles`・`initialViewed`・`thread`）と同じ中身を答える——main
+  /// に 1 件、main から切ったブランチ `feature/agent-hooks` に 3 件（StateHooks.swift の変更・EmitBuffer.swift の追加・
+  /// HookRegistry.swift と README.md の変更）。PR の先頭は手元の HEAD なので、帯は「この worktree でチェックアウト済み」になる。
+  /// レビューのやりとりは `PrFixtureReview` が答える。出どころは面より先に根へ結ぶ（worktree の今の PR は根ごとに 1 つで、最初に
+  /// 作った者の出どころを使う）。面は PR のパネルを出して窓に載せる。
   enum PrFixtures {
     static let branch = "feature/agent-hooks"
 
@@ -29,14 +30,17 @@
     @MainActor final class Scene {
       private let tab: TerminalTab
       let directory: URL
+      /// 差し替えの GitHub のレビューのやりとり（書き込みの答え方を変えられる）。
+      let review: PrFixtureReview
       var group: TabGroup { tab.group }
       var pane: EditorPaneView { group.view.editor }
       var panel: PrPanel { pane.pullRequest }
       private var warmWindow: NSWindow?
 
-      init(tab: TerminalTab, directory: URL) {
+      init(tab: TerminalTab, directory: URL, review: PrFixtureReview) {
         self.tab = tab
         self.directory = directory
+        self.review = review
       }
 
       func cleanup() {
@@ -66,6 +70,19 @@
       }
 
       var view: some View { PrPane(pane: pane) }
+
+      /// 変更ファイル `path` の PR の diff を普通のタブで開く。
+      func openDiff(_ path: String = PrFixtureReview.path) {
+        panel.select(.file(path))
+        panel.openSelection(.commit)
+      }
+
+      /// 開いた PR の diff の中身・並び・最初の位置・スレッドの絵（本文の測り・印を出せる行）が揃った。
+      var isDiffReady: Bool {
+        guard let diff = pane.diff else { return false }
+        return diff.content == .ready && diff.placement == .placed && !diff.pending
+          && diff.comments?.isSettled ?? true
+      }
     }
 
     /// リポジトリは `place` の下に作る。git が失敗すれば投げる（→ `FixtureGit`）。
@@ -76,7 +93,9 @@
       let base = try makeRepository(dir)
       if case .defaultBranch = answer { try FixtureGit(directory: dir)(["switch", "-q", "main"]) }
       let root = GitWorktreeRoot.root(of: dir.path)
-      _ = BranchPullRequest.shared(for: root, source: source(answer, base: base, dir: dir))
+      let review = PrFixtureReview(head: headCommit(answer, dir: dir))
+      _ = BranchPullRequest.shared(
+        for: root, source: source(answer, base: base, dir: dir, review: review))
       let group = TabGroup(
         key: root, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
       var settings = SettingsLayer()
@@ -86,14 +105,16 @@
       group.view.add(terminal: tab.terminal)
       group.view.show(terminal: tab.terminal)
       group.view.editor.selectPanel(.pullRequest)
-      return Scene(tab: tab, directory: dir)
+      return Scene(tab: tab, directory: dir, review: review)
     }
 
     private static let me = GitHubRepoName(nameWithOwner: "orbe/orbe")
 
     /// 差し替えの出どころ。確認済みの書き込みは覚えておき、読み直しの答えに載せる（GitHub と同じく、書いた値が次の読み直しに
-    /// 出る）。レビューのやりとりはスレッドの無い姿を答え、レビューへの書き込みは通ったと答える。
-    private static func source(_ answer: Answer, base: String, dir: URL) -> PullRequestSource {
+    /// 出る）。レビューのやりとりは `review` が答える。
+    private static func source(
+      _ answer: Answer, base: String, dir: URL, review: PrFixtureReview
+    ) -> PullRequestSource {
       let ref = GitHubBranchRef(repo: me, branch: branch)
       let found: GitHubBranchPullRequests.Branch
       switch answer {
@@ -111,10 +132,7 @@
       }
       let published: Bool
       if case .noPullRequest(let value) = answer { published = value } else { published = true }
-      let head =
-        if case .notFetched = answer { String(repeating: "0", count: 40) } else {
-          revision("HEAD", in: dir)
-        }
+      let head = headCommit(answer, dir: dir)
       let emoji: Bool = if case .emoji = answer { true } else { false }
       let commits = ["HEAD~2", "HEAD~1", "HEAD"].map { revision($0, in: dir) }
       let viewed = Viewed()
@@ -137,16 +155,14 @@
           if value { viewed.paths.formUnion(paths) } else { viewed.paths.subtract(paths) }
           completion(GitHubViewedWrite(written: paths, failure: nil))
         },
-        review: { _, completion in
-          completion(
-            .success(
-              GitHubPullRequestReview(
-                viewer: "you", viewerIsAuthor: false, headCommit: head, pendingReview: nil,
-                threads: [])))
-        },
-        writeReview: { _, _, pendingReview, _, completion in
-          completion(GitHubReviewWriteResult(pendingReview: pendingReview, failure: nil))
-        })
+        review: { _, completion in completion(.success(review.read())) },
+        writeReview: { write, _, _, _, completion in review.write(write, completion: completion) })
+    }
+
+    /// PR の先頭のコミット（`notFetched` なら手元に無いコミット）。
+    private static func headCommit(_ answer: Answer, dir: URL) -> String {
+      if case .notFetched = answer { return String(repeating: "0", count: 40) }
+      return revision("HEAD", in: dir)
     }
 
     /// 差し替えの GitHub の確認済みのパス（見本の `initialViewed` から始まる）。

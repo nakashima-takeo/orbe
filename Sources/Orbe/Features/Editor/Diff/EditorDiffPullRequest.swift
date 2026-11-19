@@ -48,6 +48,12 @@ final class EditorDiffPullRequest: EditorDiffSource {
     return read?.ends == ends
   }
 
+  /// 両側の本文 `texts` を読んだ両端（最後に読んだ両端の本文でなければ nil）。
+  func ends(of texts: EditorDiff.SideTexts) -> PullRequestState.DiffEnds? {
+    guard let read, case .revisions(let sides) = read.resolution, sides == texts else { return nil }
+    return read.ends
+  }
+
   /// 両端 `ends` の古い側と新しい側の版の本文を読み、読み終えたら diff を作り直させる。
   private func load(_ ends: PullRequestState.DiffEnds) {
     guard reading != ends, let repo = state.repo else { return }

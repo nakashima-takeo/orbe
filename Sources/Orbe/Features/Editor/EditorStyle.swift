@@ -154,14 +154,18 @@ struct EditorSurfaces {
   /// 描画のスレッドとシェーダを裏で先に用意する（エディター面が初めて見えたときに呼ばれる。何度呼んでもよい）——最初の
   /// 面を出すときにシェーダのコンパイルの待ちを見せない。
   let prepare: @MainActor () -> Void
+  /// 面の上に描く文言（打ち切った行の印・PR のスレッド）の言語。
+  let language: @MainActor () -> Language
 
   init(
     registry: LanguageRegistry, make: @escaping @MainActor () -> (any TextSurface)?,
-    prepare: @escaping @MainActor () -> Void = {}
+    prepare: @escaping @MainActor () -> Void = {},
+    language: @escaping @MainActor () -> Language = { .systemDefault }
   ) {
     self.registry = registry
     self.make = make
     self.prepare = prepare
+    self.language = language
   }
 
   /// 本物の面を、指定の根の queries で組む。打ち切った行の印の文言は、面を作る時点の UI の言語（`language`）で決まる。
@@ -177,7 +181,7 @@ struct EditorSurfaces {
             EditorStyle.omittedLabel($0, language: language)
           })
       },
-      prepare: prepareMetalTextEngine)
+      prepare: prepareMetalTextEngine, language: language)
   }
 
   /// queries は `.app` の同梱物（`BundledResources.root` 直下の資源バンドル）から解く。

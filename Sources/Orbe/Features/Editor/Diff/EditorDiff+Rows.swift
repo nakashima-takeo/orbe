@@ -10,19 +10,29 @@ extension EditorDiff {
     guard let mode = presented, content == .ready, let surface = newSurface, let old,
       let (hunks, newSide) = currentRows
     else { return }
+    let notes = comments?.notes(shown: revisionHunksSides?.texts) ?? DiffRows.Notes()
     switch mode {
     case .inline:
-      var rows = DiffRows.inline(hunks, new: newSide)
+      var rows = DiffRows.inline(hunks, new: newSide, notes: notes)
       rows.source = old
-      look(DiffStyle.inline, rows, absent: newSide.isAbsent).apply(to: surface, document: document)
+      rows.trailingMarkTarget = comments
+      look(
+        comments == nil ? DiffStyle.inline : DiffStyle.pullRequestInline, rows,
+        absent: newSide.isAbsent
+      ).apply(to: surface, document: document)
+      comments?.place(old: nil, new: surface)
     case .side:
-      let rows = DiffRows.side(hunks, old: oldSide, new: newSide)
+      var rows = DiffRows.side(hunks, old: oldSide, new: newSide, notes: notes)
+      rows.left.trailingMarkTarget = comments
+      rows.right.trailingMarkTarget = comments
+      let presentation = comments == nil ? DiffStyle.side : DiffStyle.pullRequestSide
       let left = oldSurface ?? makeOldSurface()
       if let left {
-        look(DiffStyle.side, rows.left, absent: oldSide.isAbsent).apply(to: left, document: nil)
+        look(presentation, rows.left, absent: oldSide.isAbsent).apply(to: left, document: nil)
       }
-      look(DiffStyle.side, rows.right, absent: newSide.isAbsent)
+      look(presentation, rows.right, absent: newSide.isAbsent)
         .apply(to: surface, document: document)
+      comments?.place(old: left, new: surface)
       if let left, oldSurface == nil {
         carryTop(to: surface)
         oldSurface = left

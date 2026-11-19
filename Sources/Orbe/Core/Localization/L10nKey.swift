@@ -591,6 +591,27 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrFailedTimedOut
   case editorPrFailedRead
   case editorPrFailedWrite
+  case editorPrThreadLine
+  case editorPrThreadPending
+  case editorPrThreadResolved
+  case editorPrThreadResolve
+  case editorPrThreadUnresolve
+  case editorPrThreadCollapse
+  case editorPrThreadExpand
+  case editorPrThreadAdd
+  case editorPrThreadResolveReply
+  case editorPrThreadCancel
+  case editorPrThreadReplyPlaceholder
+  case editorPrThreadNotReady
+  case editorPrWriteTimedOut
+  case editorPrReview
+  case editorPrReviewPending
+  case editorPrReviewPlaceholder
+  case editorPrReviewApprove
+  case editorPrReviewComment
+  case editorPrReviewRequestChanges
+  case editorPrReviewSubmit
+  case editorPrOutdatedThreads
 
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle

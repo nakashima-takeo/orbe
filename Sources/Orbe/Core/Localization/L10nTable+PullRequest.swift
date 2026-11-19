@@ -61,5 +61,31 @@ extension L10n {
     .editorPrFailedTimedOut: ("GitHub の応答がありません", "GitHub didn’t respond"),
     .editorPrFailedRead: ("GitHub から取得できませんでした", "Couldn’t fetch from GitHub"),
     .editorPrFailedWrite: ("GitHub に反映できませんでした", "Couldn’t update GitHub"),
+    .editorPrThreadLine: ("行 %lld", "Line %lld"),
+    .editorPrThreadPending: ("保留中", "Pending"),
+    .editorPrThreadResolved: ("解決済み", "Resolved"),
+    .editorPrThreadResolve: ("解決", "Resolve"),
+    .editorPrThreadUnresolve: ("解決を取り消す", "Unresolve"),
+    .editorPrThreadCollapse: ("折りたたむ", "Collapse"),
+    .editorPrThreadExpand: ("展開", "Expand"),
+    .editorPrThreadAdd: ("レビューに追加", "Add to Review"),
+    .editorPrThreadResolveReply: ("解決して返信", "Reply and Resolve"),
+    .editorPrThreadCancel: ("取り消す", "Cancel"),
+    .editorPrThreadReplyPlaceholder: ("返信", "Reply"),
+    .editorPrThreadNotReady: (
+      "PR の最新の内容を読み込んでから、もう一度お試しください", "Try again after the latest pull request is loaded"
+    ),
+    .editorPrWriteTimedOut: (
+      "GitHub の応答がありません。反映されたかは GitHub で確かめてください",
+      "GitHub didn’t respond. Check on GitHub whether it was applied"
+    ),
+    .editorPrReview: ("レビュー", "Review"),
+    .editorPrReviewPending: ("保留中のコメント %lld", "Pending comments: %lld"),
+    .editorPrReviewPlaceholder: ("全体へのコメント（任意）", "Overall comment (optional)"),
+    .editorPrReviewApprove: ("承認", "Approve"),
+    .editorPrReviewComment: ("コメント", "Comment"),
+    .editorPrReviewRequestChanges: ("変更を依頼", "Request Changes"),
+    .editorPrReviewSubmit: ("レビューを送信", "Submit Review"),
+    .editorPrOutdatedThreads: ("今の diff に出せないスレッド %lld 件", "Threads not in the current diff: %lld"),
   ]
 }
