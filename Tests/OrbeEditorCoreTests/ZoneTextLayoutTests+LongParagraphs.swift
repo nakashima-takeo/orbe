@@ -9,7 +9,8 @@ import XCTest
 extension ZoneTextLayoutTests {
   /// 区切って組んだ長い段落の行（範囲・幅・グリフの x）は、段落を区切らずに丸ごと組んだ行と同じ——コード・和文・アラビア文字・
   /// ヘブライ文字の文・右から左の段落・区切りをまたぐ長いコード・タイ語・ラオ語・ZWJ でつないだ絵文字・段落の頭で開いて
-  /// 閉じない isolate と埋め込みと上書き・割れない長い語・中立の字が区切りより長く続く段落のどれでも。
+  /// 閉じない isolate と埋め込みと上書き・割れない長い語・中立の字が区切りより長く続く段落・行の頭より前のヘブライ文字が
+  /// 数字の向きを決める段落のどれでも。
   func testLongParagraphsBreakWhereTheWholeParagraphBreaks() {
     let inputs: [LongParagraph] = [
       LongParagraph("latin+code", [("word and more ", false), ("code", true), (" ", false)]),
@@ -30,6 +31,9 @@ extension ZoneTextLayoutTests {
         "long code in rtl",
         [("שלום ", false), ("א " + String(repeating: "ab ", count: 2_000), true)]),
       LongParagraph("neutral then hebrew", [("1 ", false)], head: "", tail: "שלום"),
+      LongParagraph(
+        "digits after hebrew", [("שלום ", false), ((0..<100).map { "\($0) " }.joined(), false)],
+        head: "a "),
     ]
     let lines = { (typeset: ZoneTypeset) in
       typeset.lines.map { "\($0.range) \($0.width) \($0.runs.map(\.xs))" }
@@ -47,13 +51,14 @@ extension ZoneTextLayoutTests {
 
   /// 約 10,000 字を超える段落でも、段落の向きは最初の向きを持つ字で決まる——ヘブライ文字で始まる段落と、中立の字が区切り
   /// より長く続いた後にヘブライ文字が来る段落の行は、右から左の段落の行として組まれ（行の頭の字が行の右端に来る）、区切り
-  /// より長い isolate の中のヘブライ文字の後にラテン文字が来る段落は、左から右の段落として組まれる（isolate の中の字は
-  /// 段落の向きを決めない）。
+  /// より長い isolate の中のヘブライ文字の後にラテン文字が来る段落は左から右の段落として、区切りより長い isolate の中の
+  /// ラテン文字の後にヘブライ文字が来る段落は右から左の段落として組まれる（isolate の中の字は段落の向きを決めない）。
   func testALongParagraphKeepsTheDirectionOfItsFirstStrongCharacter() {
     let cases: [(String, Bool)] = [
       ("א " + String(repeating: "word ", count: 2_200), true),
       (String(repeating: "1 ", count: 5_500) + "שלום", true),
       ("\u{2067}" + String(repeating: "שלום ", count: 2_200) + "\u{2069} word", false),
+      ("\u{2067}" + String(repeating: "word ", count: 2_200) + "\u{2069} שלום", true),
     ]
     for (source, rightToLeft) in cases {
       let typeset = ZoneTextLayout.typeset(ZoneStyledText([(source, plain)]), width: 300)
