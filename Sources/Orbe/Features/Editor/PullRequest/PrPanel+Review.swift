@@ -12,9 +12,9 @@ extension PrPanel {
     return event == .comment || !review.viewerIsAuthor
   }
 
-  /// 送れるか——レビューのやりとりが読めていて、中身と同じ先頭のコミットのもので、送信の最中でなく、選んだ種類を選べ、
-  /// 「承認」でなければ全体へのコメント（欄に見えている字——変換中の字を含む——で、空白と改行だけなら空）か保留中のコメントが
-  /// ある。
+  /// 送れるか——diff の両端・中身・レビューのやりとりの版が揃っていて（`PullRequestState.isReviewAligned`）、
+  /// 送信の最中でなく、選んだ種類を選べ、「承認」でなければ全体へのコメント（欄に見えている字——変換中の字を含む——で、
+  /// 空白と改行だけなら空）か保留中のコメントがある。
   var canSubmitReview: Bool {
     guard let state, let review = state.review, state.isReviewAligned else { return false }
     let draft = state.reviewDraft

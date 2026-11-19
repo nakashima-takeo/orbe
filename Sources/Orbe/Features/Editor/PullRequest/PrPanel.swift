@@ -68,11 +68,13 @@ final class PrPanel {
     let closedFolders: Set<String>
   }
 
-  /// パネルを出している間 true。立てると worktree の今の PR を見始めて行を組み、下ろすと見るのをやめる。
+  /// パネルを出している間 true。立てると worktree の今の PR を見始めて行を組み、下ろすと見るのをやめる。隠している間は
+  /// 知らせを受けないので、出すときに下端の区画を作る元の状態を覚え直す。
   @ObservationIgnored var isShown = false {
     didSet {
       guard isShown != oldValue else { return }
       if isShown {
+        reviewedState = state.map(ObjectIdentifier.init)
         pullRequest.addObserver(self)
         pullRequest.beginWatching()
         rebuild()

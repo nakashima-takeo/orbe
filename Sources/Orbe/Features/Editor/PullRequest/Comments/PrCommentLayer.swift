@@ -300,8 +300,8 @@ final class PrCommentLayer {
     }
   }
 
-  /// スレッドへの書き込みを頼む。同じスレッドへの書き込みが走っていれば何もしない（2 回押しても 1 回）。今の diff に置けなく
-  /// なったスレッドへは書かない。
+  /// スレッドへの書き込みを頼む。同じスレッドへの書き込みが走っていれば何もしない（2 回押しても 1 回）。削除されたスレッドと、
+  /// 行を移している最中のスレッドへは書かない。
   private func write(_ write: GitHubReviewWrite, from zone: PrCommentZone, clears: Bool) {
     guard case .thread(let thread) = zone.subject, zone.canSend,
       !state.isWritingReview(.thread(thread.id))
