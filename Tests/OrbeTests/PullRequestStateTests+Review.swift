@@ -186,8 +186,10 @@ extension PullRequestStateTests {
     )
   }
 
-  /// diff の両端が揃った PR の送信は受け付け、利用者が見ていた先頭のコミットに結ぶ。送信が走っている間の 2 回目は受け付けない。
-  func testASubmissionIsSentOnceAndBoundToTheSeenHead() throws {
+  // MARK: - レビューの送信
+
+  /// 本物の git の PR（ベースの上に 1 件）の状態を、diff の両端・中身・レビューのやりとりの先頭が揃うまで読む。
+  private func submittableState() throws -> (TempGitRepo, PullRequestState) {
     let repo = try TempGitRepo()
     let base = repo.head()
     XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pr"]).isSuccess)
@@ -196,11 +198,60 @@ extension PullRequestStateTests {
     gitHub.content = .success(content(base: base, head: repo.head()))
     state.beginWatching()
     addTeardownBlock { @MainActor in state.endWatching() }
-    pumpMain(until: { state.diffEnds != nil && state.review != nil }, "前提: diff の両端とレビューのやりとり")
+    pumpMain(until: { state.isReviewAligned }, "前提: diff の両端・中身・レビューのやりとりの先頭が揃う")
+    return (repo, state)
+  }
 
+  /// PR に push する——手元の PR にコミットを足し、GitHub の中身をその先頭にして読み直す。
+  private func push(_ repo: TempGitRepo, _ state: PullRequestState) throws {
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "push"]).isSuccess)
+    let previous = try XCTUnwrap(gitHub.content.get())
+    gitHub.content = .success(content(base: previous.baseCommit, head: repo.head()))
+    state.reload()
+  }
+
+  /// diff の両端が揃った PR の送信は受け付け、利用者が見ていた先頭のコミットに結ぶ。送信が走っている間の 2 回目は受け付けず、
+  /// 終われば次の送信を受け付ける。
+  func testASubmissionIsSentOnceAndBoundToTheSeenHead() throws {
+    let (repo, state) = try submittableState()
     XCTAssertTrue(state.writeReview(.submit(.approve, body: "")) { _ in })
     XCTAssertFalse(state.writeReview(.submit(.approve, body: "")) { _ in }, "走っている間の 2 回目")
     XCTAssertEqual(gitHub.reviewWrites.map(\.write), [.submit(.approve, body: "")])
     XCTAssertEqual(gitHub.reviewWrites.first?.reviewedCommit, repo.head())
+
+    gitHub.finishReviewWrite()
+    pumpMain(until: { !state.isWritingReview(.submission) }, "送信が終わる")
+    XCTAssertTrue(state.writeReview(.submit(.comment, body: "次")) { _ in }, "終われば次を受け付ける")
+  }
+
+  /// push の後、レビューのやりとりがまだ前の先頭のものなら、送信を受け付けない（承認を、diff で見ていないコミットに付けない）。
+  func testASubmissionIsRefusedWhileTheReviewIsOfAnotherHead() throws {
+    let (repo, state) = try submittableState()
+    let seen = repo.head()
+    gitHub.review = .success(review(head: seen))
+    try push(repo, state)
+    pumpMain(
+      until: {
+        state.content?.headCommit == repo.head() && !state.isReading && !state.isReadingReview
+      },
+      "中身だけが新しい先頭になる")
+
+    XCTAssertFalse(state.writeReview(.submit(.approve, body: "")) { _ in })
+    XCTAssertTrue(gitHub.reviewWrites.isEmpty)
+  }
+
+  /// 前の書き込みの後ろに積んだ送信は、送るまでに push があって先頭が進んでも、受け付けた時点に利用者が見ていた先頭に結ぶ。
+  func testAQueuedSubmissionKeepsTheHeadSeenWhenItWasAccepted() throws {
+    let (repo, state) = try submittableState()
+    let seen = repo.head()
+    XCTAssertTrue(state.writeReview(.reply(thread: "T", body: "x", resolve: false)) { _ in })
+    XCTAssertTrue(state.writeReview(.submit(.approve, body: "")) { _ in })
+    try push(repo, state)
+    pumpMain(until: { state.isReviewAligned && state.review?.headCommit == repo.head() }, "先頭が進む")
+
+    gitHub.finishReviewWrite()
+    pumpMain(until: { gitHub.reviewWrites.count == 1 }, "積んだ送信を送る")
+    XCTAssertEqual(gitHub.reviewWrites.first?.write, .submit(.approve, body: ""))
+    XCTAssertEqual(gitHub.reviewWrites.first?.reviewedCommit, seen)
   }
 }

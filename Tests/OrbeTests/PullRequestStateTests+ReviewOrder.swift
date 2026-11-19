@@ -5,12 +5,13 @@ import XCTest
 /// PR ごとの状態が持つレビューへの書き込みを、書き込み・中身とレビューのやりとりの読み直し・それぞれの答え（出した順と関係なく
 /// 届く）・見ている者の出入り・PR への push が入り乱れる順序で、種を決めた乱数により実行する。どの順序でも、書き込みの規則と、
 /// 先頭のコミットを揃える規則（pull-request.md の「レビューのやりとり」）が保たれる。種の半分は、GitHub の答えが一貫していて
-/// 読みが失敗しない場合で、そのときは読みが出尽くすたびに中身とレビューのやりとりの先頭が揃っている。
+/// 読みが失敗しない場合で、そのときは読みが出尽くすたびに中身とレビューのやりとりの先頭が揃っている。書き込みはスレッドへの
+/// ものだけで、レビューの送信の規則は diff の両端（本物の git）が要るので `PullRequestStateTests+Review` の決まった手順が守る。
 ///
-/// 壊れると何が起きるか: 書き込みの結果が返らないままになり、そのスレッドへの返信やレビューの送信が、アプリを再起動するまで
-/// できなくなる。書き込みの応答が届くより前に問い合わせた読みの応答を取り込み、書いたコメントが消えて見える・失敗の文が
-/// 残る。2 回押した送信が 2 回送られる。承認が、利用者の見ていないコミットに付く。push の後、先頭が食い違ったまま読むのを
-/// やめ、diff にスレッドを置けず新しいスレッドも書けない。GitHub への問い合わせが止まらない。
+/// 壊れると何が起きるか: 書き込みの結果が返らないままになり、そのスレッドへの返信が、アプリを再起動するまでできなくなる。
+/// 書き込みの応答が届くより前に問い合わせた読みの応答を取り込む結果、書いたコメントが消えて見えたり、失敗の文が残ったりする。
+/// 2 回押した返信が 2 回送られる。push の後に先頭が食い違ったまま読むのをやめ、diff にスレッドを置けず、新しいスレッドも
+/// 書けなくなる。GitHub への問い合わせが止まらない。
 /// 失敗した種と手順はメッセージに出る（同じ種で回せば同じ手順になる）。
 extension PullRequestStateTests {
   func testInterleavedWritesAndRereadsKeepTheWriteRules() throws {
@@ -156,21 +157,17 @@ private final class ReviewWriteRun {
     let seen = state.review?.headCommit ?? ""
     let writes: [GitHubReviewWrite] = [
       .reply(thread: "T1", body: "x", resolve: false), .setResolved(thread: "T1", true),
-      .reply(thread: "T2", body: "x", resolve: true), .submit(.approve, body: ""),
+      .reply(thread: "T2", body: "x", resolve: true),
       .addThread(
         path: "a", side: .new, line: 1, commit: random.next(below: 2) == 0 ? seen : head, body: "x"),
     ]
     let write = writes[random.next(below: writes.count)]
-    var expected: Bool
+    let expected: Bool
     if case .addThread(_, _, _, let commit, _) = write {
       expected = commit == seen
     } else {
       let target = Self.target(of: write)
       expected = !unfinished.contains { Self.target(of: $0.write) == target }
-    }
-    // 送信は、diff の両端・中身・レビューのやりとりの先頭が同じ間だけ受け付ける。
-    if case .submit = write, state.content?.headCommit != seen || state.diffEnds?.head != seen {
-      expected = false
     }
     let index = accepted.count
     let taken = state.writeReview(write) { [weak self] in self?.finish(index, $0) }
@@ -347,9 +344,9 @@ private final class ReviewWriteRun {
   }
 
   private func checkTargets() -> String? {
-    for target in ["T1", "T2", "submit"] {
+    for target in ["T1", "T2"] {
       let busy = unfinished.contains { Self.target(of: $0.write) == target }
-      let shown = state.isWritingReview(target == "submit" ? .submission : .thread(target))
+      let shown = state.isWritingReview(.thread(target))
       if shown != busy { return "\(target) が走っているかの状態が \(shown) で、\(busy) でない" }
     }
     return nil
