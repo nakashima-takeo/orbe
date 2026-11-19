@@ -10,8 +10,11 @@ import XCTest
 /// 壊れると何が起きるか: PR に push やベースの付け替えがあると、書きかけが消える・欄が元の行の番号のまま別の行の下に残る・
 /// 書き換えられた行へのコメントを古い行の番号で送れる・置けなくなったスレッドの返信の書きかけが見えなくなる。
 extension EditorDiffTests {
-  /// PR の feat に a.txt を `text` にするコミットを足し、PR の状態を読み直して、diff が新しい先頭の版を見せ終えるのを待つ。
-  private func push(_ text: String, _ remote: Remote, _ diff: EditorDiff) throws {
+  /// PR の feat に a.txt を `text` にするコミットを足し、PR の状態を読み直して、diff が新しい先頭の版を見せ終えるのを待つ
+  /// （待つ間、main の 1 周ごとに `observe` を呼ぶ）。
+  private func push(
+    _ text: String, _ remote: Remote, _ diff: EditorDiff, observe: () -> Void = {}
+  ) throws {
     XCTAssertTrue(repo.git(["switch", "-q", "feat"]).isSuccess)
     try repo.write("a.txt", text)
     XCTAssertTrue(repo.git(["commit", "-qam", "push"]).isSuccess)
@@ -26,7 +29,10 @@ extension EditorDiffTests {
       files: content.files)
     try XCTUnwrap(diff.comments).state.reload()
     pumpMain(
-      until: { self.text(diff.newRevision) == text && diff.comments?.isSettled == true },
+      until: {
+        observe()
+        return self.text(diff.newRevision) == text && diff.comments?.isSettled == true
+      },
       "新しい先頭の版と、欄の行の移しが揃う")
   }
 
@@ -161,7 +167,8 @@ extension EditorDiffTests {
   }
 
   /// インラインで、新しいコメントの欄を置いた削除行の塊の中（欄より上の削除行）を読んでいる間に push があって面が作り直されて
-  /// も、同じ削除行が上端に残る（引き継いだ段を、新しい面で欄の高さを数えた位置に直して置く）。
+  /// も、同じ削除行が上端に残る（引き継いだ段を、新しい面で欄の高さを数えた位置に直して置く）。新しい版の本文を読んでから
+  /// diff がそれを見せるまでの間も、欄は並びから外れない（一瞬消えない）。
   func testAPushKeepsTheRemovedLineBeingReadAboveADraft() throws {
     let lines = (0..<200).map { "l\($0)" }
     try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
@@ -183,7 +190,16 @@ extension EditorDiffTests {
     XCTAssertEqual(before.lineRow(of: before.viewport.top), reading, "前提: 2 本目の削除行「l51」を読む")
 
     head[150] = "L"
-    try push(head.joined(separator: "\n") + "\n", remote, diff)
+    var vanished = false
+    try push(head.joined(separator: "\n") + "\n", remote, diff) {
+      guard let surface = diff.newSurface as? MetalTextSurface else { return }
+      let placed = surface.rows.contents.contains {
+        if case .zone(let id) = $0 { return id == ObjectIdentifier(draft) }
+        return false
+      }
+      if !placed { vanished = true }
+    }
+    XCTAssertFalse(vanished, "push を読んで diff が新しい版を見せるまでの間も、欄は並びから外れない")
     pumpMain(until: { diff.newSurface !== before && diff.carried == nil }, "面が作り直される")
     let after = try engine(diff.newSurface)
     after.flush()
