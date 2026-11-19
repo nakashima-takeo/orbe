@@ -195,7 +195,8 @@ extension PrCommentPicture {
     let writing = canvas.state.isWriting
     var right = frame.maxX - 1 - Size.editorPrThreadPadX
     for button in buttons.reversed() {
-      let enabled = !writing && (button != .add || !field.string.isEmpty)
+      let enabled =
+        !writing && (button != .add || (!field.string.isEmpty && !canvas.state.isLineGone))
       right -= self.button(button, enabled: enabled, right: right, top: top, &canvas)
       right -= Size.editorPrThreadGap
     }
@@ -268,15 +269,22 @@ extension PrCommentPicture {
     return width
   }
 
-  /// 失敗の文（字 11・danger。余白は返信の行と同じ 0 12 10）。高さを返す（失敗が無ければ 0）。
+  /// 失敗の文（danger）。高さを返す（失敗が無ければ 0）。
   static func failure(in frame: CGRect, top: CGFloat, _ canvas: inout PrCommentCanvas) -> CGFloat {
     guard let failure = canvas.state.failure else { return 0 }
+    return note(failure, color: Ink.danger, in: frame, top: top, &canvas)
+  }
+
+  /// 箱の下の 1 行の文（字 11・色 `color`。余白は返信の行と同じ 0 12 10）。高さを返す。
+  static func note(
+    _ text: String, color: NSColor, in frame: CGRect, top: CGFloat, _ canvas: inout PrCommentCanvas
+  ) -> CGFloat {
     let font = Fonts.editorPrThreadHead
     let height = font.pointSize * Fonts.editorPrThreadBodyLineHeight
     let left = frame.minX + 1 + Size.editorPrThreadPadX
     canvas.label(
-      truncated(failure, font: font, width: frame.maxX - 1 - Size.editorPrThreadPadX - left),
-      font: font, color: Ink.danger, x: left,
+      truncated(text, font: font, width: frame.maxX - 1 - Size.editorPrThreadPadX - left),
+      font: font, color: color, x: left,
       baseline: PrCommentStyle.baseline(top: top, height: height, font: font))
     return height + Size.editorPrThreadListPadY
   }

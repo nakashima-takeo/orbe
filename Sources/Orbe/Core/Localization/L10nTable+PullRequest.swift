@@ -75,6 +75,7 @@ extension L10n {
     .editorPrThreadNotReady: (
       "PR の最新の内容を読み込んでから、もう一度お試しください", "Try again after the latest pull request is loaded"
     ),
+    .editorPrThreadLineGone: ("この行は現在の diff にありません", "This line isn’t in the current diff"),
     .editorPrWriteTimedOut: (
       "GitHub の応答がありません。反映されたかは GitHub で確かめてください",
       "GitHub didn’t respond. Check on GitHub whether it was applied"

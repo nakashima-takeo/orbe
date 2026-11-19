@@ -603,6 +603,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrThreadCancel
   case editorPrThreadReplyPlaceholder
   case editorPrThreadNotReady
+  case editorPrThreadLineGone
   case editorPrWriteTimedOut
   case editorPrReview
   case editorPrReviewPending

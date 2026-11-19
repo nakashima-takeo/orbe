@@ -7,11 +7,13 @@ import XCTest
 /// 空にするか本文を残す。PR の中身とレビューのやりとりは差し替えの構造体が答える。
 ///
 /// 壊れると何が起きるか: スレッドが別の行の下に出る。印を押しても欄が開かない・焦点が入らない。書いた行と違う行にコメントが
-/// 付く。失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。
+/// 付く。失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。PR に push があると書きかけが消える・
+/// 欄が元の行の番号のまま別の行の下に残る・書き換えられた行へのコメントを古い行の番号で送れる。
 extension EditorDiffTests {
   /// 差し替えの GitHub のレビューのやりとり（テストが書き換える）と、届いた書き込み。
   private final class Remote {
     var head = ""
+    var content: GitHubPullRequestContent?
     var threads: [GitHubPullRequestReview.Thread] = []
     var writes: [GitHubReviewWrite] = []
     var failure: GitHubFailure?
@@ -26,7 +28,7 @@ extension EditorDiffTests {
     let head = repo.head()
     XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
     remote.head = head
-    let content = GitHubPullRequestContent(
+    remote.content = GitHubPullRequestContent(
       nodeID: "PR_7", number: 7, title: "題", url: "https://github.com/me/r/pull/7", isDraft: false,
       state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
       baseCommit: base, headCommit: head, commitCount: 1, commits: [],
@@ -36,7 +38,9 @@ extension EditorDiffTests {
         commonDir: repo.root + "/.git", id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 7))),
       source: PullRequestSource(
         branchPullRequests: { _, _, _ in }, branchExists: { _, _ in },
-        content: { _, completion in completion(.success(content)) },
+        content: { _, completion in
+          completion(remote.content.map { .success($0) } ?? .failure(.reason("")))
+        },
         setViewed: { _, _, _, _ in },
         review: { _, completion in
           completion(
@@ -128,5 +132,65 @@ extension EditorDiffTests {
     surface.replaceText(of: draft.field, with: "書きかけ")
     surface.selectedRange = NSRange(location: 0, length: 0)
     XCTAssertIdentical(layer.draft(.new, line: 0), draft, "本文のある欄は残る")
+  }
+
+  /// PR の feat に a.txt を `text` にするコミットを足し、PR の状態を読み直して、diff が新しい先頭の版を見せ終えるのを待つ。
+  private func push(_ text: String, _ remote: Remote, _ diff: EditorDiff) throws {
+    XCTAssertTrue(repo.git(["switch", "-q", "feat"]).isSuccess)
+    try repo.write("a.txt", text)
+    XCTAssertTrue(repo.git(["commit", "-qam", "push"]).isSuccess)
+    remote.head = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
+    let content = try XCTUnwrap(remote.content)
+    remote.content = GitHubPullRequestContent(
+      nodeID: content.nodeID, number: content.number, title: content.title, url: content.url,
+      isDraft: false, state: .open, body: "", author: content.author,
+      baseRefName: content.baseRefName, headRefName: content.headRefName,
+      baseCommit: content.baseCommit, headCommit: remote.head, commitCount: 2, commits: [],
+      files: content.files)
+    try XCTUnwrap(diff.comments).state.reload()
+    pumpMain(
+      until: { self.text(diff.newRevision) == text && diff.comments?.isSettled == true },
+      "新しい先頭の版と、欄の行の移しが揃う")
+  }
+
+  /// PR に push があっても、欄の行が新しい版にもあり印を出せるなら、欄は書きかけごとその行へ移り、新しい先頭のコミットの
+  /// その行へ書く。
+  func testAPushMovesADraftToItsLineInTheNewHead() throws {
+    let remote = Remote()
+    let (diff, surface) = try commentedDiff(remote)
+    let layer = try XCTUnwrap(diff.comments)
+    layer.surface(surface, didPressTrailingMarkOn: .document(3))
+    let draft = try XCTUnwrap(layer.draft(.new, line: 3))
+    surface.replaceText(of: draft.field, with: "書きかけ")
+
+    try push("zero\none\ntwo\nTHREE\nfour\n", remote, diff)
+    XCTAssertIdentical(layer.draft(.new, line: 4), draft, "行「four」は 1 行下へ移った")
+    XCTAssertEqual(draft.text, "書きかけ")
+    XCTAssertFalse(draft.isLineGone)
+    draft.zone(.pressed(PrCommentControl.add))
+    pumpMain(until: { layer.draft(.new, line: 4) == nil }, "通れば欄が閉じる")
+    XCTAssertEqual(
+      remote.writes,
+      [.addThread(path: "a.txt", side: .new, line: 5, commit: remote.head, body: "書きかけ")])
+  }
+
+  /// PR に push があって欄の行が書き換えられたら、欄は閉じずに書きかけを残し、送れない姿になる。「取り消す」で閉じる。
+  func testAPushThatRewritesTheLineKeepsTheDraftButStopsItsWrite() throws {
+    let remote = Remote()
+    let (diff, surface) = try commentedDiff(remote)
+    let layer = try XCTUnwrap(diff.comments)
+    layer.surface(surface, didPressTrailingMarkOn: .document(2))
+    let draft = try XCTUnwrap(layer.draft(.new, line: 2))
+    surface.replaceText(of: draft.field, with: "書きかけ")
+
+    try push("one\ntwo\nTRES\nfour\n", remote, diff)
+    XCTAssertIdentical(layer.draft(.new, line: 2), draft, "書き換えられた区間の終わりの行の下に残る")
+    XCTAssertEqual(draft.text, "書きかけ")
+    XCTAssertTrue(draft.isLineGone)
+    draft.zone(.pressed(PrCommentControl.add))
+    XCTAssertEqual(remote.writes, [], "行が現在の diff に無い欄は送れない")
+    draft.zone(.pressed(PrCommentControl.cancel))
+    XCTAssertNil(layer.draft(.new, line: 2))
   }
 }
