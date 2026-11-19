@@ -210,18 +210,38 @@ extension EditorDiffTests {
     XCTAssertFalse(draft.isWriting)
   }
 
-  /// 空の欄から焦点が外れたら欄は閉じ、本文がある欄は焦点が外れても開いたまま。
+  /// 空の欄（空白と改行だけの欄も空とみなす）から焦点が外れたら欄は閉じ、本文がある欄は焦点が外れても開いたまま。
   func testAnEmptyDraftClosesWhenItLosesFocus() throws {
     let (diff, surface) = try commentedDiff(Remote())
     let layer = try XCTUnwrap(diff.comments)
     layer.surface(surface, didPressTrailingMarkOn: .document(0))
+    surface.replaceText(of: try XCTUnwrap(layer.draft(.new, line: 0)).field, with: " \n")
     surface.selectedRange = NSRange(location: 0, length: 0)
-    XCTAssertNil(layer.draft(.new, line: 0), "空の欄は閉じる")
+    XCTAssertNil(layer.draft(.new, line: 0), "空白と改行だけの欄は閉じる")
     layer.surface(surface, didPressTrailingMarkOn: .document(0))
     let draft = try XCTUnwrap(layer.draft(.new, line: 0))
     surface.replaceText(of: draft.field, with: "書きかけ")
     surface.selectedRange = NSRange(location: 0, length: 0)
     XCTAssertIdentical(layer.draft(.new, line: 0), draft, "本文のある欄は残る")
+  }
+
+  /// 返信欄の空白と改行だけの本文は空とみなす——「レビューに追加」は書かず、「解決して返信」は解決だけを書く。
+  func testABlankReplyCountsAsEmpty() throws {
+    let remote = Remote()
+    remote.threads = [
+      GitHubPullRequestReview.Thread(
+        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
+        canResolve: true, canUnresolve: false,
+        comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
+    ]
+    let (diff, _) = try commentedDiff(remote)
+    let thread = try XCTUnwrap(diff.comments?.zone(thread: "T"))
+    pumpMain(until: { thread.surface != nil }, "スレッドが置かれる")
+    try XCTUnwrap(thread.surface).replaceText(of: thread.field, with: " \n")
+    thread.zone(.pressed(PrCommentControl.add))
+    thread.zone(.pressed(PrCommentControl.resolveReply))
+    pumpMain(until: { !remote.writes.isEmpty }, "解決が届く")
+    XCTAssertEqual(remote.writes, [.setResolved(thread: "T", true)])
   }
 
   /// rename の判定が GitHub と手元で食い違うファイルでは、古い側の行（削除行）に印もスレッドも出さない。新しい側の行には
