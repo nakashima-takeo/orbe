@@ -9,7 +9,8 @@ import XCTest
 /// PR のコメントの flow（fixture は `PrFixtures` と `PrFixtureReview`——本物の git の場と、見本 `editor/data.ts` の PR #131・
 /// スレッドを答える差し替えの出どころ）: PR の diff のスレッド（見本のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
 /// コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 並列 → パネルの
-/// 下端で全体へのコメントと「承認」を選ぶ → 送信の最中 → 送信の失敗 → 送信の後（保留中が 0）。見本は
+/// 下端で全体へのコメントと「承認」を選ぶ → 送信の最中 → 送信の失敗 → 送信の後（保留中が 0）→ 書きかけの欄の行を書き換える
+/// push の後（欄が書きかけを残して送れない姿）。見本は
 /// orbe_design の `editor/DiffView.tsx`（Thread）と `PrReviewPanel.tsx`。
 extension DesignFlowSnapshotTests {
   func testEditorPrComments() throws {
@@ -36,6 +37,7 @@ extension DesignFlowSnapshotTests {
         ("review_submitting", steps.submitReview),
         ("review_failed", steps.failReview),
         ("review_sent", steps.sendReview),
+        ("line_gone", steps.rewriteDraftLine),
       ])
   }
 
@@ -148,6 +150,27 @@ private struct CommentSteps {
     scene.review.release()
     let panel = scene.panel
     pumpMain(until: { panel.reviewFailure != nil }, "失敗が届く")
+  }
+
+  /// インラインに戻して行 7 に新しいコメントの欄を開いて打ち、行 7 を書き換える push を起こす。
+  func rewriteDraftLine() {
+    scene.pane.diffModes.select(.inline)
+    let pane = scene.pane
+    pumpMain(until: { pane.diff.map { pane.diffSurfaces($0).count == 1 } ?? false }, "インラインになる")
+    settle()
+    surface?.scroll(toFirstLine: 2)
+    diff?.comments?.openDraft(.new, line: 6)
+    settle()
+    guard let draft = diff?.comments?.draft(.new, line: 6) else { return XCTFail("前提: 欄が開く") }
+    surface?.replaceText(of: draft.field, with: "label は bundle id から作りたい")
+    let rewritten = EditorDiffFixtures.edited.replacingOccurrences(
+      of: "\"orbe.hooks\"", with: "\"orbe.agent.hooks\"")
+    XCTAssertNoThrow(try scene.push(rewritten, subject: "StateHooks: queue の label を改める"))
+    let panel = scene.panel
+    pumpMain(
+      until: { draft.isLineGone && panel.pullRequest.drift == .inSync },
+      "push の後、欄の行が無くなり、帯が手元の HEAD を PR の先頭と見る")
+    settle()
   }
 
   func sendReview() {

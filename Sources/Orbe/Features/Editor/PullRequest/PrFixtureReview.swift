@@ -17,7 +17,8 @@
     }
 
     var writes = Writes.succeed
-    private let head: String
+    /// PR の先頭のコミット（読むたびに問う。PR に push があると進む）。
+    private let head: () -> String
     private var threads: [GitHubPullRequestReview.Thread]
     private var pendingID: String? = "PRR_1"
     private var held: [(GitHubReviewWrite, (GitHubReviewWriteResult) -> Void)] = []
@@ -25,7 +26,7 @@
 
     static let path = "src/agent/StateHooks.swift"
 
-    init(head: String) {
+    init(head: @escaping () -> String) {
       self.head = head
       let now = Date()
       let ago = { (minutes: Double) in now.addingTimeInterval(-minutes * 60) }
@@ -98,7 +99,7 @@
 
     func read() -> GitHubPullRequestReview {
       GitHubPullRequestReview(
-        viewer: "you", viewerIsAuthor: false, headCommit: head,
+        viewer: "you", viewerIsAuthor: false, headCommit: head(),
         pendingReview: pendingID.map {
           .init(id: $0, commentCount: threads.flatMap(\.comments).count(where: \.isPending))
         }, threads: threads)
