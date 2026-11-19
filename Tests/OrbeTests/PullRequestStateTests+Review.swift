@@ -8,6 +8,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 誰も見ていない PR を問い合わせる。push の後に、古い版の行のスレッドを新しい版の行に置く・古い版の
 /// 行番号で新しいスレッドを書く。書いている間に push があると、次のきっかけまでスレッドを置けず、新しいスレッドも書けない。
+/// 2 回押した送信が 2 回送られる・承認が利用者の見ていないコミットに付く。
 extension PullRequestStateTests {
   private func review(head: String = "h", threads: [String] = []) -> GitHubPullRequestReview {
     GitHubPullRequestReview(
@@ -183,5 +184,23 @@ extension PullRequestStateTests {
     XCTAssertTrue(
       state.writeReview(.addThread(path: "a", side: .new, line: 1, commit: "h", body: "x")) { _ in }
     )
+  }
+
+  /// diff の両端が揃った PR の送信は受け付け、利用者が見ていた先頭のコミットに結ぶ。送信が走っている間の 2 回目は受け付けない。
+  func testASubmissionIsSentOnceAndBoundToTheSeenHead() throws {
+    let repo = try TempGitRepo()
+    let base = repo.head()
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pr"]).isSuccess)
+    let state = PullRequestState.shared(for: key, source: gitHub.source)
+    state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
+    gitHub.content = .success(content(base: base, head: repo.head()))
+    state.beginWatching()
+    addTeardownBlock { @MainActor in state.endWatching() }
+    pumpMain(until: { state.diffEnds != nil && state.review != nil }, "前提: diff の両端とレビューのやりとり")
+
+    XCTAssertTrue(state.writeReview(.submit(.approve, body: "")) { _ in })
+    XCTAssertFalse(state.writeReview(.submit(.approve, body: "")) { _ in }, "走っている間の 2 回目")
+    XCTAssertEqual(gitHub.reviewWrites.map(\.write), [.submit(.approve, body: "")])
+    XCTAssertEqual(gitHub.reviewWrites.first?.reviewedCommit, repo.head())
   }
 }
