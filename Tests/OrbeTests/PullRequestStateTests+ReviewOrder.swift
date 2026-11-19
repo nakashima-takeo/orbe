@@ -161,13 +161,15 @@ private final class ReviewWriteRun {
         path: "a", side: .new, line: 1, commit: random.next(below: 2) == 0 ? seen : head, body: "x"),
     ]
     let write = writes[random.next(below: writes.count)]
-    let expected: Bool
+    var expected: Bool
     if case .addThread(_, _, _, let commit, _) = write {
       expected = commit == seen
     } else {
       let target = Self.target(of: write)
       expected = !unfinished.contains { Self.target(of: $0.write) == target }
     }
+    // 送信は、中身とレビューのやりとりの先頭が同じ間だけ受け付ける（承認を見ていないコミットに付けない）。
+    if case .submit = write, state.content?.headCommit != seen { expected = false }
     let index = accepted.count
     let taken = state.writeReview(write) { [weak self] in self?.finish(index, $0) }
     log.append("write(\(Self.target(of: write) ?? "new"))=\(taken)")

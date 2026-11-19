@@ -14,7 +14,7 @@ import XCTest
 @MainActor
 final class PrPanelTests: OrbeTestCase {
   private var repo: TempGitRepo!
-  private var panel: PrPanel!
+  var panel: PrPanel!
   private var writes: [(viewed: Bool, paths: Set<String>)] = []
   private var opened: [(key: EditorDiff.Key, opening: ScmPanel.Opening)] = []
   private let me = GitHubRepoName(nameWithOwner: "me/r")
@@ -25,11 +25,11 @@ final class PrPanelTests: OrbeTestCase {
   /// ブランチに open の PR があるか（偽なら、PR が無いと答える）。
   private var open = true
   /// レビューのやりとりの答え（自分が作者か・保留中のコメントの数・スレッド）と、届いたレビューへの書き込みとその答えの失敗。
-  private var viewerIsAuthor = false
-  private var pendingComments = 0
-  private var threads: [GitHubPullRequestReview.Thread] = []
-  private var reviewWrites: [GitHubReviewWrite] = []
-  private var reviewFailure: GitHubFailure?
+  var viewerIsAuthor = false
+  var pendingComments = 0
+  var threads: [GitHubPullRequestReview.Thread] = []
+  var reviewWrites: [GitHubReviewWrite] = []
+  var reviewFailure: GitHubFailure?
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
@@ -109,13 +109,6 @@ final class PrPanelTests: OrbeTestCase {
     pumpMain(until: { state.review != nil }, "前提: レビューのやりとりが届く")
     return state
   }
-
-  var reviewPanel: PrPanel { panel }
-  var reviewWritesSent: [GitHubReviewWrite] { reviewWrites }
-  func setReviewFailure(_ failure: GitHubFailure?) { reviewFailure = failure }
-  func setViewerIsAuthor() { viewerIsAuthor = true }
-  func setPendingComments(_ count: Int) { pendingComments = count }
-  func setThreads(_ next: [GitHubPullRequestReview.Thread]) { threads = next }
 
   /// パネルを出して、PR の中身が届くまで待つ。
   private func shown() throws -> PullRequestState {

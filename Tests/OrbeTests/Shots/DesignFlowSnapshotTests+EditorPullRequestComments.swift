@@ -149,7 +149,7 @@ private struct CommentSteps {
     scene.review.writes = .fail(.timedOut)
     scene.review.release()
     let panel = scene.panel
-    pumpMain(until: { panel.reviewFailure != nil }, "失敗が届く")
+    pumpMain(until: { panel.state?.submissionFailure != nil }, "失敗が届く")
   }
 
   /// インラインに戻して行 7 に新しいコメントの欄を開いて打ち、行 7 を書き換える push を起こす。

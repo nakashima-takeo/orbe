@@ -3,7 +3,9 @@ import SwiftUI
 
 /// PR のパネルの下端の区画（見本 PrReviewPanel の下端。padding 10 12 12・上縁 hairline .07・段の間 8）: 今の diff に出せない
 /// スレッドの件数（あれば）・「レビュー」と保留中のコメントの数・全体へのコメント欄・承認 / コメント / 変更を依頼の 3 択・
-/// 「レビューを送信 ⌘↵」・失敗の文。⌘↵ は欄に焦点があるときだけ送信になる（pane が取る → `EditorPaneView+PullRequest`）。
+/// 「レビューを送信 ⌘↵」・送れない理由か送信の失敗の文・レビューのやりとりの読みの失敗の文（前に読めた内容を出している間も）。
+/// ⌘↵ は欄に焦点があるときだけ送信になる（pane が取る → `EditorPaneView+PullRequest`）。区画は PR ごとに作り直す（欄の
+/// 同一性を書きかけの持ち主に揃え、変換中に PR が替わっても前の PR の字を次の PR の書きかけに入れない）。
 struct PrReviewSection: View {
   let panel: PrPanel
   let state: PullRequestState
@@ -32,19 +34,16 @@ struct PrReviewSection: View {
         panel: panel, state: state, placeholder: l10n.string(.editorPrReviewPlaceholder))
       PrReviewEvents(panel: panel, selected: state.reviewDraft.event)
       PrReviewSubmit(panel: panel)
-      if let failure = panel.reviewFailure {
-        Text(text(failure))
-          .font(Font(Theme.Typography.editorPrThreadHead))
-          .foregroundStyle(Color.theme.danger)
-          .fixedSize(horizontal: false, vertical: true)
+      if panel.awaitsAlignedReview {
+        PrReviewNote(text: l10n.string(.editorPrReviewAwaitsLatest), color: Color.theme.textMuted)
+      } else if let failure = state.submissionFailure {
+        PrReviewNote(text: text(failure), color: Color.theme.danger)
+      }
+      if let failure = state.reviewFailure {
+        PrReviewNote(text: PrPanelText.reviewReadFailure(failure, l10n), color: Color.theme.danger)
       }
     }
-    .padding(.top, Theme.Layout.editorPrReviewPadTop)
-    .padding(.horizontal, Theme.Layout.editorPrReviewPadX)
-    .padding(.bottom, Theme.Layout.editorPrReviewPadBottom)
-    .overlay(alignment: .top) {
-      Rectangle().fill(ink.hairline(0.07)).frame(height: Theme.Stroke.hairline)
-    }
+    .prReviewArea(ink)
   }
 
   /// 「今の diff に出せないスレッド N 件」（字 11・muted、ホバーで text2）。押すと GitHub の PR を開く。
@@ -54,11 +53,49 @@ struct PrReviewSection: View {
       action: panel.openOnGitHub)
   }
 
-  private func text(_ failure: PrPanel.ReviewFailure) -> String {
+  private func text(_ failure: PullRequestState.SubmissionFailure) -> String {
     switch failure {
     case .write(let failure): PrPanelText.writeFailure(failure, l10n.language)
     case .notReady: l10n.string(.editorPrThreadNotReady)
     }
+  }
+}
+
+/// レビューのやりとりを一度も読めていない間の、下端の区画の位置の読みの失敗の文。
+struct PrReviewReadFailure: View {
+  let failure: GitHubFailure
+  @Environment(\.colorScheme) private var scheme
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    PrReviewNote(text: PrPanelText.reviewReadFailure(failure, l10n), color: Color.theme.danger)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .prReviewArea(EditorInk(scheme))
+  }
+}
+
+extension View {
+  /// 下端の区画の余白と上縁。
+  fileprivate func prReviewArea(_ ink: EditorInk) -> some View {
+    padding(.top, Theme.Layout.editorPrReviewPadTop)
+      .padding(.horizontal, Theme.Layout.editorPrReviewPadX)
+      .padding(.bottom, Theme.Layout.editorPrReviewPadBottom)
+      .overlay(alignment: .top) {
+        Rectangle().fill(ink.hairline(0.07)).frame(height: Theme.Stroke.hairline)
+      }
+  }
+}
+
+/// 区画の 1 文（字 11・折り返す）。
+private struct PrReviewNote: View {
+  let text: String
+  let color: Color
+
+  var body: some View {
+    Text(text)
+      .font(Font(Theme.Typography.editorPrThreadHead))
+      .foregroundStyle(color)
+      .fixedSize(horizontal: false, vertical: true)
   }
 }
 
@@ -80,7 +117,7 @@ private struct PrHoverText: View {
 }
 
 /// 全体へのコメント欄の箱（見本 inputBox: radius 3・枠 hairline .10・地 sunk .35。焦点で radius 5・枠 accent .55）。送信の最中は
-/// 押せない姿。
+/// 押せない姿で、打てない。
 private struct PrReviewMessageBox: View {
   let panel: PrPanel
   let state: PullRequestState
@@ -187,8 +224,9 @@ private struct PrReviewSubmit: View {
 }
 
 /// 全体へのコメント欄。↵ は改行（送信は pane が取る ⌘↵）で、1 行のときの高さは見本の 26、10 行まで伸び、その先はスクロール
-/// する。中身は PR ごとの状態の書きかけそのもの（`PullRequestState.reviewDraft`）。焦点の出入りはパネルへ写す。取り消しの履歴は
-/// 欄ごとに持つ（→ `ScmMessageField`）。
+/// する。中身は PR ごとの状態の書きかけそのもの（`PullRequestState.reviewDraft`）。変換中の字は確定するまで書きかけに入れず、
+/// パネルへ写す（`PrPanel.reviewComposition`）。焦点の出入りもパネルへ写す。送信の最中は打てない。取り消しの履歴は欄ごとに
+/// 持つ（→ `ScmMessageField`）。
 private struct PrReviewMessageField: NSViewRepresentable {
   let panel: PrPanel
   let state: PullRequestState
@@ -202,6 +240,12 @@ private struct PrReviewMessageField: NSViewRepresentable {
     text.delegate = context.coordinator
     text.onFocus = { [weak coordinator = context.coordinator] in
       coordinator?.field.panel.isReviewFieldFocused = $0
+    }
+    text.onComposition = { [weak coordinator = context.coordinator] composition in
+      guard let panel = coordinator?.field.panel, panel.reviewComposition != composition else {
+        return
+      }
+      panel.reviewComposition = composition
     }
     let scroll = MessageScrollView()
     scroll.documentView = text
@@ -220,6 +264,7 @@ private struct PrReviewMessageField: NSViewRepresentable {
     guard let text = scroll.documentView as? MessageTextView else { return }
     panel.confirmReviewComposition = { [weak text] in text?.confirmComposition() }
     text.placeholder = placeholder
+    text.isEditable = !state.isWritingReview(.submission)
     let body = state.reviewDraft.body
     if text.string != body, !text.hasMarkedText() {
       text.replaceDiscardingUndo(with: body)

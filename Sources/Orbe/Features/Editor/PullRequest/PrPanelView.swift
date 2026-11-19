@@ -53,6 +53,9 @@ struct PrPanelView: View {
         }
         if let review = state.review {
           PrReviewSection(panel: panel, state: state, review: review)
+            .id(ObjectIdentifier(state))
+        } else if let failure = state.reviewFailure {
+          PrReviewReadFailure(failure: failure)
         }
       } else if let failure = failureText(state) {
         PrNote(text: failure, color: Color.theme.danger)
@@ -290,6 +293,11 @@ enum PrPanelText {
 
   /// レビューへの書き込み（コメント・返信・解決・レビューの送信）の失敗の文。時間切れは、GitHub に届いていたかもしれないことを
   /// 告げる。
+  /// レビューのやりとりの読みの失敗の文。
+  static func reviewReadFailure(_ failure: GitHubFailure, _ l10n: LocalizationStore) -> String {
+    l10n.format(.editorPrReviewReadFailed, text(failure, empty: .editorPrFailedRead, l10n.language))
+  }
+
   static func writeFailure(_ failure: GitHubFailure, _ language: Language) -> String {
     if failure == .timedOut { return L10n.string(.editorPrWriteTimedOut, language) }
     return text(failure, empty: .editorPrFailedWrite, language)

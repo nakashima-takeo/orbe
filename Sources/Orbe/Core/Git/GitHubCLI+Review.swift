@@ -230,13 +230,15 @@ enum GitHubReviewMutation {
     }
   }
 
-  /// 送信の mutation。全体へのコメントが空なら、本文の変数を欄ごと省く。
+  /// 送信の mutation。全体へのコメントが空（空白と改行だけを含む）なら、本文の変数を欄ごと省く。
   private static func submission(
     _ field: String, _ inputs: [Input], event: GitHubReviewEvent, body: String
   ) -> (String, [String: Value]) {
     var inputs =
       inputs + [Input("event", "PullRequestReviewEvent!", "event", .string(event.rawValue))]
-    if !body.isEmpty { inputs.append(Input("body", "String!", "body", .string(body))) }
+    if !body.allSatisfy(\.isWhitespace) {
+      inputs.append(Input("body", "String!", "body", .string(body)))
+    }
     let declarations = inputs.map { "$\($0.variable):\($0.type)" }.joined(separator: ",")
     let fields = inputs.map { "\($0.field):$\($0.variable)" }.joined(separator: ",")
     return (

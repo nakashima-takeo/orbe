@@ -60,7 +60,7 @@ extension EditorPaneView {
     }
   }
 
-  /// 焦点を持っているサイドバーのパネル（検索パネル・ソース管理パネルの入力欄か列）。
+  /// 焦点を持っているサイドバーのパネル（検索パネル・ソース管理パネルの入力欄か列、PR のパネルの列か全体へのコメント欄）。
   var panelHoldingFocus: EditorSidebarState.Panel? {
     switch sidebar.panel {
     case .files: return nil

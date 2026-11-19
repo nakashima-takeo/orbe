@@ -29,11 +29,33 @@ extension PullRequestState {
     return review.threads
   }
 
+  /// ファイル `path` が rename かの判定が、GitHub（中身のファイルの列）と手元の diff の両端 `ends` で同じか。違えば、古い側の
+  /// 行の対応が GitHub と手元で変わる。
+  func agreesOnRename(of path: String, _ ends: DiffEnds) -> Bool {
+    (content?.files.first { $0.path == path }?.change == .renamed) == (ends.renames[path] != nil)
+  }
+
+  /// スレッド `thread` を、両端 `ends` の diff の行に置けるか——今の diff の行に付いていて、古い側の行なら rename の判定が
+  /// GitHub と手元で同じ。両端が分からなければ、今の diff の行に付いているかだけで決める。
+  func canPlace(_ thread: GitHubPullRequestReview.Thread, in ends: DiffEnds?) -> Bool {
+    guard thread.line != nil else { return false }
+    guard thread.side == .old, let ends else { return true }
+    return agreesOnRename(of: thread.path, ends)
+  }
+
   func isWritingReview(_ target: ReviewTarget) -> Bool { reviewWriteTargets.contains(target) }
+
+  /// 中身とレビューのやりとりを、同じ PR の先頭のコミットで読んでいる（diff とファイルの列が見せている版と、レビューの
+  /// やりとりの版が同じ）。
+  var isReviewAligned: Bool {
+    guard let content, let review else { return false }
+    return content.headCommit == review.headCommit
+  }
 
   /// レビューへの書き込みを順番に積む。中身とレビューのやりとりがまだ読めていないとき、対象への書き込みが走っているとき、
   /// 新しいスレッドの行を数えた先頭のコミットが、レビューのやりとりを読んだ時点の先頭のコミットと違うとき（`threads(at:)` が
-  /// nil の間）は受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は失敗の種類。通れば
+  /// nil の間）、レビューの送信で中身とレビューのやりとりの先頭のコミットが違うとき（`isReviewAligned` が偽の間。承認を、
+  /// diff で見ていないコミットに付けない）は受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は失敗の種類。通れば
   /// nil）。
   @discardableResult
   func writeReview(_ write: GitHubReviewWrite, completion: @escaping (GitHubFailure?) -> Void)
@@ -41,6 +63,7 @@ extension PullRequestState {
   {
     guard let content, let review else { return false }
     if case .addThread(_, _, _, let commit, _) = write, commit != review.headCommit { return false }
+    if case .submit = write, !isReviewAligned { return false }
     let target = Self.target(of: write)
     if let target {
       guard !reviewWriteTargets.contains(target) else { return false }

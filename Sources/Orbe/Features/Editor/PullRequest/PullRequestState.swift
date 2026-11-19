@@ -111,6 +111,8 @@ final class PullRequestState {
   var reviewFailure: GitHubFailure?
   /// レビューの送信の、全体へのコメントの書きかけと選んだ種類（PR のパネルが書く。メモリだけで、パネルを隠しても残る）。
   var reviewDraft = ReviewDraft()
+  /// 最後のレビューの送信の失敗（PR のパネルが書く。次に送るときに消す）。
+  var submissionFailure: SubmissionFailure?
   /// レビューへの書き込みが走っている対象と、順番を待っている対象。
   var reviewWriteTargets: Set<ReviewTarget> = []
   @ObservationIgnored var reviewWrites: [ReviewWrite] = []
@@ -142,6 +144,13 @@ final class PullRequestState {
   struct ReviewDraft: Equatable {
     var body = ""
     var event = GitHubReviewEvent.comment
+  }
+
+  /// レビューの送信の失敗。
+  enum SubmissionFailure: Equatable {
+    case write(GitHubFailure)
+    /// 中身かレビューのやりとりがまだ読めていない・両方の先頭のコミットが違う（状態が受け付けなかった）。
+    case notReady
   }
 
   struct PendingViewed: Equatable {

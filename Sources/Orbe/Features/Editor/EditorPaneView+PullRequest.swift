@@ -30,19 +30,15 @@ extension EditorPaneView {
     switch event.specialKey {
     case .carriageReturn?, .enter?, .newline?:
       if event.isARepeat { return true }
-      pullRequest.confirmReviewComposition()
-      if pullRequest.canSubmitReview {
-        pullRequest.submitReview()
-      } else {
-        NSSound.beep()
-      }
+      if !pullRequest.submitReview() { NSSound.beep() }
       return true
     default: return false
     }
   }
 
-  /// 焦点が PR のパネルの列にあるか。
+  /// 焦点が PR のパネルの列か全体へのコメント欄にあるか。
   var focusIsInPullRequest: Bool {
-    showsPullRequest && focusIsInSidebar && pullRequest.isListFocused
+    showsPullRequest && focusIsInSidebar
+      && (pullRequest.isListFocused || pullRequest.isReviewFieldFocused)
   }
 }

@@ -26,15 +26,8 @@ final class PrPanel {
   private(set) var focusRequest = false
   /// 下端の区画の全体へのコメント欄に焦点がある。
   var isReviewFieldFocused = false
-  /// 最後のレビューの送信の失敗（次に送るときに消す）。
-  var reviewFailure: ReviewFailure?
-
-  /// レビューの送信の失敗。
-  enum ReviewFailure: Equatable {
-    case write(GitHubFailure)
-    /// 中身かレビューのやりとりがまだ読めていない（状態が受け付けなかった）。
-    case notReady
-  }
+  /// 全体へのコメント欄の変換中の字（確定するまで書きかけに入れない。欄が写す）。
+  var reviewComposition = ""
 
   /// 列が消える直前（行の組が空になる。列がまだ窓に居るうち）。焦点が列にあれば、面の本文へ移す。
   @ObservationIgnored var onListWillClose: () -> Void = {}
@@ -50,10 +43,13 @@ final class PrPanel {
   /// ファイルごとのコメントの数と、それを数えたレビューのやりとり。
   @ObservationIgnored private var counted: CommentCounts?
 
-  /// ファイルごとのコメントの数（レビューのやりとりの版 `version` と、先頭のコミット `head` で数えた）。
+  /// ファイルごとのコメントの数（PR の状態 `state`・そのレビューのやりとりの版 `version`・diff の両端 `ends`（分からなければ
+  /// 先頭のコミット `head`）で数えた）。
   private struct CommentCounts {
+    let state: ObjectIdentifier
     let version: Int
     let head: String
+    let ends: PullRequestState.DiffEnds?
     let counts: [String: Int]
   }
   /// キーで行へ動いたときの開きの間引き。
@@ -176,29 +172,47 @@ final class PrPanel {
     navigation.drop()
     isListFocused = false
     isReviewFieldFocused = false
+    reviewComposition = ""
     focusRequest = false
   }
 
   // MARK: - コメント
 
-  /// ファイル `path` の、今の diff に置けるスレッドのコメントの総数。レビューのやりとりが変わったときだけ数え直す（3,000 件の
-  /// ファイルでも、見えている行を描くたびにスレッドを数えない）。
+  /// ファイル `path` の、今の diff に置けるスレッド（`PullRequestState.canPlace`）のコメントの総数。レビューのやりとりか
+  /// diff の両端が変わったときだけ数え直す（3,000 件のファイルでも、見えている行を描くたびにスレッドを数えない）。
   func commentCount(of path: String) -> Int {
     guard let state, let head = state.content?.headCommit else { return 0 }
-    if counted?.version != state.reviewVersion || counted?.head != head {
+    let id = ObjectIdentifier(state)
+    let ends = diffEnds(state)
+    if counted?.state != id || counted?.version != state.reviewVersion || counted?.head != head
+      || counted?.ends != ends
+    {
       var counts: [String: Int] = [:]
-      for thread in state.threads(at: head) ?? [] where thread.line != nil {
+      for thread in state.threads(at: head) ?? [] where state.canPlace(thread, in: ends) {
         counts[thread.path, default: 0] += thread.comments.count
       }
-      counted = CommentCounts(version: state.reviewVersion, head: head, counts: counts)
+      counted = CommentCounts(
+        state: id, version: state.reviewVersion, head: head, ends: ends, counts: counts)
     }
     return counted?.counts[path] ?? 0
   }
 
-  /// 今の diff に置けないスレッド（古い版の行に付いた・ファイル単位）の数。
+  /// 今の diff に置けない未解決のスレッド（古い版の行に付いた・ファイル単位・rename の判定が GitHub と手元で食い違う
+  /// ファイルの古い側の行に付いた）の数。
   var outdatedThreadCount: Int {
     guard let state, let head = state.content?.headCommit else { return 0 }
-    return (state.threads(at: head) ?? []).count { $0.line == nil }
+    let ends = diffEnds(state)
+    return (state.threads(at: head) ?? []).count {
+      !$0.isResolved && !state.canPlace($0, in: ends)
+    }
+  }
+
+  /// PR の状態 `state` の、今の先頭のコミットの diff の両端（求まっていなければ nil）。
+  private func diffEnds(_ state: PullRequestState) -> PullRequestState.DiffEnds? {
+    guard case .ready(_, let ends) = state.bounds, ends.head == state.content?.headCommit else {
+      return nil
+    }
+    return ends
   }
 
   // MARK: - 確認済み

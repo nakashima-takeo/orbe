@@ -87,9 +87,16 @@ extension L10n {
     .editorPrReviewComment: ("コメント", "Comment"),
     .editorPrReviewRequestChanges: ("変更を依頼", "Request Changes"),
     .editorPrReviewSubmit: ("レビューを送信", "Submit Review"),
+    .editorPrReviewAwaitsLatest: (
+      "PR の最新の内容を読み込むまで送信できません", "Can’t submit until the latest pull request is loaded"
+    ),
+    .editorPrReviewReadFailed: (
+      "レビューのコメントを読み込めません（%@）", "Couldn’t load review comments (%@)"
+    ),
     .editorPrCommentCount: ("コメント %lld 件", "Comments: %lld"),
     .editorPrOutdatedThreads: (
-      "現在の diff に表示できないスレッド %lld 件", "Threads not in the current diff: %lld"
+      "現在の diff に表示できない未解決のスレッド %lld 件",
+      "Unresolved threads not in the current diff: %lld"
     ),
   ]
 }

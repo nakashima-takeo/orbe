@@ -10,58 +10,58 @@ extension PrPanelTests {
   /// 「コメント」に戻る。成功しなければ書きかけと種類が残り、失敗を保持する。
   func testSubmittingAReviewNeedsABodyUnlessApprovingAndKeepsTheDraftOnFailure() throws {
     let state = try reviewed()
-    XCTAssertFalse(reviewPanel.canSubmitReview, "空のコメントは送れない")
-    reviewPanel.chooseReviewEvent(.requestChanges)
-    XCTAssertFalse(reviewPanel.canSubmitReview, "空の変更の依頼は送れない")
-    reviewPanel.chooseReviewEvent(.approve)
-    XCTAssertTrue(reviewPanel.canSubmitReview, "承認は空でも送れる")
+    XCTAssertFalse(panel.canSubmitReview, "空のコメントは送れない")
+    panel.chooseReviewEvent(.requestChanges)
+    XCTAssertFalse(panel.canSubmitReview, "空の変更の依頼は送れない")
+    panel.chooseReviewEvent(.approve)
+    XCTAssertTrue(panel.canSubmitReview, "承認は空でも送れる")
     state.reviewDraft.body = "見ました"
-    reviewPanel.submitReview()
-    XCTAssertEqual(reviewWritesSent, [.submit(.approve, body: "見ました")])
+    panel.submitReview()
+    XCTAssertEqual(reviewWrites, [.submit(.approve, body: "見ました")])
     XCTAssertEqual(
       state.reviewDraft, PullRequestState.ReviewDraft(), "成功すれば書きかけを空にし、種類を「コメント」に戻す")
 
-    setReviewFailure(.unreachable)
+    reviewFailure = .unreachable
     state.reviewDraft.body = "直してください"
-    reviewPanel.chooseReviewEvent(.requestChanges)
-    reviewPanel.submitReview()
-    XCTAssertEqual(reviewPanel.reviewFailure, .write(.unreachable))
+    panel.chooseReviewEvent(.requestChanges)
+    panel.submitReview()
+    XCTAssertEqual(panel.state?.submissionFailure, .write(.unreachable))
     XCTAssertEqual(
       state.reviewDraft, PullRequestState.ReviewDraft(body: "直してください", event: .requestChanges))
   }
 
   /// 保留中のコメントがあれば、全体へのコメントが空でも「コメント」で送れる。
   func testPendingCommentsCanBeSubmittedWithoutABody() throws {
-    setPendingComments(2)
+    pendingComments = 2
     _ = try reviewed()
-    XCTAssertTrue(reviewPanel.canSubmitReview)
-    reviewPanel.submitReview()
-    XCTAssertEqual(reviewWritesSent, [.submit(.comment, body: "")])
+    XCTAssertTrue(panel.canSubmitReview)
+    panel.submitReview()
+    XCTAssertEqual(reviewWrites, [.submit(.comment, body: "")])
   }
 
   /// 自分の PR では「承認」と「変更を依頼」を選べない。
   func testTheAuthorCannotApproveOrRequestChanges() throws {
-    setViewerIsAuthor()
+    viewerIsAuthor = true
     _ = try reviewed()
-    XCTAssertFalse(reviewPanel.canChoose(.approve))
-    XCTAssertFalse(reviewPanel.canChoose(.requestChanges))
-    XCTAssertTrue(reviewPanel.canChoose(.comment))
-    reviewPanel.chooseReviewEvent(.approve)
-    XCTAssertEqual(reviewPanel.state?.reviewDraft.event, .comment)
+    XCTAssertFalse(panel.canChoose(.approve))
+    XCTAssertFalse(panel.canChoose(.requestChanges))
+    XCTAssertTrue(panel.canChoose(.comment))
+    panel.chooseReviewEvent(.approve)
+    XCTAssertEqual(panel.state?.reviewDraft.event, .comment)
   }
 
   /// ファイルのコメント数は、今の diff に置けるスレッドのコメントの総数。置けないスレッドは件数だけを数える。
   func testCommentCountsCoverPlaceableThreadsOnly() throws {
-    setThreads([
+    threads = [
       thread("T1", path: "README.md", line: 2, comments: 2),
       thread("T2", path: "README.md", line: nil, comments: 3),
       thread("T3", path: "src/b.swift", line: 1, comments: 1),
-    ])
+    ]
     _ = try reviewed()
-    XCTAssertEqual(reviewPanel.commentCount(of: "README.md"), 2)
-    XCTAssertEqual(reviewPanel.commentCount(of: "src/b.swift"), 1)
-    XCTAssertEqual(reviewPanel.commentCount(of: "src/a/x.swift"), 0)
-    XCTAssertEqual(reviewPanel.outdatedThreadCount, 1)
+    XCTAssertEqual(panel.commentCount(of: "README.md"), 2)
+    XCTAssertEqual(panel.commentCount(of: "src/b.swift"), 1)
+    XCTAssertEqual(panel.commentCount(of: "src/a/x.swift"), 0)
+    XCTAssertEqual(panel.outdatedThreadCount, 1)
   }
 
   private func thread(_ id: String, path: String, line: Int?, comments: Int)
