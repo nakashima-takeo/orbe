@@ -239,9 +239,11 @@ final class PrCommentLayer {
     if !accepted { zone.failure = L10n.string(.editorPrThreadNotReady, language()) }
   }
 
-  /// 新しいスレッドを頼む。書いている間は欄を押せない姿にし、通れば欄を閉じる（スレッドは読み直しで出る）。
+  /// 新しいスレッドを頼む。書いている間は欄を押せない姿にし、通れば欄を閉じる（スレッドは読み直しで出る）。結果は頼んだ呼び出しの
+  /// 中に届くこともあるので、書いている姿は頼む前に付ける。
   private func writeDraft(_ key: Draft, body: String, zone: PrCommentZone) {
     zone.failure = nil
+    zone.isWriting = true
     let write = GitHubReviewWrite.addThread(
       path: path, side: key.version == .old ? .old : .new, line: key.line + 1, commit: key.head,
       body: body)
@@ -255,9 +257,8 @@ final class PrCommentLayer {
       zone.clearField()
       closeDraft(key, reapply: true)
     }
-    if accepted {
-      zone.isWriting = true
-    } else {
+    if !accepted {
+      zone.isWriting = false
       zone.failure = L10n.string(.editorPrThreadNotReady, language())
     }
   }

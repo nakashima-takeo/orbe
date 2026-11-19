@@ -32,7 +32,7 @@ extension PrPanel {
     guard let state, canSubmitReview else { return }
     reviewFailure = nil
     let draft = state.reviewDraft
-    let finished = { [weak self, weak state] (failure: GitHubFailure?) in
+    let finished: (GitHubFailure?) -> Void = { [weak self, weak state] failure in
       if let failure {
         self?.reviewFailure = .write(failure)
       } else {
