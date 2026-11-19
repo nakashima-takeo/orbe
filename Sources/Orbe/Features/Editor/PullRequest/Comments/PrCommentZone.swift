@@ -53,13 +53,22 @@ final class PrCommentZone: SurfaceZone {
   var failure: String? {
     didSet { if failure != oldValue { redraw() } }
   }
-  /// 新しいコメントの欄の行が現在の diff に無い（「レビューに追加」を押せない姿にし、その旨の文を出す）。
+  /// 欄の行が現在の diff に無い（書き込みのボタンを押せない姿にし、その旨の文を出す）。
   var isLineGone = false {
     didSet { if isLineGone != oldValue { redraw() } }
   }
-  /// 新しいコメントの欄の行を新しい版へ移している（「レビューに追加」を押せない姿にする）。
+  /// 欄の行を新しい版へ移している（書き込みのボタンを押せない姿にする）。
   var isLineMoving = false {
     didSet { if isLineMoving != oldValue { redraw() } }
+  }
+  /// 書き込める——欄の行が現在の diff にあり、移している最中でない。
+  var canSend: Bool { !isLineGone && !isLineMoving }
+  /// 入力欄に、空白と改行のほかの字がある。
+  var hasText: Bool { !text.allSatisfy(\.isWhitespace) }
+  /// スレッドの最初のコメントの時刻（同じ所のスレッドの並び順。欄なら最も古い）。
+  var firstCommentTime: Date {
+    guard case .thread(let thread) = subject else { return .distantPast }
+    return thread.comments.first?.createdAt ?? .distantPast
   }
   var language: Language = .systemDefault {
     didSet { if language != oldValue { redraw() } }

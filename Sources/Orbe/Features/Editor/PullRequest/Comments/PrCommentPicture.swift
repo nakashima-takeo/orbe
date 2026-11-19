@@ -21,6 +21,9 @@ enum PrCommentPicture {
     let isLineGone: Bool
     let isLineMoving: Bool
     let language: Language
+
+    /// 書き込める——欄の行が現在の diff にあり、移している最中でない。
+    var canSend: Bool { !isLineGone && !isLineMoving }
   }
 
   /// 組んだ絵と、その絵のリンクの行き先（押せる場所の通し番号 → URL）。
@@ -82,6 +85,7 @@ enum PrCommentPicture {
         field, buttons: resolves ? [.add, .resolveReply] : [.add], in: frame, top: y, &canvas)
       y += Size.editorPrThreadListPadY
     }
+    y += lineGone(in: frame, top: y, &canvas)
     y += failure(in: frame, top: y, &canvas)
     return canvas.finish(frame, bottom: y + 1, head: .top)
   }
@@ -117,11 +121,7 @@ enum PrCommentPicture {
     var y = frame.minY + 1 + Size.editorPrThreadListPadY
     y += reply(field, buttons: [.add, .cancel], in: frame, top: y, &canvas)
     y += Size.editorPrThreadListPadY
-    if state.isLineGone {
-      y += note(
-        L10n.string(.editorPrThreadLineGone, state.language), color: Theme.Color.textMuted,
-        in: frame, top: y, &canvas)
-    }
+    y += lineGone(in: frame, top: y, &canvas)
     y += failure(in: frame, top: y, &canvas)
     return canvas.finish(frame, bottom: y + 1, head: nil)
   }

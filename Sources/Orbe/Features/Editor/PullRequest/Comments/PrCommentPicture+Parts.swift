@@ -36,10 +36,12 @@ extension PrCommentPicture {
     ]
     if thread.isResolved, thread.canUnresolve {
       controls.append(
-        HeadControl(control: .resolve, key: .editorPrThreadUnresolve, enabled: !state.isWriting))
+        HeadControl(control: .resolve, key: .editorPrThreadUnresolve, enabled: !state.isWriting && state.canSend))
     } else if !thread.isResolved, thread.canResolve {
       controls.append(
-        HeadControl(control: .resolve, key: .editorPrThreadResolve, enabled: !state.isWriting))
+        HeadControl(
+          control: .resolve, key: .editorPrThreadResolve,
+          enabled: !state.isWriting && state.canSend))
     }
     for item in controls {
       let label = L10n.string(item.key, state.language)
@@ -195,10 +197,10 @@ extension PrCommentPicture {
     let writing = canvas.state.isWriting
     var right = frame.maxX - 1 - Size.editorPrThreadPadX
     for button in buttons.reversed() {
-      let state = canvas.state
+      let sends = button != .cancel
       let enabled =
-        !writing
-        && (button != .add || (!field.string.isEmpty && !state.isLineGone && !state.isLineMoving))
+        !writing && (!sends || canvas.state.canSend)
+        && (button != .add || !field.string.allSatisfy(\.isWhitespace))
       right -= self.button(button, enabled: enabled, right: right, top: top, &canvas)
       right -= Size.editorPrThreadGap
     }
@@ -269,6 +271,14 @@ extension PrCommentPicture {
       x: rect.minX + Size.editorPrThreadButtonPadX, baseline: baseline)
     if enabled { canvas.button(button, rect) }
     return width
+  }
+
+  /// 欄の行が現在の diff に無い旨の文（textMuted）。高さを返す（行があれば 0）。
+  static func lineGone(in frame: CGRect, top: CGFloat, _ canvas: inout PrCommentCanvas) -> CGFloat {
+    guard canvas.state.isLineGone else { return 0 }
+    return note(
+      L10n.string(.editorPrThreadLineGone, canvas.state.language), color: Ink.textMuted, in: frame,
+      top: top, &canvas)
   }
 
   /// 失敗の文（danger）。高さを返す（失敗が無ければ 0）。
