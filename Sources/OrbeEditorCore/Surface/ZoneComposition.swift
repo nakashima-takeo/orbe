@@ -8,7 +8,8 @@ import CoreText
 /// ```
 ///
 /// 置き字は U+FFFC に余白の幅だけを返す run delegate を付けた字。U+2068・U+2069 は包んだ範囲を周りと独立した向きのかたまりに
-/// する（向きは Core Text が中の字から決める）。行を割る位置はこの文では探さない（→ `ZoneTextLayout`。余白を付けずに組んだ
+/// する（向きは Core Text が中の字から決める。段落の区切りで切れたコードは、段落の中のコード全体の字から決めた U+2066 か
+/// U+2067 で包む）。行を割る位置はこの文では探さない（→ `ZoneTextLayout`。余白を付けずに組んだ
 /// 段落で探す）。コードの中の対にならない isolate の終わりは幅 0 の U+2060 に置き換え、閉じていない isolate と埋め込み・上書きは
 /// 後ろの置き字の前で閉じる——元の文の制御字が、置き字の位置と包みの向きの独立を壊さない。
 ///
@@ -36,8 +37,9 @@ final class ZoneComposition {
   /// 文 `source` の範囲 `paragraph` を、見え方 `styles`（文の先頭から順に当てる）で組む。段落の向きは元の段落の最初の、
   /// 向きを持つ字で決める。見え方は `first`（番号と、その見え方が当たり始める文の位置。段落の始まりより後ろで終わる最初の
   /// 見え方）から見て、段落の終わりで止める——段落を組む仕事は、文の見え方の数に依らない。
-  /// `context` を渡せば、範囲を段落の途中の区切りとして組む——段落の向きと、区切りの前で開いた埋め込み・上書き・isolate を
-  /// 引き継ぎ（開いた字を区切りの前に置く）、区切りの字の双方向の並びを段落の中と同じにする。
+  /// `context` を渡せば、範囲を段落 `context.paragraph` の途中の区切りとして組む——段落の向きと、区切りの前で開いた
+  /// 埋め込み・上書き・isolate を引き継ぎ（開いた字を区切りの前に置く）、区切りの字の双方向の並びを段落の中と同じにする。
+  /// 区切りで切れたコードは、段落の中のコード全体の向きのかたまりとして包む。
   init(
     _ source: [UInt16], paragraph: Range<Int>, styles: [ZoneTextStyle],
     from first: (index: Int, offset: Int) = (0, 0), context: Context? = nil
@@ -57,9 +59,10 @@ final class ZoneComposition {
       if style.leadingPadding > 0 || style.trailingPadding > 0 {
         builder.isolate(
           source, lower..<upper, style: index, font: style.font,
-          padding: (
-            lower == start ? style.leadingPadding : 0, upper == offset ? style.trailingPadding : 0
-          ))
+          wrap: Builder.Wrap(
+            initiator: Self.initiator(of: start..<offset, cutAt: lower..<upper, source, context),
+            leading: lower == start ? style.leadingPadding : 0,
+            trailing: upper == offset ? style.trailingPadding : 0))
       } else {
         builder.plain(source, lower..<upper, style: index, font: style.font)
       }
@@ -74,14 +77,27 @@ final class ZoneComposition {
     owners = builder.owners
     placeholders = builder.placeholders
     whitespace = builder.units.map { Unicode.Scalar($0)?.properties.isWhitespace ?? false }
-    rightToLeft = context?.rightToLeft ?? Self.isRightToLeft(source[paragraph])
+    rightToLeft = context?.rightToLeft ?? Self.isRightToLeft(source, paragraph)
     typesetter = Self.typesetter(builder.attributed(rightToLeft: rightToLeft))
   }
 
-  /// 段落の途中の区切りが引き継ぐ、段落の向きと、区切りの前で開いた埋め込み・上書き・isolate。
+  /// 段落の途中の区切りが引き継ぐ、段落の範囲と向きと、区切りの前で開いた埋め込み・上書き・isolate。
   struct Context {
+    let paragraph: Range<Int>
     let rightToLeft: Bool
     let open: OpenControls
+  }
+
+  /// コード `code`（元の文の範囲）を組んだ文の範囲 `part` だけ包むときの、包みの頭の字。区切りで切れていなければ U+2068
+  /// （向きは Core Text が中の字から決める）。区切りで切れていれば、段落の中のコード全体の向きで決めた U+2066 か U+2067
+  /// ——区切りの中の字だけで向きを決め直さない。
+  private static func initiator(
+    of code: Range<Int>, cutAt part: Range<Int>, _ source: [UInt16], _ context: Context?
+  ) -> UInt16 {
+    guard let context else { return 0x2068 }
+    let whole = code.clamped(to: context.paragraph)
+    guard part != whole else { return 0x2068 }
+    return isRightToLeft(source, whole) ? 0x2067 : 0x2066
   }
 
   /// 組んだ文の境 `index` の、元の文の境。
@@ -112,24 +128,6 @@ final class ZoneComposition {
         - CGFloat(CTLineGetTrailingWhitespaceWidth(line)))
   }
 
-  /// 段落 `units` が右から左か——段落の最初の、向きを持つ字で決まる（UAX #9 の P2・P3。向きを持つ字が無ければ左から
-  /// 右）。Core Text は段落の向きを返さないので、末尾に空白を 1 つ足して組み、その空白の向きを読む（行末の空白は段落の
-  /// 向きで組まれる。UAX #9 の L1）。
-  private static func isRightToLeft(_ units: ArraySlice<UInt16>) -> Bool {
-    let probe = Array(units) + [0x20]
-    let string = probe.withUnsafeBufferPointer {
-      CFStringCreateWithCharacters(nil, $0.baseAddress, $0.count)!
-    }
-    let space = probe.count - 1
-    let line = CTTypesetterCreateLine(
-      typesetter(CFAttributedStringCreate(nil, string, nil)),
-      CFRange(location: space, length: 1))
-    let run = (CTLineGetGlyphRuns(line) as? [CTRun] ?? []).first {
-      let range = CTRunGetStringRange($0)
-      return range.location <= space && space < range.location + range.length
-    }
-    return run.map { CTRunGetStatus($0).contains(.rightToLeft) } ?? false
-  }
 }
 
 extension ZoneComposition {
@@ -143,30 +141,6 @@ extension ZoneComposition {
 
   /// 見え方の番号を載せる属性（Core Text は属性の違う所で字の連なりを分ける。包みの字には載せない）。
   static let styleAttribute = "OrbeZoneTextStyle"
-}
-
-/// 開いている埋め込み・上書き・isolate の字（開いた順。対応の取り方は UAX #9 の X6a・X7）。
-struct OpenControls {
-  private(set) var units: [UInt16] = []
-
-  /// 字 `unit` を読む。isolate の終わりが、開いている isolate に対応しなければ偽（読んだ字は何も閉じない）。
-  @discardableResult
-  mutating func read(_ unit: UInt16) -> Bool {
-    switch unit {
-    case 0x2066...0x2068, 0x202A, 0x202B, 0x202D, 0x202E: units.append(unit)
-    case 0x202C: if let last = units.last, !Self.isIsolate(last) { units.removeLast() }
-    case 0x2069:
-      guard let isolate = units.lastIndex(where: Self.isIsolate) else { return false }
-      units.removeSubrange(isolate...)
-    default: break
-    }
-    return true
-  }
-
-  /// 開いている字を、閉じる順に閉じる字。
-  var closers: [UInt16] { units.reversed().map { Self.isIsolate($0) ? 0x2069 : 0x202C } }
-
-  private static func isIsolate(_ unit: UInt16) -> Bool { (0x2066...0x2068).contains(unit) }
 }
 
 /// 組んだ文を積む。
@@ -202,15 +176,22 @@ private struct Builder {
     }
   }
 
-  /// 範囲 `range`（見え方 `style` の字）を向きを独立させて包み、左右に置き字を置く（幅 0 の余白には置かない）。
+  /// 包み方——isolate の頭の字と、左右の置き字の幅。
+  struct Wrap {
+    let initiator: UInt16
+    let leading: CGFloat
+    let trailing: CGFloat
+  }
+
+  /// 範囲 `range`（見え方 `style` の字）を、`wrap` の頭の字で向きを独立させて包み、左右に置き字を置く（幅 0 の余白には
+  /// 置かない）。
   mutating func isolate(
-    _ source: [UInt16], _ range: Range<Int>, style: Int, font: CTFont,
-    padding: (leading: CGFloat, trailing: CGFloat)
+    _ source: [UInt16], _ range: Range<Int>, style: Int, font: CTFont, wrap: Wrap
   ) {
     let (start, end) = (range.lowerBound, range.upperBound)
-    let (leading, trailing) = padding
+    let (leading, trailing) = (wrap.leading, wrap.trailing)
     composed[start - paragraph.lowerBound] = units.count
-    append(0x2068, original: start, owner: style, .control, font)
+    append(wrap.initiator, original: start, owner: style, .control, font)
     if leading > 0 {
       placeholders.insert(units.count)
       append(0xFFFC, original: start, owner: style, .placeholder(leading), font)

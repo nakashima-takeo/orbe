@@ -169,14 +169,16 @@ public enum ZoneTextLayout {
   /// 割る位置は、余白を付けずに組んだ段落で Core Text が選ぶ位置だけ（語の境。日本語は字の境。禁則も余白なしと同じ）で、
   /// 置き字はコードから離れない。余白を付けた行が幅に収まる所で割り、語が幅に入らなければ、余白なしで狭い幅に組んだとき
   /// と同じく語の途中で割る。1 つの割れない塊（字 1 つなど）と余白が幅に入らない行だけが幅を超える。空の文は空の 1 行。
-  /// 4,096 字を超える段落の割る位置は、段落を区切って探す。タイ語・ラオ語がほかの字と並ぶ所と、閉じない双方向の制御字が
-  /// 多い所では、段落を丸ごと余白なしで組んだときと割る位置が語 1 つずれうる——Core Text の割る位置が、前者では組んだ文の
-  /// 始まりの位置に、後者では区切りの始まりより 3,000 字以上前の字にも依る。
+  /// 4,096 字を超える段落は区切って組み、段落を丸ごと組んだときと次の所で食い違いうる。括弧の組（UAX #9 の BD16・N0。
+  /// 段落の頭から組を数える）が区切りの頭より 512 字以上前に及ぶ所では、括弧とその周りの字の並び（と割る位置）が変わり
+  /// うる。区切りの頭より 512 字以上前で開いた U+2068 の向きは区切りの中の字で決まる。区切りの頭より 512 字以上前から
+  /// 続くコードの中でそこまでに開いた isolate・埋め込みは区切りの中に及ばない（その終わりの字は対にならない isolate の
+  /// 終わりとして組む）。
   public static func typeset(_ text: ZoneStyledText, width: CGFloat) -> ZoneTypeset {
     typeset(text, width: width, window: 4_096)
   }
 
-  /// `typeset(_:width:)` を、割る位置を探す区切りの長さ `window`（UTF-16）で組む。
+  /// `typeset(_:width:)` を、段落を区切る長さ `window`（UTF-16）で組む。
   static func typeset(_ text: ZoneStyledText, width: CGFloat, window: Int) -> ZoneTypeset {
     let units = Array(text.string.utf16)
     let bareStyles = text.styles.map(\.bare)
@@ -194,28 +196,42 @@ public enum ZoneTextLayout {
     repeat {
       let span = paragraphSpan(around: start, in: units)
       advance(span.lowerBound)
-      let composition = ZoneComposition(units, paragraph: span, styles: text.styles, from: first)
-      if span.isEmpty { lines.append(TypesetLine(composition, 0..<0)) }
-      // 行は段落を丸ごと組んだ文から組み、割る位置は段落を区切って探す。Core Text が 1 行の割る位置を探す仕事は、段落の
-      // 頭からの位置（タイ語・ラオ語は段落の長さ）に比例するので、段落ごと探すと段落を割る仕事が長さの 2 乗になる。区切りは
-      // 行の頭から始め、区切りの終わりから `lookahead` 以上手前で終わる行だけを採る（割る位置は後ろの字にも依るので、
-      // 区切りの終わりの近くの行は次の区切りで探し直す）。1 行も採れなければ区切りを倍に広げる。区切りは段落の向きと、
-      // 区切りの前で開いた埋め込みと isolate を引き継ぐ（割る位置は字の双方向の並びにも依る）。
+      guard !span.isEmpty else {
+        let composition = ZoneComposition(units, paragraph: span, styles: text.styles, from: first)
+        lines.append(TypesetLine(composition, 0..<0))
+        start = span.upperBound + 1
+        continue
+      }
+      // 段落は行の頭から `window` 字ずつ区切って組む——それより短い段落は丸ごと 1 回で組む。Core Text が 1 行の割る位置を
+      // 探す仕事は段落の頭からの位置（タイ語・ラオ語は段落の長さ）に、長さの限りを外した文を組む仕事は右から左の字の続きの
+      // 長さの 2 乗に比例するので、段落ごと組むと段落を組む仕事が長さの 2 乗になる。区切りの終わりから `margin` 以上
+      // 手前で終わる行だけを採り（割る位置は後ろの字にも依るので、区切りの終わりの近くの行は次の区切りで組み直す）、1 行も
+      // 採れなければ区切りを倍に広げる。区切りは段落の向きと、区切りの前で開いた埋め込み・上書き・isolate を引き継ぐ。
+      let rightToLeft = ZoneComposition.isRightToLeft(units, span)
+      // 行の頭の前で開いた制御字（`head` は行を組む文の頭の、`line` は割る位置を探す文の頭の）。
+      var carried = (
+        head: CarriedControls(units, styles: text.styles, from: span.lowerBound, style: first),
+        line: CarriedControls(units, styles: text.styles, from: span.lowerBound, style: first)
+      )
       var lineStart = span.lowerBound
       var size = window
-      var open = (offset: span.lowerBound, controls: OpenControls())
       while lineStart < span.upperBound {
         let end = min(span.upperBound, lineStart + size)
-        advance(lineStart)
-        for unit in units[open.offset..<lineStart] { open.controls.read(unit) }
-        open.offset = lineStart
+        // 行を組む文は行の頭より `margin` 字前から組む——字の向きは前の字にも依る（数字・中立の字は前の向きを持つ字の
+        // 向きを取る。UAX #9 の W2・N1）。
+        let head = max(span.lowerBound, lineStart - margin)
+        carried.head.read(to: head)
+        carried.line.read(to: lineStart)
+        let composition = ZoneComposition(
+          units, paragraph: head..<end, styles: text.styles, from: carried.head.style,
+          context: .init(paragraph: span, rightToLeft: rightToLeft, open: carried.head.composed))
         let bare = ZoneComposition(
-          units, paragraph: lineStart..<end, styles: bareStyles, from: first,
-          context: .init(rightToLeft: composition.rightToLeft, open: open.controls))
+          units, paragraph: lineStart..<end, styles: bareStyles, from: carried.line.style,
+          context: .init(paragraph: span, rightToLeft: rightToLeft, open: carried.line.bare))
         let made = wrap(composition, breakingAs: bare, width: width)
         let taken =
           end == span.upperBound
-          ? made[...] : made.prefix { NSMaxRange($0.range) <= end - lookahead }
+          ? made[...] : made.prefix { NSMaxRange($0.range) <= end - margin }
         guard let last = taken.last else {
           size *= 2
           continue
@@ -229,8 +245,9 @@ public enum ZoneTextLayout {
     return ZoneTypeset(text, lines: lines)
   }
 
-  /// 区切りの終わりから、採る行の終わりまでに空ける字の数（割る位置が見る後ろの字）。
-  private static let lookahead = 512
+  /// 区切りの前後に足す字の数——区切りの終わりから採る行の終わりまでに空ける字（割る位置は後ろの字にも依る）と、行を
+  /// 組む文を行の頭より前から組む字（字の向きは前の字にも依る）。
+  private static let margin = 512
 
   /// 字の連なりを 1 つの段落として 1 行に組む（折り返さない。見え方の番号は連なりの添字）。
   public static func line(_ runs: [ZoneTextRun]) -> TypesetLine {
@@ -246,8 +263,8 @@ public enum ZoneTextLayout {
     line(runs).width
   }
 
-  /// 段落を丸ごと組んだ文 `composition` の、区切り `bare`（同じ段落の範囲を余白を付けずに組んだもの。元の文と同じ並び）の
-  /// 範囲を、幅 `width` で行に割る。割る位置は `bare` で Core Text が選ぶ位置だけ——余白を付けても、余白なしでは割れない
+  /// 段落の区切りを組んだ文 `composition` の、`bare`（範囲の頭から余白を付けずに組んだもの。元の文と同じ並び）の範囲を、
+  /// 幅 `width` で行に割る。割る位置は `bare` で Core Text が選ぶ位置だけ——余白を付けても、余白なしでは割れない
   /// 所（コードの外の語の続き・禁則）で割れない。行は余白を付けて組んだ幅で確かめ、幅を超えれば、余白なしで探す幅を、
   /// 超えた分だけ狭めた幅と、余白付きと余白なしの幅の比で狭めた幅の広い方にして探し直す（行は短くなるだけで、狭め方は
   /// 倍々に広げるので、探し直しは数回で止まる）。それ以上狭められない（行が 1 つの割れない塊だけ）ときは、その行が幅を
