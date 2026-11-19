@@ -113,6 +113,8 @@ struct ZoneHits {
   var texts: [AnyHashable: TextRope] = [:]
   /// 選べる文のまとまりを組んだもの（次の描き直しで、文と見え方と行の範囲が同じなら使い回す）。
   var typeset: [AnyHashable: ZoneTextTypeset] = [:]
+  /// 字の行を組んだもの（次の描き直しで、字と字体が同じ字の行は組み直さずに使い回す）。
+  var labels: [ZoneLabelKey: [ZoneTextTypeset.Run]] = [:]
 
   /// 絵の差し込みの中の点の下の選べる文（まとまりと、いちばん近い位置）。字の行の帯と、その左右に少しの余白の上だけ。
   func text(at point: CGPoint) -> (AnyHashable, Int)? {
@@ -167,7 +169,8 @@ final class ZonePainter {
   }
 
   /// 絵 `picture` を外観 `look` で材料に、入力欄を `serial` で場の通し番号に写す。選べる文のまとまりは、前の当たりの表
-  /// `previous` に、文と見え方と行の範囲が同じものを組んだものがあれば、組み直さずに使い回す。
+  /// `previous` に、文と見え方と行の範囲が同じものを組んだものがあれば、組み直さずに使い回す。字の行も、字と字体が同じ
+  /// ものを組んだものがあれば使い回す（色は鍵に入れず、描くたびに今の外観で解く）。
   func paint(
     _ picture: ZonePicture, _ look: Look, reusing previous: ZoneHits = ZoneHits(),
     serial: (ZoneTextField) -> Int
@@ -197,9 +200,13 @@ final class ZonePainter {
             shadow: resolve(box.shadow?.color), shadowOffset: Float(box.shadow?.offset ?? 0),
             shadowBlur: Float(box.shadow?.blur ?? 0)))
       case .text(let line):
+        let key = ZoneLabelKey(line.runs)
+        let typeset =
+          hits.labels[key] ?? previous.labels[key]
+          ?? prepared(ZoneTextLayout.line(line.runs).runs)
+        hits.labels[key] = typeset
         material.runs += runs(
-          prepared(ZoneTextLayout.line(line.runs).runs), colors: line.runs.map(\.color),
-          origin: line.origin, inks: &inks)
+          typeset, colors: line.runs.map(\.color), origin: line.origin, inks: &inks)
       case .image(let image):
         if let pixels = pixels(image, look) {
           material.images.append(ZoneMaterial.Image(frame: image.frame, pixels: pixels))
@@ -328,6 +335,17 @@ private struct Inks {
     let ink = InkColor(color, appearance: look.appearance, space: look.space, scale: look.scale)
     known[color] = ink
     return ink
+  }
+}
+
+/// 字の行を組んだものを使い回す鍵——連なりごとの字（UTF-16 の並び）と字体。色は含めない。
+struct ZoneLabelKey: Hashable {
+  let units: [[UInt16]]
+  let fonts: [CTFont]
+
+  init(_ runs: [ZoneTextRun]) {
+    units = runs.map { Array($0.string.utf16) }
+    fonts = runs.map { $0.font as CTFont }
   }
 }
 

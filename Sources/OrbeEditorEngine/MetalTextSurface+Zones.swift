@@ -36,7 +36,8 @@ extension MetalTextSurface {
     let ids = Set(list.map(ObjectIdentifier.init))
     for (id, entry) in zones where !ids.contains(id) {
       zones[id] = nil
-      zonesRepainted = true
+      zonesResized = true
+      if !entry.material.images.isEmpty { zoneImagesChanged = true }
       orphanFields(of: entry, keeping: [])
       transaction?.writes.append { $0.zones[id] = nil }
       if case .zoneText = primary, zoneSelection?.zone == id { setPrimary(.body) }
@@ -46,6 +47,7 @@ extension MetalTextSurface {
     for zone in list where zones[ObjectIdentifier(zone)] == nil {
       let entry = ZoneEntry(zone: zone, width: width, picture: zone.picture(width: width))
       zones[ObjectIdentifier(zone)] = entry
+      zonesResized = true
       paint(entry)
     }
   }
@@ -67,9 +69,9 @@ extension MetalTextSurface {
       ZonePainter.Look(appearance: textView.effectiveAppearance, space: space, scale: scale),
       reusing: entry.hits, serial: { fieldSite(for: $0).serial })
     orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)))
+    if !entry.material.images.isEmpty || !material.images.isEmpty { zoneImagesChanged = true }
     entry.material = material
     entry.hits = hits
-    zonesRepainted = true
     for field in hits.fields {
       guard let site = fields[field.field.id] else { continue }
       precondition(site.zone == nil || site.zone == id, "入力欄の id は面の中で一意（2 つの絵の差し込みに置かない）")
@@ -82,6 +84,7 @@ extension MetalTextSurface {
       rows.heights[block] != Double(max(0, entry.picture.height))
     {
       zoneHeightsChanged = true
+      zonesResized = true
     }
     if zoneSelection?.zone == id { validateZoneSelection(entry) }
   }
@@ -91,7 +94,10 @@ extension MetalTextSurface {
   private func orphanFields(of entry: ZoneEntry, keeping: Set<AnyHashable>) {
     let id = ObjectIdentifier(entry.zone)
     for field in entry.hits.fields where !keeping.contains(field.field.id) {
-      if let site = fields[field.field.id], site.zone == id { site.zone = nil }
+      if let site = fields[field.field.id], site.zone == id {
+        site.zone = nil
+        unplacedFields.insert(field.field.id)
+      }
     }
   }
 
@@ -104,23 +110,33 @@ extension MetalTextSurface {
     nextFieldSerial += 1
     let site = EditingSite(surface: self, field: field, serial: nextFieldSerial)
     fields[field.id] = site
+    unplacedFields.insert(field.id)
     return site
   }
 
-  /// 取引の終わりに、絵の差し込みを今に合わせる（取引の中）——本文の区画の幅が変わっていれば絵を問い直し、どの
-  /// 絵の差し込みも描いていない入力欄の場を閉じ（主なら本文が主になる）、高さが変わった絵の差し込みで並びを組み直す
-  /// （閉じた場の知らせの中で描き直した高さも同じ取引に入る）。絵の差し込みを写したか外したなら、どの材料も指さない
-  /// 画像の覚えを手放し、スクロールを共にする相手の面の空きを揃える（相手の取引になり、2 面は一緒に出すので同じコマに
-  /// 揃う）。
+  /// 取引の終わりに、絵の差し込みを今に合わせる（取引の中）——本文の区画の幅が前に合わせた幅から変わっていれば絵を
+  /// 問い直し、どの絵の差し込みも描いていない入力欄の場を閉じ（主なら本文が主になる）、高さが変わった絵の差し込みで並びを
+  /// 組み直す（閉じた場の知らせの中で描き直した高さも同じ取引に入る）。絵の差し込みを置いたか外したか高さが変わったなら、
+  /// スクロールを共にする相手の面の空きを揃え（相手の取引になり、2 面は一緒に出すので同じコマに揃う）、画像を持つ材料を
+  /// 写したか外したなら、どの材料も指さない画像の覚えを手放す。どれも、幅が変わらず、描き直した絵の高さと画像が変わらない
+  /// 取引（スクロール・打鍵・ホバー）では、置いている絵の差し込みの数に比例する仕事をしない。
   func settleZones() {
-    guard !zones.isEmpty || !fields.isEmpty || zonesRepainted else { return }
-    let width = zoneWidth
-    for entry in zones.values where entry.width != width {
-      entry.width = width
-      entry.picture = entry.zone.picture(width: width)
-      paint(entry)
+    guard !zones.isEmpty || !unplacedFields.isEmpty || zonesResized || zoneImagesChanged else {
+      return
     }
-    for (id, site) in fields where site.zone == nil {
+    let width = zoneWidth
+    if settledZoneWidth != width {
+      settledZoneWidth = width
+      for entry in zones.values where entry.width != width {
+        entry.width = width
+        entry.picture = entry.zone.picture(width: width)
+        paint(entry)
+      }
+    }
+    let unplaced = unplacedFields
+    unplacedFields = []
+    for id in unplaced {
+      guard let site = fields[id], site.zone == nil else { continue }
       if primary == .field(id) { setPrimary(.body) }
       site.editor.finishComposition(.commit)
       fields[id] = nil
@@ -128,9 +144,12 @@ extension MetalTextSurface {
       transaction?.writes.append { $0.fields[serial] = nil }
     }
     if zoneHeightsChanged { applyZoneHeights() }
-    if zonesRepainted {
-      zonesRepainted = false
+    if zonesResized {
+      zonesResized = false
       partner?.settleGaps()
+    }
+    if zoneImagesChanged {
+      zoneImagesChanged = false
       let marks = [trailingMarkLooks?.normal, trailingMarkLooks?.hovered].compactMap { $0 }
       painter.keep(
         images: Set((zones.values.map(\.material) + marks).flatMap { $0.images.map(\.pixels.key) }))
