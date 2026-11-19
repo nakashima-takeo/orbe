@@ -155,8 +155,8 @@ final class ZoneTextLayoutTests: XCTestCase {
   }
 
   /// 右から左の字・和文・括弧・コードを乱択で混ぜた段落 5,000 本で、コードの地が 1 行の中で割れず、コードの字を含み、
-  /// 余白が渡した幅で入り、ほかの字にかぶらない（右から左の字の語を途中で割った行では、Core Text がその字をコードの地へ
-  /// 0.5pt 未満寄せて置くことがあるので、それより小さいかぶりは数えない。余白なしで組んでも同じ）。
+  /// 余白が渡した幅で入り、ほかの字にかぶらない（右から左の語を途中で割った行の、分け目の前の字の詰めの分は除く →
+  /// `misplaced`）。
   func testRandomMixedParagraphsNeverSplitTheCodeGround() {
     var random = SplitMix(seed: 7)
     let words = [
@@ -178,7 +178,7 @@ final class ZoneTextLayoutTests: XCTestCase {
       guard !codes.isEmpty else { continue }
       let width = CGFloat(60 + random.next(140))
       for code in codes {
-        wrong += check(parts, code: code, width: width, codes: codes, overlap: 0.5)
+        wrong += check(parts, code: code, width: width, codes: codes)
       }
     }
     XCTAssertEqual(wrong.prefix(10), [])

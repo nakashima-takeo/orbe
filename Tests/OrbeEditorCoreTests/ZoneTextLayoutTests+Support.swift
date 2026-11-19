@@ -21,8 +21,7 @@ extension ZoneTextLayoutTests {
 
   /// 部分 `parts` を幅 `width` で組み、コード `code` の地が守らない約束を返す（→ `misplaced`）。
   func check(
-    _ parts: [String], code: Int, width: CGFloat, codes: [Int]? = nil, measuresPadding: Bool = true,
-    overlap: CGFloat = 0.01
+    _ parts: [String], code: Int, width: CGFloat, codes: [Int]? = nil, measuresPadding: Bool = true
   ) -> [String] {
     let string = parts.joined()
     let lines = ZoneTextLayout.typeset(
@@ -34,18 +33,22 @@ extension ZoneTextLayoutTests {
       let edges =
         (NSLocationInRange(start, line.range) ? 1 : 0)
         + (line.range.location < end && end <= NSMaxRange(line.range) ? 1 : 0)
-      wrong += misplaced(line, code: code, edges: measuresPadding ? edges : nil, overlap: overlap)
-        .map {
-          "\(string) の幅 \(width) の行 \(line.range): \($0)"
-        }
+      wrong += misplaced(
+        line, code: code, edges: measuresPadding ? edges : nil, in: Array(string.utf16)
+      )
+      .map {
+        "\(string) の幅 \(width) の行 \(line.range): \($0)"
+      }
     }
     return wrong
   }
 
   /// 行 `line` でコード `code` の地が守らない約束——地は 1 つの続いた範囲で、コードの字を含み、字より余白 `edges` 個分だけ
-  /// 広く（コードの端がこの行にある数。nil なら幅を問わない）、ほかの見え方の字に `overlap` 以上かぶらない。
+  /// 広く（コードの端がこの行にある数。nil なら幅を問わない）、ほかの見え方の字にかぶらない。右から左の語を途中で割った行の
+  /// 分け目の前の字だけは、次の行へ送った字との詰め（字体の kern）の分だけ寄るので（`docs/spec/editor/code.md` の
+  /// 「テキストエンジンの境界」）、`kerningAcrossABreak` までかぶってよい（文 `units` を渡したときだけ見分ける）。
   func misplaced(
-    _ line: ZoneTextLayout.TypesetLine, code: Int, edges: Int? = 2, overlap: CGFloat = 0.01
+    _ line: ZoneTextLayout.TypesetLine, code: Int, edges: Int? = 2, in units: [UInt16] = []
   ) -> [String] {
     let spans = line.spans(of: code)
     guard let glyphs = glyphs(of: code, in: line) else {
@@ -59,13 +62,34 @@ extension ZoneTextLayoutTests {
     {
       wrong.append("地 \(ground) が字 \(glyphs) を含まない")
     }
-    for glyph in extents(in: line)
-    where glyph.style != code && glyph.x.lowerBound < ground.upperBound - overlap
-      && glyph.x.upperBound > ground.lowerBound + overlap
-    {
-      wrong.append("見え方 \(glyph.style) の字 \(glyph.x) が地 \(ground) にかぶる")
+    let kerned = units.isEmpty ? nil : kernedAcrossTheBreak(line, in: units)
+    for glyph in extents(in: line) where glyph.style != code {
+      let allowed = glyph.offset == kerned ? Self.kerningAcrossABreak : 0.01
+      if glyph.x.lowerBound < ground.upperBound - allowed
+        && glyph.x.upperBound > ground.lowerBound + allowed
+      {
+        wrong.append("見え方 \(glyph.style) の字 \(glyph.x) が地 \(ground) にかぶる")
+      }
     }
     return wrong
+  }
+
+  /// 分け目をまたぐ詰めで分け目の前の字が寄る量の上限——spec の SF 12pt で字がかぶる向きの最大（ヘブライ文字で約 1.06pt）。
+  static let kerningAcrossABreak: CGFloat = 1.1
+
+  /// 文 `units` の行 `line` が右から左の語を途中で割った行なら、分け目の前の字の、元の文での位置（そうでなければ nil）。
+  func kernedAcrossTheBreak(_ line: ZoneTextLayout.TypesetLine, in units: [UInt16]) -> Int? {
+    let end = NSMaxRange(line.range)
+    guard end > line.range.location, end < line.composition.paragraph.upperBound else { return nil }
+    let letter = { (unit: UInt16) in
+      Unicode.Scalar(unit).map { $0.properties.isAlphabetic } ?? false
+    }
+    let rightToLeft = { (unit: UInt16) in
+      (0x0590...0x08FF).contains(unit) || (0xFB1D...0xFDFF).contains(unit)
+        || (0xFE70...0xFEFF).contains(unit)
+    }
+    let before = units[end - 1]
+    return rightToLeft(before) && letter(before) && letter(units[end]) ? end - 1 : nil
   }
 
   /// 見え方 `style` の元の文の字のグリフの x 範囲を結んだもの（グリフが無ければ nil）。
@@ -77,18 +101,25 @@ extension ZoneTextLayoutTests {
     return lower..<upper
   }
 
-  /// 行の、元の文の字のグリフごとの見え方と、組んだ送りでの x 範囲（幅 0 のもの・行末の空白・包みの字は除く）。包みの字は、
-  /// 元の文の位置が次の字と同じ字（包みの頭と尾）と、段落の終わりを指す字（段落の末尾の包みの尾）。
-  func extents(in line: ZoneTextLayout.TypesetLine) -> [(style: Int, x: Range<CGFloat>)] {
+  /// 行の、元の文の字のグリフ 1 つ——見え方・元の文の位置・組んだ送りでの x 範囲。
+  struct GlyphExtent {
+    let style: Int
+    let offset: Int
+    let x: Range<CGFloat>
+  }
+
+  /// 行の、元の文の字のグリフごとの見え方と位置と x 範囲（幅 0 のもの・行末の空白・包みの字は除く）。包みの字は、元の文の
+  /// 位置が次の字と同じ字（包みの頭と尾）と、段落の終わりを指す字（段落の末尾の包みの尾）。
+  func extents(in line: ZoneTextLayout.TypesetLine) -> [GlyphExtent] {
     let composition = line.composition
     let hanging = line.hangingStart
-    var result: [(style: Int, x: Range<CGFloat>)] = []
+    var result: [GlyphExtent] = []
     line.forEachGlyph { index, x in
       let offset = composition.original(index)
       guard index < hanging, !x.isEmpty, offset != composition.original(index + 1),
         offset < composition.paragraph.upperBound
       else { return }
-      result.append((Int(composition.owners[index]), x))
+      result.append(GlyphExtent(style: Int(composition.owners[index]), offset: offset, x: x))
     }
     return result
   }
