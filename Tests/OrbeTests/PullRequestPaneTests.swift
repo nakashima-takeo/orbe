@@ -6,12 +6,14 @@ import XCTest
 /// エディター面に結んだ PR のパネル——レールで出したら、今の答えで行を組んでから、行があるときだけ列に焦点を入れる。列が
 /// 消える・パネルを隠す・cd で根が変わるとき、列にあった焦点は面の本文へ戻り、当てる列の無い焦点の要求は残らない。cd で
 /// 根が変わったら前の根の PR を見るのをやめる。ツリーかリストかをほかの面で選べば、この面の行も組み直し、言語を切り替え
-/// れば見えている行を読み直す。GitHub は、面を作る前に登録した差し替えの出どころが答える。
+/// れば見えている行を読み直す。全体へのコメント欄の ↵ は改行、⌘↵ はその欄に焦点がある間だけレビューの送信。GitHub は、面を
+/// 作る前に登録した差し替えの出どころが答える。
 ///
 /// 壊れると何が起きるか: 新しい面や cd の後にレールで PR のパネルを出しても列に焦点が入らない。PR が無くなったのに残った
 /// 焦点の要求が、後で PR が現れた瞬間に本文や端末から焦点を奪う。PR がマージされた・ブランチを替えたときに焦点が窓へ落ち、
 /// 打鍵がどこにも届かない。cd の後も前の worktree の PR を GitHub に問い合わせ続ける。ほかの面でリストにしても、この面が
-/// ツリーのまま。言語を切り替えても、見えている見出しが前の言語のまま。
+/// ツリーのまま。言語を切り替えても、見えている見出しが前の言語のまま。全体へのコメント欄の ⌘↵ で送れない・変換中の字が
+/// 抜けた本文を送る・押し続けると何度も送る・欄の外の ⌘↵ でレビューを送る。↵ で改行できない。
 @MainActor
 final class PullRequestPaneTests: OrbeTestCase {
   private struct Hosted {
@@ -20,9 +22,11 @@ final class PullRequestPaneTests: OrbeTestCase {
     var list: NSView { pane.pullRequestList.list }
   }
 
-  /// 根ごとの差し替えの出どころ。`open` が偽なら、ブランチに open の PR が無いと答える。
+  /// 根ごとの差し替えの出どころ。`open` が偽なら、ブランチに open の PR が無いと答える。レビューの送信は通し、届いた書き込みを
+  /// `reviewWrites` に残す。
   private final class FakeGitHub {
     var open = true
+    var reviewWrites: [GitHubReviewWrite] = []
     private let me = GitHubRepoName(nameWithOwner: "me/r")
 
     var source: PullRequestSource {
@@ -46,7 +50,18 @@ final class PullRequestPaneTests: OrbeTestCase {
         },
         branchExists: { _, completion in completion(.success(true)) },
         content: { _, completion in completion(.success(content)) },
-        setViewed: { _, _, _, _ in }, review: { _, _ in }, writeReview: { _, _, _, _, _ in })
+        setViewed: { _, _, _, _ in },
+        review: { _, completion in
+          completion(
+            .success(
+              GitHubPullRequestReview(
+                viewer: "me", viewerIsAuthor: false, headCommit: "h", pendingReview: nil,
+                threads: [])))
+        },
+        writeReview: { [unowned self] write, _, pending, _, completion in
+          reviewWrites.append(write)
+          completion(GitHubReviewWriteResult(pendingReview: pending, failure: nil))
+        })
     }
   }
 
@@ -203,5 +218,53 @@ final class PullRequestPaneTests: OrbeTestCase {
     hosted.pane.sidebar.setPullRequestFilesAsTree(true)
     pumpMain(
       until: { hosted.pane.pullRequest.layout.index[.folder("src")] != nil }, "ツリーに組み直す")
+  }
+
+  // MARK: - 全体へのコメント欄
+
+  /// PR のパネルを出して、全体へのコメント欄に焦点を入れる。
+  private func reviewField(_ hosted: Hosted) throws -> MessageTextView {
+    shownWithRows(hosted)
+    pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "前提: 全体へのコメント欄")
+    let field = try XCTUnwrap(messageField(in: hosted.pane))
+    hosted.window.makeFirstResponder(field)
+    XCTAssertTrue(hosted.pane.pullRequest.isReviewFieldFocused, "前提: 欄に焦点")
+    return field
+  }
+
+  private func messageField(in view: NSView) -> MessageTextView? {
+    (view as? MessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
+  }
+
+  /// 欄の ↵ は改行で、⌘↵ は見えている字（変換中の字を含む）をそのまま全体へのコメントにして送り、通れば欄が空になる。
+  func testCommandReturnInTheReviewFieldSendsTheVisibleText() throws {
+    let hosted = host(try registeredRoot())
+    let field = try reviewField(hosted)
+    field.insertText("見ました", replacementRange: NSRange(location: NSNotFound, length: 0))
+    field.keyDown(with: .key("\r", []))
+    XCTAssertEqual(field.string, "見ました\n", "↵ は改行")
+    field.setMarkedText(
+      "かくにん", selectedRange: NSRange(location: 4, length: 0),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertTrue(gitHub.reviewWrites.isEmpty, "前提: まだ送っていない")
+
+    XCTAssertTrue(hosted.pane.performKeyEquivalent(with: .key("\r")))
+    XCTAssertEqual(gitHub.reviewWrites, [.submit(.comment, body: "見ました\nかくにん")])
+    pumpMain(until: { field.string.isEmpty }, "通れば欄が空になる")
+  }
+
+  /// ⌘↵ が送るのは全体へのコメント欄に焦点がある間の 1 回だけ——送れない間と押し続けた繰り返しは食って送らず、焦点が欄の外
+  /// なら扱わない。
+  func testCommandReturnSendsOnlyOnceAndOnlyFromTheReviewField() throws {
+    let hosted = host(try registeredRoot())
+    let field = try reviewField(hosted)
+    XCTAssertTrue(hosted.pane.performKeyEquivalent(with: .key("\r")), "空の欄では送れず、食う")
+    field.insertText("見ました", replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertTrue(hosted.pane.performKeyEquivalent(with: .key("\r", isRepeat: true)))
+    XCTAssertTrue(gitHub.reviewWrites.isEmpty, "送れない間と繰り返しは送らない")
+
+    hosted.window.makeFirstResponder(hosted.list)
+    XCTAssertFalse(hosted.pane.performKeyEquivalent(with: .key("\r")))
+    XCTAssertTrue(gitHub.reviewWrites.isEmpty, "欄の外の ⌘↵ は送らない")
   }
 }
