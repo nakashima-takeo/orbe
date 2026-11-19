@@ -138,10 +138,13 @@ enum PrCommentPicture {
     return String(author.prefix(2))
   }
 
-  /// 本文の先頭の、空でない 1 行（長ければ先頭だけ）。
+  /// 本文の先頭の、空でない 1 行（長ければ先頭だけ）。読む字は、最初の空白でない字までと、その行の上限の字の数まで
+  /// （畳んだスレッドの描き直しの仕事が本文の長さに依らない）。
   static func firstLine(_ body: String) -> String {
-    let line = body.split(whereSeparator: \.isNewline).first { !$0.allSatisfy(\.isWhitespace) }
-    return String((line ?? "").prefix(summaryLimit))
+    guard let text = body.firstIndex(where: { !$0.isWhitespace }) else { return "" }
+    let start =
+      body[..<text].lastIndex(where: \.isNewline).map(body.index(after:)) ?? body.startIndex
+    return String(body[start...].prefix(summaryLimit).prefix { !$0.isNewline })
   }
 
   /// 畳んだ頭に出す本文の先頭の、字の数の上限（組む字を本文の長さに依らず抑える）。
