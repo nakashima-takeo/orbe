@@ -66,6 +66,38 @@ final class SurfaceZonesTests: EngineTestCase {
     XCTAssertEqual(surface.rows.heights, [90], "置いていない絵の差し込みは何もしない")
   }
 
+  /// 塊の中の差し込んだ行を先頭に読んでいる間に、その行と次の文書の行の間の絵の差し込みが外れても、置き直されて高さが
+  /// 変わっても、読んでいる行の画面上の位置は変わらない（PR への push で削除行のスレッドが一度外れる間も、読んでいる削除行が
+  /// ずれない）。
+  func testAZoneBelowTheTopInsideABlockKeepsTheReadLine() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let source = InsertedText()
+    let upper = source.lines((0..<20).map { "u\($0)" })
+    let lower = source.lines((0..<10).map { "d\($0)" })
+    let box = BoxZone(height: 108.5)
+    let placed = { (zones: [SurfaceZone]) in
+      SurfaceRows(
+        insertions: [RowInsertion(line: 30, content: .lines(upper))]
+          + zones.map { RowInsertion(line: 30, content: .zone($0)) }
+          + [RowInsertion(line: 30, content: .lines(lower))],
+        source: source)
+    }
+    surface.setRows(placed([box]))
+    surface.scroll(toFirstLine: 30 + 5.25)
+    surface.flush()
+    let read = { surface.scrollPosition.y - surface.rows.top(ofBlock: 0) }
+    let offset = read()
+    XCTAssertEqual(offset, 5.25 * 18, accuracy: 1e-9, "前提: 塊の頭の u0 から数えて u5 の中を先頭に読む")
+    surface.setRows(placed([]))
+    surface.flush()
+    XCTAssertEqual(read(), offset, accuracy: 1e-9, "絵の差し込みが外れても u5 は動かない")
+    box.height = 230.25
+    surface.setRows(placed([box]))
+    surface.flush()
+    XCTAssertEqual(read(), offset, accuracy: 1e-9, "高さの違う絵の差し込みが戻っても u5 は動かない")
+  }
+
   /// 高さが端数（30.3pt）の絵の差し込みが並ぶ 1,000 行の文書で、どの行を先頭に置いても、その上の絵の差し込みの高さを
   /// 変えた後に先頭に見えている行は同じ（行の上端に置いた位置が、行と y の丸めで上の項目に化けない）。
   func testFractionalZoneHeightsKeepTheFirstVisibleLine() throws {

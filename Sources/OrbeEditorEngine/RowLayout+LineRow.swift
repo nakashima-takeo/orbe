@@ -33,27 +33,32 @@ extension RowLayout {
     return RowPosition(line: position.line)
   }
 
-  /// 差し込んだ行だけを数えた段 `row` の位置（`lineRow(of:)` の逆）。段が塊の差し込んだ行の数を超えれば、塊の頭。
+  /// 差し込んだ行だけを数えた段 `row` の位置（`lineRow(of:)` の逆）。段が塊の差し込んだ行の数を超えれば、塊の最初の
+  /// 差し込んだ行。段は行の上端からの整数の表示の単位なので、その差し込んだ行の中に入る最も上の段にする。
   func position(ofLineRow row: RowPosition) -> RowPosition {
     guard row.offset < 0 else { return row }
+    let offset = (unit(ofLineRow: row) - unit(ofLine: row.line) - Self.slack).rounded(.up)
+    return RowPosition(line: row.line, offset: Int(offset))
+  }
+
+  /// 差し込んだ行だけを数えた段 `row` の上端（表示の単位。端数の高さの絵の差し込みの下でも、その行の上端そのもの）。
+  func unit(ofLineRow row: RowPosition) -> Double {
+    guard row.offset < 0 else { return unit(ofLine: row.line) + Double(row.offset) }
     let range = blocks(above: row.line - 1)..<blocks(above: row.line)
-    let total = (prefix[range.upperBound] - prefix[range.lowerBound]) / lineHeight
+    let head =
+      unit(ofLine: row.line) - (prefix[range.upperBound] - prefix[range.lowerBound]) / lineHeight
     let target = max(0, insertedLines(in: range) + max(row.offset, -insertedLines(in: range)))
-    var (top, before) = (0.0, 0)
+    var (top, before) = (head, 0)
     for index in range {
       if case .lines(let run) = contents[index] {
-        if target < before + run.count {
-          // 段は行の上端からの整数の表示の単位なので、その差し込んだ行の中に入る最も上の段にする。
-          let offset = (top + Double(target - before) - total - Self.slack).rounded(.up)
-          return RowPosition(line: row.line, offset: Int(offset))
-        }
+        if target < before + run.count { return top + Double(target - before) }
         top += Double(run.count)
         before += run.count
       } else {
         top += heights[index] / lineHeight
       }
     }
-    return RowPosition(line: row.line)
+    return unit(ofLine: row.line)
   }
 
   /// 塊 `range` の差し込んだ行の数。

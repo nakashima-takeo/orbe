@@ -134,15 +134,17 @@ extension MetalTextSurface {
     }
   }
 
-  /// 並びが `before` から今の並びに変わった——`before` で見えていた先頭の文書の行（塊の上なら次の文書の行）が画面の同じ
-  /// 位置に残るよう、縦の位置を差の分だけずらす（まだ出していない置く位置があればそれを、無ければ箱の位置をずらす）。
-  /// 見えている高さが無いか、文書の先頭（位置 0）にいれば何もしない——先頭では、文書の先頭に置いた塊をそのまま見せる。
+  /// 並びが `before` から今の並びに変わった——`before` で見えていた先頭の行（文書の行か、塊の中なら差し込んだ行。絵の
+  /// 差し込みか空きの上なら、その下の差し込んだ行か文書の行）が画面の同じ位置に残るよう、縦の位置を差の分だけずらす（まだ
+  /// 出していない置く位置があればそれを、無ければ箱の位置をずらす）。塊の中の行は差し込んだ行だけを数えた段で引き当てる
+  /// ——読んでいる行と次の文書の行の間の絵の差し込みの高さが変わっても、読んでいる行が動かない。見えている高さが無いか、
+  /// 文書の先頭（位置 0）にいれば何もしない——先頭では、文書の先頭に置いた塊をそのまま見せる。
   func keepFirstVisibleLine(from before: RowLayout, lineCount: Int) {
     let (position, limits) = scrollState()
     let top = limits.clampedY(position)
     guard limits.viewport.y > 0, top > 0 else { return }
-    let line = before.firstVisibleLine(atY: top, lineCount: lineCount)
-    let dy = rows.y(ofLine: line) - before.y(ofLine: line)
+    let row = before.lineRow(of: before.position(atY: top, lineCount: lineCount))
+    let dy = (rows.unit(ofLineRow: row) - before.unit(ofLineRow: row)) * rows.lineHeight
     guard dy != 0 else { return }
     if let placed = pending.position {
       pending.position = SIMD2(placed.x, placed.y + dy)
@@ -157,7 +159,7 @@ extension MetalTextSurface {
   }
 
   /// 相手と同じ高さの空きを、相手の今の絵の高さに揃える（相手の絵の差し込みの出入りと高さの変化・相手が付いた・外れた）。
-  /// 変われば取引の中で並びを組み直す。`keepingFirstVisibleLine` なら見えている先頭の文書の行を確定で保つ——今の位置で
+  /// 変われば取引の中で並びを組み直す。`keepingFirstVisibleLine` なら見えている先頭の行を確定で保つ——今の位置で
   /// 描いたことのない並び（後から結んで、相手の位置を引き継いだ面の並び）から揃えるときは保たない。保つと、引き継いだ
   /// 位置を描いたことのない並びとの差の分だけ共にするスクロールがずれ、相手の面の見えている行も動く。
   func settleGaps(keepingFirstVisibleLine: Bool = true) {

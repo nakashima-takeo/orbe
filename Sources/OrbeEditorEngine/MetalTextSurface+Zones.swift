@@ -161,7 +161,7 @@ extension MetalTextSurface {
     }
   }
 
-  /// 載せる側が描いた絵の高さで並びを組み直す（見えている先頭の文書の行は確定で保つ）。
+  /// 載せる側が描いた絵の高さで並びを組み直す（見えている先頭の行は確定で保つ）。
   private func applyZoneHeights() {
     zoneHeightsChanged = false
     let current = rows
@@ -183,7 +183,7 @@ extension MetalTextSurface {
     rows.replace(blocks, spans: current.spans)
   }
 
-  /// 取引の中で並びが変わる（取引の前の並びを、見えている先頭の文書の行を保つ起点として覚える）。
+  /// 取引の中で並びが変わる（取引の前の並びを、見えている先頭の行を保つ起点として覚える）。
   func noteRowsChange() {
     if transaction?.anchor == nil { transaction?.anchor = rows }
   }

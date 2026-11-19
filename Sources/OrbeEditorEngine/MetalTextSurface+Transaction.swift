@@ -72,7 +72,7 @@ extension MetalTextSurface {
   /// 本文の場は主で、面に焦点がある。
   var bodyFocused: Bool { focused && primary == .body }
 
-  /// 取引を確定する——縦の並びの差し込みの高さ（見えている先頭の文書の行を保つずらし）・範囲・見せ方の縦の位置・材料の
+  /// 取引を確定する——縦の並びの差し込みの高さ（見えている先頭の行を保つずらし）・範囲・見せ方の縦の位置・材料の
   /// 書き込み（写し・行の印・変わった行・縦の並び・カーソル・入力欄・打鍵の時刻・横の「見えるところまで」）を出す前の
   /// 状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が位置を先・材料を後の順で 1 回で書く。
   private func commit(_ finished: Transaction) {
@@ -200,7 +200,7 @@ extension MetalTextSurface {
   }
 
   /// 取引の中で変わった縦の並びを確定する——差し込みの高さが変わっていれば（位置を頼んだ取引でなければ）見えている
-  /// 先頭の文書の行を同じ位置に保ち、変わった並びを材料への書き込みに積む。
+  /// 先頭の行を同じ位置に保ち、変わった並びを材料への書き込みに積む。
   private func settleRows(_ finished: Transaction, lineCount: Int) {
     if let before = finished.anchor, finished.scrollTo == nil {
       pending.anchored = true
