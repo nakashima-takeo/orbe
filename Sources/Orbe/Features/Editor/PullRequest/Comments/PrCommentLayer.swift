@@ -19,7 +19,7 @@ final class PrCommentLayer {
   private var drafts: [Draft: PrCommentZone] = [:]
   /// 開いた順の新しいコメントの欄。
   private var draftOrder: [Draft] = []
-  /// 求めた（求めている）印を出せる行の、両端と答え。
+  /// 求めた（求めている）印を出せる行の、両端と結果。
   private var commentable: (ends: PullRequestState.DiffEnds, lines: GitDiffHunkLines?)?
   /// 最後に並びへ注記を渡した両端と、並列の古い側の面（インラインでは nil）。
   private var placedEnds: PullRequestState.DiffEnds?
@@ -264,7 +264,8 @@ final class PrCommentLayer {
   }
 }
 
-/// 行の右端の印——並列の古い側の面の行と、インラインの差し込んだ削除行は古い側、ほかは新しい側の行に新しいコメントの欄を開く。
+/// 行の右端の印——並列の古い側の面の行とインラインの差し込んだ削除行では古い側の行、ほかでは新しい側の行に、新しいコメントの
+/// 欄を開く。
 extension PrCommentLayer: SurfaceTrailingMarkTarget {
   func surface(_ surface: any TextSurface, didPressTrailingMarkOn line: TrailingMarkLine) {
     switch line {
