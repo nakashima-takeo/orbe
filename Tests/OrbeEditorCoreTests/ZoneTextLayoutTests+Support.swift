@@ -89,6 +89,33 @@ extension ZoneTextLayoutTests {
     return result
   }
 
+  /// 部分 `parts` を余白なしで（字体だけを付けて）組んだ組版——行を割れる位置の手本。`codes` は等幅の字体。
+  func bareTypesetter(_ parts: [String], codes: [Int]) -> CTTypesetter {
+    let attributed = NSMutableAttributedString()
+    for (index, part) in parts.enumerated() {
+      attributed.append(
+        NSAttributedString(string: part, attributes: [.font: codes.contains(index) ? mono : font]))
+    }
+    return CTTypesetterCreateWithAttributedString(attributed)
+  }
+
+  /// 組版 `typesetter`（文の長さ `count`）で、行の頭 `start` から組むと、どれかの幅で `end` で割れるか。Core Text は約物を
+  /// 詰めて字の幅より狭い幅にも行を収め、禁則のために字の幅より広い幅でだけその位置を選ぶこともあり、答えは幅について単調で
+  /// ないので、0 から残りの字の幅までを見る（まず字の幅の前後を細かく、無ければ全体を）。
+  func breaks(_ typesetter: CTTypesetter, count: Int, from start: Int, at end: Int) -> Bool {
+    let width = { (end: Int) -> Double in
+      let line = CTTypesetterCreateLine(typesetter, CFRange(location: start, length: end - start))
+      return CTLineGetTypographicBounds(line, nil, nil, nil)
+        - CTLineGetTrailingWhitespaceWidth(line)
+    }
+    let fitted = width(end)
+    let answers = { (widths: StrideThrough<Double>) in
+      widths.contains { start + CTTypesetterSuggestLineBreak(typesetter, start, $0) == end }
+    }
+    return answers(stride(from: max(0, fitted - 2), through: fitted + 2, by: 0.02))
+      || answers(stride(from: 0, through: width(count) + 2, by: 0.1))
+  }
+
   func glyphCount(_ line: ZoneTextLayout.TypesetLine) -> Int {
     line.runs.reduce(0) { $0 + $1.glyphs.count }
   }

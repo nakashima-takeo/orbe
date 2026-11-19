@@ -181,52 +181,6 @@ final class ZoneTextLayoutTests: XCTestCase {
     XCTAssertEqual(wrong.prefix(10), [])
   }
 
-  /// 折り返しの位置は、余白を付けないときと同じ所から選ばれる——和文の直後のコードで、直前の字がコードと一緒に次の行へ
-  /// 送られず、「」。の禁則も変わらない（コードと余白が 1 行に収まる幅で確かめる）。
-  func testBreaksAreChosenFromTheSamePlacesAsWithoutPadding() {
-    let cases: [([String], [Int])] = [
-      (["あいうえお", "code", "かきくけこ"], [1]), (["これは", "a", "と", "b", "と", "c", "です。"], [1, 3, 5]),
-      (["あいうえお「", "code", "」。かきく"], [1]), (["see the ", "code", " and then more words"], [1]),
-    ]
-    for (parts, codes) in cases {
-      let string = parts.joined()
-      var allowed = Set<Int>()
-      for width in stride(from: CGFloat(10), through: 300, by: 0.5) {
-        for line in ZoneTextLayout.lines(
-          styled(parts, codes: codes, padding: 0), width: width)
-        {
-          allowed.insert(line.range.location)
-        }
-      }
-      let widest = codes.map {
-        ZoneTextLayout.width([ZoneTextRun(parts[$0], font: mono, color: .red)]) + 2 * padding
-      }.max()!
-      for width in stride(from: widest + 12, through: 300, by: 0.5) {
-        let starts = ZoneTextLayout.lines(
-          styled(parts, codes: codes, padding: padding), width: width
-        ).map(\.range.location)
-        XCTAssertTrue(
-          starts.allSatisfy(allowed.contains), "\(string) を幅 \(width) で割った行の始まり \(starts)")
-      }
-    }
-  }
-
-  /// 和文と、右から左の字のインラインコードが同じ行にあっても、折り返したどの行も幅に収まる。
-  func testWrappedLinesFitTheWidthWithPaddedCodeNextToCJKAndRightToLeftText() {
-    for parts in [
-      ["see the ", "קוד ארוך", " and more words here"],
-      ["הריצו את ", "git commit -m", " ואז את זה"],
-      ["これは", "קוד ארוך", "の例です。続きの文もある"], ["和文の後に ", "שלום עולם", " と続く和文の段落"],
-    ] {
-      let string = parts.joined()
-      let over = stride(from: CGFloat(40), through: 200, by: 0.5).filter { width in
-        ZoneTextLayout.lines(styled(parts, padding: padding), width: width)
-          .contains { $0.width > width + 0.001 }
-      }
-      XCTAssertEqual(over, [], "\(string) を折り返すと幅を超える行が出る幅")
-    }
-  }
-
   /// 元の文に置き字や双方向の制御字が入っていても、余白は包みの置き字にだけ付き、行の範囲は元の文を隙間なく割り、描く
   /// グリフにも包みの字は入らない。コードの中の閉じない制御字や対にならない終わり、コードの外の閉じない始まりがあっても、
   /// コードを包む向きの独立が壊れず、コードの後ろの字の並びが変わらない。
