@@ -114,4 +114,54 @@ extension SurfaceSharedScrollTests {
     pump(until: { b.surface.partner == nil }, "前提: 相手が閉じれば外れる")
     XCTAssertEqual(b.surface.drawn.rows.heights, [0], "相手が閉じれば 0")
   }
+
+  /// 空きが後から結ぶ面・先に結ぶ面・両面のどれにあっても、先に結ぶ面を行 50 に送ってから結べば、空きが相手の絵の高さに揃った後も
+  /// 両面の見えている先頭の行は行 50 のまま。結んだまま相手が閉じて空きが 0 に戻っても、残った面の先頭の行は動かない。
+  func testJoiningAndLeavingKeepTheFirstVisibleLine() throws {
+    let top = RowPosition(line: 50)
+    for (name, gapOnFirst, gapOnLater) in [
+      ("後から結ぶ面に空き", false, true), ("先に結ぶ面に空き", true, false), ("両面に空き", true, true),
+    ] {
+      let a = try open(rows(200), size: CGSize(width: 400, height: 300))
+      let b = try open(rows(120), size: CGSize(width: 400, height: 300))
+      let (left, right) = (BoxZone(height: 45), BoxZone(height: 30))
+      var first: [RowInsertion] = []
+      var later: [RowInsertion] = []
+      if gapOnLater {
+        first.append(RowInsertion(line: 10, content: .zone(left)))
+        later.append(RowInsertion(line: 10, content: .gap(left)))
+      }
+      if gapOnFirst {
+        first.append(RowInsertion(line: 10, content: .gap(right)))
+        later.append(RowInsertion(line: 10, content: .zone(right)))
+      }
+      for (opened, insertions) in [(a, first), (b, later)] {
+        opened.surface.setPresentation(SurfacePresentation(showsMinimap: false))
+        opened.surface.setRows(SurfaceRows(insertions: insertions))
+      }
+      a.surface.scroll(to: top)
+      a.surface.flush()
+      a.surface.shareScroll(with: b.surface)
+      a.surface.flush()
+      XCTAssertEqual(a.surface.viewport.top, top, "\(name): 先に結ぶ面")
+      XCTAssertEqual(b.surface.viewport.top, top, "\(name): 後から結ぶ面")
+    }
+    let b = try open(rows(120), size: CGSize(width: 400, height: 300))
+    b.surface.setPresentation(SurfacePresentation(showsMinimap: false))
+    let box = BoxZone(height: 45)
+    b.surface.setRows(SurfaceRows(insertions: [RowInsertion(line: 10, content: .gap(box))]))
+    do {
+      let a = try open(rows(200), size: CGSize(width: 400, height: 300))
+      a.surface.setPresentation(SurfacePresentation(showsMinimap: false))
+      a.surface.setRows(SurfaceRows(insertions: [RowInsertion(line: 10, content: .zone(box))]))
+      a.surface.shareScroll(with: b.surface)
+      a.surface.scroll(to: top)
+      a.surface.flush()
+      XCTAssertEqual(b.surface.viewport.top, top, "前提: 結んだまま行 50")
+    }
+    pump(until: { b.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    b.surface.flush()
+    XCTAssertEqual(b.surface.drawn.rows.heights, [0], "前提: 空きは 0 に戻る")
+    XCTAssertEqual(b.surface.viewport.top, top, "相手が閉じた後")
+  }
 }
