@@ -66,6 +66,30 @@ final class SurfaceZonesTests: EngineTestCase {
     XCTAssertEqual(surface.rows.heights, [90], "置いていない絵の差し込みは何もしない")
   }
 
+  /// 高さが端数（30.3pt）の絵の差し込みが並ぶ 1,000 行の文書で、どの行を先頭に置いても、その上の絵の差し込みの高さを
+  /// 変えた後に先頭に見えている行は同じ（行の上端に置いた位置が、行と y の丸めで上の項目に化けない）。
+  func testFractionalZoneHeightsKeepTheFirstVisibleLine() throws {
+    let opened = try hostedRows(1_000)
+    let surface = opened.surface
+    let lines = Array(stride(from: 3, to: 1_000, by: 4))
+    let boxes = lines.map { _ in BoxZone(height: 30.3) }
+    surface.setRows(
+      SurfaceRows(
+        insertions: zip(lines, boxes).map { RowInsertion(line: $0, content: .zone($1)) }))
+    surface.flush()
+    var moved: [Int] = []
+    for line in 1..<990 {
+      surface.scroll(to: RowPosition(line: line))
+      surface.flush()
+      guard let above = lines.lastIndex(where: { $0 <= line }) else { continue }
+      boxes[above].height = boxes[above].height == 30.3 ? 61.7 : 30.3
+      surface.redrawZone(boxes[above])
+      surface.flush()
+      if surface.viewport.top != RowPosition(line: line) { moved.append(line) }
+    }
+    XCTAssertEqual(moved, [])
+  }
+
   /// 本文の区画の幅が変われば（窓の幅・行番号の桁）絵を問い直す（折り返しが変わり、高さが合う）。
   func testAZoneIsAskedAgainWhenTheTextWidthChanges() throws {
     let opened = try hostedRows()

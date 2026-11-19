@@ -6,9 +6,10 @@ import OrbeEditorCore
 extension MetalTextSurface {
   func setRows(_ rows: SurfaceRows) {
     let insertions = rows.insertions
-    guard !holds(insertions) || rows.spans != self.rows.spans || rows.source !== rowSource else {
-      return
-    }
+    guard
+      !holds(insertions) || rows.spans != self.rows.spans || rows.source !== rowSource
+        || rows.trailingMarkTarget !== trailingMarkTarget
+    else { return }
     precondition(
       insertions.isEmpty || !presentation.showsMinimap, "差し込みはミニマップを出していない面にだけ置く")
     // 差し込みの多い並び（1MB の diff で数千）を打鍵のたびに置き直しうるので、契約の検査は 1 回の走査で一時の列を作らずに行う。
@@ -36,6 +37,7 @@ extension MetalTextSurface {
     transact {
       noteRowsChange()
       rowSource = rows.source
+      trailingMarkTarget = rows.trailingMarkTarget
       write { $0.rowSourceContent = sourceContent }
       syncZones(zoneList)
       let lineHeight = Double(config.lineHeight)
@@ -51,6 +53,10 @@ extension MetalTextSurface {
               line: insertion.line,
               height: Double(max(0, zones[ObjectIdentifier(zone)]?.picture.height ?? 0)),
               content: .zone(ObjectIdentifier(zone)))
+          case .gap(let zone):
+            RowLayout.Block(
+              line: insertion.line, height: gapHeight(ObjectIdentifier(zone)),
+              content: .gap(ObjectIdentifier(zone)))
           }
         }, spans: rows.spans)
     }
@@ -66,12 +72,18 @@ extension MetalTextSurface {
     guard presentation != self.presentation else { return }
     precondition(!presentation.showsMinimap || rows.isEmpty, "差し込みのある面ではミニマップを出さない")
     let restyles = presentation.lineStyles != self.presentation.lineStyles
+    let previousMark = self.presentation.trailingMark
     transact {
       self.presentation = presentation
       let arrangement = SurfaceArrangement(presentation)
       self.arrangement = arrangement
       write { $0.arrangement = arrangement }
       if restyles { appearanceDidChange() }
+      if presentation.trailingMark != previousMark {
+        paintTrailingMark()
+        if presentation.trailingMark == nil { trailingMarkHover = nil }
+        publishTrailingMark()
+      }
     }
   }
 
@@ -115,7 +127,8 @@ extension MetalTextSurface {
     return zip(insertions, rows.contents).allSatisfy { insertion, content in
       switch (insertion.content, content) {
       case (.lines(let lines), .lines(let laid)): lines == laid
-      case (.zone(let zone), .zone(let id)): ObjectIdentifier(zone) == id
+      case (.zone(let zone), .zone(let id)), (.gap(let zone), .gap(let id)):
+        ObjectIdentifier(zone) == id
       default: false
       }
     }
@@ -135,6 +148,38 @@ extension MetalTextSurface {
       pending.position = SIMD2(placed.x, placed.y + dy)
     } else {
       pending.shift += dy
+    }
+  }
+
+  /// 相手と同じ高さの空きの高さ——スクロールを共にする相手の面に置いた絵の差し込み `zone` の絵の高さ（無ければ 0）。
+  func gapHeight(_ zone: ObjectIdentifier) -> Double {
+    Double(max(0, partner?.zones[zone]?.picture.height ?? 0))
+  }
+
+  /// 相手と同じ高さの空きを、相手の今の絵の高さに揃える（相手の絵の差し込みの出入りと高さの変化・相手が付いた・外れた）。
+  /// 変われば取引の中で並びを組み直す。`keepingFirstVisibleLine` なら見えている先頭の文書の行を確定で保つ——今の位置で
+  /// 描いたことのない並び（後から結んで、相手の位置を引き継いだ面の並び）から揃えるときは保たない。保つと、引き継いだ
+  /// 位置を描いたことのない並びとの差の分だけ共にするスクロールがずれ、相手の面の見えている行も動く。
+  func settleGaps(keepingFirstVisibleLine: Bool = true) {
+    guard rows.hasGaps else { return }
+    let current = rows
+    var changed = false
+    let blocks = current.contents.indices.map { index -> RowLayout.Block in
+      var height = current.heights[index]
+      if case .gap(let zone) = current.contents[index] {
+        let mirrored = gapHeight(zone)
+        if mirrored != height {
+          height = mirrored
+          changed = true
+        }
+      }
+      return RowLayout.Block(
+        line: current.boundaries[index], height: height, content: current.contents[index])
+    }
+    guard changed else { return }
+    transact {
+      if keepingFirstVisibleLine { noteRowsChange() }
+      rows.replace(blocks, spans: current.spans)
     }
   }
 }

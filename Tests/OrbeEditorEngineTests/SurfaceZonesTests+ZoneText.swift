@@ -32,6 +32,50 @@ extension SurfaceZonesTests {
     XCTAssertEqual(board.string(forType: .string), expected)
   }
 
+  /// インラインコード（余白つき）と、置き字・双方向の制御字を含む本文でも、コードの余白の上から始めたドラッグ・コードを
+  /// またぐドラッグ・⌘A のどれで選んでも、⌘C が写すのは元の文の部分そのもの（置き字も制御字も足されない）。
+  func testCopyingAcrossInlineCodeGivesTheOriginalText() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    let parts = [
+      "前の文 \u{FFFC} と ", "merges(\u{2067}event)", " の後ろ \u{200F}右から ", "שלום\u{2069}",
+      " で終わる本文。続く文もある。",
+    ]
+    let comment = parts.joined()
+    let content = ZoneStyledText(
+      parts.enumerated().map { index, part in
+        (
+          part,
+          index % 2 == 1
+            ? ZoneTextStyle(font: mono, color: ThreadZone.accent, padding: 4)
+            : ZoneTextStyle(font: ThreadZone.bodyFont, color: ThreadZone.ink)
+        )
+      })
+    let thread = ThreadZone(comment: comment, content: content)
+    surface.setRows(zone(thread, at: 4))
+    let board = privatePasteboard(opened)
+    let lines = try XCTUnwrap(surface.zones[ObjectIdentifier(thread)]?.hits.lines)
+    let codeStart = parts[0].utf16.count
+    let first = try XCTUnwrap(lines.first { NSLocationInRange(codeStart, $0.range) })
+    let last = try XCTUnwrap(lines.last)
+    let at = { (line: ZoneHits.Line, x: CGFloat) in
+      self.viewPoint(surface, thread, CGPoint(x: x, y: line.origin.y - 3))
+    }
+    try mouse(opened, .leftMouseDown, at: at(first, first.x(of: codeStart) + 1))
+    try mouse(opened, .leftMouseDragged, at: at(last, last.x(of: NSMaxRange(last.range) - 2)))
+    try mouse(opened, .leftMouseUp, at: at(last, last.x(of: NSMaxRange(last.range) - 2)))
+    surface.textView.copy(nil)
+    let to = NSMaxRange(last.range) - 2
+    XCTAssertEqual(
+      board.string(forType: .string),
+      (comment as NSString).substring(with: NSRange(location: codeStart, length: to - codeStart)),
+      "余白の上から始めたドラッグ")
+    surface.textView.selectAll(nil)
+    surface.textView.copy(nil)
+    XCTAssertEqual(board.string(forType: .string), comment, "⌘A")
+  }
+
   /// ダブルクリックは語を選び、⇧クリックは語の単位のまま選択を伸ばす。
   func testDoubleClickSelectsAWordAndShiftClickExtendsIt() throws {
     let opened = try hostedRows()
@@ -91,12 +135,11 @@ private final class CommentsZone: SurfaceZone {
       height: 20 * CGFloat(comments.count) + 8,
       texts: comments.enumerated().map { index, comment in
         ZoneText(
-          id: comment.0, string: comment.1,
+          id: comment.0, content: ThreadZone.content(comment.1),
           lines: [
             ZoneSelectableLine(
               origin: CGPoint(x: 10, y: 20 * CGFloat(index) + 16),
-              range: NSRange(location: 0, length: comment.1.utf16.count),
-              styles: ThreadZone.styles(comment.1))
+              range: NSRange(location: 0, length: comment.1.utf16.count))
           ])
       })
   }

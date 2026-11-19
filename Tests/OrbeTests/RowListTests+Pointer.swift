@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -9,12 +10,6 @@ import XCTest
 /// 壊れると何が起きるか。見出しの一括操作を押した後、同じ位置に来た別の部品の上で前の部品の説明が出たままになる。
 /// アプリが背後にある間や、ポインタが列を出た後に行が読み直されると、ポインタの無い行にホバーの地が付く。
 extension RowListTests {
-  /// ポインタの位置を差し替えられる窓。
-  final class PointerWindow: NSWindow {
-    var pointer = NSPoint.zero
-    override var mouseLocationOutsideOfEventStream: NSPoint { pointer }
-  }
-
   /// 幅 200・高さ 100 の列を、ポインタを差し替えられる窓に載せる。ポインタは行 2 の部品の上。
   private func hostUnderThePointer() -> (Hosted, PointerWindow) {
     let source = Source()

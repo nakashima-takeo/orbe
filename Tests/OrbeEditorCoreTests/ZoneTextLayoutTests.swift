@@ -3,17 +3,18 @@ import XCTest
 
 @testable import OrbeEditorCore
 
-/// 絵の差し込みの字の折り返し——行は元の文を隙間なく割り（改行は行に含めない）、どの行も幅に収まり、見え方は行の範囲に
-/// 切って渡る。壊れると、スレッドの本文が絵の差し込みの幅をはみ出す・選んだ範囲と写る文がずれる・インラインコードの色が
-/// 別の字に付く。
+/// 絵の差し込みの字の折り返し——行は元の文を隙間なく割り（改行は行に含めない）、どの行も幅に収まり、見え方の地は行ごとに
+/// 字に合う。壊れると、スレッドの本文が絵の差し込みの幅をはみ出す・選んだ範囲と写る文がずれる・インラインコードの地が別の
+/// 字に付く。
 final class ZoneTextLayoutTests: XCTestCase {
-  private let font = NSFont.systemFont(ofSize: 12)
-  private let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  let font = NSFont.systemFont(ofSize: 12)
+  let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  let padding: CGFloat = 4
 
   func testLinesPartitionTheTextAndFitTheWidth() {
     let string = "tail だけ見ると、間に別種のイベントが挟まったときに畳み損ねない？ merges(event) の前に種別チェックが要る気がする。"
-    let styles = [ZoneTextStyle(length: string.utf16.count, font: font, color: .white)]
-    let lines = ZoneTextLayout.lines(string, styles: styles, width: 160)
+    let lines = ZoneTextLayout.lines(
+      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 160)
     XCTAssertGreaterThan(lines.count, 2)
     XCTAssertEqual(lines.first?.range.location, 0)
     for (a, b) in zip(lines, lines.dropFirst()) {
@@ -25,8 +26,8 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   func testNewlinesAlwaysBreakAndAreNotInLines() {
     let string = "一行目\n\n三行目"
-    let styles = [ZoneTextStyle(length: string.utf16.count, font: font, color: .white)]
-    let lines = ZoneTextLayout.lines(string, styles: styles, width: 500)
+    let lines = ZoneTextLayout.lines(
+      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 500)
     XCTAssertEqual(
       lines.map(\.range),
       [
@@ -35,246 +36,289 @@ final class ZoneTextLayoutTests: XCTestCase {
       ])
   }
 
-  func testStylesAreSlicedToEachLine() {
-    let string = "aaaa bbbb cccc"
-    let styles = [
-      ZoneTextStyle(length: 5, font: font, color: .white),
-      ZoneTextStyle(length: 4, font: mono, color: .red),
-      ZoneTextStyle(length: 5, font: font, color: .white),
-    ]
+  /// 行末の空白は前の行に残り、見え方の地はその見え方の字がある行にだけある。
+  func testSpansBelongToTheLinesThatHoldTheirGlyphs() {
+    let text = ZoneStyledText([
+      ("aaaa ", ZoneTextStyle(font: font, color: .white)),
+      ("bbbb", ZoneTextStyle(font: mono, color: .red)),
+      (" cccc", ZoneTextStyle(font: font, color: .white)),
+    ])
     let lines = ZoneTextLayout.lines(
-      string, styles: styles,
-      width: ZoneTextLayout.width([
-        ZoneTextRun("aaaa bbbb", font: font, color: .white)
-      ]) + 1)
+      text,
+      width: ZoneTextLayout.width([ZoneTextRun("aaaa bbbb", font: font, color: .white)]) + 1)
     XCTAssertEqual(
       lines.map(\.range), [NSRange(location: 0, length: 10), NSRange(location: 10, length: 4)],
       "行末の空白は前の行に残る")
-    XCTAssertEqual(lines[0].styles.map(\.length), [5, 4, 1])
-    XCTAssertEqual(lines[0].styles[1].font, mono, "インラインコードの見え方は同じ字に付く")
-    XCTAssertEqual(lines[1].styles.map(\.length), [4])
+    XCTAssertEqual(lines[0].spans(of: 1).count, 1)
+    XCTAssertEqual(lines[1].spans(of: 1), [])
+    XCTAssertEqual(lines[1].spans(of: 2).count, 1)
   }
 
-  /// 見え方ごとの x 範囲は字にぴったり（前の字の後ろの空白を含まない）。余白は前後の字をその幅ずつ押し出し、範囲には
-  /// 含めない。行頭の見え方の余白は行の字を右へ寄せる。
-  func testSpansHugTheGlyphsAndPaddingPushesTheNeighbours() {
-    let string = "see code here"
-    let styles = { (padding: CGFloat) in
-      [
-        ZoneTextStyle(length: 4, font: self.font, color: .white),
-        ZoneTextStyle(length: 4, font: self.mono, color: .red, padding: padding),
-        ZoneTextStyle(length: 5, font: self.font, color: .white),
-      ]
-    }
-    let bare = ZoneTextLayout.lines(string, styles: styles(0), width: 500)[0]
-    let padded = ZoneTextLayout.lines(string, styles: styles(4), width: 500)[0]
-    let lead = CGFloat(
-      CTLineGetTypographicBounds(
-        ZoneTextLayout.typeset([ZoneTextRun("see ", font: font, color: .white)]).line, nil, nil,
-        nil))
-    XCTAssertGreaterThan(
-      lead, ZoneTextLayout.width([ZoneTextRun("see", font: font, color: .white)]),
-      "前提: 手前の空白に幅がある")
-    let code = ZoneTextLayout.width([ZoneTextRun("code", font: mono, color: .red)])
-    XCTAssertEqual(bare.spans[1].lowerBound, lead, accuracy: 0.01, "空白の後ろから")
-    XCTAssertEqual(bare.spans[1].upperBound - bare.spans[1].lowerBound, code, accuracy: 0.01)
-    XCTAssertEqual(padded.spans[1].lowerBound, lead + 4, accuracy: 0.01, "前の余白の分右")
-    XCTAssertEqual(padded.spans[1].upperBound - padded.spans[1].lowerBound, code, accuracy: 0.01)
-    XCTAssertEqual(padded.spans[2].lowerBound, bare.spans[2].lowerBound + 8, accuracy: 0.01)
+  /// コードの地は字に余白の幅を足した範囲で、余白は前後の字をその幅ずつ押し出す。行頭のコードの余白は字を右へ寄せる。
+  func testPaddingPushesTheNeighboursAndWidensTheGround() throws {
+    let parts = ["see ", "code", " here"]
+    let bare = try XCTUnwrap(
+      ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).first)
+    let padded = try XCTUnwrap(
+      ZoneTextLayout.typeset(styled(parts, padding: 4), width: 500).first)
+    let code = try XCTUnwrap(glyphs(of: 1, in: padded))
+    let ground = try XCTUnwrap(padded.spans(of: 1).first)
+    XCTAssertEqual(ground.lowerBound, code.lowerBound - 4, accuracy: 0.01)
+    XCTAssertEqual(ground.upperBound, code.upperBound + 4, accuracy: 0.01)
+    XCTAssertEqual(
+      code.lowerBound, try XCTUnwrap(glyphs(of: 1, in: bare)).lowerBound + 4, accuracy: 0.01)
+    XCTAssertEqual(
+      try XCTUnwrap(glyphs(of: 2, in: padded)).lowerBound,
+      try XCTUnwrap(glyphs(of: 2, in: bare)).lowerBound + 8, accuracy: 0.01)
     XCTAssertEqual(padded.width, bare.width + 8, accuracy: 0.01)
-    let leading = ZoneTextLayout.lines(
-      "code", styles: [ZoneTextStyle(length: 4, font: mono, color: .red, padding: 4)], width: 500)[
-        0]
-    XCTAssertEqual(leading.spans[0].lowerBound, 4, accuracy: 0.01, "行頭の余白で右へ")
-    XCTAssertEqual(leading.width, 4 + code + 4, accuracy: 0.01)
+    let leading = try XCTUnwrap(
+      ZoneTextLayout.typeset(
+        ZoneStyledText([("code", ZoneTextStyle(font: mono, color: .red, padding: 4))]),
+        width: 500
+      ).first)
+    XCTAssertEqual(try XCTUnwrap(glyphs(of: 0, in: leading)).lowerBound, 4, accuracy: 0.01)
+    XCTAssertEqual(
+      leading.width,
+      ZoneTextLayout.width([ZoneTextRun("code", font: mono, color: .red)]) + 8, accuracy: 0.01)
   }
 
-  /// 余白は、組版で 1 つにまとまる字（ZWJ でつないだ絵文字・タミルの合字・基の字と別のグリフで描くタイ文字の結合記号）を
-  /// 割らず、その外に付く。右から左の字のインラインコードでも、余白はコードの字の中ではなく見た目の左右に出る。どの場合も、
-  /// 余白なしで組んだ行と字の数が同じで、コードの字の幅は変わらず、コードは左の余白の分、後ろの字は左右の余白の分だけ右へ
-  /// ずれる。
-  func testPaddingStaysOutsideClustersAndOnTheVisualSides() {
+  /// 余白は、組版で 1 つにまとまる字（ZWJ でつないだ絵文字・タミルの合字・基の字と別のグリフで描く結合記号）を割らず、
+  /// 1 字を 2 つのグリフで描くタイ語の ำ・ラオ語の ຳ でも字の間に隙間を作らない。どの場合も、描くグリフの数は余白なしと
+  /// 同じで、コードの字の幅は変わらない。
+  func testPaddingNeverSplitsAClusterOrAGlyphPair() throws {
     let cases = [
-      ("ZWJ でつないだ絵文字", "👨‍👩‍👧", "👨‍👩‍👧"), ("タミルの合字", "க்ஷ", "க்ஷ"), ("タイ文字の結合記号", "see ", "กี่"),
-      ("右から左の字", "see ", "שלום"),
+      ("ZWJ でつないだ絵文字", "👨‍👩‍👧"), ("タミルの合字", "க்ஷ"), ("タイ文字の結合記号", "กี่"), ("タイ語の ำ", "กำ"),
+      ("ラオ語の ຳ", "ກຳ"), ("右から左の字", "שלום"),
     ]
-    let padding: CGFloat = 4
-    for (name, before, code) in cases {
-      let string = before + code + " z"
-      let styles = { (padding: CGFloat) in
-        [
-          ZoneTextStyle(length: before.utf16.count, font: self.font, color: .white),
-          ZoneTextStyle(length: code.utf16.count, font: self.mono, color: .red, padding: padding),
-          ZoneTextStyle(length: 2, font: self.font, color: .white),
-        ]
-      }
-      let bare = ZoneTextLayout.lines(string, styles: styles(0), width: 500)[0]
-      let padded = ZoneTextLayout.lines(string, styles: styles(padding), width: 500)[0]
+    for (name, code) in cases {
+      let parts = ["see ", code, " z"]
+      let bare = try XCTUnwrap(
+        ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).first)
+      let padded = try XCTUnwrap(
+        ZoneTextLayout.typeset(styled(parts, padding: 4), width: 500).first)
+      XCTAssertEqual(glyphCount(padded), glyphCount(bare), "\(name): 字を割らない")
+      XCTAssertEqual(padded.width, bare.width + 8, accuracy: 0.01, "\(name): 幅は余白の分だけ増える")
+      let (a, b) = (
+        try XCTUnwrap(glyphs(of: 1, in: bare)), try XCTUnwrap(glyphs(of: 1, in: padded))
+      )
       XCTAssertEqual(
-        glyphCount(string, styles(padding)), glyphCount(string, styles(0)), "\(name): 字を割らない")
-      XCTAssertEqual(padded.width, bare.width + 2 * padding, accuracy: 0.01, "\(name): 幅は余白の分だけ増える")
-      XCTAssertEqual(
-        padded.spans[1].upperBound - padded.spans[1].lowerBound,
-        bare.spans[1].upperBound - bare.spans[1].lowerBound, accuracy: 0.01,
+        b.upperBound - b.lowerBound, a.upperBound - a.lowerBound, accuracy: 0.01,
         "\(name): コードの字の幅は変わらない")
-      XCTAssertEqual(
-        padded.spans[1].lowerBound, bare.spans[1].lowerBound + padding, accuracy: 0.01,
-        "\(name): コードは左の余白の分右")
-      XCTAssertEqual(
-        padded.spans[2].lowerBound, bare.spans[2].lowerBound + 2 * padding, accuracy: 0.01,
-        "\(name): 後ろの字は左右の余白の分右")
+      XCTAssertEqual(misplaced(padded, code: 1), [], name)
     }
   }
 
-  private func glyphCount(_ string: String, _ styles: [ZoneTextStyle]) -> Int {
-    CTLineGetGlyphCount(
-      typeset(string, range: NSRange(location: 0, length: string.utf16.count), styles: styles).line)
-  }
-
-  /// まとまりの文 `string` の範囲 `range` を見え方 `styles` で描く組版。
-  private func typeset(_ string: String, range: NSRange, styles: [ZoneTextStyle])
-    -> ZoneTextLayout.Typeset
-  {
-    ZoneTextLayout.typeset(
-      ZoneText(
-        id: 0, string: string,
-        lines: [ZoneSelectableLine(origin: .zero, range: range, styles: styles)]))[0]
-  }
-
-  /// 余白のあるインラインコードと右から左の字が同じ段落にあっても、折り返したどの行も幅に収まる。
-  func testWrappedLinesFitTheWidthWithPaddedCodeAndRightToLeftText() {
-    for parts in [
-      ["see the ", "קוד ארוך", " and more words here"],
-      ["הריצו את ", "git commit -m", " ואז את זה"],
-    ] {
-      let string = parts.joined()
-      let over = stride(from: CGFloat(40), through: 200, by: 0.5).filter { width in
-        ZoneTextLayout.lines(string, styles: codeStyles(parts), width: width).contains {
-          $0.width > width
-        }
-      }
-      XCTAssertEqual(over, [], "\(string) を折り返すと幅を超える行が出る幅")
-    }
-  }
-
-  /// 段落の向きに依らず、折り返したどの行でも、インラインコードの余白は、同じ行にある前後の字とコードの間に入り、地は行の
-  /// 中に収まって前後の字にかぶらない（→ `misplacedPadding(_:)`）。右から左の字で始まる段落と、右から左の字のコードが
-  /// 折り返す段落で、コードの後ろが段落と同じ向きの字のときに確かめる。
-  func testCodePaddingSitsBetweenTheCodeAndItsNeighboursOnEveryLine() {
-    for parts in [
-      ["שלום עולם ", "aaaa bbbb cccc dddd", " עולם"], ["see ", "שלום עולם ארוך מאוד", " z"],
-    ] {
-      XCTAssertEqual(misplacedPadding(parts), [], "\(parts.joined()) を折り返したとき、余白か地の置き場が違う行")
-    }
-  }
-
-  /// コードの後ろがコードと同じ向き（段落と逆の向き）の字で、コードの終わりとその字が同じ行に並ぶと、末尾の余白は段落の
-  /// 向きで決めた側（コードの続きが前の行から来る、割れた側）に付き、後ろの字はコードの地に接する。あるべき振る舞いは、
-  /// 余白がコードと後ろの字の間に入ること。
-  func testCodePaddingSitsBetweenTheCodeAndAFollowingRunOfTheSameDirection() {
-    XCTExpectFailure("末尾の余白の左右を、コードの字の並びの向きでなく段落の向きで決めている") {
-      for parts in [
-        ["שלום עולם ", "aaaa bbbb cccc dddd", " z"], ["see ", "שלום עולם ארוך מאוד", " עולם"],
-      ] {
-        XCTAssertEqual(misplacedPadding(parts), [], "\(parts.joined()) を折り返したとき、余白か地の置き場が違う行")
-      }
-    }
-  }
-
-  /// 前と後ろを本文の字体、真ん中を余白 4 のインラインコードにした文 `parts` を幅 60〜200 で折り返し、コードの余白か地の
-  /// 置き場が違う行を返す。正しい行では、地（字の x 範囲を余白の分広げたもの）は行の中に収まり、同じ行にある前後の字と
-  /// コードの間にその側の余白が入り、地は前後の字にかぶらない——余白はコードの見た目の外側に付き、折り返しで割れた側には
-  /// 付かない。
-  private func misplacedPadding(_ parts: [String]) -> [String] {
+  /// 段落の向き 2 × コードの向き 2 × 隣の字の向き 2 の 8 通りを、行頭・行中・行末・折り返しをまたぐ置き方で組み、どの行でも
+  /// コードの地が 1 つの続いた範囲で、余白が渡した幅で入り、隣の字が地にかぶらない。
+  func testCodePaddingHoldsForEveryDirectionAndPosition() {
+    let paragraphs = ["see the text ", "הנה הטקסט "]
+    let codes = ["merges(event) ok", "מיזוג אירועים"]
+    let neighbours = ["and more words", "ועוד מילים"]
     var wrong: [String] = []
-    for width in stride(from: CGFloat(60), through: 200, by: 0.5) {
-      for line in ZoneTextLayout.lines(parts.joined(), styles: codeStyles(parts), width: width) {
-        guard let code = line.styles.firstIndex(where: { $0.font == mono }),
-          !line.spans[code].isEmpty
-        else { continue }
-        let (glyphs, ground) = (line.spans[code], line.ground(code))
-        let inside = ground.lowerBound >= -0.01 && ground.upperBound <= line.width + 0.01
-        let neighbours = [
-          (code - 1, line.styles[code].leadingPadding),
-          (code + 1, line.styles[code].trailingPadding),
-        ]
-        let spaced = neighbours.allSatisfy { other, padding in
-          guard line.spans.indices.contains(other), !line.spans[other].isEmpty else { return true }
-          let span = line.spans[other]
-          let gap = max(span.lowerBound - glyphs.upperBound, glyphs.lowerBound - span.upperBound)
-          let apart =
-            ground.upperBound <= span.lowerBound + 0.01
-            || span.upperBound <= ground.lowerBound + 0.01
-          return gap >= padding - 0.01 && apart
+    for paragraph in paragraphs {
+      for code in codes {
+        for neighbour in neighbours {
+          let placements = [
+            [code, " " + neighbour], [paragraph, code, " " + neighbour], [paragraph, code],
+            [paragraph + neighbour + " ", code, " " + neighbour + " " + paragraph],
+          ]
+          for parts in placements {
+            let index = parts.firstIndex(of: code)!
+            for width in stride(from: CGFloat(60), through: 260, by: 3) {
+              wrong += check(parts, code: index, width: width)
+            }
+          }
         }
-        if !inside || !spaced { wrong.append("幅 \(width) の行 \(line.range) の地 \(ground)") }
       }
     }
-    return wrong
+    XCTAssertEqual(wrong, [])
+  }
+
+  /// 和文の隣、和文＋空白の隣、コードの端のタイ語 ำ・ラオ語 ຳ、左右の字が混ざったコード、字を挟まず隣り合うコード、
+  /// 複数のコードにまたがる括弧、改行をまたぐコード（改行の側には余白が付かない）、端に鉤括弧のある右から左のコードのどの場合も、
+  /// どの行でも、コードの地が 1 つの続いた範囲で、余白が渡した幅で入り、隣の字が地にかぶらない。
+  func testCodePaddingHoldsNextToCJKAndAcrossMixedCodes() {
+    let cases: [([String], [Int])] = [
+      (["これは", "code", "です"], [1]), (["これは ", "code", " です"], [1]), (["見て", "กำ", "ที่นี่"], [1]),
+      (["ເບິ່ງ ", "ກຳ", " ນີ້"], [1]), (["mix ", "abc שלום def", " end"], [1]),
+      (["שלום ", "abc שלום def", " עולם"], [1]), (["a ", "first", "second", " b"], [1, 2]),
+      (["(", "a(", "b)", ")"], [1, 2]), (["和文", "שלום", "和文"], [1]), (["a ", "co\nde", " b"], [1]),
+      ([": ", "דה ו「", "。"], [1]), (["前の文 ", "」שלום「", " 後の文"], [1]),
+    ]
+    var wrong: [String] = []
+    for (parts, codes) in cases {
+      for width in stride(from: CGFloat(30), through: 200, by: 1.5) {
+        for code in codes { wrong += check(parts, code: code, width: width, codes: codes) }
+      }
+    }
+    XCTAssertEqual(wrong, [])
+  }
+
+  /// 右から左の字・和文・括弧・コードを乱択で混ぜた段落 5,000 本で、コードの地が 1 行の中で割れず、コードの字を含み、
+  /// 余白が渡した幅で入り、ほかの字にかぶらない（右から左の語を途中で割った行の、分け目の前の字の詰めの分は除く →
+  /// `misplaced`）。
+  func testRandomMixedParagraphsNeverSplitTheCodeGround() {
+    var random = SplitMix(seed: 7)
+    let words = [
+      "あいう", "漢字", "abc", "de f", "אבג", "דה ו", " ", "、", "(", ")", "12", "กำ", "。", "x-y", "「",
+      "」", ": ",
+    ]
+    var wrong: [String] = []
+    for _ in 0..<5_000 {
+      var parts: [String] = []
+      var codes: [Int] = []
+      for _ in 0..<(3 + random.next(9)) {
+        if random.next(3) == 0 {
+          codes.append(parts.count)
+          parts.append(words[random.next(words.count)] + words[random.next(words.count)])
+        } else {
+          parts.append(words[random.next(words.count)])
+        }
+      }
+      guard !codes.isEmpty else { continue }
+      let width = CGFloat(60 + random.next(140))
+      for code in codes {
+        wrong += check(parts, code: code, width: width, codes: codes)
+      }
+    }
+    XCTAssertEqual(wrong.prefix(10), [])
+  }
+
+  /// 元の文に置き字や双方向の制御字が入っていても、余白は包みの置き字にだけ付き、行の範囲は元の文を隙間なく割り、描く
+  /// グリフにも包みの字は入らない。コードの中の閉じない制御字や対にならない終わり、コードの外の閉じない始まりがあっても、
+  /// コードを包む向きの独立が壊れず、コードの後ろの字の並びが変わらない。
+  func testControlCharactersInTheTextNeitherLeakNorBreakTheIsolate() throws {
+    for (name, parts) in Self.controlCases {
+      let string = parts.joined()
+      let lines = ZoneTextLayout.typeset(
+        styled(parts, padding: padding), width: 500)
+      XCTAssertEqual(lines.map(\.range), [NSRange(location: 0, length: string.utf16.count)], name)
+      let line = try XCTUnwrap(lines.first)
+      XCTAssertEqual(misplaced(line, code: 1), [], name)
+      let bare = try XCTUnwrap(
+        ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).first)
+      XCTAssertEqual(glyphCount(line), glyphCount(bare), "\(name): 包みの字は描かない")
+      if parts[2].hasSuffix("def ghi") {
+        let tail = line.runs.filter { $0.style == 2 }.flatMap(\.positions).map(\.x)
+        XCTAssertEqual(tail, tail.sorted(), "\(name): コードの後ろの字は左から右に並ぶ")
+      }
+    }
+  }
+
+  /// 元の文に置き字や双方向の制御字を入れた例（名前と、真ん中がコードの 3 つの部分）。
+  static let controlCases: [(String, [String])] = [
+    ("元の文の置き字と U+2060", ["a\u{FFFC}b ", "x\u{2060}y", " \u{FFFC} tail words"]),
+    ("コードの中の閉じない上書き", ["abc ", "x\u{202E}y", " def ghi"]),
+    ("コードの中の閉じない isolate", ["abc ", "x\u{2067}y", " def ghi"]),
+    ("コードの中の対にならない終わり", ["abc ", "x\u{2069}y\u{202C}", " def ghi"]),
+    ("右から左の段落の、コードの中の対にならない終わり", ["שלום ", "ab\u{2069}cd", " עולם"]),
+    ("コードの外の閉じない始まり", ["a \u{2067}b ", "code", " c d"]),
+    ("コードの外の向きの印", ["\u{200F}abc ", "co\u{200E}de", " \u{202A}def ghi"]),
+  ]
+
+  /// 元の文に双方向の制御字があっても、余白の上の当たりはコードの端——地の両端から 1pt と 3pt 内側（置き字の上）を押すと、
+  /// コードの始まりか終わりに当たり、コードの外の字にも中の字にも当たらない。
+  func testHitsOnThePaddingLandOnTheCodeEdgesEvenWithBidiControls() throws {
+    for (name, parts) in Self.controlCases {
+      let line = try XCTUnwrap(
+        ZoneTextLayout.typeset(styled(parts, padding: padding), width: 500).first)
+      let ground = try XCTUnwrap(line.spans(of: 1).first)
+      let start = parts[0].utf16.count
+      let edges = [start, start + parts[1].utf16.count]
+      for x in [
+        ground.lowerBound + 1, ground.lowerBound + 3, ground.upperBound - 3, ground.upperBound - 1,
+      ] {
+        XCTAssertTrue(
+          edges.contains(line.offset(atX: x)), "\(name): x \(x) の当たり \(line.offset(atX: x))")
+      }
+    }
+  }
+
+  /// 当たり: 余白の左半分はコードの前の字の後、右半分はコードの字の前に当たり、どちらも元の文のコードの始まり。余白の上の
+  /// 当たりとコードの端のキャレットは、置き字の外側の x に戻る。
+  func testHitsOnThePaddingLandOnTheCodeEdges() throws {
+    let parts = ["see ", "code", " here"]
+    let line = try XCTUnwrap(
+      ZoneTextLayout.typeset(styled(parts, padding: padding), width: 500)
+        .first)
+    let ground = try XCTUnwrap(line.spans(of: 1).first)
+    let code = try XCTUnwrap(glyphs(of: 1, in: line))
+    XCTAssertEqual(line.offset(atX: ground.lowerBound + 1), 4, "前の余白の左半分")
+    XCTAssertEqual(line.offset(atX: ground.lowerBound + 3), 4, "前の余白の右半分")
+    XCTAssertEqual(line.offset(atX: code.upperBound + 1), 8, "後ろの余白の左半分")
+    XCTAssertEqual(line.offset(atX: code.upperBound + 3), 8, "後ろの余白の右半分")
+    XCTAssertEqual(line.x(of: 4), ground.lowerBound, accuracy: 0.01, "コードの始まりは余白の外")
+    XCTAssertEqual(line.x(of: 8), ground.upperBound, accuracy: 0.01, "コードの終わりは余白の外")
+    XCTAssertEqual(line.offset(atX: line.x(of: 6)), 6, "コードの中は字の境に戻る")
   }
 
   /// 段落の途中の行も段落の向きで組む——左から右の段落で右から左の字から始まる行でも、後ろの字はその右に、右から左の
-  /// 段落で左から右の字から始まる行でも、後ろの字はその左に並ぶ。測った行（`lines`）でも、その行を描く組版（`typeset`
-  /// にまとまりの文とその行を渡したもの）でも同じ。
+  /// 段落で左から右の字から始まる行でも、後ろの字はその左に並ぶ。測った行と、その行を描く組版（まとまりの文とその行の範囲を
+  /// 渡したもの）は同じ。
   func testAWrappedLineIsLaidOutInTheParagraphsDirection() throws {
     for (parts, width, rightToLeft) in [
       (["see ", "שלום עולם ארוך מאוד", " z"], CGFloat(90), false),
       (["שלום ", "aaaa bbbb cccc dddd", " עולם"], 90, true),
     ] {
       let string = parts.joined()
-      let lines = ZoneTextLayout.lines(string, styles: codeStyles(parts), width: width)
-      let line = try XCTUnwrap(
-        lines.last { $0.range.location > 0 && $0.styles.count == 2 && $0.styles[0].font == mono },
-        "前提: \(string) に、コードの続きから始まって後ろの字が並ぶ行がある")
-      let (code, after) = (line.spans[0], line.spans[1])
-      let set = typeset(string, range: line.range, styles: line.styles)
-      let (drawnCode, drawnAfter) = (left(of: 0, in: set.line), left(of: 1, in: set.line))
+      let styles = styled(parts, padding: padding)
+      let lines = ZoneTextLayout.lines(styles, width: width)
+      let index = try XCTUnwrap(
+        lines.lastIndex {
+          $0.range.location > parts[0].utf16.count && !$0.spans(of: 1).isEmpty
+            && !$0.spans(of: 2).isEmpty
+        }, "前提: \(string) に、コードの続きから始まって後ろの字が並ぶ行がある")
+      let line = lines[index]
+      let (code, after) = (line.spans(of: 1)[0], line.spans(of: 2)[0])
       if rightToLeft {
         XCTAssertLessThanOrEqual(after.upperBound, code.lowerBound + 0.01, "\(string): 後ろの字は左")
-        XCTAssertLessThan(drawnAfter, drawnCode, "\(string): 描く組版でも後ろの字は左")
       } else {
         XCTAssertGreaterThanOrEqual(after.lowerBound, code.upperBound - 0.01, "\(string): 後ろの字は右")
-        XCTAssertGreaterThan(drawnAfter, drawnCode, "\(string): 描く組版でも後ろの字は右")
       }
+      let drawn = ZoneTextLayout.lines(
+        of: ZoneText(
+          id: 0, content: styles,
+          lines: lines.map { ZoneSelectableLine(origin: .zero, range: $0.range) }))
+      XCTAssertEqual(drawn.map(\.range), lines.map(\.range), string)
+      XCTAssertEqual(drawn[index].width, line.width, accuracy: 0.001, string)
+      XCTAssertEqual(drawn[index].spans(of: 1), line.spans(of: 1), string)
     }
   }
 
-  /// 組んだ行 `line` で、見え方 `style` の字の左端の x。
-  private func left(of style: Int, in line: CTLine) -> CGFloat {
-    let runs = (CTLineGetGlyphRuns(line) as? [CTRun] ?? []).filter {
-      ZoneTextLayout.style(of: $0) == style
+  /// 描く行（測った行の範囲から切り出したもの）の範囲も幅も、どの見え方の地も、測った行と同じ——余白のあるコードが
+  /// 折り返しをまたぐ段落でも、右から左の字・和文・括弧・改行・コードを乱択で混ぜた文でも。
+  func testDrawnLinesMatchTheMeasuredLines() {
+    var wrong: [String] = []
+    let compare = { (parts: [String], codes: [Int], width: CGFloat) in
+      let string = parts.joined()
+      let styles = self.styled(parts, codes: codes, padding: self.padding)
+      let measured = ZoneTextLayout.lines(styles, width: width)
+      let drawn = ZoneTextLayout.lines(
+        of: ZoneText(
+          id: 0, content: styles,
+          lines: measured.map { ZoneSelectableLine(origin: .zero, range: $0.range) }))
+      if drawn.map(\.measured) != measured { wrong.append("\(string) を幅 \(width) で測った行と描く行が食い違う") }
     }
-    return runs.flatMap { run -> [CGFloat] in
-      var positions = [CGPoint](repeating: .zero, count: CTRunGetGlyphCount(run))
-      CTRunGetPositions(run, CFRange(location: 0, length: 0), &positions)
-      return positions.map(\.x)
-    }.min() ?? .nan
-  }
-
-  /// 前と後ろを本文の字体、真ん中を余白 4 のインラインコードにした見え方。
-  private func codeStyles(_ parts: [String]) -> [ZoneTextStyle] {
-    parts.enumerated().map { index, part in
-      index == 1
-        ? ZoneTextStyle(length: part.utf16.count, font: mono, color: .red, padding: 4)
-        : ZoneTextStyle(length: part.utf16.count, font: font, color: .white)
+    for width in stride(from: CGFloat(50), through: 200, by: 7) {
+      compare(["和文の段落に ", "merges(event) と長いコード", "が入り、", "שלום", " で終わる。"], [1, 3], width)
     }
-  }
-
-  /// 折り返しで割れた見え方は、割れた側の余白を持たない。
-  func testPaddingIsDroppedOnTheSideCutByAWrap() {
-    let style = ZoneTextStyle(length: 10, font: mono, color: .red, padding: 4)
-    let head = ZoneTextLayout.styles([style], in: NSRange(location: 0, length: 6))[0]
-    let tail = ZoneTextLayout.styles([style], in: NSRange(location: 6, length: 4))[0]
-    XCTAssertEqual([head.leadingPadding, head.trailingPadding], [4, 0])
-    XCTAssertEqual([tail.leadingPadding, tail.trailingPadding], [0, 4])
+    var random = SplitMix(seed: 11)
+    let words = ["あいう", "漢字", "abc", "de f", "אבג", " ", "、", "(", ")", "กำ", "「", "」", "\n"]
+    for _ in 0..<1_000 {
+      let parts = (0..<(2 + random.next(8))).map { _ in
+        words[random.next(words.count)] + words[random.next(words.count)]
+      }
+      compare(
+        parts, parts.indices.filter { _ in random.next(3) == 0 }, CGFloat(40 + random.next(160)))
+    }
+    XCTAssertEqual(wrong.prefix(5), [])
   }
 
   /// 組んだ字の連なりは見え方の境で分かれる（同じ字体でも）。
-  func testTypesetRunsSplitAtEveryStyle() {
-    let set = ZoneTextLayout.typeset([
+  func testRunsSplitAtEveryStyle() {
+    let line = ZoneTextLayout.line([
       ZoneTextRun("red", font: font, color: .red), ZoneTextRun("green", font: font, color: .green),
     ])
-    let runs = CTLineGetGlyphRuns(set.line) as? [CTRun] ?? []
-    XCTAssertEqual(runs.map { ZoneTextLayout.style(of: $0) }, [0, 1])
+    XCTAssertEqual(line.runs.map(\.style), [0, 1])
   }
 }

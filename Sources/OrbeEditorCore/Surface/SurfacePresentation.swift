@@ -25,12 +25,15 @@ public struct SurfacePresentation: Equatable {
   public var showsMarks: Bool
   /// 行の型。文書の行の区間（`LineSpan.style`）と差し込んだ行（`InsertedLine.style`）が番号で指す。
   public var lineStyles: [LineStyle]
+  /// 行の右端の印の絵（nil なら印を出さない）。印を出せる行（`LineSpan`・`InsertedLine` の `allowsTrailingMark`）に
+  /// ポインタが乗ると、その行の右端に出る。
+  public var trailingMark: TrailingMark?
 
   public init(
     showsMinimap: Bool = true, numberColumns: Int = 1, numbersOwnLines: Bool = true,
     numberWidth: CGFloat? = nil,
     numberTrailing: CGFloat? = nil, signWidth: CGFloat = 0, showsMarks: Bool = true,
-    lineStyles: [LineStyle] = []
+    lineStyles: [LineStyle] = [], trailingMark: TrailingMark? = nil
   ) {
     precondition(numberColumns == 1 || numberColumns == 2, "番号の列は 1 か 2")
     self.showsMinimap = showsMinimap
@@ -41,6 +44,7 @@ public struct SurfacePresentation: Equatable {
     self.signWidth = signWidth
     self.showsMarks = showsMarks
     self.lineStyles = lineStyles
+    self.trailingMark = trailingMark
   }
 
   /// コードの面の構成。
@@ -60,5 +64,22 @@ public struct LineStyle: Equatable {
     self.background = background
     self.sign = sign
     self.signColor = signColor
+  }
+}
+
+/// 行の右端の印——大きさ（pt）・本文の区画の右端からの距離（pt）と、通常とポインタが印の上にあるときの絵。印は行の縦の
+/// 中央に置く。絵は面が外観と倍率で描くので、名前つき（dynamic）の色で描く。絵は同一性で比べるので、同じ見え方には同じ
+/// 参照を渡す。
+public struct TrailingMark: Equatable {
+  public var size: CGSize
+  public var inset: CGFloat
+  public var image: NSImage
+  public var hoveredImage: NSImage
+
+  public init(size: CGSize, inset: CGFloat, image: NSImage, hoveredImage: NSImage) {
+    self.size = size
+    self.inset = inset
+    self.image = image
+    self.hoveredImage = hoveredImage
   }
 }

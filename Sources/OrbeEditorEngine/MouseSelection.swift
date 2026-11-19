@@ -20,9 +20,10 @@ import simd
 /// しない。
 ///
 /// 押下は、押した点の行き先（→ `SurfaceTarget`）で振り分ける。本文・行番号の列・絵の差し込みの、ほかに当たらない所は
-/// 本文の場、入力欄はその場で選ぶ（どちらも主をその場にする）。絵の差し込みの選べる文は、その文の選択になる（主を
-/// 絵の差し込みの文にする。ドラッグは同じ自動スクロールで伸びる）。押せる場所は押下を数え、同じ押せる場所で離せば載せる
-/// 側へ知らせる（主は変えない。選べる文に重なる押せる場所は、4pt を越えてドラッグすれば選択になる）。
+/// 本文の場、入力欄はその場で選ぶ（どちらも主をその場にする）。行の右端の印は、同じ印の上で離せば並びの受け手へ知らせる
+/// （選択も主も変えない）。絵の差し込みの選べる文は、その文の選択になる（主を絵の差し込みの文にする。ドラッグは
+/// 同じ自動スクロールで伸びる）。押せる場所は押下を数え、同じ押せる場所で離せば載せる側へ知らせる（主は変えない。
+/// 選べる文に重なる押せる場所は、4pt を越えてドラッグすれば選択になる）。
 @MainActor
 final class MouseSelection: NSObject {
   weak var surface: MetalTextSurface?
@@ -39,6 +40,8 @@ final class MouseSelection: NSObject {
     case zoneText
     /// 押せる場所を押している。
     case button(ZonePress)
+    /// 行の右端の印を押している。
+    case trailingMark(TrailingMarkLine)
   }
 
   /// 押している押せる場所——絵の差し込み・id・押した位置（窓の座標）と、重なる選べる文（まとまりと位置）。
@@ -104,6 +107,12 @@ final class MouseSelection: NSObject {
       surface.beginZoneSelection(
         entry, text: text, offset: offset, clicks: event.clickCount,
         extending: event.modifierFlags.contains(.shift))
+    case .trailingMark(let line):
+      cancel()
+      optionPress = nil
+      guard !control else { return }
+      begin(event, in: view)
+      drag = .trailingMark(line)
     case .button(let entry, let button):
       cancel()
       optionPress = nil
@@ -240,7 +249,7 @@ final class MouseSelection: NSObject {
   func mouseDragged(_ event: NSEvent, in view: NSView) {
     guard let drag, let surface else { return }
     switch drag {
-    case .link: return
+    case .link, .trailingMark: return
     case .candidate(_, let down):
       guard Self.moved(event, from: down) > Self.clickSlop else { return }
       self.drag = nil
@@ -303,14 +312,7 @@ final class MouseSelection: NSObject {
       site?.editor.select(CursorList(Cursor(offset)), reveal: .minimal)
       return
     }
-    if case .button(let press) = drag, let surface {
-      let up = view.convert(event.locationInWindow, from: nil)
-      guard case .button(let entry, let button) = surface.target(at: up),
-        ObjectIdentifier(entry.zone) == press.zone, button.id == press.id
-      else { return }
-      surface.transact { entry.zone.zone(.pressed(press.id)) }
-      return
-    }
+    if releasePress(at: view.convert(event.locationInWindow, from: nil)) { return }
     guard case .link(let url, let down) = drag, let surface else { return }
     guard Self.moved(event, from: down) <= Self.clickSlop,
       surface.link(at: view.convert(event.locationInWindow, from: nil)) == url

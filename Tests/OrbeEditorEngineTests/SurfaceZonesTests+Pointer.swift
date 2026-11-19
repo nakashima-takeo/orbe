@@ -46,14 +46,12 @@ extension SurfaceZonesTests {
         ],
         texts: [
           ZoneText(
-            id: "t", string: string,
+            id: "t",
+            content: ZoneStyledText([(string, ZoneTextStyle(font: font, color: ThreadZone.ink))]),
             lines: [
               ZoneSelectableLine(
                 origin: CGPoint(x: 10, y: 20),
-                range: NSRange(location: 0, length: string.utf16.count),
-                styles: [
-                  ZoneTextStyle(length: string.utf16.count, font: font, color: ThreadZone.ink)
-                ])
+                range: NSRange(location: 0, length: string.utf16.count))
             ])
         ])
     }

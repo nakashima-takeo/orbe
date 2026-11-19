@@ -49,14 +49,41 @@ public enum ZoneElement {
   case field(ZoneField)
 }
 
-/// 角の丸い矩形（円は、半径が辺の半分の箱）。塗り・枠線・影はどれも省ける。枠線は箱の内側に引く。影は箱の外へはみ
-/// 出してよい（CSS の box-shadow と同じく、絵の差し込みの外の行にも落ちる）。
+/// 角の丸い矩形（円は、半径が辺の半分の箱）。角の半径は角ごとに持てる。塗り・枠線・影はどれも省ける。枠線は箱の内側に
+/// 引く。影は箱の外へはみ出してよい（CSS の box-shadow と同じく、絵の差し込みの外の行にも落ちる）。
 public struct ZoneBox {
   public var frame: CGRect
-  public var radius: CGFloat
+  public var radius: Radius
   public var fill: NSColor?
   public var stroke: Stroke?
   public var shadow: Shadow?
+
+  /// 角ごとの半径（どの角も、短い辺の半分を超える分は短い辺の半分に収める）。数の字は 4 つの角に同じ半径。
+  public struct Radius: Equatable, ExpressibleByFloatLiteral, ExpressibleByIntegerLiteral {
+    public var topLeft: CGFloat
+    public var topRight: CGFloat
+    public var bottomRight: CGFloat
+    public var bottomLeft: CGFloat
+
+    public init(topLeft: CGFloat, topRight: CGFloat, bottomRight: CGFloat, bottomLeft: CGFloat) {
+      self.topLeft = topLeft
+      self.topRight = topRight
+      self.bottomRight = bottomRight
+      self.bottomLeft = bottomLeft
+    }
+
+    /// 上の 2 角と下の 2 角。
+    public init(top: CGFloat, bottom: CGFloat) {
+      self.init(topLeft: top, topRight: top, bottomRight: bottom, bottomLeft: bottom)
+    }
+
+    public init(_ radius: CGFloat) {
+      self.init(top: radius, bottom: radius)
+    }
+
+    public init(floatLiteral value: Double) { self.init(CGFloat(value)) }
+    public init(integerLiteral value: Int) { self.init(CGFloat(value)) }
+  }
 
   public struct Stroke {
     public var color: NSColor
@@ -82,7 +109,7 @@ public struct ZoneBox {
   }
 
   public init(
-    frame: CGRect, radius: CGFloat = 0, fill: NSColor? = nil, stroke: Stroke? = nil,
+    frame: CGRect, radius: Radius = 0, fill: NSColor? = nil, stroke: Stroke? = nil,
     shadow: Shadow? = nil
   ) {
     self.frame = frame
@@ -117,52 +144,98 @@ public struct ZoneTextLine {
   }
 }
 
-/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。絵の差し込みの中で一意）と文と、文を描く行の列。
+/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。絵の差し込みの中で一意）と、見え方つきの文と、文を
+/// 描く行の列。
 public struct ZoneText {
   public var id: AnyHashable
-  public var string: String
+  public var content: ZoneStyledText
   public var lines: [ZoneSelectableLine]
 
-  public init(id: AnyHashable, string: String, lines: [ZoneSelectableLine]) {
+  public init(id: AnyHashable, content: ZoneStyledText, lines: [ZoneSelectableLine]) {
     self.id = id
-    self.string = string
+    self.content = content
     self.lines = lines
   }
 }
 
-/// 字の見え方を、文の範囲の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの左右の字をその幅ずつ
-/// 押し出す（CSS のインラインの padding）。地は、連なりの字の x 範囲を余白の幅ずつ広げて置く（→ `ZoneTextLayout.Line`
-/// の `ground(_:)`）。先頭の余白は段落の向きの始まりの側（左から右の段落では左、右から左の段落では右）に、末尾の余白は
-/// その反対の側に付く。余白は組版で 1 つにまとまる字の塊の外に付き、絵文字や結合文字を割らない。ただし、余白に接する
-/// 字の塊にタイ語の ำ やラオ語の ຳ（1 字を 2 つのグリフで描く字）が入ると、塊の中にも余白の幅の隙間ができる。折り返しで
-/// 割れた側には付かない（→ `ZoneTextLayout.styles(_:in:)`）。
-public struct ZoneTextStyle: Equatable {
-  public var length: Int
-  public var font: NSFont
+/// 見え方つきの文——字の連なりを、見え方とともに先頭から順に足して作る。見え方の長さは足した字の連なりの長さで決まるので、
+/// 見え方は文の全部を、余りも重なりもなく覆う。どのスレッドへも渡せる。
+public struct ZoneStyledText: Equatable, Sendable {
+  public private(set) var string = ""
+  /// 見え方（文の先頭から順に。長さは足した字の連なりの UTF-16 の長さ）。
+  public private(set) var styles: [ZoneTextStyle] = []
+
+  public init() {}
+
+  /// 字の連なりと見え方の組を、順に足したもの。
+  public init(_ runs: [(String, ZoneTextStyle)]) {
+    for (string, style) in runs { append(string, style) }
+  }
+
+  /// 字の連なり `string` を見え方 `style` で後ろに足す。
+  public mutating func append(_ string: String, _ style: ZoneTextStyle) {
+    var style = style
+    style.length = string.utf16.count
+    self.string += string
+    styles.append(style)
+  }
+
+  /// 文は UTF-16 の単位で比べる（String の == は正準等価で比べ、字の並びの違う文を同じとみなす）。
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.styles == rhs.styles && lhs.string.utf16.elementsEqual(rhs.string.utf16)
+  }
+}
+
+/// 字の見え方。見え方つきの文の中で、文の先頭から順に `length` 単位（UTF-16）ずつ当てる。余白（pt）は連なりの左右の字を
+/// その幅ずつ押し出す（CSS のインラインの padding）。余白のある見え方は、周りの文と独立した向きのかたまりとして並び、先頭の余白は
+/// かたまりの向きの始まりの側に、末尾の余白はその反対の側に付く——右から左の字のコードでも、余白はコードの外に出る。
+/// 地は、余白を含めたかたまりの x 範囲に置く（→ `ZoneTextLayout.Line.spans(of:)`）。折り返しで割れた側と、改行で割れた
+/// 側には余白が付かない。
+///
+/// 字体は CTFont で持ち（載せる側の NSFont は、ここで受けるときに CTFont として持つ）、値はどのスレッドへも渡せる。
+public struct ZoneTextStyle: Equatable, Sendable {
+  /// 当てる長さ（UTF-16 の単位。見え方つきの文に足すときに決まる）。
+  public internal(set) var length = 0
+  public var font: CTFont {
+    get { typeface.font }
+    set { typeface = Typeface(font: newValue) }
+  }
   public var color: NSColor
   public var leadingPadding: CGFloat
   public var trailingPadding: CGFloat
+  private var typeface: Typeface
 
-  public init(length: Int, font: NSFont, color: NSColor, padding: CGFloat = 0) {
-    self.length = length
-    self.font = font
+  public init(font: NSFont, color: NSColor, padding: CGFloat = 0) {
+    self.typeface = Typeface(font: font as CTFont)
     self.color = color
     self.leadingPadding = padding
     self.trailingPadding = padding
   }
+
+  /// 余白を外した見え方（行を割る位置を探す段落を組む）。
+  var bare: ZoneTextStyle {
+    var style = self
+    style.leadingPadding = 0
+    style.trailingPadding = 0
+    return style
+  }
+
+  /// 字体。Core Text は字体のオブジェクト（CTFont・CTFontDescriptor）を複数のスレッドから同時に使えると保証する
+  /// （CTFont は不変で、変える API が無い）。SDK は CTFont を Sendable と宣言しないので、検査を外すのはこの型だけにする。
+  private struct Typeface: Equatable, @unchecked Sendable {
+    let font: CTFont
+  }
 }
 
-/// 選べる字の行——まとまりの文の範囲 `range` を、基線の左端 `origin` から描く（折り返さない）。字はまとまりの文から引く
-/// （文の正は 1 か所）。行は、まとまりの文の中で範囲を含む段落の向きで組む（→ `ZoneTextLayout.Line`）。
+/// 選べる字の行——まとまりの文の範囲 `range` を、基線の左端 `origin` から描く（折り返さない）。字と見え方はまとまりから
+/// 引く（文の正は 1 か所）。行は、まとまりの文の中で範囲を含む段落を組んだものから切り出す（→ `ZoneTextLayout.lines(of:)`）。
 public struct ZoneSelectableLine {
   public var origin: CGPoint
   public var range: NSRange
-  public var styles: [ZoneTextStyle]
 
-  public init(origin: CGPoint, range: NSRange, styles: [ZoneTextStyle]) {
+  public init(origin: CGPoint, range: NSRange) {
     self.origin = origin
     self.range = range
-    self.styles = styles
   }
 }
 

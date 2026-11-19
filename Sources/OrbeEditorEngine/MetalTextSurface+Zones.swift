@@ -65,7 +65,7 @@ extension MetalTextSurface {
     let (material, hits) = painter.paint(
       entry.picture,
       ZonePainter.Look(appearance: textView.effectiveAppearance, space: space, scale: scale),
-      serial: { fieldSite(for: $0).serial })
+      reusing: entry.hits, serial: { fieldSite(for: $0).serial })
     orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)))
     entry.material = material
     entry.hits = hits
@@ -110,7 +110,8 @@ extension MetalTextSurface {
   /// 取引の終わりに、絵の差し込みを今に合わせる（取引の中）——本文の区画の幅が変わっていれば絵を問い直し、どの
   /// 絵の差し込みも描いていない入力欄の場を閉じ（主なら本文が主になる）、高さが変わった絵の差し込みで並びを組み直す
   /// （閉じた場の知らせの中で描き直した高さも同じ取引に入る）。絵の差し込みを写したか外したなら、どの材料も指さない
-  /// 画像の覚えを手放す。
+  /// 画像の覚えを手放し、スクロールを共にする相手の面の空きを揃える（相手の取引になり、2 面は一緒に出すので同じコマに
+  /// 揃う）。
   func settleZones() {
     guard !zones.isEmpty || !fields.isEmpty || zonesRepainted else { return }
     let width = zoneWidth
@@ -129,7 +130,10 @@ extension MetalTextSurface {
     if zoneHeightsChanged { applyZoneHeights() }
     if zonesRepainted {
       zonesRepainted = false
-      painter.keep(images: Set(zones.values.flatMap { $0.material.images.map(\.pixels.key) }))
+      partner?.settleGaps()
+      let marks = [trailingMarkLooks?.normal, trailingMarkLooks?.hovered].compactMap { $0 }
+      painter.keep(
+        images: Set((zones.values.map(\.material) + marks).flatMap { $0.images.map(\.pixels.key) }))
     }
   }
 
@@ -186,16 +190,18 @@ extension MetalTextSurface {
 
   // MARK: - 押せる場所のホバー
 
-  /// ポインタ（view の座標。view の外なら nil）の下の押せる場所へホバーを移し、出入りを載せる側へ知らせる。
+  /// ポインタ（view の座標。view の外なら nil）の下の行へ行の右端の印を、押せる場所へホバーを移し、押せる場所の出入りを
+  /// 載せる側へ知らせる。移す間に起きた確定はポインタを引き直さない（今のポインタで引いている最中なので）。
   func hover(at point: CGPoint?) {
     guard !hovering else { return }
+    hovering = true
+    defer { hovering = false }
+    hoverTrailingMark(at: point)
     var next: HoveredButton?
     if let point, case .button(let entry, let button) = target(at: point) {
       next = HoveredButton(zone: ObjectIdentifier(entry.zone), id: button.id)
     }
     guard next != hoveredButton else { return }
-    hovering = true
-    defer { hovering = false }
     let previous = hoveredButton
     hoveredButton = next
     if let previous { zones[previous.zone]?.zone.zone(.exited(previous.id)) }
@@ -205,7 +211,8 @@ extension MetalTextSurface {
   /// 窓の今のポインタの位置でホバーとポインタの形を引き直す（スクロール・並び・載せる側が描いた絵が変わり、押せる場所が
   /// ポインタの下を動いた）。
   func refreshPointer() {
-    guard rows.hasZones || hoveredButton != nil else { return }
+    guard rows.hasZones || hoveredButton != nil || showsTrailingMarks || trailingMarkHover != nil
+    else { return }
     textView.refreshPointer()
   }
 }

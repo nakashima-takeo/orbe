@@ -1,9 +1,9 @@
 import Foundation
 import OrbeEditorCore
 
-/// 面の縦の並び——文書の行と、行の境ごとの差し込みの塊（差し込んだ行の列か、絵の差し込み）。行 ↔ y の
-/// 式はここにだけあり、描画・スクロールの範囲・面のスクロール操作・当たり・IME の矩形・ドラッグ・俯瞰がどれもこれを
-/// 呼ぶ。
+/// 面の縦の並び——文書の行と、行の境ごとの差し込みの塊（差し込んだ行の列か、絵の差し込みか、相手と同じ高さの空き）。
+/// 行 ↔ y の式はここにだけあり、描画・スクロールの範囲・面のスクロール操作・当たり・IME の矩形・ドラッグ・俯瞰がどれも
+/// これを呼ぶ。
 ///
 /// 文書の行 `r` の上端は `r × 行高 + （r より上の塊の高さの合計）`。塊は境の昇順に並び、高さの累積を持つので、行 ↔ y は
 /// 塊の数の対数で引ける。差し込みが無ければどの式も `行 × 行高` と同じ浮動小数の計算になる（差し込みの無い面の位置と
@@ -12,16 +12,18 @@ import OrbeEditorCore
 /// 文書の行の区間の見え方（行の型と、2 列の面の左の列の「もう一方の番号」）も並びと一緒に持ち、差し込みの境と同じ規則で
 /// 面自身の編集に追従させる。
 ///
-/// 値は main だけが作り変え（置く・面自身の編集でずらす・絵の差し込みを測り直す）、描く材料と一緒に描画スレッドへ渡す。
-/// 描画スレッドは引き取った材料の版の並びで描く。
+/// 値は main だけが作り変え（置く・面自身の編集でずらす・絵の差し込みを測り直す・相手と同じ高さの空きを揃える）、描く
+/// 材料と一緒に描画スレッドへ渡す。描画スレッドは引き取った材料の版の並びで描く。
 ///
 /// y を返す式は `scale` を取り、装置の画素（pt × 倍率）でも同じ式で引ける（描画スレッドは px で、main は pt で引く）。
 struct RowLayout: Sendable {
-  /// 塊の中身（差し込んだ行の列か、絵の差し込み）。絵の差し込みは載せる側の値の同一性で持ち、絵の差し込みそのものと、
-  /// それが返した絵（`ZonePicture`）は main だけが持つ（描く材料は材料の箱の `zones`）。
+  /// 塊の中身（差し込んだ行の列か、絵の差し込みか、相手と同じ高さの空き）。絵の差し込みは載せる側の値の同一性で持ち、
+  /// 絵の差し込みそのものと、それが返した絵（`ZonePicture`）は main だけが持つ（描く材料は材料の箱の `zones`）。
   enum Content: Sendable {
     case lines([InsertedLine])
     case zone(ObjectIdentifier)
+    /// スクロールを共にする相手の面の絵の差し込み（同一性）と同じ高さの空き。
+    case gap(ObjectIdentifier)
   }
 
   /// 縦の位置にあるもの——文書の行か、塊。
@@ -37,8 +39,11 @@ struct RowLayout: Sendable {
   private(set) var contents: [Content] = []
   /// 塊 `i` より前の塊の高さの合計（`prefix[i]`。要素は塊の数 + 1）。
   private var prefix: [Double] = [0]
-  /// 絵の差し込みを持つか。
+  /// 絵の差し込みを持つか・相手と同じ高さの空きを持つか。
   private(set) var hasZones = false
+  private(set) var hasGaps = false
+  /// 行の右端の印を出せる行（区間か差し込んだ行）を持つか。
+  private(set) var hasTrailingMarks = false
   /// 絵の差し込みの同一性 → 塊の番号。
   private var zoneBlocks: [ObjectIdentifier: Int] = [:]
   /// 文書の行の区間（始まりの行の昇順）。
@@ -52,6 +57,9 @@ struct RowLayout: Sendable {
   init(lineHeight: Double) {
     self.lineHeight = lineHeight
   }
+
+  /// 項目と段の境のわずかに上を境とみなす許容（行高に対する割合）。
+  private static let slack = 1e-9
 
   /// 塊 1 つ——境（文書の行 `line` の前）・高さ（pt）・中身。
   struct Block {
@@ -74,6 +82,16 @@ struct RowLayout: Sendable {
       if case .zone(let id) = content { zoneBlocks[id] = index }
     }
     hasZones = !zoneBlocks.isEmpty
+    hasGaps = contents.contains {
+      if case .gap = $0 { return true }
+      return false
+    }
+    hasTrailingMarks =
+      spans.contains(where: \.allowsTrailingMark)
+      || contents.contains {
+        guard case .lines(let lines) = $0 else { return false }
+        return lines.contains { $0.allowsTrailingMark && $0.line != nil }
+      }
     settleNumbers()
     version += 1
   }
@@ -108,8 +126,11 @@ struct RowLayout: Sendable {
     Double(boundaries[index]) + prefix[index] / lineHeight
   }
 
-  /// y にある項目。文書の行は範囲に収めない——先頭より上は負の行、最後の項目より下は行数以上の行。
+  /// y にある項目。文書の行は範囲に収めない——先頭より上は負の行、最後の項目より下は行数以上の行。項目の上端のわずかに
+  /// 上は、その項目とみなす——項目の上端に置いた y が、行と y の間の丸め（表示の単位との行き来・端数の高さの累積）で
+  /// 上の項目に化けない。y から項目・行・位置を引く道はどれもここを通る。
   func item(atY y: Double, scale: Double = 1) -> Item {
+    let y = y + lineHeight * scale * Self.slack
     var low = 0
     var high = boundaries.count
     while low < high {
@@ -200,15 +221,14 @@ struct RowLayout: Sendable {
 
   /// 縦の位置 `y` にある所を、縦の並びの中の位置で（段の粒度。`lineCount` 行の文書）。文書の行の中ならその行の段 0（範囲に
   /// 収める）、塊の中なら塊の下の文書の行（最終行の後の塊なら行数）と、その上端からの負の段。段の境のわずかに上は境の段と
-  /// みなす——位置の上端（`unit(of:lineCount:)`）に置いた y が、表示の単位から y への丸めで上の段に化けない。
+  /// みなす（`item(atY:)` と同じ許容）。
   func position(atY y: Double, lineCount: Int) -> RowPosition {
-    let y = y + lineHeight * 1e-9
     switch item(atY: y) {
     case .line(let line):
       return RowPosition(line: min(max(0, line), max(0, lineCount - 1)))
     case .block(let index):
       let line = boundaries[index]
-      let offset = (y / lineHeight - unit(ofLine: line)).rounded(.down)
+      let offset = (y / lineHeight + Self.slack - unit(ofLine: line)).rounded(.down)
       return RowPosition(line: line, offset: Int(offset))
     }
   }
@@ -288,6 +308,29 @@ struct RowLayout: Sendable {
     return newline - 1
   }
 
+  // MARK: - 行の右端の印
+
+  /// y にある、印を出せる行（`lineCount` 行の文書。出せない行なら nil）。
+  func trailingMarkSpot(atY y: Double, lineCount: Int) -> TrailingMarkSpot? {
+    guard hasTrailingMarks else { return nil }
+    switch item(atY: y) {
+    case .line(let line):
+      guard (0..<lineCount).contains(line), let span = span(containing: line),
+        spans[span].allowsTrailingMark
+      else { return nil }
+      return TrailingMarkSpot(
+        row: .document(line), line: .document(line), top: self.y(ofLine: line))
+    case .block(let index):
+      guard case .lines(let lines) = contents[index], !lines.isEmpty else { return nil }
+      let top = top(ofBlock: index)
+      let offset = min(max(0, Int(((y - top) / lineHeight).rounded(.down))), lines.count - 1)
+      guard lines[offset].allowsTrailingMark, let source = lines[offset].line else { return nil }
+      return TrailingMarkSpot(
+        row: .inserted(block: index, line: offset), line: .source(source),
+        top: top + Double(offset) * lineHeight)
+    }
+  }
+
   // MARK: - 絵の差し込み
 
   /// 絵の差し込み `id` の塊の番号（無ければ nil）。
@@ -338,4 +381,17 @@ struct RowLayout: Sendable {
     }
     settledNumberMax = result
   }
+}
+
+/// 行の右端の印を描く行——文書の行か、塊 `block` の中の `line` 行目の差し込んだ行。
+enum TrailingMarkRow: Equatable, Sendable {
+  case document(Int)
+  case inserted(block: Int, line: Int)
+}
+
+/// 印を出せる行 1 つ——描く行・押下で知らせる行・行の上端（pt）。
+struct TrailingMarkSpot {
+  var row: TrailingMarkRow
+  var line: TrailingMarkLine
+  var top: Double
 }

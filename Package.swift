@@ -157,8 +157,9 @@ let package = Package(
       dependencies: ["OrbeSound"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
-    // テストの作業ディレクトリとテストの境界（`TestScratch`）。全テストターゲットが共有する。SwiftPM にテスト専用の
-    // 非テストターゲットの種別は無いので通常ビルドにも入るが、製品にはリンクされない。
+    // テストの作業ディレクトリとテストの境界（`TestScratch`）・ポインタを差し替えられる窓（`PointerWindow`）。全テスト
+    // ターゲットが共有する。SwiftPM にテスト専用の非テストターゲットの種別は無いので通常ビルドにも入るが、製品には
+    // リンクされない。
     .target(
       name: "OrbeTestSupport",
       path: "Tests/OrbeTestSupport",

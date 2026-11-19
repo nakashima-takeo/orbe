@@ -6,7 +6,8 @@ import OrbeEditorCore
 struct BoxInstance {
   var quad: SIMD4<Float>
   var box: SIMD4<Float>
-  var radius: Float
+  /// 角ごとの半径（左上・右上・右下・左下。px）。
+  var radius: SIMD4<Float>
   var strokeWidth: Float
   var sigma: Float
   var shadowOffset: Float
@@ -70,27 +71,35 @@ extension FrameBuilder {
     }
   }
 
+  /// 行の右端の印——ポインタの下の、印を出せる行の右端（本文の区画の右端から距離を空けて）の、行の縦の中央に描く。印の
+  /// 画像は本文の字の上の層（`markImages`）に積む——当たりでも印が字より先に取るので、見えている順と押せる順を揃える。
+  func drawTrailingMark(_ source: Source, _ c: Context) {
+    guard let mark = source.material.trailingMark else { return }
+    let g = c.g
+    let s = g.scale
+    let top: Double
+    switch mark.row {
+    case .document(let row):
+      guard row < source.material.content?.text.lineCount ?? 0 else { return }
+      top = g.rowTop(row)
+    case .inserted(let block, let line):
+      guard block < g.rows.count else { return }
+      top = g.insertedTop(block: block, line: line)
+    }
+    drawPicture(
+      mark.look,
+      at: (
+        (g.textRight - Double(mark.inset + mark.size.width) * s).rounded(),
+        top + ((g.lineHeight - Double(mark.size.height) * s) / 2).rounded()
+      ), images: &markImages, source, c)
+  }
+
   private func drawZone(
     _ zone: ZoneMaterial, id: ObjectIdentifier, top: Double, _ source: Source, _ c: Context
   ) {
     let s = c.g.scale
     let left = c.g.column
-    for box in zone.boxes { zoneBoxes.append(Self.instance(box, left: left, top: top, scale: s)) }
-    let g = c.g
-    for image in zone.images {
-      let x = (left + Double(image.frame.minX) * s).rounded()
-      let y = (top + Double(image.frame.minY) * s).rounded()
-      // 画像は本文の区画の切り取りの中に描く。その外の画像は地図に入れない（見えている画像の場所を取らない）。
-      guard x < g.textRight, x + Double(image.pixels.width) > g.column, y < g.height,
-        y + Double(image.pixels.height) > g.top,
-        let entry = source.zones.images.entry(image.pixels)
-      else { continue }
-      Self.append(
-        GlyphInstance(
-          position: SIMD2(Float(x), Float(y)), size: SIMD2(Float(entry.width), Float(entry.height)),
-          uv: SIMD2(Float(entry.x), Float(entry.y)), color: 0xFFFF_FFFF),
-        to: &zoneImages, page: entry.page)
-    }
+    drawPicture(zone, at: (left, top), images: &zoneImages, source, c)
     if let selection = source.material.zoneSelection, selection.zone == id {
       let ink = selection.focused ? c.palette.selection : c.palette.inactiveSelection
       for rect in selection.rects {
@@ -104,6 +113,35 @@ extension FrameBuilder {
             radius: 0, kind: 0))
       }
     }
+    for field in zone.fields {
+      guard let material = source.material.fields[field.serial] else { continue }
+      drawField(field, material, origin: (left, top), source, c)
+    }
+  }
+
+  /// 絵の箱・画像・字を、左上 `origin`（px）に置く。画像は `images`（画像の地図の頁ごと）に積む。
+  private func drawPicture(
+    _ zone: ZoneMaterial, at origin: (left: Double, top: Double),
+    images: inout [[GlyphInstance]], _ source: Source, _ c: Context
+  ) {
+    let (left, top) = origin
+    let g = c.g
+    let s = g.scale
+    for box in zone.boxes { zoneBoxes.append(Self.instance(box, left: left, top: top, scale: s)) }
+    for image in zone.images {
+      let x = (left + Double(image.frame.minX) * s).rounded()
+      let y = (top + Double(image.frame.minY) * s).rounded()
+      // 画像は本文の区画の切り取りの中に描く。その外の画像は地図に入れない（見えている画像の場所を取らない）。
+      guard x < g.textRight, x + Double(image.pixels.width) > g.column, y < g.height,
+        y + Double(image.pixels.height) > g.top,
+        let entry = source.zones.images.entry(image.pixels)
+      else { continue }
+      Self.append(
+        GlyphInstance(
+          position: SIMD2(Float(x), Float(y)), size: SIMD2(Float(entry.width), Float(entry.height)),
+          uv: SIMD2(Float(entry.x), Float(entry.y)), color: 0xFFFF_FFFF),
+        to: &images, page: entry.page)
+    }
     for run in zone.runs {
       let font = c.fonts.id(instance: run.font)
       let baseline = top + Double(run.baseline) * s
@@ -113,10 +151,6 @@ extension FrameBuilder {
           Glyph(font: font, glyph: run.glyphs[i], x: left + Double(run.xs[i]) * s, baseline: y),
           run.ink, .text, c)
       }
-    }
-    for field in zone.fields {
-      guard let material = source.material.fields[field.serial] else { continue }
-      drawField(field, material, origin: (left, top), source, c)
     }
   }
 

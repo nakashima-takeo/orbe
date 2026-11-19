@@ -34,14 +34,14 @@ extension SurfaceZonesTests {
         ],
         texts: [
           ZoneText(
-            id: "t", string: "redgreen",
+            id: "t",
+            content: ZoneStyledText([
+              ("red", ZoneTextStyle(font: font, color: Self.red)),
+              ("green", ZoneTextStyle(font: font, color: Self.green)),
+            ]),
             lines: [
               ZoneSelectableLine(
-                origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8),
-                styles: [
-                  ZoneTextStyle(length: 3, font: font, color: Self.red),
-                  ZoneTextStyle(length: 5, font: font, color: Self.green),
-                ])
+                origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8))
             ])
         ])
     }
@@ -57,7 +57,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(runs.map(\.glyphs.count), [3, 5, 3, 5])
   }
 
-  /// 選べる字の行の余白は、行頭の見え方なら字を右へ寄せ（当たりの行の左端も）、行の途中なら前後の字を押し出す。
+  /// 選べる字の行の余白は、行頭の見え方なら字を右へ寄せ、行の途中なら前後の字を押し出す。余白の上はコードの端に当たる。
   func testPaddingPushesTheTextOfASelectableLine() throws {
     let opened = try hostedRows()
     let surface = opened.surface
@@ -69,14 +69,14 @@ extension SurfaceZonesTests {
           height: 30,
           texts: [
             ZoneText(
-              id: "t", string: "code after",
+              id: "t",
+              content: ZoneStyledText([
+                ("code", ZoneTextStyle(font: mono, color: Self.red, padding: padding)),
+                (" after", ZoneTextStyle(font: font, color: Self.green)),
+              ]),
               lines: [
                 ZoneSelectableLine(
-                  origin: CGPoint(x: 10, y: 14), range: NSRange(location: 0, length: 10),
-                  styles: [
-                    ZoneTextStyle(length: 4, font: mono, color: Self.red, padding: padding),
-                    ZoneTextStyle(length: 6, font: font, color: Self.green),
-                  ])
+                  origin: CGPoint(x: 10, y: 14), range: NSRange(location: 0, length: 10))
               ])
           ])
       }
@@ -97,7 +97,8 @@ extension SurfaceZonesTests {
     XCTAssertEqual(
       first(pushed, Self.green), first(bare, Self.green) + 8, accuracy: 1e-4, "後ろの字は両側の余白の分")
     let line = try XCTUnwrap(surface.zones[ObjectIdentifier(padded)]?.hits.lines.first)
-    XCTAssertEqual(line.origin.x, 14, "当たりの行の左端も余白の分")
+    XCTAssertEqual(line.offset(atX: 12), 0, "余白の上はコードの始まりに当たる")
+    XCTAssertEqual(line.x(of: 0), 10, accuracy: 1e-4, "コードの始まりのキャレットは余白の外")
   }
 
   /// 画像は辺が地図の上限（`ImageAtlas.maximumSide`）までなら描き、超えれば描かない。描き直しをまたいで同じ画像は同じ
@@ -186,6 +187,31 @@ extension SurfaceZonesTests {
     let top = surface.config.topInset + CGFloat(surface.rows.top(ofBlock: 0))
     let x = surface.surfaceLayout.text.minX - 2
     XCTAssertLessThan(shot.rgb(x, top + 32)[0], 250, "箱の左下の外の行番号の列に影")
+  }
+
+  /// 箱の角の半径は角ごとに効く——上の 2 角だけ丸い箱は、上の角の点が塗られず、下の角の点は塗られる。
+  func testBoxCornersTakeTheirOwnRadius() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let zone = PictureZone { _ in
+      ZonePicture(
+        height: 40,
+        elements: [
+          .box(
+            ZoneBox(
+              frame: CGRect(x: 20, y: 0, width: 100, height: 40),
+              radius: .init(top: 12, bottom: 0), fill: Self.red))
+        ])
+    }
+    surface.setRows(self.zone(zone, at: 2))
+    let shot = try pixelShot(opened)
+    let top = surface.config.topInset + CGFloat(surface.rows.top(ofBlock: 0))
+    let left = surface.surfaceLayout.text.minX + 20
+    XCTAssertNotEqual(shot.rgb(left + 1, top + 1), [255, 0, 0], "左上は丸い")
+    XCTAssertNotEqual(shot.rgb(left + 99, top + 1), [255, 0, 0], "右上は丸い")
+    XCTAssertEqual(shot.rgb(left + 1, top + 39), [255, 0, 0], "左下は角")
+    XCTAssertEqual(shot.rgb(left + 99, top + 39), [255, 0, 0], "右下は角")
+    XCTAssertEqual(shot.rgb(left + 50, top + 1), [255, 0, 0], "上の辺の中ほどは塗る")
   }
 
   /// 入力欄が主で面に焦点があれば入力欄のキャレットを描き、Esc で本文が主に戻れば消える。
