@@ -48,10 +48,13 @@ final class PrCommentMarkdownTests: OrbeTestCase {
     XCTAssertEqual(blocks[5].text.string, "let a = 1")
   }
 
-  /// 描かない記法は、書かれた字のまま段落になる（表・HTML の段・suggestion のコードブロック）。字は 1 つも欠けない。
+  /// 描かない記法は、書かれた字のまま段落になる（表・HTML の段・suggestion のコードブロック）。字は 1 つも欠けない（日本語の
+  /// 行の後でも）。
   func testUnsupportedSyntaxKeepsItsWrittenText() {
     let table = "| a | b |\n| - | - |\n| 1 | 2 |"
     XCTAssertEqual(PrCommentMarkdown.blocks(table).map(\.text.string), [table])
+    XCTAssertEqual(
+      PrCommentMarkdown.blocks("説明の段落\n\n" + table).map(\.text.string), ["説明の段落", table])
     let suggestion = "```suggestion\nlet b = 2\n```"
     XCTAssertEqual(PrCommentMarkdown.blocks(suggestion).map(\.text.string), [suggestion])
     XCTAssertEqual(
@@ -79,7 +82,8 @@ final class PrCommentMarkdownTests: OrbeTestCase {
   /// web とメールの行き先だけが押せるリンクになり、本文に直接書いた http(s) の URL もリンクになる（インラインコードの中は
   /// ならない）。
   func testOnlyWebAndMailDestinationsBecomeLinks() {
-    XCTAssertTrue(PrCommentMarkdown.blocks("[計算機](file:///Applications/Calculator.app)")[0].links.isEmpty)
+    XCTAssertTrue(
+      PrCommentMarkdown.blocks("[計算機](file:///Applications/Calculator.app)")[0].links.isEmpty)
     XCTAssertTrue(PrCommentMarkdown.blocks("[x](myapp://open)")[0].links.isEmpty)
     let bare = PrCommentMarkdown.blocks("見て https://example.com/a. と `https://example.com/b`")[0]
     XCTAssertEqual(Array(bare.links.values), [URL(string: "https://example.com/a")!])
@@ -116,11 +120,13 @@ final class PrCommentMarkdownTests: OrbeTestCase {
     let rights = numbered.map { block in
       block.markers[0].x
         + ZoneTextLayout.width([
-          ZoneTextRun(block.markers[0].text, font: Theme.Typography.editorPrThreadBody, color: .clear)
+          ZoneTextRun(
+            block.markers[0].text, font: Theme.Typography.editorPrThreadBody, color: .clear)
         ])
     }
     XCTAssertEqual(rights[0], rights[1], accuracy: 0.01)
     XCTAssertEqual(numbered[0].indent, numbered[1].indent)
-    XCTAssertGreaterThanOrEqual(numbered[0].indent - rights[0], Theme.Layout.editorPrBodyListMarkerGap - 0.01)
+    XCTAssertGreaterThanOrEqual(
+      numbered[0].indent - rights[0], Theme.Layout.editorPrBodyListMarkerGap - 0.01)
   }
 }
