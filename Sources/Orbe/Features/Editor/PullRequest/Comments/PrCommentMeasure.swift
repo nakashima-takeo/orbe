@@ -31,14 +31,14 @@ struct PrCommentMeasure: Sendable {
 }
 
 /// 本文の幅ごとに測ったコメントを覚え、無ければ裏で測る（→ code.md の「載せる側の作り方」）。絵を問われた幅の覚えが無い
-/// 間は、ほかの幅で測った同じ本文（仮の行）で組ませ、測り終えたら `done` で描き直させる。覚える幅は最近の数個だけ。
+/// 間は、ほかの幅で測った同じ本文（仮の行）で組ませ、測り終えたら `done` で描き直させる。覚える幅は最近使った数個だけ。
 @MainActor
 final class PrCommentMeasures {
   /// コメントの id と本文。
   typealias Comment = (id: String, body: String)
 
   private var byWidth: [CGFloat: [String: PrCommentMeasure]] = [:]
-  /// 覚えた幅（古い順）。
+  /// 覚えた幅（使った時が古い順）。
   private var widths: [CGFloat] = []
   /// 裏で測っている幅と、測り終えた後に測りたい幅。
   private var measuring: CGFloat?
@@ -54,6 +54,9 @@ final class PrCommentMeasures {
   /// 幅 `width` で組むコメント `comments` の測った本文。覚えに無いコメントは裏で測り始め、その間はほかの幅で測った同じ本文を
   /// 返す（どの幅でも測っていなければ返さない）。返した値の幅が `width` と違うことがある。
   func measures(_ comments: [Comment], width: CGFloat) -> [String: PrCommentMeasure] {
+    if widths.last != width, let used = widths.firstIndex(of: width) {
+      widths.append(widths.remove(at: used))
+    }
     let known = byWidth[width] ?? [:]
     let missing = comments.filter { known[$0.id]?.body != $0.body }
     guard !missing.isEmpty else { return known }
