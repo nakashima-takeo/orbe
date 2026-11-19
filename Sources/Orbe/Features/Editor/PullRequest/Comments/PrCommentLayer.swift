@@ -61,12 +61,18 @@ final class PrCommentLayer {
     }
     placed = (ends, shown)
     let language = language()
-    let visible = (state.threads(at: ends.head) ?? [])
+    let read = state.threads(at: ends.head)
+    if let read {
+      let ids = Set(read.map(\.id))
+      threads = threads.filter { ids.contains($0.key) }
+    }
+    // 同じ行（並びの同じ所）の差し込みは列の順に上から並ぶので、側を問わず最初のコメントの時刻の順に積み、欄はその後に積む。
+    let visible = (read ?? [])
       .compactMap { thread in thread.line.map { (thread, $0) } }
       .filter { $0.0.path == path }
       .sorted { a, b in
-        (a.0.side == .old ? 0 : 1, a.1, a.0.comments.first?.createdAt ?? .distantPast, a.0.id)
-          < (b.0.side == .old ? 0 : 1, b.1, b.0.comments.first?.createdAt ?? .distantPast, b.0.id)
+        (a.0.comments.first?.createdAt ?? .distantPast, a.0.id)
+          < (b.0.comments.first?.createdAt ?? .distantPast, b.0.id)
       }
     var notes = DiffRows.Notes()
     for (thread, line) in visible {
@@ -91,12 +97,8 @@ final class PrCommentLayer {
         draft.settle(commentable: notes.commentable)
       }
       draft.zone.language = language
-      let index =
-        notes.zones.lastIndex {
-          Self.order($0.version, $0.line) <= Self.order(draft.version, draft.line)
-        }.map { $0 + 1 } ?? 0
-      notes.zones.insert(
-        DiffRows.Zone(version: draft.version, line: draft.line, zone: draft.zone), at: index)
+      notes.zones.append(
+        DiffRows.Zone(version: draft.version, line: draft.line, zone: draft.zone))
     }
     return notes
   }
@@ -113,10 +115,6 @@ final class PrCommentLayer {
 
   private static func version(_ side: GitHubDiffSide) -> DiffRows.Version {
     side == .old ? .old : .new
-  }
-
-  private static func order(_ version: DiffRows.Version, _ line: Int) -> (Int, Int) {
-    (version == .old ? 0 : 1, line)
   }
 
   /// スレッド `thread` の絵の差し込み（無ければ作る。初めて見るスレッドは、解決済みなら畳む）。

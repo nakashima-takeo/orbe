@@ -9,7 +9,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: スレッドが別の行の下に出る。印を押しても欄が開かない・焦点が入らない・⌘↵ で書けない。書いた行と
 /// 違う行にコメントが付く（rename の判定が GitHub と食い違うファイルの古い側の行を含む）。2 回押すと同じコメントが 2 つ付く。
-/// 失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。同じ PR の別のタブの書きかけが消える。PR に
+/// 失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。同じ PR の別のタブの書きかけが消える。同じ行の両側のスレッドが時刻の順に並ばない。消えたスレッドの絵の差し込みが層に残り続ける。PR に
 /// push があると書きかけが消える・欄が元の行の番号のまま別の行の下に残る・書き換えられた行へのコメントを古い行の番号で送れる。
 extension EditorDiffTests {
   /// 差し替えの GitHub のレビューのやりとり（テストが書き換える）と、届いた書き込み。
@@ -104,6 +104,50 @@ extension EditorDiffTests {
       spans.filter { $0.line < 4 }.allSatisfy(\.allowsTrailingMark), "4 行は全部が区間の前後 3 行に入る")
     XCTAssertEqual(
       spans.last { $0.line <= 4 }?.allowsTrailingMark, false, "改行の後の空の行は GitHub の diff に無い")
+  }
+
+  /// 文脈の行の古い側と新しい側に付いたスレッドは同じ所に並び、側を問わず最初のコメントの時刻の順に上から置く。
+  func testThreadsOnBothSidesOfOneLineFollowTheirFirstCommentTime() throws {
+    let remote = Remote()
+    let thread = { (id: String, side: GitHubDiffSide, time: TimeInterval) in
+      GitHubPullRequestReview.Thread(
+        id: id, path: "a.txt", side: side, line: 1, isResolved: false, canReply: true,
+        canResolve: true, canUnresolve: false,
+        comments: [
+          .init(
+            id: "C_\(id)", author: "you", body: id, createdAt: Date(timeIntervalSince1970: time),
+            isPending: false)
+        ])
+    }
+    remote.threads = [thread("OLD", .old, 200), thread("NEW", .new, 100)]
+    let (diff, surface) = try commentedDiff(remote)
+    let old = try XCTUnwrap(diff.comments?.zone(thread: "OLD"))
+    let new = try XCTUnwrap(diff.comments?.zone(thread: "NEW"))
+    pumpMain(
+      until: {
+        surface.rows.block(ofZone: ObjectIdentifier(old)) != nil
+          && surface.rows.block(ofZone: ObjectIdentifier(new)) != nil
+      }, "両方のスレッドが置かれる")
+    XCTAssertLessThan(
+      try XCTUnwrap(surface.rows.block(ofZone: ObjectIdentifier(new))),
+      try XCTUnwrap(surface.rows.block(ofZone: ObjectIdentifier(old))), "先に書かれた新しい側のスレッドが上")
+  }
+
+  /// 読み直しでレビューのやりとりから消えたスレッドは、層からも消える。
+  func testAThreadGoneFromTheReviewLeavesTheLayer() throws {
+    let remote = Remote()
+    remote.threads = [
+      GitHubPullRequestReview.Thread(
+        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
+        canResolve: true, canUnresolve: false,
+        comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
+    ]
+    let (diff, _) = try commentedDiff(remote)
+    let layer = try XCTUnwrap(diff.comments)
+    XCTAssertNotNil(layer.zone(thread: "T"))
+    remote.threads = []
+    layer.state.reload()
+    pumpMain(until: { layer.zone(thread: "T") == nil }, "消えたスレッドの絵の差し込みを手放す")
   }
 
   /// 印を押すとその行の下に新しいコメントの欄が開いて主になり、欄の ⌘↵ でその側と行（1 始まり）・diff の先頭のコミットの

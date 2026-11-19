@@ -17,8 +17,8 @@ final class PrCommentDraft {
   /// 行を数えた PR の先頭のコミットと、そのときの両側の本文。
   private(set) var head: String
   private(set) var basis: EditorDiff.SideTexts
-  /// 新しい版へ行を移す計算を裏でしている。
-  private(set) var isMoving = false
+  /// 新しい版へ行を移す計算を裏でしている（絵の差し込みの `isLineMoving`）。
+  var isMoving: Bool { zone.isLineMoving }
   /// 新しい版へ移した行に印を出せるかを、まだ確かめていない。
   private var awaitsCheck = false
 
@@ -38,14 +38,14 @@ final class PrCommentDraft {
   func move(
     to head: String, shown: EditorDiff.SideTexts, limit: LineDiff.Limit, done: @escaping () -> Void
   ) {
-    isMoving = true
+    zone.isLineMoving = true
     let (from, to) = version == .old ? (basis.old, shown.old) : (basis.new, shown.new)
     let line = line
     Task.detached(priority: .userInitiated) { [weak self] in
       let target = Self.target(of: line, from: from, to: to, limit: limit)
       await MainActor.run { [weak self] in
         guard let self else { return }
-        isMoving = false
+        zone.isLineMoving = false
         self.head = head
         basis = shown
         self.line = target.line

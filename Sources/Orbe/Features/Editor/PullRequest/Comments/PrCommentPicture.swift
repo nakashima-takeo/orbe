@@ -8,10 +8,10 @@ import OrbeEditorCore
 /// 時刻と保留中の札・本文）・返信の行（返信欄・「レビューに追加」・「解決して返信」）・失敗の文。畳んだスレッドは頭の帯だけ
 /// （4 角とも丸い）で、「行 N」の後に最初のコメントの書いた人と本文の先頭 1 行を出す。新しいコメントの欄は、箱から頭と
 /// コメントの列を除いた形（返信欄・「レビューに追加」・「取り消す」）で、欄の行が現在の diff に無ければ「レビューに追加」を
-/// 押せない姿にし、その旨の文を失敗の文の上に出す。
+/// 押せない姿にし、その旨の文を失敗の文の上に出す。欄の行を新しい版へ移している間も「レビューに追加」を押せない姿にする。
 @MainActor
 enum PrCommentPicture {
-  /// 中身の外の状態（付いた行・ホバー・書き込みの最中・入力欄が主か・失敗の文・欄の行が現在の diff に無いか・文言の言語）。
+  /// 中身の外の状態（付いた行・ホバー・書き込みの最中・入力欄が主か・失敗の文・欄の行が現在の diff に無いか・欄の行を移しているか・文言の言語）。
   struct State {
     let line: Int
     let hovered: PrCommentControl?
@@ -19,6 +19,7 @@ enum PrCommentPicture {
     let isFieldPrimary: Bool
     let failure: String?
     let isLineGone: Bool
+    let isLineMoving: Bool
     let language: Language
   }
 

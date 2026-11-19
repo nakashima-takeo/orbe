@@ -57,6 +57,10 @@ final class PrCommentZone: SurfaceZone {
   var isLineGone = false {
     didSet { if isLineGone != oldValue { redraw() } }
   }
+  /// 新しいコメントの欄の行を新しい版へ移している（「レビューに追加」を押せない姿にする）。
+  var isLineMoving = false {
+    didSet { if isLineMoving != oldValue { redraw() } }
+  }
   var language: Language = .systemDefault {
     didSet { if language != oldValue { redraw() } }
   }
@@ -147,7 +151,8 @@ final class PrCommentZone: SurfaceZone {
   func picture(width: CGFloat) -> ZonePicture {
     let state = PrCommentPicture.State(
       line: line, hovered: hovered, isWriting: isWriting, isFieldPrimary: isFieldPrimary,
-      failure: failure, isLineGone: isLineGone, language: language)
+      failure: failure, isLineGone: isLineGone,
+      isLineMoving: isLineMoving, language: language)
     let composed: PrCommentPicture.Composed
     switch subject {
     case .draft:

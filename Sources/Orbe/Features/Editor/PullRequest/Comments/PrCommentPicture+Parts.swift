@@ -195,8 +195,10 @@ extension PrCommentPicture {
     let writing = canvas.state.isWriting
     var right = frame.maxX - 1 - Size.editorPrThreadPadX
     for button in buttons.reversed() {
+      let state = canvas.state
       let enabled =
-        !writing && (button != .add || (!field.string.isEmpty && !canvas.state.isLineGone))
+        !writing
+        && (button != .add || (!field.string.isEmpty && !state.isLineGone && !state.isLineMoving))
       right -= self.button(button, enabled: enabled, right: right, top: top, &canvas)
       right -= Size.editorPrThreadGap
     }
