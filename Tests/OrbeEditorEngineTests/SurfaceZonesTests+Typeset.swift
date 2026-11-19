@@ -1,14 +1,17 @@
 import AppKit
-import OrbeEditorCore
 import XCTest
+
+@testable import OrbeEditorCore
 
 @testable import OrbeEditorEngine
 
-/// 面が組んだ選べる文の使い回し——描き直しで組んだ段落を使い回しても、描く材料と当たりの行は組み直したものと同じ。壊れると、
-/// 載せる側が文・字体・余白・行の範囲を変えたのに前の字が描かれたまま残ったり、外観を変えても字の色が前の外観のまま残ったりする。
+/// 面が組んだ選べる文の使い回し——文・色を除いた見え方・行の範囲が前の絵と同じ描き直しでは組んだ段落を使い回し、使い回しても
+/// 描く材料と当たりの行は組み直したものと同じ。壊れると、載せる側が文・字体・余白・行の範囲を変えたのに前の字が描かれたまま
+/// 残ったり、外観を変えても字の色が前の外観のまま残ったり、ホバーのたびに長い本文の段落を組み直して main が止まったりする。
 extension SurfaceZonesTests {
-  /// 選べる文の絵を乱択で作り、文・見え方の字体・余白・長さ・色・行の範囲・行の原点・外観のどれか 1 つを変えて（または何も
-  /// 変えずに）面で描き直すと、描く材料と当たりの行は、その絵を何も覚えていない写しで描いたものと一致する。
+  /// 選べる文の絵を乱択で作り、文、見え方（字体・片側の余白・長さ・色）、行の範囲、行の原点、外観のどれか 1 つを変えて（または
+  /// 何も変えずに）面で描き直すと、描く材料と当たりの行は、その絵を何も覚えていない写しで描いたものと一致する。前後で文と、色を
+  /// 除いた見え方と、行の範囲が同じなら、組んだ段落は前のものが使われ、どれかが違えば組み直される。
   func testRedrawingAZoneTextDrawsTheSameAsPaintingItAfresh() throws {
     let opened = try hostedRows()
     let surface = opened.surface
@@ -22,6 +25,8 @@ extension SurfaceZonesTests {
       picture = Self.picture(content, width: width)
       if round == 0 { surface.setRows(self.zone(zone, at: 2)) } else { surface.redrawZone(zone) }
       let change = Int.random(in: 0...8, using: &random)
+      let before = try XCTUnwrap(surface.zones[ObjectIdentifier(zone)])
+      let (formerText, formerComposition) = (picture.texts[0], Self.composition(before.hits))
       if change == 8 {
         let dark = surface.textView.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
         surface.textView.appearance = NSAppearance(named: dark == .darkAqua ? .aqua : .darkAqua)
@@ -37,8 +42,30 @@ extension SurfaceZonesTests {
       if let difference = Self.difference(entry.material, entry.hits, material, hits) {
         wrong.append("回 \(round)・変えたもの \(change): \(difference)")
       }
+      let reused = formerComposition === Self.composition(entry.hits)
+      if reused != Self.typesetsAlike(formerText, picture.texts[0]) {
+        wrong.append("回 \(round)・変えたもの \(change): 組んだ段落を使い回したか \(reused)")
+      }
     }
     XCTAssertEqual(wrong.prefix(5), [])
+  }
+
+  /// 当たりの表が持つ、選べる文のまとまり "body" の最初の行を組んだ段落。
+  static func composition(_ hits: ZoneHits) -> ZoneComposition? {
+    hits.typeset["body"]?.lines.first?.composition
+  }
+
+  /// まとまり `a` と `b` が同じに組まれるか——文（UTF-16 の単位）と、色を除いた見え方と、行の範囲が同じ。
+  static func typesetsAlike(_ a: ZoneText, _ b: ZoneText) -> Bool {
+    let uncolored = { (text: ZoneText) in
+      text.content.styles.map { style -> ZoneTextStyle in
+        var style = style
+        style.color = .clear
+        return style
+      }
+    }
+    return a.content.string.utf16.elementsEqual(b.content.string.utf16)
+      && uncolored(a) == uncolored(b) && a.lines.map(\.range) == b.lines.map(\.range)
   }
 
   /// 本文の字とインラインコードを乱択で混ぜた見え方つきの文（長さ 0 の見え方も混ぜる）。
@@ -87,8 +114,8 @@ extension SurfaceZonesTests {
       texts: [ZoneText(id: "body", content: content, lines: lines)])
   }
 
-  /// 絵 `picture` の選べる文の 1 つを変えたもの（0: 変えない、1: 色、2: 字体、3: 余白、4: 隣り合う見え方の境、5: 字、
-  /// 6: 幅を変えて測り直した行の範囲、7: 行の原点）。1〜5 は行の範囲を変えない。
+  /// 絵 `picture` の選べる文を、`change` の種類に応じて 1 つだけ変えたもの（0: 変えない、1: 色、2: 字体、3: 先頭か末尾の
+  /// 片側の余白、4: 隣り合う見え方の境、5: 字、6: 幅を変えて測り直した行の範囲、7: 行の原点）。1〜5 は行の範囲を変えない。
   static func changed(_ picture: ZonePicture, _ change: Int, _ random: inout SplitMix)
     -> ZonePicture
   {
@@ -102,8 +129,11 @@ extension SurfaceZonesTests {
     case 2:
       styles[index].font = (styles[index].font == big as CTFont ? body : big) as CTFont
     case 3:
-      styles[index].leadingPadding = styles[index].leadingPadding == 0 ? 3 : 0
-      styles[index].trailingPadding = 2
+      if Bool.random(using: &random) {
+        styles[index].leadingPadding = styles[index].leadingPadding == 0 ? 3 : 0
+      } else {
+        styles[index].trailingPadding = styles[index].trailingPadding == 0 ? 3 : 0
+      }
     case 4:
       if index + 1 < styles.count, lengths[index] > 0 {
         lengths[index] -= 1
