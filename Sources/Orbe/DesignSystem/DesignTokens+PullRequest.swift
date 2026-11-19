@@ -113,6 +113,8 @@ extension Theme.Layout {
   /// 左右の余白 4 と角丸 3。
   static let editorPrBodyBlockGap: CGFloat = 6
   static let editorPrBodyListIndent: CGFloat = 16
+  /// 番号付きの箇条書きの番号（右揃え）と本文の間。
+  static let editorPrBodyListMarkerGap: CGFloat = 6
   static let editorPrBodyQuoteBar: CGFloat = 2
   static let editorPrBodyQuoteGap: CGFloat = 8
   static let editorPrBodyCodePad: CGFloat = 8

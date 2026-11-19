@@ -20,13 +20,18 @@ struct PrCommentMeasure: Sendable {
       blocks: PrCommentMarkdown.blocks(body).map { block in
         Block(
           block: block,
-          lines: ZoneTextLayout.lines(block.text, width: max(1, width - inset(of: block))))
+          lines: ZoneTextLayout.lines(block.text, width: wrapWidth(of: block, in: width)))
       })
   }
 
-  /// 段の字の左端の、本文の左端からの距離（字下げと、コードブロックの余白）。
-  static func inset(of block: PrCommentBlock) -> CGFloat {
-    block.indent + (block.kind == .code ? Theme.Layout.editorPrBodyCodePad * 2 : 0)
+  /// 段の字の左端の、本文の左端からの距離（字下げと、コードブロックの左の余白）。
+  static func textLeft(of block: PrCommentBlock) -> CGFloat {
+    block.indent + (block.kind == .code ? Theme.Layout.editorPrBodyCodePad : 0)
+  }
+
+  /// 本文の幅 `width` で、段の字を折り返す幅（字下げと、コードブロックの左右の余白を除く）。
+  static func wrapWidth(of block: PrCommentBlock, in width: CGFloat) -> CGFloat {
+    max(1, width - block.indent - (block.kind == .code ? Theme.Layout.editorPrBodyCodePad * 2 : 0))
   }
 }
 

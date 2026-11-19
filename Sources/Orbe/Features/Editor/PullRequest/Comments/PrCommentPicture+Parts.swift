@@ -136,23 +136,28 @@ extension PrCommentPicture {
     canvas.label(label, font: badge, color: Ink.editorCaution, x: x + 5, baseline: baseline)
   }
 
-  /// 本文の段の列（字 12・行高 1.6。段の間 6）を `area`（左上と幅）に置く。高さを返す。
+  /// 本文の段の列（字 12・行高 1.6。段の間 6）を `area`（左上と幅）に置く。引用の線は、次の段が同じ引用の線を持てば段の間も
+  /// 引く。高さを返す。
   static func body(
     _ measured: PrCommentMeasure, id: String, in area: CGRect, _ canvas: inout PrCommentCanvas
   ) -> CGFloat {
     let lineHeight = PrCommentCanvas.bodyLineHeight
     var y = area.minY
-    for (index, item) in measured.blocks.enumerated() {
+    let blocks = measured.blocks
+    for (index, item) in blocks.enumerated() {
       if index > 0 { y += Size.editorPrBodyBlockGap }
       let block = item.block
       let pad = block.kind == .code ? Size.editorPrBodyCodePad : 0
       let height = CGFloat(max(1, item.lines.count)) * lineHeight + pad * 2
+      let next = index + 1 < blocks.count ? blocks[index + 1].block.quoteBars : []
       for bar in block.quoteBars {
+        let joins = next.contains(bar)
         canvas.elements.append(
           .box(
             ZoneBox(
               frame: CGRect(
-                x: area.minX + bar, y: y, width: Size.editorPrBodyQuoteBar, height: height),
+                x: area.minX + bar.x, y: y, width: Size.editorPrBodyQuoteBar,
+                height: height + (joins ? Size.editorPrBodyBlockGap : 0)),
               fill: EditorStyle.hairline(0.12))))
       }
       if block.kind == .code {
@@ -164,12 +169,11 @@ extension PrCommentPicture {
                 height: height), radius: .init(Size.editorPrBodyCodeRadius),
               fill: EditorStyle.sunk(0.35))))
       }
-      let textLeft = area.minX + PrCommentMeasure.inset(of: block)
+      let textLeft = area.minX + PrCommentMeasure.textLeft(of: block)
       let font = Fonts.editorPrThreadBody
-      if let marker = block.marker {
+      for marker in block.markers {
         canvas.label(
-          marker, font: font, color: Ink.textMuted,
-          x: area.minX + block.indent - Size.editorPrBodyListIndent,
+          marker.text, font: font, color: Ink.textMuted, x: area.minX + marker.x,
           baseline: PrCommentStyle.baseline(top: y + pad, height: lineHeight, font: font))
       }
       var lines: [ZoneSelectableLine] = []
