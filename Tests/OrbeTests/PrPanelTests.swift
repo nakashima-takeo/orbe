@@ -30,6 +30,8 @@ final class PrPanelTests: OrbeTestCase {
   var threads: [GitHubPullRequestReview.Thread] = []
   var reviewWrites: [GitHubReviewWrite] = []
   var reviewFailure: GitHubFailure?
+  /// レビューのやりとりが答える PR の先頭のコミット（中身の先頭は "h"）。
+  var reviewHead = "h"
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
@@ -72,7 +74,7 @@ final class PrPanelTests: OrbeTestCase {
         completion(
           .success(
             GitHubPullRequestReview(
-              viewer: "me", viewerIsAuthor: viewerIsAuthor, headCommit: "h",
+              viewer: "me", viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
               pendingReview: pendingComments > 0
                 ? .init(id: "R", commentCount: pendingComments) : nil, threads: threads)))
       },

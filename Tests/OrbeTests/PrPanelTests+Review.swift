@@ -4,7 +4,8 @@ import XCTest
 
 /// PR のパネルの下端の区画とファイルの行のコメント数。壊れると何が起きるか: 空のコメントを送信できる・行に書いた保留中の
 /// コメントを本文なしで送れない・自分の PR を承認できるように見える・失敗した送信で書きかけが消える・成功した後も書きかけと
-/// 選んだ種類が残る・古い版の行のスレッドをコメント数に数える・今の diff に出せないスレッドに気づけない。
+/// 選んだ種類が残る・古い版の行のスレッドをコメント数に数える・今の diff に出せないスレッドに気づけない・空白だけの
+/// レビューを公開できる・diff で見ていないコミットに承認が付く・解決済みの置けないスレッドが件数を埋める。
 extension PrPanelTests {
   /// 「コメント」「変更を依頼」は本文も保留中のコメントも無ければ送れず、「承認」は空でも送れる。送信が成功すれば書きかけは空になり種類は
   /// 「コメント」に戻る。成功しなければ書きかけと種類が残り、失敗を保持する。
@@ -64,11 +65,42 @@ extension PrPanelTests {
     XCTAssertEqual(panel.outdatedThreadCount, 1)
   }
 
-  private func thread(_ id: String, path: String, line: Int?, comments: Int)
+  /// 空白と改行だけの全体へのコメントは空とみなす——「コメント」は送れず、「承認」は本文なしで送る。
+  func testABlankBodyCountsAsEmpty() throws {
+    let state = try reviewed()
+    state.reviewDraft.body = " \n\t "
+    XCTAssertFalse(panel.canSubmitReview)
+    panel.chooseReviewEvent(.approve)
+    XCTAssertTrue(panel.submitReview())
+    XCTAssertEqual(reviewWrites, [.submit(.approve, body: "")])
+  }
+
+  /// 中身とレビューのやりとりの先頭のコミットが違う間は送れず、その理由を出す（承認を、diff で見ていないコミットに付けない）。
+  func testAReviewOfAnotherHeadCannotBeSubmitted() throws {
+    reviewHead = "h2"
+    _ = try reviewed()
+    panel.chooseReviewEvent(.approve)
+    XCTAssertFalse(panel.canSubmitReview)
+    XCTAssertTrue(panel.awaitsAlignedReview)
+    XCTAssertFalse(panel.submitReview())
+    XCTAssertEqual(reviewWrites, [])
+  }
+
+  /// 置けないスレッドの件数は未解決のものだけを数える。
+  func testOutdatedThreadsCountOnlyUnresolvedOnes() throws {
+    threads = [
+      thread("T1", path: "README.md", line: nil, comments: 1),
+      thread("T2", path: "README.md", line: nil, comments: 1, resolved: true),
+    ]
+    _ = try reviewed()
+    XCTAssertEqual(panel.outdatedThreadCount, 1)
+  }
+
+  private func thread(_ id: String, path: String, line: Int?, comments: Int, resolved: Bool = false)
     -> GitHubPullRequestReview.Thread
   {
     GitHubPullRequestReview.Thread(
-      id: id, path: path, side: .new, line: line, isResolved: false, canReply: true,
+      id: id, path: path, side: .new, line: line, isResolved: resolved, canReply: true,
       canResolve: true, canUnresolve: false,
       comments: (0..<comments).map {
         .init(id: "\(id)-\($0)", author: "me", body: "本文", createdAt: Date(), isPending: false)
