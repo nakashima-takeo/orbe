@@ -32,16 +32,16 @@ extension DiffRows {
     let depth: Int
   }
 
-  /// 古い側の行の、行差分の中での位置。
-  enum OldRow {
-    /// 区間 `hunk` の古い側の `k` 番目の行（削除行）。
+  /// 片側の行の、行差分の中での位置。
+  enum Row {
+    /// 区間 `hunk` のその側の `k` 番目の行（古い側なら削除行、新しい側なら追加の行）。
     case changed(LineHunk, Int)
-    /// 区間の外の行。対応する新しい側の行 `line`。
+    /// 区間の外の行。対応する反対側の行 `line`。
     case context(Int)
   }
 
   /// 古い側の行 `line` が、どの区間の何番目の削除行か、区間の外なら対応する新しい側の行。
-  static func row(ofOld line: Int, _ hunks: [LineHunk]) -> OldRow {
+  static func row(ofOld line: Int, _ hunks: [LineHunk]) -> Row {
     var shift = 0
     for hunk in hunks {
       if line < hunk.oldLines.lowerBound { break }
@@ -52,14 +52,14 @@ extension DiffRows {
   }
 
   /// 新しい側の行 `line` が、どの区間の何番目の追加の行か、区間の外なら対応する古い側の行。
-  private static func row(ofNew line: Int, _ hunks: [LineHunk]) -> (hunk: LineHunk?, row: Int) {
+  private static func row(ofNew line: Int, _ hunks: [LineHunk]) -> Row {
     var shift = 0
     for hunk in hunks {
       if line < hunk.newLines.lowerBound { break }
-      if line < hunk.newLines.upperBound { return (hunk, line - hunk.newLines.lowerBound) }
+      if line < hunk.newLines.upperBound { return .changed(hunk, line - hunk.newLines.lowerBound) }
       shift = hunk.oldLines.upperBound - hunk.newLines.upperBound
     }
-    return (nil, line + shift)
+    return .context(line + shift)
   }
 
   /// 並列で、行 `zone.line` の絵を置く所（その側）と、相手と同じ高さの空きを置く所（反対側）。区間の `k` 段目は左の古い側の
@@ -79,11 +79,12 @@ extension DiffRows {
       }
     case .new:
       guard zone.line < new.lines else { return nil }
-      let (hunk, row) = row(ofNew: zone.line, hunks)
-      guard let hunk else {
-        return row < old.lines ? (own, Slot(boundary: row + 1, depth: 0)) : nil
+      switch row(ofNew: zone.line, hunks) {
+      case .changed(let hunk, let k):
+        return (own, slot(afterRow: k, of: hunk.oldLines))
+      case .context(let line):
+        return line < old.lines ? (own, Slot(boundary: line + 1, depth: 0)) : nil
       }
-      return (own, slot(afterRow: row, of: hunk.oldLines))
     }
   }
 
