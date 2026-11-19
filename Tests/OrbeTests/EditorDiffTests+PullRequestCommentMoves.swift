@@ -1,3 +1,4 @@
+import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
@@ -157,5 +158,35 @@ extension EditorDiffTests {
     zone.zone(.pressed(PrCommentControl.add))
     pumpMain(until: { !remote.writes.isEmpty }, "返信が届く")
     XCTAssertEqual(remote.writes, [.reply(thread: "T", body: "返信", resolve: false)])
+  }
+
+  /// インラインで、新しいコメントの欄を置いた削除行の塊の中（欄より上の削除行）を読んでいる間に push があって面が作り直されて
+  /// も、同じ削除行が上端に残る（引き継いだ段を、新しい面で欄の高さを数えた位置に直して置く）。
+  func testAPushKeepsTheRemovedLineBeingReadAboveADraft() throws {
+    let lines = (0..<200).map { "l\($0)" }
+    try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "lines"]).isSuccess)
+    var head = Array(lines[0..<50] + lines[55...])
+    let remote = Remote()
+    let (diff, before) = try commentedDiff(remote) {
+      try self.repo.write("a.txt", head.joined(separator: "\n") + "\n")
+    }
+    let layer = try XCTUnwrap(diff.comments)
+    layer.openDraft(.old, line: 53)
+    let draft = try XCTUnwrap(layer.draft(.old, line: 53))
+    before.replaceText(of: draft.field, with: "書きかけ")
+    pumpMain(until: { draft.surface != nil && layer.isSettled }, "4 本目の削除行の下に欄")
+    let reading = RowPosition(line: 50, offset: -4)
+    before.flush()
+    before.scroll(to: before.position(ofLineRow: reading))
+    before.flush()
+    XCTAssertEqual(before.lineRow(of: before.viewport.top), reading, "前提: 2 本目の削除行「l51」を読む")
+
+    head[150] = "L"
+    try push(head.joined(separator: "\n") + "\n", remote, diff)
+    pumpMain(until: { diff.newSurface !== before && diff.carried == nil }, "面が作り直される")
+    let after = try engine(diff.newSurface)
+    after.flush()
+    XCTAssertEqual(after.lineRow(of: after.viewport.top), reading)
   }
 }
