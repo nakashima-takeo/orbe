@@ -29,29 +29,34 @@ final class PullRequestPaneTests: OrbeTestCase {
     var reviewWrites: [GitHubReviewWrite] = []
     /// PR の先頭のコミット（ベースも同じ）。手元のコミットにすると diff の両端が求まる。
     var head = "h"
+    /// ブランチの open の PR の番号（替えると、worktree の今の PR が別の PR になる）。
+    var number = 9
     private let me = GitHubRepoName(nameWithOwner: "me/r")
 
     var source: PullRequestSource {
       let ref = GitHubBranchRef(repo: me, branch: "feat")
-      let pullRequest = GitHubBranchPR(
-        number: 9, headRefName: "feat", state: "OPEN", baseRefName: "main", headRepository: me,
-        url: "https://github.com/me/r/pull/9")
-      let content = GitHubPullRequestContent(
-        nodeID: "PR_1", number: 9, title: "題", url: "https://github.com/me/r/pull/9",
-        isDraft: false, state: .open, body: "", author: "me", baseRefName: "main",
-        headRefName: "feat", baseCommit: head, headCommit: head, commitCount: 0, commits: [],
-        files: ["src/a.swift", "b.swift"].map {
-          .init(path: $0, change: .modified, isViewed: false)
-        })
+      let content = { [head] (number: Int) in
+        GitHubPullRequestContent(
+          nodeID: "PR_\(number)", number: number, title: "題",
+          url: "https://github.com/me/r/pull/\(number)", isDraft: false, state: .open, body: "",
+          author: "me", baseRefName: "main", headRefName: "feat", baseCommit: head,
+          headCommit: head, commitCount: 0, commits: [],
+          files: ["src/a.swift", "b.swift"].map {
+            .init(path: $0, change: .modified, isViewed: false)
+          })
+      }
       return PullRequestSource(
         branchPullRequests: { [unowned self] _, branch, completion in
+          let pullRequest = GitHubBranchPR(
+            number: number, headRefName: "feat", state: "OPEN", baseRefName: "main",
+            headRepository: me, url: "https://github.com/me/r/pull/\(number)")
           completion(
             GitHubBranchPullRequests(
               availability: .ready, ledger: nil,
               branches: [branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))]))
         },
         branchExists: { _, completion in completion(.success(true)) },
-        content: { _, completion in completion(.success(content)) },
+        content: { id, completion in completion(.success(content(id.number))) },
         setViewed: { _, _, _, _ in },
         review: { [head] _, completion in
           completion(
@@ -151,41 +156,66 @@ final class PullRequestPaneTests: OrbeTestCase {
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "現れても焦点を奪わない")
   }
 
-  /// 列に焦点がある間に、パネルを出したまま PR が無くなる・パネルを隠すと、焦点は面の本文へ戻る（窓へ落ちない）。
-  func testTheFocusInTheListReturnsToTheBodyWhenTheListGoesAwayOrHides() throws {
-    let hosted = host(try registeredRoot())
-    shownWithRows(hosted)
-    hosted.window.makeFirstResponder(hosted.list)
-
-    gitHub.open = false
-    hosted.pane.pullRequest.refresh()
-    pumpMain(
-      until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "列が消えたら本文へ")
-
-    gitHub.open = true
-    hosted.pane.pullRequest.refresh()
-    pumpMain(until: { hosted.list.window != nil }, "前提: PR が戻る")
-    hosted.window.makeFirstResponder(hosted.list)
-    hosted.pane.shell.selectPanel(.files)
-    pumpMain(
-      until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "隠したら本文へ")
+  /// 焦点を置くパネルの中の場所。
+  private enum Area: CaseIterable {
+    case list
+    case reviewField
   }
 
-  /// cd で根が変われば、前の根の PR を見るのをやめ、列にあった焦点は本文へ戻り、新しい根の PR を見る。
-  func testChangingTheRootStopsWatchingThePreviousPullRequest() throws {
-    let hosted = host(try registeredRoot())
-    shownWithRows(hosted)
-    let previous = try XCTUnwrap(hosted.pane.pullRequest.state)
-    hosted.window.makeFirstResponder(hosted.list)
+  /// 出したパネルの `area` に焦点を入れる。
+  private func focus(_ area: Area, in hosted: Hosted) throws {
+    switch area {
+    case .list: hosted.window.makeFirstResponder(hosted.list)
+    case .reviewField:
+      pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "前提: 全体へのコメント欄")
+      hosted.window.makeFirstResponder(try XCTUnwrap(messageField(in: hosted.pane)))
+    }
+  }
 
-    let next = try registeredRoot()
-    hosted.pane.setRoot(next)
-    XCTAssertFalse(previous.isWatched, "前の根の PR を見るのをやめる")
-    pumpMain(until: { hosted.pane.pullRequest.state != nil }, "新しい根の PR を見る")
-    XCTAssertEqual(hosted.pane.pullRequest.root, next)
-    XCTAssertTrue(try XCTUnwrap(hosted.pane.pullRequest.state).isWatched)
-    settle()
-    XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "焦点は本文へ")
+  /// 列か全体へのコメント欄に焦点がある間に、パネルを出したまま PR が無くなる場合と、パネルを隠す場合のどちらでも、焦点は面の
+  /// 本文へ戻る（窓へ落ちない）。
+  func testTheFocusInThePanelReturnsToTheBodyWhenThePanelGoesAwayOrHides() throws {
+    for area in Area.allCases {
+      gitHub.open = true
+      let hosted = host(try registeredRoot())
+      shownWithRows(hosted)
+      try focus(area, in: hosted)
+
+      gitHub.open = false
+      hosted.pane.pullRequest.refresh()
+      pumpMain(
+        until: { hosted.window.firstResponder === hosted.pane.focusTarget },
+        "\(area) にあった焦点は、PR が消えたら本文へ")
+
+      gitHub.open = true
+      hosted.pane.pullRequest.refresh()
+      pumpMain(until: { hosted.list.window != nil }, "前提: PR が戻る")
+      try focus(area, in: hosted)
+      hosted.pane.shell.selectPanel(.files)
+      pumpMain(
+        until: { hosted.window.firstResponder === hosted.pane.focusTarget },
+        "\(area) にあった焦点は、隠したら本文へ")
+    }
+  }
+
+  /// cd で根が変われば、前の根の PR を見るのをやめ、列か全体へのコメント欄にあった焦点は本文へ戻り、新しい根の PR を見る。
+  func testChangingTheRootStopsWatchingThePreviousPullRequest() throws {
+    for area in Area.allCases {
+      let hosted = host(try registeredRoot())
+      shownWithRows(hosted)
+      let previous = try XCTUnwrap(hosted.pane.pullRequest.state)
+      try focus(area, in: hosted)
+
+      let next = try registeredRoot()
+      hosted.pane.setRoot(next)
+      XCTAssertFalse(previous.isWatched, "前の根の PR を見るのをやめる")
+      pumpMain(until: { hosted.pane.pullRequest.state != nil }, "新しい根の PR を見る")
+      XCTAssertEqual(hosted.pane.pullRequest.root, next)
+      XCTAssertTrue(try XCTUnwrap(hosted.pane.pullRequest.state).isWatched)
+      settle()
+      XCTAssertTrue(
+        hosted.window.firstResponder === hosted.pane.focusTarget, "\(area) にあった焦点は本文へ")
+    }
   }
 
   /// 出しているパネルで言語を切り替えれば、見えている行をその言語で読み直す。
@@ -258,6 +288,54 @@ final class PullRequestPaneTests: OrbeTestCase {
     XCTAssertTrue(hosted.pane.performKeyEquivalent(with: .key("\r")))
     XCTAssertEqual(gitHub.reviewWrites, [.submit(.comment, body: "見ました\nかくにん")])
     pumpMain(until: { field.string.isEmpty }, "通れば欄が空になる")
+  }
+
+  /// 変換中の字だけがある欄でも送れる姿になり、変換を取り消せば送れない姿に戻る。IME が確定すれば字は書きかけへ移り、その後の
+  /// 姿は書きかけだけで決まる（終わった変換の字のせいで送れる姿のままになることはない）。
+  func testOnlyAComposingTextMakesTheReviewSubmittable() throws {
+    let hosted = host(try registeredRoot())
+    let field = try reviewField(hosted)
+    let panel = hosted.pane.pullRequest
+    let compose = { (text: String) in
+      field.setMarkedText(
+        text, selectedRange: NSRange(location: text.utf16.count, length: 0),
+        replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+    XCTAssertFalse(panel.canSubmitReview, "前提: 空の欄")
+
+    compose("けんとう")
+    XCTAssertTrue(panel.canSubmitReview)
+    compose("")
+    XCTAssertFalse(panel.canSubmitReview, "変換を取り消した")
+
+    compose("けんとう")
+    field.insertText("検討", replacementRange: NSRange(location: NSNotFound, length: 0))
+    pumpMain(until: { panel.state?.reviewDraft.body == "検討" }, "IME の確定が書きかけへ入る")
+    panel.state?.reviewDraft.body = ""
+    XCTAssertFalse(panel.canSubmitReview, "確定した後は、終わった変換の字のせいで送れる姿のままになることはない")
+  }
+
+  /// 全体へのコメント欄で変換中のまま worktree の今の PR が替わると、変換中の字は前の PR の書きかけへ確定し、次の PR の欄は
+  /// 空のまま、焦点は面の本文へ移る。
+  func testSwitchingThePullRequestWhileComposingLeavesTheTextWithThePreviousOne() throws {
+    let hosted = host(try registeredRoot())
+    let field = try reviewField(hosted)
+    let panel = hosted.pane.pullRequest
+    let previous = try XCTUnwrap(panel.state)
+    field.insertText("前の", replacementRange: NSRange(location: NSNotFound, length: 0))
+    field.setMarkedText(
+      "かきかけ", selectedRange: NSRange(location: 4, length: 0),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+
+    gitHub.number = 10
+    panel.refresh()
+    pumpMain(
+      until: { panel.state.map { $0 !== previous && $0.review != nil } ?? false }, "次の PR を見る")
+    XCTAssertEqual(previous.reviewDraft.body, "前のかきかけ")
+    XCTAssertEqual(panel.state?.reviewDraft.body, "")
+    XCTAssertEqual(panel.reviewComposition, "")
+    pumpMain(
+      until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "焦点は面の本文へ")
   }
 
   /// ⌘↵ が送るのは全体へのコメント欄に焦点がある間の 1 回だけ——送れない間と押し続けた繰り返しは食って送らず、焦点が欄の外
