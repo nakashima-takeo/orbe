@@ -42,7 +42,7 @@ extension EditorDiffTests {
     try push("zero\none\ntwo\nTHREE\nfour\n", remote, diff)
     XCTAssertIdentical(layer.draft(.new, line: 4), draft, "行「four」は 1 行下へ移った")
     XCTAssertEqual(draft.text, "書きかけ")
-    XCTAssertFalse(draft.isLineGone)
+    XCTAssertNil(draft.notice)
     draft.zone(.pressed(PrCommentControl.add))
     pumpMain(until: { layer.draft(.new, line: 4) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(
@@ -62,7 +62,7 @@ extension EditorDiffTests {
     try push("one\ntwo\nTRES\nfour\n", remote, diff)
     XCTAssertIdentical(layer.draft(.new, line: 2), draft, "書き換えられた区間の終わりの行の下に残る")
     XCTAssertEqual(draft.text, "書きかけ")
-    XCTAssertTrue(draft.isLineGone)
+    XCTAssertEqual(draft.notice, .lineGone)
     draft.zone(.pressed(PrCommentControl.add))
     XCTAssertEqual(remote.writes, [], "行が現在の diff に無い欄は送れない")
     draft.zone(.pressed(PrCommentControl.cancel))
@@ -95,7 +95,7 @@ extension EditorDiffTests {
       until: { self.text(diff.old) == "one\ntwo\nthree\nfour\n" && layer.isSettled },
       "付け替えたベースの版と、欄の行の移しが揃う")
     XCTAssertIdentical(layer.draft(.old, line: 0), draft, "行「one」は 1 行上へ移った")
-    XCTAssertFalse(draft.isLineGone)
+    XCTAssertNil(draft.notice)
     draft.zone(.pressed(PrCommentControl.add))
     pumpMain(until: { layer.draft(.old, line: 0) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(
@@ -103,7 +103,9 @@ extension EditorDiffTests {
       [.addThread(path: "a.txt", side: .old, line: 1, commit: remote.head, body: "古い側")])
   }
 
-  /// 返信の書きかけを持つスレッドが push で今の diff に置けなくなっても、書きかけごと残り、送れない姿になる。
+  /// 返信の書きかけを持つスレッドが push で今の diff に置けなくなっても、書きかけごと残り、行に付いていない旨を出したまま
+  /// 返信を送れる（返信は行を渡さないので GitHub は受ける）。GitHub からスレッドが消えると、書きかけは残り、削除された旨を
+  /// 出して送れない姿になる。
   func testAThreadWithAReplyDraftStaysWhenItCannotBePlaced() throws {
     let remote = Remote()
     let thread = { (line: Int?) in
@@ -123,9 +125,37 @@ extension EditorDiffTests {
     let next = try engine(diff.newSurface)
     pumpMain(
       until: { next.rows.block(ofZone: ObjectIdentifier(zone)) != nil }, "置けなくなったスレッドが残る")
-    XCTAssertTrue(zone.isLineGone)
+    XCTAssertEqual(zone.notice, .detached)
     XCTAssertEqual(zone.text, "返信の書きかけ")
+
+    remote.threads = []
+    try XCTUnwrap(diff.comments).state.reload()
+    pumpMain(until: { zone.notice == .deleted }, "消えたスレッドの書きかけが残る")
+    XCTAssertEqual(zone.text, "返信の書きかけ")
+    XCTAssertNotNil(next.rows.block(ofZone: ObjectIdentifier(zone)))
     zone.zone(.pressed(PrCommentControl.add))
-    XCTAssertEqual(remote.writes, [], "置けなくなったスレッドへは書かない")
+    XCTAssertEqual(remote.writes, [], "消えたスレッドへは書かない")
+  }
+
+  /// 置けなくなったスレッドへの返信は送れる。
+  func testAReplyToAThreadThatCannotBePlacedIsWritten() throws {
+    let remote = Remote()
+    let thread = { (line: Int?) in
+      GitHubPullRequestReview.Thread(
+        id: "T", path: "a.txt", side: .new, line: line, isResolved: false, canReply: true,
+        canResolve: true, canUnresolve: false,
+        comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
+    }
+    remote.threads = [thread(3)]
+    let (diff, surface) = try commentedDiff(remote)
+    let zone = try XCTUnwrap(diff.comments?.zone(thread: "T"))
+    pumpMain(until: { surface.rows.block(ofZone: ObjectIdentifier(zone)) != nil }, "スレッドが置かれる")
+    surface.replaceText(of: zone.field, with: "返信")
+    remote.threads = [thread(nil)]
+    try push("one\ntwo\nTRES\nfour\n", remote, diff)
+    pumpMain(until: { zone.notice == .detached }, "置けなくなったスレッドが残る")
+    zone.zone(.pressed(PrCommentControl.add))
+    pumpMain(until: { !remote.writes.isEmpty }, "返信が届く")
+    XCTAssertEqual(remote.writes, [.reply(thread: "T", body: "返信", resolve: false)])
   }
 }

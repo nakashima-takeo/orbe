@@ -183,12 +183,12 @@ final class PrPanel {
   func commentCount(of path: String) -> Int {
     guard let state, let head = state.content?.headCommit else { return 0 }
     let id = ObjectIdentifier(state)
-    let ends = diffEnds(state)
+    let ends = state.diffEnds
     if counted?.state != id || counted?.version != state.reviewVersion || counted?.head != head
       || counted?.ends != ends
     {
       var counts: [String: Int] = [:]
-      for thread in state.threads(at: head) ?? [] where state.canPlace(thread, in: ends) {
+      for thread in state.threads(at: head) ?? [] where state.canPlace(thread, in: ends) == true {
         counts[thread.path, default: 0] += thread.comments.count
       }
       counted = CommentCounts(
@@ -201,18 +201,10 @@ final class PrPanel {
   /// ファイルの古い側の行に付いた）の数。
   var outdatedThreadCount: Int {
     guard let state, let head = state.content?.headCommit else { return 0 }
-    let ends = diffEnds(state)
+    let ends = state.diffEnds
     return (state.threads(at: head) ?? []).count {
-      !$0.isResolved && !state.canPlace($0, in: ends)
+      !$0.isResolved && state.canPlace($0, in: ends) == false
     }
-  }
-
-  /// PR の状態 `state` の、今の先頭のコミットの diff の両端（求まっていなければ nil）。
-  private func diffEnds(_ state: PullRequestState) -> PullRequestState.DiffEnds? {
-    guard case .ready(_, let ends) = state.bounds, ends.head == state.content?.headCommit else {
-      return nil
-    }
-    return ends
   }
 
   // MARK: - 確認済み

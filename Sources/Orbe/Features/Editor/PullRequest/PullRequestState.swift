@@ -112,7 +112,7 @@ final class PullRequestState {
   /// レビューの送信の、全体へのコメントの書きかけと選んだ種類（PR のパネルが書く。メモリだけで、パネルを隠しても残る）。
   var reviewDraft = ReviewDraft()
   /// 最後のレビューの送信の失敗（PR のパネルが書く。次に送るときに消す）。
-  var submissionFailure: SubmissionFailure?
+  var submissionFailure: GitHubFailure?
   /// レビューへの書き込みが走っている対象と、順番を待っている対象。
   var reviewWriteTargets: Set<ReviewTarget> = []
   @ObservationIgnored var reviewWrites: [ReviewWrite] = []
@@ -144,13 +144,6 @@ final class PullRequestState {
   struct ReviewDraft: Equatable {
     var body = ""
     var event = GitHubReviewEvent.comment
-  }
-
-  /// レビューの送信の失敗。
-  enum SubmissionFailure: Equatable {
-    case write(GitHubFailure)
-    /// 中身かレビューのやりとりがまだ読めていない・両方の先頭のコミットが違う（状態が受け付けなかった）。
-    case notReady
   }
 
   struct PendingViewed: Equatable {
@@ -315,6 +308,13 @@ final class PullRequestState {
     guard isWatched else { return }
     alignment = (issueOrder(), seen)
     startReadingContent { [weak self] in self?.readReview() }
+  }
+
+  /// 中身とレビューのやりとりの先頭のコミットが食い違ったまま、揃える読みをやめている（次のきっかけ——再読込など——まで
+  /// 読まない）。
+  var stoppedAligning: Bool {
+    guard let content, let review, content.headCommit != review.headCommit else { return false }
+    return alignment == nil && !isReading && !isReadingReview
   }
 
   /// 問い合わせずに読むのをやめる（積んだ読み直しも捨てる）。

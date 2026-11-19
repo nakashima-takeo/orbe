@@ -76,6 +76,10 @@ extension L10n {
       "PR の最新の内容を読み込んでから、もう一度お試しください", "Try again after the latest pull request is loaded"
     ),
     .editorPrThreadLineGone: ("この行は現在の diff にありません", "This line isn’t in the current diff"),
+    .editorPrThreadDetached: (
+      "このスレッドは現在の diff の行に付いていません", "This thread isn’t on a line of the current diff"
+    ),
+    .editorPrThreadDeleted: ("このスレッドは GitHub から削除されました", "This thread was deleted on GitHub"),
     .editorPrWriteTimedOut: (
       "GitHub の応答がありません。反映されたかは GitHub で確かめてください",
       "GitHub didn’t respond. Check on GitHub whether it was applied"
@@ -89,6 +93,13 @@ extension L10n {
     .editorPrReviewSubmit: ("レビューを送信", "Submit Review"),
     .editorPrReviewAwaitsLatest: (
       "PR の最新の内容を読み込むまで送信できません", "Can’t submit until the latest pull request is loaded"
+    ),
+    .editorPrReviewStoppedAligning: (
+      "PR の最新の内容を揃えて読めませんでした。再読込してください",
+      "Couldn’t load a consistent version of the pull request. Refresh to try again"
+    ),
+    .editorPrReviewNoDiff: (
+      "PR の diff を表示できないため、送信できません", "Can’t submit because the pull request diff can’t be shown"
     ),
     .editorPrReviewReadFailed: (
       "レビューのコメントを読み込めません（%@）", "Couldn’t load review comments (%@)"

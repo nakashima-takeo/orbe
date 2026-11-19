@@ -8,8 +8,8 @@ import OrbeEditorCore
 /// 新しい版のその側の本文の行差分で、行が変更区間の外にあれば区間の増減の分だけずらした行へ、変更区間の中（書き換えられた・
 /// 消された行）にあれば「行が無くなった」とする（GitHub が push の後にスレッドの行を新しい版へ付け替え、変わった行のスレッドを
 /// 古い版のものとするのと同じ考え方）。移した行に印を出せないとき（diff の区間の外）も行が無くなったとする。行が無くなった欄は
-/// 閉じずに、その区間の新しい側の終わりの行の下に置き、書きかけを残す（絵の差し込みの `isLineGone`）。移し始めてから、移した行に
-/// 印を出せるかを確かめ終えるまでは、絵の差し込みの `isLineMoving` が立つ。
+/// 閉じずに、その区間の新しい側の終わりの行の下に置き、書きかけを残す（`isGone`）。移し始めてから、移した行に印を出せるかを
+/// 確かめ終えるまでは `isMoving` が立ち、絵の差し込みの `isLineMoving` にも写す（書き込みのボタンを押せない姿にする）。
 @MainActor
 final class PrCommentPlacement {
   let zone: PrCommentZone
@@ -21,6 +21,12 @@ final class PrCommentPlacement {
   private(set) var basis: EditorDiff.SideTexts
   /// 新しい版へ行を移す行差分を裏で取っている。
   private(set) var isComputing = false
+  /// 行が今の版に無い（書き換えられた・消された・印を出せない）。一度無くなった行は戻らない。
+  private(set) var isGone = false
+  /// 行を移し始めてから、移した行に印を出せるかを確かめ終えるまで。
+  private(set) var isMoving = false {
+    didSet { zone.isLineMoving = isMoving }
+  }
 
   init(
     zone: PrCommentZone, version: DiffRows.Version, line: Int, ends: PullRequestState.DiffEnds,
@@ -34,16 +40,30 @@ final class PrCommentPlacement {
   }
 
   /// 行を移し終え、印を出せるかも確かめ終えた（裏の仕事が残っていない）。
-  var isSettled: Bool { !zone.isLineMoving }
+  var isSettled: Bool { !isMoving }
 
-  /// 行を、diff の両端 `ends` の版（両側の本文 `shown`）へ移す。行差分は本文の大きさに比例するので裏で取り、移し終えたら
-  /// `done` を呼ぶ。
-  func move(
+  /// diff が両端 `ends`（両側の本文 `shown`）を見せている今に合わせる——行を数えた両端と違えば、行を移している最中でない限り
+  /// 移し始め（移し終えたら `done` を呼ぶ）、同じ両端なら、印を出せる行 `commentable`（求め終えていれば）で移した行を
+  /// 確かめる。行を移している間は、次の両端が来ても新しく移し始めない（移し終えた後の `done` からの呼び直しで追う）。
+  func follow(
+    _ ends: PullRequestState.DiffEnds, shown: EditorDiff.SideTexts,
+    commentable: (old: [Range<Int>], new: [Range<Int>])?, limit: LineDiff.Limit,
+    done: @escaping () -> Void
+  ) {
+    if ends != self.ends {
+      if !isComputing { move(to: ends, shown: shown, limit: limit, done: done) }
+    } else if let commentable {
+      settle(commentable: commentable)
+    }
+  }
+
+  /// 行を、diff の両端 `ends` の版（両側の本文 `shown`）へ移す。行差分は本文の大きさに比例するので裏で取る。
+  private func move(
     to ends: PullRequestState.DiffEnds, shown: EditorDiff.SideTexts, limit: LineDiff.Limit,
     done: @escaping () -> Void
   ) {
     isComputing = true
-    zone.isLineMoving = true
+    isMoving = true
     let (from, to) = version == .old ? (basis.old, shown.old) : (basis.new, shown.new)
     let line = line
     Task.detached(priority: .userInitiated) { [weak self] in
@@ -56,8 +76,8 @@ final class PrCommentPlacement {
         self.line = target.line
         zone.line = target.line + 1
         if target.isGone {
-          zone.isLineGone = true
-          zone.isLineMoving = false
+          isGone = true
+          isMoving = false
         }
         done()
       }
@@ -65,12 +85,12 @@ final class PrCommentPlacement {
   }
 
   /// 移した行が、印を出せる行（側ごとの 0 始まりの半開区間）`commentable` の外なら、行が無くなったとする。確かめ終えたら、
-  /// 移している姿を下ろす。
-  func settle(commentable: (old: [Range<Int>], new: [Range<Int>])) {
-    guard zone.isLineMoving, !isComputing else { return }
-    zone.isLineMoving = false
+  /// 移している姿を下ろす。行差分を取っている間は何もしない。
+  private func settle(commentable: (old: [Range<Int>], new: [Range<Int>])) {
+    guard isMoving, !isComputing else { return }
+    isMoving = false
     if !DiffRows.contains(version == .old ? commentable.old : commentable.new, line) {
-      zone.isLineGone = true
+      isGone = true
     }
   }
 

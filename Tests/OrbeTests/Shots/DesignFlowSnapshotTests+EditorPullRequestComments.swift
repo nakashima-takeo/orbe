@@ -168,7 +168,7 @@ private struct CommentSteps {
     XCTAssertNoThrow(try scene.push(rewritten, subject: "StateHooks: queue の label を改める"))
     let panel = scene.panel
     pumpMain(
-      until: { draft.isLineGone && panel.pullRequest.drift == .inSync },
+      until: { draft.notice == .lineGone && panel.pullRequest.drift == .inSync },
       "push の後、欄の行が無くなり、帯が手元の HEAD を PR の先頭と見る")
     settle()
   }

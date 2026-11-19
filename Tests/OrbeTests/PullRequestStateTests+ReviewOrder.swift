@@ -168,8 +168,10 @@ private final class ReviewWriteRun {
       let target = Self.target(of: write)
       expected = !unfinished.contains { Self.target(of: $0.write) == target }
     }
-    // 送信は、中身とレビューのやりとりの先頭が同じ間だけ受け付ける（承認を見ていないコミットに付けない）。
-    if case .submit = write, state.content?.headCommit != seen { expected = false }
+    // 送信は、diff の両端・中身・レビューのやりとりの先頭が同じ間だけ受け付ける。
+    if case .submit = write, state.content?.headCommit != seen || state.diffEnds?.head != seen {
+      expected = false
+    }
     let index = accepted.count
     let taken = state.writeReview(write) { [weak self] in self?.finish(index, $0) }
     log.append("write(\(Self.target(of: write) ?? "new"))=\(taken)")

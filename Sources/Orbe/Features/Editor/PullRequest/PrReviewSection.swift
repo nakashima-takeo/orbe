@@ -34,10 +34,11 @@ struct PrReviewSection: View {
         panel: panel, state: state, placeholder: l10n.string(.editorPrReviewPlaceholder))
       PrReviewEvents(panel: panel, selected: state.reviewDraft.event)
       PrReviewSubmit(panel: panel)
-      if panel.awaitsAlignedReview {
-        PrReviewNote(text: l10n.string(.editorPrReviewAwaitsLatest), color: Color.theme.textMuted)
+      if let block = panel.submissionBlock {
+        PrReviewNote(text: text(block), color: Color.theme.textMuted)
       } else if let failure = state.submissionFailure {
-        PrReviewNote(text: text(failure), color: Color.theme.danger)
+        PrReviewNote(
+          text: PrPanelText.writeFailure(failure, l10n.language), color: Color.theme.danger)
       }
       if let failure = state.reviewFailure {
         PrReviewNote(text: PrPanelText.reviewReadFailure(failure, l10n), color: Color.theme.danger)
@@ -53,10 +54,11 @@ struct PrReviewSection: View {
       action: panel.openOnGitHub)
   }
 
-  private func text(_ failure: PullRequestState.SubmissionFailure) -> String {
-    switch failure {
-    case .write(let failure): PrPanelText.writeFailure(failure, l10n.language)
-    case .notReady: l10n.string(.editorPrThreadNotReady)
+  private func text(_ block: PrPanel.SubmissionBlock) -> String {
+    switch block {
+    case .loading: l10n.string(.editorPrReviewAwaitsLatest)
+    case .stopped: l10n.string(.editorPrReviewStoppedAligning)
+    case .noDiff: l10n.string(.editorPrReviewNoDiff)
     }
   }
 }

@@ -152,7 +152,7 @@ extension PrCommentPicture {
       let sends = button != .cancel
       let enabled =
         !writing && (!sends || canvas.state.canSend)
-        && (button != .add || !field.string.allSatisfy(\.isWhitespace))
+        && (button != .add || canvas.state.hasText)
       right -= self.button(button, enabled: enabled, right: right, top: top, &canvas)
       right -= Size.editorPrThreadGap
     }
@@ -225,12 +225,12 @@ extension PrCommentPicture {
     return width
   }
 
-  /// 欄の行が現在の diff に無い旨の文（textMuted）。高さを返す（行があれば 0）。
-  static func lineGone(in frame: CGRect, top: CGFloat, _ canvas: inout PrCommentCanvas) -> CGFloat {
-    guard canvas.state.isLineGone else { return 0 }
+  /// 置き場所の文（textMuted）。高さを返す（文が無ければ 0）。
+  static func notice(in frame: CGRect, top: CGFloat, _ canvas: inout PrCommentCanvas) -> CGFloat {
+    guard let notice = canvas.state.notice else { return 0 }
     return note(
-      L10n.string(.editorPrThreadLineGone, canvas.state.language), color: Ink.textMuted, in: frame,
-      top: top, &canvas)
+      L10n.string(notice.key, canvas.state.language), color: Ink.textMuted, in: frame, top: top,
+      &canvas)
   }
 
   /// 失敗の文（danger）。高さを返す（失敗が無ければ 0）。

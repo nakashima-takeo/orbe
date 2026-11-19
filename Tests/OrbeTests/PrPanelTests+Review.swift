@@ -26,7 +26,7 @@ extension PrPanelTests {
     state.reviewDraft.body = "直してください"
     panel.chooseReviewEvent(.requestChanges)
     panel.submitReview()
-    XCTAssertEqual(panel.state?.submissionFailure, .write(.unreachable))
+    XCTAssertEqual(panel.state?.submissionFailure, .unreachable)
     XCTAssertEqual(
       state.reviewDraft, PullRequestState.ReviewDraft(body: "直してください", event: .requestChanges))
   }
@@ -77,11 +77,27 @@ extension PrPanelTests {
 
   /// 中身とレビューのやりとりの先頭のコミットが違う間は送れず、その理由を出す（承認を、diff で見ていないコミットに付けない）。
   func testAReviewOfAnotherHeadCannotBeSubmitted() throws {
-    reviewHead = "h2"
+    reviewHead = String(repeating: "0", count: 40)
     _ = try reviewed()
     panel.chooseReviewEvent(.approve)
     XCTAssertFalse(panel.canSubmitReview)
-    XCTAssertTrue(panel.awaitsAlignedReview)
+    XCTAssertEqual(panel.submissionBlock, .stopped, "揃える読みでも食い違ったので、再読込を促す")
+    XCTAssertFalse(panel.submitReview())
+    XCTAssertEqual(reviewWrites, [])
+  }
+
+  /// diff の両端を求められない PR は送れず、その理由を出す（diff を見られない PR を Orbe から承認しない）。
+  func testAReviewWithoutADiffCannotBeSubmitted() throws {
+    head = String(repeating: "1", count: 40)
+    reviewHead = head
+    let state = try shown()
+    pumpMain(
+      until: {
+        guard state.review != nil, case .failed = state.bounds else { return false }
+        return true
+      }, "前提: diff の両端を求められない")
+    panel.chooseReviewEvent(.approve)
+    XCTAssertEqual(panel.submissionBlock, .noDiff)
     XCTAssertFalse(panel.submitReview())
     XCTAssertEqual(reviewWrites, [])
   }

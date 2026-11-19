@@ -24,10 +24,23 @@ extension PrPanel {
       || (review.pendingReview?.commentCount ?? 0) > 0
   }
 
-  /// 中身とレビューのやりとりの先頭のコミットが違うので、送れない（違う間は送信を押せない姿にし、その理由を出す）。
-  var awaitsAlignedReview: Bool {
-    guard let state, state.review != nil, state.content != nil else { return false }
-    return !state.isReviewAligned
+  /// 送れない理由——diff の両端・中身・レビューのやりとりの版が揃っていない（揃っていなければ送信を押せない姿にし、その理由を
+  /// 出す）。中身とレビューのやりとりがまだ読めていなければ nil（区画を出さない）。
+  var submissionBlock: SubmissionBlock? {
+    guard let state, state.review != nil, state.content != nil, !state.isReviewAligned else {
+      return nil
+    }
+    if case .failed = state.bounds { return .noDiff }
+    return state.stoppedAligning ? .stopped : .loading
+  }
+
+  enum SubmissionBlock: Equatable {
+    /// 読み込んでいる・diff の両端を求めている。
+    case loading
+    /// 中身とレビューのやりとりの先頭が食い違ったまま、揃える読みをやめた（再読込で読み直す）。
+    case stopped
+    /// diff の両端を求められない（diff を見られない PR を承認しない）。
+    case noDiff
   }
 
   func chooseReviewEvent(_ event: GitHubReviewEvent) {
@@ -46,13 +59,11 @@ extension PrPanel {
     let body = draft.body.allSatisfy(\.isWhitespace) ? "" : draft.body
     let finished: (GitHubFailure?) -> Void = { [weak state] failure in
       if let failure {
-        state?.submissionFailure = .write(failure)
+        state?.submissionFailure = failure
       } else {
         state?.reviewDraft = PullRequestState.ReviewDraft()
       }
     }
-    let accepted = state.writeReview(.submit(draft.event, body: body), completion: finished)
-    if !accepted { state.submissionFailure = .notReady }
-    return accepted
+    return state.writeReview(.submit(draft.event, body: body), completion: finished)
   }
 }

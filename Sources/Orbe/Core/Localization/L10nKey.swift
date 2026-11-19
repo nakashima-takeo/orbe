@@ -604,6 +604,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrThreadReplyPlaceholder
   case editorPrThreadNotReady
   case editorPrThreadLineGone
+  case editorPrThreadDetached
+  case editorPrThreadDeleted
   case editorPrWriteTimedOut
   case editorPrReview
   case editorPrReviewPending
@@ -613,6 +615,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrReviewRequestChanges
   case editorPrReviewSubmit
   case editorPrReviewAwaitsLatest
+  case editorPrReviewStoppedAligning
+  case editorPrReviewNoDiff
   case editorPrReviewReadFailed
   case editorPrOutdatedThreads
   case editorPrCommentCount

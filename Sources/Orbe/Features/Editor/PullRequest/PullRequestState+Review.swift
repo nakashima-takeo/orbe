@@ -36,27 +36,33 @@ extension PullRequestState {
   }
 
   /// スレッド `thread` を、両端 `ends` の diff の行に置けるか——今の diff の行に付いていて、古い側の行なら rename の判定が
-  /// GitHub と手元で同じ。両端が分からなければ、今の diff の行に付いているかだけで決める。
-  func canPlace(_ thread: GitHubPullRequestReview.Thread, in ends: DiffEnds?) -> Bool {
+  /// GitHub と手元で同じ。古い側の行のスレッドで両端が分からなければ、決められない（nil）。
+  func canPlace(_ thread: GitHubPullRequestReview.Thread, in ends: DiffEnds?) -> Bool? {
     guard thread.line != nil else { return false }
-    guard thread.side == .old, let ends else { return true }
-    return agreesOnRename(of: thread.path, ends)
+    guard thread.side == .old else { return true }
+    return ends.map { agreesOnRename(of: thread.path, $0) }
+  }
+
+  /// 今の PR の diff の両端——求め終えていて、その先頭が中身の先頭と同じとき（求めている・求められない・中身が新しい先頭を
+  /// 読んだ後で求め直す前は nil）。PR ごとの値で、diff タブの有無と数に依らない。
+  var diffEnds: DiffEnds? {
+    guard case .ready(_, let ends) = bounds, ends.head == content?.headCommit else { return nil }
+    return ends
   }
 
   func isWritingReview(_ target: ReviewTarget) -> Bool { reviewWriteTargets.contains(target) }
 
-  /// 中身とレビューのやりとりを、同じ PR の先頭のコミットで読んでいる（diff とファイルの列が見せている版と、レビューの
-  /// やりとりの版が同じ）。
+  /// diff の両端を求め終え、その先頭のコミットで中身とレビューのやりとりも読んでいる（diff・ファイルの列・スレッドと、送る
+  /// レビューの版が揃う）。
   var isReviewAligned: Bool {
-    guard let content, let review else { return false }
-    return content.headCommit == review.headCommit
+    guard let content, let review, let ends = diffEnds else { return false }
+    return content.headCommit == review.headCommit && ends.head == review.headCommit
   }
 
   /// レビューへの書き込みを順番に積む。中身とレビューのやりとりがまだ読めていないとき、対象への書き込みが走っているとき、
   /// 新しいスレッドの行を数えた先頭のコミットが、レビューのやりとりを読んだ時点の先頭のコミットと違うとき（`threads(at:)` が
-  /// nil の間）、レビューの送信で中身とレビューのやりとりの先頭のコミットが違うとき（`isReviewAligned` が偽の間。承認を、
-  /// diff で見ていないコミットに付けない）は受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は失敗の種類。通れば
-  /// nil）。
+  /// nil の間）、レビューの送信で diff の両端・中身・レビューのやりとりの版が揃っていないとき（`isReviewAligned` が偽の間）
+  /// は受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は失敗の種類。通れば nil）。
   @discardableResult
   func writeReview(_ write: GitHubReviewWrite, completion: @escaping (GitHubFailure?) -> Void)
     -> Bool

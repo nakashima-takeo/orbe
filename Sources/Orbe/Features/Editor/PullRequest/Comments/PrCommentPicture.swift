@@ -7,23 +7,22 @@ import OrbeEditorCore
 /// 26 と下縁 1。上の 2 角だけ丸い。「行 N」・状態・「解決」・「折りたたむ」）・コメントの列（アバターの頭文字の円・書いた人と
 /// 時刻と保留中の札・本文）・返信の行（返信欄・「レビューに追加」・「解決して返信」）・失敗の文。畳んだスレッドは頭の帯だけ
 /// （4 角とも丸い）で、「行 N」の後に最初のコメントの書いた人と本文の先頭 1 行を出す。新しいコメントの欄は、箱から頭と
-/// コメントの列を除いた形（返信欄・「レビューに追加」・「取り消す」）で、欄の行が現在の diff に無ければ「レビューに追加」を
-/// 押せない姿にし、その旨の文を失敗の文の上に出す。欄の行を新しい版へ移している間も「レビューに追加」を押せない姿にする。
+/// コメントの列を除いた形（返信欄・「レビューに追加」・「取り消す」）で、書き込めない間（欄の行を移している・行が
+/// 現在の diff に無い）は「レビューに追加」を押せない姿にする。置き場所の文（→ `PrCommentNotice`）は失敗の文の上に出す。
 @MainActor
 enum PrCommentPicture {
-  /// 中身の外の状態（付いた行・ホバー・書き込みの最中・入力欄が主か・失敗の文・欄の行が現在の diff に無いか・欄の行を移しているか・文言の言語）。
+  /// 中身の外の状態（付いた行・ホバー・書き込みの最中・入力欄が主か・失敗の文・置き場所の文・書き込めるか・入力欄に字があるか・文言の言語）。
   struct State {
     let line: Int
     let hovered: PrCommentControl?
     let isWriting: Bool
     let isFieldPrimary: Bool
     let failure: String?
-    let isLineGone: Bool
-    let isLineMoving: Bool
+    let notice: PrCommentNotice?
+    /// 書き込める（→ `PrCommentZone.canSend`）と、入力欄に空白と改行のほかの字がある。
+    let canSend: Bool
+    let hasText: Bool
     let language: Language
-
-    /// 書き込める——欄の行が現在の diff にあり、移している最中でない。
-    var canSend: Bool { !isLineGone && !isLineMoving }
   }
 
   /// 組んだ絵と、その絵のリンクの行き先（コメントの id → 本文の層の中の通し番号 → URL）。
@@ -85,7 +84,7 @@ enum PrCommentPicture {
         field, buttons: resolves ? [.add, .resolveReply] : [.add], in: frame, top: y, &canvas)
       y += Size.editorPrThreadListPadY
     }
-    y += lineGone(in: frame, top: y, &canvas)
+    y += notice(in: frame, top: y, &canvas)
     y += failure(in: frame, top: y, &canvas)
     return canvas.finish(frame, bottom: y + 1, head: .top)
   }
@@ -121,7 +120,7 @@ enum PrCommentPicture {
     var y = frame.minY + 1 + Size.editorPrThreadListPadY
     y += reply(field, buttons: [.add, .cancel], in: frame, top: y, &canvas)
     y += Size.editorPrThreadListPadY
-    y += lineGone(in: frame, top: y, &canvas)
+    y += notice(in: frame, top: y, &canvas)
     y += failure(in: frame, top: y, &canvas)
     return canvas.finish(frame, bottom: y + 1, head: nil)
   }

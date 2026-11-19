@@ -30,12 +30,15 @@ final class PrPanelTests: OrbeTestCase {
   var threads: [GitHubPullRequestReview.Thread] = []
   var reviewWrites: [GitHubReviewWrite] = []
   var reviewFailure: GitHubFailure?
-  /// レビューのやりとりが答える PR の先頭のコミット（中身の先頭は "h"）。
-  var reviewHead = "h"
+  /// PR の先頭のコミット（手元の feat の先頭。ベースも同じコミット）と、レビューのやりとりが答える先頭のコミット。
+  var head = ""
+  var reviewHead = ""
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    head = repo.head()
+    reviewHead = head
     writes = []
     opened = []
     asTree = true
@@ -88,7 +91,7 @@ final class PrPanelTests: OrbeTestCase {
     GitHubPullRequestContent(
       nodeID: "PR_1", number: 9, title: "題", url: "https://github.com/me/r/pull/9", isDraft: false,
       state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
-      baseCommit: "b", headCommit: "h", commitCount: 2,
+      baseCommit: head, headCommit: head, commitCount: 2,
       commits: [.init(oid: "c1", headline: "一"), .init(oid: "c2", headline: "二")],
       files: files.map { .init(path: $0, change: .modified, isViewed: $0 == "src/a/x.swift") })
   }
@@ -105,15 +108,15 @@ final class PrPanelTests: OrbeTestCase {
       "前提: 読み直した中身で行を組み直す")
   }
 
-  /// パネルを出して、PR の中身とレビューのやりとりが届くまで待つ。
+  /// パネルを出して、PR の中身・レビューのやりとり・diff の両端が揃うまで待つ。
   func reviewed() throws -> PullRequestState {
     let state = try shown()
-    pumpMain(until: { state.review != nil }, "前提: レビューのやりとりが届く")
+    pumpMain(until: { state.review != nil && state.diffEnds != nil }, "前提: レビューのやりとりと diff の両端が届く")
     return state
   }
 
   /// パネルを出して、PR の中身が届くまで待つ。
-  private func shown() throws -> PullRequestState {
+  func shown() throws -> PullRequestState {
     panel.isShown = true
     pumpMain(until: { self.panel.state?.content != nil }, "前提: PR の中身が届く")
     return try XCTUnwrap(panel.state)
