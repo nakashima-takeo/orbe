@@ -120,11 +120,9 @@ extension FramePerfTests {
     }
   }
 
-  /// 載せる側が長い 1 段落の本文を幅で折り返して測る時間は、インラインコードの無い段落では段落の長さに比例する——2,000 字と
-  /// 8,000 字の 1 段落で、測る時間の中央値の比が 6 倍以内。壊れると、長いコメントのスレッドで幅を変えるたびに、測り終える
-  /// まで待たされる。インラインコード（余白つき）のある段落は、Core Text の性質で測る時間が段落の長さの 2 乗に比例するのが現状
-  /// （`docs/spec/editor/code.md` の「テキストエンジンの境界」）なので、長さに比例する検証を `XCTExpectFailure`（期待する失敗）で包む。
-  /// 比例するようになれば（Core Text が変われば）この期待が外れてテストが落ち、spec の現状とこの期待の書き直しを知らせる。
+  /// 載せる側が長い 1 段落の本文を幅で折り返して測る時間は、段落の長さに比例する——2,000 字と 8,000 字の 1 段落で、測る時間の
+  /// 中央値の比が 6 倍以内。インラインコード（余白つき）が 20 字ごとに入る段落でも比例する。比例しなくなると、長いコメントのスレッドで幅を
+  /// 変えるたびに、測り終えるまで待たされる。
   func testMeasuringALongParagraphGrowsLinearly() {
     for coded in [false, true] {
       let costs = [2_000, 8_000].map { length -> Double in
@@ -141,16 +139,7 @@ extension FramePerfTests {
         "PERF-FRAMES zone long paragraph measure main\(coded ? " (inline code)" : ""): 2000 chars",
         Self.ms(costs[0]), "/ 8000 chars", Self.ms(costs[1]), "/ ratio",
         String(format: "%.2f", costs[1] / costs[0]))
-      let linear = {
-        XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "測る時間は段落の長さに比例する（コード: \(coded)）")
-      }
-      if coded {
-        XCTExpectFailure(
-          "現状: 置き字の run delegate があると、Core Text が行の分け目を 1 つ探すたびに、段落の終わりまでの長さに比例する時間がかかり、"
-            + "測る時間が段落の長さの 2 乗になる（code.md の「テキストエンジンの境界」）", failingBlock: linear)
-      } else {
-        linear()
-      }
+      XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "測る時間は段落の長さに比例する（コード: \(coded)）")
     }
   }
 
