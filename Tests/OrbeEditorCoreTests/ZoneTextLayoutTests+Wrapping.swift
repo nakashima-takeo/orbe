@@ -90,6 +90,19 @@ extension ZoneTextLayoutTests {
     }
   }
 
+  /// 余白付きの幅が余白なしの幅の 2 倍を超える行（1 字のコードが並ぶ行）も、幅を埋めて割る——探し直す幅が負になって
+  /// 1 字ずつの行に割れない。壊れると、短いコードの多い本文が縦に長く伸び、組む仕事が行の数だけ膨らむ。
+  func testLinesOfOneCharacterCodesFillTheWidth() {
+    let code = ZoneTextStyle(font: mono, color: .labelColor, padding: 4)
+    let typeset = ZoneTextLayout.typeset(
+      ZoneStyledText(Array(repeating: ("x", code), count: 400)), width: 600)
+    XCTAssertGreaterThan(typeset.lines.count, 1, "前提: 折り返す")
+    for line in typeset.lines.dropLast() {
+      XCTAssertLessThanOrEqual(line.width, 600)
+      XCTAssertGreaterThan(line.width, 300, "\(line.range)")
+    }
+  }
+
   /// 区切って組む長い段落でも、行は隙間なく続いて段落を覆い、どの行も幅に収まり、区切りの境で語の途中を割らない（語の
   /// 途中で割れるのは、幅に入らない語だけ）。壊れると、長いコメントの本文の字が欠けたり、区切りの位置で行が不自然に割れる。
   func testALongParagraphIsTypesetInPartsWithoutGapsOrExtraBreaks() {
