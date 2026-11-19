@@ -45,6 +45,8 @@ extension MetalTextSurface {
     }
     let width = zoneWidth
     for zone in list where zones[ObjectIdentifier(zone)] == nil {
+      // 合わせた幅と違う幅で問うた絵の差し込みがあれば、取引の終わりに幅を合わせ直す。
+      if width != settledZoneWidth { settledZoneWidth = nil }
       let entry = ZoneEntry(zone: zone, width: width, picture: zone.picture(width: width))
       zones[ObjectIdentifier(zone)] = entry
       zonesResized = true
@@ -69,7 +71,9 @@ extension MetalTextSurface {
       ZonePainter.Look(appearance: textView.effectiveAppearance, space: space, scale: scale),
       reusing: entry.hits, serial: { fieldSite(for: $0).serial })
     orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)))
-    if !entry.material.images.isEmpty || !material.images.isEmpty { zoneImagesChanged = true }
+    if entry.material.images.map(\.pixels.key) != material.images.map(\.pixels.key) {
+      zoneImagesChanged = true
+    }
     entry.material = material
     entry.hits = hits
     for field in hits.fields {
@@ -117,9 +121,9 @@ extension MetalTextSurface {
   /// 取引の終わりに、絵の差し込みを今に合わせる（取引の中）——本文の区画の幅が前に合わせた幅から変わっていれば絵を
   /// 問い直し、どの絵の差し込みも描いていない入力欄の場を閉じ（主なら本文が主になる）、高さが変わった絵の差し込みで並びを
   /// 組み直す（閉じた場の知らせの中で描き直した高さも同じ取引に入る）。絵の差し込みを置いたか外したか高さが変わったなら、
-  /// スクロールを共にする相手の面の空きを揃え（相手の取引になり、2 面は一緒に出すので同じコマに揃う）、画像を持つ材料を
-  /// 写したか外したなら、どの材料も指さない画像の覚えを手放す。どれも、幅が変わらず、描き直した絵の高さと画像が変わらない
-  /// 取引（スクロール・打鍵・ホバー）では、置いている絵の差し込みの数に比例する仕事をしない。
+  /// スクロールを共にする相手の面の空きを揃え（相手の取引になり、2 面は一緒に出すので同じコマに揃う）、写した材料の画像が
+  /// 前から変わったか画像を持つ材料を外したなら、どの材料も指さない画像の覚えを手放す。どれも、幅が変わらず、描き直した絵の
+  /// 高さと画像が変わらない取引（スクロール・打鍵・ホバー）では、置いている絵の差し込みと入力欄の数に比例する仕事をしない。
   func settleZones() {
     guard !zones.isEmpty || !unplacedFields.isEmpty || zonesResized || zoneImagesChanged else {
       return
@@ -133,9 +137,7 @@ extension MetalTextSurface {
         paint(entry)
       }
     }
-    let unplaced = unplacedFields
-    unplacedFields = []
-    for id in unplaced {
+    while let id = unplacedFields.popFirst() {
       guard let site = fields[id], site.zone == nil else { continue }
       if primary == .field(id) { setPrimary(.body) }
       site.editor.finishComposition(.commit)
