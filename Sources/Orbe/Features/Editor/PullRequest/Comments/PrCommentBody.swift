@@ -85,7 +85,7 @@ private struct Parts {
             radius: .init(Size.editorPrBodyCodeRadius), fill: EditorStyle.sunk(0.35))))
     }
     let font = Fonts.editorPrThreadBody
-    for marker in block.markers where !marker.text.isEmpty {
+    for marker in block.markers {
       elements.append(
         .text(
           ZoneTextLine(

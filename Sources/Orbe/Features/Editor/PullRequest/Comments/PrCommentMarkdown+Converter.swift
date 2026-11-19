@@ -19,16 +19,16 @@ extension PrCommentMarkdown {
   struct Frame {
     let node: Node
     let context: Context
-    /// 箇条書きの次の項目の番号と、項目の字下げ・番号の幅（番号付きの箇条書き）。
+    /// 箇条書きの次の項目の番号と、項目の字下げ。
     var next = 0
     var listIndent: CGFloat = 0
-    var numberWidth: CGFloat = 0
+    /// 番号付きの箇条書きの、項目ごとの番号の幅（項目の順）。
+    var numberWidths: [CGFloat] = []
     /// 項目が入った時点の段の数（段を 1 つも出さなかった項目は、印だけの段にする）。
     var blocksAtEntry = 0
   }
 
   struct Converter {
-    let source: String
     /// 元の字の UTF-8 と、行ごとの先頭の UTF-8 のオフセット（記法の範囲を元の字に戻す）。
     let utf8: [UInt8]
     let lineStarts: [Int]
@@ -46,7 +46,6 @@ extension PrCommentMarkdown {
     private var quotes = 0
 
     init(source: String) {
-      self.source = source
       utf8 = Array(source.utf8)
       var starts = [0]
       for (offset, byte) in utf8.enumerated() where byte == 0x0A {
@@ -108,6 +107,10 @@ extension PrCommentMarkdown {
               text: text, links: [:], strikes: []))
         }
         return false
+      case CMARK_NODE_FOOTNOTE_DEFINITION:
+        // 定義の始まりの桁は中身の始まりなので、ラベルの字を足して書かれた字に戻す。
+        appendText("[^" + PrCommentMarkdown.literal(node) + "]: " + raw(node))
+        return cmark_node_first_child(node) != nil
       case CMARK_NODE_HTML_BLOCK:
         let html = PrCommentMarkdown.literal(node)
         appendText(html.hasSuffix("\n") ? String(html.dropLast()) : html)
@@ -165,6 +168,9 @@ extension PrCommentMarkdown {
       case CMARK_NODE_IMAGE:
         add("![")
         return false
+      case CMARK_NODE_FOOTNOTE_REFERENCE:
+        add("[^" + PrCommentMarkdown.literal(node) + "]")
+        return false
       case CMARK_NODE_HTML_INLINE:
         add(PrCommentMarkdown.literal(node))
         return false
@@ -220,18 +226,20 @@ extension PrCommentMarkdown {
       frame.next = Int(cmark_node_get_list_start(node))
       frame.listIndent = Theme.Layout.editorPrBodyListIndent
       guard cmark_node_get_list_type(node) == CMARK_ORDERED_LIST else { return frame }
-      var count = 0
+      // 数字の幅は字ごとに違うので、最後の番号が最も広いとは限らない。
       var child = cmark_node_first_child(node)
       while let item = child {
-        count += 1
+        frame.numberWidths.append(
+          ZoneTextLayout.width([
+            ZoneTextRun(
+              "\(frame.next + frame.numberWidths.count).",
+              font: Theme.Typography.editorPrThreadBody, color: .clear)
+          ]))
         child = cmark_node_next(item)
       }
-      let widest = "\(frame.next + max(0, count - 1))."
-      frame.numberWidth = ZoneTextLayout.width([
-        ZoneTextRun(widest, font: Theme.Typography.editorPrThreadBody, color: .clear)
-      ])
       frame.listIndent = max(
-        frame.listIndent, frame.numberWidth + Theme.Layout.editorPrBodyListMarkerGap)
+        frame.listIndent,
+        (frame.numberWidths.max() ?? 0) + Theme.Layout.editorPrBodyListMarkerGap)
       return frame
     }
 
@@ -240,8 +248,9 @@ extension PrCommentMarkdown {
       guard var list = frames.popLast() else { return }
       let base = list.context
       var inner = base
-      let ordered = list.numberWidth > 0
+      let ordered = cmark_node_get_list_type(list.node) == CMARK_ORDERED_LIST
       let text = ordered ? "\(list.next)." : "•"
+      let index = list.next - Int(cmark_node_get_list_start(list.node))
       list.next += 1
       frames.append(list)
       if base.depth < PrCommentMarkdown.maxDepth {
@@ -250,9 +259,7 @@ extension PrCommentMarkdown {
       }
       let x: CGFloat
       if ordered {
-        let width = ZoneTextLayout.width([
-          ZoneTextRun(text, font: Theme.Typography.editorPrThreadBody, color: .clear)
-        ])
+        let width = list.numberWidths.indices.contains(index) ? list.numberWidths[index] : 0
         x = inner.indent - Theme.Layout.editorPrBodyListMarkerGap - width
       } else {
         x = inner.indent - list.listIndent
@@ -296,7 +303,7 @@ extension PrCommentMarkdown {
 
     /// 地の字。リンクの外では、本文に直接書いた http(s) の URL をリンクにする。
     private mutating func addText(_ string: String) {
-      guard links.last == nil, LinkDetector.mayContainLinks(string.utf16) else {
+      guard links.isEmpty, LinkDetector.mayContainLinks(string.utf16) else {
         return add(string)
       }
       let units = string as NSString
@@ -334,57 +341,8 @@ extension PrCommentMarkdown {
       if let link = links.last.flatMap({ $0 }) { block!.links[index] = link }
     }
 
-    /// 段の記法の範囲の、書かれた字（行ごとに、入れ物の前置き——引用の `>` と字下げ——を外す）。
     private func raw(_ node: Node) -> String {
-      let first = Int(cmark_node_get_start_line(node))
-      let last = Int(cmark_node_get_end_line(node))
-      let column = Int(cmark_node_get_start_column(node))
-      guard first >= 1, last >= first, last <= lineStarts.count else { return "" }
-      var lines: [String] = []
-      for line in first...last {
-        let start = lineStarts[line - 1]
-        let end = line < lineStarts.count ? lineStarts[line] - 1 : utf8.count
-        var from = start
-        // 前置きは、段の始まりの桁の前の空白と `>` だけ。
-        while from < min(end, start + column - 1), [0x20, 0x09, 0x3E].contains(utf8[from]) {
-          from += 1
-        }
-        lines.append(String(bytes: utf8[from..<max(from, end)], encoding: .utf8) ?? "")
-      }
-      return lines.joined(separator: "\n")
+      PrCommentMarkdown.writtenText(of: node, utf8: utf8, lineStarts: lineStarts)
     }
-  }
-
-  // MARK: - cmark の値
-
-  fileprivate static func typeName(_ node: Node) -> String {
-    string(cmark_node_get_type_string(node))
-  }
-
-  fileprivate static func literal(_ node: Node) -> String {
-    string(cmark_node_get_literal(node))
-  }
-
-  fileprivate static func string(_ pointer: UnsafePointer<CChar>?) -> String {
-    pointer.map { String(cString: $0) } ?? ""
-  }
-
-  /// リンクの行き先。web とメールの URL だけを押せるリンクにする（ほかは字のまま——第三者の書いた本文から、手元の
-  /// アプリやファイルを開かせない）。
-  fileprivate static func allowed(_ destination: String) -> URL? {
-    guard case .allow(.url(let url)) = UntrustedLink(destination, localHosts: []).decision else {
-      return nil
-    }
-    return url
-  }
-
-  static func style(_ font: NSFont, _ color: NSColor) -> ZoneTextStyle {
-    ZoneTextStyle(font: font, color: color)
-  }
-
-  /// システムの字体の斜体（本物の斜体の字体。和文は直立のまま）。
-  static func italic(_ font: NSFont) -> NSFont {
-    CTFontCreateCopyWithSymbolicTraits(font as CTFont, 0, nil, .traitItalic, .traitItalic)
-      .map { $0 as NSFont } ?? font
   }
 }

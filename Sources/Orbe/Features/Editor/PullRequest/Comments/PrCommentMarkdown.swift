@@ -39,7 +39,7 @@ struct PrCommentBlock: Sendable, Equatable {
 
 /// コメントの本文（GitHub の Markdown）を段の列に変換する（純関数。どのスレッドからも呼べる）。描くのは段落・インライン
 /// コード・太字・斜体・取り消し線・リンク（本文に直接書いた http(s) の URL を含む）・コードブロック・箇条書き・引用・見出し
-/// までで、ほかの記法（表・画像・HTML・suggestion など）は書かれた字のまま段落かインラインの字にする——字は欠けない。
+/// までで、ほかの記法（表・画像・HTML・suggestion・脚注など）は書かれた字のまま段落かインラインの字にする——字は欠けない。
 ///
 /// 解析は cmark-gfm（GitHub と同じ表・取り消し線・タスクの拡張。smart punctuation は付けない）で、木は cmark の走査で平らに
 /// たどる——仕事も stack の深さも、入れ子の深さに依らない（深い引用の本文 1 つでスレッドの stack が溢れない）。字下げは
@@ -50,7 +50,8 @@ enum PrCommentMarkdown {
 
   static func blocks(_ source: String) -> [PrCommentBlock] {
     cmark_gfm_core_extensions_ensure_registered()
-    guard let parser = cmark_parser_new(CMARK_OPT_DEFAULT) else { return [] }
+    // 脚注を脚注として読む（読まないと、脚注の定義の行を参照の定義として取り込み、字が出ない）。描くのは書かれた字のまま。
+    guard let parser = cmark_parser_new(CMARK_OPT_DEFAULT | CMARK_OPT_FOOTNOTES) else { return [] }
     defer { cmark_parser_free(parser) }
     for name in ["table", "strikethrough", "tasklist"] {
       if let syntax = cmark_find_syntax_extension(name) {

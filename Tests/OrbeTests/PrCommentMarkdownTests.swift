@@ -129,4 +129,36 @@ final class PrCommentMarkdownTests: OrbeTestCase {
     XCTAssertGreaterThanOrEqual(
       numbered[0].indent - rights[0], Theme.Layout.editorPrBodyListMarkerGap - 0.01)
   }
+
+  /// 項目の最初の子の表と区切り線は項目の印を字に含めず、空行なしで段落に続く表は段落の字を重ねない。
+  func testRawSyntaxStartsAtItsOwnLine() {
+    XCTAssertEqual(
+      PrCommentMarkdown.blocks("- | a | b |\n  | - | - |").map(\.text.string),
+      ["| a | b |\n| - | - |"])
+    XCTAssertEqual(PrCommentMarkdown.blocks("- ***").map(\.text.string), ["***"])
+    XCTAssertEqual(
+      PrCommentMarkdown.blocks("説明\n| a | b |\n| - | - |\n| 1 | 2 |").map(\.text.string),
+      ["説明", "| a | b |\n| - | - |\n| 1 | 2 |"])
+  }
+
+  /// 脚注の参照と定義は、書かれた字のまま出る。
+  func testFootnotesKeepTheirWrittenText() {
+    XCTAssertEqual(
+      PrCommentMarkdown.blocks("本文[^1]\n\n[^1]: 注").map(\.text.string), ["本文[^1]", "[^1]: 注"])
+  }
+
+  /// 番号の右揃えは、最後の番号でなく最も広い番号に合わせる（数字の幅は字ごとに違う）。
+  func testNumbersAlignToTheWidestNumber() {
+    let blocks = PrCommentMarkdown.blocks("10. a\n11. b")
+    let rights = blocks.map { block in
+      block.markers[0].x
+        + ZoneTextLayout.width([
+          ZoneTextRun(
+            block.markers[0].text, font: Theme.Typography.editorPrThreadBody, color: .clear)
+        ])
+    }
+    XCTAssertEqual(rights[0], rights[1], accuracy: 0.01)
+    XCTAssertGreaterThanOrEqual(
+      blocks[0].indent - rights[0], Theme.Layout.editorPrBodyListMarkerGap - 0.01)
+  }
 }
