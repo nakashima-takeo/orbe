@@ -1,14 +1,16 @@
+import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// PR の diff のコメントの層——スレッドを付いた行の下に置き、行の右端の印から新しいコメントの欄を開き、書き込みの結果で欄を
+/// PR の diff のコメントの層——スレッドが付いた行の下に置き、行の右端の印から新しいコメントの欄を開き、書き込みの結果で欄を
 /// 空にするか本文を残す。PR の中身とレビューのやりとりは差し替えの構造体が答える。
 ///
-/// 壊れると何が起きるか: スレッドが別の行の下に出る。印を押しても欄が開かない・焦点が入らない。書いた行と違う行にコメントが
-/// 付く。失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。PR に push があると書きかけが消える・
-/// 欄が元の行の番号のまま別の行の下に残る・書き換えられた行へのコメントを古い行の番号で送れる。
+/// 壊れると何が起きるか: スレッドが別の行の下に出る。印を押しても欄が開かない・焦点が入らない・⌘↵ で書けない。書いた行と
+/// 違う行にコメントが付く（rename の判定が GitHub と食い違うファイルの古い側の行を含む）。2 回押すと同じコメントが 2 つ付く。
+/// 失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。同じ PR の別のタブの書きかけが消える。PR に
+/// push があると書きかけが消える・欄が元の行の番号のまま別の行の下に残る・書き換えられた行へのコメントを古い行の番号で送れる。
 extension EditorDiffTests {
   /// 差し替えの GitHub のレビューのやりとり（テストが書き換える）と、届いた書き込み。
   private final class Remote {
@@ -17,13 +19,20 @@ extension EditorDiffTests {
     var threads: [GitHubPullRequestReview.Thread] = []
     var writes: [GitHubReviewWrite] = []
     var failure: GitHubFailure?
+    /// 真なら書き込みの答えを返さずに `held` に溜める（書き込みの最中を作る）。
+    var holds = false
+    var held: [() -> Void] = []
   }
 
-  /// a.txt の行 3 を変えた PR の diff を開く。
-  private func commentedDiff(_ remote: Remote) throws -> (EditorDiff, MetalTextSurface) {
+  /// PR の diff を開く。PR のコミットは `edit`（無ければ a.txt の行 3 を変える）で、GitHub はファイル `path` を `change`
+  /// と答える。
+  private func commentedDiff(
+    _ remote: Remote, path: String = "a.txt",
+    change: GitHubPullRequestContent.Change = .modified, edit: (() throws -> Void)? = nil
+  ) throws -> (EditorDiff, MetalTextSurface) {
     let base = repo.head()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
-    try repo.write("a.txt", "one\ntwo\nTHREE\nfour\n")
+    try (edit ?? { try self.repo.write("a.txt", "one\ntwo\nTHREE\nfour\n") })()
     XCTAssertTrue(repo.git(["commit", "-qam", "change"]).isSuccess)
     let head = repo.head()
     XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
@@ -32,7 +41,7 @@ extension EditorDiffTests {
       nodeID: "PR_7", number: 7, title: "題", url: "https://github.com/me/r/pull/7", isDraft: false,
       state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
       baseCommit: base, headCommit: head, commitCount: 1, commits: [],
-      files: [.init(path: "a.txt", change: .modified, isViewed: false)])
+      files: [.init(path: path, change: change, isViewed: false)])
     let state = PullRequestState.shared(
       for: PullRequestState.Key(
         commonDir: repo.root + "/.git", id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 7))),
@@ -51,11 +60,21 @@ extension EditorDiffTests {
         },
         writeReview: { write, _, pending, _, completion in
           remote.writes.append(write)
-          completion(GitHubReviewWriteResult(pendingReview: pending, failure: remote.failure))
+          let answer = {
+            completion(GitHubReviewWriteResult(pendingReview: pending, failure: remote.failure))
+          }
+          if remote.holds { remote.held.append(answer) } else { answer() }
         }))
     state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
+    return try open(state, path: path)
+  }
+
+  /// PR の状態 `state` のファイル `path` の diff を、新しいタブで開く。
+  private func open(_ state: PullRequestState, path: String = "a.txt") throws -> (
+    EditorDiff, MetalTextSurface
+  ) {
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id(path, .pullRequest(state)), as: .pinned)
     pumpMain(
       until: {
         diff.content == .ready && diff.comments?.isSettled == true && diff.newSurface != nil
@@ -87,17 +106,19 @@ extension EditorDiffTests {
       spans.last { $0.line <= 4 }?.allowsTrailingMark, false, "改行の後の空の行は GitHub の diff に無い")
   }
 
-  /// 印を押すとその行の下に新しいコメントの欄が開いて主になり、「レビューに追加」でその側と行（1 始まり）・diff の先頭の
-  /// コミットのスレッドを書く。通れば欄は閉じる。
+  /// 印を押すとその行の下に新しいコメントの欄が開いて主になり、欄の ⌘↵ でその側と行（1 始まり）・diff の先頭のコミットの
+  /// スレッドを書く。通れば欄は閉じる。
   func testTheMarkOpensADraftThatWritesAThreadOnItsLine() throws {
     let remote = Remote()
     let (diff, surface) = try commentedDiff(remote)
+    let window = try XCTUnwrap(surface.textView.window)
+    window.makeFirstResponder(surface.textView)
     let layer = try XCTUnwrap(diff.comments)
     layer.surface(surface, didPressTrailingMarkOn: .document(1))
     let draft = try XCTUnwrap(layer.draft(.new, line: 1))
     XCTAssertEqual(surface.primary, .field(draft.field.id), "欄に焦点が入る")
     surface.replaceText(of: draft.field, with: "直す")
-    draft.zone(.pressed(PrCommentControl.add))
+    XCTAssertTrue(window.performKeyEquivalent(with: .key("\r")))
     pumpMain(until: { layer.draft(.new, line: 1) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(
       remote.writes,
@@ -132,6 +153,70 @@ extension EditorDiffTests {
     surface.replaceText(of: draft.field, with: "書きかけ")
     surface.selectedRange = NSRange(location: 0, length: 0)
     XCTAssertIdentical(layer.draft(.new, line: 0), draft, "本文のある欄は残る")
+  }
+
+  /// rename の判定が GitHub と手元で食い違うファイルでは、古い側の行（削除行）に印を出さない。新しい側の行には出す。
+  func testARenameGitHubDoesNotSeeKeepsMarksOffTheOldSide() throws {
+    let (diff, surface) = try commentedDiff(Remote(), path: "b.txt", change: .modified) {
+      XCTAssertTrue(self.repo.git(["mv", "a.txt", "b.txt"]).isSuccess)
+      try self.repo.write("b.txt", "one\ntwo\nTHREE\nfour\n")
+    }
+    XCTAssertEqual(diff.comments?.path, "b.txt")
+    let removed = surface.rows.contents.flatMap { content -> [InsertedLine] in
+      if case .lines(let lines) = content { lines } else { [] }
+    }
+    XCTAssertFalse(removed.isEmpty, "前提: 手元は rename として削除行を出す")
+    XCTAssertFalse(removed.contains(where: \.allowsTrailingMark))
+    XCTAssertTrue(surface.rows.spans.contains(where: \.allowsTrailingMark))
+  }
+
+  /// 新しいスレッドの書き込みの最中は欄が書き込みの最中の姿で、「レビューに追加」を 2 回押しても書き込みは 1 回。
+  func testPressingAddTwiceWhileWritingWritesOneThread() throws {
+    let remote = Remote()
+    remote.holds = true
+    let (diff, surface) = try commentedDiff(remote)
+    let layer = try XCTUnwrap(diff.comments)
+    layer.surface(surface, didPressTrailingMarkOn: .document(1))
+    let draft = try XCTUnwrap(layer.draft(.new, line: 1))
+    surface.replaceText(of: draft.field, with: "一度だけ")
+    draft.zone(.pressed(PrCommentControl.add))
+    XCTAssertTrue(draft.isWriting)
+    draft.zone(.pressed(PrCommentControl.add))
+
+    remote.holds = false
+    while !remote.held.isEmpty { remote.held.removeFirst()() }
+    pumpMain(until: { layer.draft(.new, line: 1) == nil }, "通れば欄が閉じる")
+    XCTAssertEqual(remote.writes.count, 1)
+  }
+
+  /// 同じ PR の diff を 2 つのタブで開いても、片方のタブの返信が通って欄が空になる・失敗の文が出るのはそのタブだけで、
+  /// もう片方の書きかけは変わらない。
+  func testTwoTabsOfOnePullRequestKeepTheirOwnReplyDrafts() throws {
+    let remote = Remote()
+    remote.threads = [
+      GitHubPullRequestReview.Thread(
+        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
+        canResolve: true, canUnresolve: false,
+        comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
+    ]
+    let (first, _) = try commentedDiff(remote)
+    let (second, _) = try open(try XCTUnwrap(first.comments).state)
+    let mine = try XCTUnwrap(first.comments?.zone(thread: "T"))
+    let other = try XCTUnwrap(second.comments?.zone(thread: "T"))
+    pumpMain(until: { mine.surface != nil && other.surface != nil }, "両方のタブにスレッドが置かれる")
+    other.surface?.replaceText(of: other.field, with: "別のタブの書きかけ")
+
+    mine.surface?.replaceText(of: mine.field, with: "通る返信")
+    mine.zone(.pressed(PrCommentControl.add))
+    pumpMain(until: { mine.text.isEmpty }, "通れば欄が空になる")
+    XCTAssertEqual(other.text, "別のタブの書きかけ")
+
+    remote.failure = .unreachable
+    mine.surface?.replaceText(of: mine.field, with: "通らない返信")
+    mine.zone(.pressed(PrCommentControl.add))
+    pumpMain(until: { mine.failure != nil }, "失敗が届く")
+    XCTAssertNil(other.failure)
+    XCTAssertEqual(other.text, "別のタブの書きかけ")
   }
 
   /// PR の feat に a.txt を `text` にするコミットを足し、PR の状態を読み直して、diff が新しい先頭の版を見せ終えるのを待つ。
