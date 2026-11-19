@@ -33,6 +33,14 @@ public protocol TextSurface: AnyObject {
   /// 縦の並びの中の位置 `position` を先頭（上端）に置く（スクロールできる範囲の端で止まる）。横は動かさない。
   func scroll(to position: RowPosition)
 
+  /// 縦の並びの中の位置 `position` を、行の前の差し込みのうち差し込んだ行だけを数えた段に直す（絵の差し込みと空きの高さを
+  /// 数えない。絵の差し込みか空きの中なら、その下の差し込んだ行の頭）。絵の差し込みの高さが変わっても、同じ差し込んだ行を
+  /// 指す。
+  func lineRow(of position: RowPosition) -> RowPosition
+
+  /// 差し込んだ行だけを数えた段 `row` の、今の並びでの位置（`lineRow(of:)` の逆）。
+  func position(ofLineRow row: RowPosition) -> RowPosition
+
   /// 縦の並びの中の位置 `from` から `to` までを、縦は方針 `policy` で見せる（範囲は `from` の上端から `to` の上端まで）。
   /// 横は `from` の行の行頭が見えるところまで最小限。判定は面の最新の位置で行い、選択は動かさない。
   func reveal(from: RowPosition, to: RowPosition, policy: TextReveal)

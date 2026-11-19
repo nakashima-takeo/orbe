@@ -86,7 +86,9 @@ extension EditorDiff {
     self.carried = nil
     switch carried {
     case .anchor(let anchor):
-      surface.scroll(to: DiffRows.position(of: anchor, hunks, side: presented == .side))
+      surface.scroll(
+        to: surface.position(
+          ofLineRow: DiffRows.position(of: anchor, hunks, side: presented == .side)))
     case .position(let position):
       surface.scroll(to: position)
     }

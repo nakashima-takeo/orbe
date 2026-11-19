@@ -364,7 +364,8 @@ final class EditorDiff {
       if placement == .placed {
         carried =
           keepsOld
-          ? .anchor(DiffRows.anchor(at: top, revisionHunks, side: presented == .side))
+          ? .anchor(
+            DiffRows.anchor(at: previous.lineRow(of: top), revisionHunks, side: presented == .side))
           : .position(top)
       }
       dropOldSurface()

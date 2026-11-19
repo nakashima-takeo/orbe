@@ -147,7 +147,8 @@ enum DiffRows {
     let added: Int
   }
 
-  /// 新しい側の面の位置 `top` を、行差分 `hunks` の並び（`side` なら並列の右、そうでなければインライン）で古い側の錨に直す。
+  /// 新しい側の面の位置 `top`（差し込んだ行だけを数えた段 → `TextSurface.lineRow(of:)`）を、行差分 `hunks` の並び（`side`
+  /// なら並列の右、そうでなければインライン）で古い側の錨に直す。
   static func anchor(at top: RowPosition, _ hunks: [LineHunk], side: Bool) -> Anchor {
     var shift = 0
     for hunk in hunks {
@@ -179,8 +180,8 @@ enum DiffRows {
     return Anchor(line: max(0, top.line + shift), added: 0)
   }
 
-  /// 古い側の錨 `anchor` を、行差分 `hunks` の並びの新しい側の面の位置に戻す（`anchor(at:_:side:)` の逆）。錨の追加の行が
-  /// 新しい並びに無ければ、同じ区間の頭に寄せる。
+  /// 古い側の錨 `anchor` を、行差分 `hunks` の並びの新しい側の面の位置（差し込んだ行だけを数えた段）に戻す
+  /// （`anchor(at:_:side:)` の逆）。錨の追加の行が新しい並びに無ければ、同じ区間の頭に寄せる。
   static func position(of anchor: Anchor, _ hunks: [LineHunk], side: Bool) -> RowPosition {
     var shift = 0
     for hunk in hunks {
