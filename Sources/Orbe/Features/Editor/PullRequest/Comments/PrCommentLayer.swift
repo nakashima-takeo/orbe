@@ -71,9 +71,12 @@ final class PrCommentLayer {
   /// diff が見せている両側の本文 `shown` の並びに混ぜる注記。スレッドの値と書き込みの最中かを絵の差し込みへ写し、見せている
   /// 両端の先頭のコミットで読んだスレッドのうち今の diff に置けるもの（`PullRequestState.canPlace`）と、行を追う欄（新しい
   /// コメントの欄と、返信の書きかけを持ったまま置けなくなったスレッド）を置く。別の両端で行を数えた欄は、行を今の版へ移し
-  /// 始める。両端が分からなければ何も置かない。
+  /// 始める。見せている本文が前に注記を渡した本文のままなら、そのときの両端で置く（出どころが新しい両端の本文を読み終えても、
+  /// diff がそれを見せるまでは前の両端）。両端が分からなければ何も置かない。
   func notes(shown: EditorDiff.SideTexts?) -> DiffRows.Notes {
-    guard let shown, let ends = pullRequest.ends(of: shown) else {
+    guard let shown,
+      let ends = pullRequest.ends(of: shown) ?? (placed?.shown == shown ? placed?.ends : nil)
+    else {
       placed = nil
       return DiffRows.Notes()
     }

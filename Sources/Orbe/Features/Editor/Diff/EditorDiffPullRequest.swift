@@ -11,8 +11,6 @@ final class EditorDiffPullRequest: EditorDiffSource {
   var onChange: ((EditorDiff.SourceChange) -> Void)?
   /// 読み終えた両端と、その答え。
   private var read: (ends: PullRequestState.DiffEnds, resolution: EditorDiff.Resolution)?
-  /// その前に読み終えた両端と、その答え（diff が新しい両端の本文を見せるまで、前の本文を見せている）。
-  private var previous: (ends: PullRequestState.DiffEnds, resolution: EditorDiff.Resolution)?
   /// 読んでいる両端。
   private var reading: PullRequestState.DiffEnds?
 
@@ -50,14 +48,10 @@ final class EditorDiffPullRequest: EditorDiffSource {
     return read?.ends == ends
   }
 
-  /// 両側の本文 `texts` を読んだ両端（最後か、その前に読んだ両端の本文でなければ nil）。新しい両端の本文を読み終えてから
-  /// diff がそれを見せるまでの間も、diff が見せている前の本文の両端を答える——その間も、コメントの層が欄とスレッドを前の
-  /// 並びに置き続けられる。
+  /// 両側の本文 `texts` を読んだ両端（最後に読んだ両端の本文でなければ nil）。
   func ends(of texts: EditorDiff.SideTexts) -> PullRequestState.DiffEnds? {
-    [read, previous].lazy.compactMap { $0 }.first {
-      if case .revisions(let sides) = $0.resolution { return sides == texts }
-      return false
-    }?.ends
+    guard let read, case .revisions(let sides) = read.resolution, sides == texts else { return nil }
+    return read.ends
   }
 
   /// 両端 `ends` の古い側と新しい側の版の本文を読み、読み終えたら diff を作り直させる。
@@ -69,7 +63,6 @@ final class EditorDiffPullRequest: EditorDiffSource {
       repo.version(of: path, at: .commit(ends.head)) { [weak self] new in
         guard let self, reading == ends else { return }
         reading = nil
-        previous = read
         read = (ends, Self.resolution(old: old, new: new))
         onChange?(.material)
       }
