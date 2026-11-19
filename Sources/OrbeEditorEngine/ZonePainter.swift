@@ -110,9 +110,6 @@ final class ZonePainter {
     _ layer: ZoneLayer, _ look: Look, inks: inout Inks, copy: inout Copy,
     serial: (ZoneTextField) -> Int
   ) -> (ZoneMaterial.Layer, ZoneHits.Layer) {
-    let resolve = { (color: NSColor?) -> FrameColor in
-      color.map { FrameColor($0, appearance: look.appearance, space: look.space) } ?? .clear
-    }
     var material = ZoneMaterial.Layer()
     var hits = ZoneHits.Layer()
     for element in layer.elements {
@@ -124,12 +121,12 @@ final class ZonePainter {
             radius: SIMD4(
               Float(box.radius.topLeft), Float(box.radius.topRight),
               Float(box.radius.bottomRight), Float(box.radius.bottomLeft)),
-            fill: resolve(box.fill),
-            stroke: resolve(box.stroke?.color), strokeWidth: Float(box.stroke?.width ?? 0),
-            shadow: resolve(box.shadow?.color), shadowOffset: Float(box.shadow?.offset ?? 0),
+            fill: inks.frame(box.fill),
+            stroke: inks.frame(box.stroke?.color), strokeWidth: Float(box.stroke?.width ?? 0),
+            shadow: inks.frame(box.shadow?.color), shadowOffset: Float(box.shadow?.offset ?? 0),
             shadowBlur: Float(box.shadow?.blur ?? 0)))
       case .text(let line):
-        let runs = copy.label(line.runs) { prepared(ZoneTextLayout.line($0).runs) }
+        let runs = copy.label(line.runs) { prepared(ZoneTextLayout.line($0).runs, inks: &inks) }
         material.runs += Self.runs(
           runs, colors: line.runs.map(\.color), origin: line.origin, inks: &inks)
       case .image(let image):
@@ -164,7 +161,7 @@ final class ZonePainter {
     for (index, line) in typeset.lines.enumerated() {
       let origin = text.origins[index]
       material.runs += Self.runs(
-        prepared(line.runs), colors: colors, origin: origin, inks: &inks)
+        prepared(line.runs, inks: &inks), colors: colors, origin: origin, inks: &inks)
       let metrics = typeset.metrics[index]
       hits.lines.append(
         ZoneHits.Line(
@@ -188,9 +185,11 @@ final class ZonePainter {
   }
 
   /// 組んだ行のグリフの連なりを、外観に依らない形（面の中で揃えたフォント）にする。
-  private func prepared(_ runs: [ZoneTextLayout.GlyphRun]) -> [Glyphs] {
+  private func prepared(_ runs: [ZoneTextLayout.GlyphRun], inks: inout Inks) -> [Glyphs] {
     runs.map { run in
-      Glyphs(style: run.style, font: canonical(run.font), glyphs: run.glyphs, xs: run.xs, ys: run.ys)
+      Glyphs(
+        style: run.style, font: inks.font(run.font) { canonical($0) }, glyphs: run.glyphs,
+        xs: run.xs, ys: run.ys)
     }
   }
 
@@ -262,16 +261,36 @@ private struct Copy {
   }
 }
 
-/// 1 回の写しの中で、色を外観で解いた字の色の覚え（同じ色を解き直さない）。
+/// 1 回の写しの中で、外観で解いた字の色と箱の色、面の中で揃えたフォントの覚え（同じ参照を解き直さない）。鍵は参照の
+/// 同一性——写している間は絵が色とフォントを持ち続けるので、同じ鍵が別の値を指すことは無い。覚えは写しをまたがない。
 @MainActor
 private struct Inks {
   let look: ZonePainter.Look
-  var known: [NSColor: InkColor] = [:]
+  var inks: [ObjectIdentifier: InkColor] = [:]
+  var frames: [ObjectIdentifier: FrameColor] = [:]
+  var fonts: [ObjectIdentifier: CTFont] = [:]
 
   mutating func ink(_ color: NSColor) -> InkColor {
-    if let ink = known[color] { return ink }
+    if let ink = inks[ObjectIdentifier(color)] { return ink }
     let ink = InkColor(color, appearance: look.appearance, space: look.space, scale: look.scale)
-    known[color] = ink
+    inks[ObjectIdentifier(color)] = ink
     return ink
+  }
+
+  /// 箱の色（無ければ透明）。
+  mutating func frame(_ color: NSColor?) -> FrameColor {
+    guard let color else { return .clear }
+    if let frame = frames[ObjectIdentifier(color)] { return frame }
+    let frame = FrameColor(color, appearance: look.appearance, space: look.space)
+    frames[ObjectIdentifier(color)] = frame
+    return frame
+  }
+
+  /// フォント `font` を面の中で揃えたもの（覚えに無ければ `canonical` で引く）。
+  mutating func font(_ font: CTFont, canonical: (CTFont) -> CTFont) -> CTFont {
+    if let known = fonts[ObjectIdentifier(font)] { return known }
+    let resolved = canonical(font)
+    fonts[ObjectIdentifier(font)] = resolved
+    return resolved
   }
 }
