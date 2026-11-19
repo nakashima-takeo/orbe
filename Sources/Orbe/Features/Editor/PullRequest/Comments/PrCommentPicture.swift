@@ -26,10 +26,10 @@ enum PrCommentPicture {
     var canSend: Bool { !isLineGone && !isLineMoving }
   }
 
-  /// 組んだ絵と、その絵のリンクの行き先（押せる場所の通し番号 → URL）。
+  /// 組んだ絵と、その絵のリンクの行き先（コメントの id → 本文の層の中の通し番号 → URL）。
   struct Composed {
     let picture: ZonePicture
-    let links: [Int: URL]
+    let links: [String: [Int: URL]]
   }
 
   /// 頭の帯の敷き方。
@@ -66,7 +66,7 @@ enum PrCommentPicture {
   // MARK: - 開いたスレッド
 
   static func expanded(
-    _ thread: GitHubPullRequestReview.Thread, measured: [String: PrCommentMeasure],
+    _ thread: GitHubPullRequestReview.Thread, bodies: [String: PrCommentBody],
     field: ZoneTextField, _ state: State, width: CGFloat
   ) -> Composed {
     var canvas = PrCommentCanvas(state: state)
@@ -76,7 +76,7 @@ enum PrCommentPicture {
     y += Size.editorPrThreadHead + 1 + Size.editorPrThreadListPadY
     for (index, comment) in thread.comments.enumerated() {
       if index > 0 { y += Size.editorPrThreadCommentGap }
-      y += self.comment(comment, measured[comment.id], in: frame, top: y, &canvas)
+      y += self.comment(comment, bodies[comment.id], in: frame, top: y, &canvas)
     }
     y += Size.editorPrThreadListPadY
     if thread.canReply {

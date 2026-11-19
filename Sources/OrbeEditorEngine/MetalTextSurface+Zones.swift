@@ -37,7 +37,7 @@ extension MetalTextSurface {
     for (id, entry) in zones where !ids.contains(id) {
       zones[id] = nil
       zonesResized = true
-      if !entry.material.images.isEmpty { zoneImagesChanged = true }
+      if !entry.material.pixelKeys.isEmpty { zoneImagesChanged = true }
       orphanFields(of: entry, keeping: [])
       transaction?.writes.append { $0.zones[id] = nil }
       if case .zoneText = primary, zoneSelection?.zone == id { setPrimary(.body) }
@@ -62,27 +62,31 @@ extension MetalTextSurface {
     }
   }
 
-  /// 絵を描く材料と当たりの表に写して書く（取引の中）。入力欄の場を作り・使い回し、描き直した絵から消えた入力欄の場は
-  /// 取引の終わりに閉じる。絵の差し込みの文の選択を確かめ直す。高さが変われば取引の終わりに並びを組み直す。
+  /// 絵を描く材料と当たりの表に写して書く（取引の中）。前の写しと同じ層は使い回す（→ `ZonePainter`）。入力欄の場を作り・
+  /// 使い回し、描き直した絵から消えた入力欄の場は取引の終わりに閉じる。絵の差し込みの文の選択を確かめ直す。高さが変われば
+  /// 取引の終わりに並びを組み直す。
   func paint(_ entry: ZoneEntry) {
     let id = ObjectIdentifier(entry.zone)
-    let (material, hits) = painter.paint(
+    let previous = entry.hits
+    let painted = painter.paint(
       entry.picture,
       ZonePainter.Look(appearance: textView.effectiveAppearance, space: space, scale: scale),
-      reusing: entry.hits, serial: { fieldSite(for: $0).serial })
-    orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)))
-    if entry.material.images.map(\.pixels.key) != material.images.map(\.pixels.key) {
-      zoneImagesChanged = true
-    }
-    entry.material = material
-    entry.hits = hits
-    for field in hits.fields {
-      guard let site = fields[field.field.id] else { continue }
+      reusing: (entry.material, entry.hits), serial: { fieldSite(for: $0).serial })
+    let fields = painted.hits.fields
+    precondition(
+      Set(fields.map(\.field.id)).count == fields.count, "入力欄の id は絵の差し込みの中で一意")
+    orphanFields(of: entry, keeping: Set(fields.map(\.field.id)))
+    if painted.imagesChanged { zoneImagesChanged = true }
+    entry.material = painted.material
+    entry.hits = painted.hits
+    for field in fields {
+      guard let site = self.fields[field.field.id] else { continue }
       precondition(site.zone == nil || site.zone == id, "入力欄の id は面の中で一意（2 つの絵の差し込みに置かない）")
       site.zone = id
       site.frame = field.frame
       site.touch()
     }
+    let material = painted.material
     transaction?.writes.append { $0.zones[id] = material }
     if let block = rows.block(ofZone: id),
       rows.heights[block] != Double(max(0, entry.picture.height))
@@ -90,7 +94,7 @@ extension MetalTextSurface {
       zoneHeightsChanged = true
       zonesResized = true
     }
-    if zoneSelection?.zone == id { validateZoneSelection(entry) }
+    if zoneSelection?.zone == id { validateZoneSelection(entry, previous: previous) }
   }
 
   /// 絵の差し込み `entry` が描いていた入力欄のうち、`keeping` に無いものを、どの絵の差し込みも描いていない場にする
@@ -153,8 +157,7 @@ extension MetalTextSurface {
     if zoneImagesChanged {
       zoneImagesChanged = false
       let marks = [trailingMarkLooks?.normal, trailingMarkLooks?.hovered].compactMap { $0 }
-      painter.keep(
-        images: Set((zones.values.map(\.material) + marks).flatMap { $0.images.map(\.pixels.key) }))
+      painter.keep(images: Set((zones.values.map(\.material) + marks).flatMap(\.pixelKeys)))
     }
   }
 

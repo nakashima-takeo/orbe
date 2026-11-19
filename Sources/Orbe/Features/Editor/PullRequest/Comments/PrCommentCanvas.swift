@@ -1,17 +1,16 @@
 import AppKit
 import OrbeEditorCore
 
-/// スレッドの絵の要素と選べる文を積む。
+/// スレッドの絵の層を積む。描き直しのたびに組む要素（頭・メタの行・返信の行・失敗の文。座標は絵の差し込みの左上から）は
+/// 本文の層の間ごとに 1 つの層にまとめ、コメントの本文は組んだ本文の層をそのまま置く——箱の重ね順（層の順）は要素を積んだ
+/// 順のまま。
 @MainActor
 struct PrCommentCanvas {
   let state: PrCommentPicture.State
+  /// 今の層に積んでいる要素。
   var elements: [ZoneElement] = []
-  var texts: [ZoneText] = []
-  var links: [Int: URL] = [:]
-
-  /// 本文の行の高さ（字 12・行高 1.6）。
-  static let bodyLineHeight =
-    Theme.Typography.editorPrThreadBody.pointSize * Theme.Typography.editorPrThreadBodyLineHeight
+  private var layers: [(origin: CGPoint, layer: ZoneLayer)] = []
+  private var links: [String: [Int: URL]] = [:]
 
   init(state: PrCommentPicture.State) {
     self.state = state
@@ -37,60 +36,25 @@ struct PrCommentCanvas {
     enabled ? color : PrCommentStyle.disabled(color)
   }
 
-  /// 左上 `origin` の行 `line` の見え方ごとの飾り——インラインコードの地（余白込み・角丸 3）、取り消し線、リンクの押せる場所。
-  mutating func decorate(
-    _ line: ZoneTextLayout.Line, _ block: PrCommentBlock, at origin: CGPoint, baseline: CGFloat
-  ) {
-    let (left, top, height) = (origin.x, origin.y, Self.bodyLineHeight)
-    let mono = Theme.Typography.editorPrThreadCode
-    for (index, style) in block.text.styles.enumerated() {
-      let spans = line.spans(of: index)
-      guard !spans.isEmpty else { continue }
-      if style.leadingPadding > 0 {
-        for span in spans {
-          elements.append(
-            .box(
-              ZoneBox(
-                frame: CGRect(
-                  x: left + span.lowerBound, y: baseline - mono.ascender - 1,
-                  width: span.upperBound - span.lowerBound,
-                  height: mono.ascender - mono.descender + 2),
-                radius: .init(Theme.Layout.editorPrInlineCodeRadius),
-                fill: Theme.Color.editorPrInlineCode)))
-        }
-      }
-      if block.strikes.contains(index) {
-        let font = style.font
-        let y = baseline - CTFontGetXHeight(font) / 2
-        for span in spans {
-          elements.append(
-            .box(
-              ZoneBox(
-                frame: CGRect(
-                  x: left + span.lowerBound, y: y - 0.5, width: span.upperBound - span.lowerBound,
-                  height: 1), fill: style.color)))
-        }
-      }
-      if let url = block.links[index] {
-        for span in spans {
-          let id = links.count
-          links[id] = url
-          elements.append(
-            .button(
-              ZoneButton(
-                id: PrCommentControl.link(id),
-                frame: CGRect(
-                  x: left + span.lowerBound, y: top, width: span.upperBound - span.lowerBound,
-                  height: height))))
-        }
-      }
-    }
+  /// コメント `comment` の組んだ本文の層を、左上 `origin` に置く（それまでに積んだ要素は 1 つの層にして閉じる）。
+  mutating func place(_ body: PrCommentBody, comment: String, at origin: CGPoint) {
+    close()
+    layers.append((origin, body.layer))
+    links[comment] = body.links
+  }
+
+  /// 積んでいる要素を 1 つの層にして閉じる。
+  private mutating func close() {
+    guard !elements.isEmpty else { return }
+    layers.append((.zero, ZoneLayer(elements: elements)))
+    elements = []
   }
 
   /// 箱（地・枠・影）と頭の帯（無ければ帯なし）を下に敷き、絵にする。`bottom` は箱の下端。
-  func finish(_ frame: CGRect, bottom: CGFloat, head: PrCommentPicture.Head?)
+  mutating func finish(_ frame: CGRect, bottom: CGFloat, head: PrCommentPicture.Head?)
     -> PrCommentPicture.Composed
   {
+    close()
     let outer = CGRect(
       x: frame.minX, y: frame.minY, width: frame.width, height: bottom - frame.minY)
     let inner = outer.insetBy(dx: 1, dy: 1)
@@ -125,8 +89,8 @@ struct PrCommentCanvas {
     }
     return PrCommentPicture.Composed(
       picture: ZonePicture(
-        height: outer.maxY + Theme.Layout.editorPrThreadBottom, elements: ground + elements,
-        texts: texts),
+        height: outer.maxY + Theme.Layout.editorPrThreadBottom,
+        layers: [(.zero, ZoneLayer(elements: ground))] + layers),
       links: links)
   }
 }

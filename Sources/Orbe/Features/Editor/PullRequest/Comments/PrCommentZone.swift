@@ -13,14 +13,15 @@ enum PrCommentControl: Hashable {
   case resolveReply
   /// 新しいコメントの欄の「取り消す」。
   case cancel
-  /// 本文のリンク（組んだ絵の中の通し番号）。
-  case link(Int)
+  /// 本文のリンク（コメントの id と、そのコメントの本文の層の中の通し番号）。
+  case link(comment: String, index: Int)
 }
 
 /// diff の行の下に置く、スレッド 1 つか新しいコメントの欄 1 つの絵の差し込み。中身（スレッドの値・書き込みの最中か・失敗の文・
-/// 畳んでいるか・ホバー）は載せる層が置き、変われば描き直させる。絵は `PrCommentPicture` が中身と幅から組む。本文の測りは
-/// 裏で行い、幅ごとに覚える（→ `PrCommentMeasures`）。返信・新しいコメントの本文は入力欄（`field`）が持ち、描き直し・並びの
-/// 置き直し・インライン ⇄ 並列をまたいで残る。
+/// 畳んでいるか・ホバー）は載せる層が置き、変われば描き直させる。絵は `PrCommentPicture` が中身と幅から組む。コメントの
+/// 本文の層は裏で組み、幅ごとに覚える（→ `PrCommentBodies`）——描き直しは本文の層を同じ参照のまま絵に置くので、面は本文の層を
+/// 写し直さない。返信・新しいコメントの本文は入力欄（`field`）が持ち、描き直し・並びの置き直し・インライン ⇄ 並列をまたいで
+/// 残る。
 @MainActor
 final class PrCommentZone: SurfaceZone {
   enum Subject: Equatable {
@@ -75,9 +76,9 @@ final class PrCommentZone: SurfaceZone {
   }
   private(set) var hovered: PrCommentControl?
   private(set) var isFieldPrimary = false
-  /// 最後に組んだ絵のリンクの行き先。
-  private var links: [Int: URL] = [:]
-  private let measures = PrCommentMeasures()
+  /// 最後に組んだ絵のリンクの行き先（コメントの id → 本文の層の中の通し番号 → URL）。
+  private var links: [String: [Int: URL]] = [:]
+  private let bodies = PrCommentBodies()
   /// 入力欄の行の数と、空か（変わったときだけ描き直す）。
   private var fieldShape: (lines: Int, empty: Bool)
 
@@ -97,7 +98,7 @@ final class PrCommentZone: SurfaceZone {
       guard let self else { return }
       onPress(self, .add)
     }
-    measures.done = { [weak self] in self?.redraw() }
+    bodies.done = { [weak self] in self?.redraw() }
   }
 
   /// スレッドの値を置き換える（中身が変われば描き直す）。
@@ -107,8 +108,8 @@ final class PrCommentZone: SurfaceZone {
     redraw()
   }
 
-  /// 本文を裏で測っている（覚えから組めるようになるまで、仮の絵を返す）。
-  var isMeasuring: Bool { measures.isMeasuring }
+  /// 本文を裏で組んでいる（覚えから絵を組めるようになるまで、仮の絵を返す）。
+  var isTypesetting: Bool { bodies.isTypesetting }
 
   /// 入力欄の今の本文。
   var text: String { field.string }
@@ -148,8 +149,8 @@ final class PrCommentZone: SurfaceZone {
       redraw()
     case .pressed(let id):
       guard let control = id.base as? PrCommentControl else { return }
-      if case .link(let index) = control {
-        if let url = links[index] { NSWorkspace.shared.open(url) }
+      if case .link(let comment, let index) = control {
+        if let url = links[comment]?[index] { NSWorkspace.shared.open(url) }
         return
       }
       onPress(self, control)
@@ -169,10 +170,10 @@ final class PrCommentZone: SurfaceZone {
     case .thread(let thread) where isCollapsed:
       composed = PrCommentPicture.collapsed(thread, state, width: width)
     case .thread(let thread):
-      let measured = measures.measures(
+      let bodies = bodies.bodies(
         thread.comments.map { ($0.id, $0.body) }, width: PrCommentPicture.bodyWidth(width))
       composed = PrCommentPicture.expanded(
-        thread, measured: measured, field: field, state, width: width)
+        thread, bodies: bodies, field: field, state, width: width)
     }
     links = composed.links
     return composed.picture

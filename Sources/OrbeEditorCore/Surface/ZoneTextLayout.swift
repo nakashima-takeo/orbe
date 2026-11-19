@@ -1,36 +1,28 @@
 import AppKit
 import CoreText
 
-/// 絵の差し込みの字の組版（純関数）。面は配置の仕組みを持たない。載せる側は絵を組むときにここで測り（`lines(_:styles:width:)`。
-/// どのスレッドからも呼べ、結果は値で main へ渡せる）、面は描くときに測った行の範囲で組む（`lines(of:)`）——どちらも段落を
-/// 1 回組んだもの（→ `ZoneComposition`）から行を切り出すので、測った幅・位置と描いた字が食い違わない。
+/// 絵の差し込みの字の組版（純関数）。面は配置の仕組みを持たない。載せる側は選べる文をここで組み（`typeset(_:width:)`。
+/// どのスレッドからも呼べ、組んだものは main へ渡せる）、組んだ行の範囲・幅・地で飾りを置き、組んだものを絵に渡す——面は
+/// 渡された組んだ行をそのまま描き、当たりと選択に使うので、飾りを置いた幅・位置と描いた字が食い違わない。
 ///
 /// 余白のある見え方（インラインコード）は、余白の幅を持つ見えない字（置き字）で包み、周りの文と独立した向きのかたまりとして
 /// 並べる。並べ替え・折り返し・和文との間の空きは Core Text が決める。字組みの口は元の文の位置だけで答え、置き字と制御字は
 /// 口の外へ出ない。
 public enum ZoneTextLayout {
-  /// 測った 1 行——元の文の中の範囲（改行は含めない）と、行の幅（行末の空白を除く）と、見え方ごとの地の x 範囲の列。値だけを
-  /// 持ち、どのスレッドへも渡せる。行は段落（改行で区切った文）の向きで組む。段落の向きは段落の最初の、向きを持つ字で
-  /// 決まり、段落の途中の行も同じ向きで組む。
-  public struct Line: Sendable, Equatable {
-    public let range: NSRange
-    public let width: CGFloat
-    /// 見え方の番号 → 地の x 範囲の列（行に字の無い見え方は持たない）。
-    let grounds: [Int: [Range<CGFloat>]]
-
-    /// 見え方 `style` の地の x 範囲の列（行の左端から、見た目の左から順に。行末の空白を含まない）。余白のある見え方は
-    /// 置き字を含み、1 行の中で必ず 1 つの続いた範囲になる。ほかの見え方は、双方向の並べ替えで見た目の何か所かに分かれうる。
-    public func spans(of style: Int) -> [Range<CGFloat>] { grounds[style] ?? [] }
-  }
-
-  /// 組んだ 1 行——測った行と同じ範囲・幅に、描くグリフと当たりとキャレットの答えを足したもの（面が描くときに使う）。
+  /// 組んだ 1 行——元の文の中の範囲（改行は含めない）と、行の幅（行末の空白を除く）と、見え方ごとの地の x 範囲と、描く
+  /// グリフの連なりと、当たりとキャレットの答え。行は段落（改行で区切った文）の向きで組む。段落の向きは段落の最初の、
+  /// 向きを持つ字で決まり、段落の途中の行も同じ向きで組む。
   public struct TypesetLine {
     public let range: NSRange
     public let width: CGFloat
+    /// 描くグリフの連なり（見え方ごと。置き字と制御字は含まない）。
+    public let runs: [GlyphRun]
     let line: CTLine
     /// 組んだ文の中の行の範囲。
     let composedRange: Range<Int>
     let composition: ZoneComposition
+    /// 見え方の番号 → 地の x 範囲の列（行に字の無い見え方は持たない）。
+    private let grounds: [Int: [Range<CGFloat>]]
 
     init(_ composition: ZoneComposition, _ composedRange: Range<Int>) {
       let line = composition.line(composedRange)
@@ -40,11 +32,14 @@ public enum ZoneTextLayout {
       self.composition = composition
       range = NSRange(
         location: lower, length: composition.original(composedRange.upperBound) - lower)
-      width = max(
-        0,
-        CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
-          - CGFloat(CTLineGetTrailingWhitespaceWidth(line)))
+      width = ZoneComposition.width(of: line)
+      runs = Self.runs(of: line)
+      grounds = Self.grounds(of: line, composedRange, composition)
     }
+
+    /// 見え方 `style` の地の x 範囲の列（行の左端から、見た目の左から順に。行末の空白を含まない）。余白のある見え方は
+    /// 置き字を含み、1 行の中で必ず 1 つの続いた範囲になる。ほかの見え方は、双方向の並べ替えで見た目の何か所かに分かれうる。
+    public func spans(of style: Int) -> [Range<CGFloat>] { grounds[style] ?? [] }
 
     /// 行の左端から x の所にいちばん近い、元の文の位置（行の範囲の中）。置き字の上はコードの端に当たる——置き字の
     /// グリフの上かを先に見る（Core Text の位置の当て方は、利用者の文の双方向の制御字があると置き字の外の字を返しうる）。
@@ -71,17 +66,13 @@ public enum ZoneTextLayout {
       return CTLineGetOffsetForStringIndex(line, index, nil)
     }
 
-    /// 見え方 `style` の地の x 範囲の列（→ `Line.spans(of:)`）。
-    func spans(of style: Int) -> [Range<CGFloat>] { grounds()[style] ?? [] }
-
-    /// 測った行（値）。
-    var measured: Line { Line(range: range, width: width, grounds: grounds()) }
-
     /// 見え方の番号 → 地の x 範囲の列。グリフを見た目の左から並べ、同じ見え方の続いたグリフを 1 つの範囲にまとめる。
-    func grounds() -> [Int: [Range<CGFloat>]] {
-      let hanging = hangingStart
+    private static func grounds(
+      of line: CTLine, _ composedRange: Range<Int>, _ composition: ZoneComposition
+    ) -> [Int: [Range<CGFloat>]] {
+      let hanging = hangingStart(composedRange, composition)
       var glyphs: [(x: Range<CGFloat>, owner: Int32)] = []
-      forEachGlyph { index, x in
+      forEachGlyph(of: line) { index, x in
         guard index < hanging, !x.isEmpty else { return }
         glyphs.append((x, composition.owners[index]))
       }
@@ -106,8 +97,8 @@ public enum ZoneTextLayout {
       return grounds
     }
 
-    /// 描くグリフの連なり（見え方ごと。置き字と制御字は含まない）。
-    public var runs: [GlyphRun] {
+    /// 組んだ行の、描くグリフの連なり。
+    private static func runs(of line: CTLine) -> [GlyphRun] {
       (CTLineGetGlyphRuns(line) as? [CTRun] ?? []).compactMap { run in
         let attributes = CTRunGetAttributes(run) as NSDictionary
         let count = CTRunGetGlyphCount(run)
@@ -119,13 +110,20 @@ public enum ZoneTextLayout {
         let all = CFRange(location: 0, length: count)
         CTRunGetGlyphs(run, all, &glyphs)
         CTRunGetPositions(run, all, &positions)
-        // swiftlint:disable:next force_cast
-        return GlyphRun(style: style, font: value as! CTFont, glyphs: glyphs, positions: positions)
+        let raised = positions.contains { $0.y != 0 }
+        return GlyphRun(
+          // swiftlint:disable:next force_cast
+          style: style, font: value as! CTFont, glyphs: glyphs,
+          xs: positions.map { Float($0.x) }, ys: raised ? positions.map { Float($0.y) } : [])
       }
     }
 
     /// 行末の空白の始まり（組んだ文の位置）。
-    var hangingStart: Int {
+    var hangingStart: Int { Self.hangingStart(composedRange, composition) }
+
+    private static func hangingStart(_ composedRange: Range<Int>, _ composition: ZoneComposition)
+      -> Int
+    {
       var index = composedRange.upperBound
       while index > composedRange.lowerBound, composition.whitespace[index - 1] { index -= 1 }
       return index
@@ -133,6 +131,11 @@ public enum ZoneTextLayout {
 
     /// 組んだ行のグリフごとに、組んだ文の位置と x 範囲を渡す。
     func forEachGlyph(_ body: (Int, Range<CGFloat>) -> Void) {
+      Self.forEachGlyph(of: line, body)
+    }
+
+    /// 組んだ行 `line` のグリフごとに、組んだ文の位置と x 範囲を渡す。
+    private static func forEachGlyph(of line: CTLine, _ body: (Int, Range<CGFloat>) -> Void) {
       for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
         let count = CTRunGetGlyphCount(run)
         guard count > 0 else { continue }
@@ -151,25 +154,22 @@ public enum ZoneTextLayout {
     }
   }
 
-  /// 見え方 1 つのグリフの連なり——見え方の番号（組んだときの見え方の列の添字）・字体・グリフと、行の左端・基線からの位置。
+  /// 見え方 1 つのグリフの連なり——見え方の番号（組んだときの見え方の列の添字）・字体・グリフと、行の左端からの x・
+  /// 基線からの上向きのずれ（どのグリフも基線の上なら空）。外観に依らない。
   public struct GlyphRun {
     public let style: Int
     public let font: CTFont
     public let glyphs: [CGGlyph]
-    public let positions: [CGPoint]
+    public let xs: [Float]
+    public let ys: [Float]
   }
 
-  /// 見え方つきの文 `text` を組み、幅 `width` で行に割って測る。どのスレッドからも呼べる
-  /// （載せる側は裏で測り、結果の行を main で覚えて、絵を問われたら覚えから組める）。改行（`\n`）では必ず割る。
+  /// 見え方つきの文 `text` を組み、幅 `width` で行に割る。どのスレッドからも呼べる（載せる側は裏で組み、組んだものを main で
+  /// 覚えて、絵を問われたら覚えから絵を組める）。改行（`\n`）では必ず割る。
   /// 割る位置は、余白を付けずに組んだ段落で Core Text が選ぶ位置だけ（語の境。日本語は字の境。禁則も余白なしと同じ）で、
   /// 置き字はコードから離れない。余白を付けた行が幅に収まる所で割り、語が幅に入らなければ、余白なしで狭い幅に組んだとき
   /// と同じく語の途中で割る。1 つの割れない塊（字 1 つなど）と余白が幅に入らない行だけが幅を超える。空の文は空の 1 行。
-  public static func lines(_ text: ZoneStyledText, width: CGFloat) -> [Line] {
-    typeset(text, width: width).map(\.measured)
-  }
-
-  /// 文を幅で行に割り、組んだ行を返す（測る口と、測った行を確かめる所が使う）。
-  static func typeset(_ text: ZoneStyledText, width: CGFloat) -> [TypesetLine] {
+  public static func typeset(_ text: ZoneStyledText, width: CGFloat) -> ZoneTypeset {
     let units = Array(text.string.utf16)
     var lines: [TypesetLine] = []
     var start = 0
@@ -180,30 +180,7 @@ public enum ZoneTextLayout {
       lines += wrap(composition, breakingAs: bare, width: width)
       start = span.upperBound + 1
     } while start <= units.count
-    return lines
-  }
-
-  /// 選べる文のまとまり `text` の行を、`text.lines` の順に組む（折り返さない）。行の範囲は、範囲の始まりを含む段落の中へ
-  /// 切り詰める。段落は 1 回だけ組み、同じ段落の行はそこから切り出す——`lines` で測った行と同じ字組みになる。
-  public static func lines(of text: ZoneText) -> [TypesetLine] {
-    let units = Array(text.content.string.utf16)
-    var composition: ZoneComposition?
-    return text.lines.map { line in
-      let lower = min(max(0, line.range.location), units.count)
-      let current: ZoneComposition
-      if let composition,
-        (composition.paragraph.lowerBound...composition.paragraph.upperBound).contains(lower)
-      {
-        current = composition
-      } else {
-        current = ZoneComposition(
-          units, paragraph: paragraphSpan(around: lower, in: units), styles: text.content.styles)
-        composition = current
-      }
-      let upper = min(max(lower, NSMaxRange(line.range)), current.paragraph.upperBound)
-      let from = current.composed(lower)
-      return TypesetLine(current, from..<max(from, current.composed(upper)))
-    }
+    return ZoneTypeset(text, lines: lines)
   }
 
   /// 字の連なりを 1 つの段落として 1 行に組む（折り返さない。見え方の番号は連なりの添字）。
@@ -223,10 +200,10 @@ public enum ZoneTextLayout {
   /// 段落を幅 `width` で行に割る。割る位置は、同じ段落を余白を付けずに組んだもの `bare`（元の文と同じ並び）で Core Text が
   /// 選ぶ位置だけ——余白を付けても、余白なしでは割れない所（コードの外の語の続き・禁則）で割れない。行は余白を付けて組んだ
   /// 幅で確かめ、幅を超えれば、余白なしで探す幅を超えた分だけ狭めて探し直す（行は短くなるだけで、狭め方は倍々に広げる
-  /// ので、探し直しは数回で止まる）。それ以上狭められない（行が 1 つの割れない塊だけ）ときは、その行が幅を超える。行の境は元の文の位置から組んだ
-  /// 文の境へ写す（コードの始まりは包みの頭の前、終わりは包みの尾の後）——描く側（`lines(of:)`）も同じ境を引く。余白なしで
-  /// 探すのは、置き字の run delegate があると、Core Text が分け目を 1 つ探す仕事が段落の終わりまでの長さに比例するため
-  /// でもある（余白なしで探せば、段落を割る仕事は段落の長さに比例する）。
+  /// ので、探し直しは数回で止まる）。それ以上狭められない（行が 1 つの割れない塊だけ）ときは、その行が幅を超える。行の境は
+  /// 元の文の位置から組んだ文の境へ写す（コードの始まりは包みの頭の前、終わりは包みの尾の後）。余白なしで探すのは、置き字の
+  /// run delegate があると、Core Text が分け目を 1 つ探す仕事が段落の終わりまでの長さに比例するためでもある（余白なしで
+  /// 探せば、段落を割る仕事は段落の長さに比例する）。
   private static func wrap(
     _ composition: ZoneComposition, breakingAs bare: ZoneComposition, width: CGFloat
   ) -> [TypesetLine] {
@@ -240,12 +217,13 @@ public enum ZoneTextLayout {
       let breakAt = { (width: Double) in
         start + max(1, CTTypesetterSuggestLineBreak(bare.typesetter, from, max(0, width)))
       }
+      let composed = { (end: Int) in composition.composed(start)..<composition.composed(end) }
       var available = limit
       var end = breakAt(available)
-      var line = TypesetLine(composition, composition.composed(start)..<composition.composed(end))
-      while Double(line.width) > limit {
-        let bareWidth = Double(TypesetLine(bare, from..<end - paragraph.lowerBound).width)
-        available = min(available - (Double(line.width) - limit), bareWidth)
+      var lineWidth = Double(composition.width(composed(end)))
+      while lineWidth > limit {
+        let bareWidth = Double(bare.width(from..<end - paragraph.lowerBound))
+        available = min(available - (lineWidth - limit), bareWidth)
         var shorter = breakAt(available)
         // Core Text は約物を詰めて、測った幅より少し広い行も幅に収める。収めた分だけ狭めて探す。
         var step = 1.0
@@ -256,9 +234,9 @@ public enum ZoneTextLayout {
         }
         guard shorter < end else { break }
         end = shorter
-        line = TypesetLine(composition, composition.composed(start)..<composition.composed(end))
+        lineWidth = Double(composition.width(composed(end)))
       }
-      lines.append(line)
+      lines.append(TypesetLine(composition, composed(end)))
       start = end
     }
     return lines

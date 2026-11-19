@@ -13,8 +13,8 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   func testLinesPartitionTheTextAndFitTheWidth() {
     let string = "tail だけ見ると、間に別種のイベントが挟まったときに畳み損ねない？ merges(event) の前に種別チェックが要る気がする。"
-    let lines = ZoneTextLayout.lines(
-      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 160)
+    let lines = ZoneTextLayout.typeset(
+      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 160).lines
     XCTAssertGreaterThan(lines.count, 2)
     XCTAssertEqual(lines.first?.range.location, 0)
     for (a, b) in zip(lines, lines.dropFirst()) {
@@ -26,8 +26,8 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   func testNewlinesAlwaysBreakAndAreNotInLines() {
     let string = "一行目\n\n三行目"
-    let lines = ZoneTextLayout.lines(
-      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 500)
+    let lines = ZoneTextLayout.typeset(
+      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 500).lines
     XCTAssertEqual(
       lines.map(\.range),
       [
@@ -43,9 +43,9 @@ final class ZoneTextLayoutTests: XCTestCase {
       ("bbbb", ZoneTextStyle(font: mono, color: .red)),
       (" cccc", ZoneTextStyle(font: font, color: .white)),
     ])
-    let lines = ZoneTextLayout.lines(
+    let lines = ZoneTextLayout.typeset(
       text,
-      width: ZoneTextLayout.width([ZoneTextRun("aaaa bbbb", font: font, color: .white)]) + 1)
+      width: ZoneTextLayout.width([ZoneTextRun("aaaa bbbb", font: font, color: .white)]) + 1).lines
     XCTAssertEqual(
       lines.map(\.range), [NSRange(location: 0, length: 10), NSRange(location: 10, length: 4)],
       "行末の空白は前の行に残る")
@@ -58,9 +58,9 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testPaddingPushesTheNeighboursAndWidensTheGround() throws {
     let parts = ["see ", "code", " here"]
     let bare = try XCTUnwrap(
-      ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).first)
+      ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).lines.first)
     let padded = try XCTUnwrap(
-      ZoneTextLayout.typeset(styled(parts, padding: 4), width: 500).first)
+      ZoneTextLayout.typeset(styled(parts, padding: 4), width: 500).lines.first)
     let code = try XCTUnwrap(glyphs(of: 1, in: padded))
     let ground = try XCTUnwrap(padded.spans(of: 1).first)
     XCTAssertEqual(ground.lowerBound, code.lowerBound - 4, accuracy: 0.01)
@@ -75,7 +75,7 @@ final class ZoneTextLayoutTests: XCTestCase {
       ZoneTextLayout.typeset(
         ZoneStyledText([("code", ZoneTextStyle(font: mono, color: .red, padding: 4))]),
         width: 500
-      ).first)
+      ).lines.first)
     XCTAssertEqual(try XCTUnwrap(glyphs(of: 0, in: leading)).lowerBound, 4, accuracy: 0.01)
     XCTAssertEqual(
       leading.width,
@@ -93,9 +93,9 @@ final class ZoneTextLayoutTests: XCTestCase {
     for (name, code) in cases {
       let parts = ["see ", code, " z"]
       let bare = try XCTUnwrap(
-        ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).first)
+        ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).lines.first)
       let padded = try XCTUnwrap(
-        ZoneTextLayout.typeset(styled(parts, padding: 4), width: 500).first)
+        ZoneTextLayout.typeset(styled(parts, padding: 4), width: 500).lines.first)
       XCTAssertEqual(glyphCount(padded), glyphCount(bare), "\(name): 字を割らない")
       XCTAssertEqual(padded.width, bare.width + 8, accuracy: 0.01, "\(name): 幅は余白の分だけ増える")
       let (a, b) = (
@@ -191,15 +191,15 @@ final class ZoneTextLayoutTests: XCTestCase {
     for (name, parts) in Self.controlCases {
       let string = parts.joined()
       let lines = ZoneTextLayout.typeset(
-        styled(parts, padding: padding), width: 500)
+        styled(parts, padding: padding), width: 500).lines
       XCTAssertEqual(lines.map(\.range), [NSRange(location: 0, length: string.utf16.count)], name)
       let line = try XCTUnwrap(lines.first)
       XCTAssertEqual(misplaced(line, code: 1), [], name)
       let bare = try XCTUnwrap(
-        ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).first)
+        ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).lines.first)
       XCTAssertEqual(glyphCount(line), glyphCount(bare), "\(name): 包みの字は描かない")
       if parts[2].hasSuffix("def ghi") {
-        let tail = line.runs.filter { $0.style == 2 }.flatMap(\.positions).map(\.x)
+        let tail = line.runs.filter { $0.style == 2 }.flatMap(\.xs).map(CGFloat.init)
         XCTAssertEqual(tail, tail.sorted(), "\(name): コードの後ろの字は左から右に並ぶ")
       }
     }
@@ -221,7 +221,7 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testHitsOnThePaddingLandOnTheCodeEdgesEvenWithBidiControls() throws {
     for (name, parts) in Self.controlCases {
       let line = try XCTUnwrap(
-        ZoneTextLayout.typeset(styled(parts, padding: padding), width: 500).first)
+        ZoneTextLayout.typeset(styled(parts, padding: padding), width: 500).lines.first)
       let ground = try XCTUnwrap(line.spans(of: 1).first)
       let start = parts[0].utf16.count
       let edges = [start, start + parts[1].utf16.count]
@@ -239,7 +239,7 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testHitsOnThePaddingLandOnTheCodeEdges() throws {
     let parts = ["see ", "code", " here"]
     let line = try XCTUnwrap(
-      ZoneTextLayout.typeset(styled(parts, padding: padding), width: 500)
+      ZoneTextLayout.typeset(styled(parts, padding: padding), width: 500).lines
         .first)
     let ground = try XCTUnwrap(line.spans(of: 1).first)
     let code = try XCTUnwrap(glyphs(of: 1, in: line))
@@ -253,8 +253,7 @@ final class ZoneTextLayoutTests: XCTestCase {
   }
 
   /// 段落の途中の行も段落の向きで組む——左から右の段落で右から左の字から始まる行でも、後ろの字はその右に、右から左の
-  /// 段落で左から右の字から始まる行でも、後ろの字はその左に並ぶ。測った行と、その行を描く組版（まとまりの文とその行の範囲を
-  /// 渡したもの）は同じ。
+  /// 段落で左から右の字から始まる行でも、後ろの字はその左に並ぶ。
   func testAWrappedLineIsLaidOutInTheParagraphsDirection() throws {
     for (parts, width, rightToLeft) in [
       (["see ", "שלום עולם ארוך מאוד", " z"], CGFloat(90), false),
@@ -262,7 +261,7 @@ final class ZoneTextLayoutTests: XCTestCase {
     ] {
       let string = parts.joined()
       let styles = styled(parts, padding: padding)
-      let lines = ZoneTextLayout.lines(styles, width: width)
+      let lines = ZoneTextLayout.typeset(styles, width: width).lines
       let index = try XCTUnwrap(
         lines.lastIndex {
           $0.range.location > parts[0].utf16.count && !$0.spans(of: 1).isEmpty
@@ -275,43 +274,7 @@ final class ZoneTextLayoutTests: XCTestCase {
       } else {
         XCTAssertGreaterThanOrEqual(after.lowerBound, code.upperBound - 0.01, "\(string): 後ろの字は右")
       }
-      let drawn = ZoneTextLayout.lines(
-        of: ZoneText(
-          id: 0, content: styles,
-          lines: lines.map { ZoneSelectableLine(origin: .zero, range: $0.range) }))
-      XCTAssertEqual(drawn.map(\.range), lines.map(\.range), string)
-      XCTAssertEqual(drawn[index].width, line.width, accuracy: 0.001, string)
-      XCTAssertEqual(drawn[index].spans(of: 1), line.spans(of: 1), string)
     }
-  }
-
-  /// 描く行（測った行の範囲から切り出したもの）の範囲も幅も、どの見え方の地も、測った行と同じ——余白のあるコードが
-  /// 折り返しをまたぐ段落でも、右から左の字・和文・括弧・改行・コードを乱択で混ぜた文でも。
-  func testDrawnLinesMatchTheMeasuredLines() {
-    var wrong: [String] = []
-    let compare = { (parts: [String], codes: [Int], width: CGFloat) in
-      let string = parts.joined()
-      let styles = self.styled(parts, codes: codes, padding: self.padding)
-      let measured = ZoneTextLayout.lines(styles, width: width)
-      let drawn = ZoneTextLayout.lines(
-        of: ZoneText(
-          id: 0, content: styles,
-          lines: measured.map { ZoneSelectableLine(origin: .zero, range: $0.range) }))
-      if drawn.map(\.measured) != measured { wrong.append("\(string) を幅 \(width) で測った行と描く行が食い違う") }
-    }
-    for width in stride(from: CGFloat(50), through: 200, by: 7) {
-      compare(["和文の段落に ", "merges(event) と長いコード", "が入り、", "שלום", " で終わる。"], [1, 3], width)
-    }
-    var random = SplitMix(seed: 11)
-    let words = ["あいう", "漢字", "abc", "de f", "אבג", " ", "、", "(", ")", "กำ", "「", "」", "\n"]
-    for _ in 0..<1_000 {
-      let parts = (0..<(2 + random.next(8))).map { _ in
-        words[random.next(words.count)] + words[random.next(words.count)]
-      }
-      compare(
-        parts, parts.indices.filter { _ in random.next(3) == 0 }, CGFloat(40 + random.next(160)))
-    }
-    XCTAssertEqual(wrong.prefix(5), [])
   }
 
   /// 組んだ字の連なりは見え方の境で分かれる（同じ字体でも）。

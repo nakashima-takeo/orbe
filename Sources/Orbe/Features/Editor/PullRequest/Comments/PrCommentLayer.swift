@@ -52,9 +52,9 @@ final class PrCommentLayer {
   var state: PullRequestState { pullRequest.state }
   var path: String { pullRequest.id.path }
 
-  /// 裏の仕事（本文の測り・印を出せる行・欄の行の移し）が残っていない。
+  /// 裏の仕事（本文の組版・印を出せる行・欄の行の移し）が残っていない。
   var isSettled: Bool {
-    !threads.values.contains(where: \.isMeasuring) && drafts.allSatisfy(\.isSettled)
+    !threads.values.contains(where: \.isTypesetting) && drafts.allSatisfy(\.isSettled)
       && held.values.allSatisfy(\.isSettled) && (placed == nil || commentable?.lines != nil)
   }
 

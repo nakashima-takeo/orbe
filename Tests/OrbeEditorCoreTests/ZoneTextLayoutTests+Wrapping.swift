@@ -32,8 +32,8 @@ extension ZoneTextLayoutTests {
       let units = Array(string.utf16)
       let bare = bareTypesetter(parts, codes: codes)
       for width in stride(from: CGFloat(20), through: 260, by: index < 8 ? 1.5 : 30) {
-        for line in ZoneTextLayout.lines(
-          styled(parts, codes: codes, padding: padding), width: width)
+        for line in ZoneTextLayout.typeset(
+          styled(parts, codes: codes, padding: padding), width: width).lines
         {
           let end = NSMaxRange(line.range)
           guard end < units.count, units[end] != 0x0A else { continue }
@@ -58,7 +58,7 @@ extension ZoneTextLayoutTests {
       let string = parts.joined()
       let bare = bareTypesetter(parts, codes: [1])
       let over = stride(from: CGFloat(5), through: 200, by: 0.5).filter { width in
-        ZoneTextLayout.lines(styled(parts, padding: padding), width: width).contains {
+        ZoneTextLayout.typeset(styled(parts, padding: padding), width: width).lines.contains {
           $0.width > width + 0.001
             && CTTypesetterSuggestLineBreak(bare, $0.range.location, 0) != $0.range.length
         }
@@ -76,7 +76,7 @@ extension ZoneTextLayoutTests {
   func testTheGlyphBeforeABreakInARightToLeftWordKeepsTheKerningAcrossTheBreak() throws {
     let parts = ["see the", "קוד", "مرحبا بكم"]
     let codeEnd = parts[0].utf16.count + parts[1].utf16.count
-    let lines = ZoneTextLayout.typeset(styled(parts, padding: padding), width: 60)
+    let lines = ZoneTextLayout.typeset(styled(parts, padding: padding), width: 60).lines
     let line = try XCTUnwrap(
       lines.first { NSMaxRange($0.range) > codeEnd && NSMaxRange($0.range) < codeEnd + 5 },
       "前提: コードの後ろのアラビア語の語「مرحبا」を途中で割った行がある")

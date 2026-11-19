@@ -39,20 +39,15 @@ extension SurfaceZonesTests {
     let font = NSFont.systemFont(ofSize: 12)
     let string = "選べる文の上の押せる場所"
     let zone = PictureZone { _ in
-      ZonePicture(
+      ZonePicture.single(
         height: 40,
         elements: [
           .button(ZoneButton(id: "b", frame: CGRect(x: 0, y: 0, width: 300, height: 40)))
         ],
         texts: [
-          ZoneText(
-            id: "t",
-            content: ZoneStyledText([(string, ZoneTextStyle(font: font, color: ThreadZone.ink))]),
-            lines: [
-              ZoneSelectableLine(
-                origin: CGPoint(x: 10, y: 20),
-                range: NSRange(location: 0, length: string.utf16.count))
-            ])
+          ZoneText.laid(
+            "t", ZoneStyledText([(string, ZoneTextStyle(font: font, color: ThreadZone.ink))]),
+            origin: CGPoint(x: 10, y: 20))
         ])
     }
     surface.setRows(self.zone(zone, at: 4))

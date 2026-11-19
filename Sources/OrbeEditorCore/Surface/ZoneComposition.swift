@@ -12,8 +12,7 @@ import CoreText
 /// 段落で探す）。コードの中の対にならない isolate の終わりは幅 0 の U+2060 に置き換え、閉じていない isolate と埋め込み・上書きは
 /// 後ろの置き字の前で閉じる——元の文の制御字が、置き字の位置と包みの向きの独立を壊さない。
 ///
-/// 元の文と組んだ文の位置の対応はこの型に閉じ、字組みの口（`ZoneTextLayout.Line`・`ZoneTextLayout.TypesetLine`）は
-/// 元の文の位置だけで答える。
+/// 元の文と組んだ文の位置の対応はこの型に閉じ、字組みの口（`ZoneTextLayout.TypesetLine`）は元の文の位置だけで答える。
 final class ZoneComposition {
   /// 元の文の中の段落の範囲。
   let paragraph: Range<Int>
@@ -83,6 +82,17 @@ final class ZoneComposition {
     }
     return CTTypesetterCreateLine(
       typesetter, CFRange(location: range.lowerBound, length: range.count))
+  }
+
+  /// 組んだ文の範囲 `range` を 1 行に組んだ幅（行末の空白を除く）。
+  func width(_ range: Range<Int>) -> CGFloat { Self.width(of: line(range)) }
+
+  /// 組んだ行の幅（行末の空白を除く）。
+  static func width(of line: CTLine) -> CGFloat {
+    max(
+      0,
+      CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+        - CGFloat(CTLineGetTrailingWhitespaceWidth(line)))
   }
 
   /// 段落 `units` が右から左か——段落の最初の、向きを持つ字で決まる（UAX #9 の P2・P3。向きを持つ字が無ければ左から

@@ -74,7 +74,7 @@ enum PrCommentStyle {
   private static var widths: [WidthKey: CGFloat] = [:]
 
   /// 高さ `height` の行の中で、字を縦の中央に置く基線（CSS の行の半分の余白と同じ）。
-  static func baseline(top: CGFloat, height: CGFloat, font: NSFont) -> CGFloat {
+  nonisolated static func baseline(top: CGFloat, height: CGFloat, font: NSFont) -> CGFloat {
     top + (height - (font.ascender - font.descender)) / 2 + font.ascender
   }
 }

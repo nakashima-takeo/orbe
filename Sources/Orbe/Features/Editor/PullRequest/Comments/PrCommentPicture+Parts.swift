@@ -78,9 +78,10 @@ extension PrCommentPicture {
     return right
   }
 
-  /// コメント 1 件（アバター 20 と中身の間 10。メタの行は字 11・行高 1.6、間 6）。高さを返す。
+  /// コメント 1 件（アバター 20 と中身の間 10。メタの行は字 11・行高 1.6、間 6）。本文は、組んだ本文の層 `body` をメタの行の
+  /// 下に置く。高さを返す。
   static func comment(
-    _ comment: GitHubPullRequestReview.Comment, _ measured: PrCommentMeasure?, in frame: CGRect,
+    _ comment: GitHubPullRequestReview.Comment, _ body: PrCommentBody?, in frame: CGRect,
     top: CGFloat, _ canvas: inout PrCommentCanvas
   ) -> CGFloat {
     let size = Size.editorPrThreadAvatar
@@ -98,10 +99,9 @@ extension PrCommentPicture {
     let metaHeight = Fonts.editorPrThreadHead.pointSize * Fonts.editorPrThreadBodyLineHeight
     meta(comment, at: CGPoint(x: left, y: top), height: metaHeight, &canvas)
     var y = top + metaHeight
-    if let measured {
-      y += body(
-        measured, id: comment.id,
-        in: CGRect(x: left, y: y, width: bodyWidth(of: frame), height: 0), &canvas)
+    if let body {
+      canvas.place(body, comment: comment.id, at: CGPoint(x: left, y: y))
+      y += body.height
     }
     return max(size, y - top)
   }
@@ -134,60 +134,6 @@ extension PrCommentPicture {
           frame: CGRect(x: x, y: baseline - 11, width: width, height: 15), radius: 3,
           stroke: .init(color: Ink.editorPrPendingBorder, width: 1))))
     canvas.label(label, font: badge, color: Ink.editorCaution, x: x + 5, baseline: baseline)
-  }
-
-  /// 本文の段の列（字 12・行高 1.6。段の間 6）を `area`（左上と幅）に置く。引用の線は、次の段が同じ引用の線を持てば段の間も
-  /// 引く。高さを返す。
-  static func body(
-    _ measured: PrCommentMeasure, id: String, in area: CGRect, _ canvas: inout PrCommentCanvas
-  ) -> CGFloat {
-    let lineHeight = PrCommentCanvas.bodyLineHeight
-    var y = area.minY
-    let blocks = measured.blocks
-    for (index, item) in blocks.enumerated() {
-      if index > 0 { y += Size.editorPrBodyBlockGap }
-      let block = item.block
-      let pad = block.kind == .code ? Size.editorPrBodyCodePad : 0
-      let height = CGFloat(max(1, item.lines.count)) * lineHeight + pad * 2
-      let next = index + 1 < blocks.count ? blocks[index + 1].block.quoteBars : []
-      for bar in block.quoteBars {
-        let joins = next.contains(bar)
-        canvas.elements.append(
-          .box(
-            ZoneBox(
-              frame: CGRect(
-                x: area.minX + bar.x, y: y, width: Size.editorPrBodyQuoteBar,
-                height: height + (joins ? Size.editorPrBodyBlockGap : 0)),
-              fill: EditorStyle.hairline(0.12))))
-      }
-      if block.kind == .code {
-        canvas.elements.append(
-          .box(
-            ZoneBox(
-              frame: CGRect(
-                x: area.minX + block.indent, y: y, width: max(0, area.width - block.indent),
-                height: height), radius: .init(Size.editorPrBodyCodeRadius),
-              fill: EditorStyle.sunk(0.35))))
-      }
-      let textLeft = area.minX + PrCommentMeasure.textLeft(of: block)
-      let font = Fonts.editorPrThreadBody
-      for marker in block.markers {
-        canvas.label(
-          marker.text, font: font, color: Ink.textMuted, x: area.minX + marker.x,
-          baseline: PrCommentStyle.baseline(top: y + pad, height: lineHeight, font: font))
-      }
-      var lines: [ZoneSelectableLine] = []
-      for (row, line) in item.lines.enumerated() {
-        let origin = CGPoint(x: textLeft, y: y + pad + CGFloat(row) * lineHeight)
-        let baseline = PrCommentStyle.baseline(top: origin.y, height: lineHeight, font: font)
-        canvas.decorate(line, block, at: origin, baseline: baseline)
-        lines.append(
-          ZoneSelectableLine(origin: CGPoint(x: textLeft, y: baseline), range: line.range))
-      }
-      canvas.texts.append(ZoneText(id: "\(id)#\(index)", content: block.text, lines: lines))
-      y += height
-    }
-    return y - area.minY
   }
 
   /// 返信の行（高さ 26 と改行ごとに 1 行・左右の余白 12・間 8）: 返信欄と、右に `buttons`（左から順）。高さを返す。

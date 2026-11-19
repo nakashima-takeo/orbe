@@ -68,12 +68,12 @@ extension MetalTextSurface {
     let look = ZonePainter.Look(
       appearance: textView.effectiveAppearance, space: space, scale: scale)
     let paint = { (image: NSImage) in
-      self.painter.paint(
-        ZonePicture(
-          height: mark.size.height,
-          elements: [.image(ZoneImage(frame: CGRect(origin: .zero, size: mark.size), image: image))]
-        ), look, serial: { _ in 0 }
-      ).0
+      let layer = ZoneLayer(elements: [
+        .image(ZoneImage(frame: CGRect(origin: .zero, size: mark.size), image: image))
+      ])
+      return self.painter.paint(
+        ZonePicture(height: mark.size.height, layers: [(.zero, layer)]), look, serial: { _ in 0 }
+      ).material
     }
     trailingMarkLooks = (paint(mark.image), paint(mark.hoveredImage))
   }

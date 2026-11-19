@@ -131,16 +131,12 @@ private final class CommentsZone: SurfaceZone {
   init(_ comments: [(AnyHashable, String)]) { self.comments = comments }
 
   func picture(width: CGFloat) -> ZonePicture {
-    ZonePicture(
+    ZonePicture.single(
       height: 20 * CGFloat(comments.count) + 8,
       texts: comments.enumerated().map { index, comment in
-        ZoneText(
-          id: comment.0, content: ThreadZone.content(comment.1),
-          lines: [
-            ZoneSelectableLine(
-              origin: CGPoint(x: 10, y: 20 * CGFloat(index) + 16),
-              range: NSRange(location: 0, length: comment.1.utf16.count))
-          ])
+        ZoneText.laid(
+          comment.0, ThreadZone.content(comment.1),
+          origin: CGPoint(x: 10, y: 20 * CGFloat(index) + 16))
       })
   }
 

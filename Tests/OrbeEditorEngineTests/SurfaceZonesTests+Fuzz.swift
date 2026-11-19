@@ -130,7 +130,7 @@ extension SurfaceZonesTests {
     switch surface.primary {
     case .zoneText:
       let selection = try XCTUnwrap(surface.zoneSelection, "\(step): 絵の差し込みの文が主なら選択がある")
-      let rope = surface.zones[selection.zone]?.hits.texts[selection.text]
+      let rope = surface.zones[selection.zone]?.hits.rope(of: selection.text)
       XCTAssertLessThanOrEqual(NSMaxRange(selection.range), rope?.length ?? -1, "\(step)")
     case .body, .field:
       XCTAssertNil(surface.zoneSelection, "\(step): 絵の差し込みの文が主でなければ選択は無い")

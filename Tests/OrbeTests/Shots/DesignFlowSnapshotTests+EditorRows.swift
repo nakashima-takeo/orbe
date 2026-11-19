@@ -92,8 +92,12 @@ private struct RowsFlow {
   }
 
   func hover() {
-    let button = surface.zones[zone]?.hits.buttons.first { $0.id == SampleThreadZone.resolve }
-    surface.hover(at: button.map { point(CGPoint(x: $0.frame.midX, y: $0.frame.midY)) })
+    let frame = surface.zones[zone]?.hits.layers.lazy.compactMap { placed in
+      placed.hits.buttons.first { $0.id == SampleThreadZone.resolve }.map {
+        $0.frame.offsetBy(dx: placed.origin.x, dy: placed.origin.y)
+      }
+    }.first
+    surface.hover(at: frame.map { point(CGPoint(x: $0.midX, y: $0.midY)) })
     settle()
   }
 
@@ -106,7 +110,7 @@ private struct RowsFlow {
     surface.selectedRange = NSRange(
       location: text.lineStart(37), length: text.lineEnd(38) - text.lineStart(37))
     guard let entry = surface.zones[zone] else { return XCTFail("前提: 絵の差し込みがある") }
-    let lines = entry.hits.lines.filter { $0.text == AnyHashable("body-0") }
+    let lines = entry.hits.lines(of: "body-0")
     guard lines.count >= 2 else { return XCTFail("前提: 本文が 2 行以上に折り返す") }
     surface.inputScope {
       surface.beginZoneSelection(
