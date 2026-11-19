@@ -3,7 +3,7 @@ import SwiftUI
 
 /// サイドバー: PR のパネル（見本 PrReviewPanel）。上から、パネルヘッダー（再読込・GitHub で開く）→ 答えに応じた中身。PR が
 /// あれば頭（PR の印・題・番号・作者 · `head → base`・手元とのずれの帯）と失敗の文と列（説明・コミット・変更ファイル。
-/// AppKit）。PR が無ければ作成の入口（見本 PrListPanel の作成ボタンと下の 1 行）、出せなければ理由の一文だけ。根が変わると
+/// AppKit）と下端のレビューの送信の区画。PR が無ければ作成の入口（見本 PrListPanel の作成ボタンと下の 1 行）、出せなければ理由の一文だけ。根が変わると
 /// 面はパネルと列を組で作り直すので、中身はパネルで同一視する。
 struct PrPanelView: View {
   let panel: PrPanel
@@ -50,6 +50,9 @@ struct PrPanelView: View {
           guard list.list.source.language != language else { return }
           list.list.source.language = language
           list.list.reloadRows()
+        }
+        if let review = state.review {
+          PrReviewSection(panel: panel, state: state, review: review)
         }
       } else if let failure = failureText(state) {
         PrNote(text: failure, color: Color.theme.danger)

@@ -3,10 +3,11 @@ import AppKit
 /// 行の中身（字組みした文字）を組む。中身の同一性（`key`）が変わったときだけ呼ぶ。
 extension PrRowView {
   /// 行を描くのに要る、行の組の外の事実——確認済みの数（変更ファイルの見出しは全体、フォルダは配下、ファイルは 0 か 1）と、
-  /// ツリーで見せているか。
+  /// ツリーで見せているか、ファイルのコメントの数。
   struct Facts: Equatable {
     let viewed: Int
     let asTree: Bool
+    var comments = 0
   }
 
   /// 行の中身の同一性——行の組の行・行の組の外の事実・言語・絵文字の字体を、値のまま比べる。
@@ -26,7 +27,10 @@ extension PrRowView {
       "\(L10n.string(.editorPrFiles, language)), \(viewedText(facts, count, language))"
     case .olderCommits(let hidden): L10n.format(.editorPrOlderCommitsHidden, language, hidden)
     case .commit(let commit): commit.headline
-    case .folder(let path, _, _, _), .file(let path, _, _): path
+    case .folder(let path, _, _, _): path
+    case .file(let path, _, _) where facts.comments > 0:
+      "\(path), \(L10n.format(.editorPrCommentCount, language, facts.comments))"
+    case .file(let path, _, _): path
     }
   }
 
@@ -119,6 +123,8 @@ extension PrRowView {
           (path as NSString).deletingLastPathComponent, Theme.Typography.editorScmDirectory,
           glyphs: .chrome(emoji: emoji)),
       badge: TextLine(badge.label, Theme.Typography.editorBadge), badgeKind: badge,
+      comments: facts.comments > 0
+        ? TextLine(facts.comments.formatted(), Theme.Typography.editorPrCount) : nil,
       dimmed: viewed)
   }
 }

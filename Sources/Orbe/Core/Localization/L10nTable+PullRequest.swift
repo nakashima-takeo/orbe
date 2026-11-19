@@ -86,6 +86,7 @@ extension L10n {
     .editorPrReviewComment: ("コメント", "Comment"),
     .editorPrReviewRequestChanges: ("変更を依頼", "Request Changes"),
     .editorPrReviewSubmit: ("レビューを送信", "Submit Review"),
+    .editorPrCommentCount: ("コメント %lld 件", "Comments: %lld"),
     .editorPrOutdatedThreads: ("今の diff に出せないスレッド %lld 件", "Threads not in the current diff: %lld"),
   ]
 }

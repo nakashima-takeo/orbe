@@ -612,6 +612,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrReviewRequestChanges
   case editorPrReviewSubmit
   case editorPrOutdatedThreads
+  case editorPrCommentCount
 
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle

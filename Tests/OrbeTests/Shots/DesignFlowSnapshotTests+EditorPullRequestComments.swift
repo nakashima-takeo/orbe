@@ -8,7 +8,8 @@ import XCTest
 
 /// PR のコメントの flow（fixture は `PrFixtures` と `PrFixtureReview`——本物の git の場と、見本 `editor/data.ts` の PR #131・
 /// スレッドを答える差し替えの出どころ）: PR の diff のスレッド（見本のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
-/// コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 並列。見本は
+/// コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 並列 → パネルの
+/// 下端で全体へのコメントと「承認」を選ぶ → 送信の最中 → 送信の失敗 → 送信の後（保留中が 0）。見本は
 /// orbe_design の `editor/DiffView.tsx`（Thread）と `PrReviewPanel.tsx`。
 extension DesignFlowSnapshotTests {
   func testEditorPrComments() throws {
@@ -31,6 +32,10 @@ extension DesignFlowSnapshotTests {
         ("replied", steps.reply),
         ("collapsed", steps.collapse),
         ("side", steps.side),
+        ("review_draft", steps.draftReview),
+        ("review_submitting", steps.submitReview),
+        ("review_failed", steps.failReview),
+        ("review_sent", steps.sendReview),
       ])
   }
 
@@ -126,5 +131,29 @@ private struct CommentSteps {
     let pane = scene.pane
     pumpMain(until: { pane.diff.map { pane.diffSurfaces($0).count == 2 } ?? false }, "並列になる")
     settle()
+  }
+
+  func draftReview() {
+    scene.panel.state?.reviewDraft.body = "コメントの分岐を確かめました。"
+    scene.panel.chooseReviewEvent(.approve)
+  }
+
+  func submitReview() {
+    scene.review.writes = .hold
+    scene.panel.submitReview()
+  }
+
+  func failReview() {
+    scene.review.writes = .fail(.timedOut)
+    scene.review.release()
+    let panel = scene.panel
+    pumpMain(until: { panel.reviewFailure != nil }, "失敗が届く")
+  }
+
+  func sendReview() {
+    scene.review.writes = .succeed
+    scene.panel.submitReview()
+    let panel = scene.panel
+    pumpMain(until: { panel.state?.reviewDraft.body.isEmpty == true }, "送信が通る")
   }
 }

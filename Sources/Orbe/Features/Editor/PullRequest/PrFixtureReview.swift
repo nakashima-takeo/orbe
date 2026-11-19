@@ -5,7 +5,8 @@
   /// の `thread`）のスレッド（StateHooks.swift の新しい側の行 12。you の保留中のコメントと、もう 1 人の返信）に、古い側の行の
   /// Markdown 入りのスレッド・解決済みのスレッド・今の diff に置けないスレッド・README.md のスレッドを足した姿を答える。
   /// 書き込みは GitHub と同じく次の読みに出る（返信・解決・新しいスレッドは保留中のレビューに積み、送信で公開する）。
-  /// `writes` で、書き込みの答えを返さない（書き込みの最中を撮る）・失敗を返す、に替えられる。
+  /// `writes` で、書き込みの答えを返さない（書き込みの最中を撮る）・失敗を返す、に替えられる。返さずにおいた答えは `release` で
+  /// その時の答え方で返す。
   final class PrFixtureReview {
     enum Writes {
       case succeed
@@ -19,7 +20,7 @@
     private let head: String
     private var threads: [GitHubPullRequestReview.Thread]
     private var pendingID: String? = "PRR_1"
-    private var held: [() -> Void] = []
+    private var held: [(GitHubReviewWrite, (GitHubReviewWriteResult) -> Void)] = []
     private var serial = 0
 
     static let path = "src/agent/StateHooks.swift"
@@ -110,20 +111,17 @@
         apply(write)
         completion(GitHubReviewWriteResult(pendingReview: pendingID, failure: nil))
       case .hold:
-        held.append { [weak self] in
-          self?.apply(write)
-          completion(GitHubReviewWriteResult(pendingReview: self?.pendingID, failure: nil))
-        }
+        held.append((write, completion))
       case .fail(let failure):
         completion(GitHubReviewWriteResult(pendingReview: pendingID, failure: failure))
       }
     }
 
-    /// 返さずにおいた書き込みの答えを返す。
+    /// 返さずにおいた書き込みの答えを、今の答え方（`writes`）で返す。
     func release() {
       let answers = held
       held = []
-      for answer in answers { answer() }
+      for (write, completion) in answers { self.write(write, completion: completion) }
     }
 
     private func apply(_ write: GitHubReviewWrite) {

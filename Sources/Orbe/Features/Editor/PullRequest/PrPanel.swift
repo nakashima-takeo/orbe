@@ -24,6 +24,17 @@ final class PrPanel {
   private(set) var isListFocused = false
   /// 焦点を入れる要求（当てたら外す）。
   private(set) var focusRequest = false
+  /// 下端の区画の全体へのコメント欄に焦点がある。
+  var isReviewFieldFocused = false
+  /// 最後のレビューの送信の失敗（次に送るときに消す）。
+  var reviewFailure: ReviewFailure?
+
+  /// レビューの送信の失敗。
+  enum ReviewFailure: Equatable {
+    case write(GitHubFailure)
+    /// 中身かレビューのやりとりがまだ読めていない（状態が受け付けなかった）。
+    case notReady
+  }
 
   /// 列が消える直前（行の組が空になる。列がまだ窓に居るうち）。焦点が列にあれば、面の本文へ移す。
   @ObservationIgnored var onListWillClose: () -> Void = {}
@@ -34,6 +45,17 @@ final class PrPanel {
   @ObservationIgnored var onViewAsTree: (Bool) -> Void = { _ in }
   /// URL をブラウザで開く。
   @ObservationIgnored var onOpenURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
+  /// 全体へのコメント欄の変換中の字を確定する（欄が結ぶ）。
+  @ObservationIgnored var confirmReviewComposition: () -> Void = {}
+  /// ファイルごとのコメントの数と、それを数えたレビューのやりとり。
+  @ObservationIgnored private var counted: CommentCounts?
+
+  /// ファイルごとのコメントの数（レビューのやりとりの版 `version` と、先頭のコミット `head` で数えた）。
+  private struct CommentCounts {
+    let version: Int
+    let head: String
+    let counts: [String: Int]
+  }
   /// キーで行へ動いたときの開きの間引き。
   @ObservationIgnored let navigation = RowNavigationThrottle()
   /// 行の組の元（同じ元なら組み直さない）と、組み直した回数。
@@ -110,12 +132,14 @@ final class PrPanel {
     }
   }
 
-  /// 列が読み直す版——行の組か確認済みが変わるたびに変わる（確認済みは行を組み直さず、見えている行を描き直す）。
+  /// 列が読み直す版——行の組・確認済み・レビューのやりとりが変わるたびに変わる（確認済みとコメントの数は行を組み直さず、
+  /// 見えている行を描き直す）。
   var rowsVersion: Int {
     var hasher = Hasher()
     hasher.combine(builtVersion)
     hasher.combine(state.map(ObjectIdentifier.init))
     hasher.combine(state?.viewedVersion)
+    hasher.combine(state?.reviewVersion)
     return hasher.finalize()
   }
 
@@ -151,7 +175,30 @@ final class PrPanel {
   func panelDidHide() {
     navigation.drop()
     isListFocused = false
+    isReviewFieldFocused = false
     focusRequest = false
+  }
+
+  // MARK: - コメント
+
+  /// ファイル `path` の、今の diff に置けるスレッドのコメントの総数。レビューのやりとりが変わったときだけ数え直す（3,000 件の
+  /// ファイルでも、見えている行を描くたびにスレッドを数えない）。
+  func commentCount(of path: String) -> Int {
+    guard let state, let head = state.content?.headCommit else { return 0 }
+    if counted?.version != state.reviewVersion || counted?.head != head {
+      var counts: [String: Int] = [:]
+      for thread in state.threads(at: head) ?? [] where thread.line != nil {
+        counts[thread.path, default: 0] += thread.comments.count
+      }
+      counted = CommentCounts(version: state.reviewVersion, head: head, counts: counts)
+    }
+    return counted?.counts[path] ?? 0
+  }
+
+  /// 今の diff に置けないスレッド（古い版の行に付いた・ファイル単位）の数。
+  var outdatedThreadCount: Int {
+    guard let state, let head = state.content?.headCommit else { return 0 }
+    return (state.threads(at: head) ?? []).count { $0.line == nil }
   }
 
   // MARK: - 確認済み
