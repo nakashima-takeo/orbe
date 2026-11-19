@@ -262,13 +262,14 @@ private struct Copy {
 }
 
 /// 1 回の写しの中で、外観で解いた字の色と箱の色、面の中で揃えたフォントの覚え（同じ参照を解き直さない）。鍵は参照の
-/// 同一性——写している間は絵が色とフォントを持ち続けるので、同じ鍵が別の値を指すことは無い。覚えは写しをまたがない。
+/// 同一性——色は写している間は絵が持ち続け、フォントは覚えが鍵のフォントを持つ（字の行をその場で組んだ代替フォントは絵が
+/// 持たない）ので、同じ鍵が別の値を指すことは無い。覚えは写しをまたがない。
 @MainActor
 private struct Inks {
   let look: ZonePainter.Look
   var inks: [ObjectIdentifier: InkColor] = [:]
   var frames: [ObjectIdentifier: FrameColor] = [:]
-  var fonts: [ObjectIdentifier: CTFont] = [:]
+  var fonts: [ObjectIdentifier: (font: CTFont, resolved: CTFont)] = [:]
 
   mutating func ink(_ color: NSColor) -> InkColor {
     if let ink = inks[ObjectIdentifier(color)] { return ink }
@@ -288,9 +289,9 @@ private struct Inks {
 
   /// フォント `font` を面の中で揃えたもの（覚えに無ければ `canonical` で引く）。
   mutating func font(_ font: CTFont, canonical: (CTFont) -> CTFont) -> CTFont {
-    if let known = fonts[ObjectIdentifier(font)] { return known }
+    if let known = fonts[ObjectIdentifier(font)] { return known.resolved }
     let resolved = canonical(font)
-    fonts[ObjectIdentifier(font)] = resolved
+    fonts[ObjectIdentifier(font)] = (font, resolved)
     return resolved
   }
 }

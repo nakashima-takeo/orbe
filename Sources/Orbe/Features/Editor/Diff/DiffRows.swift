@@ -132,7 +132,7 @@ enum DiffRows {
     )
   }
 
-  /// インラインで、新しい側の面の見えている先頭 `top` から `count` 段の中に出る古い側の行を含む範囲——先頭の段の次に出る
+  /// インラインで、新しい側の面の見えている先頭 `top`（差し込んだ行だけを数えた段 → `TextSurface.lineRow(of:)`）から `count` 段の中に出る古い側の行を含む範囲——先頭の段の次に出る
   /// 古い側の行から `count` 行（インラインに出る古い側の行は単調に増え、1 段に高々 1 行）。
   static func oldLines(from top: RowPosition, count: Int, _ hunks: [LineHunk]) -> ClosedRange<Int> {
     let start = anchor(at: top, hunks, side: false).line

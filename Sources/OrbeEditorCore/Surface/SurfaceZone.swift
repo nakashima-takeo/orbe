@@ -164,9 +164,9 @@ public struct ZoneTextLine {
 /// （`ZoneTextLayout.typeset(_:width:)`）と、組んだ行ごとの基線の左端（層の座標。組んだ行と同じ数・順）。面は組んだ行を
 /// そのまま描き、当たりと選択とコピーに使う（文の正は組んだ文の 1 か所）。
 public struct ZoneText {
-  public var id: AnyHashable
-  public var typeset: ZoneTypeset
-  public var origins: [CGPoint]
+  public let id: AnyHashable
+  public let typeset: ZoneTypeset
+  public let origins: [CGPoint]
 
   public init(id: AnyHashable, typeset: ZoneTypeset, origins: [CGPoint]) {
     precondition(origins.count == typeset.lines.count, "選べる文の原点は組んだ行と同じ数")

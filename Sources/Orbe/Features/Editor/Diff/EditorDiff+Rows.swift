@@ -51,7 +51,8 @@ extension EditorDiff {
     let viewport = surface.viewport
     old.setVisible(
       lines: DiffRows.oldLines(
-        from: viewport.top, count: Int(viewport.visibleLines.rounded(.up)), hunks))
+        from: surface.lineRow(of: viewport.top), count: Int(viewport.visibleLines.rounded(.up)),
+        hunks))
   }
 
   /// 面に初めて見せる位置へ送る——位置を決めた後に作り直した面なら前の面で先頭に見えていた所、まだなら、開いた時点に

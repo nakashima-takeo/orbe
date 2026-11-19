@@ -161,9 +161,13 @@ extension FrameBuilder {
         to: &images, page: entry.page)
     }
     for run in layer.runs {
+      let baseline = top + Double(run.origin.y) * s
+      // 見えている範囲の外の字の行は置かない（長い本文の絵の差し込みの一部だけが見えている間も、字のアトラスに見えない字を
+      // 入れない）。行の上下は字の大きさの 2 倍まで見る。
+      let reach = Double(CTFontGetSize(run.font)) * 2 * s
+      guard baseline + reach > g.top, baseline - reach < g.height else { continue }
       let font = c.fonts.id(instance: run.font)
       let x = Double(run.origin.x)
-      let baseline = top + Double(run.origin.y) * s
       for i in run.glyphs.indices {
         let y = run.ys.isEmpty ? baseline : baseline - Double(run.ys[i]) * s
         place(

@@ -11,7 +11,8 @@ extension RowLayout {
     let range = blocks(above: position.line - 1)..<blocks(above: position.line)
     let total = (prefix[range.upperBound] - prefix[range.lowerBound]) / lineHeight
     let lines = insertedLines(in: range)
-    let fromTop = max(0, total + max(Double(position.offset), -total))
+    // 高さの和は別々の浮動小数の和なので、行の頭を少し越えた所とみなして、端数で上の行に化けないようにする。
+    let fromTop = max(0, total + max(Double(position.offset), -total)) + Self.slack
     var (top, before) = (0.0, 0)
     for index in range {
       if case .lines(let run) = contents[index] {
@@ -23,7 +24,7 @@ extension RowLayout {
         before += run.count
       } else {
         let height = heights[index] / lineHeight
-        if fromTop < top + height - Self.slack {
+        if fromTop < top + height {
           return RowPosition(line: position.line, offset: before - lines)
         }
         top += height
@@ -43,7 +44,7 @@ extension RowLayout {
       if case .lines(let run) = contents[index] {
         if target < before + run.count {
           // 段は行の上端からの整数の表示の単位なので、その差し込んだ行の中に入る最も上の段にする。
-          let offset = (top + Double(target - before) - total).rounded(.up)
+          let offset = (top + Double(target - before) - total - Self.slack).rounded(.up)
           return RowPosition(line: row.line, offset: Int(offset))
         }
         top += Double(run.count)
