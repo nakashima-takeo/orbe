@@ -141,10 +141,15 @@ final class PrCommentMarkdownTests: OrbeTestCase {
       ["説明", "| a | b |\n| - | - |\n| 1 | 2 |"])
   }
 
-  /// 脚注の参照と定義は、書かれた字のまま出る。
+  /// 脚注は GitHub の Markdown が見せる形で出る——参照は書かれたラベルのまま（番号でないラベルも、番号が参照の順と
+  /// 逆でも）、定義は本文の末尾に参照された順で、書かれた字のまま。定義の後ろの空行は字に入らない。
   func testFootnotesKeepTheirWrittenText() {
+    let texts = { (source: String) in PrCommentMarkdown.blocks(source).map(\.text.string) }
+    XCTAssertEqual(texts("本文[^1]\n\n[^1]: 注"), ["本文[^1]", "[^1]: 注"])
+    XCTAssertEqual(texts("本文[^note]\n\n[^note]: 注"), ["本文[^note]", "[^note]: 注"])
     XCTAssertEqual(
-      PrCommentMarkdown.blocks("本文[^1]\n\n[^1]: 注").map(\.text.string), ["本文[^1]", "[^1]: 注"])
+      texts("A[^2] B[^1]\n\n[^1]: one\n[^2]: two"), ["A[^2] B[^1]", "[^2]: two", "[^1]: one"])
+    XCTAssertEqual(texts("[^1]: 注\n\n後\n\n本文[^1]\n"), ["後", "本文[^1]", "[^1]: 注"])
   }
 
   /// 番号の右揃えは、最後の番号でなく最も広い番号に合わせる（数字の幅は字ごとに違う）。

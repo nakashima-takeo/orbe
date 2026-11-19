@@ -4,7 +4,8 @@ import cmark_gfm
 
 /// cmark の節の値と、節の範囲の書かれた字（→ `PrCommentMarkdown.Converter`）。
 extension PrCommentMarkdown {
-  /// 段の記法の範囲の、書かれた字（行ごとに、入れ物の前置き——引用の `>` と字下げ——を外す）。
+  /// 段の記法の範囲の、書かれた字（行ごとに、入れ物の前置き——引用の `>` と字下げ——を外す。末尾の空白だけの行は含めない
+  /// ——入れ物の終わりの行は、後ろに続く空行を含む）。
   static func writtenText(of node: Node, utf8: [UInt8], lineStarts: [Int]) -> String {
     let start = Int(cmark_node_get_start_line(node))
     let last = Int(cmark_node_get_end_line(node))
@@ -37,6 +38,9 @@ extension PrCommentMarkdown {
         }
       }
       lines.append(String(bytes: utf8[from..<max(from, end)], encoding: .utf8) ?? "")
+    }
+    while lines.count > 1, let tail = lines.last, tail.allSatisfy({ $0 == " " || $0 == "\t" }) {
+      lines.removeLast()
     }
     return lines.joined(separator: "\n")
   }

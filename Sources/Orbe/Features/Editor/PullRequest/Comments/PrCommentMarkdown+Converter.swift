@@ -169,7 +169,9 @@ extension PrCommentMarkdown {
         add("![")
         return false
       case CMARK_NODE_FOOTNOTE_REFERENCE:
-        add("[^" + PrCommentMarkdown.literal(node) + "]")
+        // cmark は参照の字を通し番号に書き換えるので、ラベルは結び付いた定義の書かれた字から引く（定義の無い参照は、cmark が
+        // 地の字に戻す）。
+        add("[^" + PrCommentMarkdown.literal(cmark_node_parent_footnote_def(node)) + "]")
         return false
       case CMARK_NODE_HTML_INLINE:
         add(PrCommentMarkdown.literal(node))
