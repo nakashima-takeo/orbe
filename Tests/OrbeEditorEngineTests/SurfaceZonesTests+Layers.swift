@@ -71,7 +71,9 @@ extension SurfaceZonesTests {
     let zone = PictureZone { _ in
       ZonePicture(
         height: 120,
-        layers: [(.zero, button("a")), (CGPoint(x: 0, y: 40), button("b")), (CGPoint(x: 20, y: 80), text)])
+        layers: [
+          (.zero, button("a")), (CGPoint(x: 0, y: 40), button("b")), (CGPoint(x: 20, y: 80), text),
+        ])
     }
     surface.setRows(self.zone(zone, at: 4))
     let point = { (local: CGPoint) in self.viewPoint(surface, zone, local) }
@@ -112,7 +114,8 @@ extension SurfaceZonesTests {
       .box(ZoneBox(frame: CGRect(x: 0, y: 0, width: 300, height: 26), fill: .systemPurple)),
       .text(
         ZoneTextLine(
-          origin: CGPoint(x: 12, y: 17), runs: [ZoneTextRun("行 3", font: body, color: .labelColor)])),
+          origin: CGPoint(x: 12, y: 17), runs: [ZoneTextRun("行 3", font: body, color: .labelColor)])
+      ),
       .button(ZoneButton(id: "head", frame: CGRect(x: 200, y: 4, width: 60, height: 18))),
     ])
   }
@@ -160,10 +163,13 @@ extension SurfaceZonesTests {
   ) -> String? {
     let boxes = { (material: ZoneMaterial) in
       material.layers.flatMap { placed in
-        placed.layer.boxes.map { ($0.frame.offsetBy(dx: placed.origin.x, dy: placed.origin.y), $0.fill) }
+        placed.layer.boxes.map {
+          ($0.frame.offsetBy(dx: placed.origin.x, dy: placed.origin.y), $0.fill)
+        }
       }
     }
-    guard boxes(material).elementsEqual(boxes(expected), by: { $0.0 == $1.0 && $0.1 == $1.1 }) else {
+    guard boxes(material).elementsEqual(boxes(expected), by: { $0.0 == $1.0 && $0.1 == $1.1 })
+    else {
       return "箱"
     }
     guard material.runs.count == expected.runs.count else {
@@ -183,7 +189,8 @@ extension SurfaceZonesTests {
       else { return "当たりの行 \(index)" }
     }
     guard
-      hits.buttons.elementsEqual(expectedHits.buttons, by: { $0.id == $1.id && $0.frame == $1.frame })
+      hits.buttons.elementsEqual(
+        expectedHits.buttons, by: { $0.id == $1.id && $0.frame == $1.frame })
     else { return "押せる場所" }
     return nil
   }

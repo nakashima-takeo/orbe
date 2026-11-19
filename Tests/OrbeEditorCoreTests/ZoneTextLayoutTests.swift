@@ -14,7 +14,8 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testLinesPartitionTheTextAndFitTheWidth() {
     let string = "tail だけ見ると、間に別種のイベントが挟まったときに畳み損ねない？ merges(event) の前に種別チェックが要る気がする。"
     let lines = ZoneTextLayout.typeset(
-      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 160).lines
+      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 160
+    ).lines
     XCTAssertGreaterThan(lines.count, 2)
     XCTAssertEqual(lines.first?.range.location, 0)
     for (a, b) in zip(lines, lines.dropFirst()) {
@@ -27,7 +28,8 @@ final class ZoneTextLayoutTests: XCTestCase {
   func testNewlinesAlwaysBreakAndAreNotInLines() {
     let string = "一行目\n\n三行目"
     let lines = ZoneTextLayout.typeset(
-      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 500).lines
+      ZoneStyledText([(string, ZoneTextStyle(font: font, color: .white))]), width: 500
+    ).lines
     XCTAssertEqual(
       lines.map(\.range),
       [
@@ -45,7 +47,8 @@ final class ZoneTextLayoutTests: XCTestCase {
     ])
     let lines = ZoneTextLayout.typeset(
       text,
-      width: ZoneTextLayout.width([ZoneTextRun("aaaa bbbb", font: font, color: .white)]) + 1).lines
+      width: ZoneTextLayout.width([ZoneTextRun("aaaa bbbb", font: font, color: .white)]) + 1
+    ).lines
     XCTAssertEqual(
       lines.map(\.range), [NSRange(location: 0, length: 10), NSRange(location: 10, length: 4)],
       "行末の空白は前の行に残る")
@@ -191,7 +194,8 @@ final class ZoneTextLayoutTests: XCTestCase {
     for (name, parts) in Self.controlCases {
       let string = parts.joined()
       let lines = ZoneTextLayout.typeset(
-        styled(parts, padding: padding), width: 500).lines
+        styled(parts, padding: padding), width: 500
+      ).lines
       XCTAssertEqual(lines.map(\.range), [NSRange(location: 0, length: string.utf16.count)], name)
       let line = try XCTUnwrap(lines.first)
       XCTAssertEqual(misplaced(line, code: 1), [], name)

@@ -33,8 +33,8 @@ extension ZoneTextLayoutTests {
       let bare = bareTypesetter(parts, codes: codes)
       for width in stride(from: CGFloat(20), through: 260, by: index < 8 ? 1.5 : 30) {
         for line in ZoneTextLayout.typeset(
-          styled(parts, codes: codes, padding: padding), width: width).lines
-        {
+          styled(parts, codes: codes, padding: padding), width: width
+        ).lines {
           let end = NSMaxRange(line.range)
           guard end < units.count, units[end] != 0x0A else { continue }
           if !breaks(bare, count: units.count, from: line.range.location, at: end) {

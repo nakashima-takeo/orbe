@@ -33,7 +33,9 @@ extension SurfaceZonesTests {
               ]))
         ],
         texts: [
-          ZoneText.laid("t", ZoneStyledText([
+          ZoneText.laid(
+            "t",
+            ZoneStyledText([
               ("red", ZoneTextStyle(font: font, color: Self.red)),
               ("green", ZoneTextStyle(font: font, color: Self.green)),
             ]), origin: CGPoint(x: 0, y: 32))
@@ -62,7 +64,9 @@ extension SurfaceZonesTests {
         ZonePicture.single(
           height: 30,
           texts: [
-            ZoneText.laid("t", ZoneStyledText([
+            ZoneText.laid(
+              "t",
+              ZoneStyledText([
                 ("code", ZoneTextStyle(font: mono, color: Self.red, padding: padding)),
                 (" after", ZoneTextStyle(font: font, color: Self.green)),
               ]), origin: CGPoint(x: 10, y: 14))

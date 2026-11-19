@@ -29,7 +29,9 @@ extension ZoneText {
 
 extension ZoneHits {
   /// 字の行（原点は絵の差し込みの座標。絵の層の順）。
-  var lines: [Line] { layers.flatMap { placed in placed.hits.lines.map { $0.moved(by: placed.origin) } } }
+  var lines: [Line] {
+    layers.flatMap { placed in placed.hits.lines.map { $0.moved(by: placed.origin) } }
+  }
 
   /// 押せる場所（矩形は絵の差し込みの座標。絵の層の順）。
   var buttons: [Button] {

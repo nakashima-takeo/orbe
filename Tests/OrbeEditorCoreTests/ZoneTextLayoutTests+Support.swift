@@ -25,7 +25,8 @@ extension ZoneTextLayoutTests {
   ) -> [String] {
     let string = parts.joined()
     let lines = ZoneTextLayout.typeset(
-      styled(parts, codes: codes ?? [code], padding: padding), width: width).lines
+      styled(parts, codes: codes ?? [code], padding: padding), width: width
+    ).lines
     let start = parts[..<code].reduce(0) { $0 + $1.utf16.count }
     let end = start + parts[code].utf16.count
     var wrong: [String] = []

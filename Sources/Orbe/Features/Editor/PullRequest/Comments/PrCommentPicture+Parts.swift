@@ -36,7 +36,9 @@ extension PrCommentPicture {
     ]
     if thread.isResolved, thread.canUnresolve {
       controls.append(
-        HeadControl(control: .resolve, key: .editorPrThreadUnresolve, enabled: !state.isWriting && state.canSend))
+        HeadControl(
+          control: .resolve, key: .editorPrThreadUnresolve,
+          enabled: !state.isWriting && state.canSend))
     } else if !thread.isResolved, thread.canResolve {
       controls.append(
         HeadControl(
