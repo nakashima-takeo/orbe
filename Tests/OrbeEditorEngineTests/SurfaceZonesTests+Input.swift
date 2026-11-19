@@ -6,7 +6,8 @@ import XCTest
 
 /// 絵の差し込みの入力欄と文の選択——主（キーと IME の行き先）の遷移と、入力欄の場の打鍵・IME・undo、絵の差し込みの文の
 /// 選択とコピー、絵の差し込みの文が主の間に効くコマンド。壊れると、返信の打鍵がソースへ入る・返信の undo が本文を
-/// 戻す・コメントを選んでいる間のキーで本文が変わる・入力欄が伸びるコマに字が遅れる。
+/// 戻す・コメントを選んでいる間のキーで本文が変わる・入力欄が伸びるコマに字が遅れる・どこにも描かれない入力欄が主のまま
+/// 残って打鍵が見えない欄に入る。
 extension SurfaceZonesTests {
   /// 返信の入力欄つきのスレッドを行 4 の前に置いた面。
   struct Threaded {
@@ -291,6 +292,18 @@ extension SurfaceZonesTests {
     XCTAssertNil(surface.fields["reply"], "絵に無い入力欄の場は閉じる")
     XCTAssertEqual(surface.primary, .body)
     XCTAssertTrue(surface.drawn.fields.isEmpty)
+  }
+
+  /// どの絵も描いていない入力欄は、主にしようとしても、文を置き換えても、場が即座に閉じて主は本文のまま（見えない欄に
+  /// 打鍵が入らない）。
+  func testAFieldNoPictureDrawsCannotTakeFocusOrKeepASite() throws {
+    let surface = try threaded().opened.surface
+    let absent = ZoneTextField(id: "absent", style: ThreadZone.fieldStyle())
+    surface.focus(absent)
+    XCTAssertEqual(surface.primary, .body)
+    XCTAssertNil(surface.fields["absent"])
+    surface.replaceText(of: absent, with: "見えない")
+    XCTAssertNil(surface.fields["absent"])
   }
 
   /// 入力欄の下端の近くで改行して入力欄が伸び、キャレットが面の下端を越えれば、面がキャレットの見えるところまで送る。
