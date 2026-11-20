@@ -4,10 +4,11 @@ import XCTest
 @testable import Orbe
 
 /// Home のフォルダの用意を固定する。Orbe の操作の指示は UI 言語の雛形へ毎回書き直し、CLAUDE.md は無いフォルダを
-/// 作るときだけ置いて以後は触らない。用意は UI 言語が確定した時点——新規利用者は初回の言語選択を確定するまで作らない。
+/// 作るときだけ置いて以後は触らない。用意は UI 言語が確定した時点で行う——新規利用者は初回の言語選択を確定するまで作らない。
 ///
 /// 壊れると何が起きるか: 人や AI が書き換えた CLAUDE.md が起動のたびに雛形へ戻される。Orbe の操作の指示の改版が既存の
-/// 利用者に届かない。言語選択の前に作ると、選んだ言語と違う雛形が置かれる。
+/// 利用者に届かない。言語選択の前に作ると、選んだ言語と違う雛形が置かれる。隔離起動で隔離先を使わないと、検証用の
+/// インスタンスが本物の Home の指示を書き換え、本物の Home にタスクの作業場を作る。
 final class HomeFolderTests: OrbeTestCase {
   private var folder: URL { HomeFolder.url }
   private var claudeMd: URL { folder.appendingPathComponent("CLAUDE.md") }
@@ -43,7 +44,7 @@ final class HomeFolderTests: OrbeTestCase {
     XCTAssertEqual(try XCTUnwrap(wc.workspaces.last).rootPath, folder.path)
   }
 
-  /// OS の言語と違う言語を選ぶ——OS の言語で作る誤りを、どの言語の環境でも落とすため。
+  /// OS の言語と違う言語を選ぶ——OS の言語で作る誤りを、どの言語の環境でも検出するため。
   func testNewUserGetsTheFolderOnlyAfterChoosingALanguage() throws {
     let chosen: Language = Language.systemDefault == .ja ? .en : .ja
     let wc = WindowController()
@@ -56,5 +57,14 @@ final class HomeFolderTests: OrbeTestCase {
     XCTAssertEqual(try contents(claudeMd), HomeTemplate.claudeMd(chosen), "選んだ言語の雛形")
     XCTAssertEqual(
       try contents(rules), HomeTemplate.rules(chosen, home: folder.path), "選んだ言語の雛形")
+  }
+
+  /// 隔離起動の Home は隔離先の state フォルダの `home/` で、チャネルごとの本物のフォルダではない。
+  func testAnIsolatedInstanceKeepsHomeInsideItsStateDir() {
+    HomeFolder.urlOverride = nil
+
+    XCTAssertEqual(
+      HomeFolder.url.standardizedFileURL.path,
+      TestIsolation.stateDir.appendingPathComponent("home").standardizedFileURL.path)
   }
 }
