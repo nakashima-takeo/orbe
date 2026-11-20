@@ -147,7 +147,6 @@
         branchPullRequests: { _, name, completion in
           completion(
             GitHubBranchPullRequests(
-              availability: .ready,
               ledger: GitHubRemoteLedger.Resolved(repositories: ["origin": .github(me)]),
               branches: [name: found]))
         },

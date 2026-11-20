@@ -42,7 +42,7 @@ final class BranchPullRequestTests: OrbeTestCase {
         let answer = { [unowned self] in
           completion(
             GitHubBranchPullRequests(
-              availability: .ready, ledger: GitHubRemoteLedger.Resolved(repositories: repositories),
+              ledger: GitHubRemoteLedger.Resolved(repositories: repositories),
               branches: answers[branch].map { [branch: $0] } ?? [:]))
         }
         if holdsLookups { held.append(answer) } else { answer() }

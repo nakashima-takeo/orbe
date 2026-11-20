@@ -64,7 +64,7 @@ final class PrPanelTests: OrbeTestCase {
       branchPullRequests: { [unowned self] _, branch, completion in
         completion(
           GitHubBranchPullRequests(
-            availability: .ready, ledger: nil,
+            ledger: nil,
             branches: [branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))]))
       },
       branchExists: { _, completion in completion(.success(true)) },

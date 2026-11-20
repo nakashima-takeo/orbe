@@ -52,7 +52,7 @@ final class PullRequestPaneTests: OrbeTestCase {
             headRepository: me, url: "https://github.com/me/r/pull/\(number)")
           completion(
             GitHubBranchPullRequests(
-              availability: .ready, ledger: nil,
+              ledger: nil,
               branches: [branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))]))
         },
         branchExists: { _, completion in completion(.success(true)) },

@@ -38,7 +38,6 @@ struct GitHubBranchPullRequests: Equatable {
     }
   }
 
-  let availability: GitHubAvailability
   /// remote の台帳。gh が使えなければ nil（正式名を問い合わせない）。
   let ledger: GitHubRemoteLedger.Resolved?
   /// 名指ししたブランチ名 → 答え。
@@ -92,7 +91,7 @@ final class GitHubBranchPullRequestLookup {
           let unavailable = GitHubBranchPullRequests.Branch.unavailable(reason)
           return completion(
             GitHubBranchPullRequests(
-              availability: availability, ledger: nil,
+              ledger: nil,
               branches: Dictionary(uniqueKeysWithValues: branches.map { ($0, unavailable) })))
         }
         self.ledger(repo, remotes: remotes) { resolved in
@@ -113,7 +112,7 @@ final class GitHubBranchPullRequestLookup {
               answers[branch] = .gitHub(ref, pullRequests: result)
             }
             completion(
-              GitHubBranchPullRequests(availability: .ready, ledger: resolved, branches: answers))
+              GitHubBranchPullRequests(ledger: resolved, branches: answers))
           }
         }
       }
