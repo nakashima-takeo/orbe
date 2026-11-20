@@ -166,6 +166,51 @@ extension EditorDiffTests {
     XCTAssertEqual(zone.text, "返信の書きかけ")
   }
 
+  /// 並列で、古い側の行のスレッドより下を読んでいる間に push があって新しい側の面が作り直されても、見えている先頭の行は
+  /// 変わらない（面が大きさを持ち、スレッドの反対側の空きを揃えた並びの上で位置を引き継ぐ）。
+  func testAPushInSideBySideKeepsTheLineBeingReadBelowAnOldSideThread() throws {
+    let lines = (0..<200).map { "l\($0)" }
+    try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "lines"]).isSuccess)
+    var head = Array(lines[0..<50] + lines[55...])
+    let remote = Remote()
+    remote.threads = [
+      GitHubPullRequestReview.Thread(
+        id: "T", path: "a.txt", side: .old, line: 53, isResolved: false, canReply: true,
+        canResolve: true, canUnresolve: false,
+        comments: [
+          .init(
+            id: "C", author: "you", body: (0..<6).map { "段落 \($0)" }.joined(separator: "\n\n"),
+            createdAt: Date(), isPending: false)
+        ])
+    ]
+    let modes = EditorDiffModeState()
+    modes.select(.side)
+    let (diff, _) = try commentedDiff(remote, modes: modes) {
+      try self.repo.write("a.txt", head.joined(separator: "\n") + "\n")
+    }
+    let zone = try XCTUnwrap(diff.comments?.zone(thread: "T"))
+    pumpMain(
+      until: {
+        guard let left = diff.oldSurface as? MetalTextSurface else { return false }
+        return left.rows.block(ofZone: ObjectIdentifier(zone)) != nil
+          && diff.comments?.isSettled == true
+      }, "前提: 左の面に古い側のスレッドが置かれる")
+    let before = try engine(diff.newSurface)
+    let reading = LineRow(line: 120)
+    before.flush()
+    before.scroll(to: before.position(ofLineRow: reading))
+    before.flush()
+    XCTAssertEqual(before.lineRow(of: before.viewport.top), reading, "前提: スレッドより下の行を読む")
+
+    head[145] = "L"
+    try push(head.joined(separator: "\n") + "\n", remote, diff)
+    pumpMain(until: { diff.newSurface !== before && diff.carried == nil }, "新しい側の面が作り直される")
+    let after = try engine(diff.newSurface)
+    after.flush()
+    XCTAssertEqual(after.lineRow(of: after.viewport.top), reading)
+  }
+
   /// 置けなくなったスレッドへの返信は送れる。
   func testAReplyToAThreadThatCannotBePlacedIsWritten() throws {
     let remote = Remote()
