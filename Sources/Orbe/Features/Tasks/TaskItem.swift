@@ -13,7 +13,7 @@ struct TaskItem: Codable, Equatable, Identifiable {
   var wait: Wait?
   var priority: Priority
   var due: DueDate?
-  /// 付き先の `Workspace.persistentId`。解決できない参照は「なし」と同じに扱う（削除された workspace を
+  /// 付き先の `Workspace.id`。解決できない参照は「なし」と同じに扱う（削除された workspace を
   /// 指していても書き換えない）。
   var workspace: UUID?
   /// 人も agent も読む前提の自由記述（複数行可）。
@@ -245,6 +245,12 @@ struct TaskLink: Codable, Equatable {
   init(item: GitHubItemID, kind: GitHubItemKind) {
     self.item = item
     self.kind = kind
+  }
+
+  /// Issue か PR のページの URL から。読めなければ nil。
+  init?(url: String) {
+    guard let read = GitHubItemID.read(url: url) else { return nil }
+    self.init(item: read.item, kind: read.kind)
   }
 
   init(from decoder: Decoder) throws {

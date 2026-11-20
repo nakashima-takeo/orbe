@@ -14,6 +14,7 @@ extension SettingsRegistryTests {
         .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
         .worktreeDir, .notificationSound, .notificationSoundVolume,
         .notificationSoundEnabled, .menuBarNotificationDuration, .scmAutoFetch,
+        .automationRunRetentionCount, .automationRunRetentionDays, .automationEventRetentionDays,
       ])
   }
 

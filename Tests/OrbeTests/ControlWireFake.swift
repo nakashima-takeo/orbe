@@ -17,12 +17,14 @@ final class FakeControlTarget: ControlTarget {
   var workspaces: [[String: Any]] = []
   var tabs: [[String: Any]] = []
   var agents: [[String: Any]] = []
-  /// nil にすると `spawn` が `-32000`（spawn failed）になる。
-  var spawnedTabId: Int? = 4242
+  /// `spawn` が返す新タブの ID。
+  let spawnedTabId = 4242
   /// nil にすると `activate_workspace` が `-32004` になる。
-  var activateResult: (activeWorkspaceId: Int, tabIds: [Int])? = (
-    activeWorkspaceId: 1, tabIds: []
+  var activateResult: (activeWorkspaceId: UUID, tabIds: [Int])? = (
+    activeWorkspaceId: FakeControlTarget.workspaceId, tabIds: []
   )
+  /// 応答に載せる workspace の ID（`activate_workspace`・`create_workspace`・エージェントの起動）。
+  static let workspaceId = UUID(uuidString: "0B5E4C3A-0000-4000-8000-000000000001")!
   /// 立てると `Result` を返す全メソッド（タブ操作・config・workspace CRUD）が
   /// これを `.failure` で返す。ドメインが決めるコード（tab 未発見の `-32004`・最後の
   /// workspace 削除の `-32000` 等）は `ControlServer` が生まず target から素通しするため、
@@ -30,12 +32,18 @@ final class FakeControlTarget: ControlTarget {
   var domainFailure: ControlError?
 
   /// 記録は常に行い、`domainFailure` が立っていればそれを、無ければ success を返す。
-  private func outcome(_ value: Any) -> Result<Any, ControlError> {
+  func outcome(_ value: Any) -> Result<Any, ControlError> {
     if let failure = domainFailure { return .failure(failure) }
     return .success(value)
   }
 
   // MARK: - 記録
+
+  struct ReadTrial {
+    let trialId: Int
+    let wait: Bool
+    let timeoutMs: Int
+  }
 
   struct ReportedAgent {
     let tabId: Int
@@ -48,7 +56,7 @@ final class FakeControlTarget: ControlTarget {
     let reporterGroup: pid_t?
   }
   struct Spawn {
-    let workspaceId: Int?
+    let workspaceId: UUID?
     let cwd: String?
     let command: String?
     let selects: Bool
@@ -56,7 +64,7 @@ final class FakeControlTarget: ControlTarget {
   struct AgentSpawn {
     let command: String?
     let sessionId: String?
-    let workspaceId: Int?
+    let workspaceId: UUID?
     let cwd: String?
   }
   struct Prompt {
@@ -67,30 +75,30 @@ final class FakeControlTarget: ControlTarget {
     let key: String
     let value: Any
     let scope: String
-    let workspaceId: Int?
+    let workspaceId: UUID?
   }
   struct CreatedWorkspace {
     let name: String
     let rootPath: String?
   }
   struct RenamedWorkspace {
-    let workspaceId: Int
+    let workspaceId: UUID
     let name: String
   }
   struct WorkspaceRoot {
-    let workspaceId: Int
+    let workspaceId: UUID
     let rootPath: String
   }
   struct AddedTask {
     let draft: TaskDraft
-    let workspaceId: ClearableValue<Int>?
+    let workspaceId: ClearableValue<UUID>?
     let callerTabId: Int?
     let worktree: String?
   }
   struct UpdatedTask {
     let taskId: Int
     let update: TaskUpdate
-    let workspaceId: ClearableValue<Int>?
+    let workspaceId: ClearableValue<UUID>?
     let worktree: ClearableValue<String>?
   }
   struct SetWaitCondition {
@@ -104,12 +112,13 @@ final class FakeControlTarget: ControlTarget {
   private(set) var agentSpawns: [AgentSpawn] = []
   private(set) var prompts: [Prompt] = []
   private(set) var configSets: [ConfigSet] = []
-  private(set) var configLists: [Int?] = []
+  private(set) var configLists: [UUID?] = []
+  private(set) var tabLists: [UUID?] = []
   private(set) var createdWorkspaces: [CreatedWorkspace] = []
   private(set) var renamedWorkspaces: [RenamedWorkspace] = []
   private(set) var workspaceRoots: [WorkspaceRoot] = []
-  private(set) var removedWorkspaceIds: [Int] = []
-  private(set) var activatedWorkspaceIds: [Int] = []
+  private(set) var removedWorkspaceIds: [UUID] = []
+  private(set) var activatedWorkspaceIds: [UUID] = []
   private(set) var focusedTabIds: [Int] = []
   private(set) var openedFiles: [(tabId: Int, path: String)] = []
   /// `open_diff` で受けたもの。
@@ -121,20 +130,24 @@ final class FakeControlTarget: ControlTarget {
   private(set) var openedDiffs: [OpenedDiff] = []
   private(set) var closedTabIds: [Int] = []
   private(set) var restoredSessionIds: [[String]] = []
-  private(set) var taskLists: [Int?] = []
+  private(set) var taskLists: [UUID?] = []
   private(set) var addedTasks: [AddedTask] = []
   private(set) var updatedTasks: [UpdatedTask] = []
   private(set) var setWaitConditions: [SetWaitCondition] = []
   private(set) var deletedTaskIds: [Int] = []
   private(set) var startedTasks: [TaskStartRequest] = []
-  private(set) var setAutomations: [(automationId: Int?, definition: AutomationDefinition)] = []
-  private(set) var ranAutomationIds: [Int] = []
-  private(set) var pausedAutomations: [(automationId: Int, paused: Bool)] = []
-  private(set) var deletedAutomationIds: [Int] = []
-  private(set) var proposalLists: [Int?] = []
-  private(set) var boardLists: [Int] = []
-  private(set) var addedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
-  private(set) var removedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
+  var setAutomations: [FakeSetAutomation] = []
+  var runLists: [FakeRunList] = []
+  var runTools: [FakeRunTool] = []
+  var ranAutomations: [(automationId: Int, nodeKey: String?)] = []
+  var pausedAutomations: [FakePause] = []
+  var deletedAutomationIds: [Int] = []
+  var proposalLists: [Int?] = []
+  var triedAutomations: [FakeTry] = []
+  var readTrials: [ReadTrial] = []
+  private(set) var boardLists: [UUID] = []
+  private(set) var addedBoardWidgets: [(workspaceId: UUID, widget: BoardWidget)] = []
+  private(set) var removedBoardWidgets: [(workspaceId: UUID, widget: BoardWidget)] = []
 
   // MARK: - 宛先
 
@@ -149,39 +162,46 @@ final class FakeControlTarget: ControlTarget {
   // MARK: - ControlTarget
 
   func controlListWorkspaces() -> [[String: Any]] { workspaces }
-  func controlListTabs() -> [[String: Any]] { tabs }
+  func controlListTabs(workspaceId: UUID?) -> Result<[[String: Any]], ControlError> {
+    tabLists.append(workspaceId)
+    if let failure = domainFailure { return .failure(failure) }
+    return .success(tabs)
+  }
   func controlListAgents() -> [[String: Any]] { agents }
 
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool) -> Int? {
+  func controlSpawn(workspaceId: UUID?, cwd: String?, command: String?, selects: Bool)
+    -> Result<Int, ControlError>
+  {
     spawns.append(Spawn(workspaceId: workspaceId, cwd: cwd, command: command, selects: selects))
-    return spawnedTabId
+    if let failure = domainFailure { return .failure(failure) }
+    return .success(spawnedTabId)
   }
 
   /// 起動結果。`command` 省略は codex（idle を報告しない agent）に解く——claude に解くと、
   /// 応答が ready 待ちに入り表駆動の往復が既定 30 秒を待つことになる。
-  func controlSpawnAgent(command: String?, workspaceId: Int?, cwd: String?) -> Result<
+  func controlSpawnAgent(command: String?, workspaceId: UUID?, cwd: String?) -> Result<
     AgentLaunch, ControlError
   > {
     agentSpawns.append(
       AgentSpawn(command: command, sessionId: nil, workspaceId: workspaceId, cwd: cwd))
-    return launch(tabId: 4344, workspaceId: 4345, command: command ?? "codex")
+    return launch(tabId: 4344, command: command ?? "codex")
   }
 
-  func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
+  func controlResumeAgent(command: String, sessionId: String, workspaceId: UUID?, cwd: String?)
     -> Result<AgentLaunch, ControlError>
   {
     agentSpawns.append(
       AgentSpawn(command: command, sessionId: sessionId, workspaceId: workspaceId, cwd: cwd))
-    return launch(tabId: 4347, workspaceId: 4348, command: command)
+    return launch(tabId: 4347, command: command)
   }
 
-  private func launch(tabId: Int, workspaceId: Int, command: String) -> Result<
+  private func launch(tabId: Int, command: String) -> Result<
     AgentLaunch, ControlError
   > {
     if let failure = domainFailure { return .failure(failure) }
     return .success(
       AgentLaunch(
-        tabId: tabId, workspaceId: workspaceId,
+        tabId: tabId, workspaceId: Self.workspaceId,
         agent: AgentCLI(command: command, path: "/fake/bin/\(command)")))
   }
 
@@ -198,7 +218,7 @@ final class FakeControlTarget: ControlTarget {
     return nil
   }
 
-  func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])? {
+  func controlActivateWorkspace(workspaceId: UUID) -> (activeWorkspaceId: UUID, tabIds: [Int])? {
     activatedWorkspaceIds.append(workspaceId)
     return activateResult
   }
@@ -232,12 +252,12 @@ final class FakeControlTarget: ControlTarget {
     return outcome(["ok": true])
   }
 
-  func controlConfigList(workspaceId: Int?) -> Result<Any, ControlError> {
+  func controlConfigList(workspaceId: UUID?) -> Result<Any, ControlError> {
     configLists.append(workspaceId)
     return outcome(["settings": []])
   }
 
-  func controlConfigSet(key: String, value: Any, scope: String, workspaceId: Int?)
+  func controlConfigSet(key: String, value: Any, scope: String, workspaceId: UUID?)
     -> Result<Any, ControlError>
   {
     configSets.append(ConfigSet(key: key, value: value, scope: scope, workspaceId: workspaceId))
@@ -246,20 +266,21 @@ final class FakeControlTarget: ControlTarget {
 
   func controlCreateWorkspace(name: String, rootPath: String?) -> Result<Any, ControlError> {
     createdWorkspaces.append(CreatedWorkspace(name: name, rootPath: rootPath))
-    return outcome(["workspaceId": 7, "name": name, "rootPath": rootPath ?? "/tmp"])
+    return outcome(
+      ["workspaceId": Self.workspaceId.uuidString, "name": name, "rootPath": rootPath ?? "/tmp"])
   }
 
-  func controlRenameWorkspace(workspaceId: Int, name: String) -> Result<Any, ControlError> {
+  func controlRenameWorkspace(workspaceId: UUID, name: String) -> Result<Any, ControlError> {
     renamedWorkspaces.append(RenamedWorkspace(workspaceId: workspaceId, name: name))
     return outcome(["ok": true])
   }
 
-  func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError> {
+  func controlSetWorkspaceRoot(workspaceId: UUID, rootPath: String) -> Result<Any, ControlError> {
     workspaceRoots.append(WorkspaceRoot(workspaceId: workspaceId, rootPath: rootPath))
     return outcome(["ok": true])
   }
 
-  func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError> {
+  func controlRemoveWorkspace(workspaceId: UUID) -> Result<Any, ControlError> {
     removedWorkspaceIds.append(workspaceId)
     return outcome(["ok": true])
   }
@@ -269,13 +290,13 @@ final class FakeControlTarget: ControlTarget {
     return outcome(["results": sessionIds.map { ["sessionId": $0, "status": "restored"] }])
   }
 
-  func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError> {
+  func controlListTasks(workspaceId: UUID?) -> Result<Any, ControlError> {
     taskLists.append(workspaceId)
     return outcome(["tasks": []])
   }
 
   func controlAddTask(
-    _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?, worktree: String?
+    _ draft: TaskDraft, workspaceId: ClearableValue<UUID>?, callerTabId: Int?, worktree: String?
   ) -> Result<Any, ControlError> {
     addedTasks.append(
       AddedTask(
@@ -284,7 +305,7 @@ final class FakeControlTarget: ControlTarget {
   }
 
   func controlUpdateTask(
-    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
+    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<UUID>?,
     worktree: ClearableValue<String>?
   ) -> Result<Any, ControlError> {
     updatedTasks.append(
@@ -311,50 +332,23 @@ final class FakeControlTarget: ControlTarget {
     startedTasks.append(request)
     completion(outcome(["workdir": "/w"]))
   }
+}
 
-  func controlListAutomations() -> Result<Any, ControlError> {
-    outcome(["automations": [Any]()])
-  }
-
-  func controlSetAutomation(automationId: Int?, _ definition: AutomationDefinition) -> Result<
-    Any, ControlError
-  > {
-    setAutomations.append((automationId, definition))
-    return outcome(["automation": ["automationId": automationId ?? 1]])
-  }
-
-  func controlRunAutomation(automationId: Int) -> Result<Any, ControlError> {
-    ranAutomationIds.append(automationId)
-    return outcome(["ok": true])
-  }
-
-  func controlPauseAutomation(automationId: Int, paused: Bool) -> Result<Any, ControlError> {
-    pausedAutomations.append((automationId, paused))
-    return outcome(["automation": ["automationId": automationId]])
-  }
-
-  func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError> {
-    deletedAutomationIds.append(automationId)
-    return outcome(["ok": true])
-  }
-
-  func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError> {
-    proposalLists.append(automationId)
-    return outcome(["proposals": [Any]()])
-  }
-
-  func controlListBoardParts(workspaceId: Int) -> Result<Any, ControlError> {
+/// ボードのウィジェットの 3 動詞。
+extension FakeControlTarget {
+  func controlListBoardWidgets(workspaceId: UUID) -> Result<Any, ControlError> {
     boardLists.append(workspaceId)
-    return outcome(["parts": [["kind": "automation"]]])
+    return outcome(["widgets": [["kind": "automation"]]])
   }
 
-  func controlAddBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {
-    addedBoardParts.append((workspaceId, part))
-    return outcome(["parts": [["kind": "automation"]]])
+  func controlAddBoardWidget(workspaceId: UUID, widget: BoardWidget) -> Result<Any, ControlError> {
+    addedBoardWidgets.append((workspaceId, widget))
+    return outcome(["widgets": [["kind": "automation"]]])
   }
 
-  func controlRemoveBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {
-    removedBoardParts.append((workspaceId, part))
-    return outcome(["parts": [Any]()])
+  func controlRemoveBoardWidget(workspaceId: UUID, widget: BoardWidget) -> Result<Any, ControlError>
+  {
+    removedBoardWidgets.append((workspaceId, widget))
+    return outcome(["widgets": [Any]()])
   }
 }

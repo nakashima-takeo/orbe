@@ -7,13 +7,15 @@ extension WindowController {
   func restore(from file: WorkspacesFile) {
     restoreWindowSize(file.windowSize)
     var restored: [Workspace] = []
+    var seenIds = Set<UUID>()
     for state in file.workspaces {
-      let ws = Workspace(
-        name: state.name, rootPath: state.rootPath, persistentId: state.persistentId)
+      // ID は制御の宛先なので一意でなければならない。重なった 2 個目以降には新しく振る（先の方が元の ID を保つ）。
+      let id = seenIds.insert(state.id).inserted ? state.id : UUID()
+      let ws = Workspace(name: state.name, rootPath: state.rootPath, id: id)
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
       ws.lastWorktreeBase = state.lastWorktreeBase
-      ws.boardParts = state.boardParts  // 重なりは下の store.load が落とす
+      ws.boardWidgets = state.boardWidgets  // 重なりは下の store.load が落とす
       // 連はキー（cwd の根）ごとに 1 つ作り、その連の保存状態で起こす。隣接の正規化は下の store.load。
       let keys = state.tabs.map { GitWorktreeRoot.root(of: $0.cwd) }
       let groupStates = state.groupStates(keys: keys)
@@ -133,8 +135,8 @@ extension WindowController {
           boardSelected: ws.selection == .board,
           tabs: ws.tabs.map { $0.tabState() }, groups: ws.groups.compactMap { $0.groupState() },
           lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
-          lastWorktreeBase: ws.lastWorktreeBase, persistentId: ws.persistentId,
-          boardParts: ws.boardParts)
+          lastWorktreeBase: ws.lastWorktreeBase, id: ws.id,
+          boardWidgets: ws.boardWidgets)
       },
       windowSize: rememberedWindowSize, homeWorkspaceId: store.homeWorkspaceId)
   }

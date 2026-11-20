@@ -4,11 +4,9 @@ import Foundation
 /// root path（拠点）を持ち、複数タブ（TerminalTab）を束ねる。
 /// 非アクティブな間も生存し続け、配下 surface は生きたまま（keep-alive）。
 final class Workspace {
-  /// 制御チャネルの宛先 ID。
-  let id = IdGen.next()
-  /// 起動をまたいで変わらない内部専用の ID。タスクが workspace を指すのに使い、外には見せない
-  /// （外に見せるのは起動ごとの `id`）。改名・root の変更では変わらず、使い回さない。
-  let persistentId: UUID
+  /// workspace の ID。起動をまたいで変わらず、改名・root の変更でも変わらず、使い回さない。制御チャネルの宛先も、タスク・
+  /// 自動化が workspace を指すのもこれ。
+  let id: UUID
   var name: String
   var rootPath: String
   /// 並びは「同じ `groupKey` のタブは配列上で必ず隣接する」不変条件を持ち、保証者は `SessionStore` だけ
@@ -43,9 +41,9 @@ final class Workspace {
   /// worktree パレットで前回新しいブランチを作ったときのベース（ブランチ名）。次の作成行で最初に選ぶ。
   /// 書き手は起動時の復元と `WindowController.rememberWorktreeBase` だけ。永続化する。
   var lastWorktreeBase: String?
-  /// ボードの部品の決めた並び。nil は一度も決めていない。ボードを持つか・既定・置ける／外せるかは `SessionStore` が決め、
+  /// ボードのウィジェットの決めた並び。nil は一度も決めていない。ボードを持つか・既定・置ける／外せるかは `SessionStore` が決め、
   /// 変異もそこを通す（復元の組み立てだけは直接入れ、直後の `SessionStore.load` の正規化を必ず通す）。永続化する。
-  var boardParts: [BoardPart]?
+  var boardWidgets: [BoardWidget]?
 
   /// workspace の選択。タブは位置ではなくタブそのもので指す（並びが変わっても同じタブを指し続ける）。
   enum Selection: Equatable {
@@ -63,9 +61,9 @@ final class Workspace {
     }
   }
 
-  init(name: String, rootPath: String, persistentId: UUID = UUID()) {
+  init(name: String, rootPath: String, id: UUID = UUID()) {
     self.name = name
     self.rootPath = rootPath
-    self.persistentId = persistentId
+    self.id = id
   }
 }

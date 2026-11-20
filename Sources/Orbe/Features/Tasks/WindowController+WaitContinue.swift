@@ -60,7 +60,7 @@ extension WindowController {
       return nil
     }
     let workspace = { (id: UUID?) in
-      id.flatMap { id in self.workspaces.firstIndex { $0.persistentId == id } }
+      id.flatMap { id in self.workspaces.firstIndex { $0.id == id } }
     }
     let index = workspace(conversation.workspace) ?? workspace(task.workspace) ?? activeWorkspace
     dismissPalette()

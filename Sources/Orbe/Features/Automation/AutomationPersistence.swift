@@ -1,69 +1,67 @@
 import Foundation
 import OrbeSessionLog
 
-/// 自動化と候補のディスク表現。定義も蓄積も 1 ファイルに置き、1 回の確定を 1 度の書き込みにする。
-struct AutomationsFile: Codable, Equatable {
-  var version: Int
-  /// 次に振る ID。削除した ID を使い回さないために、一覧とは別に持つ。
-  var nextAutomationId: Int
-  var nextProposalId: Int
-  var automations: [Automation]
-  var proposals: [AutomationProposal]
-}
-
-/// 自動化の永続（自前 JSON）。保存先は tasks.json と並ぶ `StateDir.base()/automations.json`。書くのは `AutomationStore` の
-/// 変異ごと。
+/// 自動化の永続。state の `automations/` フォルダの SQLite の DB（`StateDatabase`）に、ノードの定義・自動化とノードとつながり・
+/// 出す側の行・回の記録と履歴・候補と人の判断を置く（`AutomationDatabase.schema`）。書き手は `AutomationStore` だけ。
 enum AutomationPersistence {
-  static let version = 1
+  static let version: Int32 = 2
 
-  /// テスト用に保存先を差し替える（設定時はこちらを使う）。本番は nil。
-  static var fileURLOverride: URL?
+  /// 版ごとの移行（版 N → N+1）。版 1 からの移行は無い（版 1 の DB は退避する）。
+  static let migrations: [StateDatabase.Migration] = []
 
-  private static var quarantine = StateFileQuarantine()
+  /// テスト用に DB のフォルダを差し替える（設定時はこちらを使う）。本番は nil。旧形式の JSON の場所もここから導く。
+  static var folderOverride: URL?
 
-  static var fileURL: URL? {
-    if let override = fileURLOverride { return override }
-    return StateDir.base()?.appendingPathComponent("automations.json")
+  static var folder: URL? {
+    if let override = folderOverride { return override }
+    return StateDir.base()?.appendingPathComponent("automations", isDirectory: true)
   }
 
-  /// 読み込み。不在は nil。在るのに使えない原本——読めない・構造破損・非互換 version・定義の不正・ID とリンクの
-  /// 不変条件の破れ——は退避してから nil を返す（AI と人が作った定義で、直後の保存が原本を潰すと戻らないため）。
-  static func load() -> AutomationsFile? {
-    quarantine.reset()
-    guard let url = fileURL, FileManager.default.fileExists(atPath: url.path) else { return nil }
-    guard let data = try? Data(contentsOf: url), let file = decode(data) else {
-      quarantine.quarantine(url)
-      return nil
+  /// 旧形式の `automations.json`（フォルダの隣）。読まない。
+  static var legacyFile: URL? {
+    folder?.deletingLastPathComponent().appendingPathComponent("automations.json")
+  }
+
+  /// 起動時に開いて全部を読む。旧形式の JSON があれば退避する（失敗しても続け、次の起動でやり直す）。使わない（開けない・
+  /// 確かめられない・別の Orbe が持っている・新しい版）ときは理由を返し、そのセッションは自動化を読まず・走らせず・書かない。
+  /// `retention` は今の保持の値（DB が使うたびに読む）。
+  static func open(
+    now: Date = Date(), retention: @escaping () -> AutomationRetention = { .standard }
+  ) -> Result<AutomationDatabase.Opened, AutomationError> {
+    if let legacy = legacyFile, FileManager.default.fileExists(atPath: legacy.path) {
+      var quarantine = StateFileQuarantine()
+      quarantine.quarantine(legacy)
     }
-    return file
+    guard let folder else {
+      return .failure(
+        .unavailable("automations are unavailable in this session: the state folder is unknown"))
+    }
+    switch StateDatabase.open(
+      folder: folder, version: version, schema: AutomationDatabase.schema, migrations: migrations,
+      read: { try AutomationDatabase.memory($0, now: now, retention: retention) })
+    {
+    case .opened(let opened):
+      return .success(
+        AutomationDatabase.Opened(
+          database: AutomationDatabase(opened.database, retention: retention),
+          memory: opened.contents))
+    case .refused(let reason):
+      return .failure(
+        .unavailable("automations are unavailable in this session: the database \(reason)"))
+    }
   }
 
-  private static func decode(_ data: Data) -> AutomationsFile? {
-    guard let file = try? AutomationWire.decoder.decode(AutomationsFile.self, from: data),
-      file.version == version
-    else { return nil }
-    let ids = file.automations.map(\.id)
-    let proposalIds = file.proposals.map(\.id)
-    let links = file.proposals.map(\.item.link)
-    guard file.nextAutomationId >= 1, file.nextProposalId >= 1,
-      Set(ids).count == ids.count, ids.allSatisfy({ $0 >= 1 && $0 < file.nextAutomationId }),
-      Set(proposalIds).count == proposalIds.count,
-      proposalIds.allSatisfy({ $0 >= 1 && $0 < file.nextProposalId }),
-      Set(links).count == links.count,
-      file.automations.allSatisfy({ (try? AutomationStore.valid($0.definition)) == $0.definition })
-    else { return nil }
-    return file
+  /// 保存の精度（ミリ秒）。メモリの時刻はいつもこの精度に通してから持つ——読み直した値と同じにするため。
+  static func millis(_ date: Date) -> Int64 {
+    Int64((date.timeIntervalSince1970 * 1000).rounded())
   }
 
-  static func save(_ file: AutomationsFile) {
-    guard let url = fileURL, quarantine.permitsWrite(to: url),
-      let data = try? AutomationWire.encoder(pretty: true).encode(file)
-    else { return }
-    try? data.write(to: url, options: .atomic)
+  static func date(_ millis: Int64) -> Date {
+    Date(timeIntervalSince1970: Double(millis) / 1000)
   }
 }
 
-/// 自動化の保存ファイルと制御 API が共有する JSON の書き方（時刻は ISO 8601・ミリ秒・Z）。
+/// 自動化の保存と制御 API が共有する JSON の書き方（時刻は ISO 8601・ミリ秒・Z）。
 enum AutomationWire {
   static var decoder: JSONDecoder {
     let decoder = JSONDecoder()

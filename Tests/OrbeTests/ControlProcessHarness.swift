@@ -63,25 +63,45 @@ final class ControlProcess {
     return resources
   }
 
-  /// リポジトリ実体のプラグインパッケージ。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
-  private static let sourcePluginPackage = URL(fileURLWithPath: #filePath)
+  /// このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
+  private static let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // OrbeTests
     .deletingLastPathComponent()  // Tests
     .deletingLastPathComponent()  // repo root
-    .appendingPathComponent("app/agent-plugin")
+
+  /// リポジトリ実体のプラグインパッケージ。
+  private static let sourcePluginPackage = repoRoot.appendingPathComponent("app/agent-plugin")
+
+  /// `.app` 同梱時に codex 専用のディレクトリを完成させるスクリプト。
+  private static let assembleCodexPlugin = repoRoot.appendingPathComponent(
+    "scripts/assemble-codex-plugin.sh")
 
   /// リポジトリ実体のプラグインを同梱物レイアウトへ置き、本番と同じ `materializeStablePlugin()` で
-  /// 実体化して、実体化先のプラグインのルートを返す（チャネルの刻印も本番の実体化が書く）。
+  /// 実体化して、実体化先の claude・agy が読むプラグインのルートを返す（チャネルの刻印も本番の実体化が書く）。
   static func stagePlugin() throws -> URL {
+    try stagePackage(root: "plugins")
+  }
+
+  /// `stagePlugin()` と同じく実体化して、実体化先の codex 専用のプラグインのルートを返す。
+  static func stageCodexPlugin() throws -> URL {
+    try stagePackage(root: "codex")
+  }
+
+  private static func stagePackage(root: String) throws -> URL {
     let resources = try XCTUnwrap(BundledResources.root, "同梱物の探索根がステージされていない")
     let bundled = resources.appendingPathComponent("agent-plugin", isDirectory: true)
     try? FileManager.default.removeItem(at: bundled)
     // copyItem は POSIX permission を保つ（.app へのコピーと同じ性質）。
     try FileManager.default.copyItem(at: sourcePluginPackage, to: bundled)
-    let package = try XCTUnwrap(AgentPluginInstaller.materializeStablePlugin(), "実体化できない")
     let name = try XCTUnwrap(
-      AgentPluginInstaller.pluginName(in: package), "プラグイン名を読めない（パッケージが壊れている）")
-    return package.appendingPathComponent("plugins/\(name)", isDirectory: true)
+      AgentPluginInstaller.pluginName(in: bundled), "プラグイン名を読めない（パッケージが壊れている）")
+    // codex 専用のディレクトリは、`.app` 同梱時と同じスクリプトで完成させる。
+    let assembled = run(
+      URL(fileURLWithPath: "/bin/sh"), [assembleCodexPlugin.path, bundled.path, name],
+      env: ["PATH": "/usr/bin:/bin"])
+    XCTAssertEqual(assembled.status, 0, "codex 専用のディレクトリを完成させられない: \(assembled.stderr)")
+    let package = try XCTUnwrap(AgentPluginInstaller.materializeStablePlugin(), "実体化できない")
+    return package.appendingPathComponent("\(root)/\(name)", isDirectory: true)
   }
 
   private static func stage(_ source: URL, as destination: URL) throws {
@@ -244,8 +264,8 @@ final class ControlProcess {
       file: file, line: line)
   }
 
-  /// `orb <args> --json` の stdout を JSON オブジェクトとして読む。workspace / tab の id は
-  /// `IdGen` 採番で予測不能なので、テストは必ずこの出力から読む（直書きしない）。
+  /// `orb <args> --json` の stdout を JSON オブジェクトとして読む。tab の id は `IdGen` 採番で予測不能なので、テストは
+  /// 必ずこの出力から読む（直書きしない）。
   func orbJSON(
     _ args: [String], env extra: [String: String] = [:],
     file: StaticString = #filePath, line: UInt = #line
@@ -318,10 +338,12 @@ final class ControlProcess {
   }
 
   /// `tools/list` を 1 往復させ `tools` 配列を返す。socket に触れないのでサーバは要らない。
-  static func mcpToolsList(file: StaticString = #filePath, line: UInt = #line) -> [[String: Any]] {
+  static func mcpToolsList(
+    env: [String: String] = [:], file: StaticString = #filePath, line: UInt = #line
+  ) -> [[String: Any]] {
     guard
       let result = mcpRoundTrip(
-        method: "tools/list", params: [:], label: "tools/list", file: file, line: line)
+        method: "tools/list", params: [:], label: "tools/list", env: env, file: file, line: line)
     else { return [] }
     guard let tools = result["tools"] as? [[String: Any]] else {
       XCTFail("tools/list の result に tools が無い: \(result)", file: file, line: line)

@@ -3,12 +3,12 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの自動化の部品——一覧の並びと、選んだ自動化へのキー。本物の `BoardView`（中身は SwiftUI）を実窓に載せ、実
+/// ボードの自動化のウィジェット——一覧の並びと、選んだ自動化へのキー。本物の `BoardView`（中身は SwiftUI）を実窓に載せ、実
 /// `NSEvent` のキーを届ける。走らせ役は取得が終わらない偽物で、本物の claude は起きない。
 ///
-/// 壊れると何が起きるか: 前回が失敗した自動化が一覧の上に来ず、壊れた取得に気づけない。走り出すたびに行が跳ね、↵ を押した
+/// 壊れると何が起きるか: 前回が失敗した自動化が一覧の上に来ず、壊れた取得に気づけない。走り出すたびに行が跳ね、⌘↵ を押した
 /// 直後に選択の位置が狂う。⌘⌫ を押し続けたリピートで次の自動化まで消える（戻せない）。space のリピートで止める ⇄ 再開が
-/// 往復し、どちらになったか分からない。⌘↵ で今すぐ実行が走る。AI や ⌘⇧X が選んでいる自動化を消すと選択が宙に浮き、
+/// 往復し、どちらになったか分からない。⇧↵ で今すぐ実行が走る。AI や ⌘⇧X が選んでいる自動化を消すと選択が宙に浮き、
 /// 詳細が消えてキーが効かなくなる。
 @MainActor
 final class BoardAutomationTests: PaletteCardWindowTestCase {
@@ -40,20 +40,25 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
-  /// `automations` を省くと見本の 4 件。
-  func board(_ automations: [Automation]? = nil) -> BoardModel {
+  /// `samples` を省くと見本の 4 件。
+  func board(_ samples: [AutomationSample]? = nil) -> BoardModel {
     BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(
-          DesignSceneFixtures.boardAutomationFile(automations))),
-      parts: [.automation])
+          samples ?? DesignSceneFixtures.boardAutomationSamples())),
+      widgets: [.automation])
   }
 
-  /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。部品は欄から始まる。
-  func mount(_ model: BoardModel) -> NSWindow {
+  /// 見本の 4 件を置いたままの自動化（置き方は決定論なので、別の DB に置いても同じ値になる）。
+  var untouched: [Automation] {
+    DesignSceneFixtures.automationStore(DesignSceneFixtures.boardAutomationSamples()).automations
+  }
+
+  /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。ウィジェットは欄から始まる。
+  func mount(_ model: BoardModel, height: CGFloat = 700) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 1200, height: 700),
+      contentRect: NSRect(x: -20000, y: -20000, width: 1200, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = BoardView(
       model: model, translucency: ChromeTranslucency(),
@@ -91,7 +96,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
       automation.ids, [Self.failingBacklog, Self.slack, Self.github, Self.pausedGmail],
       "前回が失敗 → それ以外 → 止めている。群の中は ID 順")
 
-    try automation.runner.runNow(Self.github)
+    try automation.runner.flow(Self.github, to: .ends)
     XCTAssertTrue(automation.runner.isRunning(Self.github), "前提: 走っている")
 
     XCTAssertEqual(
@@ -101,7 +106,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
 
   // MARK: - キー
 
-  /// ↓ で選び、space で止める ⇄ 再開（沈んでも選択は付いていく）、↵ で今すぐ実行、⌘⌫ で消して同じ位置の行を選ぶ。
+  /// ↓ で選び、space で止める ⇄ 再開（沈んでも選択は付いていく）、⌘↵ で今すぐ実行、⌘⌫ で消して同じ位置の行を選ぶ。
   func testKeysActOnTheSelectedAutomation() {
     let model = board()
     let automation = model.automation
@@ -117,10 +122,10 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, false)
 
-    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", .command, to: window)
     XCTAssertTrue(automation.runner.isRunning(Self.slack))
-    send(Key.enter, "\r", to: window)
-    XCTAssertEqual(model.refusal, .automationErrRunning, "走っている間の ↵ は赤で断る")
+    send(Key.enter, "\r", .command, to: window)
+    XCTAssertEqual(model.refusal, .automationErrRunning, "走っている間の ⌘↵ は赤で断る")
 
     down(window)
     XCTAssertNil(model.refusal, "↓ で消える")
@@ -130,7 +135,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     XCTAssertEqual(automation.selectedAutomation?.id, Self.pausedGmail, "同じ位置の行")
   }
 
-  /// space・↵・⌘⌫ は押し続けても 1 回だけ効く。
+  /// space・⌘↵・⌘⌫ は押し続けても 1 回だけ効く。
   func testHeldKeysActOnce() {
     let model = board()
     let automation = model.automation
@@ -142,10 +147,10 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     send(Key.space, " ", repeating: true, to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true, "止める ⇄ 再開は 1 回だけ（往復しない）")
 
-    send(Key.enter, "\r", to: window)
-    send(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, repeating: true, to: window)
     XCTAssertTrue(automation.runner.isRunning(Self.slack))
-    XCTAssertNil(model.refusal, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
+    XCTAssertNil(model.refusal, "リピートで「実行中のため、今は実行できません」の赤を出さない")
 
     send(Key.delete, "\u{7F}", .command, to: window)
     send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
@@ -155,7 +160,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
       "消えるのは 1 件だけ")
   }
 
-  /// 今すぐ実行は修飾なしの ↵ だけ。⇧↵・文字キーは何も起こさない（⌘↵ は直しの依頼で、走らせない）。
+  /// 今すぐ実行は ⌘↵ だけ。⇧↵・文字キーは何も起こさない。
   func testModifiedEnterAndLettersDoNothing() {
     let model = board()
     let automation = model.automation
@@ -167,7 +172,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
 
     XCTAssertFalse(
       automation.store.automations.contains { automation.runner.isRunning($0.id) }, "どれも走らない")
-    XCTAssertEqual(automation.store.automations, DesignSceneFixtures.boardAutomations(), "どれも変わらない")
+    XCTAssertEqual(automation.store.automations, untouched, "どれも変わらない")
     XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "選択も動かない")
   }
 
@@ -188,5 +193,53 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     XCTAssertEqual(automation.selectedAutomation?.id, Self.github)
     send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.github)?.paused, true)
+  }
+
+  /// 地図で選んでいるノードをほかの口（AI）の書き換えが外すと、地図は同じ位置の段を選び、キーはその段から効く。
+  func testRemovingTheSelectedNodeElsewhereMovesTheMapToTheSamePosition() throws {
+    let model = board(DesignSceneFixtures.boardMapSamples())
+    let automation = model.automation
+    let window = mount(model)
+    down(window)
+    right(window)
+    for _ in 0..<12 where automation.selectedNodeKey != "digest" { down(window) }
+    XCTAssertEqual(automation.selectedNodeKey, "digest", "前提")
+    let current = try XCTUnwrap(automation.selectedAutomation)
+    let position = try XCTUnwrap(
+      automation.selectedMapStop.flatMap { automation.mapStops.firstIndex(of: $0) })
+    var definition = current.definition
+    definition.nodes.removeAll { $0.key == "digest" }
+
+    _ = try automation.runner.set(current.id, version: current.version, definition)
+    flush(window)
+
+    XCTAssertEqual(automation.place, .map)
+    XCTAssertEqual(
+      automation.selectedMapStop, automation.mapStops[min(position, automation.mapStops.count - 1)],
+      "外したノードと同じ位置の段")
+    let moved = automation.selectedNodeKey
+    up(window)
+    XCTAssertNotEqual(automation.selectedNodeKey, moved, "地図の ↑ が効く")
+  }
+
+  /// 定義を読めない自動化をほかの口で消しても、ボードは同じ位置の行を選ぶ（一覧の並びは読める自動化と読めない自動化を合わせた
+  /// もの）。
+  func testDeletingAnUnreadableAutomationElsewhereMovesTheSelectionToTheSamePosition() throws {
+    let model = BoardModel(
+      automation: BoardAutomationModel(
+        runner: DesignSceneFixtures.automationRunner(
+          store: DesignSceneFixtures.boardUnreadableStore())),
+      widgets: [.automation])
+    let automation = model.automation
+    let window = mount(model)
+    down(window)
+    XCTAssertEqual(automation.selectedUnreadable?.id, 2, "前提")
+
+    try automation.runner.delete(2)
+    flush(window)
+
+    let first = try XCTUnwrap(automation.ids.first)
+    XCTAssertEqual(automation.list.selectedID, .automation(first), "消えた行と同じ位置の行")
+    XCTAssertNotNil(automation.selectedAutomation)
   }
 }

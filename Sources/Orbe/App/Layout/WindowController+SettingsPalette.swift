@@ -78,11 +78,13 @@ extension WindowController {
   /// `target` は workspace スコープの書込先（省略時はアクティブ WS）。`Workspace` は参照型のため
   /// 非アクティブ WS でも `settingsOverride` を in-place で書ける。永続（scheduleSave）は常に、
   /// ライブ反映（applyActiveWorkspaceConfig）は global か対象がアクティブ WS の時だけ——非アクティブ
-  /// WS の上書きは次回 activate 時に `current.settingsOverride` を読んで効く。
+  /// WS の上書きは次回 activate 時に `current.settingsOverride` を読んで効く。自動化の保持の値（Home の実効値）が
+  /// 変わったら、自動化の読めば取る行を数え直す。
   func applySetting(
     _ change: SettingChange, scope: SettingsScope, target: Workspace? = nil
   ) {
     let target = target ?? current
+    let retention = automationRetention
     switch scope {
     case .global:
       settingsStore.applyGlobal(change)  // in-memory SSOT 変異＋即 save（書込 gate）
@@ -93,6 +95,7 @@ extension WindowController {
       scheduleSave()  // workspaces.json へ永続化（再起動越し復元）
     }
     if scope == .global || target === current { applyActiveWorkspaceConfig() }
+    if automationRetention != retention { automationRunner.retentionChanged() }
     // カスタム音源の参照集合が変わったので、参照されなくなったファイルを回収する
     // （順序は「新ファイルを書く → ここで設定値を保存 → GC」。パレット・`orb config`・control が共有）。
     if SettingsRegistry.customSoundSourceIDs.contains(change.id) { collectCustomSoundGarbage() }

@@ -25,7 +25,7 @@ final class SecretaryTests: OrbeTestCase {
           name: "main", rootPath: "/tmp", activeTab: 0,
           tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
         WorkspaceState(
-          name: "Home", rootPath: home, activeTab: 0, tabs: [], persistentId: homeId),
+          name: "Home", rootPath: home, activeTab: 0, tabs: [], id: homeId),
       ], homeWorkspaceId: homeId)
     try JSONEncoder().encode(workspaces).write(to: workspacesFile())
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
@@ -40,7 +40,7 @@ final class SecretaryTests: OrbeTestCase {
   }
 
   func homeTabs(_ wc: WindowController) throws -> [TerminalTab] {
-    try XCTUnwrap(wc.workspaces.first { $0.persistentId == homeId }).tabs
+    try XCTUnwrap(wc.workspaces.first { $0.id == homeId }).tabs
   }
 
   // MARK: - 起こす
@@ -56,7 +56,7 @@ final class SecretaryTests: OrbeTestCase {
 
     XCTAssertEqual(wc.presentedOverlay, .none, "⌘⇧X は閉じる")
     let tab = try XCTUnwrap(try homeTabs(wc).first, "Home に claude のタブが起きる")
-    XCTAssertEqual(wc.current.persistentId, homeId, "Home へ移る")
+    XCTAssertEqual(wc.current.id, homeId, "Home へ移る")
     XCTAssertEqual(wc.activeTab?.id, tab.id, "そのタブを選ぶ")
     let command = try XCTUnwrap(tab.surface.initialCommand)
     XCTAssertTrue(
@@ -64,7 +64,7 @@ final class SecretaryTests: OrbeTestCase {
         && !command.contains("set_automation"), "タスクを足す役目を添える: \(command)")
     XCTAssertTrue(command.hasSuffix(" -- '依頼: 見積もりを山田さんに送る'"), "頼みは最初の入力: \(command)")
 
-    try wc.secretary.ask(.text("二件目"), from: .palette)
+    try wc.secretary.ask("二件目", from: .palette)
     XCTAssertEqual(try homeTabs(wc).count, 2, "頼みのたびに別の claude")
   }
 
@@ -95,7 +95,7 @@ final class SecretaryTests: OrbeTestCase {
   func testWithoutClaudeTheAskIsRefused() throws {
     let wc = try launch(stage: false)
 
-    XCTAssertThrowsError(try wc.secretary.ask(.text("頼み"), from: .palette)) {
+    XCTAssertThrowsError(try wc.secretary.ask("頼み", from: .palette)) {
       XCTAssertEqual($0 as? Secretary.Refusal, .claudeMissing)
     }
     XCTAssertTrue(try homeTabs(wc).isEmpty)

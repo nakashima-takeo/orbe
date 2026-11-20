@@ -7,13 +7,14 @@
 # 即終了すると毎回接続失敗として警告されるため。
 # チャネルの判定は状態追跡のシム（hooks/orbe-agent-status.sh）と同じ規則: channel は実体化時に Orbe が
 # 刻んだ自分の bundle ID、ORBE_BUNDLE_ID はタブを開いた Orbe が名乗る bundle ID。片方が欠けたら通す。
+# 引数は orbe-mcp へそのまま渡す。codex の MCP 定義は CLI 名を渡し、orbe-mcp はそれでデーモン経由の呼び出しを見分ける。
 
 ROOT="$(dirname "$0")/.."
 if [ -x "$ORBE_MCP_BIN" ]; then
   OWNER=""
   [ -r "$ROOT/channel" ] && read -r OWNER < "$ROOT/channel"
   if [ -z "$OWNER" ] || [ -z "$ORBE_BUNDLE_ID" ] || [ "$OWNER" = "$ORBE_BUNDLE_ID" ]; then
-    exec "$ORBE_MCP_BIN"
+    exec "$ORBE_MCP_BIN" "$@"
   fi
 fi
 exec /usr/bin/perl "$ROOT/mcp/empty-server.pl"

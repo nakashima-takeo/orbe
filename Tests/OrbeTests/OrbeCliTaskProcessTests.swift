@@ -39,9 +39,10 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     try XCTUnwrap(control.orbJSON(["task", "list"], env: env)["tasks"] as? [[String: Any]])
   }
 
-  private func workspaceId(_ control: ControlProcess, _ name: String) throws -> Int {
+  private func workspaceId(_ control: ControlProcess, _ name: String) throws -> String {
     try XCTUnwrap(
-      control.target.controlListWorkspaces().first { $0["name"] as? String == name }?["id"] as? Int)
+      control.target.controlListWorkspaces().first { $0["name"] as? String == name }?["id"]
+        as? String)
   }
 
   func testTaskSubcommandsDriveOneLifecycle() throws {
@@ -69,13 +70,13 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
       control,
       [
         "set", first, "--title", "経費精算", "--priority", "low", "--no-due", "--waiting", "領収書",
-        "--workspace", String(background),
+        "--workspace", background,
       ])
     XCTAssertEqual(
       rows(control).last, [first, "todo", "low", "-", "background", "経費精算", "領収書", "-", "-"],
       "task set: 渡した項目だけ変わり、--no-due で期限が外れる")
     let filtered = try XCTUnwrap(
-      control.orbJSON(["task", "list", "--workspace", String(background)])["tasks"]
+      control.orbJSON(["task", "list", "--workspace", background])["tasks"]
         as? [[String: Any]])
     XCTAssertEqual(
       filtered.compactMap { $0["taskId"] as? Int }, [Int(first)].compactMap { $0 },
@@ -255,7 +256,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         "pass only one of --description / --no-description"
       ),
       (
-        ["task", "add", "a", "--workspace", "1", "--no-workspace"],
+        ["task", "add", "a", "--workspace", UUID().uuidString, "--no-workspace"],
         "pass only one of --workspace / --no-workspace"
       ),
       (

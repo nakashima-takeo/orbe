@@ -42,7 +42,7 @@ enum TaskPaletteSamples {
       store: TaskStore(file: file), githubItems: githubItems, viewer: githubItems.viewer,
       openLists: openLists ?? GitHubOpenLists(source: .idle, viewer: githubItems.viewer),
       root: root, agents: agents, sessionTabs: sessionTabs,
-      automations: automations ?? DesignSceneFixtures.automationRunner(nil),
+      automations: automations ?? DesignSceneFixtures.automationRunner(),
       workspaces: workspaces,
       now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }

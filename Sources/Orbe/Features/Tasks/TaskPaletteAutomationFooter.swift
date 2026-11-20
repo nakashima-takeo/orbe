@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// 提案タブのフッターの左（居場所と選択で、↵ が何をするか。失敗は赤で置き換える）。
+/// 提案タブのフッターの左（居場所と選択で、主なキーが何をするか。失敗は赤で置き換える）。絞り込み欄と候補の一覧では出さない——
+/// 候補をさばくキーは詳細のボタンに出ている。
 struct TaskPaletteAutomationAction: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -11,22 +12,19 @@ struct TaskPaletteAutomationAction: View {
         .foregroundStyle(Color.theme.danger)
     } else {
       switch model.place {
-      case .proposals:
-        if let proposal = model.selectedProposal {
-          PaletteActionLine(
-            key: "↵", template: l10n.string(.taskPaletteAutomationActionAccept),
-            slots: [.emphasis(proposal.title)])
-        }
+      case .field:
+        EmptyView()
       case .shelf:
-        PaletteActionLine(
-          key: "→", template: l10n.string(.taskPaletteAutomationActionProposals), slots: [])
-      case .contents:
         if let automation = model.selectedAutomation {
           PaletteActionLine(
-            key: AutomationHand.Operation.runNow.key,
-            template: l10n.string(.taskPaletteAutomationActionRunNow),
-            slots: [.emphasis(automation.definition.name)])
+            key: "⌘↵", template: l10n.string(.taskPaletteAutomationActionRefresh),
+            slots: [.emphasis(automation.name)])
+        } else {
+          PaletteActionLine(
+            key: "→", template: l10n.string(.taskPaletteAutomationActionProposals), slots: [])
         }
+      case .proposals:
+        EmptyView()
       }
     }
   }
@@ -40,30 +38,19 @@ struct TaskPaletteAutomationHints: View {
 
   var body: some View {
     switch model.place {
-    case .proposals:
+    case .field:
       TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
-        if model.selectedProposal != nil {
-          PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
-          PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteAutomationDismiss))
-          PaletteKeyHint(key: "⌘O", label: l10n.string(.taskPaletteHintOpenInBrowser))
-        }
-        if model.selectedAutomation != nil {
-          PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteAutomationContents))
-        }
-        PaletteKeyHint(key: "←", label: l10n.string(.taskPaletteAutomationHintShelf))
+        PaletteKeyHint(key: "↓", label: l10n.string(.automationHintToList))
       }
     case .shelf:
-      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteAutomationHintBack) {
+      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
         PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteAutomationHintPick))
+        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteAutomationHintProposals))
       }
-    case .contents:
-      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteAutomationHintBack) {
-        if let automation = model.selectedAutomation {
-          ForEach([AutomationHand.Operation.togglePause, .delete], id: \.self) { operation in
-            PaletteKeyHint(
-              key: operation.key, label: l10n.string(operation.title(paused: automation.paused)))
-          }
-        }
+    case .proposals:
+      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
+        PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteAutomationHintCandidates))
+        PaletteKeyHint(key: "←", label: l10n.string(.automationHintToList))
       }
     }
   }
