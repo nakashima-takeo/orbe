@@ -22,8 +22,7 @@ final class PrCommentPlacementTests: OrbeTestCase {
     var done = false
     placement.follow(
       PullRequestState.DiffEnds(mergeBase: "B", head: head, renames: [:]),
-      shown: EditorDiff.SideTexts(old: base, new: text), commentable: nil,
-      limit: EditorDiff.hunkLimit
+      shown: EditorDiff.SideTexts(old: base, new: text), commentable: nil
     ) { done = true }
     pumpMain(until: { done }, "行差分を取り終える")
   }
@@ -37,14 +36,13 @@ final class PrCommentPlacementTests: OrbeTestCase {
 
     let current = PullRequestState.DiffEnds(mergeBase: "B", head: "H2", renames: [:])
     let shown = EditorDiff.SideTexts(old: base, new: "zero\n" + base)
-    kept.follow(current, shown: shown, commentable: ([], [0..<5]), limit: EditorDiff.hunkLimit) {}
+    kept.follow(current, shown: shown, commentable: ([], [0..<5])) {}
     XCTAssertTrue(kept.zone.canSend)
     XCTAssertFalse(kept.isGone)
 
     let outside = placement(line: 3)
     follow(outside, to: "H2", "zero\n" + base)
-    outside.follow(current, shown: shown, commentable: ([], [0..<2]), limit: EditorDiff.hunkLimit) {
-    }
+    outside.follow(current, shown: shown, commentable: ([], [0..<2])) {}
     XCTAssertTrue(outside.isGone, "印を出せない行は無くなったとする")
   }
 

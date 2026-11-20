@@ -3,7 +3,8 @@ import Foundation
 /// PR の diff の出どころ——古い側は PR のマージベースのコミットの版（rename なら元のパス）、新しい側は PR の先頭のコミットの
 /// 版。両側とも読むだけ。diff を開いたときの PR の、PR ごとの状態を持ち続け、ブランチを切り替えても同じ PR の diff を出す。PR に push が
 /// あって両端が変わったら、新しい両端の版の本文を読み直す。両端が変わらない間（中身の読み直し・確認済みの切り替え）は、
-/// 読んだ本文で同じ答えを返し続ける。
+/// 読んだ本文で同じ答えを返し続ける。版の本文を読めなかったときだけは、PR ごとの状態が中身の読み直しを始めるたびに 1 回
+/// 読み直す（LFS の取得のような一時的な失敗から、再読込で戻れる。読み直す間は前の答えを返す）。
 @MainActor
 final class EditorDiffPullRequest: EditorDiffSource {
   let id: EditorDiff.Key
@@ -13,6 +14,8 @@ final class EditorDiffPullRequest: EditorDiffSource {
   private var read: (ends: PullRequestState.DiffEnds, resolution: EditorDiff.Resolution)?
   /// 読んでいる両端。
   private var reading: PullRequestState.DiffEnds?
+  /// 前の知らせのときに、PR ごとの状態が中身を読んでいたか（中身の読み直しを始めた知らせを見分ける）。
+  private var sawReading = false
 
   init(id: EditorDiff.Key, state: PullRequestState) {
     self.id = id
@@ -59,8 +62,8 @@ final class EditorDiffPullRequest: EditorDiffSource {
     guard reading != ends, let repo = state.repo else { return }
     reading = ends
     let path = id.path
-    repo.version(of: ends.renames[path] ?? path, at: .commit(ends.mergeBase)) { [weak self] old in
-      repo.version(of: path, at: .commit(ends.head)) { [weak self] new in
+    repo.version(of: ends.renames[path] ?? path, atCommit: ends.mergeBase) { [weak self] old in
+      repo.version(of: path, atCommit: ends.head) { [weak self] new in
         guard let self, reading == ends else { return }
         reading = nil
         read = (ends, Self.resolution(old: old, new: new))
@@ -98,9 +101,16 @@ final class EditorDiffPullRequest: EditorDiffSource {
   }
 }
 
-/// PR の両端が変わったら diff を作り直させる（両端が同じなら、読んだ本文で同じ答えを返す）。
+/// PR の両端が変わったら diff を作り直させる（両端が同じなら、読んだ本文で同じ答えを返す）。中身の読み直しを始めたら、今の
+/// 両端の版の本文を読めなかった答えを読み直す。
 extension EditorDiffPullRequest: PullRequestStateObserver {
   func pullRequestStateDidChange(_ state: PullRequestState) {
+    if state.isReading, !sawReading, let read, case .unavailable(.failed) = read.resolution,
+      case .ready(_, let ends) = state.bounds, read.ends == ends
+    {
+      load(ends)
+    }
+    sawReading = state.isReading
     onChange?(.material)
   }
 }

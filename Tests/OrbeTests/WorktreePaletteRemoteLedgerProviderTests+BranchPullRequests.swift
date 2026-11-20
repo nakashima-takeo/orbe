@@ -44,7 +44,6 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     let found = try lookup(["feat"])
 
     let ref = GitHubBranchRef(repo: mine, branch: "feat")
-    XCTAssertEqual(found.availability, .ready)
     XCTAssertEqual(found.ledger?.repository(forPushRemote: nil), .github(mine))
     guard case .gitHub(ref, .success(let pullRequests))? = found.branches["feat"] else {
       return XCTFail("GitHub のブランチと決まり、PR の一覧が返る: \(String(describing: found.branches["feat"]))")
@@ -59,7 +58,6 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
     let found = try lookup(["feat"])
 
-    XCTAssertEqual(found.availability, .notGitHub)
     XCTAssertNil(found.ledger)
     XCTAssertEqual(
       found.branches["feat"], GitHubBranchPullRequests.Branch.unavailable(.notGitHub))

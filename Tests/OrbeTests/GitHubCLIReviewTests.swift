@@ -112,8 +112,8 @@ final class GitHubCLIReviewTests: OrbeTestCase {
   }
 
   private func firstPage(head: String = "h1", _ page: String) -> String {
-    #"{"data":{"viewer":{"login":"you"},"repository":{"pullRequest":{"headRefOid":"\#(head)","#
-      + #""viewerDidAuthor":true,"reviews":{"nodes":[{"id":"R1","viewerDidAuthor":true,"#
+    #"{"data":{"repository":{"pullRequest":{"headRefOid":"\#(head)","#
+      + #""viewerDidAuthor":true,"reviews":{"nodes":[{"id":"R1","#
       + #""comments":{"totalCount":2}}]},"reviewThreads":\#(page)}}}}"#
   }
 
@@ -132,9 +132,9 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     return result
   }
 
-  /// 100 件を超えるスレッドは続きのページを最後まで読み、自分・自分が作者か・保留中のレビューとそのコメントの数も揃う。
+  /// 100 件を超えるスレッドは続きのページを最後まで読み、自分が作者か・保留中のレビューとそのコメントの数も揃う。
   /// ファイル単位のスレッドと、行が null（古い版に付いた）のスレッドは行を持たない。
-  func testEveryThreadPageIsReadWithTheViewerAndThePendingReview() throws {
+  func testEveryThreadPageIsReadWithThePendingReview() throws {
     let first = (0..<100).map { thread("T\($0)") }
     try serve("first", firstPage(threads(first, next: "P1")))
     try serve(
@@ -148,7 +148,6 @@ final class GitHubCLIReviewTests: OrbeTestCase {
 
     let review = try XCTUnwrap(read()).get()
 
-    XCTAssertEqual(review.viewer, "you")
     XCTAssertTrue(review.viewerIsAuthor)
     XCTAssertEqual(review.headCommit, "h1")
     XCTAssertEqual(review.pendingReview, .init(id: "R1", commentCount: 2))
@@ -278,7 +277,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
 
     XCTAssertEqual(
       write(.reply(thread: "T1", body: "b", resolve: false), pendingReview: nil),
-      GitHubReviewWriteResult(pendingReview: "create-id", failure: nil))
+      GitHubReviewWriteResult(pendingReview: "create-id", failure: nil, replied: true))
     XCTAssertEqual(calls(), ["create", "create", "reply"])
     XCTAssertEqual(try call(3).variables["review"] as? String, "create-id")
     XCTAssertEqual(
@@ -301,11 +300,18 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     XCTAssertNil(try call(7).variables["commit"])
   }
 
-  /// 「解決して返信」は返信 → 解決の順で、返信が通らなければ解決を送らない。作った保留中のレビューは、返信が通らなくても返す。
+  /// 「解決して返信」は返信 → 解決の順で、返信が通らなければ解決を送らない。解決だけが通らなければ、返信が通ったことを返す。
+  /// 作った保留中のレビューは、返信が通らなくても返す。
   func testReplyThenResolveStopsAtAFailedReply() throws {
     XCTAssertEqual(
       write(.reply(thread: "T1", body: "b", resolve: true), pendingReview: "R1")?.failure, nil)
     XCTAssertEqual(calls(), ["reply", "resolve"])
+
+    try serve("resolve.exit", "1")
+    let resolveFailed = write(.reply(thread: "T1", body: "b", resolve: true), pendingReview: "R1")
+    XCTAssertNotNil(resolveFailed?.failure, "解決だけが通らない")
+    XCTAssertEqual(resolveFailed?.replied, true, "返信が通ったことは分かる")
+    try serve("resolve.exit", "0")
 
     try serve("reply.stderr", "gh: Could not resolve to a node\n")
     try serve("reply.exit", "1")

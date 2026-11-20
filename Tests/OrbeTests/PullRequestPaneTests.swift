@@ -52,7 +52,7 @@ final class PullRequestPaneTests: OrbeTestCase {
             headRepository: me, url: "https://github.com/me/r/pull/\(number)")
           completion(
             GitHubBranchPullRequests(
-              availability: .ready, ledger: nil,
+              ledger: nil,
               branches: [branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))]))
         },
         branchExists: { _, completion in completion(.success(true)) },
@@ -62,7 +62,7 @@ final class PullRequestPaneTests: OrbeTestCase {
           completion(
             .success(
               GitHubPullRequestReview(
-                viewer: "me", viewerIsAuthor: false, headCommit: head, pendingReview: nil,
+                viewerIsAuthor: false, headCommit: head, pendingReview: nil,
                 threads: [])))
         },
         writeReview: { [unowned self] write, _, pending, _, completion in

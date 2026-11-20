@@ -15,7 +15,7 @@ enum GitHubReviewEvent: String, Equatable {
   case requestChanges = "REQUEST_CHANGES"
 }
 
-/// PR のレビューのやりとり（GitHub 上の一時点のもの）——行に付いたスレッド、自分（viewer）、自分の保留中のレビュー。
+/// PR のレビューのやりとり（GitHub 上の一時点のもの）——行に付いたスレッド、自分の保留中のレビュー。
 struct GitHubPullRequestReview: Equatable {
   struct Comment: Equatable {
     let id: String
@@ -47,8 +47,6 @@ struct GitHubPullRequestReview: Equatable {
     let commentCount: Int
   }
 
-  /// 自分の login。
-  let viewer: String
   /// 自分が PR の作者か。
   let viewerIsAuthor: Bool
   /// 読んだ時点の PR の先頭のコミット。
@@ -69,11 +67,11 @@ enum GitHubReviewQuery {
     + "viewerCanReply comments(first:\(pageSize)){nodes{id author{login} body createdAt state}}} "
     + "pageInfo{hasNextPage endCursor}"
 
-  /// 1 ページ目。自分・PR の先頭のコミット・自分が作者か・保留中のレビューと、スレッドの先頭のページ。GitHub は保留中の
+  /// 1 ページ目。PR の先頭のコミット・自分が作者か・保留中のレビューと、スレッドの先頭のページ。GitHub は保留中の
   /// レビューを書いた本人にしか返さないので、載るのは自分のもの（多くて 1 つ）だけとして、作者で絞らずに読む。
   static func firstPageArguments(_ id: GitHubItemID) -> [String] {
     arguments(
-      id, root: "viewer{login} ",
+      id,
       fields: "headRefOid viewerDidAuthor "
         + "reviews(states:[PENDING],first:1){nodes{id comments{totalCount}}} "
         + "reviewThreads(first:\(pageSize)){\(threadsFields)}", after: nil)
@@ -82,20 +80,19 @@ enum GitHubReviewQuery {
   /// スレッドの続きの 1 ページ。`after` は前のページの `endCursor`。
   static func nextPageArguments(_ id: GitHubItemID, after: String) -> [String] {
     arguments(
-      id, root: "",
-      fields: "headRefOid reviewThreads(first:\(pageSize),after:$after){\(threadsFields)}",
+      id, fields: "headRefOid reviewThreads(first:\(pageSize),after:$after){\(threadsFields)}",
       after: after)
   }
 
   /// owner・name・カーソルは `-f`（文字列のまま）、番号は `-F`（整数）で渡す（`GitHubPullRequestQuery` と同じ）。
   private static func arguments(
-    _ id: GitHubItemID, root: String, fields: String, after: String?
+    _ id: GitHubItemID, fields: String, after: String?
   ) -> [String] {
     let declarations =
       "$owner:String!,$name:String!,$number:Int!" + (after == nil ? "" : ",$after:String!")
     var args = [
       "api", "graphql", "--hostname", "github.com", "-f",
-      "query=query(\(declarations)){\(root)repository(owner:$owner,name:$name){"
+      "query=query(\(declarations)){repository(owner:$owner,name:$name){"
         + "pullRequest(number:$number){\(fields)}}}",
       "-f", "owner=\(id.repo.owner)", "-f", "name=\(id.repo.name)", "-F", "number=\(id.number)",
     ]
@@ -112,8 +109,7 @@ enum GitHubReviewQuery {
       let payload = try ReviewResponse<FirstPayload>(from: decoder).data
       let node = payload.repository.pullRequest
       review = GitHubPullRequestReview(
-        viewer: payload.viewer.login, viewerIsAuthor: node.viewerDidAuthor,
-        headCommit: node.headRefOid,
+        viewerIsAuthor: node.viewerDidAuthor, headCommit: node.headRefOid,
         pendingReview: node.reviews.nodes.first.map {
           .init(id: $0.id, commentCount: $0.comments.totalCount)
         }, threads: node.reviewThreads.nodes)
@@ -139,12 +135,7 @@ private struct ReviewResponse<Payload: Decodable>: Decodable { let data: Payload
 
 private struct RepositoryNode<Node: Decodable>: Decodable { let pullRequest: Node }
 
-private struct ViewerNode: Decodable { let login: String }
-
-private struct FirstPayload: Decodable {
-  let viewer: ViewerNode
-  let repository: RepositoryNode<FirstNode>
-}
+private struct FirstPayload: Decodable { let repository: RepositoryNode<FirstNode> }
 
 private struct NextPayload: Decodable { let repository: RepositoryNode<NextNode> }
 

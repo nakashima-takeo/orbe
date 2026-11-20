@@ -2,7 +2,7 @@ import AppKit
 import OrbeEditorCore
 
 /// 縦の並びの差し込みと文書の行の見え方と表示の構成（契約）。並びを変えるのは取引の中だけで、確定するときに見えている先頭の
-/// 文書の行を画面の同じ位置に保ち（→ `keepFirstVisibleLine`）、出すときに材料へ書く。
+/// 行を画面の同じ位置に保ち（→ `keepFirstVisibleLine`）、出すときに材料へ書く。
 extension MetalTextSurface {
   func setRows(_ rows: SurfaceRows) {
     let insertions = rows.insertions

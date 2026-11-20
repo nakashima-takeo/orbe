@@ -172,7 +172,7 @@ final class GitRepoCommitsTests: OrbeTestCase {
       .some(GitCommitCounts(ahead: 0, behind: 1)))
   }
 
-  /// push 先の追跡 ref は、push 先の remote（設定が無ければ origin）とローカル名で決まり、公開するまでは値が無い。
+  /// push 先の追跡 ref の名前は、push 先の remote（設定が無ければ origin）とローカル名で決まる。
   func testThePushTrackingRefFollowsThePushRemote() throws {
     XCTAssertTrue(temp.git(["branch", "feat"]).isSuccess)
     XCTAssertEqual(
@@ -182,16 +182,12 @@ final class GitRepoCommitsTests: OrbeTestCase {
     temp.addOrigin()
     XCTAssertEqual(
       landed { self.repo.pushTracking(ofBranch: "feat", completion: $0) },
-      .some(.ref("refs/remotes/origin/feat", commit: nil)), "未公開")
-    XCTAssertTrue(temp.git(["push", "-q", "origin", "feat"]).isSuccess)
-    XCTAssertEqual(
-      landed { self.repo.pushTracking(ofBranch: "feat", completion: $0) },
-      .some(.ref("refs/remotes/origin/feat", commit: temp.head())), "公開済み")
+      .some(.ref("refs/remotes/origin/feat")))
 
     XCTAssertTrue(temp.git(["config", "branch.feat.pushRemote", "fork"]).isSuccess)
     XCTAssertEqual(
       landed { self.repo.pushTracking(ofBranch: "feat", completion: $0) },
-      .some(.ref("refs/remotes/fork/feat", commit: nil)), "push 先の設定")
+      .some(.ref("refs/remotes/fork/feat")), "push 先の設定")
   }
 
   /// 指定した ref の値だけが入り、無い ref は入らない（パターンの下の階層の ref も入らない）。

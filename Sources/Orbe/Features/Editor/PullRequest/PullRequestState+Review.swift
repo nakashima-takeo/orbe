@@ -3,8 +3,8 @@ import Foundation
 /// レビューのやりとり——スレッドと保留中のレビューを読み、書き込み（スレッドの追加・返信・解決・レビューの送信）を PR ごとに
 /// 1 つずつ順に送る。書き込みは、レスポンスが届いた後にレビューのやりとりを読み直し、その読み直しのレスポンスが届いて初めて
 /// 終わる（結果は、書き込みを頼んだ呼び出し元へ 1 回だけ返す）。書き込みのレスポンスより前に出した読みのレスポンスは、GitHub が
-/// 書き込みを受ける前の状態を返しうるので取り込まない。走っている書き込みは、見ている者がいなくなっても最後まで走る（その後の
-/// 読み直しはしない）。
+/// 書き込みを受ける前の状態を返しうるので取り込まない。受け付けた書き込みは、見ている者がいなくなっても最後まで順に送る
+/// （その後の読み直しはしない）。
 extension PullRequestState {
   /// 書き込みの対象。対象への書き込みが走っている間と順番を待っている間は、同じ対象への次の書き込みを受け付けない。
   enum ReviewTarget: Hashable {
@@ -19,7 +19,7 @@ extension PullRequestState {
     let nodeID: String
     /// 受け付けた時点のレビューのやりとりを読んだ PR の先頭のコミット（利用者が見ていたもの）。
     let reviewedCommit: String
-    let completion: (GitHubFailure?) -> Void
+    let completion: (GitHubReviewWriteResult) -> Void
   }
 
   /// PR の先頭のコミットが `head` だった時点に読んだスレッド。読んだ時点の先頭のコミットが `head` と違えば nil（古い版の行の
@@ -62,11 +62,12 @@ extension PullRequestState {
   /// レビューへの書き込みを順番に積む。中身とレビューのやりとりがまだ読めていないとき、対象への書き込みが走っているとき、
   /// 新しいスレッドの行を数えた先頭のコミットが、レビューのやりとりを読んだ時点の先頭のコミットと違うとき（`threads(at:)` が
   /// nil の間）、レビューの送信で diff の両端・中身・レビューのやりとりの版が揃っていないとき（`isReviewAligned` が偽の間）
-  /// は受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は失敗の種類。通れば nil）。
+  /// は受け付けず、false を返す。受け付けたら、終わったときに `completion` を 1 回だけ呼ぶ（引数は書き込みの結果。通れば
+  /// 失敗の種類が nil。「解決して返信」で返信だけが通ったことも分かる）。
   @discardableResult
-  func writeReview(_ write: GitHubReviewWrite, completion: @escaping (GitHubFailure?) -> Void)
-    -> Bool
-  {
+  func writeReview(
+    _ write: GitHubReviewWrite, completion: @escaping (GitHubReviewWriteResult) -> Void
+  ) -> Bool {
     guard let content, let review else { return false }
     if case .addThread(_, _, _, let commit, _) = write, commit != review.headCommit { return false }
     if case .submit = write, !isReviewAligned { return false }
@@ -138,18 +139,18 @@ extension PullRequestState {
       pendingReviewID = result.pendingReview
       reviewWrittenOrder = issueOrder()
       // タイムアウトで失敗した書き込みも、GitHub に届いていたかもしれないので読み直す（利用者が同じ書き込みを二重に送らないため）。
-      reviewReadWaiters.append { [weak self] in self?.finishReviewWrite(failure: result.failure) }
+      reviewReadWaiters.append { [weak self] in self?.finishReviewWrite(result) }
       readReview()
     }
     source.writeReview(next.write, next.nodeID, pendingReviewID, next.reviewedCommit, answered)
   }
 
-  private func finishReviewWrite(failure: GitHubFailure?) {
+  private func finishReviewWrite(_ result: GitHubReviewWriteResult) {
     let done = reviewWrites.removeFirst()
     isSendingReviewWrite = false
     if let target = done.target { reviewWriteTargets.remove(target) }
     notify()
-    done.completion(failure)
+    done.completion(result)
     sendNextReviewWrite()
   }
 

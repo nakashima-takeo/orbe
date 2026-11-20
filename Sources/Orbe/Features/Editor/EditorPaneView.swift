@@ -232,9 +232,9 @@ final class EditorPaneView: NSView {
     return nil
   }
 
-  /// 根が変わった（cd）。ツリーとソース管理パネルを作り直し、握っていたなら握り直す（worktree の状態——メッセージ・操作・
-  /// 失敗——は worktree ごとに残るので、戻れば同じものが見える）。プロジェクト検索は結果を捨て、この面の検索パネルが画面に
-  /// 見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
+  /// 根が変わった（cd）。ツリーとソース管理パネルと PR のパネルを作り直し（前の根の PR は見るのをやめる）、握っていたなら
+  /// 握り直す（worktree の状態——メッセージ・操作・失敗——は worktree ごとに残るので、戻れば同じものが見える）。プロジェクト
+  /// 検索は結果を捨て、この面の検索パネルが画面に見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
     tree.cancelNew()
@@ -342,7 +342,7 @@ final class EditorPaneView: NSView {
     }
   }
 
-  // MARK: - 可視性（ツリー・プロジェクト検索・ソース管理パネルが根のサービスを握る寿命）
+  // MARK: - 可視性（ツリー・プロジェクト検索・ソース管理パネル・PR のパネルが根のサービスを握る寿命）
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
@@ -361,8 +361,9 @@ final class EditorPaneView: NSView {
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。PR のパネルは、出しているときだけ worktree の今の PR を見る。配置を頼み、見えるようになった本体を
-  /// 初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても、見えたときにもう一度配置して待つ）。
+  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。PR のパネルは、出しているときだけ
+  /// worktree の今の PR を見る。配置を頼み、見えるようになった本体を初めて見せる前の待ちをその配置で通す（隠れている間に
+  /// 配置が済んでいても、見えたときにもう一度配置して待つ）。
   private func updateLiveness() {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live

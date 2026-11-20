@@ -58,7 +58,7 @@ final class PullRequestFakeGitHub {
     review
       ?? .success(
         GitHubPullRequestReview(
-          viewer: "me", viewerIsAuthor: false, headCommit: (try? content.get())?.headCommit ?? "h",
+          viewerIsAuthor: false, headCommit: (try? content.get())?.headCommit ?? "h",
           pendingReview: nil, threads: []))
   }
 

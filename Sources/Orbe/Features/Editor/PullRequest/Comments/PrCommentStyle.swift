@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// PR のコメントの絵の見え方——返信欄の見え方・コメント追加の印の絵・押せない姿の色・短い字の幅の覚え。
+/// PR のコメントの絵の見え方——返信欄の見え方・コメント追加の印の絵・短い字の幅の覚え。
 @MainActor
 enum PrCommentStyle {
   static let field = ZoneTextField.Style(
@@ -41,17 +41,6 @@ enum PrCommentStyle {
       glyph.setStroke()
       path.stroke()
       return true
-    }
-  }
-
-  /// 押せない姿の色（外観ごとの α に `Theme.Opacity.disabled` を掛ける）。
-  static func disabled(_ color: NSColor) -> NSColor {
-    NSColor(name: nil) { appearance in
-      var resolved = color
-      appearance.performAsCurrentDrawingAppearance {
-        resolved = color.usingColorSpace(.sRGB) ?? color
-      }
-      return resolved.withAlphaComponent(resolved.alphaComponent * Theme.Opacity.disabled)
     }
   }
 

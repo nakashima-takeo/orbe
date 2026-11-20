@@ -63,6 +63,8 @@ final class EditorDiff {
   var carried: Carried?
   /// PR の diff のコメントの層（ほかの種類の diff には無い）。
   let comments: PrCommentLayer?
+  /// コメントの書きかけがあるかが変わったかもしれない（セッションが仮のタブを普通のタブにするかを決め直す）。
+  var onDraftChange: (() -> Void)?
 
   init(
     id: Key, source: any EditorDiffSource, surfaces: EditorSurfaces,
@@ -79,6 +81,7 @@ final class EditorDiff {
       }
     }
     comments?.onRowsChange = { [weak self] in self?.applyRows() }
+    comments?.onDraftChange = { [weak self] in self?.onDraftChange?() }
   }
 
   /// 種類の出どころで開く。作業ツリー diff は `documents`（セッション）から新しい側の文書を引く。テキスト面を作れなければ

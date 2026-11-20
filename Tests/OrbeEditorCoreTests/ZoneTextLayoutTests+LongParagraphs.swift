@@ -70,6 +70,45 @@ extension ZoneTextLayoutTests {
     }
   }
 
+  /// 区切りより長い割れない塊（右から左の字に結合記号を続けた 1 字）は、区切りを広げずに区切りの終わりで割る——行は 2 行
+  /// 以上になり、行の範囲が文を隙間なく覆う。
+  func testAClusterLongerThanTheWindowIsCutAtTheWindow() {
+    let source = "א" + String(repeating: "\u{05B0}", count: 20_000)
+    let lines = ZoneTextLayout.typeset(ZoneStyledText([(source, plain)]), width: 300).lines
+    XCTAssertGreaterThanOrEqual(lines.count, 2)
+    var next = 0
+    for line in lines {
+      XCTAssertEqual(line.range.location, next, "行の範囲は前の行の終わりから")
+      next = NSMaxRange(line.range)
+    }
+    XCTAssertEqual(next, source.utf16.count, "行の範囲は文の終わりまで")
+  }
+
+  /// 区切って組む長い段落で、行を組む文の頭（行の頭の 512 字前）がコードの中の結合記号に当たっても、コードの境にある字の
+  /// 塊は割れない——余白の有無でグリフの数が変わらない。壊れると、その区切りで組む行のどこかで、本文の `e` とコードの頭の
+  /// 結合記号が別々のグリフに描かれる。
+  func testAHeadInsideACodeClusterDoesNotSplitClusters() {
+    var split: [Int] = []
+    // 段落の頭の a の数で区切りの位置をずらす（24 と 27 で、行を組む文の頭がコードの中の結合記号に当たる）。
+    for shift in 22..<28 {
+      var parts = [String(repeating: "a", count: shift) + " "]
+      var codes: [Int] = []
+      for k in 0..<500 {
+        let filler = String(repeating: "y", count: (k * (shift + 1)) % 9)
+        parts.append(k % 3 == 0 ? "word\(filler) \(k) e" : "tx \(k) e")
+        codes.append(parts.count)
+        parts.append("\u{0301}\u{0323}\u{0308}cd\(k)" + (k % 2 == 0 ? "e" : ""))
+        parts.append(k % 2 == 0 ? "\u{0301}\u{0323}\u{0308} " : " ")
+      }
+      let glyphs = [0, 4].map { padding in
+        ZoneTextLayout.typeset(styled(parts, codes: codes, padding: padding), width: 300).lines
+          .reduce(0) { $0 + glyphCount($1) }
+      }
+      if glyphs[0] != glyphs[1] { split.append(shift) }
+    }
+    XCTAssertEqual(split, [], "字の塊を割った、段落の頭の a の数")
+  }
+
   private var plain: ZoneTextStyle { ZoneTextStyle(font: font, color: .white) }
   private var code: ZoneTextStyle { ZoneTextStyle(font: mono, color: .red, padding: 4) }
 }

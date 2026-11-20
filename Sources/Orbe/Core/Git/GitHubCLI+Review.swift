@@ -68,6 +68,14 @@ struct GitHubReviewWriteResult: Equatable {
   let pendingReview: String?
   /// 通らなかった呼び出しがあれば、その失敗の種類。失敗した呼び出しより後の呼び出しは送らない。
   let failure: GitHubFailure?
+  /// 返信の呼び出しが通ったか（「解決して返信」で、解決だけが通らなかったときも真）。
+  let replied: Bool
+
+  init(pendingReview: String?, failure: GitHubFailure?, replied: Bool = false) {
+    self.pendingReview = pendingReview
+    self.failure = failure
+    self.replied = replied
+  }
 }
 
 /// 書き込み 1 つを、GraphQL の mutation の呼び出しに分けて順に送る。保留中のレビューがあればその ID を名指しする。無いときの
@@ -104,9 +112,13 @@ struct GitHubReviewWriting {
       if case .failure(let failure) = send(.reply(thread: thread, review: review, body: body)) {
         return GitHubReviewWriteResult(pendingReview: review, failure: failure)
       }
-      guard resolve else { return GitHubReviewWriteResult(pendingReview: review, failure: nil) }
-      return finish(
+      guard resolve else {
+        return GitHubReviewWriteResult(pendingReview: review, failure: nil, replied: true)
+      }
+      let resolved = finish(
         send(.setResolved(thread: thread, true)).map { _ in review }, else: review)
+      return GitHubReviewWriteResult(
+        pendingReview: resolved.pendingReview, failure: resolved.failure, replied: true)
     case .setResolved(let thread, let resolved):
       return finish(
         send(.setResolved(thread: thread, resolved)).map { _ in pendingReview },

@@ -113,7 +113,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     try "*.txt filter=slow\n".write(
       toFile: root + "/.gitattributes", atomically: true, encoding: .utf8)
     var version: GitVersionText?
-    files.repo?.version(of: "a.txt", at: .head) { version = $0 }
+    files.repo?.version(of: "a.txt", atCommit: "HEAD") { version = $0 }
     pumpMain(until: { version != nil }, timeout: 10, "観測は打ち切られて返る")
     XCTAssertEqual(version, .failed)
     XCTAssertFalse(outcome.finished, "打ち切りの上限を過ぎても、書き込みは止めるまで待つ")

@@ -34,7 +34,6 @@ extension EditorDiff {
         .apply(to: surface, document: document)
       comments?.place(old: left, new: surface)
       if let left, oldSurface == nil {
-        carryTop(to: surface)
         oldSurface = left
         surface.shareScroll(with: left)
         surfacesChanged = true
@@ -89,7 +88,7 @@ extension EditorDiff {
     case .anchor(let anchor):
       surface.scroll(
         to: surface.position(
-          ofLineRow: DiffRows.position(of: anchor, hunks, side: presented == .side)))
+          ofLineRow: DiffRows.lineRow(of: anchor, hunks, side: presented == .side)))
     case .position(let position):
       surface.scroll(to: position)
     }

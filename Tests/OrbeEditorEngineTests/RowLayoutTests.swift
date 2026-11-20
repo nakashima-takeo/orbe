@@ -82,20 +82,20 @@ final class RowLayoutTests: XCTestCase {
         .init(line: 4, height: 18, content: .lines([InsertedLine()])),
       ], spans: [])
     let total = (36.0 + 45 + 18) / lineHeight
-    XCTAssertEqual(rows.lineRow(of: .head(of: 4)), RowPosition(line: 4, offset: -3))
+    XCTAssertEqual(rows.lineRow(of: .head(of: 4)), LineRow(line: 4, offset: -3))
     XCTAssertEqual(
       rows.lineRow(of: RowPosition(line: 4, offset: Int((1.5 - total).rounded(.up)))),
-      RowPosition(line: 4, offset: -2), "2 つ目の差し込んだ行")
+      LineRow(line: 4, offset: -2), "2 つ目の差し込んだ行")
     XCTAssertEqual(
-      rows.lineRow(of: RowPosition(line: 4, offset: -2)), RowPosition(line: 4, offset: -1),
+      rows.lineRow(of: RowPosition(line: 4, offset: -2)), LineRow(line: 4, offset: -1),
       "絵の差し込みの中は、その下の差し込んだ行")
-    XCTAssertEqual(rows.lineRow(of: RowPosition(line: 4, offset: 0)), RowPosition(line: 4))
+    XCTAssertEqual(rows.lineRow(of: RowPosition(line: 4, offset: 0)), LineRow(line: 4))
     for offset in -3 ... -1 {
-      let row = RowPosition(line: 4, offset: offset)
+      let row = LineRow(line: 4, offset: offset)
       XCTAssertEqual(rows.lineRow(of: rows.position(ofLineRow: row)), row, "\(row)")
     }
     XCTAssertEqual(
-      rows.position(ofLineRow: RowPosition(line: 4, offset: -1)), RowPosition(line: 4, offset: -1))
+      rows.position(ofLineRow: LineRow(line: 4, offset: -1)), RowPosition(line: 4, offset: -1))
   }
 
   /// 行高で割り切れない高さの絵の差し込みがあっても、差し込んだ行だけを数えた段は浮動小数の誤差で隣の行に化けない。
@@ -114,7 +114,7 @@ final class RowLayoutTests: XCTestCase {
           content: .lines([InsertedLine(), InsertedLine(), InsertedLine()])))
       rows.replace(blocks, spans: [])
       for offset in -5 ... -1 {
-        let row = RowPosition(line: 4, offset: offset)
+        let row = LineRow(line: 4, offset: offset)
         XCTAssertEqual(rows.lineRow(of: rows.position(ofLineRow: row)), row, "\(heights) \(row)")
       }
     }

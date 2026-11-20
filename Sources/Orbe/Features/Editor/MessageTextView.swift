@@ -32,9 +32,11 @@ final class MessageTextView: NSTextView {
 
   private static let font = Theme.Typography.editorScmMessage
   private static let leading: CGFloat = 8
-  private static let trailing: CGFloat = 5
+  /// 字の右の余白（欄ごとの見本の値）。
+  private var trailing: CGFloat = 0
 
-  convenience init() {
+  /// 字の右の余白を `trailing` にした欄（左は 8）。
+  convenience init(trailing: CGFloat) {
     let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
     container.widthTracksTextView = false
     container.lineFragmentPadding = 0
@@ -51,6 +53,7 @@ final class MessageTextView: NSTextView {
     self.init(frame: .zero, textContainer: container)
     self.storage = storage
     self.measuring = measuring
+    self.trailing = trailing
     font = Self.font
     textColor = Theme.Color.textPrimary
     insertionPointColor = Theme.Color.accentPrimary
@@ -74,7 +77,8 @@ final class MessageTextView: NSTextView {
   /// 1 行のときに見本の 26 になる上下の余白。
   private static let verticalInset = (Theme.Layout.editorScmMessage - lineHeight) / 2
 
-  /// 行の左右の余白（見本 padding 0 5 0 8。テキストコンテナの左右は同じ余白しか持てないので、左はコンテナの原点で動かす）。
+  /// 行の左右の余白（左 8・右は欄ごとの `trailing`。テキストコンテナの左右は同じ余白しか持てないので、左はコンテナの原点で
+  /// 動かす）。
   override var textContainerOrigin: NSPoint {
     NSPoint(x: Self.leading, y: super.textContainerOrigin.y)
   }
@@ -83,7 +87,7 @@ final class MessageTextView: NSTextView {
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)
     textContainer?.containerSize = NSSize(
-      width: max(0, newSize.width - Self.leading - Self.trailing),
+      width: max(0, newSize.width - Self.leading - trailing),
       height: CGFloat.greatestFiniteMagnitude)
   }
 
@@ -95,7 +99,7 @@ final class MessageTextView: NSTextView {
       return Theme.Layout.editorScmMessage
     }
     let size = NSSize(
-      width: max(0, width - Self.leading - Self.trailing), height: .greatestFiniteMagnitude)
+      width: max(0, width - Self.leading - trailing), height: .greatestFiniteMagnitude)
     if measuring.containerSize != size { measuring.containerSize = size }
     layout.ensureLayout(
       forBoundingRect: NSRect(x: 0, y: 0, width: size.width, height: limit), in: measuring)
@@ -130,7 +134,7 @@ final class MessageTextView: NSTextView {
     let line = NSAttributedString(string: placeholder, attributes: attributes)
     line.draw(
       with: NSRect(
-        x: origin.x, y: origin.y, width: max(0, bounds.width - origin.x - Self.trailing),
+        x: origin.x, y: origin.y, width: max(0, bounds.width - origin.x - trailing),
         height: Self.lineHeight),
       options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
   }
@@ -141,9 +145,9 @@ final class MessageTextView: NSTextView {
     super.keyDown(with: event)
   }
 
-  /// ↵ と ⇧↵（と pane が取らない修飾の組）の命令。`onCommit` があれば修飾の無い ↵ だけがコミットで、ほか（押下の無い合成の
-  /// 命令を含む）は改行
-  /// ——押し間違いは軽い側に倒す。修飾の無い ↵ の押し続けたキーリピートは捨てる（押した瞬間だけをコミットの合図にする）。
+  /// ↵ と ⇧↵（と pane が取らない修飾の組）の命令。`onCommit` があれば修飾の無い ↵ だけがコミットで（押し続けたキーリピートは
+  /// 捨て、押した瞬間だけをコミットの合図にする）、ほか（押下の無い合成の命令を含む）は改行——押し間違いは軽い側に倒す。
+  /// `onCommit` が無ければ、どれも改行。
   override func insertNewline(_ sender: Any?) {
     if let onCommit, let press = interpreting,
       press.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]),

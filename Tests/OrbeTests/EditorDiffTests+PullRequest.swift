@@ -77,6 +77,32 @@ extension EditorDiffTests {
     XCTAssertEqual(diff.revisionHunks.count, 2, "変えた行と足した行")
   }
 
+  /// 版の本文を読めなかった PR の diff は、PR の中身を読み直すとき（再読込など）にもう一度読み、読めれば diff を出す。
+  func testAPullRequestDiffThatFailedToReadARevisionReadsItAgainOnReload() throws {
+    try repo.write(".gitattributes", "*.bad filter=bad\n")
+    try repo.write("x.bad", "one\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "bad"]).isSuccess)
+    let base = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    try repo.write("x.bad", "two\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "change"]).isSuccess)
+    let head = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "filter.bad.smudge", "false"]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "filter.bad.required", "true"]).isSuccess)
+    let reply = Reply()
+    reply.content = content(base: base, head: head)
+    let state = try pullRequest(reply)
+    let (tab, _) = tab()
+    let diff = try tab.group.editor.openDiff(id("x.bad", .pullRequest(state)), as: .pinned)
+    pumpMain(until: { diff.content == .unavailable(.failed) }, "前提: 版の本文を読めない")
+
+    XCTAssertTrue(repo.git(["config", "filter.bad.smudge", "cat"]).isSuccess)
+    state.reload()
+    waitRows(diff, "読み直して diff を出す") { self.removedLines($0) == [0] }
+  }
+
   /// PR が動かしたサブモジュールは、両側とも「Subproject commit」の 1 行で、その 1 行の差になる。
   func testAPullRequestDiffOfASubmoduleShowsTheSubprojectCommitLines() throws {
     try repo.addSubmodule("sub")

@@ -89,7 +89,7 @@ extension PrRowView {
       let countX = bounds.width - 12 - snap(folder.count.width, .up)
       folder.count.draw(at: countX, top: top(folder.count), colors.tertiary, context)
       folder.name.draw(
-        at: x, top: top(folder.name), width: max(0, countX - Theme.Space.note - x), colors.text,
+        at: x, top: top(folder.name), width: max(0, countX - Theme.Space.note * 2 - x), colors.text,
         context)
     }
   }
@@ -169,7 +169,7 @@ extension PrRowView {
     return rect.maxX + Theme.Space.note
   }
 
-  /// 字下げの線（1 段 8・右に hairline・その後 6 の空き）を `depth` 段描き、その右の位置を返す。
+  /// 字下げの線（1 段 8・右に hairline・その後 6 の空きと行の gap 6）を `depth` 段描き、その右の位置を返す。
   private func drawGuides(_ depth: Int, from x: CGFloat, _ pr: PrRowColors, in context: CGContext)
     -> CGFloat
   {
@@ -178,7 +178,7 @@ extension PrRowView {
       context.setFillColor(pr.guide)
       context.fill(
         NSRect(x: x + Theme.Layout.editorPrGuide - 1, y: 0, width: 1, height: bounds.height))
-      x += Theme.Layout.editorPrGuide + Theme.Layout.editorPrGuideGap
+      x += Theme.Layout.editorPrGuide + Theme.Layout.editorPrGuideGap + Theme.Space.note
     }
     return x
   }

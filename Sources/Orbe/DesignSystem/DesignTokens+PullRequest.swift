@@ -125,7 +125,7 @@ extension Theme.Layout {
   static let editorPrMark: CGFloat = 18
   static let editorPrMarkInset: CGFloat = 8
   static let editorPrMarkGlyph: CGFloat = 11
-  /// パネルの下端の区画（余白 10 12 12・段の間 8）、3 択（外枠の余白 2・各 22）、欄と送信ボタン 26、欄が伸びる上限の行数。
+  /// パネルの下端の区画（余白 10 12 12・段の間 8）、3 択（外枠の余白 2・各 22）、送信ボタン 26。
   static let editorPrReviewPadTop: CGFloat = 10
   static let editorPrReviewPadX: CGFloat = 12
   static let editorPrReviewPadBottom: CGFloat = 12

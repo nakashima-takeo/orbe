@@ -33,7 +33,7 @@ struct PrCommentCanvas {
 
   /// 押せる姿なら `color`、押せない姿なら薄めた色。
   func enabled(_ color: NSColor, _ enabled: Bool) -> NSColor {
-    enabled ? color : PrCommentStyle.disabled(color)
+    enabled ? color : EditorStyle.scaledAlpha(color, Theme.Opacity.disabled)
   }
 
   /// コメント `comment` の組んだ本文の層を、左上 `origin` に置く（それまでに積んだ要素は 1 つの層にして閉じる）。

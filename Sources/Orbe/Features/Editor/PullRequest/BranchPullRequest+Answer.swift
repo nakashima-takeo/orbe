@@ -27,10 +27,9 @@ extension BranchPullRequest {
   struct Creation: Equatable {
     let branch: String
     let defaultBranch: String
-    /// 既定のブランチの追跡 ref に対する先行の数（追跡 ref が手元に無ければ nil）。
-    let ahead: Int?
+    /// 既定のブランチの追跡 ref に対する先行の数（追跡 ref が手元に無ければ nil）。手元の HEAD が動けば数え直す。
+    var ahead: Int?
     let url: URL?
-    let ref: GitHubBranchRef
     var published: Published
   }
 

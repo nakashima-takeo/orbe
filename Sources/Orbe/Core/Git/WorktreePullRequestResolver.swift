@@ -8,7 +8,7 @@ struct WorktreeBranchPullRequest: Equatable {
 
 /// worktree ごとに、PR の head として見るブランチを決め、そのブランチの PR を 1 つ引く（画面に依らない）。
 /// ブランチの同一性と PR の突き合わせは `GitHubBranchPullRequestLookup` が持ち、ここが決めるのは見るブランチと選ぶ PR
-/// だけ——選ぶのは open の最新、無ければ最新（`gh pr list` は作成日時の降順で返す）。
+/// だけ——選ぶのは open の最新、無ければ最新（`GitHubBranchPullRequestLookup` は作成日時の新しい順で返す）。
 ///
 /// worktree はリポジトリ（commonDir）ごとにまとめ、ブランチの PR はリポジトリごとに 1 回でまとめて引く。ブランチを
 /// 見るのは、今のブランチが期待したブランチと同じか、期待が未確定（無い・既定ブランチ）で今のブランチが既定ブランチで

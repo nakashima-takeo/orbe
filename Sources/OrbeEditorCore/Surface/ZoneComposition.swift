@@ -1,7 +1,8 @@
 import AppKit
 import CoreText
 
-/// 絵の差し込みの字組みで組む文——元の文の段落 1 つに、余白のある見え方（インラインコード）ごとに次の並びを足したもの。
+/// 絵の差し込みの字組みで組む文——元の文の段落 1 つ（か、その途中の区切り）に、余白のある見え方（インラインコード）ごとに
+/// 次の並びを足したもの。
 ///
 /// ```
 /// [U+2068] [置き字] コード [置き字] [U+2069]
@@ -11,65 +12,66 @@ import CoreText
 /// する（向きは Core Text が中の字から決める。段落の区切りで切れたコードは、段落の中のコード全体の字から決めた U+2066 か
 /// U+2067 で包む）。行を割る位置はこの文では探さない（→ `ZoneTextLayout`。余白を付けずに組んだ
 /// 段落で探す）。コードの中の対にならない isolate の終わりは幅 0 の U+2060 に置き換え、閉じていない isolate と埋め込み・上書きは
-/// 後ろの置き字の前で閉じる——元の文の制御字が、置き字の位置と包みの向きの独立を壊さない。
+/// 後ろの置き字の前で閉じる——元の文の制御字が、置き字の位置と包みの向きの独立を壊さない。コードの境が字の塊（書記素）の
+/// 途中に来れば、包む範囲をその塊の端まで広げる（コードの始まりは塊の頭へ、終わりは塊の終わりへ）——包みの字と置き字が
+/// 塊を割らない（Core Text は結合記号の後ろに幅 0 の書式の字が来ると、記号を基の字とまとめずに描く）。広げた範囲の字の
+/// 見え方は変えない。
 ///
 /// 元の文と組んだ文の位置の対応はこの型に閉じ、字組みの口（`ZoneTextLayout.TypesetLine`）は元の文の位置だけで答える。
 final class ZoneComposition {
-  /// 元の文の中の段落の範囲。
-  let paragraph: Range<Int>
+  /// 組む元の文の範囲（段落か、段落の途中の区切り）。
+  let range: Range<Int>
   let typesetter: CTTypesetter
   /// 組んだ文。
   let units: [UInt16]
   var count: Int { units.count }
   /// 組んだ文の境 c（0...count）の、元の文の境。包みの頭の境はコードの始まり、包みの尾の境はコードの終わり。
   private let originals: [Int]
-  /// 元の文の境 p（段落の中）の、組んだ文の境（コードの始まりは包みの頭の前、コードの終わりは包みの尾の後）。
+  /// 元の文の境 p（範囲の中）の、組んだ文の境（コードの始まりは包みの頭の前、コードの終わりは包みの尾の後）。
   private let composed: [Int]
-  /// 組んだ文の字の見え方（包みの字は包んだ見え方。見え方の無い字は -1）。
+  /// 組んだ文の字の地の見え方（包みの字と包みの中の字は包んだ見え方。区切りの頭に置いた、引き継いだ制御字は -1）。
   let owners: [Int32]
   /// 置き字の位置（組んだ文の位置）。
   let placeholders: Set<Int>
   /// 組んだ文の字が空白か（行末の空白を幅と地に数えない）。
   let whitespace: [Bool]
-  /// 段落が右から左か。
-  let rightToLeft: Bool
 
-  /// 文 `source` の範囲 `paragraph` を、見え方 `styles`（文の先頭から順に当てる）で組む。段落の向きは元の段落の最初の、
-  /// 向きを持つ字で決める。見え方は `first`（番号と、その見え方が当たり始める文の位置。段落の始まりより後ろで終わる最初の
-  /// 見え方）から見て、段落の終わりで止める——段落を組む仕事は、文の見え方の数に依らない。
+  /// 文 `source` の範囲 `range` を、見え方 `styles`（文の先頭から順に当てる）で組む。段落の向きは元の段落の最初の、
+  /// 向きを持つ字で決める。見え方は `first`（範囲の始まりより後ろで終わる最初の見え方）から見て、範囲の終わりで止める
+  /// ——範囲を組む仕事は、文の見え方の数に依らない。
   /// `context` を渡せば、範囲を段落 `context.paragraph` の途中の区切りとして組む——段落の向きと、区切りの前で開いた
   /// 埋め込み・上書き・isolate を引き継ぎ（開いた字を区切りの前に置く）、区切りの字の双方向の並びを段落の中と同じにする。
   /// 区切りで切れたコードは、段落の中のコード全体の向きのかたまりとして包む。
   init(
-    _ source: [UInt16], paragraph: Range<Int>, styles: [ZoneTextStyle],
-    from first: (index: Int, offset: Int) = (0, 0), context: Context? = nil
+    _ source: [UInt16], range: Range<Int>, styles: [ZoneTextStyle],
+    from first: StyleCursor = .init(), context: Context? = nil
   ) {
-    self.paragraph = paragraph
-    var builder = Builder(paragraph: paragraph)
+    self.range = range
+    var builder = Builder(range: range, source: source, styles: styles, from: first)
     for unit in context?.open.units ?? [] { builder.carry(unit) }
+    var clusters: ClusterStarts?
     var offset = first.offset
     for index in first.index..<styles.count {
-      guard offset < paragraph.upperBound else { break }
+      guard offset < range.upperBound else { break }
       let style = styles[index]
       let start = offset
       offset += style.length
-      let lower = max(start, paragraph.lowerBound)
-      let upper = min(offset, paragraph.upperBound)
-      guard lower < upper else { continue }
-      if style.leadingPadding > 0 || style.trailingPadding > 0 {
-        builder.isolate(
-          source, lower..<upper, style: index, font: style.font,
-          wrap: Builder.Wrap(
-            initiator: Self.initiator(of: start..<offset, cutAt: lower..<upper, source, context),
-            leading: lower == start ? style.leadingPadding : 0,
-            trailing: upper == offset ? style.trailingPadding : 0))
-      } else {
-        builder.plain(source, lower..<upper, style: index, font: style.font)
-      }
+      let lower = max(start, range.lowerBound)
+      let upper = min(offset, range.upperBound)
+      guard lower < upper, style.leadingPadding > 0 || style.trailingPadding > 0 else { continue }
+      let starts = clusters ?? ClusterStarts(source, range)
+      clusters = starts
+      let low = max(builder.next, lower == start ? starts.boundary(atOrBefore: lower) : lower)
+      let high = max(low, upper == offset ? starts.boundary(atOrAfter: upper) : upper)
+      builder.plain(to: low)
+      builder.isolate(
+        low..<high, code: index,
+        wrap: Builder.Wrap(
+          initiator: Self.initiator(of: start..<offset, cutAt: lower..<upper, source, context),
+          leading: lower == start ? style.leadingPadding : 0,
+          trailing: upper == offset ? style.trailingPadding : 0))
     }
-    builder.plain(
-      source, min(max(offset, paragraph.lowerBound), paragraph.upperBound)..<paragraph.upperBound,
-      style: -1, font: nil)
+    builder.plain(to: range.upperBound)
     builder.finish()
     self.units = builder.units
     originals = builder.originals
@@ -77,8 +79,41 @@ final class ZoneComposition {
     owners = builder.owners
     placeholders = builder.placeholders
     whitespace = builder.units.map { Unicode.Scalar($0)?.properties.isWhitespace ?? false }
-    rightToLeft = context?.rightToLeft ?? Self.isRightToLeft(source, paragraph)
+    let rightToLeft = context?.rightToLeft ?? Self.isRightToLeft(source, range)
     typesetter = Self.typesetter(builder.attributed(rightToLeft: rightToLeft))
+  }
+
+  /// 範囲の中の字の塊（書記素）の境。コードの境が塊の途中に来たときにだけ求める（範囲の長さに比例する）。
+  private struct ClusterStarts {
+    let range: Range<Int>
+    /// 範囲の頭からの位置ごとに、塊の境か。
+    private let starts: [Bool]
+
+    init(_ source: [UInt16], _ range: Range<Int>) {
+      self.range = range
+      var starts = [Bool](repeating: false, count: range.count + 1)
+      var position = 0
+      for character in String(decoding: source[range], as: UTF16.self) {
+        starts[position] = true
+        position += character.utf16.count
+      }
+      starts[range.count] = true
+      self.starts = starts
+    }
+
+    /// 位置 `offset`（範囲の中）か、その前で最後の塊の境。
+    func boundary(atOrBefore offset: Int) -> Int {
+      var index = offset - range.lowerBound
+      while !starts[index] { index -= 1 }
+      return range.lowerBound + index
+    }
+
+    /// 位置 `offset`（範囲の中）か、その後ろで最初の塊の境。
+    func boundary(atOrAfter offset: Int) -> Int {
+      var index = offset - range.lowerBound
+      while !starts[index] { index += 1 }
+      return range.lowerBound + index
+    }
   }
 
   /// 段落の途中の区切りが引き継ぐ、段落の範囲と向きと、区切りの前で開いた埋め込み・上書き・isolate と、段落の区切りで
@@ -119,9 +154,9 @@ final class ZoneComposition {
   /// 組んだ文の境 `index` の、元の文の境。
   func original(_ index: Int) -> Int { originals[min(max(0, index), count)] }
 
-  /// 元の文の境 `offset` の、組んだ文の境（段落の外は段落の端）。
+  /// 元の文の境 `offset` の、組んだ文の境（範囲の外は範囲の端）。
   func composed(_ offset: Int) -> Int {
-    composed[min(max(paragraph.lowerBound, offset), paragraph.upperBound) - paragraph.lowerBound]
+    composed[min(max(range.lowerBound, offset), range.upperBound) - range.lowerBound]
   }
 
   /// 組んだ文の範囲 `range` を 1 行に組む（空の範囲は空の行）。
@@ -159,7 +194,7 @@ extension ZoneComposition {
   static let styleAttribute = "OrbeZoneTextStyle"
 }
 
-/// 組んだ文を積む。
+/// 組んだ文を積む。元の文の字は前から順に 1 度ずつ積み、字ごとの見え方は見え方の列を前へたどって決める。
 private struct Builder {
   /// 元の文の字（見え方の番号つき）・幅 0 の制御字・置き字。
   enum Kind {
@@ -168,7 +203,9 @@ private struct Builder {
     case placeholder(CGFloat)
   }
 
-  let paragraph: Range<Int>
+  let range: Range<Int>
+  private let source: [UInt16]
+  private let styles: [ZoneTextStyle]
   var units: [UInt16] = []
   var originals: [Int] = []
   var composed: [Int]
@@ -179,16 +216,27 @@ private struct Builder {
   var placeholders: Set<Int> = []
   /// 包んだコードの字の範囲（組んだ文の位置。包みの制御字と置き字は含まない）。
   var codes: [Range<Int>] = []
+  /// 積み終えた元の文の位置。
+  private(set) var next: Int
+  /// 次に積む字より後ろで終わる見え方（字の見え方を前へたどる）。
+  private var style: StyleCursor
 
-  init(paragraph: Range<Int>) {
-    self.paragraph = paragraph
-    composed = [Int](repeating: 0, count: paragraph.count + 1)
+  init(range: Range<Int>, source: [UInt16], styles: [ZoneTextStyle], from first: StyleCursor) {
+    self.range = range
+    self.source = source
+    self.styles = styles
+    style = first
+    next = range.lowerBound
+    composed = [Int](repeating: 0, count: range.count + 1)
   }
 
-  mutating func plain(_ source: [UInt16], _ range: Range<Int>, style: Int, font: CTFont?) {
-    for offset in range {
-      composed[offset - paragraph.lowerBound] = units.count
-      append(source[offset], original: offset, owner: style, .text(style), font)
+  /// 元の文の字を位置 `end` の手前まで、字の見え方のまま積む。
+  mutating func plain(to end: Int) {
+    while next < end {
+      style.advance(to: next, in: styles)
+      composed[next - range.lowerBound] = units.count
+      append(source[next], original: next, owner: style.index, .text(style.index), font)
+      next += 1
     }
   }
 
@@ -199,50 +247,55 @@ private struct Builder {
     let trailing: CGFloat
   }
 
-  /// 範囲 `range`（見え方 `style` の字）を、`wrap` の頭の字で向きを独立させて包み、左右に置き字を置く（幅 0 の余白には
-  /// 置かない）。
-  mutating func isolate(
-    _ source: [UInt16], _ range: Range<Int>, style: Int, font: CTFont, wrap: Wrap
-  ) {
+  /// 範囲 `range`（見え方 `code` のコード。境を字の塊の端まで広げた範囲）を、`wrap` の頭の字で向きを独立させて包み、左右に
+  /// 置き字を置く（幅 0 の余白には置かない）。包みの字と置き字はコードの見え方で組み、中の字は字の見え方で組んで地は
+  /// コードに数える。
+  mutating func isolate(_ range: Range<Int>, code: Int, wrap: Wrap) {
     let (start, end) = (range.lowerBound, range.upperBound)
     let (leading, trailing) = (wrap.leading, wrap.trailing)
-    composed[start - paragraph.lowerBound] = units.count
-    append(wrap.initiator, original: start, owner: style, .control, font)
+    let codeFont = styles[code].font
+    composed[start - self.range.lowerBound] = units.count
+    append(wrap.initiator, original: start, owner: code, .control, codeFont)
     if leading > 0 {
       placeholders.insert(units.count)
-      append(0xFFFC, original: start, owner: style, .placeholder(leading), font)
+      append(0xFFFC, original: start, owner: code, .placeholder(leading), codeFont)
     }
     let head = units.count
     var open = OpenControls()
     for offset in range {
-      if offset > start { composed[offset - paragraph.lowerBound] = units.count }
+      style.advance(to: offset, in: styles)
+      if offset > start { composed[offset - self.range.lowerBound] = units.count }
       let unit = open.read(source[offset]) ? source[offset] : 0x2060
       append(
-        unit, original: offset, owner: style, unit == source[offset] ? .text(style) : .control,
-        font)
+        unit, original: offset, owner: code,
+        unit == source[offset] ? .text(style.index) : .control, font)
     }
+    next = end
     let tail = units.count
     for closer in open.closers {
-      append(closer, original: end, owner: style, .control, font)
+      append(closer, original: end, owner: code, .control, codeFont)
     }
     if trailing > 0 {
       placeholders.insert(units.count)
-      append(0xFFFC, original: end, owner: style, .placeholder(trailing), font)
+      append(0xFFFC, original: end, owner: code, .placeholder(trailing), codeFont)
     }
-    append(0x2069, original: end, owner: style, .control, font)
-    composed[end - paragraph.lowerBound] = units.count
-    codes.append(head..<tail)
+    append(0x2069, original: end, owner: code, .control, codeFont)
+    composed[end - self.range.lowerBound] = units.count
+    if head < tail { codes.append(head..<tail) }
   }
 
   /// 区切りの前で開いた字 `unit` を、区切りの頭に置く。
   mutating func carry(_ unit: UInt16) {
-    append(unit, original: paragraph.lowerBound, owner: -1, .text(-1), nil)
+    append(unit, original: range.lowerBound, owner: -1, .text(-1), nil)
   }
 
   mutating func finish() {
-    originals.append(paragraph.upperBound)
-    composed[paragraph.count] = units.count
+    originals.append(range.upperBound)
+    composed[range.count] = units.count
   }
+
+  /// 次に積む字の字体。
+  private var font: CTFont { styles[style.index].font }
 
   private mutating func append(
     _ unit: UInt16, original: Int, owner: Int, _ kind: Kind, _ font: CTFont?

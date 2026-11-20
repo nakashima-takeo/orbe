@@ -9,12 +9,17 @@ import OrbeEditorCore
 /// 使い回すので、返信の書きかけは読み直し・並びの置き直し・インライン ⇄ 並列をまたいで残る。スレッドを置くのは、diff が
 /// 見せている両端の先頭のコミットで読んだスレッドだけ（古い版の行に付けない）。書き込みの結果は頼んだ層へ返り、通れば欄を
 /// 空にし（新しいコメントの欄は閉じ）、通らなければ本文を残して失敗の文を出す——同じ PR の別のタブの書きかけは変わらない。
+/// タブの PR がタブの根の worktree の今の open の PR でない間は、新しいスレッドと返信を書かずに、送れる所を告げる。
 @MainActor
 final class PrCommentLayer {
   let pullRequest: EditorDiffPullRequest
+  /// タブの根の worktree の今の PR（タブがある間見る）。保留中のレビューを送れるのは、その PR を出すパネルだけ。
+  private let current: BranchPullRequest
   /// 並びを置き直させる（スレッドの出入り・新しいコメントの欄の開閉・印を出せる行が分かった）。
   var onRowsChange: () -> Void = {}
-  private let language: () -> Language
+  /// 書きかけがあるか（`holdsDrafts`）が変わったかもしれない（入力欄に空白でない字が入った・無くなった）。
+  var onDraftChange: () -> Void = {}
+  let language: () -> Language
   private var threads: [String: PrCommentZone] = [:]
   /// スレッドを最後に置いた所——側・行（0 始まり）と、そのときの両端と両側の本文（今の diff に置けなくなったときに、行を
   /// 追い始める所）。
@@ -22,7 +27,7 @@ final class PrCommentLayer {
   /// 返信の書きかけを持ったまま今の diff に置けなくなったスレッドの置き場所。
   private var held: [String: PrCommentPlacement] = [:]
   /// 開いた順の新しいコメントの欄。
-  private var drafts: [PrCommentPlacement] = []
+  private(set) var drafts: [PrCommentPlacement] = []
   /// 新しいコメントの欄の入力欄の通し番号。
   private var draftSerial = 0
   /// 求めた（求めている）印を出せる行の、両端と結果。
@@ -30,9 +35,11 @@ final class PrCommentLayer {
   /// 最後に並びへ注記を渡した両端とその両側の本文、並列の古い側の面（インラインでは nil）。
   private var placed: Placed?
   private weak var oldSurface: (any TextSurface)?
+  /// スレッドの絵を 1 分ごとに描き直させる（コメントの相対時刻を、時の経過に合わせて進める）。
+  private var clock: Timer?
 
   /// diff の両端と両側の本文。
-  private struct Placed {
+  private struct Placed: Equatable {
     let ends: PullRequestState.DiffEnds
     let shown: EditorDiff.SideTexts
   }
@@ -47,7 +54,30 @@ final class PrCommentLayer {
   init(pullRequest: EditorDiffPullRequest, language: @escaping () -> Language) {
     self.pullRequest = pullRequest
     self.language = language
+    current = BranchPullRequest.shared(
+      for: pullRequest.id.root, source: pullRequest.state.source)
+    current.beginWatching()
+    let clock = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+      // main の runloop の timer なので main で届く。描き直しで作り直すのは時刻を載せる小さな層だけ（本文は組み直さない）。
+      MainActor.assumeIsolated { self?.tick() }
+    }
+    RunLoop.main.add(clock, forMode: .common)
+    self.clock = clock
   }
+
+  deinit {
+    let current = current
+    clock?.invalidate()
+    MainActor.assumeIsolated { current.endWatching() }
+  }
+
+  private func tick() {
+    for zone in threads.values { zone.redraw() }
+  }
+
+  /// この PR が、タブの根の worktree の今の PR で open か。そうでない間（ブランチの切り替え・マージ・クローズの後）は、保留中の
+  /// レビューに積む書き込み（新しいスレッド・返信）を断る——積んでも、Orbe から送る所が無い。
+  var isCurrentPullRequest: Bool { current.state === state && state.content?.state == .open }
 
   var state: PullRequestState { pullRequest.state }
   var path: String { pullRequest.id.path }
@@ -56,6 +86,11 @@ final class PrCommentLayer {
   var isSettled: Bool {
     !threads.values.contains(where: \.isTypesetting) && drafts.allSatisfy(\.isSettled)
       && held.values.allSatisfy(\.isSettled) && (placed == nil || commentable?.lines != nil)
+  }
+
+  /// 返信か新しいコメントの欄に、空白でない字の書きかけがある（人が打った内容——仮のタブを普通のタブにする）。
+  var holdsDrafts: Bool {
+    threads.values.contains(where: \.hasText) || drafts.contains { $0.zone.hasText }
   }
 
   /// スレッド `id` の絵の差し込み（まだ置いていなければ nil）。
@@ -84,7 +119,8 @@ final class PrCommentLayer {
     placed = current
     let language = language()
     var notes = DiffRows.Notes()
-    notes.commentable = commentableLines(ends)
+    let markable = commentableLines(ends)
+    notes.commentable = markable ?? ([], [])
     // diff が見せている両端が PR の今の両端でない間（PR への push・ベースの付け替えを読んで、両端を求め直し、diff が
     // 新しい両端の本文を読み終えるまで）は、古い側の行のスレッドを前の並びに置かない（GitHub は古い側の行を今の
     // マージベースの diff の行として読む）。
@@ -111,14 +147,12 @@ final class PrCommentLayer {
         zone.isLineMoving = false
         zone.language = language
         zone.isWriting = state.isWritingReview(.thread(thread.id))
-        let side = Self.version(thread.side)
-        lastPlaced[thread.id] = Seen(side: side, line: line - 1, placed: current)
-        notes.zones.append(DiffRows.Zone(version: side, line: line - 1, zone: zone))
-        switch side {
-        case .old: notes.threads.old.insert(line - 1)
-        case .new: notes.threads.new.insert(line - 1)
-        }
+        let seen = Seen(side: Self.version(thread.side), line: line - 1, placed: current)
+        lastPlaced[thread.id] = seen
+        place(zone, at: seen, in: &notes)
       }
+    } else {
+      keepPlaced(current, isCurrent: isCurrent, language: language, in: &notes)
     }
     let following =
       held.sorted { a, b in
@@ -126,10 +160,9 @@ final class PrCommentLayer {
         return (x, a.key) < (y, b.key)
       }.map(\.value) + drafts
     for placement in following {
-      placement.follow(
-        ends, shown: shown, commentable: commentable?.lines != nil ? notes.commentable : nil,
-        limit: EditorDiff.hunkLimit
-      ) { [weak self] in self?.onRowsChange() }
+      placement.follow(ends, shown: shown, commentable: markable) { [weak self] in
+        self?.onRowsChange()
+      }
       if case .draft = placement.zone.subject {
         placement.zone.notice = placement.isGone ? .lineGone : nil
       }
@@ -138,6 +171,36 @@ final class PrCommentLayer {
         DiffRows.Zone(version: placement.version, line: placement.line, zone: placement.zone))
     }
     return notes
+  }
+
+  /// レビューのやりとりが、diff が見せている先頭と違う先頭を読んだ間（PR への push を読み、diff が新しい両端を見せるまで）は、
+  /// diff が見せている両端と本文 `current` で最後に置いたスレッドを、その行に残す（古い側の行のスレッドは、両端が PR の今の
+  /// 両端の間だけ）。ほかの返信の書きかけは、最後に置いた所から行を追う。
+  private func keepPlaced(
+    _ current: Placed, isCurrent: Bool, language: Language, in notes: inout DiffRows.Notes
+  ) {
+    let ordered = threads.sorted { a, b in
+      (a.value.firstCommentTime, a.key) < (b.value.firstCommentTime, b.key)
+    }
+    for (id, zone) in ordered where held[id] == nil {
+      guard let seen = lastPlaced[id], seen.placed == current, isCurrent || seen.side == .new
+      else {
+        _ = startHolding(id, zone)
+        continue
+      }
+      zone.language = language
+      zone.isWriting = state.isWritingReview(.thread(id))
+      place(zone, at: seen, in: &notes)
+    }
+  }
+
+  /// スレッドの絵の差し込み `zone` を、置いた所 `seen` の行の下に置き、その行に印を付ける。
+  private func place(_ zone: PrCommentZone, at seen: Seen, in notes: inout DiffRows.Notes) {
+    notes.zones.append(DiffRows.Zone(version: seen.side, line: seen.line, zone: zone))
+    switch seen.side {
+    case .old: notes.threads.old.insert(seen.line)
+    case .new: notes.threads.new.insert(seen.line)
+    }
   }
 
   /// 今の diff に置けないスレッド `thread` に返信の書きかけがあれば、最後に置いた所から行を追う（返信と解決は送れる）。
@@ -202,6 +265,7 @@ final class PrCommentLayer {
       subject: .thread(thread), line: line, fieldID: "thread:\(thread.id)")
     zone.isCollapsed = thread.isResolved
     zone.onPress = { [weak self] zone, control in self?.press(control, in: zone) }
+    zone.onHasTextChange = { [weak self] _ in self?.onDraftChange() }
     zone.onFieldFocus = { [weak self] zone, primary in
       // 置けなくなった・削除されたスレッドは、書きかけを空にして焦点が外れたら手放す。
       guard let self, !primary, !zone.hasText, case .thread(let thread) = zone.subject,
@@ -219,10 +283,10 @@ final class PrCommentLayer {
     return zone
   }
 
-  /// 両端 `ends` の、印を出せる行（0 始まりの半開区間）。まだ求めていなければ裏で求め始め、求め終えたら並びを置き直させる。
-  /// rename の判定が GitHub と手元で食い違うファイルでは、古い側の行に印を出さない（古い側の行の対応が変わる）。
+  /// 両端 `ends` の、印を出せる行（0 始まりの半開区間）。まだ求めていなければ裏で求め始めて nil を返し、求め終えたら並びを
+  /// 置き直させる。rename の判定が GitHub と手元で食い違うファイルでは、古い側の行に印を出さない（古い側の行の対応が変わる）。
   private func commentableLines(_ ends: PullRequestState.DiffEnds)
-    -> (old: [Range<Int>], new: [Range<Int>])
+    -> (old: [Range<Int>], new: [Range<Int>])?
   {
     if commentable?.ends != ends {
       commentable = (ends, nil)
@@ -235,7 +299,7 @@ final class PrCommentLayer {
         onRowsChange()
       }
     }
-    guard let lines = commentable?.lines else { return ([], []) }
+    guard let lines = commentable?.lines else { return nil }
     let ranges = { (lines: [ClosedRange<Int>]) in lines.map { ($0.lowerBound - 1)..<$0.upperBound }
     }
     let old = state.agreesOnRename(of: path, ends) ? ranges(lines.old) : []
@@ -257,6 +321,7 @@ final class PrCommentLayer {
     draftSerial += 1
     let zone = PrCommentZone(subject: .draft, line: line + 1, fieldID: "draft:\(draftSerial)")
     zone.onPress = { [weak self] zone, control in self?.press(control, in: zone) }
+    zone.onHasTextChange = { [weak self] _ in self?.onDraftChange() }
     zone.onFieldFocus = { [weak self] zone, primary in
       guard let self, !primary, !zone.hasText, !zone.isWriting else { return }
       closeDraft(zone)
@@ -268,88 +333,10 @@ final class PrCommentLayer {
     zone.surface?.focus(zone.field)
   }
 
-  private func closeDraft(_ zone: PrCommentZone) {
+  func closeDraft(_ zone: PrCommentZone) {
     guard let index = drafts.firstIndex(where: { $0.zone === zone }) else { return }
     drafts.remove(at: index)
     onRowsChange()
-  }
-
-  // MARK: - 押下と書き込み
-
-  private func press(_ control: PrCommentControl, in zone: PrCommentZone) {
-    let body = zone.hasText ? zone.text : ""
-    switch (zone.subject, control) {
-    case (.thread, .collapse):
-      zone.isCollapsed.toggle()
-    case (.thread(let thread), .resolve):
-      write(.setResolved(thread: thread.id, !thread.isResolved), from: zone, clears: false)
-    case (.thread(let thread), .add):
-      guard !body.isEmpty else { return }
-      write(.reply(thread: thread.id, body: body, resolve: false), from: zone, clears: true)
-    case (.thread(let thread), .resolveReply):
-      if body.isEmpty {
-        write(.setResolved(thread: thread.id, true), from: zone, clears: false)
-      } else {
-        write(.reply(thread: thread.id, body: body, resolve: true), from: zone, clears: true)
-      }
-    case (.draft, .add):
-      guard !body.isEmpty, !zone.isWriting, zone.canSend,
-        let draft = drafts.first(where: { $0.zone === zone })
-      else { return }
-      writeDraft(draft, body: body)
-    case (.draft, .cancel):
-      guard !zone.isWriting else { return }
-      closeDraft(zone)
-    default: return
-    }
-  }
-
-  /// スレッドへの書き込みを頼む。同じスレッドへの書き込みが走っていれば何もしない（2 回押しても 1 回）。削除されたスレッドと、
-  /// 行を移している最中のスレッドへは書かない。
-  private func write(_ write: GitHubReviewWrite, from zone: PrCommentZone, clears: Bool) {
-    guard case .thread(let thread) = zone.subject, zone.canSend,
-      !state.isWritingReview(.thread(thread.id))
-    else { return }
-    zone.failure = nil
-    let accepted = state.writeReview(write) { [weak self, weak zone] failure in
-      guard let self, let zone else { return }
-      if let failure {
-        zone.failure = PrPanelText.writeFailure(failure, language())
-      } else if clears {
-        zone.clearField()
-      }
-    }
-    if !accepted { zone.failure = L10n.string(.editorPrThreadNotReady, language()) }
-  }
-
-  /// 新しいスレッドを頼む。書いている間は欄を押せない姿にし、通れば欄を閉じる（スレッドは読み直しで出る）。結果は頼んだ呼び出しの
-  /// 中に届くこともあるので、書いている姿は頼む前に付ける。
-  private func writeDraft(_ draft: PrCommentPlacement, body: String) {
-    let zone = draft.zone
-    // 欄が行を数えた両端が PR の今の両端でない間（ベースの付け替えを読んで、diff が新しい両端の本文を読み終える前）は書かない。
-    guard state.diffEnds == draft.ends else {
-      zone.failure = L10n.string(.editorPrThreadNotReady, language())
-      return
-    }
-    zone.failure = nil
-    zone.isWriting = true
-    let write = GitHubReviewWrite.addThread(
-      path: path, side: draft.version == .old ? .old : .new, line: draft.line + 1,
-      commit: draft.ends.head, body: body)
-    let accepted = state.writeReview(write) { [weak self, weak zone] failure in
-      guard let self, let zone else { return }
-      zone.isWriting = false
-      if let failure {
-        zone.failure = PrPanelText.writeFailure(failure, language())
-        return
-      }
-      zone.clearField()
-      closeDraft(zone)
-    }
-    if !accepted {
-      zone.isWriting = false
-      zone.failure = L10n.string(.editorPrThreadNotReady, language())
-    }
   }
 }
 

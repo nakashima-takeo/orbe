@@ -82,8 +82,8 @@ extension SurfaceSharedScrollTests {
     assertAligned(a, b, after: 11, "右の高さが変わっても揃う")
   }
 
-  /// 空きは文書の行でも絵でもない——押すと次の文書の行の行頭に当たり（キャレットは空きに入らない）、何も描かない。
-  func testTheGapIsNeitherSelectableNorDrawn() throws {
+  /// 空きは文書の行でも絵でもない——押すと次の文書の行の行頭に当たり、キャレットは空きに入らない。
+  func testTheGapIsNotSelectable() throws {
     let (a, b) = try pair()
     let box = BoxZone(height: 60)
     a.surface.setRows(SurfaceRows(insertions: [RowInsertion(line: 4, content: .zone(box))]))

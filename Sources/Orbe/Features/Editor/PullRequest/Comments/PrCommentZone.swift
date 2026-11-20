@@ -18,10 +18,10 @@ enum PrCommentControl: Hashable {
 }
 
 /// diff の行の下に置く、スレッド 1 つか新しいコメントの欄 1 つの絵の差し込み。中身（スレッドの値・書き込みの最中か・失敗の文・
-/// 畳んでいるか・ホバー）は載せる層が置き、変われば描き直させる。絵は `PrCommentPicture` が中身と幅から組む。コメントの
-/// 本文の層は裏で組み、幅ごとに覚える（→ `PrCommentBodies`）——描き直しは本文の層を同じ参照のまま絵に置くので、面は本文の層を
-/// 写し直さない。返信・新しいコメントの本文は入力欄（`field`）が持ち、描き直し・並びの置き直し・インライン ⇄ 並列をまたいで
-/// 残る。
+/// 畳んでいるか）は載せる層が置き、ホバーは面からの知らせ（`zone(_:)`）で自分が持つ。どれも変われば描き直させる。絵は
+/// `PrCommentPicture` が中身と幅から組む。コメントの本文の層は裏で組み、幅ごとに覚える（→ `PrCommentBodies`）——描き直しは
+/// 本文の層を同じ参照のまま絵に置くので、面は本文の層を写し直さない。返信・新しいコメントの本文は入力欄（`field`）が持ち、
+/// 描き直し・並びの置き直し・インライン ⇄ 並列をまたいで残る。
 @MainActor
 final class PrCommentZone: SurfaceZone {
   enum Subject: Equatable {
@@ -36,12 +36,20 @@ final class PrCommentZone: SurfaceZone {
   var line: Int {
     didSet { if line != oldValue { redraw() } }
   }
-  /// 描き直させる面（並びに置いた面。並びを置くたびに置き直す）。
-  weak var surface: (any TextSurface)?
+  /// 描き直させる面（並びに置いた面。並びを置くたびに置き直す）。入力欄が主のまま別の面へ置き直したら（push を読んだ
+  /// 面の作り直しなど）、新しい面でも入力欄を主にする。
+  weak var surface: (any TextSurface)? {
+    didSet {
+      guard isFieldPrimary, let surface, surface !== oldValue else { return }
+      surface.focus(field)
+    }
+  }
   /// 押せる場所が押された。
   var onPress: (PrCommentZone, PrCommentControl) -> Void = { _, _ in }
   /// 入力欄が主になった・外れた。
   var onFieldFocus: (PrCommentZone, Bool) -> Void = { _, _ in }
+  /// 入力欄に空白でない字があるか（`hasText`）が変わった。
+  var onHasTextChange: (PrCommentZone) -> Void = { _ in }
 
   var isCollapsed = false {
     didSet { if isCollapsed != oldValue { redraw() } }
@@ -139,8 +147,10 @@ final class PrCommentZone: SurfaceZone {
   private func fieldDidChange(_ field: ZoneTextField) {
     let shape = FieldShape(lines: field.lineCount, empty: field.string.isEmpty, blank: !hasText)
     guard shape != fieldShape else { return }
+    let wasBlank = fieldShape.blank
     fieldShape = shape
     redraw()
+    if shape.blank != wasBlank { onHasTextChange(self) }
   }
 
   // MARK: - 絵の差し込み

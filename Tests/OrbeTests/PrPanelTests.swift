@@ -24,6 +24,8 @@ final class PrPanelTests: OrbeTestCase {
   private var asTree = true
   /// ブランチに open の PR があるか（偽なら、PR が無いと答える）。
   private var open = true
+  /// PR の番号（テストが替えて、次の引き直しに答えさせる）。
+  private var number = 9
   /// レビューのやりとりの答え（自分が作者か・保留中のコメントの数・スレッド）と、届いたレビューへの書き込みとその答えの失敗。
   var viewerIsAuthor = false
   var pendingComments = 0
@@ -57,14 +59,14 @@ final class PrPanelTests: OrbeTestCase {
 
   private var source: PullRequestSource {
     let ref = GitHubBranchRef(repo: me, branch: "feat")
-    let pullRequest = GitHubBranchPR(
-      number: 9, headRefName: "feat", state: "OPEN", baseRefName: "main", headRepository: me,
-      url: "https://github.com/me/r/pull/9")
     return PullRequestSource(
       branchPullRequests: { [unowned self] _, branch, completion in
+        let pullRequest = GitHubBranchPR(
+          number: number, headRefName: "feat", state: "OPEN", baseRefName: "main",
+          headRepository: me, url: "https://github.com/me/r/pull/\(number)")
         completion(
           GitHubBranchPullRequests(
-            availability: .ready, ledger: nil,
+            ledger: nil,
             branches: [branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))]))
       },
       branchExists: { _, completion in completion(.success(true)) },
@@ -77,7 +79,7 @@ final class PrPanelTests: OrbeTestCase {
         completion(
           .success(
             GitHubPullRequestReview(
-              viewer: "me", viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
+              viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
               pendingReview: pendingComments > 0
                 ? .init(id: "R", commentCount: pendingComments) : nil, threads: threads)))
       },
@@ -89,8 +91,9 @@ final class PrPanelTests: OrbeTestCase {
 
   private var content: GitHubPullRequestContent {
     GitHubPullRequestContent(
-      nodeID: "PR_1", number: 9, title: "題", url: "https://github.com/me/r/pull/9", isDraft: false,
-      state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
+      nodeID: "PR_1", number: number, title: "題", url: "https://github.com/me/r/pull/\(number)",
+      isDraft: false, state: .open, body: "", author: "me", baseRefName: "main",
+      headRefName: "feat",
       baseCommit: head, headCommit: head, commitCount: 2,
       commits: [.init(oid: "c1", headline: "一"), .init(oid: "c2", headline: "二")],
       files: files.map { .init(path: $0, change: .modified, isViewed: $0 == "src/a/x.swift") })
@@ -136,6 +139,31 @@ final class PrPanelTests: OrbeTestCase {
 
     panel.isShown = false
     XCTAssertFalse(state.isWatched, "隠せば PR の状態を見るのをやめる")
+  }
+
+  /// 隠している間に、ほかの面のパネルが今の PR の替わりを受けても、出し直した後の同じ PR の知らせでは、全体へのコメント
+  /// 欄の変換中の字を確定せず、焦点も移さない（区画は出し直したときの PR で作られていて、作り直しは起きていない）。
+  func testAPullRequestThatChangedWhileHiddenLeavesTheFieldAloneAfterShowingAgain() throws {
+    let other = PrPanel(root: repo.root, source: source)
+    other.isShown = true
+    defer { other.isShown = false }
+    let previous = try shown()
+    panel.isShown = false
+    number = 10
+    other.refresh()
+    pumpMain(
+      until: { other.state.map { $0 !== previous && $0.content != nil } ?? false },
+      "前提: ほかの面のパネルが次の PR を見る")
+    panel.isShown = true
+    var confirms = 0
+    var closings = 0
+    panel.confirmReviewComposition = { confirms += 1 }
+    panel.onFocusWillClose = { closings += 1 }
+    panel.isReviewFieldFocused = true
+    panel.toggleViewed("README.md")
+    XCTAssertEqual(confirms, 0, "作り直していない欄の変換中の字を確定しない")
+    XCTAssertEqual(closings, 0)
+    XCTAssertTrue(panel.isReviewFieldFocused, "焦点は欄のまま")
   }
 
   // MARK: - キー

@@ -143,6 +143,31 @@ extension FramePerfTests {
     }
   }
 
+  /// 区切り（4,096 字）をまたぐ長いインラインコード 1 つの段落を組む時間も、段落の長さに比例する——8,000 字と 32,000 字で、
+  /// 組む時間の中央値の比が 6 倍以内。区切りで切れたコードの向きを区切りごとにコード全体から求め直すと、比例しなくなる。
+  func testTypesettingALongCodeAcrossWindowsGrowsLinearly() {
+    let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    let costs = [8_000, 32_000].map { length -> Double in
+      let text = ZoneStyledText([
+        ("see ", ZoneTextStyle(font: ThreadZone.bodyFont, color: ThreadZone.ink)),
+        (
+          String(repeating: "1 ", count: length / 2),
+          ZoneTextStyle(font: mono, color: ThreadZone.accent, padding: 4)
+        ),
+      ])
+      let times = (0..<9).map { _ -> Double in
+        let started = CACurrentMediaTime()
+        _ = ZoneTextLayout.typeset(text, width: 700)
+        return CACurrentMediaTime() - started
+      }
+      return Self.quantile(times.sorted(), 0.5)
+    }
+    print(
+      "PERF-FRAMES zone long code typeset: 8000 chars", Self.ms(costs[0]), "/ 32000 chars",
+      Self.ms(costs[1]), "/ ratio", String(format: "%.2f", costs[1] / costs[0]))
+    XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "区切りをまたぐコードを組む時間は段落の長さに比例する")
+  }
+
   /// 長さ `length` の 1 段落の本文と、その見え方つきの文（`coded` なら 20 字ごとに本文の字とインラインコードを交互に
   /// 並べたもの、でなければ nil でスレッドの既定の見え方）。
   static func longParagraph(_ length: Int, coded: Bool) -> (String, ZoneStyledText?) {

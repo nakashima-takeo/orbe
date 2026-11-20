@@ -191,8 +191,9 @@ enum TestIsolation {
     // 書き込みが届く。システムのディレクトリだけにして、テストが PATH に置いたものだけが解決されるようにする（置かなければ
     // 「無い」になる）。
     ShellPATH.knownPathsOverride = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
-    // gh の設定ディレクトリ。これを空のディレクトリへ向けると、本物の gh が解決されても資格情報が無く、通信せずに「認証が
-    // 要る」で終わる（PATH の絞り込みに重ねる二重の壁）。gh が書きうるので caseDir の下に置く。
+    // gh の設定ディレクトリ。gh が書く設定（hosts.yml など）を開発者のものと分ける。資格情報はこれでは消えない——gh は
+    // キーチェーンのトークンを設定ディレクトリに関係なく読むので、本物の gh を解決させない壁は PATH の絞り込みだけ。gh が
+    // 書きうるので caseDir の下に置く。
     let ghConfig = dir.appendingPathComponent("gh-config", isDirectory: true)
     try? FileManager.default.createDirectory(at: ghConfig, withIntermediateDirectories: true)
     setenv("GH_CONFIG_DIR", ghConfig.path, 1)

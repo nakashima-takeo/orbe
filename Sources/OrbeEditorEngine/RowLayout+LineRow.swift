@@ -6,8 +6,8 @@ import OrbeEditorCore
 extension RowLayout {
   /// 位置 `position` を、行の前の塊のうち差し込んだ行だけを数えた段に直す（絵の差し込みと空きの高さを数えない）。位置が
   /// 絵の差し込みか空きの中なら、その下の差し込んだ行（無ければ文書の行）の頭。文書の行の中（段が 0 以上）ならそのまま。
-  func lineRow(of position: RowPosition) -> RowPosition {
-    guard position.offset < 0 else { return position }
+  func lineRow(of position: RowPosition) -> LineRow {
+    guard position.offset < 0 else { return LineRow(line: position.line, offset: position.offset) }
     let range = blocks(above: position.line - 1)..<blocks(above: position.line)
     let total = (prefix[range.upperBound] - prefix[range.lowerBound]) / lineHeight
     let lines = insertedLines(in: range)
@@ -17,32 +17,31 @@ extension RowLayout {
     for index in range {
       if case .lines(let run) = contents[index] {
         if fromTop < top + Double(run.count) {
-          return RowPosition(
-            line: position.line, offset: before + Int(fromTop - top) - lines)
+          return LineRow(line: position.line, offset: before + Int(fromTop - top) - lines)
         }
         top += Double(run.count)
         before += run.count
       } else {
         let height = heights[index] / lineHeight
         if fromTop < top + height {
-          return RowPosition(line: position.line, offset: before - lines)
+          return LineRow(line: position.line, offset: before - lines)
         }
         top += height
       }
     }
-    return RowPosition(line: position.line)
+    return LineRow(line: position.line)
   }
 
   /// 差し込んだ行だけを数えた段 `row` の位置（`lineRow(of:)` の逆）。段が塊の差し込んだ行の数を超えれば、塊の最初の
   /// 差し込んだ行。段は行の上端からの整数の表示の単位なので、その差し込んだ行の中に入る最も上の段にする。
-  func position(ofLineRow row: RowPosition) -> RowPosition {
-    guard row.offset < 0 else { return row }
+  func position(ofLineRow row: LineRow) -> RowPosition {
+    guard row.offset < 0 else { return RowPosition(line: row.line, offset: row.offset) }
     let offset = (unit(ofLineRow: row) - unit(ofLine: row.line) - Self.slack).rounded(.up)
     return RowPosition(line: row.line, offset: Int(offset))
   }
 
   /// 差し込んだ行だけを数えた段 `row` の上端（表示の単位。端数の高さの絵の差し込みの下でも、その行の上端そのもの）。
-  func unit(ofLineRow row: RowPosition) -> Double {
+  func unit(ofLineRow row: LineRow) -> Double {
     guard row.offset < 0 else { return unit(ofLine: row.line) + Double(row.offset) }
     let range = blocks(above: row.line - 1)..<blocks(above: row.line)
     let head =

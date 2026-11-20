@@ -111,6 +111,23 @@ final class ZoneTextLayoutTests: XCTestCase {
     }
   }
 
+  /// コードの境が字の塊の途中に来ても（結合記号だけがコードに入る・コードの後ろの字に入る）、包みと余白は塊の外に付き、塊を
+  /// 割らない——描くグリフの数は余白なしと同じで、幅は余白の分だけ増え、コードの地は塊を含めた 1 つの続いた範囲になる。
+  func testPaddingStaysOutsideAClusterThatACodeBorderSplits() throws {
+    for (name, parts) in [
+      ("コードの頭が結合記号", ["see e", "\u{0301}x", " z"]),
+      ("コードの後ろが結合記号", ["see ", "xe", "\u{0301} z"]),
+    ] {
+      let bare = try XCTUnwrap(
+        ZoneTextLayout.typeset(styled(parts, padding: 0), width: 500).lines.first)
+      let padded = try XCTUnwrap(
+        ZoneTextLayout.typeset(styled(parts, padding: 4), width: 500).lines.first)
+      XCTAssertEqual(glyphCount(padded), glyphCount(bare), "\(name): 字を割らない")
+      XCTAssertEqual(padded.width, bare.width + 8, accuracy: 0.01, "\(name): 幅は余白の分だけ増える")
+      XCTAssertEqual(misplaced(padded, code: 1), [], name)
+    }
+  }
+
   /// 段落の向き 2 × コードの向き 2 × 隣の字の向き 2 の 8 通りを、行頭・行中・行末・折り返しをまたぐ置き方で組み、どの行でも
   /// コードの地が 1 つの続いた範囲で、余白が渡した幅で入り、隣の字が地にかぶらない。
   func testCodePaddingHoldsForEveryDirectionAndPosition() {
@@ -278,6 +295,24 @@ final class ZoneTextLayoutTests: XCTestCase {
       } else {
         XCTAssertGreaterThanOrEqual(after.lowerBound, code.upperBound - 0.01, "\(string): 後ろの字は右")
       }
+    }
+  }
+
+  /// 段落の向きは、段落の区切りの字（CR・U+2029）の後ろの字でなく、段落の最初の向きを持つ字で決まる——末尾に CR や
+  /// U+2029 のある右から左の文は右から左の段落（行の頭の字が右端の側）として、U+2029 の後ろに右から左の字がある左から右の
+  /// 文は左から右の段落として組む。
+  func testParagraphSeparatorsDoNotDecideTheDirection() throws {
+    for (source, rightToLeft) in [
+      ("שלום עולם.\r", true), ("שלום עולם.\u{2029}", true), ("abc\u{2029}שלום", false),
+    ] {
+      let line = try XCTUnwrap(
+        ZoneTextLayout.typeset(
+          ZoneStyledText([(source, ZoneTextStyle(font: font, color: .white))]),
+          width: 500
+        ).lines.first)
+      XCTAssertEqual(
+        line.x(of: line.range.location) > line.width / 2, rightToLeft,
+        "行の頭の字が右端の側にあるか: \(source.debugDescription)")
     }
   }
 

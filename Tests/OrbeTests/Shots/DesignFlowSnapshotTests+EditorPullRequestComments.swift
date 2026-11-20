@@ -84,7 +84,7 @@ private struct CommentSteps {
     settle()
   }
 
-  /// 行 8 の印を押して新しいコメントの欄を開き、打つ。
+  /// 行 8 に新しいコメントの欄を開き、打つ。
   func newComment() {
     surface?.hover(at: nil)
     diff?.comments?.openDraft(.new, line: 7)

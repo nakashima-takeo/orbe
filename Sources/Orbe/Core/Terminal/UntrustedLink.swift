@@ -1,9 +1,10 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// OSC 8 で端末出力が指すリンク。見えている文字列と別の対象を隠せるため、開く前に
-/// allow / confirm / block の 3 値で判定する。判定は URL 文字列・ローカル host 名の集合・ファイルシステムの
-/// 状態だけから決まる。
+/// 見えている文字列と別の対象を隠せるリンク（OSC 8 で端末出力が指すリンクと、PR のコメントの本文のリンク）。
+/// 端末のリンクは、開く前に allow / confirm / block の 3 値で判定する（`decision`）。判定は URL 文字列・ローカル
+/// host 名の集合・ファイルシステムの状態だけから決まる。PR のコメントの本文のリンクは、web とメールの URL だけを
+/// 押せるリンクにする（`webURL`。URL 文字列だけから決まる）。
 ///
 /// ローカルファイルの危険はファイルの型ではなく Launch Services が選ぶ handler にある（拡張子の無い
 /// 実行ファイルや `.command` は Terminal、`.py` は IDLE、`.jnlp` は JavaLauncher、`.fileloc` は中で
