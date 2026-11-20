@@ -29,7 +29,7 @@ final class PullRequestState {
   }
 
   /// diff の両端——マージベース（古い側）、PR の先頭（新しい側）、その間の rename（新しいパス → 元のパス）。
-  struct DiffEnds: Equatable {
+  struct DiffEnds: Hashable {
     let mergeBase: String
     let head: String
     let renames: [String: String]

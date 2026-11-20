@@ -102,6 +102,20 @@ extension PrPanelTests {
     XCTAssertEqual(reviewWrites, [])
   }
 
+  /// レビューのやりとりが diff の両端より先に届いても、両端が揃えば、古い側の行のスレッドをファイルの行の数に入れて
+  /// 描き直す。
+  func testCommentCountsFollowTheDiffEndsThatArriveAfterTheReview() throws {
+    threads = [thread("T1", path: "README.md", line: 1, comments: 2, side: .old)]
+    let state = try shown()
+    pumpMain(until: { state.review != nil }, "前提: レビューのやりとりが届く")
+    XCTAssertNil(state.diffEnds, "前提: 両端はまだ求めている")
+    XCTAssertEqual(panel.commentCount(of: "README.md"), 0, "両端が分からない間は古い側を数えない")
+    let before = panel.rowsVersion
+    pumpMain(until: { state.diffEnds != nil }, "両端が揃う")
+    XCTAssertNotEqual(panel.rowsVersion, before, "見えている行を描き直す")
+    XCTAssertEqual(panel.commentCount(of: "README.md"), 2)
+  }
+
   /// 置けないスレッドの件数は未解決のものだけを数える。
   func testOutdatedThreadsCountOnlyUnresolvedOnes() throws {
     threads = [
@@ -112,11 +126,12 @@ extension PrPanelTests {
     XCTAssertEqual(panel.outdatedThreadCount, 1)
   }
 
-  private func thread(_ id: String, path: String, line: Int?, comments: Int, resolved: Bool = false)
-    -> GitHubPullRequestReview.Thread
-  {
+  private func thread(
+    _ id: String, path: String, line: Int?, comments: Int, resolved: Bool = false,
+    side: GitHubDiffSide = .new
+  ) -> GitHubPullRequestReview.Thread {
     GitHubPullRequestReview.Thread(
-      id: id, path: path, side: .new, line: line, isResolved: resolved, canReply: true,
+      id: id, path: path, side: side, line: line, isResolved: resolved, canReply: true,
       canResolve: true, canUnresolve: false,
       comments: (0..<comments).map {
         .init(id: "\(id)-\($0)", author: "me", body: "本文", createdAt: Date(), isPending: false)

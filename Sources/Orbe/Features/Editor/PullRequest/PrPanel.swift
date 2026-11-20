@@ -1,7 +1,8 @@
 import AppKit
 
 /// PR のパネルの面ごとの状態——worktree の今の PR（`BranchPullRequest`）を見ること、列の行の組、区分・フォルダ・説明の
-/// 開閉、選択、列の焦点。PR の事実（どの PR か・中身・確認済み・両端）は 2 つの状態が持ち、ここは見せ方だけ。
+/// 開閉、選択、パネルの中の焦点（列と全体へのコメント欄。欄の変換中の字と、PR が替わったときの欄の後始末を含む）、
+/// ファイルごとのコメント数の覚え。PR の事実（どの PR か・中身・確認済み・両端）は 2 つの状態が持ち、ここは見せ方だけ。
 ///
 /// パネルを出している間（`isShown`）だけ worktree の今の PR を見る——GitHub に問い合わせるのは見ている間だけ。列の行は、
 /// PR の中身・ツリーかリストか・開閉で決まり、そのどれかが変わったときに 1 か所（`rebuild`）で組み直す（確認済みは描くときに
@@ -133,14 +134,15 @@ final class PrPanel {
     }
   }
 
-  /// 列が読み直す版——行の組・確認済み・レビューのやりとりが変わるたびに変わる（確認済みとコメントの数は行を組み直さず、
-  /// 見えている行を描き直す）。
+  /// 列が読み直す版——行の組・確認済み・レビューのやりとり・diff の両端が変わるたびに変わる（確認済みとコメントの数は行を
+  /// 組み直さず、見えている行を描き直す。コメントの数は diff の両端で置けるかが決まる）。
   var rowsVersion: Int {
     var hasher = Hasher()
     hasher.combine(builtVersion)
     hasher.combine(state.map(ObjectIdentifier.init))
     hasher.combine(state?.viewedVersion)
     hasher.combine(state?.reviewVersion)
+    hasher.combine(state?.diffEnds)
     return hasher.finalize()
   }
 
