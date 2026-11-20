@@ -108,6 +108,32 @@ extension EditorDiffTests {
       [.addThread(path: "a.txt", side: .old, line: 1, commit: remote.head, body: "古い側")])
   }
 
+  /// 欄が行を数えた diff の両端が PR の今の両端でない間（ベースの付け替えを読んだ後、両端を求め終えるまで・求められない
+  /// 間）は、新しいスレッドを書かず、最新の内容を読み込んでからやり直すよう告げる。
+  func testADraftCountedOnOtherEndsIsNotWritten() throws {
+    let remote = Remote()
+    let (diff, _) = try commentedDiff(remote)
+    let layer = try XCTUnwrap(diff.comments)
+    layer.openDraft(.old, line: 1)
+    let draft = try XCTUnwrap(layer.draft(.old, line: 1))
+    try XCTUnwrap(draft.surface).replaceText(of: draft.field, with: "古い側")
+
+    let content = try XCTUnwrap(remote.content)
+    remote.content = GitHubPullRequestContent(
+      nodeID: content.nodeID, number: content.number, title: content.title, url: content.url,
+      isDraft: false, state: .open, body: "", author: content.author,
+      baseRefName: content.baseRefName, headRefName: content.headRefName,
+      baseCommit: String(repeating: "1", count: 40), headCommit: content.headCommit,
+      commitCount: 1, commits: [], files: content.files)
+    layer.state.reload()
+    pumpMain(
+      until: { if case .failed = layer.state.bounds { true } else { false } },
+      "前提: 付け替えたベースの両端を求められない")
+    draft.zone(.pressed(PrCommentControl.add))
+    XCTAssertEqual(remote.writes, [])
+    XCTAssertNotNil(draft.failure, "最新の内容を読み込んでからやり直すよう告げる")
+  }
+
   /// 返信の書きかけを持つスレッドが push で今の diff に置けなくなっても、書きかけごと残り、行に付いていない旨を出したまま
   /// 返信を送れる（返信は行を渡さないので GitHub は受ける）。GitHub からスレッドが消えると、書きかけは残り、削除された旨を
   /// 出して送れない姿になる。
