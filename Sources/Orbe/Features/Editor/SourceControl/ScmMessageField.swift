@@ -19,7 +19,8 @@ struct ScmMessageField: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
   func makeNSView(context: Context) -> NSScrollView {
-    let text = MessageTextView()
+    // 見本（ScmPanel）の padding 0 5 0 8（右の ✦ は持たない）。
+    let text = MessageTextView(trailing: 5)
     context.coordinator.text = text
     text.delegate = context.coordinator
     text.onFocus = { [weak coordinator = context.coordinator] in coordinator?.focusDidChange($0) }

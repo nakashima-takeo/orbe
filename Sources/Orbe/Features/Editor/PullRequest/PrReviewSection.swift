@@ -95,7 +95,7 @@ private struct PrReviewNote: View {
 
   var body: some View {
     Text(text)
-      .font(Font(Theme.Typography.editorPrThreadHead))
+      .font(Font.theme.editorScmNote)
       .foregroundStyle(color)
       .fixedSize(horizontal: false, vertical: true)
   }
@@ -110,7 +110,7 @@ private struct PrHoverText: View {
   var body: some View {
     Text(text)
       .font(Font(Theme.Typography.editorPrReviewLabel))
-      .foregroundStyle(hovered ? Color(nsColor: Theme.Color.editorText) : Color.theme.textMuted)
+      .foregroundStyle(hovered ? Color.theme.editorText : Color.theme.textMuted)
       .lineLimit(1)
       .contentShape(Rectangle())
       .onHover { hovered = $0 }
@@ -185,7 +185,7 @@ private struct PrReviewSegment: View {
       .foregroundStyle(
         isSelected
           ? Color.theme.tabActiveText
-          : hovered && isEnabled ? Color(nsColor: Theme.Color.editorText) : Color.theme.textMuted
+          : hovered && isEnabled ? Color.theme.editorText : Color.theme.textMuted
       )
       .frame(maxWidth: .infinity)
       .frame(height: Theme.Layout.editorPrReviewSegment)
@@ -237,7 +237,8 @@ private struct PrReviewMessageField: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
   func makeNSView(context: Context) -> NSScrollView {
-    let text = MessageTextView()
+    // 見本（PrReviewPanel）の padding 0 8。
+    let text = MessageTextView(trailing: 8)
     context.coordinator.text = text
     text.delegate = context.coordinator
     text.onFocus = { [weak coordinator = context.coordinator] in
