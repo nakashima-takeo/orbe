@@ -8,10 +8,11 @@ enum StateDir {
   /// state ディレクトリ。存在しなければ作成する。解決できなければ nil。
   static func base() -> URL? { OrbePaths.stateDirBase() }
 
+  /// `ORBE_STATE_DIR` で隔離したときの隔離先。隔離していなければ nil。ディレクトリは作らない。
+  static var isolatedBase: URL? { OrbePaths.isolatedStateDir() }
+
   /// `ORBE_STATE_DIR` で隔離した検証用のインスタンスか。隔離したインスタンスは state フォルダの外を書かない。
-  static var isIsolated: Bool {
-    ProcessInfo.processInfo.environment[OrbePaths.stateDirEnvVar]?.isEmpty == false
-  }
+  static var isIsolated: Bool { isolatedBase != nil }
 
   /// このインスタンスの bundle ID（チャネル identity）。タブへ注入し、実体化コピーへも刻む。
   static var bundleId: String { OrbePaths.bundleId }
