@@ -45,7 +45,9 @@ extension PrCommentLayer {
     zone.failure = nil
     let accepted = state.writeReview(write) { [weak self, weak zone] result in
       guard let self, let zone else { return }
-      if let failure = result.failure { zone.failure = PrPanelText.writeFailure(failure, language()) }
+      if let failure = result.failure {
+        zone.failure = PrPanelText.writeFailure(failure, language())
+      }
       if clears, result.failure == nil || result.replied { zone.clearField() }
     }
     if !accepted { zone.failure = L10n.string(.editorPrThreadNotReady, language()) }

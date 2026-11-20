@@ -92,7 +92,8 @@ final class PrPanelTests: OrbeTestCase {
   private var content: GitHubPullRequestContent {
     GitHubPullRequestContent(
       nodeID: "PR_1", number: number, title: "題", url: "https://github.com/me/r/pull/\(number)",
-      isDraft: false, state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
+      isDraft: false, state: .open, body: "", author: "me", baseRefName: "main",
+      headRefName: "feat",
       baseCommit: head, headCommit: head, commitCount: 2,
       commits: [.init(oid: "c1", headline: "一"), .init(oid: "c2", headline: "二")],
       files: files.map { .init(path: $0, change: .modified, isViewed: $0 == "src/a/x.swift") })

@@ -306,7 +306,8 @@ final class ZoneTextLayoutTests: XCTestCase {
       ("שלום עולם.\r", true), ("שלום עולם.\u{2029}", true), ("abc\u{2029}שלום", false),
     ] {
       let line = try XCTUnwrap(
-        ZoneTextLayout.typeset(ZoneStyledText([(source, ZoneTextStyle(font: font, color: .white))]),
+        ZoneTextLayout.typeset(
+          ZoneStyledText([(source, ZoneTextStyle(font: font, color: .white))]),
           width: 500
         ).lines.first)
       XCTAssertEqual(

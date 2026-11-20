@@ -140,7 +140,9 @@ final class DiffRowsTests: OrbeTestCase {
     XCTAssertEqual(
       DiffRows.oldLines(from: LineRow(line: 0, offset: -100), count: 40, removed), 100...140,
       "消したファイルの途中は、見えている削除行から")
-    XCTAssertEqual(DiffRows.oldLines(from: LineRow(line: 0, offset: .min), count: 40, removed), 0...40, "消したファイルの頭")
+    XCTAssertEqual(
+      DiffRows.oldLines(from: LineRow(line: 0, offset: .min), count: 40, removed), 0...40,
+      "消したファイルの頭")
   }
 
   /// 古い側が変わらず新しい側が変わる作り直しで、見えている位置は同じ古い側の行（同じ段）へ引き継ぐ——インラインの

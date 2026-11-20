@@ -56,7 +56,8 @@ extension EditorDiffTests {
     let me = GitHubRepoName(nameWithOwner: "me/r")
     let state = PullRequestState.shared(
       for: PullRequestState.Key(
-        commonDir: try repo.open().commonDir, id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 7))
+        commonDir: try repo.open().commonDir,
+        id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 7))
       ),
       source: PullRequestSource(
         // 根の worktree（ブランチ feat）の今の PR は、この PR。
