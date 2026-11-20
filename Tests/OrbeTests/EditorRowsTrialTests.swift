@@ -57,6 +57,12 @@ final class EditorRowsTrialTests: OrbeTestCase {
 
   // MARK: - 合成の型
 
+  /// 要素が箱ならその箱。
+  private static func box(_ element: ZoneElement) -> ZoneBox? {
+    guard case .box(let box) = element else { return nil }
+    return box
+  }
+
   private func synthetic() throws {
     let shown = try show(Self.markedSource())
     let (window, surface) = (shown.window, shown.surface)
@@ -71,10 +77,9 @@ final class EditorRowsTrialTests: OrbeTestCase {
       return (Int(point.x * scale), Int((window.frame.height - point.y) * scale))
     }
     let box = try XCTUnwrap(
-      surface.zones.values.first?.picture.elements.lazy.compactMap { element -> ZoneBox? in
-        guard case .box(let box) = element else { return nil }
-        return box
-      }.first, "前提: 試しのスレッドの枠の箱")
+      surface.zones.values.first?.picture.layers.lazy.flatMap(\.layer.elements).compactMap(
+        Self.box
+      ).first, "前提: 試しのスレッドの枠の箱")
     let recorder = WindowRecorder(
       strokeX: image(left + 4, 0).0, markerX: image(left + 30, 0).0,
       top: image(0, surface.config.topInset + 8).1,

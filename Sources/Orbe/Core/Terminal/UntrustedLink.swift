@@ -1,9 +1,10 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// OSC 8 で端末出力が指すリンク。見えている文字列と別の対象を隠せるため、開く前に
-/// allow / confirm / block の 3 値で判定する。判定は URL 文字列・ローカル host 名の集合・ファイルシステムの
-/// 状態だけから決まる。
+/// 見えている文字列と別の対象を隠せるリンク（OSC 8 で端末出力が指すリンクと、PR のコメントの本文のリンク）。
+/// 端末のリンクは、開く前に allow / confirm / block の 3 値で判定する（`decision`）。判定は URL 文字列・ローカル
+/// host 名の集合・ファイルシステムの状態だけから決まる。PR のコメントの本文のリンクは、web とメールの URL だけを
+/// 押せるリンクにする（`webURL`。URL 文字列だけから決まる）。
 ///
 /// ローカルファイルの危険はファイルの型ではなく Launch Services が選ぶ handler にある（拡張子の無い
 /// 実行ファイルや `.command` は Terminal、`.py` は IDLE、`.jnlp` は JavaLauncher、`.fileloc` は中で
@@ -59,19 +60,47 @@ struct UntrustedLink {
   }
 
   var decision: Decision {
-    guard !raw.isEmpty else { return .block(.malformed) }
+    switch parsed {
+    case .blocked(let reason): return .block(reason)
+    case .url(let url, let scheme):
+      if let web = Self.webDecision(url, scheme: scheme) { return web }
+      return scheme == "file" ? fileDecision(url) : .confirm(url)
+    }
+  }
+
+  /// web とメールの開き先——`decision` が `.allow(.url)` になる http・https・mailto の URL（ほかは nil）。scheme・host・
+  /// 危ない字だけを見て、ファイルシステムを調べない（第三者の書いた本文のリンクを、組むたびに判定できる）。
+  var webURL: URL? {
+    guard case .url(let url, let scheme) = parsed,
+      case .allow(.url(let allowed)) = Self.webDecision(url, scheme: scheme)
+    else { return nil }
+    return allowed
+  }
+
+  private enum Parsed {
+    case url(URL, scheme: String)
+    case blocked(BlockReason)
+  }
+
+  /// 危ない字を断ち、scheme のある URL に読む。
+  private var parsed: Parsed {
+    guard !raw.isEmpty else { return .blocked(.malformed) }
 
     // Foundation は制御・書式文字を URL として受け入れるが、UI はそれを改行・不可視・方向反転として
     // 描く。表示と実体が食い違う手口はパースの前に断つ。
     guard !raw.unicodeScalars.contains(where: Self.isUnsafeCharacter) else {
-      return .block(.unsafeCharacters)
+      return .blocked(.unsafeCharacters)
     }
 
     // `URL(string:)` は相対参照も受け入れる。後段が base に対して勝手に解決しないよう scheme を要求する。
     guard let url = URL(string: raw), let scheme = url.scheme?.lowercased(), !scheme.isEmpty else {
-      return .block(.malformed)
+      return .blocked(.malformed)
     }
+    return .url(url, scheme: scheme)
+  }
 
+  /// http・https・mailto の判定（ほかの scheme は nil）。
+  private static func webDecision(_ url: URL, scheme: String) -> Decision? {
     switch scheme {
     case "http", "https":
       // `https:relative` のような authority 無しは消費者ごとに解決が変わる。
@@ -87,11 +116,8 @@ struct UntrustedLink {
       }
       return .allow(.url(url))
 
-    case "file":
-      return fileDecision(url)
-
     default:
-      return .confirm(url)
+      return nil
     }
   }
 

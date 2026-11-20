@@ -2,12 +2,32 @@ import AppKit
 import OrbeEditorCore
 
 /// 文書の「変わった」の扇出と、出現の強調・一致の地への配線。文書側の closure は単一のまま、ここが検索・出現の強調・
-/// プロジェクト検索へ配る（裏から届いた問いの結果も）。一致の地は 2 つの出どころ（ファイル内検索とプロジェクト検索）の和を
-/// 面へ押す（`pushFindGround`）。見えている範囲が変わったときに検索バーを置き直す。
+/// diff・プロジェクト検索へ配る（裏から届いた問いの結果も）。一致の地は 2 つの出どころ（ファイル内検索とプロジェクト検索）の
+/// 和を面へ押す（`pushFindGround`）。見えている範囲が変わったときに検索バーを置き直す。
 extension EditorPaneView {
-  /// 文書の「変わった」を検索・出現の強調・プロジェクト検索へ配る（見せている文書だけ）。
-  func observe(_ document: EditorDocument, _ on: Bool) {
-    document.onViewportChange = on ? { [weak self] in self?.placeSearchBar() } : nil
+  /// 文書の知らせを、本体で編集する文書（`editedDocument`）へ結ぶ。前に結んだ文書と同じなら何もしない。替わったときだけ
+  /// 前の文書の知らせを解いて今の文書に結び、プロジェクト検索へ文書を見せたと知らせる。本体を置き換えたときと、diff が面を
+  /// 置き直したとき（新しい側の文書が替わりうる）に呼ぶ。
+  func bindEditedDocument() {
+    let next = editedDocument
+    guard next !== boundDocument else { return }
+    if let previous = boundDocument { observe(previous, false) }
+    boundDocument = next
+    guard let next else { return }
+    observe(next, true)
+    projectSearch.documentDidShow(next)
+  }
+
+  /// 文書 `document` の「変わった」を検索・出現の強調・diff・プロジェクト検索へ配る。ファイル内検索と出現の強調は diff の
+  /// 本体では相手の文書を持たないので、配っても何もしない。
+  private func observe(_ document: EditorDocument, _ on: Bool) {
+    document.onViewportChange =
+      on
+      ? { [weak self] in
+        guard let self else { return }
+        placeSearchBar()
+        diff?.viewportDidChange()
+      } : nil
     document.onSelectionChange =
       on
       ? { [weak self] in
@@ -17,11 +37,12 @@ extension EditorPaneView {
       } : nil
     document.onTextChange =
       on
-      ? { [weak self] edits in
+      ? { [weak self, unowned document] edits in
         guard let self else { return }
         search.textDidChange(edits)
         occurrences.textDidChange()
-        if let document = self.document { projectSearch.documentDidEdit(document, edits) }
+        diff?.documentTextDidChange()
+        projectSearch.documentDidEdit(document, edits)
       } : nil
     document.onAnalysis =
       on

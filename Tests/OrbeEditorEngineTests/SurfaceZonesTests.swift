@@ -66,6 +66,62 @@ final class SurfaceZonesTests: EngineTestCase {
     XCTAssertEqual(surface.rows.heights, [90], "置いていない絵の差し込みは何もしない")
   }
 
+  /// 塊の中の差し込んだ行を先頭に読んでいる間に、その行と次の文書の行の間の絵の差し込みが外れても、置き直されて高さが
+  /// 変わっても、読んでいる行の画面上の位置は変わらない（PR への push で削除行のスレッドが一度外れる間も、読んでいる削除行が
+  /// ずれない）。
+  func testAZoneBelowTheTopInsideABlockKeepsTheReadLine() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let source = InsertedText()
+    let upper = source.lines((0..<20).map { "u\($0)" })
+    let lower = source.lines((0..<10).map { "d\($0)" })
+    let box = BoxZone(height: 108.5)
+    let placed = { (zones: [SurfaceZone]) in
+      SurfaceRows(
+        insertions: [RowInsertion(line: 30, content: .lines(upper))]
+          + zones.map { RowInsertion(line: 30, content: .zone($0)) }
+          + [RowInsertion(line: 30, content: .lines(lower))],
+        source: source)
+    }
+    surface.setRows(placed([box]))
+    surface.scroll(toFirstLine: 30 + 5.25)
+    surface.flush()
+    let read = { surface.scrollPosition.y - surface.rows.top(ofBlock: 0) }
+    let offset = read()
+    XCTAssertEqual(offset, 5.25 * 18, accuracy: 1e-9, "前提: 塊の頭の u0 から数えて u5 の中を先頭に読む")
+    surface.setRows(placed([]))
+    surface.flush()
+    XCTAssertEqual(read(), offset, accuracy: 1e-9, "絵の差し込みが外れても u5 は動かない")
+    box.height = 230.25
+    surface.setRows(placed([box]))
+    surface.flush()
+    XCTAssertEqual(read(), offset, accuracy: 1e-9, "高さの違う絵の差し込みが戻っても u5 は動かない")
+  }
+
+  /// 高さが端数（30.3pt）の絵の差し込みが並ぶ 1,000 行の文書で、どの行を先頭に置いても、その上の絵の差し込みの高さを
+  /// 変えた後に先頭に見えている行は同じ（行の上端に置いた位置が、行と y の丸めで上の項目に化けない）。
+  func testFractionalZoneHeightsKeepTheFirstVisibleLine() throws {
+    let opened = try hostedRows(1_000)
+    let surface = opened.surface
+    let lines = Array(stride(from: 3, to: 1_000, by: 4))
+    let boxes = lines.map { _ in BoxZone(height: 30.3) }
+    surface.setRows(
+      SurfaceRows(
+        insertions: zip(lines, boxes).map { RowInsertion(line: $0, content: .zone($1)) }))
+    surface.flush()
+    var moved: [Int] = []
+    for line in 1..<990 {
+      surface.scroll(to: RowPosition(line: line))
+      surface.flush()
+      guard let above = lines.lastIndex(where: { $0 <= line }) else { continue }
+      boxes[above].height = boxes[above].height == 30.3 ? 61.7 : 30.3
+      surface.redrawZone(boxes[above])
+      surface.flush()
+      if surface.viewport.top != RowPosition(line: line) { moved.append(line) }
+    }
+    XCTAssertEqual(moved, [])
+  }
+
   /// 本文の区画の幅が変われば（窓の幅・行番号の桁）絵を問い直す（折り返しが変わり、高さが合う）。
   func testAZoneIsAskedAgainWhenTheTextWidthChanges() throws {
     let opened = try hostedRows()

@@ -17,6 +17,9 @@ public final class ZoneTextField: SiteText {
   public var didChange: ((ZoneTextField) -> Void)?
   /// 主（キーと IME の行き先）になった（true）・外れた（false）。
   public var didChangePrimary: ((ZoneTextField, Bool) -> Void)?
+  /// 送る——入力欄が主の間に ⌘↵（テンキーの Enter も）が押された。変換中なら変換を確定してから知らせ、押し続けた繰り返しでは
+  /// 知らせない（↵ は改行のまま）。
+  public var didSubmit: ((ZoneTextField) -> Void)?
 
   /// 入力欄の見え方。色は名前付き（dynamic）の色で、外観は面が解く。
   public struct Style {

@@ -157,11 +157,20 @@ struct GitHubRepoName: Hashable {
 struct GitHubBranchRef: Hashable {
   let repo: GitHubRepoName
   let branch: String
+
+  /// このブランチから PR を作るページ（push の後に GitHub が案内するのと同じ URL）。PR を向ける先のリポジトリとブランチは、
+  /// 開いたページで GitHub が既定を選び、利用者がそこで変えられる。
+  var pullRequestCreationURL: URL? {
+    branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed).flatMap {
+      URL(string: "https://github.com/\(repo.value)/pull/new/\($0)")
+    }
+  }
 }
 
 /// GitHub に問い合わせたリポジトリの正式名（改名後の古い名前からも新しい名前が返る）。
 enum GitHubRepositoryResolution: Equatable {
-  case found(GitHubRepoName)
+  /// 正式名と、fork なら親のリポジトリの正式名（fork でない・親が見えないなら nil）。
+  case found(GitHubRepoName, parent: GitHubRepoName? = nil)
   /// 正式名を確かめられなかった。GitHub は「存在しない」と「今のアカウントから見えない private」を
   /// 同じ `NOT_FOUND` で返すので、問い合わせの失敗と区別しない。
   case unverified
@@ -195,9 +204,16 @@ struct GitHubPage<Node: Decodable>: Decodable {
   let pageInfo: PageInfo
 }
 
+/// ブランチの PR の 1 回の問い合わせ——ブランチ名と、PR を引くリポジトリ（nil なら gh が作業ディレクトリの remote から
+/// 選ぶ）。
+struct GitHubBranchPRQuery: Hashable {
+  let head: String
+  let repository: GitHubRepoName?
+}
+
 /// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,headRepository,
-/// headRepositoryOwner,url` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
-/// 見るための小さな形。
+/// headRepositoryOwner,url,createdAt` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
+/// 見るのと、ブランチの PR を引く段（`GitHubBranchPullRequestLookup`）の答えに使う小さな形。
 struct GitHubBranchPR: Decodable, Equatable {
   let number: Int
   let headRefName: String
@@ -209,6 +225,8 @@ struct GitHubBranchPR: Decodable, Equatable {
   let headRepository: GitHubRepoName?
   /// PR のページ（PR が置かれたリポジトリを指す。head のリポジトリとは限らない）。
   var url: String?
+  /// 作成日時（ISO 8601 の UTC。文字列の大小が日時の前後と同じ）。
+  var createdAt: String?
 
   /// head のリポジトリとブランチ。head のリポジトリが消えていれば nil（どのブランチとも等しくならない）。
   var head: GitHubBranchRef? {
@@ -234,11 +252,12 @@ extension GitHubBranchPR {
       state: try container.decode(String.self, forKey: .state),
       baseRefName: try container.decode(String.self, forKey: .baseRefName),
       headRepository: try PullRequestHeadRepository(from: decoder).name,
-      url: try container.decodeIfPresent(String.self, forKey: .url))
+      url: try container.decodeIfPresent(String.self, forKey: .url),
+      createdAt: try container.decodeIfPresent(String.self, forKey: .createdAt))
   }
 
   private enum CodingKeys: String, CodingKey {
-    case number, headRefName, state, baseRefName, url
+    case number, headRefName, state, baseRefName, url, createdAt
   }
 }
 

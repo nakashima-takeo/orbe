@@ -13,7 +13,7 @@ struct TaskAgentBadge: View {
         Text(agent.name)
         Text(
           agent.state == .working
-            ? TaskElapsedText.label(since: agent.since, now: context.date, l10n: l10n)
+            ? ElapsedText.label(since: agent.since, now: context.date, language: l10n.language)
             : l10n.string(.taskPaletteAgentWaitingBadge))
       }
       .font(Font.theme.meta)
@@ -47,7 +47,7 @@ struct TaskAgentDetail: View {
         Text(
           [
             agent.state.state,
-            TaskElapsedText.label(since: agent.since, now: context.date, l10n: l10n),
+            ElapsedText.label(since: agent.since, now: context.date, language: l10n.language),
             "·", l10n.format(.taskPaletteAgentTab, agent.tabTitle),
           ].joined(separator: " ")
         )

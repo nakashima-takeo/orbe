@@ -85,6 +85,13 @@ enum TestIsolation {
     // 開発者の `GIT_EDITOR`（`true` 等のすぐ返るもの）を残すと、エディタの封じが外れてもテストの git が待たずに返り、
     // 封じのテストが手元で落ちない。
     unsetenv("GIT_EDITOR")
+    // gh の資格情報を渡す環境変数。残すと、PATH に本物の gh が入ったテストが開発者のトークンで GitHub へ届く。
+    // 設定ディレクトリ（`GH_CONFIG_DIR`）は `beginCase` が空のディレクトリへ向ける。
+    for key in [
+      "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST",
+    ] {
+      unsetenv(key)
+    }
     // ghostty のリソース根（theme の探索先）。libghostty は `ghostty_init` で 1 度だけ読むので、どの
     // テスト本体よりも前に張る。張らないと Orbe / Ghostty の端末から起動した `swift test` は親の
     // インストール済み .app を読み、CI と違う結果になる。`app/` は .app の `Resources/ghostty` と同じ
@@ -180,6 +187,17 @@ enum TestIsolation {
     // 子プロセス PATH の probe。張らないと `WindowController` を立てる多数のテストが開発者の
     // 実ログインシェルを起こし、手元の dotfiles で結果が変わる（CI と手元で違う PATH を見る）。
     ShellPATH.shared = ShellPATH(probe: { "/usr/bin:/bin" })
+    // 子プロセス PATH に必ず足す既知のディレクトリ。既定は Homebrew などのインストール先を含むので、テストが置いた偽物で
+    // ない gh・agent（開発者のログイン済みの gh を含む）が見つかり、偽の gh を置き忘れたテスト 1 本で本物の GitHub へ
+    // 書き込みが届く。システムのディレクトリだけにして、テストが PATH に置いたものだけが解決されるようにする（置かなければ
+    // 「無い」になる）。
+    ShellPATH.knownPathsOverride = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+    // gh の設定ディレクトリ。gh が書く設定（hosts.yml など）を開発者のものと分ける。資格情報はこれでは消えない——gh は
+    // キーチェーンのトークンを設定ディレクトリに関係なく読むので、本物の gh を解決させない壁は PATH の絞り込みだけ。gh が
+    // 書きうるので caseDir の下に置く。
+    let ghConfig = dir.appendingPathComponent("gh-config", isDirectory: true)
+    try? FileManager.default.createDirectory(at: ghConfig, withIntermediateDirectories: true)
+    setenv("GH_CONFIG_DIR", ghConfig.path, 1)
 
     // 端末のクリップボード。general はシステム全域の実環境で、書けば履歴アプリやユニバーサル
     // クリップボードへ流れ、落ちたテストは開発者の中身を戻せない。テストごとに一意名の pasteboard へ向ける。

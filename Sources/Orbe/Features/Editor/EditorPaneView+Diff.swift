@@ -39,6 +39,7 @@ extension EditorPaneView {
   /// 一文を面が覆わない。
   func installDiffSurfaces(_ diff: EditorDiff) {
     observeDiff(diff, true)
+    bindEditedDocument()
     let surfaces = diffSurfaces(diff)
     let views = surfaces.map(\.view)
     let hadFocus = focusIsInside && !focusIsInSidebar
@@ -85,18 +86,8 @@ extension EditorPaneView {
       height: rect.height)
   }
 
-  /// diff の知らせを結ぶ——新しい側の文書の見えている範囲と本文の変化（文書の閉包 1 本を通して配る）と、面の焦点。
-  /// 新しい側の文書は作業ツリーの姿で替わるので、前に結んだ文書の知らせを解いてから今の文書に結ぶ。
+  /// diff の面の焦点の知らせを結ぶ（新しい側の文書の知らせは、本体で編集する文書として `bindEditedDocument` が結ぶ）。
   private func observeDiff(_ diff: EditorDiff, _ on: Bool) {
-    if let previous = diffDocument, previous !== diff.document || !on {
-      previous.onViewportChange = nil
-      previous.onTextChange = nil
-    }
-    diffDocument = on ? diff.document : nil
-    if on, let document = diff.document {
-      document.onViewportChange = { [weak diff] in diff?.viewportDidChange() }
-      document.onTextChange = { [weak diff] _ in diff?.documentTextDidChange() }
-    }
     diff.onFocusChange = on ? { [weak self] _ in self?.focusDidChange() } : nil
   }
 
@@ -125,8 +116,15 @@ extension EditorPaneView {
     case .unavailable(.conflicted): return .notice(.editorDiffConflicted)
     case .unavailable(.failed): return .notice(.editorDiffFailed)
     case .unavailable(.nowhere):
-      return .notice(
-        diff.id.kind == .staged ? .editorDiffNowhereStaged : .editorDiffNowhereInWorkingTree)
+      switch diff.id.kind {
+      case .workingTree: return .notice(.editorDiffNowhereInWorkingTree)
+      case .staged: return .notice(.editorDiffNowhereStaged)
+      case .pullRequest: return .notice(.editorDiffNowherePullRequest)
+      }
+    case .unavailable(.pullRequestCommitsMissing):
+      return .notice(.editorDiffPullRequestCommitsMissing)
+    case .unavailable(.pullRequestUnrelated):
+      return .notice(.editorDiffPullRequestUnrelated)
     }
   }
 

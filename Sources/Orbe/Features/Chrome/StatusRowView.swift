@@ -143,13 +143,14 @@ struct StatusRowView: View {
     .animation(headerLayoutAnimation, value: model.trafficLights.isOverChrome)
   }
 
-  /// 現在地の断片の色。退いた姿では 2 トーンの強弱を保ったまま両方一段沈める。
+  /// 現在地の断片の色。退いた姿では強弱を保ったまま一段沈める（`accent` は `text` と同じ段へ沈め、色相を外す）。
   private func locationColor(_ tone: LocationPart.Tone) -> Color {
     switch (tone, windowIsMain) {
     case (.dim, true): Color.theme.textMuted
     case (.text, true): Color.theme.statusText
+    case (.accent, true): Color.theme.accentBright
     case (.dim, false): Color.theme.textMutedInactive
-    case (.text, false): Color.theme.textMuted
+    case (.text, false), (.accent, false): Color.theme.textMuted
     }
   }
 

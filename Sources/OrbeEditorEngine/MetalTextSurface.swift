@@ -59,8 +59,12 @@ final class MetalTextSurface: TextSurface {
   private var highlights = Highlights()
   /// 縦の並び（main の最新。取引の中で置き・ずらし・測り直し、出すときに材料へ書く）。
   var rows: RowLayout
-  /// 差し込んだ行の出どころ（並びと一緒に置く）。
+  /// 差し込んだ行の出どころと、行の右端の印の押下の受け手（どちらも並びと一緒に置く）。
   weak var rowSource: (any SurfaceRowSource)?
+  weak var trailingMarkTarget: (any SurfaceTrailingMarkTarget)?
+  /// ポインタの下の、印を出せる行と、表示の構成の印の絵を描いた材料（通常・印の上）。
+  var trailingMarkHover: TrailingMarkHover?
+  var trailingMarkLooks: (normal: ZoneMaterial, hovered: ZoneMaterial)?
   /// 表示の構成と、そのうち配置と描き方に効くもの。
   var presentation = SurfacePresentation.code
   var arrangement = SurfaceArrangement()
@@ -69,6 +73,9 @@ final class MetalTextSurface: TextSurface {
   let painter = ZonePainter()
   /// 入力欄の場（入力欄の id で引く）と、場に振る通し番号。
   var fields: [AnyHashable: EditingSite] = [:]
+  /// 取引の中で、どの絵の差し込みも描いていない場になりえた入力欄（作った・描き直した絵から消えた・描いていた絵の差し込みを
+  /// 外した。取引の終わりに、どの絵の差し込みも描いていなければ閉じる）。
+  var unplacedFields: Set<AnyHashable> = []
   var nextFieldSerial = 0
   /// 主（→ `Primary`）と、絵の差し込みの文が主の間の、その文の選択。
   var primary = Primary.body
@@ -78,8 +85,14 @@ final class MetalTextSurface: TextSurface {
   var hovering = false
   /// 取引の中で、絵の高さが並びの高さと違う絵の差し込みを写した（取引の終わりに並びを組み直す）。
   var zoneHeightsChanged = false
-  /// 取引の中で、絵の差し込みを写したか外した（取引の終わりに、どの絵の差し込みも指さない画像の覚えを手放す）。
-  var zonesRepainted = false
+  /// 取引の中で、絵の差し込みを置いたか外したか、写した絵の高さが変わった（取引の終わりに、スクロールを共にする相手の面の
+  /// 空きを揃える）。
+  var zonesResized = false
+  /// 取引の中で、写した材料の画像が前から変わったか、画像を持つ材料を外した（取引の終わりに、どの絵の差し込みも指さない
+  /// 画像の覚えを手放す）。
+  var zoneImagesChanged = false
+  /// 絵の差し込みの幅を合わせた本文の区画の幅（取引の終わりに、この幅から変わったときだけ全部の絵を問い直す）。
+  var settledZoneWidth: CGFloat?
   /// 面自身の入力の処理の入れ子の深さ（→ `inputScope`）。
   var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
@@ -117,10 +130,11 @@ final class MetalTextSurface: TextSurface {
     write { $0.rows = rows }
   }
 
-  deinit {
+  isolated deinit {
     let id = id
     scroll.leave()
     RenderThread.shared.perform { $0.detach(id) }
+    partner?.settleGaps()
   }
 
   // MARK: - 選択と編集（契約）
@@ -251,6 +265,12 @@ final class MetalTextSurface: TextSurface {
       space: space, scale: scale)
     write { $0.palette = palette }
     zonesAppearanceDidChange()
+    if presentation.trailingMark != nil {
+      transact {
+        paintTrailingMark()
+        publishTrailingMark()
+      }
+    }
   }
 
   /// view の大きさ・倍率・描く色空間・見えているかが変わった。
@@ -310,6 +330,8 @@ final class MetalTextSurface: TextSurface {
     other.partner = self
     leadsScroll = true
     other.leadsScroll = false
+    settleGaps()
+    other.settleGaps(keepingFirstVisibleLine: false)
     wake()
     refreshViewport()
     other.refreshViewport()

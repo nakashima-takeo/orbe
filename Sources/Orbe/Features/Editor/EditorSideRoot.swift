@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// レール＋サイドバー（エクスプローラー・検索パネル・ソース管理パネル）の SwiftUI ルート。器の中の別 root なので環境は明示注入する。
+/// レール＋サイドバー（エクスプローラー・検索パネル・ソース管理パネル・PR のパネル）の SwiftUI ルート。器の中の別 root なので環境は明示注入する。
 /// 幅は pane が決める（レール 36 ＋ hairline、サイドバーが出るときは ＋幅 ＋ hairline）。レールは固定幅で、
 /// パネルは残りを埋める——サイドバーの幅の持ち主は pane で、ここは与えられた幅を埋めるだけ。
 struct EditorSideRoot: View {
@@ -13,6 +13,10 @@ struct EditorSideRoot: View {
   /// ソース管理の変更の列とグラフの列（検索結果の列と同じく pane が持つ）。
   let scmList: RowList<ScmListSource>
   let scmGraphList: RowList<ScmGraphSource>
+  /// PR のパネルの状態と列と列の頭（ソース管理と同じく pane が持つ）。
+  let pullRequest: PrPanel
+  let pullRequestList: RowList<PrListSource>
+  let pullRequestHeader: PrDescriptionHeader
   /// 開閉の真実（pane と同じ 1 つ。写しを挟まない）。
   let sidebar: EditorSidebarState
   let localization: LocalizationStore
@@ -32,6 +36,8 @@ struct EditorSideRoot: View {
           case .search: SearchPanelView(search: search, results: searchResults)
           case .sourceControl:
             ScmPanelView(panel: scm, list: scmList, graphList: scmGraphList, sidebar: sidebar)
+          case .pullRequest:
+            PrPanelView(panel: pullRequest, list: pullRequestList, header: pullRequestHeader)
           }
         }
       }
@@ -43,7 +49,7 @@ struct EditorSideRoot: View {
   }
 }
 
-/// レール: 幅 36 のアイコン列。項目は「ファイル」「検索」「ソース管理」（サイドバーのパネルと 1 対 1）。選択は左 2px の
+/// レール: 幅 36 のアイコン列。項目は「ファイル」「検索」「ソース管理」「プルリクエスト」（サイドバーのパネルと 1 対 1）。選択は左 2px の
 /// accent の縦線 ＋ 淡い地（design-system §5 のエディター面の例外）で、サイドバーが閉じている間は無い（`selection == nil`）。
 /// 押すと `onSelect`——選択中の項目ならサイドバーを閉じ、別の項目ならそのパネルへ切り替える（閉じていれば開く）。
 /// ソース管理の項目は、変更があれば右下に件数のバッジを出す（見本 Rail.tsx。1000 以上は「999+」）。
@@ -102,6 +108,7 @@ struct RailView: View {
     case .files: EditorGlyphs.railFiles
     case .search: EditorGlyphs.railSearch
     case .sourceControl: EditorGlyphs.railGit
+    case .pullRequest: EditorGlyphs.railPullRequest
     }
   }
 
@@ -110,6 +117,7 @@ struct RailView: View {
     case .files: .editorExplorerTitle
     case .search: .editorRailSearch
     case .sourceControl: .editorRailSourceControl
+    case .pullRequest: .editorRailPullRequest
     }
   }
 }

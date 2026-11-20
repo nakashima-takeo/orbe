@@ -6,10 +6,10 @@ import SwiftUI
 /// （タブ行 → タブがあればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点のタブ
 /// の本体——文書のテキスト面か diff の面。無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
 ///
-/// 文書の「変わった」（viewport・選択・本文・焦点）は pane が 1 つずつ受け、検索・出現の強調・プロジェクト検索・
-/// アウトラインへ配る——文書側の closure は単一のまま、扇出はここが持つ。一致の地は、ファイル内検索とプロジェクト検索の
-/// 2 つの出どころの和を pane が面へ押す（`pushFindGround`）。俯瞰（ミニマップ・スクロールバーと印・影）は面が、押された
-/// 強調の地から自分で描く。
+/// 本体で編集する文書（文書の本体ならその文書、diff の本体なら新しい側の文書）の「変わった」（viewport・選択・本文）は
+/// pane が 1 つずつ受け、検索・出現の強調・diff・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。
+/// 一致の地は、ファイル内検索とプロジェクト検索の 2 つの出どころの和を pane が面へ押す（`pushFindGround`）。
+/// 俯瞰（ミニマップ・スクロールバーと印・影）は面が、押された強調の地から自分で描く。
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
@@ -39,8 +39,8 @@ final class EditorPaneView: NSView {
   let diffDivider = NSView()
   /// 本体に置いている diff の面の view（左から）。
   var diffViews: [NSView] = []
-  /// 知らせを結んでいる、diff の新しい側の文書。
-  weak var diffDocument: EditorDocument?
+  /// 知らせを結んでいる文書（本体で編集する文書を結んだもの——`bindEditedDocument`）。
+  weak var boundDocument: EditorDocument?
   /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
   let search = EditorSearch()
   var searchBar: SearchBar?
@@ -57,6 +57,10 @@ final class EditorPaneView: NSView {
   /// ソース管理の変更の列とグラフの列（検索結果の列と同じく、パネルが隠れている間も持つ）。
   private(set) var scmList: RowList<ScmListSource>
   private(set) var scmGraphList: RowList<ScmGraphSource>
+  /// PR のパネルの状態と列と列の頭（面ごと。根が変われば作り直す）。
+  private(set) var pullRequest: PrPanel
+  private(set) var pullRequestList: RowList<PrListSource>
+  private(set) var pullRequestHeader = PrDescriptionHeader(frame: .zero)
   /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
@@ -87,10 +91,15 @@ final class EditorPaneView: NSView {
     self.scmList = scmList
     let scmGraphList = Self.scmGraphList(scm)
     self.scmGraphList = scmGraphList
+    let pullRequest = PrPanel(root: root, source: .gh())
+    self.pullRequest = pullRequest
+    let pullRequestList = Self.pullRequestList(pullRequest)
+    self.pullRequestList = pullRequestList
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-        scmList: scmList, scmGraphList: scmGraphList, sidebar: sidebar,
+        scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
+        pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
@@ -121,6 +130,7 @@ final class EditorPaneView: NSView {
     wireTree()
     wireProjectSearch()
     wireSourceControl()
+    wirePullRequest()
     observeSidebar()
     observeDiffModes()
     registerForDraggedTypes([.fileURL])
@@ -159,8 +169,9 @@ final class EditorPaneView: NSView {
   private func installRoots() {
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-      scmList: scmList, scmGraphList: scmGraphList, sidebar: sidebar, localization: localization,
-      fontResolver: fontResolver)
+      scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
+      pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
+      localization: localization, fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
     faceHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
@@ -206,11 +217,14 @@ final class EditorPaneView: NSView {
     }
   }
 
-  /// 本体が文書のタブなら、その文書（検索・出現・プロジェクト検索・⌘S の相手）。
+  /// 本体が文書のタブなら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
   var document: EditorDocument? {
     if case .document(let document) = body { return document }
     return nil
   }
+
+  /// 本体で編集する文書——文書の本体ならその文書、diff の本体なら新しい側の文書（無ければ nil）。
+  var editedDocument: EditorDocument? { document ?? diff?.document }
 
   /// 本体が diff のタブなら、その diff。
   var diff: EditorDiff? {
@@ -218,9 +232,9 @@ final class EditorPaneView: NSView {
     return nil
   }
 
-  /// 根が変わった（cd）。ツリーとソース管理パネルを作り直し、握っていたなら握り直す（worktree の状態——メッセージ・操作・
-  /// 失敗——は worktree ごとに残るので、戻れば同じものが見える）。プロジェクト検索は結果を捨て、この面の検索パネルが画面に
-  /// 見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
+  /// 根が変わった（cd）。ツリーとソース管理パネルと PR のパネルを作り直し（前の根の PR は見るのをやめる）、握っていたなら
+  /// 握り直す（worktree の状態——メッセージ・操作・失敗——は worktree ごとに残るので、戻れば同じものが見える）。プロジェクト
+  /// 検索は結果を捨て、この面の検索パネルが画面に見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
     tree.cancelNew()
@@ -235,6 +249,12 @@ final class EditorPaneView: NSView {
     scmList = Self.scmList(scm)
     scmGraphList = Self.scmGraphList(scm)
     wireSourceControl()
+    if focusIsInPullRequest { reclaimSidebarFocus() }
+    pullRequest.isShown = false
+    pullRequest = PrPanel(root: root, source: .gh())
+    pullRequestList = Self.pullRequestList(pullRequest)
+    pullRequestHeader = PrDescriptionHeader(frame: .zero)
+    wirePullRequest()
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
@@ -248,6 +268,7 @@ final class EditorPaneView: NSView {
   /// 見え方をコードへ戻す）、新しい本体を載せる（文書の面にはコードの見え方を、diff には今の見せ方の見え方を載せる）。
   /// 配置を頼み、文書を初めて画面に出すときはその配置で、最初の描画に色が間に合うよう上限つきで待つ（→
   /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
+  /// 文書の知らせは、本体で編集する文書へ結び直す（→ `bindEditedDocument`）。
   /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が面の中（サイドバーを除く）にあれば新しい
   /// 行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では
   /// 「中にあった」ことが分からない）。サイドバーの焦点（検索結果・行内入力）は面を外しても残るので動かさない。
@@ -260,7 +281,6 @@ final class EditorPaneView: NSView {
     case .document(let document):
       SurfaceLook.code.apply(to: document.surface, document: document)
       install(document.surface)
-      observe(document, true)
     case .diff(let diff):
       closeSearch()
       showDiff(diff)
@@ -269,7 +289,7 @@ final class EditorPaneView: NSView {
     }
     search.bind(document)
     occurrences.bind(document)
-    if let document { projectSearch.documentDidShow(document) }
+    bindEditedDocument()
     pushFindGround()
     refreshNotice()
     needsLayout = true
@@ -306,6 +326,7 @@ final class EditorPaneView: NSView {
     body = .empty
     search.bind(nil)
     occurrences.bind(nil)
+    bindEditedDocument()
   }
 
   /// 本体を外す——文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の見え方をコードへ戻す。
@@ -313,7 +334,6 @@ final class EditorPaneView: NSView {
     switch body {
     case .document(let document):
       document.surface.view.removeFromSuperview()
-      observe(document, false)
       document.surface.setHighlights([], for: .findMatch)
       document.surface.setHighlights([], for: .currentFindMatch)
     case .diff(let diff):
@@ -322,7 +342,7 @@ final class EditorPaneView: NSView {
     }
   }
 
-  // MARK: - 可視性（ツリー・プロジェクト検索・ソース管理パネルが根のサービスを握る寿命）
+  // MARK: - 可視性（ツリー・プロジェクト検索・ソース管理パネル・PR のパネルが根のサービスを握る寿命）
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
@@ -341,21 +361,24 @@ final class EditorPaneView: NSView {
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。配置を頼み、見えるようになった本体を
-  /// 初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても、見えたときにもう一度配置して待つ）。
+  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。PR のパネルは、出しているときだけ
+  /// worktree の今の PR を見る。配置を頼み、見えるようになった本体を初めて見せる前の待ちをその配置で通す（隠れている間に
+  /// 配置が済んでいても、見えたときにもう一度配置して待つ）。
   private func updateLiveness() {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
     projectSearch.isLive = live
     scm.isLive = live
-    updateSourceControlShown()
+    updatePanelsShown()
     if live { group?.editor.prepareSurfaces() }
     needsLayout = true
   }
 
-  /// ソース管理パネルを出しているか（面が見えていて、サイドバーがソース管理のパネルを出している）を写す。
-  func updateSourceControlShown() {
-    scm.isShown = window != nil && !isHiddenOrHasHiddenAncestor && showsSourceControl
+  /// ソース管理パネルと PR のパネルを出しているか（面が見えていて、サイドバーがそのパネルを出している）を写す。
+  func updatePanelsShown() {
+    let visible = window != nil && !isHiddenOrHasHiddenAncestor
+    scm.isShown = visible && showsSourceControl
+    pullRequest.isShown = visible && showsPullRequest
   }
 
   /// 面が画面に見えていれば、本体の文書・diff を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書・diff が何もしない）。

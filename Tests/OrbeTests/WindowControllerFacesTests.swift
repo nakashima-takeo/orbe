@@ -351,6 +351,16 @@ final class WindowControllerFacesTests: OrbeTestCase {
       "根の外の文書だけ強く")
   }
 
+  /// 事実 → 表現の写し: PR の diff は `PR #N · ディレクトリ/ファイル名`。根の直下のファイルはディレクトリの断片を出さない。
+  func testPullRequestLocationPartsSplitTheDirectoryAndTheName() {
+    XCTAssertEqual(
+      StatusRowModel.parts(of: .pullRequest(number: 9, relative: "src/a/b.swift")),
+      [.accent("PR #9"), .dim(" · "), .dim("src/a/"), .text("b.swift")])
+    XCTAssertEqual(
+      StatusRowModel.parts(of: .pullRequest(number: 9, relative: "README.md")),
+      [.accent("PR #9"), .dim(" · "), .text("README.md")])
+  }
+
   /// 位置ドットはアクティブタブの面の可視と焦点を映し、0 タブでは無い。
   func testFaceDotsMirrorTheActiveTabsFaces() throws {
     let wc = WindowController()

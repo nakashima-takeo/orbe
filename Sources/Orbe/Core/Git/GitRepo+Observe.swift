@@ -79,29 +79,39 @@ extension GitRepo {
   }
 
   /// HEAD のツリーにある項目（相対パス → ファイルの blob の OID かサブモジュールのコミット。無いもの・ディレクトリは含まない。
-  /// 初回コミット前は空）。空の問い合わせは git を起こさない。git が失敗したら nil。
+  /// 初回コミット前は空）。空の問い合わせは git を起こさない。git が失敗したら nil。初回コミット前は HEAD が無くて失敗するので、
+  /// そのときは HEAD が無いことを確かめて空にする。
+  func headEntries(
+    relativePaths: [String], completion: @escaping ([String: GitVersionEntry]?) -> Void
+  ) {
+    treeEntries(at: "HEAD", relativePaths: relativePaths) { [runner, root] entries in
+      if let entries { return completion(entries) }
+      // `rev-parse -q --verify` は、HEAD が無い（初回コミット前）ときだけ黙って 1 で終わる。
+      runner.run(["rev-parse", "-q", "--verify", "HEAD"], cwd: root) { probe in
+        completion(probe.exited && probe.status == 1 ? [:] : nil)
+      }
+    }
+  }
+
+  /// コミット `commit`（`HEAD` などの名前でもよい）のツリーにある項目（相対パス → ファイルの blob の OID かサブモジュールの
+  /// コミット。無いもの・ディレクトリは含まない）。空の問い合わせは git を起こさない。git が失敗したら（手元に無いコミットを
+  /// 含む）nil。種類はツリーの項目の型で読む——gitlink は git の版を問わず `commit` と答える。
   ///
   /// パスは `indexEntries` と同じく `:(literal)` を前置した pathspec で argv に渡す——macOS の git は argv のパスを
   /// `core.precomposeunicode` で NFC に揃えて照合するので、ディスク上の NFD の綴りでも index と同じく引ける。
-  /// 初回コミット前は HEAD が無くて失敗するので、そのときは HEAD が無いことを確かめて空にする。
-  func headEntries(
-    relativePaths: [String], completion: @escaping ([String: GitVersionEntry]?) -> Void
+  func treeEntries(
+    at commit: String, relativePaths: [String],
+    completion: @escaping ([String: GitVersionEntry]?) -> Void
   ) {
     guard !relativePaths.isEmpty else {
       completion([:])
       return
     }
     runner.run(
-      ["ls-tree", "-z", "--full-tree", "HEAD", "--"] + relativePaths.map { ":(literal)" + $0 },
+      ["ls-tree", "-z", "--full-tree", commit, "--"] + relativePaths.map { ":(literal)" + $0 },
       cwd: root
-    ) { [runner, root] output in
-      guard output.isSuccess else {
-        // `rev-parse -q --verify` は、HEAD が無い（初回コミット前）ときだけ黙って 1 で終わる。
-        runner.run(["rev-parse", "-q", "--verify", "HEAD"], cwd: root) { probe in
-          completion(probe.exited && probe.status == 1 ? [:] : nil)
-        }
-        return
-      }
+    ) { output in
+      guard output.isSuccess else { return completion(nil) }
       var entries: [String: GitVersionEntry] = [:]
       for record in output.stdout.split(separator: 0) {
         // `<mode> <type> <oid>\t<path>`

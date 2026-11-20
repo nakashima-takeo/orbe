@@ -337,10 +337,11 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["add", "big.txt"]).isSuccess)
     let (tab, _) = tab()
     let diff = try tab.group.editor.openDiff(id("big.txt", .staged), as: .pinned)
+    let observer = try XCTUnwrap(diff.rootObserver)
 
     let deadline = Date().addingTimeInterval(10)
     while diff.content != .ready, Date() < deadline {
-      diff.rootFilesStatusDidChange(diff.files)
+      observer.rootFilesStatusDidChange(diff.files)
       RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.005))
     }
     XCTAssertEqual(diff.content, .ready, "status が変わり続けても中身が届く")

@@ -94,28 +94,100 @@ extension FramePerfTests {
 
   /// 長い 1 段落の本文を持つスレッドを材料と当たりの表に写す main の仕事は、段落の長さに比例する——本文が 2,000 字と
   /// 8,000 字の 1 段落のスレッドで、写す時間の中央値の比が 6 倍以内（比例なら 4 倍、段落の長さの 2 乗なら 16 倍）。
-  /// 壊れると、長いコメントのスレッドでホバーの出入りや幅の変化のたびに main が長く止まる。
+  /// インラインコード（余白つき）が文ごとに入る段落でも同じ。壊れると、長いコメントのスレッドを置いたときや幅の変化の
+  /// たびに main が長く止まる。
   func testPaintingALongParagraphGrowsLinearly() throws {
     let look = ZonePainter.Look(
       appearance: try XCTUnwrap(NSAppearance(named: .darkAqua)),
       space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)), scale: 2)
-    let sentence = "tail だけ見ると、間に別種のイベントが挟まったときに畳み損ねない？"
-    let costs = [2_000, 8_000].map { length -> Double in
-      let comment = String(
-        String(repeating: sentence, count: length / sentence.count + 1).prefix(length))
-      let picture = ThreadZone(comment: comment).picture(width: 700)
-      let painter = ZonePainter()
+    for coded in [false, true] {
+      let costs = [2_000, 8_000].map { length -> Double in
+        let (comment, content) = Self.longParagraph(length, coded: coded)
+        let picture = ThreadZone(comment: comment, content: content).picture(width: 700)
+        let painter = ZonePainter()
+        let times = (0..<9).map { _ -> Double in
+          let started = CACurrentMediaTime()
+          _ = painter.paint(picture, look) { _ in 0 }
+          return CACurrentMediaTime() - started
+        }
+        return Self.quantile(times.sorted(), 0.5)
+      }
+      print(
+        "PERF-FRAMES zone long paragraph paint main\(coded ? " (inline code)" : ""): 2000 chars",
+        Self.ms(costs[0]), "/ 8000 chars", Self.ms(costs[1]), "/ ratio",
+        String(format: "%.2f", costs[1] / costs[0]))
+      XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "写す時間は段落の長さに比例する（コード: \(coded)）")
+    }
+  }
+
+  /// 載せる側が長い 1 段落の本文を幅で折り返して組む時間は、段落の長さに比例する——2,000 字と 8,000 字の 1 段落で、組む時間の
+  /// 中央値の比が 6 倍以内。インラインコード（余白つき）が 20 字ごとに入る段落でも比例する。比例しなくなると、長いコメントのスレッドで幅を
+  /// 変えるたびに、組み終えるまで待たされる。
+  func testTypesettingALongParagraphGrowsLinearly() {
+    for coded in [false, true] {
+      let costs = [2_000, 8_000].map { length -> Double in
+        let (comment, content) = Self.longParagraph(length, coded: coded)
+        let text = content ?? ThreadZone.content(comment)
+        let times = (0..<9).map { _ -> Double in
+          let started = CACurrentMediaTime()
+          _ = ZoneTextLayout.typeset(text, width: 700)
+          return CACurrentMediaTime() - started
+        }
+        return Self.quantile(times.sorted(), 0.5)
+      }
+      print(
+        "PERF-FRAMES zone long paragraph typeset\(coded ? " (inline code)" : ""): 2000 chars",
+        Self.ms(costs[0]), "/ 8000 chars", Self.ms(costs[1]), "/ ratio",
+        String(format: "%.2f", costs[1] / costs[0]))
+      XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "組む時間は段落の長さに比例する（コード: \(coded)）")
+    }
+  }
+
+  /// 区切り（4,096 字）をまたぐ長いインラインコード 1 つの段落を組む時間も、段落の長さに比例する——8,000 字と 32,000 字で、
+  /// 組む時間の中央値の比が 6 倍以内。区切りで切れたコードの向きを区切りごとにコード全体から求め直すと、比例しなくなる。
+  func testTypesettingALongCodeAcrossWindowsGrowsLinearly() {
+    let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    let costs = [8_000, 32_000].map { length -> Double in
+      let text = ZoneStyledText([
+        ("see ", ZoneTextStyle(font: ThreadZone.bodyFont, color: ThreadZone.ink)),
+        (
+          String(repeating: "1 ", count: length / 2),
+          ZoneTextStyle(font: mono, color: ThreadZone.accent, padding: 4)
+        ),
+      ])
       let times = (0..<9).map { _ -> Double in
         let started = CACurrentMediaTime()
-        _ = painter.paint(picture, look) { _ in 0 }
+        _ = ZoneTextLayout.typeset(text, width: 700)
         return CACurrentMediaTime() - started
       }
       return Self.quantile(times.sorted(), 0.5)
     }
     print(
-      "PERF-FRAMES zone long paragraph paint main: 2000 chars", Self.ms(costs[0]), "/ 8000 chars",
+      "PERF-FRAMES zone long code typeset: 8000 chars", Self.ms(costs[0]), "/ 32000 chars",
       Self.ms(costs[1]), "/ ratio", String(format: "%.2f", costs[1] / costs[0]))
-    XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "写す時間は段落の長さに比例する")
+    XCTAssertLessThanOrEqual(costs[1], costs[0] * 6, "区切りをまたぐコードを組む時間は段落の長さに比例する")
+  }
+
+  /// 長さ `length` の 1 段落の本文と、その見え方つきの文（`coded` なら 20 字ごとに本文の字とインラインコードを交互に
+  /// 並べたもの、でなければ nil でスレッドの既定の見え方）。
+  static func longParagraph(_ length: Int, coded: Bool) -> (String, ZoneStyledText?) {
+    let sentence = "tail だけ見ると、間に別種のイベントが挟まったときに畳み損ねない？"
+    let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    let comment = String(
+      String(repeating: sentence, count: length / sentence.count + 1).prefix(length))
+    guard coded else { return (comment, nil) }
+    let units = Array(comment.utf16)
+    let content = ZoneStyledText(
+      stride(from: 0, to: units.count, by: 20).map { start in
+        let part = String(decoding: units[start..<min(start + 20, units.count)], as: UTF16.self)
+        return (
+          part,
+          start / 20 % 2 == 0
+            ? ZoneTextStyle(font: ThreadZone.bodyFont, color: ThreadZone.ink)
+            : ZoneTextStyle(font: mono, color: ThreadZone.accent, padding: 4)
+        )
+      })
+    return (comment, content)
   }
 
   /// ミニマップを出さない構成にし、差し込みの列（→ `rowInsertions`）を置く。

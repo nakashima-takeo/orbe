@@ -15,6 +15,27 @@ extension EditorDiff {
   enum Kind: Hashable {
     case workingTree
     case staged
+    /// PR。PR ごとの状態そのものを持ち、識別は状態の key（手元のリポジトリと PR の同一性）——状態を手にしている者
+    /// だけが開ける。コミットは識別に入れない——PR に push があっても同じタブのまま。
+    case pullRequest(PullRequestState)
+
+    static func == (lhs: Kind, rhs: Kind) -> Bool {
+      switch (lhs, rhs) {
+      case (.workingTree, .workingTree), (.staged, .staged): true
+      case (.pullRequest(let a), .pullRequest(let b)): a.key == b.key
+      default: false
+      }
+    }
+
+    func hash(into hasher: inout Hasher) {
+      switch self {
+      case .workingTree: hasher.combine(0)
+      case .staged: hasher.combine(1)
+      case .pullRequest(let state):
+        hasher.combine(2)
+        hasher.combine(state.key)
+      }
+    }
   }
 
   /// 見せ方（アプリ全体で 1 つ。→ `EditorDiffModeState`）。
@@ -37,8 +58,13 @@ extension EditorDiff {
     case conflicted
     /// git から取れない。
     case failed
-    /// 両側とも無い（作業ツリー: 作業ツリーにも index にも無い。ステージ済み: HEAD にも index にも無い）。
+    /// 両側とも無い（作業ツリー: 作業ツリーにも index にも無い。ステージ済み: HEAD にも index にも無い。PR: マージベースにも
+    /// PR の先頭にも無い）。
     case nowhere
+    /// PR のコミットが手元に無く、取りに行っても揃わない。
+    case pullRequestCommitsMissing
+    /// PR がベースブランチと共通のコミットを持たない。
+    case pullRequestUnrelated
   }
 
   /// 見せられる中身。
@@ -79,17 +105,5 @@ extension EditorDiff {
   struct SideTexts: Equatable {
     let old: String?
     let new: String?
-  }
-
-  /// 作業ツリー diff の新しい側。
-  enum WorkingSide {
-    /// 開いた文書（ファイルタブと共有する）。
-    case document(EditorDocument)
-    /// 作業ツリーに無い（消した）。
-    case missing
-    /// ディレクトリ（`hasRepository` は中が取り出したリポジトリ）。index の版がサブモジュールか、中がリポジトリなら、
-    /// サブモジュールとして「Subproject commit」の行で見せる。見せられなければ、理由「ディレクトリ」で表示できない。
-    case directory(hasRepository: Bool)
-    case unavailable(Unavailable)
   }
 }

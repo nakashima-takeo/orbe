@@ -2,8 +2,8 @@ import Foundation
 
 // MARK: - リモートとの書き込み（fetch・pull・push）
 
-/// リモートとの書き込み。前段の読みも含めてどの段も `handle` の下で走り（打ち切るかは手が決める）、進捗（git の語の行）を
-/// `onProgress` へ届いた順に渡す。ユーザーの設定（既定の remote・prune・`pull.rebase`・`push.default`・`pushRemote`・
+/// リモートとの書き込み。前段の読みも含めてどの段も `handle` の下で走り（打ち切るかは手が決める）、`onProgress` を受ける
+/// ものは進捗（git の語の行）を届いた順に渡す。ユーザーの設定（既定の remote・prune・`pull.rebase`・`push.default`・`pushRemote`・
 /// `core.sshCommand`・credential helper）はそのまま効く。completion は main で返る。
 ///
 /// 前提（upstream・detached・push 先・止まった操作）は本体の git を起こす前に判定する。`branch` は呼んだ時点の status の
@@ -20,6 +20,25 @@ extension GitRepo {
       ["fetch", "--progress"] + (attended ? [] : ["--no-write-fetch-head"]), cwd: root,
       environment: attended ? [:] : GitRunner.unattendedEnvironment, onProgress: onProgress,
       handle: handle
+    ) { completion(.ofRemote($0)) }
+  }
+
+  /// コミットを名指しして取ってくる（PR の diff に要るコミットが手元に無いとき）。ref・FETCH_HEAD・タグを 1 つも書かず、
+  /// コミットグラフも書かず、サブモジュールにも降りず、fetch の後の自動の保守も走らせない——ほかの fetch・pull と ref・
+  /// コミットグラフのロックを取り合わないので、ネット操作の排他に載せなくてよい。人が頼んだ通信ではないので、裏の fetch と
+  /// 同じく askpass・資格情報の窓を出させない（ssh-agent の側の承認は封じられない）。`commits` が空なら git を起こさずに
+  /// 成功で返す——コミットの無い fetch は設定の refspec で ref を書く。
+  func fetch(
+    commits: [String], from remote: String, handle: GitRunner.Handle,
+    completion: @escaping (GitWriteFailure?) -> Void
+  ) {
+    guard !commits.isEmpty else { return DispatchQueue.main.async { completion(nil) } }
+    runner.run(
+      [
+        "-c", "fetch.writeCommitGraph=false", "fetch", "--progress", "--no-tags",
+        "--no-write-fetch-head", "--no-auto-maintenance",
+        "--recurse-submodules=no", "--end-of-options", remote,
+      ] + commits, cwd: root, environment: GitRunner.unattendedEnvironment, handle: handle
     ) { completion(.ofRemote($0)) }
   }
 
@@ -76,10 +95,10 @@ extension GitRepo {
     }
   }
 
-  /// upstream の無いブランチの push 先の remote。設定が無ければ origin、origin も無ければ nil。git が解決する
+  /// ブランチの push 先の remote。設定が無ければ origin、origin も無ければ nil。git が解決する
   /// `%(push:remotename)` を読む（`GitHubRemoteLedger` と同じ。空か `.` は設定が無い）。ブランチ名は glob の文字を
   /// 持てないので、パターンは自分自身と、その下の階層にだけ当たる——完全一致の行を採る。
-  private func pushRemote(
+  func pushRemote(
     ofBranch name: String, handle: GitRunner.Handle,
     completion: @escaping (Result<String?, GitWriteFailure>) -> Void
   ) {

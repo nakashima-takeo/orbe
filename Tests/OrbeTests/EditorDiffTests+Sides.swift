@@ -7,11 +7,11 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// diff の側の決まり方——新しい側の文書が替わったとき（並びが載るまで出さない・仮のタブとタブ行・未保存が下りたとき）、
-/// 両側とも無いパス、途中のシンボリックリンク、サブモジュール。壊れると、diff タブに編集できる面が一瞬出る・未保存の文書を
+/// 両側とも無いパス、途中のシンボリックリンク、サブモジュール。壊れると、diff タブに並びの無い面が一瞬出る・未保存の文書を
 /// 使う仮のタブが黙って入れ替わる・消えたファイルの diff が古いまま残る・リンク先の別のファイルが出る・空の diff が理由
 /// なしに出る・サブモジュールの行が「git から取れない」になる。
 extension EditorDiffTests {
-  /// diff だけが持つファイルが消えて戻った直後は、新しい文書の行差分が届くまで本体に何も出さず、届けば読むだけで出す。
+  /// diff だけが持つファイルが消えて戻った直後は、新しい文書の行差分が届くまで本体に何も出さず、届けば出す。
   func testADiffOnlyDocumentThatComesBackShowsNothingUntilItsRowsArrive() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
@@ -22,12 +22,11 @@ extension EditorDiffTests {
     pumpMain(until: { diff.document == nil && diff.content == .ready }, "消えたファイルの diff")
 
     try contents.write(to: repo.url("a.txt"))
-    diff.rootFiles(diff.files, filesDidChange: .scanAll)
-    let document = try XCTUnwrap(diff.document, "前提: 戻ったファイルの文書に替わる")
+    try XCTUnwrap(diff.rootObserver).rootFiles(diff.files, filesDidChange: .scanAll)
+    XCTAssertNotNil(diff.document, "前提: 戻ったファイルの文書に替わる")
     XCTAssertEqual(diff.content, .loading, "並びが載るまで何も出さない")
     XCTAssertNil(diff.newSurface)
     waitRows(diff, "行差分が届く") { self.removedLines($0) == [1] }
-    XCTAssertFalse(try engine(document.surface).isEditable, "読むだけで出す")
   }
 
   /// 未保存のファイルが外で消えて戻ると、それを新しい側に使うようになった仮の diff タブは普通のタブになり、未保存の印が
@@ -73,7 +72,7 @@ extension EditorDiffTests {
     let diff = try tab.group.editor.openDiff(id("u.txt", .workingTree), as: .pinned)
     waitRows(diff, "追加が出る") { $0.style(ofLine: 0) == DiffStyle.added }
     try FileManager.default.removeItem(at: repo.url("u.txt"))
-    pumpMain(until: { diff.workingStale }, "前提: 消えたと知り、読み直しを保留した")
+    pumpMain(until: { diff.workingTree?.workingStale == true }, "前提: 消えたと知り、読み直しを保留した")
     XCTAssertTrue(diff.document === document, "前提: 未保存の間は手放さない")
 
     document.surface.replaceAll(with: "u\n")
@@ -224,6 +223,7 @@ extension EditorDiffTests {
       self.text(diff.newRevision) == "Subproject commit \(inner)"
     }
     XCTAssertEqual(text(diff.old), "x\ny\nz\n", "古い側は index のファイル")
+    XCTAssertEqual(diff.revisionHunks, [LineHunk(old: 0..<4, new: 0..<1)], "丸ごとの置き換え")
     diff.dismiss()
 
     XCTAssertTrue(repo.git(["add", "sub"]).isSuccess)
@@ -236,9 +236,85 @@ extension EditorDiffTests {
     diff.present(.inline)
     pumpMain(
       until: { diff.revisionHunks.isEmpty && diff.oldSide.lines == 1 }, "中の HEAD が届くと 1 行どうし")
+
+    let staged = try tab.group.editor.openDiff(id("sub", .staged), as: .pinned)
+    pumpMain(until: { staged.content == .ready && staged.newRevision != nil }, "ステージ済み")
+    XCTAssertEqual(
+      staged.revisionHunks, [LineHunk(old: 0..<4, new: 0..<1)], "ステージ済みも丸ごとの置き換え")
   }
 
-  private func text(_ revision: RevisionDocument?) -> String? {
+  /// 消したファイルの diff を開いたまま、ファイルを別の中身で戻して index に入れ、もう一度消すと、並びは今の index の版の
+  /// 全部の行の削除になる。index を元の本文に戻せば、その全部の行の削除に並び直す。
+  func testDeletingAFileAgainAfterItsIndexChangedShowsTheNewIndexAsRemoved() throws {
+    let (tab, _) = tab()
+    try FileManager.default.removeItem(at: repo.url("a.txt"))
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    waitRows(diff, "全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
+
+    try repo.write("a.txt", "x\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    pumpMain(
+      until: { diff.document != nil && diff.oldSource == .some("x\n") }, "前提: 戻した文書と新しい index")
+    try FileManager.default.removeItem(at: repo.url("a.txt"))
+    waitRows(diff, "新しい index の版の全部の行が削除") { _ in
+      diff.document == nil && diff.oldSide.lines == 2
+    }
+    XCTAssertEqual(removedLines(try engine(diff.newSurface).rows), [0, 1])
+
+    XCTAssertTrue(repo.git(["restore", "--staged", "a.txt"]).isSuccess)
+    waitRows(diff, "元の index の版の全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
+  }
+
+  /// 消したファイルを短い本文で戻して index に入れた後、中にコミットを持つリポジトリのディレクトリに置き換えると、見せた
+  /// ままでも、隠している間に置き換えて見せ直しても、並びは今の index の版とサブモジュールの行の丸ごとの置き換えになる。
+  /// 中の HEAD を読む間は、前の並びを面に置かない。
+  func testReplacingARestoredFileWithARepositoryReplacesTheRowsWholeVisibleOrHidden() throws {
+    for hidden in [false, true] {
+      if hidden { try setUpWithError() }
+      let (tab, _) = tab()
+      try FileManager.default.removeItem(at: repo.url("a.txt"))
+      let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+      waitRows(diff, "全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
+      try repo.write("a.txt", "x\n")
+      XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+      pumpMain(
+        until: { diff.document != nil && diff.oldSource == .some("x\n") && diff.content == .ready },
+        "前提: 戻した文書と新しい index")
+      if hidden { diff.dismiss() }
+
+      let nested = repo.dir.path + "-nested-\(hidden)"
+      for args in [
+        ["init", "-q", "-b", "main", nested],
+        [
+          "-C", nested, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-q",
+          "--allow-empty",
+          "-m", "t",
+        ],
+      ] {
+        XCTAssertTrue(repo.git(args).isSuccess, "\(args)")
+      }
+      try FileManager.default.removeItem(at: repo.url("a.txt"))
+      try FileManager.default.moveItem(atPath: nested, toPath: repo.root + "/a.txt")
+      if hidden {
+        let working = try XCTUnwrap(diff.workingTree)
+        pumpMain(until: { working.workingStale }, "前提: 隠している間に作業ツリーが変わったと知る")
+        diff.present(.inline)
+      } else {
+        try XCTUnwrap(diff.rootObserver).rootFiles(diff.files, filesDidChange: .scanAll)
+      }
+      XCTAssertNil(diff.document, "前提: 文書が無くなった")
+      XCTAssertTrue(diff.pending, "前提: 中の HEAD を読んでいる")
+      XCTAssertEqual(diff.content, .loading, "中の HEAD を読む間は何も出さない")
+      XCTAssertNil(diff.newSurface)
+
+      waitRows(diff, hidden ? "見せ直した後の置き換え" : "見せたままの置き換え") { _ in
+        diff.document == nil && diff.newRevisionSide.lines == 1
+      }
+      XCTAssertEqual(diff.revisionHunks, [LineHunk(old: 0..<2, new: 0..<1)], "丸ごとの置き換え")
+    }
+  }
+
+  func text(_ revision: RevisionDocument?) -> String? {
     revision.map { String(decoding: $0.text.contiguousUnits(), as: UTF16.self) }
   }
 }

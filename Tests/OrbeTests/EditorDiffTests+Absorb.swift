@@ -42,8 +42,8 @@ extension EditorDiffTests {
     waitRows(diff, "外の書き換えに追従する") { self.removedLines($0) == [1, 3] }
   }
 
-  /// 元の連で見せていた diff は畳みで見せるのをやめる——同じファイルを行き先のファイルタブで見せていれば、そのタブは編集
-  /// できるコードの見え方のまま（diff の見え方が載らない）。
+  /// 元の連で見せていた diff は畳みで見せるのをやめる——同じファイルを行き先のファイルタブで見せていれば、そのタブは
+  /// コードの見え方のまま（diff の見え方が載らない）。
   func testAbsorbDoesNotCarryTheShownDiffsLookOntoTheDestinationsFileTab() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (dest, _) = tab()
@@ -55,7 +55,6 @@ extension EditorDiffTests {
     dest.group.absorb(from)
 
     let surface = try engine(document.surface)
-    XCTAssertTrue(surface.isEditable)
     XCTAssertEqual(surface.presentation, .code)
     XCTAssertTrue(surface.rows.isEmpty)
   }

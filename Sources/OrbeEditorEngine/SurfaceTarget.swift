@@ -11,8 +11,8 @@ enum Primary: Equatable {
   case field(AnyHashable)
 }
 
-/// 点の下の行き先。絵の差し込みの上では、入力欄 → 押せる場所 → 選べる文 の順に当たる。どれにも当たらない所（箱・画像・
-/// 選べない字の行の上を含む）は、絵の差し込みの、ほかに当たらない所。
+/// 点の下の行き先。行の右端の印が何より先に当たり、絵の差し込みの上では、入力欄 → 押せる場所 → 選べる文 の順に当たる。
+/// どれにも当たらない所（箱・画像・選べない字の行の上を含む）は、絵の差し込みの、ほかに当たらない所。
 enum SurfaceTarget {
   case body
   case field(EditingSite)
@@ -21,6 +21,8 @@ enum SurfaceTarget {
   case zoneText(ZoneEntry, text: AnyHashable, offset: Int)
   /// 絵の差し込みの、ほかに当たらない所。
   case zoneSpace(ZoneEntry)
+  /// 行の右端の印（ポインタの下の行の印）。
+  case trailingMark(TrailingMarkLine)
 }
 
 /// 行き先を決める 1 段——面の view の入口が最初に通る。点を持つ入口（押す・ドラッグ・右クリック・落とす・字の位置・
@@ -29,25 +31,25 @@ enum SurfaceTarget {
 /// 振り分ける。主の遷移は入口で明示して起こす（`setPrimary`）——カーソルの値の
 /// 変化からは推し量らない。
 extension MetalTextSurface {
-  /// 点（view の座標、pt）の下の行き先。`position` はスクロールの位置（省けば今の位置）。
-  func target(at point: CGPoint, position: SIMD2<Double>? = nil) -> SurfaceTarget {
+  /// 点（view の座標、pt）の下の行き先。
+  func target(at point: CGPoint) -> SurfaceTarget {
+    if let found = trailingMarkRow(at: point), found.onMark {
+      return .trailingMark(found.line)
+    }
     guard rows.hasZones, textView.overview.area(at: point) == nil else { return .body }
     let area = surfaceLayout.text
     guard point.x >= area.minX, point.x < area.maxX, point.y >= config.topInset else {
       return .body
     }
-    let p = position ?? scrollPosition
-    let y = Double(point.y - config.topInset) + p.y
+    let y = Double(point.y - config.topInset) + scrollPosition.y
     guard case .block(let index) = rows.item(atY: y), case .zone(let id) = rows.contents[index],
       let entry = zones[id]
     else { return .body }
     let local = CGPoint(x: point.x - area.minX, y: CGFloat(y - rows.top(ofBlock: index)))
-    if let field = entry.hits.fields.last(where: { $0.frame.contains(local) }),
-      let site = fields[field.field.id]
-    {
+    if let field = entry.hits.field(at: local), let site = fields[field.field.id] {
       return .field(site)
     }
-    if let button = entry.hits.buttons.last(where: { $0.frame.contains(local) }) {
+    if let button = entry.hits.button(at: local) {
       return .button(entry, button)
     }
     if let (text, offset) = entry.hits.text(at: local) {

@@ -34,8 +34,22 @@ final class GitHubCLI {
   /// 一度外した結果を焼くと、PATH が整った後も gh が永久に「未導入」のままになる。
   private var cachedGh: String?
 
-  /// gh 呼び出しの時間上限（ネット待ちのハングを引きずらない）。open 一覧では 1 ページごとにかかる。
-  private let timeout: TimeInterval = 15
+  /// gh の 1 回の呼び出しの種類。時間上限が違う。
+  enum Call {
+    case read
+    /// 書き込み。打ち切ると GitHub に届いたかが分からなくなるので、読みより長く待つ。
+    case write
+  }
+
+  /// 呼び出しの種類ごとの時間上限（ネット待ちのハングを引きずらない）。open 一覧では 1 ページごとにかかる。
+  private let readTimeout: TimeInterval
+  private let writeTimeout: TimeInterval
+
+  /// テストだけが短い上限を渡す（本番の上限を待つテストは書けないため）。
+  init(readTimeout: TimeInterval = 15, writeTimeout: TimeInterval = 60) {
+    self.readTimeout = readTimeout
+    self.writeTimeout = writeTimeout
+  }
 
   /// 打ち切り後に EOF を待つ猶予。pipe の書き込み端を握る子孫がいると EOF は来ないことがあり、
   /// **無期限に待つと、待ちそのものが新しいハングになる**（`GitRunner.terminationGrace` と同じ規範）。
@@ -84,45 +98,60 @@ final class GitHubCLI {
   /// が同じ）ので、ここを絞る動機が無い一方、絞ると `--head` に混ざる他人の fork の同名ブランチの PR
   /// （呼び出し側が head のリポジトリで落とす）で埋まって自分の PR が窓落ちしうる。上限まで取れば、
   /// このブランチ名の PR が 100 件を超えない限り窓落ちは起きない。
-  static func branchPRArguments(head: String) -> [String] {
-    [
-      "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
-      "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner,url",
-    ]
+  ///
+  /// `repository` を名指しすれば、そのリポジトリの PR を引く（`-R`）。nil なら gh が作業ディレクトリの remote から選ぶ
+  /// リポジトリ。
+  static func branchPRArguments(head: String, repository: GitHubRepoName? = nil) -> [String] {
+    (repository.map { ["-R", "github.com/\($0.value)"] } ?? [])
+      + [
+        "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
+        "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner,url,createdAt",
+      ]
   }
 
-  /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。worktree の掃除で
-  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。タスクの worktree のブランチの PR の
-  /// 自動の結び付け（`WorktreePullRequestResolver`）も同じ取得を使う。
+  /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。リポジトリは名指しせず、gh が作業ディレクトリの
+  /// remote から選ぶ。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。
   ///
-  /// **結果は head 単位で返し、失敗もその head に閉じる**（`nil` = その head の取得失敗／
+  /// **結果は head 単位で返し、失敗もその head に閉じる**（`.failure` = その head の取得失敗／
   /// `[]` = 該当なし）——1 本の失敗で全体を捨てると、取れた head の事実まで一緒に消える。
   /// `each` は head ごとに 1 回、メインで返る（`GitRunner` / `GitHubCLI` の共通契約）。
+  func branchPullRequests(
+    cwd: String, heads: [String],
+    each: @escaping (String, Result<[GitHubBranchPR], GitHubFailure>) -> Void
+  ) {
+    branchPullRequests(
+      cwd: cwd, queries: heads.map { GitHubBranchPRQuery(head: $0, repository: nil) }
+    ) { query, fetched in each(query.head, fetched) }
+  }
+
+  /// 問い合わせ（ブランチ名と、名指しするリポジトリ）ごとの PR。ブランチの PR を引く段（`GitHubBranchPullRequestLookup`）が
+  /// 使う。`each` は問い合わせごとに 1 回、メインで返る。
   ///
   /// ラウンドロビンで固定本数のレーンへ静的に配り、各レーンは自分の担当を直列に回す。セマフォで
-  /// 待たせる形にすると heads の本数ぶんスレッドを塞ぐ（thread explosion）。
+  /// 待たせる形にすると queries の本数ぶんスレッドを塞ぐ（thread explosion）。
   func branchPullRequests(
-    cwd: String, heads: [String], each: @escaping (String, [GitHubBranchPR]?) -> Void
+    cwd: String, queries: [GitHubBranchPRQuery],
+    each: @escaping (GitHubBranchPRQuery, Result<[GitHubBranchPR], GitHubFailure>) -> Void
   ) {
-    let lanes = min(Self.branchFetchConcurrency, heads.count)
+    let lanes = min(Self.branchFetchConcurrency, queries.count)
     guard lanes > 0 else { return }
     for lane in 0..<lanes {
-      let mine = heads.enumerated().filter { $0.offset % lanes == lane }.map(\.element)
+      let mine = queries.enumerated().filter { $0.offset % lanes == lane }.map(\.element)
       branchQueue.async {
         guard let gh = self.resolveGh() else {
-          DispatchQueue.main.async { for head in mine { each(head, nil) } }
+          DispatchQueue.main.async { for query in mine { each(query, .failure(.reason(""))) } }
           return
         }
-        for head in mine {
-          let decoded: [GitHubBranchPR]? = self.fetchSync(
-            gh, Self.branchPRArguments(head: head), cwd: cwd)
-          DispatchQueue.main.async { each(head, decoded) }
+        for query in mine {
+          let decoded: Result<[GitHubBranchPR], GitHubFailure> = self.decodeSync(
+            gh, Self.branchPRArguments(head: query.head, repository: query.repository), cwd: cwd)
+          DispatchQueue.main.async { each(query, decoded) }
         }
       }
     }
   }
 
-  /// リポジトリの正式名を GitHub に問い合わせる（改名後の古い名前からも新しい名前が返る）。gh を
+  /// リポジトリの正式名と、fork なら親の正式名を GitHub に問い合わせる（改名後の古い名前からも新しい名前が返る）。gh を
   /// 解決できないときも `.unverified`。メインで返る。
   func resolveRepository(
     cwd: String, name: GitHubRepoName,
@@ -143,7 +172,7 @@ final class GitHubCLI {
   static func resolveRepositoryArguments(_ name: GitHubRepoName) -> [String] {
     [
       "api", "graphql", "--hostname", "github.com", "-f",
-      "query=query($o:String!,$n:String!){repository(owner:$o,name:$n){nameWithOwner}}",
+      "query=query($o:String!,$n:String!){repository(owner:$o,name:$n){nameWithOwner parent{nameWithOwner}}}",
       "-f", "o=\(name.owner)", "-f", "n=\(name.name)",
     ]
   }
@@ -154,10 +183,14 @@ final class GitHubCLI {
     guard let response = try? JSONDecoder().decode(RepositoryResponse.self, from: stdout),
       let name = response.data?.repository?.nameWithOwner
     else { return .unverified }
-    return .found(GitHubRepoName(nameWithOwner: name))
+    return .found(
+      GitHubRepoName(nameWithOwner: name),
+      parent: response.data?.repository?.parent.map {
+        GitHubRepoName(nameWithOwner: $0.nameWithOwner)
+      })
   }
 
-  /// 1 回の問い合わせに載せる項目の上限。1 回を `timeout` に収めるため。
+  /// 1 回の問い合わせに載せる項目の上限。1 回を時間上限に収めるため。
   static let itemsPerQuery = 50
 
   /// 結び付いた項目の値を、番号で直接まとめて問い合わせる。`itemsPerQuery` ごとの問い合わせに分けて続けて
@@ -184,20 +217,41 @@ final class GitHubCLI {
 
   /// 1 往復を同期で叩いてデコードする。`nil` = 取得失敗（非 0 終了・タイムアウト・デコード失敗）。
   /// ローカル変数だけを触るので、どのレーンから並行に呼んでも安全。
-  func fetchSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String) -> T? {
-    let out = runSync(gh, args, cwd: cwd)
-    guard out.status == 0 else { return nil }
-    return try? JSONDecoder().decode(T.self, from: out.stdout)
+  func fetchSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String, call: Call = .read)
+    -> T?
+  {
+    try? decodeSync(gh, args, cwd: cwd, call: call).get()
+  }
+
+  /// 1 往復を同期で叩いてデコードする。0 以外の終了・時間切れ・起動の失敗は分類した失敗、読めない答えは `.reason("")`
+  /// （理由が空の「それ以外」）。
+  func decodeSync<T: Decodable>(
+    _ gh: String, _ args: [String], cwd: String, call: Call = .read
+  ) -> Result<T, GitHubFailure> {
+    let out = runSync(gh, args, cwd: cwd, call: call)
+    if let failure = out.failure { return .failure(failure) }
+    guard let value = try? JSONDecoder().decode(T.self, from: out.stdout) else {
+      return .failure(.reason(""))
+    }
+    return .success(value)
   }
 
   // MARK: - 実行基盤
 
-  private struct Output {
+  /// gh の 1 回の結果。成否は読む側が決める——GraphQL の問い合わせが一部だけ失敗すると、gh は 0 以外で終わるが、通った分の
+  /// `data` は標準出力に載る。
+  struct Output {
     let status: Int32
     let stdout: Data
+    /// 0 以外の終了・時間切れ・起動の失敗を分類したもの。0 で終わったら nil。
+    let failure: GitHubFailure?
   }
 
-  private func runSync(_ executable: String, _ args: [String], cwd: String) -> Output {
+  /// gh を 1 回、同期で呼ぶ（呼び出し元のスレッドを塞ぐ）。gh を起動するのはこの関数だけ。`stdin` は標準入力へ渡す
+  /// （argv に載せない本文など）。時間上限は `call` の種類で決まる。
+  func runSync(
+    _ executable: String, _ args: [String], cwd: String, call: Call = .read, stdin: Data? = nil
+  ) -> Output {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = args
@@ -208,13 +262,24 @@ final class GitHubCLI {
     let err = Pipe()
     process.standardOutput = out
     process.standardError = err
+    let input: Pipe? = stdin != nil ? Pipe() : nil
+    if let input { process.standardInput = input }
     do {
       try process.run()
     } catch {
-      return Output(status: -1, stdout: Data())
+      return Output(status: -1, stdout: Data(), failure: .reason(error.localizedDescription))
+    }
+    // 標準入力は裏のスレッドで書く。このスレッドで書くと、gh が読まないまま pipe の容量（64KB）を超えたときに、時間上限の
+    // 待ちに入る前に固まる（`GitRunner` と同じ）。
+    if let input, let stdin {
+      DispatchQueue.global(qos: .userInitiated).async {
+        try? input.fileHandleForWriting.write(contentsOf: stdin)
+        try? input.fileHandleForWriting.close()
+      }
     }
     // stdout/stderr は別スレッドで並行に吸い出す（片方だけ読むと相手の pipe 満杯で相互デッドロック）。
     var outData = Data()
+    var errData = Data()
     let group = DispatchGroup()
     group.enter()
     DispatchQueue.global(qos: .userInitiated).async {
@@ -223,19 +288,30 @@ final class GitHubCLI {
     }
     group.enter()
     DispatchQueue.global(qos: .userInitiated).async {
-      _ = try? err.fileHandleForReading.readToEnd()
+      errData = (try? err.fileHandleForReading.readToEnd()) ?? Data()
       group.leave()
     }
     // ネット待ちのハングは時間上限で打ち切る（通常は terminate で pipe が EOF に達し読みも解ける）。
     // EOF が来るかは書き込み端を握る子孫次第なので、打ち切り後の読み終わり待ちも猶予で有界にする
     // ——ここを無期限にすると、打ち切ったのに返らないという新しいハングになる。
+    let timeout =
+      switch call {
+      case .read: readTimeout
+      case .write: writeTimeout
+      }
     if group.wait(timeout: .now() + timeout) == .timedOut {
       process.terminate()
       _ = group.wait(timeout: .now() + Self.terminationGrace)
-      return Output(status: -1, stdout: Data())
+      return Output(status: -1, stdout: Data(), failure: .timedOut)
     }
     process.waitUntilExit()
-    return Output(status: process.terminationStatus, stdout: outData)
+    let status = process.terminationStatus
+    return Output(
+      status: status, stdout: outData,
+      failure: status == 0
+        ? nil
+        : GitHubFailure.of(
+          status: status, stderr: String(bytes: errData, encoding: .utf8) ?? "", stdout: outData))
   }
 
   private func environment() -> [String: String] {
@@ -260,9 +336,13 @@ final class GitHubCLI {
   }
 }
 
-/// 正式名の問い合わせ（`repository(owner:name:){nameWithOwner}`）の出力。
+/// 正式名の問い合わせ（`repository(owner:name:){nameWithOwner parent{nameWithOwner}}`）の出力。
 private struct RepositoryResponse: Decodable {
   struct Payload: Decodable { let repository: Repository? }
-  struct Repository: Decodable { let nameWithOwner: String }
+  struct Repository: Decodable {
+    let nameWithOwner: String
+    let parent: Parent?
+  }
+  struct Parent: Decodable { let nameWithOwner: String }
   let data: Payload?
 }

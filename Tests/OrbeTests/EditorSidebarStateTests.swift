@@ -2,13 +2,13 @@ import XCTest
 
 @testable import Orbe
 
-/// サイドバーの幅・開閉・パネルとソース管理のグラフの枠の高さの記憶——app-state から起こし、下限を守り、ドラッグの終わり・
-/// 開閉・パネルの切替で書き戻す。
+/// サイドバーの幅・開閉・パネルとソース管理のグラフの枠の高さ・PR のパネルの変更ファイルのツリーかリストかの記憶——
+/// app-state から起こし、下限を守り、ドラッグの終わり・開閉・パネルの切替・ツリーかリストかの選択で書き戻す。
 /// レールの項目は、出しているパネルなら閉じ、別のパネルならそれへ切り替える（閉じていれば開く）。読めない・範囲外・未知の
 /// 値は既定へ落とし、app-state の他の項目を巻き込まない。
 ///
-/// 壊れると何が起きるか。再起動で幅と開閉と検索パネル・引いたグラフの枠の高さが戻らない。壊れた幅で app-state 全体が読めなくなり UI 言語まで
-/// 消える。レールで検索を押してもファイルのパネルが閉じるだけ。
+/// 壊れると何が起きるか。再起動で幅と開閉と検索パネル・引いたグラフの枠の高さ・PR のパネルのツリーかリストかが戻らない。
+/// 壊れた幅で app-state 全体が読めなくなり UI 言語まで消える。レールで検索を押してもファイルのパネルが閉じるだけ。
 @MainActor
 final class EditorSidebarStateTests: OrbeTestCase {
   func testCommitAndToggleWriteBackAndLoadedReadsThem() {
@@ -20,11 +20,15 @@ final class EditorSidebarStateTests: OrbeTestCase {
     state.commit()
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar,
-      EditorSidebarRecord(width: 300, isOpen: true, panel: "files", graphHeight: 198))
+      EditorSidebarRecord(
+        width: 300, isOpen: true, panel: "files", graphHeight: 198,
+        pullRequestFilesAsTree: true))
     state.select(.files)
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar,
-      EditorSidebarRecord(width: 300, isOpen: false, panel: "files", graphHeight: 198))
+      EditorSidebarRecord(
+        width: 300, isOpen: false, panel: "files", graphHeight: 198,
+        pullRequestFilesAsTree: true))
 
     let reloaded = EditorSidebarState.loaded()
     XCTAssertEqual(reloaded.width, 300)
@@ -109,5 +113,12 @@ final class EditorSidebarStateTests: OrbeTestCase {
     XCTAssertEqual(EditorSidebarState.loaded().panel, .files)
     AppStatePersistence.save(AppStateFile(editorSidebar: EditorSidebarRecord(width: 300)))
     XCTAssertEqual(EditorSidebarState.loaded().panel, .files)
+  }
+
+  /// PR のパネルの変更ファイルのツリーかリストかは、選べば書き戻し、再起動でも戻る。記録に無ければツリー。
+  func testThePullRequestFilesViewIsRememberedAndDefaultsToTheTree() {
+    XCTAssertTrue(EditorSidebarState.loaded().pullRequestFilesAsTree, "記録に無ければツリー")
+    EditorSidebarState.loaded().setPullRequestFilesAsTree(false)
+    XCTAssertFalse(EditorSidebarState.loaded().pullRequestFilesAsTree, "再起動でも戻る")
   }
 }

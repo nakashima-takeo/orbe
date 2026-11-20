@@ -7,6 +7,8 @@ let package = Package(
   dependencies: [
     // CommonMark + GFM パーサ（公式）。リリースノートの markdown を AST へ起こし SwiftUI へ描画する。
     .package(url: "https://github.com/apple/swift-markdown.git", from: "0.6.0"),
+    // swift-markdown が使う cmark-gfm。PR のコメントの本文は、入れ子の深さに依らない走査で段にする（→ PrCommentMarkdown）。
+    .package(url: "https://github.com/swiftlang/swift-cmark.git", from: "0.8.0"),
     // アプリ内アップデート（appcast + EdDSA 署名検証 + 終了時適用）。UI は自前（SPUUserDriver 実装）。
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
     // tree-sitter 本体（C API を OrbeEditorCore から直接呼ぶ）。0.26.12 以降はエラー回復が退行して大きな Swift が
@@ -123,6 +125,8 @@ let package = Package(
         "OrbeEditorCore",
         "OrbeEditorEngine",
         .product(name: "Markdown", package: "swift-markdown"),
+        .product(name: "cmark-gfm", package: "swift-cmark"),
+        .product(name: "cmark-gfm-extensions", package: "swift-cmark"),
         .product(name: "Sparkle", package: "Sparkle"),
       ],
       // v1 土台: libghostty の C コールバックはスレッド保証が API 上不明確で、
@@ -171,8 +175,9 @@ let package = Package(
       dependencies: ["OrbeSound"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
-    // テストの作業ディレクトリとテストの境界（`TestScratch`）。全テストターゲットが共有する。SwiftPM にテスト専用の
-    // 非テストターゲットの種別は無いので通常ビルドにも入るが、製品にはリンクされない。
+    // テストの作業ディレクトリとテストの境界（`TestScratch`）・ポインタを差し替えられる窓（`PointerWindow`）。全テスト
+    // ターゲットが共有する。SwiftPM にテスト専用の非テストターゲットの種別は無いので通常ビルドにも入るが、製品には
+    // リンクされない。
     .target(
       name: "OrbeTestSupport",
       path: "Tests/OrbeTestSupport",

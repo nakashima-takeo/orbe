@@ -344,8 +344,7 @@ enum TaskWaitText {
 
   /// 「2分前」（1 分未満は「たった今」）。
   static func ago(_ date: Date, now: Date, l10n: LocalizationStore) -> String {
-    guard now.timeIntervalSince(date) >= 60 else { return l10n.string(.taskWaitJustNow) }
-    return l10n.format(.taskWaitAgo, TaskElapsedText.label(since: date, now: now, l10n: l10n))
+    ElapsedText.ago(date, now: now, language: l10n.language)
   }
 
   /// 「2日前の会話」「今日の会話」。

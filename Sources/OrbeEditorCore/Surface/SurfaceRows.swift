@@ -10,14 +10,31 @@ public struct SurfaceRows {
   public var spans: [LineSpan]
   /// 差し込んだ行が指す行の出どころ（行を指す差し込んだ行が無ければ nil でよい）。
   public var source: (any SurfaceRowSource)?
+  /// 行の右端の印の押下を受けるもの（面は弱く持つ。並びを置き直せば、置き直した並びの受け手だけが受ける）。
+  public var trailingMarkTarget: (any SurfaceTrailingMarkTarget)?
 
   public init(
-    insertions: [RowInsertion] = [], spans: [LineSpan] = [], source: (any SurfaceRowSource)? = nil
+    insertions: [RowInsertion] = [], spans: [LineSpan] = [], source: (any SurfaceRowSource)? = nil,
+    trailingMarkTarget: (any SurfaceTrailingMarkTarget)? = nil
   ) {
     self.insertions = insertions
     self.spans = spans
     self.source = source
+    self.trailingMarkTarget = trailingMarkTarget
   }
+}
+
+/// 行の右端の印（→ `SurfacePresentation.trailingMark`）の押下を受けるもの。
+@MainActor
+public protocol SurfaceTrailingMarkTarget: AnyObject {
+  /// 行 `line` の印が押された（押して、同じ印の上で離した）。
+  func surface(_ surface: any TextSurface, didPressTrailingMarkOn line: TrailingMarkLine)
+}
+
+/// 印を押した行——文書の行か、差し込んだ行が指す出どころの行（どちらも 0 始まり）。
+public enum TrailingMarkLine: Equatable, Sendable {
+  case document(Int)
+  case source(Int)
 }
 
 /// 差し込んだ行の出どころ——差し込んだ行が指す行の本文と役割の写しを持つもの（diff の古い側の版）。面は並びを置いたときと、
@@ -37,11 +54,16 @@ public struct LineSpan: Equatable, Sendable {
   public var style: Int?
   /// 区間の始まりの行の「もう一方の番号」（2 列の面の左の列。区間の中の行 r は `otherNumber + (r − line)`。nil なら描かない）。
   public var otherNumber: Int?
+  /// 区間の行に、ポインタが乗ったとき行の右端の印を出すか。
+  public var allowsTrailingMark: Bool
 
-  public init(line: Int, style: Int? = nil, otherNumber: Int? = nil) {
+  public init(
+    line: Int, style: Int? = nil, otherNumber: Int? = nil, allowsTrailingMark: Bool = false
+  ) {
     self.line = line
     self.style = style
     self.otherNumber = otherNumber
+    self.allowsTrailingMark = allowsTrailingMark
   }
 }
 
@@ -57,11 +79,16 @@ public struct RowInsertion: Equatable {
     case lines([InsertedLine])
     /// 絵の差し込み。面は本文の区画の幅を渡して絵を問い、返った高さで並べ、本文と同じコマに描く（→ `SurfaceZone`）。
     case zone(SurfaceZone)
+    /// スクロールを共にする相手の面（→ `TextSurface.shareScroll`）に置いた絵の差し込みと同じ高さの空き（並列の diff の、
+    /// スレッドの反対側）。高さは面が相手の絵の高さから解き、相手の絵の高さが変わった取引の中で揃える。相手が無い間と、
+    /// 相手の面にその絵の差し込みが無い間は高さ 0。文書の行でも絵でもなく、何も描かず、選べず、当たらない。
+    case gap(SurfaceZone)
 
     public static func == (lhs: Content, rhs: Content) -> Bool {
       switch (lhs, rhs) {
       case (.lines(let a), .lines(let b)): a == b
       case (.zone(let a), .zone(let b)): a === b
+      case (.gap(let a), .gap(let b)): a === b
       default: false
       }
     }
@@ -80,9 +107,12 @@ public struct InsertedLine: Equatable, Sendable {
   public var line: Int?
   /// 行の型（`SurfacePresentation.lineStyles` の番号。nil なら型なし）。
   public var style: Int?
+  /// ポインタが乗ったとき行の右端の印を出すか（出どころの行を指す行だけが出せる）。
+  public var allowsTrailingMark: Bool
 
-  public init(line: Int? = nil, style: Int? = nil) {
+  public init(line: Int? = nil, style: Int? = nil, allowsTrailingMark: Bool = false) {
     self.line = line
     self.style = style
+    self.allowsTrailingMark = allowsTrailingMark
   }
 }

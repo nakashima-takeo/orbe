@@ -48,6 +48,10 @@ enum L10nKey: String, CaseIterable, Sendable {
 
   // MARK: - Relative date
   case relativeJustNow
+  case relativeAgo
+  case elapsedMinutes
+  case elapsedHours
+  case elapsedDays
 
   // MARK: - Agent（共有: 状態名・検出無し）
   case agentNotFoundCLI
@@ -231,8 +235,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteReview
   case taskPaletteUnlink
   case taskPaletteActionOpenLink
-  case taskPaletteElapsedMinutes
-  case taskPaletteElapsedHours
   case taskPaletteAgentWaitingBadge
   case taskPaletteAgentWorkingBadge
   case taskPaletteAgentWorking
@@ -315,8 +317,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskWaitContinueNote
   case taskWaitSatisfied
   case taskWaitExpired
-  case taskWaitJustNow
-  case taskWaitAgo
   case taskWaitConversationToday
   case taskWaitConversationDays
   case taskWaitResultSuccess
@@ -600,6 +600,72 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorDiffFailed
   case editorDiffNowhereInWorkingTree
   case editorDiffNowhereStaged
+  case editorDiffPullRequest
+  case editorDiffNowherePullRequest
+  case editorDiffPullRequestCommitsMissing
+  case editorDiffPullRequestUnrelated
+
+  // MARK: - Editor 面（PR）
+  case editorRailPullRequest
+  case editorPrTitle
+  case editorPrRefresh
+  case editorPrOpenOnGitHub
+  case editorPrInSync
+  case editorPrUnpushed
+  case editorPrUnfetched
+  case editorPrHeadDiffers
+  case editorPrDescription
+  case editorPrCommits
+  case editorPrFiles
+  case editorPrViewedCount
+  case editorPrTreeView
+  case editorPrListView
+  case editorPrOlderCommitsHidden
+  case editorPrMarkViewed
+  case editorPrCreate
+  case editorPrPublishFirst
+  case editorPrNotDetached
+  case editorPrNotDefaultBranch
+  case editorPrNotGitHub
+  case editorPrUnverified
+  case editorPrGhMissing
+  case editorPrGhUnauthed
+  case editorPrFailedUnauthenticated
+  case editorPrFailedRateLimited
+  case editorPrFailedUnreachable
+  case editorPrFailedTimedOut
+  case editorPrFailedRead
+  case editorPrFailedWrite
+  case editorPrThreadLine
+  case editorPrThreadPending
+  case editorPrThreadResolved
+  case editorPrThreadResolve
+  case editorPrThreadUnresolve
+  case editorPrThreadCollapse
+  case editorPrThreadExpand
+  case editorPrThreadAdd
+  case editorPrThreadResolveReply
+  case editorPrThreadCancel
+  case editorPrThreadReplyPlaceholder
+  case editorPrThreadNotReady
+  case editorPrThreadNotCurrent
+  case editorPrThreadLineGone
+  case editorPrThreadDetached
+  case editorPrThreadDeleted
+  case editorPrWriteTimedOut
+  case editorPrReview
+  case editorPrReviewPending
+  case editorPrReviewPlaceholder
+  case editorPrReviewApprove
+  case editorPrReviewComment
+  case editorPrReviewRequestChanges
+  case editorPrReviewSubmit
+  case editorPrReviewAwaitsLatest
+  case editorPrReviewStoppedAligning
+  case editorPrReviewNoDiff
+  case editorPrReviewReadFailed
+  case editorPrOutdatedThreads
+  case editorPrCommentCount
 
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle

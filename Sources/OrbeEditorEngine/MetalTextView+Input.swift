@@ -104,7 +104,7 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
       switch surface.target(at: point) {
       case .body: surface.bodySite
       case .field(let site): site
-      case .button, .zoneText, .zoneSpace: nil
+      case .button, .zoneText, .zoneSpace, .trailingMark: nil
       }
     return site === primary ? site : nil
   }

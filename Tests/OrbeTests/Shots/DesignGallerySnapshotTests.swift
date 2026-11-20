@@ -69,6 +69,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderEditorShellSnapshots(dir: dir)
     try renderEditorSearchSnapshots(dir: dir)
     try renderEditorScmSnapshots(dir: dir)
+    try renderEditorPullRequestSnapshots(dir: dir)
 
     // SearchBar（empty / typing / no-match / match / overflow）。
     try writePNG(
@@ -233,7 +234,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       chromeBand(fitting, size: size), size: size, name: "statusrow_fitting.png", dir: dir)
   }
 
-  /// エディター焦点の段——ボードのセル・2 トーンの現在地・選択タブの done グリフ。renaming は改名中の選択面。
+  /// エディター焦点の段——ボードのセル・2 トーンの現在地と PR の diff の現在地・選択タブの done グリフ。renaming は改名中の
+  /// 選択面。
   private func renderStatusRowEditorSnapshots(dir: URL) throws {
     let size = statusRowStageSize
     let editor = StatusRowModel()
@@ -253,6 +255,11 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     editor.editingIndex = 0
     editor.editingText = "window-look"
     try writeChromeBandPair(editor, size: size, name: "statusrow_renaming", dir: dir)
+
+    editor.editingIndex = nil
+    editor.location = StatusRowModel.parts(
+      of: .pullRequest(number: 131, relative: "src/agent/StateHooks.swift"))
+    try writeChromeBandPair(editor, size: size, name: "statusrow_pull_request", dir: dir)
   }
 
   /// 補完のサイドカードと design 正典の 2 枚組。cap 超過のスクロール追従は flow の `completion_scroll` が撮る。

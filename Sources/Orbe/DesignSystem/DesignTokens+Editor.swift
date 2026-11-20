@@ -25,6 +25,8 @@ extension Theme.Color {
   static let editorText = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
   /// 三次の文字——レールの非選択・パンくずの区切り。`textTertiary` は `textMuted` の別名なので別値を持つ。
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
+  /// 説明文の段——PR の説明（見本 prDesc。editorText と textMuted の間）。
+  static let editorProse = editorDyn(light: 0x6d647f, dark: 0xa9a2b5)
   /// 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地・diff タブの種類の注記と選択の上縁。
   /// dark は conflict と偶然同値だが light が違い、git 競合でもない。
   static let editorCaution = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)

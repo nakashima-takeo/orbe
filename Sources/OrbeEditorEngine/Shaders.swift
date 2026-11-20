@@ -87,13 +87,14 @@ enum Shaders {
     // 矩形を σ のガウスでぼかした濃さ（直線の縁の erfc を角丸の距離に当てた近似）で、箱の内側には落とさない（CSS の
     // box-shadow）。
     struct Box {
-      float4 quad; float4 box; float radius; float stroke_width; float sigma; float shadow_offset;
+      float4 quad; float4 box; float4 radius; float stroke_width; float sigma; float shadow_offset;
       uint fill; uint stroke; uint shadow; uint pad;
     };
     struct BoxOut {
       float4 position [[position]];
       float4 box [[flat]];
-      float4 params [[flat]];
+      float4 radius [[flat]];
+      float3 params [[flat]];
       float4 fill [[flat]];
       float4 stroke [[flat]];
       float4 shadow [[flat]];
@@ -108,7 +109,8 @@ enum Shaders {
       BoxOut out;
       out.position = float4(px.x / viewport.x * 2 - 1, 1 - px.y / viewport.y * 2, 0, 1);
       out.box = b.box;
-      out.params = float4(b.radius, b.stroke_width, b.sigma, b.shadow_offset);
+      out.radius = b.radius;
+      out.params = float3(b.stroke_width, b.sigma, b.shadow_offset);
       out.fill = unpack_unorm4x8_to_float(b.fill);
       out.stroke = unpack_unorm4x8_to_float(b.stroke);
       out.shadow = unpack_unorm4x8_to_float(b.shadow);
@@ -125,8 +127,11 @@ enum Shaders {
       return s * y;
     }
 
-    float round_box(float2 p, float2 center, float2 half_size, float r) {
-      float2 q = abs(p - center) - half_size + r;
+    // 角ごとの半径 radii（左上・右上・右下・左下。y は下向き）の角丸の矩形への符号つき距離。
+    float round_box(float2 p, float2 center, float2 half_size, float4 radii) {
+      float2 d = p - center;
+      float r = d.x < 0.0 ? (d.y < 0.0 ? radii.x : radii.w) : (d.y < 0.0 ? radii.y : radii.z);
+      float2 q = abs(d) - half_size + r;
       return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
     }
 
@@ -134,20 +139,20 @@ enum Shaders {
       float2 p = in.position.xy;
       float2 half_size = in.box.zw * 0.5;
       float2 center = in.box.xy + half_size;
-      float r = min(in.params.x, min(half_size.x, half_size.y));
+      float4 r = min(in.radius, float4(min(half_size.x, half_size.y)));
       float d = round_box(p, center, half_size, r);
       float inside = clamp(0.5 - d, 0.0, 1.0);
       float4 color = float4(0.0);
-      if (in.params.z > 0.0 && in.shadow.a > 0.0) {
-        float ds = round_box(p, center + float2(0.0, in.params.w), half_size, r);
-        float a = 0.5 * (1.0 - erf_approx(ds / (in.params.z * 1.41421356))) * (1.0 - inside)
+      if (in.params.y > 0.0 && in.shadow.a > 0.0) {
+        float ds = round_box(p, center + float2(0.0, in.params.z), half_size, r);
+        float a = 0.5 * (1.0 - erf_approx(ds / (in.params.y * 1.41421356))) * (1.0 - inside)
           * in.shadow.a;
         color = float4(in.shadow.rgb * a, a);
       }
       float fa = inside * in.fill.a;
       color = float4(in.fill.rgb * fa, fa) + color * (1.0 - fa);
-      if (in.params.y > 0.0) {
-        float sa = inside * clamp(0.5 + d + in.params.y, 0.0, 1.0) * in.stroke.a;
+      if (in.params.x > 0.0) {
+        float sa = inside * clamp(0.5 + d + in.params.x, 0.0, 1.0) * in.stroke.a;
         color = float4(in.stroke.rgb * sa, sa) + color * (1.0 - sa);
       }
       return color;

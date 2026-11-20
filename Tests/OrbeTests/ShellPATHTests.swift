@@ -29,29 +29,34 @@ final class ShellPATHTests: OrbeTestCase {
   /// 「起動には成功したが PATH が不完全」——欠けていた既知パスが末尾に補われる。
   func testComposeAppendsMissingKnownPaths() {
     XCTAssertEqual(
-      ShellPATH.compose(login: "/usr/bin:/bin"),
+      ShellPATH.compose(login: "/usr/bin:/bin", known: ShellPATH.defaultKnownPaths),
       "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin:/usr/sbin:/sbin")
   }
 
   func testComposeLeavesCompletePathUntouched() {
     let complete = "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
-    XCTAssertEqual(ShellPATH.compose(login: complete), complete, "全て含むなら順序も含め変わらない")
+    XCTAssertEqual(
+      ShellPATH.compose(login: complete, known: ShellPATH.defaultKnownPaths), complete,
+      "全て含むなら順序も含め変わらない")
   }
 
   /// 既知パスは「無いものを補う」役。ユーザーが意図した優先順は奪わない。
   func testComposeKeepsShellPriorityFirst() {
     let composed = ShellPATH.compose(
-      login: "/Users/x/.local/share/mise/shims:/opt/homebrew/bin:/usr/bin:/bin")
+      login: "/Users/x/.local/share/mise/shims:/opt/homebrew/bin:/usr/bin:/bin",
+      known: ShellPATH.defaultKnownPaths)
     XCTAssertTrue(composed.hasPrefix("/Users/x/.local/share/mise/shims:"), "shim が先頭のまま")
   }
 
   func testComposeWithoutLoginPathIsKnownPathsOnly() {
-    XCTAssertEqual(ShellPATH.compose(login: nil), ShellPATH.knownPaths.joined(separator: ":"))
+    XCTAssertEqual(
+      ShellPATH.compose(login: nil, known: ShellPATH.defaultKnownPaths),
+      ShellPATH.defaultKnownPaths.joined(separator: ":"))
   }
 
   func testComposeDropsDuplicates() {
     XCTAssertEqual(
-      ShellPATH.compose(login: "/usr/bin:/usr/bin:/bin"),
+      ShellPATH.compose(login: "/usr/bin:/usr/bin:/bin", known: ShellPATH.defaultKnownPaths),
       "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin:/usr/sbin:/sbin", "重複は初出だけ残す")
   }
 

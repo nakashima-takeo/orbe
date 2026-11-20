@@ -106,6 +106,7 @@ final class EditorSession {
       return existing
     }
     let diff = try EditorDiff(id: id, documents: diffDocuments, surfaces: surfaces)
+    diff.onDraftChange = { [weak self] in self?.draftsDidChange() }
     place(.diff(diff), as: mode)
     return diff
   }
@@ -136,10 +137,10 @@ final class EditorSession {
     onChange?()
   }
 
-  /// 新しいタブを列へ置いて焦点にする（仮なら今の仮のタブをその位置で入れ替える）。未保存の文書を使うタブは、仮で頼まれても
-  /// はじめから普通のタブ（末尾）にする——仮のタブの文書は常に未保存でない。
+  /// 新しいタブを列へ置いて焦点にする（仮なら今の仮のタブをその位置で入れ替える）。人が打った内容を持つタブ（未保存の文書を
+  /// 使う）は、仮で頼まれてもはじめから普通のタブ（末尾）にする——仮のタブは常に人が打った内容を持たない。
   private func place(_ tab: EditorTab, as mode: OpenMode) {
-    let mode = tab.document?.isDirty == true ? .pinned : mode
+    let mode = tab.holdsEdits ? .pinned : mode
     if mode == .preview, let old = previewID, let index = tabs.firstIndex(where: { $0.id == old }) {
       let replaced = tabs[index]
       tabs[index] = tab
@@ -199,7 +200,10 @@ final class EditorSession {
         }
         continue
       }
-      if case .diff(let diff) = tab { diff.rebind(diffDocuments) }
+      if case .diff(let diff) = tab {
+        diff.rebind(diffDocuments)
+        diff.onDraftChange = { [weak self] in self?.draftsDidChange() }
+      }
       tabs.append(tab)
       if tab.id == other.previewID, previewID == nil { previewID = tab.id }
     }
@@ -247,10 +251,17 @@ final class EditorSession {
     }
   }
 
-  /// 仮のタブの文書が未保存なら普通のタブにする（入れ替えで中身を失わない）。
+  /// 仮のタブが人が打った内容（未保存の文書・PR の diff のコメントの書きかけ）を持てば普通のタブにする（入れ替えで中身を
+  /// 失わない）。
   private func settlePreview() {
-    guard let previewID, tab(previewID)?.document?.isDirty == true else { return }
+    guard let previewID, tab(previewID)?.holdsEdits == true else { return }
     self.previewID = nil
+  }
+
+  /// PR の diff のコメントの書きかけがあるかが変わった——仮のタブを普通に戻し、タブ行を作り直す。
+  private func draftsDidChange() {
+    settlePreview()
+    onChange?()
   }
 
   /// テキスト面を描く用意を裏で始める（エディター面が初めて見えたとき。何度呼んでもよい）。
@@ -271,10 +282,11 @@ final class EditorSession {
     onChange?()
   }
 
-  /// 焦点の文書のタブの文書を保存する。force でなければ、ディスクが変わっていれば失敗する（→ `EditorDocument.save`）。
-  /// 仮のタブは保存しても仮のまま。diff のタブには保存が無い。
+  /// 焦点のタブが使う文書（ファイルタブはその文書、作業ツリー diff は新しい側の文書）を保存する。force でなければ、ディスクが
+  /// 変わっていれば失敗する（→ `EditorDocument.save`）。仮のタブは保存しても仮のまま。文書を使わないタブ（ステージ済み
+  /// diff など）では何もしない。
   func saveActive(force: Bool = false) throws {
-    try activeDocument?.save(force: force)
+    try activeTab?.document?.save(force: force)
   }
 
   /// タブ `id` を閉じたときに閉じる文書（その文書を使う最後のタブなら、その文書。ほかのタブが使っていれば nil）。未保存の

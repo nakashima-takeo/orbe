@@ -54,6 +54,31 @@ final class TestIsolationTests: OrbeTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: ghosttyUser.path), "user 層は不在＝読まれない")
   }
 
+  /// 偽の gh を置かないテストでは gh が見つからず、gh の可否は「gh が無い」になる。gh の設定は空のディレクトリを指し、
+  /// 資格情報の環境変数も無い。
+  ///
+  /// この状態が外れると、偽の gh を PATH に置き忘れたテスト 1 本で開発者のログイン済みの gh が使われ、確認済みの書き込みなどが
+  /// 本物の GitHub へ届く。「gh が無い」場合もテストで作れなくなる。
+  func testOnlyAGhThatATestPlacesIsResolved() throws {
+    XCTAssertNil(GitHubCLI().resolveGh(), "PATH の既知の場所に開発者の gh が入っていない")
+    var availability: GitHubAvailability?
+    GitHubCLI().probe(cwd: TestScratch.caseDir.path, isGitHub: true) { availability = $0 }
+    let deadline = Date().addingTimeInterval(10)
+    while availability == nil, Date() < deadline {
+      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+    }
+    XCTAssertEqual(availability, .ghMissing)
+
+    let environment = ProcessInfo.processInfo.environment
+    let config = try XCTUnwrap(environment["GH_CONFIG_DIR"])
+    XCTAssertEqual(
+      URL(fileURLWithPath: config).deletingLastPathComponent().path, TestScratch.caseDir.path)
+    XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: config), [], "空の設定")
+    for key in ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"] {
+      XCTAssertNil(environment[key], "\(key) が残っていない")
+    }
+  }
+
   /// テスト 1 件ごとに別の作業ディレクトリが配られ、前のテストのものは消えている。
   ///
   /// `testPerCaseOverridesPointIntoCaseDir` は override の向き先しか見ないので、全テストが
@@ -67,7 +92,8 @@ final class TestIsolationTests: OrbeTestCase {
       FileManager.default.fileExists(atPath: previous.path),
       "前のテストのディレクトリが残っている＝後始末が効いていない")
     XCTAssertEqual(
-      Set(try FileManager.default.contentsOfDirectory(atPath: dir.path)), ["resources"],
-      "配られた直後のディレクトリは、ハーネスが用意する空の同梱リソース根だけを持つ")
+      Set(try FileManager.default.contentsOfDirectory(atPath: dir.path)),
+      ["resources", "gh-config"],
+      "配られた直後のディレクトリは、ハーネスが用意する空の同梱リソース根と gh の設定ディレクトリだけを持つ")
   }
 }

@@ -22,7 +22,8 @@ struct EditorHeaderRoot: View {
 }
 
 /// タブ行: 自然幅のタブ（文書のタブと diff のタブ）を横に並べ、溢れは横スクロール（スクローラー非表示・アクティブを
-/// 可視位置へ）。焦点が diff のタブなら右端に見せ方の切り替え。
+/// 可視位置へ）。焦点が diff のタブなら右端に見せ方の切り替え。焦点が PR の diff のタブで、そのパスが PR の変更ファイルに
+/// あれば、切り替えの左に「確認済みにする」。
 struct FileTabsView: View {
   let shell: EditorShellModel
   @Environment(\.colorScheme) private var scheme
@@ -48,6 +49,7 @@ struct FileTabsView: View {
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        if let file = shell.pullRequestFile { PrViewedToggle(file: file) }
         if shell.showsDiffModes { DiffModesView(shell: shell) }
       }
       .frame(height: Theme.Layout.editorFileTabs)
@@ -85,7 +87,7 @@ struct FileTabView: View {
         .foregroundStyle(tab.isActive ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
       if let kind = tab.diffKind {
-        Text(l10n.string(kind == .workingTree ? .editorDiffWorkingTree : .editorDiffStaged))
+        Text(Self.note(of: kind, l10n))
           .italic(tab.isPreview)
           .font(Font.theme.editorDiffNote)
           .foregroundStyle(Color.theme.editorCaution)
@@ -116,6 +118,66 @@ struct FileTabView: View {
     .onHover { hovering = $0 }
     .onTapGesture { shell.activate(tab.id) }
     .simultaneousGesture(TapGesture(count: 2).onEnded { shell.pin(tab.id) })
+  }
+
+  /// diff のタブの注記。
+  private static func note(of kind: EditorDiff.Kind, _ l10n: LocalizationStore) -> String {
+    switch kind {
+    case .workingTree: l10n.string(.editorDiffWorkingTree)
+    case .staged: l10n.string(.editorDiffStaged)
+    case .pullRequest(let state): l10n.format(.editorDiffPullRequest, state.key.id.number)
+    }
+  }
+}
+
+/// タブ行の「確認済みにする」（見本 DiffTabs: padding 0 10・gap 7・字 11.5 editor.text・チェック 14）。押すとパネルの行頭の
+/// チェックと同じく PR ごとの状態の確認済みを切り替える。パスが PR の変更ファイルに無ければ出さない。
+private struct PrViewedToggle: View {
+  let file: EditorShellModel.PullRequestFile
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    if file.state.content?.files.contains(where: { $0.path == file.path }) == true {
+      let viewed = file.state.isViewed(file.path)
+      HStack(spacing: 7) {
+        PrCheckbox(isOn: viewed)
+        Text(l10n.string(.editorPrMarkViewed))
+          .font(Font.theme.editorPrMarkViewed)
+          .foregroundStyle(Color.theme.editorText)
+          .lineLimit(1)
+      }
+      .padding(.horizontal, 10)
+      .frame(maxHeight: .infinity)
+      .contentShape(Rectangle())
+      .onTapGesture { file.state.setViewed(!viewed, paths: [file.path]) }
+    }
+  }
+}
+
+/// 確認済みのチェック 14（radius 3）。付いていれば accent の地にレ点、付いていなければ沈んだ地と淡い枠（列の行の
+/// チェックと同じ姿。→ `PrRowView`）。
+private struct PrCheckbox: View {
+  let isOn: Bool
+  @Environment(\.colorScheme) private var scheme
+
+  private static let borderAlpha = 0.22
+  private static let groundAlpha = 0.25
+
+  var body: some View {
+    let ink = EditorInk(scheme)
+    let size = Theme.Layout.editorPrCheckbox
+    RoundedRectangle(cornerRadius: 3)
+      .fill(isOn ? Color.theme.accentPrimary : ink.sunk(Self.groundAlpha))
+      .overlay {
+        if isOn {
+          EditorGlyphView(
+            glyph: EditorGlyphs.checkboxCheck, size: 10, color: Color.theme.accentCheckStroke)
+        } else {
+          RoundedRectangle(cornerRadius: 3)
+            .strokeBorder(ink.hairline(Self.borderAlpha), lineWidth: 1)
+        }
+      }
+      .frame(width: size, height: size)
   }
 }
 

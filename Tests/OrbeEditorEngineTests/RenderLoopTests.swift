@@ -226,7 +226,7 @@ final class RenderLoopTests: EngineTestCase {
       return .image(
         ZoneImage(frame: CGRect(x: 0, y: 0, width: side, height: side), image: ThreadZone.glyph))
     }
-    let zone = PictureZone { _ in ZonePicture(height: 300, elements: images) }
+    let zone = PictureZone { _ in ZonePicture.single(height: 300, elements: images) }
     surface.setRows(SurfaceRows(insertions: [RowInsertion(line: 2, content: .zone(zone))]))
     driver.bind(surface.id)
     waitUntilPaused(surface)

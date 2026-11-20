@@ -62,9 +62,16 @@ extension ControlServer {
     return target.controlOpenFile(tabId: tabId, path: path)
   }
 
-  private static let diffKinds: [String: EditorDiff.Kind] = [
-    "workingTree": .workingTree, "staged": .staged,
-  ]
+  private static let openDiffKinds: [EditorDiff.Kind] = [.workingTree, .staged]
+
+  /// diff の種類の、制御 API での名前（制御 API で開かない種類は nil。PR の diff は PR のパネルから開く）。
+  private static func controlName(of kind: EditorDiff.Kind) -> String? {
+    switch kind {
+    case .workingTree: "workingTree"
+    case .staged: "staged"
+    case .pullRequest: nil
+    }
+  }
 
   static func openDiff(_ target: ControlTarget, _ p: ControlParams) throws(ControlError)
     -> Result<Any, ControlError>
@@ -73,7 +80,7 @@ extension ControlServer {
     let path = try p.optionalString("path")
     let kind = try p.string("kind")
     guard let path, !path.isEmpty else { throw p.missing("path") }
-    guard let diffKind = diffKinds[kind] else {
+    guard let diffKind = openDiffKinds.first(where: { controlName(of: $0) == kind }) else {
       throw p.invalid("kind", "pass workingTree or staged")
     }
     return target.controlOpenDiff(tabId: tabId, path: path, kind: diffKind)

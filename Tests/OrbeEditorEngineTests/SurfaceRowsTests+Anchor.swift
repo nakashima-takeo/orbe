@@ -47,7 +47,7 @@ extension SurfaceRowsTests {
   }
 
   /// 付き先から始まる削除（行 4 の改行を消して行 5 をつなぐ）では動かず、付き先をまたいで消せば、消した区間の始まりの行の
-  /// 後へ寄る。
+  /// 後へ寄る。付き先をまたいで同じ行の数の本文に置き換えても（行の数は変わらない）、同じく寄る。
   func testDeletingAcrossTheAnchorMovesTheBoundaryAfterTheStartLine() throws {
     let opened = try anchored()
     let surface = opened.surface
@@ -60,6 +60,12 @@ extension SurfaceRowsTests {
       location: joined.lineStart(2) + 1, length: joined.lineStart(7) - joined.lineStart(2) - 1)
     surface.textView.deleteBackward(nil)
     XCTAssertEqual(surface.rows.boundaries, [0, 3], "付き先を消せば、消した区間の始まりの行 2 の後")
+    let shorter = opened.document.text
+    surface.selectedRange = NSRange(
+      location: shorter.lineStart(1) + 1, length: shorter.lineStart(3) - shorter.lineStart(1))
+    surface.textView.insertText("p\nq\n")
+    XCTAssertEqual(opened.document.text.lineCount, shorter.lineCount, "前提: 行の数は変わらない")
+    XCTAssertEqual(surface.rows.boundaries, [0, 2], "行の数を変えない置き換えでも、消した区間の始まりの行 1 の後")
   }
 
   /// CRLF の文書でも、付き先は CR の手前——行末の Enter（CRLF を挿す）で境は動かない。

@@ -12,7 +12,7 @@ import XCTest
 /// ボタンが押せる姿に残る。
 extension SourceControlPaneTests {
   /// 欄に変換中の字を置く（IME の打鍵と同じ口）。
-  private func compose(_ text: String, in field: ScmMessageTextView) {
+  private func compose(_ text: String, in field: MessageTextView) {
     field.setMarkedText(
       text, selectedRange: NSRange(location: text.utf16.count, length: 0),
       replacementRange: NSRange(location: NSNotFound, length: 0))

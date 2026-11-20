@@ -151,6 +151,7 @@ extension Renderer {
     instances.shapes(built.zoneSelectionShapes, encoder, pass)
     instances.glyphs(built.text, pass.atlas.monoPages, pass.pipelines.mono, encoder)
     instances.glyphs(built.color, pass.atlas.colorPages, pass.pipelines.color, encoder)
+    instances.glyphs(built.markImages, pass.images, pass.pipelines.color, encoder)
     for field in built.fieldLayers {
       encoder.setScissorRect(field.scissor)
       instances.shapes(field.overlays.under, encoder, pass)

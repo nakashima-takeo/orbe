@@ -6,7 +6,8 @@ import XCTest
 
 /// 絵の差し込みの入力欄と文の選択——主（キーと IME の行き先）の遷移と、入力欄の場の打鍵・IME・undo、絵の差し込みの文の
 /// 選択とコピー、絵の差し込みの文が主の間に効くコマンド。壊れると、返信の打鍵がソースへ入る・返信の undo が本文を
-/// 戻す・コメントを選んでいる間のキーで本文が変わる・入力欄が伸びるコマに字が遅れる。
+/// 戻す・コメントを選んでいる間のキーで本文が変わる・入力欄が伸びるコマに字が遅れる・どこにも描かれない入力欄が主のまま
+/// 残って打鍵が見えない欄に入る。
 extension SurfaceZonesTests {
   /// 返信の入力欄つきのスレッドを行 4 の前に置いた面。
   struct Threaded {
@@ -55,6 +56,46 @@ extension SurfaceZonesTests {
     view.insertText("z")
     XCTAssertEqual(field.string, "")
     XCTAssertNotEqual(text(opened.document), body, "続きは本文に入る")
+  }
+
+  /// 入力欄が主の間の ⌘↵（テンキーの Enter も）は、載せる側に 1 回だけ「送る」を知らせ、文を変えない。押し続けた繰り返しでは
+  /// 知らせない。変換中なら、変換を確定してから 1 回知らせる（知らせを受けた時には、見えていた字が入力欄の文に入っている）。
+  /// 本文が主の間の ⌘↵ は入力欄に知らせない。
+  func testCommandReturnInAFieldSubmitsOnce() throws {
+    let setup = try threaded()
+    let (opened, field) = (setup.opened, setup.field)
+    let surface = opened.surface
+    let window = try XCTUnwrap(surface.textView.window)
+    var submitted: [String] = []
+    var composing: [Bool] = []
+    field.didSubmit = {
+      submitted.append($0.string)
+      composing.append(surface.textView.hasMarkedText())
+    }
+    let commandReturn = { (characters: String, repeated: Bool) throws -> Bool in
+      let event = try XCTUnwrap(
+        NSEvent.keyEvent(
+          with: .keyDown, location: .zero, modifierFlags: .command,
+          timestamp: CACurrentMediaTime(), windowNumber: window.windowNumber, context: nil,
+          characters: characters, charactersIgnoringModifiers: characters, isARepeat: repeated,
+          keyCode: characters == "\r" ? 36 : 76))
+      return window.performKeyEquivalent(with: event)
+    }
+    XCTAssertFalse(try commandReturn("\r", false), "本文が主なら面は ⌘↵ を受けない")
+    XCTAssertEqual(submitted, [])
+    surface.focus(field)
+    surface.textView.insertText("返信")
+    XCTAssertTrue(try commandReturn("\r", false))
+    XCTAssertEqual(submitted, ["返信"])
+    XCTAssertEqual(field.string, "返信", "⌘↵ は改行を入れない")
+    XCTAssertTrue(try commandReturn("\u{3}", false))
+    XCTAssertEqual(submitted.count, 2, "テンキーの Enter")
+    XCTAssertTrue(try commandReturn("\r", true), "繰り返しも面が消費する")
+    XCTAssertEqual(submitted.count, 2, "押し続けた繰り返しでは知らせない")
+    IMECall.mark("へ").send(to: surface.textView)
+    XCTAssertTrue(try commandReturn("\r", false))
+    XCTAssertEqual(submitted.last, "返信へ", "見えていた字が入力欄の文に入っている")
+    XCTAssertEqual(composing, [false, false, false], "変換を確定してから知らせる")
   }
 
   /// 本文が読むだけでも、入力欄は打て（IME の文脈もある）、undo できる。本文は変わらない。
@@ -251,6 +292,18 @@ extension SurfaceZonesTests {
     XCTAssertNil(surface.fields["reply"], "絵に無い入力欄の場は閉じる")
     XCTAssertEqual(surface.primary, .body)
     XCTAssertTrue(surface.drawn.fields.isEmpty)
+  }
+
+  /// どの絵も描いていない入力欄は、主にしようとしても、文を置き換えても、場が即座に閉じて主は本文のまま（見えない欄に
+  /// 打鍵が入らない）。
+  func testAFieldNoPictureDrawsCannotTakeFocusOrKeepASite() throws {
+    let surface = try threaded().opened.surface
+    let absent = ZoneTextField(id: "absent", style: ThreadZone.fieldStyle())
+    surface.focus(absent)
+    XCTAssertEqual(surface.primary, .body)
+    XCTAssertNil(surface.fields["absent"])
+    surface.replaceText(of: absent, with: "見えない")
+    XCTAssertNil(surface.fields["absent"])
   }
 
   /// 入力欄の下端の近くで改行して入力欄が伸び、キャレットが面の下端を越えれば、面がキャレットの見えるところまで送る。

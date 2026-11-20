@@ -269,6 +269,25 @@ final class SurfaceDiffGearTests: EngineTestCase {
     XCTAssertLessThan(zone.widths.last ?? 0, zone.widths.first ?? 0)
   }
 
+  /// 絵の差し込みが無い間に本文の区画の幅が変わっても、後で置いた絵の差し込みは、置いた取引の終わりの幅で問い直される
+  /// （置き換え前の番号の列の幅で問うた絵のまま残らない）。
+  func testAZonePlacedAfterAWidthChangeWithoutZonesIsAskedAtTheFinalWidth() throws {
+    let opened = try open(rows(20), size: size)
+    let surface = opened.surface
+    surface.setPresentation(inline)
+    let zone = BoxZone(height: 40)
+    let short = [LineSpan(line: 0, otherNumber: 1)]
+    let long = [LineSpan(line: 0, otherNumber: 123_456)]
+    let placed = SurfaceRows(
+      insertions: [RowInsertion(line: 3, content: .zone(zone))], spans: short)
+    surface.setRows(placed)
+    surface.setRows(SurfaceRows(spans: short))
+    surface.setRows(SurfaceRows(spans: long))
+    XCTAssertLessThan(surface.surfaceLayout.text.width, zone.widths[0], "前提: 差し込みの無い間に幅が狭まった")
+    surface.setRows(placed)
+    XCTAssertEqual(zone.widths.last, surface.surfaceLayout.text.width)
+  }
+
   /// 載せる側が描いた絵の高さが変わって並びを組み直しても、文書の行の区間（行の型・もう一方の番号）と行の地と番号の列の
   /// 幅は残る。
   func testRegrowingAZoneKeepsTheLineSpans() throws {

@@ -60,6 +60,7 @@ final class EditorOccurrences {
   }
 
   func textDidChange() {
+    guard document != nil else { return }
     textChangedThisTurn = true
     DispatchQueue.main.async { [weak self] in self?.textChangedThisTurn = false }
     clearWord()
