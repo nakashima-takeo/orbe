@@ -195,17 +195,20 @@ extension EditorDiffTests {
   /// 返信欄に焦点と書きかけを持つスレッドで、そのファイルを変える push を読んで面が作り直されても、新しい面でも返信欄が
   /// 主（キーと IME の行き先）のまま。壊れると、打っている途中の返信の字が本文へ行く（読むだけの本文には入らず消える）。
   func testAPushThatRemakesTheSurfaceKeepsTheReplyFocused() throws {
-    try assertAPushKeepsTheReplyFocused(side: false, pushed: "one\ntwo\nTHREE\nfour\nfive\n", line: 3)
+    try assertAPushKeepsTheReplyFocused(
+      side: false, pushed: "one\ntwo\nTHREE\nfour\nfive\n", line: 3)
   }
 
   /// 上と同じで、スレッドの行が動く push。
   func testAPushThatMovesTheThreadKeepsTheReplyFocused() throws {
-    try assertAPushKeepsTheReplyFocused(side: false, pushed: "zero\none\ntwo\nTHREE\nfour\n", line: 4)
+    try assertAPushKeepsTheReplyFocused(
+      side: false, pushed: "zero\none\ntwo\nTHREE\nfour\n", line: 4)
   }
 
   /// 上と同じで、並列（新しい側のスレッドは右の面）。
   func testAPushInSideBySideKeepsTheReplyFocused() throws {
-    try assertAPushKeepsTheReplyFocused(side: true, pushed: "zero\none\ntwo\nTHREE\nfour\n", line: 4)
+    try assertAPushKeepsTheReplyFocused(
+      side: true, pushed: "zero\none\ntwo\nTHREE\nfour\n", line: 4)
   }
 
   /// 新しい側の行 3 のスレッドの返信欄に焦点と書きかけを置き、a.txt を `pushed`（スレッドは行 `line` へ）にする push を
