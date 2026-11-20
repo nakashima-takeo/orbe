@@ -122,15 +122,15 @@ final class DiffRowsTests: OrbeTestCase {
   func testTheOldLinesInViewFollowTheTopOfTheInlineRows() {
     let (old, new) = sample
     let sample = hunks(old, new)
-    let cases: [String: (RowPosition, Int)] = [
-      "区間の前": (RowPosition(line: 0), 0),
-      "削除行の頭": (RowPosition(line: 2, offset: -2), 2),
-      "削除行の 2 段目": (RowPosition(line: 2, offset: -1), 3),
-      "差し込みの上は頭で止まる": (RowPosition(line: 2, offset: -9), 2),
-      "追加の区間の中は区間の後の行": (RowPosition(line: 5), 4),
-      "文脈": (RowPosition(line: 10), 4),
-      "追加だけの区間": (RowPosition(line: 11), 5),
-      "末尾の文脈": (RowPosition(line: 12), 5),
+    let cases: [String: (LineRow, Int)] = [
+      "区間の前": (LineRow(line: 0), 0),
+      "削除行の頭": (LineRow(line: 2, offset: -2), 2),
+      "削除行の 2 段目": (LineRow(line: 2, offset: -1), 3),
+      "差し込みの上は頭で止まる": (LineRow(line: 2, offset: -9), 2),
+      "追加の区間の中は区間の後の行": (LineRow(line: 5), 4),
+      "文脈": (LineRow(line: 10), 4),
+      "追加だけの区間": (LineRow(line: 11), 5),
+      "末尾の文脈": (LineRow(line: 12), 5),
     ]
     for (message, (top, first)) in cases {
       XCTAssertEqual(DiffRows.oldLines(from: top, count: 3, sample), first...(first + 3), message)
@@ -138,9 +138,9 @@ final class DiffRowsTests: OrbeTestCase {
     let removed = DiffRows.hunks(
       old: TextRope(lines((0..<199).map(String.init))), new: nil, limit: EditorDiff.hunkLimit)
     XCTAssertEqual(
-      DiffRows.oldLines(from: RowPosition(line: 0, offset: -100), count: 40, removed), 100...140,
+      DiffRows.oldLines(from: LineRow(line: 0, offset: -100), count: 40, removed), 100...140,
       "消したファイルの途中は、見えている削除行から")
-    XCTAssertEqual(DiffRows.oldLines(from: .head(of: 0), count: 40, removed), 0...40, "消したファイルの頭")
+    XCTAssertEqual(DiffRows.oldLines(from: LineRow(line: 0, offset: .min), count: 40, removed), 0...40, "消したファイルの頭")
   }
 
   /// 古い側が変わらず新しい側が変わる作り直しで、見えている位置は同じ古い側の行（同じ段）へ引き継ぐ——インラインの
@@ -150,14 +150,14 @@ final class DiffRowsTests: OrbeTestCase {
     let (old, new) = sample
     let before = hunks(old, new)
     let after = hunks(old, lines(["x", "y", "z"]) + new)
-    let carry = { (top: RowPosition, from: [LineHunk], to: [LineHunk], side: Bool) in
-      DiffRows.position(of: DiffRows.anchor(at: top, from, side: side), to, side: side)
+    let carry = { (top: LineRow, from: [LineHunk], to: [LineHunk], side: Bool) in
+      DiffRows.lineRow(of: DiffRows.anchor(at: top, from, side: side), to, side: side)
     }
-    let inline: [RowPosition: RowPosition] = [
-      RowPosition(line: 2, offset: -1): RowPosition(line: 5, offset: -1),
-      RowPosition(line: 5): RowPosition(line: 8),
-      RowPosition(line: 10): RowPosition(line: 13),
-      RowPosition(line: 12): RowPosition(line: 15),
+    let inline: [LineRow: LineRow] = [
+      LineRow(line: 2, offset: -1): LineRow(line: 5, offset: -1),
+      LineRow(line: 5): LineRow(line: 8),
+      LineRow(line: 10): LineRow(line: 13),
+      LineRow(line: 12): LineRow(line: 15),
     ]
     for (top, moved) in inline {
       XCTAssertEqual(carry(top, before, before, false), top, "同じ並びなら同じ位置: \(top)")
@@ -166,20 +166,20 @@ final class DiffRowsTests: OrbeTestCase {
     let shorterOld = lines(["a", "b", "c", "d", "e", "f"])
     let shorter = hunks(shorterOld, lines(["a", "B", "f"]))
     let shorterAfter = hunks(shorterOld, lines(["x", "y", "z", "a", "B", "f"]))
-    let side: [RowPosition: RowPosition] = [
-      RowPosition(line: 1): RowPosition(line: 4),
-      RowPosition(line: 2, offset: -2): RowPosition(line: 5, offset: -2),
-      RowPosition(line: 2, offset: -1): RowPosition(line: 5, offset: -1),
+    let side: [LineRow: LineRow] = [
+      LineRow(line: 1): LineRow(line: 4),
+      LineRow(line: 2, offset: -2): LineRow(line: 5, offset: -2),
+      LineRow(line: 2, offset: -1): LineRow(line: 5, offset: -1),
     ]
     for (top, moved) in side {
       XCTAssertEqual(carry(top, shorter, shorter, true), top, "並列で同じ並びなら同じ位置: \(top)")
       XCTAssertEqual(carry(top, shorter, shorterAfter, true), moved, "並列で上に 3 行: \(top)")
     }
     XCTAssertEqual(
-      carry(RowPosition(line: 5), before, after, true), RowPosition(line: 8), "並列で古い側より長い追加の段")
+      carry(LineRow(line: 5), before, after, true), LineRow(line: 8), "並列で古い側より長い追加の段")
     let fewer = hunks(old, lines(["a", "", "add 0", "add 1", "ctx", "}", "end"]))
     XCTAssertEqual(
-      carry(RowPosition(line: 3), before, fewer, false), RowPosition(line: 2), "無くなった追加の行は同じ区間の頭")
+      carry(LineRow(line: 3), before, fewer, false), LineRow(line: 2), "無くなった追加の行は同じ区間の頭")
   }
 
   private func surface(_ text: String, _ rows: SurfaceRows) throws -> MetalTextSurface {

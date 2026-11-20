@@ -89,7 +89,7 @@ extension EditorDiff {
     case .anchor(let anchor):
       surface.scroll(
         to: surface.position(
-          ofLineRow: DiffRows.position(of: anchor, hunks, side: presented == .side)))
+          ofLineRow: DiffRows.lineRow(of: anchor, hunks, side: presented == .side)))
     case .position(let position):
       surface.scroll(to: position)
     }

@@ -132,9 +132,10 @@ enum DiffRows {
     )
   }
 
-  /// インラインで、新しい側の面の見えている先頭 `top`（差し込んだ行だけを数えた段 → `TextSurface.lineRow(of:)`）から `count` 段の中に出る古い側の行を含む範囲——先頭の段の次に出る
-  /// 古い側の行から `count` 行（インラインに出る古い側の行は単調に増え、1 段に高々 1 行）。
-  static func oldLines(from top: RowPosition, count: Int, _ hunks: [LineHunk]) -> ClosedRange<Int> {
+  /// インラインで、新しい側の面の見えている先頭 `top`（差し込んだ行だけを数えた段 → `TextSurface.lineRow(of:)`）から
+  /// `count` 段の中に出る古い側の行を含む範囲——先頭の段の次に出る古い側の行から `count` 行（インラインに出る古い側の行は
+  /// 単調に増え、1 段に高々 1 行）。
+  static func oldLines(from top: LineRow, count: Int, _ hunks: [LineHunk]) -> ClosedRange<Int> {
     let start = anchor(at: top, hunks, side: false).line
     return start...(start + max(0, count))
   }
@@ -149,7 +150,7 @@ enum DiffRows {
 
   /// 新しい側の面の位置 `top`（差し込んだ行だけを数えた段 → `TextSurface.lineRow(of:)`）を、行差分 `hunks` の並び（`side`
   /// なら並列の右、そうでなければインライン）で古い側の錨に直す。
-  static func anchor(at top: RowPosition, _ hunks: [LineHunk], side: Bool) -> Anchor {
+  static func anchor(at top: LineRow, _ hunks: [LineHunk], side: Bool) -> Anchor {
     var shift = 0
     for hunk in hunks {
       let (old, new) = (hunk.oldLines, hunk.newLines)
@@ -182,25 +183,25 @@ enum DiffRows {
 
   /// 古い側の錨 `anchor` を、行差分 `hunks` の並びの新しい側の面の位置（差し込んだ行だけを数えた段）に戻す
   /// （`anchor(at:_:side:)` の逆）。錨の追加の行が新しい並びに無ければ、同じ区間の頭に寄せる。
-  static func position(of anchor: Anchor, _ hunks: [LineHunk], side: Bool) -> RowPosition {
+  static func lineRow(of anchor: Anchor, _ hunks: [LineHunk], side: Bool) -> LineRow {
     var shift = 0
     for hunk in hunks {
       let (old, new) = (hunk.oldLines, hunk.newLines)
       if anchor.line < old.lowerBound { break }
       if anchor.line < old.upperBound {
         let row = anchor.line - old.lowerBound
-        guard side else { return RowPosition(line: new.lowerBound, offset: row - old.count) }
+        guard side else { return LineRow(line: new.lowerBound, offset: row - old.count) }
         return row < new.count
-          ? RowPosition(line: new.lowerBound + row)
-          : RowPosition(line: new.upperBound, offset: row - old.count)
+          ? LineRow(line: new.lowerBound + row)
+          : LineRow(line: new.upperBound, offset: row - old.count)
       }
       if anchor.line == old.upperBound, anchor.added < 0, !new.isEmpty {
         let first = side ? new.lowerBound + min(old.count, new.count) : new.lowerBound
-        return RowPosition(line: max(first, new.upperBound + anchor.added))
+        return LineRow(line: max(first, new.upperBound + anchor.added))
       }
       shift = new.upperBound - old.upperBound
     }
-    return RowPosition(line: max(0, anchor.line + shift))
+    return LineRow(line: max(0, anchor.line + shift))
   }
 
   /// 昇順の重ならない区間の列 `ranges` のどれかが `line` を含む。

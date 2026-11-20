@@ -82,9 +82,9 @@ extension MetalTextSurface {
     scroll(toFirstLine: CGFloat(rows.unit(of: position, lineCount: text.lineCount)))
   }
 
-  func lineRow(of position: RowPosition) -> RowPosition { rows.lineRow(of: position) }
+  func lineRow(of position: RowPosition) -> LineRow { rows.lineRow(of: position) }
 
-  func position(ofLineRow row: RowPosition) -> RowPosition { rows.position(ofLineRow: row) }
+  func position(ofLineRow row: LineRow) -> RowPosition { rows.position(ofLineRow: row) }
 
   /// 2 つの位置の間を見せる。横は `from` の行の行頭を区間として、本文の横の寄せに渡す。
   func reveal(from: RowPosition, to: RowPosition, policy: TextReveal) {

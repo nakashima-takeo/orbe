@@ -205,7 +205,7 @@ extension EditorDiffTests {
     let draft = try XCTUnwrap(layer.draft(.old, line: 53))
     before.replaceText(of: draft.field, with: "書きかけ")
     pumpMain(until: { draft.surface != nil && layer.isSettled }, "4 本目の削除行の下に欄")
-    let reading = RowPosition(line: 50, offset: -4)
+    let reading = LineRow(line: 50, offset: -4)
     before.flush()
     before.scroll(to: before.position(ofLineRow: reading))
     before.flush()
