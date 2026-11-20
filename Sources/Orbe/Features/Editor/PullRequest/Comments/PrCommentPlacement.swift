@@ -47,11 +47,10 @@ final class PrCommentPlacement {
   /// 確かめる。行を移している間は、次の両端が来ても新しく移し始めない（移し終えた後の `done` からの呼び直しで追う）。
   func follow(
     _ ends: PullRequestState.DiffEnds, shown: EditorDiff.SideTexts,
-    commentable: (old: [Range<Int>], new: [Range<Int>])?, limit: LineDiff.Limit,
-    done: @escaping () -> Void
+    commentable: (old: [Range<Int>], new: [Range<Int>])?, done: @escaping () -> Void
   ) {
     if ends != self.ends {
-      if !isComputing { move(to: ends, shown: shown, limit: limit, done: done) }
+      if !isComputing { move(to: ends, shown: shown, done: done) }
     } else if let commentable {
       settle(commentable: commentable)
     }
@@ -59,13 +58,13 @@ final class PrCommentPlacement {
 
   /// 行を、diff の両端 `ends` の版（両側の本文 `shown`）へ移す。行差分は本文の大きさに比例するので裏で取る。
   private func move(
-    to ends: PullRequestState.DiffEnds, shown: EditorDiff.SideTexts, limit: LineDiff.Limit,
-    done: @escaping () -> Void
+    to ends: PullRequestState.DiffEnds, shown: EditorDiff.SideTexts, done: @escaping () -> Void
   ) {
     isComputing = true
     isMoving = true
     let (from, to) = version == .old ? (basis.old, shown.old) : (basis.new, shown.new)
     let line = line
+    let limit = EditorDiff.hunkLimit
     Task.detached(priority: .userInitiated) { [weak self] in
       let target = Self.target(of: line, from: from, to: to, limit: limit)
       await MainActor.run { [weak self] in

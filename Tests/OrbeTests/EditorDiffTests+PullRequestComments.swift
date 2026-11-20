@@ -32,23 +32,47 @@ extension EditorDiffTests {
     change: GitHubPullRequestContent.Change = .modified, modes: EditorDiffModeState? = nil,
     edit: (() throws -> Void)? = nil
   ) throws -> (EditorDiff, MetalTextSurface) {
+    let opened = try commentedTab(remote, path: path, change: change, modes: modes, edit: edit)
+    return (opened.diff, try engine(opened.diff.newSurface))
+  }
+
+  /// `commentedDiff` と同じ PR の diff を、`mode` のタブで開き、そのタブも返す。
+  func commentedTab(
+    _ remote: Remote, path: String = "a.txt",
+    change: GitHubPullRequestContent.Change = .modified, modes: EditorDiffModeState? = nil,
+    as mode: EditorSession.OpenMode = .pinned, edit: (() throws -> Void)? = nil
+  ) throws -> (diff: EditorDiff, tab: TerminalTab) {
     let base = repo.head()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     try (edit ?? { try self.repo.write("a.txt", "one\ntwo\nTHREE\nfour\n") })()
     XCTAssertTrue(repo.git(["commit", "-qam", "change"]).isSuccess)
     let head = repo.head()
-    XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
     remote.head = head
     remote.content = GitHubPullRequestContent(
       nodeID: "PR_7", number: 7, title: "題", url: "https://github.com/me/r/pull/7", isDraft: false,
       state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
       baseCommit: base, headCommit: head, commitCount: 1, commits: [],
       files: [.init(path: path, change: change, isViewed: false)])
+    let me = GitHubRepoName(nameWithOwner: "me/r")
     let state = PullRequestState.shared(
       for: PullRequestState.Key(
-        commonDir: repo.root + "/.git", id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 7))),
+        commonDir: try repo.open().commonDir, id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 7))
+      ),
       source: PullRequestSource(
-        branchPullRequests: { _, _, _ in }, branchExists: { _, _ in },
+        // 根の worktree（ブランチ feat）の今の PR は、この PR。
+        branchPullRequests: { _, branch, completion in
+          let pullRequest = GitHubBranchPR(
+            number: 7, headRefName: "feat", state: "OPEN", baseRefName: "main",
+            headRepository: me, url: "https://github.com/me/r/pull/7")
+          completion(
+            GitHubBranchPullRequests(
+              ledger: nil,
+              branches: [
+                branch: .gitHub(
+                  GitHubBranchRef(repo: me, branch: branch), pullRequests: .success([pullRequest]))
+              ]))
+        },
+        branchExists: { _, _ in },
         content: { _, completion in
           completion(remote.content.map { .success($0) } ?? .failure(.reason("")))
         },
@@ -68,21 +92,62 @@ extension EditorDiffTests {
           if remote.holds { remote.held.append(answer) } else { answer() }
         }))
     state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
-    return try open(state, path: path, modes: modes)
+    // 面が作る PR のパネルより先に、根の worktree の今の PR を差し替えの出どころで登録する（本物の gh を呼ばない）。
+    _ = BranchPullRequest.shared(for: repo.root, source: state.source)
+    return try open(state, path: path, modes: modes, as: mode)
   }
 
   /// PR の状態 `state` のファイル `path` の diff を、新しいタブで開く。
   private func open(
-    _ state: PullRequestState, path: String = "a.txt", modes: EditorDiffModeState? = nil
-  ) throws -> (EditorDiff, MetalTextSurface) {
+    _ state: PullRequestState, path: String = "a.txt", modes: EditorDiffModeState? = nil,
+    as mode: EditorSession.OpenMode = .pinned
+  ) throws -> (diff: EditorDiff, tab: TerminalTab) {
     let (tab, _) = tab(modes: modes)
-    let diff = try tab.group.editor.openDiff(id(path, .pullRequest(state)), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id(path, .pullRequest(state)), as: mode)
     pumpMain(
       until: {
         diff.content == .ready && diff.comments?.isSettled == true && diff.newSurface != nil
+          && diff.comments?.isCurrentPullRequest == true
       },
-      "PR の diff と印を出せる行が揃う")
-    return (diff, try engine(diff.newSurface))
+      "PR の diff と印を出せる行が揃い、PR が根の worktree の今の PR と分かる")
+    return (diff, tab)
+  }
+
+  /// タブの PR がタブの根の worktree の今の PR でなくなったら（ブランチを切り替えた後）、新しいスレッドを書かずに、送れる所を
+  /// 告げる（積んでも、Orbe から送る所が無い）。
+  func testAPullRequestThatIsNoLongerTheWorktreesDoesNotTakeNewComments() throws {
+    let remote = Remote()
+    let (diff, surface) = try commentedDiff(remote)
+    let layer = try XCTUnwrap(diff.comments)
+    layer.surface(surface, didPressTrailingMarkOn: .document(3))
+    let draft = try XCTUnwrap(layer.draft(.new, line: 3))
+    surface.replaceText(of: draft.field, with: "書きかけ")
+    XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
+    pumpMain(until: { !layer.isCurrentPullRequest }, "前提: ブランチを切り替えると今の PR でなくなる")
+
+    draft.zone(.pressed(PrCommentControl.add))
+    XCTAssertEqual(remote.writes, [])
+    XCTAssertTrue(
+      [Language.ja, .en].map { L10n.string(.editorPrThreadNotCurrent, $0) }.contains(draft.failure),
+      "送れる所を告げる")
+    XCTAssertEqual(draft.text, "書きかけ")
+  }
+
+  /// 仮のタブで開いた PR の diff は、コメントの書きかけを打ち始めたら普通のタブになる（次の仮のタブとの入れ替えで書きかけを
+  /// 失わない）。
+  func testADraftInAPreviewPullRequestDiffPinsTheTab() throws {
+    let remote = Remote()
+    let (diff, tab) = try commentedTab(remote, as: .preview)
+    let session = tab.group.editor
+    XCTAssertEqual(session.previewID, .diff(diff.id), "前提: 仮のタブ")
+    let layer = try XCTUnwrap(diff.comments)
+    let surface = try engine(diff.newSurface)
+    layer.surface(surface, didPressTrailingMarkOn: .document(3))
+    let draft = try XCTUnwrap(layer.draft(.new, line: 3))
+    surface.replaceText(of: draft.field, with: " ")
+    XCTAssertEqual(session.previewID, .diff(diff.id), "空白だけなら仮のまま")
+    surface.replaceText(of: draft.field, with: "書きかけ")
+    XCTAssertNil(session.previewID, "打てば普通のタブ")
   }
 
   /// 新しい側の行 3 のスレッドは文書の行 3 の下に置かれ、その行の地はスレッドのある行の型になる。変更の前後 3 行は印を出せ、

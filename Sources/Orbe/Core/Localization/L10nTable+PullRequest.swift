@@ -75,6 +75,10 @@ extension L10n {
     .editorPrThreadNotReady: (
       "PR の最新の内容を読み込んでから、もう一度お試しください", "Try again after the latest pull request is loaded"
     ),
+    .editorPrThreadNotCurrent: (
+      "この PR のレビューは、PR のブランチの worktree か GitHub で送信してください",
+      "Send this pull request’s review from a worktree on its branch or on GitHub"
+    ),
     .editorPrThreadLineGone: ("この行は現在の diff にありません", "This line isn’t in the current diff"),
     .editorPrThreadDetached: (
       "このスレッドは現在の diff の行に付いていません", "This thread isn’t on a line of the current diff"

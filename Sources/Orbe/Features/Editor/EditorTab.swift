@@ -28,6 +28,15 @@ enum EditorTab {
     }
   }
 
+  /// 人が打った内容を持つ——使う文書が未保存か、PR の diff にコメントの書きかけがある（仮のタブの入れ替えで失わないよう、
+  /// 普通のタブにする）。
+  var holdsEdits: Bool {
+    switch self {
+    case .document(let document): document.isDirty
+    case .diff(let diff): diff.document?.isDirty == true || diff.comments?.holdsDrafts == true
+    }
+  }
+
   /// タブが指すファイルの実体の URL（現在地・パンくず・ツリーの選択表示）。
   var url: URL {
     switch self {

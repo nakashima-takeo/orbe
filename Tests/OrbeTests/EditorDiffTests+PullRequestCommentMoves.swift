@@ -15,11 +15,9 @@ extension EditorDiffTests {
   private func push(
     _ text: String, _ remote: Remote, _ diff: EditorDiff, observe: () -> Void = {}
   ) throws {
-    XCTAssertTrue(repo.git(["switch", "-q", "feat"]).isSuccess)
     try repo.write("a.txt", text)
     XCTAssertTrue(repo.git(["commit", "-qam", "push"]).isSuccess)
     remote.head = repo.head()
-    XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
     let content = try XCTUnwrap(remote.content)
     remote.content = GitHubPullRequestContent(
       nodeID: content.nodeID, number: content.number, title: content.title, url: content.url,
@@ -142,6 +140,30 @@ extension EditorDiffTests {
     XCTAssertNotNil(next.rows.block(ofZone: ObjectIdentifier(zone)))
     zone.zone(.pressed(PrCommentControl.add))
     XCTAssertEqual(remote.writes, [], "消えたスレッドへは書かない")
+  }
+
+  /// PR に push があっても、diff が新しい先頭の版を見せるまでの間、置いていたスレッドは並びから外れない（返信の書きかけの
+  /// 欄の場が閉じない）。
+  func testAPushKeepsAPlacedThreadUntilTheDiffShowsTheNewHead() throws {
+    let remote = Remote()
+    remote.threads = [
+      GitHubPullRequestReview.Thread(
+        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
+        canResolve: true, canUnresolve: false,
+        comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
+    ]
+    let (diff, surface) = try commentedDiff(remote)
+    let zone = try XCTUnwrap(diff.comments?.zone(thread: "T"))
+    pumpMain(until: { surface.rows.block(ofZone: ObjectIdentifier(zone)) != nil }, "スレッドが置かれる")
+    surface.replaceText(of: zone.field, with: "返信の書きかけ")
+
+    var vanished = false
+    try push("one\ntwo\nTHREE\nfour\nfive\n", remote, diff) {
+      guard let surface = diff.newSurface as? MetalTextSurface else { return }
+      if surface.rows.block(ofZone: ObjectIdentifier(zone)) == nil { vanished = true }
+    }
+    XCTAssertFalse(vanished, "push を読んで diff が新しい版を見せるまでの間も、スレッドは並びから外れない")
+    XCTAssertEqual(zone.text, "返信の書きかけ")
   }
 
   /// 置けなくなったスレッドへの返信は送れる。
