@@ -83,7 +83,7 @@ extension WindowController {
 
   /// Home のタスクの作業場を用意する（無ければ作る）。Home が git の中にあると作業場の一致が崩れるので拒む。
   func prepareHomeTaskFolder(_ task: TaskItem) -> Result<TaskWorkplace, TaskStartFailure> {
-    guard let home = HomeFolder.url?.path else { return .failure(.failed("Home is unresolved")) }
+    let home = HomeFolder.url.path
     guard !HomeTaskFolder.isInsideGit(home: home) else {
       return .failure(.failed("Home is inside a git repository: \(home)"))
     }

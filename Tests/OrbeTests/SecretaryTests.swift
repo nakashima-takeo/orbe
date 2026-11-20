@@ -17,7 +17,7 @@ final class SecretaryTests: OrbeTestCase {
   /// 前面は main（素のタブ 1 枚）、背景に Home（`homeTabs`）。
   func launch(stage: Bool = true) throws -> WindowController {
     if stage { _ = try stageFakeAgent("claude") }
-    let home = try XCTUnwrap(HomeFolder.url).path
+    let home = HomeFolder.url.path
     let workspaces = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [

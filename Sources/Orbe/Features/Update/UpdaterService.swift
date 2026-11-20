@@ -1,4 +1,5 @@
 import AppKit
+import OrbePaths
 import Sparkle
 
 /// `SPUUpdater` の所有者。状態モデル（`UpdateState`）を生成・所有し、起動ゲート・トグルの永続化・
@@ -15,9 +16,9 @@ import Sparkle
 ///
 /// 起動ゲート:
 /// - `.app` 以外（テスト・素の `swift build` バイナリ）は Info.plist に `SUFeedURL` が無く常に不活性。
-/// - dev ビルド（`ORBE_RELEASE` 未定義）は defaults/起動引数の `SUFeedURL` 上書きがあるときだけ開始する
+/// - dev チャネル（`OrbePaths.channel`）のビルドは defaults/起動引数の `SUFeedURL` 上書きがあるときだけ開始する
 ///   （dev/sandbox インスタンスが GitHub へ確認に行かない。localhost appcast でのテストは可能）。
-/// - release ビルドは常に開始。
+/// - release チャネルのビルドは常に開始。
 ///
 /// 言語モード 5・main スレッド規律（プロジェクト方針: libghostty 同様、明示ディスパッチで扱う）。
 /// SPUUpdater の API は main thread 前提で、呼び出し元（WindowController/AppDelegate）は常に main。
@@ -121,9 +122,9 @@ final class UpdaterService: NSObject {
   func startIfPermitted() {
     defer { syncCanCheckNow() }
     guard Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil else { return }
-    #if !ORBE_RELEASE
+    if OrbePaths.channel == .dev {
       guard UserDefaults.standard.string(forKey: "SUFeedURL") != nil else { return }
-    #endif
+    }
     do {
       try updater.start()
       started = true

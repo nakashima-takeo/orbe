@@ -12,9 +12,10 @@ extension WindowController: SecretaryHost {
   }
 
   func secretaryOpen(command: String) -> Bool {
-    guard let index = store.homeIndex, let home = HomeFolder.url?.path,
+    guard let index = store.homeIndex,
       let opened = openTab(
-        workspaceIndex: index, cwd: home, command: command, env: agentLauncher.launchEnvironment)
+        workspaceIndex: index, cwd: HomeFolder.url.path, command: command,
+        env: agentLauncher.launchEnvironment)
     else { return false }
     dismissPalette()
     _ = controlFocusTab(tabId: opened.tabId)

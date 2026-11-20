@@ -100,7 +100,7 @@ final class SessionStore {
 
   /// 「Home がちょうど 1 つあり、root が `rootPath`」へそろえる（起動時に復元の後で 1 回）。
   /// 指している workspace があれば root を上書きし、無ければ「Home」を末尾に足して指す（選択はボード）。前面の
-  /// workspace は動かさず、タブも作らない。root は state フォルダから導く値なので、保存されていた root は使わない。
+  /// workspace は動かさず、タブも作らない。root は毎起動導く値なので、保存されていた root は使わない。
   func ensureHome(rootPath: String) {
     if let i = homeIndex {
       workspaces[i].rootPath = rootPath
@@ -138,7 +138,7 @@ final class SessionStore {
     return regularCount <= 1 ? .lastRegularWorkspace : nil
   }
 
-  /// ディレクトリ（rootPath）を変えられるか。Home の root は state フォルダから導く値なので変えない。
+  /// ディレクトリ（rootPath）を変えられるか。Home の root は毎起動導く値なので変えない。
   func canChangeDir(_ index: Int) -> Bool { !isHome(index) }
 
   // MARK: - 純ドメイン読み

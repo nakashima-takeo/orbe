@@ -11,16 +11,29 @@ import Foundation
 /// クライアントの socket 解決はサーバ（ControlServer = `stateDirBase()/control.sock`）と同じ
 /// `stateDirBase()` を通るため、一致は偶然でなく構造として保証される。
 public enum OrbePaths {
+  /// ビルドのチャネル。公開版が release、それ以外（`swift build` の素の実行体を含む）は dev。
+  public enum Channel: Sendable {
+    case dev, release
+  }
+
+  /// このビルドのチャネル。ビルド時の `ORBE_RELEASE` を読むのはここだけで、チャネルで分かれる値はこれから導く。
+  public static let channel: Channel = {
+    #if ORBE_RELEASE
+      return .release
+    #else
+      return .dev
+    #endif
+  }()
+
   /// bundle を持たない実行体（CLI/MCP）の fallback bundle id。GUI では
   /// `Bundle.main.bundleIdentifier` が優先されるが、ビルド時のチャネルから導出するため
   /// 同じチャネルで焼かれた GUI の Info.plist と必ず同値になる（`build-app.sh` が両方を導出する）。
-  public static let fallbackBundleId: String = {
-    #if ORBE_RELEASE
-      return "dev.orbe.app"
-    #else
-      return "dev.orbe.app.dev"
-    #endif
-  }()
+  public static var fallbackBundleId: String {
+    switch channel {
+    case .release: "dev.orbe.app"
+    case .dev: "dev.orbe.app.dev"
+    }
+  }
 
   /// このプロセスの bundle ID（＝チャネル identity）。バンドルを持たない実行体では焼き込み値へ落ちる。
   /// state の置き場（`appSupportDir()`）とタブへ注入する identity が同じ解決を通ることを構造で保証する。
@@ -44,17 +57,23 @@ public enum OrbePaths {
     return dir
   }
 
-  /// state ディレクトリ。`ORBE_STATE_DIR` が非空ならその直下へ隔離、未設定なら `appSupportDir()`。
+  /// 隔離先の state ディレクトリ。`ORBE_STATE_DIR` が非空のときだけその場所を返し、そうでなければ nil
+  /// （隔離起動でない）。フォルダは作らない。env はテスト seam（既定は実環境）。
+  public static func isolatedStateDir(
+    env: [String: String] = ProcessInfo.processInfo.environment
+  ) -> URL? {
+    guard let dir = env[stateDirEnvVar], !dir.isEmpty else { return nil }
+    return URL(fileURLWithPath: dir, isDirectory: true)
+  }
+
+  /// state ディレクトリ。隔離先（`isolatedStateDir`）があればそこ、無ければ `appSupportDir()`。
   /// 存在しなければ作成する。解決不能なら nil。env はテスト seam（既定は実環境）。
   public static func stateDirBase(
     env: [String: String] = ProcessInfo.processInfo.environment
   ) -> URL? {
-    if let override = env[stateDirEnvVar], !override.isEmpty {
-      let dir = URL(fileURLWithPath: override, isDirectory: true)
-      try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-      return dir
-    }
-    return appSupportDir()
+    guard let dir = isolatedStateDir(env: env) else { return appSupportDir() }
+    try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
   }
 
   /// control.sock の絶対パス。`ORBE_STATE_DIR`（明示指定）が非空なら `$ORBE_STATE_DIR/control.sock`
@@ -63,11 +82,7 @@ public enum OrbePaths {
   public static func controlSocketPath(
     env: [String: String] = ProcessInfo.processInfo.environment
   ) -> String? {
-    if let dir = env[stateDirEnvVar], !dir.isEmpty {
-      return stateDirBase(env: env)?
-        .appendingPathComponent("control.sock", isDirectory: false).path
-    }
-    if let sock = env[sockEnvVar], !sock.isEmpty { return sock }
+    if isolatedStateDir(env: env) == nil, let sock = env[sockEnvVar], !sock.isEmpty { return sock }
     return stateDirBase(env: env)?
       .appendingPathComponent("control.sock", isDirectory: false).path
   }

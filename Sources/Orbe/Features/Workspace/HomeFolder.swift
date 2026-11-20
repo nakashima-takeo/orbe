@@ -1,6 +1,7 @@
 import Foundation
+import OrbePaths
 
-/// Home の root（`StateDir.base()/home/`）と、その用意。
+/// Home の root（ホームディレクトリ直下のチャネルごとのフォルダ。隔離起動では隔離先の `home/`）と、その用意。
 enum HomeFolder {
   /// テスト用にフォルダを差し替える（他の永続ファイルと同じく隔離ハーネスが張る）。
   nonisolated(unsafe) static var urlOverride: URL?
@@ -8,18 +9,32 @@ enum HomeFolder {
   /// Orbe の操作の指示の置き場（root からの相対）。claude は `.claude/rules/` の下を指示として読む。
   static let rulesPath = ".claude/rules/orbe.md"
 
-  /// フォルダの場所。解決できなければ nil。フォルダの有無は問わない。
-  static var url: URL? {
-    urlOverride ?? StateDir.base()?.appendingPathComponent("home", isDirectory: true)
+  /// フォルダの場所。フォルダの有無は問わない。
+  static var url: URL {
+    urlOverride
+      ?? url(
+        isolatedStateDir: StateDir.isolatedBase,
+        home: FileManager.default.homeDirectoryForCurrentUser, channel: OrbePaths.channel)
+  }
+
+  /// 場所の規則。隔離起動なら隔離先の `home/`、そうでなければ `home` の下のチャネルごとの名前
+  /// （release は `orbe`、dev は `orbe-dev`）。隔離したインスタンスに本物のフォルダを触らせない。
+  static func url(isolatedStateDir: URL?, home: URL, channel: OrbePaths.Channel) -> URL {
+    if let isolatedStateDir {
+      return isolatedStateDir.appendingPathComponent("home", isDirectory: true)
+    }
+    let name =
+      switch channel {
+      case .release: "orbe"
+      case .dev: "orbe-dev"
+      }
+    return home.appendingPathComponent(name, isDirectory: true)
   }
 
   /// `language` で用意する。Orbe の操作の指示は Orbe が持つので毎回今の雛形へ書き直す。CLAUDE.md は人と AI の欄なので、
   /// フォルダを作るときに 1 回だけ置き、以後は中身を見ない。失敗はログに残し、次の起動で再挑戦する。
   static func prepare(language: Language) {
-    guard let url else {
-      NSLog("[home] state dir unresolved, folder not prepared")
-      return
-    }
+    let url = Self.url
     create(url, language: language)
     guard FileManager.default.fileExists(atPath: url.path) else { return }
     do {

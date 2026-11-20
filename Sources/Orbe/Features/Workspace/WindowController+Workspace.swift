@@ -6,11 +6,7 @@ extension WindowController {
   /// Home がちょうど 1 つあり、root が専用フォルダを指す状態へそろえ、保存を予約する。
   /// フォルダそのものの用意は UI 言語の確定を待つ（`prepareHomeFolder`）。
   func ensureHome() {
-    guard let root = HomeFolder.url else {
-      NSLog("[home] state dir unresolved, Home not ensured")
-      return
-    }
-    store.ensureHome(rootPath: root.path)
+    store.ensureHome(rootPath: HomeFolder.url.path)
     scheduleSave()
   }
 

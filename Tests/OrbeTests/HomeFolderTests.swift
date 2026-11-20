@@ -3,17 +3,17 @@ import XCTest
 
 @testable import Orbe
 
-/// Home のフォルダの用意を固定する。Orbe の操作の指示は UI 言語の雛形へ毎回書き直し、CLAUDE.md は無いフォルダを
-/// 作るときだけ置いて以後は触らない。用意は UI 言語が確定した時点——新規利用者は初回の言語選択を確定するまで作らない。
+/// Home のフォルダの用意を固定する。Orbe の操作の指示は UI 言語の雛形へ毎回書き直し、CLAUDE.md はフォルダが無くて
+/// 作るときだけ置き、以後は触らない。用意は UI 言語が確定した時点で行う——新規利用者は初回の言語選択を確定するまで作らない。
 ///
 /// 壊れると何が起きるか: 人や AI が書き換えた CLAUDE.md が起動のたびに雛形へ戻される。Orbe の操作の指示の改版が既存の
-/// 利用者に届かない。言語選択の前に作ると、選んだ言語と違う雛形が置かれる。
+/// 利用者に届かない。言語選択の前に作ると、選んだ言語と違う雛形が置かれる。隔離起動で隔離先を使わないと、検証用の
+/// インスタンスが本物の Home の指示を書き換え、本物の Home にタスクの作業場を作る。チャネルごとの名前が崩れると、利用者の
+/// Home が空の別のフォルダへ移り、書き足した CLAUDE.md とタスクの作業場を見失う。dev と release が同じ Home を共有してしまう。
 final class HomeFolderTests: OrbeTestCase {
-  private func folder() throws -> URL { try XCTUnwrap(HomeFolder.url) }
-  private func claudeMd() throws -> URL { try folder().appendingPathComponent("CLAUDE.md") }
-  private func rules() throws -> URL {
-    try folder().appendingPathComponent(HomeFolder.rulesPath)
-  }
+  private var folder: URL { HomeFolder.url }
+  private var claudeMd: URL { folder.appendingPathComponent("CLAUDE.md") }
+  private var rules: URL { folder.appendingPathComponent(HomeFolder.rulesPath) }
 
   private func contents(_ url: URL) throws -> String {
     try String(contentsOf: url, encoding: .utf8)
@@ -22,41 +22,67 @@ final class HomeFolderTests: OrbeTestCase {
   /// Orbe の操作の指示は毎回今の雛形へ戻し、CLAUDE.md は書き換えを上書きせず、消しても戻さない。
   func testPrepareRewritesRulesButLeavesClaudeMdToPeople() throws {
     HomeFolder.prepare(language: .ja)
-    try "edited".write(to: claudeMd(), atomically: true, encoding: .utf8)
-    try "stale".write(to: rules(), atomically: true, encoding: .utf8)
+    try "edited".write(to: claudeMd, atomically: true, encoding: .utf8)
+    try "stale".write(to: rules, atomically: true, encoding: .utf8)
 
     HomeFolder.prepare(language: .en)
-    XCTAssertEqual(try contents(claudeMd()), "edited")
-    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(.en, home: try folder().path))
+    XCTAssertEqual(try contents(claudeMd), "edited")
+    XCTAssertEqual(try contents(rules), HomeTemplate.rules(.en, home: folder.path))
 
-    try FileManager.default.removeItem(at: claudeMd())
-    try FileManager.default.removeItem(at: rules())
+    try FileManager.default.removeItem(at: claudeMd)
+    try FileManager.default.removeItem(at: rules)
     HomeFolder.prepare(language: .ja)
-    XCTAssertFalse(FileManager.default.fileExists(atPath: try claudeMd().path))
-    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(.ja, home: try folder().path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: claudeMd.path))
+    XCTAssertEqual(try contents(rules), HomeTemplate.rules(.ja, home: folder.path))
   }
 
   func testReturningUserGetsTheFolderAtLaunchAndTheHomePointsAtIt() throws {
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
     let wc = WindowController()
 
-    XCTAssertEqual(try contents(claudeMd()), HomeTemplate.claudeMd(.ja))
-    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(.ja, home: try folder().path))
-    XCTAssertEqual(try XCTUnwrap(wc.workspaces.last).rootPath, try folder().path)
+    XCTAssertEqual(try contents(claudeMd), HomeTemplate.claudeMd(.ja))
+    XCTAssertEqual(try contents(rules), HomeTemplate.rules(.ja, home: folder.path))
+    XCTAssertEqual(try XCTUnwrap(wc.workspaces.last).rootPath, folder.path)
   }
 
-  /// OS の言語と違う言語を選ぶ——OS の言語で作る誤りを、どの言語の環境でも落とすため。
+  /// OS の言語と違う言語を選ぶ——OS の言語で作る誤りを、どの言語の環境でも検出するため。
   func testNewUserGetsTheFolderOnlyAfterChoosingALanguage() throws {
     let chosen: Language = Language.systemDefault == .ja ? .en : .ja
     let wc = WindowController()
-    XCTAssertFalse(FileManager.default.fileExists(atPath: try folder().path), "言語選択の前には作らない")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path), "言語選択の前には作らない")
 
     let gate = try XCTUnwrap(wc.model.languageSelect)
     gate.selected = try XCTUnwrap(Language.allCases.firstIndex(of: chosen))
     gate.activate()
 
-    XCTAssertEqual(try contents(claudeMd()), HomeTemplate.claudeMd(chosen), "選んだ言語の雛形")
+    XCTAssertEqual(try contents(claudeMd), HomeTemplate.claudeMd(chosen), "選んだ言語の雛形")
     XCTAssertEqual(
-      try contents(rules()), HomeTemplate.rules(chosen, home: try folder().path), "選んだ言語の雛形")
+      try contents(rules), HomeTemplate.rules(chosen, home: folder.path), "選んだ言語の雛形")
+  }
+
+  /// 隔離起動の Home は隔離先の state フォルダの `home/` で、チャネルごとの本物のフォルダではない。
+  func testAnIsolatedInstanceKeepsHomeInsideItsStateDir() {
+    HomeFolder.urlOverride = nil
+
+    XCTAssertEqual(
+      HomeFolder.url.standardizedFileURL.path,
+      TestIsolation.stateDir.appendingPathComponent("home").standardizedFileURL.path)
+  }
+
+  /// 通常起動の Home はホームディレクトリ直下の、チャネルごとに名前が決まるフォルダ。隔離起動は release でも隔離先を使う。
+  /// release の側を通る確認はここだけ（テストは dev で走り、release の出荷前の起動確認は隔離起動）。
+  func testHomeIsTheChannelsFolderInTheHomeDirectoryUnlessIsolated() {
+    let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+    let isolated = URL(fileURLWithPath: "/tmp/isolated-state", isDirectory: true)
+
+    XCTAssertEqual(
+      HomeFolder.url(isolatedStateDir: nil, home: home, channel: .release).path,
+      "/Users/someone/orbe")
+    XCTAssertEqual(
+      HomeFolder.url(isolatedStateDir: nil, home: home, channel: .dev).path,
+      "/Users/someone/orbe-dev")
+    XCTAssertEqual(
+      HomeFolder.url(isolatedStateDir: isolated, home: home, channel: .release).path,
+      "/tmp/isolated-state/home")
   }
 }

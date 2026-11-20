@@ -56,7 +56,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
   /// 保存値どおりに戻らなければ等値が崩れる。
   private func homeWorkspace(boardSelected: Bool) throws -> WorkspaceState {
     WorkspaceState(
-      name: "Home", rootPath: try XCTUnwrap(HomeFolder.url).path, activeTab: 0,
+      name: "Home", rootPath: HomeFolder.url.path, activeTab: 0,
       boardSelected: boardSelected,
       tabs: [TabState(cwd: "/work/home", agent: nil, explicitTitle: "home")])
   }
