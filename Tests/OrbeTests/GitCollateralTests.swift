@@ -118,7 +118,7 @@ final class GitCollateralTests: OrbeTestCase {
       XCTAssertNotNil(entries?["a.txt"])
       observed.fulfill()
     }
-    repo.version(of: "a.txt", at: .head) { version in
+    repo.version(of: "a.txt", atCommit: "HEAD") { version in
       XCTAssertEqual(version, .present(Data("x\n".utf8)))
       observed.fulfill()
     }

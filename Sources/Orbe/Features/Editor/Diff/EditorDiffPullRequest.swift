@@ -59,8 +59,8 @@ final class EditorDiffPullRequest: EditorDiffSource {
     guard reading != ends, let repo = state.repo else { return }
     reading = ends
     let path = id.path
-    repo.version(of: ends.renames[path] ?? path, at: .commit(ends.mergeBase)) { [weak self] old in
-      repo.version(of: path, at: .commit(ends.head)) { [weak self] new in
+    repo.version(of: ends.renames[path] ?? path, atCommit: ends.mergeBase) { [weak self] old in
+      repo.version(of: path, atCommit: ends.head) { [weak self] new in
         guard let self, reading == ends else { return }
         reading = nil
         read = (ends, Self.resolution(old: old, new: new))
