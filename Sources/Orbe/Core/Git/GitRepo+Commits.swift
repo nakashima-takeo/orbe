@@ -51,8 +51,8 @@ extension GitDiffHunkLines {
 enum GitPushTracking: Equatable {
   /// push 先が無い（push 先の設定も origin も無い）。
   case noDestination
-  /// push 先の remote 追跡 ref（`refs/remotes/<remote>/<ブランチ名>`）と今の値。値が nil なら、手元にその ref は無い。
-  case ref(String, commit: String?)
+  /// push 先の remote 追跡 ref の名前（`refs/remotes/<remote>/<ブランチ名>`）。手元にその ref が在るとは限らない。
+  case ref(String)
 }
 
 /// 2 つのコミットのマージベースを求めた結果。
@@ -168,20 +168,15 @@ extension GitRepo {
     }
   }
 
-  /// ブランチの push 先の remote 追跡 ref と今の値。push 先は push の解決（`pushRemote(ofBranch:handle:)`。設定が無ければ
-  /// origin）と同じで、ref の名前は、fetch の既定の refspec が写す先（`refs/remotes/<remote>/<名前>`）で組む。値が無いのは
-  /// 手元にその追跡 ref が無いときで、push 先にブランチが無いとは限らない（single-branch のクローンは、ほかのブランチの
-  /// 追跡 ref を作らない）。読めなければ nil。
+  /// ブランチの push 先の remote 追跡 ref の名前。push 先は push の解決（`pushRemote(ofBranch:handle:)`。設定が無ければ
+  /// origin）と同じで、名前は fetch の既定の refspec が写す先（`refs/remotes/<remote>/<名前>`）で組む。その ref が手元に
+  /// 在るとは限らない（single-branch のクローンは、ほかのブランチの追跡 ref を作らない）。読めなければ nil。
   func pushTracking(ofBranch name: String, completion: @escaping (GitPushTracking?) -> Void) {
     pushRemote(ofBranch: name, handle: GitRunner.Handle()) { remote in
       switch remote {
       case .failure: completion(nil)
       case .success(nil): completion(.noDestination)
-      case .success(let remote?):
-        let ref = "refs/remotes/\(remote)/\(name)"
-        self.refValues([ref]) { values in
-          completion(values.map { .ref(ref, commit: $0[ref]) })
-        }
+      case .success(let remote?): completion(.ref("refs/remotes/\(remote)/\(name)"))
       }
     }
   }

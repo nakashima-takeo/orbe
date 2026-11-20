@@ -2,7 +2,8 @@ import Foundation
 
 /// 見ているリモート追跡 ref の値を覚え、動いたかを比べる。根のサービスの「リモート追跡の ref が動いたかもしれない」という
 /// 知らせは、どの ref が動いたかを名前で区別しない——見ている ref の今の値を手元で読み、覚えた値と比べて、変わったときだけ
-/// 知らせる（無関係なブランチが fetch で動くたびに GitHub へ問い合わせない）。値を比べるのは、同じ名前の組どうしだけ。
+/// 知らせる（無関係なブランチが fetch で動くたびに GitHub へ問い合わせない）。値を比べるのは、前と今の両方で見ている ref
+/// だけ（見る ref が増えたら、使い手が `lacks` を見て覚え直す）。
 @MainActor
 final class TrackingRefs {
   /// 見る ref の名前と、それを読むリポジトリを求める（求められなければ nil）。
@@ -33,14 +34,18 @@ final class TrackingRefs {
     recorded.map { !$0.refs.contains(ref) } ?? false
   }
 
-  /// リモート追跡の ref が動いたかもしれない。覚えた値があれば今の値を読んで覚え直し、同じ名前の組で値が変わっていれば
-  /// `moved` を呼ぶ。
+  /// リモート追跡の ref が動いたかもしれない。覚えた値があれば今の値を読んで覚え直し、前と今の両方で見ている ref の値が
+  /// 変わっていれば `moved` を呼ぶ（見る ref の組が変わった直後でも、残った ref の動きを取りこぼさない）。
   func check(_ moved: @escaping () -> Void) {
     guard let previous = recorded else { return }
     read { [weak self] read in
       guard let self, let read else { return }
       recorded = read
-      guard read.refs == previous.refs, read.values != previous.values else { return }
+      guard
+        previous.refs.filter(read.refs.contains).contains(where: {
+          previous.values[$0] != read.values[$0]
+        })
+      else { return }
       moved()
     }
   }

@@ -36,6 +36,22 @@ extension BranchPullRequestTests {
     XCTAssertEqual(pullRequest.answer, .pullRequest(state))
   }
 
+  /// 引き直しの最中に見ている者が去り、その問い合わせが失敗で答えても、理由を持たない（去った後の答えは出さない）。
+  func testAFailureArrivingAfterTheLastWatcherLeftHoldsNoReason() throws {
+    let pullRequest = try watchAnOpenPullRequest()
+    pumpMain(until: { pullRequest.state?.content != nil }, "前提: PR の中身が届く")
+    answers["feat"] = .gitHub(
+      GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .failure(.rateLimited))
+    holdsLookups = true
+    pullRequest.reload()
+    pumpMain(until: { self.held.count == 1 }, "前提: 引き直しの問い合わせの最中")
+    pullRequest.endWatching()
+    holdsLookups = false
+    releaseLookups()
+    letTheLookUpSettle()
+    XCTAssertNil(pullRequest.lookupFailure)
+  }
+
   /// gh が無い・未ログイン・GitHub でない答えと、成功の答えで open の PR が無いときは、PR を保たずに答えを替え、前の PR を
   /// 見るのをやめる。
   func testAnAnswerThatRulesThePullRequestOutReplacesIt() throws {

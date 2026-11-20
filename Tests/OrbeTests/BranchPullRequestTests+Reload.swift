@@ -53,7 +53,7 @@ extension BranchPullRequestTests {
     XCTAssertEqual(pullRequest.answer, .reading)
 
     holdsLookups = false
-    release()
+    releaseLookups()
     pumpMain(until: { pullRequest.answer == .unavailable(.unverified) }, "新しいブランチの答え")
   }
 
@@ -69,7 +69,7 @@ extension BranchPullRequestTests {
     letTheLookUpSettle()
     XCTAssertEqual(lookups.count, 1, "前提: 問い合わせの最中は問い直さない")
     holdsLookups = false
-    release()
+    releaseLookups()
     pumpMain(until: { self.lookups.count == 2 }, "終わった後に問い直す")
     letTheLookUpSettle()
     XCTAssertEqual(lookups.count, 2, "1 回だけ")
@@ -110,7 +110,7 @@ extension BranchPullRequestTests {
     pumpMain(until: { self.held.count == 1 }, "前提: 問い合わせの最中")
     pullRequest.endWatching()
     holdsLookups = false
-    release()
+    releaseLookups()
     letTheLookUpSettle()
 
     let state = PullRequestState.shared(
@@ -143,6 +143,26 @@ extension BranchPullRequestTests {
       .trimmingCharacters(in: .newlines)
     try moveRemoteRef("refs/remotes/origin/main", to: advanced, watchedBy: refs.recorder)
     pumpMain(until: { self.lookups.count == looked + 1 }, "ベースブランチの追跡 ref が動いたら問い直す")
+  }
+
+  /// PR が無くなって見る追跡 ref からベースブランチのものが外れた直後でも、push 先の追跡 ref の動きで問い直す。
+  func testAPushRefMoveRightAfterThePullRequestIsGoneLooksUpAgain() throws {
+    let refs = try trackedBranch()
+    repositories = ["origin": .github(me)]
+    content = pullRequestContent(base: refs.main)
+    answers["feat"] = .gitHub(
+      GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([pr(9, state: "OPEN")]))
+    let pullRequest = watch()
+    pumpMain(until: { pullRequest.drift == .inSync }, "前提: PR の中身が届く")
+    letTheLookUpSettle()
+    answers["feat"] = .gitHub(GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([]))
+    pullRequest.reload()
+    pumpMain(until: { pullRequest.state == nil && pullRequest.answer != .reading }, "前提: PR が無くなる")
+    letTheLookUpSettle()
+    let looked = lookups.count
+
+    try moveRemoteRef("refs/remotes/origin/feat", to: refs.main, watchedBy: refs.recorder)
+    pumpMain(until: { self.lookups.count == looked + 1 }, "push 先の追跡 ref が動いたら問い直す")
   }
 
   /// 同じきっかけでは、worktree の今の PR と PR の diff タブが同じ PR を見ていても、中身の問い合わせは 1 回。パネルを隠して
@@ -211,7 +231,7 @@ extension BranchPullRequestTests {
     pullRequest.endWatching()
     pumpMain(until: { root == nil }, "前提: 根のサービスをほかに誰も持っていない")
     holdsLookups = false
-    release()
+    releaseLookups()
     XCTAssertEqual(pullRequest.answer, .reading, "前提: 去った後に届いた答えは出さない")
 
     pullRequest.beginWatching()
@@ -245,7 +265,7 @@ extension BranchPullRequestTests {
     let pullRequest = watch()
     pumpMain(until: { self.held.count == 1 }, "前提: 問い合わせの最中")
     pullRequest.endWatching()
-    release()
+    releaseLookups()
     letTheLookUpSettle()
     XCTAssertEqual(publishedChecks, [])
   }
@@ -265,7 +285,7 @@ extension BranchPullRequestTests {
     pullRequest.reload()
     pumpMain(until: { self.held.count == 1 }, "前提: 読み直しの問い合わせの最中")
 
-    release()
+    releaseLookups()
     pullRequest.endWatching()
     letTheLookUpSettle()
     XCTAssertEqual(publishedChecks.count, 1, "去った後に問い合わせない")
@@ -296,7 +316,7 @@ extension BranchPullRequestTests {
   }
 
   /// 留めた問い合わせに答える。
-  private func release() {
+  func releaseLookups() {
     let answers = held
     held = []
     for answer in answers { answer() }
@@ -304,7 +324,7 @@ extension BranchPullRequestTests {
 
   /// 問い合わせと、その前後の git の読み取り（追跡 ref の値を覚える・ずれを数える）が、起きるなら終わるまで main を
   /// 回す（終わったことも、起きなかったことも外から見えない）。
-  private func letTheLookUpSettle() {
+  func letTheLookUpSettle() {
     let until = Date().addingTimeInterval(1)
     while Date() < until {
       RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))

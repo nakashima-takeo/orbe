@@ -13,8 +13,8 @@ protocol BranchPullRequestObserver: AnyObject {
 /// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。読み直すきっかけは、誰も見ていない状態から
 /// 見ている者が現れた・`reload`・今のブランチ名が変わった・Orbe の中のネット操作が終わった・リモート追跡の ref が動き、
 /// このブランチの push 先の追跡 ref か PR のベースブランチの追跡 ref の値が前と変わった、のどれか。読んでいる間に次の
-/// きっかけが来たら、終わった後に 1 回だけ読み直す。手元の HEAD が動いただけなら、GitHub に問い合わせずに手元とのずれを
-/// 数え直す。
+/// きっかけが来たら、終わった後に 1 回だけ読み直す。手元の HEAD が動いただけなら、GitHub に問い合わせずに手元とのずれと
+/// 作成の入口の先行の数を数え直す。
 @MainActor @Observable
 final class BranchPullRequest {
   let root: String
@@ -31,18 +31,20 @@ final class BranchPullRequest {
   @ObservationIgnored private var isReading = false
   @ObservationIgnored private var readAgain = false
   /// 読み直しを、status が届くまで待っている（届いたら、ブランチ名が前と同じでも読み直す）。
-  @ObservationIgnored private var awaitingStatus = false
+  @ObservationIgnored var awaitingStatus = false
   /// 答えを出した通し番号（`settle` のたびに増える）。答えに続く問い合わせの結果は、その答えを出した番号のままのときだけ
   /// 入れる——答えの値が同じでも、別の読みが出した答えには入れない。
   @ObservationIgnored private var settlement = 0
   /// 答えを出している・読んでいるブランチ名（ブランチに居ない・git の管理下でないなら nil）・手元の HEAD。
-  @ObservationIgnored private var branch: String?
-  @ObservationIgnored private var head: String?
+  @ObservationIgnored var branch: String?
+  @ObservationIgnored var head: String?
   /// このブランチの push 先の追跡 ref と、PR のベースブランチの追跡 ref（PR の中身が読めていれば）。
-  @ObservationIgnored private lazy var tracking = TrackingRefs { [weak self] done in
+  @ObservationIgnored lazy var tracking = TrackingRefs { [weak self] done in
     guard let self else { return }
     trackedRefs(done)
   }
+  /// 作成の入口の先行の数を数える、既定のブランチの追跡 ref（既定のブランチが remote に無ければ nil）。
+  @ObservationIgnored private var defaultTrackingRef: String?
   /// ずれを数えた（数えている）手元の HEAD と PR の先頭。
   @ObservationIgnored private var counted: (local: String, pullRequest: String)?
   @ObservationIgnored private var observers: [WeakObserver] = []
@@ -81,7 +83,7 @@ final class BranchPullRequest {
     observers.removeAll { $0.value == nil || $0.value === observer }
   }
 
-  private func notify() {
+  func notify() {
     for observer in observers { observer.value?.branchPullRequestDidChange(self) }
   }
 
@@ -186,16 +188,12 @@ final class BranchPullRequest {
     _ ref: GitHubBranchRef, name: String, defaultBranch: String, remoteDefault: String,
     _ repo: GitRepo
   ) {
-    let tracking = remoteDefault.contains("/") ? "refs/remotes/" + remoteDefault : nil
-    let count: (@escaping (Int?) -> Void) -> Void = { done in
-      guard let tracking else { return done(nil) }
-      repo.counts("HEAD", against: tracking) { done($0?.ahead) }
-    }
-    count { [weak self] ahead in
+    defaultTrackingRef = remoteDefault.contains("/") ? "refs/remotes/" + remoteDefault : nil
+    countAhead(in: repo) { [weak self] ahead in
       guard let self else { return }
       let creation = Creation(
         branch: name, defaultBranch: defaultBranch, ahead: ahead,
-        url: ref.pullRequestCreationURL, ref: ref, published: .checking)
+        url: ref.pullRequestCreationURL, published: .checking)
       // この読みが答えを出したときだけ問い合わせる（見ている者がいなくなった・ブランチが変わったなら、答えを出していない）。
       guard let settled = finish(.noPullRequest(creation), name), settled == settlement else {
         return
@@ -211,6 +209,26 @@ final class BranchPullRequest {
         }
         answer = .noPullRequest(current)
       }
+    }
+  }
+
+  /// 既定のブランチの追跡 ref に対する、手元の HEAD の先行の数（追跡 ref が無い・数えられなければ nil）。
+  private func countAhead(in repo: GitRepo, _ done: @escaping (Int?) -> Void) {
+    guard let defaultTrackingRef else { return done(nil) }
+    repo.counts("HEAD", against: defaultTrackingRef) { done($0?.ahead) }
+  }
+
+  /// 作成の入口を出している間に手元の HEAD が動いた——GitHub に問い合わせずに先行の数を数え直す（数えた時点の答えが
+  /// 変わっていなければ入れる）。
+  func recountAhead() {
+    guard case .noPullRequest = answer, let repo = files?.repo else { return }
+    let settled = settlement
+    countAhead(in: repo) { [weak self] ahead in
+      guard let self, settlement == settled, case .noPullRequest(var current) = answer,
+        current.ahead != ahead
+      else { return }
+      current.ahead = ahead
+      answer = .noPullRequest(current)
     }
   }
 
@@ -242,6 +260,8 @@ final class BranchPullRequest {
   /// 見続ける）、理由だけを持つ——一時的な失敗のたびに PR が消えて、PR の中身の追従が止まらないように。PR を引けて
   /// いなければ、出せない理由にする。
   private func failed(_ reason: Unavailable, _ name: String) {
+    // 問い合わせの最中に見ている者がいなくなったら、答えも理由も出さない。
+    guard watchers > 0 else { return stopReading() }
     guard case .pullRequest = answer else {
       finish(.unavailable(reason), name)
       return
@@ -298,7 +318,7 @@ final class BranchPullRequest {
   /// マージベースが求まっても、git は浅い境界の先をたどれず、数が誤りうる（浅くなくなった後、次に PR の状態か手元の HEAD
   /// が変わったときに数え直す）。PR の先頭のコミットが手元に無い・読めないなら、違うことだけを持ち、次に PR の状態か手元の
   /// HEAD が変わったときに数え直す（両端を求めるために取ってきた後に数えられる）。
-  private func countDrift() {
+  func countDrift() {
     guard let prHead = state?.content?.headCommit else {
       counted = nil
       drift = nil
@@ -338,59 +358,9 @@ final class BranchPullRequest {
     repo.pushTracking(ofBranch: branch) { [weak self] push in
       guard let self else { return }
       var refs: [String] = []
-      if case .ref(let ref, _)? = push { refs.append(ref) }
+      if case .ref(let ref)? = push { refs.append(ref) }
       if let base = state?.baseTrackingRef { refs.append(base) }
       completion((repo, refs))
     }
-  }
-}
-
-/// 根のサービスの知らせ——管理下かの判定・status（ブランチ名と HEAD）・リモート追跡の ref の変化。
-extension BranchPullRequest: RootFilesObserver {
-  func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {}
-
-  func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
-
-  func rootFilesDidResolve(_ files: RootFiles) {
-    reload()
-  }
-
-  /// ブランチ名が変わったか、status を待っていた読み直しがあれば引き直す。HEAD だけが動いたなら、手元とのずれを数え直す。
-  func rootFilesStatusDidChange(_ files: RootFiles) {
-    let name = files.status?.branch?.name
-    if name != branch || awaitingStatus { return reload() }
-    head = files.status?.branch?.commit
-    countDrift()
-  }
-
-  /// リモート追跡の ref が動いたかもしれない——このブランチの push 先か PR のベースブランチの追跡 ref の値が変わって
-  /// いたときだけ読み直す（無関係なブランチが fetch で動くたびに GitHub へ問い合わせない）。問い合わせの最中なら、
-  /// 終わった後に 1 回読み直す。
-  func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
-    guard remoteRefsChanged else { return }
-    tracking.check { [weak self] in self?.reload() }
-  }
-}
-
-/// Orbe の中のネット操作（プッシュ・プル・フェッチ・同期・公開・コミットしてプッシュ）が終わったら読み直す。
-extension BranchPullRequest: SourceControlObserver {
-  func sourceControl(
-    _ control: SourceControl, firstStepDidFinish operation: SourceControl.Operation,
-    outcome: SourceControl.FirstStepOutcome
-  ) {}
-
-  func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind) {
-    guard kind.isNetwork else { return }
-    reload()
-  }
-}
-
-/// PR の中身・両端が変わったら、手元とのずれを数え直し、受ける者へ知らせる。PR のベースブランチの追跡 ref が新しく
-/// 分かったら、その値も覚える。
-extension BranchPullRequest: PullRequestStateObserver {
-  func pullRequestStateDidChange(_ state: PullRequestState) {
-    countDrift()
-    notify()
-    if let base = self.state?.baseTrackingRef, tracking.lacks(base) { tracking.record() }
   }
 }
