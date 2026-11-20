@@ -3,12 +3,13 @@ import XCTest
 
 @testable import Orbe
 
-/// Home のフォルダの用意を固定する。Orbe の操作の指示は UI 言語の雛形へ毎回書き直し、CLAUDE.md は無いフォルダを
-/// 作るときだけ置いて以後は触らない。用意は UI 言語が確定した時点で行う——新規利用者は初回の言語選択を確定するまで作らない。
+/// Home のフォルダの用意を固定する。Orbe の操作の指示は UI 言語の雛形へ毎回書き直し、CLAUDE.md はフォルダが無くて
+/// 作るときだけ置き、以後は触らない。用意は UI 言語が確定した時点で行う——新規利用者は初回の言語選択を確定するまで作らない。
 ///
 /// 壊れると何が起きるか: 人や AI が書き換えた CLAUDE.md が起動のたびに雛形へ戻される。Orbe の操作の指示の改版が既存の
 /// 利用者に届かない。言語選択の前に作ると、選んだ言語と違う雛形が置かれる。隔離起動で隔離先を使わないと、検証用の
-/// インスタンスが本物の Home の指示を書き換え、本物の Home にタスクの作業場を作る。
+/// インスタンスが本物の Home の指示を書き換え、本物の Home にタスクの作業場を作る。チャネルごとの名前が崩れると、利用者の
+/// Home が空の別のフォルダへ移り、書き足した CLAUDE.md とタスクの作業場を見失う。dev と release が同じ Home を共有してしまう。
 final class HomeFolderTests: OrbeTestCase {
   private var folder: URL { HomeFolder.url }
   private var claudeMd: URL { folder.appendingPathComponent("CLAUDE.md") }
@@ -66,5 +67,22 @@ final class HomeFolderTests: OrbeTestCase {
     XCTAssertEqual(
       HomeFolder.url.standardizedFileURL.path,
       TestIsolation.stateDir.appendingPathComponent("home").standardizedFileURL.path)
+  }
+
+  /// 通常起動の Home はホームディレクトリ直下の、チャネルごとに名前が決まるフォルダ。隔離起動は release でも隔離先を使う。
+  /// release の側を通る確認はここだけ（テストは dev で走り、release の出荷前の起動確認は隔離起動）。
+  func testHomeIsTheChannelsFolderInTheHomeDirectoryUnlessIsolated() {
+    let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+    let isolated = URL(fileURLWithPath: "/tmp/isolated-state", isDirectory: true)
+
+    XCTAssertEqual(
+      HomeFolder.url(isolatedStateDir: nil, home: home, channel: .release).path,
+      "/Users/someone/orbe")
+    XCTAssertEqual(
+      HomeFolder.url(isolatedStateDir: nil, home: home, channel: .dev).path,
+      "/Users/someone/orbe-dev")
+    XCTAssertEqual(
+      HomeFolder.url(isolatedStateDir: isolated, home: home, channel: .release).path,
+      "/tmp/isolated-state/home")
   }
 }
