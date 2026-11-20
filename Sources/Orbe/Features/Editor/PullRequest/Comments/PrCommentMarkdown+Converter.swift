@@ -13,6 +13,8 @@ extension PrCommentMarkdown {
     var quoteBars: [PrCommentBlock.QuoteBar] = []
     var quoted = false
     var depth = 0
+    /// 入れ子が上限の段に達したときの字下げ（上限より深い箇条書きの項目は、ここから 1 段だけ下げる）。
+    var capped: CGFloat?
   }
 
   /// 開いている入れ物（走査の入りで積み、出で降ろす）。
@@ -85,11 +87,6 @@ extension PrCommentMarkdown {
       case CMARK_NODE_PARAGRAPH, CMARK_NODE_HEADING:
         begin()
         if type == CMARK_NODE_HEADING { strong += 1 }
-        if let item = frames.last, PrCommentMarkdown.typeName(item.node) == "tasklist",
-          cmark_node_first_child(item.node) == node
-        {
-          add(cmark_gfm_extensions_get_tasklist_item_checked(item.node) ? "[x] " : "[ ] ")
-        }
         return false
       case CMARK_NODE_CODE_BLOCK:
         let code = PrCommentMarkdown.literal(node)
@@ -121,6 +118,7 @@ extension PrCommentMarkdown {
           inner.quoteBars.append(PrCommentBlock.QuoteBar(x: inner.indent, quote: quotes))
           inner.indent += Theme.Layout.editorPrBodyQuoteBar + Theme.Layout.editorPrBodyQuoteGap
           inner.depth += 1
+          if inner.depth == PrCommentMarkdown.maxDepth { inner.capped = inner.indent }
         }
         quotes += 1
         inner.quoted = true
@@ -245,7 +243,8 @@ extension PrCommentMarkdown {
       return frame
     }
 
-    /// 項目に入る——印を次に出す段に積み、字下げを深くする。
+    /// 項目に入る——印を次に出す段に積み、字下げを深くする。上限より深い段の項目は、上限の段の字下げから 1 段だけ下げる
+    /// （字下げは上限の段から伸びず、印は項目の字に重ならない）。
     private mutating func item(_ node: Node) {
       guard var list = frames.popLast() else { return }
       let base = list.context
@@ -258,6 +257,9 @@ extension PrCommentMarkdown {
       if base.depth < PrCommentMarkdown.maxDepth {
         inner.indent += list.listIndent
         inner.depth += 1
+        if inner.depth == PrCommentMarkdown.maxDepth { inner.capped = inner.indent }
+      } else {
+        inner.indent = (base.capped ?? base.indent) + list.listIndent
       }
       let x: CGFloat
       if ordered {
@@ -266,7 +268,7 @@ extension PrCommentMarkdown {
       } else {
         x = inner.indent - list.listIndent
       }
-      markers.append(PrCommentBlock.Marker(text: text, x: max(base.indent, x)))
+      markers.append(PrCommentBlock.Marker(text: text, x: x))
       var frame = Frame(node: node, context: inner)
       frame.blocksAtEntry = blocks.count
       frames.append(frame)
@@ -303,7 +305,7 @@ extension PrCommentMarkdown {
       end()
     }
 
-    /// 地の字。リンクの外では、本文に直接書いた http(s) の URL をリンクにする。
+    /// 地の字。リンクの外では、本文に直接書いた http(s) の URL を、明示のリンクと同じ判定（`allowed`）でリンクにする。
     private mutating func addText(_ string: String) {
       guard links.isEmpty, LinkDetector.mayContainLinks(string.utf16) else {
         return add(string)
@@ -314,8 +316,9 @@ extension PrCommentMarkdown {
         add(
           units.substring(with: NSRange(location: location, length: link.range.location - location))
         )
-        links.append(link.url)
-        add(units.substring(with: link.range))
+        let written = units.substring(with: link.range)
+        links.append(PrCommentMarkdown.allowed(written))
+        add(written)
         links.removeLast()
         location = NSMaxRange(link.range)
       }

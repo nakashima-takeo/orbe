@@ -43,7 +43,7 @@ struct PrCommentBlock: Sendable, Equatable {
 /// 字は欠けない。脚注は cmark-gfm が見せる形で出す——参照は書かれたラベルのまま、定義は本文の末尾に参照された順で出し、
 /// 参照されない定義と同じラベルの 2 つ目の定義は出さない。
 ///
-/// 解析は cmark-gfm（GitHub と同じ表・取り消し線・タスクの拡張。smart punctuation は付けない）で、木は cmark の走査で平らに
+/// 解析は cmark-gfm（GitHub と同じ表・取り消し線の拡張。smart punctuation は付けない）で、木は cmark の走査で平らに
 /// たどる——仕事も stack の深さも、入れ子の深さに依らない（深い引用の本文 1 つでスレッドの stack が溢れない）。字下げは
 /// 入れ子 `maxDepth` 段までで、それより深い段はその段と同じ字下げで出す。
 enum PrCommentMarkdown {
@@ -51,11 +51,14 @@ enum PrCommentMarkdown {
   static let maxDepth = 8
 
   static func blocks(_ source: String) -> [PrCommentBlock] {
+    // 改行を LF にそろえる（cmark は CR と CRLF も行の終わりに数えるが、書かれた字を切り出す行は LF で数える）。
+    let source = source.replacingOccurrences(of: "\r\n", with: "\n")
+      .replacingOccurrences(of: "\r", with: "\n")
     cmark_gfm_core_extensions_ensure_registered()
     // 脚注を脚注として読む（読まないと、脚注の定義の行を参照の定義として取り込み、字が出ない）。描くのは書かれた字のまま。
     guard let parser = cmark_parser_new(CMARK_OPT_DEFAULT | CMARK_OPT_FOOTNOTES) else { return [] }
     defer { cmark_parser_free(parser) }
-    for name in ["table", "strikethrough", "tasklist"] {
+    for name in ["table", "strikethrough"] {
       if let syntax = cmark_find_syntax_extension(name) {
         cmark_parser_attach_syntax_extension(parser, syntax)
       }

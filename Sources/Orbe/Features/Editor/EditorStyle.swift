@@ -125,7 +125,7 @@ enum EditorStyle {
   }
 
   /// 外観ごとの α に `factor` を掛けた色。
-  private static func scaledAlpha(_ color: NSColor, _ factor: CGFloat) -> NSColor {
+  static func scaledAlpha(_ color: NSColor, _ factor: CGFloat) -> NSColor {
     NSColor(name: nil) { appearance in
       var resolved = color
       appearance.performAsCurrentDrawingAppearance {

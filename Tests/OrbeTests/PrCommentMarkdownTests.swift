@@ -54,6 +54,9 @@ final class PrCommentMarkdownTests: OrbeTestCase {
     let table = "| a | b |\n| - | - |\n| 1 | 2 |"
     XCTAssertEqual(PrCommentMarkdown.blocks(table).map(\.text.string), [table])
     XCTAssertEqual(
+      PrCommentMarkdown.blocks("| a | b |\r\n| - | - |\r\n| 1 | 2 |").map(\.text.string), [table],
+      "CRLF の表も同じ字")
+    XCTAssertEqual(
       PrCommentMarkdown.blocks("説明の段落\n\n" + table).map(\.text.string), ["説明の段落", table])
     let suggestion = "```suggestion\nlet b = 2\n```"
     XCTAssertEqual(PrCommentMarkdown.blocks(suggestion).map(\.text.string), [suggestion])
@@ -87,6 +90,32 @@ final class PrCommentMarkdownTests: OrbeTestCase {
     XCTAssertTrue(PrCommentMarkdown.blocks("[x](myapp://open)")[0].links.isEmpty)
     let bare = PrCommentMarkdown.blocks("見て https://example.com/a. と `https://example.com/b`")[0]
     XCTAssertEqual(Array(bare.links.values), [URL(string: "https://example.com/a")!])
+    XCTAssertEqual(
+      Array(PrCommentMarkdown.blocks("[連絡](mailto:a@example.com)")[0].links.values),
+      [URL(string: "mailto:a@example.com")!])
+    XCTAssertTrue(
+      PrCommentMarkdown.blocks("見て https://example.com/\u{202E}a")[0].links.isEmpty,
+      "本文に直接書いた URL も明示のリンクと同じ判定で、危ない字を含めば押せない")
+  }
+
+  /// タスクの記法は書かれた字のまま（大文字の X も、同じ行の後ろに [x] があっても、中身の無いタスクも）。
+  func testTaskItemsKeepTheirWrittenText() {
+    XCTAssertEqual(
+      PrCommentMarkdown.blocks("- [ ] 未\n- [X] 済\n- [ ] 後で [x] と書く\n- [ ]").map(\.text.string),
+      ["[ ] 未", "[X] 済", "[ ] 後で [x] と書く", "[ ]"])
+  }
+
+  /// 入れ子の上限より深い箇条書きの項目でも、印は項目の字に重ならない。
+  func testAListDeeperThanTheLimitKeepsItsMarkerOffTheText() throws {
+    let source = (0...PrCommentMarkdown.maxDepth).map {
+      String(repeating: "  ", count: $0) + "- 段\($0)"
+    }.joined(separator: "\n")
+    let deepest = try XCTUnwrap(PrCommentMarkdown.blocks(source).last)
+    let marker = try XCTUnwrap(deepest.markers.last)
+    let width = NSAttributedString(
+      string: marker.text, attributes: [.font: Theme.Typography.editorPrThreadBody]
+    ).size().width
+    XCTAssertLessThanOrEqual(marker.x + width, deepest.indent)
   }
 
   /// 引用・箇条書きの中の描かない記法も、書かれた字のまま（入れ物の前置きを外し、HTML と画像は書かれた字）。
@@ -150,6 +179,8 @@ final class PrCommentMarkdownTests: OrbeTestCase {
     XCTAssertEqual(
       texts("A[^2] B[^1]\n\n[^1]: one\n[^2]: two"), ["A[^2] B[^1]", "[^2]: two", "[^1]: one"])
     XCTAssertEqual(texts("[^1]: 注\n\n後\n\n本文[^1]\n"), ["後", "本文[^1]", "[^1]: 注"])
+    XCTAssertEqual(texts("A[^1]\r\n\r\n[^1]: one\r\n\r\nB"), ["A[^1]", "B", "[^1]: one"], "CRLF")
+    XCTAssertEqual(texts("A[^1]\r\r[^1]: one\r\rB"), ["A[^1]", "B", "[^1]: one"], "CR だけの改行")
   }
 
   /// 番号の右揃えは、最後の番号でなく最も広い番号に合わせる（数字の幅は字ごとに違う）。
