@@ -36,8 +36,14 @@ final class PrCommentZone: SurfaceZone {
   var line: Int {
     didSet { if line != oldValue { redraw() } }
   }
-  /// 描き直させる面（並びに置いた面。並びを置くたびに置き直す）。
-  weak var surface: (any TextSurface)?
+  /// 描き直させる面（並びに置いた面。並びを置くたびに置き直す）。入力欄が主のまま別の面へ置き直したら（push を読んだ
+  /// 面の作り直しなど）、新しい面でも入力欄を主にする。
+  weak var surface: (any TextSurface)? {
+    didSet {
+      guard isFieldPrimary, let surface, surface !== oldValue else { return }
+      surface.focus(field)
+    }
+  }
   /// 押せる場所が押された。
   var onPress: (PrCommentZone, PrCommentControl) -> Void = { _, _ in }
   /// 入力欄が主になった・外れた。

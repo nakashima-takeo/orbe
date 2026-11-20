@@ -192,6 +192,53 @@ extension EditorDiffTests {
     XCTAssertEqual(zone.text, "返信の書きかけ")
   }
 
+  /// 返信欄に焦点と書きかけを持つスレッドで、そのファイルを変える push を読んで面が作り直されても、新しい面でも返信欄が
+  /// 主（キーと IME の行き先）のまま。壊れると、打っている途中の返信の字が本文へ行く（読むだけの本文には入らず消える）。
+  func testAPushThatRemakesTheSurfaceKeepsTheReplyFocused() throws {
+    try assertAPushKeepsTheReplyFocused(side: false, pushed: "one\ntwo\nTHREE\nfour\nfive\n", line: 3)
+  }
+
+  /// 上と同じで、スレッドの行が動く push。
+  func testAPushThatMovesTheThreadKeepsTheReplyFocused() throws {
+    try assertAPushKeepsTheReplyFocused(side: false, pushed: "zero\none\ntwo\nTHREE\nfour\n", line: 4)
+  }
+
+  /// 上と同じで、並列（新しい側のスレッドは右の面）。
+  func testAPushInSideBySideKeepsTheReplyFocused() throws {
+    try assertAPushKeepsTheReplyFocused(side: true, pushed: "zero\none\ntwo\nTHREE\nfour\n", line: 4)
+  }
+
+  /// 新しい側の行 3 のスレッドの返信欄に焦点と書きかけを置き、a.txt を `pushed`（スレッドは行 `line` へ）にする push を
+  /// 読んだ後も、作り直した面で返信欄が主で、窓の焦点がその面にあり、書きかけが残ることを確かめる。
+  private func assertAPushKeepsTheReplyFocused(side: Bool, pushed: String, line: Int) throws {
+    let thread = { (line: Int) in
+      GitHubPullRequestReview.Thread(
+        id: "T", path: "a.txt", side: .new, line: line, isResolved: false, canReply: true,
+        canResolve: true, canUnresolve: false,
+        comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
+    }
+    let remote = Remote()
+    remote.threads = [thread(3)]
+    let modes = EditorDiffModeState()
+    if side { modes.select(.side) }
+    let (diff, surface) = try commentedDiff(remote, modes: modes)
+    let window = try XCTUnwrap(surface.textView.window)
+    let zone = try XCTUnwrap(diff.comments?.zone(thread: "T"))
+    pumpMain(until: { surface.rows.block(ofZone: ObjectIdentifier(zone)) != nil }, "スレッドが置かれる")
+    window.makeFirstResponder(surface.textView)
+    surface.focus(zone.field)
+    surface.replaceText(of: zone.field, with: "返信の書きかけ")
+
+    remote.threads = [thread(line)]
+    try push(pushed, remote, diff)
+    pumpMain(until: { diff.carried == nil }, "位置を引き継ぎ終える")
+    let after = try engine(diff.newSurface)
+    XCTAssertFalse(after === surface, "前提: 新しい側の面が作り直された")
+    XCTAssertEqual(after.primary, .field(zone.field.id))
+    XCTAssertTrue(window.firstResponder === after.textView)
+    XCTAssertEqual(zone.text, "返信の書きかけ")
+  }
+
   /// 並列で、古い側の行のスレッドより下を読んでいる間に push があって新しい側の面が作り直されても、見えている先頭の行は
   /// 変わらない（面が大きさを持ち、スレッドの反対側の空きを揃えた並びの上で位置を引き継ぐ）。
   func testAPushInSideBySideKeepsTheLineBeingReadBelowAnOldSideThread() throws {
