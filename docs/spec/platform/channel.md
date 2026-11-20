@@ -1,7 +1,7 @@
 ---
 title: ビルドチャネル
 description: dev / release の 2 チャネル。ORBE_CHANNEL を唯一の入力に identity を全導出し、dev は「Orbe Dev」として本番と併存する
-updated: 2026-10-13
+updated: 2026-11-20
 ---
 
 # ビルドチャネル
@@ -14,14 +14,15 @@ updated: 2026-10-13
 | 表示名（CFBundleName / CFBundleDisplayName） | Orbe Dev | Orbe |
 | アイコン | アンバー地（glyph は共有） | オリジナル |
 | エージェントプラグイン名（＝MCP サーバー名） | `orbe-agent-dev` | `orbe-agent` |
+| [Home](workspace.md#home) のフォルダ | `~/orbe-dev/` | `~/orbe/` |
 | Swift 定義 | なし | `-DORBE_RELEASE` |
 | インストール先 | `/Applications/Orbe Dev.app`（local-release） | `/Applications/Orbe.app`（DMG / Sparkle） |
 
 ## 導出の規律
 
 - **`app/Info.plist` は 1 枚が SSOT。** dev の identity 差分はビルド時に導出して上書きする（release は無加工）。アイコンも `app/Orbe.icon` 1 つが SSOT で、dev は背景 fill だけ差し替えて actool にかける。エージェントプラグインも同じ形で、`app/agent-plugin/` が release の名前を持つ SSOT・dev だけビルド時に名前を焼き直す（焼き漏れはビルドを落とす。名前が 1 つでも残ると dev が release の枠を奪う——[agent/plugin-package](../agent/plugin-package.md)）。`CFBundleExecutable` は両チャネル `Orbe`。
-- **Swift 定義は `-DORBE_RELEASE` の 1 本**（release がオプトイン）。素の `swift build` は dev になる——フラグを付け忘れた経路が本番 identity へ落ちないための極性。
+- **Swift 定義は `-DORBE_RELEASE` の 1 本**（release がオプトイン）。素の `swift build` は dev になる——フラグを付け忘れた経路が本番 identity へ落ちないための極性。コードがこの定義を読むのは 1 か所（`OrbePaths.channel`）だけで、fallback bundle ID・更新確認の起動ゲート・Home のフォルダ名はその値から導く。
 - **バンドルを持たない実行体（`orb`・`orbe-mcp`）は `Bundle.main.bundleIdentifier` が取れない**ため、fallback bundle ID を同じ定義から焼く（`OrbePaths.fallbackBundleId`）。同一チャネルでビルドされた GUI と CLI は必ず同じ state / control.sock を解決する。
-- **state は bundle ID 由来で全分離**（[persistence](persistence.md)）。dev と release は workspaces・settings・control.sock・UserDefaults を共有せず、同時起動できる。
+- **state は bundle ID 由来で全分離**（[persistence](persistence.md)）。dev と release は workspaces・settings・control.sock・UserDefaults を共有せず、同時起動できる。Home のフォルダもチャネルごとに別の名前で、共有しない。
 - dev は Sparkle の更新確認に行かない（[update](update.md) の起動ゲート）。
 - **通知センターの許可は bundle ID ごと**（[automation](automation.md#通知センター)）。dev と release は別々に、それぞれ初回に 1 回問う。隔離起動（`sandbox-run`）は dev の `.app` を起こすので、dev と許可を共有する。

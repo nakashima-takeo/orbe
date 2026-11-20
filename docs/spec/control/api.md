@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスク/自動化/ボードのウィジェットを操作し、タスクから作業を始める out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
-updated: 2026-11-16
+updated: 2026-11-20
 ---
 
 # 制御 API（外部 → Orbe）
@@ -121,7 +121,7 @@ JSON-RPC メソッド = MCP の普段のツール名の 1:1 で、各ツール�
     | 行き着いた先がリポジトリの本体（main worktree。人の作業ツリーで agent を起こさない） | `-32602` |
     | 作業場がほかのタスクの worktree（相手のタスクを添える。付け替えは人の ⌘T だけ） | `-32602` |
     | 作業場で agent が作業中・入力待ち（そのタブを添える。2 体目を起こさず `prompt_agent` で頼む） | `-32602` |
-    | Home のフォルダが決まらない・git の作業ツリーの中にある | `-32000` |
+    | Home のフォルダが git の作業ツリーの中にある | `-32000` |
     | worktree の作成・最新化・フォルダの作成の失敗（理由を添える） | `-32000` |
     | ウィンドウ未接続・用意の間にタスクの workspace が消えた・タブを起こせない | `-32000` |
 - `list_automations` → `{automations:[…], seq}` … [自動化](../platform/automation.md)を ID 順に返す。各要素は次の形で、`set_automation`・`pause_automation` の応答の `automation` も同じ形。
