@@ -61,7 +61,8 @@ final class PullRequestState {
     }
   }
 
-  /// 最後の失敗。次の読み直し・確認済みの書き込みで消える。
+  /// 中身の読みか確認済みの書き込みの、最後の失敗。次に中身が読めたときと、確認済みの書き込みを始めたときに消える
+  /// （読み直している間は前の失敗を残す）。
   enum Failure: Equatable {
     case read(GitHubFailure)
     case write(GitHubFailure)
@@ -234,19 +235,19 @@ final class PullRequestState {
     }
     // 新しいきっかけでは、先頭のコミットを揃える読み直しを最初から数える。
     alignment = nil
-    startReadingContent { [weak self] in self?.readReview() }
+    startReading()
   }
 
-  /// 中身を読む（`then` は中身を問い合わせる直前に呼ぶ）。中身を読む道はこの 1 つ。問い合わせる前の追跡 ref の値を覚えてから
-  /// 問い合わせる（→ worktree の今の PR と同じ）。読めたら前の失敗を外し、読めなければその失敗を持つ。
-  private func startReadingContent(then: @escaping () -> Void = {}) {
+  /// 中身とレビューのやりとりを読む。中身を読む道はこの 1 つ。問い合わせる前の追跡 ref の値を覚えてから問い合わせる
+  /// （→ worktree の今の PR と同じ）。読めたら前の失敗を外し、読めなければその失敗を持つ。
+  private func startReading() {
     isReading = true
     let order = issueOrder()
     notify()
     tracking.record { [weak self] in
-      // 中身の読みが印の付いたまま（`isReading`）で、ほかの読みを先に出す——答えがすぐ返っても、中身の答えより先に
-      // 先頭のコミットを見比べない。
-      then()
+      // 中身の読みが印の付いたまま（`isReading`）で、レビューのやりとりの読みを先に出す——答えがすぐ返っても、中身の答えより
+      // 先に先頭のコミットを見比べない。
+      self?.readReview()
       self?.readContent(order: order)
     }
   }
@@ -307,7 +308,7 @@ final class PullRequestState {
     }
     guard isWatched else { return }
     alignment = (issueOrder(), seen)
-    startReadingContent { [weak self] in self?.readReview() }
+    startReading()
   }
 
   /// 中身とレビューのやりとりの先頭のコミットが食い違ったまま、揃える読みをやめている（次のきっかけ——再読込など——まで
@@ -375,12 +376,9 @@ final class PullRequestState {
           bounds = .failed(ends, .commitsMissing)
           return notify()
         }
-        let fetched: (GitWriteFailure?) -> Void = { [weak self] _ in
-          self?.mergeBase(ends, in: repo, fetched: true)
-        }
         repo.fetch(
-          commits: [ends.base, ends.head], from: remote, handle: GitRunner.Handle(),
-          completion: fetched)
+          commits: [ends.base, ends.head], from: remote, handle: GitRunner.Handle()
+        ) { [weak self] _ in self?.mergeBase(ends, in: repo, fetched: true) }
       case .unrelated:
         bounds = .failed(ends, .unrelated)
         notify()

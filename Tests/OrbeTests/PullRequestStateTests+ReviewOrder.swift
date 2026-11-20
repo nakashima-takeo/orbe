@@ -170,7 +170,7 @@ private final class ReviewWriteRun {
       expected = !unfinished.contains { Self.target(of: $0.write) == target }
     }
     let index = accepted.count
-    let taken = state.writeReview(write) { [weak self] in self?.finish(index, $0) }
+    let taken = state.writeReview(write) { [weak self] in self?.finish(index, $0.failure) }
     log.append("write(\(Self.target(of: write) ?? "new"))=\(taken)")
     guard taken == expected else {
       violation = taken ? "受け付けてはいけない書き込みを受け付けた" : "受け付けるべき書き込みを拒否した"
@@ -188,9 +188,15 @@ private final class ReviewWriteRun {
     guard let issuedAt = readIssuedAt else { return }
     tag += 1
     let pending = random.next(below: 2) == 0 ? "P\(tag)" : nil
+    // スレッドの id で読みの答えを 1 つずつ見分ける（書き込みはスレッドの有無を見ない）。
     let read = GitHubPullRequestReview(
-      viewer: "r\(tag)", viewerIsAuthor: false, headCommit: answeredHead(inconsistent),
-      pendingReview: pending.map { .init(id: $0, commentCount: 1) }, threads: [])
+      viewerIsAuthor: false, headCommit: answeredHead(inconsistent),
+      pendingReview: pending.map { .init(id: $0, commentCount: 1) },
+      threads: [
+        .init(
+          id: "r\(tag)", path: "a", side: .new, line: 1, isResolved: false, canReply: true,
+          canResolve: true, canUnresolve: false, comments: [])
+      ])
     gitHub.review = failing ? .failure(.unreachable) : .success(read)
     log.append("answerRead(\(failing ? "失敗" : read.headCommit))")
     let before = (state.review, state.reviewFailure, state.failure)

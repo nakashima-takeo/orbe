@@ -24,6 +24,9 @@ final class GitHubFailureTests: OrbeTestCase {
     XCTAssertEqual(
       classify(stderr: "gh: Bad credentials (HTTP 401)\nTry authenticating with:  gh auth login\n"),
       .unauthenticated, "認証情報が拒まれた")
+    XCTAssertEqual(classify(4, stderr: ""), .unauthenticated, "終了コード 4 だけでも未ログイン")
+    XCTAssertEqual(
+      classify(stderr: "gh: Bad credentials (HTTP 401)\n"), .unauthenticated, "HTTP 401 だけでも未ログイン")
   }
 
   func testRateLimitIsReadFromTheGraphQLErrorTypeAndTheMessage() {

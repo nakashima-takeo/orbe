@@ -12,7 +12,7 @@ import XCTest
 extension PullRequestStateTests {
   private func review(head: String = "h", threads: [String] = []) -> GitHubPullRequestReview {
     GitHubPullRequestReview(
-      viewer: "me", viewerIsAuthor: false, headCommit: head, pendingReview: nil,
+      viewerIsAuthor: false, headCommit: head, pendingReview: nil,
       threads: threads.map {
         .init(
           id: $0, path: "a", side: .new, line: 1, isResolved: false, canReply: true,
@@ -169,7 +169,7 @@ extension PullRequestStateTests {
     state.beginWatching()
     addTeardownBlock { @MainActor in state.endWatching() }
     XCTAssertNotNil(state.content)
-    XCTAssertFalse(state.writeReview(.submit(.comment, body: "x")) { _ in })
+    XCTAssertFalse(state.writeReview(.reply(thread: "T1", body: "x", resolve: false)) { _ in })
     XCTAssertTrue(gitHub.reviewWrites.isEmpty)
   }
 

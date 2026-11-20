@@ -99,7 +99,7 @@
 
     func read() -> GitHubPullRequestReview {
       GitHubPullRequestReview(
-        viewer: "you", viewerIsAuthor: false, headCommit: head(),
+        viewerIsAuthor: false, headCommit: head(),
         pendingReview: pendingID.map {
           .init(id: $0, commentCount: threads.flatMap(\.comments).count(where: \.isPending))
         }, threads: threads)

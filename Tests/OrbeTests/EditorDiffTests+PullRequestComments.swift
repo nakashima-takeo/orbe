@@ -57,7 +57,7 @@ extension EditorDiffTests {
           completion(
             .success(
               GitHubPullRequestReview(
-                viewer: "me", viewerIsAuthor: false, headCommit: remote.head, pendingReview: nil,
+                viewerIsAuthor: false, headCommit: remote.head, pendingReview: nil,
                 threads: remote.threads)))
         },
         writeReview: { write, _, pending, _, completion in

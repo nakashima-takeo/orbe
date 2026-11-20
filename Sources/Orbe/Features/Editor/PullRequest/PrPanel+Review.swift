@@ -57,8 +57,8 @@ extension PrPanel {
     state.submissionFailure = nil
     let draft = state.reviewDraft
     let body = draft.body.allSatisfy(\.isWhitespace) ? "" : draft.body
-    let finished: (GitHubFailure?) -> Void = { [weak state] failure in
-      if let failure {
+    let finished: (GitHubReviewWriteResult) -> Void = { [weak state] result in
+      if let failure = result.failure {
         state?.submissionFailure = failure
       } else {
         state?.reviewDraft = PullRequestState.ReviewDraft()

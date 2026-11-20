@@ -62,7 +62,7 @@ final class PullRequestPaneTests: OrbeTestCase {
           completion(
             .success(
               GitHubPullRequestReview(
-                viewer: "me", viewerIsAuthor: false, headCommit: head, pendingReview: nil,
+                viewerIsAuthor: false, headCommit: head, pendingReview: nil,
                 threads: [])))
         },
         writeReview: { [unowned self] write, _, pending, _, completion in

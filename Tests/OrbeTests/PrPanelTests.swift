@@ -77,7 +77,7 @@ final class PrPanelTests: OrbeTestCase {
         completion(
           .success(
             GitHubPullRequestReview(
-              viewer: "me", viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
+              viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
               pendingReview: pendingComments > 0
                 ? .init(id: "R", commentCount: pendingComments) : nil, threads: threads)))
       },
