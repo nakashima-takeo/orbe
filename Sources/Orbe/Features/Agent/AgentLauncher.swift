@@ -218,15 +218,21 @@ final class AgentLauncher {
   }
 
   /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する（`firstInput` は会話の最初の入力）。
-  /// 起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで復元）。
+  /// CLI はタブへ渡すのと同じ PATH で絶対パスへ解く——裸の名前だと、端末がログインの形で起動したとき argv[0] が
+  /// `-<名前>` になり、argv[0] で振り分ける shim（mise など）が解けない。未対応 agent・その PATH に CLI が無ければ nil
+  /// （呼び出し側は素のシェルで復元）。
   func resumeSpawn(for session: AgentSession, firstInput: String? = nil)
     -> (command: String, env: [String: String])?
   {
+    let env = launchEnvironment
     guard let sessionId = session.sessionId,
+      let agent = AgentCatalog.resolve(in: env["PATH"] ?? "").first(where: {
+        $0.command == session.command
+      }),
       let command = AgentCatalog.resumeCommand(
-        forAgent: session.command, sessionId: sessionId, firstInput: firstInput)
+        agent, sessionId: sessionId, firstInput: firstInput)
     else { return nil }
-    return (command, launchEnvironment)
+    return (command, env)
   }
 
   /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替える。

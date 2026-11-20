@@ -85,6 +85,7 @@ extension WindowControllerTabGroupTests {
           ])
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
+    _ = try stageFakeAgent("claude")
     let wc = WindowController()
     let (a, dormant) = (wc.current.tabs[0], wc.current.tabs[1])
 

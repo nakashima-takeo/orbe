@@ -35,9 +35,9 @@ extension WindowControllerControlTests {
     let wc = try restore(
       activeWorkspace: 0,
       [tabbed("main"), tabbed("mixed", tabs: [agentTab("sleeping")])])
-    let mixedId = try XCTUnwrap(row(wc, name: "mixed")?["id"] as? Int)
+    let mixedId = try XCTUnwrap(workspaceUUID(row(wc, name: "mixed")?["id"]))
 
-    _ = try XCTUnwrap(wc.controlSpawn(workspaceId: mixedId, cwd: nil, command: nil))
+    _ = try wc.controlSpawn(workspaceId: mixedId, cwd: nil, command: nil).get()
 
     let mixed = try XCTUnwrap(row(wc, name: "mixed"))
     XCTAssertEqual(mixed["active"] as? Bool, false, "前面 workspace は奪わない")
@@ -53,7 +53,7 @@ extension WindowControllerControlTests {
     let wc = try restore(
       activeWorkspace: 0,
       [tabbed("main"), tabbed("dormant", tabs: [agentTab("sleeping")])])
-    let rows = wc.controlListTabs()
+    let rows = try wc.controlListTabs(workspaceId: nil).get()
     XCTAssertEqual(
       Set(rows.compactMap { $0["workspaceName"] as? String }), ["main", "dormant"],
       "休眠 workspace のタブも列挙する")

@@ -1,0 +1,164 @@
+import Foundation
+
+/// 受け手の読み。上流から引いた行（`AutomationDatabase.rows`）に受け手の取り方を掛け、取る行・捨てる行・読んだ位置の進め先を
+/// 選ぶだけの計算。DB を読み書きするのは呼び手。
+enum AutomationIntake {
+  /// 出す側の表。
+  enum Table: Equatable {
+    case item
+    case event
+  }
+
+  /// 上流の行 1 つ。
+  struct Row: Equatable {
+    /// 上流のノード（つながり）。
+    let from: AutomationNodeID
+    let table: Table
+    let seq: Int
+    /// 回の履歴が指す行（項目は版）。
+    let ref: AutomationRowRef
+    /// 下流が引き継ぐ参照（項目か出来事）。
+    let source: AutomationSourceRef
+    /// 下流へ渡す id。
+    let id: String
+    /// 下流へ渡す 1 行。
+    let text: String
+    /// 項目は有効になった時刻、出来事は作られた時刻。古さはここから数える。
+    let at: Date
+    /// 行の `link`（項目は今の版の）。無ければ nil。
+    let link: String?
+    /// 読んだ位置より後に足されたか（take が all の行は、前の回までに読んだ行も載る）。捨てた数はこれで数える。
+    let unread: Bool
+    /// 読んだ位置より後に変わったか（項目は足した番号と今の版の番号の大きい方、出来事は足した番号で見る）。
+    let changed: Bool
+  }
+
+  /// 捨てた行と理由（`lapsed` は読みでは出ない）。
+  struct Drop: Equatable {
+    let row: Row
+    let reason: AutomationDrops.Reason
+  }
+
+  /// 読んだ位置の進め先（つながりと表ごと）。
+  struct Reach: Equatable {
+    let from: AutomationNodeID
+    let table: Table
+    let seq: Int
+  }
+
+  /// 読んだもの。
+  struct Read: Equatable {
+    /// 取る行（古い順）。
+    var taken: [Row]
+    /// 捨てる行（読んだ位置より後の行だけ。前の回までに読んだ行は黙って除く）。
+    var dropped: [Drop]
+    /// 読んだ位置の進め先。
+    var reach: [Reach]
+    /// 読む前に期限で消えた出来事の数（呼び手が `reach` から数えて足す）。
+    var lapsed = 0
+  }
+
+  /// つながりごとの、読む上限の番号（読んだ位置を上限まで進めてよいかを決める）。
+  struct Ceiling: Equatable {
+    let from: AutomationNodeID
+    let seqs: AutomationSeqs
+  }
+
+  /// 読むノード（判定）の、判断待ちでない覚えている候補のリンク。判定の前に捨てる行を決めるのに使う。
+  struct Closed: Equatable {
+    /// 人がさばいた候補と読めない候補のリンク。その行はいつも捨てる。
+    var settled: Set<String> = []
+    /// 判定が対応済みにした候補のリンク。そのリンクの行のどれにも読んだ位置より後の変化が無いときだけ、そのリンクの行をすべて
+    /// 捨てる（判定がまだ見ていない変化があれば、すべて渡す）。
+    var resolved: Set<String> = []
+  }
+
+  /// 取るときの事情。
+  struct Context {
+    let closed: Closed
+    let now: Date
+  }
+
+  /// `node` が `rows` から取る行を選ぶ。次の順に捨て、残りを古い順に取る。読んだ位置は上限の番号まで進める。
+  /// 1. 古さ（古さの上限を過ぎた行、読む行の下限の時刻以前の行）
+  /// 2. 判定だけ、判断待ちでない覚えている候補のリンクの行
+  /// 3. 同じ id の古い方
+  /// 4. 件数の上限
+  static func read(
+    by node: AutomationGraph.Node, _ rows: [Row], ceilings: [Ceiling], in context: Context
+  ) -> Read {
+    let edges = Dictionary(uniqueKeysWithValues: node.inputs.map { ($0.from, $0) })
+    var (remaining, dropped) = filtered(rows.sorted(by: order), by: node, edges, context)
+    var newestId: [String: Row] = [:]
+    for row in remaining { newestId[row.id] = row }
+    let replaced = remaining.filter { newestId[$0.id] != $0 }
+    dropped += replaced.map { Drop(row: $0, reason: .replaced) }
+    remaining.removeAll { replaced.contains($0) }
+    if let maxItems = node.entity.maxItems, remaining.count > maxItems {
+      dropped += remaining.prefix(remaining.count - maxItems).map {
+        Drop(row: $0, reason: .overflow)
+      }
+      remaining.removeFirst(remaining.count - maxItems)
+    }
+    return Read(
+      taken: remaining,
+      dropped: dropped.filter(\.row.unread).sorted { order($0.row, $1.row) },
+      reach: reach(ceilings))
+  }
+
+  /// 古さ（古さの上限を過ぎた行、読む行の下限の時刻以前の行）で捨てる。判定だけは、判断待ちでない覚えている候補のリンクの行も
+  /// 捨てる（`Closed`。変化は古さで捨てた後に残った行で見る）。残りと捨てた行（古い順）を返す。
+  private static func filtered(
+    _ rows: [Row], by node: AutomationGraph.Node, _ edges: [AutomationNodeID: AutomationNodeEdge],
+    _ context: Context
+  ) -> (remaining: [Row], dropped: [Drop]) {
+    var aged: [Row] = []
+    var dropped: [Drop] = []
+    for row in rows {
+      if let edge = edges[row.from], tooOld(row, edge, now: context.now) {
+        dropped.append(Drop(row: row, reason: .expired))
+      } else {
+        aged.append(row)
+      }
+    }
+    guard node.role == .judge else { return (aged, dropped) }
+    let changed = Set(aged.filter(\.changed).compactMap(\.link))
+    var remaining: [Row] = []
+    for row in aged {
+      if let link = row.link,
+        context.closed.settled.contains(link)
+          || context.closed.resolved.contains(link) && !changed.contains(link)
+      {
+        dropped.append(Drop(row: row, reason: .closed))
+      } else {
+        remaining.append(row)
+      }
+    }
+    return (remaining, dropped)
+  }
+
+  /// 行が、つながりの古さの上限を過ぎたか、読む行の下限の時刻以前か。
+  private static func tooOld(_ row: Row, _ edge: AutomationNodeEdge, now: Date) -> Bool {
+    if let hours = edge.maxAgeHours, now.timeIntervalSince(row.at) > TimeInterval(hours) * 3600 {
+      return true
+    }
+    return edge.after.map { row.at <= $0 } ?? false
+  }
+
+  /// 読んだ位置の進め先——つながりと表ごとに上限の番号まで（その間で取らなかった番号は、読む前に無効になった項目・版の追加や
+  /// 無効化の番号・期限で消えた出来事）。
+  private static func reach(_ ceilings: [Ceiling]) -> [Reach] {
+    ceilings.flatMap { ceiling in
+      [
+        Reach(from: ceiling.from, table: .item, seq: ceiling.seqs.item),
+        Reach(from: ceiling.from, table: .event, seq: ceiling.seqs.event),
+      ]
+    }.filter { $0.seq > 0 }
+  }
+
+  /// 古い順（同じ時刻は上流・表・番号の順）。表ごとの番号は時刻と同じ向きに増える。
+  static func order(_ a: Row, _ b: Row) -> Bool {
+    (a.at, a.from.rawValue, a.table == .item ? 0 : 1, a.seq)
+      < (b.at, b.from.rawValue, b.table == .item ? 0 : 1, b.seq)
+  }
+}

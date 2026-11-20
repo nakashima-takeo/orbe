@@ -1,0 +1,210 @@
+import Foundation
+
+/// 出す側の行（今の集合の項目と版・出来事の流れの出来事）と、受け手の読み。
+extension AutomationDatabase {
+  /// 出した行 1 つ（書かれたまま）。
+  struct Output: Equatable {
+    /// 書かれた id。
+    let id: String
+    /// 書かれたままの JSON オブジェクト 1 行。
+    let body: String
+    /// 引き継いだ入力（処理の行で、入力の行の `id` を保ったものだけ）。
+    let source: AutomationSourceRef?
+  }
+
+  /// 出す側の確定の結果。
+  struct Written: Equatable {
+    /// 新しく有効にした行（新しい項目と出来事）の数。
+    var fresh = 0
+    /// 出来事の流れで、残す期間の内に同じ id を出したので足さなかった数。
+    var duplicates = 0
+    /// 無効にした項目の数。
+    var invalidated = 0
+    /// 足した版（既にある項目の中身が変わった）の数。
+    var versioned = 0
+
+    /// 何かが変わったか（項目が有効になる・版が足される・項目が無効になる・出来事が足される）。
+    var changed: Bool { fresh > 0 || invalidated > 0 || versioned > 0 }
+
+  }
+
+  /// 今の集合のノードの出力を照らす。結果の行ごとに同じ（ノード・書かれた id）の今有効な項目を引き、無ければ新しい項目と版を
+  /// 足し、あって引き継ぎ元も中身も同じなら何もせず、中身だけ違えば版を足す。引き継ぎ元が違えば今の項目を無効にして新しい
+  /// 項目にする。結果に無い今有効な項目は無効にする。
+  func writeItems(of nodeId: AutomationNodeID, _ outputs: [Output], at: Date) throws -> Written {
+    let p = Int64(nodeId.rawValue)
+    var written = Written()
+    var live = Dictionary(
+      uniqueKeysWithValues: try db.select(
+        """
+        SELECT i.written_id, i.id, i.source_item_id, i.source_event_id, v.body
+        FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
+        WHERE i.node_id = ? AND i.valid_to IS NULL
+        """, [.integer(p)]
+      ) { s in
+        (
+          s.text(at: 0) ?? "",
+          (id: s.int(at: 1), source: Self.source(s, item: 2, event: 3), body: s.text(at: 4))
+        )
+      })
+    for output in outputs {
+      if let current = live.removeValue(forKey: output.id) {
+        if current.source == output.source {
+          if current.body != output.body {
+            try insertVersion(
+              of: current.id, seq: try nextSeq(of: nodeId, "last_item_seq"), output.body, at: at)
+            written.versioned += 1
+          }
+          continue
+        }
+        try invalidate(item: current.id, of: nodeId, at: at)
+        written.invalidated += 1
+      }
+      try insertItem(of: nodeId, output, at: at)
+      written.fresh += 1
+    }
+    for current in live.values {
+      try invalidate(item: current.id, of: nodeId, at: at)
+      written.invalidated += 1
+    }
+    return written
+  }
+
+  /// 出来事の流れのノードの出力を足す。残す期間の内に同じノードが同じ書かれた id を同じ引き継ぎ元（項目か出来事。無ければ
+  /// 無いどうし）で出していれば同じ出来事として足さない（中身が違っても）。入力の id を保った行は「この入力の行と同じもの」と
+  /// いう宣言なので、入力の行が別の行（消えてまた現れた項目など）なら別の出来事になる。同じ出来事かどうかは、行が保存の都合で
+  /// 残っていても、残す期間の内かで決める。
+  func writeEvents(of nodeId: AutomationNodeID, _ outputs: [Output], at: Date) throws -> Written {
+    let p = Int64(nodeId.rawValue)
+    let cutoff = try eventCutoff(of: nodeId, now: at)
+    var written = Written()
+    for output in outputs {
+      let seen = try db.select(
+        """
+        SELECT 1 FROM events WHERE node_id = ? AND written_id = ? AND created_at >= ?
+          AND source_item_id IS ? AND source_event_id IS ? LIMIT 1
+        """, [.integer(p), .text(output.id), cutoff] + Self.values(output.source)
+      ) { _ in true }
+      if !seen.isEmpty {
+        written.duplicates += 1
+        continue
+      }
+      try insertEvent(of: nodeId, output, at: at)
+      written.fresh += 1
+    }
+    return written
+  }
+
+  /// 新しい項目を、次の番号と、同じ番号の最初の版で足す。
+  func insertItem(of nodeId: AutomationNodeID, _ output: Output, at: Date) throws {
+    let seq = try nextSeq(of: nodeId, "last_item_seq")
+    try db.run(
+      """
+      INSERT INTO items (node_id, seq, written_id, source_item_id, source_event_id, valid_from)
+      VALUES (?, ?, ?, ?, ?, ?)
+      """,
+      [.integer(Int64(nodeId.rawValue)), .integer(seq), .text(output.id)]
+        + Self.values(output.source) + [Self.instant(at)])
+    try insertVersion(of: Int(db.lastInsertRowID), seq: seq, output.body, at: at)
+  }
+
+  private func insertVersion(of item: Int, seq: Int64, _ body: String, at: Date) throws {
+    try db.run(
+      "INSERT INTO item_versions (item_id, seq, body, valid_from) VALUES (?, ?, ?, ?)",
+      [.integer(Int64(item)), .integer(seq), .text(body), Self.instant(at)])
+  }
+
+  /// 新しい出来事を次の番号で足す。
+  func insertEvent(of nodeId: AutomationNodeID, _ output: Output, at: Date) throws {
+    let seq = try nextSeq(of: nodeId, "last_event_seq")
+    try db.run(
+      """
+      INSERT INTO events (node_id, seq, created_at, written_id, body, source_item_id,
+        source_event_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      """,
+      [
+        .integer(Int64(nodeId.rawValue)), .integer(seq), Self.instant(at), .text(output.id),
+        .text(output.body),
+      ] + Self.values(output.source))
+  }
+
+  /// ノードの今有効な項目をすべて無効にする（性質の書き換え・ノードを外す）。
+  func invalidateItems(of nodeId: AutomationNodeID, at: Date) throws {
+    let ids = try db.select(
+      "SELECT id FROM items WHERE node_id = ? AND valid_to IS NULL",
+      [.integer(Int64(nodeId.rawValue))]
+    ) { $0.int(at: 0) }
+    for id in ids { try invalidate(item: id, of: nodeId, at: at) }
+  }
+
+  /// ノード `nodeId` の今有効な項目を、次の番号で無効にする。
+  func invalidate(item: Int, of nodeId: AutomationNodeID, at: Date) throws {
+    let seq = try nextSeq(of: nodeId, "last_item_seq")
+    try db.run(
+      "UPDATE items SET valid_to = max(valid_from, ?), valid_to_seq = ? WHERE id = ?",
+      [Self.instant(at), .integer(seq), .integer(Int64(item))])
+  }
+
+  private func nextSeq(of nodeId: AutomationNodeID, _ column: String) throws -> Int64 {
+    let p: SQLiteValue = .integer(Int64(nodeId.rawValue))
+    try db.run("UPDATE nodes SET \(column) = \(column) + 1 WHERE id = ?", [p])
+    return try db.select("SELECT \(column) FROM nodes WHERE id = ?", [p]) { $0.int64(at: 0) }
+      .first ?? 0
+  }
+
+  // MARK: - 値
+
+  /// 項目の今の版の ID を引く SQL の式（`item` は項目の ID の式）。版は足すだけなので、最も大きい ID が今の版。
+  static func currentVersion(of item: String) -> String {
+    "(SELECT max(id) FROM item_versions WHERE item_id = \(item))"
+  }
+
+  /// 出す側のノードの出来事を残す日数。ノードの `retention_days`、無ければ今の設定の値。
+  func eventDays(of nodeId: AutomationNodeID) throws -> Int {
+    let days =
+      try db.select(
+        "SELECT retention_days FROM nodes WHERE id = ?", [.integer(Int64(nodeId.rawValue))]
+      ) { $0.optionalInt64(at: 0).map(Int.init) }.first ?? nil
+    return days ?? retention().eventDays
+  }
+
+  /// 出す側のノードの出来事を残す期間の始まり（これより前に作られた出来事は期限を過ぎた）。
+  func eventCutoff(of nodeId: AutomationNodeID, now: Date) throws -> SQLiteValue {
+    Self.instant(now.addingTimeInterval(-TimeInterval(try eventDays(of: nodeId)) * Self.day))
+  }
+
+  /// 時刻 `now` に、出したノード（`node` はそのノードの ID の SQL の式）の出来事を残す期間（ノードの `retention_days`、無ければ
+  /// 今の設定の値）の始まりを求める SQL の式と、その値。これより前に作られた出来事は期限を過ぎた。
+  func retentionStart(of node: String, now: Date) -> (sql: String, values: [SQLiteValue]) {
+    (
+      "(? - coalesce((SELECT retention_days FROM nodes WHERE id = \(node)), ?) * ?)",
+      [
+        Self.instant(now), .integer(Int64(retention().eventDays)),
+        .integer(Int64(Self.day * 1000)),
+      ]
+    )
+  }
+
+  /// 時刻 `now` に残す期間を過ぎた出来事の ID を選ぶ SQL と、その値。
+  func expiredEvents(at now: Date) -> (sql: String, values: [SQLiteValue]) {
+    let start = retentionStart(of: "x.node_id", now: now)
+    return ("SELECT x.id FROM events x WHERE x.created_at < \(start.sql)", start.values)
+  }
+
+  static let day: TimeInterval = 24 * 3600
+
+  static func source(_ s: SQLiteStatement, item: Int, event: Int) -> AutomationSourceRef? {
+    if let id = s.optionalInt64(at: item) { return .item(Int(id)) }
+    if let id = s.optionalInt64(at: event) { return .event(Int(id)) }
+    return nil
+  }
+
+  static func values(_ source: AutomationSourceRef?) -> [SQLiteValue] {
+    switch source {
+    case .item(let id): [.integer(Int64(id)), .null]
+    case .event(let id): [.null, .integer(Int64(id))]
+    case nil: [.null, .null]
+    }
+  }
+}

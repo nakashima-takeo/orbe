@@ -10,8 +10,8 @@ import XCTest
 /// 重要: WindowControllerWorkspaceTests と同様、実 NSWindow に SurfaceView を接続するため
 /// **libghostty ランタイムを起動する**（GhosttyKit 必須）。ヘッドレスな純ロジック検証ではない。
 ///
-/// workspace の id はプロセス全域の IdGen で採番され予測不能なため、決して直書きせず
-/// `controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で指す契約でもある）。
+/// workspace の id は外の口から見える値を確かめるため、`controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で
+/// 指す契約でもある）。
 ///
 /// 休眠 workspace が list_workspaces / list_tabs にどう写るかは分割した拡張ファイル
 /// `+DormantProjection` が測る。ハーネス（`restore` / `tabbed` / `agentTab` / `row`）は本体が持つ。
@@ -57,7 +57,7 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(wc.window.title, "main")
 
     let bg = try XCTUnwrap(row(wc, name: "background"))
-    let bgId = try XCTUnwrap(bg["id"] as? Int)
+    let bgId = try XCTUnwrap(workspaceUUID(bg["id"]))
     XCTAssertEqual(bg["active"] as? Bool, false, "activate 前は背景（非アクティブ）")
 
     let result = try XCTUnwrap(
@@ -73,7 +73,7 @@ final class WindowControllerControlTests: OrbeTestCase {
   func testActivateAlreadyActiveWorkspaceIsIdempotent() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("background")])
     let main = try XCTUnwrap(row(wc, name: "main"))
-    let mainId = try XCTUnwrap(main["id"] as? Int)
+    let mainId = try XCTUnwrap(workspaceUUID(main["id"]))
     let before = try XCTUnwrap(wc.controlActivateWorkspace(workspaceId: mainId))
 
     let again = try XCTUnwrap(
@@ -83,12 +83,12 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(wc.window.title, "main", "title 不変")
   }
 
-  /// 未知の workspaceId は nil（spawn と違いアクティブへフォールバックしない）——ここが
+  /// 未知の workspaceId は nil（アクティブへフォールバックしない）——ここが
   /// dispatch 側で `-32004 workspace not found` に畳まれる継ぎ目。アクティブは変わらない。
   func testActivateUnknownWorkspaceIdReturnsNilWithoutFallback() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("background")])
     XCTAssertNil(
-      wc.controlActivateWorkspace(workspaceId: 999_999), "未知 id はフォールバックせず nil")
+      wc.controlActivateWorkspace(workspaceId: UUID()), "未知 id はフォールバックせず nil")
     XCTAssertEqual(wc.window.title, "main", "未知 id の activate はアクティブを変えない")
   }
 
@@ -98,11 +98,11 @@ final class WindowControllerControlTests: OrbeTestCase {
     let wc = try restore(
       activeWorkspace: 0,
       [tabbed("main"), tabbed("background", tabs: [Self.plainTab, Self.plainTab])])
-    let bgId = try XCTUnwrap(row(wc, name: "background")?["id"] as? Int)
+    let bgId = try XCTUnwrap(workspaceUUID(row(wc, name: "background")?["id"]))
 
     let result = try XCTUnwrap(wc.controlActivateWorkspace(workspaceId: bgId))
-    let fromListTabs = wc.controlListTabs()
-      .filter { $0["workspaceId"] as? Int == bgId }
+    let fromListTabs = try wc.controlListTabs(workspaceId: nil).get()
+      .filter { workspaceUUID($0["workspaceId"]) == bgId }
       .compactMap { $0["tabId"] as? Int }
     XCTAssertEqual(result.tabIds.count, 2, "2 タブ分の id を返す")
     XCTAssertEqual(result.tabIds, fromListTabs, "activate の tabIds は list_tabs と同一導出")
@@ -117,7 +117,7 @@ final class WindowControllerControlTests: OrbeTestCase {
         tabbed("main"),
         WorkspaceState(name: "empty", rootPath: "/tmp", activeTab: 0, tabs: []),  // 0タブ休眠
       ])
-    let emptyId = try XCTUnwrap(row(wc, name: "empty")?["id"] as? Int)
+    let emptyId = try XCTUnwrap(workspaceUUID(row(wc, name: "empty")?["id"]))
 
     let result = try XCTUnwrap(wc.controlActivateWorkspace(workspaceId: emptyId))
     XCTAssertEqual(result.activeWorkspaceId, emptyId)
@@ -161,7 +161,9 @@ final class WindowControllerControlTests: OrbeTestCase {
       row(wc, name: "sleeping")?["activated"] as? Bool, false, "前提: 未 activate＝チケットは未消費")
 
     let tab = try XCTUnwrap(
-      wc.controlListTabs().first { $0["workspaceName"] as? String == "sleeping" })
+      try wc.controlListTabs(workspaceId: nil).get().first {
+        $0["workspaceName"] as? String == "sleeping"
+      })
 
     XCTAssertEqual(tab["agentSessionId"] as? String, "zzz", "休眠のあいだも resume の鍵は見える")
     XCTAssertTrue(tab["agentState"] is NSNull, "休眠タブに報告状態は無い")
@@ -196,7 +198,7 @@ final class WindowControllerControlTests: OrbeTestCase {
   /// Home が残っていても数に入れない。
   func testRemoveLastRegularWorkspaceIsRejected() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("solo")])
-    let id = try XCTUnwrap(row(wc, name: "solo")?["id"] as? Int)
+    let id = try XCTUnwrap(workspaceUUID(row(wc, name: "solo")?["id"]))
     guard case .failure(let err) = wc.controlRemoveWorkspace(workspaceId: id) else {
       return XCTFail("最後の通常 workspace の削除は failure")
     }
@@ -232,10 +234,20 @@ final class WindowControllerControlTests: OrbeTestCase {
   /// remove_workspace は未知 id を -32004 で弾く（workspace not found）。
   func testRemoveUnknownWorkspaceIsRejected() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("other")])
-    guard case .failure(let err) = wc.controlRemoveWorkspace(workspaceId: 999_999) else {
+    guard case .failure(let err) = wc.controlRemoveWorkspace(workspaceId: UUID()) else {
       return XCTFail("未知 id の削除は failure")
     }
     XCTAssertEqual(err.code, -32004, "workspace not found")
+  }
+
+  /// rename_workspace は未知 id を -32004 で弾く（workspace not found）。
+  func testRenameUnknownWorkspaceIsRejected() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main")])
+    guard case .failure(let err) = wc.controlRenameWorkspace(workspaceId: UUID(), name: "x") else {
+      return XCTFail("未知 id の改名は failure")
+    }
+    XCTAssertEqual(err.code, -32004, "workspace not found")
+    XCTAssertEqual(row(wc, name: "main")?["name"] as? String, "main", "どの workspace も改名しない")
   }
 
   // MARK: - controlSetWorkspaceRoot（set_workspace_root）
@@ -243,7 +255,7 @@ final class WindowControllerControlTests: OrbeTestCase {
   /// set_workspace_root は rootPath を更新し `~` をホーム展開する（GUI のディレクトリ変更と同一意味論）。
   func testSetWorkspaceRootUpdatesRootPath() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    let id = try XCTUnwrap(row(wc, name: "main")?["id"] as? Int)
+    let id = try XCTUnwrap(workspaceUUID(row(wc, name: "main")?["id"]))
     let result = wc.controlSetWorkspaceRoot(workspaceId: id, rootPath: "~/some-dir")
     guard case .success(let value) = result else {
       return XCTFail("有効 id への rootPath 設定は success")
@@ -257,7 +269,7 @@ final class WindowControllerControlTests: OrbeTestCase {
   /// set_workspace_root は未知 id を -32004 で弾く（workspace not found）。
   func testSetWorkspaceRootUnknownWorkspaceIsRejected() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    let result = wc.controlSetWorkspaceRoot(workspaceId: 999_999, rootPath: "/tmp")
+    let result = wc.controlSetWorkspaceRoot(workspaceId: UUID(), rootPath: "/tmp")
     guard case .failure(let err) = result else {
       return XCTFail("未知 id への rootPath 設定は failure")
     }
@@ -267,7 +279,7 @@ final class WindowControllerControlTests: OrbeTestCase {
   /// set_workspace_root は trim 後空の rootPath を -32602 で弾き、rootPath を変えない。
   func testSetWorkspaceRootEmptyPathIsRejected() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    let id = try XCTUnwrap(row(wc, name: "main")?["id"] as? Int)
+    let id = try XCTUnwrap(workspaceUUID(row(wc, name: "main")?["id"]))
     guard case .failure(let err) = wc.controlSetWorkspaceRoot(workspaceId: id, rootPath: "   ")
     else { return XCTFail("空 rootPath は failure") }
     XCTAssertEqual(err.code, -32602, "workspace rootPath is empty")
@@ -318,10 +330,9 @@ final class WindowControllerControlTests: OrbeTestCase {
     let wc = try restore(
       activeWorkspace: 0,
       [WorkspaceState(name: "empty", rootPath: "/tmp/empty-root", activeTab: 0, tabs: [])])
-    let id = try XCTUnwrap(row(wc, name: "empty")?["id"] as? Int)
-    let tabId = try XCTUnwrap(
-      wc.controlSpawn(workspaceId: id, cwd: nil, command: nil), "0タブ WS への spawn は成功する")
-    let tab = wc.controlListTabs().first { $0["tabId"] as? Int == tabId }
+    let id = try XCTUnwrap(workspaceUUID(row(wc, name: "empty")?["id"]))
+    let tabId = try wc.controlSpawn(workspaceId: id, cwd: nil, command: nil).get()
+    let tab = try wc.controlListTabs(workspaceId: nil).get().first { $0["tabId"] as? Int == tabId }
     XCTAssertEqual(
       tab?["cwd"] as? String, "/tmp/empty-root", "cwd 省略はホームでなく対象 WS の rootPath")
   }
@@ -335,12 +346,23 @@ final class WindowControllerControlTests: OrbeTestCase {
         tabbed("main"),  // rootPath "/tmp" のアクティブ WS
         WorkspaceState(name: "bg", rootPath: "/tmp/bg-root", activeTab: 0, tabs: []),
       ])
-    let bgId = try XCTUnwrap(row(wc, name: "bg")?["id"] as? Int)
-    let tabId = try XCTUnwrap(
-      wc.controlSpawn(workspaceId: bgId, cwd: nil, command: nil), "背景 WS への spawn は成功する")
-    let tab = wc.controlListTabs().first { $0["tabId"] as? Int == tabId }
+    let bgId = try XCTUnwrap(workspaceUUID(row(wc, name: "bg")?["id"]))
+    let tabId = try wc.controlSpawn(workspaceId: bgId, cwd: nil, command: nil).get()
+    let tab = try wc.controlListTabs(workspaceId: nil).get().first { $0["tabId"] as? Int == tabId }
     XCTAssertEqual(
       tab?["cwd"] as? String, "/tmp/bg-root", "対象（背景）WS の rootPath で開く")
     XCTAssertEqual(wc.window.title, "main", "アクティブ WS は変わらない")
+  }
+
+  /// 未知の workspaceId への spawn は -32004 で、どの workspace にもタブを開かない（アクティブへ黙って開かない）。
+  func testSpawnIntoAnUnknownWorkspaceOpensNothing() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main")])
+    let before = try wc.controlListTabs(workspaceId: nil).get().count
+
+    guard case .failure(let error) = wc.controlSpawn(workspaceId: UUID(), cwd: nil, command: nil)
+    else { return XCTFail("未知 workspace への spawn が通った") }
+
+    XCTAssertEqual(error.code, -32004)
+    XCTAssertEqual(try wc.controlListTabs(workspaceId: nil).get().count, before, "タブは増えない")
   }
 }

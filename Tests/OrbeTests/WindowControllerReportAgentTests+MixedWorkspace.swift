@@ -33,8 +33,7 @@ extension WindowControllerReportAgentTests {
     let workspace = try XCTUnwrap(wc.workspaces.first { $0.name == "mixed" })
     let dormant = try XCTUnwrap(workspace.tabs.first)
     workspace.lastUsedAt = Date(timeIntervalSinceReferenceDate: 9_000)
-    let tabId = try XCTUnwrap(
-      wc.controlSpawn(workspaceId: workspace.id, cwd: nil, command: nil))
+    let tabId = try wc.controlSpawn(workspaceId: workspace.id, cwd: nil, command: nil).get()
     let live = try XCTUnwrap(wc.controlResolveTab(tabId))
 
     XCTAssertFalse(wc.current === workspace)
@@ -112,7 +111,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(fixture.wc.attentionStore.transient?.retracted, true)
     XCTAssertEqual(fixture.workspace.lastUsedAt, stampBefore)
     let row = try XCTUnwrap(
-      fixture.wc.controlListWorkspaces().first { $0["id"] as? Int == fixture.workspace.id })
+      fixture.wc.controlListWorkspaces().first { workspaceUUID($0["id"]) == fixture.workspace.id })
     XCTAssertEqual(row["activated"] as? Bool, false)
     XCTAssertEqual(row["dormantAgentCount"] as? Int, 1)
     fixture.wc.showWorkspacePalette()
@@ -178,7 +177,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertTrue(try live().dormant, "前提: 配下のタブを一度も起こしていない")
     wc.flushChrome()  // 以降の追随が spawn 自身の chrome 要求だけで起きることを見るため dirty を落とす
 
-    XCTAssertNotNil(wc.controlSpawn(workspaceId: sleeping.id, cwd: nil, command: nil))
+    _ = try wc.controlSpawn(workspaceId: sleeping.id, cwd: nil, command: nil).get()
     wc.flushChrome()
 
     XCTAssertFalse(try live().dormant, "素シェル 1 枚の起床で行の減光が解ける")

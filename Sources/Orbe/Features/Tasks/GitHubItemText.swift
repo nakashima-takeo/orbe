@@ -3,6 +3,18 @@ import Foundation
 /// 結び付いた GitHub の Issue・PR の表示規則（主の印と番号・PR の段階・CI を出すか・「レビュー」・リポジトリ名を
 /// 添えるか）。どの画面もここを読むだけで、自分では規則を持たない——行と右の欄で出し方がずれないため。
 enum GitHubItemText {
+  /// 候補のリンクの言い方。GitHub の Issue・PR なら「PR #405（storefront）」「Issue #12（orbe）」（リポジトリは名前だけ）、
+  /// 読めなければスキームを除いた URL。
+  static func link(_ url: String, l10n: LocalizationStore) -> String {
+    guard let link = TaskLink(url: url) else {
+      guard let scheme = URLComponents(string: url)?.scheme else { return url }
+      return String(url.dropFirst(scheme.count + 1).drop { $0 == "/" })
+    }
+    return l10n.format(
+      link.kind == .pr ? .githubLinkPullRequest : .githubLinkIssue, link.item.number,
+      link.item.repoName)
+  }
+
   /// 主の結び付きの印と番号（保存した結び付きだけで決まる）。
   struct Mark: Equatable {
     let kind: GitHubItemKind

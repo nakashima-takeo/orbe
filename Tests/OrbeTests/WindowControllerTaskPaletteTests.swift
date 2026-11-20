@@ -26,9 +26,9 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)], persistentId: mainId),
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)], id: mainId),
         WorkspaceState(
-          name: "empty", rootPath: "/tmp", activeTab: 0, tabs: [], persistentId: emptyId),
+          name: "empty", rootPath: "/tmp", activeTab: 0, tabs: [], id: emptyId),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
@@ -72,16 +72,16 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
   /// 提案タブで提案をタスクにすると、開いた workspace ではなく Home に付く。
   @MainActor func testAcceptingAProposalInTheAutomationTabAttachesTheTaskToHome() throws {
     let wc = try launchOnAnEmptyWorkspace()
-    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
-    let item = AutomationStoreTests.item("a")
-    AutomationStoreTests.commit(
-      wc.automationStore, automation.id,
-      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
-      fetched: [item],
-      decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil, workspace: nil)])
+    let automation = try wc.automationRunner.set(
+      nil, WindowControllerAutomationControlTests.definition())
+    let item = WindowControllerAutomationControlTests.item("a")
+    try WindowControllerAutomationControlTests.round(
+      wc.automationStore, automation.id, fetched: [item], proposing: [item], titles: ["見積もりを送る"],
+      workspaces: [nil])
 
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
+    palette.automation.enterProposals()
     palette.submit()
 
     XCTAssertEqual(
@@ -95,15 +95,16 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     throws
   {
     let wc = try launchOnAnEmptyWorkspace()
-    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
-    AutomationStoreTests.commit(
-      wc.automationStore, automation.id,
-      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
-      fetched: [AutomationStoreTests.item("a")],
-      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+    let automation = try wc.automationRunner.set(
+      nil, WindowControllerAutomationControlTests.definition())
+    let item = WindowControllerAutomationControlTests.item("a")
+    try WindowControllerAutomationControlTests.round(
+      wc.automationStore, automation.id, fetched: [item], proposing: [item], titles: ["main で直す"],
+      workspaces: [mainId])
 
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
+    palette.automation.enterProposals()
     palette.automation.acceptAndOpen()
 
     let task = try XCTUnwrap(wc.taskStore.tasks.first { $0.title == "main で直す" })
@@ -115,16 +116,17 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
   /// ⌘⇧X を開いている間に付け先の workspace が消えたら、↵ の時点の値で解いて Home に付ける。
   @MainActor func testAProposalWhoseWorkspaceWasDeletedWhileOpenGoesToHome() throws {
     let wc = try launchOnAnEmptyWorkspace()
-    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
-    AutomationStoreTests.commit(
-      wc.automationStore, automation.id,
-      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
-      fetched: [AutomationStoreTests.item("a")],
-      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+    let automation = try wc.automationRunner.set(
+      nil, WindowControllerAutomationControlTests.definition())
+    let item = WindowControllerAutomationControlTests.item("a")
+    try WindowControllerAutomationControlTests.round(
+      wc.automationStore, automation.id, fetched: [item], proposing: [item], titles: ["main で直す"],
+      workspaces: [mainId])
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
+    palette.automation.enterProposals()
 
-    let main = try XCTUnwrap(wc.workspaces.firstIndex { $0.persistentId == mainId })
+    let main = try XCTUnwrap(wc.workspaces.firstIndex { $0.id == mainId })
     wc.closeWorkspace(main, origin: .controlAPI)
     palette.submit()
 

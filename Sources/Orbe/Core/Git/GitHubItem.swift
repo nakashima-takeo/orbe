@@ -22,14 +22,27 @@ struct GitHubItemID: Hashable {
     self.number = number
   }
 
-  /// PR のページの URL（`https://github.com/owner/name/pull/230`）から読む。読めなければ nil。
-  init?(pullRequestURL url: String) {
+  /// Issue か PR のページの URL（`https://github.com/owner/name/pull/230`・`…/issues/12`）から、種別と項目を読む。
+  /// 読めなければ nil。
+  static func read(url: String) -> (kind: GitHubItemKind, item: GitHubItemID)? {
     guard let components = URLComponents(string: url), components.host == "github.com" else {
       return nil
     }
     let parts = components.path.split(separator: "/")
-    guard parts.count == 4, parts[2] == "pull", let number = Int(parts[3]) else { return nil }
-    self.init(repo: "\(parts[0])/\(parts[1])", number: number)
+    guard parts.count == 4, let number = Int(parts[3]),
+      let item = GitHubItemID(repo: "\(parts[0])/\(parts[1])", number: number)
+    else { return nil }
+    switch parts[2] {
+    case "pull": return (.pr, item)
+    case "issues": return (.issue, item)
+    default: return nil
+    }
+  }
+
+  /// PR のページの URL から読む。読めなければ nil。
+  init?(pullRequestURL url: String) {
+    guard let read = Self.read(url: url), read.kind == .pr else { return nil }
+    self = read.item
   }
 
   /// `owner/name#221`。

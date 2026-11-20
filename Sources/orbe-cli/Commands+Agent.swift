@@ -127,7 +127,7 @@ private func report(_ result: Any, verb: String) -> Never {
     let command = (d?["agent"] as? [String: Any])?["command"] as? String ?? "?"
     var line =
       "\(verb) \(command) in tab \(d?["tabId"] as? Int ?? -1) "
-      + "(ws \(d?["workspaceId"] as? Int ?? -1))"
+      + "(ws \(d?["workspaceId"] as? String ?? "?"))"
     if d?["ready"] as? Bool == true {
       line += " ready" + ((d?["agentSessionId"] as? String).map { " (session \($0))" } ?? "")
     }

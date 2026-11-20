@@ -56,6 +56,18 @@ let package = Package(
       name: "OrbeSessionLog",
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
+    // OS のプロセス表から読むプロセスの事実と、orbe-report・orbe-mcp が呼び出しに応えるかの判定。本体・orbe-report・
+    // orbe-mcp で共有する薄い土台。Darwin のみ・独立ライブラリ（OrbePaths と同じ理由）。
+    .target(
+      name: "OrbeProcess",
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    // 自動化の定義と仕組みの説明の正本（英文）。MCP の自動化ツールの説明と `orb automation --help` が同じ文を出す。
+    // 文字列だけを持つ独立ライブラリにする（orbe-mcp・orbe-cli は本体に依存できない）。
+    .target(
+      name: "OrbeAutomationReference",
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
     // 通知音の純 DSP 層（合成プリミティブ・部品語彙・カタログ・レンダラ・取り込み・数値解析）。Foundation のみで、
     // 音を出す手段を持たない（再生は Orbe 側の SoundPlayer）。Orbe 本体と dev CLI（orbe-sound）が共有する。
     // debug でも最適化して焼く: 純 DSP のループは -Onone だと 40 倍遅く、テストが分オーダーになる。
@@ -107,6 +119,7 @@ let package = Package(
       dependencies: [
         "GhosttyKit",
         "OrbePaths",
+        "OrbeProcess",
         "OrbeSessionLog",
         "OrbeSound",
         "OrbeEditorCore",
@@ -137,7 +150,7 @@ let package = Package(
     // GhosttyKit/AppKit に依存しない独立実行体（Foundation のみ）。
     .executableTarget(
       name: "orbe-mcp",
-      dependencies: ["OrbePaths"],
+      dependencies: ["OrbePaths", "OrbeProcess", "OrbeAutomationReference"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     // Orbe 自身を構成・操作する CLI（config / ws / tab / agent / task / session / wait）。control.sock へ JSON-RPC を
@@ -145,13 +158,14 @@ let package = Package(
     // GhosttyKit/AppKit に依存しない独立実行体（Foundation のみ）。
     .executableTarget(
       name: "orbe-cli",
-      dependencies: ["OrbePaths", "OrbeSessionLog"],
+      dependencies: ["OrbePaths", "OrbeSessionLog", "OrbeAutomationReference"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     // エージェント hook → Orbe の状態報告 CLI（.app 同梱・env で位置を指される）。
     // 制御ソケットへ JSON-RPC 1 行を送る薄い独立実行体（Foundation のみ）。
     .executableTarget(
       name: "orbe-report",
+      dependencies: ["OrbeProcess"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     // 通知音の制作ループ用 dev CLI（list / render / play / analyze / board）。app には同梱しない。
@@ -202,7 +216,9 @@ let package = Package(
     ),
     .testTarget(
       name: "OrbeTests",
-      dependencies: ["Orbe", "OrbeEditorCore", "OrbeEditorEngine", "OrbeTestSupport"],
+      dependencies: [
+        "Orbe", "OrbeEditorCore", "OrbeEditorEngine", "OrbeAutomationReference", "OrbeTestSupport",
+      ],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(

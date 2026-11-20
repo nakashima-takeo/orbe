@@ -1,56 +1,94 @@
 import AppKit
 
-/// 自動化の知らせ。走らせ役が回を記録したことを知らせ、窓がその自動化の定義と最新の回から 1 つの知らせに組んで、通知音と、
+/// 自動化の知らせ。走らせ役がノードの回を記録したことを知らせ、窓がそのノードの最新の回から 1 つの知らせに組んで、通知音と、
 /// 通知先に応じてメニューバー②か通知センターへ流す。ピルや通知のクリックは Home のボードでその自動化を開く。
 extension WindowController {
-  /// 回を記録した（走らせ役から）。
-  func notifyAutomationRecorded(_ id: Int) {
-    guard let notification = automationNotification(id) else { return }
+  /// ノードの回を記録した（走らせ役から）。
+  func notifyAutomationRecorded(_ id: Int, _ nodeId: AutomationNodeID) {
+    guard let notification = automationNotification(id, nodeId) else { return }
     deliver(notification)
   }
 
-  /// 最新の回を知らせとして組む。自動化が消えている・通知が off・最新の回が何も出さなかった・前の回に続く失敗・その行を
-  /// 見ているときは nil。失敗は続く間の最初の回だけ知らせる——直るまで毎回鳴らすと、ピルと音を見なくなるため。
+  /// ノードの最新の回を知らせとして組む。1 回の記録に知らせは 1 つで、順は「出力が決まりを外した最初の回」→「失敗の続きの最初の
+  /// 回」→「Orbe へ何かを渡した回」。自動化が消えている・通知が off・どれにも当たらない・その自動化を見ているときは nil。
+  /// 失敗は続く間の最初の回だけ、決まりを外したことはノードの印が無かった回（何をするかが変わるまでに 1 度）だけ知らせる——
+  /// 毎回鳴らすと、ピルと音を見なくなるため。外して失敗した回は、外したことの文で失敗も言う。
   ///
-  /// 本文はボードの実行履歴の最新の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定（押した先が
-  /// Home なので、発信元の workspace の値という読み方に揃う）。
-  func automationNotification(_ id: Int) -> ChromeNotification? {
-    guard let automation = automationStore.automation(id), let latest = automation.runs.first,
+  /// 本文は、外した回のほかは実行履歴のその回の行の 1 行目（報告と仕事の応答なら文の 1 行目）——ピルと、押した先の行を同じ文で
+  /// 語るため。設定は Home の実効設定（押した先が Home なので、発信元の workspace の値という読み方に揃う）。
+  func automationNotification(_ id: Int, _ nodeId: AutomationNodeID) -> ChromeNotification? {
+    guard let automation = automationStore.automation(id), let notify = automation.notify,
+      let state = automation.states[nodeId], let record = state.runs.first, let latest = record.run,
       !isViewingAutomation(id)
     else { return nil }
-    guard let notify = automation.definition.notify else { return nil }
     let tone = BoardAutomationSummary.tone(latest)
-    guard tone != .quiet else { return nil }
-    let previous = automation.runs.dropFirst().first.map(BoardAutomationSummary.tone)
-    guard tone != .failed || previous != .failed else { return nil }
     let text = board.automation.text(localization, now: automationRunner.now())
-    guard let line = BoardAutomationSummary(automation, text: text).latestLine else { return nil }
-    let home = store.homeIndex.map { workspaces[$0] }
-    let name = automation.definition.name
+    let line: String
+    if let breach = state.breach, breach.id == record.id {
+      line = breachLine(breach, nodeName: automation.graph.node(nodeId)?.entity.name ?? "\(nodeId)")
+    } else if tone == .failed, state.runs.dropFirst().first?.failed != true {
+      line = BoardAutomationSummary.line(latest, nodeId: nodeId, in: automation, text: text)
+    } else if tone == .produced {
+      line = BoardAutomationSummary.line(latest, nodeId: nodeId, in: automation, text: text)
+    } else {
+      return nil
+    }
     return ChromeNotification(
       notice: .automation(
-        AutomationNotice(automationId: id, name: name, text: line, failed: tone == .failed)),
-      settings: settingsStore.effective(override: home?.settingsOverride),
+        AutomationNotice(
+          automationId: id, name: automation.name, text: line, failed: tone == .failed)),
+      settings: homeSettings,
       systemNotification: notify == .notificationCenter
         ? SystemNotificationContent(
-          identifier: Self.systemNotificationIdentifier(id), title: name, body: line,
+          identifier: Self.systemNotificationIdentifier(id, nodeId), title: automation.name,
+          body: line,
           automationId: id)
         : nil)
   }
 
-  /// 通知センターでの自動化の通知の識別子。自動化ごとに 1 つなので、新しい回が前の通知を差し替える。
-  private static func systemNotificationIdentifier(_ id: Int) -> String { "automation.\(id)" }
+  /// Home の実効設定。自動化は workspace に属さないので、自動化の設定（知らせ・保持）はどれもこれを読む。
+  private var homeSettings: EffectiveSettings {
+    settingsStore.effective(override: store.homeIndex.flatMap { workspaces[$0].settingsOverride })
+  }
 
-  /// 定義を書いた（走らせ役から。AI の口でもボードでも通る）。通知先が通知センターなら、書いたその場で OS に許可を問う
-  /// （未確認のときだけ）。
-  func automationDefined(_ id: Int) {
-    guard automationStore.automation(id)?.definition.notify == .notificationCenter else { return }
+  /// 今の保持の値（Home の実効設定から）。
+  var automationRetention: AutomationRetention {
+    AutomationRetention(homeSettings)
+  }
+
+  /// 「連絡 の出力の形式エラー（2 件）— agent が修正済み」。
+  private func breachLine(_ record: AutomationRunRecord, nodeName name: String) -> String {
+    let count = record.run?.breach?.count ?? 0
+    return localization.format(
+      count == 1 ? .automationBreachNoticeOne : .automationBreachNoticeOther, name, count,
+      localization.string(record.failed ? .automationBreachFailed : .automationBreachPassed))
+  }
+
+  /// 通知センターでの自動化の通知の識別子。ノードごとに 1 つで、同じノードの新しい回が前の通知を差し替える（ノードの回は互いの
+  /// 後継ではないので、別のノードの通知は残す）。ノードの ID で作る——鍵は変えても同じノードなので。
+  private static func systemNotificationIdentifier(_ id: Int, _ nodeId: AutomationNodeID) -> String
+  {
+    "automation.\(id).\(nodeId)"
+  }
+
+  /// 定義を書いた（走らせ役から。AI の口でもボードでも通る）。外したノードの通知を通知センターから取り下げる。通知先が通知センター
+  /// なら、書いたその場で OS に許可を問う（未確認のときだけ）。
+  func automationDefined(_ id: Int, removed nodeIds: [AutomationNodeID]) {
+    withdrawSystemNotifications(id, nodeIds)
+    guard automationStore.automation(id)?.notify == .notificationCenter else { return }
     systemNotifier.requestAuthorizationIfUndetermined()
   }
 
-  /// 自動化を消した（走らせ役から。どの経路で消しても通る）。その自動化の通知を通知センターから取り下げる。
-  func automationDeleted(_ id: Int) {
-    systemNotifier.remove(identifier: Self.systemNotificationIdentifier(id))
+  /// 自動化を消した（走らせ役から。どの経路で消しても通る）。その全ノードの通知を通知センターから取り下げ、試走を止める。
+  func automationDeleted(_ id: Int, nodeIds: [AutomationNodeID]) {
+    withdrawSystemNotifications(id, nodeIds)
+    automationTrials.discard(id)
+  }
+
+  private func withdrawSystemNotifications(_ id: Int, _ nodeIds: [AutomationNodeID]) {
+    for nodeId in nodeIds {
+      systemNotifier.remove(identifier: Self.systemNotificationIdentifier(id, nodeId))
+    }
   }
 
   /// 通知センターの通知のクリック。ピルのクリックと同じく、前面化してから Home のボードでその自動化を開く。
@@ -70,7 +108,7 @@ extension WindowController {
   }
 
   /// Home のボードでその自動化を開く（ピル・通知のクリック）。差し替えてはならない画面の間は何もしない。行き先はボードそのもの
-  /// なので、ほかのパレットは閉じる。自動化が消えていれば欄を、自動化の部品が無ければボードを開くだけ。
+  /// なので、ほかのパレットは閉じる。自動化が消えていれば欄を、自動化のウィジェットが無ければボードを開くだけ。
   func showAutomation(_ id: Int) {
     guard !model.overlay.isModal, let home = store.homeIndex else { return }
     if model.overlay != .none { dismissPalette() }

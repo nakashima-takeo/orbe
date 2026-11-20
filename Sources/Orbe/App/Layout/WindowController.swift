@@ -59,13 +59,20 @@ final class WindowController: NSObject, NSWindowDelegate {
   // タスク一覧の唯一の正。制御 API と画面が同じ変異メソッドを呼び、変異ごとに tasks.json へ即時保存される。
   // workspace の参照は表示・応答のときに解くので、workspace の復元との順序の依存は無い。
   let taskStore = TaskStore()
-  // 受信の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `automationStore` が持つ。
+  // 自動化の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `automationStore` が持つ。
+  // 保持の値は Home の実効設定から読む（自動化は workspace に属さない。通知の設定と同じ読み方）。
   private(set) lazy var automationRunner = AutomationRunner(
-    store: AutomationStore(), workspaces: { [store] in AutomationWorkspaces(store) },
-    recorded: { [weak self] in self?.notifyAutomationRecorded($0) },
-    defined: { [weak self] in self?.automationDefined($0) },
-    deleted: { [weak self] in self?.automationDeleted($0) })
+    store: AutomationStore(
+      opening: AutomationPersistence.open(retention: { [weak self] in
+        self?.automationRetention ?? .standard
+      })),
+    workspaces: { [store] in AutomationWorkspaces(store) },
+    recorded: { [weak self] in self?.notifyAutomationRecorded($0.end.automationId, $0.end.nodeId) },
+    defined: { [weak self] in self?.automationDefined($0, removed: $1) },
+    deleted: { [weak self] in self?.automationDeleted($0, nodeIds: $1) })
   var automationStore: AutomationStore { automationRunner.store }
+  // 自動化の試走の係（自動化ごとに 1 つ、メモリだけ）。
+  private(set) lazy var automationTrials = AutomationTrials(runner: automationRunner)
   // worktree ごとに動いている agent の索引。flushChrome が作り直し、タスク画面と ⌘T が読む。
   let worktreeAgents = WorktreeAgentActivity()
   let agentSessionTabs = AgentSessionTabs()
@@ -105,7 +112,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         return error
       }
     }
-    return BoardModel(automation: automation, parts: [])
+    return BoardModel(automation: automation, widgets: [])
   }()
   private(set) lazy var boardView: BoardView = {
     let view = BoardView(
@@ -194,7 +201,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     showFirstRunFlow()  // 初回言語選択（preferredLanguage 未設定時）→ 既存 Onboarding（各 CLI へ導入）
     cleanupLegacyCompletionIfNeeded()  // 旧方式が zshrc へ書いた managed block を一度だけ除去
     wireUpdateUI()  // アップデート提示導線を配線し、ゲートを通れば update サイクル開始
-    automationRunner.start()  // 全自動化を番人へ載せる（過ぎていた間隔の回はここで 1 回だけ走る）
+    automationRunner.start()  // 全ノードを番人へ載せる（過ぎていた間隔の回はここで 1 回だけ走る）
     waitConditions.start()
     window.center()
   }
@@ -363,11 +370,9 @@ final class WindowController: NSObject, NSWindowDelegate {
 extension AutomationWorkspaces {
   /// 今の workspace の値。
   init(_ session: SessionStore) {
-    listed = session.workspaces.indices.filter { !session.isHome($0) }.map {
-      let ws = session.workspaces[$0]
-      return AutomationWorkspace(
-        id: ws.id, persistentId: ws.persistentId, name: ws.name, root: ws.rootPath)
-    }
-    home = session.homeIndex.map { session.workspaces[$0].id }
+    self.init(
+      all: session.workspaces.map {
+        AutomationWorkspace(id: $0.id, name: $0.name, root: $0.rootPath)
+      }, home: session.homeIndex.map { session.workspaces[$0].id })
   }
 }

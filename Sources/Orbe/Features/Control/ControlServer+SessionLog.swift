@@ -5,49 +5,34 @@ import OrbeSessionLog
 /// background queue へ hop して応答だけを制御キューへ戻す——accept・配信・timeout を直列に捌く 1 本の
 /// キューを最大 5MB の復号で塞がない。窓（target）を要さないので、Orbe が起きていれば常に答える。
 extension ControlServer {
-  /// `session_log` の params。型違い・ISO 不正・limit の値域外は -32602。
+  /// `session_log` の引数。型違い・ISO 不正・limit の値域外は -32602。
   struct SessionLogQueryParams {
     let since: Date?
     let until: Date?
     let limit: Int
     let sessionId: String?
 
-    static func parse(_ params: [String: Any]) throws(ControlError) -> SessionLogQueryParams {
-      func invalid(_ key: String) -> ControlError {
-        ControlError(code: -32602, message: "invalid \(key)")
-      }
-      func date(_ key: String) throws(ControlError) -> Date? {
-        guard let raw = params[key] else { return nil }
-        guard let text = raw as? String, let parsed = SessionEvent.parseISO8601(text) else {
-          throw invalid(key)
-        }
+    static func parse(_ p: ControlParams) throws(ControlError) -> SessionLogQueryParams {
+      let since = try p.optionalString("since")
+      let until = try p.optionalString("until")
+      let limit = try p.optionalInt("limit")
+      let sessionId = try p.optionalString("sessionId")
+      func date(_ key: String, _ text: String?) throws(ControlError) -> Date? {
+        guard let text else { return nil }
+        guard let parsed = SessionEvent.parseISO8601(text) else { throw p.invalid(key) }
         return parsed
       }
-      let since = try date("since")
-      let until = try date("until")
-      var limit = SessionLogLimits.defaultLimit
-      if let raw = params["limit"] {
-        // JSONSerialization は true / false も NSNumber に載せ `as? Int` が 1 / 0 として通す。
-        // `"10"`（文字列）と対称に、Bool は整数ではないので弾く。
-        let isBool = (raw as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() } ?? false
-        guard !isBool, let n = raw as? Int, (1...SessionLogLimits.maxLimit).contains(n) else {
-          throw invalid("limit")
-        }
-        limit = n
-      }
-      var sessionId: String?
-      if let raw = params["sessionId"] {
-        guard let text = raw as? String else { throw invalid("sessionId") }
-        sessionId = text
-      }
-      return SessionLogQueryParams(since: since, until: until, limit: limit, sessionId: sessionId)
+      if let limit, !(1...SessionLogLimits.maxLimit).contains(limit) { throw p.invalid("limit") }
+      return SessionLogQueryParams(
+        since: try date("since", since), until: try date("until", until),
+        limit: limit ?? SessionLogLimits.defaultLimit, sessionId: sessionId)
     }
   }
 
-  func sessionLog(id: Any?, params: [String: Any], conn: Connection) {
+  func sessionLog(id: Any?, params p: ControlParams, conn: Connection) {
     let query: SessionLogQueryParams
-    do {
-      query = try SessionLogQueryParams.parse(params)
+    do throws(ControlError) {
+      query = try SessionLogQueryParams.parse(p)
     } catch {
       return conn.respond(id: id, result: .failure(error))
     }

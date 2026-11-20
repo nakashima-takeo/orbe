@@ -133,17 +133,20 @@ mkdir -p "$APP/Contents/Resources/ghostty/themes"
 cp "$ROOT/app/themes/OrbeDark"  "$APP/Contents/Resources/ghostty/themes/OrbeDark"   # Orbe 自前 named theme（dark）
 cp "$ROOT/app/themes/OrbeLight" "$APP/Contents/Resources/ghostty/themes/OrbeLight"  # Orbe 自前 named theme（light）
 cp -R "$GHOSTTYKIT/share/terminfo" "$APP/Contents/Resources/terminfo"
-cp -R "$ROOT/app/agent-plugin" "$APP/Contents/Resources/agent-plugin"  # エージェントプラグイン（各 CLI へ自動導入する配布物）
-# プラグイン名（marketplace 名＝plugin 名＝MCP サーバー名＝plugins/<name>/ のディレクトリ名）を dev チャネルだけ焼き直す。
+PKG="$APP/Contents/Resources/agent-plugin"
+cp -R "$ROOT/app/agent-plugin" "$PKG"  # エージェントプラグイン（各 CLI へ自動導入する配布物）
+"$ROOT/scripts/assemble-codex-plugin.sh" "$PKG" "$SRC_PLUGIN_NAME"  # codex 専用のディレクトリ（codex/<name>/）を完成させる
+# プラグイン名（marketplace 名＝plugin 名＝MCP サーバー名＝plugins/<name>/・codex/<name>/ のディレクトリ名）を
+# dev チャネルだけ焼き直す。
 # claude / codex / agy はどれも名前で 1 枠を取るため、名前を分けないと dev と release が枠を奪い合う
 # （agy は marketplace を持たず plugin.json の name だけで枠とステージ先が決まる）。1 つの名前を
 # パッケージの全出現箇所へ通し、3 CLI が同一の規則で分かれるようにする。
 if [ "$CHANNEL" != "release" ]; then
-  PKG="$APP/Contents/Resources/agent-plugin"
   python3 - "$PKG" "$SRC_PLUGIN_NAME" "$PLUGIN_NAME" <<'PY'
 import json, os, sys
 pkg, old, name = sys.argv[1], sys.argv[2], sys.argv[3]
-os.rename(f"{pkg}/plugins/{old}", f"{pkg}/plugins/{name}")
+for root in ("plugins", "codex"):
+    os.rename(f"{pkg}/{root}/{old}", f"{pkg}/{root}/{name}")
 
 
 def edit(rel, fn):
@@ -164,7 +167,7 @@ def claude_marketplace(d):
 def codex_marketplace(d):
     d["name"] = name
     d["plugins"][0]["name"] = name
-    d["plugins"][0]["source"]["path"] = f"./plugins/{name}"
+    d["plugins"][0]["source"]["path"] = f"./codex/{name}"
     return d
 
 
@@ -176,8 +179,8 @@ def rename_mcp_server(d):
 edit(".claude-plugin/marketplace.json", claude_marketplace)
 edit(".agents/plugins/marketplace.json", codex_marketplace)
 edit(f"plugins/{name}/plugin.json", lambda d: {**d, "name": name})
-for rel in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
-    edit(f"plugins/{name}/{rel}", lambda d: rename_mcp_server({**d, "name": name}))
+for rel in (f"plugins/{name}/.claude-plugin/plugin.json", f"codex/{name}/.codex-plugin/plugin.json"):
+    edit(rel, lambda d: rename_mcp_server({**d, "name": name}))
 edit(f"plugins/{name}/mcp_config.json", rename_mcp_server)
 edit(f"plugins/{name}/hooks.json", lambda d: {name: d[old]})
 PY

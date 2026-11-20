@@ -10,13 +10,17 @@ struct AgentCLI: Equatable {
 /// `ShellPATH` が解決した PATH 上で実行ファイルを絶対パスへ解決する
 /// （「ユーザーのシェルが見つけるもの＝候補」の契約。GUI アプリの素の PATH に依存しない）。
 final class AgentCatalog {
-  /// CLI 1 つぶんの静的な知識。`resumeFlag` は `<command> <resumeFlag> <sessionId>` の席。
+  /// CLI 1 つぶんの静的な知識。`resumeFlag` は `<絶対パス> <requiredArguments> <resumeFlag> <sessionId>` の席。
   /// `reportsIdleOnStart` は Orbe のプラグインがその CLI の起動時 hook に idle を配線しているか
   /// （claude の SessionStart→idle。codex CLI 自身も SessionStart を持つが `codex-hooks.json` は
   /// 配線していない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
   /// `firstInput` は起動（新規・再開）に最初の入力を添える席。`headless` は裏で非対話に回す能力。
+  /// `requiredArguments` は Orbe が起動するとき（新規・再開）コマンド名の直後に必ず置く引数。codex の `--no-daemon` は、
+  /// hook と MCP サーバーをタブの端末で動く codex の子として起動させる——共有のデーモン経由だと、hook と MCP サーバーが
+  /// デーモンを起動した時点の端末の環境で走り、別のタブを名乗る。
   struct AgentProfile {
     let command: String
+    let requiredArguments: [String]
     let resumeFlag: String
     let reportsIdleOnStart: Bool
     let firstInput: FirstInputSeat
@@ -35,18 +39,20 @@ final class AgentCatalog {
   /// 一級サポートの全体。並び＝デフォルト未設定時の優先順。
   static let profiles = [
     AgentProfile(
-      command: "claude", resumeFlag: "--resume", reportsIdleOnStart: true,
+      command: "claude", requiredArguments: [], resumeFlag: "--resume", reportsIdleOnStart: true,
       firstInput: .trailing,
       headless: .runs(
         HeadlessCLI(
           arguments: ClaudeHeadless.arguments, environment: ClaudeHeadless.environment,
           reply: ClaudeHeadless.reply, availableTools: ClaudeHeadless.availableTools))),
     AgentProfile(
-      command: "codex", resumeFlag: "resume", reportsIdleOnStart: false,
+      command: "codex", requiredArguments: ["--no-daemon"], resumeFlag: "resume",
+      reportsIdleOnStart: false,
       firstInput: .trailing,
       headless: .refuses(.toolsNotAllowListable)),
     AgentProfile(
-      command: "agy", resumeFlag: "--conversation", reportsIdleOnStart: false,
+      command: "agy", requiredArguments: [], resumeFlag: "--conversation",
+      reportsIdleOnStart: false,
       firstInput: .flag("-i"),
       headless: .refuses(.noToolOrSessionControl)),
   ]
@@ -103,26 +109,27 @@ final class AgentCatalog {
       && sessionId.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
   }
 
-  /// 各 CLI の resume コマンド文字列（`/bin/sh -c` 経由で実行される前提）。`firstInput` があれば、会話の最初の入力と
-  /// してその CLI の席に添える。未対応 agent・安全な文字集合（UUID 等）外の sessionId は nil（呼び出し側が素のシェルへ
-  /// fallback）。command は表のリテラルでのみ一致し、sessionId は文字集合検証し、入力はシェルの単語として引用するため
-  /// shell インジェクションを防ぐ。
-  static func resumeCommand(forAgent command: String, sessionId: String, firstInput: String? = nil)
+  /// 会話を再開するコマンド文字列（`/bin/sh -c` 経由）。新規起動と同じく解決済みの絶対パスで起動し、`<resumeFlag> <sessionId>`
+  /// を引数に置く。未対応の agent、または安全な文字集合（UUID 等）に収まらない sessionId は nil（呼び出し側が素のシェルへ
+  /// fallback）。
+  static func resumeCommand(_ agent: AgentCLI, sessionId: String, firstInput: String? = nil)
     -> String?
   {
-    guard isSafeSessionId(sessionId), let profile = profile(command) else { return nil }
-    return
-      ([profile.command, profile.resumeFlag, sessionId] + firstInputWords(profile, firstInput))
-      .joined(separator: " ")
+    guard isSafeSessionId(sessionId), let profile = profile(agent.command) else { return nil }
+    return startCommand(agent, arguments: [profile.resumeFlag, sessionId], firstInput: firstInput)
   }
 
-  /// 新しく起こすコマンド文字列（`/bin/sh -c` 経由）。実行ファイルは検出した絶対パスで起こす。`arguments` は 1 つずつ
-  /// シェルの単語として引用する。`firstInput` の添え方は `resumeCommand` と同じ。
+  /// 起動するコマンド文字列（`/bin/sh -c` 経由）。実行ファイルは解決済みの絶対パスで起動し、直後に `requiredArguments`、
+  /// 続けて `arguments` を置く。`firstInput` があれば、会話の最初の入力としてその CLI の席に添える。引数と入力は 1 つずつ
+  /// シェルの単語として引用する。
   static func startCommand(_ agent: AgentCLI, arguments: [String] = [], firstInput: String? = nil)
     -> String
   {
-    let input = profile(agent.command).map { firstInputWords($0, firstInput) } ?? []
-    return ([ShellWord.quoted(agent.path)] + arguments.map(ShellWord.quoted) + input)
+    let known = profile(agent.command)
+    let input = known.map { firstInputWords($0, firstInput) } ?? []
+    return
+      ([ShellWord.quoted(agent.path)]
+      + ((known?.requiredArguments ?? []) + arguments).map(ShellWord.quoted) + input)
       .joined(separator: " ")
   }
 
@@ -168,11 +175,12 @@ enum HeadlessSupport {
 }
 
 /// 非対話の 1 回の起こし方。依頼文は標準入力で渡す。`arguments`・`environment` の `tools` は許可の規則（組み込みのツール名・
-/// `Bash(<コマンドの接頭>:*)`・`mcp__` で始まる MCP のツールの完全名）。`environment` は子の環境に上書きする変数。`reply` は標準出力の 1 行から
+/// `Bash(<コマンドの接頭>:*)`・`mcp__` で始まる MCP のツールの完全名）。`arguments` の `server` は足す MCP サーバー（Orbe 自身の
+/// 口）。`environment` は子の環境に上書きする変数で、`tools` には足すサーバーのツールも含める。`reply` は標準出力の 1 行から
 /// 最終応答を取り出す（最終応答の行でなければ nil）。`availableTools` は始まりの出来事の行から、その回で使えるツールの名前を
 /// 取り出す（始まりの行でなければ nil）。
 struct HeadlessCLI {
-  let arguments: (_ model: String, _ tools: [String]) -> [String]
+  let arguments: (_ model: String, _ tools: [String], _ server: HeadlessServer?) -> [String]
   let environment: (_ tools: [String]) -> [String: String]
   let reply: (Data) -> BackgroundAgentReply?
   let availableTools: (Data) -> [String]?
@@ -181,6 +189,15 @@ struct HeadlessCLI {
   static func missingTools(_ requested: [String], available: [String]) -> [String] {
     requested.filter { $0.hasPrefix("mcp__") && !available.contains($0) }
   }
+}
+
+/// 裏の agent に足す MCP サーバー 1 つ（標準入出力で話す）。`environment` はサーバーに渡す変数で、値は CLI の環境に置き、
+/// 設定には名前の参照だけを書く——回の札がコマンド行（プロセス一覧と回の記録）に出ないため。`tools` は許すツールの完全名。
+struct HeadlessServer: Equatable {
+  let name: String
+  let command: String
+  let environment: [String: String]
+  let tools: [String]
 }
 
 /// 裏で回せない理由。
@@ -201,21 +218,46 @@ enum ClaudeHeadless {
   /// 指定した呼び出しは、利用者が登録した MCP サーバーを名前で
   /// 使うため設定を読み、指定したもの以外は拒否する（`dontAsk`。利用者の bypassPermissions もこれで上書きする）——ただし利用者が
   /// 常に許可にしたツールと hook は効き、設定の `additionalDirectories` の下は指定なしで読める。
-  static func arguments(model: String, tools: [String]) -> [String] {
+  ///
+  /// 足すサーバー（`server`）は `--mcp-config` で渡し、そのツールだけを許すものに足す。利用者の MCP のツールを指定しなければ、
+  /// 利用者の設定も MCP サーバーも読まない閉じた形のまま、足したサーバーだけが加わる。
+  static func arguments(model: String, tools: [String], server: HeadlessServer?) -> [String] {
     let builtins = tools.filter { !$0.hasPrefix("mcp__") }
     var names: [String] = []
     for rule in builtins {
       let name = rule.firstIndex(of: "(").map { String(rule[..<$0]) } ?? rule
       if !names.contains(name) { names.append(name) }
     }
+    let allowed = tools + (server?.tools ?? [])
     var args = ["-p", "--model", model, "--tools", names.joined(separator: ",")]
-    if !tools.isEmpty { args += ["--allowedTools", tools.joined(separator: ",")] }
+    if !allowed.isEmpty { args += ["--allowedTools", allowed.joined(separator: ",")] }
+    if let server { args += ["--mcp-config", mcpConfig(server)] }
     args += [
       "--permission-mode", "dontAsk", "--no-session-persistence",
       "--output-format", "stream-json", "--verbose",
     ]
     if builtins.count == tools.count { args += ["--setting-sources", "", "--strict-mcp-config"] }
     return args
+  }
+
+  /// `{"mcpServers": {"<名前>": {"type": "stdio", "command", "args": [], "env"}}}`。`env` は値でなく `${名前}` の参照で、
+  /// claude が自分の環境から展開する（値は `HeadlessServer.environment` を CLI の環境に置いたもの）。
+  private static func mcpConfig(_ server: HeadlessServer) -> String {
+    let config: [String: Any] = [
+      "mcpServers": [
+        server.name: [
+          "type": "stdio", "command": server.command, "args": [String](),
+          "env": Dictionary(
+            uniqueKeysWithValues: server.environment.keys.map { ($0, "${\($0)}") }),
+        ] as [String: Any]
+      ]
+    ]
+    guard
+      let data = try? JSONSerialization.data(
+        withJSONObject: config, options: [.sortedKeys, .withoutEscapingSlashes]),
+      let text = String(bytes: data, encoding: .utf8)
+    else { preconditionFailure("an MCP config is plain JSON") }
+    return text
   }
 
   /// どちらの呼び出しでも、利用者の CLAUDE.md と auto memory を読まない。`--setting-sources` は auto memory を止めず、

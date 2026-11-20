@@ -6,8 +6,8 @@ import XCTest
 /// MCP シム（`app/agent-plugin/.../mcp/orbe-mcp.sh`）と空サーバー（`mcp/empty-server.pl`）を実 `/bin/sh`・
 /// 実 perl で機械検証する。プラグインは本番の実体化に通す（チャネルの刻印は実体化が書いたもの）。
 /// CLI は有効なプラグインの MCP サーバーを全セッションで起こすので、シムは自分のチャネルの Orbe のタブでだけタブの `orbe-mcp` へつなぎ、それ以外ではツール 0 個のサーバーとして
-/// 正常に応答する。チャネルの規則は状態追跡のシム（`AgentShimChannelGateTests`）と同じ。シムは claude と agy の
-/// MCP 定義から起こし方を取る（codex の定義は `AgentMcpPathTests` が通す）。
+/// 正常に応答する。チャネルの規則は状態追跡のシム（`AgentShimChannelGateTests`）と同じ。シムは 3 つの CLI の
+/// MCP 定義から起こし方を取る。codex は、claude・agy とは別の codex 専用のプラグインのルートから起こす。
 ///
 /// 壊れると何が起きるか: dev のタブの agent が release の Orbe を操作する（その逆も）。あるいは Orbe の外の
 /// claude / codex が毎セッション接続失敗を警告する。
@@ -18,6 +18,7 @@ final class AgentMcpShimTests: OrbeTestCase {
 
   private var work: URL!
   private var pluginRoot: URL!
+  private var codexPluginRoot: URL!
   private var mcpBin: URL!  // stdin を記録し、目印の 1 行を返す fake orbe-mcp
   private var mcpLog: URL!
 
@@ -25,6 +26,7 @@ final class AgentMcpShimTests: OrbeTestCase {
     work = TestScratch.caseDir.appendingPathComponent("AgentMcpShimTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
     pluginRoot = try ControlProcess.stagePlugin()
+    codexPluginRoot = try ControlProcess.stageCodexPlugin()
     mcpLog = work.appendingPathComponent("mcp.log")
     mcpBin = work.appendingPathComponent("orbe-mcp")
     let script = """
@@ -42,24 +44,35 @@ final class AgentMcpShimTests: OrbeTestCase {
     case claude
     /// cwd＝ステージ済みプラグインルートからの相対で呼ぶ。
     case agy
+    /// cwd＝codex 専用のプラグインのルートからの相対で呼び、CLI 名を引数で渡す。
+    case codex
   }
 
-  /// 定義ファイルから、サーバー名＝プラグイン名のサーバーの起こし方（コマンドと cwd）を取る。
-  private func launch(_ definition: Definition) throws -> (command: String, cwd: String) {
-    let file = definition == .claude ? ".claude-plugin/plugin.json" : "mcp_config.json"
+  /// 定義ファイルから、サーバー名＝プラグイン名のサーバーの起こし方（コマンドと引数・cwd）を取る。
+  private func launch(_ definition: Definition) throws -> (argv: [String], cwd: String) {
+    let (root, file) =
+      switch definition {
+      case .claude: (pluginRoot!, ".claude-plugin/plugin.json")
+      case .agy: (pluginRoot!, "mcp_config.json")
+      case .codex: (codexPluginRoot!, ".codex-plugin/plugin.json")
+      }
     let manifest = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: Data(contentsOf: pluginRoot.appendingPathComponent(file)))
+      JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent(file)))
         as? [String: Any])
     let servers = try XCTUnwrap(manifest["mcpServers"] as? [String: [String: Any]], file)
-    let command = try XCTUnwrap(
-      servers[pluginRoot.lastPathComponent]?["command"] as? String, "\(file): サーバー名＝プラグイン名")
+    let server = try XCTUnwrap(servers[root.lastPathComponent], "\(file): サーバー名＝プラグイン名")
+    let command = try XCTUnwrap(server["command"] as? String, file)
+    let args = server["args"] as? [String] ?? []
     switch definition {
     case .claude:
       return (
-        command.replacingOccurrences(of: "${CLAUDE_PLUGIN_ROOT}", with: pluginRoot.path), work.path
+        [command.replacingOccurrences(of: "${CLAUDE_PLUGIN_ROOT}", with: root.path)] + args,
+        work.path
       )
     case .agy:
-      return (command, pluginRoot.path)
+      return ([command] + args, root.path)
+    case .codex:
+      return ([command] + args, root.appendingPathComponent(server["cwd"] as? String ?? ".").path)
     }
   }
 
@@ -70,9 +83,9 @@ final class AgentMcpShimTests: OrbeTestCase {
     var env = ["PATH": "/usr/bin:/bin"]
     if withMcpBin { env["ORBE_MCP_BIN"] = mcpBin.path }
     if let bundleId { env["ORBE_BUNDLE_ID"] = bundleId }
-    let (command, cwd) = try launch(definition)
+    let (argv, cwd) = try launch(definition)
     let outcome = ControlProcess.run(
-      URL(fileURLWithPath: "/bin/sh"), [command], env: env,
+      URL(fileURLWithPath: "/bin/sh"), argv, env: env,
       stdin: stdin.joined(separator: "\n") + "\n", cwd: cwd)
     XCTAssertEqual(outcome.status, 0, "\(definition): \(outcome.stderr)")
     return outcome.stdout.split(separator: "\n").map(String.init)
