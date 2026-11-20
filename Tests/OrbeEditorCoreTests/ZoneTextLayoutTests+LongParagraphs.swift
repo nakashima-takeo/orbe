@@ -70,6 +70,20 @@ extension ZoneTextLayoutTests {
     }
   }
 
+  /// 区切りより長い割れない塊（右から左の字に結合記号を続けた 1 字）は、区切りを広げずに区切りの終わりで割る——行は 2 行
+  /// 以上になり、行の範囲が文を隙間なく覆う。
+  func testAClusterLongerThanTheWindowIsCutAtTheWindow() {
+    let source = "א" + String(repeating: "\u{05B0}", count: 20_000)
+    let lines = ZoneTextLayout.typeset(ZoneStyledText([(source, plain)]), width: 300).lines
+    XCTAssertGreaterThanOrEqual(lines.count, 2)
+    var next = 0
+    for line in lines {
+      XCTAssertEqual(line.range.location, next, "行の範囲は前の行の終わりから")
+      next = NSMaxRange(line.range)
+    }
+    XCTAssertEqual(next, source.utf16.count, "行の範囲は文の終わりまで")
+  }
+
   private var plain: ZoneTextStyle { ZoneTextStyle(font: font, color: .white) }
   private var code: ZoneTextStyle { ZoneTextStyle(font: mono, color: .red, padding: 4) }
 }

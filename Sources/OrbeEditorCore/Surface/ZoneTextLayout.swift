@@ -168,7 +168,8 @@ public enum ZoneTextLayout {
   /// 覚えて、絵を問われたら覚えから絵を組める）。改行（`\n`）では必ず割る。
   /// 割る位置は、余白を付けずに組んだ段落で Core Text が選ぶ位置だけ（語の境。日本語は字の境。禁則も余白なしと同じ）で、
   /// 置き字はコードから離れない。余白を付けた行が幅に収まる所で割り、語が幅に入らなければ、余白なしで狭い幅に組んだとき
-  /// と同じく語の途中で割る。1 つの割れない塊（字 1 つなど）と余白が幅に入らない行だけが幅を超える。空の文は空の 1 行。
+  /// と同じく語の途中で割る。1 つの割れない塊（字 1 つなど）と余白が幅に入らない行だけが幅を超える。区切り（下）より長い
+  /// 割れない塊は、区切りの終わりで割る。空の文は空の 1 行。
   /// 4,096 字を超える段落は区切って組む。行を組む文（行の頭の 512 字前から区切りの終わりまで）の外の字は、段落の向き・
   /// 文の頭で開いている埋め込み・上書き・isolate（コードの中で開いたものを除く）・文の端で切れたコードの向きとしてだけ
   /// 効く。そのため字の向きが文の外の字で決まる所では、段落を丸ごと組んだときと字の並びと割る位置が変わりうる——向きを
@@ -186,20 +187,13 @@ public enum ZoneTextLayout {
     let bareStyles = text.styles.map(\.bare)
     var lines: [TypesetLine] = []
     var start = 0
-    // 位置 `offset` より後ろで終わる最初の見え方（段落と区切りは前から順に組むので、見え方を前から 1 度だけたどる）。
-    var first = (index: 0, offset: 0)
-    let advance = { (offset: Int) in
-      while first.index < text.styles.count,
-        first.offset + text.styles[first.index].length <= offset
-      {
-        first = (first.index + 1, first.offset + text.styles[first.index].length)
-      }
-    }
+    // 段落の頭より後ろで終わる最初の見え方（段落と区切りは前から順に組むので、見え方を前から 1 度だけたどる）。
+    var first = StyleCursor()
     repeat {
       let span = paragraphSpan(around: start, in: units)
-      advance(span.lowerBound)
+      first.advance(to: span.lowerBound, in: text.styles)
       guard !span.isEmpty else {
-        let composition = ZoneComposition(units, paragraph: span, styles: text.styles, from: first)
+        let composition = ZoneComposition(units, range: span, styles: text.styles, from: first)
         lines.append(TypesetLine(composition, 0..<0))
         start = span.upperBound + 1
         continue
@@ -208,7 +202,9 @@ public enum ZoneTextLayout {
       // 探す仕事は段落の頭からの位置（タイ語・ラオ語は段落の長さ）に、長さの限りを外した文を組む仕事は右から左の字の続きの
       // 長さの 2 乗に比例するので、段落ごと組むと段落を組む仕事が長さの 2 乗になる。区切りの終わりから `margin` 以上
       // 手前で終わる行だけを採り（割る位置は後ろの字にも依るので、区切りの終わりの近くの行は次の区切りで組み直す）、1 行も
-      // 採れなければ区切りを倍に広げる。区切りは段落の向きと、区切りの前で開いた埋め込み・上書き・isolate を引き継ぐ。
+      // 採れなければ区切りを倍に広げる。ただし区切りの全体が 1 行（割れない塊の途中）なら、広げずに区切りの終わりで割る
+      // ——広げると、塊を組む仕事が塊の長さの 2 乗に伸びる。区切りの終わりはサロゲートの対を割らない。区切りは段落の向きと、
+      // 区切りの前で開いた埋め込み・上書き・isolate を引き継ぐ。
       let rightToLeft = ZoneComposition.isRightToLeft(units, span)
       let codes = ZoneComposition.CodeDirections()
       // 行の頭の前で開いた制御字（`head` は行を組む文の頭の、`line` は割る位置を探す文の頭の）。
@@ -219,24 +215,31 @@ public enum ZoneTextLayout {
       var lineStart = span.lowerBound
       var size = window
       while lineStart < span.upperBound {
-        let end = min(span.upperBound, lineStart + size)
+        var end = min(span.upperBound, lineStart + size)
+        if end < span.upperBound, UTF16.isLeadSurrogate(units[end - 1]) { end -= 1 }
         // 行を組む文は行の頭より `margin` 字前から組む——字の向きは前の字にも依る（数字・中立の字は前の向きを持つ字の
         // 向きを取る。UAX #9 の W2・N1）。
         let head = max(span.lowerBound, lineStart - margin)
         carried.head.read(to: head)
         carried.line.read(to: lineStart)
         let composition = ZoneComposition(
-          units, paragraph: head..<end, styles: text.styles, from: carried.head.style,
+          units, range: head..<end, styles: text.styles, from: carried.head.style,
           context: .init(
             paragraph: span, rightToLeft: rightToLeft, open: carried.head.composed, codes: codes))
         let bare = ZoneComposition(
-          units, paragraph: lineStart..<end, styles: bareStyles, from: carried.line.style,
+          units, range: lineStart..<end, styles: bareStyles, from: carried.line.style,
           context: .init(
             paragraph: span, rightToLeft: rightToLeft, open: carried.line.bare, codes: codes))
         let made = wrap(composition, breakingAs: bare, width: width)
         let taken =
           end == span.upperBound
           ? made[...] : made.prefix { NSMaxRange($0.range) <= end - margin }
+        if taken.isEmpty, let line = made.first, NSMaxRange(line.range) == end {
+          lines.append(line)
+          lineStart = end
+          size = window
+          continue
+        }
         guard let last = taken.last else {
           size *= 2
           continue
@@ -259,7 +262,7 @@ public enum ZoneTextLayout {
     let text = ZoneStyledText(
       runs.map { ($0.string, ZoneTextStyle(font: $0.font, color: $0.color)) })
     let units = Array(text.string.utf16)
-    let composition = ZoneComposition(units, paragraph: 0..<units.count, styles: text.styles)
+    let composition = ZoneComposition(units, range: 0..<units.count, styles: text.styles)
     return TypesetLine(composition, 0..<composition.count)
   }
 
@@ -279,7 +282,7 @@ public enum ZoneTextLayout {
   private static func wrap(
     _ composition: ZoneComposition, breakingAs bare: ZoneComposition, width: CGFloat
   ) -> [TypesetLine] {
-    let part = bare.paragraph
+    let part = bare.range
     let limit = Double(max(1, width))
     var lines: [TypesetLine] = []
     var start = part.lowerBound

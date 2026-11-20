@@ -20,9 +20,7 @@ extension ZoneTextLayoutTests {
   }
 
   /// 部分 `parts` を幅 `width` で組み、コード `code` の地が守らない約束を返す（→ `misplaced`）。
-  func check(
-    _ parts: [String], code: Int, width: CGFloat, codes: [Int]? = nil, measuresPadding: Bool = true
-  ) -> [String] {
+  func check(_ parts: [String], code: Int, width: CGFloat, codes: [Int]? = nil) -> [String] {
     let string = parts.joined()
     let lines = ZoneTextLayout.typeset(
       styled(parts, codes: codes ?? [code], padding: padding), width: width
@@ -34,10 +32,7 @@ extension ZoneTextLayoutTests {
       let edges =
         (NSLocationInRange(start, line.range) ? 1 : 0)
         + (line.range.location < end && end <= NSMaxRange(line.range) ? 1 : 0)
-      wrong += misplaced(
-        line, code: code, edges: measuresPadding ? edges : nil, in: Array(string.utf16)
-      )
-      .map {
+      wrong += misplaced(line, code: code, edges: edges, in: Array(string.utf16)).map {
         "\(string) の幅 \(width) の行 \(line.range): \($0)"
       }
     }
@@ -45,11 +40,11 @@ extension ZoneTextLayoutTests {
   }
 
   /// 行 `line` でコード `code` の地が守らない約束——地は 1 つの続いた範囲で、コードの字を含み、字より余白 `edges` 個分だけ
-  /// 広く（コードの端がこの行にある数。nil なら幅を問わない）、ほかの見え方の字にかぶらない。右から左の語を途中で割った行の
+  /// 広く（コードの端がこの行にある数）、ほかの見え方の字にかぶらない。右から左の語を途中で割った行の
   /// 分け目の前の字だけは、次の行へ送った字との詰め（字体の kern）の分だけ寄るので（`docs/spec/editor/code.md` の
   /// 「テキストエンジンの境界」）、`kerningAcrossABreak` までかぶってよい（文 `units` を渡したときだけ見分ける）。
   func misplaced(
-    _ line: ZoneTextLayout.TypesetLine, code: Int, edges: Int? = 2, in units: [UInt16] = []
+    _ line: ZoneTextLayout.TypesetLine, code: Int, edges: Int = 2, in units: [UInt16] = []
   ) -> [String] {
     let spans = line.spans(of: code)
     guard let glyphs = glyphs(of: code, in: line) else {
@@ -58,7 +53,7 @@ extension ZoneTextLayoutTests {
     guard spans.count == 1, let ground = spans.first else { return ["地が \(spans.count) 個"] }
     var wrong: [String] = []
     let extra = (ground.upperBound - ground.lowerBound) - (glyphs.upperBound - glyphs.lowerBound)
-    if let edges, abs(extra - CGFloat(edges) * padding) > 0.01 { wrong.append("余白の合計 \(extra)") }
+    if abs(extra - CGFloat(edges) * padding) > 0.01 { wrong.append("余白の合計 \(extra)") }
     if ground.lowerBound > glyphs.lowerBound + 0.01 || ground.upperBound < glyphs.upperBound - 0.01
     {
       wrong.append("地 \(ground) が字 \(glyphs) を含まない")
@@ -81,7 +76,7 @@ extension ZoneTextLayoutTests {
   /// 文 `units` の行 `line` が右から左の語を途中で割った行なら、分け目の前の字の、元の文での位置（そうでなければ nil）。
   func kernedAcrossTheBreak(_ line: ZoneTextLayout.TypesetLine, in units: [UInt16]) -> Int? {
     let end = NSMaxRange(line.range)
-    guard end > line.range.location, end < line.composition.paragraph.upperBound else { return nil }
+    guard end > line.range.location, end < line.composition.range.upperBound else { return nil }
     let letter = { (unit: UInt16) in
       Unicode.Scalar(unit).map { $0.properties.isAlphabetic } ?? false
     }
@@ -118,7 +113,7 @@ extension ZoneTextLayoutTests {
     line.forEachGlyph { index, x in
       let offset = composition.original(index)
       guard index < hanging, !x.isEmpty, offset != composition.original(index + 1),
-        offset < composition.paragraph.upperBound
+        offset < composition.range.upperBound
       else { return }
       result.append(GlyphExtent(style: Int(composition.owners[index]), offset: offset, x: x))
     }
