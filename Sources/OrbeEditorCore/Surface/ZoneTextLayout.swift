@@ -218,8 +218,11 @@ public enum ZoneTextLayout {
         var end = min(span.upperBound, lineStart + size)
         if end < span.upperBound, UTF16.isLeadSurrogate(units[end - 1]) { end -= 1 }
         // 行を組む文は行の頭より `margin` 字前から組む——字の向きは前の字にも依る（数字・中立の字は前の向きを持つ字の
-        // 向きを取る。UAX #9 の W2・N1）。
-        let head = max(span.lowerBound, lineStart - margin)
+        // 向きを取る。UAX #9 の W2・N1）。文の頭は字の塊の境に合わせる（塊の途中から組むと、文はその頭を塊の境とみなし、
+        // コードの境にある塊を段落を丸ごと組んだときと別に割る）。
+        let head = clusterBoundary(
+          atOrAfter: max(span.lowerBound, lineStart - margin), before: lineStart,
+          from: lineHead(atOrBefore: lineStart - margin, in: lines, span: span), in: units)
         carried.head.read(to: head)
         carried.line.read(to: lineStart)
         let composition = ZoneComposition(
@@ -251,6 +254,28 @@ public enum ZoneTextLayout {
       start = span.upperBound + 1
     } while start <= units.count
     return ZoneTypeset(text, lines: lines)
+  }
+
+  /// 段落 `span` の、位置 `position` か、その前で始まる最後の組んだ行の頭（無ければ段落の頭）。行の頭は字の塊の境
+  /// （区切りより長い割れない塊を割った所を除く）。
+  private static func lineHead(atOrBefore position: Int, in lines: [TypesetLine], span: Range<Int>)
+    -> Int
+  {
+    guard position > span.lowerBound else { return span.lowerBound }
+    let line = lines.last { $0.range.location <= position }
+    return max(span.lowerBound, line?.range.location ?? span.lowerBound)
+  }
+
+  /// 位置 `position` か、その後ろで `limit` までの最初の字の塊の境（無ければ `limit`）。塊は字の塊の境 `known` から数える。
+  private static func clusterBoundary(
+    atOrAfter position: Int, before limit: Int, from known: Int, in units: [UInt16]
+  ) -> Int {
+    var offset = known
+    for character in String(decoding: units[known..<limit], as: UTF16.self) {
+      if offset >= position { return offset }
+      offset += character.utf16.count
+    }
+    return limit
   }
 
   /// 区切りの前後に足す字の数——区切りの終わりから採る行の終わりまでに空ける字（割る位置は後ろの字にも依る）と、行を
