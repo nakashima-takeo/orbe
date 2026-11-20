@@ -123,7 +123,7 @@ extension WindowControllerTaskStartTests {
   /// （作業場の根が Home 全体になり、Home のタスクどうしが同じ作業場に重なる）。
   func testAHomeThatIsItselfARepositoryRefusesHomeTasks() throws {
     let wc = try launch()
-    let home = try XCTUnwrap(HomeFolder.url).path
+    let home = HomeFolder.url.path
     try git(["init", "-q"], in: home)
     let task = try wc.taskStore.add(TaskDraft(title: "Home のタスク", workspace: try homeId(wc)))
 
@@ -144,7 +144,7 @@ extension WindowControllerTaskStartTests {
 
     let result = try start(wc, TaskStartRequest(taskId: task.id)).get()
 
-    let home = GitWorktreeRoot.normalizedPath(try XCTUnwrap(HomeFolder.url).path)
+    let home = GitWorktreeRoot.normalizedPath(HomeFolder.url.path)
     let workdir = try XCTUnwrap(result["workdir"] as? String)
     XCTAssertTrue(workdir.hasPrefix(home + "/tasks/\(task.id)-"), workdir)
   }
@@ -236,7 +236,7 @@ extension WindowControllerTaskStartTests {
     let homeIndex = try XCTUnwrap(wc.store.homeIndex)
     wc.switchWorkspace(to: homeIndex)
     let task = try wc.taskStore.add(TaskDraft(title: "札を外す", workspace: try homeId(wc)))
-    let folder = "\(try XCTUnwrap(HomeFolder.url).path)/tasks/\(task.id)-札を外す"
+    let folder = "\(HomeFolder.url.path)/tasks/\(task.id)-札を外す"
     let folderRow = WorktreePaletteAction.open(.directory(path: folder))
     wc.showWorktreePalette(task: task.id)
     let palette = try XCTUnwrap(wc.model.worktreePalette)

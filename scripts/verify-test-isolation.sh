@@ -21,6 +21,9 @@ WATCH=(
   "$HOME/Library/Application Support/com.mitchellh.ghostty"
   "$HOME/Library/Application Support/dev.orbe.app.dev"
   "$HOME/Library/Application Support/dev.orbe.app"
+  # Home の専用フォルダ（release・dev）。
+  "$HOME/orbe"
+  "$HOME/orbe-dev"
   # 隔離なしの `swift test` が state dir を作る先。application support は bundle id で分岐し、
   # テスト実行体の bundle id は xctest ツールのものになる。
   "$HOME/Library/Application Support/com.apple.dt.xctest.tool"

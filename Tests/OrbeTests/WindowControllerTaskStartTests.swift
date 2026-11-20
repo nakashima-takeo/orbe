@@ -114,7 +114,7 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
 
     let result = try start(wc, TaskStartRequest(taskId: task.id, prompt: "急ぎで")).get()
 
-    let home = try XCTUnwrap(HomeFolder.url).path
+    let home = HomeFolder.url.path
     let folder = "\(home)/tasks/\(task.id)-見積もりを-山田さん-経理-に送る"
     XCTAssertEqual(result["workdir"] as? String, GitWorktreeRoot.root(of: folder))
     XCTAssertEqual(result["created"] as? Bool, true)
@@ -150,7 +150,7 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
     let wc = try launch()
     let home = try homeId(wc)
     let task = try wc.taskStore.add(TaskDraft(title: "歯医者", workspace: home))
-    let folder = "\(try XCTUnwrap(HomeFolder.url).path)/tasks/\(task.id)-歯医者"
+    let folder = "\(HomeFolder.url.path)/tasks/\(task.id)-歯医者"
     let row = WorktreePaletteAction.open(.directory(path: folder))
 
     wc.showWorktreePalette(task: task.id)
