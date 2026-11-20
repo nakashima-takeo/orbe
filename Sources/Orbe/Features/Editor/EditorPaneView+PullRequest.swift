@@ -1,6 +1,7 @@
 import AppKit
 
-/// PR のパネルの結線——行から PR の diff を開く・ツリーかリストかのアプリ全体の選択・焦点。
+/// PR のパネルの結線——行から PR の diff を開く・ツリーかリストかのアプリ全体の選択・焦点・パネルの中のキー（全体への
+/// コメント欄の ⌘↵）。
 extension EditorPaneView {
   static func pullRequestList(_ panel: PrPanel) -> RowList<PrListSource> {
     RowList(source: PrListSource(panel: panel), rowHeight: Theme.Layout.editorScmRow)

@@ -213,7 +213,7 @@ struct GitHubBranchPRQuery: Hashable {
 
 /// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,headRepository,
 /// headRepositoryOwner,url,createdAt` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
-/// 見るための小さな形。
+/// 見るのと、ブランチの PR を引く段（`GitHubBranchPullRequestLookup`）の答えに使う小さな形。
 struct GitHubBranchPR: Decodable, Equatable {
   let number: Int
   let headRefName: String
