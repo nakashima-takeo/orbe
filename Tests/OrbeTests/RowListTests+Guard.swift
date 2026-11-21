@@ -4,8 +4,8 @@ import XCTest
 @testable import Orbe
 
 /// 押し続けの守り——部品を押して錨を受け取った後、ポインタが押した部品の枠の中に居る間は、その枠の中の押下が留めている
-/// 行の同じ部品にだけ届く。押下はアプリの配送の口（`NSApp.sendEvent`）から送り、窓の段の受け手も本物と同じく通す（窓は
-/// 物理画面の外へ並べる。`sendEvent` は ordered-in の窓にしか配送しない）。
+/// 行の同じ部品にだけ届く。押下はアプリの配送の口（`NSApp.sendEvent`）から送り、窓の段の受け手も本物と同じく通す。窓は
+/// `placeOffscreen` で並べる（AppKit は並んでいない窓へマウスを配らない）。
 ///
 /// 壊れると何が起きるか。続けて押している位置に留めきれずに来た見出し・別の区分の行・列の外のもの（帯の出入りで来た
 /// コミットボタン）が、続けて押すつもりの押下で働く（開閉・すべてステージ・別のファイルのステージ・コミット）。守りが
@@ -15,8 +15,7 @@ extension RowListTests {
   private func hostShown(anchor: RowListAnchor<Int>?) -> Hosted {
     let hosted = host(rowCount: 10)
     hosted.source.anchor = anchor
-    hosted.window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
-    hosted.window.orderFront(nil)
+    placeOffscreen(hosted.window)
     return hosted
   }
 
@@ -78,8 +77,7 @@ extension RowListTests {
   /// view への押下は、続けて捨てる。
   func testAPressOnADisabledControlKeepsTheHoldAndTheGuard() {
     let hosted = host(rowCount: 3)
-    hosted.window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
-    hosted.window.orderFront(nil)
+    placeOffscreen(hosted.window)
     // 押した行 1 が抜け、後継の行 2 を行 1 の高さ（窓の中の 20）に留める。
     hosted.source.anchor = RowListAnchor(pressed: 99, successor: 2)
     let point = NSPoint(x: 185, y: 30)
