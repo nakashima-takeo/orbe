@@ -40,13 +40,6 @@ extension WindowControllerReportAgentTests {
     return (task.id, try XCTUnwrap(resolution, "前提: 解けている"))
   }
 
-  /// 初回起動の言語選択（真のモーダル）を下ろした窓。⌘⇧X を開くテストの足場。
-  private func launchWithoutFirstRun(window: OrbeWindow = OrbeWindow()) throws -> WindowController {
-    let (wc, _) = try makeControllerAndTab(window: window)
-    wc.dismissPalette()
-    return wc
-  }
-
   private func pr214() throws -> TaskLink {
     TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/orbe", number: 214)), kind: .pr)
   }

@@ -290,14 +290,15 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
   /// 別の workspace からピルを押して Home のボードへ移っても、Home で選んでいたタブの done は残る——そのタブの端末は一度も
   /// 画面に出ていない。
   @MainActor func testThePillFromAnotherWorkspaceKeepsTheDoneOfTheTabSelectedInHome() throws {
-    let wc = controller()
+    let window = OrbeWindowFake()
+    let wc = controller(window: window)
     let home = try XCTUnwrap(wc.store.homeIndex)
     let elsewhere = try XCTUnwrap(wc.workspaces.indices.first { $0 != home })
     wc.switchWorkspace(to: home)
     wc.openTab(workspaceIndex: home, cwd: "/tmp")
     let secretary = try XCTUnwrap(wc.activeTab)
     wc.switchWorkspace(to: elsewhere)
-    key(wc)
+    window.isKey = true
     wc.controlReportAgent(
       tab: secretary,
       report: AgentHookReport(
