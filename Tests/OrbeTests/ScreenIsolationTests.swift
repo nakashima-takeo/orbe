@@ -47,7 +47,9 @@ final class ScreenIsolationTests: OrbeTestCase {
     // swiftlint:disable:next test_screen_isolation
     app.setActivationPolicy(.accessory)
     var recorded: [(message: String, policy: NSApplication.ActivationPolicy)] = []
-    screen.finish { recorded.append(($0, app.activationPolicy())) }
+    screen.finish { message in
+      recorded.append((message, app.activationPolicy()))
+    }
     XCTAssertEqual(recorded.count, 1)
     XCTAssertTrue(recorded.first?.message.contains("アクティベーションポリシーが変わった") == true)
     XCTAssertEqual(recorded.first?.policy, .accessory, "戻すのは、失敗を記録した後")

@@ -35,10 +35,12 @@ class OrbeTestCase: XCTestCase {
   /// `final` にするのは、サブクラスが `super` 抜きで上書きすると隔離が外れるため。
   final override func invokeTest() {
     guard !Self.presentsOnScreen else { return super.invokeTest() }
-    let screen = MainActor.assumeIsolated { ScreenIsolation() }
+    let screen = MainActor.assumeIsolated { () -> ScreenIsolation in ScreenIsolation() }
     super.invokeTest()
     MainActor.assumeIsolated {
-      screen.finish { record(XCTIssue(type: .assertionFailure, compactDescription: $0)) }
+      screen.finish { breach in
+        self.record(XCTIssue(type: .assertionFailure, compactDescription: breach))
+      }
     }
   }
 }

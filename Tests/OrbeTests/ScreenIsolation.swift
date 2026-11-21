@@ -43,6 +43,7 @@ final class ScreenIsolation {
     /// 並んでいて、ディスプレイの範囲と面積を持って重なる窓（窓と、失敗の文言に出す説明）。
     var windowsOnDisplays: [ObjectIdentifier: String]
 
+    @MainActor
     static func current() -> State {
       let app = NSApplication.shared
       var windows: [ObjectIdentifier: String] = [:]
@@ -78,13 +79,17 @@ final class ScreenIsolation {
     ) { [weak self] notification in
       let parent = String(describing: type(of: notification.object as AnyObject))
       MainActor.assumeIsolated {
-        self?.note(
+        guard let self else { return }
+        self.note(
           "本物のシートが出た（親の窓: \(parent)）。確認を出すコードを通るテストは、エディターの面を OrbeWindowFake に載せ、"
             + "WindowController には OrbeWindowFake を渡す")
       }
     }
     let onPass: (CFRunLoopObserver?, CFRunLoopActivity) -> Void = { [weak self] _, _ in
-      MainActor.assumeIsolated { self?.observe() }
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        self.note(breachesOf: State.current())
+      }
     }
     let activities: CFRunLoopActivity = [.beforeWaiting, .exit]
     runLoopObserver = CFRunLoopObserverCreateWithHandler(nil, activities.rawValue, true, 0, onPass)
@@ -95,11 +100,8 @@ final class ScreenIsolation {
     if !breaches.contains(breach) { breaches.append(breach) }
   }
 
-  @discardableResult
-  private func observe() -> State {
-    let now = State.current()
+  private func note(breachesOf now: State) {
     for breach in now.breaches(since: start) { note(breach) }
-    return now
   }
 
   /// テストの終わりに呼ぶ。見つけた違反を、失敗の文言で `record` に渡してから、テストが変えたポリシーと前面を戻す。
@@ -111,7 +113,8 @@ final class ScreenIsolation {
     if policy != startPolicy {
       note("アクティベーションポリシーが変わった（\(startPolicy.name) → \(policy.name)）")
     }
-    let end = observe()
+    let end = State.current()
+    note(breachesOf: end)
     for breach in breaches { record("画面と前面の隔離: \(breach)") }
     if policy != startPolicy { app.setActivationPolicy(startPolicy) }
     if end.isActive, !start.isActive { app.deactivate() }
