@@ -6,9 +6,8 @@ import os
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// 画面に出す計測（朝の場で回し、その結果を正とする。関門にはしない）。`ORBE_EDITOR_PRESENT=1` のときだけ走り、
-/// `scripts/perf-editor-present.sh` が xctrace（Animation Hitches）の下で起こす。窓は画面に出すがアプリは activate
-/// しない。
+/// 画面に出す計測（関門にはしない）。`ORBE_EDITOR_PRESENT=1` のときだけ走り、`scripts/perf-editor-present.sh` が
+/// xctrace（Animation Hitches）の下で起こす。窓は画面に出すがアプリは activate しない。
 ///
 /// 1MB の文書に合成した指の出来事を実機の刻み（約 5.7ms）で流す。待つ間はアプリの出来事を配る（→ `runShownWindow`。
 /// 配らないと窓が見えている知らせが届かず、面は描かない）。出来事→present と落ちたコマは面の記録係が OS のログ
