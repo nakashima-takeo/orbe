@@ -141,13 +141,13 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertTrue(pane.tree.isLive, "窓に付いて見えていれば握る")
     XCTAssertTrue(pane.projectSearch.isLive)
 
-    tab.group.view.setEditorOpen(false, animated: false)
+    tab.group.view.show(.terminal, animated: false)
     tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.isHiddenOrHasHiddenAncestor, "前提: 閉じた面は隠れる")
     XCTAssertFalse(pane.tree.isLive, "面が隠れれば離す（祖先の hidden でも viewDidHide が届く）")
     XCTAssertFalse(pane.projectSearch.isLive)
 
-    tab.group.view.setEditorOpen(true, animated: false)
+    tab.group.view.show(.editor, animated: false)
     tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.tree.isLive, "戻れば握り直す")
     XCTAssertTrue(pane.projectSearch.isLive)

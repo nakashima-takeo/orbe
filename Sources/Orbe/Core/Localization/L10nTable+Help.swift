@@ -31,6 +31,9 @@ extension L10n {
     .helpShortcutSettings: ("設定を開く", "Open settings"),
     .helpShortcutOpenEditor: ("cwd を GUI エディタで開く", "Open cwd in GUI editor"),
     .helpShortcutToggleEditorFace: ("エディターとターミナルを切替", "Switch editor / terminal"),
+    .helpShortcutPeekTerminal: (
+      "押している間、エディターの下のターミナルを表示", "Hold to show the terminal under the editor"
+    ),
     .helpShortcutSaveDocument: ("エディターのファイルを保存", "Save the editor file"),
     .helpShortcutFindInProject: ("プロジェクト全体を検索", "Search the whole project"),
     .helpShortcutScmCommit: ("ソース管理のメッセージでコミット", "Commit from the Source Control message"),

@@ -155,7 +155,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: .darkAqua)
     window.contentView = tab.group.view
-    tab.group.view.setEditorOpen(true, animated: false)
+    tab.group.view.show(.editor, animated: false)
     let document = try tab.group.editor.open(try caseFile("trial.swift", text), as: .pinned)
     let surface = try engine(document)
     tab.group.view.layoutSubtreeIfNeeded()

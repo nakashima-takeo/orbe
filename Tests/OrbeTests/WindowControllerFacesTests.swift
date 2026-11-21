@@ -7,13 +7,14 @@ import XCTest
 
 /// エディターの開閉を実窓で固定する——⌘E の往復と焦点、開閉で端末の寸法が変わらないこと、タブを選ぶ操作でエディターが
 /// 閉じること（選んでいないタブの増減では閉じない）、`focus_tab`・workspace の切替、開閉を保存しないこと、⌘W の
-/// 発火源、chrome への投影（現在地）。
+/// 発火源、chrome への投影（現在地）、エディターを開いたまま見せる端末が替わったときの描く端末。
 ///
 /// 壊れると何が起きるか。⌘E が見せている面へ first responder を運ばないとキーが隠れた面へ届く。開閉で端末が resize されると
 /// scrollback が折り返し直される。タブを選んでもエディターが閉じないと、選んだタブの端末が見えない。裏のタブが閉じただけで
 /// エディターが閉じると、読んでいた文書が消える。閉じて開き直したときに文書が戻らないと、⌘E のたびに開き直す手間が生じる。
 /// ⌘W の発火源が `.gesture` でなくなると寿命ログが人の操作を「落ちた」と記録し、⇧⌘T のバッジと `orb session closed` の
-/// 群れ分けが狂う。chrome が見せているものを映さないと現在地が実態と別の面を指す。
+/// 群れ分けが狂う。chrome が見せているものを映さないと現在地が実態と別の面を指す。エディターを開いたまま見せる端末が替わったときに
+/// 新しい端末が描かれないと、⌥ で見せた最初のフレームが古い。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerFacesTests: OrbeTestCase {
@@ -38,6 +39,36 @@ final class WindowControllerFacesTests: OrbeTestCase {
   }
 
   private static let plain = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
+
+  /// `makeKey` で前面化した窓。次のテストへ key を持ち越さないため tearDown で下ろす。
+  private var openedWindows: [NSWindow] = []
+  override func tearDown() {
+    openedWindows.forEach { $0.orderOut(nil) }
+    openedWindows.removeAll()
+    super.tearDown()
+  }
+
+  /// 届いたイベントを配送しながら待つ。
+  private func pumpApp(upTo seconds: TimeInterval, until done: () -> Bool) {
+    let end = Date().addingTimeInterval(seconds)
+    while Date() < end, !done() {
+      guard
+        let event = NSApp.nextEvent(
+          matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
+      else { continue }
+      NSApp.sendEvent(event)
+    }
+  }
+
+  /// 窓を実際に key（前面）にする。前面の窓であることを要る契約を実経路で測るため。
+  func makeKey(_ wc: WindowController) {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    wc.window.makeKeyAndOrderFront(nil)
+    NSApplication.shared.activate(ignoringOtherApps: true)
+    openedWindows.append(wc.window)
+    pumpApp(upTo: 2, until: { wc.window.isKeyWindow })
+    XCTAssertTrue(wc.window.isKeyWindow, "前提: ウィンドウが key にならない環境ではこの契約を測れない")
+  }
 
   func pump(_ seconds: TimeInterval) {
     let end = Date().addingTimeInterval(seconds)
@@ -67,7 +98,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertTrue(
       wc.window.firstResponder === tab.group.view.editor, "エディター pane が first responder")
     settle(tab)
-    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開き終われば下の端末を描かない")
+    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開き終われば下の端末を見せない")
 
     wc.handleWindowCommand(.toggleEditorFace)
     XCTAssertFalse(tab.group.view.isEditorOpen)
@@ -200,6 +231,24 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
     XCTAssertTrue(tab.group.view.isEditorOpen)
     XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor)
+  }
+
+  // MARK: - 覆われている端末の描画
+
+  /// エディターを開いたまま同じ連の別のタブをエディターで見せる（`open_file` の経路）と、覆われたまま新しいタブの端末が描き、
+  /// 元のタブの端末は止まる。
+  func testShowingAnotherTabInTheEditorMovesRenderingUnderTheCover() throws {
+    let wc = try restore([Self.plain, Self.plain])
+    let (a, b) = (wc.current.tabs[0], wc.current.tabs[1])
+    XCTAssertTrue(a.group === b.group, "前提: 同じ連")
+    pumpMain(until: { b.activated }, "隠れた兄弟が起きる")
+    wc.toggleEditorFace()
+
+    wc.showInEditor(b)
+
+    XCTAssertTrue(b.group.view.isEditorOpen, "前提: エディターのまま")
+    XCTAssertTrue(b.surface.wantsRendering, "覆われたまま見せ始めた端末が描く")
+    XCTAssertFalse(a.surface.wantsRendering, "見せなくなった端末は止まる")
   }
 
   // MARK: - 開閉は保存しない

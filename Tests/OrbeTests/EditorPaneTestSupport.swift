@@ -22,7 +22,7 @@ extension OrbeTestCase {
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = tab.group.view
-    tab.group.view.setEditorOpen(true, animated: false)
+    tab.group.view.show(.editor, animated: false)
     tab.group.view.layoutSubtreeIfNeeded()
     return window
   }

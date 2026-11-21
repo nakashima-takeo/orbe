@@ -11,7 +11,7 @@ extension TabGroupTests {
       contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = tab.group.view
-    tab.group.view.setEditorOpen(true, animated: false)
+    tab.group.view.show(.editor, animated: false)
     window.makeFirstResponder(tab.group.view.editor)
     return window
   }

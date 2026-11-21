@@ -29,7 +29,7 @@ extension WindowController {
 
   /// アクティブ workspace の今の状態を画面へ反映する（冪等。状態を変えた経路の終わりに 1 回呼ぶ）。最初に、エディターで見せて
   /// いるタブが今選んでいるタブでなければ無しにする（見せるタブが替わればエディターは閉じる）。`animated` なら、選んでいる
-  /// タブの連の器へ開閉を動きつきで写す（同じタブのまま開閉が変わる命令だけが渡す）。選んでいるタブを即時に materialize
+  /// タブの連の器へ見せ方を動きつきで写す（同じタブのまま開閉が変わる命令だけが渡す）。選んでいるタブを即時に materialize
   /// してから content を照合し（`reconcileContent`。見せるものは照合が状態から導く）、フォーカスを見せているものへ戻す。
   /// 未 materialize の隠れタブは後続 tick へ分割して materialize する（surface 誕生を 1 turn で N 個積まない）。選択を記録し直さない
   /// ので、選択を動かさない経路（タブの閉鎖の後・workspace のアクティブ化・選ばずに足したタブ）はこれだけを呼ぶ。
@@ -37,7 +37,7 @@ extension WindowController {
     let ws = current
     if let shown = editorShownTab, shown !== ws.selectedTab { editorShownTab = nil }
     if animated, let tab = ws.selectedTab {
-      tab.group.view.setEditorOpen(editorShownTab === tab, animated: true)
+      tab.group.view.show(facesMode(of: tab.group), animated: true)
     }
     // 選択が動きうる＝インライン改名の文脈が崩れる。編集中なら畳む（DragSession と同じ「集合/選択が
     // 変わったら継続は不正」不変条件。blur 自己修復に頼らず SSOT 遷移点で決定的に解除する）。
@@ -77,13 +77,14 @@ extension WindowController {
     }
   }
 
-  /// 見せているものへフォーカスを戻す——タブの端末ならその surface、タブのエディターならエディター面のフォーカスの行き先、
+  /// 見せているものへフォーカスを戻す——タブの端末ならその surface、タブのエディター（透かしを含む）ならエディター面のフォーカスの行き先、
   /// ボードならボードの中の宛先、空なら無し（除去済みの surface に宙ぶらりんの first responder を残さない）。パレットの
   /// dismiss・workspace の切替・`focus_tab` が共有する。
   func focusSelection() {
     switch presentation {
     case .terminal(let tab): window.makeFirstResponder(tab.surface)
-    case .editor(let tab): window.makeFirstResponder(tab.group.view.editor.focusTarget)
+    case .editor(let tab), .peek(let tab):
+      window.makeFirstResponder(tab.group.view.editor.focusTarget)
     case .board: board.focus()
     case .empty: window.makeFirstResponder(nil)
     }
