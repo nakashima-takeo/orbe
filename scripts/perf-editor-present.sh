@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# 画面に出す計測（朝の場で回し、その結果を正とする。関門にはしない）。窓を画面に出すので、画面のロックを外し、スリープ
-# させずに回す（アプリは activate しない）。release のテスト用ビルドで EditorPresentPerfTests を xctrace（Animation
-# Hitches ＋ os_signpost）の下で起こし、1MB に合成の指の出来事を約 5.7ms ごとに流して、記録係の要約（出来事→present・
-# 落ちたコマ）と hitches を並べる。hitches は、テストが os_signpost の interval（scrolling）で記録した出来事を流している
-# 区間の中のものだけを足し、区間の長さの合計で割る。目標は docs/testing/test-architecture.md。
+# 画面に出す計測（関門にはしない）。窓を画面に出すので、画面のロックを外し、スリープさせずに回す（アプリは activate
+# しない）。release のテスト用ビルドで EditorPresentPerfTests を xctrace（Animation Hitches ＋ os_signpost）の下で
+# 起こし、1MB に合成の指の出来事を約 5.7ms ごとに流して、記録係の要約（出来事→present・落ちたコマ）と hitches を並べる。
+# hitches は、テストが os_signpost の interval（scrolling）で記録した出来事を流している区間の中のものだけを足し、区間の
+# 長さの合計で割る。目標は、記録係の要約（gesture の行）の event→present が median 31ms 以下・p95 40ms 以下、
+# hitches が 5 ms/s 未満。
 #
 #   scripts/perf-editor-present.sh [out_dir]
 set -euo pipefail

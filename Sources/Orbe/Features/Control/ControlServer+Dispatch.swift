@@ -139,16 +139,18 @@ extension ControlServer {
     let command: String?
     let workspaceId: UUID?
     let cwd: String?
+    let prompt: String?
     do throws(ControlError) {
       command = try p.optionalString("command")
       workspaceId = try p.optionalWorkspaceId()
       cwd = try p.optionalString("cwd")
+      prompt = try p.optionalString("prompt")
       timeoutMs = try WaitTimeout.parse(p, default: WaitTimeout.launchDefaultMs)
     } catch {
       return conn.respond(id: id, result: .failure(error))
     }
     launchAgent(id: id, conn: conn, timeoutMs: timeoutMs) {
-      $0.controlSpawnAgent(command: command, workspaceId: workspaceId, cwd: cwd)
+      $0.controlSpawnAgent(command: command, workspaceId: workspaceId, cwd: cwd, prompt: prompt)
     }
   }
 

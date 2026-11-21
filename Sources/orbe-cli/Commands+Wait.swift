@@ -11,7 +11,7 @@ let waitUsageLines = [
 ]
 
 /// help の `KINDS:` 行は control の `ControlEvent.kinds` と一致していなければならない
-/// （その照合は L4 の `orb wait --help` テストが持つ）。未知 kind を弾くのは control 側で、
+/// （その照合はプロセス境界の `orb wait --help` テストが持つ）。未知 kind を弾くのは control 側で、
 /// CLI は語彙を複製しない——ここは人が読むための写し。
 let waitUsage = """
   orb wait — block until a state-change event arrives

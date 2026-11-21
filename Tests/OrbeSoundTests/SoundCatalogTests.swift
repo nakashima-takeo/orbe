@@ -2,7 +2,7 @@ import XCTest
 
 @testable import OrbeSound
 
-/// 12 案 × 2 イベントの定義と合成結果の健全性。L1 純ロジック・決定論（音は出さない）。
+/// 12 案 × 2 イベントの定義と合成結果の健全性。純ロジック・決定論（音は出さない）。
 final class SoundCatalogTests: XCTestCase {
   private let sampleRate = 48000.0
 

@@ -14,7 +14,8 @@ import XCTest
 ///
 /// `ControlServer.shared` の履歴はプロセス寿命で溜まり続け、他のテストが残した `SurfaceView` の解放
 /// （`tab_closed`）がいつ割り込むかは決められない。seq はリテラルで書かず直前の応答から読み、
-/// 隣接（`+ 1`）ではなく**前後関係**（自分の tab に絞った一致・大小）で言う。`+ 1` の厳密さは L1 が持つ。
+/// 隣接（`+ 1`）ではなく**前後関係**（自分の tab に絞った一致・大小）で言う。`+ 1` の厳密さは
+/// `EventHistoryTests` が持つ。
 extension ControlWireTests {
   /// 応答時点の履歴位置（成功応答の最上位 `seq`）。
   private func seq(_ response: [String: Any]?) -> Int? {
@@ -211,7 +212,7 @@ extension ControlWireTests {
       (response?["error"] as? [String: Any])?["message"] as? String, "event history evicted",
       "message も契約の一部（クライアントが seq の取り直しを判断する）")
     // 保持範囲の内側は replay できる。最古ぴったりは他テストの残骸（tab_closed）が割り込むと
-    // 落ちうるので 1 つ内側を指す（境界の厳密さは L1 が持つ）。
+    // 落ちうるので 1 つ内側を指す（境界の厳密さは `EventHistoryTests` が持つ）。
     let retained = latest - capacity + 1
     XCTAssertEqual(
       event(wire.request(id: 4, method: "wait_for_event", params: ["after": retained]))?["seq"]

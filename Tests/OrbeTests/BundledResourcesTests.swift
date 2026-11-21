@@ -181,7 +181,9 @@ final class BundledResourcesTests: OrbeTestCase {
   /// 「1 つだけ追随しない」形の退行を取りこぼさない。
   /// `Config.load()` と `TerminalFonts.registerBundled()` は戻り値から所在を観測できず、
   /// `TitleGlyphs.notoEmoji` は `static let` で root の差し替えに追随しないため、ここには入らない。
-  /// この 3 つの相対パスは `scripts/build-app.sh` との照合（スライス 9）が受け持つ。
+  /// `TerminalFonts.registerBundled()` が登録するフォントの配置は `TerminalFontDelegationTests` が
+  /// `scripts/build-app.sh` と照合する。`Config.load()` が読む既定設定と `TitleGlyphs.notoEmoji` の
+  /// パスを `scripts/build-app.sh` と照合するテストは無い。
   private func resolved() -> [(name: String, path: String?)] {
     [
       ("AgentPluginInstaller.bundledPluginDir", AgentPluginInstaller.bundledPluginDir?.path),

@@ -8,14 +8,16 @@ struct AgentLaunch {
   /// 再開する会話が既に生きているタブで開いていて、新しく起こさずそのタブを返したとき、今 prompt を送れるか
   /// （idle / done を報告しているか）。新しく起こしたなら nil（最初の idle を待つ）。
   var readyAsOpened: Bool?
+  /// 会話の最初の入力を添えて起こしたか。agent はすぐその入力に取り掛かるので、idle を報告しても prompt を送れない。
+  var startedWithInput = false
 
   /// `{tabId, workspaceId, agent:{command, path}, ready}`。`ready` はエージェントが
-  /// 最初の idle を報告した（prompt を送れる）か。
+  /// 最初の idle を報告し、prompt を送れるか（最初の入力を添えて起こしたなら常に偽）。
   func toDict(ready: Bool) -> [String: Any] {
     [
       "tabId": tabId, "workspaceId": workspaceId.uuidString,
       "agent": ["command": agent.command, "path": agent.path],
-      "ready": ready,
+      "ready": ready && !startedWithInput,
     ]
   }
 }

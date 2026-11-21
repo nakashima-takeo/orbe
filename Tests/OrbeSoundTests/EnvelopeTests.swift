@@ -2,7 +2,7 @@ import XCTest
 
 @testable import OrbeSound
 
-/// エンベロープ語彙の数値検証。L1 純ロジック・決定論。
+/// エンベロープ語彙の数値検証。純ロジック・決定論。
 /// `.percussive` が従来の 3 イベント形（setValue → 指数立ち上がり → 指数減衰）と同一数式で
 /// あることが要——ここが崩れると既存 12 案の聴感が一斉に変わる。
 final class EnvelopeTests: XCTestCase {

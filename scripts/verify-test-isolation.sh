@@ -10,7 +10,7 @@
 #
 # 測っていないもの: `UserDefaults`。standard domain は cfprefsd がユーザーレコードで解決するので
 # HOME 差し替えでは曲がらず、テスト実行体の bundle id（xctest ツール）の plist が実ホームへ残る。
-# ハーネスも隔離していない（roadmap の前倒しリファクタ表を参照）。
+# ハーネスも隔離していない。
 #
 # 前提: Orbe 本体を終了しておく（起動中のインスタンスが state dir を書くと差分が出る）。
 set -euo pipefail

@@ -9,7 +9,7 @@ import XCTest
 /// `ControlServer` を通って発信元タブの状態が変わるまで。
 ///
 /// 区間ごとの検証は既に在る（シムのチャネルゲートは `AgentShimChannelGateTests`、stdin の解釈は
-/// `ReportLogicTests`、`report_agent` の wire は L3、タブ状態の上書き規律は
+/// `ReportLogicTests`、`report_agent` の wire は `ControlWireTests`、タブ状態の上書き規律は
 /// `WindowControllerReportAgentTests`）。残る穴は継ぎ目そのもので、注入された env が実際に
 /// シムと `orbe-report` を正しいタブへ導くかは、どの区間テストも見ていない。
 ///

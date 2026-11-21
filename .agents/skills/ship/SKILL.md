@@ -76,9 +76,10 @@ NG の差し戻しは、期待・設計が変わるなら計画へ、承認済�
 
 ### テスト・機械検証 — 既存の基盤で結果を確かめる
 
-`auto:implement-test` には、auto が定める差分・計画書（テスト自体が題材なら要求）に加え、`docs/testing/test-architecture.md` と `docs/testing/roadmap.md` を Read で読む指示を渡す。前者は層と横断方針、後者は実装済みの範囲を持つ。該当スライスの進捗が変われば作業者にロードマップも更新させる。
+`auto:implement-test` には、auto が定める差分・計画書（テスト自体が題材なら要求）に加え、次の指示を渡す。既存テストの慣習（ハーネス・Fake・支援コードの使い方）は、対象の領域の既存スイートを読んで取る。`docs/testing/test-architecture.md` は、テストを置く種類と品質規律の判断基準として Read で読む。同文書はテストのあるべき姿を定めるので、現行のテスト基盤に手段がまだ無い箇所は、下の箇条書きと既存のハーネスに合わせる。
 
 - テストは XCTest を使い、`Tests/OrbeTests` では `OrbeTestCase` の隔離ハーネスを通す。`swift test --parallel` は使わない。
+- クリップボードを通すテストは、エディター面（`textView.pasteboard`）へ名前付きの専用ペーストボードを渡す。ハーネスが自動で隔離するのは端末の `Ghostty.pasteboard` だけ。
 - ビルド・lint・format は `docs/guides/build.md`、CI の実行内容は `.github/workflows/ci.yml` を Read で確かめる。`<wt>` の依存を用意してから `swift build --build-tests` → `swift test --skip-build` を実行する。追加するテストは今回の振る舞いと既存の網から判断し、検分では仕様との対応と書かなかった理由を見る。
 
 テストの検分後、**完了条件を独立に確かめる Agent**（subagent_type=general-purpose、`model: opus`）を起動する。model は実行水準によらず opus に固定する——検証は確認作業で、モデルの能力差が結果に出る工程ではない。渡すのは完了条件・`<wt>`・検証に必要な上記文書の所在。実装者の成功申告や採用設計は渡さない。既存テスト・制御 API・ログ等から手段を選び、条件ごとに「合格 / 不合格 / 人の判定が必要」と、根拠・検証したコミットを返させる。検証用の使い捨てファイルは worktree 外の scratch に置かせ、成果物の修正は実装工程へ返す。

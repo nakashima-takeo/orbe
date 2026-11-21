@@ -7,7 +7,8 @@ import Foundation
 
 let agentUsageLines = [
   "orb agent list [--json]",
-  "orb agent spawn [<agent>] [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]",
+  "orb agent spawn [<agent>] [--text <text> | --stdin] [--workspace <id|current>] [--dir <path>]"
+    + " [--timeout-ms <ms>] [--json]",
   "orb agent resume <agent> <session-id> [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]",
   "orb agent prompt <tab> (--text <text> | --stdin) [--timeout-ms <ms>] [--json]",
 ]
@@ -27,6 +28,18 @@ let agentUsage = """
   Both wait until the agent reports it is ready (its first idle) and then print
   ` ready (session <id>)`; --json carries ready:true and agentSessionId. Agents
   that cannot report idle (codex / agy) return at once with ready:false.
+  spawn --text / --stdin hands the text to the agent as the first input of the
+  conversation, on its command line (claude, codex and agy all take it). Use it
+  for codex instead of sending text to the freshly opened tab, where enter can
+  confirm the default choice of a startup screen (an update notice, say); a
+  codex tab opened by resume has the same risk. The agent starts on the input
+  at once, so ready is false for every agent: do not follow with
+  `orb agent prompt`. Wait for the result with
+  `orb wait <tab> --kind agent_state --kind tab_closed --after <seq> --json`,
+  starting from the seq of `spawn --json`. The first event is working: pass
+  its seq as the next --after and repeat until agent_state is done, waiting or
+  clear, or tab_closed arrives. A timeout (exit 124) also prints a seq under
+  --json; wait again from it. Pass --timeout-ms for long work.
   <session-id> also comes from `orb tab list --json` (agentSessionId).
   --timeout-ms defaults to 30000; timing out exits 124 with ready:false and
   timedOut:true — the tab is open, the agent just has not reported yet.
@@ -78,12 +91,16 @@ private func agentList(_ rest: [String]) -> Never {
   exit(0)
 }
 
+/// `--text` の値の席は help より先に抜き取る（`agent prompt` と同じ理由）。
 private func agentSpawn(_ rest: [String]) -> Never {
-  if hasHelp(rest) {
+  var args = rest
+  let text = takeOption(&args, "--text", requires: "a value (use --stdin for text starting with -)")
+  let useStdin = takeFlag(&args, "--stdin")
+  if hasHelp(args) {
     print(agentUsage)
     exit(0)
   }
-  var args = rest
+  if text != nil && useStdin { usageDie("pass only one of --text / --stdin") }
   let dir = takeOption(&args, "--dir", requires: "a <path> value")
   let workspaceId = takeWorkspaceId(&args)
   let timeoutMs = takeIntOption(&args, "--timeout-ms", requires: "a positive <milliseconds>")
@@ -92,6 +109,7 @@ private func agentSpawn(_ rest: [String]) -> Never {
   if let agent = args.first { params["command"] = agent }
   if let workspaceId { params["workspaceId"] = workspaceId }
   if let dir { params["cwd"] = dir }
+  if let prompt = text ?? (useStdin ? readStdinText() : nil) { params["prompt"] = prompt }
   if let timeoutMs { params["timeoutMs"] = timeoutMs }
   report(callOrExit("spawn_agent", params), verb: "spawned")
 }

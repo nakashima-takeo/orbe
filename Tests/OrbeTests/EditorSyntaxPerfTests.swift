@@ -4,8 +4,8 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorCore
 
-/// 構文の裏の仕事の計測。`ORBE_EDITOR_PERF=1` のときだけ走る（`scripts/perf-editor.sh` が回し、目標は
-/// docs/testing/test-architecture.md）。結果は `PERF` で始まる行に出す。
+/// 構文の裏の仕事の計測。`ORBE_EDITOR_PERF=1` のときだけ走る（`scripts/perf-editor.sh` が回し、目標は各テストの
+/// 説明にある）。結果は `PERF` で始まる行に出す。
 @MainActor
 final class EditorSyntaxPerfTests: OrbeTestCase {
   override func setUpWithError() throws {
@@ -17,9 +17,9 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
   /// 構文の崩れる打鍵の裏の重さ。1MB の Swift と、タグ付きテンプレートを含む 1MB の JS の途中で `let v = f(` の `(` を
   /// 打った 1 回の後の、裏のスレッドの CPU 時間の総和（見えていない範囲の作り直しを含む）・見えている行の色が最終の色に
   /// なるまで・文書全体が揃うまで（どれも打鍵の前から）と、同じ打鍵を tree-sitter が差分で解き直す時間（見えている行の色が
-  /// 最終の色になるまでの目標は、この時間 ＋ 15ms）。続けて同じ崩れた文書で 30ms おきに 50 打鍵し、打ち続けた間と
-  /// 止んでからの裏の CPU と、その間の構文解析の回数と、最後の打鍵から全体が揃うまでを出す。裏の CPU はプロセスの CPU から
-  /// main スレッドの CPU を引いたもの。
+  /// 最終の色になるまでの目標は、この時間 ＋ 15ms。裏のスレッドの CPU 時間の総和の目標は 1 秒未満）。続けて同じ崩れた
+  /// 文書で 30ms おきに 50 打鍵し、打ち続けた間と止んでからの裏の CPU と、その間の構文解析の回数と、最後の打鍵から全体が
+  /// 揃うまでを出す。裏の CPU はプロセスの CPU から main スレッドの CPU を引いたもの。
   func testCrumblingKeystroke() throws {
     for (label, ext, text) in [
       ("1MB", "swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)),

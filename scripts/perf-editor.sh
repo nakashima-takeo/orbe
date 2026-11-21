@@ -4,7 +4,7 @@
 # 開いてから全体の色が揃うまで）と ProjectSearchArrowPerfTests（検索結果の ↑↓ を押し続けたときに開く回数と、開かない
 # キーの main の仕事・仮のタブを入れ替える開きの記録）と EditorDiffPerfTests（1MB の大きな書き換えで、裏の行差分の時間と、
 # 並びを作って面に置く main の仕事。1MB の作業ツリー diff の中の打鍵 1 回の main の仕事）を回して PERF の行を出す。目標は
-# docs/testing/test-architecture.md。
+# 各テストの説明にあり、関門はアサートが持つ。行差分の時間の目安は、diff の上限（`EditorDiff.hunkLimit`）の説明にある。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

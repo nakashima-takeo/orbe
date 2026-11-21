@@ -6,9 +6,9 @@ import XCTest
 
 @testable import Orbe
 
-/// L4（プロセス境界）の駆動台。テストクラスではない支援ファイルで、L3 の `ControlWireHarness` と
-/// 同じ位置づけ。テストプロセス内に実 `WindowController` を target とした `ControlServer` を立て、
-/// 外部プロセスとしてビルド済みの `orb` / `orbe-mcp` / `orbe-report` を起こす。
+/// プロセス境界のテストの駆動台。テストクラスではない支援ファイルで、制御プロトコル契約のテストの
+/// `ControlWireHarness` と同じ位置づけ。テストプロセス内に実 `WindowController` を target とした
+/// `ControlServer` を立て、外部プロセスとしてビルド済みの `orb` / `orbe-mcp` / `orbe-report` を起こす。
 ///
 /// **main runloop を止めずに待つ**のがこの台の存在理由。`ControlServer` は domain 操作を
 /// `DispatchQueue.main.async` へ hop するため、テストが `Process.waitUntilExit()` で main を塞ぐと、
@@ -32,8 +32,8 @@ final class ControlProcess {
 
   // MARK: - ビルド済み実行体の解決
 
-  /// L4 が使うバイナリ位置の解決規則: xctest バンドルの親ディレクトリ。
-  /// 「隣に在る」ことは `BuiltExecutablesTests` が先に固定し、L4 の全テストはここを通して同じ出所を引く
+  /// プロセス境界のテストが使うバイナリ位置の解決規則: xctest バンドルの親ディレクトリ。
+  /// 「隣に在る」ことは `BuiltExecutablesTests` が先に固定し、プロセス境界の全テストはここを通して同じ出所を引く
   /// （規則を二重管理しない）。
   static var builtProductsDirectory: URL {
     Bundle(for: ControlProcess.self).bundleURL.deletingLastPathComponent()
@@ -369,7 +369,7 @@ final class ControlProcess {
   }
 }
 
-/// L4 の arrange。同梱物を組み → fixture を書き → 実 `WindowController` を起こし → サーバを張る、
+/// プロセス境界のテストの arrange。同梱物を組み → fixture を書き → 実 `WindowController` を起こし → サーバを張る、
 /// までを 1 手で行う（順序を各テストの申告制にしない）。
 extension OrbeTestCase {
   /// 既定の fixture は「アクティブ WS ＋ 背景 WS」。背景 WS を必ず作るので、`activate_workspace` の

@@ -2,7 +2,7 @@ import XCTest
 
 @testable import OrbeSound
 
-/// 数値解析の検証。L1 純ロジック・決定論。
+/// 数値解析の検証。純ロジック・決定論。
 /// ここが狂うと、ラウドネス整合テストと orbe-sound analyze の数値が物差しとして使えなくなる。
 final class SoundAnalysisTests: XCTestCase {
   private let sampleRate = 48000.0

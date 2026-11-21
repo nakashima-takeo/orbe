@@ -48,6 +48,6 @@ tab identity は env で運ぶ（tty 経路を要さない）。Orbe は全タ�
 
 ## 対象 CLI
 
-claude / codex / agy の hook 定義あり。取得できる状態は CLI のフック粒度に依存し、claude は全状態、codex は idle（中断）/working/waiting/done、agy は working/waiting（質問の待ちだけ）/done（詳細は [plugin-package](plugin-package.md)）。
+claude / codex / agy の hook 定義あり。取得できる状態は CLI のフック粒度に依存し、claude は idle/working/waiting/done/clear（作業中のターンを Esc で中断すると hook が呼ばれず、次の入力まで working が残る。確認の待ちの間に Esc を押したときに残る状態は確かめていない）、codex は idle（中断）/working/waiting/done、agy は working/waiting（質問の待ちだけ）/done（詳細と、hook では取れない状態は [plugin-package](plugin-package.md)）。claude の背景のセッション（claude の常駐プロセスの下へ移した会話）の報告は、常駐プロセスを最初に起こしたタブに付き、そのタブの会話 ID（復元で再開する会話）も背景の会話のものに置き換わる（[plugin-package](plugin-package.md#デーモン経由の呼び出しの判定)）。
 
 codex は、デーモンを使わずに動いているものの状態だけが報告される。Orbe が起こす codex はデーモンを使わない（[launch](launch.md#起動形態)）。タブのシェルで素の `codex` と打つと、デーモンが起動していればデーモン経由になり（0.157 以上の codex はデーモンを既定で起動する）、そのタブにも他のタブにも状態は付かない——デーモン経由の codex がどのタブの会話かを知る手段が無いため。手で起こすときは `codex --no-daemon` と打てば報告される。状態の表示（chrome）は本配管の範囲外、セッション ID の永続/resume は [persistence](../platform/persistence.md)。

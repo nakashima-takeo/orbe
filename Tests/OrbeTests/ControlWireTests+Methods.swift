@@ -21,7 +21,7 @@ extension ControlWireTests {
   ///
   /// これが spec の `-32004`（宛先 tab が見つからない）と `-32000`（最後の workspace 削除）を
   /// wire 上で成立させている唯一の経路。どの条件でドメインがそのコードを選ぶかは
-  /// `WindowController` 側（L2）の担保で、ここが見るのは「選ばれたコードが素通しされるか」だけ。
+  /// 実 `WindowController` を起こすテストの担保で、ここが見るのは「選ばれたコードが素通しされるか」だけ。
   ///
   /// 壊れると、ドメインの拒否が `{"ok":true}` に化けて `orb` が成功と誤読する。
   func testDomainFailureReachesWireUnchanged() {
@@ -146,7 +146,7 @@ extension ControlWireTests {
   }
 
   /// `activate_workspace` の成功形。ここが固定するのは wire の語（応答キー）で、返った `tabIds` が
-  /// 実際に読めるタブを指すことは L4（`OrbeMcpProcessTests`）が実 `WindowController` で見る。
+  /// 実際に読めるタブを指すことは `OrbeMcpProcessTests` が実 `WindowController` で見る。
   func testActivateWorkspaceReturnsActiveIdAndTabIds() {
     let fake = FakeControlTarget()
     let workspace = UUID()
