@@ -6,7 +6,8 @@ extension AutomationPrompts {
   /// だけの回も、何も無い回ではない。
   static func judge(instruction: String, count: Int, now: Date, timeZone: TimeZone) -> String {
     """
-    You decide which incoming items should become tasks on the user's task list. \(orbeToolsOnly)
+    You decide which incoming items should become tasks on the user's task list. \(orbeToolsOnly) \
+    \(itemsMaterialLine)
 
     Now: \(local(now, timeZone)), time zone \(timeZone.identifier).
 
@@ -19,13 +20,16 @@ extension AutomationPrompts {
     workspaces the user works in with \(tool(.readWorkspaces)).
 
     Give Orbe your decisions:
-    - \(tool(.propose)): a task for an item, {"id": "<item id>", "title": "<one-line task title>", \
-    "due": "YYYY-MM-DD", "workspace": "<workspace id>", "reason": "<why this item should be a task>"}. \
-    Write reason in one or two sentences, in the language of the user's instruction. Omit due when there is no \
-    deadline. At most one proposal per item; use only ids of the items, and only items that have "link" (an \
-    http(s) URL). Write workspace only when the item clearly belongs to one of the listed workspaces (by the \
-    user's instruction or by the item itself, such as its repository), using only listed ids; omit it when \
-    unsure, and the task goes to Home.
+    - \(tool(.propose)): a task for an item, {"id": "<item id>", "title": "<concise, actionable one-line \
+    task title>", "due": "YYYY-MM-DD", "workspace": "<workspace id>", \
+    "reason": "<concrete facts from the item explaining why it should be a task>"}. \
+    Make title state what the user should do. Write reason in one or two sentences grounded in concrete facts \
+    from the item (not a restatement of title), in the language of the user's instruction. Omit due when there \
+    is no deadline. At most one proposal per item; use only ids of the items, and only items that have "link" \
+    (an http(s) URL). Do not propose an item whose "link" is already in the waiting proposals you read. Write \
+    workspace only when the item clearly belongs to one of the listed workspaces (by the user's instruction or \
+    by the item itself, such as its repository), using only listed ids; omit it when unsure, and the task goes \
+    to Home.
     - \(tool(.resolve)): the links of waiting proposals that the items show are already dealt with.
     You can call them more than once; when Orbe refuses a call, fix what it names and call again. Orbe ignores \
     your final text reply.
