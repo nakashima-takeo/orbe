@@ -85,6 +85,7 @@ final class AgentHookWiringTests: OrbeTestCase {
     XCTAssertEqual(failure.map(\.state), ["done"])
     let kinds = try XCTUnwrap(failure.first?.matcher).split(separator: "|").map(String.init)
     XCTAssertTrue(kinds.contains("server_error"))
+    XCTAssertTrue(kinds.contains("verification_required"), "組織の確認を求められて失敗したターンも終わり")
     XCTAssertFalse(kinds.contains("rate_limit"))
     let quota = try XCTUnwrap(claude["Notification"]).filter {
       $0.matcher == "quota_auto_resume_disabled"
