@@ -44,7 +44,7 @@ extension WindowController {
     case .activeTabsChanged:
       // 選択が動かなかった（隠れタブ・ボード選択中）close も必ず描き直す。照合が閉じたタブの端末を器から、空になった器を
       // content から外し（外さないと外れたタブの端末を器が retain し続け surface がリークする）、焦点を選んでいるものへ戻す。
-      select(current.selection)
+      renderSelection()
     case .backgroundChanged:
       reconcileContent()  // 閉じたタブの端末を器から外す（外さないと surface がリークする）
       refreshChrome()  // 背景タブ/背景 workspace の空化でも chrome 横断 rollup を同期する

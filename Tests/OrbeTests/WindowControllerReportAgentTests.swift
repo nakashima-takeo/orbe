@@ -33,6 +33,14 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     return (wc, tab)
   }
 
+  /// `window` の上に `makeControllerAndTab` で起動し、初回起動の言語選択（真のモーダル）を閉じた `WindowController`。
+  /// オーバーレイが出ていない窓を前提にするテストの足場。分割した拡張ファイルからも使うため internal。
+  func launchWithoutFirstRun(window: OrbeWindow = OrbeWindow()) throws -> WindowController {
+    let (wc, _) = try makeControllerAndTab(window: window)
+    wc.dismissPalette()
+    return wc
+  }
+
   /// 1 workspace 2 タブ（アクティブはタブ0＝見ているタブ）で `window` の上に起動し、
   /// タブ順に並べた各タブ（`tabs[i]` がタブ i）を返す。
   /// 分割した拡張ファイルからも使うため internal。

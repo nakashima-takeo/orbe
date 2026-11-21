@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// `SurfaceOcclusionGate` の差分ゲートの検証。libghostty の可視性契約（不可視で描画停止・可視復帰で 1 フレーム保証）へ
+/// `SurfaceOcclusionGate` の差分ゲートの検証。libghostty の可視性契約（不可視で描画停止・可視復帰で最新の状態から描き直す）へ
 /// 送る値を、初回は必ず送り、同値は飛ばし、転じるたびに送る。
 final class SurfaceVisibilityTests: OrbeTestCase {
   /// 初回は値に依らず必ず送る（renderer の visible 初期値 true との不整合を防ぐ。
-  /// 特に隠れ状態で生まれる遅延 mount の surface に false を確実に届ける）。
+  /// 特に描かない状態で生まれる surface（遅延 mount）に false を確実に届ける）。
   func testFirstSendAlwaysFires() {
     var visibleFirst = SurfaceOcclusionGate()
     XCTAssertTrue(visibleFirst.shouldSend(true))

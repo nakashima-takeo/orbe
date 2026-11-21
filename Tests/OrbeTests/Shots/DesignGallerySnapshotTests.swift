@@ -131,7 +131,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
         .working, .waiting, nil, .done, .working, .working, .done, .done, nil, .done, .done,
       ])
     normal.selection = .tab(0)
-    normal.faceDots = .init(editor: .off, terminal: .focus)
     normal.rollup = [("working", 3), ("waiting", 1), ("done", 5), ("idle", 2)]
     try writeChromeBandPair(normal, size: size, name: "statusrow_normal", dir: dir)
 
@@ -144,7 +143,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       glyphs: (0..<10).map { glyphCycle[$0 % glyphCycle.count] })
     overflow.selection = .tab(6)
     overflow.location = [.dim("~/work/infra/terraform/modules/network")]
-    overflow.faceDots = .init(editor: .off, terminal: .focus)
     overflow.rollup = [("working", 8), ("waiting", 2), ("idle", 15)]
     try writePNG(
       chromeBand(overflow, size: size), size: size, name: "statusrow_overflow.png", dir: dir)
@@ -173,7 +171,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       })
     grouped.selection = .tab(3)
     grouped.location = [.dim("~/dev/storefront/src/hooks")]
-    grouped.faceDots = .init(editor: .off, terminal: .focus)
     grouped.rollup = [("working", 2), ("waiting", 1), ("done", 2), ("idle", 4)]
     try writeChromeBandPair(grouped, size: size, name: "statusrow_grouped", dir: dir)
 
@@ -187,7 +184,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       colorIndices: ["network", "compute", "storage"].map { WorktreeColor.index(forKey: $0) })
     groupedOverflow.selection = .tab(5)
     groupedOverflow.location = [.dim("~/work/infra-worktrees/compute")]
-    groupedOverflow.faceDots = .init(editor: .off, terminal: .focus)
     groupedOverflow.rollup = [("working", 3), ("waiting", 3), ("done", 3), ("idle", 2)]
     try writePNG(
       chromeBand(groupedOverflow, size: size), size: size, name: "statusrow_grouped_overflow.png",
@@ -206,7 +202,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     )
     groupedScroll.selection = .tab(2)
     groupedScroll.location = [.dim("~/dev/monorepo/packages/core")]
-    groupedScroll.faceDots = .init(editor: .off, terminal: .focus)
     groupedScroll.rollup = [("working", 5), ("waiting", 4), ("done", 5), ("idle", 4)]
     try writePNG(
       chromeBand(groupedScroll, size: size), size: size, name: "statusrow_grouped_scroll.png",
@@ -228,7 +223,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       colorIndices: ["orbe", "notes"].map { WorktreeColor.index(forKey: $0) })
     fitting.selection = .tab(0)
     fitting.location = [.dim("~/dev/orbe/ui")]
-    fitting.faceDots = .init(editor: .off, terminal: .focus)
     fitting.rollup = [("working", 1), ("done", 1), ("idle", 2)]
     try writePNG(
       chromeBand(fitting, size: size), size: size, name: "statusrow_fitting.png", dir: dir)
@@ -248,7 +242,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       colorIndices: ["orbe", "notes"].map { WorktreeColor.index(forKey: $0) })
     editor.selection = .tab(0)
     editor.location = [.dim("~/dev/orbe/"), .text("Sources/Orbe/App/Layout/AppShell.swift")]
-    editor.faceDots = .init(editor: .focus, terminal: .on)
     editor.rollup = [("working", 1), ("done", 1), ("idle", 1)]
     try writeChromeBandPair(editor, size: size, name: "statusrow_editor", dir: dir)
 

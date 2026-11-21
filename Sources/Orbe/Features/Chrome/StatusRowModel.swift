@@ -40,8 +40,6 @@ enum TrafficLights: Equatable {
   var boardLabel: String?
   /// 現在地（アクティブタブの焦点の面が居る場所）。`~` 短縮済みのトーン付き断片列。空は出さない。
   var location: [LocationPart] = []
-  /// アクティブタブの位置ドット（エディター・端末）。0 タブは nil。
-  var faceDots: FaceGeometry.FaceDots?
   /// 全 workspace 横断のエージェント状態ロールアップ（状態順の `[(state, count)]`）。
   var rollup: [(state: String, count: Int)] = []
   /// 検証インスタンス限定の build-id（`ORBE_STATE_DIR` 設定時のみ）。本物では nil。
@@ -101,7 +99,6 @@ enum TrafficLights: Equatable {
     let selection: Selection
     let boardLabel: String?
     let location: TerminalTab.Location?
-    let faceDots: FaceGeometry.FaceDots?
     let rollup: [(state: String, count: Int)]
   }
 
@@ -111,7 +108,6 @@ enum TrafficLights: Equatable {
     selection = s.selection
     boardLabel = s.boardLabel
     location = s.location.map(Self.parts(of:)) ?? []
-    faceDots = s.faceDots
     rollup = s.rollup
   }
 

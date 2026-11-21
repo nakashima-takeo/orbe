@@ -5,15 +5,16 @@ import XCTest
 
 @testable import Orbe
 
-/// 面の機構を実窓で固定する——⌘E の往復、⌘W の発火源、引き手・継ぎ目を引く／離す／押す、連ごとの配置と
-/// 焦点の面への復帰、器に包まれた端末の寸法、chrome への投影（現在地・位置ドット）。
+/// エディターの開閉を実窓で固定する——⌘E の往復と焦点、開閉で端末の寸法が変わらないこと、タブを選ぶ操作でエディターが
+/// 閉じること（選んでいないタブの増減では閉じない）、`focus_tab`・workspace の切替、開閉を保存しないこと、⌘W の
+/// 発火源、chrome への投影（現在地）、エディターを開いたまま見せる端末が替わったときの描く端末。
 ///
-/// 壊れると何が起きるか。⌘E が焦点の面へ first responder を運ばないとキーが隠れた面へ届く。⌘W の発火源が
-/// `.gesture` でなくなると寿命ログが人の操作を「落ちた」と記録し、⇧⌘T のバッジと `orb session closed` の
-/// 群れ分けが狂う。取っ手を引いている間にタブの配置を書き換えると毎ポインタで保存と chrome 更新が走る。
-/// 離したときの閉じ境がずれると意図しない面が閉じ、焦点が残る面へ移らないと responder が隠れた面に残る。
-/// 隠れている端末が resize されると scrollback が折り返し直され、復元した配置に戻らないと連を切り替える
-/// たびに分割が消える。chrome が焦点の面を映さないと現在地とドットが実態と別の面を指す。
+/// 壊れると何が起きるか。⌘E が見せている面へ first responder を運ばないとキーが隠れた面へ届く。開閉で端末が resize されると
+/// scrollback が折り返し直される。タブを選んでもエディターが閉じないと、選んだタブの端末が見えない。裏のタブが閉じただけで
+/// エディターが閉じると、読んでいた文書が消える。閉じて開き直したときに文書が戻らないと、⌘E のたびに開き直す手間が生じる。
+/// ⌘W の発火源が `.gesture` でなくなると寿命ログが人の操作を「落ちた」と記録し、⇧⌘T のバッジと `orb session closed` の
+/// 群れ分けが狂う。chrome が見せているものを映さないと現在地が実態と別の面を指す。エディターを開いたまま見せる端末が替わったときに
+/// 新しい端末が描かれないと、⌥ で見せた最初のフレームが古い。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerFacesTests: OrbeTestCase {
@@ -25,14 +26,19 @@ final class WindowControllerFacesTests: OrbeTestCase {
   private func restore(
     _ tabs: [TabState], groups: [GroupState] = [], rootPath: String = "/tmp"
   ) throws -> WindowController {
+    try restore([
+      WorkspaceState(name: "main", rootPath: rootPath, activeTab: 0, tabs: tabs, groups: groups)
+    ])
+  }
+
+  private func restore(_ workspaces: [WorkspaceState]) throws -> WindowController {
     let file = WorkspacesFile(
-      version: WorkspacePersistence.version, activeWorkspace: 0,
-      workspaces: [
-        WorkspaceState(name: "main", rootPath: rootPath, activeTab: 0, tabs: tabs, groups: groups)
-      ])
+      version: WorkspacePersistence.version, activeWorkspace: 0, workspaces: workspaces)
     try JSONEncoder().encode(file).write(to: workspacesFile())
     return WindowController()
   }
+
+  private static let plain = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
 
   func pump(_ seconds: TimeInterval) {
     let end = Date().addingTimeInterval(seconds)
@@ -45,41 +51,200 @@ final class WindowControllerFacesTests: OrbeTestCase {
     wc.window.contentView?.layoutSubtreeIfNeeded()
   }
 
-  /// 器の幅（窓の content 幅）。
-  func facesWidth(_ wc: WindowController) -> CGFloat {
-    wc.model.content.bounds.width
+  /// 器の開閉の動きが終わるまで待つ。
+  private func settle(_ tab: TerminalTab) {
+    pumpMain(until: { !tab.group.view.isFading }, timeout: 2, "開閉の動きが終わる")
   }
 
   // MARK: - ⌘E
 
-  /// 分割していなければ端末 ⇄ エディター全面を往復し、first responder も焦点の面へ移る。
-  func testToggleEditorFaceSwapsTheFullFaceAndMovesFocus() throws {
+  /// ⌘E で選んでいるタブのエディターが開き、もう一度で閉じる。first responder も見せている面へ移る。
+  func testToggleEditorFaceOpensAndClosesTheEditorAndMovesFocus() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
 
     wc.handleWindowCommand(.toggleEditorFace)
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor))
+    XCTAssertTrue(tab.group.view.isEditorOpen)
     XCTAssertTrue(
       wc.window.firstResponder === tab.group.view.editor, "エディター pane が first responder")
+    settle(tab)
+    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開き終われば下の端末を見せない")
 
     wc.handleWindowCommand(.toggleEditorFace)
-    XCTAssertEqual(tab.group.faces, .terminalOnly)
+    XCTAssertFalse(tab.group.view.isEditorOpen)
     XCTAssertTrue(wc.window.firstResponder === tab.surface, "端末 surface へ戻る")
+    settle(tab)
+    XCTAssertTrue(tab.group.view.editor.isHiddenOrHasHiddenAncestor)
   }
 
-  /// 分割中は幅を変えず焦点だけが往復する。
-  func testToggleEditorFaceWhileSplitOnlyMovesFocus() throws {
+  /// 開閉で端末の寸法は変わらず、開いている間の窓の resize には覆われた端末も追従する。
+  func testOpeningAndClosingNeverResizesTheTerminal() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
-    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
+    layout(wc)
+    let size = tab.surface.bounds.size
+    XCTAssertGreaterThan(size.width, 0, "前提: 端末が実サイズを持つ")
 
     wc.handleWindowCommand(.toggleEditorFace)
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 0.5, focus: .editor))
-    XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor)
+    settle(tab)
+    layout(wc)
+    XCTAssertEqual(tab.surface.bounds.size, size, "開いても変わらない")
+
+    wc.window.setContentSize(NSSize(width: 1000, height: 600))
+    layout(wc)
+    let content = wc.model.content.bounds.size
+    XCTAssertEqual(tab.surface.bounds.size, content, "覆われている間も窓の resize に追従する")
 
     wc.handleWindowCommand(.toggleEditorFace)
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 0.5, focus: .terminal))
+    settle(tab)
+    layout(wc)
+    XCTAssertEqual(tab.surface.bounds.size, content, "閉じても変わらない")
+  }
+
+  // MARK: - タブを選ぶとエディターは閉じる
+
+  /// タブ行のクリック（今のタブを含む）・巡回のキー・新しいタブは、エディターを閉じてそのタブの端末を出す。閉じても文書は
+  /// 連に残り、⌘E で開き直せば元の文書が出る。
+  @MainActor
+  func testSelectingATabClosesTheEditorAndKeepsItsDocuments() throws {
+    let wc = WindowController()
+    let tab = try XCTUnwrap(wc.activeTab)
+    let document = try tab.group.editor.open(try caseFile("a.txt", "a"), as: .pinned)
+    let reopen = {
+      wc.handleWindowCommand(.toggleEditorFace)
+      XCTAssertTrue(tab.group.view.isEditorOpen)
+    }
+
+    reopen()
+    wc.select(0)
+    XCTAssertFalse(tab.group.view.isEditorOpen, "今のタブのクリックで閉じる")
     XCTAssertTrue(wc.window.firstResponder === tab.surface)
+
+    reopen()
+    XCTAssertTrue(tab.group.view.editor.document === document, "開き直すと元の文書")
+    wc.newTab()
+    let sibling = try XCTUnwrap(wc.activeTab)
+    XCTAssertTrue(sibling.group === tab.group, "前提: 同じ連")
+    XCTAssertFalse(tab.group.view.isEditorOpen, "新しいタブは端末で出る")
+    XCTAssertTrue(wc.window.firstResponder === sibling.surface)
+
+    reopen()
+    wc.prevTab()
+    XCTAssertTrue(wc.activeTab === tab)
+    XCTAssertFalse(tab.group.view.isEditorOpen, "巡回のキーで閉じる")
+    XCTAssertTrue(wc.window.firstResponder === tab.surface)
+  }
+
+  /// 見ているタブを閉じれば隣のタブの端末が出る。選んでいないタブが閉じても・裏で増えても、エディターのまま。
+  func testOnlyClosingTheShownTabClosesTheEditor() throws {
+    let wc = try restore([Self.plain, Self.plain, Self.plain])
+    let (a, b, c) = (wc.current.tabs[0], wc.current.tabs[1], wc.current.tabs[2])
+    wc.toggleEditorFace()
+
+    wc.closeTab(c, origin: .gesture)
+    XCTAssertTrue(a.group.view.isEditorOpen, "選んでいないタブが閉じてもエディターのまま")
+
+    wc.openTab(workspaceIndex: wc.activeWorkspace, cwd: "/tmp", selects: false)
+    XCTAssertTrue(a.group.view.isEditorOpen, "選ばずに足したタブではエディターのまま")
+
+    wc.closeTab(a, origin: .gesture)
+    XCTAssertTrue(wc.activeTab === b)
+    XCTAssertFalse(b.group.view.isEditorOpen, "見ているタブを閉じれば隣の端末")
+    XCTAssertTrue(wc.window.firstResponder === b.surface)
+  }
+
+  /// `focus_tab`（Attention・メニューバー・タスク画面も通る）は、エディターを閉じてそのタブの端末へ焦点を移す。
+  func testControlFocusTabLandsOnTheTerminal() throws {
+    let wc = WindowController()
+    let first = try XCTUnwrap(wc.activeTab)
+    wc.handleWindowCommand(.toggleEditorFace)
+
+    _ = wc.controlFocusTab(tabId: first.id)
+
+    XCTAssertTrue(first === wc.activeTab)
+    XCTAssertFalse(first.group.view.isEditorOpen)
+    XCTAssertTrue(wc.window.firstResponder === first.surface)
+  }
+
+  /// workspace を切り替えると、その workspace で選んでいるタブの端末が出る。戻っても端末で出る。
+  func testSwitchingWorkspacesShowsTheTerminal() throws {
+    let wc = try restore([
+      WorkspaceState(name: "a", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain]),
+      WorkspaceState(name: "b", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain]),
+    ])
+    let a = try XCTUnwrap(wc.activeTab)
+    wc.toggleEditorFace()
+
+    wc.switchWorkspace(to: 1)
+    let b = try XCTUnwrap(wc.activeTab)
+    XCTAssertFalse(b.group.view.isEditorOpen)
+    XCTAssertFalse(a.group.view.isEditorOpen, "content から外れた器は閉じている")
+    XCTAssertTrue(wc.window.firstResponder === b.surface)
+
+    wc.switchWorkspace(to: 0)
+    XCTAssertFalse(a.group.view.isEditorOpen)
+    XCTAssertTrue(wc.window.firstResponder === a.surface)
+  }
+
+  /// ヘルプを閉じると見せている面（エディター pane）へ戻り、エディターは開いたまま。ヘルプの入力欄が first responder を
+  /// 取るのは SwiftUI の focus 経由で同期には決まらないので、奪われた状態は明示的に作る。
+  func testHelpDismissReturnsFocusToTheEditorPane() throws {
+    let wc = WindowController()
+    let tab = try XCTUnwrap(wc.activeTab)
+    wc.handleWindowCommand(.toggleEditorFace)
+
+    wc.showHelp()
+    wc.window.makeFirstResponder(nil)
+    XCTAssertFalse(wc.window.firstResponder === tab.group.view.editor, "前提: 焦点はヘルプ側にある")
+    wc.dismissHelp()
+    pump(0.05)
+
+    XCTAssertTrue(tab.group.view.isEditorOpen)
+    XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor)
+  }
+
+  // MARK: - 覆われている端末の描画
+
+  /// エディターを開いたまま同じ連の別のタブをエディターで見せる（`open_file` の経路）と、覆われたまま新しいタブの端末が描き、
+  /// 元のタブの端末は止まる。
+  func testShowingAnotherTabInTheEditorMovesRenderingUnderTheCover() throws {
+    let wc = try restore([Self.plain, Self.plain])
+    let (a, b) = (wc.current.tabs[0], wc.current.tabs[1])
+    XCTAssertTrue(a.group === b.group, "前提: 同じ連")
+    pumpMain(until: { b.activated }, "隠れた兄弟が起きる")
+    wc.toggleEditorFace()
+
+    wc.showInEditor(b)
+
+    XCTAssertTrue(b.group.view.isEditorOpen, "前提: エディターのまま")
+    XCTAssertTrue(b.surface.wantsRendering, "覆われたまま見せ始めた端末が描く")
+    XCTAssertFalse(a.surface.wantsRendering, "見せなくなった端末は止まる")
+  }
+
+  // MARK: - 開閉は保存しない
+
+  /// 分割の割合を保存していた旧い記録から起動しても、連は端末で起き、開いていた文書は ⌘E で戻る。
+  @MainActor
+  func testAnOldRecordWithFacesWakesClosedWithItsDocuments() throws {
+    let file = try caseFile("a.txt", "a")
+    let root = GitWorktreeRoot.root(of: TestScratch.caseDir.path)
+    let json = """
+      {"version":\(WorkspacePersistence.version),"activeWorkspace":0,"workspaces":[\
+      {"name":"main","rootPath":"/tmp","activeTab":0,"tabs":[{"cwd":"\(TestScratch.caseDir.path)"}],\
+      "groups":[{"root":"\(root)","faces":{"editorRatio":0.5,"focus":"editor"},\
+      "editor":{"open":["\(file.path)"],"active":"\(file.path)"}}]}]}
+      """
+    try Data(json.utf8).write(to: workspacesFile())
+    let wc = WindowController()
+    let tab = try XCTUnwrap(wc.activeTab)
+
+    XCTAssertFalse(tab.group.view.isEditorOpen, "端末で起きる")
+    XCTAssertTrue(wc.window.firstResponder === tab.surface)
+
+    wc.toggleEditorFace()
+    XCTAssertEqual(
+      tab.group.view.editor.document?.url.resolvingSymlinksInPath(), file.resolvingSymlinksInPath(),
+      "開いていた文書が戻る")
   }
 
   // MARK: - ⌘W
@@ -99,211 +264,10 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertEqual(events.last?.closeOrigin, .gesture, "⌘W は人のジェスチャとして記録される")
   }
 
-  // MARK: - 引き手・継ぎ目
-
-  /// 端末だけのときに左縁の引き手を掴んで引くと、取っ手はポインタに 1:1 で付き、面が追従する。タブの配置は離すまで
-  /// 書き換えず、離したときに 1 回だけ確定する（ゆっくり離せばその位置で分割として残る）。
-  func testNotchDragFollowsThePointerAndCommitsOnRelease() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    layout(wc)
-    var changes = 0
-    tab.group.onFacesChange = { changes += 1 }
-    let handle = tab.group.view.handle
-    let grab = handle.centerInWindow
-    let offset = grab.x - handle.frame.minX
-    let y = grab.y
-
-    handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
-    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 300, y: y), in: wc.window))
-    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 400, y: y), in: wc.window))
-
-    XCTAssertEqual(handle.frame.minX, 400 - offset, "取っ手は掴んだ点のずれを保ってポインタに追従する")
-    XCTAssertTrue(handle.frame.minX <= 400 && 400 <= handle.frame.maxX, "取っ手はポインタの下")
-    let ratio = try XCTUnwrap(FaceGeometry.ratio(hx: 400 - offset, width: facesWidth(wc)))
-    XCTAssertFalse(tab.group.view.editor.isHiddenOrHasHiddenAncestor, "引き出したエディター面は見えている")
-    XCTAssertEqual(tab.group.faces, .terminalOnly, "離すまでタブの配置は変わらない")
-    XCTAssertEqual(changes, 0)
-
-    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 400, y: y), in: wc.window))
-    XCTAssertEqual(tab.group.faces.editorRatio, ratio, accuracy: 0.0001, "離した位置で確定")
-    XCTAssertEqual(tab.group.faces.focus, .terminal, "焦点は掴んだときのまま")
-    XCTAssertEqual(changes, 1, "確定は 1 回")
-  }
-
-  /// 端の近く（勢いで滑った先が端から 24 以内）で離すと、その面が閉じて隣が全面になる。閉じたのが焦点の面なら
-  /// 焦点と first responder は残る面へ移る。動いている途中で掴み直しても同じ。
-  func testHandleReleaseNearTheEdgeClosesTheFace() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    layout(wc)
-    let handle = tab.group.view.handle
-    let y = handle.centerInWindow.y
-
-    handle.mouseDown(with: .mouse(.leftMouseDown, at: handle.centerInWindow, in: wc.window))
-    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 20, y: y), in: wc.window))
-    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 20, y: y), in: wc.window))
-    XCTAssertEqual(tab.group.faces, .terminalOnly, "端ぎりぎりのエディターは閉じる")
-    XCTAssertTrue(wc.window.firstResponder === tab.surface)
-
-    let nearRight = facesWidth(wc) - 20
-    handle.mouseDown(with: .mouse(.leftMouseDown, at: handle.centerInWindow, in: wc.window))
-    handle.mouseDragged(
-      with: .mouse(.leftMouseDragged, at: NSPoint(x: nearRight, y: y), in: wc.window))
-    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: nearRight, y: y), in: wc.window))
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "端ぎりぎりの端末は閉じる")
-    XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor, "焦点は残ったエディターへ")
-  }
-
-  /// 継ぎ目を掴んだ瞬間に焦点の面へ first responder が戻り、引いて離しても焦点の面は変わらない。
-  func testSeamGrabReturnsFocusToTheFocusedFaceAndDragKeepsIt() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .editor), animated: false)
-    layout(wc)
-    wc.window.makeFirstResponder(nil)
-    XCTAssertFalse(wc.window.firstResponder === tab.group.view.editor, "前提: 焦点の面から外れている")
-    let handle = tab.group.view.handle
-    let grab = handle.centerInWindow
-    let offset = grab.x - handle.frame.minX
-    let y = grab.y
-    let ratio = try XCTUnwrap(FaceGeometry.ratio(hx: 300 - offset, width: facesWidth(wc)))
-
-    handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
-    XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor, "掴んだ瞬間に焦点の面へ戻る")
-
-    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 300, y: y), in: wc.window))
-    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 300, y: y), in: wc.window))
-    XCTAssertEqual(tab.group.faces.focus, .editor, "焦点はエディターのまま")
-    XCTAssertEqual(tab.group.faces.editorRatio, ratio, accuracy: 0.0001)
-    XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor)
-  }
-
-  /// 閾値（4px）未満しか動かさずに離せば押した扱い（隣の面を全開）。
-  func testNotchMoveUnderTheThresholdIsAClick() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    layout(wc)
-    let handle = tab.group.view.handle
-    let grab = handle.centerInWindow
-
-    handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
-    handle.mouseDragged(
-      with: .mouse(.leftMouseDragged, at: NSPoint(x: grab.x + 3, y: grab.y), in: wc.window))
-    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: grab.x + 3, y: grab.y), in: wc.window))
-
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていたエディターが全開")
-    XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor)
-  }
-
-  // MARK: - 連ごとの配置と焦点の面
-
-  /// 配置と焦点の面は連が持つ。同じ連の新しいタブへ移っても配置と焦点の面は変わらず、新しい連は端末だけで始まり、
-  /// 元の連へ戻ればその配置と焦点の面へ戻る。
-  func testLayoutAndFocusedFaceBelongToTheGroup() throws {
-    let wc = WindowController()
-    let first = try XCTUnwrap(wc.activeTab)
-    wc.handleWindowCommand(.toggleEditorFace)
-    XCTAssertTrue(wc.window.firstResponder === first.group.view.editor, "前提: 連はエディター焦点")
-
-    wc.newTab()
-    let sibling = try XCTUnwrap(wc.activeTab)
-    XCTAssertTrue(sibling.group === first.group, "前提: 同じ cwd の新タブは同じ連")
-    XCTAssertEqual(sibling.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "連の配置のまま")
-    XCTAssertTrue(wc.window.firstResponder === first.group.view.editor, "焦点の面も連で共有する")
-
-    wc.openTab(workspaceIndex: wc.activeWorkspace, cwd: TestScratch.caseDir.path)
-    let stranger = try XCTUnwrap(wc.activeTab)
-    XCTAssertFalse(stranger.group === first.group, "前提: 別の根は別の連")
-    XCTAssertEqual(stranger.group.faces, .terminalOnly, "新しい連は端末だけで始まる")
-    XCTAssertTrue(wc.window.firstResponder === stranger.surface)
-
-    _ = wc.controlFocusTab(tabId: first.id)
-    XCTAssertEqual(first.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "元の連の配置は残る")
-    XCTAssertTrue(wc.window.firstResponder === first.group.view.editor, "元の連の焦点の面へ戻る")
-  }
-
-  /// ヘルプを閉じると焦点の面（エディター pane）へ戻る。ヘルプの入力欄が first responder を取るのは
-  /// SwiftUI の focus 経由で同期には決まらないので、奪われた状態は明示的に作る。
-  func testHelpDismissReturnsFocusToTheEditorPane() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    wc.handleWindowCommand(.toggleEditorFace)
-
-    wc.showHelp()
-    wc.window.makeFirstResponder(nil)
-    XCTAssertFalse(wc.window.firstResponder === tab.group.view.editor, "前提: 焦点はヘルプ側にある")
-    wc.dismissHelp()
-    pump(0.05)
-
-    XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor)
-  }
-
-  /// 制御 API の `focus_tab` もそのタブの焦点の面へ着地する。
-  func testControlFocusTabLandsOnTheFocusedFace() throws {
-    let wc = WindowController()
-    let first = try XCTUnwrap(wc.activeTab)
-    wc.handleWindowCommand(.toggleEditorFace)
-    wc.newTab()
-
-    _ = wc.controlFocusTab(tabId: first.id)
-
-    XCTAssertTrue(first === wc.activeTab)
-    XCTAssertTrue(wc.window.firstResponder === first.group.view.editor)
-  }
-
-  /// 復元した連は保存した配置と焦点の面で起き、端末は見えている面の寸法を持つ。
-  func testRestoredTabWakesWithItsSavedLayoutAndFocusedFace() throws {
-    let wc = try restore(
-      [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)],
-      groups: [
-        GroupState(
-          root: GitWorktreeRoot.root(of: "/tmp"),
-          faces: FaceLayout(editorRatio: 0.5, focus: .editor))
-      ])
-    let tab = try XCTUnwrap(wc.activeTab)
-    layout(wc)
-
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 0.5, focus: .editor))
-    XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor)
-    let content = wc.model.content.bounds.size
-    XCTAssertGreaterThan(content.width, 0, "前提: content が実サイズを持つ")
-    XCTAssertEqual(
-      tab.surface.bounds.size,
-      FaceGeometry.resolve(tab.group.faces, size: content).frames.terminal.size, "端末は分割後の面の寸法")
-  }
-
-  // MARK: - 器に包まれた端末
-
-  /// エディターに覆われている間は窓を resize しても端末の寸法が変わらず、戻したときに今の窓幅で置き直す。
-  func testSurfaceKeepsItsSizeWhileCoveredByTheEditor() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    layout(wc)
-    let visible = tab.surface.bounds.size
-    XCTAssertGreaterThan(visible.width, 0, "前提: 端末が実サイズを持つ")
-
-    wc.handleWindowCommand(.toggleEditorFace)
-    layout(wc)
-    XCTAssertEqual(tab.surface.bounds.size, visible, "覆われた瞬間に縮めない")
-
-    wc.window.setContentSize(NSSize(width: 1000, height: 600))
-    layout(wc)
-    XCTAssertEqual(tab.surface.bounds.size, visible, "覆われている間の窓の resize に追従しない")
-
-    wc.handleWindowCommand(.toggleEditorFace)
-    layout(wc)
-    let content = wc.model.content.bounds.size
-    XCTAssertEqual(
-      tab.surface.bounds.size,
-      CGSize(width: content.width, height: content.height),
-      "戻したら今の窓幅で置き直す")
-  }
-
   // MARK: - chrome
 
-  /// 上段の現在地は焦点の面に追従する——端末焦点は cwd、エディター焦点は worktree ルート。
-  func testLocationFollowsTheFocusedFace() throws {
+  /// 上段の現在地は見せているものに追従する——端末は cwd、エディターは worktree ルートの下の位置。
+  func testLocationFollowsWhatIsShown() throws {
     let root = TestScratch.caseDir
       .appendingPathComponent("orbe-faces-\(UUID().uuidString)")
     let src = root.appendingPathComponent("src")
@@ -314,13 +278,13 @@ final class WindowControllerFacesTests: OrbeTestCase {
       [TabState(cwd: src.path, agent: nil, explicitTitle: nil)], rootPath: root.path)
 
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.location, [.dim(src.path)], "端末焦点は cwd 1 本（弱く）")
+    XCTAssertEqual(wc.statusModel.location, [.dim(src.path)], "端末は cwd 1 本（弱く）")
 
     wc.handleWindowCommand(.toggleEditorFace)
     wc.flushChrome()
     let normalizedRoot = GitWorktreeRoot.normalizedPath(root.path)
     XCTAssertEqual(
-      wc.statusModel.location, [.dim(normalizedRoot)], "エディター焦点で文書が無ければ根だけ（dim）")
+      wc.statusModel.location, [.dim(normalizedRoot)], "エディターで文書が無ければ根だけ（dim）")
 
     let file = src.appendingPathComponent("a.txt")
     try Data("x".utf8).write(to: file)
@@ -359,27 +323,5 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertEqual(
       StatusRowModel.parts(of: .pullRequest(number: 9, relative: "README.md")),
       [.accent("PR #9"), .dim(" · "), .text("README.md")])
-  }
-
-  /// 位置ドットはアクティブタブの面の可視と焦点を映し、0 タブでは無い。
-  func testFaceDotsMirrorTheActiveTabsFaces() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    layout(wc)
-
-    wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.faceDots, .init(editor: .off, terminal: .focus), "端末だけ")
-
-    wc.handleWindowCommand(.toggleEditorFace)
-    wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.faceDots, .init(editor: .focus, terminal: .off), "エディター全面")
-
-    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
-    wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.faceDots, .init(editor: .on, terminal: .focus), "分割で端末焦点")
-
-    wc.closeTab(tab, origin: .gesture)
-    wc.flushChrome()
-    XCTAssertNil(wc.statusModel.faceDots, "0 タブでは無い")
   }
 }

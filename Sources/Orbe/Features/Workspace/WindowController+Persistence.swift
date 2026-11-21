@@ -20,7 +20,8 @@ extension WindowController {
       let keys = state.tabs.map { GitWorktreeRoot.root(of: $0.cwd) }
       let groupStates = state.groupStates(keys: keys)
       for (tab, key) in zip(state.tabs, keys) {
-        let group = group(forKey: key, in: ws) ?? makeGroup(key: key, state: groupStates[key])
+        let group =
+          group(forKey: key, in: ws) ?? makeGroup(key: key, state: groupStates[key]?.editor)
         ws.tabs.append(makeTab(from: tab, group: group))
       }
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）はボードか空表示
@@ -57,13 +58,13 @@ extension WindowController {
   /// （明示タイトルは付かない）。位置は新規タブと同じ規則——同じ worktree の連の右端、無ければ末尾。
   /// 選択・mount はしない（起床は既存の mount 規律に従う）。ただし前面の workspace の選択がそのタブになったら
   /// （空表示だった workspace に足したタブ）、隠すと「選んでいるタブが見えない」状態になるので、`wakeUnselected` と
-  /// 同じく選んで見せる。
+  /// 同じく描いて見せる。
   func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
     let tab = makeTab(from: state, group: group(for: state.cwd, in: workspaces[index]))
     _ = store.insertTabUnselected(tab, intoWorkspaceAt: index)
     let ws = workspaces[index]
     if index == activeWorkspace, ws.selectedTab === tab {
-      select(ws.selection)
+      renderSelection()
     } else {
       refreshChrome()
     }

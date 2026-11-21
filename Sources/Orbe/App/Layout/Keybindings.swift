@@ -23,7 +23,7 @@ enum ChromeAction {
   case scrollToTop  // スクロールバック先頭へジャンプ
   case scrollToBottom  // スクロールバック末尾へジャンプ
   case toggleHelp  // ヘルプオーバーレイ（ショートカットチートシート）をトグル開閉
-  case toggleEditorFace  // エディター面 ⇄ 端末面（分割中は焦点の往復）
+  case toggleEditorFace  // エディターを開く・閉じる
   case saveDocument  // エディター焦点の文書を保存
 }
 

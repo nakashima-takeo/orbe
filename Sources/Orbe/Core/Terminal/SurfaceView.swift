@@ -2,18 +2,18 @@ import AppKit
 import GhosttyKit
 import SwiftUI
 
-/// occlusion（可視性）の導出と差分ゲート（純ロジック。SurfaceVisibilityTests が検証）。
+/// occlusion（可視性）の導出と差分ゲート（純ロジック。差分ゲートは SurfaceVisibilityTests が検証）。
 /// libghostty の可視性契約: 不可視で `set_occlusion(false)`（描画停止・端末状態は前進）、
-/// 可視復帰で `set_occlusion(true)`（display link 再開前に 1 フレーム同期描画が保証される）。
+/// 可視復帰で `set_occlusion(true)`（別スレッドで最新の状態から 1 フレーム描く。その結果が layer に載るのは復帰の後）。
 struct SurfaceOcclusionGate {
   /// 前回 libghostty へ送った可視値。未送信は nil で初回は必ず送る——renderer の visible
-  /// 初期値は true のため、隠れ状態で生まれる surface（遅延 mount）には false を届ける必要がある。
+  /// 初期値は true のため、描かない状態で生まれる surface（遅延 mount）には false を届ける必要がある。
   private(set) var lastSent: Bool?
 
-  /// 「タブ可視 AND ウィンドウ可視」の合成。window 未接続（デタッチ中）・自分/祖先の
-  /// isHidden（タブ切替）・ウィンドウ occluded（最小化・別 Space）のいずれかで不可視。
-  static func derive(inWindow: Bool, hiddenOrHasHiddenAncestor: Bool, windowVisible: Bool) -> Bool {
-    inWindow && !hiddenOrHasHiddenAncestor && windowVisible
+  /// 「器が描くと渡した AND ウィンドウ可視」の合成。window 未接続（デタッチ中）・器が描かないと渡した（見せていない兄弟・
+  /// 隠れた器）・ウィンドウ occluded（最小化・別 Space）のいずれかで不可視。
+  static func derive(inWindow: Bool, wantsRendering: Bool, windowVisible: Bool) -> Bool {
+    inWindow && wantsRendering && windowVisible
   }
 
   /// desired を送るべきか判定し、送るなら記録する（同値スキップの差分ゲート・冪等）。
@@ -30,6 +30,13 @@ final class SurfaceView: NSView {
   private var surface: ghostty_surface_t?
   /// occlusion 差分ゲート（前回送信値）。読み書きは main のみ（syncOcclusion 経由）。
   private var occlusionGate = SurfaceOcclusionGate()
+  /// 描くか。器（`GroupFacesView`）が渡す。自分や祖先の隠れ状態からは導かない——エディターに覆われて隠れている間も描き続け、
+  /// 見せた最初のフレームに最新の描画結果を出すため。
+  var wantsRendering = false {
+    didSet {
+      if wantsRendering != oldValue { syncOcclusion() }
+    }
+  }
   /// 所属 window の通知購読（occlusion・key の得失）。viewDidMoveToWindow で付け替える。
   private var windowObservers: [NSObjectProtocol] = []
   /// 所属タブ。シェルが報告した事実（タイトル・cwd）と閉鎖要求の通知先。
@@ -181,41 +188,27 @@ final class SurfaceView: NSView {
     syncFocus()
     Ghostty.shared.register(surf, view: self)
     updateSize()
-    // 生成時同期。renderer の visible 初期値は true のため、隠れ mount（viewDidHide は
-    // 「既に隠れている祖先への追加」では発火しない）には初回送信で false を確実に届ける。
+    // 生成時同期。renderer の visible 初期値は true のため、描かない状態で生まれた surface には初回送信で false を届ける。
     syncOcclusion()
     Ghostty.shared.tick()
   }
 
   // MARK: - 可視性（occlusion）同期
 
-  /// 可視性の合成値を libghostty へ差分同期する choke-point。タブ切替（isHidden トグル）・
-  /// WS 切替（デタッチ/再アタッチ）・ウィンドウ occlusion 変化・surface 生成の全経路が
-  /// AppKit コールバック経由でここへ集約される。可視へ転じたときは `updateSize()` を
-  /// 無条件再アサートし、setFrameSize が届かない可視化経路でもサイズ再収束を保証する
+  /// 可視性の合成値を libghostty へ差分同期する choke-point。器が渡す「描くか」の変化（タブ切替・器の隠れ）・
+  /// WS 切替（デタッチ/再アタッチ）・ウィンドウ occlusion 変化・surface 生成の全経路がここへ集約される。
+  /// 可視へ転じたときは `updateSize()` を無条件再アサートし、setFrameSize が届かない可視化経路でもサイズ再収束を保証する
   /// （ゼロサイズ surface は stale contents すら描かず完全透明になるため）。
   private func syncOcclusion() {
     dispatchPrecondition(condition: .onQueue(.main))  // 前回送信値の一貫性のため main 固定
     guard let surface else { return }  // 未生成。初回送信は生成時の syncOcclusion が担う
     let desired = SurfaceOcclusionGate.derive(
       inWindow: window != nil,
-      hiddenOrHasHiddenAncestor: isHiddenOrHasHiddenAncestor,
+      wantsRendering: wantsRendering,
       windowVisible: window?.occlusionState.contains(.visible) ?? false)
     guard occlusionGate.shouldSend(desired) else { return }
     ghostty_surface_set_occlusion(surface, desired)
     if desired { updateSize() }
-  }
-
-  /// 自分または祖先（タブの view）の isHidden 変化。タブ切替の不可視化経路。
-  override func viewDidHide() {
-    super.viewDidHide()
-    syncOcclusion()
-  }
-
-  /// 自分または祖先の isHidden 解除。タブ切替の可視化経路（setFrameSize が来ないことがある）。
-  override func viewDidUnhide() {
-    super.viewDidUnhide()
-    syncOcclusion()
   }
 
   /// `theme = light:...,dark:...` を解決させるため、現在の effectiveAppearance を surface へ通知する。
