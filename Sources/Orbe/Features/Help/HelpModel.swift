@@ -49,7 +49,7 @@ import SwiftUI
   func syncPressedMatch(_ l10n: LocalizationStore) {
     let combo = Set(pressed.map(Self.normalizedComboID))
     // 修飾のみの押下と修飾を含まない押下は一致に使わない。前者を許すと、他のショートカットを試し押しする途中の
-    // ⌘ 押下でも毎回 ⌘⌘ の行のハイライトと自動スクロールが走る。後者は検索欄へのタイプ（↵ も検索欄が受ける）で、
+    // ⌘ や ⌥ の押下でも毎回 ⌘⌘ や ⌥ の行のハイライトと自動スクロールが走る。後者は検索欄へのタイプ（↵ も検索欄が受ける）で、
     // 一致させると下の自動遷移が検索語を消す。キーボードの点灯は pressed をそのまま読む別経路で、どちらでも起きる。
     guard !combo.isSubset(of: HelpCatalog.modifierKeys),
       !combo.isDisjoint(with: HelpCatalog.modifierKeys),

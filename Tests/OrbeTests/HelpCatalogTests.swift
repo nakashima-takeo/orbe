@@ -85,16 +85,29 @@ final class HelpCatalogTests: OrbeTestCase {
       "発見不能な ⌘⌘ がトップ厳選に載っていない")
   }
 
+  /// ⌥ だけの長押し（エディターの下の端末を透かす）も画面に書けないジェスチャなので、「全般」に載せる。点灯は左の ⌥ そのもの。
+  /// トップ厳選には入れない。
+  func testPeekGestureIsListedInGeneral() {
+    guard let general = HelpCatalog.all.first(where: { $0.title == .helpCatGeneral }) else {
+      return XCTFail("カテゴリ helpCatGeneral が all に無い")
+    }
+    guard let row = general.rows.first(where: { $0.key == "⌥" }) else {
+      return XCTFail("⌥ の行が 全般 カテゴリに無い")
+    }
+    XCTAssertEqual(row.combo, ["opt"], "⌥ の点灯は左の ⌥ キーそのもの")
+    XCTAssertEqual(HelpCatalog.topPicks[.helpCatGeneral]?.contains("⌥"), false, "トップ厳選には入れない")
+  }
+
   /// usedKeys は combo の全網羅（キーボードの明暗・クリック可否の SSOT）。
   func testUsedKeysDerivation() {
     XCTAssertTrue(HelpCatalog.usedKeys.contains("cmd"))
     XCTAssertTrue(HelpCatalog.usedKeys.contains("shift"))
     XCTAssertTrue(HelpCatalog.usedKeys.isSubset(of: keyboardIDs), "usedKeys に KB 外の id がある")
-    // 修飾のみの combo は ⌘⌘（⌘ の素タップ×2）だけ——修飾は単独では実行キーになりえず、
-    // 例外はこのジェスチャに限る（増えたら実バインドの棚卸し漏れを疑う）。
+    // 修飾のみの combo は ⌥（⌥ だけの長押し）と ⌘⌘（⌘ の素タップ×2）だけ——修飾は単独では実行キーになりえず、
+    // 例外はこの 2 つのジェスチャに限る（増えたら実バインドの棚卸し漏れを疑う）。
     let modifierOnly = HelpCatalog.all.flatMap { $0.rows }
       .filter { Set($0.combo).isSubset(of: HelpCatalog.modifierKeys) }
       .map(\.key)
-    XCTAssertEqual(modifierOnly, ["⌘⌘"], "修飾キーのみの combo は ⌘⌘ 以外に存在しない")
+    XCTAssertEqual(modifierOnly, ["⌥", "⌘⌘"], "修飾キーのみの combo は ⌥ と ⌘⌘ 以外に存在しない")
   }
 }

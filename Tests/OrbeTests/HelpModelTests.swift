@@ -12,8 +12,8 @@ final class HelpModelTests: OrbeTestCase {
   private func model() -> HelpModel { HelpModel() }
 
   /// 完全一致だけがハイライトする（修飾のみ・部分一致は対象外）。
-  /// 修飾のみを外すのは ⌘⌘（combo が ⌘ 単独）が載って以降も同じ——許すと他のショートカットを
-  /// 試し押しする途中の ⌘ 押下で毎回ハイライトと自動スクロールが走る（点灯は従来どおり効く）。
+  /// 修飾のみを外すのは ⌘⌘・⌥（combo が修飾 1 つ）が載って以降も同じ——許すと他のショートカットを
+  /// 試し押しする途中の ⌘ や ⌥ の押下で毎回ハイライトと自動スクロールが走る（点灯は従来どおり効く）。
   /// トップビューに該当行があればトップの行 id でハイライトし、ビューは変えない。
   func testExactMatchOnly() {
     let m = model()
@@ -21,6 +21,10 @@ final class HelpModelTests: OrbeTestCase {
     m.syncPressedMatch(l10n)
     XCTAssertTrue(m.pressedRowIDs.isEmpty, "⌘ 単独は ⌘⌘ 行にも一致させない")
     XCTAssertNil(m.revealRowID)
+
+    m.pressed = ["opt"]
+    m.syncPressedMatch(l10n)
+    XCTAssertTrue(m.pressedRowIDs.isEmpty, "⌥ 単独は ⌥ 行にも一致させない")
 
     m.pressed = ["cmd", "shift"]
     m.syncPressedMatch(l10n)
