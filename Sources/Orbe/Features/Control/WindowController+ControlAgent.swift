@@ -16,7 +16,7 @@ extension WindowController {
     return resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
       launchAgentTab(
         target, command: AgentCatalog.startCommand(target.agent, firstInput: firstInput),
-        cwd: cwd)
+        cwd: cwd, startedWithInput: firstInput != nil)
     }
   }
 
@@ -94,9 +94,9 @@ extension WindowController {
 
   /// 解決済みの起動先へ 1 タブ起こす。env は `AgentLauncher.launchEnvironment`（login shell の
   /// PATH）で、GUI 起動と同じ解決をエージェントの子プロセスにも保証する。
-  private func launchAgentTab(_ target: AgentLaunchTarget, command: String, cwd: String?) -> Result<
-    AgentLaunch, ControlError
-  > {
+  private func launchAgentTab(
+    _ target: AgentLaunchTarget, command: String, cwd: String?, startedWithInput: Bool
+  ) -> Result<AgentLaunch, ControlError> {
     guard
       let opened = openTab(
         workspaceIndex: target.workspaceIndex, cwd: cwd, command: command,
@@ -105,6 +105,8 @@ extension WindowController {
       return .failure(ControlError(code: -32000, message: "spawn failed"))
     }
     return .success(
-      AgentLaunch(tabId: opened.tabId, workspaceId: opened.workspaceId, agent: target.agent))
+      AgentLaunch(
+        tabId: opened.tabId, workspaceId: opened.workspaceId, agent: target.agent,
+        startedWithInput: startedWithInput))
   }
 }

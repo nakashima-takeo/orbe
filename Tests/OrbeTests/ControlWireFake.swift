@@ -66,7 +66,7 @@ final class FakeControlTarget: ControlTarget {
     let sessionId: String?
     let workspaceId: UUID?
     let cwd: String?
-    var prompt: String?
+    let prompt: String?
   }
   struct Prompt {
     let tabId: Int
@@ -193,7 +193,8 @@ final class FakeControlTarget: ControlTarget {
     -> Result<AgentLaunch, ControlError>
   {
     agentSpawns.append(
-      AgentSpawn(command: command, sessionId: sessionId, workspaceId: workspaceId, cwd: cwd))
+      AgentSpawn(
+        command: command, sessionId: sessionId, workspaceId: workspaceId, cwd: cwd, prompt: nil))
     return launch(tabId: 4347, command: command)
   }
 

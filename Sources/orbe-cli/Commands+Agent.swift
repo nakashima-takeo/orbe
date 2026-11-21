@@ -29,11 +29,17 @@ let agentUsage = """
   ` ready (session <id>)`; --json carries ready:true and agentSessionId. Agents
   that cannot report idle (codex / agy) return at once with ready:false.
   spawn --text / --stdin hands the text to the agent as the first input of the
-  conversation, on its command line. Use it for codex / agy instead of a prompt
-  sent to the freshly opened tab. The agent is then already working on it, so
-  do not follow with `orb agent prompt`; wait for the result with
-  `orb wait <tab> --kind agent_state --kind tab_closed --after <seq>`, taking
-  <seq> from `--json`.
+  conversation, on its command line (claude, codex and agy all take it). Use it
+  for codex instead of sending text to the freshly opened tab, where enter can
+  confirm the default choice of a startup screen (an update notice, say); a
+  codex tab opened by resume has the same risk. The agent starts on the input
+  at once, so ready is false for every agent: do not follow with
+  `orb agent prompt`. Wait for the result with
+  `orb wait <tab> --kind agent_state --kind tab_closed --after <seq> --json`,
+  starting from the seq of `spawn --json`. The first event is working: pass
+  its seq as the next --after and repeat until agent_state is done, waiting or
+  clear, or tab_closed arrives. A timeout (exit 124) also prints a seq under
+  --json; wait again from it. Pass --timeout-ms for long work.
   <session-id> also comes from `orb tab list --json` (agentSessionId).
   --timeout-ms defaults to 30000; timing out exits 124 with ready:false and
   timedOut:true — the tab is open, the agent just has not reported yet.
@@ -85,7 +91,7 @@ private func agentList(_ rest: [String]) -> Never {
   exit(0)
 }
 
-/// help は値の席を抜き取った後に見る（`agent prompt` と同じ理由）。
+/// `--text` の値の席は help より先に抜き取る（`agent prompt` と同じ理由）。
 private func agentSpawn(_ rest: [String]) -> Never {
   var args = rest
   let text = takeOption(&args, "--text", requires: "a value (use --stdin for text starting with -)")
