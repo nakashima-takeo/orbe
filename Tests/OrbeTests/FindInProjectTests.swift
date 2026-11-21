@@ -31,24 +31,9 @@ final class FindInProjectTests: OrbeTestCase {
     let pane = tab.group.view.editor
 
     wc.handleWindowCommand(.findInProject)
-    XCTAssertTrue(wc.editorShownTab === tab, "閉じていれば開く")
+    XCTAssertTrue(tab.group.view.isEditorOpen, "閉じていれば開く")
     XCTAssertTrue(pane.showsSearchPanel)
     pumpMain(until: { searchFieldIsFocused(pane) }, "入力欄に焦点")
-  }
-
-  /// 開いたまま入力欄に打っている途中で押し直しても、焦点は入力欄に残る（開いていれば描き直さない）。
-  func testFindInProjectWhileOpenKeepsTheSearchFieldFocused() throws {
-    let wc = windowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    let pane = tab.group.view.editor
-    wc.handleWindowCommand(.findInProject)
-    pumpMain(until: { searchFieldIsFocused(pane) }, "入力欄に焦点")
-    let field = try XCTUnwrap(wc.window.firstResponder as? NSTextView)
-
-    wc.handleWindowCommand(.findInProject)
-    XCTAssertTrue(wc.editorShownTab === tab)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-    XCTAssertTrue(wc.window.firstResponder === field, "焦点は入力欄のまま")
   }
 
   func testFindInProjectWithoutTabsDoesNothing() throws {
@@ -62,32 +47,25 @@ final class FindInProjectTests: OrbeTestCase {
 
   // MARK: - 種
 
-  /// ⌘⇧F が器と pane に頼むこと——押した時点の焦点で種を取り、エディターを開いて、検索パネルを出し入力欄に焦点を入れる。
-  private func findInProject(_ tab: TerminalTab) {
-    let pane = tab.group.view.editor
-    let seed = pane.projectSearchSeed()
-    tab.group.view.setEditorOpen(true, animated: false)
-    pane.showProjectSearch(seed: seed)
-  }
-
-  /// タブを窓に載せ、文書を開いて本文に焦点を置く。
+  /// 実窓でエディターを開き、文書を開いて本文に焦点を置く。
   private struct Hosted {
+    let wc: WindowController
     let tab: TerminalTab
     let document: EditorDocument
-    let window: NSWindow
+    var window: NSWindow { wc.window }
+
+    func findInProject() { wc.handleWindowCommand(.findInProject) }
   }
 
   private func hostWithDocument(_ text: String) throws -> Hosted {
-    let tab = TerminalTab.alone(
-      cwd: TestScratch.caseDir.path,
-      editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostEditor(tab, width: 900)
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    let wc = windowController()
+    let tab = try XCTUnwrap(wc.activeTab)
     let document = try tab.group.editor.open(try caseFile("seed.txt", text), as: .pinned)
-    tab.group.view.editor.layoutSubtreeIfNeeded()
-    window.makeFirstResponder(document.surface.responder)
+    wc.handleWindowCommand(.toggleEditorFace)
+    wc.window.contentView?.layoutSubtreeIfNeeded()
+    wc.window.makeFirstResponder(document.surface.responder)
     tab.group.view.editor.projectSearch.restore(SearchQuery(pattern: "previous"))
-    return Hosted(tab: tab, document: document, window: window)
+    return Hosted(wc: wc, tab: tab, document: document)
   }
 
   /// 本文の 1 行以内の選択が種になる（正規表現が有効なら字どおりになるようエスケープする）。
@@ -96,13 +74,13 @@ final class FindInProjectTests: OrbeTestCase {
     let (tab, document) = (hosted.tab, hosted.document)
     let search = tab.group.view.editor.projectSearch
     document.surface.selectedRange = NSRange(location: 0, length: 7)
-    findInProject(tab)
+    hosted.findInProject()
     XCTAssertEqual(search.query.pattern, "foo.bar")
     XCTAssertNotEqual(search.phase, .idle, "種を入れたら即時に探す")
 
     search.toggle(.regex)
-    tab.group.view.window?.makeFirstResponder(document.surface.responder)
-    findInProject(tab)
+    hosted.window.makeFirstResponder(document.surface.responder)
+    hosted.findInProject()
     XCTAssertEqual(search.query.pattern, #"foo\.bar"#)
   }
 
@@ -112,12 +90,12 @@ final class FindInProjectTests: OrbeTestCase {
     let (tab, document, window) = (hosted.tab, hosted.document, hosted.window)
     let search = tab.group.view.editor.projectSearch
     document.surface.selectedRange = NSRange(location: 1, length: 0)
-    findInProject(tab)
+    hosted.findInProject()
     XCTAssertEqual(search.query.pattern, "previous", "キャレットの語は使わない")
 
     window.makeFirstResponder(document.surface.responder)
     document.surface.selectedRange = NSRange(location: 0, length: 6)
-    findInProject(tab)
+    hosted.findInProject()
     XCTAssertEqual(search.query.pattern, "previous", "複数行は種にしない")
   }
 
@@ -130,21 +108,23 @@ final class FindInProjectTests: OrbeTestCase {
     bar.onNeedleChange?("oo")
     pumpMain(until: { (window.firstResponder as? NSView)?.isDescendant(of: bar) == true })
 
-    findInProject(tab)
+    hosted.findInProject()
     XCTAssertEqual(pane.projectSearch.query.pattern, "oo")
   }
 
-  /// 入力欄に焦点があるまま ⌘⇧F を押し直しても、検索語を全選択に戻す（VS Code と同じ。打てば置き換わる）。
-  func testFindInProjectAgainSelectsTheWholePattern() throws {
+  /// 入力欄に打っている途中で ⌘⇧F を押し直しても、焦点は入力欄に残り（開いていれば描き直さない）、検索語を全選択に
+  /// 戻す（VS Code と同じ。打てば置き換わる）。
+  func testFindInProjectAgainKeepsTheFieldFocusedAndSelectsTheWholePattern() throws {
     let hosted = try hostWithDocument("foo\n")
     let (tab, window) = (hosted.tab, hosted.window)
-    findInProject(tab)
+    hosted.findInProject()
     pumpMain(until: { searchFieldIsFocused(tab.group.view.editor) }, "入力欄に焦点")
     let editor = try XCTUnwrap(window.firstResponder as? NSTextView)
     pumpMain(until: { editor.string == "previous" }, "入力欄に前の検索語")
     editor.setSelectedRange(NSRange(location: 3, length: 0))
 
-    findInProject(tab)
+    hosted.findInProject()
+    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
     XCTAssertTrue(window.firstResponder === editor, "焦点は入力欄のまま")
     XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 8))
   }
@@ -155,13 +135,13 @@ final class FindInProjectTests: OrbeTestCase {
     let (tab, document, window) = (hosted.tab, hosted.document, hosted.window)
     let search = tab.group.view.editor.projectSearch
     document.surface.selectedRange = NSRange(location: 0, length: 3)
-    tab.group.view.setEditorOpen(false, animated: false)
-    window.makeFirstResponder(tab.surface)
-    findInProject(tab)
+    hosted.wc.handleWindowCommand(.toggleEditorFace)
+    XCTAssertTrue(window.firstResponder === tab.surface, "前提: 閉じて端末に焦点")
+    hosted.findInProject()
     XCTAssertEqual(search.query.pattern, "previous", "端末の焦点からは種にしない")
 
     pumpMain(until: { searchFieldIsFocused(tab.group.view.editor) }, "入力欄に焦点")
-    findInProject(tab)
+    hosted.findInProject()
     XCTAssertEqual(search.query.pattern, "previous", "検索パネルの焦点からは種にしない")
   }
 }

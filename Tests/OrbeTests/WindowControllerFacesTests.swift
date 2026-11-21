@@ -6,7 +6,7 @@ import XCTest
 @testable import Orbe
 
 /// エディターの開閉を実窓で固定する——⌘E の往復と焦点、開閉で端末の寸法が変わらないこと、タブを選ぶ操作でエディターが
-/// 閉じること（選んでいないタブの増減では閉じない）、⌘⇧F・`focus_tab`・workspace の切替、開閉を保存しないこと、⌘W の
+/// 閉じること（選んでいないタブの増減では閉じない）、`focus_tab`・workspace の切替、開閉を保存しないこと、⌘W の
 /// 発火源、chrome への投影（現在地）。
 ///
 /// 壊れると何が起きるか。⌘E が見せている面へ first responder を運ばないとキーが隠れた面へ届く。開閉で端末が resize されると
@@ -98,17 +98,6 @@ final class WindowControllerFacesTests: OrbeTestCase {
     settle(tab)
     layout(wc)
     XCTAssertEqual(tab.surface.bounds.size, content, "閉じても変わらない")
-  }
-
-  /// ⌘⇧F は閉じていれば開き、検索欄に焦点を入れる。
-  func testFindInProjectOpensTheEditor() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-
-    wc.handleWindowCommand(.findInProject)
-
-    XCTAssertTrue(tab.group.view.isEditorOpen)
-    XCTAssertEqual(MainActor.assumeIsolated { wc.editorSidebar.panel }, .search)
   }
 
   // MARK: - タブを選ぶとエディターは閉じる
