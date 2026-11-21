@@ -26,14 +26,16 @@ func isSubagentReport(_ obj: [String: Any]?) -> Bool {
   return !id.isEmpty
 }
 
-/// state == "done" かつ background_tasks に status == "running" が 1 つでもあれば "working"。
+/// state == "done" でもバックグラウンドの作業が残っていれば "working"。作業が残っているかの表現は CLI ごとに違い、claude は
+/// background_tasks に status == "running" が 1 つでもあること、agy は fullyIdle が真偽値の false であること。
 /// それ以外（欠落・空配列・キャスト失敗を含む）は state をそのまま返す（誤 working には倒れない）。
 func effectiveState(_ state: String, stdin obj: [String: Any]?) -> String {
-  guard state == "done",
-    let tasks = obj?["background_tasks"] as? [[String: Any]],
-    tasks.contains(where: { ($0["status"] as? String) == "running" })
-  else { return state }
-  return "working"
+  guard state == "done", let obj else { return state }
+  let running =
+    (obj["background_tasks"] as? [[String: Any]])?
+    .contains(where: { ($0["status"] as? String) == "running" }) ?? false
+  let notFullyIdle = (obj["fullyIdle"] as? Bool) == false
+  return running || notFullyIdle ? "working" : state
 }
 
 /// hook payload からユーザーへ見せる文言と、その出所を取り出す（無ければ nil）。state は

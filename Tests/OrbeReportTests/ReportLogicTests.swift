@@ -3,8 +3,8 @@ import XCTest
 @testable import orbe_report
 
 /// orbe-report の stdin JSON 解釈（ReportLogic）の契約を固定する。
-/// claude はバックグラウンド作業を残してターンを終えられるため、Stop hook の
-/// `background_tasks` に running があれば done を working に読み替える。
+/// claude / agy はバックグラウンド作業を残してターンを終えられるため、Stop hook の
+/// `background_tasks` に running があるか、`fullyIdle` が false なら done を working に読み替える。
 final class ReportLogicTests: XCTestCase {
   // MARK: effectiveState
 
@@ -43,12 +43,26 @@ final class ReportLogicTests: XCTestCase {
       effectiveState("done", stdin: ["background_tasks": [["status": 1]]]), "done")
   }
 
+  /// agy の Stop の fullyIdle が false（バックグラウンドのコマンドやサブエージェントが残る）なら working。
+  func testDoneThatIsNotFullyIdleBecomesWorking() {
+    XCTAssertEqual(
+      effectiveState("done", stdin: ["conversationId": "c-1", "fullyIdle": false]), "working")
+  }
+
+  /// fullyIdle が true・欠落（claude / codex の経路）・真偽値でない型は done のまま。
+  func testDoneThatIsFullyIdleOrWithoutABooleanStaysDone() {
+    XCTAssertEqual(effectiveState("done", stdin: ["fullyIdle": true]), "done")
+    XCTAssertEqual(effectiveState("done", stdin: ["fullyIdle": "false"]), "done")
+  }
+
   /// done 以外の state は running があっても不変。
   func testNonDoneStateIsUnchanged() {
     let obj: [String: Any] = [
-      "background_tasks": [["id": "b1", "type": "shell", "status": "running"]]
+      "background_tasks": [["id": "b1", "type": "shell", "status": "running"]],
+      "fullyIdle": false,
     ]
     XCTAssertEqual(effectiveState("working", stdin: obj), "working")
+    XCTAssertEqual(effectiveState("waiting", stdin: obj), "waiting")
   }
 
   // MARK: endReason(from:)
