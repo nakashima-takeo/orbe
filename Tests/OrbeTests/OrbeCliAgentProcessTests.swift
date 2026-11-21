@@ -173,6 +173,16 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       "背景 WS のタブが前面の端末面と同じ実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
   }
 
+  /// `orb agent spawn` の文面の渡し方（`--text` / `--stdin`）は高々一方で、両方は socket に触れる前の usage エラー。通すと
+  /// 片方が黙って捨てられる。
+  func testAgentSpawnRejectsBothTextSources() {
+    let outcome = ControlProcess.orbWithoutServer([
+      "agent", "spawn", "codex", "--text", "x", "--stdin",
+    ])
+    XCTAssertEqual(outcome.status, 2, outcome.stderr)
+    XCTAssertTrue(outcome.stderr.contains("pass only one of --text / --stdin"), outcome.stderr)
+  }
+
   /// `orb agent spawn` が受けた文面は、起こした agent の会話の最初の入力として、その CLI の席（codex は末尾の
   /// `-- <入力>`）に置かれる。MCP から渡す空文字の `prompt` は、渡さないのと同じ。
   func testAgentSpawnPassesThePromptAsTheFirstInputOfTheConversation() throws {
