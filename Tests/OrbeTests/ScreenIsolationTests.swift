@@ -1,0 +1,60 @@
+import AppKit
+import XCTest
+
+/// 画面と前面の隔離（`ScreenIsolation`）が、破ったテストを実際に落とすことを固定する。
+///
+/// ここが崩れると、窓を画面に並べるテストや本物のシートを出すテストが緑のまま通り、`swift test` のたびに利用者の画面へ
+/// 窓やシートが現れる。違反は、並べていないのに並んでいると答える窓と、手で出した通知で作る（画面には何も出ない）。
+@MainActor
+final class ScreenIsolationTests: OrbeTestCase {
+  /// テストの終わり（`tearDown` の後）まで生きている窓。テスト本体のローカル変数の窓は、終わりの確認より前に解放される。
+  private var windowKeptToTheEnd: ClaimsShownWindow?
+
+  /// 並んでいてディスプレイと重なる窓を残したまま終わったテストは、ランループを回していなくても落ちる。
+  func testAWindowLeftOnADisplayFailsTheTest() throws {
+    let display = try XCTUnwrap(NSScreen.screens.first, "前提: ディスプレイが在る")
+    expectBreach("窓がディスプレイの範囲と重なって並んだ")
+    windowKeptToTheEnd = ClaimsShownWindow(on: display) { [weak self] in
+      self?.testRun?.stopDate == nil
+    }
+  }
+
+  /// ランループが回った時点でディスプレイと重なっていた窓は、テストの終わりまでに下ろしても、そのテストを落とす。
+  func testAWindowOnADisplayWhenTheRunLoopSpinsFailsTheTestEvenIfLoweredByTheEnd() throws {
+    let display = try XCTUnwrap(NSScreen.screens.first, "前提: ディスプレイが在る")
+    expectBreach("窓がディスプレイの範囲と重なって並んだ")
+    var shown = true
+    let window = ClaimsShownWindow(on: display) { shown }
+    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    shown = false
+    _ = window
+  }
+
+  /// 本物のシートが出たテストは落ちる。
+  func testARealSheetFailsTheTest() {
+    expectBreach("本物のシートが出た")
+    NotificationCenter.default.post(name: NSWindow.willBeginSheetNotification, object: NSWindow())
+  }
+
+  /// 隔離がこのテストに、`phrase` を含む失敗を記録することを期待する。記録しなければ、このテストが落ちる。
+  private func expectBreach(_ phrase: String) {
+    let options = XCTExpectedFailure.Options()
+    options.issueMatcher = { $0.compactDescription.contains(phrase) }
+    XCTExpectFailure("画面と前面の隔離が、このテストを落とす", options: options)
+  }
+}
+
+/// 並べていない（OS の表示の並びに入れていない）のに、`isShown` が true を返す間はディスプレイの中に並んでいると答える窓。
+private final class ClaimsShownWindow: NSWindow {
+  private let isShown: () -> Bool
+
+  init(on display: NSScreen, while isShown: @escaping () -> Bool) {
+    self.isShown = isShown
+    super.init(
+      contentRect: NSRect(x: display.frame.midX, y: display.frame.midY, width: 200, height: 100),
+      styleMask: [.borderless], backing: .buffered, defer: true)
+    isReleasedWhenClosed = false
+  }
+
+  override var isVisible: Bool { isShown() }
+}
