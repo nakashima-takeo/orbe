@@ -14,8 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     windowController.onLanguageChanged = { [weak self] in self?.installMainMenu() }
     // 標準 Edit メニューを据える。無いと ⌘V/⌘C/⌘X/⌘A がオーバーレイの入力欄へ届かない（MainMenu 参照）。
     installMainMenu()
-    windowController.window.makeKeyAndOrderFront(nil)
-    NSApp.activate(ignoringOtherApps: true)
+    windowController.window.bringToFront()
     ControlServer.shared.start(target: windowController)  // 外部 → Orbe 制御チャネル
     // メニューバー投影（Attention の件数・状態変化の一過性表示・ドロップダウン）。
     menuBarController = MenuBarController(

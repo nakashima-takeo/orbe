@@ -217,13 +217,13 @@ extension OrbeTestCase {
     }
   }
 
-  /// 実 `WindowController` を起こし、0 タブの workspace に dump のタブを開く。controller の寿命は
+  /// 実 `WindowController` を `window` で作り、0 タブの workspace に dump のタブを開く。controller の寿命は
   /// 返す `TtyDumpTab` が持つ——テストのローカル束縛が終わると window ごと畳まれ、タブと python が落ちる。
-  func dump(_ mode: TtyDumpTab.Mode) throws -> TtyDumpTab {
+  func dump(_ mode: TtyDumpTab.Mode, window: OrbeWindow = OrbeWindow()) throws -> TtyDumpTab {
     let fixture = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [])])
     try JSONEncoder().encode(fixture).write(to: workspacesFile())
-    return try TtyDumpTab(in: WindowController(), mode: mode)
+    return try TtyDumpTab(in: WindowController(window: window), mode: mode)
   }
 }

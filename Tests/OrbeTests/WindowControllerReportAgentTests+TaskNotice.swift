@@ -41,8 +41,8 @@ extension WindowControllerReportAgentTests {
   }
 
   /// 初回起動の言語選択（真のモーダル）を下ろした窓。⌘⇧X を開くテストの足場。
-  private func launchWithoutFirstRun() throws -> WindowController {
-    let (wc, _) = try makeControllerAndTab()
+  private func launchWithoutFirstRun(window: OrbeWindow = OrbeWindow()) throws -> WindowController {
+    let (wc, _) = try makeControllerAndTab(window: window)
     wc.dismissPalette()
     return wc
   }
@@ -96,8 +96,9 @@ extension WindowControllerReportAgentTests {
 
   /// 前面の ⌘⇧X でそのタスクを選んでいれば、ピルも音も出ない。別のタスクが解けたときは出る。
   func testTaskNoticeSuppressedWhileViewingThatTask() throws {
-    let wc = try launchWithoutFirstRun()
-    makeKey(wc)
+    let window = OrbeWindowFake()
+    let wc = try launchWithoutFirstRun(window: window)
+    window.isKey = true
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     let viewed = try resolveTask(wc)
     let other = try resolveTask(wc, title: "別のタスク")

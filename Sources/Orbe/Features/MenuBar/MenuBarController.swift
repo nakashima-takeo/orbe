@@ -123,8 +123,7 @@ final class MenuBarController: NSObject {
     if let transient = store.transient, !transient.retracted {
       driver.dismissed(at: Date())
       advance()
-      NSApp.activate(ignoringOtherApps: true)
-      windowController.window.makeKeyAndOrderFront(nil)
+      windowController.window.bringToFront()
       switch transient.notice {
       case .agent(let row): windowController.focusAttentionTab(tabId: row.tabId)
       case .task(let notice): windowController.showTaskPalette(selecting: notice.taskId)
@@ -155,21 +154,18 @@ final class MenuBarController: NSObject {
     d.onSelectRow = { [weak self] row in
       guard let self else { return }
       self.closeDropdown()
-      NSApp.activate(ignoringOtherApps: true)  // 行クリック＝orbe 前面化＋タブへ移動
-      self.windowController.window.makeKeyAndOrderFront(nil)
+      self.windowController.window.bringToFront()  // 行クリック＝orbe 前面化＋タブへ移動
       self.windowController.focusAttentionTab(tabId: row.tabId)
     }
     d.onOpenOrbe = { [weak self] in
       guard let self else { return }
       self.closeDropdown()
-      NSApp.activate(ignoringOtherApps: true)
-      self.windowController.window.makeKeyAndOrderFront(nil)
+      self.windowController.window.bringToFront()
     }
     d.onPermissionHint = { [weak self] in
       guard let self else { return }
       self.closeDropdown()
-      NSApp.activate(ignoringOtherApps: true)
-      self.windowController.window.makeKeyAndOrderFront(nil)
+      self.windowController.window.bringToFront()
       guard !self.windowController.model.overlay.isModal else { return }
       self.windowController.showSettingsPalette()  // 権限状態行は設定パレット root にある
     }
