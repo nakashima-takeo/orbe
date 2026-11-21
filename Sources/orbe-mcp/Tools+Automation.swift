@@ -14,6 +14,7 @@ private func described(_ sentence: String, _ section: String) -> String {
 let automationTools: [[String: Any]] = [
   obj([
     ("name", "list_automations"),
+    readOnlyAnnotation,
     (
       "description",
       described(
@@ -55,6 +56,7 @@ let automationTools: [[String: Any]] = [
   ]),
   obj([
     ("name", "list_automation_runs"),
+    readOnlyAnnotation,
     (
       "description",
       described(
@@ -179,6 +181,7 @@ let automationTools: [[String: Any]] = [
   ]),
   obj([
     ("name", "list_automation_proposals"),
+    readOnlyAnnotation,
     (
       "description",
       described(

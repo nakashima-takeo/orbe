@@ -35,10 +35,18 @@ func schema(_ props: [String: Any], required: [String] = []) -> [String: Any] {
   ["type": "object", "properties": props, "required": required]
 }
 
+/// 普段のツール（`tools`）のうち、状態を変えず（Orbe の状態もファイルも書かず、プロセスも起こさない）、待たずに返り、タブの画面の
+/// 中身を返さないものに付ける MCP の注釈。注釈で承認の要否を決めるクライアント（codex）は、これを持つツールの呼び出しに承認を
+/// 求めない。codex・claude はこれを持つツールを並べて呼ぶが、本ブリッジは 1 件ずつ応えるので、長く待つツールに付けると後ろの
+/// 呼び出しが時間切れになる。状態を変えるツールには注釈を何も付けない——事実どおりの `destructiveHint: false`・`openWorldHint: false` でも
+/// codex は承認を省き、状態を変える呼び出しへの承認が消えるため。
+let readOnlyAnnotation: (String, Any) = ("annotations", ["readOnlyHint": true])
+
 let tools: [[String: Any]] =
   [
     obj([
       ("name", "list_workspaces"),
+      readOnlyAnnotation,
       (
         "description",
         "Orbe の全 workspace を列挙する（id・名前・root path・タブ数・アクティブか・休眠 agent 数 dormantAgentCount・"
@@ -48,6 +56,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "list_tabs"),
+      readOnlyAnnotation,
       (
         "description",
         "タブを列挙する（workspaceId を省けば全 workspace）。tabId（操作の宛先）・所属 workspace・タイトル・cwd・エージェント状態・"
@@ -57,6 +66,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "list_agents"),
+      readOnlyAnnotation,
       (
         "description",
         "検出済みのエージェント CLI（claude / codex / agy）を列挙する。各要素は command と解決済み絶対 path。"
@@ -132,6 +142,15 @@ let tools: [[String: Any]] =
           + "agent（claude）は準備できた（最初の idle）まで待ち ready:true と agentSessionId（実 session ID）を"
           + "返すので、続けて prompt_agent を送れる。ready:false は prompt を送れる保証が無い——codex / agy は"
           + "idle を報告できず即返り、時間切れ（timedOut:true）はタブは開いたが報告がまだ来ていない。"
+          + "prompt は会話の最初の入力で、起動の引数として agent に渡る（claude / codex / agy のどれでも使える）。"
+          + "prompt を渡すと agent はすぐその入力に取り掛かるので、ready は agent によらず false になる。"
+          + "続けて prompt_agent を送らず、結果は wait_for_event で待つ: tabId を付け、kinds は agent_state と"
+          + "tab_closed、value では絞らず、after にこの応答の seq を渡す。working を読み飛ばし、done / waiting / "
+          + "clear の agent_state か tab_closed が出るまで、返った seq を次の after に渡して繰り返す（時間切れの"
+          + "応答 timedOut:true も seq を持つので、それを after に渡して待ち直す。長い作業では timeoutMs を明示する）。"
+          + "codex への最初の入力は prompt に渡す——起こした直後の codex のタブへ prompt_agent / send_text で送ると、"
+          + "起動時の画面（更新の案内など）の既定の選択肢を enter が確定することがある。claude には、prompt を"
+          + "渡さずに起こして prompt_agent で問う形も使える（結果を 1 回で受け取れる）。"
       ),
       (
         "inputSchema",
@@ -139,6 +158,7 @@ let tools: [[String: Any]] =
           "command": strProp("起動する agent（list_agents の command。省略時は対象 WS の実効デフォルト）"),
           "workspaceId": strProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
           "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブタブ由来）"),
+          "prompt": strProp("会話の最初の入力（起動の引数として渡す。空文字は省略と同じ）"),
           "timeoutMs": intProp("準備完了を待つ上限 ミリ秒（既定 30000）"),
         ])
       ),
@@ -178,6 +198,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "session_log"),
+      readOnlyAnnotation,
       (
         "description",
         "エージェントセッションの寿命ログ（event=opened / closed）を時刻昇順で返す。各行は ts・workspace"
@@ -226,8 +247,12 @@ let tools: [[String: Any]] =
           + "戻り値は state（done=応答を終えた / waiting=質問か承認を求めている / clear=セッションが終わった）・"
           + "message（その時点の文言。done なら最終応答、waiting なら質問文。無ければキー欠落）・seq。"
           + "送信直後に済んだ遷移も取りこぼさない。エージェントに問う用途はこれを使い、send_text＋send_key は"
-          + "生の入力（waiting への応答・シェルコマンド）に、wait_for_event は特殊な待ちにだけ使う。"
+          + "生の入力（waiting への応答・シェルコマンド）に、wait_for_event は特殊な待ち（spawn_agent に"
+          + "prompt を添えて起こした後の結果待ちなど）にだけ使う。"
           + "対象が working / waiting を報告していれば何も送らずエラー（waiting への応答は send_key で）。"
+          + "codex を起こした直後のタブ（spawn_agent・resume_agent のどちらで起こしたものも）へ text を送ると、起動時の画面"
+          + "（更新の案内など）の既定の選択肢を enter が確定することがある。spawn_agent で起こす codex への最初の入力は、"
+          + "ここで送らず spawn_agent の prompt で渡す（resume_agent には最初の入力を渡す口が無い）。"
           + "判定は hook 報告だけなので、拒めるのは waiting を報告する agent（claude / codex、プラグイン"
           + "導入済み）に限る——報告経路の無いタブでは承認ダイアログが開いていても送られ、既定選択が確定する。"
           + "タイムアウトは timedOut:true（既定 3600000 ms＝1 時間。MCP クライアント側のツール"
@@ -250,6 +275,7 @@ let tools: [[String: Any]] =
         "状態変化イベントを待つ（長ポーリング）。扱える kind: agent_state / title / pwd / "
           + "tab_closed（libghostty が host に出す OSC シグナル）。生のシェル出力は待てない"
           + "（その用途は get_tab_text をポーリング）。エージェントの応答を待つなら prompt_agent を使う。"
+          + "spawn_agent に prompt を添えて起こしたときの結果待ちはこれを使う（手順は spawn_agent の説明）。"
           + "全イベントに 1 本の単調増加 seq が付く。after を渡すと、その seq より後に既に起きた一致イベントも"
           + "即返す（after の出所は他の応答の seq）。after が保持範囲より古ければ event history evicted の"
           + "エラー（seq を取り直す）。"
@@ -272,6 +298,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "list_tasks"),
+      readOnlyAnnotation,
       (
         "description",
         "人と agent が共有するタスク一覧を、作成の新しい順（createdAt の新しい順。同時刻は taskId の大きい方が先）で返す。各要素は taskId・title・status"

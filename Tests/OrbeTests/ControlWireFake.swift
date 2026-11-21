@@ -66,6 +66,7 @@ final class FakeControlTarget: ControlTarget {
     let sessionId: String?
     let workspaceId: UUID?
     let cwd: String?
+    let prompt: String?
   }
   struct Prompt {
     let tabId: Int
@@ -179,11 +180,12 @@ final class FakeControlTarget: ControlTarget {
 
   /// 起動結果。`command` 省略は codex（idle を報告しない agent）に解く——claude に解くと、
   /// 応答が ready 待ちに入り表駆動の往復が既定 30 秒を待つことになる。
-  func controlSpawnAgent(command: String?, workspaceId: UUID?, cwd: String?) -> Result<
-    AgentLaunch, ControlError
-  > {
+  func controlSpawnAgent(command: String?, workspaceId: UUID?, cwd: String?, prompt: String?)
+    -> Result<AgentLaunch, ControlError>
+  {
     agentSpawns.append(
-      AgentSpawn(command: command, sessionId: nil, workspaceId: workspaceId, cwd: cwd))
+      AgentSpawn(
+        command: command, sessionId: nil, workspaceId: workspaceId, cwd: cwd, prompt: prompt))
     return launch(tabId: 4344, command: command ?? "codex")
   }
 
@@ -191,7 +193,8 @@ final class FakeControlTarget: ControlTarget {
     -> Result<AgentLaunch, ControlError>
   {
     agentSpawns.append(
-      AgentSpawn(command: command, sessionId: sessionId, workspaceId: workspaceId, cwd: cwd))
+      AgentSpawn(
+        command: command, sessionId: sessionId, workspaceId: workspaceId, cwd: cwd, prompt: nil))
     return launch(tabId: 4347, command: command)
   }
 

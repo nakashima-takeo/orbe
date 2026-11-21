@@ -91,6 +91,19 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
       "人間向けの行は spawned … ready (session <id>): \(plain.stdout)")
   }
 
+  /// 最初の入力を添えた起動も、claude なら最初の idle まで待って session id を返すが、agent はすぐその入力に取り掛かるので
+  /// `ready` は偽。真で返すと、呼び手は作業中の agent へ続けて `prompt_agent` を送ってよいと読む。
+  func testSpawnWithAFirstInputWaitsForTheIdleButIsNotReady() throws {
+    _ = try stageReportingClaude()
+    let control = try startControlProcess(workspaces: ["main"])
+    waitForDetection(control, "claude")
+
+    let spawned = control.orbJSON(["agent", "spawn", "claude", "--text", "first"])
+    XCTAssertEqual(spawned["ready"] as? Bool, false)
+    XCTAssertEqual(spawned["agentSessionId"] as? String, Self.sessionId, "最初の idle まで待って返る")
+    XCTAssertNil(spawned["timedOut"])
+  }
+
   /// idle が来なければ `--timeout-ms` で exit 124。`--json` は result を stdout へ、非 `--json` は spawned 行を
   /// 出しつつ理由を stderr へ。result の中身（tabId を捨てない・`ready:false, timedOut:true`）は L3
   /// （`ControlWireTests+AgentReady`）が持つ。

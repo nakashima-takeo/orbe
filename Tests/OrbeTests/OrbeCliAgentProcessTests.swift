@@ -173,6 +173,41 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       "背景 WS のタブが前面の端末面と同じ実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
   }
 
+  /// `orb agent spawn` の文面の渡し方（`--text` / `--stdin`）は高々一方で、両方は socket に触れる前の usage エラー。通すと
+  /// 片方が黙って捨てられる。
+  func testAgentSpawnRejectsBothTextSources() {
+    let outcome = ControlProcess.orbWithoutServer([
+      "agent", "spawn", "codex", "--text", "x", "--stdin",
+    ])
+    XCTAssertEqual(outcome.status, 2, outcome.stderr)
+    XCTAssertTrue(outcome.stderr.contains("pass only one of --text / --stdin"), outcome.stderr)
+  }
+
+  /// `orb agent spawn` が受けた文面は、起こした agent の会話の最初の入力として、その CLI の席（codex は末尾の
+  /// `-- <入力>`）に置かれる。MCP から渡す空文字の `prompt` は、渡さないのと同じ。
+  func testAgentSpawnPassesThePromptAsTheFirstInputOfTheConversation() throws {
+    let codex = try stageFakeAgent("codex")
+    let control = try startControlProcess(workspaces: ["main"])
+    waitForDetection(control, "codex")
+
+    let viaOrb = control.orb(["agent", "spawn", "codex", "--stdin", "--json"], stdin: "-x hi")
+    XCTAssertEqual(viaOrb.status, 0, "agent spawn --stdin が失敗した: \(viaOrb.stderr)")
+    let orbTab = try XCTUnwrap(
+      (try JSONSerialization.jsonObject(with: Data(viaOrb.stdout.utf8)) as? [String: Any])?[
+        "tabId"] as? Int)
+    let orbText = waitForTabText(control, tab: orbTab, contains: codex.marker)
+    XCTAssertTrue(
+      orbText.contains("\(codex.marker) --no-daemon -- -x hi"),
+      "codex の最初の入力が末尾の -- の後に置かれていない: \(orbText)")
+
+    let empty = control.mcpJSON("spawn_agent", ["command": "codex", "prompt": ""])
+    let emptyText = waitForTabText(
+      control, tab: try XCTUnwrap(empty["tabId"] as? Int), contains: codex.marker)
+    XCTAssertFalse(
+      emptyText.contains("\(codex.marker) --no-daemon --"),
+      "空文字の prompt で入力の席が組まれている: \(emptyText)")
+  }
+
   /// `orb agent resume` が resume 形の起動コマンド（`codex resume <id>`）で起こす。
   func testAgentResumeLaunchesWithTheResumeCommand() throws {
     let fake = try stageFakeAgent("codex")

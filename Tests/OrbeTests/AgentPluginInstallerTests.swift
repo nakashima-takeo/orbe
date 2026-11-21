@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// パッケージのプラグイン名の導出規則（`AgentPluginInstaller.pluginName(in:)`）、中身の指紋、
-/// `run` の完了順序を固定する。
+/// `run` の完了順序と、同梱の install.sh が claude の一覧から導入するかを決める規則（一覧が時限を過ぎた場合を含む）を固定する。
 /// 名前はビルド時にチャネルから導出されるため Swift には焼けず、`plugins/` 直下の唯一の
 /// サブディレクトリ名として読む。この 1 つの名前を marketplace 登録と channel の置き場所が
 /// 共有するので、曖昧なパッケージでは nil を返す（誤った名前で登録しない）。
@@ -94,7 +94,8 @@ final class AgentPluginInstallerTests: OrbeTestCase {
 
   /// `pkg` を install.sh の置き場にして `run` を回し、届いた Event と完了を届いた順に記録する。
   /// 完了は "complete" として同じ列に積むので、取りこぼしと順序を 1 本の列で検証できる。
-  private func runInstaller(script: String?) throws -> [String] {
+  private func runInstaller(script: String?, shellPATH: String = "/usr/bin:/bin") throws -> [String]
+  {
     if let script {
       try script.write(
         to: pkg.appendingPathComponent("install.sh"), atomically: true, encoding: .utf8)
@@ -102,7 +103,7 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     var log: [String] = []
     let done = expectation(description: "install.sh complete")
     AgentPluginInstaller.run(
-      pluginDir: pkg, pluginName: "orbe-agent", shellPATH: "/usr/bin:/bin",
+      pluginDir: pkg, pluginName: "orbe-agent", shellPATH: shellPATH,
       onEvent: { event in
         switch event {
         case .start(let cli): log.append("start \(cli)")
@@ -162,5 +163,71 @@ final class AgentPluginInstallerTests: OrbeTestCase {
   /// 1 行も出さずに終わっても完了は届く（呼び出し側の「導入中」が残らない）。
   func testMissingScriptStillCompletes() throws {
     XCTAssertEqual(try runInstaller(script: nil), ["complete"])
+  }
+
+  // MARK: - 同梱の install.sh
+
+  private static let bundledInstallScript = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    .appendingPathComponent("app/agent-plugin/install.sh")
+
+  /// 偽の claude だけを PATH に置いて同梱の install.sh を実行する。偽の claude は受けた引数を 1 行ずつ残し、`plugin list` には
+  /// `list` を出して `listStatus` で終わる。`listHangs` なら、`plugin list` は agy と同じく SIGALRM では終わらず、終了の要求
+  /// （SIGTERM）には 0 で終わる形で 30 秒固まる。返すのは届いた Event と、claude が受けた呼び出しの列。
+  private func runBundledInstaller(
+    claudeList list: String = "", listStatus: Int32 = 0, listHangs: Bool = false
+  ) throws -> (log: [String], calls: [String]) {
+    let hang =
+      listHangs ? "trap '' ALRM; trap 'kill $! 2>/dev/null; exit 0' TERM; sleep 30 & wait; " : ""
+    let bin = pkg.appendingPathComponent("bin")
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    let calls = pkg.appendingPathComponent("claude-calls.log")
+    let listed = pkg.appendingPathComponent("claude-list.txt")
+    try Data(list.utf8).write(to: listed)
+    let claude = bin.appendingPathComponent("claude")
+    try """
+    #!/bin/sh
+    echo "$*" >> "\(calls.path)"
+    if [ "$1 $2" = "plugin list" ]; then \(hang)cat "\(listed.path)"; exit \(listStatus); fi
+    exit 0
+    """.write(to: claude, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+    let log = try runInstaller(
+      script: String(contentsOf: Self.bundledInstallScript, encoding: .utf8),
+      shellPATH: "\(bin.path):/usr/bin:/bin")
+    let called = ((try? String(contentsOf: calls, encoding: .utf8)) ?? "")
+      .split(separator: "\n").map(String.init)
+    return (log, called)
+  }
+
+  /// claude の一覧が失敗し、このプラグインの行も出さなかったときは導入を試みず失敗にする。claude の plugin install は無効にした
+  /// プラグインを有効へ戻すので、導入済みかどうか分からないまま導入すると、利用者が無効にした設定を黙って覆す。
+  func testUnreadableClaudeListIsAnErrorWithoutInstalling() throws {
+    let run = try runBundledInstaller(claudeList: "", listStatus: 1)
+    XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
+    XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
+  }
+
+  /// このプラグインの行は無効にしても一覧に残るので、一覧が失敗しても行があれば導入済みとして何もしない。
+  func testClaudeListShowingThePluginIsUnchangedEvenWhenTheListFails() throws {
+    let run = try runBundledInstaller(
+      claudeList: "  ❯ orbe-agent@orbe-agent\n    Status: ✘ disabled\n", listStatus: 1)
+    XCTAssertTrue(run.log.contains("ok claude"), "\(run.log)")
+    XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
+  }
+
+  /// 一覧が最後まで出てこのプラグインの行が無ければ、未導入なので導入する。
+  func testCompleteClaudeListWithoutThePluginInstallsIt() throws {
+    let run = try runBundledInstaller(claudeList: "No plugins installed.\n", listStatus: 0)
+    XCTAssertTrue(run.log.contains("ok claude"), "\(run.log)")
+    XCTAssertTrue(run.calls.contains("plugin install orbe-agent@orbe-agent"), "\(run.calls)")
+  }
+
+  /// 時限を過ぎても終わらない一覧は打ち切り、CLI が 0 で終わっても失敗として導入を試みない。打ち切りが効かなければ起動時の導入が
+  /// 止まったままになり、打ち切った一覧を成功と読めば、未導入と見て導入する。時限（15 秒）を実時間で待つ。
+  func testClaudeListPastItsTimeLimitIsCutOffAndAnErrorWithoutInstalling() throws {
+    let run = try runBundledInstaller(listHangs: true)
+    XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
+    XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
   }
 }

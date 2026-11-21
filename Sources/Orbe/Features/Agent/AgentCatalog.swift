@@ -12,8 +12,8 @@ struct AgentCLI: Equatable {
 final class AgentCatalog {
   /// CLI 1 つぶんの静的な知識。`resumeFlag` は `<絶対パス> <requiredArguments> <resumeFlag> <sessionId>` の席。
   /// `reportsIdleOnStart` は Orbe のプラグインがその CLI の起動時 hook に idle を配線しているか
-  /// （claude の SessionStart→idle。codex CLI 自身も SessionStart を持つが `codex-hooks.json` は
-  /// 配線していない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
+  /// （claude の SessionStart→idle。codex の SessionStart は起動時ではなく最初の入力を送った時点で呼ばれるので、
+  /// 配線しても起動時の idle は報告できない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
   /// `firstInput` は起動（新規・再開）に最初の入力を添える席。`headless` は裏で非対話に回す能力。
   /// `requiredArguments` は Orbe が起動するとき（新規・再開）コマンド名の直後に必ず置く引数。codex の `--no-daemon` は、
   /// hook と MCP サーバーをタブの端末で動く codex の子として起動させる——共有のデーモン経由だと、hook と MCP サーバーが

@@ -43,8 +43,10 @@ extension ControlServer {
       ["workspaceId": .workspaceId, "cwd": .string, "command": .string, "select": .bool],
       .window(spawn)),
     "spawn_agent": ControlVerb(
-      ["command": .string, "workspaceId": .workspaceId, "cwd": .string, "timeoutMs": .int],
-      .connection(spawnAgent)),
+      [
+        "command": .string, "workspaceId": .workspaceId, "cwd": .string, "prompt": .string,
+        "timeoutMs": .int,
+      ], .connection(spawnAgent)),
     "resume_agent": ControlVerb(
       [
         "command": .string, "sessionId": .string, "workspaceId": .workspaceId, "cwd": .string,

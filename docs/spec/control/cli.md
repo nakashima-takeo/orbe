@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
 description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/自動化/ボードのウィジェット/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/automation/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-11-16
+updated: 2026-11-21
 ---
 
 # Orbe CLI（`orb`）
@@ -39,7 +39,7 @@ updated: 2026-11-16
 ### エージェント（起動・再開・対話）
 
 - `orb agent list [--json]` … 検出済みエージェント CLI の command と絶対パス。検出ゼロはエラーではなく空の結果。
-- `orb agent spawn [<agent>] [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]` … 新タブでエージェントを起こし、**準備できるまで待つ**。`<agent>` 省略は**対象 workspace の**実効 `default-agent`。
+- `orb agent spawn [<agent>] [--text <text> | --stdin] [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]` … 新タブでエージェントを起こし、**準備できるまで待つ**。`<agent>` 省略は**対象 workspace の**実効 `default-agent`。`--text` / `--stdin` は会話の最初の入力（`spawn_agent` の `prompt`）で、どちらも省けるが、両方は渡せない（値の規則は `tab send` と同じ）。入力を添えた起動では agent がすぐその入力に取り掛かるので、`ready` は agent によらず偽で、続けて `agent prompt` を送らない。結果は `orb wait <tab> --kind agent_state --kind tab_closed --after <seq> --json` で待つ。`<seq>` は `agent spawn --json` の応答から取り、最初に返る working を読み飛ばして、`agent_state` の done / waiting / clear か `tab_closed` が出るまで、返った `seq` を次の `--after` に渡して繰り返す。時間切れ（exit 124）も `--json` では `seq` を出すので、それを `--after` に渡して待ち直す。長い作業では `--timeout-ms` を明示する（手順の正本は [api](api.md) の `spawn_agent`）。
 - `orb agent resume <agent> <session-id> [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]` … 既存セッションを継いで起こす。`<session-id>` の出所は `orb tab list --json` の `agentSessionId`。
 - `orb agent prompt <tab> (--text <text> | --stdin) [--timeout-ms <ms>] [--json]` … エージェントに問うて答えを待つ。テキストを送って enter を押し、その後に初めてターンが止まった状態で返る。`<tab>` は必須で `ORBE_TAB` に落ちない（自タブのエージェントに問う形は無い）。`--text` / `--stdin` の規則は `tab send` と同じ。
 
@@ -113,7 +113,7 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"` / `--text <text>` / `--key <key>` / `--kind <kind>` / `--value <value>` / `--after <seq>` / `--timeout-ms <ms>` / task の項目フラグ）の値は `-` 始まりも空（空白だけの形も含む）も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通ってしまうため。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない（例外は `task` の `--worktree` で、CLI が呼び出し元の cwd から解く）。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
 
-この規約が禁じる形のテキスト——`-` 始まり・空・空白だけ——をタブへ送りたいときは `tab send --stdin` を使う。標準入力は席ではないので規約の対象外で、0 バイトだけを usage エラーにする。`printf '%s' "$PROMPT" | orb tab send --stdin` の `$PROMPT` 未設定が 0 バイトとして現れる形は規約が守ろうとしているものと同じだが、ファイルや heredoc の中身が空白・改行だけであることは正当にあり得るためこの線を引く。
+この規約が禁じる形のテキスト——`-` 始まり・空・空白だけ——をタブへ送りたいときは `tab send --stdin` を使う（`agent prompt`・`agent spawn` の文面も同じく `--stdin` で渡す）。標準入力は席ではないので規約の対象外で、0 バイトだけを usage エラーにする。`printf '%s' "$PROMPT" | orb tab send --stdin` の `$PROMPT` 未設定が 0 バイトとして現れる形は規約が守ろうとしているものと同じだが、ファイルや heredoc の中身が空白・改行だけであることは正当にあり得るためこの線を引く。
 
 ## 文脈解決
 

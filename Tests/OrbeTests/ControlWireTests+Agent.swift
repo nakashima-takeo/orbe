@@ -10,7 +10,7 @@ import XCTest
 /// 契約だけを見る。どちらも表では観測できない（届かなくてもエラーにならない・余分なキーがあっても
 /// エラーにならない）。
 extension ControlWireTests {
-  /// `spawn_agent` の optional 3 件が名前どおり target へ届く（`command` にもガードが無い＝
+  /// `spawn_agent` の optional 4 件が名前どおり target へ届く（`command` にもガードが無い＝
   /// 省略を「デフォルトを解け」の意味として target へ渡すため、ここでしか到達を観測できない）。
   /// `command` に非文字列を渡した形だけは「省略」と同じにせず -32602 で弾く——通すと、指定した
   /// のとは違う（デフォルトの）agent が黙って起きる。
@@ -21,14 +21,19 @@ extension ControlWireTests {
 
     _ = wire.request(
       id: 1, method: "spawn_agent",
-      params: ["command": "codex", "workspaceId": workspace.uuidString, "cwd": "/tmp/cwd"])
+      params: [
+        "command": "codex", "workspaceId": workspace.uuidString, "cwd": "/tmp/cwd",
+        "prompt": "first input",
+      ])
     let spawn = fake.agentSpawns.last
     XCTAssertEqual(spawn?.command, "codex", "command が名前どおり届く")
     XCTAssertEqual(spawn?.workspaceId, workspace, "workspaceId が名前どおり届く")
     XCTAssertEqual(spawn?.cwd, "/tmp/cwd", "cwd が名前どおり届く")
+    XCTAssertEqual(spawn?.prompt, "first input", "prompt が名前どおり届く")
 
     _ = wire.request(id: 2, method: "spawn_agent")
     XCTAssertNil(fake.agentSpawns.last?.command, "command 省略は nil のまま target へ渡る（デフォルト解決）")
+    XCTAssertNil(fake.agentSpawns.last?.prompt, "prompt 省略は nil のまま target へ渡る")
 
     XCTAssertEqual(
       errorCode(wire.request(id: 3, method: "spawn_agent", params: ["command": 42])), -32602,

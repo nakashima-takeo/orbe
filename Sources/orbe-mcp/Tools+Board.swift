@@ -18,6 +18,7 @@ private func boardTarget(_ verb: String) -> [String: Any] {
 let boardTools: [[String: Any]] = [
   obj([
     ("name", "list_board_widgets"),
+    readOnlyAnnotation,
     (
       "description",
       boardIntro + "ボードのウィジェットの並びを上から順に返す {widgets: [{kind}]}。何も決めていないボードは automation 1 つ。"
