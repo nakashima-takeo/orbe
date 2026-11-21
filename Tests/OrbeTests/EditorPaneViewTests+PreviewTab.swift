@@ -18,8 +18,7 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
     @MainActor var pane: EditorPaneView { tab.group.view.editor }
   }
 
-  /// 根に a.txt・b.txt・c.txt を置いた幅 900 の面（エクスプローラーを出す）。窓は物理画面の外へ並べる（`sendEvent` は
-  /// ordered-in の窓にしか配送しない）。
+  /// 根に a.txt・b.txt・c.txt を置いた幅 900 の面（エクスプローラーを出す）。窓は並べない。
   private func host() throws -> Hosted {
     for name in ["a.txt", "b.txt", "c.txt"] { _ = try caseFile(name, name) }
     let tab = TerminalTab.alone(
@@ -27,9 +26,6 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
     window.appearance = NSAppearance(named: .darkAqua)
-    window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
-    window.orderFront(nil)
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     pumpMain(
       until: {
         Set(tab.group.view.editor.tree.rows.map(\.name)).isSuperset(of: ["a.txt", "b.txt", "c.txt"])
@@ -52,6 +48,7 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
 
   func testTreeRowsOpenAPreviewOnTheFirstClickAndPinOnTheSecond() throws {
     let hosted = try host()
+    placeOffscreen(hosted.window)
     let editor = hosted.tab.group.editor
 
     try click(hosted.pane, at: try treeRow(hosted, "a.txt"))
@@ -72,6 +69,7 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
   /// ファイルタブのダブルクリックで普通のタブになる。1 回目の押下は今どおりの切替。
   func testDoubleClickingAFileTabPinsIt() throws {
     let hosted = try host()
+    placeOffscreen(hosted.window)
     let pane = hosted.pane
     let editor = hosted.tab.group.editor
     try editor.open(try caseFile("a.txt", "a.txt"), as: .pinned)
