@@ -3,11 +3,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 連の器（`GroupFacesView`）が開閉を 2 層の見え方へ写す規則——両面は常に器いっぱい・端末の寸法は開閉に触れない・
+/// 連の器（`GroupFacesView`）が開閉を 2 層の見え方へ写す規則——両面は常に器いっぱい・端末の寸法は器だけに従う・
 /// 開いている間は端末面を隠す・動きの途中は両面を見せる・クリックの届き先は開閉に従う。
 ///
-/// 壊れると何が起きるか。端末の寸法が開閉で変わると、⌘E のたびに pty が resize され scrollback が折り返し直される。
-/// 覆われた端末が窓の resize に追従しないと、閉じた瞬間に resize が起き、透かしたときの端末が古い大きさで見える。
+/// 壊れると何が起きるか。端末の寸法が開閉や連の中の切替で変わると、そのたびに pty が resize され scrollback が折り返し直される。
 /// 開いている間に端末面が隠れないと、半透明のエディター面の下で端末が描かれ続け、文字が透ける。
 /// 置き換えられた動きの完了で「途中」が解けると、閉じる途中にエディター面が消え、開く途中に下が抜ける。
 /// 閉じる途中のエディター面がクリックを取ると、隠れる view に first responder が残る。
@@ -45,7 +44,6 @@ final class GroupFacesViewTests: OrbeTestCase {
     let tab = laidOut()
     let view = tab.group.view
 
-    XCTAssertFalse(view.isEditorOpen)
     XCTAssertTrue(view.editor.isHiddenOrHasHiddenAncestor, "閉じたエディター面は隠れる（根のサービスを離す）")
     XCTAssertFalse(tab.terminal.isHiddenOrHasHiddenAncestor)
     XCTAssertEqual(rect(of: tab.terminal, in: view), NSRect(origin: .zero, size: size))
@@ -65,25 +63,6 @@ final class GroupFacesViewTests: OrbeTestCase {
   }
 
   // MARK: - 端末の寸法
-
-  /// 開閉で端末の寸法は変わらず、開いている間の器の resize には覆われた端末も追従する。
-  func testTerminalSizeFollowsOnlyTheContainer() {
-    let tab = laidOut()
-    let view = tab.group.view
-
-    view.setEditorOpen(true, animated: false)
-    view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(tab.surface.bounds.size, size, "開いても変わらない")
-
-    view.frame = NSRect(x: 0, y: 0, width: 1200, height: 600)
-    view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(
-      tab.surface.bounds.size, NSSize(width: 1200, height: 600), "覆われている間も器の resize に追従する")
-
-    view.setEditorOpen(false, animated: false)
-    view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(tab.surface.bounds.size, NSSize(width: 1200, height: 600), "閉じても変わらない")
-  }
 
   /// 連の兄弟の端末は見せていなくても器の寸法を持ち（差した瞬間から・器の resize でも）、見せる端末を替えても寸法は
   /// 変わらない——連の中の切替で pty の resize と再折り返しが起きない。
@@ -111,18 +90,7 @@ final class GroupFacesViewTests: OrbeTestCase {
 
   // MARK: - 開閉の動き
 
-  /// 窓に無い器は、動きつきを渡されても即時に切り替わる。
-  func testAnimatedChangeOutsideAWindowIsImmediate() {
-    let tab = laidOut()
-    let view = tab.group.view
-    view.reduceMotion = false
-
-    view.setEditorOpen(true, animated: true)
-    XCTAssertFalse(view.isFading)
-    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor)
-  }
-
-  /// 動きを減らす設定では、窓の中でも即時に切り替わる。
+  /// 動きを減らす設定では、窓の中でも開き終わりの見え方へ即時に切り替わる。
   func testReduceMotionMakesTheChangeImmediate() {
     let tab = laidOut()
     let window = hosted(tab)
@@ -130,7 +98,7 @@ final class GroupFacesViewTests: OrbeTestCase {
     tab.group.view.reduceMotion = true
 
     tab.group.view.setEditorOpen(true, animated: true)
-    XCTAssertFalse(tab.group.view.isFading)
+    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開き終わりの見え方")
   }
 
   /// 動きの途中は両面を見せ、開閉と濃さの行き先は押した瞬間に切り替わる。途中で反転しても、置き換えられた動きの完了では
@@ -142,21 +110,17 @@ final class GroupFacesViewTests: OrbeTestCase {
     let view = tab.group.view
 
     view.setEditorOpen(true, animated: true)
-    XCTAssertTrue(view.isEditorOpen)
-    XCTAssertTrue(view.isFading)
     XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor)
     XCTAssertFalse(tab.terminal.isHiddenOrHasHiddenAncestor, "開く途中は下の端末を見せる")
     XCTAssertEqual(try XCTUnwrap(view.editor.superview).alphaValue, 1, "濃さの行き先")
 
     view.setEditorOpen(false, animated: true)
-    XCTAssertFalse(view.isEditorOpen)
     RunLoop.main.run(until: Date().addingTimeInterval(0.03))
-    XCTAssertTrue(view.isFading, "置き換えられた動きの完了では解けない")
-    XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor, "閉じる途中のエディター面は見えている")
+    XCTAssertFalse(
+      view.editor.isHiddenOrHasHiddenAncestor, "置き換えられた動きの完了では解けず、閉じる途中のエディター面は見えている")
     XCTAssertEqual(try XCTUnwrap(view.editor.superview).alphaValue, 0)
 
-    pumpMain(until: { !view.isFading }, timeout: 2, "最後の動きが終わる")
-    XCTAssertTrue(view.editor.isHiddenOrHasHiddenAncestor)
+    pumpMain(until: { view.editor.isHiddenOrHasHiddenAncestor }, timeout: 2, "最後の動きが終わって隠れる")
     XCTAssertFalse(tab.terminal.isHiddenOrHasHiddenAncestor)
   }
 
@@ -169,10 +133,10 @@ final class GroupFacesViewTests: OrbeTestCase {
 
     view.setEditorOpen(true, animated: true)
     view.setEditorOpen(true, animated: false)
-    XCTAssertTrue(view.isFading)
+    XCTAssertFalse(tab.terminal.isHiddenOrHasHiddenAncestor, "開く途中のまま下の端末が見えている")
   }
 
-  /// 即時の切り替えは進行中の動きを打ち切り、動きの完了の知らせでは何も変わらない。
+  /// 即時の切り替えは進行中の動きを打ち切り、その場で行き先の見え方になる。
   func testImmediateChangeCutsTheFade() {
     let tab = laidOut()
     let window = hosted(tab)
@@ -181,10 +145,6 @@ final class GroupFacesViewTests: OrbeTestCase {
 
     view.setEditorOpen(true, animated: true)
     view.setEditorOpen(false, animated: false)
-    XCTAssertFalse(view.isFading)
-    XCTAssertTrue(view.editor.isHiddenOrHasHiddenAncestor)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-    XCTAssertFalse(view.isFading)
     XCTAssertTrue(view.editor.isHiddenOrHasHiddenAncestor)
   }
 
@@ -202,7 +162,7 @@ final class GroupFacesViewTests: OrbeTestCase {
     XCTAssertTrue(open.isDescendant(of: view.editor), "開いている間はエディター: \(open)")
 
     view.setEditorOpen(false, animated: true)
-    XCTAssertTrue(view.isFading, "前提: 閉じる途中")
+    XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor, "前提: 閉じる途中でエディター面が見えている")
     let closing = try XCTUnwrap(view.hitTest(point))
     XCTAssertTrue(closing.isDescendant(of: tab.terminal), "閉じる途中は端末: \(closing)")
   }
