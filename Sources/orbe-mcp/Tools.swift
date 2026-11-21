@@ -35,10 +35,16 @@ func schema(_ props: [String: Any], required: [String] = []) -> [String: Any] {
   ["type": "object", "properties": props, "required": required]
 }
 
+/// 状態を変えない（Orbe の状態もファイルも書かず、プロセスも起こさない）ツールに付ける MCP の注釈。注釈で承認の要否を決める
+/// クライアント（codex）は、これを持つツールの呼び出しに承認を求めない。状態を変えるツールには注釈を何も付けない——事実どおりの
+/// `destructiveHint: false`・`openWorldHint: false` でも codex は承認を省き、状態を変える呼び出しへの承認が消えるため。
+let readOnlyAnnotation: (String, Any) = ("annotations", ["readOnlyHint": true])
+
 let tools: [[String: Any]] =
   [
     obj([
       ("name", "list_workspaces"),
+      readOnlyAnnotation,
       (
         "description",
         "Orbe の全 workspace を列挙する（id・名前・root path・タブ数・アクティブか・休眠 agent 数 dormantAgentCount・"
@@ -48,6 +54,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "list_tabs"),
+      readOnlyAnnotation,
       (
         "description",
         "タブを列挙する（workspaceId を省けば全 workspace）。tabId（操作の宛先）・所属 workspace・タイトル・cwd・エージェント状態・"
@@ -57,6 +64,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "list_agents"),
+      readOnlyAnnotation,
       (
         "description",
         "検出済みのエージェント CLI（claude / codex / agy）を列挙する。各要素は command と解決済み絶対 path。"
@@ -66,6 +74,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "get_tab_text"),
+      readOnlyAnnotation,
       ("description", "タブの画面テキストを平文で取得する。scrollback=true で履歴全体、false で可視範囲のみ。"),
       (
         "inputSchema",
@@ -187,6 +196,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "session_log"),
+      readOnlyAnnotation,
       (
         "description",
         "エージェントセッションの寿命ログ（event=opened / closed）を時刻昇順で返す。各行は ts・workspace"
@@ -256,6 +266,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "wait_for_event"),
+      readOnlyAnnotation,
       (
         "description",
         "状態変化イベントを待つ（長ポーリング）。扱える kind: agent_state / title / pwd / "
@@ -284,6 +295,7 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "list_tasks"),
+      readOnlyAnnotation,
       (
         "description",
         "人と agent が共有するタスク一覧を、作成の新しい順（createdAt の新しい順。同時刻は taskId の大きい方が先）で返す。各要素は taskId・title・status"
