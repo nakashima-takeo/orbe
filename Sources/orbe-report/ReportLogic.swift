@@ -26,21 +26,24 @@ func isSubagentReport(_ obj: [String: Any]?) -> Bool {
   return !id.isEmpty
 }
 
-/// state == "done" かつ background_tasks に status == "running" が 1 つでもあれば "working"。
+/// state == "done" でもバックグラウンドの作業が残っていれば "working"。作業が残っているかの表現は CLI ごとに違い、claude は
+/// background_tasks に status == "running" が 1 つでもあること、agy は fullyIdle が真偽値の false であること。
 /// それ以外（欠落・空配列・キャスト失敗を含む）は state をそのまま返す（誤 working には倒れない）。
 func effectiveState(_ state: String, stdin obj: [String: Any]?) -> String {
-  guard state == "done",
-    let tasks = obj?["background_tasks"] as? [[String: Any]],
-    tasks.contains(where: { ($0["status"] as? String) == "running" })
-  else { return state }
-  return "working"
+  guard state == "done", let obj else { return state }
+  let running =
+    (obj["background_tasks"] as? [[String: Any]])?
+    .contains(where: { ($0["status"] as? String) == "running" }) ?? false
+  let notFullyIdle = (obj["fullyIdle"] as? Bool) == false
+  return running || notFullyIdle ? "working" : state
 }
 
 /// hook payload からユーザーへ見せる文言と、その出所を取り出す（無ければ nil）。state は
 /// effectiveState 適用後（done→working 読み替え後は文言なし＝working は文言を持たない）。
 /// 出所は**どのフィールドから取ったか**そのもの。フィールド形は実 payload 準拠:
-/// - waiting: claude Notification の `message`（出所 `notification`）、無ければ
-///   PreToolUse(AskUserQuestion) の `tool_input.questions[0].question`（先頭の質問文・出所 `tool`）。
+/// - waiting: claude Notification の `message`（出所 `notification`）、無ければ待っているツールの入力の
+///   `questions[0].question`（先頭の質問文・出所 `tool`）。ツールの入力は claude PreToolUse(AskUserQuestion) の
+///   `tool_input`、agy PreToolUse(ask_question) の `toolCall.args`。
 /// - done: Stop payload の `last_assistant_message`（出所 `tool`。claude / codex とも同名フィールドを
 ///   持つ。持たない CLI（agy 等）は自然に nil ＝文言なし）。
 func agentMessage(state: String, stdin obj: [String: Any]?) -> (text: String, source: String)? {
@@ -50,8 +53,10 @@ func agentMessage(state: String, stdin obj: [String: Any]?) -> (text: String, so
     if let message = truncateMessage(obj["message"] as? String) {
       return (message, "notification")
     }
-    guard let input = obj["tool_input"] as? [String: Any],
-      let questions = input["questions"] as? [[String: Any]],
+    let input =
+      obj["tool_input"] as? [String: Any]
+      ?? (obj["toolCall"] as? [String: Any])?["args"] as? [String: Any]
+    guard let questions = input?["questions"] as? [[String: Any]],
       let question = truncateMessage(questions.first?["question"] as? String)
     else { return nil }
     return (question, "tool")

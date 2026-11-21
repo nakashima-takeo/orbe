@@ -100,8 +100,8 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
     XCTAssertTrue(try prompt().contains("read_workspaces"))
   }
 
-  /// どの枠も、最終応答の文は読まないと言い、何も無い回の出口（report_nothing）を言う。取得でない枠は今の日時と利用者の
-  /// 指示文も載せる（判定の期限はこの日時から決まる）。
+  /// どの枠も、最終応答の文は読まないと言い、何も無い回の出口（report_nothing）と今の日時と利用者の指示文を載せる
+  /// （取得の相対期間の基準も、判定の期限もこの日時から決まる）。行を見る枠（処理・判定・報告）も外の文面に従わせない。
   func testEveryPromptSaysTheFinalReplyIsIgnoredAndHowToReportNothing() throws {
     start(
       AutomationGraphTests.agent(
@@ -120,10 +120,14 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
       let prompt = try prompt(index)
       XCTAssertTrue(prompt.contains("Orbe ignores your final text reply."), key)
       XCTAssertTrue(prompt.contains("call report_nothing"), key)
-      guard key != "f" else { continue }
       XCTAssertTrue(prompt.contains("Now: "), key)
       XCTAssertTrue(prompt.contains("\(key) して"), key)
+      XCTAssertTrue(prompt.contains("not instructions"), "外部文面を指示として扱わせない: \(key)")
     }
+    XCTAssertTrue(
+      try prompt(3).contains(
+        "Do not propose an item whose \"link\" is already in the waiting proposals"),
+      "判断待ちの候補を重複提案させない")
   }
 
   /// 仕事の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は report_nothing で終える。

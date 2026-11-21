@@ -4,8 +4,8 @@ import XCTest
 
 @testable import Orbe
 
-/// ソース管理パネルの gallery（見本 `editor/ScmPanel.tsx`・`Rail.tsx` の突合用）。fixture は見本の `editor/data.ts` と同じ形の
-/// 本物の git の場で、見本と同じく変更の行（StateHooks.swift）を選んだ姿を dark / light で撮る。
+/// ソース管理パネルの gallery。fixture は本物の git の場で、
+/// 変更の行（StateHooks.swift）を選んだ姿と、レールの件数バッジを dark / light で撮る。
 extension DesignGallerySnapshotTests {
   func renderEditorScmSnapshots(dir: URL) throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()

@@ -1,11 +1,10 @@
 import OrbeEditorCore
 import SwiftUI
 
-/// サイドバー: 検索パネル（見本 SearchPanel を u4 で詰めた比率に揃えたもの）。上から、ヘッダー（題・更新／停止・クリア・
-/// すべて折りたたむ／すべて展開。検索中はその下端に進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 結果の列 → 件数の文
-/// （パネルの下に固定）。状態は `ProjectSearch` だけを読み、入力欄の焦点は SwiftUI の焦点を `focusedArea` へ写す（結果の列の
-/// 焦点は列が自分で写す）。部分ごとに別の view にして、読む値が変わった部分だけを組み直す（結果が届くたびに入力欄まで
-/// 組み直さない）。
+/// サイドバー: 検索パネル。上から、ヘッダー（題・更新／停止・クリア・すべて折りたたむ／すべて展開。検索中はその下端に
+/// 進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 結果の列 → 件数の文（パネルの下に固定）。状態は
+/// `ProjectSearch` だけを読み、入力欄の焦点は SwiftUI の焦点を `focusedArea` へ写す（結果の列の焦点は列が自分で写す）。
+/// 部分ごとに別の view にして、読む値が変わった部分だけを組み直す（結果が届くたびに入力欄まで組み直さない）。
 struct SearchPanelView: View {
   let search: ProjectSearch
   let results: RowList<SearchResultsSource>
@@ -84,7 +83,7 @@ private struct SearchPanelHeader: View {
   }
 }
 
-/// 入力欄 28: 入力（mono 12）と右端の Aa / ab / .*。焦点があると枠が accent になり角が 5 に（見本 inputBox）。
+/// 入力欄 28: 入力（mono 12）と右端の Aa / ab / .*。焦点があると枠が accent になり角が 5 になる。
 private struct ProjectSearchField: View {
   let search: ProjectSearch
   var focus: FocusState<Bool>.Binding

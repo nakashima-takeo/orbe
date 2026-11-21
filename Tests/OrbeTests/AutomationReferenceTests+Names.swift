@@ -23,9 +23,9 @@ extension AutomationReferenceTests {
       [
         ("共有の英文", AutomationReference.sections.joined(separator: "\n\n")),
         ("orb automation --help", help),
-        ("自動化のスキル", try String(contentsOf: Self.skill, encoding: .utf8)),
-        ("自動化のスキルの型", try String(contentsOf: Self.patterns, encoding: .utf8)),
-      ] + tools.map { ("\($0["name"] ?? "") の説明", Self.descriptions($0)) }
+      ]
+      + (try Self.bundledSkillMarkdowns())
+      + tools.map { ("\($0["name"] ?? "") の説明", Self.descriptions($0)) }
 
     for (label, text) in texts {
       for name in Self.quoted(in: text) {
@@ -280,7 +280,18 @@ extension AutomationReferenceTests {
     }
   }
 
-  /// 同梱の自動化のスキル（`skills/automation/SKILL.md`）。
-  static let skill = patterns.deletingLastPathComponent().deletingLastPathComponent()
-    .appendingPathComponent("SKILL.md")
+  /// 同梱プラグインの全スキル Markdown（`app/agent-plugin/plugins/orbe-agent/skills/**/*.md`）。
+  static func bundledSkillMarkdowns() throws -> [(String, String)] {
+    let root = patterns.deletingLastPathComponent().deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let fm = FileManager.default
+    guard let walker = fm.enumerator(atPath: root.path) else { return [] }
+    var files: [String] = []
+    while let rel = walker.nextObject() as? String {
+      if rel.hasSuffix(".md") { files.append(rel) }
+    }
+    return try files.sorted().map { rel in
+      ("同梱スキル \(rel)", try String(contentsOf: root.appendingPathComponent(rel), encoding: .utf8))
+    }
+  }
 }

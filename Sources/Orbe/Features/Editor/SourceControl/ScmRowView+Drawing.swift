@@ -1,6 +1,6 @@
 import AppKit
 
-/// 変更の列の行の描き方（寸法と色は見本 ScmPanel の値。子の区分の字下げと、それに合わせたファイル行の左は見本に無い）。
+/// 変更の列の行の描き方（子の区分は親の見出しから 1 段字下げし、ファイル行の左もそれに合わせる）。
 extension ScmRowView {
   /// 子の見出し 22（padding 0 12 0 12——親の見出しの 4 から 1 段字下げ）: シェブロン 16・題 11 bold・右端に一括操作と件数
   /// バッジ。
@@ -33,7 +33,7 @@ extension ScmRowView {
       at: x, top: top(header.label), width: max(0, right - x), colors.text, context)
   }
 
-  /// ファイル行 22（padding 0 12 0 28——見本の 20 から子の区分の字下げぶん右。種別チップが子の題の真下に揃う・gap 6）:
+  /// ファイル行 22（padding 0 12 0 28——子の区分の字下げぶん右で、種別チップが子の題の真下に揃う・gap 6）:
   /// 種別チップ 16・名前 13（バッジの色）・ディレクトリ 11 tertiary・右端に行のボタン 18（常に出す）とバッジの字。名前を
   /// 先に取り、ディレクトリは残りに詰める（右のボタンとの間は、伸びる余白の両側の gap で 12）。
   func draw(_ file: File, _ colors: RowColors, _ scm: ScmRowColors, in context: CGContext) {

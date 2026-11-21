@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// PR のパネルの下端の区画（見本 PrReviewPanel の下端。padding 10 12 12・上縁 hairline .07・段の間 8）: 今の diff に出せない
+/// PR のパネルの下端の区画（padding 10 12 12・上縁 hairline .07・段の間 8）: 今の diff に出せない
 /// スレッドの件数（あれば）・「レビュー」と保留中のコメントの数・全体へのコメント欄・承認 / コメント / 変更を依頼の 3 択・
 /// 「レビューを送信 ⌘↵」・送れない理由か送信の失敗の文・レビューのやりとりの読みの失敗の文（前に読めた内容を出している間も）。
 /// ⌘↵ は欄に焦点があるときだけ送信になる（pane が取る → `EditorPaneView+PullRequest`）。区画は PR ごとに作り直す（欄の
@@ -118,7 +118,7 @@ private struct PrHoverText: View {
   }
 }
 
-/// 全体へのコメント欄の箱（見本 inputBox: radius 3・枠 hairline .10・地 sunk .35。焦点で radius 5・枠 accent .55）。送信の最中は
+/// 全体へのコメント欄の箱（radius 3・枠 hairline .10・地 sunk .35。焦点で radius 5・枠 accent .55）。送信の最中は
 /// 押せない姿で、打てない。
 private struct PrReviewMessageBox: View {
   let panel: PrPanel
@@ -200,7 +200,7 @@ private struct PrReviewSegment: View {
   }
 }
 
-/// 「レビューを送信」と「⌘↵」（見本 primaryButton 26・radius 3・地 accent・字 tabActiveText 12 semibold、⌘↵ は mono 10.5・
+/// 「レビューを送信」と「⌘↵」（高さ 26・radius 3・地 accent・字 tabActiveText 12 semibold、⌘↵ は mono 10.5・
 /// 不透明度 .7、間 6）。送れない間は押せない姿。
 private struct PrReviewSubmit: View {
   let panel: PrPanel
@@ -225,7 +225,7 @@ private struct PrReviewSubmit: View {
   }
 }
 
-/// 全体へのコメント欄。↵ は改行（送信は pane が取る ⌘↵）で、1 行のときの高さは見本の 26、10 行まで伸び、その先はスクロール
+/// 全体へのコメント欄。↵ は改行（送信は pane が取る ⌘↵）で、1 行のときの高さは 26、10 行まで伸び、その先はスクロール
 /// する。中身は PR ごとの状態の書きかけそのもの（`PullRequestState.reviewDraft`）。変換中の字は確定するまで書きかけに入れず、
 /// パネルへ写す（`PrPanel.reviewComposition`）。焦点の出入りもパネルへ写す。送信の最中は打てない。取り消しの履歴は欄ごとに
 /// 持つ（→ `ScmMessageField`）。
@@ -237,7 +237,7 @@ private struct PrReviewMessageField: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
   func makeNSView(context: Context) -> NSScrollView {
-    // 見本（PrReviewPanel）の padding 0 8。
+    // 左右の余白は 8（padding 0 8）。
     let text = MessageTextView(trailing: 8)
     context.coordinator.text = text
     text.delegate = context.coordinator

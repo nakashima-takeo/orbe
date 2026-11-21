@@ -169,7 +169,7 @@ final class SettingsPaletteTests: OrbeTestCase {
 
   // MARK: - theme: Auto / Dark / Light の固定3択
 
-  /// theme サブパレットは絞り込み欄なしの固定3行（見本 Settings 画面の Seg 順）で、
+  /// theme サブパレットは絞り込み欄なしの固定3行（Auto / Dark / Light の順）で、
   /// 現在の実効値（未設定は Auto）に ● とハイライトが乗る。
   func testThemeSubpaletteShowsFixedThreeRows() {
     let p = model()

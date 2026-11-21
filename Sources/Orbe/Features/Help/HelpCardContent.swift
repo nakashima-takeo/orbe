@@ -128,7 +128,7 @@ private struct HelpTopRow: View {
           .strokeBorder(Color.theme.accentPrimary.opacity(0.4), lineWidth: Theme.Stroke.hairline)
       }
     }
-    // デザインの margin 0 -8px 相当: 塗りは左右 8px はみ出し、テキストは列に揃う。
+    // ホバー/押下の塗りだけ左右 8pt はみ出させ、テキストの左端は列に揃える。
     .padding(.horizontal, -Theme.Space.step)
     .id(rowID)
     .onHover { entered in
@@ -182,8 +182,8 @@ private struct HelpListRow: View {
         .foregroundStyle(Color.theme.textSecondary)
         .lineLimit(1)
         .frame(maxWidth: .infinity, alignment: .leading)
-      // 外形はデザインの CSS 外形（padding 2px 7px ＋ border 1px が外に付く）と同寸=
-      // 幅 text+16 / 高さ 18。SwiftUI は stroke が内側なので padding 8・高さ 18 で寸を合わせる。
+      // 外形は幅 text+16 / 高さ 18（内余白 2×7 に 1pt 枠を外付けした寸法）。SwiftUI は stroke が
+      // 内側なので horizontal padding 8・高さ 18 で外形を合わせる。
       Text(row.key)
         .font(Font.theme.helpKeyList)
         .tracking(Theme.Typography.trackingKey)
@@ -216,7 +216,7 @@ private struct HelpListRow: View {
           .strokeBorder(Color.theme.accentPrimary.opacity(0.4), lineWidth: Theme.Stroke.hairline)
       }
     }
-    // デザインの margin 0 -8px 相当: 塗りは左右 8px はみ出し、テキストは列に揃う。
+    // ホバー/押下の塗りだけ左右 8pt はみ出させ、テキストの左端は列に揃える。
     .padding(.horizontal, -Theme.Space.step)
     .id(rowID)
     .onHover { entered in

@@ -72,12 +72,12 @@ extension WindowController: ControlTarget {
   }
 
   /// タブのエージェントへ text を送って Enter を押す（制御 API の prompt_agent）。届くのは入力欄が
-  /// 空いている状態（idle / done / 報告なし）だけ。`waiting` は permission ダイアログ / AskUserQuestion
-  /// が開いている状態で、そこへ text＋Enter を打つと既定選択の確定＝ツール実行の承認が副作用として
-  /// 起きるので拒む（waiting への応答は `send_key` の領分）。判定は hook 報告の派生値 `agentState`
-  /// だけなので、拒めるのは waiting を報告する agent（claude / codex、プラグイン導入済み）に限る
-  /// ——報告経路の無いタブ（agy・未導入・codex の初回報告前）では、承認ダイアログが開いていても
-  /// 素通りし、既定選択の確定を防げない。
+  /// 空いている状態（idle / done / 報告なし）だけ。`waiting` は permission ダイアログ / 質問
+  /// （claude の AskUserQuestion・agy の ask_question）が開いている状態で、そこへ text＋Enter を
+  /// 打つと既定選択の確定＝ツール実行の承認が副作用として起きるので拒む（waiting への応答は `send_key`
+  /// の領分）。判定は hook 報告の派生値 `agentState` だけなので、拒めるのは報告される待ちに限る。
+  /// agy が報告する待ちは質問だけで、コマンド実行などの確認の待ちは報告されない。報告経路の無いタブ
+  /// （未導入・codex の初回報告前）では、承認ダイアログが開いていても素通りし、既定選択の確定を防げない。
   func controlPromptAgent(tab: TerminalTab, text: String) -> ControlError? {
     if let state = tab.agentState, state == "working" || state == "waiting" {
       return ControlError(

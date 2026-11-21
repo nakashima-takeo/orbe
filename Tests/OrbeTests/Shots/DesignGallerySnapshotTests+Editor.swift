@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// エディター面の gallery（見本 `editor/EmptyView.tsx`・`CodeView.tsx` 突合用）。
+/// エディター面の gallery。
 /// 空状態（dark / light）・コードビュー（dark / light。一時 git リポジトリの中身で 3 種の印・丸点）。
 extension DesignGallerySnapshotTests {
   func renderEditorSnapshots(dir: URL) throws {

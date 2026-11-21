@@ -8,7 +8,7 @@ struct ScmRowColors {
   let buttonDisabled: CGColor
   /// 見出しのツールの押せない字（muted .35。SwiftUI の見出しのツール `ScmToolButton` と同じ）。
   let toolDisabled: CGColor
-  /// 見本 chromeBg（点の輪と中抜きの点の地）。
+  /// 点の輪と中抜きの点の地（`bgBase`）。
   let ground: CGColor
   let headerHover: CGColor
   let fileHover: CGColor

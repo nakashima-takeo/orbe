@@ -5,13 +5,12 @@ import SwiftUI
 struct HelpOverlay: View {
   @Bindable var model: HelpModel
 
-  /// カードの基準寸法（デザイン見本のモーダル上限 760×656。窓が狭ければ −32 マージンで縮む）。
+  /// カードの基準寸法（モーダル上限 760×656。窓が狭ければ −32 マージンで縮む）。
   private let cardWidth: CGFloat = 760
   private let cardHeight: CGFloat = 656
   /// 内部リフローが成立する最小カード寸（床）。幅はキーボード可視化の実寸（約 570＋左右 16）、
-  /// 高さはヘッダ＋キーボード＋フッター＋サイドバー実寸が決める。design 見本は縮小域を定義しない
-  /// ため Orbe の設計: 床まではリフローで縮み、床を下回る小窓ではカードを床寸で描いて等倍縮小する
-  /// （レイアウトは常に成立し、design の構成が崩れない）。
+  /// 高さはヘッダ＋キーボード＋フッター＋サイドバー実寸が決める。床まではリフローで縮み、床を
+  /// 下回る小窓ではカードを床寸で描いて等倍縮小する（レイアウトは常に成立し、構成が崩れない）。
   private let floorWidth: CGFloat = 608
   private let floorHeight: CGFloat = 540
 
@@ -38,8 +37,8 @@ struct HelpOverlay: View {
   }
 }
 
-/// デザイン見本の rgba 面/罫線（surfaceRgb / borderRgb の α 合成）を基色トークン＋view 側 α で再現する
-/// ヘルパ。light では border +0.04 / surface +0.02 シフト。
+/// ヘルプ固有の半透明面・罫線を基色トークン（`surfaceInk` / `borderInk`）＋view 側 α で出すヘルパ。
+/// light では border +0.04 / surface +0.02 シフトする。
 struct HelpInk {
   let dark: Bool
 
@@ -54,14 +53,14 @@ struct HelpInk {
 
 /// ヘルプのカード本体。縦構成＝ヘッダ（検索・チップ・件数・⌘H バッジ）/（サイドバー＋コンテンツ）/ フッター。
 /// 外郭は `GlassPanel(.help)`（面 α.92・radius16・panel 級 blur・help 影）。
-/// キーは検索欄（常時フォーカス）に集約し、esc で閉じる（1段。デザイン見本の2段挙動は採らない）。
+/// キーは検索欄（常時フォーカス）に集約し、esc で即座に閉じる（入力クリアを経る 2 段挙動は採らない）。
 struct HelpCard: View {
   @Bindable var model: HelpModel
   @Environment(\.localization) private var l10n
   @Environment(\.colorScheme) private var scheme
   @FocusState private var fieldFocused: Bool
 
-  /// サイドバー幅（デザイン見本の 168px。コンポーネント局所定数）。
+  /// サイドバー幅（168pt。コンポーネント局所定数）。
   private let sidebarWidth: CGFloat = 168
 
   private var ink: HelpInk { HelpInk(dark: scheme == .dark) }
@@ -150,8 +149,8 @@ struct HelpCard: View {
   }
 
   /// キー絞り込みチップ（accent 淡塗り・accentBright 文字）。タップで解除。
-  /// 外形はデザインの CSS 外形（padding 2px 8px ＋ border 1px が外に付く）と同寸=
-  /// 幅 text+18 / 高さ 18。SwiftUI は stroke が内側なので padding 9・高さ 18 で寸を合わせる。
+  /// 外形は幅 text+18 / 高さ 18（内余白 2×8 に 1pt 枠を外付けした寸法）。SwiftUI は stroke が
+  /// 内側なので horizontal padding 9・高さ 18 で外形を合わせる。
   private func keyFilterChip(_ fkey: String) -> some View {
     HStack(spacing: 5) {
       Text(l10n.format(.helpKeyFilterChip, HelpCatalog.symbol(for: fkey)))
@@ -306,7 +305,7 @@ private struct HelpSidebarRow: View {
 }
 
 #if DEBUG
-  /// 見た目検証用の共通ステージ（design 原典と同寸 920×720・BackgroundGlow の上に overlay ごと描く）。
+  /// 見た目検証用の共通ステージ（920×720・BackgroundGlow の上に overlay ごと描く）。
   private func helpPreview(_ configure: (HelpModel) -> Void = { _ in }) -> some View {
     let model = HelpModel()
     configure(model)

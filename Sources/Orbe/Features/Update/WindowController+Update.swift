@@ -15,7 +15,7 @@ extension WindowController {
     updaterService.startIfPermitted()
   }
 
-  /// 変更内容シートを開く（トースト・設定の「変更内容」が同じここへ着地する。見本 2b）。
+  /// 変更内容シートを開く（トースト・設定の「変更内容」が同じここへ着地する）。
   func showUpdateChanges() {
     guard updateState.ready != nil else { return }
     updateState.dismissToast()  // シートが開けばトーストの役目は済み

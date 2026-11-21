@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Attention の 2 段行（パレットとメニューバードロップダウンで共用・デザイン第10/11シーン準拠）。
+/// Attention の 2 段行（パレットとメニューバードロップダウンで共用）。
 /// 上段: 状態グリフ 12 / WS 名 12 / `›` 10 / タブタイトル 11（省略）/ 右端 経過時間 10。
 /// 下段（message 非 nil のみ）: 11px・行送り 1.55・3 行 clamp・waiting は statusText / done は muted。
 /// 経過時間は 1 秒周期の TimelineView で自走する（表示中のみ・タイマー配線不要）。
@@ -52,7 +52,7 @@ struct AttentionRowView: View {
       }
     }
     // 器（SelectableRow・ドロップダウン行）の縦 padding は 5。attention の 2 段行は
-    // デザイン第10/11シーンで 7×10 なので、差分 2 を行内で足して実効 7 にする。
+    // 縦 7・横 10 の余白を取るため、差分 2 を行内で足して実効 7 にする。
     .padding(.vertical, Theme.Space.hair)
   }
 }

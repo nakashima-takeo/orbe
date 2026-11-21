@@ -3,10 +3,10 @@
   import SwiftUI
 
   /// PR のパネルの gallery / flow の fixture。渡された置き場に本物の git の場を作り、GitHub の代わりに差し替えの出どころが
-  /// 見本（orbe_design の `editor/data.ts` の `pr`・`prCommits`・`prFiles`・`initialViewed`・`thread`）と同じ中身を答える——main
-  /// に 1 件、main から切ったブランチ `feature/agent-hooks` に 3 件（StateHooks.swift の変更・EmitBuffer.swift の追加・
-  /// HookRegistry.swift と README.md の変更）。PR の先頭とコミットの列は手元の HEAD のもの（`Scene.push` で進む）なので、帯は
-  /// 「この worktree でチェックアウト済み」になる。
+  /// PR #131 のレビュー用 fixture（pr・commits・files・確認済みファイル・スレッド）を答える——main に 1 件、main から切った
+  /// ブランチ `feature/agent-hooks` に 3 件（StateHooks.swift の変更・EmitBuffer.swift の追加・HookRegistry.swift と
+  /// README.md の変更）。PR の先頭とコミットの列は手元の HEAD のもの（`Scene.push` で進む）なので、帯は「この worktree で
+  /// チェックアウト済み」になる。
   /// レビューのやりとりは `PrFixtureReview` が答える。出どころは面より先に根へ結ぶ（worktree の今の PR は根ごとに 1 つで、最初に
   /// 作った者の出どころを使う）。面は PR のパネルを出して窓に載せる。
   enum PrFixtures {
@@ -14,7 +14,7 @@
 
     /// 出どころの答え方。
     enum Answer {
-      /// open の PR #131（見本の中身）。
+      /// open の PR #131（標準の fixture）。
       case pullRequest
       /// open の PR #131 だが、PR の先頭のコミットが手元に無い（数えない違いの帯）。
       case notFetched
@@ -173,12 +173,12 @@
       return revision("HEAD", in: dir)
     }
 
-    /// 差し替えの GitHub の確認済みのパス（見本の `initialViewed` から始まる）。
+    /// 差し替えの GitHub の確認済みのパス（EmitBuffer.swift と HookRegistry.swift が確認済みから始まる）。
     private final class Viewed {
       var paths: Set<String> = ["src/agent/EmitBuffer.swift", "src/agent/HookRegistry.swift"]
     }
 
-    /// 見本の PR #131 の中身。`emoji` なら、コミットの題と README の名前に絵文字を混ぜる。
+    /// fixture の PR #131 の中身。`emoji` なら、コミットの題と README の名前に絵文字を混ぜる。
     private static func content(
       base: String, head: String, commits: [GitHubPullRequestContent.Commit], viewed: Set<String>,
       emoji: Bool

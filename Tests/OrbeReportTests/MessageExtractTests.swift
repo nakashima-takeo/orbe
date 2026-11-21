@@ -11,6 +11,8 @@ import XCTest
 /// - claude PreToolUse(AskUserQuestion): `{"tool_input": {"questions": [{"question": ..., ...}]}}`
 /// - claude PreToolUse(ExitPlanMode): `{"tool_input": {"plan": "..."}}`（questions を持たない）
 /// - claude / codex Stop: `{"last_assistant_message": "...", "stop_hook_active": false, ...}`
+/// - agy PreToolUse(ask_question): `{"toolCall": {"name": "ask_question", "args": {"questions": [{"question": ...}]}}}`
+///   （agy 1.5.13 実機）
 final class MessageExtractTests: XCTestCase {
   // MARK: waiting
 
@@ -38,6 +40,26 @@ final class MessageExtractTests: XCTestCase {
       ],
     ]
     XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.text, "AとBどちらにしますか？")
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.source, "tool")
+  }
+
+  /// agy の質問ツールの待ちは、`toolCall.args` の先頭の質問文を使う（出所はツール）。
+  func testWaitingUsesFirstQuestionOfAgyToolCall() {
+    let obj: [String: Any] = [
+      "hookEventName": "PreToolUse",
+      "conversationId": "c-1",
+      "toolCall": [
+        "name": "ask_question",
+        "id": "t-1",
+        "args": [
+          "questions": [
+            ["question": "どのブランチに入れますか？", "options": ["main"], "is_multi_select": false],
+            ["question": "2 問目は使わない"],
+          ]
+        ],
+      ],
+    ]
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.text, "どのブランチに入れますか？")
     XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.source, "tool")
   }
 

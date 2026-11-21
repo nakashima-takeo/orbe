@@ -100,7 +100,7 @@ final class AgentCatalogTests: OrbeTestCase {
     XCTAssertEqual(
       AgentCatalog.resumeCommand(
         AgentCLI(command: "agy", path: "/bin/agy"), sessionId: "s-1", firstInput: "done"),
-      "/bin/agy --conversation s-1 -i done")
+      "/bin/agy --dangerously-skip-permissions --conversation s-1 -i done")
     XCTAssertEqual(
       AgentCatalog.startCommand(
         AgentCLI(command: "claude", path: "/bin/claude"), firstInput: "- 箇条書き"),

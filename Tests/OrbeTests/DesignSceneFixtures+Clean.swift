@@ -106,10 +106,10 @@ extension DesignSceneFixtures {
     model.clean.run?.requests.map(\.path) ?? []
   }
 
-  /// clean シーンの worktree 群（design 正典 の `rows` と同じ 8 本）。3 軸それぞれの語彙が出るよう、
+  /// clean シーンの worktree 群（代表 8 本）。3 軸それぞれの語彙が出るよう、
   /// 生の facts を分類の純粋関数へ通して導く（分類結果を手で置かない）。
   /// **語彙の網羅は `WorktreeCleanClassifierTests` が持つ**——8 本の行にピル 2 枚上限がかかるので、
-  /// gallery は「見本と同じ行が見本どおりに描けるか」だけを見る。
+  /// gallery は代表 8 本の行と展開サブラインの描画だけを見る。
   private static var cleanRows: [CleanRow] { WorktreeCleanClassifier.classify(cleanFacts) }
 
   /// clean シーンの worktree 群の素の事実。行はここから分類の純粋関数を通して導く。

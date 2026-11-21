@@ -72,7 +72,7 @@ final class EditorStyleTests: OrbeTestCase {
     XCTAssertEqual(darkValues.count, SyntaxRole.allCases.count, "役割ごとに違う色（取り違えの検知）")
   }
 
-  /// 素の文字・キャレット・行番号も外観で解き直され、行番号だけは沈めた不透明度（見本の tint .55）を持つ。
+  /// 素の文字・キャレット・行番号も外観で解き直され、行番号だけは沈めた不透明度（α 0.55）を持つ。
   func testTextCaretAndLineNumberColorsFollowTheAppearance() throws {
     let style = EditorStyle.make()
     for color in [style.textColor, style.caretColor, style.gutterTextColor] {

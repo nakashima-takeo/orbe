@@ -4,7 +4,7 @@ import SwiftUI
 struct EditorEmptyView: View {
   @Environment(\.localization) private var l10n
 
-  // 見本（EmptyView.tsx）の寸法。◐ の下 18・一文の下 22・ラベル列の幅 170。
+  // ◐ の下 18・一文の下 22・ラベル列の幅 170。
   private let glyphSize: CGFloat = 44
   private let leadTop: CGFloat = 18
   private let hintsTop: CGFloat = 22
@@ -42,7 +42,7 @@ private struct EditorKbd: View {
   let key: String
   @Environment(\.colorScheme) private var scheme
 
-  // 見本の dark 値。light は EditorInk が換算する。
+  // dark の不透明度。light は EditorInk が換算する。
   private static let fillAlpha: Double = 0.05
   private static let borderAlpha: Double = 0.14
 

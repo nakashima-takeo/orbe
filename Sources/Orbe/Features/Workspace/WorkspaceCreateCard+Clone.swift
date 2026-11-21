@@ -6,7 +6,7 @@ import SwiftUI
 /// ため、focus（@FocusState private）を握る `WorkspaceCreateCard` 本体（別ファイル）から拡張として分離できる。
 extension WorkspaceCreateCard {
   /// ヘッダ直後のソース切替（既存フォルダ / git clone）。選択中は accent 系・非選択は muted。
-  /// 見本 `SrcTab` はフルカプセル（radius 999）・ピル間 gap 6。
+  /// ピルはフルカプセル・ピル間 gap 6。
   var sourceTabs: some View {
     HStack(spacing: Theme.Space.note) {
       sourceTab(.folder, l10n.string(.wsSourceFolder))
@@ -93,8 +93,8 @@ struct WorkspaceCreateCloneForm: View {
       }
     }
     // 代入は次 runloop tick へ回す——clone へ切替＝この subview が新規 mount された直後で field editor が
-    // 未準備／SrcTab クリックが focus をさらった状態。同期代入だと URL 欄に focus が乗らず esc も死ぬため、
-    // 次 tick で確実に当てる（表示中は常に入力欄 focus の不変）。
+    // 未準備／ソース切替タブのクリックが focus をさらった状態。同期代入だと URL 欄に focus が乗らず
+    // esc も死ぬため、次 tick で確実に当てる（表示中は常に入力欄 focus の不変）。
     .onChange(of: model.focusToken, initial: true) {
       DispatchQueue.main.async { place(.url) }
     }
@@ -174,7 +174,7 @@ struct WorkspaceCreateCloneForm: View {
     }
   }
 
-  /// 見本どおり: 箱（`FieldChrome`）は clone 先の親だけを囲い、末尾 `/{名前}` は箱の外・右隣に並べる
+  /// 箱（`FieldChrome`）は clone 先の親だけを囲い、末尾 `/{名前}` は箱の外・右隣に並べる
   /// （gap 8・`/`＝idle・名前＝done で編集可）。箱と `/名前` は縦中央で揃える。
   private var destField: some View {
     HStack(spacing: Theme.Space.step) {
@@ -267,7 +267,7 @@ struct WorkspaceNameLinkStatus: View {
         .font(Font.theme.chrome)
         .foregroundStyle(Color.theme.stateDone)
     } else {
-      // 解除中は下線付きの単一ボタン（押下で再リンク）。見本どおり全体が 1 つのアクション。
+      // 解除中は下線付きの単一ボタン（押下で再リンク）。ラベル全体が 1 つのアクション。
       Button {
         model.relink()
       } label: {

@@ -108,7 +108,7 @@ enum HelpCatalog {
     }
   }
 
-  /// キーボード物理 6 段配列（デザイン見本の KB をそのまま移植）。
+  /// キーボード物理 6 段配列（ANSI 配列）。
   static let keyboard: [[Key]] = [
     [
       Key("esc", 1.5, "esc"), Key("f1", 1.125, "F1"), Key("f2", 1.125, "F2"),
@@ -145,7 +145,7 @@ enum HelpCatalog {
     "shift", "rshift", "caps", "cmd", "rcmd", "opt", "ropt", "ctrl", "fn",
   ]
 
-  /// 下寄せラベルで描くキー id（デザイン見本 MOD_RE の集合表現）。
+  /// 下寄せラベルで描くキー id（修飾キーと tab / return / delete）。
   static let bottomLabelKeys = modifierKeys.union(["tab", "return", "delete"])
 
   /// combo id → 表示記号（キー絞り込みチップ用）。無ければ id の大文字。

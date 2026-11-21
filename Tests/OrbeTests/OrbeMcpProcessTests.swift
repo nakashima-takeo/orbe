@@ -60,20 +60,8 @@ final class OrbeMcpProcessTests: OrbeTestCase {
   func testAgentInstructionsNameOnlyToolsTheBridgeLists() throws {
     let names = Set(ControlProcess.mcpToolsList().compactMap { $0["name"] as? String })
     let pattern = try NSRegularExpression(pattern: "`([a-z]+(?:_[a-z]+)+|spawn)`")
-    let skill = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-      .appendingPathComponent("app/agent-plugin/plugins/orbe-agent/skills/automation")
-    var texts = [
-      (
-        "自動化のスキル",
-        try String(contentsOf: skill.appendingPathComponent("SKILL.md"), encoding: .utf8)
-      ),
-      (
-        "自動化のスキルの型",
-        try String(
-          contentsOf: skill.appendingPathComponent("references/patterns.md"), encoding: .utf8)
-      ),
-    ]
+    var texts = try AutomationReferenceTests.bundledSkillMarkdowns()
+    XCTAssertFalse(texts.isEmpty, "前提: 同梱スキルの Markdown がある")
     for language in Language.allCases {
       texts += [
         ("\(language) の Home の rules", HomeTemplate.rules(language, home: "/home")),

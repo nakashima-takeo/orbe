@@ -10,7 +10,7 @@ enum PrCommentStyle {
     selectionColor: Theme.Color.editorPrFieldSelection,
     inactiveSelectionColor: Theme.Color.editorPrFieldSelectionInactive)
 
-  /// 行の右端のコメント追加の印（見本 18×18・角丸 3・中の ＋ 11、線 1.4）。通常は tertiary の ＋ を不透明度 .6、ポインタが印の
+  /// 行の右端のコメント追加の印（18×18・角丸 3・中の ＋ 11、線 1.4）。通常は tertiary の ＋ を不透明度 .6、ポインタが印の
   /// 上にあれば tint(accent, .16) の地に accentBright の ＋。
   nonisolated(unsafe) static let trailingMark: TrailingMark = {
     let size = Theme.Layout.editorPrMark

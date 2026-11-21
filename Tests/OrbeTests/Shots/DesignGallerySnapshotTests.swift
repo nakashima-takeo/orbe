@@ -89,7 +89,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
 
   /// StatusRow（最上段 chrome）の状態。gallery は borderless 窓なので信号機は無く、
   /// タブ・色・shrink・overflow・ストリップを検証する（信号機整列は実窓ハーネスで詰める）。
-  /// 実アプリ同様に、design 正典 ステージ同寸（640×520）の BackgroundGlow の上へ重ねて撮る
+  /// 実アプリ同様に、ステージ（640×520）の BackgroundGlow の上へ重ねて撮る
   /// （TopBar は透明背景で、ambient の減衰はステージ全体の寸法に依存するため帯だけで描かない）。
   private func chromeBand(_ model: StatusRowModel, size: NSSize, windowIsMain: Bool = true)
     -> some View
@@ -112,14 +112,14 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       name: "\(name)_inactive.png", dir: dir)
   }
 
-  /// design 正典 のステージ同寸（chrome 帯 28+28 ＋ 空のターミナル領域）。
+  /// StatusRow の撮影ステージ寸法（chrome 帯 28+28 ＋ 空のターミナル領域）。
   private var statusRowStageSize: NSSize { NSSize(width: 640, height: 520) }
 
   /// 連を持たない（全タブ単独）段——通常と overflow。
   private func renderStatusRowSnapshots(dir: URL) throws {
     let size = statusRowStageSize
 
-    // 通常: design 正典 Terminal シーンの fixture（11 タブ・ストリップ 3/1/5/2・cwd なし）。
+    // 通常: Terminal シーンの代表 fixture（11 タブ・ストリップ 3/1/5/2・cwd なし）。
     let normal = StatusRowModel()
     normal.workspace = "orbe-core"
     normal.strip = TabStrip(
@@ -153,8 +153,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     let size = statusRowStageSize
     let glyphCycle: [AgentStateIcon.Kind?] = [.working, .waiting, .done, nil]
 
-    // grouped: 見本 workspaceSnapshot の storefront——同 worktree の連（4・2・2）＋管理外の単独 1。
-    // 連の中の選択セル・識別バー・区切り線・1 枚は現行の絵。cwd あり。
+    // grouped: storefront の代表構成——同 worktree の連（4・2・2）＋管理外の単独 1。
+    // 連の中の選択セル・識別バー・区切り線・単独セルを確認する。cwd あり。
     let grouped = StatusRowModel()
     grouped.workspace = "storefront"
     grouped.strip = TabStrip(
@@ -255,9 +255,9 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try writeChromeBandPair(editor, size: size, name: "statusrow_pull_request", dir: dir)
   }
 
-  /// 補完のサイドカードと design 正典の 2 枚組。cap 超過のスクロール追従は flow の `completion_scroll` が撮る。
+  /// 補完のサイドカード単体と、候補パネル＋サイドカードの 2 枚組。cap 超過のスクロール追従は flow の `completion_scroll` が撮る。
   private func renderCompletionSnapshot(dir: URL) throws {
-    // side card は CompletionList の外（AppKit 配置）なので単体で 1 枚撮る（ピクセル突合用）。
+    // side card は CompletionList の外（AppKit 配置）なので単体で 1 枚撮る。
     try writePNG(
       CompletionSideCard(
         name: "feature/tab-rename", kind: .argument,
@@ -268,7 +268,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       .background(Color.theme.bgBase),
       size: NSSize(width: 260, height: 200), name: "completion_sidecard.png", dir: dir)
 
-    // design 正典 Autocomplete 同データ（候補パネル＋サイドカードの2枚組・突合用）。
+    // Autocomplete シーン（候補パネル＋サイドカードの 2 枚組）。
     try writePNG(
       HStack(alignment: .top, spacing: Theme.Space.note) {
         CompletionList(model: DesignSceneFixtures.completionModel())
@@ -302,7 +302,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       paletteSnapshot(wsModel, canvas: cardSize), size: cardSize, name: "palette_workspace.png",
       dir: dir)
 
-    // design 正典 WorkspaceSwitcher 同データ（ステージ 640×520・overlay ごと・突合用）。
+    // WorkspaceSwitcher シーン（ステージ 640×520・overlay ごと）。
     let stage = NSSize(width: 640, height: 520)
     try writePNG(
       paletteOverlaySnapshot(DesignSceneFixtures.workspaceModel(), canvas: stage),

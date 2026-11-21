@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// メニューバーのドロップダウン（④）。borderless の `.nonactivatingPanel` に SwiftUI を全面で載せ、
-/// デザイン第11シーン（幅 420・radius 14・行はパレットと同一仕様）をそのまま再現する。
+/// メニューバーのドロップダウン（④）。borderless の `.nonactivatingPanel` に SwiftUI を全面で載せる
+/// （幅 420・radius 14・行は Attention パレットと同一仕様）。
 /// アプリを前面化せずに開け、パネルが key になるので Esc / ⌘O を受けられる。
 /// 閉じる: 外クリック（global mouse monitor・権限不要）・resignKey・Esc。
 final class MenuBarDropdown {
@@ -102,7 +102,7 @@ private final class DropdownPanel: NSPanel {
   }
 }
 
-/// ドロップダウンの中身（幅 420・radius 14・地 rgba(panel, 0.94)・枠 border 8%）。
+/// ドロップダウンの中身（幅 420・radius 14・地 α 0.94・枠 borderInk 8%）。
 /// 行リスト＝waiting/done のみ（`AttentionRowView` 共用・ホバーで 1 行だけ着色・クリックで移動）、
 /// 区切り線 → working 減光集約 1 行（クリック不可）、フッター、権限未付与時のみ控えめなヒント 1 行。
 /// internal なのはギャラリー（DesignGallerySnapshotTests+Attention）が単体で描くため。
@@ -121,7 +121,7 @@ struct MenuBarDropdownView: View {
   @State private var hoveredTabId: Int?
 
   /// 地色。Theme.Glass.surface と同基色（dark 0x1e1a26 / light 白）のドロップダウン専用濃度 0.94
-  /// （デザイン rgba(panel, 0.94)。既存 GlassLevel の 0.72/0.85/0.90 とは別段のため局所で持つ）。
+  /// （既存 GlassLevel の 0.72/0.85/0.90 とは別段のため局所で持つ）。
   private var panelFill: Color {
     Color(
       nsColor: NSColor(name: nil) { appearance in

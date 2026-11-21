@@ -61,7 +61,7 @@ extension EditorPaneView {
     }
   }
 
-  /// 境の線の色を今の外観で塗る（見本 hairline(.07)）。
+  /// 境の線の色を今の外観で塗る（hairline .07）。
   func paintDiffDivider() {
     effectiveAppearance.performAsCurrentDrawingAppearance {
       diffDivider.layer?.backgroundColor =

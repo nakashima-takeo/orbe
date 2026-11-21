@@ -88,7 +88,7 @@ struct PaletteRow: View {
             Color.theme.createDashBorder,
             style: StrokeStyle(lineWidth: Theme.Stroke.hairline, dash: [4, 3]))
       )
-      .padding(.top, Theme.Space.note)  // 見本: 直上の行から 6pt 空けて作成導線を分離（marginTop 6）
+      .padding(.top, Theme.Space.note)  // 直上の行から 6pt 空けて作成導線を分離
     }
   }
 

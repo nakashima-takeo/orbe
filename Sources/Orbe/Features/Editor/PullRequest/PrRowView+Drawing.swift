@@ -1,6 +1,6 @@
 import AppKit
 
-/// PR のパネルの列の行の描き方（寸法と色は見本 PrReviewPanel の値）。
+/// PR のパネルの列の行の描き方。
 extension PrRowView {
   /// 区分の見出し 22（padding 0 12 0 4）: シェブロン 16・題 11 bold・右端にコミットの件数バッジか、「N/M 確認済み」と
   /// ツリー / リストの印。
