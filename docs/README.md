@@ -12,8 +12,8 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 | 機能ごとの現状仕様 | [spec/](spec/README.md)（下に目次） |
 | ビルド手順 | [guides/build.md](guides/build.md) |
 | 外観の思想・トークン | [design/design-system.md](design/design-system.md)（機械可読ミラー [design/tokens.json](design/tokens.json)） |
-| テストの層構成と方針 | [testing/test-architecture.md](testing/test-architecture.md) |
-| テスト実装の進捗 | [testing/roadmap.md](testing/roadmap.md) |
+| テストの種類と方針 | [testing/test-architecture.md](testing/test-architecture.md) |
+| テスト基盤の導入メモ | [testing/test-setup.md](testing/test-setup.md) |
 
 アイデア・要望・不具合・積んである作業は GitHub Issue が持つ。「なぜ今こうなっているか」の記録は当該変更の PR 本文が持つ。
 

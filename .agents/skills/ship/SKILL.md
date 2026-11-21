@@ -76,7 +76,7 @@ NG の差し戻しは、期待・設計が変わるなら計画へ、承認済�
 
 ### テスト・機械検証 — 既存の基盤で結果を確かめる
 
-`auto:implement-test` には、auto が定める差分・計画書（テスト自体が題材なら要求）に加え、`docs/testing/test-architecture.md` と `docs/testing/roadmap.md` を Read で読む指示を渡す。前者は層と横断方針、後者は実装済みの範囲を持つ。該当スライスの進捗が変われば作業者にロードマップも更新させる。
+`auto:implement-test` には、auto が定める差分・計画書（テスト自体が題材なら要求）に加え、`docs/testing/test-architecture.md` を Read で読む指示を渡す。同文書はテストのあるべき姿（種類ごとの対象と依存の扱い、テスト容易性の規則、運用の規則）を定める。現行のテスト基盤に手段がまだ無い箇所は、下の箇条書きと既存のハーネスに合わせさせる。
 
 - テストは XCTest を使い、`Tests/OrbeTests` では `OrbeTestCase` の隔離ハーネスを通す。`swift test --parallel` は使わない。
 - ビルド・lint・format は `docs/guides/build.md`、CI の実行内容は `.github/workflows/ci.yml` を Read で確かめる。`<wt>` の依存を用意してから `swift build --build-tests` → `swift test --skip-build` を実行する。追加するテストは今回の振る舞いと既存の網から判断し、検分では仕様との対応と書かなかった理由を見る。
