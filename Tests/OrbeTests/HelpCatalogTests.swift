@@ -90,11 +90,11 @@ final class HelpCatalogTests: OrbeTestCase {
     XCTAssertTrue(HelpCatalog.usedKeys.contains("cmd"))
     XCTAssertTrue(HelpCatalog.usedKeys.contains("shift"))
     XCTAssertTrue(HelpCatalog.usedKeys.isSubset(of: keyboardIDs), "usedKeys に KB 外の id がある")
-    // 修飾のみの combo は ⌘⌘（⌘ の素タップ×2）だけ——修飾は単独では実行キーになりえず、
-    // 例外はこのジェスチャに限る（増えたら実バインドの棚卸し漏れを疑う）。
+    // 修飾のみの combo は ⌥（⌥ だけの長押し）と ⌘⌘（⌘ の素タップ×2）だけ——修飾は単独では実行キーになりえず、
+    // 例外はこの 2 つのジェスチャに限る（増えたら実バインドの棚卸し漏れを疑う）。
     let modifierOnly = HelpCatalog.all.flatMap { $0.rows }
       .filter { Set($0.combo).isSubset(of: HelpCatalog.modifierKeys) }
       .map(\.key)
-    XCTAssertEqual(modifierOnly, ["⌘⌘"], "修飾キーのみの combo は ⌘⌘ 以外に存在しない")
+    XCTAssertEqual(modifierOnly, ["⌥", "⌘⌘"], "修飾キーのみの combo は ⌥ と ⌘⌘ 以外に存在しない")
   }
 }

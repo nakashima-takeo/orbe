@@ -40,7 +40,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     XCTAssertNil(tab.group.editor.preview, "作ったファイルは普通のタブ")
     XCTAssertEqual(pane.tree.selected, "fresh.txt")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "焦点はテキスト面へ")
-    XCTAssertEqual(tab.group.faces.focus, .editor)
   }
 
   func testEscapeCancelsTheInputAndReturnsTheFocusToThePane() throws {

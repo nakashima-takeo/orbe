@@ -112,8 +112,7 @@ extension WindowController {
   func showAutomation(_ id: Int) {
     guard !model.overlay.isModal, let home = store.homeIndex else { return }
     if model.overlay != .none { dismissPalette() }
-    if activeWorkspace != home { switchWorkspace(to: home) }
-    select(.board)
+    select(.board, inWorkspaceAt: home)
     board.open(automation: id)
   }
 }

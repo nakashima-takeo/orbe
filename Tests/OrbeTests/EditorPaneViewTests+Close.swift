@@ -18,8 +18,6 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
-    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
-    tab.group.view.layoutSubtreeIfNeeded()
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
     tab.group.view.addSubview(outsider)
     XCTAssertTrue(window.makeFirstResponder(outsider))
@@ -32,7 +30,6 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     XCTAssertTrue(pane.document === a, "焦点の文書を閉じれば隣の文書が見える")
     let responder = try XCTUnwrap(window.firstResponder as? NSView)
     XCTAssertFalse(responder.isDescendant(of: pane), "面の外にあった焦点はそのまま")
-    XCTAssertEqual(tab.group.faces.focus, .terminal, "面の記憶も動かない")
   }
 
   func testReleasingAGroupFreesItsPaneWhileAnotherGroupKeepsTheRootService() throws {

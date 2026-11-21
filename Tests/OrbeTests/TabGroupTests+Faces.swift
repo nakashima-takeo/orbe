@@ -3,8 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 連が持つ面の配置——エディター pane から届くキーの分類、面からの焦点通知、永続状態との往復。
-/// 窓に載せず、タブを直接組む。
+/// 連の器の面へ届くキーの分類。窓は持たず、タブを直接組む。
 extension TabGroupTests {
   /// pane を窓に載せて first responder にする（chrome キーの gate は first responder が pane の配下であること）。
   private func hosted(_ tab: TerminalTab) -> NSWindow {
@@ -12,7 +11,7 @@ extension TabGroupTests {
       contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = tab.group.view
-    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    tab.group.view.show(.editor, animated: false)
     window.makeFirstResponder(tab.group.view.editor)
     return window
   }
@@ -82,36 +81,5 @@ extension TabGroupTests {
     XCTAssertFalse(tab.group.view.editor.performKeyEquivalent(with: .key("e")))
     XCTAssertEqual(received, [])
     window.orderOut(nil)
-  }
-
-  /// 面が first responder になった通知は分割中だけ焦点を動かし、配置の変更として上位へ届く。
-  /// 全面の配置では隠れた面からの通知が焦点を奪えない（正規形）。
-  func testPaneFocusNotificationMovesFocusOnlyWhileSplit() {
-    let group = TabGroup(key: "/tmp")
-    var changes = 0
-    group.onFacesChange = { changes += 1 }
-
-    group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
-    group.paneDidFocus(.editor)
-    XCTAssertEqual(group.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割中は通知した面が焦点")
-    XCTAssertEqual(changes, 2)
-
-    group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
-    group.paneDidFocus(.terminal)
-    XCTAssertEqual(group.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れた端末は焦点を取れない")
-    XCTAssertEqual(changes, 3, "変わらなければ通知しない")
-  }
-
-  /// 永続状態は配置を運び、読んだ配置は正規形に直して連に置く。
-  func testGroupStateCarriesTheFacesAndRestoreNormalizesThem() {
-    let split = FaceLayout(editorRatio: 0.3, focus: .editor)
-    let group = TabGroup(key: "/tmp")
-    group.setFaces(split, animated: false)
-    XCTAssertEqual(group.groupState(), GroupState(root: "/tmp", faces: split))
-
-    let restored = TabGroup(
-      key: "/tmp",
-      state: GroupState(root: "/tmp", faces: FaceLayout(editorRatio: 1.5, focus: .terminal)))
-    XCTAssertEqual(restored.faces, FaceLayout(editorRatio: 1, focus: .editor), "範囲外は正規形へ")
   }
 }

@@ -5,8 +5,7 @@ import XCTest
 @testable import Orbe
 
 /// エディター面の gallery。
-/// 空状態（dark / light）・コードビュー（dark / light。一時 git リポジトリの中身で 3 種の印・丸点）と、
-/// タブ行右端の位置ドット 3 態（端末のみ・分割で端末焦点・エディターのみ）。
+/// 空状態（dark / light）・コードビュー（dark / light。一時 git リポジトリの中身で 3 種の印・丸点）。
 extension DesignGallerySnapshotTests {
   func renderEditorSnapshots(dir: URL) throws {
     let stage = NSSize(width: 640, height: 480)
@@ -19,28 +18,5 @@ extension DesignGallerySnapshotTests {
     // サイドバー 240 ＋ レール 36 ＋ 行番号の列 69 の右、俯瞰（ミニマップとスクロールバー）の左に本文。最長行は右端で切れる。
     try writePNG(
       code.view, size: NSSize(width: 1000, height: 480), name: "editor_code.png", dir: dir)
-
-    let rowStage = NSSize(width: 640, height: 520)
-    let cases: [(String, FaceGeometry.FaceDots)] = [
-      ("statusrow_facedots_terminal", .init(editor: .off, terminal: .focus)),
-      ("statusrow_facedots_split", .init(editor: .on, terminal: .focus)),
-      ("statusrow_facedots_editor", .init(editor: .focus, terminal: .off)),
-    ]
-    for (name, dots) in cases {
-      let model = StatusRowModel()
-      model.update(
-        StatusRowModel.Snapshot(
-          workspace: "orbe",
-          strip: TabStrip(titles: ["src/renderer", "docs"], glyphs: [.working, nil]),
-          selection: .tab(0), boardLabel: nil, location: .cwd("~/dev/orbe"), faceDots: dots,
-          rollup: [("working", 1)]))
-      try writePNG(
-        ZStack(alignment: .top) {
-          BackgroundGlow()
-          StatusRowView(model: model).frame(width: rowStage.width, height: Chrome.barHeight)
-        }
-        .frame(width: rowStage.width, height: rowStage.height, alignment: .top),
-        size: rowStage, name: "\(name).png", dir: dir)
-    }
   }
 }

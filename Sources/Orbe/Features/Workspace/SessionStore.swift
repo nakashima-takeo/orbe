@@ -166,6 +166,11 @@ final class SessionStore {
     }
   }
 
+  /// `tab` を持つ workspace の index。どの workspace にも無ければ nil。
+  func workspaceIndex(of tab: TerminalTab) -> Int? {
+    workspaces.firstIndex { ws in ws.tabs.contains { $0 === tab } }
+  }
+
   /// 今 Orbe に居る同一性（全 workspace・live / 休眠を問わない）。`list_tabs` の `agentSessionId` と
   /// 同じ読み口なので、CLI 側の「戻っていない」の導出と一致する。
   var presentSessionIds: Set<String> {
@@ -204,13 +209,17 @@ final class SessionStore {
     return true
   }
 
-  /// アクティブ workspace の選択のドメイン記録。不変条件に反する選択は拒み（false）、受けたら選択を記録する。
-  /// タブかボードを前面に出すのは workspace の利用なので MRU を進める。空は何も前面に出さないので進めない（空の
-  /// workspace への切替は、切替そのものを利用として呼び出し側が記録する）。
+  /// `index` の workspace をアクティブにし、その選択を記録する。範囲外の index と、不変条件に反する選択は拒み（false）、
+  /// アクティブな workspace も替えない。タブかボードを前面に出すのは workspace の利用なので MRU を進める。空は何も前面に
+  /// 出さないので進めない（空の workspace への切替は、切替そのものを利用として呼び出し側が記録する）。
   /// ビュー除去/mount/focus/chrome は呼び出し側（WindowController.select）が担う。
-  @discardableResult func recordSelection(_ selection: Workspace.Selection) -> Bool {
-    let ws = current
+  @discardableResult func recordSelection(
+    _ selection: Workspace.Selection, inWorkspaceAt index: Int
+  ) -> Bool {
+    guard workspaces.indices.contains(index) else { return false }
+    let ws = workspaces[index]
     guard isValid(selection, in: ws) else { return false }
+    activeWorkspace = index
     if selection != .empty { recordWorkspaceUse(ws) }
     ws.selection = selection
     return true

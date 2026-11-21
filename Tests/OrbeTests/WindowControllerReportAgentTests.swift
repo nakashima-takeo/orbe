@@ -101,13 +101,15 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
 
   /// AppKit のイベントを実際に取り出して配送し、`done` が真になるまで回す。活性化（`activate` → key 化）は
   /// WindowServer から届くイベントを NSApp が捌いて初めて成立するため、素の `RunLoop.run` では key にならない。
-  /// `seconds` は上限。速い機械では待たず、詰まった共有ランナーでも取りこぼさない。
+  /// `seconds` は上限。速い機械では待たず、詰まった共有ランナーでも取りこぼさない。前面にした間に本物のキーボードから届いた
+  /// イベントは配送しない——利用者の打鍵をテストの判定（⌥ の長押しなど）へ通さないため。
   private func pumpApp(upTo seconds: TimeInterval, until done: () -> Bool) {
     let end = Date().addingTimeInterval(seconds)
+    let mask = NSEvent.EventTypeMask.any.subtracting([.keyDown, .keyUp, .flagsChanged])
     while Date() < end, !done() {
       guard
         let event = NSApp.nextEvent(
-          matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
+          matching: mask, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
       else { continue }
       NSApp.sendEvent(event)
     }

@@ -4,8 +4,8 @@ import XCTest
 
 @testable import Orbe
 
-/// `open_diff` の実体——diff が普通のタブで開き（エージェントが見せた diff を人の次のクリックが入れ替えない）、エディター面が
-/// 見え（分割中は配置を保つ）、そのタブが焦点になる。パスは `open_file` と同じ解き方で根と相対パスになり、git 管理外は
+/// `open_diff` の実体——diff が普通のタブで開き（エージェントが見せた diff を人の次のクリックが入れ替えない）、そのタブの
+/// エディターが開き、焦点になる。パスは `open_file` と同じ解き方で根と相対パスになり、git 管理外は
 /// -32000、未知のタブは -32004。
 ///
 /// 重要: 実 NSWindow に接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -21,7 +21,7 @@ extension WindowControllerControlTests {
 
     let result = wc.controlOpenDiff(tabId: tabId, path: "a.txt", kind: .workingTree)
     guard case .success = result else { return XCTFail("\(result)") }
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
+    XCTAssertTrue(tab.group.view.isEditorOpen, "エディターが開く")
     let active = MainActor.assumeIsolated { tab.group.editor.activeID }
     XCTAssertEqual(
       active, .diff(EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree)),
@@ -31,14 +31,11 @@ extension WindowControllerControlTests {
       until: { MainActor.assumeIsolated { tab.group.view.editor.diff?.content == .ready } },
       "中身が届く")
     _ = wc.controlOpenDiff(tabId: tabId, path: repo.url("a.txt").path, kind: .workingTree)
+    let pane = tab.group.view.editor
     XCTAssertTrue(
-      wc.window.firstResponder === tab.focusTarget && tab.focusTarget !== tab.group.view.editor,
+      wc.window.firstResponder === pane.focusTarget && pane.focusTarget !== pane,
       "開き直すと diff の面へフォーカス")
     XCTAssertEqual(MainActor.assumeIsolated { tab.group.editor.tabs.count }, 1, "同じ diff はタブを増やさない")
-
-    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
-    _ = wc.controlOpenDiff(tabId: tabId, path: "a.txt", kind: .workingTree)
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割中は焦点だけ")
   }
 
   /// 根の下の階層にあるファイルは、親ごと消えていても、`/private` を含む綴りでも、根と根からの相対パスの diff になる。

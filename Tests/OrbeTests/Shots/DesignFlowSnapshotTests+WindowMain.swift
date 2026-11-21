@@ -17,7 +17,6 @@ extension DesignFlowSnapshotTests {
       colorIndices: ["orbe", "notes"].map { WorktreeColor.index(forKey: $0) })
     status.selection = .tab(0)
     status.location = [.dim("~/dev/orbe/"), .text("Sources/Orbe/App/Layout/AppShell.swift")]
-    status.faceDots = .init(editor: .focus, terminal: .on)
     status.rollup = [("working", 1), ("waiting", 1), ("done", 1)]
     let model = AppShellModel(statusModel: status, content: NSView())
     try flow(

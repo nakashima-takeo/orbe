@@ -66,14 +66,14 @@ extension WindowController {
   /// `place` が足したばかりのタブの surface を、選ばずに起こす。
   /// 背景 workspace なら前面化せずに起こし（`materializeOffscreen`）、前面の workspace なら隠れタブとして mount する。
   /// 前面の workspace の選択がそのタブなら（空表示だった workspace に足したタブ）、隠すと「選んでいるタブが見えない」状態に
-  /// なるので、選んで見せる。ボードを持つ workspace は空にならないので、そのタブはボードの裏で起きる。
+  /// なるので、描いて見せる。ボードを持つ workspace は空にならないので、そのタブはボードの裏で起きる。
   private func wakeUnselected(_ tab: TerminalTab) {
     guard
       let index = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tab } })
     else { return }
     let ws = workspaces[index]
     guard index == activeWorkspace else { return materializeOffscreen(tab, in: ws) }
-    if ws.selectedTab === tab { return select(ws.selection) }
+    if ws.selectedTab === tab { return renderSelection() }
     mountTab(tab, in: ws)
     refreshChrome()
   }
