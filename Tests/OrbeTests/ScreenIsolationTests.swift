@@ -4,7 +4,9 @@ import XCTest
 /// 画面と前面の隔離（`ScreenIsolation`）が、破ったテストを実際に落とすことを固定する。
 ///
 /// ここが崩れると、窓を画面に並べるテストや本物のシートを出すテストが緑のまま通り、`swift test` のたびに利用者の画面へ
-/// 窓やシートが現れる。違反は、並べていないのに並んでいると答える窓と、手で出した通知で作る（画面には何も出ない）。
+/// 窓やシートが現れる。アクティベーションポリシーを変えたテストの後は、前面に出られるポリシーのまま残りのテストが走る。
+/// 窓とシートの違反は、並べていないのに並んでいると答える窓と、手で出した通知で作る（画面には何も出ない）。ポリシーは
+/// 本物を変えるが、画面にもフォーカスにも現れない。
 @MainActor
 final class ScreenIsolationTests: OrbeTestCase {
   /// テストの終わり（`tearDown` の後）まで生きている窓。テスト本体のローカル変数の窓は、終わりの確認より前に解放される。
@@ -34,6 +36,22 @@ final class ScreenIsolationTests: OrbeTestCase {
   func testARealSheetFailsTheTest() {
     expectBreach("本物のシートが出た")
     NotificationCenter.default.post(name: NSWindow.willBeginSheetNotification, object: NSWindow())
+  }
+
+  /// アクティベーションポリシーを変えたテストには失敗が記録され、ポリシーは記録の後に始まりの値へ戻る。
+  func testAChangedActivationPolicyIsRecordedAndThenRestored() {
+    let app = NSApplication.shared
+    XCTAssertEqual(app.activationPolicy(), .prohibited, "前提: テストの実行体のポリシーは prohibited")
+    let screen = ScreenIsolation()
+    // 隔離が戻すことを確かめるために、ポリシーだけを本物で変える。
+    // swiftlint:disable:next test_screen_isolation
+    app.setActivationPolicy(.accessory)
+    var recorded: [(message: String, policy: NSApplication.ActivationPolicy)] = []
+    screen.finish { recorded.append(($0, app.activationPolicy())) }
+    XCTAssertEqual(recorded.count, 1)
+    XCTAssertTrue(recorded.first?.message.contains("アクティベーションポリシーが変わった") == true)
+    XCTAssertEqual(recorded.first?.policy, .accessory, "戻すのは、失敗を記録した後")
+    XCTAssertEqual(app.activationPolicy(), .prohibited, "戻った")
   }
 
   /// 隔離がこのテストに、`phrase` を含む失敗を記録することを期待する。記録しなければ、このテストが落ちる。

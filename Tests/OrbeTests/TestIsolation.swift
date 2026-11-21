@@ -37,8 +37,8 @@ class OrbeTestCase: XCTestCase {
     guard !Self.presentsOnScreen else { return super.invokeTest() }
     let screen = MainActor.assumeIsolated { ScreenIsolation() }
     super.invokeTest()
-    for breach in MainActor.assumeIsolated({ screen.finish() }) {
-      record(XCTIssue(type: .assertionFailure, compactDescription: breach))
+    MainActor.assumeIsolated {
+      screen.finish { record(XCTIssue(type: .assertionFailure, compactDescription: $0)) }
     }
   }
 }

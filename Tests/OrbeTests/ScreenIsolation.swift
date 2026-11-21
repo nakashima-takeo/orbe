@@ -14,16 +14,23 @@ import AppKit
 ///
 /// 終わりだけを見ないのは、テストの窓が、終わりより前に下ろされるか解放されるため。
 ///
+/// 違反を失敗として記録した後、テストが変えたアクティベーションポリシーを始まりの値へ戻し、テストが前面にしたアプリを
+/// 前面から降ろす（`deactivate`）。前面に残ると、その実行の残りの間、利用者のキー入力がテストの実行体へ向かう。前面から
+/// 降りるのは、ウィンドウサーバーのイベントが捌かれた後になるので、降りるまでは待たない。並んだ窓とシートは、持ち主のテストが
+/// 下ろす。
+///
 /// 仕組みの性質から、届かない範囲が在る。
 ///
 /// - 見るのは、ランループの切れ目と終わりだけ。ランループを 1 度も回さないうちに並べて、下ろすか解放した窓には届かない。
-///   1 件の中で変えて戻したアクティベーションポリシーにも届かない。前面にする要求がテストの終わりより後に届くと、落ちるのは
-///   次のテストになる。
+///   1 件の中で変えて戻したアクティベーションポリシーにも届かない。テストの終わりより後に届いた出来事（前面にする要求、
+///   遅れて届いたシートの通知など）は、次のテストの違反として記録される。
+/// - 前面かどうかは、始まりとの差で見る。始まりの時点で既に前面のテスト（前のテストの後、前面から降りるのが遅れた場合など）は、
+///   前面になったことでは落ちない。
 /// - 見るのは、テストの実行体だけ。ほかのアプリを起動する・前面にする操作（`NSWorkspace.shared.open` など）には届かない。
-/// - 落とすのは、テスト 1 件が戻った後に、ふつうの失敗を記録する形。戻らないテスト（モーダルで止まるもの）、skip した
-///   テスト、失敗を期待すると宣言したテスト（`XCTExpectFailure`）は落ちない。クラスの `setUp`・`tearDown` は包まない。
-/// - 変わった状態を戻さず、状態が戻るのを待たない。破ったテストの後は、同じ実行の残りのテストが、変わった状態のまま
-///   走る（落ちるのは破ったテストだけ）。
+/// - 落とすのは、テスト 1 件が戻った後に、ふつうの失敗を記録する形。戻らないテスト（モーダルで止まるもの）と skip した
+///   テストは落ちない。ブロックなしの `XCTExpectFailure` で、条件が隔離の失敗に合う期待を宣言したテストも落ちない（ブロックの
+///   形の期待を宣言したテストと、条件が合わない期待を宣言したテストは落ちる）。クラスの `setUp`・`tearDown` は包まない。
+/// - 破ったテストが下ろさなかった窓とシートは、同じ実行の残りのテストの間も残る（落ちるのは破ったテストだけ）。
 /// - 包むのは、`OrbeTestCase` を継承するテストだけ。
 ///
 /// 前面になった通知（`NSApplication.didBecomeActiveNotification`）では見ない。この通知を手で出して、前面と背面で
@@ -32,29 +39,22 @@ import AppKit
 final class ScreenIsolation {
   /// テストの実行体が、利用者の画面と前面に現れている状態。
   struct State {
-    var policy: NSApplication.ActivationPolicy
     var isActive: Bool
     /// 並んでいて、ディスプレイの範囲と面積を持って重なる窓（窓と、失敗の文言に出す説明）。
     var windowsOnDisplays: [ObjectIdentifier: String]
 
-    /// ポリシーは OS への問い合わせで、ランループが回るたびに読むには重い。回るたびに見るときは、読まずに始まりの値を渡す。
-    static func current(
-      policy: NSApplication.ActivationPolicy = NSApplication.shared.activationPolicy()
-    ) -> State {
+    static func current() -> State {
       let app = NSApplication.shared
       var windows: [ObjectIdentifier: String] = [:]
       for window in app.windows where window.isShownOnADisplay {
         windows[ObjectIdentifier(window)] = "\(type(of: window)) \(window.frame)"
       }
-      return State(policy: policy, isActive: app.isActive, windowsOnDisplays: windows)
+      return State(isActive: app.isActive, windowsOnDisplays: windows)
     }
 
     /// `start` からこの状態までの違反。
     func breaches(since start: State) -> [String] {
       var breaches: [String] = []
-      if policy != start.policy {
-        breaches.append("アクティベーションポリシーが変わった（\(start.policy.name) → \(policy.name)）")
-      }
       if isActive, !start.isActive { breaches.append("アプリが前面になった") }
       let added = windowsOnDisplays.filter { start.windowsOnDisplays[$0.key] == nil }
       for window in added.values.sorted() {
@@ -65,6 +65,8 @@ final class ScreenIsolation {
     }
   }
 
+  /// ポリシーは OS への問い合わせで、ランループが回るたびに読むには重い。始まりに控え、終わりにだけ読み直して比べる。
+  private let startPolicy = NSApplication.shared.activationPolicy()
   private let start = State.current()
   private var breaches: [String] = []
   private var sheetObserver: NSObjectProtocol?
@@ -82,7 +84,7 @@ final class ScreenIsolation {
       }
     }
     let onPass: (CFRunLoopObserver?, CFRunLoopActivity) -> Void = { [weak self] _, _ in
-      MainActor.assumeIsolated { self?.observe(readingPolicy: false) }
+      MainActor.assumeIsolated { self?.observe() }
     }
     let activities: CFRunLoopActivity = [.beforeWaiting, .exit]
     runLoopObserver = CFRunLoopObserverCreateWithHandler(nil, activities.rawValue, true, 0, onPass)
@@ -93,17 +95,26 @@ final class ScreenIsolation {
     if !breaches.contains(breach) { breaches.append(breach) }
   }
 
-  private func observe(readingPolicy: Bool) {
-    let now = readingPolicy ? State.current() : State.current(policy: start.policy)
+  @discardableResult
+  private func observe() -> State {
+    let now = State.current()
     for breach in now.breaches(since: start) { note(breach) }
+    return now
   }
 
-  /// テストの終わりに呼ぶ。見つけた違反を、失敗の文言で返す。
-  func finish() -> [String] {
+  /// テストの終わりに呼ぶ。見つけた違反を、失敗の文言で `record` に渡してから、テストが変えたポリシーと前面を戻す。
+  func finish(recording record: (String) -> Void) {
     if let sheetObserver { NotificationCenter.default.removeObserver(sheetObserver) }
     if let runLoopObserver { CFRunLoopObserverInvalidate(runLoopObserver) }
-    observe(readingPolicy: true)
-    return breaches.map { "画面と前面の隔離: \($0)" }
+    let app = NSApplication.shared
+    let policy = app.activationPolicy()
+    if policy != startPolicy {
+      note("アクティベーションポリシーが変わった（\(startPolicy.name) → \(policy.name)）")
+    }
+    let end = observe()
+    for breach in breaches { record("画面と前面の隔離: \(breach)") }
+    if policy != startPolicy { app.setActivationPolicy(startPolicy) }
+    if end.isActive, !start.isActive { app.deactivate() }
   }
 }
 

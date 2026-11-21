@@ -84,6 +84,7 @@ custom_rules:
     included: ".*/Tests/.*\\.swift"
     excluded:
       - ".*/Tests/OrbeTests/OffscreenWindowPlacement\\.swift"
+      - ".*/Tests/OrbeTests/ScreenIsolation\\.swift"
       - ".*/Tests/OrbeTests/EditorRowsTrialTests(\\+Side)?\\.swift"
       - ".*/Tests/OrbeTests/EditorPresentPerfTests\\.swift"
     # 窓を並べる API と、アプリを前面にする API を検出する。`activate` は `NSApp.` と `NSApplication.shared.` に続くものだけを、
