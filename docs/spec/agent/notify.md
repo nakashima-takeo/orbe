@@ -1,7 +1,7 @@
 ---
 title: エージェント通知の配管
 description: エージェント CLI の hook が状態とセッション ID を .app 同梱 CLI 経由で制御ソケットへ報告し、発信元タブに保持する配管
-updated: 2026-11-16
+updated: 2026-11-21
 ---
 
 # エージェント通知の配管
@@ -30,8 +30,9 @@ tab identity は env で運ぶ（tty 経路を要さない）。Orbe は全タ�
 - サブエージェント実行中の hook payload（親と同じセッション ID で届き、サブエージェント識別子を持つ）は報告しない——タブのセッション状態ではないため。socket へ接続する前に落とす。
   - 既知の制約: permission 待ちの通知はサブエージェント識別子を**持たない**ので、サブエージェント内の承認要求でもタブは `waiting` になる。一方その待ちを解く側（バッチ解決の報告）はサブエージェント識別子を持つので落ちる。結果、サブエージェント内で承認しても `waiting` は即座には解けず、親のバッチが解決した時点まで残る。
   - 既知の制約: teammate の worker が出す承認要求はリーダーのタブへ届くが、リーダーの承認/拒否は hook を発火しない（ツール実行ではないため）。結果、承認しても `waiting` は次の報告が来るまで残る。
-- `state=="done"` かつ stdin の `background_tasks` に running が 1 つでもあれば `working` に読み替える——claude の Stop はバックグラウンド作業（bg Bash・bg サブエージェント）残存時も発火するため。フィールド欠落・空配列・型不一致は読み替えずそのまま `done`。判定・抽出は pure 関数として切り出す。
-- `waiting` / `done` は表示用の文言と**その出所**も stdin から取り出して載せる（`waiting` は permission 通知の文言〔出所は通知〕、無ければ待っているツールの先頭質問文〔出所はツール〕。`done` は最終アシスタント応答〔出所はツール〕）。出所は**どの payload フィールドから取ったか**そのもので、別途の判定を持たない。C0 制御文字（改行・タブ以外）を落とし、trim して空なら載せず、長文は切って制御ソケットの 1 行上限に対して防御する——文言は `orb agent prompt` の stdout として端末へそのまま流れるので、入口で無害化する。当該フィールドを持たない CLI は自然に文言なし。
+  - 既知の制約: agy のサブエージェントは、サブエージェント自身の会話 ID で親と同じ hook を呼び、payload にも環境変数にも親と見分ける印を持たない。見分けられないので落とさず、タブの状態と会話 ID は親とサブエージェントの報告で入れ替わる。サブエージェントが出した質問の `waiting` は親の次の報告で上書きされ、サブエージェントの Stop は親が作業中でも `done` を運ぶ。最後に届いた報告がサブエージェントのものなら、タブの会話 ID はサブエージェントの会話を指し、復元でその会話が再開される。
+- `state=="done"` でもバックグラウンドの作業が残っていれば `working` に読み替える——claude・agy の Stop はバックグラウンド作業（bg のコマンド・bg サブエージェント）の残存時も発火するため。作業が残っているかの表現は CLI ごとに違い、claude は stdin の `background_tasks` に running が 1 つでもあること、agy は stdin の `fullyIdle` が false であること。フィールド欠落・空配列・型不一致は読み替えずそのまま `done`。agy では、後続の `done` を運ぶのは、バックグラウンドのコマンドの終わりで agy がもう一度回すターンの Stop か、残っていたサブエージェント自身の Stop。作業が Stop を伴わずに消えると、次の報告まで `working` が残る。判定・抽出は pure 関数として切り出す。
+- `waiting` / `done` は表示用の文言と**その出所**も stdin から取り出して載せる（`waiting` は permission 通知の文言〔出所は通知〕、無ければ待っているツールの先頭質問文〔出所はツール。claude の AskUserQuestion・agy の ask_question のどちらの payload の形からも取る〕。`done` は最終アシスタント応答〔出所はツール〕）。出所は**どの payload フィールドから取ったか**そのもので、別途の判定を持たない。C0 制御文字（改行・タブ以外）を落とし、trim して空なら載せず、長文は切って制御ソケットの 1 行上限に対して防御する——文言は `orb agent prompt` の stdout として端末へそのまま流れるので、入口で無害化する。当該フィールドを持たない CLI は自然に文言なし。
 - SessionEnd 相当の hook が終了理由（claude の `reason`: `clear` / `logout` / `prompt_input_exit` / `other` 等）を渡す CLI では、それを文言と同じ無害化（C0 制御文字除去・trim・長さ上限）を通して `report_agent` の `reason` に載せる。持たない CLI は自然に無し。
 - 接続は 1 リクエスト 1 接続・同期で、応答の 1 行を受けるまで（または Orbe が切るまで）接続を保ってから閉じる。Orbe は接続の向こうのプロセスから報告者のプロセスグループをたどる（→ [launch](launch.md) の会話へ貼ってよいタブ）ので、報告者が先に消えるとたどれない。送受信の待ちには上限があり、Orbe が応答しなくても hook を長く止めない。終了コードは報告の成否によらず 0。
 
@@ -47,6 +48,6 @@ tab identity は env で運ぶ（tty 経路を要さない）。Orbe は全タ�
 
 ## 対象 CLI
 
-claude / codex / agy の hook 定義あり。取得できる状態は CLI のフック粒度に依存し、claude は全状態、codex は idle（中断）/working/waiting/done、agy は working/done のみ（詳細は [plugin-package](plugin-package.md)）。
+claude / codex / agy の hook 定義あり。取得できる状態は CLI のフック粒度に依存し、claude は全状態、codex は idle（中断）/working/waiting/done、agy は working/waiting（質問の待ちだけ）/done（詳細は [plugin-package](plugin-package.md)）。
 
 codex は、デーモンを使わずに動いているものの状態だけが報告される。Orbe が起こす codex はデーモンを使わない（[launch](launch.md#起動形態)）。タブのシェルで素の `codex` と打つと、デーモンが起動していればデーモン経由になり（0.157 以上の codex はデーモンを既定で起動する）、そのタブにも他のタブにも状態は付かない——デーモン経由の codex がどのタブの会話かを知る手段が無いため。手で起こすときは `codex --no-daemon` と打てば報告される。状態の表示（chrome）は本配管の範囲外、セッション ID の永続/resume は [persistence](../platform/persistence.md)。

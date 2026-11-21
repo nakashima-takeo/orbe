@@ -46,6 +46,8 @@ Orbe は、作業場所の準備、エージェントの起動、入力待ち・
 
 codex は 0.156 以上が必要です。初回の起動時に codex の画面へ「Hooks need review」が出たら、Orbe の hook を承認してください。承認するまで codex の状態は表示されません。素の `codex` は、デーモンが起動していればデーモン経由で動き、状態も Orbe の MCP ツールも出ません（0.157 以上の codex はデーモンを既定で起動します）。タブのシェルで codex を手動で起動するときは `codex --no-daemon` を実行します。
 
+Orbe は agy を、コマンド実行などの確認を省く引数（`--dangerously-skip-permissions`）付きで起動します。会話の再開でも付きます。タブのシェルで手動で始めた会話も、Orbe が再開するときは付きます。agy は信頼していないフォルダで起動すると、フォルダを信頼するかを確認します。新しい worktree では毎回確認が出るので、agy の画面で応えてください。
+
 | 使いたい機能 | 必要な準備 |
 |---|---|
 | エージェントの起動・状態表示 | `claude` / `codex` / `agy` のいずれかと、初回案内でのプラグイン導入 |
@@ -83,7 +85,7 @@ worktree パレットは既存の worktree を再利用し、必要なときだ�
 
 Orbe が背面にあるときは、macOS のメニューバーから入力待ち・完了を確認できます。見ていないタブでの状態変化は通知音でも知らせます。音の種類・音量・オン／オフはワークスペースごとに設定でき、手持ちの音源も使えます。
 
-状態表示は各 CLI の hook に依存します。`agy` は作業中・完了に対応し、入力待ちは取得できません。詳しくは [Attention](docs/spec/palette/attention.md)・[メニューバー](docs/spec/chrome/menubar.md)・[通知音](docs/spec/agent/sound.md)を参照してください。
+状態表示は各 CLI の hook に依存します。`agy` の入力待ちは、質問への回答待ちだけを表示します。詳しくは [Attention](docs/spec/palette/attention.md)・[メニューバー](docs/spec/chrome/menubar.md)・[通知音](docs/spec/agent/sound.md)を参照してください。
 
 ### プロジェクトごとに作業場所を分ける
 
