@@ -47,6 +47,21 @@ extension WindowController {
     }
   }
 
+  /// 「見ているタブ」＝ウィンドウがキー（前面）のときに、アクティブ workspace で端末が見えているタブ（端末で見せているか、
+  /// 透かしている）。背面・ボード・空・エディターで見せている間（端末が覆われていて結果もプロンプトも見えない）なら nil。
+  /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
+  var visibleTab: TerminalTab? {
+    guard window.isKeyWindow else { return nil }
+    switch presentation {
+    case .terminal(let tab), .peek(let tab): return tab
+    case .editor, .board, .empty: return nil
+    }
+  }
+
+  /// 完了通知の消費：見ているタブの done を消費して done バッジを消す。
+  /// 背面・背景タブの done は残す。描画（`renderSelection`）・done 到着・前面復帰・透かしの出入りが共有する。
+  func consumeVisibleTabDone() { visibleTab?.consumeDoneState() }
+
   /// ⌥ だけの長押しが成立を許すか: 前面の窓で、オーバーレイ（パレット・ヘルプなど）が出ておらず、タブのエディターを見せている。
   var allowsPeek: Bool {
     guard window.isKeyWindow, model.overlay == .none, case .editor = presentation else {

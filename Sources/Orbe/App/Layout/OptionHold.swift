@@ -2,11 +2,12 @@ import AppKit
 
 /// ⌥ だけの長押しの判定（純粋な状態機械。`OptionHoldTests` が仕様を固定する）。
 ///
-/// - ⌥ だけになってから `delay` の間、ほかのキー・マウスの押下・`pointerTolerance` を越えるポインタの動きが無く、期限の時点で
-///   修飾の実状態が ⌥ だけで、マウスのボタンが押されておらず、窓が許せば成立する。
+/// - ⌥ だけになってから `delay` の間、ほかのキー・マウスの押下が無く、期限の時点でポインタが ⌥ だけになった位置から
+///   `pointerTolerance` 以内にあり、修飾の実状態が ⌥ だけで、マウスのボタンが押されておらず、窓が許せば成立する。
 /// - 成立中は `checkInterval` ごとに修飾の実状態で確かめ、⌥ だけでなくなれば終わる。キーの押下・⌥ 以外の修飾でも終わる。
 ///   成立中のマウスの押下とポインタの動きでは終わらない。
-/// - 見送った押下（待ちの間の割り込み・⌥ 以外の修飾・ボタンを押したままの ⌥）は、修飾を全部離すまで次を始めない。
+/// - 見送った押下（待ちの間の割り込み・⌥ 以外の修飾・ボタンを押したままの ⌥）と打ち切った押下は、修飾を全部離すまで次を
+///   始めない。
 struct OptionHoldDetector {
   /// ⌥ だけになってから成立までの間合い（秒）。
   static let delay: TimeInterval = 0.2
@@ -58,6 +59,11 @@ struct OptionHoldDetector {
 
   /// キーの押下。
   mutating func keyDown() {
+    interrupt()
+  }
+
+  /// 待ち・成立を打ち切る（エディターで見せるタブが替わった）。修飾を全部離すまで次を始めない。
+  mutating func interrupt() {
     switch phase {
     case .waiting, .holding: phase = .skipped
     case .idle, .skipped: break
@@ -158,6 +164,13 @@ final class OptionHoldMonitor {
   /// 打ち切る（窓が前面でなくなった）。
   func cancel() {
     update { $0.cancel() }
+  }
+
+  /// 待ち・成立を打ち切り、修飾を全部離すまで次を始めない（エディターで見せるタブが替わった）。`onChange` は呼ばない——
+  /// 見せるタブを替えた窓が、続けて今の状態を描く。
+  func interrupt() {
+    detector.interrupt()
+    syncTimers()
   }
 
   private func observe(_ event: NSEvent) {

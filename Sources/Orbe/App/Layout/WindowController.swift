@@ -52,8 +52,11 @@ final class WindowController: NSObject, NSWindowDelegate {
   // 復元時の programmatic な setFrame を windowDidResize の取り込みから除外するフラグ。
   var isApplyingRestoredSize = false
   /// エディターで見せているタブ。無ければエディターは閉じている。あるなら前面の workspace で選んでいるタブ（揃えるのは
-  /// `renderSelection` の冒頭）。書き手は選ぶ命令・エディターで見せる命令・⌘E だけで、保存しない。
-  var editorShownTab: TerminalTab?
+  /// `renderSelection` の冒頭）。書き手は選ぶ命令・エディターで見せる命令・⌘E だけで、保存しない。替われば ⌥ だけの長押しを
+  /// 打ち切る——透かしは見せていたエディターの下を見るもので、閉じた・別のタブへ移ったエディターには残さない。
+  var editorShownTab: TerminalTab? {
+    didSet { if editorShownTab !== oldValue { optionHold.interrupt() } }
+  }
   /// ⌥ だけの長押しの判定。成立しているかは入力の事実としてここだけが持つ（窓は複製しない）。
   let optionHold: OptionHoldMonitor
   // chrome 更新の coalesce 状態。高頻度 report でも runloop tick 単位に 1 回へ間引く。
@@ -295,21 +298,6 @@ final class WindowController: NSObject, NSWindowDelegate {
 
   /// アクティブ workspace の選んでいるタブ。ボード・空なら nil（ボードには場所も面も無いので、0 タブと同じ扱い）。
   var activeTab: TerminalTab? { current.selectedTab }
-
-  /// 「見ているタブ」＝ウィンドウがキー（前面）のときに、アクティブ workspace で端末が見えているタブ（端末で見せているか、
-  /// 透かしている）。背面・ボード・空・エディターで見せている間（端末が覆われていて結果もプロンプトも見えない）なら nil。
-  /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
-  var visibleTab: TerminalTab? {
-    guard window.isKeyWindow else { return nil }
-    switch presentation {
-    case .terminal(let tab), .peek(let tab): return tab
-    case .editor, .board, .empty: return nil
-    }
-  }
-
-  /// 完了通知の消費：見ているタブの done を消費して done バッジを消す。
-  /// 背面・背景タブの done は残す。描画（`renderSelection`）・done 到着・前面復帰・透かしの出入りが共有する。
-  func consumeVisibleTabDone() { visibleTab?.consumeDoneState() }
 
   /// chrome 更新を要求する。`window.title`（Mission Control 用・O(1)）は即時反映し、重い StatusRow
   /// snapshot（全 workspace×全タブ走査）は dirty を立て runloop tick 末尾に 1 回だけ予約。
