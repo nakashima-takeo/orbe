@@ -1,16 +1,16 @@
 ---
 title: エージェントプラグイン（配布物）
 description: claude / codex / agy へ届けるプラグインパッケージ app/agent-plugin/ の構造（claude・agy が共有するディレクトリと codex 専用のディレクトリ）・各 CLI の導入契約・codex の hook の承認・チャネル別のプラグイン名・デーモン経由の呼び出しの判定・MCP サーバー・.app 同梱と毎起動の実体化・中身の指紋による入れ直し
-updated: 2026-11-16
+updated: 2026-11-21
 ---
 
 # エージェントプラグイン（配布物）
 
-`app/agent-plugin/` は claude / codex / agy へ届けるプラグインパッケージ。3 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。もう 1 つは claude のスキル（→ [自動化のスキル](#自動化のスキル)）。利用者は何も設定しない。ただし codex は、人が codex の画面で hook を一度承認するまで hook を走らせない（→ [codex の hook の承認](#codex-の-hook-の承認)）。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
+`app/agent-plugin/` は claude / codex / agy へ届けるプラグインパッケージ。3 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。もう 1 つはスキル（→ [自動化のスキル](#自動化のスキル)）。利用者は何も設定しない。ただし codex は、人が codex の画面で hook を一度承認するまで hook を走らせない（→ [codex の hook の承認](#codex-の-hook-の承認)）。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
 
 プラグイン本体は 2 つのディレクトリに分かれる。
 
-- **`plugins/<プラグイン名>/`**: claude と agy が読む。claude・agy のマニフェストと hook 定義、MCP 定義、claude のスキル、状態追跡のシム・MCP のシム・空サーバーを持つ。claude の marketplace 定義はここを指し、agy はここを直接導入する。
+- **`plugins/<プラグイン名>/`**: claude と agy が読む。claude・agy のマニフェストと hook 定義、MCP 定義、スキル、状態追跡のシム・MCP のシム・空サーバーを持つ。claude の marketplace 定義はここを指し、agy はここを直接導入する。
 - **`codex/<プラグイン名>/`**: codex だけが読む。codex のマニフェスト、codex の hook 定義、2 つのシム、空サーバー、チャネルの刻印だけを持つ。codex の marketplace 定義はここを指す。
 
 codex を分けるのは、codex が hook の承認を、導入したディレクトリ全体の中身に結び付けるため（→ [codex の hook の承認](#codex-の-hook-の承認)）。claude・agy のファイルと同じディレクトリに置くと、claude のスキルの文面を直すだけで codex の hook が止まる。シムと空サーバーは `plugins/<プラグイン名>/` を正とし、リポジトリの `codex/<プラグイン名>/` には置かない。`.app` へ同梱するときにビルドがコピーして、codex のディレクトリが完成する（→ [`.app` 同梱と実体化](#app-同梱と実体化)）。シンボリックリンクにしないのは、codex が導入のコピーにリンクを含めないため。
@@ -57,7 +57,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 
 この新しいセッションやプロセスグループは、codex が子孫ごと止めるために自分で作るもので、その先頭は codex が直接起動したプロセス。間のシェルやシムが exec するかどうかで先頭は変わらないので、判定はシェルの種類・ログイン設定・シムの書き方に左右されない。規則は codex が hook を新しいセッションで、MCP サーバーを新しいグループで起動することに依る（codex 0.167.0 の実物で確かめた）。codex がこの起動の形を変えたら、規則を見直す。
 
-判定が言えるのは「codex のデーモン（端末から切り離されたプロセス）が起動した呼び出しではない」ことまでで、環境がそのタブのものであることは確かめない。端末を持つ仲介が環境を抱えて配る場合（tmux など）は、身元は環境の申告のまま。判定を掛けるのは codex だけ——claude・agy については、hook と MCP サーバーをどう起動するかを確かめていない。CLI 名は、`orbe-report` は第 1 引数で、`orbe-mcp` は codex の MCP 定義が渡す引数で受ける。
+判定が言えるのは「codex のデーモン（端末から切り離されたプロセス）が起動した呼び出しではない」ことまでで、環境がそのタブのものであることは確かめない。端末を持つ仲介が環境を抱えて配る場合（tmux など）は、身元は環境の申告のまま。判定を掛けるのは codex だけ。agy は hook も MCP サーバーも自分の直接の子として、自分と同じプロセスグループ・同じ端末で起動し、環境を受け継がせる（agy 1.5.13 の実物で確かめた）——デーモンを挟まないので、環境は agy が動くタブのもの。claude については、hook と MCP サーバーをどう起動するかを確かめていない。CLI 名は、`orbe-report` は第 1 引数で、`orbe-mcp` は codex の MCP 定義が渡す引数で受ける。
 
 判定をシムでなく同梱の実行ファイルに置くのは、判定が見るのが呼び出しの親子関係の事実で、プラグインのコピーの事実ではないから。同梱に置けば、判定はタブを開いた Orbe の版と必ず一致し、直しても codex のコピーが変わらない（hook の承認が外れない）。プロセスの親と制御端末の読み方は、[会話へ貼ってよいタブ](launch.md#会話へ貼ってよいタブ)が報告者のグループを辿る読み方と共有する。
 
@@ -67,7 +67,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 
 - **claude**: `.claude-plugin/plugin.json` の `mcpServers`。プラグインルート変数を展開した絶対パスで呼ぶ（相対パスでは起動に失敗する）。
 - **codex**: codex 専用のディレクトリの `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼び、そのディレクトリにコピーした MCP シムを起動する。codex は MCP サーバーへ親の環境のうち既定の数個（`HOME`・`PATH` など）と名指しされた変数しか渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。引数で CLI 名（`codex`）を渡す——ブリッジの[デーモン経由の呼び出しの判定](#デーモン経由の呼び出しの判定)が読む。
-- **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ——agy は MCP サーバーをステージ済みプラグインルートを cwd にして起こし、相対の command をそこから解く。親の環境（`ORBE_MCP_BIN` など）はそのまま MCP サーバーへ渡る。Orbe の外では空サーバーが接続できたサーバーとして扱われ、警告は出ない（HOME を一時ディレクトリに差し替えた隔離環境の agy の print モードで確かめた。対話画面の表示は見ていない）。
+- **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ——agy は MCP サーバーをステージ済みプラグインルートを cwd にして起こし、相対の command をそこから解く。親の環境（`ORBE_MCP_BIN` など）はそのまま MCP サーバーへ渡る。Orbe の外では空サーバーが接続できたサーバーとして扱われ、print モードでも対話画面でも警告は出ない（HOME を一時ディレクトリに差し替えた隔離環境の agy で確かめた）。
 
 プラグインのルートに `.mcp.json`（claude も codex も既定の置き場として読む）は置かない。
 
@@ -77,7 +77,7 @@ MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば�
 
 ## 自動化のスキル
 
-プラグインは `plugins/<プラグイン名>/skills/automation/` に、Orbe の[自動化](../platform/automation.md)を人の一言から作る・直すスキルを 1 つ持つ（claude が読む形式。agy には届かず、codex 専用のディレクトリには置かないので codex にも届かない）。スキルが持つのは進め方で、調べる → 案を立てる → 決め所（出どころと範囲・判定の基準・予定・型から外れること・書いて動かし始めること）を AskUserQuestion で聞く → 定義を組む → 初期セットアップ（次の回以降の入力を整える → 書く前の定義を[試走](../platform/automation.md#試走)で入口から終わりまで流す）→ 試走の結果を読む → 見せて聞く、を人が「このまま」と言うまで繰り返し、人が良いと言ってから `set_automation` で書く。作るときも直すときもこの道を通るので、人が確かめる前に本番の定義は変わらず、新しい判定の基準や副作用が本番で動かない。判定の基準は出どころごとに別の質問で聞く。重いノードは時間を見積もって上限時間を書く。設計の参考として型（見張ってタスク候補・MCP でしか読めない出どころを見張ってタスク候補・出どころごとの予定で集めてまとめて判定・定時の報告・定時にツールで作業・定時のコマンド・届いたら外部操作・組み合わせ）を、そのまま定義として通るノードのグラフの JSON とともに `references/` に持つ。型は参考で、頼みに合わなければ外れてよい。定義の項目と仕組み・既定の値と上限は MCP の `set_automation` ほかの説明が持つので、スキルにはコピーせず、理由が仕組みにあるときは説明の節を名前で指す。
+プラグインは `plugins/<プラグイン名>/skills/automation/` に、Orbe の[自動化](../platform/automation.md)を人の一言から作る・直すスキルを 1 つ持つ（claude が読む形式。agy もプラグインの `skills/` を取り込むので届くが、本文は claude のツール名で書かれていて、agy で通しで動くことは確かめていない。codex 専用のディレクトリには置かないので codex には届かない）。スキルが持つのは進め方で、調べる → 案を立てる → 決め所（出どころと範囲・判定の基準・予定・型から外れること・書いて動かし始めること）を AskUserQuestion で聞く → 定義を組む → 初期セットアップ（次の回以降の入力を整える → 書く前の定義を[試走](../platform/automation.md#試走)で入口から終わりまで流す）→ 試走の結果を読む → 見せて聞く、を人が「このまま」と言うまで繰り返し、人が良いと言ってから `set_automation` で書く。作るときも直すときもこの道を通るので、人が確かめる前に本番の定義は変わらず、新しい判定の基準や副作用が本番で動かない。判定の基準は出どころごとに別の質問で聞く。重いノードは時間を見積もって上限時間を書く。設計の参考として型（見張ってタスク候補・MCP でしか読めない出どころを見張ってタスク候補・出どころごとの予定で集めてまとめて判定・定時の報告・定時にツールで作業・定時のコマンド・届いたら外部操作・組み合わせ）を、そのまま定義として通るノードのグラフの JSON とともに `references/` に持つ。型は参考で、頼みに合わなければ外れてよい。定義の項目と仕組み・既定の値と上限は MCP の `set_automation` ほかの説明が持つので、スキルにはコピーせず、理由が仕組みにあるときは説明の節を名前で指す。
 
 [秘書](secretary.md#役目の指示)はこのスキルを役目の指示で名指しする。Orbe のプラグインが入っている claude なら、人が手で起こしたものでも、スキルの説明（description）から同じ進め方で自動化を書ける。スキルの本文は日本語 1 つで、人とのやり取りは頼みの言語に合わせる。
 
@@ -85,7 +85,7 @@ MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば�
 
 - **claude**: SessionStart(startup|resume|clear|fork)→idle / UserPromptSubmit→working / Notification(permission_prompt|worker_permission_prompt)→waiting / Notification(quota_auto_resume_disabled)→done / PreToolUse(AskUserQuestion|ExitPlanMode)→waiting / PostToolUse(AskUserQuestion|ExitPlanMode)→working / PostToolBatch→working / Stop→done / StopFailure(rate_limit 以外の種別)→done / SessionEnd→clear。SessionStart は matcher で会話が始まる・切り替わる source に絞る——compact も SessionStart を撃ち、自動 compact はターンの途中で走るので、絞らないと作業中の agent を idle と誤認する（解けた待ちの続きを作業中の agent へ貼る）。StopFailure（API エラーで終わったターン。Stop の代わりに撃たれる）もターンの終わりとして done に写す——写さないと working が残り、会話へ貼ってよいタブにならない。ただし usage limit（`rate_limit`）は matcher で外す：claude はその場でリセットを待って自分で続けるので、終わりとすると待ちの間に解けた待ちの続きが貼られ、続きが打ち切られる。待ちが続きなしに終わったこと（Notification の `quota_auto_resume_disabled`）を終わりとする。matcher は `rate_limit` 以外の種別を列挙するので、claude が新しい種別を足すとその種別のターンは working のまま残る。Notification は matcher で permission 待ちの notification_type に絞る——絞らないと idle（無操作）等でも発火し waiting を誤認するため（matcher に外れた通知はフックコマンド自体が走らない）。待ちの解除は種類ごとに経路が分かれる——ツールの待ち（AskUserQuestion / ExitPlanMode）は待つツールが事前に確定するので同じ matcher の PostToolUse が応答の瞬間に解除し（matcher 無しにすると並列に走る無関係なツールの完了でも撃たれ waiting が潰れる）、permission の待ちはどのツールが承認されるか事前に分からないのでバッチ解決（PostToolBatch・matcher の概念を持たないイベント）で解除する。
 - **codex**: UserPromptSubmit→working / PermissionRequest→waiting / Stop→done / Interrupt→idle。turn を中断（Esc）すると Stop は出ず Interrupt だけが出るので、これを受けないと中断後も working が残る。中断は人が目の前で止めた操作で応答を終えたのではないので、done（通知音が鳴る）でなく idle に写す。
-- **agy**: PreInvocation→working / Stop→done（agy のフックに SessionStart/Notification/PermissionRequest 相当が無く idle/waiting/clear は取得不可）
+- **agy**: PreInvocation→working / PreToolUse(ask_question)→waiting / PostToolUse(ask_question)→working / Stop→done。質問の待ちは claude の AskUserQuestion と同じく待つツールが事前に確定する待ちで、同じ matcher の PreToolUse が立て、PostToolUse が解く。matcher を絞るのも claude と同じ理由で、並列に走る無関係なツールの完了で waiting が潰れないため。人を待つツールとして観測できたのは `ask_question` だけ。質問をスキップ（Esc）しても PostToolUse が出るので、答えたときと同じ経路で解ける。Stop は、バックグラウンドの作業が残っていれば working に読み替える（[notify](notify.md)）。計画モードの計画の承認は、計画を書き出したターンの終わり（Stop）の後に待つので done として見える。取れない状態と理由: 起動直後の idle は、agy の SessionStart が新しい会話の最初の入力の後に呼ばれ、起動時・再開時には呼ばれないので配線しない。コマンド実行などの確認の待ちは、PreToolUse が確認の前に呼ばれ、確認の有無で変わらないので取れない（Orbe は確認を出させない引数で agy を起動する → [launch](launch.md#起動形態)）。Esc での中断は hook が何も出ず、working が残る。終了時の hook は無いので clear は報告されない。最初の入力を添えない起動では、[フォルダの信頼](launch.md#agy-のフォルダの信頼)の確認の画面の間も hook は出ない。
 
 ## `.app` 同梱と実体化
 

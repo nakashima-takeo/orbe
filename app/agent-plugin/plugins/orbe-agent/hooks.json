@@ -3,6 +3,22 @@
     "PreInvocation": [
       { "type": "command", "command": "./hooks/orbe-agent-status.sh agy working", "timeout": 5 }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "ask_question",
+        "hooks": [
+          { "type": "command", "command": "./hooks/orbe-agent-status.sh agy waiting", "timeout": 5 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "ask_question",
+        "hooks": [
+          { "type": "command", "command": "./hooks/orbe-agent-status.sh agy working", "timeout": 5 }
+        ]
+      }
+    ],
     "Stop": [
       { "type": "command", "command": "./hooks/orbe-agent-status.sh agy done", "timeout": 5 }
     ]

@@ -17,7 +17,9 @@ final class AgentCatalog {
   /// `firstInput` は起動（新規・再開）に最初の入力を添える席。`headless` は裏で非対話に回す能力。
   /// `requiredArguments` は Orbe が起動するとき（新規・再開）コマンド名の直後に必ず置く引数。codex の `--no-daemon` は、
   /// hook と MCP サーバーをタブの端末で動く codex の子として起動させる——共有のデーモン経由だと、hook と MCP サーバーが
-  /// デーモンを起動した時点の端末の環境で走り、別のタブを名乗る。
+  /// デーモンを起動した時点の端末の環境で走り、別のタブを名乗る。agy の `--dangerously-skip-permissions` は、コマンド実行
+  /// などの 1 手ごとの確認を出させない——agy の hook はその確認の待ちを知らせないので、確認を出す agy はタブの状態に表れない。
+  /// 再開のコマンドを組む時点では会話がどう始まったかを知る材料が無いので、手で始めた会話の再開にも付く。
   struct AgentProfile {
     let command: String
     let requiredArguments: [String]
@@ -32,7 +34,7 @@ final class AgentCatalog {
     /// 末尾に位置引数として置く。前にオプションの終わり（`--`）を置き、`-` で始まる入力をオプションと読ませない
     /// （`claude --resume <id> -- <入力>`）。
     case trailing
-    /// フラグの値として渡す（`agy --conversation <id> -i <入力>`）。値は `-` で始まってもそのフラグの値になる。
+    /// フラグの値として渡す（`agy --dangerously-skip-permissions --conversation <id> -i <入力>`）。値は `-` で始まってもそのフラグの値になる。
     case flag(String)
   }
 
@@ -51,7 +53,8 @@ final class AgentCatalog {
       firstInput: .trailing,
       headless: .refuses(.toolsNotAllowListable)),
     AgentProfile(
-      command: "agy", requiredArguments: [], resumeFlag: "--conversation",
+      command: "agy", requiredArguments: ["--dangerously-skip-permissions"],
+      resumeFlag: "--conversation",
       reportsIdleOnStart: false,
       firstInput: .flag("-i"),
       headless: .refuses(.noToolOrSessionControl)),
