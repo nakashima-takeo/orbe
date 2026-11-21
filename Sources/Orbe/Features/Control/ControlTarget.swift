@@ -12,8 +12,9 @@ protocol ControlTarget: ControlTaskTarget, ControlAutomationTarget, ControlBoard
   func controlSpawn(workspaceId: UUID?, cwd: String?, command: String?, selects: Bool)
     -> Result<Int, ControlError>
   /// 検出済みエージェントを新タブで起こす（spawn_agent）。command 省略時は対象 workspace の実効 default-agent を解く。
+  /// `prompt` は会話の最初の入力（空文字は無いのと同じ）。
   /// 未知 workspaceId は -32004・未検出 command は -32602・検出ゼロは -32000。
-  func controlSpawnAgent(command: String?, workspaceId: UUID?, cwd: String?)
+  func controlSpawnAgent(command: String?, workspaceId: UUID?, cwd: String?, prompt: String?)
     -> Result<AgentLaunch, ControlError>
   /// 既存セッションを resume してエージェントを新タブで起こす（resume_agent）。安全文字集合の外の sessionId は -32602。
   func controlResumeAgent(command: String, sessionId: String, workspaceId: UUID?, cwd: String?)

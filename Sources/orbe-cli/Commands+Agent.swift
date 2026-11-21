@@ -7,7 +7,8 @@ import Foundation
 
 let agentUsageLines = [
   "orb agent list [--json]",
-  "orb agent spawn [<agent>] [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]",
+  "orb agent spawn [<agent>] [--text <text> | --stdin] [--workspace <id|current>] [--dir <path>]"
+    + " [--timeout-ms <ms>] [--json]",
   "orb agent resume <agent> <session-id> [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]",
   "orb agent prompt <tab> (--text <text> | --stdin) [--timeout-ms <ms>] [--json]",
 ]
@@ -27,6 +28,12 @@ let agentUsage = """
   Both wait until the agent reports it is ready (its first idle) and then print
   ` ready (session <id>)`; --json carries ready:true and agentSessionId. Agents
   that cannot report idle (codex / agy) return at once with ready:false.
+  spawn --text / --stdin hands the text to the agent as the first input of the
+  conversation, on its command line. Use it for codex / agy instead of a prompt
+  sent to the freshly opened tab. The agent is then already working on it, so
+  do not follow with `orb agent prompt`; wait for the result with
+  `orb wait <tab> --kind agent_state --kind tab_closed --after <seq>`, taking
+  <seq> from `--json`.
   <session-id> also comes from `orb tab list --json` (agentSessionId).
   --timeout-ms defaults to 30000; timing out exits 124 with ready:false and
   timedOut:true — the tab is open, the agent just has not reported yet.
@@ -78,12 +85,16 @@ private func agentList(_ rest: [String]) -> Never {
   exit(0)
 }
 
+/// help は値の席を抜き取った後に見る（`agent prompt` と同じ理由）。
 private func agentSpawn(_ rest: [String]) -> Never {
-  if hasHelp(rest) {
+  var args = rest
+  let text = takeOption(&args, "--text", requires: "a value (use --stdin for text starting with -)")
+  let useStdin = takeFlag(&args, "--stdin")
+  if hasHelp(args) {
     print(agentUsage)
     exit(0)
   }
-  var args = rest
+  if text != nil && useStdin { usageDie("pass only one of --text / --stdin") }
   let dir = takeOption(&args, "--dir", requires: "a <path> value")
   let workspaceId = takeWorkspaceId(&args)
   let timeoutMs = takeIntOption(&args, "--timeout-ms", requires: "a positive <milliseconds>")
@@ -92,6 +103,7 @@ private func agentSpawn(_ rest: [String]) -> Never {
   if let agent = args.first { params["command"] = agent }
   if let workspaceId { params["workspaceId"] = workspaceId }
   if let dir { params["cwd"] = dir }
+  if let prompt = text ?? (useStdin ? readStdinText() : nil) { params["prompt"] = prompt }
   if let timeoutMs { params["timeoutMs"] = timeoutMs }
   report(callOrExit("spawn_agent", params), verb: "spawned")
 }

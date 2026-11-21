@@ -132,6 +132,14 @@ let tools: [[String: Any]] =
           + "agent（claude）は準備できた（最初の idle）まで待ち ready:true と agentSessionId（実 session ID）を"
           + "返すので、続けて prompt_agent を送れる。ready:false は prompt を送れる保証が無い——codex / agy は"
           + "idle を報告できず即返り、時間切れ（timedOut:true）はタブは開いたが報告がまだ来ていない。"
+          + "prompt は会話の最初の入力で、起動の引数として agent に渡る。ready:false で返る agent（codex / agy）への"
+          + "最初の入力は prompt に渡す——起こした直後のタブへ prompt_agent / send_text で送ると、agent の起動時の画面"
+          + "（更新の案内など）の既定の選択肢を enter が確定することがある。prompt を渡したときは agent がその入力に"
+          + "取り掛かっているので、ready:true でも続けて prompt_agent を送らない（working で拒否される）。結果は"
+          + "wait_for_event で待つ: tabId を付け、kinds は agent_state と tab_closed、value では絞らず、after に"
+          + "この応答の seq を渡す。done / waiting / clear の agent_state か tab_closed が出るまで、返った seq を"
+          + "次の after に渡して繰り返す（最初に返るのは working）。claude には、今までどおり prompt を渡さずに"
+          + "起こして prompt_agent で問える（結果を 1 回で受け取れる）。"
       ),
       (
         "inputSchema",
@@ -139,6 +147,7 @@ let tools: [[String: Any]] =
           "command": strProp("起動する agent（list_agents の command。省略時は対象 WS の実効デフォルト）"),
           "workspaceId": strProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
           "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブタブ由来）"),
+          "prompt": strProp("会話の最初の入力（起動の引数として渡す。空文字は省略と同じ）"),
           "timeoutMs": intProp("準備完了を待つ上限 ミリ秒（既定 30000）"),
         ])
       ),
@@ -226,8 +235,10 @@ let tools: [[String: Any]] =
           + "戻り値は state（done=応答を終えた / waiting=質問か承認を求めている / clear=セッションが終わった）・"
           + "message（その時点の文言。done なら最終応答、waiting なら質問文。無ければキー欠落）・seq。"
           + "送信直後に済んだ遷移も取りこぼさない。エージェントに問う用途はこれを使い、send_text＋send_key は"
-          + "生の入力（waiting への応答・シェルコマンド）に、wait_for_event は特殊な待ちにだけ使う。"
+          + "生の入力（waiting への応答・シェルコマンド）に、wait_for_event は特殊な待ち（spawn_agent に"
+          + "prompt を添えて起こした後の結果待ちなど）にだけ使う。"
           + "対象が working / waiting を報告していれば何も送らずエラー（waiting への応答は send_key で）。"
+          + "spawn_agent が ready:false で返したタブへの最初の入力は、ここで送らず spawn_agent の prompt で渡す。"
           + "判定は hook 報告だけなので、拒めるのは waiting を報告する agent（claude / codex、プラグイン"
           + "導入済み）に限る——報告経路の無いタブでは承認ダイアログが開いていても送られ、既定選択が確定する。"
           + "タイムアウトは timedOut:true（既定 3600000 ms＝1 時間。MCP クライアント側のツール"
@@ -250,6 +261,7 @@ let tools: [[String: Any]] =
         "状態変化イベントを待つ（長ポーリング）。扱える kind: agent_state / title / pwd / "
           + "tab_closed（libghostty が host に出す OSC シグナル）。生のシェル出力は待てない"
           + "（その用途は get_tab_text をポーリング）。エージェントの応答を待つなら prompt_agent を使う。"
+          + "spawn_agent に prompt を添えて起こしたときの結果待ちはこれを使う（手順は spawn_agent の説明）。"
           + "全イベントに 1 本の単調増加 seq が付く。after を渡すと、その seq より後に既に起きた一致イベントも"
           + "即返す（after の出所は他の応答の seq）。after が保持範囲より古ければ event history evicted の"
           + "エラー（seq を取り直す）。"

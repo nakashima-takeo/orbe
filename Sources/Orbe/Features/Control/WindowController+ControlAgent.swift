@@ -7,12 +7,16 @@ import AppKit
 extension WindowController {
   /// 検出済みエージェントを新タブで起こす（制御 API の spawn_agent）。command 省略時は対象
   /// workspace の実効 `default-agent` を `AgentLauncher.resolveDefault` で解く（GUI の Cmd+Shift+C
-  /// と同じ 1 規則。違うのは入力がアクティブ WS ではなく**対象 WS** の実効設定であることだけ）。
-  func controlSpawnAgent(command: String?, workspaceId: UUID?, cwd: String?) -> Result<
-    AgentLaunch, ControlError
-  > {
-    resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
-      launchAgentTab(target, command: AgentCatalog.startCommand(target.agent), cwd: cwd)
+  /// と同じ 1 規則。違うのは入力がアクティブ WS ではなく**対象 WS** の実効設定であることだけ）。`prompt` は
+  /// `AgentCatalog.startCommand` の最初の入力の席へ置く。
+  func controlSpawnAgent(command: String?, workspaceId: UUID?, cwd: String?, prompt: String?)
+    -> Result<AgentLaunch, ControlError>
+  {
+    let firstInput = prompt.flatMap { $0.isEmpty ? nil : $0 }
+    return resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
+      launchAgentTab(
+        target, command: AgentCatalog.startCommand(target.agent, firstInput: firstInput),
+        cwd: cwd)
     }
   }
 
