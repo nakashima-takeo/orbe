@@ -3,20 +3,23 @@ import XCTest
 
 @testable import Orbe
 
-/// 連の器（`GroupFacesView`）が開閉を 2 層の見え方へ写す規則——両面は常に器いっぱい・端末の寸法は器だけに従う・
-/// 開いている間は端末面を隠す（描画は続ける）・描くのは見せている端末だけ・動きの途中は両面を見せる・クリックの届き先は開閉に従う。
+/// 連の器（`GroupFacesView`）が見せ方（端末・エディター・透かし）を 2 層の見え方へ写す規則——両面は常に器いっぱい・端末の寸法は
+/// 器だけに従う・開いている間は端末面を隠す（描画は続ける）・透かしはエディター面を隠さず見えなくする・描くのは見せている端末だけ・
+/// 動きの途中は両面を見せる・クリックの届き先は見せ方に従う。
 ///
 /// 壊れると何が起きるか。端末の寸法が開閉や連の中の切替で変わると、そのたびに pty が resize され scrollback が折り返し直される。
 /// 開いている間に端末面が隠れないと、半透明のエディター面の下の端末の文字が透ける。覆われている端末の描画が止まると、見せ直した
 /// 最初のフレームに古い出力か何も描かれていない状態が出る。見せていない兄弟や隠れた器の端末が描き続けると、見えない描画の負荷がかかる。
 /// 置き換えられた動きの完了で「途中」が解けると、閉じる途中にエディター面が消え、開く途中に下が抜ける。
-/// 閉じる途中のエディター面がクリックを取ると、隠れる view に first responder が残る。
+/// 閉じる途中のエディター面がクリックを取ると、隠れる view に first responder が残る。透かしでエディター面を隠すと first responder が
+/// 窓へ移り、⌥ を離してもフォーカスが戻らない。透かしている間のクリックが届くと、見えないエディターのボタンが押されるか、端末へ
+/// フォーカスが移る。
 final class GroupFacesViewTests: OrbeTestCase {
   private let size = NSSize(width: 1000, height: 400)
 
   private func laidOut(open: Bool = false) -> TerminalTab {
     let tab = TerminalTab.alone(cwd: "/tmp")
-    tab.group.view.setEditorOpen(open, animated: false)
+    tab.group.view.show(open ? .editor : .terminal, animated: false)
     tab.group.view.frame = NSRect(origin: .zero, size: size)
     tab.group.view.layoutSubtreeIfNeeded()
     return tab
@@ -62,6 +65,51 @@ final class GroupFacesViewTests: OrbeTestCase {
     XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開いている間は下の端末を見せない")
     XCTAssertTrue(tab.surface.wantsRendering, "覆われても描き続ける")
     XCTAssertEqual(tab.surface.bounds.size, size, "覆われても寸法は器のまま")
+  }
+
+  // MARK: - 透かし
+
+  /// 透かしはエディター面を隠さず濃さ 0 にし、端末面を見せる。first responder はエディターに残り、離せばそのままエディターに戻る。
+  func testPeekMakesTheEditorInvisibleWithoutHidingIt() throws {
+    let tab = laidOut(open: true)
+    let window = hosted(tab)
+    defer { window.contentView = nil }
+    let view = tab.group.view
+    window.makeFirstResponder(view.editor)
+
+    view.show(.peek, animated: false)
+    XCTAssertTrue(view.isEditorOpen, "透かしてもエディターは開いたまま")
+    XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor, "エディター面は隠さない")
+    XCTAssertEqual(try XCTUnwrap(view.editor.superview).alphaValue, 0)
+    XCTAssertFalse(tab.terminal.isHiddenOrHasHiddenAncestor, "端末が見える")
+    XCTAssertTrue(window.firstResponder === view.editor, "フォーカスは動かない")
+
+    view.show(.editor, animated: false)
+    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor)
+    XCTAssertTrue(window.firstResponder === view.editor)
+  }
+
+  /// エディターと透かしの間は `quick`、端末とエディターの間は `base` でフェードする。端末と透かしの間は濃さが変わらないので
+  /// 動かない。
+  func testFadeLengthFollowsTheModesOnBothEnds() throws {
+    let tab = laidOut()
+    let window = hosted(tab)
+    defer { window.contentView = nil }
+    let view = tab.group.view
+    let layer = try XCTUnwrap(view.editor.superview?.layer)
+    let duration = { layer.animation(forKey: "editorFade")?.duration }
+
+    view.show(.editor, animated: true)
+    XCTAssertEqual(duration(), Theme.Motion.base)
+    view.show(.peek, animated: true)
+    XCTAssertEqual(duration(), Theme.Motion.quick)
+    view.show(.editor, animated: true)
+    XCTAssertEqual(duration(), Theme.Motion.quick)
+
+    view.show(.terminal, animated: false)
+    view.show(.peek, animated: true)
+    XCTAssertNil(duration(), "端末から透かしへは即時")
+    XCTAssertFalse(view.isFading)
   }
 
   // MARK: - 端末を描くか
@@ -152,7 +200,7 @@ final class GroupFacesViewTests: OrbeTestCase {
     defer { window.contentView = nil }
     tab.group.view.reduceMotion = true
 
-    tab.group.view.setEditorOpen(true, animated: true)
+    tab.group.view.show(.editor, animated: true)
     XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開き終わりの見え方")
   }
 
@@ -164,12 +212,12 @@ final class GroupFacesViewTests: OrbeTestCase {
     defer { window.contentView = nil }
     let view = tab.group.view
 
-    view.setEditorOpen(true, animated: true)
+    view.show(.editor, animated: true)
     XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor)
     XCTAssertFalse(tab.terminal.isHiddenOrHasHiddenAncestor, "開く途中は下の端末を見せる")
     XCTAssertEqual(try XCTUnwrap(view.editor.superview).alphaValue, 1, "濃さの行き先")
 
-    view.setEditorOpen(false, animated: true)
+    view.show(.terminal, animated: true)
     RunLoop.main.run(until: Date().addingTimeInterval(0.03))
     XCTAssertFalse(
       view.editor.isHiddenOrHasHiddenAncestor, "置き換えられた動きの完了では解けず、閉じる途中のエディター面は見えている")
@@ -186,8 +234,8 @@ final class GroupFacesViewTests: OrbeTestCase {
     defer { window.contentView = nil }
     let view = tab.group.view
 
-    view.setEditorOpen(true, animated: true)
-    view.setEditorOpen(true, animated: false)
+    view.show(.editor, animated: true)
+    view.show(.editor, animated: false)
     XCTAssertFalse(tab.terminal.isHiddenOrHasHiddenAncestor, "開く途中のまま下の端末が見えている")
   }
 
@@ -198,12 +246,28 @@ final class GroupFacesViewTests: OrbeTestCase {
     defer { window.contentView = nil }
     let view = tab.group.view
 
-    view.setEditorOpen(true, animated: true)
-    view.setEditorOpen(false, animated: false)
+    view.show(.editor, animated: true)
+    view.show(.terminal, animated: false)
     XCTAssertTrue(view.editor.isHiddenOrHasHiddenAncestor)
   }
 
   // MARK: - クリックの届き先
+
+  /// 透かしている間は器自身がクリックを受け、エディターにも端末にも届けない。
+  func testPeekKeepsClicksInTheContainer() {
+    let tab = laidOut(open: true)
+    let window = hosted(tab)
+    defer { window.contentView = nil }
+    let view = tab.group.view
+
+    view.show(.peek, animated: false)
+    XCTAssertTrue(view.hitTest(NSPoint(x: 500, y: 200)) === view)
+
+    view.show(.editor, animated: true)
+    XCTAssertTrue(
+      view.hitTest(NSPoint(x: 500, y: 200))?.isDescendant(of: view.editor) == true,
+      "戻る途中からエディターへ届く")
+  }
 
   /// 閉じる途中のエディター面はまだ見えているが、クリックは下の端末へ届く。開いている間はエディターへ届く。
   func testClicksFollowTheOpenStateDuringTheFade() throws {
@@ -216,7 +280,7 @@ final class GroupFacesViewTests: OrbeTestCase {
     let open = try XCTUnwrap(view.hitTest(point))
     XCTAssertTrue(open.isDescendant(of: view.editor), "開いている間はエディター: \(open)")
 
-    view.setEditorOpen(false, animated: true)
+    view.show(.terminal, animated: true)
     XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor, "前提: 閉じる途中でエディター面が見えている")
     let closing = try XCTUnwrap(view.hitTest(point))
     XCTAssertTrue(closing.isDescendant(of: tab.terminal), "閉じる途中は端末: \(closing)")

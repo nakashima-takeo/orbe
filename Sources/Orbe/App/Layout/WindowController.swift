@@ -54,6 +54,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// エディターで見せているタブ。無ければエディターは閉じている。あるなら前面の workspace で選んでいるタブ（揃えるのは
   /// `renderSelection` の冒頭）。書き手は選ぶ命令・エディターで見せる命令・⌘E だけで、保存しない。
   var editorShownTab: TerminalTab?
+  /// ⌥ だけの長押しの判定。成立しているかは入力の事実としてここだけが持つ（窓は複製しない）。
+  let optionHold: OptionHoldMonitor
   // chrome 更新の coalesce 状態。高頻度 report でも runloop tick 単位に 1 回へ間引く。
   private var chromeDirty = false
   private var chromeFlushScheduled = false
@@ -150,7 +152,9 @@ final class WindowController: NSObject, NSWindowDelegate {
         model: model, translucency: chromeTranslucency, agentIconResolver: agentIconResolver,
         fontResolver: fontResolver, localization: localization))
     store = SessionStore()  // 実体の populate は super.init 後（wire に self が要る）
+    optionHold = OptionHoldMonitor(window: window)
     super.init()
+    wireOptionHold()
 
     // タイトルバーは表示しない。chrome（StatusRow）がその領域を占め、
     // 信号機ボタンだけがコンテンツ上に残る。
@@ -238,6 +242,12 @@ final class WindowController: NSObject, NSWindowDelegate {
       guard let self, self.store.moveSegment(containing: from, to: to) else { return }
       self.tabsDidReorder()
     }
+  }
+
+  /// ⌥ だけの長押しの判定へ、成立の条件と成立・終わりの知らせ先を配線する。
+  private func wireOptionHold() {
+    optionHold.windowAllows = { [weak self] in self?.allowsPeek ?? false }
+    optionHold.onChange = { [weak self] in self?.optionHoldDidChange() }
   }
 
   /// アクティブ workspace のタブ順が変わった（並び替え・cd 再判定）。順が変わると editingIndex
@@ -359,6 +369,10 @@ final class WindowController: NSObject, NSWindowDelegate {
     consumeVisibleTabDone()
     refreshChrome()
     syncWindowBlur()  // 可視後の初回適用（起動時 init は windowNumber 未確定で CGS ブラーが効かない）
+  }
+
+  func windowDidResignKey(_ notification: Notification) {
+    optionHold.cancel()
   }
 
   // chrome の前面／退いた姿は key でなく main で決める（Orbe のメニューやダイアログが key の間も窓は前面）。

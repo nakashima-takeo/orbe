@@ -14,13 +14,13 @@ extension EditorPaneViewTests {
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 600)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    tab.group.view.setEditorOpen(false, animated: false)
+    tab.group.view.show(.terminal, animated: false)
     tab.group.view.layoutSubtreeIfNeeded()
     let document = try tab.group.editor.open(try caseFile("h.swift", "let a = 1\n"), as: .pinned)
     XCTAssertTrue(tab.group.view.editor.isHiddenOrHasHiddenAncestor, "前提: エディター面は閉じている")
     XCTAssertFalse(document.hasBeenShown, "見えていない面では待たない")
 
-    tab.group.view.setEditorOpen(true, animated: false)
+    tab.group.view.show(.editor, animated: false)
     tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(document.hasBeenShown, "面が見えたときに待つ")
   }

@@ -1,15 +1,17 @@
 import AppKit
 
 /// エディターの開閉——見せているものの導出と、開閉の命令（⌘E・⌘⇧F、タブをエディターで見せる操作。制御 API の
-/// `open_file`・`open_diff` も通る）。
+/// `open_file`・`open_diff` も通る）、⌥ だけの長押しの間の透かし。
 extension WindowController {
-  /// 前面の workspace で見せているもの。選択と `editorShownTab` から導く。焦点の行き先・上段の現在地・見ているタブ・
-  /// content の照合がこれを読む。
+  /// 前面の workspace で見せているもの。選択と `editorShownTab` と ⌥ だけの長押しが成立しているかから導く。焦点の行き先・
+  /// 上段の現在地・見ているタブ・content の照合がこれを読む。
   enum Presentation {
     case empty
     case board
     case terminal(TerminalTab)
     case editor(TerminalTab)
+    /// エディターで見せているタブを、⌥ だけを押している間、端末で見せている（透かし）。焦点と現在地はエディターのまま。
+    case peek(TerminalTab)
   }
 
   var presentation: Presentation {
@@ -17,16 +19,50 @@ extension WindowController {
     case .empty: .empty
     case .board: .board
     case .tab(let tab):
-      if tab === editorShownTab { .editor(tab) } else { .terminal(tab) }
+      if tab !== editorShownTab {
+        .terminal(tab)
+      } else if optionHold.isHolding {
+        .peek(tab)
+      } else {
+        .editor(tab)
+      }
     }
   }
 
-  /// chrome の現在地。端末で見せているタブは cwd、エディターで見せているタブはその連が導く値。
+  /// `group` の器の見せ方。見せているものがその連のタブのエディターか透かしならそれ、ほかは端末。
+  func facesMode(of group: TabGroup) -> GroupFacesView.Mode {
+    switch presentation {
+    case .editor(let tab) where tab.group === group: .editor
+    case .peek(let tab) where tab.group === group: .peek
+    default: .terminal
+    }
+  }
+
+  /// chrome の現在地。端末で見せているタブは cwd、エディターで見せているタブ（透かしを含む）はその連が導く値。
   var chromeLocation: TerminalTab.Location? {
     switch presentation {
     case .terminal(let tab): .cwd(tab.cwd)
-    case .editor(let tab): tab.group.editorLocation
+    case .editor(let tab), .peek(let tab): tab.group.editorLocation
     case .board, .empty: nil
+    }
+  }
+
+  /// ⌥ だけの長押しが成立を許すか: 前面の窓で、オーバーレイ（パレット・ヘルプなど）が出ておらず、タブのエディターを見せている。
+  var allowsPeek: Bool {
+    guard window.isKeyWindow, model.overlay == .none, case .editor = presentation else {
+      return false
+    }
+    return true
+  }
+
+  /// ⌥ だけの長押しが成立した・終わった。選んでいるタブの連の器へ見せ方を動きつきで写すだけで、描く関数は通さない
+  /// （フォーカスを当て直さない）。
+  func optionHoldDidChange() {
+    switch presentation {
+    case .editor(let tab), .peek(let tab):
+      tab.group.view.show(facesMode(of: tab.group), animated: true)
+    case .terminal, .board, .empty:
+      break
     }
   }
 

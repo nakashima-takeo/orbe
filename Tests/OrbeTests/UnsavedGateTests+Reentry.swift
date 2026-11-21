@@ -16,7 +16,7 @@ extension UnsavedGateTests {
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = tab.group.view
-    tab.group.view.setEditorOpen(true, animated: false)
+    tab.group.view.show(.editor, animated: false)
     return window
   }
 

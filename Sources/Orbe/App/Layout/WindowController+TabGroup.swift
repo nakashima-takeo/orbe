@@ -55,10 +55,10 @@ extension WindowController {
   /// - 器の端末面に入っているのは、その連の materialize 済みのタブの端末だけ（器を窓に付けても休眠タブは起きない）。
   /// - content に載っているのは、前面の workspace の器のうち端末を 1 枚以上持つものと、前面の workspace がボードを持てば
   ///   ボードの面だけ。
-  /// - 見えるのは選択が指すもの 1 つ。タブならその連の器（器の中では、エディターで見せているならエディター面、そうでなければ
-  ///   そのタブの端末）、ボードならボードの面、空なら何も見せず 0 タブの地を出す。前面の workspace のほかの器は閉じていて、
-  ///   content に載っていない器も閉じている（載せる前に開閉を写し、外す器は閉じてから外す）。開閉は即時に写し、同じ値なら
-  ///   器は何もしない（進行中の動きを切らない）。
+  /// - 見えるのは選択が指すもの 1 つ。タブならその連の器（器の見せ方は、エディターで見せているならエディター、透かしている
+  ///   なら透かし、そうでなければそのタブの端末）、ボードならボードの面、空なら何も見せず 0 タブの地を出す。前面の workspace の
+  ///   ほかの器は端末の見せ方で、content に載っていない器も同じ（載せる前に見せ方を写し、外す器は端末にしてから外す）。見せ方は
+  ///   即時に写し、同じ値なら器は何もしない（進行中の動きを切らない）。
   ///
   /// 焦点は当てない（器を外す・隠すと焦点は落ちうる。当て直すのは呼び手）。器は窓に付く前に大きさと可視を確定させる——窓に付いた瞬間の可視性で面
   /// （エクスプローラー）が根のサービスを握るか決まり、差した端末はその寸法で surface を起こす。器を初めて載せるときに
@@ -66,14 +66,12 @@ extension WindowController {
   func reconcileContent() {
     reconcileTerminals()
     let selected = current.selectedTab
-    var editorGroup: TabGroup?
-    if case .editor(let tab) = presentation { editorGroup = tab.group }
     var wanted: [NSView] = []
     for group in current.groups where !group.view.terminals.isEmpty {
       let view = group.view
       view.isHidden = group !== selected?.group
       if let selected, group === selected.group { view.show(terminal: selected.terminal) }
-      view.setEditorOpen(group === editorGroup, animated: false)
+      view.show(facesMode(of: group), animated: false)
       if view.superview !== model.content {
         fitToContent(view)
         group.materialize()
@@ -83,7 +81,7 @@ extension WindowController {
     }
     if store.hasBoard(current) { wanted.append(placeBoard()) }
     for sub in model.content.subviews where !wanted.contains(where: { $0 === sub }) {
-      (sub as? GroupFacesView)?.setEditorOpen(false, animated: false)
+      (sub as? GroupFacesView)?.show(.terminal, animated: false)
       sub.removeFromSuperview()
     }
     let empty = current.selection == .empty

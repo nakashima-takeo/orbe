@@ -40,6 +40,36 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
   private static let plain = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
 
+  /// `makeKey` で前面化した窓。次のテストへ key を持ち越さないため tearDown で下ろす。
+  private var openedWindows: [NSWindow] = []
+  override func tearDown() {
+    openedWindows.forEach { $0.orderOut(nil) }
+    openedWindows.removeAll()
+    super.tearDown()
+  }
+
+  /// 届いたイベントを配送しながら待つ。
+  private func pumpApp(upTo seconds: TimeInterval, until done: () -> Bool) {
+    let end = Date().addingTimeInterval(seconds)
+    while Date() < end, !done() {
+      guard
+        let event = NSApp.nextEvent(
+          matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
+      else { continue }
+      NSApp.sendEvent(event)
+    }
+  }
+
+  /// 窓を実際に key（前面）にする。前面の窓であることを要る契約を実経路で測るため。
+  func makeKey(_ wc: WindowController) {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    wc.window.makeKeyAndOrderFront(nil)
+    NSApplication.shared.activate(ignoringOtherApps: true)
+    openedWindows.append(wc.window)
+    pumpApp(upTo: 2, until: { wc.window.isKeyWindow })
+    XCTAssertTrue(wc.window.isKeyWindow, "前提: ウィンドウが key にならない環境ではこの契約を測れない")
+  }
+
   func pump(_ seconds: TimeInterval) {
     let end = Date().addingTimeInterval(seconds)
     while Date() < end {

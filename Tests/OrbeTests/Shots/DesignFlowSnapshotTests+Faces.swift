@@ -3,8 +3,9 @@ import XCTest
 
 @testable import Orbe
 
-/// 連の器の開閉（fixture は `EditorShellFixtures`。開閉は器の口が写す）: 閉じた器（端末面が器の左端から右端まで）→
-/// 開いた器（エディター面が器いっぱいに重なる）を dark で、続けて同じ並びを light で撮る。面を付けた窓の中でそのまま描く。
+/// 連の器の見せ方（fixture は `EditorShellFixtures`。見せ方は器の口が写す）: 閉じた器（端末面が器の左端から右端まで）→
+/// 開いた器（エディター面が器いっぱいに重なる）→ 透かし（エディター面が写らず、閉じた器と同じ姿）を dark で、続けて同じ並びを
+/// light で撮る。面を付けた窓の中でそのまま描く。
 extension DesignFlowSnapshotTests {
   func testFacesOverlay() throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -20,14 +21,16 @@ extension DesignFlowSnapshotTests {
     ground.addSubview(view)
     window.contentView = ground
     defer { window.contentView = nil }
-    view.setEditorOpen(true, animated: false)
+    view.show(.editor, animated: false)
     view.layoutSubtreeIfNeeded()
     pumpMain(until: { scene.isReady }, "git バッジが揃う")
     var idx = 0
     for (appearance, suffix) in [(NSAppearance.Name.darkAqua, ""), (.aqua, "_light")] {
       window.appearance = NSAppearance(named: appearance)
-      for (label, open) in [("closed", false), ("open", true)] {
-        view.setEditorOpen(open, animated: false)
+      for (label, mode) in [
+        ("closed", GroupFacesView.Mode.terminal), ("open", .editor), ("peek", .peek),
+      ] {
+        view.show(mode, animated: false)
         view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
         try writeFacesShot(
