@@ -127,7 +127,6 @@ let automationTools: [[String: Any]] = [
   ]),
   obj([
     ("name", "get_automation_trial"),
-    readOnlyAnnotation,
     (
       "description",
       described(

@@ -35,9 +35,11 @@ func schema(_ props: [String: Any], required: [String] = []) -> [String: Any] {
   ["type": "object", "properties": props, "required": required]
 }
 
-/// 状態を変えない（Orbe の状態もファイルも書かず、プロセスも起こさない）ツールに付ける MCP の注釈。注釈で承認の要否を決める
-/// クライアント（codex）は、これを持つツールの呼び出しに承認を求めない。状態を変えるツールには注釈を何も付けない——事実どおりの
-/// `destructiveHint: false`・`openWorldHint: false` でも codex は承認を省き、状態を変える呼び出しへの承認が消えるため。
+/// 普段のツール（`tools`）のうち、状態を変えず（Orbe の状態もファイルも書かず、プロセスも起こさない）、待たずに返り、タブの画面の
+/// 中身を返さないものに付ける MCP の注釈。注釈で承認の要否を決めるクライアント（codex）は、これを持つツールの呼び出しに承認を
+/// 求めない。codex・claude はこれを持つツールを並べて呼ぶが、本ブリッジは 1 件ずつ応えるので、長く待つツールに付けると後ろの
+/// 呼び出しが時間切れになる。状態を変えるツールには注釈を何も付けない——事実どおりの `destructiveHint: false`・`openWorldHint: false` でも
+/// codex は承認を省き、状態を変える呼び出しへの承認が消えるため。
 let readOnlyAnnotation: (String, Any) = ("annotations", ["readOnlyHint": true])
 
 let tools: [[String: Any]] =
@@ -74,7 +76,6 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "get_tab_text"),
-      readOnlyAnnotation,
       ("description", "タブの画面テキストを平文で取得する。scrollback=true で履歴全体、false で可視範囲のみ。"),
       (
         "inputSchema",
@@ -269,7 +270,6 @@ let tools: [[String: Any]] =
     ]),
     obj([
       ("name", "wait_for_event"),
-      readOnlyAnnotation,
       (
         "description",
         "状態変化イベントを待つ（長ポーリング）。扱える kind: agent_state / title / pwd / "
