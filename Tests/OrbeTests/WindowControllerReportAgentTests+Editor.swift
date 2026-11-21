@@ -36,20 +36,23 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(tab.agentState, "idle", "端末が出たら消える")
   }
 
-  /// ⌥ で透かすと、エディターを開いている間に付いた done の印が消える。透かしている最中に終わっても音も知らせも出ない。
+  /// 前面の窓で透かしているタブは見ているタブ——エディターを開いている間に付いた done の印が消え、透かしている最中に終わっても
+  /// 音も知らせも出ない。
   func testPeekingCountsAsLookingAtTheTab() throws {
-    AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))  // 言語選択のオーバーレイを出さない
     let (wc, tab) = try makeControllerAndTab()
     let option = OptionHoldDriver(wc)
-    makeKey(wc)
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     wc.toggleEditorFace()
     done(wc, tab)
     XCTAssertEqual(tab.agentState, "done", "前提: エディターの間の done は残る")
-
+    // 窓を前面にしておける時間はテストが決められない（ほかのアプリが前面を取る）ので、透かしてから前面にし、前面に戻ったときの
+    // done の消去で見ているタブかを確かめる。
+    wc.optionHold.windowAllows = { true }
     option.hold()
+
+    makeKey(wc)
     XCTAssertTrue(wc.visibleTab === tab, "透かしている間は見ているタブ")
-    XCTAssertEqual(tab.agentState, "idle", "透かした時点で done の印が消える")
+    XCTAssertEqual(tab.agentState, "idle", "見ているタブの done の印は消える")
 
     wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
     wc.attentionStore.transient = nil
