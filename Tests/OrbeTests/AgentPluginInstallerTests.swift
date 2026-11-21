@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// パッケージのプラグイン名の導出規則（`AgentPluginInstaller.pluginName(in:)`）、中身の指紋、
-/// `run` の完了順序を固定する。
+/// `run` の完了順序と、同梱の install.sh が claude の一覧から導入するかを決める規則を固定する。
 /// 名前はビルド時にチャネルから導出されるため Swift には焼けず、`plugins/` 直下の唯一の
 /// サブディレクトリ名として読む。この 1 つの名前を marketplace 登録と channel の置き場所が
 /// 共有するので、曖昧なパッケージでは nil を返す（誤った名前で登録しない）。
@@ -206,7 +206,7 @@ final class AgentPluginInstallerTests: OrbeTestCase {
   }
 
   /// このプラグインの行は無効にしても一覧に残るので、一覧が失敗しても行があれば導入済みとして何もしない。
-  func testClaudeListShowingThePluginIsUnchangedWhateverItsStatus() throws {
+  func testClaudeListShowingThePluginIsUnchangedEvenWhenTheListFails() throws {
     let run = try runBundledInstaller(
       claudeList: "  ❯ orbe-agent@orbe-agent\n    Status: ✘ disabled\n", listStatus: 1)
     XCTAssertTrue(run.log.contains("ok claude"), "\(run.log)")

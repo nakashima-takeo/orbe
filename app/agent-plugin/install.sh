@@ -24,7 +24,7 @@ tmo() {
     my $cut = 0;
     $SIG{ALRM} = sub { kill($cut++ ? "KILL" : "TERM", $pid); alarm 2 };
     alarm $limit;
-    1 while waitpid($pid, 0) == -1 && $!{EINTR};
+    waitpid($pid, 0);
     exit 124 if $cut;
     exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
   ' "$@" </dev/null 2>/dev/null
@@ -46,10 +46,10 @@ if command -v claude >/dev/null 2>&1; then
   # 誤認して plugin install を永久に飛ばさないよう、完全一致で判定する。このプラグインの行は無効にしても残るので、
   # あれば終了コードによらず導入済み。行が無いことを信じるのは、一覧が最後まで出た（終了コード 0）ときだけ。
   tmo 15 claude plugin list >"$LIST"
-  LISTED=$?
+  LIST_STATUS=$?
   if grep -qF "${NAME}@${NAME}" "$LIST"; then
     echo "unchanged claude"
-  elif [ "$LISTED" -ne 0 ]; then
+  elif [ "$LIST_STATUS" -ne 0 ]; then
     echo "error claude"
   elif tmo 60 claude plugin install "${NAME}@${NAME}" >/dev/null; then
     echo "installed claude"
