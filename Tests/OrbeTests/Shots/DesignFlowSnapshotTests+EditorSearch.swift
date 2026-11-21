@@ -5,7 +5,7 @@ import XCTest
 
 @testable import Orbe
 
-/// プロジェクト検索の flow（fixture は骨の `EditorShellFixtures`。状態は本物の操作が生む）: 端末焦点から ⌘⇧F → 打鍵
+/// プロジェクト検索の flow（fixture は骨の `EditorShellFixtures`。状態は本物の操作が生む）: ⌘⇧F が pane に頼む検索パネル → 打鍵
 /// （300ms 後に検索）→ 結果 → ⌘↓ で結果へ → ↓（ファイルが仮のタブで開いて一致が選ばれ中央に。橙の地と現在の一致）→
 /// Enter（普通のタブにして本文へ）→ レールでエクスプローラーへ切り替えると地が消える → F4 で次の一致（検索パネルが戻り、
 /// 焦点は本文のまま——入力欄は焦点の枠を出さない）。
@@ -17,13 +17,11 @@ extension DesignFlowSnapshotTests {
     scene.warmUp()
     pumpMain(until: { scene.isReady }, "git バッジが揃う")
     let pane = scene.pane
-    let group = scene.group
     let search = pane.projectSearch
-    group.setFaces(.terminalOnly, animated: false)
     try flow(
       "editor_search", size: NSSize(width: 1100, height: 640), render: { scene.view },
       steps: [
-        ("command_shift_f", { group.findInProject() }),
+        ("command_shift_f", { pane.showProjectSearch(seed: pane.projectSearchSeed()) }),
         (
           "typed",
           {

@@ -25,7 +25,7 @@ final class StatusRowViewRenderTests: OrbeTestCase {
       strip: TabStrip(
         titles: keys, tabIds: Array(keys.indices), segments: segments,
         colorIndices: segments.map { WorktreeColor.index(forKey: keys[$0.lowerBound]) }),
-      selection: .tab(active), boardLabel: nil, location: nil, faceDots: nil, rollup: [])
+      selection: .tab(active), boardLabel: nil, location: nil, rollup: [])
   }
 
   /// タブ行を並べない窓に載せて描く。

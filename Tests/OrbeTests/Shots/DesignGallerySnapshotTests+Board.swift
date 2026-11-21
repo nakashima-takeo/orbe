@@ -22,7 +22,6 @@ extension DesignGallerySnapshotTests {
 
     let tabSelected = homeRow(homeTabs, selection: .tab(1))
     tabSelected.location = [.dim("~/Library/Application Support/dev.orbe.app.dev/home")]
-    tabSelected.faceDots = .init(editor: .off, terminal: .focus)
     try writePNG(
       homeBand(tabSelected, size: rowStage), size: rowStage, name: "statusrow_board_tab.png",
       dir: dir)

@@ -51,6 +51,14 @@ final class WindowController: NSObject, NSWindowDelegate {
   var rememberedWindowSize: WindowSize?
   // 復元時の programmatic な setFrame を windowDidResize の取り込みから除外するフラグ。
   var isApplyingRestoredSize = false
+  /// エディターで見せているタブ。無ければエディターは閉じている。あるなら前面の workspace で選んでいるタブ（揃えるのは
+  /// `renderSelection` の冒頭）。書き手は選ぶ命令・エディターで見せる命令・⌘E だけで、保存しない。替われば ⌥ だけの長押しを
+  /// 打ち切る——透かしは見せていたエディターの下を見るもので、閉じた・別のタブへ移ったエディターには残さない。
+  var editorShownTab: TerminalTab? {
+    didSet { if editorShownTab !== oldValue { optionHold.interrupt() } }
+  }
+  /// ⌥ だけの長押しの判定。成立しているかは入力の事実としてここだけが持つ（窓は複製しない）。
+  let optionHold: OptionHoldMonitor
   // chrome 更新の coalesce 状態。高頻度 report でも runloop tick 単位に 1 回へ間引く。
   private var chromeDirty = false
   private var chromeFlushScheduled = false
@@ -142,7 +150,9 @@ final class WindowController: NSObject, NSWindowDelegate {
         model: model, translucency: chromeTranslucency, agentIconResolver: agentIconResolver,
         fontResolver: fontResolver, localization: localization))
     store = SessionStore()  // 実体の populate は super.init 後（wire に self が要る）
+    optionHold = OptionHoldMonitor(window: window)
     super.init()
+    wireOptionHold()
 
     // タイトルバーは表示しない。chrome（StatusRow）がその領域を占め、
     // 信号機ボタンだけがコンテンツ上に残る。
@@ -153,7 +163,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     window.contentView = hostingView
     syncWindowOpacity()  // 起動時に既定 95% の背景透過を適用（WindowController+Opacity）
     // 背景ブラーの初回適用は windowDidBecomeKey が担う（init は windowNumber 未確定で CGS が効かない）。
-    // SwiftUI に content スロット（端末の器）を即マウントさせ、初回 select() の
+    // SwiftUI に content スロット（端末の器）を即マウントさせ、初回の描画（`renderSelection`）の
     // makeFirstResponder が成立する（= 起動直後からアクティブタブがキー入力を受ける）状態を作る。
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
@@ -232,6 +242,12 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
   }
 
+  /// ⌥ だけの長押しの判定へ、成立の条件と成立・終わりの知らせ先を配線する。
+  private func wireOptionHold() {
+    optionHold.windowAllows = { [weak self] in self?.allowsPeek ?? false }
+    optionHold.onChange = { [weak self] in self?.optionHoldDidChange() }
+  }
+
   /// アクティブ workspace のタブ順が変わった（並び替え・cd 再判定）。順が変わると editingIndex
   /// （位置 index）が別タブを指す（count 不変で StatusRowView 側の onChange も検知不能）ので編集中なら
   /// 畳み、current.tabs 順を再投影して新順を workspaces.json へ（1 秒デバウンス）。
@@ -278,15 +294,6 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// アクティブ workspace の選んでいるタブ。ボード・空なら nil（ボードには場所も面も無いので、0 タブと同じ扱い）。
   var activeTab: TerminalTab? { current.selectedTab }
 
-  /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
-  /// 背面・ボード・空なら nil。
-  /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
-  var visibleTab: TerminalTab? { window.isKeyWindow ? activeTab : nil }
-
-  /// 完了通知の消費：見ているタブの done を消費して done バッジを消す。
-  /// 背面・背景タブの done は残す。3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
-  func consumeVisibleTabDone() { visibleTab?.consumeDoneState() }
-
   /// chrome 更新を要求する。`window.title`（Mission Control 用・O(1)）は即時反映し、重い StatusRow
   /// snapshot（全 workspace×全タブ走査）は dirty を立て runloop tick 末尾に 1 回だけ予約。
   /// 同一 turn 内の N 回の要求（高頻度 report_agent 等）は 1 回の `flushChrome` に畳む。
@@ -310,8 +317,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         strip: tabStrip(of: current),
         selection: chromeSelection(of: current),
         boardLabel: store.hasBoard(current) ? current.name : nil,
-        location: activeTab?.location,
-        faceDots: activeTab?.group.view.projection.dots,
+        location: chromeLocation,
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
@@ -344,11 +350,15 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
   }
 
-  // アプリ前面復帰：背面で届いていたアクティブ表示タブの done を消費する。
+  // アプリ前面復帰：背面で届いていた、見ているタブ（`visibleTab`）の done を消費する。
   func windowDidBecomeKey(_ notification: Notification) {
     consumeVisibleTabDone()
     refreshChrome()
     syncWindowBlur()  // 可視後の初回適用（起動時 init は windowNumber 未確定で CGS ブラーが効かない）
+  }
+
+  func windowDidResignKey(_ notification: Notification) {
+    optionHold.cancel()
   }
 
   // chrome の前面／退いた姿は key でなく main で決める（Orbe のメニューやダイアログが key の間も窓は前面）。

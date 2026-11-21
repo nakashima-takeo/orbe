@@ -86,7 +86,7 @@ final class WorkspaceActivationTests: OrbeTestCase {
     ws.lastUsedAt = Date(timeIntervalSinceReferenceDate: 1)
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertTrue(store.recordSelection(.tab(ws.tabs[1])))
+    XCTAssertTrue(store.recordSelection(.tab(ws.tabs[1]), inWorkspaceAt: 0))
     XCTAssertEqual(ws.selectedTabIndex, 1)
     XCTAssertGreaterThan(try XCTUnwrap(ws.lastUsedAt), Date(timeIntervalSinceReferenceDate: 1))
     XCTAssertFalse(ws.activated)

@@ -15,18 +15,13 @@ extension WindowController {
   }
 
   /// 連を作り、上位への通知を配線する（配線は作るときに 1 回だけ）。
-  func makeGroup(key: String, state: GroupState? = nil) -> TabGroup {
+  func makeGroup(key: String, state: EditorState? = nil) -> TabGroup {
     let group = TabGroup(key: key, state: state, editorSurfaces: editorSurfaces)
-    group.onFacesChange = { [weak self, weak group] in
-      guard let self, let group else { return }
-      groupFacesDidChange(group)
-    }
     group.onEditorChange = { [weak self] in
       self?.refreshChrome()
       self?.scheduleSave()
     }
     group.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
-    group.view.onProjectionChange = { [weak self] in self?.refreshChrome() }
     group.view.configure(
       translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
       sidebar: editorSidebar, diffModes: editorDiffModes)
@@ -40,14 +35,10 @@ extension WindowController {
 
   /// cd で根が `key` に変わったタブの所属を付け替える。元の連に他のタブが残るなら、そのタブだけが行き先の連（無ければ
   /// 新しい連）へ移る。元の連の最後のタブなら、行き先が無ければ連ごとキーを付け替え、あれば元のエディターのタブ
-  /// （文書と diff）を行き先へ移して連を畳む。前面のアクティブなタブが端末に焦点を置いたまま連を移ったら、行き先の
-  /// 焦点を端末にする（行き先がエディター全面なら端末だけの配置へ）——焦点の記憶を実際に焦点がある面から導く規則を、
-  /// cd の経路にも当てる。
+  /// （文書と diff）を行き先へ移して連を畳む。エディターで見せているかは窓の状態なので変わらず、付け替えの後の照合が
+  /// 行き先の器へ写す。
   func moveToGroup(_ tab: TerminalTab, key: String) {
     guard let ws = workspaces.first(where: { $0.tabs.contains { $0 === tab } }) else { return }
-    let terminalFocused =
-      tab === activeTab
-      && (window.firstResponder as? NSView)?.isDescendant(of: tab.terminal) == true
     let old = tab.group
     let dest = group(forKey: key, in: ws, excluding: tab)
     if ws.tabs.contains(where: { $0 !== tab && $0.group === old }) {
@@ -58,20 +49,16 @@ extension WindowController {
     } else {
       old.rekey(key)
     }
-    guard terminalFocused, tab.group !== old else { return }
-    let faces = tab.group.faces
-    tab.group.setFaces(
-      faces.editorRatio >= 1
-        ? .terminalOnly : FaceLayout(editorRatio: faces.editorRatio, focus: .terminal),
-      animated: false)
   }
 
   /// content と器の中身を、タブの状態と選択に揃える（冪等。状態を変えた経路の終わりで毎回呼ぶ）。保つ不変条件は 3 つ。
   /// - 器の端末面に入っているのは、その連の materialize 済みのタブの端末だけ（器を窓に付けても休眠タブは起きない）。
   /// - content に載っているのは、前面の workspace の器のうち端末を 1 枚以上持つものと、前面の workspace がボードを持てば
   ///   ボードの面だけ。
-  /// - 見えるのは選択が指すもの 1 つ。タブならその連の器（器の中ではそのタブの端末）、ボードならボードの面、空なら何も
-  ///   見せず 0 タブの地を出す。
+  /// - 見えるのは選択が指すもの 1 つ。タブならその連の器（器の見せ方は、エディターで見せているならエディター、透かしている
+  ///   なら透かし、そうでなければそのタブの端末）、ボードならボードの面、空なら何も見せず 0 タブの地を出す。前面の workspace の
+  ///   ほかの器は端末の見せ方で、content に載っていない器も同じ（載せる前に見せ方を写し、外す器は端末にしてから外す）。見せ方は
+  ///   即時に写し、同じ値なら器は何もしない（進行中の動きを切らない）。
   ///
   /// 焦点は当てない（器を外す・隠すと焦点は落ちうる。当て直すのは呼び手）。器は窓に付く前に大きさと可視を確定させる——窓に付いた瞬間の可視性で面
   /// （エクスプローラー）が根のサービスを握るか決まり、差した端末はその寸法で surface を起こす。器を初めて載せるときに
@@ -84,6 +71,7 @@ extension WindowController {
       let view = group.view
       view.isHidden = group !== selected?.group
       if let selected, group === selected.group { view.show(terminal: selected.terminal) }
+      view.show(facesMode(of: group), animated: false)
       if view.superview !== model.content {
         fitToContent(view)
         group.materialize()
@@ -93,6 +81,7 @@ extension WindowController {
     }
     if store.hasBoard(current) { wanted.append(placeBoard()) }
     for sub in model.content.subviews where !wanted.contains(where: { $0 === sub }) {
+      (sub as? GroupFacesView)?.show(.terminal, animated: false)
       sub.removeFromSuperview()
     }
     let empty = current.selection == .empty

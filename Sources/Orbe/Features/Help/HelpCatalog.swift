@@ -2,7 +2,7 @@ import Foundation
 
 /// ⌘H ヘルプの静的カタログ（ショートカット一覧・キーボード物理配列・チップ記号）。
 /// 掲載内容の真実の出所（どれも手動棚卸し）は、chrome キー・メニュー・libghostty の既定・面の中のキー（エディター面の
-/// ソース管理のメッセージ欄）・修飾のジェスチャ（⌘⌘）。
+/// ソース管理のメッセージ欄）・修飾のジェスチャ（⌘⌘・⌥ の長押し）。
 /// 表示キー表記・ラベル・カテゴリ・combo はプレゼンテーション情報でコードから導出できないため
 /// 静的に持ち、内部整合（combo⊆KB・厳選⊆カテゴリ行・表示キー一意）は HelpCatalogTests が機械保証する。
 /// 掲載内容で機械保証があるのはタブ左右移動の「矢印が主・括弧が従」だけ（提示の意思決定のため）。
@@ -30,6 +30,9 @@ enum HelpCatalog {
         Row(key: "⌘H", label: .helpShortcutHelp, combo: ["cmd", "h"]),
         Row(key: "⌘,", label: .helpShortcutSettings, combo: ["cmd", ","]),
         Row(key: "⌘E", label: .helpShortcutToggleEditorFace, combo: ["cmd", "e"]),
+        // ⌥ だけの長押し。⌘⌘ と同じく画面に書けないジェスチャなので、ここに載せる。combo は ⌥ 単独（修飾のみの combo は
+        // ⌘⌘ とこの 2 行）。
+        Row(key: "⌥", label: .helpShortcutPeekTerminal, combo: ["opt"]),
         Row(key: "⌘S", label: .helpShortcutSaveDocument, combo: ["cmd", "s"]),
         Row(key: "⌘⇧F", label: .helpShortcutFindInProject, combo: ["cmd", "shift", "f"]),
         Row(key: "↵", label: .helpShortcutScmCommit, combo: ["return"]),
@@ -57,7 +60,7 @@ enum HelpCatalog {
         Row(key: "⌘⇧A", label: .helpShortcutAgentPalette, combo: ["cmd", "shift", "a"]),
         Row(key: "⌘⇧X", label: .helpShortcutTasks, combo: ["cmd", "shift", "x"]),
         // ⌘ の素タップ×2。画面のどこにも書けない発見不能なジェスチャなので、可視の入口である
-        // ここに必ず載せる。combo は ⌘ 単独＝点灯する物理キーそのもの（唯一の修飾のみ combo）。
+        // ここに必ず載せる。combo は ⌘ 単独＝点灯する物理キーそのもの（修飾のみの combo は、この行と ⌥ の行の 2 行）。
         Row(key: "⌘⌘", label: .helpShortcutAttentionPalette, combo: ["cmd"]),
       ]),
     Group(

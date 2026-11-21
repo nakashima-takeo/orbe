@@ -38,27 +38,3 @@ final class WindowControllerFocusRestoreTests: OrbeTestCase {
     XCTAssertFalse(wc.window.firstResponder === surface, "nextTab が届けば隣タブの surface へ移る")
   }
 }
-
-/// 面（エディター pane・端末 surface）のクリックと取っ手の操作が、焦点の面をどう動かすかを実窓で固定する。
-extension WindowControllerFocusRestoreTests {
-  /// 分割中にエディター面をクリックして焦点にし、継ぎ目を押すと、残るのは焦点の面（エディター）。
-  func testSeamClickKeepsTheFocusedEditorFace() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
-    wc.window.contentView?.layoutSubtreeIfNeeded()
-    let pane = tab.group.view.editor
-    XCTAssertGreaterThan(pane.bounds.width, 0, "前提: 分割でエディター面が見えている")
-
-    pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: wc.window))
-    XCTAssertTrue(wc.window.firstResponder === pane, "クリックでエディター pane が first responder")
-    XCTAssertEqual(tab.group.faces.focus, .editor, "連の焦点の面がエディターへ追従する")
-
-    let handle = tab.group.view.handle
-    handle.mouseDown(with: .mouse(.leftMouseDown, at: handle.centerInWindow, in: wc.window))
-    handle.mouseUp(with: .mouse(.leftMouseUp, at: handle.centerInWindow, in: wc.window))
-    XCTAssertEqual(
-      tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "継ぎ目を押すと焦点の面（エディター）が全面に残る")
-    XCTAssertTrue(wc.window.firstResponder === pane, "焦点はエディター pane のまま")
-  }
-}
