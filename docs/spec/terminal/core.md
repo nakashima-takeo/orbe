@@ -27,7 +27,7 @@ pty fork ＋シェル起動だけは、surface 生成時に spawn される io �
 
 GPU（Metal）描画。surface view は layer-hosting で、libghostty が自前のレイヤを view に代入してから `wantsLayer` を立てる規約に従う——host 側が先に `wantsLayer` を立ててはならない。
 
-描画駆動は `wakeup_cb` → `ghostty_app_tick` → RENDER アクション → `ghostty_surface_draw` の流れ。vsync への同期は CVDisplayLink でコアレッスし、常時 60fps のタイマーは持たない。
+描画は libghostty の描画のスレッドが行い、描いた結果は main で layer に載る。vsync への同期は CVDisplayLink が担い、常時 60fps のタイマーは持たない。
 
 ### 可視性の同期（外部契約）
 

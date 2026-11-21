@@ -298,7 +298,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 ### 5.1 chrome（2 段 28+28・TopBar＋TabBar）
 
 - **TopBar（上段 28px）**: 背景透明（最背面の chromeBg＋ambient が見える）・**罫線なし**。左 padding 16＋信号機の柱 80px。縦位置は信号機 close ボタン中央へ整列。空白は窓ドラッグ面。
-  - 左: `workspace名`（mono 11・`text.primary`）。build-id・現在地は名前の後に後置（→§9）。現在地は焦点の面のもので、トーン付きの断片列——端末焦点は cwd 1 本（`text.muted`）、エディター焦点は根（`text.muted`）＋ 相対パス（`statusText`）、PR の diff のタブは `PR #N`（`accent.bright`）＋ ` · `・ディレクトリ（`text.muted`）＋ ファイル名（`statusText`）、根の外の文書は絶対パス 1 本（`statusText`）、空状態は根だけ。
+  - 左: `workspace名`（mono 11・`text.primary`）。build-id・現在地は名前の後に後置（→§9）。現在地は見せているもの（端末で見せている／エディターで見せている。透かしはエディター）に従い、トーン付きの断片列——端末で見せていれば cwd 1 本（`text.muted`）、エディターで見せていれば根（`text.muted`）＋ 相対パス（`statusText`）、PR の diff のタブは `PR #N`（`accent.bright`）＋ ` · `・ディレクトリ（`text.muted`）＋ ファイル名（`statusText`）、根の外の文書は絶対パス 1 本（`statusText`）、空状態は根だけ。
   - 右: ステータスストリップ（§4 の書式）・右 padding 16。
 - **窓が main でない間（退いた姿）**: chrome だけが退き、端末・エディターの本文の濃さは変えない。切り替えは即時（アニメーションなし）。
   - グロー（BackgroundGlow のラジアル 2 枚）を描かない。不透明時の `bg.base` の地は残す。
