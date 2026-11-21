@@ -45,8 +45,7 @@ extension SourceControlPaneTests {
     try repo.write("x2.txt", "x\n")
     XCTAssertTrue(repo.git(["add", "x1.txt"]).isSuccess)
     let hosted = host(repo)
-    hosted.window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
-    hosted.window.orderFront(nil)
+    placeOffscreen(hosted.window)
     let scm = hosted.scm
     pumpMain(until: { scm.changes.staged.count == 1 && scm.changes.changes.count == 1 }, "両方の区分")
     let staged = try row(hosted, .staged, "x1.txt")
