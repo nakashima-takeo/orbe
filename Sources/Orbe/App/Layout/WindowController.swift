@@ -51,6 +51,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   var rememberedWindowSize: WindowSize?
   // 復元時の programmatic な setFrame を windowDidResize の取り込みから除外するフラグ。
   var isApplyingRestoredSize = false
+  /// エディターで見せているタブ。無ければエディターは閉じている。あるなら前面の workspace で選んでいるタブ（揃えるのは
+  /// `renderSelection` の冒頭）。書き手は選ぶ命令・エディターで見せる命令・⌘E だけで、保存しない。
+  var editorShownTab: TerminalTab?
   // chrome 更新の coalesce 状態。高頻度 report でも runloop tick 単位に 1 回へ間引く。
   private var chromeDirty = false
   private var chromeFlushScheduled = false
@@ -158,7 +161,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     window.contentView = hostingView
     syncWindowOpacity()  // 起動時に既定 95% の背景透過を適用（WindowController+Opacity）
     // 背景ブラーの初回適用は windowDidBecomeKey が担う（init は windowNumber 未確定で CGS が効かない）。
-    // SwiftUI に content スロット（端末の器）を即マウントさせ、初回 select() の
+    // SwiftUI に content スロット（端末の器）を即マウントさせ、初回の描画（`renderSelection`）の
     // makeFirstResponder が成立する（= 起動直後からアクティブタブがキー入力を受ける）状態を作る。
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
@@ -283,10 +286,13 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// アクティブ workspace の選んでいるタブ。ボード・空なら nil（ボードには場所も面も無いので、0 タブと同じ扱い）。
   var activeTab: TerminalTab? { current.selectedTab }
 
-  /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
-  /// 背面・ボード・空なら nil。
+  /// 「見ているタブ」＝ウィンドウがキー（前面）のときに、アクティブ workspace で端末を見せているタブ。
+  /// 背面・ボード・空・エディターで見せている間（端末が覆われていて結果もプロンプトも見えない）なら nil。
   /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
-  var visibleTab: TerminalTab? { window.isKeyWindow ? activeTab : nil }
+  var visibleTab: TerminalTab? {
+    guard window.isKeyWindow, case .terminal(let tab) = presentation else { return nil }
+    return tab
+  }
 
   /// 完了通知の消費：見ているタブの done を消費して done バッジを消す。
   /// 背面・背景タブの done は残す。3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
@@ -315,8 +321,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         strip: tabStrip(of: current),
         selection: chromeSelection(of: current),
         boardLabel: store.hasBoard(current) ? current.name : nil,
-        location: activeTab?.location,
-        faceDots: activeTab?.group.view.projection.dots,
+        location: chromeLocation,
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）

@@ -21,11 +21,26 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// アクティブ workspace を表示する（選択をそのまま描く。空ならシェルは起こさない）。
+  /// `tab` の workspace をアクティブにする（描かない）。替えたかを返す。替えたら、呼び手は状態を書いて 1 回だけ描いた後に
+  /// `finishWorkspaceSwitch` を呼ぶ（タブへ移る `focus_tab`・`open_file`・`open_diff`）——先に切替を描くと、移り先では
+  /// ないタブが一瞬「見ているタブ」になる。
+  func activateWorkspace(of tab: TerminalTab) -> Bool {
+    guard let index = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tab } })
+    else { return false }
+    return store.setActiveWorkspace(index)
+  }
+
+  /// workspace を替えて描いた後の仕上げ（実効設定の反映・保存の予約）。
+  func finishWorkspaceSwitch() {
+    applyActiveWorkspaceConfig()
+    scheduleSave()
+  }
+
+  /// アクティブ workspace を表示する（今の状態を描く。空ならシェルは起こさない）。
   /// 切替・復元・明示削除後の MRU 繰上げの全アクティブ化経路がここを共有する。
   func activateCurrent() {
     store.recordWorkspaceUse(current)  // 前面へ出すこと自体が利用（空でも MRU を進める）
-    select(current.selection)
+    renderSelection()
     applyActiveWorkspaceConfig()  // 実効設定（外観＋gui.conf）は0タブでも従来どおり反映する
   }
 

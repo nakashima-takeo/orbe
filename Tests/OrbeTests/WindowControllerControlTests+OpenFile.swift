@@ -4,8 +4,9 @@ import XCTest
 
 @testable import Orbe
 
-/// `open_file` の実体——ファイルが開いてエディター面が見え、そのタブが焦点になる。相対パスはタブの cwd から、
-/// 未知のタブは -32004、開けないファイルは -32000 で面は変わらない。
+/// `open_file` の実体——ファイルが開いてそのタブが選ばれ、エディターが開いて焦点になる。相対パスはタブの cwd から、
+/// 未知のタブは -32004、開けないファイルは -32000 でエディターは開かない。別の workspace のタブなら、その workspace へ
+/// 移って 1 回だけ描く。
 ///
 /// 重要: 実 NSWindow に接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 extension WindowControllerControlTests {
@@ -25,20 +26,17 @@ extension WindowControllerControlTests {
     let tabs = try wc.controlListTabs(workspaceId: nil).get()
     let second = try XCTUnwrap(tabs[1]["tabId"] as? Int)
     let tab = try XCTUnwrap(wc.controlResolveTab(second))
-    XCTAssertEqual(tab.group.faces, .terminalOnly)
+    XCTAssertFalse(tab.group.view.isEditorOpen)
 
     let result = wc.controlOpenFile(tabId: second, path: "note.md")
     guard case .success = result else { return XCTFail("\(result)") }
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
+    XCTAssertTrue(tab.group.view.isEditorOpen, "エディターが開く")
     let opened = MainActor.assumeIsolated { tab.group.editor.activeDocument?.url }
     XCTAssertEqual(opened, url.resolvingSymlinksInPath())
     XCTAssertTrue(
       try wc.controlListTabs(workspaceId: nil).get()[1]["active"] as? Bool == true, "そのタブが選ばれる")
-    XCTAssertTrue(wc.window.firstResponder === tab.focusTarget, "テキスト面へフォーカス")
-
-    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
-    _ = wc.controlOpenFile(tabId: second, path: url.path)
-    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割中は焦点だけ")
+    XCTAssertTrue(
+      wc.window.firstResponder === tab.group.view.editor.focusTarget, "テキスト面へフォーカス")
   }
 
   /// 一度も起きていない背景 workspace のタブ（前回開いていた文書を持つ）へ `open_file` すると、materialize の
@@ -76,6 +74,7 @@ extension WindowControllerControlTests {
     XCTAssertEqual(Set(documents), [a, c], "前回開いていた文書も戻る")
     let shown = MainActor.assumeIsolated { tab.group.view.editor.document?.url }
     XCTAssertEqual(shown, c, "面に載っているのも要求した文書")
+    XCTAssertTrue(tab.group.view.isEditorOpen, "移り先でエディターが開く")
   }
 
   func testOpenFileErrors() throws {
@@ -102,7 +101,7 @@ extension WindowControllerControlTests {
     } else {
       XCTFail("UTF-8 でないファイルは -32000")
     }
-    XCTAssertEqual(tab.group.faces, .terminalOnly, "失敗では面は変わらない")
+    XCTAssertFalse(tab.group.view.isEditorOpen, "失敗ではエディターは開かない")
     XCTAssertNil(MainActor.assumeIsolated { tab.group.editor.activeDocument })
   }
 }

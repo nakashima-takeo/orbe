@@ -5,7 +5,7 @@ import OrbeSessionLog
 /// タブ 1 枚。端末 surface 1 枚（`SurfaceView`）と「タブとしての状態」——制御チャネルの宛先 ID・
 /// エージェントスロット・明示タイトル・復元単位——を所有し、所属の連（`TabGroup`）を指す。外部から指す単位・
 /// エージェントが走る単位・永続の単位はすべてこのタブで、`SurfaceView` はシェルが報告する事実（タイトル・cwd）と
-/// 端末 I/O だけを持つ。エディターと面の配置は連が持つ。
+/// 端末 I/O だけを持つ。エディターは連が持つ。
 ///
 /// `terminal` は AppKit の NSView として作り直さずに、連の器へ差す／隠す／外すだけを行う。
 /// SwiftUI に所有させて再生成すると scrollback と非アクティブ workspace の keep-alive
@@ -281,7 +281,7 @@ final class TerminalTab {
 
   /// このタブの復元単位（cwd・エージェントセッション・明示タイトル）。起動時の一括保存（WorkspacePersistence）が読み、
   /// 復元は `TerminalTab(restoring:)` が同じ形を受ける。永続化するのは sessionId が確定している同一性だけ
-  /// （resume 不能な記録を書かない）。エディターと面の配置は連の状態（`TabGroup.groupState`）。
+  /// （resume 不能な記録を書かない）。エディターは連の状態（`TabGroup.groupState`）。
   func tabState() -> TabState {
     TabState(
       cwd: cwd, agent: agentSlot.session.flatMap { $0.sessionId != nil ? $0 : nil },
@@ -290,5 +290,17 @@ final class TerminalTab {
 
   deinit {
     ControlServer.shared.emit(.tabClosed(tabId: id))
+  }
+
+  /// chrome の現在地（事実。表現は chrome が持つ）。端末で見せているときは cwd 1 本、エディターで見せているときは連が導く
+  /// 値（→ `TabGroup.editorLocation`）。cwd と根の外の絶対パスは別の事実（常態の居場所と、根から外れたファイル）で、
+  /// chrome は別のトーンで描く。
+  enum Location: Equatable {
+    case cwd(String)
+    case root(String)
+    case file(root: String, relative: String)
+    case absolute(String)
+    /// PR の diff（PR の番号と、根からの相対パス）。
+    case pullRequest(number: Int, relative: String)
   }
 }

@@ -22,12 +22,12 @@ final class TabGroupTests: OrbeTestCase {
   }
 
   private func group(_ state: GroupState? = nil) -> TabGroup {
-    TabGroup(key: "/tmp", state: state, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    TabGroup(key: "/tmp", state: state?.editor, editorSurfaces: EditorSurfaces(queriesRoot: nil))
   }
 
   func testGroupStateCarriesOpenDocumentsAndTheActive() throws {
     let group = group()
-    XCTAssertNil(group.groupState(), "既定の配置で文書も問いも無ければ書かない")
+    XCTAssertNil(group.groupState(), "文書も問いも無ければ書かない")
     let a = try group.editor.open(try file("a.txt"), as: .pinned)
     let b = try group.editor.open(try file("b.txt"), as: .preview)
     group.editor.activate(a)
@@ -90,7 +90,7 @@ final class TabGroupTests: OrbeTestCase {
     search.toggle(.matchCase)
     XCTAssertEqual(changes, 1, "問いの変化は保存のきっかけ")
     XCTAssertEqual(
-      group.groupState()?.editor?.search,
+      group.groupState()?.editor.search,
       SearchQuery(pattern: "needle", matchCase: true, wholeWord: true))
   }
 
@@ -208,7 +208,7 @@ final class TabGroupTests: OrbeTestCase {
     let waiting = group(pending(a.path))
     waiting.absorb(group(pending(b.path)))
     XCTAssertEqual(
-      waiting.groupState()?.editor?.documents,
+      waiting.groupState()?.editor.documents,
       .init(open: [a.path, b.path], active: a.path), "まだ載っていない行き先は復元待ちに合わせる")
 
     let shown = group()
@@ -230,7 +230,7 @@ final class TabGroupTests: OrbeTestCase {
     waiting.absorb(from)
 
     XCTAssertEqual(
-      waiting.groupState()?.editor?.documents,
+      waiting.groupState()?.editor.documents,
       .init(open: [b.url.path, a.path], active: b.url.path))
   }
 }

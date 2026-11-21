@@ -1,22 +1,19 @@
 import AppKit
 import OrbeEditorCore
 
-/// workspace の中の連（同じ worktree のタブの並び）1 本に 1 つ。連のタブが共有するもの——エディターのセッション・面の配置と
-/// 焦点の面・器（`GroupFacesView`）・開いていた文書の復元待ち——を持つ。連の中でタブを切り替えると、器の中の端末だけが
-/// 入れ替わる。
+/// workspace の中の連（同じ worktree のタブの並び）1 本に 1 つ。連のタブが共有するもの——エディターのセッション・
+/// 器（`GroupFacesView`）・開いていた文書の復元待ち——を持つ。連の中でタブを切り替えると、器の中の端末だけが入れ替わる。
 ///
 /// 寿命は、それを所属に持つタブが居る間だけ。作る・付け替える・畳むのは `WindowController` だけで、キー K の連は
 /// 「キー K のタブの所属」で引く（表は持たない）。器は AppKit の NSView のまま作り直さない（cf. `TerminalTab`）。
 final class TabGroup {
   /// 連のキー＝worktree ルート（管理外は cwd 自身の正規形パス）。エディター面の根も同じ値。書くのは `rekey` だけ。
   private(set) var key: String
-  /// 面の配置（エディター幅の割合・焦点の面）。正規形に限り、書き換えは `setFaces` だけが行う。
-  private(set) var faces: FaceLayout
   /// エディターのセッション。書き手は連とその pane で、外（制御 API）は `openFile`・`openDiff` を通る。エディターの型は
   /// UI に閉じた `@MainActor` で、連はその外（main スレッド規律の nonisolated）にいるため、触る箇所は
   /// `MainActor.assumeIsolated` で境を越える。
   let editor: EditorSession
-  /// mount 単位（エディター面・端末面と取っ手の器）。`WindowController` の照合が content へ載せる／隠す／外す。
+  /// mount 単位（端末面とエディター面の器）。`WindowController` の照合が content へ載せる／隠す／外す。
   let view: GroupFacesView
   /// 未消費の復元状態（開いていた文書）。器が初めて content に載るとき（`materialize`）に消費する。一度も載らなければ
   /// 同じ形で書き戻す。
@@ -24,33 +21,26 @@ final class TabGroup {
   /// 器が一度でも content に載ったか。
   private var materialized = false
 
-  /// 面の配置が変わった（永続保存・chrome 更新・焦点の追従は上位）。
-  var onFacesChange: (() -> Void)?
   /// タブの列・焦点のタブ・未保存の有無・検索の問いが変わった（chrome 更新・永続保存は上位）。
   var onEditorChange: (() -> Void)?
   /// エディター面からのウィンドウレベルの chrome キーを上位へ届ける。
   var onWindowCommand: ((WindowCommand) -> Void)?
 
-  init(key: String, state: GroupState? = nil, editorSurfaces: EditorSurfaces = .shared) {
+  /// `state` は復元した連のエディターの状態（開いていた文書・検索の問い）。
+  init(key: String, state: EditorState? = nil, editorSurfaces: EditorSurfaces = .shared) {
     self.key = key
-    faces = state?.faces.normalized ?? .terminalOnly
     editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
-    view = GroupFacesView(editor: EditorPaneView(root: key), faces: faces)
-    pendingDocuments = state?.editor?.documents
+    view = GroupFacesView(editor: EditorPaneView(root: key))
+    pendingDocuments = state?.documents
     wireView()
-    if let search = state?.editor?.search {
+    if let search = state?.search {
       MainActor.assumeIsolated { view.editor.projectSearch.restore(search) }
     }
   }
 
-  /// pane が連を知り、取っ手の求める配置が連の状態を通って器へ戻るよう配線する。セッションの変化は器（面の骨と中身）へ
-  /// 写してから上位へ 1 本で上げる。
+  /// pane が連を知るよう配線する。セッションの変化は器（面の骨と中身）へ写してから上位へ 1 本で上げる。
   private func wireView() {
     view.editor.group = self
-    view.onFacesRequested = { [weak self] faces, animated in
-      self?.setFaces(faces, animated: animated)
-    }
-    view.onFaceFocused = { [weak self] face in self?.paneDidFocus(face) }
     MainActor.assumeIsolated {
       editor.onChange = { [weak self] in
         guard let self else { return }
@@ -70,32 +60,6 @@ final class TabGroup {
     MainActor.assumeIsolated {
       editor.restore(paths: pending.open, active: pending.active, preview: pending.preview)
     }
-  }
-
-  /// 配置を書き換える唯一の口。正規化し、同じなら何もしない。器へ写し、上位へ通知する。
-  func setFaces(_ faces: FaceLayout, animated: Bool) {
-    let normalized = faces.normalized
-    guard normalized != self.faces else { return }
-    self.faces = normalized
-    view.set(normalized, animated: animated)
-    onFacesChange?()
-  }
-
-  /// first responder が面の配下に入った（器が告げる）。焦点の記憶を面に追従させる（面の外へ出ても触らない——パレットで
-  /// 一時的に焦点を失っても面の記憶は残る）。
-  func paneDidFocus(_ face: Face) {
-    guard faces.focus != face else { return }
-    setFaces(FaceLayout(editorRatio: faces.editorRatio, focus: face), animated: false)
-  }
-
-  /// ⌘⇧F。エディターを見せ（隠れていれば全面、見えていれば焦点だけ——`open_file` と同じ規則）、サイドバーを検索パネルで
-  /// 開いて入力欄に焦点を入れる。種は押した時点の焦点で決めるので、配置を変える前に取る。
-  func findInProject() {
-    let pane = view.editor
-    let seed = pane.projectSearchSeed()
-    let ratio = faces.editorRatio == 0 ? 1 : faces.editorRatio
-    setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
-    pane.showProjectSearch(seed: seed)
   }
 
   /// 閉じれば失われる文書（未保存の列）。閉じる・終了の確認が読む。
@@ -145,17 +109,31 @@ final class TabGroup {
     }
   }
 
-  /// この連の永続状態。配置が既定で、文書も検索の問いも無ければ nil（書かない）。文書は開いているものに、未消費の復元状態
+  /// この連の永続状態。文書も検索の問いも無ければ nil（書かない）。文書は開いているものに、未消費の復元状態
   /// を後ろに合わせたもの——まだ一度も載っていない連へ cd で文書が入っても、復元待ちの文書を書き落とさない。
   func groupState() -> GroupState? {
-    let editorState: EditorState? = MainActor.assumeIsolated {
+    let state: EditorState = MainActor.assumeIsolated {
       let opened = openedDocuments()
       let open = pendingDocuments.map { opened?.merging($0) ?? $0 } ?? opened
-      let state = EditorState(documents: open, search: view.editor.projectSearch.query)
-      return state.isEmpty ? nil : state
+      return EditorState(documents: open, search: view.editor.projectSearch.query)
     }
-    guard faces != .terminalOnly || editorState != nil else { return nil }
-    return GroupState(root: key, faces: faces, editor: editorState)
+    guard !state.isEmpty else { return nil }
+    return GroupState(root: key, editor: state)
+  }
+
+  /// エディターで見せているときの、chrome の現在地。根の下のファイル（文書のタブ・作業ツリーとステージ済みの diff のタブ）は
+  /// 根と相対パス、PR の diff のタブは PR の番号と相対パス、根の外のファイルは絶対パス、タブが無ければ根だけ。
+  var editorLocation: TerminalTab.Location {
+    let root = key
+    return MainActor.assumeIsolated {
+      guard let tab = editor.activeTab else { return .root(root) }
+      if case .diff(let diff) = tab, case .pullRequest(let state) = diff.id.kind {
+        return .pullRequest(number: state.key.id.number, relative: diff.id.path)
+      }
+      let path = tab.url.path
+      guard path.hasPrefix(root + "/") else { return .absolute(path) }
+      return .file(root: root, relative: String(path.dropFirst(root.count + 1)))
+    }
   }
 
   /// 開いている文書のタブ（diff のタブは戻さないので書かない）。焦点が diff のタブなら、diff のタブを除いた列でその位置に

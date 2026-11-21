@@ -362,10 +362,10 @@ final class EditorDiffTests: OrbeTestCase {
     try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     tab.group.editor.activate(.diff(id("a.txt", .workingTree)))
-    let documents = try XCTUnwrap(tab.group.groupState()?.editor?.documents)
+    let documents = try XCTUnwrap(tab.group.groupState()?.editor.documents)
     XCTAssertEqual(documents.open, [repo.url("b.txt").path, repo.url("a.txt").path])
     XCTAssertEqual(documents.active, repo.url("a.txt").path, "閉じたときと同じく右隣の文書のタブ")
-    XCTAssertEqual(tab.location, .file(root: repo.root, relative: "a.txt"))
+    XCTAssertEqual(tab.group.editorLocation, .file(root: repo.root, relative: "a.txt"))
   }
 }
 

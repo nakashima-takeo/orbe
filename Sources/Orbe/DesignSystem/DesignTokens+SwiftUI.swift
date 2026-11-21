@@ -88,9 +88,7 @@ struct ThemeColors {
   let inputWash = Color(nsColor: Theme.Color.inputWash)
   let inputBorder = Color(nsColor: Theme.Color.inputBorder)
   let tintAccent = Color(nsColor: Theme.Color.tintAccent)
-  // エディター面（面のキー色・空状態）
-  let faceEditor = Color(nsColor: Theme.Color.faceEditor)
-  let faceTerminal = Color(nsColor: Theme.Color.faceTerminal)
+  // エディター面（空状態）
   let editorGhost = Color(nsColor: Theme.Color.editorGhost)
   let editorIcon = Color(nsColor: Theme.Color.editorIcon)
   let editorText = Color(nsColor: Theme.Color.editorText)

@@ -2,20 +2,7 @@ import AppKit
 import SwiftUI
 
 /// エディター面（⌘E）のトークンが所有する自己完結ファイル（`DesignTokens+Glass.swift` と同型）。
-/// 面のキー色は「どの面に居るか」を示す識別色で、引き手・分割中の焦点の印・位置ドットが共有する。
 extension Theme.Color {
-  /// エディター面のキー色（紙の白。light は紙面に向けて濃い側へ写した値）。
-  static let faceEditor = editorDyn(light: 0x352d4a, dark: 0xece7f5)
-  /// 端末面のキー色。dark / light とも textSecondary と偶然同値だが役割が違うので別トークン。
-  static let faceTerminal = editorDyn(light: 0x5f5678, dark: 0xb8afc4)
-  /// ホバー中の引き手のグリフ（キー色を明るくした色。light は紙面に向けて暗くする）。
-  static let faceEditorBright = editorDyn(light: 0x221c32, dark: 0xfffdff)
-  static let faceTerminalBright = editorDyn(light: 0x4a435e, dark: 0xcfc7d9)
-  /// ホバー中の引き手の不透明な地（キー色 α .16 を bgBase の上で不透明にした色）。
-  static let faceNotchEditorHover = editorDyn(light: 0xdcdae1, dark: 0x393642)
-  static let faceNotchTerminalHover = editorDyn(light: 0xe3e1e9, dark: 0x312d3a)
-  /// ホバー中の引き手の影。
-  static let faceNotchShadow = editorDynAB(light: (0x5a4696, 0.14), dark: (0x000000, 0.35))
   /// 空状態の ◐ の沈んだ塗り。
   static let editorGhost = editorDyn(light: 0xd9d3e6, dark: 0x3d3752)
   /// エディター面のアイコン・kbd の文字。dark / light とも kbKeyText と偶然同値だが役割が違うので別トークン。
@@ -284,17 +271,6 @@ extension Theme.Layout {
   /// 実行中の帯の高さと「止める」の高さ（見本に無い）。
   static let editorScmBand: CGFloat = 28
   static let editorScmStop: CGFloat = 20
-  /// 引き手と継ぎ目の幅。
-  static let faceHandle: CGFloat = 12
-  /// 縁にいるときの引き手の高さ（縁から離れるにつれて全高へ伸びる）。
-  static let faceNotchHeight: CGFloat = 48
-  /// 引き手のグリフ。
-  static let faceNotchGlyph: CGFloat = 9
-  /// ホバー中の引き手の影（縁から離れる向きのずれと、ぼかし半径）。
-  static let faceNotchShadowOffset: CGFloat = 2
-  static let faceNotchShadowRadius: CGFloat = 5
-  /// 継ぎ目の中央の縦棒。
-  static let faceSeamBar = CGSize(width: 2, height: 22)
 }
 
 extension Theme.Radius {
@@ -302,10 +278,6 @@ extension Theme.Radius {
   static let editorTabClose: CGFloat = 6
   /// 「インライン / 並列」の項目。
   static let editorDiffSegment: CGFloat = 3
-  /// 引き手の縁と反対側の角。
-  static let faceNotch: CGFloat = 6
-  /// 継ぎ目の縦棒の角。
-  static let faceSeamBar: CGFloat = 1
 }
 
 extension Theme.Stroke {
@@ -329,24 +301,9 @@ extension Theme.Opacity {
   static let editorDiffDivider: Double = 0.07
   /// 「インライン / 並列」の選んでいない項目の地（見本 fill(α)）。
   static let editorDiffSegmentIdle: Double = 0.08
-  /// 普段の引き手の不透明度。
-  static let faceNotchRest: Double = 0.45
-  /// 引き手の地と枠（キー色に掛ける α）、ホバー中の枠。
-  static let faceNotchFill: Double = 0.16
-  static let faceNotchBorder: Double = 0.4
-  static let faceNotchBorderHover: Double = 0.65
-  /// 継ぎ目の地（veil に重ねる）と縦棒（どちらも端末のキー色に掛ける α）。
-  static let faceSeamGround: Double = 0.07
-  static let faceSeamBar: Double = 0.55
 }
 
 extension Theme.Motion {
-  /// 境の位置を行き先へ運ぶばね（⌘E・取っ手を押す・閉じる着地）。時間は固定せず、収束で止まる。
-  static let facePositionSpring: (stiffness: CGFloat, damping: CGFloat) = (320, 1.0)
-  /// 取っ手の形（引き手 ⇄ 継ぎ目）が位置の決める目標を追うばね。
-  static let faceShapeSpring: (stiffness: CGFloat, damping: CGFloat) = (420, 0.85)
-  /// 位置ドットの幅・色の遷移。
-  static let faceDot: Double = 0.24
   /// ミニマップの帯が現れる・消える、スクロールバーのつまみが現れる（VS Code の opacity 100ms linear）。
   static let editorSliderFadeIn: Double = 0.1
   /// スクロールバーのつまみが消える（800ms linear）。スクロールが止まってから `editorScrollbarHideDelay` 後に始まる。
