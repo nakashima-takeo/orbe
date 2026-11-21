@@ -152,7 +152,7 @@ final class WindowControllerTabControlTests: OrbeTestCase {
 
   // MARK: - controlFocusTab
 
-  /// 別 WS のタブを focus すると、その WS が activate されアクティブになる（switchWorkspace 込み）。
+  /// 別 WS のタブを focus すると、その WS がアクティブになる。
   func testFocusTabAcrossWorkspacesActivatesTarget() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("background")])
     XCTAssertEqual(wc.window.title, "main", "前提: main がアクティブ")

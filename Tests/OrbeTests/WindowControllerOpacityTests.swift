@@ -113,8 +113,9 @@ final class WindowControllerOpacityTests: OrbeTestCase {
     XCTAssertNil(NSApp.appearance, "未設定 → 既定 .auto で nil のまま")
   }
 
-  /// 上書きを持つ WS から新規 WS を作ると、実効設定は global へ戻り生成 conf も global で再生成される。
-  func testCreateWorkspaceRegeneratesConfigToGlobal() {
+  /// 上書きを持つ WS から新規 WS を作ると、実効設定は global へ戻り生成 conf も global で再生成される。WS の切替でも、別の WS の
+  /// タブへ移る操作（`focus_tab`。`open_file`・`open_diff`・自動化の知らせも同じ命令を通る）でも、移り先の実効設定で再生成される。
+  func testEnteringAWorkspaceRegeneratesConfigForIt() throws {
     saveGlobal { $0[SettingKeys.fontSize] = 12 }  // global
     let wc = WindowController()
     wc.current.settingsOverride = override { $0[SettingKeys.fontSize] = 30 }  // WS0 上書き
@@ -124,6 +125,7 @@ final class WindowControllerOpacityTests: OrbeTestCase {
       + "theme = light:OrbeLight,dark:OrbeDark\n"
     XCTAssertEqual(guiConfContent(), "font-size = 30\n" + constLines, "上書き WS では生成 conf が 30")
     wc.createWorkspace(name: "other", rootPath: "/tmp/ws-other")  // 上書き無しの新 WS がアクティブに
+    let otherTab = try XCTUnwrap(wc.activeTab)
     XCTAssertEqual(
       guiConfContent(), "font-size = 12\n" + constLines,
       "新 WS は global 継承——生成 conf が 12 へ再生成される（前 WS の 30 を持ち越さない）")
@@ -134,6 +136,11 @@ final class WindowControllerOpacityTests: OrbeTestCase {
     XCTAssertEqual(
       guiConfContent(), "font-size = 30\n" + constLines,
       "切替でも再適用——上書きを持つ元 WS の 30 へ生成 conf が戻る")
+
+    _ = wc.controlFocusTab(tabId: otherTab.id)
+    XCTAssertEqual(
+      guiConfContent(), "font-size = 12\n" + constLines,
+      "別の WS のタブへ移っても再適用——移り先の 12 へ生成 conf が戻る")
   }
 
   private func guiConfContent() -> String {
