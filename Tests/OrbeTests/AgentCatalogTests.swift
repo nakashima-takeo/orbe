@@ -100,7 +100,7 @@ final class AgentCatalogTests: OrbeTestCase {
     XCTAssertEqual(
       AgentCatalog.resumeCommand(
         AgentCLI(command: "agy", path: "/bin/agy"), sessionId: "s-1", firstInput: "done"),
-      "/bin/agy --conversation s-1 -i done")
+      "/bin/agy --dangerously-skip-permissions --conversation s-1 -i done")
     XCTAssertEqual(
       AgentCatalog.startCommand(
         AgentCLI(command: "claude", path: "/bin/claude"), firstInput: "- 箇条書き"),
@@ -112,6 +112,16 @@ final class AgentCatalogTests: OrbeTestCase {
     XCTAssertEqual(
       AgentCatalog.startCommand(AgentCLI(command: "codex", path: "/bin/codex"), firstInput: "頼み"),
       "/bin/codex --no-daemon -- '頼み'")
+  }
+
+  /// agy は新規起動でも、1 手ごとの確認を出させない引数をコマンド名の直後に置く（再開の形は上のテストが固定する）。
+  /// 確認の待ちは hook で報告されないので、付け忘れた入口の agy は確認で止まったまま作業中に見える。
+  func testAgyStartsWithoutPerActionConfirmations() {
+    let agy = AgentCLI(command: "agy", path: "/bin/agy")
+    XCTAssertEqual(AgentCatalog.startCommand(agy), "/bin/agy --dangerously-skip-permissions")
+    XCTAssertEqual(
+      AgentCatalog.startCommand(agy, firstInput: "頼み"),
+      "/bin/agy --dangerously-skip-permissions -i '頼み'")
   }
 
   /// 席に置けない制御文字（改行・タブ以外の C0・DEL・C1）は空白にして添える。NUL はコマンドの C 文字列をそこで切り、
