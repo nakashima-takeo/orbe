@@ -28,7 +28,7 @@ final class AgentHookWiringTests: OrbeTestCase {
     var agent: String { tokens.count >= 2 ? String(tokens[tokens.count - 2]) : "" }
   }
 
-  // MARK: claude の待ち
+  // MARK: 待ち
 
   /// permission の待ちは matcher で permission 系の通知に絞る。絞らないと無操作の idle 通知などでも
   /// 撃たれ、waiting を誤認する。
@@ -38,20 +38,34 @@ final class AgentHookWiringTests: OrbeTestCase {
     XCTAssertTrue(entries.allSatisfy { $0.matcher != nil })
   }
 
-  /// ツールの待ちは PreToolUse / PostToolUse の同一 matcher が対で立て/解除する。
+  /// ツールの待ちは PreToolUse / PostToolUse の同一 matcher が対で立て/解除する（claude / agy）。
   /// 待つツールが事前に確定しているので matcher で正確に撃て、応答の瞬間に解除できる。
   func testToolWaitIsMatchedOnBothSides() throws {
-    let claude = try XCTUnwrap(try definitions()["claude"])
-    XCTAssertEqual(
-      try XCTUnwrap(claude["PreToolUse"]).map(\.matcher),
-      try XCTUnwrap(claude["PostToolUse"]).map(\.matcher))
+    for cli in ["claude", "agy"] {
+      let events = try XCTUnwrap(try definitions()[cli])
+      XCTAssertEqual(
+        try XCTUnwrap(events["PreToolUse"]).map(\.matcher),
+        try XCTUnwrap(events["PostToolUse"]).map(\.matcher), cli)
+    }
   }
 
-  /// PostToolUse に matcher 無しのエントリを置かない。matcher 無し（catch-all）は
+  /// PostToolUse に matcher 無しのエントリを置かない（claude / agy）。matcher 無し（catch-all）は
   /// 待っているツールと並列に走る無関係なツールの完了でも撃たれ、waiting を潰す。
   func testPostToolUseHasNoCatchAllEntry() throws {
-    let entries = try XCTUnwrap(try definitions()["claude"]?["PostToolUse"])
-    XCTAssertFalse(entries.contains { $0.matcher == nil })
+    for cli in ["claude", "agy"] {
+      let entries = try XCTUnwrap(try definitions()[cli]?["PostToolUse"])
+      XCTAssertFalse(entries.contains { $0.matcher == nil }, cli)
+    }
+  }
+
+  /// agy の質問の待ちは、質問ツールの直前に立て、直後（答えてもスキップしても呼ばれる）に解く。
+  func testAgyQuestionWaitIsRaisedBeforeAndClearedAfterTheQuestionTool() throws {
+    let agy = try XCTUnwrap(try definitions()["agy"])
+    let before = try XCTUnwrap(agy["PreToolUse"])
+    let after = try XCTUnwrap(agy["PostToolUse"])
+    XCTAssertEqual(before.map(\.matcher), ["ask_question"])
+    XCTAssertEqual(before.map(\.state), ["waiting"])
+    XCTAssertEqual(after.map(\.state), ["working"])
   }
 
   /// permission の待ちはバッチ境界で解除する。どのツールが承認されるか事前に分からないため
@@ -133,7 +147,9 @@ final class AgentHookWiringTests: OrbeTestCase {
   // MARK: 読み取り
 
   /// CLI ごとの定義（event → エントリ）。claude / codex は
-  /// `{"hooks": {event: [{matcher?, hooks: [{command}]}]}}`、agy はプラグイン名直下に `{event: [{command}]}`。
+  /// `{"hooks": {event: [{matcher?, hooks: [{command}]}]}}`、agy はプラグイン名直下に event を置き、
+  /// matcher を取る event（PreToolUse / PostToolUse）は `[{matcher, hooks: [{command}]}]`、取らない event は
+  /// `[{command}]`。
   private func definitions() throws -> [String: [String: [Entry]]] {
     var out: [String: [String: [Entry]]] = [:]
     let files = [
@@ -142,20 +158,22 @@ final class AgentHookWiringTests: OrbeTestCase {
     ]
     for (cli, path) in files {
       let hooks = try XCTUnwrap(try json(path)["hooks"] as? [String: [[String: Any]]])
-      out[cli] = hooks.mapValues { groups in
-        groups.map { group in
-          Entry(
-            matcher: group["matcher"] as? String,
-            command: (group["hooks"] as? [[String: Any]])?.first?["command"] as? String ?? "")
-        }
-      }
+      out[cli] = hooks.mapValues { $0.map(Self.entry) }
     }
     let agy = try XCTUnwrap(
       try json("plugins/orbe-agent/hooks.json")["orbe-agent"] as? [String: [[String: Any]]])
-    out["agy"] = agy.mapValues { groups in
-      groups.map { Entry(matcher: nil, command: $0["command"] as? String ?? "") }
-    }
+    out["agy"] = agy.mapValues { $0.map(Self.entry) }
     return out
+  }
+
+  /// `hooks` を持つ要素は matcher つきの組、持たない要素は command そのもの。
+  private static func entry(_ element: [String: Any]) -> Entry {
+    guard let hooks = element["hooks"] as? [[String: Any]] else {
+      return Entry(matcher: nil, command: element["command"] as? String ?? "")
+    }
+    return Entry(
+      matcher: element["matcher"] as? String,
+      command: hooks.first?["command"] as? String ?? "")
   }
 
   private func json(_ relativePath: String) throws -> [String: Any] {
