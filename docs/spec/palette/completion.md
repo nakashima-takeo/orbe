@@ -60,7 +60,7 @@ engine(JS) は純関数のまま、host が種別グループ化の直前に**�
 
 ## 候補エンジン
 
-候補ソースは **JavaScriptCore 埋め込みの spec エンジン**。fig の補完 spec エコシステム（withfig/autocomplete）の宣言的 spec を、inshellisense 由来の parser/suggestion ロジックで解釈する。エンジンは prebuilt の単一 JS バンドルを `JSContext` に load して駆動する（spec の `postProcess` 等が JS 関数のため JS ランタイムが要る）。同梱 spec は主要コマンドの curated subset（一覧は `vendor/completion-engine/README.md`）。うち `claude`・`codex` は上流に無い**自家最小 spec**（実 CLI の `--help` 実測由来・純静的）。
+候補ソースは **JavaScriptCore 埋め込みの spec エンジン**。fig の補完 spec エコシステム（withfig/autocomplete）の宣言的 spec を、inshellisense 由来の parser/suggestion ロジックで解釈する。エンジンは prebuilt の単一 JS バンドルを `JSContext` に load して駆動する（spec の `postProcess` 等が JS 関数のため JS ランタイムが要る）。同梱 spec は主要コマンドの curated subset（一覧は `vendor/completion-engine/README.md`）。うち `claude`・`codex`・`agy` は上流に無い**自家 spec**（実 CLI の `--help` 実測由来・純静的）。
 
 - **責務分界**: JS は parse・spec 走査・postProcess（純変換）だけを担い、シェルは叩かない。spec の generator（動的候補）が要求するシェル実行は、Swift が `JSContext` へ注入した native 関数経由で `posix_spawn` が行う——当該タブの cwd（OSC 7、未報告時は initialCwd→ホーム）で `zsh -c`・子プロセス PATH（[shell-path](../platform/shell-path.md)）・stdin 無し・stdout のみ・**数秒のハードタイムアウト**・失敗/タイムアウトは空（静的候補は保つ）。子は自分の**プロセスグループのリーダー**として起こし、タイムアウト時はグループごと kill する——孫が pipe を握り続けると書き手が残って EOF が起きず、drain が永久ハングして補完 queue が恒久停止するため。出力は別 queue で drain する。これにより `git checkout <Tab>` が実ブランチ名、`ls <Tab>` がカレント dir の実ファイルを出す。
 - **スレッド規律**: `JSContext` とシェル実行は専用 serial queue（main 非依存）、popup 表示は main へ hop。候補取得は**非同期**で `completion_update` から駆動し、連続更新は debounce で coalesce、generator 結果は短 TTL キャッシュ。タブごとの単調増加 token で**古い結果を破棄**する（stale ガード）。
@@ -96,7 +96,7 @@ shim `.zshenv` は全 zsh 起動で読まれ、次の順で働く。
 - `ORBE_USER_ZDOTDIR` が削除済み `.app` の shim dir を指す場合は同定できず、`ZDOTDIR` が不在の dir を指したままユーザ rc は読まれない（widget は入る）。
 - `zsh -i -c`（プロンプトを出さない）では precmd が走らず widget は入らない。
 - precmd 段で bind・keymap 切替をするプラグイン（zsh-vi-mode の既定 lazy init 等）には `^I` / `^M` を奪われる。Orbe のフックはユーザの `.zshrc` が積む precmd より先に走るため（zsh-vi-mode は `ZVM_INIT_MODE=sourcing` で回避できる）。ユーザ設定が `precmd_functions` を代入で丸ごと潰す場合も widget は入らない。
-- 同梱 spec は curated subset のみ（上流 600+ の全網羅・ユーザ提供 spec・上流 spec の自家 fork 運用は無い。`claude`/`codex`/`agy` の自家 spec は上流に無いコマンドの新規 spec であり fork ではない）。自家 spec が載せるのは、元にした版の root の `--help` に載るサブコマンドとオプション（別名は 1 つの項目にまとめる）で、サブコマンドの中のサブコマンドとオプションと、値の候補は持たない——`--help` に載るかどうかで決めるので、版が上がったときの直し方が 1 つに決まる。
+- 同梱 spec は curated subset のみ（上流 600+ の全網羅・ユーザ提供 spec・上流 spec の自家 fork 運用は無い。`claude`/`codex`/`agy` の自家 spec は上流に無いコマンドの新規 spec であり fork ではない）。自家 spec が載せるのは、元にした版の root の `--help` に載るサブコマンドとオプションの、`--help` の先頭に出る正式な名前（オプションは短い名前も）で、別名は載せない——何も打っていないとき、エンジンは項目の名前のうち一番長いものを出すので、別名を載せると正式でない名前が出る。サブコマンドの中のサブコマンドとオプション・値の候補は持たない——`--help` に載るかどうかで決めるので、版が上がったときの直し方が 1 つに決まる。
 - generator のシェル実行は vendored curated spec のみが起点＝信頼境界内。任意のユーザ spec は受けない。
 - `swift run`（バンドル無し）では ZDOTDIR 未設定＝素の zsh 起動・engine 未ロードで候補非表示（クラッシュしない）。
 
