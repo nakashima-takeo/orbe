@@ -27,13 +27,13 @@ src/
 build.mjs              esbuild 設定（curated specs を 1 ファイルへ束ねる）
 ```
 
-## curated spec（39 コマンド）
+## curated spec（40 コマンド）
 
 git, npm, pnpm, yarn, docker, docker-compose, cargo, go, kubectl, brew, gh, make,
 python, pip, node, ssh, curl, tar, systemctl, ls, cd, cat, rm, cp, mv, kill, grep,
-find, chmod, code, deno, mkdir, xcodebuild, volta, open, touch, source, claude, codex
+find, chmod, code, deno, mkdir, xcodebuild, volta, open, touch, source, claude, codex, agy
 
-`claude`・`codex` は上流に無い自家最小 spec（`src/specs/` 直置き・実 CLI の `--help` 実測由来）。
+`claude`・`codex`・`agy` は上流に無い自家 spec（`src/specs/` 直置き）。実 CLI の root の `--help` に載るサブコマンドとオプションを載せ、サブコマンドの中のサブコマンドとオプション・値の候補は持たない。元にした版は各 spec の冒頭に書く。
 追加するには `src/specs/index.ts` に import を足して再生成するだけ（lazy-load 全網羅は段階外）。
 
 ## 再生成手順

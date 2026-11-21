@@ -161,13 +161,19 @@ final class CompletionEngineTests: OrbeTestCase {
   }
 
   func testEngineSelfAuthoredSpecs() throws {
-    // 自家 spec（上流に無い claude/codex）が実バンドルで候補を出す。
+    // 自家 spec（上流に無い claude/codex/agy）が実バンドルで候補を出す。載せるのは、元にした版の root の --help に
+    // 載るサブコマンドとオプション。
     let h = try XCTUnwrap(EngineHarness { _ in "" })
     let claude = h.complete("claude ")
     XCTAssertTrue(names(claude).contains("mcp"), "claude: 自家 spec のサブコマンド")
     XCTAssertEqual(type(claude, name: "mcp"), "subcommand", "自家 spec にも起源型が焼かれる")
     XCTAssertTrue(names(h.complete("codex ")).contains("exec"), "codex: 自家 spec のサブコマンド")
+    XCTAssertTrue(
+      names(h.complete("codex --")).contains("--no-daemon"), "codex: 元にした版の --help のオプション")
     XCTAssertTrue(names(h.complete("claude --")).contains("--model"), "claude: オプションも出る")
+    XCTAssertTrue(names(h.complete("agy ")).contains("mcp"), "agy: 自家 spec のサブコマンド")
+    XCTAssertTrue(
+      names(h.complete("agy --")).contains("--dangerously-skip-permissions"), "agy: オプションも出る")
   }
 
   func testEngineGeneratorUsesNativeExec() throws {

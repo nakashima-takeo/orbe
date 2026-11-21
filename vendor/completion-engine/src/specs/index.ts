@@ -1,5 +1,5 @@
 // curated subset の withfig spec（prebuilt build/*.js を静的 import）。
-// 実用頻度上位の 37 コマンド＋自家 2 spec（claude/codex・上流に無い）のみ同梱
+// 実用頻度上位の 37 コマンド＋自家 3 spec（claude/codex/agy・上流に無い）のみ同梱
 // （全 600+ の網羅はしない）。追加は本ファイルへ import を足して再生成するだけ（README）。
 // 上流: @withfig/autocomplete build（package.json で版を pin）。
 import git from "@withfig/autocomplete/build/git.js";
@@ -41,6 +41,7 @@ import touch from "@withfig/autocomplete/build/touch.js";
 import source from "@withfig/autocomplete/build/source.js";
 import claude from "./claude.js";
 import codex from "./codex.js";
+import agy from "./agy.js";
 
 // コマンド名 → figspec。loadSpec はこの表を同期参照する（JSC に dynamic import は無い）。
 export const specRegistry: { [key: string]: Fig.Spec } = {
@@ -83,4 +84,5 @@ export const specRegistry: { [key: string]: Fig.Spec } = {
   source,
   claude,
   codex,
+  agy,
 };
