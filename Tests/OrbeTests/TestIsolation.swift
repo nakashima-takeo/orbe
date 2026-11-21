@@ -5,12 +5,14 @@ import XCTest
 
 @testable import Orbe
 
-/// 全テストクラスの基底。隔離ハーネスへ点火するだけで、それ以外は素の `XCTestCase`。
+/// 全テストクラスの基底。隔離ハーネスへ点火し、テスト 1 件を画面と前面の隔離（`ScreenIsolation`）で包む。
+/// それ以外は素の `XCTestCase`。
 ///
 /// 点火は `class func setUp()`（クラス単位・全インスタンス setUp より前）で行う。最初に走った
 /// 1 クラスが `TestIsolation.installOnce()` を呼び、そこでテストの境界へ登録される口が以降の全テスト
 /// （この基底を継承しないクラスも含む）へ効く。だから継承は「どのクラスが最初に走っても点火される」
-/// ことだけを担保すればよく、隔離そのものは基底に依存しない。
+/// ことだけを担保すればよく、実環境の向け直しは基底に依存しない。画面と前面の隔離だけは、破ったテストに
+/// 失敗を記録するのにそのテストのインスタンス（`XCTestCase`）が要るので、この基底を継承したクラスにだけ効く。
 ///
 /// これが外れると、`swift test` が開発者の実 `workspaces.json`・ghostty の user 設定・
 /// 実 state dir を読み書きし始め、実スピーカーを鳴らす。テストが手元の環境に依存して緑になり、
@@ -21,6 +23,23 @@ class OrbeTestCase: XCTestCase {
   override static func setUp() {
     TestIsolation.installOnce()
     super.setUp()
+  }
+
+  /// true にするのは、画面に出して人が見る・計測する道具（環境変数で有効にするもの）だけ。true のクラスは、画面と前面の
+  /// 隔離の対象から外れる。通常のテストがこれを上書きすると、lint が落とす。
+  class var presentsOnScreen: Bool { false }
+
+  /// テスト 1 件（`setUp`・本文・`tearDown`）を、画面と前面の隔離で包む。失敗の記録は `tearDown` の後で、テストが
+  /// 終わったと記録される前に行う（テストの境界のフック（`TestScratch.addCaseHooks`）から記録すると、テストは既に
+  /// 終わっていて落とせない）。
+  /// `final` にするのは、サブクラスが `super` 抜きで上書きすると隔離が外れるため。
+  final override func invokeTest() {
+    guard !Self.presentsOnScreen else { return super.invokeTest() }
+    let screen = MainActor.assumeIsolated { ScreenIsolation() }
+    super.invokeTest()
+    for breach in MainActor.assumeIsolated({ screen.finish() }) {
+      record(XCTIssue(type: .assertionFailure, compactDescription: breach))
+    }
   }
 }
 
@@ -54,9 +73,6 @@ enum TestIsolation {
   static let maxRootPathBytes = 90
 
   private nonisolated(unsafe) static var installed = false
-
-  /// テストを始める前のアプリの activation policy（xctest は前面化しない `prohibited`）。
-  private nonisolated(unsafe) static var initialActivationPolicy: NSApplication.ActivationPolicy!
 
   static func installOnce() {
     guard !installed else { return }
@@ -117,10 +133,7 @@ enum TestIsolation {
           + "テスト本体より前に ORBE_STATE_DIR を張れていない")
     }
 
-    // 5. アプリの前面化の状態。どのテストにも触られる前の値を、各テストの終わりに戻す先として控える。
-    initialActivationPolicy = NSApplication.shared.activationPolicy()
-
-    // 6. 毎テストの隔離。以降の全テストへ効く。
+    // 5. 毎テストの隔離。以降の全テストへ効く。
     TestScratch.addCaseHooks(begin: beginCase, end: endCase)
   }
 
@@ -207,29 +220,7 @@ enum TestIsolation {
   }
 
   /// テスト 1 件の終わり（`tearDown` の後）。
-  ///
-  /// 窓を key にするテストは、アプリの activation policy を変えて前面化する。どちらもプロセス全体の状態で、戻さなければ
-  /// 後続の全テストが「前面のアプリ」で走り、焦点の振る舞いの前提が変わる。窓を下ろすのは窓を上げたテストの責務だが、
-  /// アプリの状態は誰が変えたかに依らずここで必ず戻す——申告制だと戻し忘れが起きる。
-  ///
-  /// policy を先に戻す（前面化を許す policy のままでは `deactivate` が効かない）。前面を降りたことはウィンドウサーバーの
-  /// イベントとして届き、NSApp が捌いて初めて成立するので、降りるまでイベントを配送する。
   static func endCase() {
     Ghostty.pasteboard.releaseGlobally()
-    let app = NSApplication.shared
-    if app.activationPolicy() != initialActivationPolicy {
-      app.setActivationPolicy(initialActivationPolicy)
-    }
-    if app.isActive {
-      app.deactivate()
-      let deadline = Date().addingTimeInterval(5)
-      while app.isActive, Date() < deadline {
-        if let event = app.nextEvent(
-          matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
-        {
-          app.sendEvent(event)
-        }
-      }
-    }
   }
 }

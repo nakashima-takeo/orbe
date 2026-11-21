@@ -26,8 +26,7 @@ extension OrbeTestCase {
     FirstMouse.begin()
     addTeardownBlock {
       MainActor.assumeIsolated {
-        XCTAssertFalse(
-          NSScreen.screens.contains { $0.frame.intersects(window.frame) }, "窓が画面と重なっている")
+        XCTAssertFalse(window.isShownOnADisplay, "窓が画面と重なっている")
         window.orderOut(nil)
         FirstMouse.end()
       }
