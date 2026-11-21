@@ -15,11 +15,10 @@ jobs:
       - uses: actions/checkout@v5
       - name: build (incl. tests)
         run: swift build --build-tests
-      - name: test (SidebarScrollbarTests x3)
-        run: |
-          for i in 1 2 3; do swift test --skip-build --filter 'OrbeTests\.SidebarScrollbarTests/' 2>&1 | grep -E "SidebarScrollbarTests test.*(passed|failed)|error:|Executed [0-9]+ tests" ; done
       - name: test (23 classes that host the editor pane, and the placeOffscreen classes)
         run: |
+          set +e
           swift test --skip-build --filter 'OrbeTests\.(UnsavedGateTests|EditorDiffTests|SourceControlPaneTests|EditorOccurrencesTests|EditorPaneSurfaceTests|EditorPaneViewCloseTests|EditorPaneViewTests|EditorPaneViewGutterTests|EditorPaneViewHeaderTests|EditorPaneViewInlineInputTests|EditorPaneViewPreviewTabTests|EditorPaneViewShellTests|EditorPaneViewSidebarTests|EditorPaneViewTabCloseTests|EditorSearchTests|EditorSurfaceHostTests|EditorZoneEditingMenuTests|FindInProjectTests|SidebarScrollbarTests|ProjectSearchPaneTests|PullRequestPaneTests|TabGroupTests|GroupFacesViewTests|TaskPaletteCardKeyTests|RowListTests|BoardAutomationTests|ChromeMiddleClickTests)/' > test.log 2>&1; r=$?
-          grep -E "Test Suite '[A-Za-z]+Tests' (passed|failed)|Executed [0-9]+ tests|error:" test.log | sort -u
+          grep -E "Test Suite '[A-Za-z]+Tests' (passed|failed)|Executed [0-9]+ tests|error:|failed \(|Fatal|signal" test.log | sort -u
+          echo "exit=$r"
           exit $r
