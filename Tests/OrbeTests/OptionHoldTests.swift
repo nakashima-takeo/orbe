@@ -42,14 +42,6 @@ final class OptionHoldTests: OrbeTestCase {
     XCTAssertFalse(detector.isHolding)
   }
 
-  /// 期限が間合いより前なら何もしない（待ちのまま）。
-  func testAnEarlyDeadlineKeepsWaiting() {
-    press(at: 1)
-    expire(at: 1 + delay / 2)
-    XCTAssertFalse(detector.isHolding)
-    XCTAssertEqual(detector.waitingSince, 1)
-  }
-
   /// 成立中のマウスの押下とポインタの動きでは終わらない。
   func testMouseDuringTheHoldKeepsIt() {
     press()

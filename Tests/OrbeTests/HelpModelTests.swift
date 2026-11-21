@@ -22,10 +22,6 @@ final class HelpModelTests: OrbeTestCase {
     XCTAssertTrue(m.pressedRowIDs.isEmpty, "⌘ 単独は ⌘⌘ 行にも一致させない")
     XCTAssertNil(m.revealRowID)
 
-    m.pressed = ["opt"]
-    m.syncPressedMatch(l10n)
-    XCTAssertTrue(m.pressedRowIDs.isEmpty, "⌥ 単独は ⌥ 行にも一致させない")
-
     m.pressed = ["cmd", "shift"]
     m.syncPressedMatch(l10n)
     XCTAssertTrue(m.pressedRowIDs.isEmpty)

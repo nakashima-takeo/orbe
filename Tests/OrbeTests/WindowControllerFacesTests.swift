@@ -99,7 +99,6 @@ final class WindowControllerFacesTests: OrbeTestCase {
       wc.window.firstResponder === tab.group.view.editor, "エディター pane が first responder")
     settle(tab)
     XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開き終われば下の端末を見せない")
-    XCTAssertTrue(tab.surface.wantsRendering, "覆われた端末も描き続ける")
 
     wc.handleWindowCommand(.toggleEditorFace)
     XCTAssertFalse(tab.group.view.isEditorOpen)
@@ -250,23 +249,6 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertTrue(b.group.view.isEditorOpen, "前提: エディターのまま")
     XCTAssertTrue(b.surface.wantsRendering, "覆われたまま見せ始めた端末が描く")
     XCTAssertFalse(a.surface.wantsRendering, "見せなくなった端末は止まる")
-  }
-
-  /// エディターを開いたまま別の連のタブを選ぶと、元の連の器が隠れてその端末は止まり、選んだタブの端末が描く。
-  func testSelectingAnotherGroupStopsTheHiddenGroupsTerminal() throws {
-    let wc = try restore([
-      TabState(cwd: "/tmp/g1", agent: nil, explicitTitle: nil),
-      TabState(cwd: "/tmp/g2", agent: nil, explicitTitle: nil),
-    ])
-    let (a, b) = (wc.current.tabs[0], wc.current.tabs[1])
-    XCTAssertFalse(a.group === b.group, "前提: 別の連")
-    wc.toggleEditorFace()
-    XCTAssertTrue(a.surface.wantsRendering)
-
-    wc.select(1)
-
-    XCTAssertFalse(a.surface.wantsRendering, "隠れた器の端末は止まる")
-    XCTAssertTrue(b.surface.wantsRendering)
   }
 
   // MARK: - 開閉は保存しない

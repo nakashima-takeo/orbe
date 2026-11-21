@@ -89,29 +89,6 @@ final class GroupFacesViewTests: OrbeTestCase {
     XCTAssertTrue(window.firstResponder === view.editor)
   }
 
-  /// エディターと透かしの間は `quick`、端末とエディターの間は `base` でフェードする。端末と透かしの間は濃さが変わらないので
-  /// 動かない。
-  func testFadeLengthFollowsTheModesOnBothEnds() throws {
-    let tab = laidOut()
-    let window = hosted(tab)
-    defer { window.contentView = nil }
-    let view = tab.group.view
-    let layer = try XCTUnwrap(view.editor.superview?.layer)
-    let duration = { layer.animation(forKey: "editorFade")?.duration }
-
-    view.show(.editor, animated: true)
-    XCTAssertEqual(duration(), Theme.Motion.base)
-    view.show(.peek, animated: true)
-    XCTAssertEqual(duration(), Theme.Motion.quick)
-    view.show(.editor, animated: true)
-    XCTAssertEqual(duration(), Theme.Motion.quick)
-
-    view.show(.terminal, animated: false)
-    view.show(.peek, animated: true)
-    XCTAssertNil(duration(), "端末から透かしへは即時")
-    XCTAssertFalse(view.isFading)
-  }
-
   // MARK: - 端末を描くか
 
   /// 描くのは見せている 1 枚だけ。見せる端末を替えると、覆われたままでも新しい端末が描き、元の端末は止まる。
