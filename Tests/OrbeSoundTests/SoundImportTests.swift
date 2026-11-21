@@ -2,7 +2,7 @@ import XCTest
 
 @testable import OrbeSound
 
-/// 取り込みの信号処理（打ち切り・デクリック・ラウドネス正規化）。L1 純ロジック・決定論（音は出さない）。
+/// 取り込みの信号処理（打ち切り・デクリック・ラウドネス正規化）。純ロジック・決定論（音は出さない）。
 /// ここが崩れると、選んだファイルが 12 案と同格に鳴らなくなる（長すぎる・音量が浮く・端でプチッと鳴る）。
 final class SoundImportTests: XCTestCase {
   private let sampleRate = 48000.0

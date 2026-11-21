@@ -54,7 +54,7 @@ final class OrbeCliProcessTests: OrbeTestCase {
       "\(label) の stderr に \"\(message)\" が無い: \(outcome.stderr)", file: file, line: line)
   }
 
-  /// L3 の `ControlWireTests` の `startWire` / `errorCode` と同じ形で、問い合わせも共有する。
+  /// `ControlWireTests` の `startWire` / `errorCode` と同じ形で、問い合わせも共有する。
   func workspaceRows(_ control: ControlProcess) throws -> [[String: Any]] {
     try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
   }

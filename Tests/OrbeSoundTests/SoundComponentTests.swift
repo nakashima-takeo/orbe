@@ -2,7 +2,7 @@ import XCTest
 
 @testable import OrbeSound
 
-/// LFO 語彙の数値検証。L1 純ロジック・決定論。
+/// LFO 語彙の数値検証。純ロジック・決定論。
 /// 壊れると深さの解釈（1−depth…1）が崩れて、トレモロが公称ゲインを超えるクリップ余地を作る。
 final class SoundComponentTests: XCTestCase {
 

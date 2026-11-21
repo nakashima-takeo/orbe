@@ -85,7 +85,7 @@ struct ControlEventRecord {
 
 /// 待機動詞（wait_for_event / prompt_agent / spawn_agent / resume_agent / get_automation_trial）の `timeoutMs` 検証。
 /// 既定値は動詞ごとに違うので呼び出し側が渡す。CLI help と MCP description はその値を写しており、
-/// ドリフトは L4 の help / `tools/list` テストが突き合わせて落とす（`KINDS:` / `KEYS:` と同じ守り方）。
+/// ドリフトはプロセス境界の help / `tools/list` テストが突き合わせて落とす（`KINDS:` / `KEYS:` と同じ守り方）。
 enum WaitTimeout {
   /// 上限を置くのは、巨大値だと `.milliseconds(_:)` の deadline が DISPATCH_TIME_FOREVER まで
   /// 飽和してタイマーが発火しなくなるため——応答も時間切れも返らない待機が残る。
@@ -98,7 +98,7 @@ enum WaitTimeout {
   /// 長さ——`eventDefaultMs` では実作業の途中で切れ、`maxMs` まで伸ばすと放置された待機が丸一日残る。
   static let promptDefaultMs = 3_600_000
   /// `spawn_agent` / `resume_agent` の既定（30 秒）。新タブ＋ログインシェル＋agent 起動＋最初の
-  /// hook 報告までを負荷時も含めて覆う長さ（L4 のタブ安定待ち 15 秒の倍）。
+  /// hook 報告までを負荷時も含めて覆う長さ（プロセス境界のテストのタブ安定待ち 15 秒の倍）。
   static let launchDefaultMs = 30_000
 
   /// 省略なら既定、正の整数で上限内ならその値、それ以外は -32602 invalid timeoutMs。

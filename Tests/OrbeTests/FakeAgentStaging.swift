@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// L4 が起こす偽 agent。`marker` はコマンドの中で 2 つの文字列リテラルに割れているので、
+/// プロセス境界のテストが起こす偽 agent。`marker` はコマンドの中で 2 つの文字列リテラルに割れているので、
 /// **連結された形はシェルが実際に評価した出力にしか現れない**（入力行の描き返しは目印にならない）。
 struct FakeAgent {
   let path: String
@@ -12,7 +12,7 @@ struct FakeAgent {
 }
 
 /// 偽 agent の実行体をテスト専用 dir へ置き、`ShellPATH` をそこ先頭へ差し替える支援。
-/// 検出はマシン依存なので、L4 のエージェント系テストは必ずこれで固定する（開発者の Mac には本物の
+/// 検出はマシン依存なので、プロセス境界のエージェント系テストは必ずこれで固定する（開発者の Mac には本物の
 /// claude / codex が居る）。
 extension OrbeTestCase {
   /// 実行可能な偽 agent を置く。`body` はマーカー行の後に続くシェル本文で、既定は入力を反響しながら

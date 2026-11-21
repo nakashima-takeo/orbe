@@ -10,7 +10,8 @@ import Foundation
 ///
 /// 宛先解決に使う `tab` は実 `TerminalTab` だが、window に載せないので libghostty surface は
 /// 生まれない（surface を作るのは `viewDidMoveToWindow`）。制御系のメソッドは surface 不在で
-/// no-op / nil を返すため、L3 は L2 の重さを背負わずに宛先解決の経路だけを通せる。
+/// no-op / nil を返すため、制御プロトコル契約のテストは、実 `WindowController` を起こす重さを
+/// 背負わずに宛先解決の経路だけを通せる。
 final class FakeControlTarget: ControlTarget {
   // MARK: - 返り値（テストが決める）
 
@@ -213,7 +214,7 @@ final class FakeControlTarget: ControlTarget {
   var promptSideEffect: (() -> Void)?
 
   /// `prompt_agent` の到達記録。`domainFailure` が立っていればそれで拒み、無ければ送れたことにする
-  /// （surface 不在で `controlSendText` は no-op なので、実 `WindowController` 経路は L4 が測る）。
+  /// （surface 不在で `controlSendText` は no-op なので、実 `WindowController` 経路はプロセス境界のテストが測る）。
   func controlPromptAgent(tab: TerminalTab, text: String) -> ControlError? {
     prompts.append(Prompt(tabId: tab.id, text: text))
     if let failure = domainFailure { return failure }

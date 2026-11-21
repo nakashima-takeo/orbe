@@ -184,6 +184,6 @@ JSON-RPC メソッド = MCP の普段のツール名の 1:1 で、各ツール�
 
 ## 開発検証
 
-制御 API の導通は `swift test` の L4（プロセス境界）が担う。テストプロセス内に実 `WindowController` を target とした `ControlServer` を立て、外部プロセスの `orbe-mcp` / `orb` / `orbe-report` から駆動して assert する。「タブで実際に実行された」ことは、コマンド行の中で 2 つのリテラルに割った目印（`echo L4D""ONE_<id>`）を送り、連結された `L4DONE_<id>` が `get_tab_text` に現れるまでポーリングして見る——連結形はシェルが引用符除去を評価した出力にしか現れないので、プロンプトの描画挙動に依らない。`.app` の起動経路と `AppDelegate` の配線はその外側で、隔離した使い捨てインスタンスを起こす `sandbox-run`（`.claude/skills/`）が同じ形の煙探知を通す。再起動の orchestration も制御 API の外側に置く——socket はアプリと心中するため、自己再起動は循環になる。
+制御 API の導通は `swift test` のプロセス境界のテストが担う。テストプロセス内に実 `WindowController` を target とした `ControlServer` を立て、外部プロセスの `orbe-mcp` / `orb` / `orbe-report` から駆動して assert する。「タブで実際に実行された」ことは、コマンド行の中で 2 つのリテラルに割った目印（`echo L4D""ONE_<id>`）を送り、連結された `L4DONE_<id>` が `get_tab_text` に現れるまでポーリングして見る——連結形はシェルが引用符除去を評価した出力にしか現れないので、プロンプトの描画挙動に依らない。`.app` の起動経路と `AppDelegate` の配線はその外側で、隔離した使い捨てインスタンスを起こす `sandbox-run`（`.claude/skills/`）が同じ形の煙探知を通す。再起動の orchestration も制御 API の外側に置く——socket はアプリと心中するため、自己再起動は循環になる。
 
 CLI は `orbe-mcp`（MCP ブリッジ）・`orbe-report`（状態報告）・`orb`（ユーザー/AI 向け操作 CLI・[cli](cli.md)）。3 つとも `.app` に同梱される。

@@ -13,7 +13,7 @@ import XCTest
 /// 初回起動のたびに意味のない退避物が積み上がる。
 ///
 /// `WorkspacePersistence` 単体で固定し、実害は host でも出るので最後の 1 本だけ実
-/// `WindowController` を起こす（L2）。
+/// `WindowController` を起こす。
 final class WorkspaceQuarantineTests: OrbeTestCase {
 
   /// ユーザー構成が入った、壊れた JSON（末尾で切れている）。
@@ -219,7 +219,7 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
       WorkspacePersistence.load(), healthy, "退避成功後の保存は通常どおりディスクへ届く")
   }
 
-  // MARK: - 実 WindowController 起動（L2）
+  // MARK: - 実 WindowController 起動
 
   /// 壊れた原本で起動すると、原本は退避物として残り、`workspaces.json` は既定構成で書き直される。
   /// これが #85 の実害そのもの——`flushSave()` で 1 秒のデバウンスを待たずに起動直後の保存を再現する。

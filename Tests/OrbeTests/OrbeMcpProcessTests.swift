@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// 実 `orbe-mcp` を子プロセスで起こし、MCP の `tools/call` → control.sock → 実 `WindowController`
-/// までの導通と、L3 が固定できなかった `get_tab_text` の `scrollback` を測る。
+/// までの導通と、`ControlWireTests` が固定できなかった `get_tab_text` の `scrollback` を測る。
 ///
 /// 壊れると何が起きるか: MCP ブリッジがツール名を control のメソッドへ載せ替えられなくなっても、
 /// `isError` の畳み込みが消えても、実タブへの注入・読み取りが no-op に倒れても、どのテストも

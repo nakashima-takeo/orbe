@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// `prompt_agent` のドメイン側（`controlPromptAgent`）——どの状態のタブに届き、どの状態を拒むか
-/// ——を実 `WindowController` で固定する。wire の二段 hop と応答の形は L3（`ControlWireTests+PromptAgent`）
+/// ——を実 `WindowController` で固定する。wire の二段 hop と応答の形は `ControlWireTests+PromptAgent`
 /// が Fake で持ち、ここは Fake が見ない「タブの状態と surface の有無」だけを見る。
 ///
 /// 壊れると何が起きるか: `waiting`（permission ダイアログ / AskUserQuestion が開いている）へ

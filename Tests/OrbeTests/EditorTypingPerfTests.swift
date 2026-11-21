@@ -5,9 +5,9 @@ import XCTest
 @testable import Orbe
 
 /// エディターの打鍵の main の仕事の計測。`ORBE_EDITOR_PERF=1` のときだけ走る——時間はマシンと環境で変わるので通常の
-/// テストでは見ない。release で `scripts/perf-editor.sh` が回し、目標（→ docs/testing/test-architecture.md）と並べる。
-/// 結果は `PERF` で始まる行に出す。main の仕事は main のスレッドの CPU 時間で数える（壁時計の時間は機械の混み具合で
-/// 膨らむので参考に出すだけ）。
+/// テストでは見ない。release で `scripts/perf-editor.sh` が回し、各テストの説明にある目標と並べる。結果は `PERF` で
+/// 始まる行に出す。main の仕事は main のスレッドの CPU 時間で数える（壁時計の時間は機械の混み具合で膨らむので参考に
+/// 出すだけ）。
 @MainActor
 final class EditorTypingPerfTests: OrbeTestCase {
   override func setUpWithError() throws {

@@ -74,7 +74,7 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
   // MARK: - spawn / resume の ready 待ち
 
   /// claude は最初の idle を待ってから返り、`ready:true` と idle 報告が運んだ session id を載せる。
-  /// 人間向けの行は末尾に ` ready (session <id>)`。resume の ready 待ちは L3（`ControlWireTests+AgentReady`）
+  /// 人間向けの行は末尾に ` ready (session <id>)`。resume の ready 待ちは `ControlWireTests+AgentReady`
   /// が持つ。
   func testSpawnWaitsForTheFirstIdleAndReportsTheSession() throws {
     let ready = try spawnReady()
@@ -105,8 +105,8 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
   }
 
   /// idle が来なければ `--timeout-ms` で exit 124。`--json` は result を stdout へ、非 `--json` は spawned 行を
-  /// 出しつつ理由を stderr へ。result の中身（tabId を捨てない・`ready:false, timedOut:true`）は L3
-  /// （`ControlWireTests+AgentReady`）が持つ。
+  /// 出しつつ理由を stderr へ。result の中身（tabId を捨てない・`ready:false, timedOut:true`）は
+  /// `ControlWireTests+AgentReady` が持つ。
   func testSpawnReadyTimeoutExits124ButKeepsTheLaunch() throws {
     _ = try stageFakeAgent("claude")  // 何も報告しない claude
     let control = try startControlProcess(workspaces: ["main"])
