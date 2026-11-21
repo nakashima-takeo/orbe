@@ -27,7 +27,10 @@ final class OrbeWindowFake: OrbeWindow {
     [(sheet: NSWindow, completion: ((NSApplication.ModalResponse) -> Void)?)] = []
 
   override var isKeyWindow: Bool { isKey }
-  override var screen: NSScreen? { super.screen ?? (isVisible ? NSScreen.screens.first : nil) }
+  override var screen: NSScreen? {
+    if ProcessInfo.processInfo.environment["PROBE_NO_SCREEN"] != nil { return super.screen }
+    return super.screen ?? (isVisible ? NSScreen.screens.first : nil)
+  }
   override func bringToFront() { bringToFrontCount += 1 }
 
   override func beginSheet(

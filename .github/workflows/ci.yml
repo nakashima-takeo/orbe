@@ -15,6 +15,17 @@ jobs:
       - uses: actions/checkout@v5
       - name: build (incl. tests)
         run: swift build --build-tests
+      - name: drag test x10 with and without the screen answer
+        run: |
+          set +e
+          for mode in with without; do
+            for i in $(seq 1 10); do
+              if [ $mode = without ]; then export PROBE_NO_SCREEN=1; else unset PROBE_NO_SCREEN; fi
+              swift test --skip-build --filter 'OrbeTests\.SidebarScrollbarTests/testDragging' 2>&1 | grep -E "SidebarScrollbarTests.swift:[0-9]+: error|SidebarScrollbarTests test.*(passed|failed)" | sed "s/^/$mode $i: /"
+            done
+          done
+          unset PROBE_NO_SCREEN
+          for i in 1 2 3; do swift test --skip-build --filter 'OrbeTests\.SidebarScrollbarTests/' 2>&1 | grep -E "SidebarScrollbarTests.swift:[0-9]+: error|Executed [0-9]+ tests" | sed "s/^/class $i: /"; done
       - name: test (23 classes that host the editor pane, and the placeOffscreen classes)
         run: |
           set +e
