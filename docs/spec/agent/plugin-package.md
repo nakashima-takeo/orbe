@@ -6,7 +6,7 @@ updated: 2026-11-21
 
 # エージェントプラグイン（配布物）
 
-`app/agent-plugin/` は claude / codex / agy へ届けるプラグインパッケージ。3 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。もう 1 つはスキル（→ [自動化のスキル](#自動化のスキル)）。利用者は何も設定しない。ただし codex は、人が codex の画面で hook を一度承認するまで hook を走らせない（→ [codex の hook の承認](#codex-の-hook-の承認)）。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
+`app/agent-plugin/` は claude / codex / agy へ届けるプラグインパッケージ。3 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。もう 1 つはスキル（→ [同梱スキル](#同梱スキル)）。利用者は何も設定しない。ただし codex は、人が codex の画面で hook を一度承認するまで hook を走らせない（→ [codex の hook の承認](#codex-の-hook-の承認)）。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
 
 プラグイン本体は 2 つのディレクトリに分かれる。
 
@@ -75,11 +75,21 @@ MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば�
 
 それ以外（Orbe の外・別チャネルの Orbe のタブ・同梱の無い Orbe）では、シムは**ツール 0 個の空サーバー**（`mcp/empty-server.pl`）へ exec する。即終了させないのは、CLI がプラグインの MCP サーバーを全セッションで起こし、接続失敗を毎回警告するため。Orbe の外にはバイナリが無いので、空サーバーは macOS 標準の perl で書く。改行区切りの JSON-RPC を読み、initialize には tools を名乗らない capabilities で、tools/list には空の一覧で、ping には空で応え、それ以外の要求は method not found を返す。通知と読めない行には応えない。
 
-## 自動化のスキル
+## 同梱スキル
 
-プラグインは `plugins/<プラグイン名>/skills/automation/` に、Orbe の[自動化](../platform/automation.md)を人の一言から作る・直すスキルを 1 つ持つ（claude が読む形式。agy もプラグインの `skills/` を取り込むので届くが、本文は claude のツール名で書かれていて、agy で通しで動くことは確かめていない。codex 専用のディレクトリには置かないので codex には届かない）。スキルが持つのは進め方で、調べる → 案を立てる → 決め所（出どころと範囲・判定の基準・予定・型から外れること・書いて動かし始めること）を AskUserQuestion で聞く → 定義を組む → 初期セットアップ（次の回以降の入力を整える → 書く前の定義を[試走](../platform/automation.md#試走)で入口から終わりまで流す）→ 試走の結果を読む → 見せて聞く、を人が「このまま」と言うまで繰り返し、人が良いと言ってから `set_automation` で書く。作るときも直すときもこの道を通るので、人が確かめる前に本番の定義は変わらず、新しい判定の基準や副作用が本番で動かない。判定の基準は出どころごとに別の質問で聞く。重いノードは時間を見積もって上限時間を書く。設計の参考として型（見張ってタスク候補・MCP でしか読めない出どころを見張ってタスク候補・出どころごとの予定で集めてまとめて判定・定時の報告・定時にツールで作業・定時のコマンド・届いたら外部操作・組み合わせ）を、そのまま定義として通るノードのグラフの JSON とともに `references/` に持つ。型は参考で、頼みに合わなければ外れてよい。定義の項目と仕組み・既定の値と上限は MCP の `set_automation` ほかの説明が持つので、スキルにはコピーせず、理由が仕組みにあるときは説明の節を名前で指す。
+プラグインは `plugins/<プラグイン名>/skills/` に、Orbe の裏定期実行を扱う 2 つのスキルを持つ（claude が読む形式。agy もプラグインの `skills/` を取り込むので届くが、本文は claude のツール名で書かれていて、agy で通しで動くことは確かめていない。codex 専用のディレクトリには置かないので codex には届かない）。スキルの本文は日本語で、人とのやり取りは頼みの言語に合わせる。
 
-[秘書](secretary.md#役目の指示)はこのスキルを役目の指示で名指しする。Orbe のプラグインが入っている claude なら、人が手で起こしたものでも、スキルの説明（description）から同じ進め方で自動化を書ける。スキルの本文は日本語 1 つで、人とのやり取りは頼みの言語に合わせる。
+### 自動化のスキル（`automation`）
+
+`skills/automation/` は Orbe の[自動化](../platform/automation.md)を人の一言から作る・直す・監査するスキル。薄い司令塔（`SKILL.md`）に核となる設計原則とモード分岐だけを置き、設計判断基準（`references/design.md`）・新規作成手順（`references/create.md`）・修正と診断と品質監査手順（`references/fix.md`）・実戦パターン集（`references/patterns.md`）・コマンド出力の JSONL 検証スクリプト（`scripts/check-jsonl.pl`、macOS 標準の perl）へ概念境界で分ける。
+
+新規作成では、実データの先行プローブ（副作用のない読み取りで構造・情報量・ノイズを確認）→ 設計と基準の合意（AskUserQuestion）→ 必要なら Home 配下の scripts フォルダへのローカルスクリプト化と `check-jsonl.pl` によるローカル検証 → 書く前の定義の[試走](../platform/automation.md#試走)と品質自己監査ループ → 結果を見せて合意してから `set_automation` で本登録、の順で進める。修正・監査では過去ログ・候補の採否傾向・`breach` から根本原因を診断し、`after`・`atWrite`・`paused`・`currentSet` 処理の差し替えまで含めて試走で確かめてから更新する。`patterns.md` の JSON はそのまま定義として通る形を保ち、定義の項目・既定値・上限の正本は MCP の `set_automation` ほかの説明に置く。
+
+[秘書](secretary.md#役目の指示)はこのスキルを役目の指示で名指しする。Orbe のプラグインが入っている claude なら、人が手で起こしたものでも、スキルの説明（description）から同じ進め方で自動化を書ける。
+
+### 待ちの条件のスキル（`wait`）
+
+`skills/wait/` は Orbe の[待ちの条件](../platform/tasks.md#待ちの条件)（`set_wait_condition`）を設計・実測検証して設定・解除するスキル。対象タスクを特定し、厳格な読み取り専用・フェイルクローズ（エラー時に誤って終了コード 0 を返さない）・標準出力 1 行目に人間向けの短い状況要約を出す確認コマンドを設計し、登録前に手元で 1 回実行して検証してから間隔と期限を決めて設定する。
 
 ## event→state 対応
 
