@@ -26,12 +26,11 @@ extension WindowControllerControlTests {
     let tabs = try wc.controlListTabs(workspaceId: nil).get()
     let second = try XCTUnwrap(tabs[1]["tabId"] as? Int)
     let tab = try XCTUnwrap(wc.controlResolveTab(second))
-    XCTAssertNil(wc.editorShownTab)
+    XCTAssertFalse(tab.group.view.isEditorOpen)
 
     let result = wc.controlOpenFile(tabId: second, path: "note.md")
     guard case .success = result else { return XCTFail("\(result)") }
-    XCTAssertTrue(wc.editorShownTab === tab, "エディターが開く")
-    XCTAssertTrue(tab.group.view.isEditorOpen)
+    XCTAssertTrue(tab.group.view.isEditorOpen, "エディターが開く")
     let opened = MainActor.assumeIsolated { tab.group.editor.activeDocument?.url }
     XCTAssertEqual(opened, url.resolvingSymlinksInPath())
     XCTAssertTrue(
@@ -75,7 +74,6 @@ extension WindowControllerControlTests {
     XCTAssertEqual(Set(documents), [a, c], "前回開いていた文書も戻る")
     let shown = MainActor.assumeIsolated { tab.group.view.editor.document?.url }
     XCTAssertEqual(shown, c, "面に載っているのも要求した文書")
-    XCTAssertTrue(wc.editorShownTab === tab)
     XCTAssertTrue(tab.group.view.isEditorOpen, "移り先でエディターが開く")
   }
 
@@ -103,7 +101,7 @@ extension WindowControllerControlTests {
     } else {
       XCTFail("UTF-8 でないファイルは -32000")
     }
-    XCTAssertNil(wc.editorShownTab, "失敗ではエディターは開かない")
+    XCTAssertFalse(tab.group.view.isEditorOpen, "失敗ではエディターは開かない")
     XCTAssertNil(MainActor.assumeIsolated { tab.group.editor.activeDocument })
   }
 }

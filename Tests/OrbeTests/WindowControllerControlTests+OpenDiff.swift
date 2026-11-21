@@ -21,7 +21,7 @@ extension WindowControllerControlTests {
 
     let result = wc.controlOpenDiff(tabId: tabId, path: "a.txt", kind: .workingTree)
     guard case .success = result else { return XCTFail("\(result)") }
-    XCTAssertTrue(wc.editorShownTab === tab, "エディターが開く")
+    XCTAssertTrue(tab.group.view.isEditorOpen, "エディターが開く")
     let active = MainActor.assumeIsolated { tab.group.editor.activeID }
     XCTAssertEqual(
       active, .diff(EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree)),

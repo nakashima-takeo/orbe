@@ -182,8 +182,7 @@ extension WindowControllerTabGroupTests {
     a.surface.currentPwd = "/tmp/g2"
 
     XCTAssertTrue(a.group === c.group)
-    XCTAssertTrue(wc.editorShownTab === a, "見せ方は cd で変わらない")
-    XCTAssertTrue(c.group.view.isEditorOpen, "行き先の器でエディターが開く")
+    XCTAssertTrue(c.group.view.isEditorOpen, "見せ方は cd で変わらず、行き先の器でエディターが開く")
     XCTAssertFalse(old.view.isEditorOpen, "元の連の器は閉じる")
     XCTAssertTrue(wc.window.firstResponder === c.group.view.editor.focusTarget, "焦点は行き先のエディター")
   }

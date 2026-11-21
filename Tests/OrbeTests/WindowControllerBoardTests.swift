@@ -131,7 +131,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.count, 2, "⌘W でタブは閉じない")
     XCTAssertEqual(wc.current.selection, .board, "ボードのまま")
     XCTAssertNil(wc.statusModel.editingIndex, "⌘R で隠れたタブの改名は始まらない")
-    XCTAssertNil(wc.editorShownTab, "⌘E でエディターは開かない")
+    XCTAssertTrue(tabs.allSatisfy { !$0.group.view.isEditorOpen }, "⌘E でエディターは開かない")
     XCTAssertTrue(tabs.allSatisfy { $0.surface.searchBar == nil }, "⌘F で検索は開かない")
   }
 

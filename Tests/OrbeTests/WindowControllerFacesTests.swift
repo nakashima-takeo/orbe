@@ -63,7 +63,6 @@ final class WindowControllerFacesTests: OrbeTestCase {
     let tab = try XCTUnwrap(wc.activeTab)
 
     wc.handleWindowCommand(.toggleEditorFace)
-    XCTAssertTrue(wc.editorShownTab === tab)
     XCTAssertTrue(tab.group.view.isEditorOpen)
     XCTAssertTrue(
       wc.window.firstResponder === tab.group.view.editor, "エディター pane が first responder")
@@ -71,7 +70,6 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開き終われば下の端末を描かない")
 
     wc.handleWindowCommand(.toggleEditorFace)
-    XCTAssertNil(wc.editorShownTab)
     XCTAssertFalse(tab.group.view.isEditorOpen)
     XCTAssertTrue(wc.window.firstResponder === tab.surface, "端末 surface へ戻る")
     settle(tab)
@@ -109,7 +107,6 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
     wc.handleWindowCommand(.findInProject)
 
-    XCTAssertTrue(wc.editorShownTab === tab)
     XCTAssertTrue(tab.group.view.isEditorOpen)
     XCTAssertEqual(MainActor.assumeIsolated { wc.editorSidebar.panel }, .search)
   }
@@ -130,8 +127,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
     reopen()
     wc.select(0)
-    XCTAssertNil(wc.editorShownTab, "今のタブのクリックで閉じる")
-    XCTAssertFalse(tab.group.view.isEditorOpen)
+    XCTAssertFalse(tab.group.view.isEditorOpen, "今のタブのクリックで閉じる")
     XCTAssertTrue(wc.window.firstResponder === tab.surface)
 
     reopen()
@@ -139,14 +135,13 @@ final class WindowControllerFacesTests: OrbeTestCase {
     wc.newTab()
     let sibling = try XCTUnwrap(wc.activeTab)
     XCTAssertTrue(sibling.group === tab.group, "前提: 同じ連")
-    XCTAssertNil(wc.editorShownTab, "新しいタブは端末で出る")
-    XCTAssertFalse(tab.group.view.isEditorOpen)
+    XCTAssertFalse(tab.group.view.isEditorOpen, "新しいタブは端末で出る")
     XCTAssertTrue(wc.window.firstResponder === sibling.surface)
 
     reopen()
     wc.prevTab()
     XCTAssertTrue(wc.activeTab === tab)
-    XCTAssertNil(wc.editorShownTab, "巡回のキーで閉じる")
+    XCTAssertFalse(tab.group.view.isEditorOpen, "巡回のキーで閉じる")
     XCTAssertTrue(wc.window.firstResponder === tab.surface)
   }
 
@@ -157,16 +152,14 @@ final class WindowControllerFacesTests: OrbeTestCase {
     wc.toggleEditorFace()
 
     wc.closeTab(c, origin: .gesture)
-    XCTAssertTrue(wc.editorShownTab === a, "選んでいないタブが閉じてもエディターのまま")
-    XCTAssertTrue(a.group.view.isEditorOpen)
+    XCTAssertTrue(a.group.view.isEditorOpen, "選んでいないタブが閉じてもエディターのまま")
 
     wc.openTab(workspaceIndex: wc.activeWorkspace, cwd: "/tmp", selects: false)
-    XCTAssertTrue(wc.editorShownTab === a, "選ばずに足したタブではエディターのまま")
+    XCTAssertTrue(a.group.view.isEditorOpen, "選ばずに足したタブではエディターのまま")
 
     wc.closeTab(a, origin: .gesture)
     XCTAssertTrue(wc.activeTab === b)
-    XCTAssertNil(wc.editorShownTab, "見ているタブを閉じれば隣の端末")
-    XCTAssertFalse(b.group.view.isEditorOpen)
+    XCTAssertFalse(b.group.view.isEditorOpen, "見ているタブを閉じれば隣の端末")
     XCTAssertTrue(wc.window.firstResponder === b.surface)
   }
 
@@ -179,7 +172,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     _ = wc.controlFocusTab(tabId: first.id)
 
     XCTAssertTrue(first === wc.activeTab)
-    XCTAssertNil(wc.editorShownTab)
+    XCTAssertFalse(first.group.view.isEditorOpen)
     XCTAssertTrue(wc.window.firstResponder === first.surface)
   }
 
@@ -194,7 +187,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
     wc.switchWorkspace(to: 1)
     let b = try XCTUnwrap(wc.activeTab)
-    XCTAssertNil(wc.editorShownTab)
+    XCTAssertFalse(b.group.view.isEditorOpen)
     XCTAssertFalse(a.group.view.isEditorOpen, "content から外れた器は閉じている")
     XCTAssertTrue(wc.window.firstResponder === b.surface)
 
@@ -216,7 +209,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     wc.dismissHelp()
     pump(0.05)
 
-    XCTAssertTrue(wc.editorShownTab === tab)
+    XCTAssertTrue(tab.group.view.isEditorOpen)
     XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor)
   }
 
@@ -237,8 +230,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
 
-    XCTAssertNil(wc.editorShownTab, "端末で起きる")
-    XCTAssertFalse(tab.group.view.isEditorOpen)
+    XCTAssertFalse(tab.group.view.isEditorOpen, "端末で起きる")
     XCTAssertTrue(wc.window.firstResponder === tab.surface)
 
     wc.toggleEditorFace()
