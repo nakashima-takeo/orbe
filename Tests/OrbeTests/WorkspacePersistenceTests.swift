@@ -1,4 +1,5 @@
 import AppKit
+import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
@@ -293,7 +294,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     let full = WorkspaceState(
       name: "w", rootPath: "/w", activeTab: 0, boardSelected: true,
       tabs: [TabState(cwd: "/w", agent: nil, explicitTitle: nil)],
-      groups: [GroupState(root: "/w", faces: FaceLayout(editorRatio: 0.4, focus: .editor))],
+      groups: [GroupState(root: "/w", editor: EditorState(search: SearchQuery(pattern: "x")))],
       lastUsedAt: Date(timeIntervalSinceReferenceDate: 123), settingsOverride: override,
       lastWorktreeBase: "origin/main", boardWidgets: [.automation])
     let data = try JSONEncoder().encode(full)

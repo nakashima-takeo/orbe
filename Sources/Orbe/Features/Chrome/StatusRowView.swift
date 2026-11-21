@@ -39,7 +39,7 @@ extension View {
 /// 上段=現在地（workspace 名・build-id・焦点の面の現在地、左）とステータスストリップ（右端）、テキストは
 /// 信号機の縦中央へ整列・背景は透明（最背面の BackgroundGlow が見える）。下段=全幅セグメント形タブ行
 /// （地 tabRowBg・ボードを持つ workspace では左端に固定のボードのセル・同 worktree のタブを連ねた DSTabSegment・
-/// shrink＋横スクロール・＋ボタン）と右端の位置ドット（エディター・端末の焦点と可視）。
+/// shrink＋横スクロール・＋ボタン）。
 /// 罫線は持たない（tabRowBg の濃度差が境界）。背景に窓ドラッグ（タブ/ボタンのクリックは奪わない）。
 /// 窓が main でない間は文字とタブを退いた姿で描く（状態グリフの色は保つ）。
 struct StatusRowView: View {
@@ -165,12 +165,10 @@ struct StatusRowView: View {
   private var tabStrip: some View {
     GeometryReader { geo in
       let strip = model.strip
-      let dots = model.faceDots
       let boardLabel = model.boardLabel
-      // ボードのセルと位置ドットは ScrollView の外（左端・右端）に置き、その予約幅を行の利用可能幅から引く。
+      // ボードのセルは ScrollView の外（左端）に置き、その予約幅を行の利用可能幅から引く。
       // ボードはスクロールの外なので、横スクロールしても左端に残り、並び替えの幾何（x=0 起点）にも入らない。
-      let available =
-        geo.size.width - (dots == nil ? 0 : Chrome.faceDotsWidth) - boardReserve(boardLabel)
+      let available = geo.size.width - boardReserve(boardLabel)
       let widths = tabWidths(strip, available: available)
       HStack(spacing: 0) {
         if let boardLabel {
@@ -237,9 +235,6 @@ struct StatusRowView: View {
             dragState.discard()
             if case .tab(let i) = model.selection { proxy.scrollTo(i, anchor: .center) }
           }
-        }
-        if let dots {
-          FaceDotsView(dots: dots)
         }
       }
     }

@@ -51,6 +51,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   var rememberedWindowSize: WindowSize?
   // 復元時の programmatic な setFrame を windowDidResize の取り込みから除外するフラグ。
   var isApplyingRestoredSize = false
+  /// エディターで見せているタブ。無ければエディターは閉じている。あるなら前面の workspace で選んでいるタブ（揃えるのは
+  /// `renderSelection` の冒頭）。書き手は選ぶ命令・エディターで見せる命令・⌘E だけで、保存しない。
+  var editorShownTab: TerminalTab?
   // chrome 更新の coalesce 状態。高頻度 report でも runloop tick 単位に 1 回へ間引く。
   private var chromeDirty = false
   private var chromeFlushScheduled = false
@@ -315,8 +318,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         strip: tabStrip(of: current),
         selection: chromeSelection(of: current),
         boardLabel: store.hasBoard(current) ? current.name : nil,
-        location: activeTab?.location,
-        faceDots: activeTab?.group.view.projection.dots,
+        location: chromeLocation,
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）

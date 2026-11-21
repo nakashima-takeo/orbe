@@ -4,15 +4,15 @@ import XCTest
 
 @testable import Orbe
 
-/// 連（`TabGroup`）がエディターと面の配置を共有する配線を、実 `WindowController` で通す——連の中の切替は端末の入れ替え
+/// 連（`TabGroup`）がエディターを共有する配線を、実 `WindowController` で通す——連の中の切替は端末の入れ替え
 /// だけ、別の連へは器ごと、休眠タブは器の mount で起きない、cd の 3 通り（タブだけ移る・連ごと付け替える・文書を移して
-/// 畳む）と焦点、worktree の中の cd、閉じたタブの端末の後片付け。
+/// 畳む）と、cd で見せ方が変わらないこと、worktree の中の cd、閉じたタブの端末の後片付け。
 ///
-/// 壊れると何が起きるか。同じ worktree のタブを切り替えるたびにエディターが閉じたり開いたりし、配置と文書が消える。切り替えた
-/// 瞬間に端末が描き直される。連の器を出しただけで休眠の agent が素のシェルとして起き、resume されない。cd したタブが元の
-/// 連の文書を持ち去る、あるいは連の最後のタブの cd で文書が消える。端末で cd したのに、エディター全面の連へ移って入力が
-/// 見えない面へ届く、分割の連へ移って入力がエディターへ届く。サブディレクトリへ cd するたびにエディターの文書・
-/// 配置・ツリーを失う。閉じたタブの surface とプロセスが器に残り続ける。
+/// 壊れると何が起きるか。同じ worktree のタブを切り替えるたびに文書が消える。切り替えた瞬間に端末が描き直される。連の器を
+/// 出しただけで休眠の agent が素のシェルとして起き、resume されない。cd したタブが元の連の文書を持ち去る、あるいは連の
+/// 最後のタブの cd で文書が消える。端末で cd したのに行き先のエディターが開いて入力が見えない面へ届く、エディターで
+/// 見せていたのに cd で閉じる。サブディレクトリへ cd するたびにエディターの文書・ツリーを失う。閉じたタブの surface と
+/// プロセスが器に残り続ける。
 extension WindowControllerTabGroupTests {
   private func layout(_ wc: WindowController) {
     wc.window.contentView?.layoutSubtreeIfNeeded()
@@ -24,19 +24,18 @@ extension WindowControllerTabGroupTests {
     return url.resolvingSymlinksInPath()
   }
 
-  /// 連の中の切替は器の中の端末の入れ替えだけ——器もエディターも配置も動かず、見える端末だけが替わる。切り替えた先の
-  /// 端末は既に面の寸法を持っている（切替で resize が起きない）。焦点の面は連の記憶のまま。
+  /// 連の中の切替は器の中の端末の入れ替えだけ——器もエディターも動かず、見える端末だけが替わる。切り替えた先の
+  /// 端末は既に器の寸法を持っている（切替で resize が起きない）。
   func testSwitchingWithinTheGroupOnlySwapsTheTerminal() throws {
     let wc = try restore(["/tmp/g1", "/tmp/g1"], activeTab: 0)
     let (a, b) = (wc.current.tabs[0], wc.current.tabs[1])
     let group = a.group
     XCTAssertTrue(b.group === group, "前提: 同じ連")
-    group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
     layout(wc)
     pumpMain(until: { b.activated }, "隠れた兄弟が起きる")
     let size = a.surface.bounds.size
     XCTAssertGreaterThan(size.width, 0, "前提: 端末が実寸を持つ")
-    XCTAssertEqual(b.surface.bounds.size, size, "隠れた兄弟も面の確定寸法を持つ")
+    XCTAssertEqual(b.surface.bounds.size, size, "隠れた兄弟も器の寸法を持つ")
     let mounted = wc.model.content.subviews
 
     wc.select(1)
@@ -45,28 +44,28 @@ extension WindowControllerTabGroupTests {
     XCTAssertTrue(group.view.shownTerminal === b.terminal)
     XCTAssertFalse(b.terminal.isHiddenOrHasHiddenAncestor)
     XCTAssertTrue(a.terminal.isHidden)
-    XCTAssertEqual(group.faces, FaceLayout(editorRatio: 0.5, focus: .terminal), "配置は動かない")
     XCTAssertEqual(b.surface.bounds.size, size, "切替で寸法は変わらない")
-    XCTAssertTrue(wc.window.firstResponder === b.surface, "連の焦点の面（端末）の、そのタブの端末へ")
+    XCTAssertTrue(wc.window.firstResponder === b.surface, "そのタブの端末へ")
   }
 
-  /// 別の連のタブへ移ると器ごと入れ替わり、その連の配置になる。戻れば元の連の器と配置が残っている。
+  /// 別の連のタブへ移ると器ごと入れ替わり、そのタブの端末が出る。見えなくなった器は閉じる。
   func testSwitchingToAnotherGroupSwapsTheWholeView() throws {
     let wc = try restore(["/tmp/g1", "/tmp/g2"], activeTab: 0)
     let (a, b) = (wc.current.tabs[0], wc.current.tabs[1])
-    a.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    wc.toggleEditorFace()
 
     wc.select(1)
     XCTAssertTrue(a.group.view.isHidden)
+    XCTAssertFalse(a.group.view.isEditorOpen, "見えなくなった器は閉じる")
     XCTAssertFalse(b.group.view.isHidden)
-    XCTAssertEqual(b.group.faces, .terminalOnly, "新しい連は端末だけで始まる")
+    XCTAssertFalse(b.group.view.isEditorOpen)
     XCTAssertTrue(wc.window.firstResponder === b.surface)
 
     wc.select(0)
     XCTAssertFalse(a.group.view.isHidden)
     XCTAssertTrue(b.group.view.isHidden)
-    XCTAssertEqual(a.group.faces, FaceLayout(editorRatio: 1, focus: .editor))
-    XCTAssertTrue(wc.window.firstResponder === a.group.view.editor)
+    XCTAssertFalse(a.group.view.isEditorOpen, "タブを選べば端末が出る")
+    XCTAssertTrue(wc.window.firstResponder === a.surface)
   }
 
   /// 連の器が画面に出ても、同じ連の休眠タブは起きない——器に入るのは materialize 済みの端末だけで、休眠の兄弟は後続 tick に
@@ -160,33 +159,33 @@ extension WindowControllerTabGroupTests {
     XCTAssertFalse(wc.model.content.subviews.contains { $0 === old.view }, "畳まれた連の器は外れる")
   }
 
-  /// 前面のアクティブなタブが端末に焦点を置いたままエディター全面の連へ cd すると、その連は端末だけの配置になり、焦点は
-  /// 端末に残る。
-  func testCdWithTheTerminalFocusedIntoAnEditorOnlyGroupKeepsTheTerminal() throws {
+  /// 端末で見せているタブが別の連へ cd しても、行き先の器は閉じたままで焦点は端末に残る。
+  func testCdWhileShowingTheTerminalKeepsTheTerminal() throws {
     let wc = try restore(["/tmp/g1", "/tmp/g1", "/tmp/g2"], activeTab: 0)
     let (a, c) = (wc.current.tabs[0], wc.current.tabs[2])
-    c.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
     XCTAssertTrue(wc.window.firstResponder === a.surface, "前提: 端末に焦点")
 
     a.surface.currentPwd = "/tmp/g2"
 
     XCTAssertTrue(a.group === c.group)
-    XCTAssertEqual(c.group.faces, .terminalOnly, "エディター全面の連は端末だけになる")
+    XCTAssertFalse(c.group.view.isEditorOpen, "行き先のエディターは開かない")
     XCTAssertTrue(wc.window.firstResponder === a.surface, "焦点は端末に残る")
   }
 
-  /// 分割の連へ端末で cd すると、幅は保ったまま連の焦点の面だけが端末になる。
-  func testCdWithTheTerminalFocusedIntoASplitGroupMovesOnlyItsFocus() throws {
+  /// エディターで見せているタブが別の連へ cd すると、見せ方はそのままで行き先の連のエディターが出る。元の連の器は閉じる。
+  func testCdWhileShowingTheEditorShowsTheDestinationEditor() throws {
     let wc = try restore(["/tmp/g1", "/tmp/g1", "/tmp/g2"], activeTab: 0)
     let (a, c) = (wc.current.tabs[0], wc.current.tabs[2])
-    c.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .editor), animated: false)
-    XCTAssertTrue(wc.window.firstResponder === a.surface, "前提: 端末に焦点")
+    let old = a.group
+    wc.toggleEditorFace()
 
     a.surface.currentPwd = "/tmp/g2"
 
     XCTAssertTrue(a.group === c.group)
-    XCTAssertEqual(c.group.faces, FaceLayout(editorRatio: 0.5, focus: .terminal))
-    XCTAssertTrue(wc.window.firstResponder === a.surface, "焦点は端末に残る")
+    XCTAssertTrue(wc.editorShownTab === a, "見せ方は cd で変わらない")
+    XCTAssertTrue(c.group.view.isEditorOpen, "行き先の器でエディターが開く")
+    XCTAssertFalse(old.view.isEditorOpen, "元の連の器は閉じる")
+    XCTAssertTrue(wc.window.firstResponder === c.group.view.editor.focusTarget, "焦点は行き先のエディター")
   }
 
   /// 連のキーは worktree のルート。worktree の中で cd しても連もツリーも作り直さず、外から worktree の下へ cd したタブと

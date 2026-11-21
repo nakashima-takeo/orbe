@@ -110,7 +110,6 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertEqual(visibleContent(wc), [wc.boardView], "見えるのはボードだけ")
     XCTAssertEqual(wc.statusModel.selection, .board, "タブのセルは選択の見た目にならない")
     XCTAssertTrue(wc.statusModel.location.isEmpty, "隠れたタブの現在地を出さない")
-    XCTAssertNil(wc.statusModel.faceDots, "隠れたタブの位置ドットを出さない")
     XCTAssertFalse(wc.model.contentIsEmpty, "空表示の地を重ねない")
   }
 
@@ -132,7 +131,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.count, 2, "⌘W でタブは閉じない")
     XCTAssertEqual(wc.current.selection, .board, "ボードのまま")
     XCTAssertNil(wc.statusModel.editingIndex, "⌘R で隠れたタブの改名は始まらない")
-    XCTAssertTrue(tabs.allSatisfy { $0.group.faces == FaceLayout.terminalOnly }, "⌘E で面は動かない")
+    XCTAssertNil(wc.editorShownTab, "⌘E でエディターは開かない")
     XCTAssertTrue(tabs.allSatisfy { $0.surface.searchBar == nil }, "⌘F で検索は開かない")
   }
 

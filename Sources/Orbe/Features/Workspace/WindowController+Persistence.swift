@@ -20,7 +20,8 @@ extension WindowController {
       let keys = state.tabs.map { GitWorktreeRoot.root(of: $0.cwd) }
       let groupStates = state.groupStates(keys: keys)
       for (tab, key) in zip(state.tabs, keys) {
-        let group = group(forKey: key, in: ws) ?? makeGroup(key: key, state: groupStates[key])
+        let group =
+          group(forKey: key, in: ws) ?? makeGroup(key: key, state: groupStates[key]?.editor)
         ws.tabs.append(makeTab(from: tab, group: group))
       }
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）はボードか空表示

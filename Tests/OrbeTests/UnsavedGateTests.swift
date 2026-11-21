@@ -174,7 +174,7 @@ final class UnsavedGateTests: OrbeTestCase {
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = tab.group.view
-    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    tab.group.view.setEditorOpen(true, animated: false)
     defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     try repo.write("b.txt", "b\n")
@@ -203,7 +203,7 @@ final class UnsavedGateTests: OrbeTestCase {
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = tab.group.view
-    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    tab.group.view.setEditorOpen(true, animated: false)
     defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)

@@ -120,19 +120,18 @@ extension WindowController: ControlTarget {
 
   // MARK: - タブ操作（focus・close）
 
-  /// 指定タブへフォーカスする（focus_tab）。別 WS なら switchWorkspace で activate、その上でタブを選び（ボードを
-  /// 選んでいてもタブへ移る）first responder を移す（既フォーカスでも成功＝冪等）。Attention / メニューバーの「そのタブへ移動」も
-  /// 同じ経路を通る。
+  /// 指定タブへフォーカスする（focus_tab）。別 WS ならその WS をアクティブにし（途中の画面は描かない）、タブを選んで
+  /// （ボードを選んでいてもタブへ移り、エディターを開いていれば閉じる）その端末へ first responder を移す（既フォーカスでも
+  /// 成功＝冪等）。Attention / メニューバーの「そのタブへ移動」も同じ経路を通る。
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
-    for (wi, ws) in workspaces.enumerated() {
-      for tab in ws.tabs where tab.id == tabId {
-        if wi != activeWorkspace { switchWorkspace(to: wi) }
-        select(.tab(tab))
-        focusSelection()
-        return .success(["ok": true])
-      }
+    guard let tab = controlResolveTab(tabId) else {
+      return .failure(ControlError(code: -32004, message: "tab not found"))
     }
-    return .failure(ControlError(code: -32004, message: "tab not found"))
+    let switched = activateWorkspace(of: tab)
+    select(.tab(tab))
+    if switched { finishWorkspaceSwitch() }
+    focusSelection()
+    return .success(["ok": true])
   }
 
   /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。id 解決の上で internal 化した closeTab へ
@@ -146,8 +145,7 @@ extension WindowController: ControlTarget {
   }
 
   /// 指定タブの連のエディターでファイルを開く（open_file）。`path` は絶対か、`~` 展開の上でタブの実効 cwd
-  /// からの相対。開けたら配置をエディターが見える正規形へ（隠れていれば全面・分割中は焦点だけ）、
-  /// `focus_tab` と同じ経路でタブを選んで first responder を移す。
+  /// からの相対。開けたらタブを選んでエディターで見せ（別 WS ならその WS へ移る）、first responder を移す。
   func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError> {
     guard let tab = controlResolveTab(tabId) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))
@@ -162,14 +160,14 @@ extension WindowController: ControlTarget {
     } catch {
       return .failure(ControlError(code: -32000, message: "cannot read: \(url.path)"))
     }
-    let ratio = tab.group.faces.editorRatio == 0 ? 1 : tab.group.faces.editorRatio
-    tab.group.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
-    return controlFocusTab(tabId: tabId)
+    showInEditor(tab)
+    focusSelection()
+    return .success(["ok": true])
   }
 
   /// 指定タブの連のエディターで diff を開く（open_diff）。`path` は `open_file` と同じ解き方で、それを含む worktree の根と根から
   /// の相対パスにする（ファイル自体の symlink は解かない——diff は git の座標の上のもの）。開けたら `open_file` と同じく
-  /// エディターを見える配置にし、タブを選んで本体へ焦点を移す。
+  /// タブを選んでエディターで見せ、本体へ焦点を移す。
   func controlOpenDiff(tabId: Int, path: String, kind: EditorDiff.Kind) -> Result<Any, ControlError>
   {
     guard let tab = controlResolveTab(tabId) else {
@@ -190,9 +188,9 @@ extension WindowController: ControlTarget {
     } catch {
       return .failure(ControlError(code: -32000, message: "no Metal device: \(url.path)"))
     }
-    let ratio = tab.group.faces.editorRatio == 0 ? 1 : tab.group.faces.editorRatio
-    tab.group.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
-    return controlFocusTab(tabId: tabId)
+    showInEditor(tab)
+    focusSelection()
+    return .success(["ok": true])
   }
 
   /// 制御 API のパス——絶対か、`~` 展開の上でタブの実効 cwd からの相対。

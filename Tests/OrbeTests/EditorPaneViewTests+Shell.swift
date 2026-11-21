@@ -77,12 +77,9 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
-    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
-    tab.group.view.layoutSubtreeIfNeeded()
     window.makeFirstResponder(nil)
 
     pane.shell.createFile()
-    XCTAssertEqual(tab.group.faces.focus, .editor, "行内入力を出す前に面の記憶がエディターへ移る")
     XCTAssertTrue(window.firstResponder === pane)
     XCTAssertEqual(pane.tree.newEntry?.directory, "")
 
@@ -144,13 +141,13 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertTrue(pane.tree.isLive, "窓に付いて見えていれば握る")
     XCTAssertTrue(pane.projectSearch.isLive)
 
-    tab.group.setFaces(.terminalOnly, animated: false)
+    tab.group.view.setEditorOpen(false, animated: false)
     tab.group.view.layoutSubtreeIfNeeded()
-    XCTAssertTrue(pane.isHiddenOrHasHiddenAncestor, "前提: 幅 0 の面は隠れる")
+    XCTAssertTrue(pane.isHiddenOrHasHiddenAncestor, "前提: 閉じた面は隠れる")
     XCTAssertFalse(pane.tree.isLive, "面が隠れれば離す（祖先の hidden でも viewDidHide が届く）")
     XCTAssertFalse(pane.projectSearch.isLive)
 
-    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    tab.group.view.setEditorOpen(true, animated: false)
     tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.tree.isLive, "戻れば握り直す")
     XCTAssertTrue(pane.projectSearch.isLive)
