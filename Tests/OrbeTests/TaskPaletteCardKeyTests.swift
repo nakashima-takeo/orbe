@@ -34,61 +34,19 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
   func mount(
     _ model: TaskPaletteModel, width: CGFloat = 960, detailWidth: CGFloat = 340
   ) -> NSWindow {
-    NSApplication.shared.setActivationPolicy(.accessory)
-    let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: width + 40, height: 640),
-      styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = FirstMouseHost(
-      rootView: TaskPaletteCard(model: model, detailWidth: detailWidth)
-        .frame(width: width, height: 600)
-        .environment(\.localization, LocalizationStore(language: .ja)))
-    window.makeKeyAndOrderFront(nil)
-    held.append(window)
-    pump(0.4)
-    return window
-  }
-
-  /// 非アクティブなテストの窓では、最初のクリックが窓の有効化に使われて SwiftUI のジェスチャまで届かない。
-  /// 実機では窓が前面にあるので、クリックがそのまま届く形に揃える。
-  private final class FirstMouseHost<Content: View>: NSHostingView<Content> {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-  }
-
-  private var held: [NSWindow] = []
-
-  override func tearDown() {
-    held.forEach { $0.orderOut(nil) }
-    held.removeAll()
-    super.tearDown()
+    host(
+      NSHostingView(
+        rootView: TaskPaletteCard(model: model, detailWidth: detailWidth)
+          .frame(width: width, height: 600)
+          .environment(\.localization, LocalizationStore(language: .ja))),
+      size: NSSize(width: width + 40, height: 640))
   }
 
   /// ヘッダーの入力欄（カード左上の「❯」の右）をクリックする。窓はカードの大きさに揃うので、窓座標
   /// （原点は左下）でヘッダーの縦中央を叩く。
   func click(atFieldOf window: NSWindow) throws {
     let content = try XCTUnwrap(window.contentView)
-    try click(NSPoint(x: 120, y: content.bounds.height - 28), in: window)
-  }
-
-  /// 窓座標（原点は左下）の 1 点を実 NSEvent のマウスでクリックする。離す方は先にキューへ入れておく——入力欄の
-  /// 文字の面が押下を受けると、離すまでキューを待つ追跡に入り、後から送ると戻ってこない。
-  func click(_ point: NSPoint, in window: NSWindow) throws {
-    let make = { (type: NSEvent.EventType) in
-      NSEvent.mouseEvent(
-        with: type, location: point, modifierFlags: [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
-    }
-    let down = try XCTUnwrap(make(.leftMouseDown))
-    let up = try XCTUnwrap(make(.leftMouseUp))
-    NSApp.postEvent(up, atStart: false)
-    NSApp.sendEvent(down)
-    pump(0.05)
-    if let pending = NSApp.nextEvent(
-      matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
-    {
-      NSApp.sendEvent(pending)
-    }
-    pump(0.3)
+    click(NSPoint(x: 120, y: content.bounds.height - 28), in: window)
   }
 
   func arrow(
@@ -346,6 +304,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let model = model()
     model.toggleFilterMenu(.due)
     let window = mount(model, width: 880, detailWidth: 880 / 3)
+    placeOffscreen(window)
     let content = try XCTUnwrap(window.contentView)
     let table = try XCTUnwrap(scrollViews(in: content).first)
     let tableTop = table.convert(table.bounds, to: nil).maxY
@@ -355,7 +314,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     for (row, bucket) in [TaskDueBucket.overdue, .today, .withinWeek].enumerated() {
       let y =
         frame.maxY - Theme.Space.tick - TaskPaletteRowMetrics.line * (CGFloat(row) + 0.5)
-      try click(NSPoint(x: frame.minX + 40, y: y), in: window)
+      click(NSPoint(x: frame.minX + 40, y: y), in: window)
       if row == 0 {
         XCTAssertLessThan(
           table.convert(table.bounds, to: nil).maxY, tableTop, "前提: ドロップダウンが次の行へ折り返す")
