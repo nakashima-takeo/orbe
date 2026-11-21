@@ -1,11 +1,12 @@
 // codex（OpenAI Codex CLI）の自家 spec。上流 @withfig/autocomplete に無いため直置き。
-// codex 0.171.0 の `codex --help` に載るサブコマンドとオプションを載せる（サブコマンドの中のサブコマンドとオプション・値の候補・generator は持たない）。
+// codex 0.171.0 の `codex --help` に載るサブコマンドとオプションを載せる。名前は `--help` の先頭に出る正式な名前（オプションは短い名前も）だけで、
+// 別名は載せない。サブコマンドの中のサブコマンドとオプション・値の候補・generator は持たない。
 const spec: Fig.Spec = {
   name: "codex",
   description: "Codex CLI - interactive agent by default",
   subcommands: [
     { name: "agents", description: "Open the agent command center to browse and switch sessions" },
-    { name: ["exec", "e"], description: "Run Codex non-interactively" },
+    { name: "exec", description: "Run Codex non-interactively" },
     { name: "review", description: "Run a code review non-interactively" },
     { name: "login", description: "Manage login" },
     { name: "logout", description: "Remove stored authentication credentials" },
@@ -19,7 +20,7 @@ const spec: Fig.Spec = {
     { name: "doctor", description: "Diagnose local Codex installation, config, auth, and runtime health" },
     { name: "sandbox", description: "Run commands within a Codex-provided sandbox" },
     { name: "debug", description: "Debugging tools" },
-    { name: ["apply", "a"], description: "Apply the latest diff produced by Codex agent as a `git apply` to your local working tree" },
+    { name: "apply", description: "Apply the latest diff produced by Codex agent as a `git apply` to your local working tree" },
     { name: "resume", description: "Resume a previous interactive session" },
     { name: "queue", description: "Queue a message for an existing session" },
     { name: "archive", description: "Archive a saved session by id or session name" },

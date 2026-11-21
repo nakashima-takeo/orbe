@@ -1,18 +1,19 @@
 // agy（Antigravity CLI）の自家 spec。上流 @withfig/autocomplete に無いため直置き。
-// agy 1.5.14 の `agy --help` に載るサブコマンドとオプションを載せる（サブコマンドの中のサブコマンドとオプション・値の候補・generator は持たない）。
+// agy 1.5.14 の `agy --help` に載るサブコマンドとオプションを載せる。名前は `--help` の先頭に出る正式な名前（オプションは短い名前も）だけで、
+// 別名は載せない。サブコマンドの中のサブコマンドとオプション・値の候補・generator は持たない。
 const spec: Fig.Spec = {
   name: "agy",
   description: "Antigravity CLI",
   subcommands: [
     { name: "acp", description: "Start the Agent Client Protocol (ACP) stdio server" },
-    { name: ["agent", "agents"], description: "List available agents" },
+    { name: "agent", description: "List available agents" },
     { name: "changelog", description: "Show changelog and release notes" },
     { name: "help", description: "Show help for subcommands" },
     { name: "install", description: "Configure environment paths and shell settings" },
     { name: "mcp", description: "Manage MCP servers (add, remove, list, enable, disable)" },
     { name: "mic-serve", description: "Serve this machine's microphone to a CLI on another host" },
     { name: "models", description: "List available models" },
-    { name: ["plugin", "plugins"], description: "Manage plugins (install, uninstall, list, enable, disable)" },
+    { name: "plugin", description: "Manage plugins (install, uninstall, list, enable, disable)" },
     { name: "remote-control", description: "Manage the remote-control background daemon (start, status, stop)" },
     { name: "update", description: "Update CLI" },
   ],
@@ -77,7 +78,7 @@ const spec: Fig.Spec = {
       args: { name: "format" },
     },
     {
-      name: ["-p", "--print", "--prompt"],
+      name: ["-p", "--print"],
       description: "Run a single prompt non-interactively and print the response",
       args: { name: "prompt" },
     },

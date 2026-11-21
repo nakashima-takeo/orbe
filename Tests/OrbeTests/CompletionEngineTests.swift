@@ -161,7 +161,7 @@ final class CompletionEngineTests: OrbeTestCase {
   }
 
   func testEngineSelfAuthoredSpecs() throws {
-    // 自家 spec（上流に無い claude/codex/agy）が実バンドルで候補を出す。
+    // 自家 spec（上流に無いコマンド）が実バンドルで候補を出すことを、claude と codex で確かめる。
     let h = try XCTUnwrap(EngineHarness { _ in "" })
     let claude = h.complete("claude ")
     XCTAssertTrue(names(claude).contains("mcp"), "claude: 自家 spec のサブコマンド")

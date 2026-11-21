@@ -1,5 +1,6 @@
 // claude（Claude Code CLI）の自家 spec。上流 @withfig/autocomplete に無いため直置き。
-// claude 2.1.330 の `claude --help` に載るサブコマンドとオプションを載せる（サブコマンドの中のサブコマンドとオプション・値の候補・generator は持たない）。
+// claude 2.1.330 の `claude --help` に載るサブコマンドとオプションを載せる。名前は `--help` の先頭に出る正式な名前（オプションは短い名前も）だけで、
+// 別名は載せない。サブコマンドの中のサブコマンドとオプション・値の候補・generator は持たない。
 const spec: Fig.Spec = {
   name: "claude",
   description: "Claude Code - starts an interactive session by default",
@@ -14,14 +15,14 @@ const spec: Fig.Spec = {
     { name: "install", description: "Install the Claude Code native build" },
     { name: "logs", description: "Print a background session's recent terminal output" },
     { name: "mcp", description: "Configure and manage MCP servers" },
-    { name: ["plugin", "plugins"], description: "Manage Claude Code plugins" },
+    { name: "plugin", description: "Manage Claude Code plugins" },
     { name: "purge", description: "Delete a project's Claude Code data from this computer only" },
     { name: "respawn", description: "Restart a background session, or all of them with --all" },
     { name: "rm", description: "If it's safe, remove a background session from the list and delete its worktree" },
     { name: "setup-token", description: "Set up a long-lived authentication token" },
-    { name: ["stop", "kill"], description: "Stop a background session" },
+    { name: "stop", description: "Stop a background session" },
     { name: "ultrareview", description: "Run a cloud-hosted multi-agent code review of the current branch" },
-    { name: ["update", "upgrade"], description: "Check for updates and install if available" },
+    { name: "update", description: "Check for updates and install if available" },
   ],
   options: [
     {
@@ -41,7 +42,7 @@ const spec: Fig.Spec = {
     },
     { name: "--allow-dangerously-skip-permissions", description: "Enable bypassing all permission checks as an option, without it being enabled by default" },
     {
-      name: ["--allowedTools", "--allowed-tools"],
+      name: "--allowedTools",
       description: "Comma or space-separated list of tool names to allow",
       args: { name: "tools", isVariadic: true },
     },
@@ -56,7 +57,7 @@ const spec: Fig.Spec = {
       args: { name: "auto|tokens" },
     },
     { name: "--ax-screen-reader", description: "Render screen-reader friendly output" },
-    { name: ["--bg", "--background"], description: "Start the session in the background and return immediately" },
+    { name: "--bg", description: "Start the session in the background and return immediately" },
     { name: "--bare", description: "Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery" },
     {
       name: "--betas",
@@ -85,7 +86,7 @@ const spec: Fig.Spec = {
     { name: "--desktop", description: "Open in the Claude Desktop app instead of the terminal" },
     { name: "--disable-slash-commands", description: "Disable all skills and commands" },
     {
-      name: ["--disallowedTools", "--disallowed-tools"],
+      name: "--disallowedTools",
       description: "Comma or space-separated list of tool names to deny",
       args: { name: "tools", isVariadic: true },
     },

@@ -33,7 +33,7 @@ git, npm, pnpm, yarn, docker, docker-compose, cargo, go, kubectl, brew, gh, make
 python, pip, node, ssh, curl, tar, systemctl, ls, cd, cat, rm, cp, mv, kill, grep,
 find, chmod, code, deno, mkdir, xcodebuild, volta, open, touch, source, claude, codex, agy
 
-`claude`・`codex`・`agy` は上流に無い自家 spec（`src/specs/` 直置き）。実 CLI の root の `--help` に載るサブコマンドとオプションを載せ、サブコマンドの中のサブコマンドとオプション・値の候補は持たない。元にした版は各 spec の冒頭に書く。
+`claude`・`codex`・`agy` は上流に無い自家 spec（`src/specs/` 直置き）。実 CLI の root の `--help` に載るサブコマンドとオプションを、`--help` の先頭に出る正式な名前（オプションは短い名前も）で載せ、別名は載せない（何も打っていないとき、エンジンは項目の名前のうち一番長いものを出すので、別名を載せると正式でない名前が出る）。サブコマンドの中のサブコマンドとオプション・値の候補は持たない。元にした版は各 spec の冒頭に書く。
 追加するには `src/specs/index.ts` に import を足して再生成するだけ（lazy-load 全網羅は段階外）。
 
 ## 再生成手順
