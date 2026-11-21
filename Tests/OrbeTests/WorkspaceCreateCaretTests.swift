@@ -11,14 +11,6 @@ import XCTest
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WorkspaceCreateCaretTests: OrbeTestCase {
-  private var opened: WindowController?
-
-  override func tearDown() {
-    opened?.window.orderOut(nil)
-    opened = nil
-    super.tearDown()
-  }
-
   /// ホームと別の cwd のタブを持つ主窓で、作成フォームを開いた状態。
   private func openCreateForm() throws -> (WindowController, WorkspaceCreateModel) {
     let file = WorkspacesFile(
@@ -30,10 +22,6 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
-    opened = wc
-    // 非アクティブなアプリの窓は key にならないが、`NSApp.sendEvent` は ordered-in の窓の first responder へ届ける。
-    NSApplication.shared.setActivationPolicy(.accessory)
-    wc.window.makeKeyAndOrderFront(nil)
     wc.showWorkspaceCreate(name: nil)
     pump(0.6)
     return (wc, try XCTUnwrap(wc.model.workspaceCreate))
@@ -55,7 +43,7 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
         context: nil, characters: characters, charactersIgnoringModifiers: characters,
         isARepeat: false, keyCode: 48)
     else { return XCTFail("キーイベントを作れない") }
-    NSApp.sendEvent(event)
+    deliverKeyDown(event, to: wc.window)
     pump()
   }
 

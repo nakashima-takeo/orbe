@@ -3,8 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 主窓に開いたパレットの入力欄へ、実 `NSEvent` を `NSApp.sendEvent` で届けたときのキーの行き先を、実
-/// `WindowController` の窓で固定する。
+/// 主窓に開いたパレットの入力欄へ、実 `NSEvent` を主窓へ届けたときのキーの行き先を、実 `WindowController` の窓で
+/// 固定する。
 ///
 /// 壊れると何が起きるか: 日本語の変換中に ↓ で候補を選ぼうとするとパレットの行が動き、esc で変換を取り消そうと
 /// するとパレットが閉じて打った内容が消え、⌫ で未確定の文字を消そうとすると選んでいる行の上書きが外れる。設定
@@ -16,14 +16,6 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     static let backspace: UInt16 = 51
     static let escape: UInt16 = 53
     static let down: UInt16 = 125
-  }
-
-  private var opened: WindowController?
-
-  override func tearDown() {
-    opened?.window.orderOut(nil)
-    opened = nil
-    super.tearDown()
   }
 
   /// 設定パレットを開いた主窓。焦点は絞り込みの入力欄。
@@ -38,10 +30,6 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     try JSONEncoder().encode(file).write(to: workspacesFile())
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
     let wc = WindowController()
-    opened = wc
-    // 非アクティブなアプリの窓は key にならないが、`NSApp.sendEvent` は ordered-in の窓の first responder へ届ける。
-    NSApplication.shared.setActivationPolicy(.accessory)
-    wc.window.makeKeyAndOrderFront(nil)
     XCTAssertTrue(wc.handleWindowKeyCommand(.showSettings))
     pump(0.6)
     XCTAssertTrue(wc.window.firstResponder is NSTextView, "前提: 焦点は絞り込みの入力欄")
@@ -66,7 +54,7 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
         context: nil, characters: characters, charactersIgnoringModifiers: characters,
         isARepeat: false, keyCode: keyCode)
     else { return XCTFail("キーイベントを作れない") }
-    NSApp.sendEvent(event)
+    deliverKeyDown(event, to: wc.window)
     pump()
   }
 
