@@ -11,16 +11,30 @@
 DIR="${1:?plugin_dir required}"
 NAME="${2:?plugin_name required}"
 
-# macOS に timeout が無いため perl の alarm で代替（alarm は exec を越えて残る）。
+# macOS に timeout が無いため perl で代替する。CLI を子として起こし、時限で終了を要求（SIGTERM）し、猶予の後も
+# 残っていれば強制終了（SIGKILL）する。SIGALRM を CLI へ直に届けないのは、agy が SIGALRM では終わらないため。
+# 打ち切ったら CLI の終了コードによらず失敗（124）を返す——agy は SIGTERM を受けて 0 で終わることがある。
 # stderr は常に捨てる: このスクリプトの stdout は status 行の通り道で、混ざると Orbe が誤読する。
-tmo() { perl -e 'alarm shift; exec @ARGV' "$@" </dev/null 2>/dev/null; }
+tmo() {
+  perl -e '
+    my $limit = shift;
+    my $pid = fork;
+    exit 127 unless defined $pid;
+    if (!$pid) { exec @ARGV; exit 127 }
+    my $cut = 0;
+    $SIG{ALRM} = sub { kill($cut++ ? "KILL" : "TERM", $pid); alarm 2 };
+    alarm $limit;
+    1 while waitpid($pid, 0) == -1 && $!{EINTR};
+    exit 124 if $cut;
+    exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
+  ' "$@" </dev/null 2>/dev/null
+}
 
 # list の出力はパイプでなくこのファイルで受ける（毎回 truncate される）。CLI が孫プロセスを残した
 # まま打ち切られても、孫が握るのはこの fd なので読み手は EOF を待たない（パイプだと孫が閉じるまで
-# 待ち続け、打ち切りが効かない）。読めない一覧（打ち切り・形の変化）の扱いは CLI ごとに違う:
-# claude は未登録扱いで install を試す（install は無効の設定を変えない）。codex は error にする
-# （plugin add は必ず有効へ戻すので、読めないまま入れ直すと利用者の無効を黙って覆す。error なら
-# 指紋を記録せず、次の起動でやり直す）。
+# 待ち続け、打ち切りが効かない）。一覧を読めない（打ち切り・失敗。codex は JSON の形の変化も）ときは、導入を試みず error にする。
+# claude の plugin install も codex の plugin add も無効にしたプラグインを有効へ戻すので、読めないまま
+# 導入すると、利用者が無効にした設定を黙って覆す。error なら指紋を記録せず、次の起動でやり直す。
 LIST="$(mktemp -t orbe-plugin-list)" || exit 1
 trap 'rm -f "$LIST"' EXIT
 
@@ -29,10 +43,14 @@ echo "start claude"
 if command -v claude >/dev/null 2>&1; then
   tmo 30 claude plugin marketplace add "$DIR" >/dev/null
   # list は "<name>@<marketplace>" の行を持つ。別チャネルの枠（名前の先頭が同じ）を自分のものと
-  # 誤認して plugin install を永久に飛ばさないよう、完全一致で判定する。
+  # 誤認して plugin install を永久に飛ばさないよう、完全一致で判定する。このプラグインの行は無効にしても残るので、
+  # あれば終了コードによらず導入済み。行が無いことを信じるのは、一覧が最後まで出た（終了コード 0）ときだけ。
   tmo 15 claude plugin list >"$LIST"
+  LISTED=$?
   if grep -qF "${NAME}@${NAME}" "$LIST"; then
     echo "unchanged claude"
+  elif [ "$LISTED" -ne 0 ]; then
+    echo "error claude"
   elif tmo 60 claude plugin install "${NAME}@${NAME}" >/dev/null; then
     echo "installed claude"
   else
