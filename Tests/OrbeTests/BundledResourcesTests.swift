@@ -183,7 +183,7 @@ final class BundledResourcesTests: OrbeTestCase {
   /// `TitleGlyphs.notoEmoji` は `static let` で root の差し替えに追随しないため、ここには入らない。
   /// `TerminalFonts.registerBundled()` が登録するフォントの配置は `TerminalFontDelegationTests` が
   /// `scripts/build-app.sh` と照合する。`Config.load()` が読む既定設定と `TitleGlyphs.notoEmoji` の
-  /// パスを照合するテストは無い。
+  /// パスを `scripts/build-app.sh` と照合するテストは無い。
   private func resolved() -> [(name: String, path: String?)] {
     [
       ("AgentPluginInstaller.bundledPluginDir", AgentPluginInstaller.bundledPluginDir?.path),

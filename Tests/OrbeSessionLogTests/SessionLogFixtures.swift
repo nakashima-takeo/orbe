@@ -4,7 +4,7 @@ import XCTest
 
 @testable import OrbeSessionLog
 
-/// ユニットテストの素材。時刻は基準からの秒で組み、同一性は sessionId だけ変える。
+/// `OrbeSessionLog` のテストの素材。時刻は基準からの秒で組み、同一性は sessionId だけ変える。
 enum Fixture {
   static let base = Date(timeIntervalSince1970: 1_800_000_000)
 

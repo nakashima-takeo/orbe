@@ -26,8 +26,9 @@ import XCTest
 /// **担保外**: `get_tab_text` の `scrollback`（値が `SurfaceView` の libghostty 経路へ吸い込まれ、
 /// surface 無しでは真偽の差が観測できない）と、`completion_accept` の `advance` /
 /// `completion_update` の `buffer`・`cursor`（popup が生まれないと適用結果が出ず、無応答契約で
-/// wire 側の観測面がゼロ）。`scrollback` は `OrbeMcpProcessTests` が実 surface で測る。
-/// `completion_*` の 3 つを測るテストは無い。
+/// wire 側の観測面がゼロ）。`scrollback` は `OrbeMcpProcessTests` が実 surface で測る。制御の口から
+/// `advance`・`buffer`・`cursor` を送って結果を見るテストは無い（`advance` による挿入の形そのものは
+/// `CompletionTests` がユニットで固定する）。
 extension ControlWireTests {
 
   // MARK: - 表
@@ -192,7 +193,8 @@ extension ControlWireTests {
 
   /// `send_key` は文字列でも `ControlKey.parse` が解けない指定を値域外として弾く。
   /// 黙って無視して `{"ok":true}` を返すようになると、エージェントが送った enter が
-  /// 実行されないまま成功と読まれる（`ControlKey.parse` 自体の語彙は `ControlKeyParseTests` が持つ）。
+  /// 実行されないまま成功と読まれる（`ControlKey.parse` の受理と拒否の規則は `ControlKeyParseTests`、
+  /// 名前付きキーとその符号化は `SurfaceKeyInputTests` が持つ）。
   func testUnparsableKeySpecIsRejected() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
