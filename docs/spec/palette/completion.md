@@ -1,7 +1,7 @@
 ---
 title: コマンド補完
 description: zsh の zle フックが control.sock 経由で編集バッファを送り、JavaScriptCore 埋め込みの spec エンジンが候補を算出、カーソル位置のドロップダウンから $BUFFER を直接書き換える
-updated: 2026-11-02
+updated: 2026-11-21
 ---
 
 # コマンド補完
@@ -96,7 +96,7 @@ shim `.zshenv` は全 zsh 起動で読まれ、次の順で働く。
 - `ORBE_USER_ZDOTDIR` が削除済み `.app` の shim dir を指す場合は同定できず、`ZDOTDIR` が不在の dir を指したままユーザ rc は読まれない（widget は入る）。
 - `zsh -i -c`（プロンプトを出さない）では precmd が走らず widget は入らない。
 - precmd 段で bind・keymap 切替をするプラグイン（zsh-vi-mode の既定 lazy init 等）には `^I` / `^M` を奪われる。Orbe のフックはユーザの `.zshrc` が積む precmd より先に走るため（zsh-vi-mode は `ZVM_INIT_MODE=sourcing` で回避できる）。ユーザ設定が `precmd_functions` を代入で丸ごと潰す場合も widget は入らない。
-- 同梱 spec は curated subset のみ（上流 600+ の全網羅・ユーザ提供 spec・上流 spec の自家 fork 運用は無い。`claude`/`codex` の自家 spec は上流に無いコマンドの新規最小 spec であり fork ではない）。
+- 同梱 spec は curated subset のみ（上流 600+ の全網羅・ユーザ提供 spec・上流 spec の自家 fork 運用は無い。`claude`/`codex`/`agy` の自家 spec は上流に無いコマンドの新規 spec であり fork ではない）。自家 spec が載せるのは、元にした版の root の `--help` に載るサブコマンドとオプション（別名は 1 つの項目にまとめる）で、サブコマンドの中のサブコマンドとオプションと、値の候補は持たない——`--help` に載るかどうかで決めるので、版が上がったときの直し方が 1 つに決まる。
 - generator のシェル実行は vendored curated spec のみが起点＝信頼境界内。任意のユーザ spec は受けない。
 - `swift run`（バンドル無し）では ZDOTDIR 未設定＝素の zsh 起動・engine 未ロードで候補非表示（クラッシュしない）。
 
