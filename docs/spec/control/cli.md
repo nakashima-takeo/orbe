@@ -39,7 +39,7 @@ updated: 2026-11-21
 ### エージェント（起動・再開・対話）
 
 - `orb agent list [--json]` … 検出済みエージェント CLI の command と絶対パス。検出ゼロはエラーではなく空の結果。
-- `orb agent spawn [<agent>] [--text <text> | --stdin] [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]` … 新タブでエージェントを起こし、**準備できるまで待つ**。`<agent>` 省略は**対象 workspace の**実効 `default-agent`。`--text` / `--stdin` は会話の最初の入力（`spawn_agent` の `prompt`）で、どちらも省けるが、両方は渡せない（値の規則は `tab send` と同じ）。入力を添えた起動では agent が既にその入力に取り掛かっているので、続けて `agent prompt` を送らず、結果は `orb wait <tab> --kind agent_state --kind tab_closed --after <seq>`（`<seq>` は `--json` の応答から）で待つ。
+- `orb agent spawn [<agent>] [--text <text> | --stdin] [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]` … 新タブでエージェントを起こし、**準備できるまで待つ**。`<agent>` 省略は**対象 workspace の**実効 `default-agent`。`--text` / `--stdin` は会話の最初の入力（`spawn_agent` の `prompt`）で、どちらも省けるが、両方は渡せない（値の規則は `tab send` と同じ）。入力を添えた起動では agent がすぐその入力に取り掛かるので、`ready` は agent によらず偽で、続けて `agent prompt` を送らない。結果は `orb wait <tab> --kind agent_state --kind tab_closed --after <seq> --json` で待つ。`<seq>` は `agent spawn --json` の応答から取り、最初に返る working を読み飛ばして、`agent_state` の done / waiting / clear か `tab_closed` が出るまで、返った `seq` を次の `--after` に渡して繰り返す。時間切れ（exit 124）も `--json` では `seq` を出すので、それを `--after` に渡して待ち直す。長い作業では `--timeout-ms` を明示する（手順の正本は [api](api.md) の `spawn_agent`）。
 - `orb agent resume <agent> <session-id> [--workspace <id|current>] [--dir <path>] [--timeout-ms <ms>] [--json]` … 既存セッションを継いで起こす。`<session-id>` の出所は `orb tab list --json` の `agentSessionId`。
 - `orb agent prompt <tab> (--text <text> | --stdin) [--timeout-ms <ms>] [--json]` … エージェントに問うて答えを待つ。テキストを送って enter を押し、その後に初めてターンが止まった状態で返る。`<tab>` は必須で `ORBE_TAB` に落ちない（自タブのエージェントに問う形は無い）。`--text` / `--stdin` の規則は `tab send` と同じ。
 
