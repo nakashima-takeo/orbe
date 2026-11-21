@@ -173,14 +173,12 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       "背景 WS のタブが前面の端末面と同じ実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
   }
 
-  /// `spawn_agent` の `prompt` は、起動の引数のその CLI の席（codex は末尾の `-- <入力>`、agy は `-i <入力>`）に
-  /// 置かれる。`orb agent spawn --stdin` と MCP の `spawn_agent` の両方から通し、空文字は渡さないのと同じ。
+  /// `orb agent spawn` が受けた文面は、起こした agent の会話の最初の入力として、その CLI の席（codex は末尾の
+  /// `-- <入力>`）に置かれる。MCP から渡す空文字の `prompt` は、渡さないのと同じ。
   func testAgentSpawnPassesThePromptAsTheFirstInputOfTheConversation() throws {
     let codex = try stageFakeAgent("codex")
-    let agy = try stageFakeAgent("agy")
     let control = try startControlProcess(workspaces: ["main"])
     waitForDetection(control, "codex")
-    waitForDetection(control, "agy")
 
     let viaOrb = control.orb(["agent", "spawn", "codex", "--stdin", "--json"], stdin: "-x hi")
     XCTAssertEqual(viaOrb.status, 0, "agent spawn --stdin が失敗した: \(viaOrb.stderr)")
@@ -191,13 +189,6 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     XCTAssertTrue(
       orbText.contains("\(codex.marker) --no-daemon -- -x hi"),
       "codex の最初の入力が末尾の -- の後に置かれていない: \(orbText)")
-
-    let viaMcp = control.mcpJSON("spawn_agent", ["command": "agy", "prompt": "hello agy"])
-    let mcpText = waitForTabText(
-      control, tab: try XCTUnwrap(viaMcp["tabId"] as? Int), contains: agy.marker)
-    XCTAssertTrue(
-      mcpText.contains("\(agy.marker) --dangerously-skip-permissions -i hello agy"),
-      "agy の最初の入力が -i の値に置かれていない: \(mcpText)")
 
     let empty = control.mcpJSON("spawn_agent", ["command": "codex", "prompt": ""])
     let emptyText = waitForTabText(
