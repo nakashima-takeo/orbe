@@ -42,7 +42,7 @@ final class OptionHoldTests: OrbeTestCase {
     XCTAssertFalse(detector.isHolding)
   }
 
-  /// 成立中のマウスの押下とポインタの動きでは終わらない。
+  /// 成立中のマウスの押下では終わらない。
   func testMouseDuringTheHoldKeepsIt() {
     press()
     expire()

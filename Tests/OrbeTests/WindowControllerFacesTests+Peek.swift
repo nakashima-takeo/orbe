@@ -5,10 +5,12 @@ import XCTest
 @testable import Orbe
 
 /// ⌥ だけの長押しの間の透かしを実窓で固定する——成立すると器が透かしになり、離すとエディターに戻ること、フォーカスと現在地が
-/// エディターのままであること、前面の窓でオーバーレイが出ていない間だけ透かすこと、窓が前面でなくなったら透かしをやめること。
+/// エディターのままであること、前面の窓でオーバーレイが出ていない間だけ透かすこと、窓が前面でなくなったら・エディターが閉じたら
+/// 透かしをやめること。
 ///
 /// 壊れると何が起きるか。透かしのたびにフォーカスがエディターの本体へ当て直され、サイドバーの入力欄で打っていた字が途切れる。
-/// ヘルプやパレットの後ろでエディターが消える。別のアプリへ移った後に端末が出たままになる。
+/// ヘルプやパレットの後ろでエディターが消える。別のアプリへ移った後に端末が出たままになる。透かしている間にタブを選んだ後、
+/// ⌥ を押したまま `open_file` が届くと、フォーカスはエディターにあるのに画面には端末が出る。
 extension WindowControllerFacesTests {
   /// エディターを開いた窓と、その ⌥ を操作するドライバー。前面の窓かどうかは OS とほかのアプリが決め、テストからは保てないので、
   /// 窓の条件は許すに差し替える（条件そのものは `testPeekIsAllowedOnlyInTheFrontWindowWithoutAnOverlay` が見る）。
@@ -57,13 +59,27 @@ extension WindowControllerFacesTests {
   func testPeekIsAllowedOnlyInTheFrontWindowWithoutAnOverlay() throws {
     let wc = WindowController()
     wc.toggleEditorFace()
-    XCTAssertFalse(wc.allowsPeek, "前面でない窓")
+    XCTAssertFalse(wc.optionHold.windowAllows(), "前面でない窓")
 
     makeKey(wc)
-    XCTAssertTrue(wc.allowsPeek)
+    XCTAssertTrue(wc.optionHold.windowAllows())
 
     wc.showHelp()
-    XCTAssertFalse(wc.allowsPeek, "ヘルプの後ろ")
+    XCTAssertFalse(wc.optionHold.windowAllows(), "ヘルプの後ろ")
+  }
+
+  /// 透かしている間にエディターが閉じたら透かしは終わり、⌥ を押したままエディターを開き直しても透かさない。
+  func testClosingTheEditorWhilePeekingEndsThePeekUntilTheModifiersAreReleased() throws {
+    let (wc, option) = try peekable()
+    let tab = try XCTUnwrap(wc.activeTab)
+    option.hold()
+    XCTAssertEqual(mode(wc), .peek, "前提")
+
+    wc.select(0)
+    XCTAssertEqual(mode(wc), .terminal, "タブ行のクリックで端末")
+    wc.showInEditor(tab)
+
+    XCTAssertEqual(mode(wc), .editor, "⌥ を押したままの open_file でもエディター")
   }
 
   /// 窓が前面でなくなったら透かしをやめる。
