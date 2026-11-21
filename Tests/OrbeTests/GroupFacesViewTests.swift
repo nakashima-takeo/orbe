@@ -4,10 +4,11 @@ import XCTest
 @testable import Orbe
 
 /// 連の器（`GroupFacesView`）が開閉を 2 層の見え方へ写す規則——両面は常に器いっぱい・端末の寸法は器だけに従う・
-/// 開いている間は端末面を隠す・動きの途中は両面を見せる・クリックの届き先は開閉に従う。
+/// 開いている間は端末面を隠す（描画は続ける）・描くのは見せている端末だけ・動きの途中は両面を見せる・クリックの届き先は開閉に従う。
 ///
 /// 壊れると何が起きるか。端末の寸法が開閉や連の中の切替で変わると、そのたびに pty が resize され scrollback が折り返し直される。
-/// 開いている間に端末面が隠れないと、半透明のエディター面の下で端末が描かれ続け、文字が透ける。
+/// 開いている間に端末面が隠れないと、半透明のエディター面の下の端末の文字が透ける。覆われている端末の描画が止まると、見せ直した
+/// 最初のフレームに古い出力か何も描かれていない状態が出る。見せていない兄弟や隠れた器の端末が描き続けると、見えない描画の負荷がかかる。
 /// 置き換えられた動きの完了で「途中」が解けると、閉じる途中にエディター面が消え、開く途中に下が抜ける。
 /// 閉じる途中のエディター面がクリックを取ると、隠れる view に first responder が残る。
 final class GroupFacesViewTests: OrbeTestCase {
@@ -50,7 +51,7 @@ final class GroupFacesViewTests: OrbeTestCase {
     XCTAssertEqual(tab.surface.bounds.size, size)
   }
 
-  /// 開くとエディター面が器いっぱいに重なり、下の端末面は隠れる（描かない）が、端末の寸法は器のまま。
+  /// 開くとエディター面が器いっぱいに重なり、下の端末面は隠れるが、端末は描き続け、寸法は器のまま。
   func testOpenCoversTheContainerAndHidesTheTerminalWithoutResizingIt() {
     let tab = laidOut(open: true)
     let view = tab.group.view
@@ -58,8 +59,62 @@ final class GroupFacesViewTests: OrbeTestCase {
     XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor)
     XCTAssertEqual(try XCTUnwrap(view.editor.superview).alphaValue, 1)
     XCTAssertEqual(rect(of: view.editor, in: view), NSRect(origin: .zero, size: size))
-    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開いている間は下の端末を描かない")
+    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "開いている間は下の端末を見せない")
+    XCTAssertTrue(tab.surface.wantsRendering, "覆われても描き続ける")
     XCTAssertEqual(tab.surface.bounds.size, size, "覆われても寸法は器のまま")
+  }
+
+  // MARK: - 端末を描くか
+
+  /// 描くのは見せている 1 枚だけ。見せる端末を替えると、覆われたままでも新しい端末が描き、元の端末は止まる。
+  func testOnlyTheShownTerminalRendersEvenWhileCovered() {
+    let tab = laidOut(open: true)
+    let sibling = TerminalTab(cwd: "/tmp", group: tab.group)
+    let view = tab.group.view
+
+    view.add(terminal: sibling.terminal)
+    XCTAssertTrue(tab.surface.wantsRendering)
+    XCTAssertFalse(sibling.surface.wantsRendering, "差しただけの兄弟は描かない")
+
+    view.show(terminal: sibling.terminal)
+    XCTAssertTrue(sibling.surface.wantsRendering, "覆われたまま見せ始めた端末が描く")
+    XCTAssertFalse(tab.surface.wantsRendering, "見せなくなった端末は止まる")
+  }
+
+  /// 器が隠れれば（器自身でも祖先でも）見せている端末も止まり、現れれば描き直す。窓に付いていない器でも同じ。
+  func testHidingTheContainerOrAnAncestorStopsRendering() {
+    let tab = laidOut(open: true)
+    let view = tab.group.view
+    let parent = NSView()
+    parent.addSubview(view)
+
+    view.isHidden = true
+    XCTAssertFalse(tab.surface.wantsRendering, "器が隠れると止まる")
+    view.isHidden = false
+    XCTAssertTrue(tab.surface.wantsRendering)
+
+    parent.isHidden = true
+    XCTAssertFalse(tab.surface.wantsRendering, "祖先が隠れても止まる")
+    parent.isHidden = false
+    XCTAssertTrue(tab.surface.wantsRendering)
+  }
+
+  /// 外した端末は描かない。別の器へ移った端末は、元の器から外しても描いたまま。
+  func testRemovingStopsRenderingUnlessTheTerminalMovedAway() {
+    let tab = laidOut()
+    let view = tab.group.view
+
+    view.remove(terminal: tab.terminal)
+    XCTAssertFalse(tab.surface.wantsRendering, "外した端末は描かない")
+
+    let moving = TerminalTab(cwd: "/tmp", group: tab.group)
+    let destination = TerminalTab.alone(cwd: "/tmp").group.view
+    view.add(terminal: moving.terminal)
+    view.show(terminal: moving.terminal)
+    destination.add(terminal: moving.terminal)
+    destination.show(terminal: moving.terminal)
+    view.remove(terminal: moving.terminal)
+    XCTAssertTrue(moving.surface.wantsRendering, "移り先で見せている端末には触れない")
   }
 
   // MARK: - 端末の寸法

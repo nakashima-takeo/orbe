@@ -7,6 +7,9 @@ import QuartzCore
 /// 端末面には連の materialize 済みのタブの端末を何枚でも差せ、見せるのはそのうち 1 枚。端末はどれも器の寸法に従う（エディターに
 /// 覆われている間も、見せていない兄弟も）ので、開閉でも、連の中で見せる端末を替えても resize は起きない。
 ///
+/// 端末を描くかは器が端末へ渡す（`syncRendering`）。描くのは見せている 1 枚で、器が（祖先を含めて）隠れていないときだけ。
+/// エディターに覆われて端末面が隠れている間も描き続ける——見せた最初のフレームに最新の描画結果を出すため。
+///
 /// 開閉の動きはエディター面の濃さのフェード 1 つで、開閉の状態とクリックの届き先は動きを待たずに切り替わる。両面の可視と
 /// 届き先は「開閉」と「動きの途中か」の 2 つから `applyFaces` が 1 か所で導く。
 final class GroupFacesView: NSView {
@@ -76,13 +79,16 @@ final class GroupFacesView: NSView {
     terminal.frame = bounds
     terminal.layoutSubtreeIfNeeded()
     terminalFace.addSubview(terminal)
+    syncRendering()
   }
 
-  /// 端末を端末面から外す（既に別の器へ移っていれば、そちらからは外さない）。
+  /// 端末を端末面から外し、描かないと渡す（既に別の器へ移っていれば、どちらもしない）。
   func remove(terminal: SurfaceScrollView) {
     terminals.removeAll { $0 === terminal }
     if shownTerminal === terminal { shownTerminal = nil }
-    if terminal.superview === terminalFace { terminal.removeFromSuperview() }
+    guard terminal.superview === terminalFace else { return }
+    terminal.removeFromSuperview()
+    terminal.surfaceView.wantsRendering = false
   }
 
   /// 見せる端末を替える。開閉とエディターには触れない。
@@ -93,6 +99,26 @@ final class GroupFacesView: NSView {
     shownTerminal?.isHidden = true
     shownTerminal = terminal
     terminal.isHidden = false
+    syncRendering()
+  }
+
+  /// 配下の端末へ描くかを渡す。端末面の可視（エディターに覆われているか）は関わらない。
+  private func syncRendering() {
+    let visible = !isHiddenOrHasHiddenAncestor
+    for terminal in terminals {
+      terminal.surfaceView.wantsRendering = visible && terminal === shownTerminal
+    }
+  }
+
+  /// 器か祖先が隠れた・現れた。窓に付いていない器にも届く。
+  override func viewDidHide() {
+    super.viewDidHide()
+    syncRendering()
+  }
+
+  override func viewDidUnhide() {
+    super.viewDidUnhide()
+    syncRendering()
   }
 
   override func layout() {
@@ -142,7 +168,7 @@ final class GroupFacesView: NSView {
   private static let fadeKey = "editorFade"
 
   /// 開閉と動きの途中かから、両面の可視とエディター面の濃さを写す。エディター面は開いているか動きの途中なら見せ、端末面は
-  /// 閉じているか動きの途中なら見せる（開いている間は下の端末を描かない）。
+  /// 閉じているか動きの途中なら見せる（開いている間は下の端末を見せない。描画は続く）。
   private func applyFaces() {
     editorFace.alphaValue = isEditorOpen ? 1 : 0
     editorFace.isHidden = !isEditorOpen && !isFading
