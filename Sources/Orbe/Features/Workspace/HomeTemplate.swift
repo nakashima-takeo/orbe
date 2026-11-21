@@ -43,6 +43,7 @@ enum HomeTemplate {
 
     - タスクを待ちにし、解ける条件（説明・確認のコマンド・間隔・期限）を `set_wait_condition` で付ける。
     - Orbe が確認のコマンドを人の承認なしに裏で予定どおり繰り返し走らせ、満たすか期限が来たら待ちを外して人に知らせる。
+    - 待ちの条件を付ける・直すときは、Orbe のプラグインの wait スキルの手順で進める。
 
     \(automationJa)
 
@@ -92,6 +93,7 @@ enum HomeTemplate {
     interval, deadline) with `set_wait_condition`.
     - Orbe runs the check command in the background on schedule, repeatedly and without asking the user, \
     and clears the wait and notifies the user when it holds or the deadline comes.
+    - To set or adjust a wait condition, follow the wait skill of Orbe's plugin.
 
     \(automationEn)
 

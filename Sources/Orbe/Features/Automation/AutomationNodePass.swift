@@ -235,7 +235,8 @@ struct AutomationNodePass {
     switch input {
     case .fetch(let since, let reachesJudge):
       return AutomationPrompts.fetch(
-        instruction: instruction, since: mark(node, since), reachesJudge: reachesJudge)
+        instruction: instruction, since: mark(node, since), now: now, timeZone: timeZone,
+        reachesJudge: reachesJudge)
     case .process(let rows, let reachesJudge):
       return AutomationPrompts.process(
         instruction: instruction, count: rows.count, now: now, timeZone: timeZone,
