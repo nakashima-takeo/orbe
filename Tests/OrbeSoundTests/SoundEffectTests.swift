@@ -2,7 +2,7 @@ import XCTest
 
 @testable import OrbeSound
 
-/// 後段エフェクトの性質検証。L1 純ロジック・決定論。
+/// 後段エフェクトの性質検証。純ロジック・決定論。
 /// ここが崩れると、エフェクトを使う音の空間表現が案の定義と食い違ったまま鳴る。
 final class SoundEffectTests: XCTestCase {
   private let sampleRate = 48000.0

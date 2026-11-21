@@ -110,7 +110,7 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
   /// `--after <seq>` は、その seq より後に**既に起きた**一致イベントも返す。seq の出所は他の `--json`
   /// 応答（ここでは `tab list`）で、待機を張る前に済んだ遷移——`orb tab send` → `orb wait` の隙間
   /// ——を取りこぼさない。`--value` は状態語の一致で絞る（idle も撃っているので、value が効かなければ
-  /// idle の方が先に返る）。seq の意味は L3（`ControlWireTests+EventHistory`）が持ち、ここは 2 つの
+  /// idle の方が先に返る）。seq の意味は `ControlWireTests+EventHistory` が持ち、ここは 2 つの
   /// フラグが params に写ることだけを見る——`--after` が届かなければ以後イベントは撃たれず 124 になる。
   func testAfterReplaysAnEventThatHappenedBeforeTheWait() throws {
     let control = try startControlProcess(workspaces: ["main"])

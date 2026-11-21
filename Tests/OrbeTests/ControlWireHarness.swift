@@ -5,10 +5,10 @@ import XCTest
 
 @testable import Orbe
 
-/// L3 wire 契約の駆動台。`socketpair(2)` の片端を `ControlServer.shared` へ載せ、もう片端から
+/// wire 契約の駆動台。`socketpair(2)` の片端を `ControlServer.shared` へ載せ、もう片端から
 /// 行を書いて応答を読む。サーバ側は本番と同じ実 `Connection`・実 `LineFramer`・実 `handle` を通る。
 ///
-/// listener は張らない（`start()` を呼ばない）ので、実 socket に bind する L4 と同じ singleton を
+/// listener は張らない（`start()` を呼ばない）ので、実 socket に bind するプロセス境界のテストと同じ singleton を
 /// 共有していても待ち受けを奪い合わず、bind 完了を待つポーリングも要らない。
 ///
 /// `teardown` は client fd を閉じて target を外すだけで、サーバ側の EOF 処理（`connections` からの

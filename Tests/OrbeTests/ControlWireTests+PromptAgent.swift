@@ -5,8 +5,8 @@ import XCTest
 
 /// `prompt_agent`（テキスト＋Enter を送り、その送信より後で最初に止まる agent_state で返す）の
 /// wire 契約を固定する。送信の中身（busy / 未 mount の判定・PTY への書込み）は target の領分で、
-/// 実 `WindowController` 側は L2 / L4 が測る。ここが見るのは queue → main → queue の二段 hop と、
-/// 何で起きて何を返すか。
+/// 実 `WindowController` 側は、それを起こすテスト（`WindowControllerControlTests+PromptAgent`）と
+/// プロセス境界のテストが測る。ここが見るのは queue → main → queue の二段 hop と、何で起きて何を返すか。
 ///
 /// 壊れると何が起きるか: `orb agent prompt` と MCP の `prompt_agent` が「送ったのに返らない」か
 /// 「送る前の状態で返る」のどちらかに倒れる。止まる状態の集合が広がれば `working` で即返って

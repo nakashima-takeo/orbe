@@ -2,7 +2,7 @@ import XCTest
 
 @testable import OrbeSound
 
-/// 通知音の合成プリミティブ（`SoundSynth`）の数値検証。L1 純ロジック・決定論。
+/// 通知音の合成プリミティブ（`SoundSynth`）の数値検証。純ロジック・決定論。
 /// 音がおかしいときに疑う 4 箇所——エンベロープの減衰区間長・帯域制限・biquad の Q 解釈・
 /// コンプレッサの静特性——を、ここで数値として固定する。
 final class SoundSynthTests: XCTestCase {

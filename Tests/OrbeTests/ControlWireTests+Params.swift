@@ -26,7 +26,8 @@ import XCTest
 /// **担保外**: `get_tab_text` の `scrollback`（値が `SurfaceView` の libghostty 経路へ吸い込まれ、
 /// surface 無しでは真偽の差が観測できない）と、`completion_accept` の `advance` /
 /// `completion_update` の `buffer`・`cursor`（popup が生まれないと適用結果が出ず、無応答契約で
-/// wire 側の観測面がゼロ）。受け皿は `docs/testing/roadmap.md` のスライス 2（L4）とスライス 5（L2）。
+/// wire 側の観測面がゼロ）。`scrollback` は `OrbeMcpProcessTests` が実 surface で測る。
+/// `completion_*` の 3 つを測るテストは無い。
 extension ControlWireTests {
 
   // MARK: - 表
@@ -191,7 +192,7 @@ extension ControlWireTests {
 
   /// `send_key` は文字列でも `ControlKey.parse` が解けない指定を値域外として弾く。
   /// 黙って無視して `{"ok":true}` を返すようになると、エージェントが送った enter が
-  /// 実行されないまま成功と読まれる（`ControlKey.parse` 自体の語彙は L1 が持つ）。
+  /// 実行されないまま成功と読まれる（`ControlKey.parse` 自体の語彙は `ControlKeyParseTests` が持つ）。
   func testUnparsableKeySpecIsRejected() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
@@ -225,7 +226,7 @@ extension ControlWireTests {
 
   /// `config_set` の `value: null` は「解除（継承へ戻す）」として受理する——欠落とは別物。
   /// `params["value"]` の存在チェックを「null も欠落扱い」へ締めると `orb config unset`
-  /// （`NSNull()` を送る）が `-32602` になるが、値の意味論を見る L2 は通り続ける。
+  /// （`NSNull()` を送る）が `-32602` になるが、値の意味論を見る、実 `WindowController` を起こすテストは通り続ける。
   func testConfigSetAcceptsNullValueAsUnset() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
