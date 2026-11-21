@@ -16,9 +16,12 @@ extension OrbeTestCase {
     return url
   }
 
-  /// タブを幅 `width` のエディター全面の窓に載せる。
-  func hostEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
-    let window = NSWindow(
+  /// タブを幅 `width` のエディター全面の窓（`windowType` の窓）に載せる。
+  func hostEditor(
+    _ tab: TerminalTab, width: CGFloat, height: CGFloat = 400,
+    windowType: NSWindow.Type = NSWindow.self
+  ) -> NSWindow {
+    let window = windowType.init(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = tab.group.view

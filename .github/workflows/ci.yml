@@ -15,9 +15,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: build (incl. tests)
         run: swift build --build-tests
-      - name: test (wheel diagnosis)
+      - name: test (SidebarScrollbarTests x3 and the other placeOffscreen classes)
         run: |
-          set -o pipefail
-          swift test --skip-build --filter 'OrbeTests\.(ZZWheelProbeTests|SidebarScrollbarTests)/' 2>&1 | tee test.log || true
-          echo "===== WHEELDIAG ====="
-          grep WHEELDIAG test.log || true
+          for i in 1 2 3; do swift test --skip-build --filter 'OrbeTests\.SidebarScrollbarTests/' 2>&1 | grep -E "SidebarScrollbarTests test.*(passed|failed)|error:|Executed" ; done
+          swift test --skip-build --filter 'OrbeTests\.(EditorPaneViewPreviewTabTests|EditorPaneViewTabCloseTests|EditorLineMarksTests|EditorSearchTests|EditorDiffTests)/' 2>&1 | grep -E "failed|Executed [0-9]+ tests" | tail -5

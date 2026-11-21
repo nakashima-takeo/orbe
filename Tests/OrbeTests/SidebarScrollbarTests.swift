@@ -56,7 +56,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
       below.sliderPosition + below.sliderLength, 200, "下へ弾んでもつまみは下端")
   }
 
-  /// 溢れたツリー（41 行・見えている 192pt）を載せ、`placeOffscreen` で並べた窓。
+  /// 溢れたツリー（41 行・見えている 192pt）を載せ、`placeOffscreen` で並べた窓（ホイールでスクロールさせるので
+  /// `ScreenedOffscreenWindow`）。
   private struct Tree {
     let pane: EditorPaneView
     let window: NSWindow
@@ -91,7 +92,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
         withIntermediateDirectories: true)
     }
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostEditor(tab, width: 900, height: 240)
+    let window = hostEditor(tab, width: 900, height: 240, windowType: ScreenedOffscreenWindow.self)
     placeOffscreen(window)
     let scroll = try XCTUnwrap(scrollView(in: tab.group.view.editor.sideHost))
     let document = try XCTUnwrap(scroll.documentView)

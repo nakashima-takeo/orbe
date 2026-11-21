@@ -59,3 +59,10 @@ private enum FirstMouse {
     self.original = nil
   }
 }
+
+/// 画面外へ並べても、主ディスプレイに載っていると答える窓。ホイールでスクロールさせるテストの窓に使う。AppKit の
+/// `NSScrollView` は、窓が画面に載っていない（`screen` が nil）とホイールでスクロールしない（macOS 26 で実測。SwiftUI の
+/// `ScrollView` の裏も素の `NSScrollView` も同じ）。答えを変えるのは `screen` だけで、窓は画面外のまま並ぶ。
+final class ScreenedOffscreenWindow: NSWindow {
+  override var screen: NSScreen? { NSScreen.screens.first }
+}
