@@ -55,12 +55,13 @@ extension WindowController {
     return true
   }
 
-  /// ⌥ だけの長押しが成立した・終わった。選んでいるタブの連の器へ見せ方を動きつきで写すだけで、描く関数は通さない
-  /// （フォーカスを当て直さない）。
+  /// ⌥ だけの長押しが成立した・終わった。選んでいるタブの連の器へ見せ方を動きつきで写し、透かしで端末が見えたタブの done を
+  /// 消すだけで、描く関数（`renderSelection`）は通さない（フォーカスを当て直さない）。
   func optionHoldDidChange() {
     switch presentation {
     case .editor(let tab), .peek(let tab):
       tab.group.view.show(facesMode(of: tab.group), animated: true)
+      consumeVisibleTabDone()
     case .terminal, .board, .empty:
       break
     }
