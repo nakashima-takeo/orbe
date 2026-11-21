@@ -4,8 +4,8 @@ import AppKit
 ///
 /// AppKit は keyDown を、窓の `performKeyEquivalent` とメニューに回してから `sendEvent` へ渡す。⌘ キーの受け手はその段で
 /// 決まるので、ここに来るのは受け手の無かったキーだけ。SwiftUI の `.onKeyPress` は `super.sendEvent` の先で（祖先から順に）
-/// 配られるため、ここで止めれば変換中のキーはどの handler にも届かない。テストが継承して key の状態・前面化・`canBecomeKey`
-/// を差し替える境界なので final にしない。
+/// 配られるため、ここで止めれば変換中のキーはどの handler にも届かない。テストが継承して key の状態・前面化を差し替える
+/// 境界なので final にしない。
 class OrbeWindow: NSWindow {
   /// 主窓の大きさとスタイルで作る。
   convenience init() {

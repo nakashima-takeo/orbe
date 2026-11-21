@@ -7,27 +7,17 @@ import XCTest
 /// 本物の `PaletteCard` を**実 `NSWindow` に載せ、実 `NSEvent` で叩く**テストの共通基底。
 ///
 /// モデル単体テストでは掴めない欠陥——focus の所在、SwiftUI の更新パスで消えゆく子の評価——は
-/// 実際に描いて実際にキーを届けないと再現しない。画面外座標・`canBecomeKey` の上書き・pump の刻みは
-/// どれも微妙で、写すと片方だけ腐るため 1 か所に置く。
+/// 実際に描いて実際にキーを届けないと再現しない。窓は並べず（OS の表示の並びに入れず。並べるのは
+/// `placeOffscreen` だけ）、キーは窓を名指しして届ける。SwiftUI の focus と更新は並べない窓でも回る。
+/// 窓の作り方・pump の刻み・キーとクリックの届け方はどれも微妙で、コピーすると片方だけ腐るため 1 か所に置く。
 @MainActor
 class PaletteCardWindowTestCase: OrbeTestCase {
+  /// 返した窓を捨てるテストがあるので、載せた中身がテストの間に解放されないよう、テストの終わりまで保持する。
   private var windows: [NSWindow] = []
 
-  /// 窓は ordered-in の間 AppKit が保持するため、参照を捨てるだけでは解放されず居座る。
-  /// `orderOut` で下ろしてから手放す（`close` は `isReleasedWhenClosed` と ARC が二重解放になる）。
   override func tearDown() {
-    windows.forEach { $0.orderOut(nil) }
     windows.removeAll()
     super.tearDown()
-  }
-
-  /// 主窓と同じ `OrbeWindow`（変換中のキーを入力欄へ渡す関所）に載せる。borderless の窓は既定で `canBecomeKey` が
-  /// false で、`NSApp.sendEvent` は key になれない窓へ keyDown を渡さない（窓の `sendEvent` すら呼ばれない）。配送を
-  /// 通すこの一点だけを開ける。
-  /// 窓が実際に key になる必要はない——`.accessory` の非アクティブなテストでは
-  /// `isKeyWindow` は最後まで false のまま、キーは first responder へ届く。
-  final class KeyDeliveryWindow: OrbeWindow {
-    override var canBecomeKey: Bool { true }
   }
 
   func pump(_ seconds: TimeInterval) {
@@ -37,9 +27,7 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     }
   }
 
-  /// keyDown を窓へ送る（keyCode は macOS の仮想キーコード）。実アプリと同じくキューから取り出してから配る——
-  /// 入力欄の確定はキーリピートかを `NSApp.currentEvent` で見るので、取り出さずに配ると前に取り出したキーが残って
-  /// 判定を狂わせる。
+  /// keyDown を窓へ届ける（keyCode は macOS の仮想キーコード）。
   func send(
     _ keyCode: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = [],
     repeating: Bool = false, to window: NSWindow
@@ -51,13 +39,33 @@ class PaletteCardWindowTestCase: OrbeTestCase {
         context: nil, characters: characters, charactersIgnoringModifiers: characters,
         isARepeat: repeating, keyCode: keyCode)
     else { return XCTFail("キーイベントを作れない") }
-    NSApp.postEvent(event, atStart: true)
-    guard
-      let dequeued = NSApp.nextEvent(
-        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
-    else { return XCTFail("キーイベントがキューから取れない") }
-    NSApp.sendEvent(dequeued)
+    deliverKeyDown(event, to: window)
     pump(0.15)
+  }
+
+  /// 窓座標（原点は左下）の 1 点を実 NSEvent のマウスでクリックする。マウスは並んだ窓にしか届かないので、窓は
+  /// `placeOffscreen` で並べておく。離す方のイベントは先にキューへ入れておく——入力欄のテキストビューが押下を受けると、
+  /// 離すイベントがキューに来るまで待つマウスの追跡ループに入り、離すイベントを後から送ると、押下を送った `sendEvent` が
+  /// 戻ってこない。
+  func click(_ point: NSPoint, in window: NSWindow) {
+    guard window.isVisible else {
+      return XCTFail("マウスは並んだ窓にしか届かない。先に placeOffscreen で並べる")
+    }
+    let make = { (type: NSEvent.EventType) in
+      NSEvent.mouseEvent(
+        with: type, location: point, modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
+    }
+    NSApp.postEvent(make(.leftMouseUp), atStart: false)
+    NSApp.sendEvent(make(.leftMouseDown))
+    pump(0.05)
+    if let pending = NSApp.nextEvent(
+      matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
+    {
+      NSApp.sendEvent(pending)
+    }
+    pump(0.3)
   }
 
   /// 保留中の SwiftUI 更新を 1 パス流し切る。モデルを書き換えただけでは子ビューは作られも壊されもせず、
@@ -70,22 +78,25 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     window.contentView?.layoutSubtreeIfNeeded()
   }
 
-  /// カードを載せた窓を**物理画面の外**に出す。`NSApp.sendEvent` は `windowNumber` で直接配送するため、
-  /// 窓が見えていなくてもキーは届く——テストがユーザーの画面とフォーカスを触らずに済む。
-  /// 枠のある窓は macOS が画面内へ押し戻す（`constrainFrameRect`）ので borderless で作る。
-  /// カードには窓高をそのまま上限として渡す＝窓いっぱいまで使える状態（ここに来るのはキー配送を
-  /// 見るテストだけで、高さの取り合いには関心がない。収まりは `PaletteFitTests` が別に見る）。
-  func mount(_ model: PaletteModel) -> NSWindow {
-    NSApplication.shared.setActivationPolicy(.accessory)
-    let windowHeight: CGFloat = 500
-    let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 600, height: windowHeight),
+  /// 中身を、並べない窓に載せて返す。主窓と同じ `OrbeWindow` に載せ、日本語入力の変換中に届いたキーをキーの処理に通さず
+  /// 入力欄へ直に渡す `OrbeWindow.sendEvent` を、テストのキーにも通す。枠のある窓は macOS が画面内へ押し戻す
+  /// （`constrainFrameRect`）ので borderless で作る（`placeOffscreen` で並べる窓もここで作る）。
+  func host(_ content: NSView, size: NSSize) -> NSWindow {
+    let window = OrbeWindow(
+      contentRect: NSRect(origin: Self.offscreenOrigin, size: size),
       styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = NSHostingView(
-      rootView: PaletteCard(model: model, maxHeight: windowHeight).frame(width: 560))
-    window.makeKeyAndOrderFront(nil)
+    window.contentView = content
     windows.append(window)
     pump(0.4)
     return window
+  }
+
+  /// カードには窓高をそのまま上限として渡す＝窓いっぱいまで使える状態（ここに来るのはキー配送を
+  /// 見るテストだけで、高さの取り合いには関心がない。収まりは `PaletteFitTests` が別に見る）。
+  func mount(_ model: PaletteModel) -> NSWindow {
+    let windowHeight: CGFloat = 500
+    return host(
+      NSHostingView(rootView: PaletteCard(model: model, maxHeight: windowHeight).frame(width: 560)),
+      size: NSSize(width: 600, height: windowHeight))
   }
 }

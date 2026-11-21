@@ -28,31 +28,6 @@ extension BoardAutomationTests {
     }
   }
 
-  /// 窓の点を押して離す。非アクティブなテストの窓では最初のクリックが窓の有効化に使われて SwiftUI のジェスチャまで届かない
-  /// ので、押している間だけどのビューも最初のクリックを受ける形にする（実機では窓が前面にあり、クリックがそのまま届く）。
-  /// 離す方は先にキューへ入れておく——入力欄の文字の面が押下を受けると、離すまでキューを待つ追跡に入る。
-  func click(_ point: NSPoint, in window: NSWindow) {
-    let method = class_getInstanceMethod(NSView.self, #selector(NSView.acceptsFirstMouse(for:)))!
-    let always: @convention(block) (AnyObject, NSEvent?) -> Bool = { _, _ in true }
-    let original = method_setImplementation(method, imp_implementationWithBlock(always))
-    defer { method_setImplementation(method, original) }
-    let make = { (type: NSEvent.EventType) in
-      NSEvent.mouseEvent(
-        with: type, location: point, modifierFlags: [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
-    }
-    NSApp.postEvent(make(.leftMouseUp), atStart: false)
-    NSApp.sendEvent(make(.leftMouseDown))
-    pump(0.05)
-    if let pending = NSApp.nextEvent(
-      matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
-    {
-      NSApp.sendEvent(pending)
-    }
-    pump(0.3)
-  }
-
   /// 欄は一覧の上の 1 段で、欄と行は 1 つの選択を分け合う。ウィジェットは欄から始まり、欄を選んでいる間は行の選択と詳細が無い。
   /// 欄の ↓ で一覧の先頭、先頭の行の ↑ で欄、欄の ↑ で一覧の末尾（巡回）、末尾の行の ↓ で欄（巡回）、欄の esc は ↓ と同じく
   /// 一覧の先頭へ。⇥・⇧⇥ は欄でも一覧でも何もせず、一覧の → で地図へ入り、地図の ← で一覧へ戻る。
@@ -170,6 +145,7 @@ extension BoardAutomationTests {
     let model = board()
     let automation = model.automation
     let window = mount(model)
+    placeOffscreen(window)
 
     click(Point.field, in: window)
     XCTAssertEqual(automation.place, .request)
@@ -209,6 +185,7 @@ extension BoardAutomationTests {
     let model = board()
     let automation = model.automation
     let window = mount(model)
+    placeOffscreen(window)
 
     for point in Point.fieldMargins {
       send(Key.escape, "\u{1B}", to: window)

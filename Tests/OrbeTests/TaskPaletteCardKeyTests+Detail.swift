@@ -92,6 +92,7 @@ extension TaskPaletteCardKeyTests {
   func testClickingTheFieldFromTheDetailCommitsAndReturnsTheKeysToTheField() throws {
     let model = model()
     let window = mount(model)
+    placeOffscreen(window)
     enterDetail(model, at: .description, in: window)
     send(Key.enter, "\r", to: window)
     type("abc", into: window)
