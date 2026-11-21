@@ -25,7 +25,7 @@ enum ThemeMode: String, Codable, Equatable {
     }
   }
 
-  /// 表示ラベル（design 見本 Settings 画面の Seg 表記そのまま）。
+  /// 表示ラベル（Auto / Dark / Light）。
   var label: String {
     switch self {
     case .auto: return "Auto"

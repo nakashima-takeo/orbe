@@ -162,16 +162,15 @@ struct MenuBarStatusView: View {
   }
 
   /// 上限を宣言せず残り予算を吸う。インクは WS 名より一段沈めて「名前 → 中身」の順を作る
-  /// （見本の副次インク #a49bb4 は②の地に対し 4.3:1 で、design-system §3 の本文 4.5:1 を
+  /// （より暗い副次インク #a49bb4 は②の地に対し 4.3:1 で、design-system §3 の本文 4.5:1 を
   /// 満たさない。`textSecondary` は #b8afc4＝5.4:1 で、条件を満たすうちの最も近い階調）。
   private func messageSlot(_ text: String) -> some View {
     textSlot(text, color: Color.theme.textSecondary)
   }
 
   /// ◐。①③④は前景モノクロ（.primary＝メニューバー外観追従）で、他の常駐アイコンと同じ
-  /// template 相当の見え——見本がバー全体へ与える `chromeText` は、バーを持たない実装では
-  /// システムの前景にあたる（①はさらに減光する）。②の暗地が立つぶんだけ、見本どおりの
-  /// `textPrimary` を dark で解決した単色へクロスフェードする（地が固定の暗色なので dark ピン）。
+  /// template 相当の見え（①はさらに減光する）。②の暗地が立つぶんだけ、`textPrimary` を
+  /// dark で解決した単色へクロスフェードする（地が固定の暗色なので dark ピン）。
   private var brandGlyph: some View {
     let lift = eased(MenuBarArrival.Curve.glyph)
     return ZStack {
@@ -196,8 +195,8 @@ struct MenuBarStatusView: View {
 
   /// 地の 2 層。下が③④（surfaceInk 16%／ドロップダウン中は accent 35%）、上が②。
   ///
-  /// ②の地はデザイン見本（tint(accent, 0.35)）から**不透明の暗地＋accent 被せ**へ逸脱する——
-  /// メニューバーの実背景（壁紙由来・半透明）の上では 35% tint が薄すぎて読めない（実機 NG）。
+  /// ②の地は半透明の accent 35% 単層にせず**不透明の暗地＋accent 35% 被せ**とする——
+  /// メニューバーの実背景（壁紙由来・半透明）の上では 35% の半透明塗りだけでは薄すぎて読めない。
   /// 地が固定の暗色になるため、インクは `.environment(\.colorScheme, .dark)` で dark トークンに
   /// 固定して解決する（ライトメニューバー上でも文字・状態グリフが地に対して読める）。
   private var pillGround: some View {

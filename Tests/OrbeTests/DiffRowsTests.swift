@@ -17,8 +17,7 @@ final class DiffRowsTests: OrbeTestCase {
 
   private func lines(_ texts: [String]) -> String { texts.map { $0 + "\n" }.joined() }
 
-  /// 見本（orbe_design の `data.ts` の `diffLines`）と同じ形——同じ 2 行・削除 2 行と追加 8 行の区間・同じ 1 行・追加
-  /// 1 行・同じ 1 行。
+  /// 代表的な差分構成——同じ 2 行・削除 2 行と追加 8 行の区間・同じ 1 行・追加 1 行・同じ 1 行。
   private var sample: (old: String, new: String) {
     let old = lines(["a", "", "del 0", "del 1", "ctx", "end"])
     let new = lines(["a", ""] + (0..<8).map { "add \($0)" } + ["ctx", "}", "end"])
@@ -95,7 +94,7 @@ final class DiffRowsTests: OrbeTestCase {
   }
 
   /// 並列は変わった区間の削除と追加を上から同じ行（同じ y）に並べ、行の数の差の分だけ短い側の区間の後に詰め物が入り、
-  /// 続く同じ行も左右で同じ y に来る（見本の `diffLeft` / `diffRight` と VS Code の並列）。
+  /// 続く同じ行も左右で同じ y に来る（VS Code の並列と同じ整列）。
   func testSideBySideBlocksLineUpRowByRow() throws {
     try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
     let (old, new) = sample
@@ -113,7 +112,7 @@ final class DiffRowsTests: OrbeTestCase {
     XCTAssertEqual(right.rows.style(ofLine: 11), DiffStyle.added)
     XCTAssertNil(right.rows.style(ofLine: 12))
     let lineHeight = Double(left.config.lineHeight)
-    XCTAssertEqual(left.rows.y(ofLine: 4), 10 * lineHeight, "左は削除 2 行の後に詰め物 6 行（見本と同じ）")
+    XCTAssertEqual(left.rows.y(ofLine: 4), 10 * lineHeight, "左は削除 2 行の後に詰め物 6 行")
     XCTAssertEqual(left.rows.y(ofLine: 5), 12 * lineHeight, "追加 1 行の向かいに詰め物 1 行")
   }
 

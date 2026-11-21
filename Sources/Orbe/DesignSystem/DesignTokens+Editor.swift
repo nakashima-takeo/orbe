@@ -20,12 +20,12 @@ extension Theme.Color {
   static let editorGhost = editorDyn(light: 0xd9d3e6, dark: 0x3d3752)
   /// エディター面のアイコン・kbd の文字。dark / light とも kbKeyText と偶然同値だが役割が違うので別トークン。
   static let editorIcon = editorDyn(light: 0x766e8d, dark: 0xa99fb8)
-  /// エディター面の 2 段目の文字——コードの素文字・ファイル名・タブ題・パンくずの末尾（見本 text2）。
+  /// エディター面の 2 段目の文字——コードの素文字・ファイル名・タブ題・パンくずの末尾。
   /// dark / light とも statusText と偶然同値だが役割が違うので別トークン。
   static let editorText = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
   /// 三次の文字——レールの非選択・パンくずの区切り。`textTertiary` は `textMuted` の別名なので別値を持つ。
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
-  /// 説明文の段——PR の説明（見本 prDesc。editorText と textMuted の間）。
+  /// 説明文の段——PR の説明（editorText と textMuted の間）。
   static let editorProse = editorDyn(light: 0x6d647f, dark: 0xa9a2b5)
   /// 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地・diff タブの種類の注記と選択の上縁。
   /// dark は conflict と偶然同値だが light が違い、git 競合でもない。
@@ -42,7 +42,7 @@ extension Theme.Color {
   static let editorTabCloseHover = editorDynAB(light: (0x3a3151, 0.10), dark: (0xffffff, 0.10))
   /// 仮のタブの地の斜線の基色（α は `Theme.Opacity.editorPreviewHatch*`）。dark は editorIcon と同じ色相。
   static let editorPreviewHatch = editorDyn(light: 0x3a3151, dark: 0xa99fb8)
-  /// 種別チップの色相（見本 palette.ts の hue）。チップの文字色と、その α .16 の地に使う。
+  /// 種別チップの色相。チップの文字色と、その α .16 の地に使う。
   static let editorHueOrange = editorDyn(light: 0xbf5f2a, dark: 0xd98a5f)
   static let editorHueBlue = editorDyn(light: 0x3f6fd6, dark: 0x85adff)
   static let editorHueYellow = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
@@ -92,7 +92,7 @@ extension Theme.Color {
   static let editorMinimapShadow = editorDynA(light: 0x000000, dark: 0x000000, alpha: 0.08)
 
   // 構文色。dark は VSCode Dark Modern の実在トークン色（5 色は端末 ANSI と偶然同値だが、端末色は
-  // 別レイヤー〔design-system §8〕なので参照しない）。light は見本の値。
+  // 別レイヤー〔design-system §8〕なので参照しない）。light は紙面に合わせて調整した値。
   static let syntaxKeyword = editorDyn(light: 0x2f63c9, dark: 0x569cd6)
   static let syntaxKeywordControl = editorDyn(light: 0xa03a98, dark: 0xc586c0)
   static let syntaxType = editorDyn(light: 0x178a72, dark: 0x4ec9b0)
@@ -169,10 +169,10 @@ extension Theme.Typography {
   static let editorSearchNote = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// レールの件数バッジ（sans 9 bold）。
   static let editorRailBadge = NSFont.systemFont(ofSize: 9, weight: .bold)
-  /// ソース管理（見本 ScmPanel の値）。親・子の区分・グラフの枠の見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の
-  /// 名前（sans 13）とディレクトリ（sans 11）・メッセージ欄（sans 12）・コミットボタン（sans 12 semibold）・グラフのコミットの
-  /// 題（sans 12）・ref の札（mono 9）。グラフのブランチの行（mono 11）・「さらに表示」（sans 11.5）・失敗の文（sans 11）は
-  /// 見本に無い。
+  /// ソース管理。親・子の区分・グラフの枠の見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の名前
+  /// （sans 13）とディレクトリ（sans 11）・メッセージ欄（sans 12）・コミットボタン（sans 12 semibold）・グラフの
+  /// コミットの題（sans 12）・ref の札（mono 9）・ブランチの行（mono 11）・「さらに表示」（sans 11.5）・失敗の文
+  /// （sans 11）。
   static let editorScmSection = NSFont.systemFont(ofSize: 11, weight: .bold)
   static let editorScmCount = NSFont.systemFont(ofSize: 9.5, weight: .regular)
   static let editorScmFile = NSFont.systemFont(ofSize: 13, weight: .regular)
@@ -184,7 +184,7 @@ extension Theme.Typography {
   static let editorScmBranch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   static let editorScmMore = NSFont.systemFont(ofSize: 11.5, weight: .regular)
   static let editorScmNote = NSFont.systemFont(ofSize: 11, weight: .regular)
-  /// 実行中の帯の操作名（sans 12）・git の進捗の行（mono 10.5）・止める（sans 11）。見本に無い。
+  /// 実行中の帯の操作名（sans 12）・git の進捗の行（mono 10.5）・止める（sans 11）。
   static let editorScmBandName = NSFont.systemFont(ofSize: 12, weight: .regular)
   static let editorScmBandProgress = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
   static let editorScmStop = NSFont.systemFont(ofSize: 11, weight: .regular)
@@ -248,8 +248,8 @@ extension Theme.Layout {
   static let editorMinimapMaxWidth: CGFloat = 120
   /// 折りたたみのシェブロン。
   static let editorChevron: CGFloat = 16
-  /// 検索パネル（見本 SearchPanel を u4 で詰めた比率に揃えたもの）。入力欄の高さ・オプションの角・結果の行の高さ
-  /// （まとまりの見出しも一致も同じ）・一致の行の左の字下げ・件数バッジ（最小幅×高さ）・見出しのシェブロンの幅。
+  /// 検索パネル。入力欄の高さ・オプションの角・結果の行の高さ（まとまりの見出しも一致も同じ）・一致の行の左の
+  /// 字下げ・件数バッジ（最小幅×高さ）・見出しのシェブロンの幅。
   static let editorSearchField: CGFloat = 28
   static let editorSearchOption: CGFloat = 20
   static let editorSearchRow: CGFloat = 20
@@ -262,8 +262,9 @@ extension Theme.Layout {
   /// レールの件数バッジ（最小の幅と高さ）と、アイコンの右下からのはみ出し（右・下）。
   static let editorRailBadge: CGFloat = 15
   static let editorRailBadgeOffset = CGSize(width: 8, height: 4)
-  /// ソース管理（見本 ScmPanel の値）。行（見出し・ファイル・コミット・さらに表示）の高さ・種別チップ・行の中のボタンとその印・
-  /// 見出しのツールの角とその間（親の見出しのツールも子の見出しの一括操作も）・メッセージ欄の 1 行の高さ・コミットボタンの高さと ▾ の幅・ref の札の高さ・コミットの点・点の列の幅。
+  /// ソース管理。行（見出し・ファイル・コミット・さらに表示）の高さ・種別チップ・行の中のボタンとその印・見出しの
+  /// ツールの角とその間（親の見出しのツールも子の見出しの一括操作も）・メッセージ欄の 1 行の高さ・コミットボタンの
+  /// 高さと ▾ の幅・ref の札の高さ・コミットの点・点の列の幅。
   static let editorScmRow: CGFloat = 22
   static let editorScmChip: CGFloat = 16
   static let editorScmRowButton: CGFloat = 18
@@ -276,12 +277,12 @@ extension Theme.Layout {
   static let editorScmRef: CGFloat = 15
   static let editorScmDot: CGFloat = 7
   static let editorScmDotColumn: CGFloat = 16
-  /// 子の区分の字下げ。見本に無い。
+  /// 子の区分の字下げ。
   static let editorScmIndent: CGFloat = 8
-  /// グラフの枠の高さ（見出し 22 を含む）の既定（見出し＋8 行）と下限（見出し＋3 行）。見本に無い。
+  /// グラフの枠の高さ（見出し 22 を含む）の既定（見出し＋8 行）と下限（見出し＋3 行）。
   static let editorScmGraph: CGFloat = 198
   static let editorScmGraphMin: CGFloat = 88
-  /// 実行中の帯の高さと「止める」の高さ（見本に無い）。
+  /// 実行中の帯の高さと「止める」の高さ。
   static let editorScmBand: CGFloat = 28
   static let editorScmStop: CGFloat = 20
   /// 引き手と継ぎ目の幅。
@@ -314,7 +315,7 @@ extension Theme.Stroke {
 }
 
 extension Theme.Opacity {
-  /// 見本の半透明面の light 換算。`sunkInk` の沈み面は tabRowBg の比に倣い ×0.3、`surfaceInk` の塗りは
+  /// 半透明面の light 換算。`sunkInk` の沈み面は tabRowBg の比に倣い ×0.3、`surfaceInk` の塗りは
   /// tabSegBg の比に倣い ×0.6、`borderInk` の hairline は紙面で濃くする ×1.4。
   static let editorSunkLight: Double = 0.3
   static let editorFillLight: Double = 0.6
@@ -324,10 +325,10 @@ extension Theme.Opacity {
   static let editorPreviewHatchInactive: Double = 0.039
   /// diff の追加・削除の行の地の不透明度（構文色が地の上で読める濃さ）。
   static let editorDiffRow: CGFloat = 0.12
-  /// diff の詰め物の行の地（見本 fill(α)）と、並列の 2 面の境（見本 hairline(α)）。
+  /// diff の詰め物の行の地（塗りの α）と、並列の 2 面の境（hairline の α）。
   static let editorDiffPad: Double = 0.02
   static let editorDiffDivider: Double = 0.07
-  /// 「インライン / 並列」の選んでいない項目の地（見本 fill(α)）。
+  /// 「インライン / 並列」の選んでいない項目の地（塗りの α）。
   static let editorDiffSegmentIdle: Double = 0.08
   /// 普段の引き手の不透明度。
   static let faceNotchRest: Double = 0.45

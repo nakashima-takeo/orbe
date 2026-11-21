@@ -122,7 +122,7 @@ import Foundation
 
   /// ソース切替。入力（path/cloneURL/cloneDir）と名前の状態は保持する（追従中なら切替先の導出元から導かれる）。
   /// clone の試行状態は捨てる（`.failed` の inline エラーが folder タブへ持ち越らないよう `.idle` へ）。
-  /// focusToken を進め、切替先ソースの主入力欄（folder=パス / clone=URL）へ focus を移す——SrcTab は
+  /// focusToken を進め、切替先ソースの主入力欄（folder=パス / clone=URL）へ focus を移す——ソース切替タブは
   /// ボタンで、切替で旧ソースの入力欄が unmount されるため、明示的に focus を張り直さないと「どの欄にも
   /// focus が無い」状態になり esc/↑↓/tab を拾う TextField が消える（表示中は常に入力欄 focus の不変）。
   func setSource(_ newValue: Source) {

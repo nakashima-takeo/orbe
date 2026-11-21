@@ -28,7 +28,7 @@ struct FileTabsView: View {
   let shell: EditorShellModel
   @Environment(\.colorScheme) private var scheme
 
-  // 見本 EditorLayer.tsx のタブ行の地と下縁。
+  // タブ行の地と下縁の不透明度。
   private static let sunkAlpha = 0.22
   private static let hairlineAlpha = 0.07
 
@@ -71,7 +71,7 @@ struct FileTabView: View {
   @Environment(\.chromeFontResolver) private var fontResolver
   @Environment(\.localization) private var l10n
 
-  // 見本 CodeView.tsx（FileTabs）の値。
+  // タブ 1 枚の不透明度と寸法。
   private static let activeFillAlpha = 0.045
   private static let hairlineAlpha = 0.07
   private let accentBar: CGFloat = 1.5
@@ -130,7 +130,7 @@ struct FileTabView: View {
   }
 }
 
-/// タブ行の「確認済みにする」（見本 DiffTabs: padding 0 10・gap 7・字 11.5 editor.text・チェック 14）。押すとパネルの行頭の
+/// タブ行の「確認済みにする」（padding 0 10・gap 7・字 11.5 editor.text・チェック 14）。押すとパネルの行頭の
 /// チェックと同じく PR ごとの状態の確認済みを切り替える。パスが PR の変更ファイルに無ければ出さない。
 private struct PrViewedToggle: View {
   let file: EditorShellModel.PullRequestFile
@@ -264,7 +264,7 @@ private struct FileTabCloseSlot: View {
   let shell: EditorShellModel
   @State private var hovering = false
 
-  // 見本（デザインキャンバス『ファイルタブの閉じるボタン』A）の値。
+  // デザインキャンバス『ファイルタブの閉じるボタン』A の値。
   private let dotSize: CGFloat = 8
 
   var body: some View {

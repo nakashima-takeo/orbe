@@ -136,7 +136,7 @@ import SwiftUI
   /// グローバル ⌘⌘（背面 global monitor）の権限判定。nil＝行を出さない（テスト・gallery の既定）。
   /// 開くたびに評価する（System Settings で付与して戻った直後の再表示に追従）。
   let cmdTapPermissionGranted: (() -> Bool)?
-  /// theme サブパレットの固定3択（見本 Settings 画面の Seg 順）。選択 index → ThemeMode の対応。
+  /// theme サブパレットの固定3択（Auto / Dark / Light 順）。選択 index → ThemeMode の対応。
   static let themeModes: [ThemeMode] = [.auto, .dark, .light]
   /// emoji フォントサブパレットの固定2択（既定 Noto を先頭）。選択 index → EmojiFontMode の対応。
   static let emojiFontModes: [EmojiFontMode] = [.noto, .apple]

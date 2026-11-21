@@ -1,12 +1,12 @@
 ---
 title: PR のコメント
 description: PR の diff のレビューのスレッド——行の下に置く・インラインと並列・コメント追加の印と新しいコメントの欄・返信と解決・折りたたみ・本文の Markdown・書き込みの最中と失敗・書きかけの残り方・本文を組む仕事を main の外へ出すこと・限界
-updated: 2026-11-20
+updated: 2026-11-21
 ---
 
 # PR のコメント
 
-PR の diff（→ [diff](diff.md#pr-の-diff)）の中で、GitHub のレビューのスレッドを読み、返信し、解決し、新しいコメントを書く。ブラウザの GitHub へ移らずに、変更を見ている行のその場で議論を進めるため。読み書きの規則（スレッドと保留中のレビューの読み方、書き込みの順序と読み直し）は PR の状態（→ [pull-request](pull-request.md#レビューのやりとり)）と [GitHub の読み書き](../platform/github.md#レビューのやりとり) が持ち、ここは diff の中の見せ方と操作を持つ。保留中のコメントをまとめて送るのは PR のパネルの下端（→ [pull-request-panel](pull-request-panel.md#レビューの送信)）。寸法と色は orbe_design の `editor/DiffView.tsx` の Thread に従う。
+PR の diff（→ [diff](diff.md#pr-の-diff)）の中で、GitHub のレビューのスレッドを読み、返信し、解決し、新しいコメントを書く。ブラウザの GitHub へ移らずに、変更を見ている行のその場で議論を進めるため。読み書きの規則（スレッドと保留中のレビューの読み方、書き込みの順序と読み直し）は PR の状態（→ [pull-request](pull-request.md#レビューのやりとり)）と [GitHub の読み書き](../platform/github.md#レビューのやりとり) が持ち、ここは diff の中の見せ方と操作を持つ。保留中のコメントをまとめて送るのは PR のパネルの下端（→ [pull-request-panel](pull-request-panel.md#レビューの送信)）。
 
 コメントは PR の diff だけに出る。作業ツリー diff とステージ済み diff には、印もスレッドも出ない。
 

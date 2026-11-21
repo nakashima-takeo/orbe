@@ -4,8 +4,8 @@ import XCTest
 
 @testable import Orbe
 
-/// ソース管理パネルの flow（fixture は `ScmFixtures`——見本 `editor/data.ts` と同じ形の本物の git の場。状態は本物の操作が
-/// 生む）: 見本の姿（ステージ済み 1・変更 3・未 push 3 と origin 2 のグラフ、変更の行を選ぶ）→ 本文つきのメッセージで欄が
+/// ソース管理パネルの flow（fixture は `ScmFixtures`——本物の git の場。状態は本物の操作が生む）:
+/// 初期状態（ステージ済み 1・変更 3・未 push 3 と origin 2 のグラフ、変更の行を選ぶ）→ 本文つきのメッセージで欄が
 /// 伸びる → 子の区分を畳む（欄が空で主の側が押せない）→ 返らない pre-commit hook の
 /// コミットで実行中の帯 → 止める → upstream の無いブランチのプルの失敗の文 → 端末でコミットして変更なし（グラフだけ・同期
 /// ↑N ↓M）→ push して先行も遅れも無い（主の側も ▾ も押せない）→ upstream の無いブランチ（ブランチを公開）→ git 管理外。
@@ -28,7 +28,7 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 見本の姿・メッセージ欄が伸びる・子の区分を畳む。
+  /// 初期状態・メッセージ欄が伸びる・子の区分を畳む。
   private func panelSteps(_ scene: ScmFixtures.Scene) -> [(label: String, action: () -> Void)] {
     let panel = scene.panel
     let control = panel.control

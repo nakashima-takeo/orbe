@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// 試しのスレッドの見え方——見本の theme・cmdePalette の値（dark / light）と、字の測り。
+/// 試しのスレッドの見え方——dark / light の配色値と、字の測り。
 extension SampleThreadZone {
   static let resolve: AnyHashable = "resolve"
   static let collapse: AnyHashable = "collapse"

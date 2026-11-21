@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// 押すと OS のメニューを自分の下に出す透明な当たり（SwiftUI の Menu は見本の姿に描けないため、見た目は SwiftUI、押下と
-/// メニューは AppKit）。押せない間はメニューを開かない。
+/// 押すと OS のメニューを自分の下に出す透明な当たり（SwiftUI の Menu では狙った見た目に描けないため、見た目は SwiftUI、
+/// 押下とメニューは AppKit）。押せない間はメニューを開かない。
 struct ScmMenuAnchor: NSViewRepresentable {
   let help: String
   let isEnabled: Bool

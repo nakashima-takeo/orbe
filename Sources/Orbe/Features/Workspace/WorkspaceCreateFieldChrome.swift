@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 入力欄のラベル（見本: 11px muted ラベル・letterSpacing 0.08em ≒ tracking 1）。folder/clone で共用。
+/// 入力欄のラベル（11pt muted・tracking 1）。folder/clone で共用。
 func workspaceFieldLabel(_ text: String) -> some View {
   Text(text)
     .font(Font.theme.chrome)
@@ -17,7 +17,7 @@ struct FieldChrome: ViewModifier {
   func body(content: Content) -> some View {
     content
       .padding(.horizontal, Theme.Space.beat)
-      .padding(.vertical, 11)  // 見本の入力欄高（padding 11px・off-grid の指定値）
+      .padding(.vertical, 11)  // 入力欄の縦パディング（11pt・off-grid の指定値）
       .background(RoundedRectangle(cornerRadius: Theme.Radius.md).fill(Color.theme.inputWash))
       .overlay(
         RoundedRectangle(cornerRadius: Theme.Radius.md)

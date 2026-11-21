@@ -2,8 +2,7 @@ import SwiftUI
 
 @testable import Orbe
 
-/// design 正典 の各シーンと同データの突合用 fixture（gallery が PNG に描き、見本と突き合わせる）。
-/// 値の出所は design 正典のモックデータ。
+/// 各シーンの見た目検証用 fixture（gallery が PNG に描いて状態ごとの描画を確認する）。
 @MainActor
 enum DesignSceneFixtures {
 
@@ -147,7 +146,7 @@ enum DesignSceneFixtures {
     return model
   }
 
-  /// design 正典の起動先（claude 既定 / shell / codex / agy）。
+  /// worktree パレットの起動先（claude 既定 / shell / codex / agy）。
   private static func setDesignTargets(_ model: WorktreePaletteModel) {
     model.setTargets(
       agents: ["claude", "codex", "agy"].map { AgentCLI(command: $0, path: "/usr/bin/\($0)") },
@@ -175,9 +174,9 @@ enum DesignSceneFixtures {
       description: "ブランチを切り替える。最近のブランチ:")
   }
 
-  // MARK: - Update（見本 UpdateCheckDoc 2a–2d 同データ。Sparkle 実体なしで各状態を注入する）
+  // MARK: - Update（Sparkle 実体なしで各状態を注入する）
 
-  /// 見本のリリースノート（2b の 3 分類・ユーザー語）。appcast description と同じ Markdown 形。
+  /// 既定のリリースノート（3 分類・ユーザー語）。appcast description と同じ Markdown 形。
   /// 箇条書きでない段落を 2 通り置いてある——本文として読ませる注意書きと、
   /// 末尾の出典段落（GPL §6 表記）。段落の描かれ方をここで見る。
   /// 「改善」だけ項目を 2 つ持ち、うち 1 つは折り返す長さ——項目間の間隔と、
@@ -240,7 +239,7 @@ enum DesignSceneFixtures {
     return state
   }
 
-  /// 適用待ち（2a トースト・2b シート・2c 状態カードの正）。v0.2.0 / 2026-07-13 / 13 MB。
+  /// 適用待ち（トースト・変更内容シート・設定の状態カードで使う）。v0.2.0 / 2026-07-13 / 13 MB。
   static func updateReadyState(notes: String = updateSampleNotes) -> UpdateState {
     let state = baseUpdateState()
     state.markReady(
@@ -259,7 +258,7 @@ enum DesignSceneFixtures {
     return state
   }
 
-  /// DL中 64%（見本 2d の `8.3 MB / 13 MB` mono 表記）。DL 中は Sparkle が確認を受け付けないため
+  /// DL中 64%（`8.3 MB / 13 MB` mono 表記）。DL 中は Sparkle が確認を受け付けないため
   /// 確認不可も張る（「今すぐ確認」行の減光と、理由を語るカードが同時に読めるか見る）。
   static func updateDownloadingState() -> UpdateState {
     let state = baseUpdateState()
@@ -313,7 +312,7 @@ enum DesignSceneFixtures {
     UpdateState(currentVersion: "0.1.0")
   }
 
-  /// 設定パレットをアップデートセクションへ潜らせたモデル（2c/2d。gallery/flow が状態カードを撮る）。
+  /// 設定パレットをアップデートセクションへ潜らせたモデル（gallery/flow が状態カードを撮る）。
   /// - Parameter selectCheckNow: 末尾の「今すぐ確認」行を選択する。行が器の高さ上限を超える状態
   ///   （適用待ち）で、その行が見えているスクロール位置＝押そうとしている状況を撮るために使う。
   static func updateSettingsModel(_ state: UpdateState, selectCheckNow: Bool = false)

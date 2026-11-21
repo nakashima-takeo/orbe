@@ -32,7 +32,7 @@ final class MessageTextView: NSTextView {
 
   private static let font = Theme.Typography.editorScmMessage
   private static let leading: CGFloat = 8
-  /// 字の右の余白（欄ごとの見本の値）。
+  /// 字の右の余白（欄ごとに指定する）。
   private var trailing: CGFloat = 0
 
   /// 字の右の余白を `trailing` にした欄（左は 8）。
@@ -74,7 +74,7 @@ final class MessageTextView: NSTextView {
   /// 1 行の高さ。
   private static let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
 
-  /// 1 行のときに見本の 26 になる上下の余白。
+  /// 1 行のときに高さ 26 になる上下の余白。
   private static let verticalInset = (Theme.Layout.editorScmMessage - lineHeight) / 2
 
   /// 行の左右の余白（左 8・右は欄ごとの `trailing`。テキストコンテナの左右は同じ余白しか持てないので、左はコンテナの原点で

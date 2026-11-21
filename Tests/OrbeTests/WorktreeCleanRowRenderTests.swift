@@ -15,7 +15,7 @@ final class WorktreeCleanRowRenderTests: SnapshotTestCase {
   private let size = NSSize(width: 640, height: 96)
 
   /// 損失の内訳（`%@ も消えます`）が展開サブラインに描かれている。
-  /// デザイン抽出が「黄ピルの行は必ず内訳を書く」と定める、消してはいけない側。
+  /// 確認群の黄ピルの行は必ず内訳を書く契約であり、消してはいけない側。
   func testSublineDrawsTheLossNotes() throws {
     try assertSublineDraws(
       pick: { !$0.lossNotes.isEmpty },

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// PR のパネルの印（見本 editor/parts.tsx の SVG の写し）。
+/// PR のパネルの印。
 extension EditorGlyphs {
-  /// レールの「プルリクエスト」（24 系・stroke 1.5。見本 RailPrIcon）。
+  /// レールの「プルリクエスト」（24 系・stroke 1.5）。
   static let railPullRequest = Glyph(viewBox: 24, stroke: 1.5) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
@@ -21,7 +21,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// open の PR（stroke 1.4。見本 PrOpenIcon）。
+  /// open の PR（stroke 1.4）。
   static let pullRequest = Glyph(viewBox: 16, stroke: 1.4) { k in
     var path = pullRequestBranches(k)
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
@@ -31,7 +31,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// プルリクエストを作成（stroke 1.5。見本 PrCreateIcon）。
+  /// プルリクエストを作成（stroke 1.5）。
   static let createPullRequest = Glyph(viewBox: 16, stroke: 1.5) { k in
     var path = pullRequestBranches(k)
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
@@ -42,7 +42,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// ツリー表示（stroke 1.3。見本 TreeIcon）。
+  /// ツリー表示（stroke 1.3）。
   static let viewAsTree = Glyph(viewBox: 16, stroke: 1.3) { k in
     var path = Path()
     for (from, to) in [((3, 3), (7, 3)), ((6, 8), (13, 8)), ((6, 13), (13, 13)), ((6, 3), (6, 13))]
@@ -54,7 +54,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// リスト表示（stroke 1.3。見本 ListIcon）。
+  /// リスト表示（stroke 1.3）。
   static let viewAsList = Glyph(viewBox: 16, stroke: 1.3) { k in
     var path = Path()
     for y in [4, 8, 12] as [CGFloat] {
@@ -64,7 +64,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// コメント（stroke 1.4。見本 CommentIcon）。
+  /// コメント（stroke 1.4）。
   static let comment = Glyph(viewBox: 16, stroke: 1.4) { k in
     var path = Path()
     let points: [(CGFloat, CGFloat)] = [
@@ -76,7 +76,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// PR の印の 3 つの点と、2 本の枝（`PrOpenIcon`・`PrCreateIcon` に共通）。
+  /// PR の印の 3 つの点と、2 本の枝（`pullRequest`・`createPullRequest` に共通）。
   private static func pullRequestBranches(_ k: CGFloat) -> Path {
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
