@@ -4,10 +4,12 @@ import XCTest
 @testable import Orbe
 
 /// エディターを開いている間の「見ているタブ」——端末が覆われていて結果が見えないので、前面の窓で選んでいるタブでも見ている
-/// タブに数えない。別の workspace のタブへ移るときは、移り先ではないタブを途中で見ているタブにしない。
+/// タブに数えない。別の workspace のタブへ移るとき（`focus_tab`・`open_file`）は、移り先ではないタブを途中で見ているタブに
+/// しない。
 ///
 /// 壊れると何が起きるか。エディターで文書を読んでいる間に終わったエージェントの音も知らせも出ず、done の印も消えて、終わった
-/// ことに気づけない。Attention パレットから別の workspace のタブへ移るだけで、そこで選んでいた別のタブの done が消える。
+/// ことに気づけない。Attention パレットやエージェントの `open_file` で別の workspace のタブへ移るだけで、そこで選んでいた別の
+/// タブの done が消える。
 extension WindowControllerReportAgentTests {
   private func done(_ wc: WindowController, _ tab: TerminalTab) {
     wc.controlReportAgent(
@@ -34,8 +36,15 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(tab.agentState, "idle", "端末が出たら消える")
   }
 
-  /// 別の workspace のタブ C へ移ると、C の done は消え、その workspace で選んでいたタブ A の done は残る。
-  func testMovingToATabInAnotherWorkspaceKeepsTheDoneOfItsSelectedTab() throws {
+  /// 背景の workspace の、選んでいるタブ A ともう 1 つのタブ C。
+  private struct Background {
+    let wc: WindowController
+    let a: TerminalTab
+    let c: TerminalTab
+  }
+
+  /// 背景の workspace の A と C に done を付けて、前面の workspace から返す。
+  private func doneInTheBackgroundWorkspace() throws -> Background {
     let tab = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
@@ -54,11 +63,33 @@ extension WindowControllerReportAgentTests {
     done(wc, a)
     done(wc, c)
     XCTAssertEqual([a.agentState, c.agentState], ["done", "done"], "前提: 背景の workspace の done は残る")
+    return Background(wc: wc, a: a, c: c)
+  }
+
+  /// `focus_tab`（Attention パレットの移動も通る）で C へ移ると、C の done は消え、A の done は残る。
+  func testMovingToATabInAnotherWorkspaceKeepsTheDoneOfItsSelectedTab() throws {
+    let bg = try doneInTheBackgroundWorkspace()
+    let (wc, a, c) = (bg.wc, bg.a, bg.c)
 
     _ = wc.controlFocusTab(tabId: c.id)
 
     XCTAssertTrue(wc.activeTab === c)
     XCTAssertEqual(c.agentState, "idle", "移り先の done は消える")
+    XCTAssertEqual(a.agentState, "done", "移り先ではないタブを途中で見ているタブにしない")
+  }
+
+  /// `open_file` で C のエディターを開いて移ると、エディターが端末を覆うので C の done も残り、A の done も残る。
+  func testOpeningAFileInAnotherWorkspaceKeepsTheDoneOfBothTabs() throws {
+    let bg = try doneInTheBackgroundWorkspace()
+    let (wc, a, c) = (bg.wc, bg.a, bg.c)
+    let file = try caseFile("a.txt", "a")
+
+    guard case .success = wc.controlOpenFile(tabId: c.id, path: file.path) else {
+      return XCTFail("open_file は success")
+    }
+
+    XCTAssertTrue(wc.activeTab === c)
+    XCTAssertEqual(c.agentState, "done", "エディターで見せているタブの done は残る")
     XCTAssertEqual(a.agentState, "done", "移り先ではないタブを途中で見ているタブにしない")
   }
 }
