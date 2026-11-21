@@ -18,6 +18,8 @@ final class EditorPresentPerfTests: OrbeTestCase {
   private static let signposter = OSSignposter(
     subsystem: "dev.orbe.perf", category: "editor-present")
 
+  override static var presentsOnScreen: Bool { true }
+
   override func setUpWithError() throws {
     try super.setUpWithError()
     try XCTSkipUnless(
