@@ -20,7 +20,7 @@ final class EditorPaneViewTests: OrbeTestCase {
   }
 
   private func hosted(_ tab: TerminalTab, focus: Face = .editor) -> NSWindow {
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = tab.group.view

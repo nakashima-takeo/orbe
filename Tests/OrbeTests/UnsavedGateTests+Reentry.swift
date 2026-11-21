@@ -11,19 +11,10 @@ import XCTest
 /// 壊れると何が起きるか。エージェントが `open_file` した別の文書が代わりに閉じられる／上書きされる。
 /// 制御 API が別の workspace を畳んだ直後の応答で、指していない workspace が丸ごと消える。
 extension UnsavedGateTests {
-  private func hostPane(_ tab: TerminalTab) -> NSWindow {
-    let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    window.contentView = tab.group.view
-    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
-    return window
-  }
-
   /// ファイルタブの × の確認は、応答までに焦点が別の文書へ移っても、閉じるのは確認を出した文書。
   func testFileTabCloseSheetClosesTheDocumentItAskedAboutEvenIfTheFocusMoved() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostPane(tab)
+    let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     edit(a)
@@ -41,7 +32,7 @@ extension UnsavedGateTests {
   /// 上書き確認の応答までにその文書が閉じられていれば何もしない（ディスクを触らない）。
   func testOverwriteDoesNothingWhenTheDocumentWasClosedMeanwhile() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostPane(tab)
+    let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
@@ -60,7 +51,7 @@ extension UnsavedGateTests {
   /// 上書きも書けない先（親ディレクトリが書けない）では失敗し、印は立ったまま残る。
   func testOverwriteThatCannotWriteKeepsTheMarks() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostPane(tab)
+    let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)

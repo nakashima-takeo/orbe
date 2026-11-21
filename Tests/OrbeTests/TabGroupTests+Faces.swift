@@ -8,7 +8,7 @@ import XCTest
 extension TabGroupTests {
   /// pane を窓に載せて first responder にする（chrome キーの gate は first responder が pane の配下であること）。
   private func hosted(_ tab: TerminalTab) -> NSWindow {
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = tab.group.view
@@ -58,7 +58,7 @@ extension TabGroupTests {
   /// 端末焦点の ⌘F は端末面のスクロールバック検索バーを開き、エディター面の検索は開かない。
   func testCommandFOnTheTerminalOpensTheScrollbackSearchNotTheEditorSearch() throws {
     let tab = TerminalTab.alone(cwd: "/tmp")
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = tab.group.view

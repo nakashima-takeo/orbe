@@ -12,21 +12,10 @@ import XCTest
 /// この catcher だけが受け口なので、ここが崩れると機能ごと消えるか、逆に catcher がタブ全面を
 /// 覆って選択・並び替え・改名を殺す。
 final class ChromeMiddleClickTests: OrbeTestCase {
-
-  private var windows: [NSWindow] = []
-
   override func setUp() {
     super.setUp()
     // 言語確定済み（returning user）として起動し、初回言語選択 overlay を出さない。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
-  }
-
-  /// 窓は ordered-in の間 AppKit が保持するため、参照を捨てるだけでは解放されず居座る。
-  /// `orderOut` で下ろしてから手放す（`close` は `isReleasedWhenClosed` と ARC が二重解放になる）。
-  override func tearDown() {
-    windows.forEach { $0.orderOut(nil) }
-    windows.removeAll()
-    super.tearDown()
   }
 
   // MARK: - ドメイン: onCloseTab → closeTab
@@ -68,6 +57,7 @@ final class ChromeMiddleClickTests: OrbeTestCase {
     wc.newTab()
     wc.newTab()
     let window = try mount(wc)
+    placeOffscreen(window)
     let catchers = try tabCatchers(in: window)
     XCTAssertEqual(catchers.count, 3, "catcher はタブ 1 枚に 1 つ載る")
     let active = wc.current.selectedTab
@@ -87,6 +77,7 @@ final class ChromeMiddleClickTests: OrbeTestCase {
     let wc = WindowController()
     wc.newTab()
     let window = try mount(wc)
+    placeOffscreen(window)
     let catcher = try XCTUnwrap(tabCatchers(in: window).first, "先頭タブの catcher")
     let point = center(of: catcher)
     let side = try otherDown(button: 3, at: point)
@@ -119,18 +110,15 @@ final class ChromeMiddleClickTests: OrbeTestCase {
 
   // MARK: - 窓の組み立て
 
-  /// chrome を載せた窓を**物理画面の外**に組む。`sendEvent` は ordered-in の窓でしか配送せず、
-  /// `WindowController` の窓は titled なので macOS が画面内へ押し戻す（`constrainFrameRect`）——
-  /// 押し戻されない borderless の窓へ chrome を移し、ユーザーの画面を触らずに配送を通す。
+  /// chrome を borderless の窓へ移して組む（並べない）。マウスを窓へ配送するテストは `placeOffscreen` で並べるが、
+  /// `WindowController` の窓は titled で、macOS が画面内へ押し戻す（`constrainFrameRect`）ので並べられない。
   private func mount(_ wc: WindowController) throws -> NSWindow {
     wc.flushChrome()  // chrome は coalesce 済み——mount 前に最終状態（タブ枚数）を確定させる
     let window = NSWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 800, height: 500),
+      contentRect: NSRect(origin: Self.offscreenOrigin, size: NSSize(width: 800, height: 500)),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = try XCTUnwrap(wc.window.contentView, "SwiftUI ルートの contentView")
-    window.orderFront(nil)
     window.contentView?.layoutSubtreeIfNeeded()
-    windows.append(window)
     return window
   }
 

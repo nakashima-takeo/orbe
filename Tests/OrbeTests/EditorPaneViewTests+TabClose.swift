@@ -25,8 +25,8 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     var pane: EditorPaneView { tab.group.view.editor }
   }
 
-  /// 幅 900・サイドバー閉の面に 3 枚: 未保存の a・保存済みの b・アクティブの c。窓は物理画面の外へ並べる
-  /// （`sendEvent` は ordered-in の窓にしか配送しない）。
+  /// 幅 900・サイドバー閉の面に 3 枚: 未保存の a・保存済みの b・アクティブの c。ポインタと押下を配送で届けるので、窓は
+  /// `placeOffscreen` で並べる。
   private func row() throws -> Row {
     let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
@@ -34,8 +34,7 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     window.appearance = NSAppearance(named: .darkAqua)
-    window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
-    window.orderFront(nil)
+    placeOffscreen(window)
     pane.shell.selectPanel(.files)
     let a = try tab.group.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
     a.surface.responder.perform(Selector(("insertText:")), with: "x")
@@ -60,7 +59,6 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
 
   func testSlotShowsCloseDotOrNothingByActiveDirtyAndPointer() throws {
     let row = try row()
-    defer { row.window.orderOut(nil) }
     let pane = row.pane
     let slot = { (index: Int) in self.fileTabSlotCenter(pane, index) }
     let onTab = { (index: Int) in NSPoint(x: slot(index).x - 24, y: slot(index).y) }  // 名前の上
@@ -89,7 +87,6 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
   /// 枠は 20 四方——中心から 9 ずれた端を押しても閉じ、枠の外（タブの右の余白）を押せばタブの切替になる。
   func testTheWholeTwentyPointSlotCloses() throws {
     let row = try row()
-    defer { row.window.orderOut(nil) }
     let pane = row.pane
     let names = { pane.shell.tabs.map(\.name) }
     // 写しが変わっても描き直す前のタブ行は古い位置のまま押される——押す前に描画が写しに追いつくのを待つ。
