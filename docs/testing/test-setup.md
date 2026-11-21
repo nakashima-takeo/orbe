@@ -63,8 +63,8 @@ updated: 2026-11-22
   - `TaskPaletteModel+Keys`・`TaskPaletteAutomationModel+Keys`・`BoardAutomationModel`・`WorktreePaletteFieldKeys`・`WorktreePaletteCardKeys` が直接受けている `SwiftUI.KeyPress` について、その扱いはビュー層の薄い変換に留め、モデルは値型キー（キー・修飾・リピートフラグ）を受ける構造にする。あわせて `DSTab` / `SubmitIgnoringKeyRepeat` の `NSApp.currentEvent` 直読みを引数化する。これにより `TaskPaletteCardKeyTests`（72 件）・`BoardAutomationTests`（30 件）・`WorktreePaletteCardKeyTests`（11 件）の大部分を 1ms 未満の純ユニットテストへ移設する。
   - 実画面中央／左下にウィンドウを出していた 5 クラス 20 件（`WindowControllerBoardTests`, `WindowControllerBoardWidgetsTests`, `WindowControllerPaletteKeyTests`, `WorkspaceCreateCaretTests`, `SidebarScrollbarTests`）から不要な前面化を外し、テストの種類ごとに次の形へ移行する。
     - `WindowController` を載せるテスト（`WindowControllerBoardTests`・`WindowControllerBoardWidgetsTests`・`WindowControllerPaletteKeyTests`・`WorkspaceCreateCaretTests`）: 主ウィンドウを並べず、キーを `deliverKeyDown` で主ウィンドウへ届ける。key の状態や前面化を扱うテストは、`WindowController(window:)` に `OrbeWindowFake` を渡す。
-    - `WindowController` を介さず、部品だけを載せるテスト: 並べないウィンドウに載せる。エディターの面は `OrbeWindowFake` に、面でない部品は素のウィンドウに載せる。キーは `deliverKeyDown` で届ける。
-    - マウス・ホイールのイベントを AppKit の配送で届けるテスト（`SidebarScrollbarTests` など）と、ローカルモニタに頼るテスト: タイトルバーの無いウィンドウに載せ、`placeOffscreen` を通る。
+    - `WindowController` を介さず、部品だけを載せるテスト: 並べないウィンドウに載せる。エディターの面は `OrbeWindowFake`（`hostEditor` など）に載せる。主ウィンドウの `OrbeWindow.sendEvent` は、日本語入力の変換中に届いたキーを入力欄へ直に渡す。テストのキーも本番と同じくこれを通すテスト（パレットとボードの部品。`PaletteCardWindowTestCase.host`）は、`OrbeWindow` に載せる。それ以外の部品は素の `NSWindow` に載せる。キーをウィンドウの配送で届けるテストは `deliverKeyDown` を使う。ビューのメソッド（`keyDown(with:)` など）を直接呼んでキーを渡すテストは、直接呼ぶままでよい。
+    - マウス・ホイールのイベントを AppKit の配送で届けるテスト（`SidebarScrollbarTests` など）: タイトルバーの無いウィンドウに載せ、`placeOffscreen` を通る。
   - 確認のシートは、本番コードが `NSAlert.beginSheetModal(for:)` で自分のウィンドウに出す形のまま変えない。`NSAlert` はウィンドウの公開のシートの API（`beginSheet`・`beginCriticalSheet`）を通るので、`OrbeWindowFake` がこの API を上書きし、シートを画面に出さずに応答待ちとして持つ。テストは `attachedSheet` で確認が出たことを読み、`endSheet(_:returnCode:)` で応答する。主ウィンドウに確認を出すテストは、`WindowController(window:)` に `OrbeWindowFake` を渡す。
   - `BoardAutomationTests` の生座標クリック（`(300, 669)` 等）や `EditorPaneViewTests+TabClose` / `+Sidebar` / `EditorSearchTests+Ground` / `EditorLineMarksTests` の画素座標と RGB 値のハードコード（`c.x - 8` の位置での輝度差判定等）を廃止し、モデル状態・レイアウト矩形・`firstResponder`・アクセシビリティ要素で検証する。
   - 18 ファイルに重複している独自 `pump` ヘルパを廃止し、`layoutSubtreeIfNeeded()`＋条件待機に統一する。固定秒数の待機（`PaletteFitTests` の 0.2s×24 等）は描画完了の確定的シグナルへ置き換える。
@@ -125,7 +125,7 @@ updated: 2026-11-22
   - 本物のシートが出ている間、AppKit は親のウィンドウを画面の中へ動かす。親を画面外へ置いても、タイトルバーの無いウィンドウにしても、この動きは止まらず、シートのウィンドウはディスプレイの範囲と重なる。確認のシートを出すコードを通るテストは、面を `OrbeWindowFake` に載せ、`WindowController` には `OrbeWindowFake` を渡す。
   - AppKit の `NSScrollView` は、どの画面にも載っていない（`screen` が nil の）ウィンドウでは、ホイールでスクロールしない（macOS 26 で実測。SwiftUI の `ScrollView` の裏も、素の `NSScrollView` も同じ）。画面外へ並べたウィンドウもこれに当たるので、`OrbeWindowFake` は、並べられているのにどの画面にも載っていない間だけ、主ディスプレイに載っていると答える。
   - 並んでいないウィンドウのビューへ、AppKit はマウスのイベントを配らない。ビューのメソッド（`mouseDown` など）を直接呼べば AppKit のビューには届くが、SwiftUI のジェスチャは反応しない。
-  - `NSApp.sendEvent` のキーは、アプリの key のウィンドウへ配られる。並んでいないウィンドウは key にならないので、キーはウィンドウを名指しして届ける（`deliverKeyDown`）。
+  - `NSApp.sendEvent` で送った keyDown は、並んでいないウィンドウにも key になれないウィンドウにも届かない。テストのウィンドウはどちらかに当たる。ウィンドウの `sendEvent` へ渡した keyDown は、並んでいないウィンドウでも first responder に届くので、キーはウィンドウを名指しして届ける（`deliverKeyDown`）。
   - key になれるウィンドウは、非アクティブなアプリでは最初のクリックがウィンドウの有効化に使われ、ビューへ届かない。
   - macOS 26 の SwiftUI は、非アクティブなアプリの key でないウィンドウがクリックされると、そのウィンドウが key になれなくても有効化のクリックとみなす。このとき `NSHostingView` の `acceptsFirstMouse` が false なら、クリックをジェスチャへ渡さない（macOS 27 は渡す）。ウィンドウに key と答えさせても（`isKeyWindow` の上書き）、`window.sendEvent` で送っても、クリックは渡らない。`NSHostingView` を本番コードの部品（`BoardView`）が内側で作るのでサブクラスも `allowsWindowActivationEvents` も差し込めず、`placeOffscreen` は並べている間だけ `NSView.acceptsFirstMouse` の実装を true を返すものに入れ替える。
   - `NSWindow` は既定で `isReleasedWhenClosed == true` のため、ARC 下で `close()` を呼ぶと二重解放クラッシュする（`orderOut(nil)`＋`isReleasedWhenClosed = false` を使う）。
