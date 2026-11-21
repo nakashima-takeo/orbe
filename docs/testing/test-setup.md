@@ -12,13 +12,13 @@ updated: 2026-11-21
 
 - **採用**: **XCTest と Swift Testing のターゲット単位ハイブリッド構成**（Swift 6.4.2 ツールチェーン同梱）。`Orbe` の実環境・共有状態からの隔離（`TestIsolation`）が要らない独立ライブラリテストターゲット（`OrbePathsTests`, `OrbeSessionLogTests`, `OrbeReportTests`, `OrbeSoundTests`, `OrbeEditorCoreTests` および新設する純ロジック・CLI/MCP コアテストターゲット）から Swift Testing（`import Testing`）を段階導入してプロセス内並列実行を効かせる。一方、`Orbe` 本体の実環境・プロセス全域の共有状態を隔離する必要がある結合テストターゲット（`OrbeTests`）は、テストメソッドごとの明示的な呼び出しなしに `OrbeTestCase` の継承だけで隔離ハーネスを自動起動する仕組みを維持するため XCTest 一本に留める。
 - **棄却**:
-  - **Swift Testing への全面一括移行**: 既存 4,447 関数の一括変換リスクが高く、`XCTestObservationCenter` 相当の自動実行フックがないため `OrbeTests` で隔離漏れを招く。また `OrbeTests` 内の `static var *Override` 17 箇所・`setenv` 38 箇所を全廃するまでインプロセス並列化できない。
-  - **XCTest のみの継続（`--parallel` 有効化）**: ワーカーごとのプロセス起動・112 MB の `OrbeTests` ロードが重く、クラス内メソッド並列・パラメータ化・`TestScoping`・ケース単位の繰り返し実行（`ST-0024`）・JSON Event Stream を使えない。
+  - **Swift Testing への全面一括移行**: 既存 4,447 関数の一括変換リスクが高く、`XCTestObservationCenter` 相当の自動実行フックがないため `OrbeTests` で隔離漏れを招く。また `Orbe` 本体の `static var *Override` 16 箇所・`setenv` 38 箇所を全廃するまでインプロセス並列化できない。
+  - **XCTest のみの継続（`--parallel` 有効化）**: テストメソッドごとにプロセスを起動し、そのたびに 112 MB の `OrbeTests` を読み込むため重い。また、パラメータ化・`TestScoping`・ケース単位の繰り返し実行（`ST-0024`）・JSON Event Stream を使えない。
   - **同一ターゲット（`OrbeTests`）内での XCTest と Swift Testing の混在**: macOS の `swift test` は XCTest と Swift Testing を別プロセスで起動するため、Swift Testing 側で `OrbeTestCase.setUp()` が走らず実環境を汚染する。
 - **要点**:
   - `.swiftlint.yml` の `xctest_only_runner` ルールの対象を、`Tests/` 全体への一律適用から「`TestIsolation` が必要なターゲット（`Tests/OrbeTests/` 等）限定」へ絞り、独立純ロジックターゲットで `import Testing` を許可する。
   - `OrbeTestSupport` に `TestScratch` の Swift Testing 版（`ST-0007` `TestScoping` ＋ `@TaskLocal` によるケースごとの一時ディレクトリ作成、既存の外部 `/bin/sh` watchdog を共有）を併設する。
-  - 共有アサーションヘルパの移行期は Swift 6.4 の `ST-0021`（`SWIFT_TESTING_XCTEST_INTEROP_MODE`）を補助に使う（`swift-tools-version: 6.0` のままでは既定が `limited` となり、もう一方のフレームワークのアサート失敗がテスト失敗にならず警告止まりになるため、混在ヘルパを使う場合は `swift-tools-version` 引き上げまたは環境変数 `SWIFT_TESTING_XCTEST_INTEROP_MODE` の設定を行う）。
+  - 共有アサーションヘルパの移行期は Swift 6.4 の `ST-0021`（`SWIFT_TESTING_XCTEST_INTEROP_MODE`）を補助に使う（`swift-tools-version: 6.0` のままでは既定が `limited` となり、Swift Testing のテストの中で呼んだ XCTest のアサート失敗がテスト失敗にならず警告止まりになるため（XCTest のテストの中の `#expect`・`Issue.record` の失敗はテスト失敗になる）、混在ヘルパを使う場合は `swift-tools-version` 引き上げまたは環境変数 `SWIFT_TESTING_XCTEST_INTEROP_MODE` の設定を行う）。
   - Swift Testing 導入済みターゲットでは、flaky 調査時に Swift 6.4 の `swift test --repeat-until fail --maximum-repetitions <N>` を活用する（CI の無条件リトライには使わない）。
 
 ## ターゲット構成と非テストの分離
@@ -41,7 +41,7 @@ updated: 2026-11-21
 - **採用**: **テスト用の外部依存ゼロの純 Swift コンストラクタ／クロージャ／プロトコル注入**を基本とする。テスト作業ディレクトリにのみ `@TaskLocal` + `TestScoping` を、プロセス全域・C コールバック境界にのみ既存の `TestIsolation`（テストごとの宣言なしに自動適用）を併用する。
 - **棄却**:
   - **`pointfreeco/swift-dependencies` + `swift-clocks` 導入**: 内部実装が `@TaskLocal` のため、Orbe 本体に 157 箇所ある `Task.detached` / `DispatchQueue` / `Timer` / `NotificationCenter` および `libghostty` C コールバックを跨ぐと依存の伝播が切れ、`withEscapedDependencies` の付け忘れが実環境汚染や失敗を招く。さらに本番バイナリへ 5 パッケージ（`swift-syntax` 含む）が連鎖導入され、`NOTICE` / `licenses/` 管理とビルド負荷が増える。
-  - **現行 17 個の `static var *Override` による隔離方式の全面維持**: 共有可変状態を使うためプロセス内並列実行と原理的に両立しない。また、この方式には構造上の限界があり、`UserDefaults.standard` への書き込み（cfprefsd による実ホームへの出力）や、初回アクセス時にメモリへ固定化される `CompletionLearning.shared` のテスト間持ち越しを防げない。
+  - **現行 16 個の `static var *Override` による隔離方式の全面維持**: 共有可変状態を使うためプロセス内並列実行と原理的に両立しない。また、この方式には構造上の限界があり、`UserDefaults.standard` への書き込み（cfprefsd による実ホームへの出力）や、初回アクセス時にメモリへ固定化される `CompletionLearning.shared` のテスト間持ち越しを防げない。
 - **要点（本番コード側の主な設計変更）**:
   - `WindowController.init()` に依存（永続化・設定・端末ファクトリ・エディターサーフェスファクトリ・通知音・通知センター・Updater・AutomationStore・クロック）を注入可能にし、起動副作用（実 PTY spawn、Sparkle 初期化、バックグラウンド PATH 走査、SQLite オープン）をコンポジションルートへ分離する。
   - `extension WindowController` に同居する業務ロジック（`TaskWorkStart`, `AutomationNotice`, `WorktreePalette` 配線, `TaskPalette` PR 紐付け, `WaitContinue`）および `MenuBarController` の時間・判断ロジックを独立した型へ切り出す。
@@ -94,10 +94,10 @@ updated: 2026-11-21
 
 ## CI 構成と実行時間プロファイリング
 
-- **採用**: **PR と `main`/定期の 2 段階ワークフロー（`.github/workflows/ci.yml` ＋ 定期/main ジョブ）**、**依存ダウンロード物（`checkouts` + `artifacts` / SwiftPM キャッシュ）に絞った `actions/cache@v4`（または `v5`）**、および **`--xunit-output` / Swift Testing `--event-stream-output-path` による所要時間プロファイリング**。見た目の自動 VRT は置かず、既存の `visual-check`（`Shots/`）を運用維持する。
+- **採用**: **PR と `main`/定期の 2 段階ワークフロー（`.github/workflows/ci.yml` ＋ 定期/main ジョブ）**、**依存ダウンロード物（`checkouts` + `artifacts` / SwiftPM キャッシュ）に絞った `actions/cache@v6`**、および **`--xunit-output` / Swift Testing `--event-stream-output-path` による所要時間プロファイリング**。見た目の自動 VRT は置かず、既存の `visual-check`（`Shots/`）を運用維持する。
 - **棄却**:
-  - **`.build` ディレクトリ丸ごとの `actions/cache`**: Orbe の `.build` 実測は 6.5 GB（`.build/out` 単体 2.4 GB、`index-build` 1.6 GB）。GitHub Actions のキャッシュ上限はリポジトリ合計 10 GB（LRU 自動削除）のため複数 PR でスラッシングし、さらに `actions/checkout` の `mtime` リセットでインクリメンタルビルドが無効化されやすい。
-  - **`pointfreeco/swift-snapshot-testing` による自動 VRT**: [テストアーキテクチャ](test-architecture.md) で自動 VRT を対象外とし、既存の `visual-check` を継続する方針のため不要。将来 VRT を導入する場合も、次の点に注意する。`swift-snapshot-testing` は `Package.swift` 解決時に `swift-syntax` を引き込む。また `InlineSnapshotTesting` を誤ってリンクすると、非マクロターゲットからの `swift-syntax` 依存により SwiftPM の `swift-syntax` プリビルド利用が無効化され、ソースからフルビルドされる既知問題（`pointfreeco/swift-snapshot-testing#1126`）がある。加えて、macOS の 1x 固定・`NSHostingView` ラップ・確定的待機は結局自前実装になる（既存 `SnapshotTestSupport.swift` 拡張＋Swift Testing `Attachment` のゼロ依存構成が第一候補）。
+  - **`.build` ディレクトリ丸ごとの `actions/cache`**: Orbe の `.build` 実測は 6.5 GB（`.build/out` 単体 2.4 GB、`index-build` 1.6 GB）。GitHub Actions のキャッシュ上限は既定でリポジトリ合計 10 GB（LRU 自動削除。引き上げた超過分は課金）のため複数 PR でスラッシングし、さらに `actions/checkout` の `mtime` リセットでインクリメンタルビルドが無効化されやすい。
+  - **`pointfreeco/swift-snapshot-testing` による自動 VRT**: [テストアーキテクチャ](test-architecture.md) で自動 VRT を対象外とし、既存の `visual-check` を継続する方針のため不要。将来 VRT を導入する場合も、次の点に注意する。`swift-snapshot-testing` は `Package.swift` 解決時に `swift-syntax` を引き込む。また `InlineSnapshotTesting` を誤ってリンクすると、非マクロターゲットが `swift-syntax` に依存することになり、SwiftPM はパッケージグラフ全体で `swift-syntax` のプリビルドを使わず、ソースからフルビルドする。加えて、macOS の 1x 固定・`NSHostingView` ラップ・確定的待機は結局自前実装になる（既存 `SnapshotTestSupport.swift` 拡張＋Swift Testing `Attachment` のゼロ依存構成が第一候補）。
   - **PR での全種直列実行（現行 `ci.yml`）**: `macos-26` 標準ランナーは 3 vCPU / 7 GB RAM であり、単一ジョブ直列実行が 60 分タイムアウト設定を強いる原因になっている。
 - **要点**:
   - ジョブ構成（`macos-26`）:
@@ -110,7 +110,7 @@ updated: 2026-11-21
 
 - **Swift Testing は `XCTestObservationCenter` を通らず別プロセスで走る**: `Tests/OrbeTests` 内に `@Test` を 1 本でも書くと、`swiftpm-testing-helper` が `OrbeTestCase.setUp()` を通らず起動し、実 state dir・実 ghostty 設定・実スピーカーへ直結する。Swift Testing は独立ライブラリテストターゲットに厳格分離する。
 - **`ST-0025`（タグフィルタ）は Swift 6.4.2 に未搭載**: `swift test --filter tag:...` は Swift 6.5 機能のため、現行環境ではターゲット名・スイート名規約の `--filter` / `--skip` を使う。
-- **`ST-0021` の相互運用モード既定値**: `Package.swift` が `swift-tools-version: 6.0` の間は `limited` 扱いとなり、もう一方のフレームワークのアサート失敗がエラーにならない場合がある。共有ヘルパの混在を避けるか、環境変数 `SWIFT_TESTING_XCTEST_INTEROP_MODE` や `swift-tools-version` で `complete` 以上を明示設定する。
+- **`ST-0021` の相互運用モード既定値**: `Package.swift` が `swift-tools-version: 6.0` の間は `limited` 扱いとなり、Swift Testing のテストの中で呼んだ XCTest のアサート失敗がエラーにならず警告になる（XCTest のテストの中の `#expect`・`Issue.record` の失敗はエラーになる）。共有ヘルパの混在を避けるか、環境変数 `SWIFT_TESTING_XCTEST_INTEROP_MODE` や `swift-tools-version` で `complete` 以上を明示設定する。
 - **`setenv` / `unsetenv` は POSIX でスレッド非安全（MT-Unsafe）**: テスト内に 38 箇所ある環境変数操作を Swift Testing の並列スレッドから呼ぶと `EXC_BAD_ACCESS` や他テスト汚染を起こす。並列実行するターゲットでは環境変数書き換えを禁止し、子プロセス環境の設定は、`Process.environment` に明示的な辞書を渡す方法のみで行う。
 - **`@TaskLocal` は AppKit・GCD・`libghostty` C コールバックで伝播が切れる**: `@TaskLocal` は構造化並行処理内の `TestScratch.caseDir` 等に限定し、UI や C コールバックを跨ぐ依存はコンストラクタ注入（インスタンス保持）で渡す。
 - **`@MainActor` テストは再入（reentrancy）する**: Swift Testing で `@MainActor` を付けても、`await` 境界で別テストがメインスレッドに割り込む。プロセス共有の AppKit 状態に触るスイートには `@Suite(.serialized)` を必須とし、Swift Concurrency 協調プール上で `RunLoop.current.run` で長時間ブロックしない。
