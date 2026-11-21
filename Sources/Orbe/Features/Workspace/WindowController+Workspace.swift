@@ -21,11 +21,11 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// アクティブ workspace を表示する（選択をそのまま描く。空ならシェルは起こさない）。
+  /// アクティブ workspace を表示する（今の状態を描く。空ならシェルは起こさない）。
   /// 切替・復元・明示削除後の MRU 繰上げの全アクティブ化経路がここを共有する。
   func activateCurrent() {
     store.recordWorkspaceUse(current)  // 前面へ出すこと自体が利用（空でも MRU を進める）
-    select(current.selection)
+    renderSelection()
     applyActiveWorkspaceConfig()  // 実効設定（外観＋gui.conf）は0タブでも従来どおり反映する
   }
 

@@ -1,6 +1,6 @@
 import AppKit
 
-/// アクティブ workspace の選択（ボード・タブ・空）の描画と巡回、選んでいるものへの焦点の戻し。
+/// アクティブ workspace の選択（ボード・タブ・空）を選ぶ命令と巡回、今の状態を画面へ写す描画、選んでいるものへの焦点の戻し。
 extension WindowController {
   func nextTab() {
     guard let selection = store.nextSelection() else { return }
@@ -17,13 +17,19 @@ extension WindowController {
     select(.tab(current.tabs[index]))
   }
 
-  /// アクティブ workspace の選択を描く唯一の入口（アクティブ化・クリック・巡回・閉鎖後・`focus_tab`）。選択を記録し、
-  /// 選んだタブを即時に materialize してから content を照合し（`reconcileContent`。見せるものは照合が選択から導く）、
-  /// 焦点を選んだものへ戻す。未 materialize の隠れタブは後続 tick へ分割して起こす（surface 誕生を 1 turn で N 個
-  /// 積まない）。
+  /// アクティブ workspace の選択を選ぶ（クリック・巡回・新しいタブ・`focus_tab`・閉じたエージェントを戻す・ボード）。
+  /// 選択を記録して描く。不変条件に反する選択は何もしない。
   func select(_ selection: Workspace.Selection) {
     guard store.recordSelection(selection) else { return }
-    // 選択が動いた＝インライン改名の文脈が崩れる。編集中なら畳む（DragSession と同じ「集合/選択が
+    renderSelection()
+  }
+
+  /// アクティブ workspace の今の状態を画面へ写す（冪等。状態を変えた経路の終わりに 1 回呼ぶ）。選んでいるタブを即時に
+  /// materialize してから content を照合し（`reconcileContent`。見せるものは照合が状態から導く）、焦点を選んでいるものへ
+  /// 戻す。未 materialize の隠れタブは後続 tick へ分割して起こす（surface 誕生を 1 turn で N 個積まない）。選択を記録
+  /// し直さないので、選択を動かさない経路（タブの閉鎖の後・workspace のアクティブ化・選ばずに足したタブ）はこれだけを呼ぶ。
+  func renderSelection() {
+    // 選択が動きうる＝インライン改名の文脈が崩れる。編集中なら畳む（DragSession と同じ「集合/選択が
     // 変わったら継続は不正」不変条件。blur 自己修復に頼らず SSOT 遷移点で決定的に解除する）。
     if statusModel.editingIndex != nil { endTabRename() }
     let ws = current
@@ -37,7 +43,7 @@ extension WindowController {
     scheduleHiddenMounts(for: ws)
   }
 
-  /// 前面の workspace のボードのウィジェットの並びをボードへ写す唯一の口（`select` と、ウィジェットの操作の後）。
+  /// 前面の workspace のボードのウィジェットの並びをボードへ写す唯一の口（`renderSelection` と、ウィジェットの操作の後）。
   func projectBoardWidgets() {
     board.show(store.boardWidgets(of: current) ?? [])
   }

@@ -158,7 +158,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     window.contentView = hostingView
     syncWindowOpacity()  // 起動時に既定 95% の背景透過を適用（WindowController+Opacity）
     // 背景ブラーの初回適用は windowDidBecomeKey が担う（init は windowNumber 未確定で CGS が効かない）。
-    // SwiftUI に content スロット（端末の器）を即マウントさせ、初回 select() の
+    // SwiftUI に content スロット（端末の器）を即マウントさせ、初回の描画（`renderSelection`）の
     // makeFirstResponder が成立する（= 起動直後からアクティブタブがキー入力を受ける）状態を作る。
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()

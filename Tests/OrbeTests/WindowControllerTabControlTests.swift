@@ -86,7 +86,8 @@ final class WindowControllerTabControlTests: OrbeTestCase {
     XCTAssertEqual(row(wc, name: "sleepers")?["dormantAgentCount"] as? Int, 0)
   }
 
-  /// 前面の close は残存 tab を reselect して起こすため、背景 close と違い activated は true のまま。
+  /// 前面の close は残存 tab を描き直して起こすため、背景 close と違い activated は true のまま。描き直しは選択を記録し
+  /// 直さないので MRU は進めない。
   func testClosingLiveTabInForegroundMixedWorkspaceMaterializesRemainingTab() throws {
     let wc = try restore(
       activeWorkspace: 0, [tabbed("mixed", tabs: [Self.plainTab, agentTab("sleeping")])])
@@ -99,10 +100,10 @@ final class WindowControllerTabControlTests: OrbeTestCase {
     wc.closeTab(wc.current.tabs[0], origin: .controlAPI)
 
     XCTAssertEqual(wc.current.tabs.count, 1)
-    XCTAssertTrue(wc.current.tabs[0].activated, "reselect された残存タブは同期 materialize")
+    XCTAssertTrue(wc.current.tabs[0].activated, "描き直しで残存タブは同期 materialize")
     XCTAssertTrue(wc.current.activated)
     XCTAssertEqual(wc.current.dormantAgentCount(), 0)
-    XCTAssertGreaterThan(try XCTUnwrap(wc.current.lastUsedAt), stamp, "残存タブの前面利用で MRU を進める")
+    XCTAssertEqual(wc.current.lastUsedAt, stamp, "閉鎖の後の描き直しは MRU を動かさない")
   }
 
   /// 次 tab の前面表示を伴わない close は foreground use ではないので MRU を進めない。
