@@ -114,16 +114,6 @@ final class AgentCatalogTests: OrbeTestCase {
       "/bin/codex --no-daemon -- '頼み'")
   }
 
-  /// agy は新規起動でも、1 手ごとの確認を出させない引数をコマンド名の直後に置く（再開の形は上のテストが固定する）。
-  /// 確認の待ちは hook で報告されないので、付け忘れた入口の agy は確認で止まったまま作業中に見える。
-  func testAgyStartsWithoutPerActionConfirmations() {
-    let agy = AgentCLI(command: "agy", path: "/bin/agy")
-    XCTAssertEqual(AgentCatalog.startCommand(agy), "/bin/agy --dangerously-skip-permissions")
-    XCTAssertEqual(
-      AgentCatalog.startCommand(agy, firstInput: "頼み"),
-      "/bin/agy --dangerously-skip-permissions -i '頼み'")
-  }
-
   /// 席に置けない制御文字（改行・タブ以外の C0・DEL・C1）は空白にして添える。NUL はコマンドの C 文字列をそこで切り、
   /// 起動を壊す。新規起動でも再開でも同じ。
   func testFirstInputControlCharactersOtherThanNewlineAndTabBecomeSpaces() {

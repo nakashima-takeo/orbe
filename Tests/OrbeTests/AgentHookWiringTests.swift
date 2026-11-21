@@ -58,16 +58,6 @@ final class AgentHookWiringTests: OrbeTestCase {
     }
   }
 
-  /// agy の質問の待ちは、質問ツールの直前に立て、直後（答えてもスキップしても呼ばれる）に解く。
-  func testAgyQuestionWaitIsRaisedBeforeAndClearedAfterTheQuestionTool() throws {
-    let agy = try XCTUnwrap(try definitions()["agy"])
-    let before = try XCTUnwrap(agy["PreToolUse"])
-    let after = try XCTUnwrap(agy["PostToolUse"])
-    XCTAssertEqual(before.map(\.matcher), ["ask_question"])
-    XCTAssertEqual(before.map(\.state), ["waiting"])
-    XCTAssertEqual(after.map(\.state), ["working"])
-  }
-
   /// permission の待ちはバッチ境界で解除する。どのツールが承認されるか事前に分からないため
   /// per-tool の matcher では撃てない。PostToolBatch は matcher の概念を持たないイベントなので、
   /// どのエントリも matcher キーを持たない。

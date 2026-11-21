@@ -49,7 +49,7 @@ final class ReportLogicTests: XCTestCase {
       effectiveState("done", stdin: ["conversationId": "c-1", "fullyIdle": false]), "working")
   }
 
-  /// fullyIdle が true・欠落（claude / codex の経路）・真偽値でない型は done のまま。
+  /// fullyIdle が true・真偽値でない型は done のまま（欠落は上の running が無い場合のテストが持つ）。
   func testDoneThatIsFullyIdleOrWithoutABooleanStaysDone() {
     XCTAssertEqual(effectiveState("done", stdin: ["fullyIdle": true]), "done")
     XCTAssertEqual(effectiveState("done", stdin: ["fullyIdle": "false"]), "done")
