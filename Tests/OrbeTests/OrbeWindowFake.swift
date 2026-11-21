@@ -9,6 +9,10 @@ import AppKit
 ///
 /// シートは画面に出さず、応答待ちとして持つ。`NSAlert.beginSheetModal(for:)` は、ウィンドウのシートの API を通ってここへ届く。
 /// `attachedSheet` は応答待ちの先頭のシートを返し、`endSheet(_:returnCode:)` はそのシートの完了ハンドラを応答つきで呼ぶ。
+///
+/// 並べられている（ordered-in）のにどの画面にも載っていない間（`placeOffscreen` で画面外へ並べた間）は、主ディスプレイに
+/// 載っていると答える。AppKit の `NSScrollView` は、画面に載っていない（`screen` が nil の）ウィンドウではホイールで
+/// スクロールしない。並べていない間の答えは変えない。
 final class OrbeWindowFake: OrbeWindow {
   var isKey = false {
     didSet {
@@ -23,6 +27,7 @@ final class OrbeWindowFake: OrbeWindow {
     [(sheet: NSWindow, completion: ((NSApplication.ModalResponse) -> Void)?)] = []
 
   override var isKeyWindow: Bool { isKey }
+  override var screen: NSScreen? { super.screen ?? (isVisible ? NSScreen.screens.first : nil) }
   override func bringToFront() { bringToFrontCount += 1 }
 
   override func beginSheet(
