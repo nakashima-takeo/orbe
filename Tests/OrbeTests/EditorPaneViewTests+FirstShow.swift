@@ -5,8 +5,8 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorCore
 
-/// 文書を初めて画面に出すときだけ最初の色を待つ——エディター面が見えていない（畳まれた・窓に無い）pane に結んだ文書は
-/// 待たず、面が見えたときに待つ。壊れると、端末だけの配置のタブを復元するたびに main が最大 50ms 止まる。
+/// 文書を初めて画面に出すときだけ最初の色を待つ——エディター面が見えていない（閉じている・窓に無い）pane に結んだ文書は
+/// 待たず、面が見えたときに待つ。壊れると、文書を持つ連を復元するたびに main が最大 50ms 止まる。
 extension EditorPaneViewTests {
   func testADocumentShownInAHiddenEditorFaceWaitsOnlyWhenTheFaceAppears() throws {
     let tab = TerminalTab.alone(

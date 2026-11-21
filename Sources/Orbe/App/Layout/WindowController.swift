@@ -308,7 +308,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   }
 
   /// 完了通知の消費：見ているタブの done を消費して done バッジを消す。
-  /// 背面・背景タブの done は残す。4 トリガ（タブ活性化・done 到着・前面復帰・透かしの始まり）が共有する。
+  /// 背面・背景タブの done は残す。描画（`renderSelection`）・done 到着・前面復帰・透かしの出入りが共有する。
   func consumeVisibleTabDone() { visibleTab?.consumeDoneState() }
 
   /// chrome 更新を要求する。`window.title`（Mission Control 用・O(1)）は即時反映し、重い StatusRow
@@ -367,7 +367,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
   }
 
-  // アプリ前面復帰：背面で届いていたアクティブ表示タブの done を消費する。
+  // アプリ前面復帰：背面で届いていた、見ているタブ（`visibleTab`）の done を消費する。
   func windowDidBecomeKey(_ notification: Notification) {
     consumeVisibleTabDone()
     refreshChrome()

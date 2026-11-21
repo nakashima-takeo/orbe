@@ -2,7 +2,7 @@ import AppKit
 import GhosttyKit
 import SwiftUI
 
-/// occlusion（可視性）の導出と差分ゲート（純ロジック。SurfaceVisibilityTests が検証）。
+/// occlusion（可視性）の導出と差分ゲート（純ロジック。差分ゲートは SurfaceVisibilityTests が検証）。
 /// libghostty の可視性契約: 不可視で `set_occlusion(false)`（描画停止・端末状態は前進）、
 /// 可視復帰で `set_occlusion(true)`（別スレッドで最新の状態から 1 フレーム描く。その結果が layer に載るのは復帰の後）。
 struct SurfaceOcclusionGate {

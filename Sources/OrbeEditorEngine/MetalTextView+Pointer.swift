@@ -19,7 +19,7 @@ extension MetalTextView {
   }
 
   /// 窓の hit-test がその点で自分（か配下）に解けるか。tracking area は重なった view を考慮しないので、手前に重なる
-  /// view（面の取っ手など）の下では、ポインタの形も俯瞰のホバーも出さない——ポインタは最前面の view が持つ。
+  /// view の下では、ポインタの形も俯瞰のホバーも出さない——ポインタは最前面の view が持つ。
   private func ownsPointer(at windowPoint: NSPoint) -> Bool {
     window?.contentView?.hitTest(windowPoint)?.isDescendant(of: self) == true
   }
