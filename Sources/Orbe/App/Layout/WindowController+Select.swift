@@ -17,14 +17,26 @@ extension WindowController {
     select(.tab(current.tabs[index]))
   }
 
-  /// アクティブ workspace の選択を選ぶ（クリック・巡回・新しいタブ・`focus_tab`・閉じたエージェントを戻す・ボード）。
-  /// 選択を記録し、エディターを閉じて描く——タブは端末で出る。エディターで見せていたタブを選び直したときだけ、閉じる
-  /// 動きを付ける。不変条件に反する選択は何もしない。
+  /// アクティブ workspace の選択を選ぶ（クリック・巡回・新しいタブ・閉じたエージェントを戻す・ボード）。エディターを閉じて
+  /// 描く——タブは端末で出る。
   func select(_ selection: Workspace.Selection) {
-    let closesInPlace = editorShownTab.map { selection == .tab($0) } ?? false
-    guard store.recordSelection(selection) else { return }
-    editorShownTab = nil
-    renderSelection(animated: closesInPlace)
+    select(selection, inWorkspaceAt: activeWorkspace)
+  }
+
+  /// `index` の workspace で `selection` を選び（前面でなければ、その workspace へ移る）、1 回だけ描く。`inEditor` なら選んだ
+  /// タブをエディターで見せ、そうでなければエディターを閉じる（タブは端末で出る）。workspace・選択・エディターで見せるタブを
+  /// すべて書いてから描く——先に workspace の切替を描くと、移り先ではないタブが一瞬「見ているタブ」になり、その done が消える。
+  /// 動きを付けるのは、同じ workspace で選択が替わらず見せ方だけが変わるときだけ。範囲外の index と、不変条件に反する選択は
+  /// 何もしない。workspace を替えたら、実効設定を反映して保存を予約する。
+  func select(_ selection: Workspace.Selection, inWorkspaceAt index: Int, inEditor: Bool = false) {
+    let switches = index != activeWorkspace
+    let inPlace = !switches && current.selection == selection
+    guard store.recordSelection(selection, inWorkspaceAt: index) else { return }
+    editorShownTab = inEditor ? current.selectedTab : nil
+    renderSelection(animated: inPlace)
+    guard switches else { return }
+    applyActiveWorkspaceConfig()
+    scheduleSave()
   }
 
   /// アクティブ workspace の今の状態を画面へ反映する（冪等。状態を変えた経路の終わりに 1 回呼ぶ）。最初に、エディターで見せて

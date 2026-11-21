@@ -124,12 +124,10 @@ extension WindowController: ControlTarget {
   /// （ボードを選んでいてもタブへ移り、エディターを開いていれば閉じる）その端末へ first responder を移す（既フォーカスでも
   /// 成功＝冪等）。Attention / メニューバーの「そのタブへ移動」も同じ経路を通る。
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
-    guard let tab = controlResolveTab(tabId) else {
+    guard let tab = controlResolveTab(tabId), let index = store.workspaceIndex(of: tab) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))
     }
-    let switched = activateWorkspace(of: tab)
-    select(.tab(tab))
-    if switched { finishWorkspaceSwitch() }
+    select(.tab(tab), inWorkspaceAt: index)
     focusSelection()
     return .success(["ok": true])
   }

@@ -74,17 +74,11 @@ extension WindowController {
     renderSelection(animated: true)
   }
 
-  /// `tab` をエディターで見せる。既に見せていれば何もしない（描画しない）。別の workspace のタブなら、その workspace へ
-  /// 移ってから 1 回だけ描画する。前から選んでいたタブなら開く動きを付け、別のタブへ移るなら即時。
+  /// `tab` を選んでエディターで見せる（別の workspace のタブなら、その workspace へ移る）。既に見せていれば何もしない
+  /// （描画しない）。前から選んでいたタブなら開く動きを付け、別のタブへ移るなら即時。
   func showInEditor(_ tab: TerminalTab) {
-    guard editorShownTab !== tab else { return }
-    let switched = activateWorkspace(of: tab)
-    guard current.tabs.contains(where: { $0 === tab }) else { return }
-    let inPlace = !switched && activeTab === tab
-    store.recordSelection(.tab(tab))
-    editorShownTab = tab
-    renderSelection(animated: inPlace)
-    if switched { finishWorkspaceSwitch() }
+    guard editorShownTab !== tab, let index = store.workspaceIndex(of: tab) else { return }
+    select(.tab(tab), inWorkspaceAt: index, inEditor: true)
   }
 
   /// ⌘⇧F。選んでいるタブをエディターで見せ、サイドバーを検索パネルで開いて入力欄に焦点を入れる。種は押した時点の焦点で

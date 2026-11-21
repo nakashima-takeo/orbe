@@ -110,7 +110,7 @@ final class SessionStoreHomeTests: OrbeTestCase {
 
     var forward: [Workspace.Selection] = []
     for _ in 0..<3 {
-      store.nextSelection().map { store.recordSelection($0) }
+      store.nextSelection().map { store.recordSelection($0, inWorkspaceAt: 1) }
       forward.append(store.current.selection)
     }
     XCTAssertEqual(forward, [.tab(first), .tab(second), .board])
