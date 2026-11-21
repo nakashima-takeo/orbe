@@ -42,15 +42,15 @@ extension WindowControllerReportAgentTests {
     let (wc, tab) = try makeControllerAndTab()
     let option = OptionHoldDriver(wc)
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
+    makeKey(wc)
     wc.toggleEditorFace()
     done(wc, tab)
     XCTAssertEqual(tab.agentState, "done", "前提: エディターの間の done は残る")
-    // 窓を前面にしておける時間はテストが決められない（ほかのアプリが前面を取る）ので、透かしてから前面にし、前面に戻ったときの
-    // done の消去で見ているタブかを確かめる。
     wc.optionHold.windowAllows = { true }
+
     option.hold()
 
-    makeKey(wc)
+    XCTAssertTrue(wc.window.isKeyWindow, "前提: 透かし始めたときに窓が前面")
     XCTAssertTrue(wc.visibleTab === tab, "透かしている間は見ているタブ")
     XCTAssertEqual(tab.agentState, "idle", "見ているタブの done の印は消える")
 
