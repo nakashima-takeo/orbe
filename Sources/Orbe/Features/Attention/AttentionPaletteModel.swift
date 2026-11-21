@@ -5,7 +5,7 @@ import SwiftUI
 /// 全ライブタブの agentState（waiting/done/working）を stateChangedAt 降順にフラット一覧し、
 /// ↑↓ で選択・Enter/行タップでそのタブへ移動（WS activate＋タブ選択＋surface focus）・
 /// Esc/scrim で閉じる。フィルタ入力欄・ドリルインは持たない。空のときは情報行 1 本。
-/// ヘッダは breadcrumb「attention」＋右端 `⌘⌘` バッジ（デザイン第10シーン）。
+/// ヘッダは breadcrumb「attention」＋右端 `⌘⌘` バッジ。
 ///
 /// 描画は `PaletteOverlay`/`PaletteCard`。行の中身は `AttentionRowView`（customContent）。
 /// 表示中の更新は提示元（WindowController）が `flushChrome` の snapshot 更新時に `setRows` で流し込む。
@@ -21,7 +21,7 @@ import SwiftUI
     self.localization = localization
     render.breadcrumb = "attention"
     render.headerPills = [PaletteModel.HeaderPill(label: "⌘⌘")]
-    render.surface = .popup  // デザイン第10シーン rgba(panel, 0.9)＝popup 級の面（枠・幾何は panel 級）
+    render.surface = .popup  // Attention の面は popup 級（α.90。枠・幾何は panel 級）
     render.scrimStrength = .normal  // 頻繁に開く軽いパレット（workspace 切替と同じ通常暗幕）
     render.hintKeys = [
       PaletteModel.HintKey(key: "↵", label: localization.string(.attentionHintJump)),

@@ -1,7 +1,7 @@
 import Markdown
 import SwiftUI
 
-/// 変更内容シート（見本 2b）。トーストの「変更内容」と設定の「変更内容」が同じここへ着地する。
+/// 変更内容シート。トーストの「変更内容」と設定の「変更内容」が同じここへ着地する。
 /// ノートは appcast description の Markdown を、その構造（見出し・箇条書き・段落）のまま描く。
 struct UpdateChangesCard: View {
   let state: UpdateState
@@ -108,7 +108,7 @@ struct UpdateChangesCard: View {
     return parts.joined(separator: " · ")
   }
 
-  /// 「✓ Developer ID 署名と公証を検証済み」——更新経路への信頼シグナル（見本 2b）。
+  /// 「✓ Developer ID 署名と公証を検証済み」——更新経路への信頼シグナル。
   private var verifiedLine: some View {
     HStack(spacing: Theme.Space.note) {
       Text("✓").foregroundStyle(Color.theme.stateDone)

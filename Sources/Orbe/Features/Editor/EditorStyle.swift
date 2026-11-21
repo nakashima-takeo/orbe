@@ -4,7 +4,7 @@ import OrbeEditorEngine
 
 /// エディターの見え方を `Theme` から組む唯一の場所。
 enum EditorStyle {
-  /// 印のバーと三角の不透明度（見本 tint(diffAdd, 0.85)）。
+  /// 印のバーと三角の不透明度（diff 色の 0.85）。
   private static let markAlpha: CGFloat = 0.85
 
   static func make() -> TextSurfaceStyle {
@@ -100,7 +100,7 @@ enum EditorStyle {
       hideDelay: Theme.Motion.editorScrollbarHideDelay)
   }
 
-  /// 見本の fill(α) を外観で換算した塗り（`EditorInk.fill` の NSColor 版。換算は `EditorInk.fillAlpha`）。
+  /// `fill(α)` を外観で換算した塗り（`EditorInk.fill` の NSColor 版。換算は `EditorInk.fillAlpha`）。
   static func fill(_ alpha: Double) -> NSColor {
     NSColor(name: nil) { appearance in
       Theme.Color.surfaceInk.withAlphaComponent(
@@ -108,7 +108,7 @@ enum EditorStyle {
     }
   }
 
-  /// 見本の hairline(α) を外観で換算した縁（`EditorInk.hairline` の NSColor 版）。
+  /// `hairline(α)` を外観で換算した縁（`EditorInk.hairline` の NSColor 版）。
   static func hairline(_ alpha: Double) -> NSColor {
     NSColor(name: nil) { appearance in
       Theme.Color.borderInk.withAlphaComponent(
@@ -116,7 +116,7 @@ enum EditorStyle {
     }
   }
 
-  /// 見本の sunk(α) を外観で換算した沈み面（`EditorInk.sunk` の NSColor 版）。
+  /// `sunk(α)` を外観で換算した沈み面（`EditorInk.sunk` の NSColor 版）。
   static func sunk(_ alpha: Double) -> NSColor {
     NSColor(name: nil) { appearance in
       Theme.Color.sunkInk.withAlphaComponent(

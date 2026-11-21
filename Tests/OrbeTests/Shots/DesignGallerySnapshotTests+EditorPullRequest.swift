@@ -4,9 +4,9 @@ import XCTest
 
 @testable import Orbe
 
-/// PR のパネルの gallery（見本 `editor/PrReviewPanel.tsx`・`PrListPanel.tsx`・`Rail.tsx` の突合用）。fixture は本物の git の場と、
-/// 見本の `editor/data.ts` の PR #131 を答える差し替えの出どころで、見本と同じく StateHooks.swift を選んだ姿と、その PR の diff の
-/// スレッドと下端のレビューの送信の区画、PR が無いときの作成の入口を dark / light で撮る。
+/// PR のパネルの gallery。fixture は本物の git の場と、PR #131 を答える差し替えの出どころで、
+/// StateHooks.swift を選んだ姿と、その PR の diff のスレッドと下端のレビューの送信の区画、
+/// PR が無いときの作成の入口を dark / light で撮る。
 extension DesignGallerySnapshotTests {
   func renderEditorPullRequestSnapshots(dir: URL) throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()

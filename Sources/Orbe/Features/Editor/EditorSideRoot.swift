@@ -52,7 +52,7 @@ struct EditorSideRoot: View {
 /// レール: 幅 36 のアイコン列。項目は「ファイル」「検索」「ソース管理」「プルリクエスト」（サイドバーのパネルと 1 対 1）。選択は左 2px の
 /// accent の縦線 ＋ 淡い地（design-system §5 のエディター面の例外）で、サイドバーが閉じている間は無い（`selection == nil`）。
 /// 押すと `onSelect`——選択中の項目ならサイドバーを閉じ、別の項目ならそのパネルへ切り替える（閉じていれば開く）。
-/// ソース管理の項目は、変更があれば右下に件数のバッジを出す（見本 Rail.tsx。1000 以上は「999+」）。
+/// ソース管理の項目は、変更があれば右下に件数のバッジを出す（1000 以上は「999+」）。
 struct RailView: View {
   typealias Item = EditorSidebarState.Panel
 
@@ -63,7 +63,7 @@ struct RailView: View {
   @Environment(\.colorScheme) private var scheme
   @Environment(\.localization) private var l10n
 
-  // 見本 Rail.tsx の値。
+  // レールの不透明度と選択バーの幅。
   private static let sunkAlpha = 0.22
   private static let hairlineAlpha = 0.07
   private static let selectedFillAlpha = 0.04
@@ -122,7 +122,7 @@ struct RailView: View {
   }
 }
 
-/// レールの件数バッジ（見本 Rail.tsx: アイコンの右下から右 8・下 4 はみ出す、最小 15×15・radius 8・地 accent・字 tabActiveText
+/// レールの件数バッジ（アイコンの右下から右 8・下 4 はみ出す、最小 15×15・radius 8・地 accent・字 tabActiveText
 /// 9 bold・padding 0 3）。
 private struct RailBadge: View {
   let count: Int
@@ -143,7 +143,7 @@ private struct RailBadge: View {
   }
 }
 
-/// サイドバーのパネルの器: 上から積む中身と右の hairline。地は沈み面、ぼかしは持たない（見本 parts.tsx の Sidebar）。
+/// サイドバーのパネルの器: 上から積む中身と右の hairline。地は沈み面、ぼかしは持たない。
 struct EditorSidebarPanel<Content: View>: View {
   @ViewBuilder let content: Content
   @Environment(\.colorScheme) private var scheme
@@ -163,7 +163,7 @@ struct EditorSidebarPanel<Content: View>: View {
   }
 }
 
-/// パネルヘッダー 28: 題と、右端のツール（見本 editor/parts.tsx の PanelHeader）。
+/// パネルヘッダー 28: 題と、右端のツール。
 struct EditorPanelHeader<Tools: View>: View {
   let title: String
   @ViewBuilder let tools: Tools

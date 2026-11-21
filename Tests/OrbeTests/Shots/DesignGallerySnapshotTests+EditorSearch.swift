@@ -5,7 +5,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 検索パネルの gallery（見本 `editor/SearchPanel.tsx` の突合用）。骨の fixture のリポジトリを実際に探した結果で、
+/// 検索パネルの gallery。骨の fixture のリポジトリを実際に探した結果で、
 /// 結果あり（Aa を有効・2 つ目の一致を選んで開いた状態。本文にも一致の地と現在の一致）・0 件・正規表現のエラー・打ち切り。
 extension DesignGallerySnapshotTests {
   func renderEditorSearchSnapshots(dir: URL) throws {

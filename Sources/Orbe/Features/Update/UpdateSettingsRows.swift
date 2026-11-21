@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 設定›アップデート（見本 2c/2d）の行コンテンツ群。`SettingsPaletteModel+Update` が
+/// 設定›アップデートの行コンテンツ群。`SettingsPaletteModel+Update` が
 /// `RowItem.customContent` として組み、キー操作（↵/→）は palette 側の行活性が担う。
 /// ビューは `UpdateState`（@Observable）を直接読むため、進捗・状態遷移は行再構築なしでライブに追従する。
 
@@ -52,7 +52,7 @@ enum UpdateIdleAppearance: Equatable {
 
 /// 最上段の状態カード。7 通りの見え（まだ確認していない / 確認しない / 確認中 / DL中 / 最新 / 失敗 /
 /// 適用待ち）。`.idle` は確認の可否で 2 つに分かれる（`UpdateIdleAppearance`）。
-/// トーストに出るのは「適用待ち」だけで、他の状態はここにしか現れない（見本 2d）。
+/// トーストに出るのは「適用待ち」だけで、他の状態はここにしか現れない。
 struct UpdateStatusCardRow: View {
   let state: UpdateState
   @Environment(\.localization) private var l10n
@@ -219,7 +219,7 @@ struct UpdateStatusCardRow: View {
   }
 }
 
-/// 現在バージョン＋最終確認時刻の情報行（見本 2c。選択・実行の対象にしない）。
+/// 現在バージョン＋最終確認時刻の情報行（選択・実行の対象にしない）。
 struct UpdateVersionRow: View {
   let state: UpdateState
   @Environment(\.localization) private var l10n
@@ -243,7 +243,7 @@ struct UpdateVersionRow: View {
   }
 }
 
-/// トグル行（ラベル＋補足＋ピル。見本 2c の 3 トグル）。値は行構築時点のスナップショットで、
+/// トグル行（ラベル＋補足＋ピル）。値は行構築時点のスナップショットで、
 /// 切替は palette 側が行を組み直して反映する（root の toggle 行と同じ流儀）。
 struct UpdateToggleRow: View {
   let title: String

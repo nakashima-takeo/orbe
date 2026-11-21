@@ -6,12 +6,11 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// PR のコメントの flow（fixture は `PrFixtures` と `PrFixtureReview`——本物の git の場と、見本 `editor/data.ts` の PR #131・
-/// スレッドを答える差し替えの出どころ）: PR の diff のスレッド（見本のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
+/// PR のコメントの flow（fixture は `PrFixtures` と `PrFixtureReview`——本物の git の場と、PR #131 とスレッドを答える
+/// 差し替えの出どころ）: PR の diff のスレッド（既定のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
 /// コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 並列 → パネルの
 /// 下端で全体へのコメントと「承認」を選ぶ → 送信の最中 → 送信の失敗 → 送信の後（保留中が 0）→ 書きかけの欄の行を書き換える
-/// push の後（欄が書きかけを残して送れない姿）。見本は
-/// orbe_design の `editor/DiffView.tsx`（Thread）と `PrReviewPanel.tsx`。
+/// push の後（欄が書きかけを残して送れない姿）。
 extension DesignFlowSnapshotTests {
   func testEditorPrComments() throws {
     try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
@@ -102,14 +101,14 @@ private struct CommentSteps {
     settle()
   }
 
-  /// 書き込みを通し、見本のスレッドへの返信を失敗させる（本文が残り、失敗の文が出る）。
+  /// 書き込みを通し、既定のスレッドへの返信を失敗させる（本文が残り、失敗の文が出る）。
   func fail() {
     scene.review.writes = .succeed
     scene.review.release()
     settle()
     surface?.scroll(toFirstLine: 11)
     scene.review.writes = .fail(.unreachable)
-    guard let thread = zone("T_coalesce") else { return XCTFail("前提: 見本のスレッド") }
+    guard let thread = zone("T_coalesce") else { return XCTFail("前提: 既定のスレッド") }
     thread.surface?.replaceText(of: thread.field, with: "了解。それなら OK")
     thread.zone(.pressed(PrCommentControl.add))
     settle()

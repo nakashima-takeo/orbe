@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// サイドバー: ソース管理パネル（見本 ScmPanel）。上から、パネルヘッダー → 実行中の帯（0.3 秒を超えて走る操作があるときだけ）→
+/// サイドバー: ソース管理パネル。上から、パネルヘッダー → 実行中の帯（0.3 秒を超えて走る操作があるときだけ）→
 /// 親「ソース管理」（見出し・メッセージ欄・コミットボタン・失敗の文・変更の列〔2 つの子の区分。AppKit〕）→ 境目 → グラフの枠
 /// （区切り線・見出し「グラフ」・グラフの列。AppKit）。git 管理外の根では、ヘッダーの下に理由の一文だけ。部分ごとに別の view
 /// にして、読む値が変わった部分だけを組み直す（status が届くたびに欄まで組み直さない）。根が変わると面は panel と列を組で
@@ -35,7 +35,7 @@ struct ScmPanelView: View {
   }
 }
 
-/// 実行中の帯 28（見本に無い）: 上端に流れる細い線、操作名・git の進捗の最新の行（末尾省略）・右端に「止める」。
+/// 実行中の帯 28: 上端に流れる細い線、操作名・git の進捗の最新の行（末尾省略）・右端に「止める」。
 private struct ScmBand: View {
   let control: SourceControl
   @Environment(\.colorScheme) private var scheme
@@ -190,7 +190,7 @@ struct ScmControls: View {
   }
 }
 
-/// メッセージ欄の箱（見本 inputBox: radius 3・枠 hairline .10・地 sunk .35。焦点で radius 5・枠 accent .55）。
+/// メッセージ欄の箱（radius 3・枠 hairline .10・地 sunk .35。焦点で radius 5・枠 accent .55）。
 private struct ScmMessageBox: View {
   let panel: ScmPanel
   let placeholder: String
@@ -215,7 +215,7 @@ private struct ScmMessageBox: View {
   }
 }
 
-/// コミットボタン（見本 primaryButton 26・radius 3・地 accent・字 tabActiveText 12 semibold）: 主の働き（コミット / 同期 ↑N ↓M /
+/// コミットボタン（高さ 26・radius 3・地 accent・字 tabActiveText 12 semibold）: 主の働き（コミット / 同期 ↑N ↓M /
 /// ブランチを公開）＋縦線 ＋ ▾（コミット (amend) / コミットしてプッシュ / ─ / 最後のコミットを取り消す）。ボタンは主の働きと
 /// ▾ で 1 つの可否を持ち、押せない間は地・印・字をまとめて design-system の disabled にして、▾ も開かない（1 つのボタンの中で
 /// 明暗を割らない。字だけ薄くすると、紫の地が押せる姿のまま残る）。

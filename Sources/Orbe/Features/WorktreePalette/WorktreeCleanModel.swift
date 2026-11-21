@@ -64,8 +64,8 @@ struct CleanRun: Equatable {
   var isSettled: Bool { !states.contains(.running) && !states.contains(.pending) }
 }
 
-/// clean の画面。**保存しない**——見本の「削除中と一部失敗は同じ行集合の別の時点」という構造を
-/// そのまま持つため、状態から導出する。
+/// clean の画面。**保存しない**——削除中と一部失敗は同じ行集合の別の時点なので、
+/// 状態から導出する。
 enum CleanPhase: Equatable {
   case selecting, deleting, failed
 }

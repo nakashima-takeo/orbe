@@ -51,7 +51,7 @@ import Observation
   /// `.idle` へ畳めるようにするため——`ready` を DL 前に埋めると中断が readyToRestart へ化ける。
   private(set) var downloadVersion: String?
   private(set) var lastCheck: Date?
-  /// トースト可視。readyToRestart への遷移時に **1 バージョンにつき一度だけ** 立つ（見本 2a の設計注記）。
+  /// トースト可視。readyToRestart への遷移時に **1 バージョンにつき一度だけ** 立つ。
   private(set) var toastVisible = false
   private var toastShownVersion: String?
   /// 「今すぐ確認」の実行可否（`UpdaterService` が写す）。fixture は既定 `.available` のまま
@@ -148,7 +148,7 @@ import Observation
 
   /// セッション終了（Sparkle の dismissUpdateInstallation）。進行中の見かけ（確認中・DL中）だけを、
   /// 適用待ちがあれば readyToRestart、無ければ idle へ畳む。
-  /// 確定状態（最新・失敗・適用待ち）は残す——設定の状態カードが「真実の置き場」（見本 2c）。
+  /// 確定状態（最新・失敗・適用待ち）は残す——設定›アップデートの状態カードが「真実の置き場」。
   func settleTransientPhase() {
     switch phase {
     case .checking, .downloading:

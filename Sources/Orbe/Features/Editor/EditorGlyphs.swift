@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// 骨の装飾グリフ（見本 editor/parts.tsx の SVG の写し）。viewBox 座標で組み、`k = size / viewBox` で
-/// point 空間へ乗算する（`StatusGlyphShape` と同じ流儀。stroke 幅も SVG と同じく viewBox に比例する）。
+/// 骨の装飾グリフ。viewBox 座標で組み、`k = size / viewBox` で point 空間へ乗算する
+/// （`StatusGlyphShape` と同じ流儀。stroke 幅も SVG と同じく viewBox に比例する）。
 /// 装飾グリフなので `AgentIconResolver` は読まない。
 enum EditorGlyphs {
   struct Glyph {
     let viewBox: CGFloat
     let stroke: CGFloat
-    /// 塗りの印（見本の `fill="currentColor"`）。`stroke` は使わない。
+    /// 塗りの印（線ではなく塗りつぶす）。`stroke` は使わない。
     var fills = false
     /// `k` を受け、(path, opacity) の列を返す。
     let parts: (CGFloat) -> [(path: Path, opacity: Double)]
@@ -34,7 +34,7 @@ enum EditorGlyphs {
     return [(sheet, 1), (behind, 0.8)]
   }
 
-  /// レールの「検索」（24 系・stroke 1.6。見本 SearchIcon）。
+  /// レールの「検索」（24 系・stroke 1.6）。
   static let railSearch = Glyph(viewBox: 24, stroke: 1.6) { k in
     var path = Path(ellipseIn: CGRect(x: 5.5 * k, y: 5.5 * k, width: 11 * k, height: 11 * k))
     path.move(to: CGPoint(x: 15.5 * k, y: 15.5 * k))
@@ -42,7 +42,7 @@ enum EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// レールの「ソース管理」（24 系・stroke 1.5。見本 RailGitIcon）。
+  /// レールの「ソース管理」（24 系・stroke 1.5）。
   static let railGit = Glyph(viewBox: 24, stroke: 1.5) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
@@ -131,7 +131,7 @@ enum EditorGlyphs {
     return parts
   }
 
-  /// 更新: 開いた円弧と矢じり（見本 RefreshIcon `M13 8a5 5 0 1 1-1.7-3.75` `M13 2.8v2.4h-2.4`）。
+  /// 更新: 開いた円弧と矢じり（`M13 8a5 5 0 1 1-1.7-3.75` `M13 2.8v2.4h-2.4`）。
   static let refresh = Glyph(viewBox: 16, stroke: 1.2) { k in
     var path = Path()
     path.addArc(
@@ -143,14 +143,14 @@ enum EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// 停止: 円に四角（見本に無い。検索が 2 秒を超えると更新と入れ替わる）。
+  /// 停止: 円に四角（検索が 2 秒を超えると更新と入れ替わる）。
   static let stop = Glyph(viewBox: 16, stroke: 1.2) { k in
     var path = Path(ellipseIn: CGRect(x: 2.5 * k, y: 2.5 * k, width: 11 * k, height: 11 * k))
     path.addRect(CGRect(x: 6 * k, y: 6 * k, width: 4 * k, height: 4 * k))
     return [(path, 1)]
   }
 
-  /// クリア: 斜線の入った円（見本 ClearIcon）。
+  /// クリア: 斜線の入った円。
   static let clear = Glyph(viewBox: 16, stroke: 1.2) { k in
     var path = Path(ellipseIn: CGRect(x: 2.5 * k, y: 2.5 * k, width: 11 * k, height: 11 * k))
     path.move(to: CGPoint(x: 4.2 * k, y: 4.2 * k))
@@ -158,7 +158,7 @@ enum EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// ファイルタブの ×。見本には無い（ユーザー要望）ので、ブラウザ層の停止印と同じ 2 本の斜線。
+  /// ファイルタブの ×（ブラウザ層の停止印と同じ 2 本の斜線）。
   static let close = Glyph(viewBox: 16, stroke: 1.5) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
@@ -171,16 +171,16 @@ enum EditorGlyphs {
 }
 
 extension EditorGlyphs {
-  /// コミット: レ点（見本 CheckIcon `M3 8.5l3.2 3L13 4.5`。stroke 1.3）。
+  /// コミット: レ点（`M3 8.5l3.2 3L13 4.5`。stroke 1.3）。
   static let check = Glyph(viewBox: 16, stroke: 1.3) { k in [(checkPath(k), 1)] }
 
   /// コミットボタンのレ点（同じ形で stroke 1.6）。
   static let commitCheck = Glyph(viewBox: 16, stroke: 1.6) { k in [(checkPath(k), 1)] }
 
-  /// チェックボックスのレ点（同じ形で stroke 2.2。見本 Checkbox）。
+  /// チェックボックスのレ点（同じ形で stroke 2.2）。
   static let checkboxCheck = Glyph(viewBox: 16, stroke: 2.2) { k in [(checkPath(k), 1)] }
 
-  /// 帯のレ点（同じ形で stroke 1.6。見本 PR の頭の帯の CheckIcon）。
+  /// PR の頭の帯のレ点（同じ形で stroke 1.6）。
   static let bandCheck = Glyph(viewBox: 16, stroke: 1.6) { k in [(checkPath(k), 1)] }
 
   private static func checkPath(_ k: CGFloat) -> Path {
@@ -191,7 +191,7 @@ extension EditorGlyphs {
     return path
   }
 
-  /// その他: 3 つの点（見本 MoreIcon。塗り）。
+  /// その他: 3 つの点（塗り）。
   static let more = Glyph(viewBox: 16, stroke: 0, fills: true) { k in
     var path = Path()
     for x in [3.5, 8, 12.5] as [CGFloat] {
@@ -200,7 +200,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// 下向きのシェブロン（見本 ChevDownIcon `M4 6.5L8 10l4-3.5`。stroke 1.5）。
+  /// 下向きのシェブロン（`M4 6.5L8 10l4-3.5`。stroke 1.5）。
   static let chevronDown = Glyph(viewBox: 16, stroke: 1.5) { k in
     var path = Path()
     path.move(to: CGPoint(x: 4 * k, y: 6.5 * k))
@@ -209,7 +209,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// ファイルを開く: 書類から右上へ抜ける矢印（見本 OpenEditorIcon。stroke 1.2）。
+  /// ファイルを開く: 書類から右上へ抜ける矢印（stroke 1.2）。
   static let openFile = Glyph(viewBox: 16, stroke: 1.2) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
@@ -226,7 +226,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// 変更を破棄: 戻る矢印（見本 DiscardIcon。stroke 1.2）。
+  /// 変更を破棄: 戻る矢印（stroke 1.2）。
   static let discard = Glyph(viewBox: 16, stroke: 1.2) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
@@ -242,7 +242,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// ステージ: ＋（見本 PlusIcon。stroke 1.3）。
+  /// ステージ: ＋（stroke 1.3）。
   static let plus = Glyph(viewBox: 16, stroke: 1.3) { k in
     var path = Path()
     path.move(to: CGPoint(x: 8 * k, y: 4.5 * k))
@@ -252,7 +252,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// ステージを解除: −（見本に無い。＋と同じ太さ・長さ）。
+  /// ステージを解除: −（＋と同じ太さ・長さ）。
   static let minus = Glyph(viewBox: 16, stroke: 1.3) { k in
     var path = Path()
     path.move(to: CGPoint(x: 4.5 * k, y: 8 * k))
@@ -260,7 +260,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// 同期: 下りと上りの矢印（見本に無い）。
+  /// 同期: 下りと上りの矢印。
   static let sync = Glyph(viewBox: 16, stroke: 1.5) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
@@ -277,7 +277,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// ブランチを公開: 受け皿から上がる矢印（見本に無い）。
+  /// ブランチを公開: 受け皿から上がる矢印。
   static let publish = Glyph(viewBox: 16, stroke: 1.4) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
@@ -293,12 +293,12 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// 実行中の帯の「止める」: 角の丸い四角（見本に無い。塗り）。
+  /// 実行中の帯の「止める」: 角の丸い四角（塗り）。
   static let stopSquare = Glyph(viewBox: 10, stroke: 0, fills: true) { k in
     [(Path(roundedRect: CGRect(x: k, y: k, width: 8 * k, height: 8 * k), cornerRadius: k), 1)]
   }
 
-  /// ブランチ（見本 BranchGlyph の形を線で。小さい寸法で使うので塗りの細部は持たない）。
+  /// ブランチ（線描き。小さい寸法で使うので塗りの細部は持たない）。
   static let branch = Glyph(viewBox: 16, stroke: 1.5) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()

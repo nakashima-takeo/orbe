@@ -10,8 +10,7 @@
 oklch → oklab → linear sRGB（Björn Ottosson の行列）→ gamma 符号化 → 8bit 丸め。
 一部のチャンネルが sRGB 域外に出るので、CSS Color 4 が規定するガマット写像 binary-search local MINDE
 （https://drafts.csswg.org/css-color-4/#GMA-Binary-local-MINDE ・chroma を [0, C] で二分探索し、
-クリップ結果との ΔEOK が JND 0.02 未満になる最大 chroma を採る）で落とす。見本 theme.ts が書いている
-のは oklch の値そのもので、写像はこの規定に従う。
+クリップ結果との ΔEOK が JND 0.02 未満になる最大 chroma を採る）で落とす。
 
 生成物 Sources/Orbe/DesignSystem/WorktreePalette.swift はコミットする（アプリに色計算を持ち込まない）。
 式を変えたら再実行する:

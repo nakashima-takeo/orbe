@@ -37,7 +37,7 @@ struct WorkspaceCreateCard: View {
   @FocusState private var focus: Field?
   @State private var placement = FocusPlacement<Field>(order: [.path, .name])
 
-  /// 補完ドロップダウンの高さ上限（px・見本 maxHeight 186。超過は内部スクロール）。
+  /// 補完ドロップダウンの高さ上限（186pt。超過は内部スクロール）。
   private let suggestionCap: CGFloat = 186
 
   var body: some View {
@@ -195,8 +195,8 @@ struct WorkspaceCreateCard: View {
   }
 
   private var suggestionsDropdown: some View {
-    // 器は popup 級（見本 rgba(panelRgb,.95)・radius 10）。行は full-bleed（見本 overflow:hidden で
-    // 器の角丸に食い込む）＝行側に角丸・余白を持たせず、選択塗りは器いっぱいに敷く。
+    // 器は popup 級（radius 10）。行は full-bleed（器の角丸でクリップする）＝行側に角丸・余白を
+    // 持たせず、選択塗りは器いっぱいに敷く。
     GlassPanel(level: .popup) {
       VStack(alignment: .leading, spacing: 0) {
         ScrollViewReader { proxy in
@@ -218,7 +218,7 @@ struct WorkspaceCreateCard: View {
     }
   }
 
-  /// 見本のドロップダウン下端: 左にキーヒント（idle）・右端へ件数（muted）を marginLeft auto で寄せる。
+  /// ドロップダウン下端: 左にキーヒント（idle）・右端へ件数（muted）を寄せる。
   private var suggestionFooter: some View {
     HStack(spacing: Theme.Space.beat) {
       Text(l10n.string(.wsHintMove))
@@ -243,7 +243,7 @@ struct WorkspaceCreateCard: View {
       Text("▸")
         .font(Font.theme.workspaceName)
         .foregroundStyle(selected ? Color.theme.accentPrimary : Color.theme.stateIdle)
-      // フォルダ名＋末尾に淡いスラッシュ（見本の orbe/ ＝ディレクトリの符牒）。
+      // フォルダ名＋末尾に淡いスラッシュ（`name/`＝ディレクトリの符牒）。
       (Text(suggestion.name).foregroundColor(nameColor)
         + Text("/").foregroundColor(Color.theme.stateIdle))
         .font(Font.theme.workspaceName)
@@ -256,7 +256,7 @@ struct WorkspaceCreateCard: View {
         .truncationMode(.tail)
       Spacer(minLength: Theme.Space.tick)
       if suggestion.isRepo {
-        // 見本: 素の完了の緑テキスト（ピル塗りにしない）。
+        // 素の完了の緑テキスト（ピル塗りにしない）。
         Text("git")
           .font(Font.theme.meta)
           .foregroundStyle(Color.theme.stateDone)
@@ -287,8 +287,8 @@ struct WorkspaceCreateCard: View {
   private var nameField: some View {
     TextField("", text: nameBinding)
       .textFieldStyle(.plain)
-      .font(Font.theme.code)  // パス欄と同一（見本は両欄同寸・type.code=入力）
-      .foregroundStyle(Color.theme.stateDone)  // 見本: 名前欄の文字は done(green)
+      .font(Font.theme.code)  // パス欄と同寸（type.code＝入力）
+      .foregroundStyle(Color.theme.stateDone)  // 名前欄の文字は done(green)
       .tint(Color.theme.accentPrimary)
       .focused($focus, equals: .name)
       .modifier(FieldChrome(focused: focus == .name))

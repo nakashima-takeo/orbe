@@ -159,8 +159,7 @@ struct WorktreePaletteCard: View {
       .background(RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
   }
 
-  /// 入力欄。一覧では検索と新しいブランチ名、ベースを選ぶ画面ではベースの絞り込み。設計見本の静的
-  /// プロンプト＋擬似点滅カーソルは、実 `TextField` のキャレットで置き換える。
+  /// 入力欄。一覧では検索と新しいブランチ名、ベースを選ぶ画面ではベースの絞り込み。
   private var queryField: some View {
     TextField("", text: queryBinding)
       .textFieldStyle(.plain)

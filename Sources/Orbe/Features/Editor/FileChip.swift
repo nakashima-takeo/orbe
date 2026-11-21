@@ -5,7 +5,7 @@ import SwiftUI
 /// 種別 → 見た目（グリフ・色相）の唯一の決定点。ツリー・ファイルタブ・パンくずはこれしか知らないので、
 /// 将来アイコンテーマへ差し替えるときはこの型の中身を変えるだけで済む。
 /// 言語は `SyntaxLanguage.detect`（15 言語）で決め、未知は拡張子の頭文字を大文字にした mono（拡張子が
-/// 無ければ `·`）。見本（editor/data.ts）は swift / md / json の 3 種だけなので、残りは色相表を暫定で割り当てる。
+/// 無ければ `·`）。swift / md / json 以外の言語にも色相表から暫定で割り当てる。
 struct FileChip: Equatable {
   enum Hue: Equatable, CaseIterable {
     case orange, blue, yellow, sky, violet, cyan, red, green, teal
@@ -38,7 +38,7 @@ struct FileChip: Equatable {
     }
   }
 
-  /// チップの文字サイズ。16 のとき 1 字は 10、記号 2 字は 9、それ以外の 2 字は 8（見本 S 10 / M↓ 8 / {} 9）で、
+  /// チップの文字サイズ。16 のとき 1 字は 10、記号 2 字は 9、それ以外の 2 字は 8（例: S 10 / M↓ 8 / {} 9）で、
   /// 他の寸法へは比例して丸める（14 → 9 / 8 / 7、12 → 8 / 7 / 6）。
   func fontSize(for size: CGFloat) -> CGFloat {
     let base: CGFloat

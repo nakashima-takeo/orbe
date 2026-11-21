@@ -37,7 +37,7 @@ struct PaletteCard: View {
     Self.listMaxHeight(maxHeight: maxHeight, chromeHeight: chromeHeight)
   }
 
-  /// セグメント外枠 9 / セグメント 6。`Theme.Radius` の格子（3/4/8/10/12/16）に無い見本の実寸なので
+  /// セグメント外枠 9 / セグメント 6。`Theme.Radius` の格子（3/4/8/10/12/16）に無い固有の実寸なので
   /// `capHeight` と同じくコンポーネント局所の定数にする（グローバルトークンは足さない）。
   private let segmentRowRadius: CGFloat = 9
   private let segmentRadius: CGFloat = 6
@@ -104,7 +104,7 @@ struct PaletteCard: View {
           VStack(alignment: .leading, spacing: 0) {
             divider
             // 余白はスロットごと。素文字列 hint は従来の 16×10 を保ち（既存パレットの見た目を
-            // 変えない）、キー付きセグメントだけがデザイン第10シーンの 9×20 を取る。
+            // 変えない）、キー付きセグメント（Attention 等）だけが 9×20 を取る。
             Group {
               if model.hintKeys.isEmpty {
                 Text(model.hint)

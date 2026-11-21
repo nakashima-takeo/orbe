@@ -18,7 +18,7 @@ private func agentStateLabel(_ kind: AgentStateIcon.Kind, _ l10n: LocalizationSt
 /// 1 本から出す。ここが確定させる「現在値」は常に**そのスコープの実効値**（agent は解決済みデフォルト）
 /// であり、↵ の着地点と一致する。
 extension SettingsPaletteModel {
-  /// theme: Auto / Dark / Light の固定3行（絞り込み欄なし・見本 Settings 画面の Seg 順）。
+  /// theme: Auto / Dark / Light の固定3行（絞り込み欄なし）。
   /// 現在値は実効テーマ（nil＝Auto へ解決・スコープ依存）。
   func rebuildTheme() {
     render.fieldVisible = false

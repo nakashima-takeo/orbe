@@ -253,7 +253,7 @@ final class FaceHandleView: NSView {
     return p
   }
 
-  /// 見本 `parts.tsx` のグリフ（viewBox 18・stroke 1.8）を `faceNotchGlyph` に写す。
+  /// viewBox 18・stroke 1.8 のグリフを `faceNotchGlyph` に写す。
   private func drawGlyph(editor: Bool, color: NSColor) {
     let size = Theme.Layout.faceNotchGlyph
     let scale = size / 18

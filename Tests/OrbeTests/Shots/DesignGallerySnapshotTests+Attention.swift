@@ -3,11 +3,10 @@ import XCTest
 
 @testable import Orbe
 
-/// Attention（第10シーン: パレット / 第11シーン: メニューバー投影）のギャラリー。
-/// visual-check が orbe_design の見本と突き合わせるピクセル入力。
+/// Attention（パレットとメニューバー投影）のギャラリー。
 extension DesignGallerySnapshotTests {
 
-  /// design 正典 attentionSnapshot.tsx と同じ 6 行（working 2 / waiting 2 / done 2・新しい順）。
+  /// Attention の代表 6 行（working 2 / waiting 2 / done 2・新しい順）。
   private func attentionFixtureRows() -> [AttentionRow] {
     let now = Date()
     return [
@@ -96,7 +95,7 @@ extension DesignGallerySnapshotTests {
   func renderAttentionSnapshots(dir: URL) throws {
     let stage = NSSize(width: 640, height: 520)
 
-    // パレット（第10シーン同データ・overlay ごと・突合用）。
+    // パレット（代表 6 行・overlay ごと）。
     let palette = AttentionPaletteModel(localization: LocalizationStore(language: .ja))
     palette.setRows(attentionFixtureRows())
     palette.render.selected = 0
@@ -115,7 +114,7 @@ extension DesignGallerySnapshotTests {
       menuBarStrip(rows: rows), size: NSSize(width: 420, height: 320),
       name: "menubar_states.png", dir: dir)
 
-    // ドロップダウン（第11シーン④・幅 420・working 集約・フッター・権限ヒントなし/あり）。
+    // ドロップダウン（④・幅 420・working 集約・フッター・権限ヒントなし/あり）。
     let store = AttentionStore()
     store.apply(rows: rows)
     for (name, granted) in [("menubar_dropdown.png", true), ("menubar_dropdown_hint.png", false)] {

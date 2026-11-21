@@ -4,13 +4,13 @@ import XCTest
 @testable import Orbe
 
 /// ワークスペース作成フォームの gallery 描画（既存フォルダ / git clone の両ソース・全状態）。
-/// 本体（`DesignGallerySnapshotTests`）から分離し、突合対象を1ファイルに集約する
+/// 本体（`DesignGallerySnapshotTests`）から分離し、確認対象を1ファイルに集約する
 /// （production の `WorkspaceCreateCard+Clone.swift` と同じ関心分離）。
 extension DesignGallerySnapshotTests {
 
-  /// ワークスペース作成フォームを design 正典 ステージ同寸（640×520）で撮る。folder=(a)追従＋補完・
+  /// ワークスペース作成フォームをステージ 640×520 で撮る。folder=(a)追従＋補完・
   /// (b)リンク解除中・(b')引き継いだ長い名前／clone=(c)通常・(d)URL空・
-  /// (e)リンク解除中・(f)待機・(g)失敗。見本と突合。
+  /// (e)リンク解除中・(f)待機・(g)失敗。
   func renderWorkspaceCreateSnapshots(dir: URL) throws {
     let stage = NSSize(width: 640, height: 520)
     func write(_ name: String, _ model: WorkspaceCreateModel) throws {
@@ -22,7 +22,7 @@ extension DesignGallerySnapshotTests {
         size: stage, name: name, dir: dir)
     }
 
-    // (a) 追従＋補完: 見本 FS（~/dev で "orb" 前方一致）。fullPath は ~ 短縮が効くよう実ホーム基準。
+    // (a) 追従＋補完: 疑似 FS（~/dev で "orb" 前方一致）。fullPath は ~ 短縮が効くよう実ホーム基準。
     let home = NSHomeDirectory()
     let follow = WorkspaceCreateModel(path: "~/dev/orb")
     follow.suggestions = [
@@ -43,7 +43,7 @@ extension DesignGallerySnapshotTests {
       "workspacecreate_seeded_long.png",
       WorkspaceCreateModel(path: "~", name: "very-long-workspace-name-that-overflows-the-field"))
 
-    // --- git clone ソース（見本 WorkspaceCreateFlow.tsx の src==="clone" と突合）---
+    // --- git clone ソース ---
     let repoURL = "https://github.com/you/repo.git"
     func cloneModel() -> WorkspaceCreateModel {
       let model = WorkspaceCreateModel(path: "~")  // 親=home（実在）で canCreate 可

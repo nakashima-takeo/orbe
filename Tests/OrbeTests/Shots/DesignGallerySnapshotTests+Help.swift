@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// ⌘H ヘルプオーバーレイの gallery（design 正典 CmdHelp / Cmd_H_Help.dc.html 突合用）。
+/// ⌘H ヘルプオーバーレイの gallery（Cmd_H_Help.dc.html 突合用）。
 /// ステージは design 原典と同寸 920×720（モーダル上限 760×656 が原寸で出る）。
 /// トップ / 一覧（すべて）/ 検索絞り込み / キー絞り込み＋実押下点灯を撮る（ファイル分割の拡張）。
 extension DesignGallerySnapshotTests {
@@ -46,7 +46,7 @@ extension DesignGallerySnapshotTests {
     match.syncPressedMatch(LocalizationStore(language: .ja))
     try write("help_pressed_match.png", match)
 
-    // 縮小域（パネルが 760×656 を下回る小窓）。design 見本は未定義＝Orbe 設計の縮小挙動を検証する。
+    // 縮小域（パネルが 760×656 を下回る小窓）。design 原典は未定義＝Orbe 設計の縮小挙動を検証する。
     let small = HelpModel()
     small.category = .all
     try write("help_small.png", small, stage: NSSize(width: 640, height: 520))

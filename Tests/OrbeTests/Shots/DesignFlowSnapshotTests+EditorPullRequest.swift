@@ -4,8 +4,8 @@ import XCTest
 
 @testable import Orbe
 
-/// PR のパネルの flow（fixture は `PrFixtures`——本物の git の場と、見本 `editor/data.ts` の PR #131 を答える差し替えの
-/// 出どころ）: 見本の姿 → 確認済みを付ける → フォルダの配下をまとめて外す → リスト表示 → 説明とコミットを畳む → 変更
+/// PR のパネルの flow（fixture は `PrFixtures`——本物の git の場と、PR #131 を答える差し替えの出どころ）:
+/// 初期状態 → 確認済みを付ける → フォルダの配下をまとめて外す → リスト表示 → 説明とコミットを畳む → 変更
 /// ファイルを開く（PR の diff。タブ行に「確認済みにする」）→ 確認済みにする → PR が無い（作成の入口）→ ブランチが未公開
 /// → gh が認証されていない → PR の先頭が手元に無い（数えない違いの帯）→ 既定のブランチ → コミットの題とファイル名に絵文字。
 extension DesignFlowSnapshotTests {

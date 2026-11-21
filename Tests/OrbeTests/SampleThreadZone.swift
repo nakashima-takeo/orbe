@@ -1,9 +1,8 @@
 import AppKit
 import OrbeEditorCore
 
-/// 試しのスレッド——見本（orbe_design の `DiffView.tsx` の `Thread`。デザイン台帳 D 節）の構成を、絵の差し込みに描く絵
-/// として組んだもの。差し込みの flow（`editor_rows`）と、画面に出す試しの場（`EditorRowsTrialTests`）と、編集メニューの経路の
-/// テスト（`EditorZoneEditingMenuTests`）が載せる。
+/// 試しのスレッド——PR コメントスレッドの構成を、絵の差し込みに描く絵として組んだもの。差し込みの flow（`editor_rows`）
+/// と、画面に出す試しの場（`EditorRowsTrialTests`）と、編集メニューの経路のテスト（`EditorZoneEditingMenuTests`）が載せる。
 ///
 /// 枠（半透明の地・枠線 1・影）・頭（枠線の内側に高さ 26 の帯と下縁 1。帯は上の 2 角だけ丸い。行と話題・状態の点・押せる
 /// 「解決」「折りたたむ」）・コメント（アバターの円と頭文字か
@@ -53,7 +52,7 @@ final class SampleThreadZone: SurfaceZone {
     field.didChange = { [weak self] field in self?.fieldDidChange(field) }
   }
 
-  /// 見本の展示データ（`editor/data.ts` の `thread`）。
+  /// 既定のサンプルスレッド（2 件のコメントと返信入力欄の初期文を持つ）。
   static func sample(line: Int, id: String) -> SampleThreadZone {
     SampleThreadZone(
       line: "行 \(line)", topic: "coalesce の判定", status: "保留中",
@@ -255,7 +254,7 @@ final class SampleThreadZone: SurfaceZone {
     return max(20, y - top)
   }
 
-  /// インラインコードの左右の余白（見本の padding 0 4px）。
+  /// インラインコードの左右の余白（4px）。
   private static let codePadding: CGFloat = 4
 
   /// 本文（12px・行高 1.6・text2。インラインコードは等幅・accentBright・地 tint(accent, 0.12)・左右の余白 4）を幅で

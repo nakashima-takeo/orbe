@@ -1,8 +1,8 @@
 /// capture 名 → 役割の正規化表。dotted 名の最長一致（`keyword.conditional.ternary` は
 /// `keyword.conditional` に当たる）。表に無い名前は plain（nil）。
 ///
-/// 見本の 8 色に対し 16 文法の highlights.scm が使う名前を割り当てる。数値・定数・ラベル・
-/// マークアップの強調は plain＝素の文字色で、見本に無い色を増やさない。
+/// 構文色 8 種に対し 16 文法の highlights.scm が使う名前を割り当てる。数値・定数・ラベル・
+/// マークアップの強調は plain＝素の文字色で、役割を増やさない。
 public enum CaptureRoleMap {
   public static func role(for captureName: String) -> SyntaxRole? {
     var components = captureName.split(separator: ".").map(String.init)

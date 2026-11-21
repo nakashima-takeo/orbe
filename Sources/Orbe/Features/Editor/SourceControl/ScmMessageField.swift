@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// コミットメッセージの欄。↵ はコミット（→ `ScmPanel.commitFromMessage`）、改行は ⇧↵・⌥↵・⌃↵、変換中の ↵ は変換の
-/// 確定だけ（IME が使った ↵ は改行の命令として届かない）。1 行のときの高さは見本の 26 で、10 行まで伸び、その先は
+/// 確定だけ（IME が使った ↵ は改行の命令として届かない）。1 行のときの高さは 26 で、10 行まで伸び、その先は
 /// スクロールする。中身は worktree の状態（`SourceControl.message`）そのもので、同じ worktree を見る別の窓の欄とも同じ値に
 /// なる。変換中の字は確定するまでメッセージに入れず、パネルの見せ方（`ScmPanel.composition`）に写す。取り消しの履歴は
 /// 欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り直された・隠れた欄の打鍵を別の欄の ⌘Z が戻し、見えない
@@ -19,7 +19,7 @@ struct ScmMessageField: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
   func makeNSView(context: Context) -> NSScrollView {
-    // 見本（ScmPanel）の padding 0 5 0 8（右の ✦ は持たない）。
+    // 左右の余白は左 8・右 5（padding 0 5 0 8）。
     let text = MessageTextView(trailing: 5)
     context.coordinator.text = text
     text.delegate = context.coordinator

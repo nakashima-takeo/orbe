@@ -104,7 +104,7 @@ final class FileTree: RootFilesObserver {
     return out
   }
 
-  /// 一覧は名前順（→ `RootFiles.entries`）。面ではディレクトリを先に並べる（見本・VS Code の慣習）。
+  /// 一覧は名前順（→ `RootFiles.entries`）。面ではディレクトリを先に並べる（VS Code の慣習）。
   private static func directoriesFirst(_ list: [RootFiles.Entry]) -> [RootFiles.Entry] {
     list.filter(\.isDirectory) + list.filter { !$0.isDirectory }
   }

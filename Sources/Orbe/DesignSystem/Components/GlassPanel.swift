@@ -34,7 +34,7 @@ struct GlassPanel<Content: View>: View {
   var borderOverride: Theme.GlassLevel?
   @ViewBuilder let content: () -> Content
 
-  /// blur 半径は material に固定（`--blur-panel: 24px` の厳密一致は原理不可）。見本に最も近い material を採る。
+  /// blur 半径は material に固定（24px との厳密一致は原理不可）。最も近い material を採る。
   private var material: NSVisualEffectView.Material {
     if let materialOverride { return materialOverride }
     switch level {

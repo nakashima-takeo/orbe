@@ -8,7 +8,7 @@ struct EqBarsView: View {
   let color: Color
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  /// 見本の実寸（幅 2 / 高さ 3⇄10 / gap 2）。`Theme` の格子に無いのでコンポーネント局所の定数
+  /// バーの実寸（幅 2 / 高さ 3⇄10 / gap 2）。`Theme` の格子に無いのでコンポーネント局所の定数
   /// （`PaletteCard.capHeight` と同流儀。グローバルトークンは足さない）。
   private let barWidth: CGFloat = 2
   private let gap: CGFloat = 2
@@ -36,8 +36,7 @@ struct EqBarsView: View {
     .frame(height: high, alignment: .bottom)
   }
 
-  /// 見本 `@keyframes eqbar { 0%,100% { height: 3px } 50% { height: 10px } }` の cos 往復近似
-  /// （`waiting` の float と同じ正弦イージング）。
+  /// 高さ 3⇄10 の往復を cos で近似する（`waiting` の float と同じ正弦イージング）。
   private func height(_ t: Double, _ delay: Double) -> CGFloat {
     var cycle = ((t - delay) / Theme.Motion.eq).truncatingRemainder(dividingBy: 1)
     if cycle < 0 { cycle += 1 }

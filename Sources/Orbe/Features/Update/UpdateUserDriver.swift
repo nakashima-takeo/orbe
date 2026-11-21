@@ -21,7 +21,7 @@ extension UpdateState.ReadyInfo {
 ///
 /// 「終了時に自動で適用」オフ時は自動 staging 自体を止め（`UpdaterService` が実効
 /// `automaticallyDownloadsUpdates` を落とす）、DL・検証後の `showReadyToInstallAndRelaunch` の reply を
-/// **保留**する——「今すぐ再起動」だけが `.install` を返す（見本 2c「オフにすると再起動ボタンからのみ」）。
+/// **保留**する——「今すぐ再起動」だけが `.install` を返す（オフ時は再起動ボタンからのみ適用）。
 ///
 /// 言語モード 5・main スレッド規律。SPUUserDriver の全コールバックは main thread から呼ばれる（ヘッダ保証）。
 final class UpdateUserDriver: NSObject, SPUUserDriver {
@@ -91,7 +91,7 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
         reply(.dismiss)
       }
     case .downloaded, .notDownloaded:
-      // 背景発見かつ自動DLオフは静観（見本 2c「全オフ=通知ゼロ・完全手動」。手動確認で表へ出る）。
+      // 背景発見かつ自動DLオフは静観（全オフ時は通知ゼロ・完全手動。手動確認で表へ出る）。
       if updateState.stage == .notDownloaded, !updateState.userInitiated, !state.autoDownload {
         reply(.dismiss)
       } else {

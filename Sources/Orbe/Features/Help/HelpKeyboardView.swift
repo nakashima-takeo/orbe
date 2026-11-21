@@ -15,12 +15,12 @@ struct HelpKeyboardView: View {
   /// ローカルモニタのハンドル。表示中のみ非 nil（onAppear で張り onDisappear で外す）。
   @State private var monitor: Any?
 
-  /// キー 1 単位の幅と間隔（デザイン見本の U/GAP。コンポーネント局所定数）。
+  /// キー 1 単位の幅と間隔（コンポーネント局所定数）。
   private let unit: CGFloat = 34
   private let gap: CGFloat = 4
 
   var body: some View {
-    // 行はデザイン見本どおり左揃え（行幅は fn 行が最長で不揃い。中央揃えにしない）。
+    // 行は左揃え（行幅は fn 行が最長で不揃い。中央揃えにしない）。
     // 行ブロックごとパネル中央に置き、キャプションはその下で中央。
     VStack(spacing: gap) {
       VStack(alignment: .leading, spacing: gap) {
@@ -127,7 +127,7 @@ struct HelpKeyboardView: View {
     return ink.border(0.1)
   }
 
-  /// キー下端の inset 影色（shadowRgb: dark=黒 / light=紫灰）。
+  /// キー下端の inset 影色（dark=黒 / light=紫灰）。
   private var keycapShadow: Color {
     ink.dark
       ? Color.black.opacity(0.25)
@@ -169,7 +169,7 @@ struct HelpKeyboardView: View {
 /// NSEvent → キーボード可視化のキー id 解決と修飾キー同期（純ロジック・テスト可能）。
 enum HelpKeyMonitor {
   /// ヘルプ表示中に消費する keyDown か。⌘ 併用はメニュー keyEquivalent（⌘Q 終了・⌘⌥H 等）まで
-  /// 含めて実動作を抑止し点灯にだけ使う（デザイン見本 CmdHelp.tsx の preventDefault と同意図）。
+  /// 含めて実動作を抑止し点灯にだけ使う。
   /// 例外は ⌘H のみ＝閉じ経路（`ChromeHostingView.performKeyEquivalent` →
   /// `handleWindowKeyCommand` のトグル特例）と同一判定で素通しする。
   static func consumesKeyDown(_ event: NSEvent) -> Bool {
@@ -190,8 +190,7 @@ enum HelpKeyMonitor {
       default: return nil
       }
     }
-    // デザイン見本 keyId() の移植: charactersIgnoringModifiers の 1 文字で解決する
-    // （修飾キー自体は flagsChanged が担う）。
+    // charactersIgnoringModifiers の 1 文字でキー id を解決する（修飾キー自体は flagsChanged が担う）。
     guard let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first else {
       return nil
     }
@@ -199,9 +198,8 @@ enum HelpKeyMonitor {
     if scalar.value == 0x20 { return "space" }
     var s = String(Character(scalar)).lowercased()
     // charactersIgnoringModifiers は Shift だけは反映するため、⇧ 併用の記号は shift 後の文字で
-    // 届く（⌘⇧] は "}"）。base キーへ戻さないと ⌘⇧] 等の点灯・行一致が成立しない。
-    // 見本 keyId() は shift 後の文字を対象外にするが、Orbe は US 配列対応で戻す（意図的逸脱。
-    // 物理可視化が ANSI 配列である近似と同等）。
+    // 届く（⌘⇧] は "}"）。base キーへ戻さないと ⌘⇧] 等の点灯・行一致が成立しないため、
+    // US 配列対応表で戻す（物理可視化が ANSI 配列である近似と同等）。
     if let base = shiftedSymbols[s] { s = base }
     guard "abcdefghijklmnopqrstuvwxyz0123456789`-=[];',./\\".contains(s) else { return nil }
     return s
