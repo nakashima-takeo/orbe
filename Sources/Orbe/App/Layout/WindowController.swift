@@ -8,7 +8,7 @@ import SwiftUI
 /// 保持され続け、配下 surface は生きたまま（keep-alive）。
 /// 構成はディスクに永続化し、起動時に復元する（WorkspacePersistence）。
 final class WindowController: NSObject, NSWindowDelegate {
-  let window: NSWindow
+  let window: OrbeWindow
   // chrome（StatusRow）の状態。WindowController が所有して更新する（読みは同モジュールのテストも使う）。
   let statusModel: StatusRowModel
   // パレット提示の拡張（WindowController+Palette）も握るため internal。
@@ -130,14 +130,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// 前面 overlay の種別（テスト用の検査面）。
   var presentedOverlay: AppShellModel.Overlay { model.overlay }
 
-  override init() {
-    let frame = NSRect(x: 0, y: 0, width: 800, height: 500)
-    window = OrbeWindow(
-      contentRect: frame,
-      styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
-      backing: .buffered,
-      defer: false
-    )
+  /// `window` は、この controller が中身を載せるウィンドウ。省けば標準の形の `OrbeWindow` を作る。
+  init(window: OrbeWindow = OrbeWindow()) {
+    self.window = window
     let statusModel = StatusRowModel()
     self.statusModel = statusModel
     let model = AppShellModel(statusModel: statusModel, content: NSView())

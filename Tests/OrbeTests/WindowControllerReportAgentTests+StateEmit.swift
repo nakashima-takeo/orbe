@@ -100,8 +100,9 @@ extension WindowControllerReportAgentTests {
   /// 両方が並ぶ。`orb wait --value done` は消費より先に done を掴める（消費が先に走ると done は
   /// 履歴に現れず、待つ側はタイムアウトまで気づけない）。
   func testDoneOnTheVisibleTabIsEmittedBeforeItsConsumptionToIdle() throws {
-    let (wc, tab) = try makeControllerAndTab()
-    makeKey(wc)
+    let window = OrbeWindowFake()
+    let (wc, tab) = try makeControllerAndTab(window: window)
+    window.isKey = true
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
     for (id, value) in [(1, "done"), (2, "idle")] {

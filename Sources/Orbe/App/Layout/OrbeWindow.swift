@@ -4,9 +4,25 @@ import AppKit
 ///
 /// AppKit は keyDown を、窓の `performKeyEquivalent` とメニューに回してから `sendEvent` へ渡す。⌘ キーの受け手はその段で
 /// 決まるので、ここに来るのは受け手の無かったキーだけ。SwiftUI の `.onKeyPress` は `super.sendEvent` の先で（祖先から順に）
-/// 配られるため、ここで止めれば変換中のキーはどの handler にも届かない。テストが `canBecomeKey` を上書きできるよう final に
-/// しない。
+/// 配られるため、ここで止めれば変換中のキーはどの handler にも届かない。テストが継承して key の状態・前面化・`canBecomeKey`
+/// を差し替える境界なので final にしない。
 class OrbeWindow: NSWindow {
+  /// 主窓の大きさとスタイルで作る。
+  convenience init() {
+    self.init(
+      contentRect: NSRect(x: 0, y: 0, width: 800, height: 500),
+      styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
+      backing: .buffered,
+      defer: false
+    )
+  }
+
+  /// Orbe を前面に出す。主窓を人の前に出すにはアプリごと前面にするしかないので、アプリを前面にしてから窓を key にして最前面へ出す。
+  func bringToFront() {
+    NSApp.activate(ignoringOtherApps: true)
+    makeKeyAndOrderFront(nil)
+  }
+
   override func sendEvent(_ event: NSEvent) {
     if event.type == .keyDown, let composing = IMEComposition.composingTextView(in: self) {
       composing.keyDown(with: event)

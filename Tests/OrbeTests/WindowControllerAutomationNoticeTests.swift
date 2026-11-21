@@ -16,39 +16,15 @@ import XCTest
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationNoticeTests: OrbeTestCase {
-  private var shown: WindowController?
-
   override func setUp() {
     super.setUp()
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
   }
 
-  override func tearDown() {
-    shown?.window.orderOut(nil)
-    shown = nil
-    super.tearDown()
-  }
-
-  @MainActor func controller() -> WindowController {
-    let wc = WindowController()
-    shown = wc
+  @MainActor func controller(window: OrbeWindow = OrbeWindow()) -> WindowController {
+    let wc = WindowController(window: window)
     wc.dismissPalette()
     return wc
-  }
-
-  @MainActor func key(_ wc: WindowController) {
-    NSApplication.shared.setActivationPolicy(.accessory)
-    wc.window.makeKeyAndOrderFront(nil)
-    NSApplication.shared.activate(ignoringOtherApps: true)
-    let end = Date().addingTimeInterval(2)
-    while !wc.window.isKeyWindow, Date() < end {
-      guard
-        let event = NSApp.nextEvent(
-          matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
-      else { continue }
-      NSApp.sendEvent(event)
-    }
-    XCTAssertTrue(wc.window.isKeyWindow, "前提: ウィンドウが key にならない環境ではこの契約を測れない")
   }
 
   /// 入力の無い報告のノード `digest`（名前「要約」）だけの自動化。
@@ -258,8 +234,9 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
 
   /// 選んでいる行の回は出ず、同じボードで選んでいない自動化の回は出る。
   @MainActor func testViewingTheRowStaysSilent() throws {
-    let wc = controller()
-    key(wc)
+    let window = OrbeWindowFake()
+    let wc = controller(window: window)
+    window.isKey = true
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     let id = try recorded(wc)
     let other = try recorded(wc, name: "GitHub: レビュー依頼")
@@ -291,8 +268,9 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
 
   /// ピルのクリックは、開いているパレットを閉じ、Home のボードでその自動化の行を選んで一覧に焦点を置く。消えた自動化なら欄。
   @MainActor func testThePillOpensTheAutomationOnTheBoard() throws {
-    let wc = controller()
-    key(wc)
+    let window = OrbeWindowFake()
+    let wc = controller(window: window)
+    window.isKey = true
     let id = try recorded(wc)
     wc.showTaskPalette()
 
