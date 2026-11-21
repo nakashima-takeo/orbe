@@ -25,7 +25,7 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     var pane: EditorPaneView { tab.group.view.editor }
   }
 
-  /// 幅 900・サイドバー閉の面に 3 枚: 未保存の a・保存済みの b・アクティブの c。ポインタと押下を配送で届けるので、窓は
+  /// 幅 900・サイドバー閉の面に 3 枚: 未保存の a・保存済みの b・アクティブの c。押下を配送で届けるので、窓は
   /// `placeOffscreen` で並べる。
   private func row() throws -> Row {
     let tab = TerminalTab.alone(

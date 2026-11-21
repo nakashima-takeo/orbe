@@ -16,7 +16,7 @@ extension OrbeTestCase {
     return url
   }
 
-  /// タブを幅 `width` のエディター全面のウィンドウに載せる。ウィンドウはテスト用の `OrbeWindowFake` で、確認のシートを画面に出さない。
+  /// タブを幅 `width` のエディター全面の窓に載せる。窓はテスト用の `OrbeWindowFake` で、確認のシートを画面に出さない。
   func hostEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
     let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
@@ -146,12 +146,15 @@ extension OrbeTestCase {
         height: geometry.sliderLength), to: nil)
   }
 
-  /// 面の座標の点を押して離す（窓は ordered-in であること——`sendEvent` はそれ以外に配送しない）。アプリの配送の口
-  /// （`NSApp.sendEvent`）から送るので、ローカルのイベントの監視も本物と同じく見る。`count` は何回目の押下か（2 なら
-  /// ダブルクリックの 2 回目）。
+  /// 面の座標の点を押して離す（窓は `placeOffscreen` で並べておくこと——`sendEvent` は並んでいない窓に配送しない）。
+  /// アプリの配送の口（`NSApp.sendEvent`）から送るので、ローカルのイベントの監視も本物と同じく見る。`count` は何回目の
+  /// 押下か（2 ならダブルクリックの 2 回目）。
   @MainActor
   func click(_ pane: EditorPaneView, at point: NSPoint, count: Int = 1) throws {
     let window = try XCTUnwrap(pane.window)
+    guard window.isVisible else {
+      return XCTFail("マウスは並んだ窓にしか届かない。先に placeOffscreen で並べる")
+    }
     for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
       NSApp.sendEvent(
         timedMouse(type, at: pane.convert(point, to: nil), in: window, clickCount: count))

@@ -9,9 +9,14 @@ extension OrbeTestCase {
   /// AppKit の配送（`NSApp.sendEvent`・`window.sendEvent`）でビューへ届けるテストだけが使う。AppKit は、並んでいない窓のビューへ
   /// これらのイベントを配らない。キーとフォーカスだけのテストは窓を並べない。
   ///
+  /// ホイールでスクロールさせるテストは、窓を `OrbeWindowFake` にする。AppKit の `NSScrollView` は、どの画面にも
+  /// 載っていない窓ではホイールでスクロールしない。`OrbeWindowFake` は、並べられているのにどの画面にも載っていない間だけ、
+  /// `screen` で主ディスプレイを答える。
+  ///
   /// 位置と並べ方はここが決める。key にせず、アプリを前面にせず、テストの終わりに並びから外す（`orderOut`）。タイトルバーのある窓は
-  /// macOS が画面内へ押し戻し、key になれる窓は最初のクリックが窓の有効化に使われてビューへ届かないので、どちらも並べない。
-  /// 並べている間は、どのビューも最初のクリックを受ける（`FirstMouse`）。
+  /// macOS が画面内へ押し戻すので並べない。key になれる窓は、クリックで key になり、アプリが前面になりうる。画面外へ並べた
+  /// key になれる窓でそれが起きるかは確かめていないので、これも並べない。並べている間は、どのビューも最初のクリックを受ける
+  /// （`FirstMouse`）。
   func placeOffscreen(_ window: NSWindow) {
     guard !window.styleMask.contains(.titled), !window.canBecomeKey else {
       return XCTFail("画面外へ並べられるのは、タイトルバーが無く key になれない窓だけ")
