@@ -124,6 +124,7 @@ updated: 2026-11-22
   - 並んでいないウィンドウのビューへ、AppKit はマウスのイベントを配らない。ビューのメソッド（`mouseDown` など）を直接呼べば AppKit のビューには届くが、SwiftUI のジェスチャは反応しない。
   - `NSApp.sendEvent` のキーは、アプリの key のウィンドウへ配られる。並んでいないウィンドウは key にならないので、キーはウィンドウを名指しして届ける（`deliverKeyDown`）。
   - key になれるウィンドウは、非アクティブなアプリでは最初のクリックがウィンドウの有効化に使われ、ビューへ届かない。
+  - macOS 26 の SwiftUI は、非アクティブなアプリの key でないウィンドウがクリックされると、そのウィンドウが key になれなくても有効化のクリックとみなす。このとき `NSHostingView` の `acceptsFirstMouse` が false なら、クリックをジェスチャへ渡さない（macOS 27 は渡す）。ウィンドウに key と答えさせても（`isKeyWindow` の上書き）、`window.sendEvent` で送っても、クリックは渡らない。`NSHostingView` を本番コードの部品（`BoardView`）が内側で作るのでサブクラスも `allowsWindowActivationEvents` も差し込めず、`placeOffscreen` は並べている間だけ `NSView.acceptsFirstMouse` の実装を true を返すものに入れ替える。
   - `NSWindow` は既定で `isReleasedWhenClosed == true` のため、ARC 下で `close()` を呼ぶと二重解放クラッシュする（`orderOut(nil)`＋`isReleasedWhenClosed = false` を使う）。
   - `NSEvent.addLocalMonitorForEvents` は解除漏れがあると後続の全テストの入力を奪うため、`deinit` / `tearDown` で必ず `removeMonitor` する。ローカルモニタは `NSApp.sendEvent` の中で呼ばれ、`window.sendEvent` やビューのメソッドの直接呼び出しでは呼ばれない。`NSApp.sendEvent` で送ったキーはローカルモニタまでしか届かず、テストのウィンドウ（並べていないウィンドウや key になれないウィンドウ）には届かない。
 - **一時ディレクトリの隔離漏れ**: `BackgroundRuns.swift` が一時作業ディレクトリとして `FileManager.default.temporaryDirectory` を直参照しており、`TestScratch` の管理外へ残骸が出るため、注入可能に改める。
