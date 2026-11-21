@@ -34,7 +34,7 @@ final class SourceControlPaneTests: OrbeTestCase {
   func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = pane

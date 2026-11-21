@@ -1,7 +1,7 @@
 ---
 title: テスト基盤の導入メモ
 description: 新テストアーキテクチャの実現手段・ツール選定・本番および既存テスト改修の要点と落とし穴
-updated: 2026-11-21
+updated: 2026-11-22
 ---
 
 # テスト基盤の導入メモ
@@ -54,14 +54,18 @@ updated: 2026-11-21
 
 ## 画面非表示化とヘッドレス UI テスト
 
-- **採用**: **主ウィンドウ（`OrbeWindow`）の、key の状態と前面化をテストが決めるサブクラスへの差し替え＋値型によるキー入力の分離＋非表示オフスクリーン `TestWindow`（既存 `PointerWindow` の拡張）**。通常テストで `setActivationPolicy`・`NSApp.activate`・`makeKeyAndOrderFront`・`orderFront`・`orderFrontRegardless` を一切呼ばない構成にする。
+- **採用**: **主ウィンドウ（`OrbeWindow`）の、key の状態・前面化・確認のシートへの応答をテストが決めるサブクラス（`OrbeWindowFake`）への差し替え＋値型によるキー入力の分離＋並べないテスト用ウィンドウ＋届け先のウィンドウを名指ししたキーの配送（`deliverKeyDown`）**。テスト用のウィンドウは並べない（OS の表示の並びに入れない。AppKit の ordered-in にしない）。マウス・ホイールのイベントを AppKit の配送でビューへ届けるテストだけが、ウィンドウを画面外へ並べるテスト支援の 1 か所（`placeOffscreen`）を通る。通常テストで `setActivationPolicy`・`NSApp.activate`・`makeKeyAndOrderFront`・`orderFront`・`orderFrontRegardless` を呼ぶのは、この 1 か所の `orderFront` だけにする。
 - **棄却**:
   - **`nalexn/ViewInspector`**: SwiftUI 内部構造のリフレクション依存で macOS/Xcode 更新ごとに破損しやすく、`@FocusState` が公式非サポート。さらに AppKit `NSWindow`・`NSViewRepresentable`（20 箇所）・Metal・`GhosttyKit` を検証できない。
   - **現行の画面外ウィンドウ + `.accessory` + `makeKeyAndOrderFront` + 固定 `pump`（`PaletteCardWindowHarness` 方式）の維持**: 114 件で `activationPolicy` を `.prohibited ↔ .accessory` 間で往復させ、`pump(0.15〜0.6s)` だけで 170 秒以上の固定待ちが発生している。また `.titled` ウィンドウは macOS の `constrainFrameRect` で画面中央へ押し戻されてチラつく。
 - **要点**:
-  - key の判定は、本番コード（`WindowController.visibleTab`, `WindowController+AutomationNotice.isViewingAutomation`, `WindowController+TaskNotice`, `SurfaceView.syncFocus`, `MetalTextView`）が主ウィンドウの `isKeyWindow` と、key になった・key でなくなったときの通知（`NSWindow.didBecomeKeyNotification` / `didResignKeyNotification`）を読む形のまま変えない。`WindowController` は主ウィンドウを init の引数で受け取り、テストは key の状態を自分で決める `OrbeWindow` のサブクラス（`OrbeWindowFake`）を渡す。アプリを前面にしてウィンドウを key にする前面化（起動時・`MenuBarController`・通知のクリック）は `OrbeWindow.bringToFront()` の 1 つの操作にまとめ、テスト用のサブクラスは呼び出された回数を記録するだけにする。`ScmAutoFetch` の `NSApp.isActive` の判定は、静的レジストリからスコープ所有への移し替えと合わせて差し替えられる形にする。以上に合わせて、実画面表示とフォーカス奪取を行っていた 11 テスト（`SurfaceFocusTests`, `WindowControllerAutomationNoticeTests`, `WindowControllerReportAgentTests`）をこのサブクラスによる非表示検証へ書き換え、毎回の `endCase()` にあった最大 5 秒の `deactivate` ループを撤去する。
+  - key の判定は、本番コードが主ウィンドウの `isKeyWindow` と、key になった・key でなくなったときの通知（`NSWindow.didBecomeKeyNotification` / `didResignKeyNotification`）を読む形のまま変えない。`WindowController` は主ウィンドウを init の引数で受け取り、テストは key の状態を自分で決める `OrbeWindow` のサブクラス（`OrbeWindowFake`）を渡す。アプリを前面にしてウィンドウを key にする前面化（起動時・`MenuBarController`・通知のクリック）は `OrbeWindow.bringToFront()` の 1 つの操作にまとめ、テスト用のサブクラスは呼び出された回数を記録するだけにする。`ScmAutoFetch` の `NSApp.isActive` の判定は、静的レジストリからスコープ所有への移し替えと合わせて差し替えられる形にする。以上に合わせて、実画面表示とフォーカス奪取を行っていた 11 テスト（`SurfaceFocusTests`, `WindowControllerAutomationNoticeTests`, `WindowControllerReportAgentTests`）をこのサブクラスによる非表示検証へ書き換え、毎回の `endCase()` にあった最大 5 秒の `deactivate` ループを撤去する。
   - `TaskPaletteModel+Keys`・`TaskPaletteAutomationModel+Keys`・`BoardAutomationModel`・`WorktreePaletteFieldKeys`・`WorktreePaletteCardKeys` が直接受けている `SwiftUI.KeyPress` について、その扱いはビュー層の薄い変換に留め、モデルは値型キー（キー・修飾・リピートフラグ）を受ける構造にする。あわせて `DSTab` / `SubmitIgnoringKeyRepeat` の `NSApp.currentEvent` 直読みを引数化する。これにより `TaskPaletteCardKeyTests`（72 件）・`BoardAutomationTests`（30 件）・`WorktreePaletteCardKeyTests`（11 件）の大部分を 1ms 未満の純ユニットテストへ移設する。
-  - 実画面中央／左下にウィンドウを出していた 5 クラス 20 件（`WindowControllerBoardTests`, `WindowControllerBoardWidgetsTests`, `WindowControllerPaletteKeyTests`, `WorkspaceCreateCaretTests`, `SidebarScrollbarTests`）から不要な前面化を外し、非表示 `TestWindow`（`defer: false`, `isKeyWindow` 差し替え, `makeFirstResponder` + `window.sendEvent` / `performKeyEquivalent` 直接配送）へ移行する。
+  - 実画面中央／左下にウィンドウを出していた 5 クラス 20 件（`WindowControllerBoardTests`, `WindowControllerBoardWidgetsTests`, `WindowControllerPaletteKeyTests`, `WorkspaceCreateCaretTests`, `SidebarScrollbarTests`）から不要な前面化を外し、テストの種類ごとに次の形へ移行する。
+    - `WindowController` を載せるテスト（`WindowControllerBoardTests`・`WindowControllerBoardWidgetsTests`・`WindowControllerPaletteKeyTests`・`WorkspaceCreateCaretTests`）: 主ウィンドウを並べず、キーを `deliverKeyDown` で主ウィンドウへ届ける。key の状態や前面化を扱うテストは、`WindowController(window:)` に `OrbeWindowFake` を渡す。
+    - `WindowController` を介さず、部品だけを載せるテスト: 並べないウィンドウに載せる。エディターの面は `OrbeWindowFake`（`hostEditor` など）に載せる。主ウィンドウの `OrbeWindow.sendEvent` は、日本語入力の変換中に届いたキーを入力欄へ直に渡す。テストのキーも本番と同じくこれを通すテスト（パレットとボードの部品。`PaletteCardWindowTestCase.host`）は、`OrbeWindow` に載せる。それ以外の部品は素の `NSWindow` に載せる。キーをウィンドウの配送で届けるテストは `deliverKeyDown` を使う。ビューのメソッド（`keyDown(with:)` など）を直接呼んでキーを渡すテストは、直接呼ぶままでよい。
+    - マウス・ホイールのイベントを AppKit の配送で届けるテスト（`SidebarScrollbarTests` など）: タイトルバーの無いウィンドウに載せ、`placeOffscreen` を通る。
+  - 確認のシートは、本番コードが `NSAlert.beginSheetModal(for:)` で自分のウィンドウに出す形のまま変えない。`NSAlert` はウィンドウの公開のシートの API（`beginSheet`・`beginCriticalSheet`）を通るので、`OrbeWindowFake` がこの API を上書きし、シートを画面に出さずに応答待ちとして持つ。テストは `attachedSheet` で確認が出たことを読み、`endSheet(_:returnCode:)` で応答する。主ウィンドウに確認を出すテストは、`WindowController(window:)` に `OrbeWindowFake` を渡す。
   - `BoardAutomationTests` の生座標クリック（`(300, 669)` 等）や `EditorPaneViewTests+TabClose` / `+Sidebar` / `EditorSearchTests+Ground` / `EditorLineMarksTests` の画素座標と RGB 値のハードコード（`c.x - 8` の位置での輝度差判定等）を廃止し、モデル状態・レイアウト矩形・`firstResponder`・アクセシビリティ要素で検証する。
   - 18 ファイルに重複している独自 `pump` ヘルパを廃止し、`layoutSubtreeIfNeeded()`＋条件待機に統一する。固定秒数の待機（`PaletteFitTests` の 0.2s×24 等）は描画完了の確定的シグナルへ置き換える。
 
@@ -76,7 +80,7 @@ updated: 2026-11-21
   - **エディター層の契約完成と非描画層の分離**: `TextSurface` プロトコルへ必要な読み取り契約を補完し、`FakeTextSurface` を `OrbeEditorTestSupport` で共有、`EditorDiffSource` の Fake を用意する。これにより `OrbeTests` 25 ファイルの `OrbeEditorEngine` 直ダウンキャスト・72 箇所の実 `MetalTextSurface` 生成・86 件の `EditorDiffTests` 実 git/FSEvents 依存を解消する。さらに `OrbeEditorEngine` の編集・選択・IME・複数カーソル状態を Metal / `RenderThread` 非依存層へ分離し、`EngineTestCase.open` の既定を「構文解析なし・ディスク書込なし」に変え、`SurfaceMultiCursorVSCodeTests`（87 回）や `SurfaceInputMethodTests+NSTextView`（45 回）での毎回の `NSWindow` 生成を廃止する。
   - **CLI / MCP・PTY・JS エンジンの軽量化**: `orbe-cli`・`orbe-mcp` のライブラリ化により、90 メソッドの大半（特に `OrbeMcpProcessTests` での 32 ツール定義と 99 引数バリデーション）をインプロセスユニットテストへ移設し、テスト側の待機ポーリング内で毎回 `orbe-mcp` プロセスを起動する実装も解消する。実バイナリ起動は代表的な疎通確認のみ残す。`TtyDumpTab`（実 PTY + `python3`）はスイート単位で再利用して起動回数を 32 回から数回へ削減する。`CompletionEngineTests` は手書き `EngineHarness` を廃して `CompletionEngine` 本体へ接続し、`JSContext`（1.3 MB バンドル）をスイートで 1 回だけ初期化する。
   - **ファズと重い純ユニットテストの二段分離**: `ZoneTextLayoutTests`（5,000 段落・26.8 秒）・`SyntaxLayersTests`（128 回×20 KB）・`SurfaceFuzzTests`（18,000 ステップ）・`SurfaceZonesTests+Fuzz`（6,000 ステップ）・`EditorDiffTests+Transitions`（実 git 90 ステップ）・`PullRequestStateTests+ReviewOrder`（60,000 ステップ）は、通常のユニットテストを軽量固定シード（数十 ms 以内）に抑え、大量ステップ版を長時間ファズ枠へ分離する。
-  - **価値の薄い・脆い・重複したテストの撤去と未カバー領域の補完**: 恒真テスト（`ChromeFontResolverTests.testEmojiFontSettingDrivesResolver` の `nil == nil`）、ゼロアサート（`StatusRowViewRenderTests`）、単独実行不可の順序依存（`TestIsolationTests.testCaseDirIsFreshForEachTest`）、本番定数表の丸写し（`SettingsRegistryTests`, `SettingsResolutionTests`）、英文プロンプト／日本語 UI 文言／行 index／CLI 引数添字のハードコード（`AutomationNodePassPromptTests`, `SettingsPalette*`, `ClaudeHeadlessTests`）、3 ターゲット間の三重重複（Git 変更マーカー・検索ハイライト・Diff 行並び）を整理する。あわせて未カバー領域（`MenuBarController` 判断部、`CompletionEngine` 実体、`SoundPlayer` フォールバック、`UpdaterService` 状態遷移、`SurfaceView` 検索/スクロール/補完、`WorktreePaletteDataProvider+Clean`、`BoardModel`、`Secretary` 単体）を補完する。
+  - **価値の薄い・脆い・重複したテストの撤去と未カバー領域の補完**: 恒真テスト（`ChromeFontResolverTests.testEmojiFontSettingDrivesResolver` の `nil == nil`）、単独実行不可の順序依存（`TestIsolationTests.testCaseDirIsFreshForEachTest`）、本番定数表の丸写し（`SettingsRegistryTests`, `SettingsResolutionTests`）、英文プロンプト／日本語 UI 文言／行 index／CLI 引数添字のハードコード（`AutomationNodePassPromptTests`, `SettingsPalette*`, `ClaudeHeadlessTests`）、3 ターゲット間の三重重複（Git 変更マーカー・検索ハイライト・Diff 行並び）を整理する。あわせて未カバー領域（`MenuBarController` 判断部、`CompletionEngine` 実体、`SoundPlayer` フォールバック、`UpdaterService` 状態遷移、`SurfaceView` 検索/スクロール/補完、`WorktreePaletteDataProvider+Clean`、`BoardModel`、`Secretary` 単体）を補完する。
 
 ## 静的ルール・生成物・隔離実証
 
@@ -117,7 +121,13 @@ updated: 2026-11-21
 - **`swift-build#1868` による独立テストターゲットの直列コンパイル**: Swift 6.4 既定の `swift-build` は独立した `.testTarget` を直列コンパイルする。本体モジュールを小さく切り出さずにテストターゲットだけ細分化すると、重複リンクと直列コンパイルでビルド時間が悪化する。
 - **GitHub Actions `macos-26` の仮想 GPU（Apple Paravirtual device）と `backingScaleFactor`**: 実機 Apple Silicon と GPU 機能・フォント平滑化・解像度（1x vs 2x）が異なる。Metal デバイス不在環境（サンドボックス等）や仮想 GPU 差異に備え、編集・選択・IME 等の非描画テストは Metal 非依存層へ分離する。
 - **AppKit のウィンドウ・ローカルイベント監視の罠**:
-  - `.titled` ウィンドウは画面外座標を指定しても `constrainFrameRect` で画面内へ押し戻される（自動テストでは `orderFront` 自体を呼ばず、画面外表示が要る画面キャプチャツール等では borderless ウィンドウを使う）。
+  - `.titled` ウィンドウは画面外座標を指定しても `constrainFrameRect` で画面内へ押し戻される（このため、画面外へ並べるテスト支援の `placeOffscreen` は、タイトルバーのあるウィンドウを渡されると、並べる前にテストを失敗させる。画面外表示が要る画面キャプチャツール等では borderless ウィンドウを使う）。
+  - 本物のシートが出ている間、AppKit は親のウィンドウを画面の中へ動かす。親を画面外へ置いても、タイトルバーの無いウィンドウにしても、この動きは止まらず、シートのウィンドウはディスプレイの範囲と重なる。確認のシートを出すコードを通るテストは、面を `OrbeWindowFake` に載せ、`WindowController` には `OrbeWindowFake` を渡す。
+  - AppKit の `NSScrollView` は、どの画面にも載っていない（`screen` が nil の）ウィンドウでは、ホイールでスクロールしない（macOS 26 で実測。SwiftUI の `ScrollView` の裏も、素の `NSScrollView` も同じ）。画面外へ並べたウィンドウもこれに当たるので、`OrbeWindowFake` は、並べられているのにどの画面にも載っていない間だけ、主ディスプレイに載っていると答える。
+  - 並んでいないウィンドウのビューへ、AppKit はマウスのイベントを配らない。ビューのメソッド（`mouseDown` など）を直接呼べば AppKit のビューには届くが、SwiftUI のジェスチャは反応しない。
+  - `NSApp.sendEvent` で送った keyDown は、並んでいないウィンドウにも key になれないウィンドウにも届かない。テストのウィンドウはどちらかに当たる。ウィンドウの `sendEvent` へ渡した keyDown は、並んでいないウィンドウでも first responder に届くので、キーはウィンドウを名指しして届ける（`deliverKeyDown`）。
+  - key になれるウィンドウは、非アクティブなアプリでは最初のクリックがウィンドウの有効化に使われ、ビューへ届かない。
+  - macOS 26 の SwiftUI は、非アクティブなアプリの key でないウィンドウがクリックされると、そのウィンドウが key になれなくても有効化のクリックとみなす。このとき `NSHostingView` の `acceptsFirstMouse` が false なら、クリックをジェスチャへ渡さない（macOS 27 は渡す）。ウィンドウに key と答えさせても（`isKeyWindow` の上書き）、`window.sendEvent` で送っても、クリックは渡らない。`NSHostingView` を本番コードの部品（`BoardView`）が内側で作るのでサブクラスも `allowsWindowActivationEvents` も差し込めず、`placeOffscreen` は並べている間だけ `NSView.acceptsFirstMouse` の実装を true を返すものに入れ替える。
   - `NSWindow` は既定で `isReleasedWhenClosed == true` のため、ARC 下で `close()` を呼ぶと二重解放クラッシュする（`orderOut(nil)`＋`isReleasedWhenClosed = false` を使う）。
-  - `NSEvent.addLocalMonitorForEvents` は解除漏れがあると後続の全テストの入力を奪うため、`deinit` / `tearDown` で必ず `removeMonitor` する。また `NSApp.sendEvent` 直呼びではローカルモニタの発火条件がキュー経由と異なる点に注意する。
+  - `NSEvent.addLocalMonitorForEvents` は解除漏れがあると後続の全テストの入力を奪うため、`deinit` / `tearDown` で必ず `removeMonitor` する。ローカルモニタは `NSApp.sendEvent` の中で呼ばれ、`window.sendEvent` やビューのメソッドの直接呼び出しでは呼ばれない。`NSApp.sendEvent` で送ったキーはローカルモニタまでしか届かず、テストのウィンドウ（並べていないウィンドウや key になれないウィンドウ）には届かない。
 - **一時ディレクトリの隔離漏れ**: `BackgroundRuns.swift` が一時作業ディレクトリとして `FileManager.default.temporaryDirectory` を直参照しており、`TestScratch` の管理外へ残骸が出るため、注入可能に改める。

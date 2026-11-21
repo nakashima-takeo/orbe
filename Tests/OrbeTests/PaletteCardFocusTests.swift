@@ -8,7 +8,7 @@ import XCTest
 /// 宛先が同じ更新 pass で新規 mount されると SwiftUI はその pass で当てた `@FocusState` を取りこぼし、
 /// first responder が常設のカード器に残る。器は `fieldVisible` のとき ←→↵ を入力欄へ委ねて `.ignored`
 /// を返すため、**↑↓ だけ効いて ↵（決定）と →（ドリルイン）が誰にも届かない**状態になる
-/// ——ドリルイン→Esc 復帰でパレットが半死にした退行がこれ。実キーイベントを画面外の窓へ流して固定する。
+/// ——ドリルイン→Esc 復帰でパレットが半死にした退行がこれ。実キーイベントを並べない窓へ流して固定する。
 @MainActor
 final class PaletteCardFocusTests: PaletteCardWindowTestCase {
   /// パレットモデルが `setMode` で行う立て下げ（選択・クエリ・入力欄可視・行・focusToken）の順序を再現する。

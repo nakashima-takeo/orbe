@@ -32,14 +32,6 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
   static let failingBacklog = 3
   static let pausedGmail = 4
 
-  private var held: [NSWindow] = []
-
-  override func tearDown() {
-    held.forEach { $0.orderOut(nil) }
-    held.removeAll()
-    super.tearDown()
-  }
-
   /// `samples` を省くと見本の 4 件。
   func board(_ samples: [AutomationSample]? = nil) -> BoardModel {
     BoardModel(
@@ -56,16 +48,11 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
 
   /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。ウィジェットは欄から始まる。
   func mount(_ model: BoardModel, height: CGFloat = 700) -> NSWindow {
-    NSApplication.shared.setActivationPolicy(.accessory)
-    let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 1200, height: height),
-      styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = BoardView(
-      model: model, translucency: ChromeTranslucency(),
-      localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
-    window.makeKeyAndOrderFront(nil)
-    held.append(window)
-    pump(0.4)
+    let window = host(
+      BoardView(
+        model: model, translucency: ChromeTranslucency(),
+        localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver()),
+      size: NSSize(width: 1200, height: height))
     model.focus()
     flush(window)
     return window

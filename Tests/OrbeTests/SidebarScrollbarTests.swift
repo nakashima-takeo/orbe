@@ -56,7 +56,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
       below.sliderPosition + below.sliderLength, 200, "下へ弾んでもつまみは下端")
   }
 
-  /// 溢れたツリー（41 行・見えている 192pt）を載せた、前に出した窓。
+  /// 溢れたツリー（41 行・見えている 192pt）を載せ、`placeOffscreen` で並べた窓。
   private struct Tree {
     let pane: EditorPaneView
     let window: NSWindow
@@ -92,8 +92,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
     }
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900, height: 240)
-    window.orderFront(nil)
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    placeOffscreen(window)
     let scroll = try XCTUnwrap(scrollView(in: tab.group.view.editor.sideHost))
     let document = try XCTUnwrap(scroll.documentView)
     pumpMain(until: { document.frame.height > scroll.documentVisibleRect.height * 2 }, "ツリーが溢れる")
@@ -122,7 +121,10 @@ final class SidebarScrollbarTests: OrbeTestCase {
         wheel3: 0))
     let point = try thumbCenter(tree)
     hover(tree, point)
-    wheel.location = CGPoint(x: point.x, y: (tree.window.screen?.frame.height ?? 0) - point.y)
+    // CGEvent の座標は主ディスプレイの左上が原点。窓を持たない NSEvent の locationInWindow は、主ディスプレイの高さで
+    // 上下を反転した値になるので、窓の座標 `point` がそのまま出るように逆算する。
+    let flip = NSScreen.screens.first?.frame.height ?? 0
+    wheel.location = CGPoint(x: point.x, y: flip - point.y)
     tree.window.sendEvent(try XCTUnwrap(NSEvent(cgEvent: wheel)))
     pumpMain(until: { tree.scroll.documentVisibleRect.minY > 100 }, "ツリーが送られる")
   }

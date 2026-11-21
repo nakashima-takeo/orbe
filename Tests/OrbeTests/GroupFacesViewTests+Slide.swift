@@ -15,7 +15,7 @@ extension GroupFacesViewTests {
   /// 窓に載せた器（動きは窓に付いているときだけ起きる）。動きを減らす設定は実行する機械に依らず切る——ばねの動きを
   /// 確かめるテストが、Reduce Motion の入った機械で即時の着地に化けないように。
   func hostedInWindow(_ faces: FaceLayout) -> (TerminalTab, NSWindow) {
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 1012, height: 400)),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
