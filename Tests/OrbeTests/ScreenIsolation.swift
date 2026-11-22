@@ -14,7 +14,8 @@ import AppKit
 ///
 /// 終わりだけを見ないのは、テストの窓が、終わりより前に下ろされるか解放されるため。
 ///
-/// 終わりには、違反を見た後、次の 3 つを行ってから、違反を失敗として記録する。
+/// 終わりには、違反を見た後、次の 3 つを行ってから、違反を失敗として記録する。記録を後にするのは、戻す処理を、記録（`record`）の
+/// 後に処理が続くかどうかに依らせないため。
 ///
 /// - テストが変えたアクティベーションポリシーを、始まりの値へ戻す。
 /// - アプリが前面なら、前面から降ろす（`deactivate`）。始まりで前面だったかどうかに依らない。前面に残ると、同じ実行の
@@ -110,8 +111,8 @@ final class ScreenIsolation {
     for breach in now.breaches(since: start) { note(breach) }
   }
 
-  /// テストの終わりに呼ぶ。違反を見て、ポリシーと前面を戻し、このテストの間に増えてディスプレイと重なる窓を下ろしてから、
-  /// 見つけた違反を失敗の文言で `record` に渡す。
+  /// テストの終わりに呼ぶ。違反を見て、ポリシーを戻し、アプリを前面から降ろし、このテストの間に増えてディスプレイと重なる窓を
+  /// 下ろしてから、見つけた違反を失敗の文言で `record` に渡す。
   func finish(recording record: (String) -> Void) {
     if let sheetObserver { NotificationCenter.default.removeObserver(sheetObserver) }
     if let runLoopObserver { CFRunLoopObserverInvalidate(runLoopObserver) }
