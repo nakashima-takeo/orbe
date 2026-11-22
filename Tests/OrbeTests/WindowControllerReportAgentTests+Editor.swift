@@ -20,8 +20,9 @@ extension WindowControllerReportAgentTests {
 
   /// エディターを開いている間に終わると、音と知らせが出て done の印が残る。閉じて端末が出たら消える。
   func testDoneWhileTheEditorCoversTheTerminalIsNotifiedAndKeptUntilClosed() throws {
-    let (wc, tab) = try makeControllerAndTab()
-    makeKey(wc)
+    let window = OrbeWindowFake()
+    let (wc, tab) = try makeControllerAndTab(window: window)
+    window.isKey = true
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     wc.toggleEditorFace()
     XCTAssertNil(wc.visibleTab, "エディターで見せている間は見ているタブに数えない")
@@ -39,18 +40,18 @@ extension WindowControllerReportAgentTests {
   /// 前面の窓で透かしているタブは見ているタブ——エディターを開いている間に付いた done の印が消え、透かしている最中に終わっても
   /// 音も知らせも出ない。
   func testPeekingCountsAsLookingAtTheTab() throws {
-    let (wc, tab) = try makeControllerAndTab()
+    let window = OrbeWindowFake()
+    let wc = try launchWithoutFirstRun(window: window)
+    let tab = try XCTUnwrap(wc.current.tabs.first)
     let option = OptionHoldDriver(wc)
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
-    makeKey(wc)
+    window.isKey = true
     wc.toggleEditorFace()
     done(wc, tab)
     XCTAssertEqual(tab.agentState, "done", "前提: エディターの間の done は残る")
-    wc.optionHold.windowAllows = { true }
 
     option.hold()
 
-    XCTAssertTrue(wc.window.isKeyWindow, "前提: 透かし始めたときに窓が前面")
     XCTAssertTrue(wc.visibleTab === tab, "透かしている間は見ているタブ")
     XCTAssertEqual(tab.agentState, "idle", "見ているタブの done の印は消える")
 
@@ -82,13 +83,14 @@ extension WindowControllerReportAgentTests {
         WorkspaceState(name: "there", rootPath: "/tmp", activeTab: 0, tabs: [tab, tab]),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
-    let wc = WindowController()
+    let window = OrbeWindowFake()
+    let wc = WindowController(window: window)
     let there = try XCTUnwrap(wc.workspaces.first { $0.name == "there" })
     let (a, c) = (there.tabs[0], there.tabs[1])
     _ = wc.controlActivateWorkspace(workspaceId: there.id)
     pumpMain(until: { c.activated }, "隠れたタブが起きる")
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "here" }))
-    makeKey(wc)
+    window.isKey = true
     done(wc, a)
     done(wc, c)
     XCTAssertEqual([a.agentState, c.agentState], ["done", "done"], "前提: 背景の workspace の done は残る")

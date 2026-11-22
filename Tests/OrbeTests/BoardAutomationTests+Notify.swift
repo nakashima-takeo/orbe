@@ -243,6 +243,7 @@ extension BoardAutomationTests {
     let model = board()
     let automation = model.automation
     let window = mount(model)
+    placeOffscreen(window)
     openNotify(window)
 
     click(NotifyPoint.secondRow, in: window)

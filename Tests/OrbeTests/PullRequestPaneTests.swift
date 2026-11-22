@@ -93,7 +93,7 @@ final class PullRequestPaneTests: OrbeTestCase {
   private func host(_ root: String) -> Hosted {
     let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = pane

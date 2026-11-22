@@ -27,7 +27,7 @@ final class GroupFacesViewTests: OrbeTestCase {
 
   /// 器を窓に載せ、動きを減らす設定を切る（動きつきの開閉が即時に落ちないように）。
   private func hosted(_ tab: TerminalTab) -> NSWindow {
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false

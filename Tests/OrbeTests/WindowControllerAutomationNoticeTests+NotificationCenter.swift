@@ -169,12 +169,14 @@ extension WindowControllerAutomationNoticeTests {
   }
 
   @MainActor func testClickingTheNotificationOpensTheAutomationOnTheBoard() throws {
-    let wc = controller()
+    let window = OrbeWindowFake()
+    let wc = controller(window: window)
     let id = try recorded(wc, notify: .notificationCenter)
     wc.showTaskPalette()
 
     try notifier(wc).onOpenAutomation?(id)
 
+    XCTAssertEqual(window.bringToFrontCount, 1, "通知のクリックは Orbe を前面に出す")
     XCTAssertEqual(wc.presentedOverlay, AppShellModel.Overlay.none)
     XCTAssertEqual(wc.current.selection, .board)
     XCTAssertEqual(wc.board.automation.list.selectedID, .automation(id))

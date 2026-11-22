@@ -89,7 +89,8 @@ extension WindowControllerReportAgentTests {
   /// 背面で届いた done は、窓が前面に戻ったときのフォーカス消費（done→idle）で一覧から消え、ピルも
   /// 取り下げる。
   func testTransientWithdrawnWhenDoneConsumedToIdle() throws {
-    let (wc, tab) = try makeControllerAndTab()
+    let window = OrbeWindowFake()
+    let (wc, tab) = try makeControllerAndTab(window: window)
     wc.controlReportAgent(
       tab: tab,
       report: AgentHookReport(
@@ -97,7 +98,7 @@ extension WindowControllerReportAgentTests {
     flushDelivered(wc)
     XCTAssertNotNil(wc.attentionStore.transient, "前提: 背面なので done のピルが立つ")
 
-    makeKey(wc)
+    window.isKey = true
     XCTAssertEqual(tab.agentState, "idle", "前提: 前面復帰で見ているタブの done が消費された")
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.retracted, true)

@@ -35,6 +35,8 @@ final class EditorRowsTrialTests: OrbeTestCase {
   /// 試しのスレッドを置く間隔（行）。
   private static let zoneEvery = 30
 
+  override static var presentsOnScreen: Bool { true }
+
   override func setUpWithError() throws {
     try super.setUpWithError()
     try XCTSkipUnless(environment["ORBE_EDITOR_ROWS_TRIAL"] == "1", "ORBE_EDITOR_ROWS_TRIAL=1 で走る")
