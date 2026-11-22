@@ -191,6 +191,28 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     try assertSidebarContentFills(pane, width: 263)
   }
 
+  /// ⌘B はエディターにフォーカスがある間だけ左の列を開閉し、フォーカスが面の外にあれば素通しする。
+  func testCommandBTogglesTheSidebarOnlyWhileTheEditorHasTheFocus() throws {
+    let tab = TerminalTab.alone(
+      cwd: TestScratch.caseDir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
+    let window = hostEditor(tab, width: 900)
+    defer { window.orderOut(nil) }
+    let commandB = NSEvent.key("b")
+
+    window.makeFirstResponder(pane)
+    XCTAssertTrue(pane.performKeyEquivalent(with: commandB))
+    XCTAssertFalse(pane.sidebar.isOpen, "閉じる")
+    XCTAssertTrue(pane.performKeyEquivalent(with: commandB))
+    XCTAssertTrue(pane.sidebar.isOpen, "開く")
+
+    let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
+    tab.group.view.addSubview(outsider)
+    XCTAssertTrue(window.makeFirstResponder(outsider))
+    XCTAssertFalse(pane.performKeyEquivalent(with: commandB), "面の外のフォーカスには効かない")
+    XCTAssertTrue(pane.sidebar.isOpen)
+  }
+
   /// 幅と開閉はアプリ全体で 1 つ——既に窓に載っている別の連の面も、ドラッグと開閉に追随する（置き直しは
   /// 観測の非同期ホップ越し。自分でドラッグした面だけがその場で置き直す）。
   func testSharedSidebarStateMovesEveryHostedPane() throws {

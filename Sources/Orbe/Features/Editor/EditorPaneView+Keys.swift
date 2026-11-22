@@ -38,7 +38,7 @@ extension EditorPaneView {
   }
 
   /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れた連の pane も窓に残るので、
-  /// 焦点が自分か配下に無いときは素通しする。検索パネル・ソース管理パネル・PR のパネルの中のキーは chrome キーより先に見る。
+  /// 焦点が自分か配下に無いときは素通しする。エディターのキーは ⌘S（保存）と ⌘B（左の列の開閉）。検索パネル・ソース管理パネル・PR のパネルの中のキーは chrome キーより先に見る。
   /// chrome キーを走らせる前に焦点の文書の変換を確定する（⌘F の種の読み取りや焦点の移動の前に、変換の状態と IME の状態を
   /// 揃える。未確定の文字は既に本文にあるので、⌘S は見えている本文を保存する）。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -57,7 +57,7 @@ extension EditorPaneView {
       if let command = action.windowCommand { group?.requestWindowCommand(command) }
       return true
     case .editor:
-      saveEdited()
+      if action == .toggleEditorSidebar { toggleSidebar() } else { saveEdited() }
       return true
     case .terminal:
       return true

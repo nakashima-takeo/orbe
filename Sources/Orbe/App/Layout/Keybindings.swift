@@ -25,6 +25,7 @@ enum ChromeAction {
   case toggleHelp  // ヘルプオーバーレイ（ショートカットチートシート）をトグル開閉
   case toggleEditorFace  // エディターを開く・閉じる
   case saveDocument  // エディター焦点の文書を保存
+  case toggleEditorSidebar  // エディターの左の列（ツリー）を開く・閉じる
 }
 
 /// 面（surface・エディター pane）から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
@@ -68,7 +69,7 @@ extension ChromeAction {
     case .toggleEditorFace: return .toggleEditorFace
     case .findInProject: return .findInProject
     case .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
-      .scrollToTop, .scrollToBottom, .saveDocument:
+      .scrollToTop, .scrollToBottom, .saveDocument, .toggleEditorSidebar:
       return nil
     }
   }
@@ -91,7 +92,7 @@ extension ChromeAction {
       return .window
     case .increaseFontSize, .decreaseFontSize, .resetFontSize:
       return .terminal
-    case .saveDocument:
+    case .saveDocument, .toggleEditorSidebar:
       return .editor
     case .find, .scrollToTop, .scrollToBottom:
       return .eachFace
@@ -147,6 +148,7 @@ enum Keybindings {
     case "F": return .findInProject  // Cmd+Shift+F
     case "r": return .rename  // Cmd+R
     case "s": return .saveDocument  // Cmd+S
+    case "b": return .toggleEditorSidebar  // Cmd+B
     case "w": return .closeTab  // Cmd+W
     case "t": return .showWorktreePalette  // Cmd+T
     case "T": return .showClosedAgentsPalette  // Cmd+Shift+T

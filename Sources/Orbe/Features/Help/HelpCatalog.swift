@@ -34,6 +34,7 @@ enum HelpCatalog {
         // ⌘⌘ とこの 2 行）。
         Row(key: "⌥", label: .helpShortcutPeekTerminal, combo: ["opt"]),
         Row(key: "⌘S", label: .helpShortcutSaveDocument, combo: ["cmd", "s"]),
+        Row(key: "⌘B", label: .helpShortcutToggleEditorSidebar, combo: ["cmd", "b"]),
         Row(key: "⌘⇧F", label: .helpShortcutFindInProject, combo: ["cmd", "shift", "f"]),
         Row(key: "↵", label: .helpShortcutScmCommit, combo: ["return"]),
         Row(key: "⌘↵", label: .helpShortcutScmCommitAndPush, combo: ["cmd", "return"]),

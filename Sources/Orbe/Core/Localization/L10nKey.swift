@@ -1045,6 +1045,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutToggleEditorFace
   case helpShortcutPeekTerminal
   case helpShortcutSaveDocument
+  case helpShortcutToggleEditorSidebar
   case helpShortcutFindInProject
   case helpShortcutScmCommit
   case helpShortcutScmCommitAndPush
