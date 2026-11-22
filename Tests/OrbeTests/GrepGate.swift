@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -67,9 +68,7 @@ final class GrepGate {
 
   /// 門で待っている git を通す（着くまで待ってから）。
   func open(timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !release(), Date() < deadline { usleep(10_000) }
-    XCTAssertLessThan(Date(), deadline, "門で待つ git がいない", file: file, line: line)
+    XCTAssertTrue(sleepUntil(timeout) { release() }, "門で待つ git がいない", file: file, line: line)
     while release() {}
   }
 
