@@ -204,8 +204,8 @@ extension BranchPullRequestTests {
     SourceControl.shared(for: repo.root).fetch()
     pumpMain(until: { self.lookups.count == 2 }, timeout: 20, "前提: フェッチの後に問い直す")
     pumpMain(until: { !state.isReading }, "中身の読みが終わる")
-    // フェッチは、リモート追跡の ref が動いたという知らせも出す。その知らせに続く追跡 ref の確かめが、いつ終わるかは外から
-    // 見えない。
+    // `trackedBranch()` の組は origin/HEAD を持たないので、フェッチは `refs/remotes/origin/HEAD` を作り、リモート追跡の ref が
+    // 動いたという知らせも出す。その知らせに続く追跡 ref の確かめが、いつ終わるかは外から見えない。
     pumpMain(until: { refs.recorder.moves > notified }, "前提: リモート追跡の ref が動いたと知らせる")
     XCTAssertTrue(holds(for: 1) { self.contentReads == 1 }, "中身の問い合わせは 1 回")
 

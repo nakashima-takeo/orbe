@@ -105,12 +105,6 @@ extension EditorDiffTests {
     try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
-    // slow.txt の index の記録を index より古い時刻にしておく（racy clean だと、足場の git が index を書くときにも clean
-    // filter を通る）。
-    try FileManager.default.setAttributes(
-      [.modificationDate: Date().addingTimeInterval(-3600)], ofItemAtPath: repo.url("slow.txt").path
-    )
-    XCTAssertTrue(repo.git(["update-index", "--refresh"]).isSuccess)
     let (tab, _) = tab()
     let files = RootFiles.shared(for: repo.root)
     pumpMain(until: { files.status != nil }, "前提: rename の前の status を持つ")

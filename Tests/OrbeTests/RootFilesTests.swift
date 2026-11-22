@@ -44,9 +44,10 @@ final class RootFilesTests: OrbeTestCase {
     var watchNotifications: Int { changes.count + gitStateChanges + nestedGitStateChanges }
 
     /// `count` が数える知らせが、`BatchDebounce.maximumDelay * 2` のあいだ 1 つも来なくなるまで待ち、20 秒以内に静まったかを
-    /// 返す。ある時刻までに起きた変化は、遅くとも FSEvents の遅れ（0.1 秒）とデバウンスの上限の後に知らせとして届くので、
-    /// そのあいだ来なければ、その前の変化は出尽くしている（見張る長さのうち、その 2 つを越える分は、知らせの原因になる status の
-    /// 読みに見込む余裕）。監視の遅れの時計を差し替える口が無いので、実時間で見張る。
+    /// 返す。ある時刻までに起きた変化は、通常は FSEvents の遅れ（0.1 秒）とデバウンスの上限を足した時間の内に知らせとして
+    /// 届くので、そのあいだ来なければ、その前の変化は出尽くしたとみなす（見張る長さのうち、その 2 つを越える分は、知らせの
+    /// 原因になる status の読みと、配送の遅れ（fseventsd・main のキュー）に見込む余裕）。監視の遅れの時計を差し替える口が
+    /// 無いので、実時間で見張る。
     func settles(counting count: @escaping (Recorder) -> Int) -> Bool {
       waitUntil(20) {
         let seen = count(self)

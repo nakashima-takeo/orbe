@@ -11,14 +11,18 @@ import OrbeTestSupport
 /// git の変化として届く）。そこで複製の最後に、追跡ファイルを持つ作業ツリーごとに `git update-index -q --refresh` で
 /// index を作業ツリーに合わせる。
 ///
+/// 契約の例外として、clone の `remote.*.url` は、テンプレートの中の bare リポジトリを指したまま複製される。複製の中の
+/// bare リポジトリへ向け直すのは、テンプレートを使う側（`StaleCloneFixture.place` など、組ごとの置き方）の役目。
+///
 /// テンプレートの追跡ファイルの時刻は、作り終えるときに過去へずらす。git は、index を書いた時刻と同じ秒に変わった
 /// ファイル（racy git）を、変わっていないと言い切れないので、素の `git status` のたびに中身を読み直して `.git/index` を
 /// 書き換える。ずらさないと、テンプレートを作ってから 1 秒未満の複製だけが `.git/index` を書き換えることになり、ファイル監視に届く通知の数が
 /// テストの実行の順序と時刻で変わる。
 ///
 /// テンプレートは `TestScratch.root` の下に、最初に複製を求めたテストの中で作る（作成の時間はそのテストに入る）。
-/// 作り終えたら中の全ディレクトリから所有者の書き込み権限を外すので、テンプレートへ書き込もうとした git やテストは
-/// その場で失敗する。後始末は `TestScratch` が持つ。
+/// 作り終えたら中の全ディレクトリから所有者の書き込み権限を外すので、テンプレートの中にファイルを作る・消す・置き換える
+/// 書き込みは、その場で失敗する（git が ref・index・設定・オブジェクトを書くときは、どれもこれに当たる）。後始末は
+/// `TestScratch` が持つ。
 final class GitFixtureTemplate {
   struct Failure: Error, CustomStringConvertible {
     let description: String
