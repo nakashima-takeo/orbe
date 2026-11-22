@@ -9,7 +9,7 @@ description: GitHub Issue や指示を、auto:ship に Orbe 固有の検証・sp
 
 ## 検証の分担
 
-全件の `swift test` は、PR ごとに CI の `build-test`（`.github/workflows/ci.yml`）が 1 回回す。手元で全件を回しても CI と同じ結果を同じ時間待つだけで、検証は増えず、その待ちが工程の直列に乗る。作業者（実装・テスト・独立検証・レビュー修正）が手元で回すのは、変更に関係するクラスだけ——変更した型の `<型名>Tests`（`Tests/<ターゲット>/<型名>Tests*.swift`）と、完了条件が指すテスト。`swift build --build-tests` の後に `swift test --skip-build --filter 'OrbeTests.FooTests'` で回す（複数は `|` でつなぐ）。
+全件の `swift test` は、PR ごとに CI の `build-test`（`.github/workflows/ci.yml`）が 1 回回す。手元で全件を回しても CI と同じ結果を同じ時間待つだけで、検証は増えず、その待ちが工程の直列に乗る。作業者（実装・テスト・独立検証・レビュー修正）が手元で回すのは、変更に関係するクラスだけ——変更した型の `<型名>Tests`（`Tests/<ターゲット>/<型名>Tests*.swift`）と、完了条件が指すテスト。`swift build --build-tests` の後に `swift test --skip-build --filter 'OrbeTests.FooTests'` で回す（複数は `|` でつなぐ）。PR の CI は、名前の末尾が `AtFullScale` のテスト（長時間ファズ）を飛ばす。`Sources/` を変えたときは、手元で `swift test --skip-build --filter AtFullScale` も回す（1〜2 分）。
 
 ship は作業者を起動するたびにこの分担を指示に含める。合否は、作業者に返させた実行コマンド・終了コード・XCTest の `Executed N tests, with M failures` の行で読む。全件の合否は PR 作成後に `gh pr checks <PR>` で読む。
 
