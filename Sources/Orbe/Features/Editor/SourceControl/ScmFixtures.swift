@@ -13,15 +13,15 @@
 
     @MainActor final class Scene {
       private let tab: TerminalTab
-      /// fixture のリポジトリと bare の origin（置き場の下。消すのは置き場の持ち主）。
+      /// fixture のリポジトリ（git 管理外の場ならただのフォルダ）と bare の origin（置き場の下。消すのは置き場の持ち主）。
       let directory: URL
-      let origin: URL
+      let origin: URL?
       var group: TabGroup { tab.group }
       var pane: EditorPaneView { group.view.editor }
       var panel: ScmPanel { pane.scm }
       private var warmWindow: NSWindow?
 
-      init(tab: TerminalTab, directory: URL, origin: URL) {
+      init(tab: TerminalTab, directory: URL, origin: URL?) {
         self.tab = tab
         self.directory = directory
         self.origin = origin
@@ -74,6 +74,22 @@
       group.view.show(terminal: tab.terminal)
       group.editor.selectScreen(.changes)
       return Scene(tab: tab, directory: dir, origin: origin)
+    }
+
+    /// git 管理外のフォルダの連を Changes の画面で開く（左の列と本体が「表示できない」姿になる）。撮る側は `warmUp()` の後
+    /// `panel.isManaged == false` を待つ。
+    @MainActor static func unmanagedScene(queriesRoot: URL, in place: URL) throws -> Scene {
+      let dir = place.appendingPathComponent(
+        "orbe-scm-plain-\(UUID().uuidString)", isDirectory: true)
+      try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      try Data("# notes\n".utf8).write(to: dir.appendingPathComponent("README.md"))
+      let group = TabGroup(
+        key: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
+      let tab = TerminalTab(cwd: dir.path, group: group)
+      group.view.add(terminal: tab.terminal)
+      group.view.show(terminal: tab.terminal)
+      group.editor.selectScreen(.changes)
+      return Scene(tab: tab, directory: dir, origin: nil)
     }
 
     /// origin に 2 件、`branch` に未 push の 3 件、ステージ済みの追加 1 件と変更 3 件。

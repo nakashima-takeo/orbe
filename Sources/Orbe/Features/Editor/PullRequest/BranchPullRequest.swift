@@ -13,8 +13,8 @@ protocol BranchPullRequestObserver: AnyObject {
 /// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。読み直すきっかけは、誰も見ていない状態から
 /// 見ている者が現れた・`reload`・今のブランチ名が変わった・Orbe の中のネット操作が終わった・リモート追跡の ref が動き、
 /// このブランチの push 先の追跡 ref か PR のベースブランチの追跡 ref の値が前と変わった、のどれか。読んでいる間に次の
-/// きっかけが来たら、終わった後に 1 回だけ読み直す。手元の HEAD が動いただけなら、GitHub に問い合わせずに手元とのずれと
-/// 作成の入口の先行の数を数え直す。
+/// きっかけが来たら、終わった後に 1 回だけ読み直す。手元の HEAD が動いただけなら、GitHub に問い合わせずに手元とのずれを
+/// 数え直す。
 @MainActor @Observable
 final class BranchPullRequest {
   let root: String
@@ -43,8 +43,6 @@ final class BranchPullRequest {
     guard let self else { return }
     trackedRefs(done)
   }
-  /// 作成の入口の先行の数を数える、既定のブランチの追跡 ref（既定のブランチが remote に無ければ nil）。
-  @ObservationIgnored private var defaultTrackingRef: String?
   /// ずれを数えた（数えている）手元の HEAD と PR の先頭。
   @ObservationIgnored private var counted: (local: String, pullRequest: String)?
   @ObservationIgnored private var observers: [WeakObserver] = []
@@ -176,58 +174,28 @@ final class BranchPullRequest {
             headRemote: Self.remote(of: ref.repo, in: found.ledger))
           finish(.pullRequest(state), name)
         } else {
-          creation(
-            ref, name: name, defaultBranch: defaultBranch, remoteDefault: remoteDefault, repo)
+          creation(ref, name: name)
         }
       }
     }
   }
 
-  /// PR が無いブランチの作成の入口の材料——既定のブランチに対する先行の数を数え、ブランチが GitHub に在るかを問い合わせる。
-  private func creation(
-    _ ref: GitHubBranchRef, name: String, defaultBranch: String, remoteDefault: String,
-    _ repo: GitRepo
-  ) {
-    defaultTrackingRef = remoteDefault.contains("/") ? "refs/remotes/" + remoteDefault : nil
-    countAhead(in: repo) { [weak self] ahead in
-      guard let self else { return }
-      let creation = Creation(
-        branch: name, defaultBranch: defaultBranch, ahead: ahead,
-        url: ref.pullRequestCreationURL, published: .checking)
-      // この読みが答えを出したときだけ問い合わせる（見ている者がいなくなった・ブランチが変わったなら、答えを出していない）。
-      guard let settled = finish(.noPullRequest(creation), name), settled == settlement else {
+  /// PR が無いブランチの作成の入口の材料——ブランチが GitHub に在るかを問い合わせる。
+  private func creation(_ ref: GitHubBranchRef, name: String) {
+    let creation = Creation(branch: name, url: ref.pullRequestCreationURL, published: .checking)
+    // この読みが答えを出したときだけ問い合わせる（見ている者がいなくなった・ブランチが変わったなら、答えを出していない）。
+    guard let settled = finish(.noPullRequest(creation), name), settled == settlement else {
+      return
+    }
+    source.branchExists(ref) { [weak self] exists in
+      guard let self, settlement == settled, case .noPullRequest(var current) = answer else {
         return
       }
-      source.branchExists(ref) { [weak self] exists in
-        guard let self, settlement == settled, case .noPullRequest(var current) = answer else {
-          return
-        }
-        switch exists {
-        case .success(true): current.published = .yes
-        case .success(false): current.published = .no
-        case .failure: current.published = .unknown
-        }
-        answer = .noPullRequest(current)
+      switch exists {
+      case .success(true): current.published = .yes
+      case .success(false): current.published = .no
+      case .failure: current.published = .unknown
       }
-    }
-  }
-
-  /// 既定のブランチの追跡 ref に対する、手元の HEAD の先行の数（追跡 ref が無い・数えられなければ nil）。
-  private func countAhead(in repo: GitRepo, _ done: @escaping (Int?) -> Void) {
-    guard let defaultTrackingRef else { return done(nil) }
-    repo.counts("HEAD", against: defaultTrackingRef) { done($0?.ahead) }
-  }
-
-  /// 作成の入口を出している間に手元の HEAD が動いた——GitHub に問い合わせずに先行の数を数え直す（数えた時点の答えが
-  /// 変わっていなければ入れる）。
-  func recountAhead() {
-    guard case .noPullRequest = answer, let repo = files?.repo else { return }
-    let settled = settlement
-    countAhead(in: repo) { [weak self] ahead in
-      guard let self, settlement == settled, case .noPullRequest(var current) = answer,
-        current.ahead != ahead
-      else { return }
-      current.ahead = ahead
       answer = .noPullRequest(current)
     }
   }

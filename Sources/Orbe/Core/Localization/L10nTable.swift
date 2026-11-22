@@ -148,10 +148,19 @@ enum L10n {
       "Add one of VS Code, Cursor, Windsurf, Zed, or Sublime to your PATH, or set a GUI editor in $VISUAL/$EDITOR."
     ),
 
-    // MARK: Editor 面（空状態）
+    // MARK: Editor 面（空・使えないときの表示）
     .editorEmptyLead: ("ファイルを開いて編集を開始", "Open a file to start editing"),
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
+    .editorUnavailable: ("表示できません", "Unavailable"),
+    .editorScmUnavailableTitle: ("変更を表示できません", "Can’t Show Changes"),
+    .editorScmNoChanges: ("変更なし", "No Changes"),
+    .editorScmNoChangesLead: ("作業ツリーは HEAD と同じです。", "The working tree matches HEAD."),
+    .editorPrNone: ("プルリクエストなし", "No Pull Request"),
+    .editorPrNoneLead: (
+      "このブランチのプルリクエストは、まだありません。", "This branch doesn’t have a pull request yet."
+    ),
+    .editorPrUnavailableTitle: ("プルリクエストを表示できません", "Can’t Show the Pull Request"),
 
     // MARK: Editor 面（diff）
     .editorDiffNotText: (

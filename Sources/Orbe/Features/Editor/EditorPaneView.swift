@@ -117,7 +117,8 @@ final class EditorPaneView: NSView {
         scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
         pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
-    faceHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
+    faceHost = NSHostingView(
+      rootView: EditorFaceRoot(localization: localization, scm: scm, pullRequest: pullRequest))
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
@@ -188,7 +189,7 @@ final class EditorPaneView: NSView {
       scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
       pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
       localization: localization, fontResolver: fontResolver)
-    faceHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
+    faceHost.rootView = faceRoot(faceContent)
   }
 
   /// 行内入力を預かっている間に焦点を明け渡した。行き先が決まった次のターンに、入力欄と同じ判定へ通す

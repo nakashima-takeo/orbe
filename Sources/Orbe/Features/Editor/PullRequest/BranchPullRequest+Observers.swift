@@ -10,15 +10,12 @@ extension BranchPullRequest: RootFilesObserver {
     reload()
   }
 
-  /// ブランチ名が変わったか、status を待っていた読み直しがあれば引き直す。HEAD だけが動いたなら、手元とのずれと作成の
-  /// 入口の先行の数を数え直す。
+  /// ブランチ名が変わったか、status を待っていた読み直しがあれば引き直す。HEAD だけが動いたなら、手元とのずれを数え直す。
   func rootFilesStatusDidChange(_ files: RootFiles) {
     let name = files.status?.branch?.name
     if name != branch || awaitingStatus { return reload() }
-    let moved = head != files.status?.branch?.commit
     head = files.status?.branch?.commit
     countDrift()
-    if moved { recountAhead() }
   }
 
   /// リモート追跡の ref が動いたかもしれない——このブランチの push 先か PR のベースブランチの追跡 ref の値が変わって

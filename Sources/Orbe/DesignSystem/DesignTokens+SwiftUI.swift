@@ -137,7 +137,11 @@ struct ThemeFonts {
   let helpKeyArrow = Font(Theme.Typography.helpKeyArrow as CTFont)
   // エディター面の空状態
   let editorLead = Font(Theme.Typography.editorLead as CTFont)
-  let editorHint = Font(Theme.Typography.editorHint as CTFont)
+  let editorEmptyTitle = Font(Theme.Typography.editorEmptyTitle as CTFont)
+  let editorEmptyText = Font(Theme.Typography.editorEmptyText as CTFont)
+  let editorEmptyButton = Font(Theme.Typography.editorEmptyButton as CTFont)
+  let editorEmptyKey = Font(Theme.Typography.editorEmptyKey as CTFont)
+  let editorSidebarNote = Font(Theme.Typography.editorSidebarNote as CTFont)
   // エディター面の骨
   let editorBarSwitch = Font(Theme.Typography.editorBarSwitch as CTFont)
   let editorBarCount = Font(Theme.Typography.editorBarCount as CTFont)
@@ -160,7 +164,6 @@ struct ThemeFonts {
   let editorPrTitle = Font(Theme.Typography.editorPrTitle as CTFont)
   let editorPrMeta = Font(Theme.Typography.editorPrMeta as CTFont)
   let editorPrBand = Font(Theme.Typography.editorPrBand as CTFont)
-  let editorPrCreateMeta = Font(Theme.Typography.editorPrCreateMeta as CTFont)
 }
 
 extension NSFont {

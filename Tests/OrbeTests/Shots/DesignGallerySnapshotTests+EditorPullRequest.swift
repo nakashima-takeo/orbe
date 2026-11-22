@@ -6,7 +6,7 @@ import XCTest
 
 /// PR のパネルの gallery。fixture は本物の git の場と、PR #131 を答える差し替えの出どころで、
 /// StateHooks.swift を選んだ姿と、その PR の diff のスレッドと下端のレビューの送信の区画、
-/// PR が無いときの作成の入口を dark / light で撮る。
+/// PR が無いとき・表示できないとき（gh が認証されていない）・問い合わせが失敗したときの本体と左の列を dark / light で撮る。
 extension DesignGallerySnapshotTests {
   func renderEditorPullRequestSnapshots(dir: URL) throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -30,5 +30,15 @@ extension DesignGallerySnapshotTests {
     pumpMain(until: { none.isReady }, "作成の入口の材料が揃う")
     try writePNG(
       none.view, size: size, name: "editor_pr_create.png", dir: dir, until: { none.isReady })
+    for (answer, name) in [
+      (PrFixtures.Answer.unavailable(.ghUnauthed), "editor_pr_unavailable.png"),
+      (.failed(.unreachable), "editor_pr_failed.png"),
+    ] {
+      let blocked = try PrFixtures.scene(answer, queriesRoot: queriesRoot, in: TestScratch.caseDir)
+      defer { blocked.cleanup() }
+      blocked.warmUp()
+      pumpMain(until: { blocked.isReady }, "\(name): 答えが出る")
+      try writePNG(blocked.view, size: size, name: name, dir: dir, until: { blocked.isReady })
+    }
   }
 }

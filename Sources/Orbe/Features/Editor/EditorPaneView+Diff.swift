@@ -91,7 +91,7 @@ extension EditorPaneView {
     diff.onFocusChange = on ? { [weak self] _ in self?.focusDidChange() } : nil
   }
 
-  /// 本体に文字だけを出す器（空状態・表示できない diff の一文・読み込み中の diff）の見え隠れと中身。
+  /// 本体に文字だけを出す器（空・使えないときの表示・表示できない diff の一文・読み込み中の diff）の見え隠れと中身。
   func refreshNotice() {
     switch body {
     case .document: faceHost.isHidden = true
@@ -99,16 +99,19 @@ extension EditorPaneView {
     case .empty: faceHost.isHidden = false
     }
     let content = faceContent
-    if faceHost.rootView.content != content {
-      faceHost.rootView = EditorFaceRoot(localization: localization, content: content)
-    }
+    if faceHost.rootView.content != content { faceHost.rootView = faceRoot(content) }
   }
 
-  /// 器に出すもの。本体が空なら、Files は空状態、Changes・PR は何も出さない。
+  /// 器の root。空・使えないときの表示は今の一覧の状態を読み、ボタンの外を押せば面が焦点を取る。
+  func faceRoot(_ content: EditorFaceRoot.Content) -> EditorFaceRoot {
+    EditorFaceRoot(
+      localization: localization, content: content, scm: scm, pullRequest: pullRequest
+    ) { [weak self] in self?.focusEditor() }
+  }
+
+  /// 器に出すもの。本体が空なら、その画面の空・使えないときの表示。
   var faceContent: EditorFaceRoot.Content {
-    guard case .diff(let diff) = body else {
-      return (group?.editor.screen ?? .files) == .files ? .empty : .blank
-    }
+    guard case .diff(let diff) = body else { return .empty(group?.editor.screen ?? .files) }
     switch diff.content {
     case .ready, .loading: return .blank
     case .unavailable(.notText): return .notice(.editorDiffNotText)

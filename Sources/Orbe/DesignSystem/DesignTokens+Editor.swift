@@ -3,7 +3,7 @@ import SwiftUI
 
 /// エディター面（⌘E）のトークンが所有する自己完結ファイル（`DesignTokens+Glass.swift` と同型）。
 extension Theme.Color {
-  /// 空状態の ◐ の沈んだ塗り。
+  /// 沈んだ塗り（アバターの地など）。
   static let editorGhost = editorDyn(light: 0xd9d3e6, dark: 0x3d3752)
   /// エディター面のアイコン・kbd の文字。dark / light とも kbKeyText と偶然同値だが役割が違うので別トークン。
   static let editorIcon = editorDyn(light: 0x766e8d, dark: 0xa99fb8)
@@ -110,10 +110,15 @@ extension Theme.Color {
 }
 
 extension Theme.Typography {
-  /// エディター面・ボードの空状態の一文（サンセリフ 13）。
+  /// 表示できない diff の理由の一文・ボードの空状態の一文（サンセリフ 13）。
   static let editorLead = NSFont.systemFont(ofSize: 13, weight: .regular)
-  /// エディター面のショートカット行・kbd（mono 12）。
-  static let editorHint = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  /// 本体の空・使えないときの表示——見出し（sans 14 medium）・案内の一文とショートカットの行（sans 12.5）・ボタン（sans 12.5
+  /// semibold）・キーの札（sans 10.5 semibold）。左の列の一言（sans 12）。
+  static let editorEmptyTitle = NSFont.systemFont(ofSize: 14, weight: .medium)
+  static let editorEmptyText = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+  static let editorEmptyButton = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
+  static let editorEmptyKey = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+  static let editorSidebarNote = NSFont.systemFont(ofSize: 12, weight: .regular)
   /// コード本体（mono 12）。
   static let editorCode = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
   /// 行番号（mono 11）。

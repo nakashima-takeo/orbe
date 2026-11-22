@@ -582,10 +582,17 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorNotFoundTitle
   case editorNotFoundMessage
 
-  // MARK: - Editor 面（空状態）
+  // MARK: - Editor 面（空・使えないときの表示）
   case editorEmptyLead
   case editorEmptySearchProject
   case editorEmptyBackToTerminal
+  case editorUnavailable
+  case editorScmUnavailableTitle
+  case editorScmNoChanges
+  case editorScmNoChangesLead
+  case editorPrNone
+  case editorPrNoneLead
+  case editorPrUnavailableTitle
 
   // MARK: - Editor 面（diff）
   case editorDiffNotText

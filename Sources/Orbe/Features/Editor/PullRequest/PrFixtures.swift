@@ -26,6 +26,8 @@
       case noPullRequest(published: Bool)
       /// GitHub のどのブランチかが決まらない（gh が無い・認証されていない など）。
       case unavailable(GitHubBranchPullRequestsUnavailable)
+      /// 今のブランチの PR の問い合わせが失敗する。
+      case failed(GitHubFailure)
     }
 
     @MainActor final class Scene {
@@ -140,6 +142,7 @@
       // 既定のブランチでは問い合わせないので、答えは使われない。
       case .noPullRequest, .defaultBranch: found = .gitHub(ref, pullRequests: .success([]))
       case .unavailable(let reason): found = .unavailable(reason)
+      case .failed(let failure): found = .gitHub(ref, pullRequests: .failure(failure))
       }
       let published: Bool
       if case .noPullRequest(let value) = answer { published = value } else { published = true }

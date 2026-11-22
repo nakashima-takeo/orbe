@@ -25,12 +25,12 @@ extension EditorPaneView {
 
   override var acceptsFirstResponder: Bool { true }
 
-  /// 文字だけの器（空状態・diff の一文）の中身は静止しているので、本体のどこを押しても面自身が受ける（焦点を取る）。骨の
-  /// host は自分で受ける。
+  /// 文字だけの器の中身は静止しているので、本体のどこを押しても面自身が受ける（焦点を取る）。ボタンを出しうる表示（PR の
+  /// 画面の空・使えないときの表示）だけは器が受け、ボタンの外の押下で面が焦点を取る。骨の host は自分で受ける。
   override func hitTest(_ point: NSPoint) -> NSView? {
     let hit = super.hitTest(point)
-    guard !faceHost.isHidden, let hit else { return hit }
-    return hit.isDescendant(of: faceHost) ? self : hit
+    guard !faceHost.isHidden, let hit, hit.isDescendant(of: faceHost) else { return hit }
+    return faceHost.rootView.content == .empty(.pullRequest) ? hit : self
   }
 
   override func mouseDown(with event: NSEvent) {

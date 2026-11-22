@@ -270,27 +270,6 @@ extension BranchPullRequestTests {
     XCTAssertEqual(publishedChecks, [])
   }
 
-  /// PR が無いブランチで、前の答えの「GitHub に在るか」を確かめている最中に読み直し、その答えが届いて先行の数を数え終わる
-  /// 前に見ている者が去れば、去った後に「GitHub に在るか」を問い合わせない。
-  func testLeavingWhileAReloadCountsSkipsThePublishedCheckEvenWithAnEarlierAnswer() {
-    // 既定のブランチの追跡 ref があると、先行の数を git で数える（答えを出すのは数え終わった後）。
-    repo.addOrigin()
-    XCTAssertTrue(repo.git(["remote", "set-head", "origin", "main"]).isSuccess)
-    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
-    answers["feat"] = .gitHub(GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([]))
-    holdsPublishedChecks = true
-    let pullRequest = watch()
-    pumpMain(until: { self.publishedChecks.count == 1 }, "前提: 前の答えの在るかを確かめている")
-    holdsLookups = true
-    pullRequest.reload()
-    pumpMain(until: { self.held.count == 1 }, "前提: 読み直しの問い合わせの最中")
-
-    releaseLookups()
-    pullRequest.endWatching()
-    letTheLookUpSettle()
-    XCTAssertEqual(publishedChecks.count, 1, "去った後に問い合わせない")
-  }
-
   /// 読み直しで前と同じ値の答えが出たら、前の答えの「GitHub に在るか」の結果は入れず、今の答えの結果だけを入れる。
   func testAnEarlierPublishedCheckDoesNotLandOnTheNextAnswer() {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)

@@ -12,17 +12,6 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// プルリクエストを作成（stroke 1.5）。
-  static let createPullRequest = Glyph(viewBox: 16, stroke: 1.5) { k in
-    var path = pullRequestBranches(k)
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
-    path.move(to: p(8, 4.5))
-    path.addLine(to: p(8, 8.5))
-    path.move(to: p(6, 6.5))
-    path.addLine(to: p(10, 6.5))
-    return [(path, 1)]
-  }
-
   /// ツリー表示（stroke 1.3）。
   static let viewAsTree = Glyph(viewBox: 16, stroke: 1.3) { k in
     var path = Path()
@@ -57,7 +46,7 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// PR の印の 3 つの点と、2 本の枝（`pullRequest`・`createPullRequest` に共通）。
+  /// PR の印の 3 つの点と、2 本の枝。
   private static func pullRequestBranches(_ k: CGFloat) -> Path {
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
