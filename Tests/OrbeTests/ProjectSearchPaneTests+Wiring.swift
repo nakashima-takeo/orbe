@@ -209,12 +209,12 @@ extension ProjectSearchPaneTests {
     searchAll(hosted, "needle")
 
     hosted.pane.isHidden = true
-    hosted.pane.setRoot(other.root)
+    hosted.tab.group.rekey(other.root)
     XCTAssertEqual(hosted.search.phase, .idle, "見えていない面では探さない")
     XCTAssertTrue(hosted.search.results.isEmpty)
 
     hosted.pane.isHidden = false
-    hosted.pane.setRoot(hosted.repo.root)
+    hosted.tab.group.rekey(hosted.repo.root)
     pumpMain(until: { hosted.search.phase == .done }, "見えている面は探し直す")
     XCTAssertEqual(hosted.search.results.files.map(\.path), ["a.txt"])
   }

@@ -65,7 +65,7 @@ extension SourceControlPaneTests {
       pumpMain(until: { old.focusedArea == .message }, "\(area): 欄に焦点")
       if area == .list { hosted.window.makeFirstResponder(hosted.pane.scmList.list) }
       XCTAssertEqual(old.focusedArea, area, "前提")
-      hosted.pane.setRoot(try TempGitRepo().root)
+      hosted.tab.group.rekey(try TempGitRepo().root)
       pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "\(area): 新しいパネル")
       RunLoop.main.run(until: Date().addingTimeInterval(0.2))
       XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "\(area)")

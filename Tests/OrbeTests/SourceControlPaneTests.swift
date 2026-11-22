@@ -269,7 +269,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     let previous = hosted.scm.control
     let other = try TempGitRepo(name: "orbe-scm-pane-other")
 
-    hosted.pane.setRoot(other.root)
+    hosted.tab.group.rekey(other.root)
     pumpMain(
       until: { self.messageField(in: hosted.pane).map { $0 !== old } ?? false }, "新しい根の欄")
     let new = try type("new", in: hosted)
@@ -321,7 +321,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     let hosted = host(repo)
     pumpMain(until: { hosted.scm.changes.changes.map(\.path) == ["a.txt"] }, "前の根の行")
 
-    hosted.pane.setRoot(other.root)
+    hosted.tab.group.rekey(other.root)
     pumpMain(until: { hosted.scm.changes.changes.map(\.path) == ["m.txt"] }, "新しい根の行")
     let row = try row(hosted, .changes, "m.txt")
     pumpMain(until: { self.slot(row, in: hosted.pane) != nil }, timeout: 3, "載っている列に新しい根の行")
