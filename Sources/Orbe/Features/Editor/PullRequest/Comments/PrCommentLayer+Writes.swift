@@ -1,29 +1,37 @@
 import Foundation
 
-/// PR のコメントの層の押下と書き込み——スレッドへの返信・解決と新しいスレッドを PR ごとの状態へ頼み、結果を頼んだ絵の差し込みへ
-/// 返す。
+/// PR のコメントの層の押下と書き込み——送る前に確かめてから、スレッドへの返信・解決と新しいスレッドを PR ごとの状態へ頼む。
+/// 返信と新しいスレッドの本文は PR ごとの書きかけから送られ、通った書きかけは状態が消す（どの層の欄も空になる・閉じる）。
+/// 層が受けるのは失敗だけで、頼んだ絵の差し込みに失敗の文を出す。
 extension PrCommentLayer {
   func press(_ control: PrCommentControl, in zone: PrCommentZone) {
-    let body = zone.hasText ? zone.text : ""
     switch (zone.subject, control) {
     case (.thread, .collapse):
       zone.isCollapsed.toggle()
     case (.thread(let thread), .resolve):
-      write(.setResolved(thread: thread.id, !thread.isResolved), from: zone, clears: false)
-    case (.thread(let thread), .add):
-      guard !body.isEmpty else { return }
-      write(.reply(thread: thread.id, body: body, resolve: false), from: zone, clears: true)
-    case (.thread(let thread), .resolveReply):
-      if body.isEmpty {
-        write(.setResolved(thread: thread.id, true), from: zone, clears: false)
-      } else {
-        write(.reply(thread: thread.id, body: body, resolve: true), from: zone, clears: true)
+      write(from: zone, replying: false) {
+        state.writeReview(.setResolved(thread: thread.id, !thread.isResolved), completion: $0)
       }
-    case (.draft, .add):
-      guard !body.isEmpty, !zone.isWriting, zone.canSend,
+    case (.thread(let thread), .add):
+      guard zone.hasText else { return }
+      write(from: zone, replying: true) {
+        state.sendReply(to: thread.id, resolve: false, completion: $0)
+      }
+    case (.thread(let thread), .resolveReply):
+      if zone.hasText {
+        write(from: zone, replying: true) {
+          state.sendReply(to: thread.id, resolve: true, completion: $0)
+        }
+      } else {
+        write(from: zone, replying: false) {
+          state.writeReview(.setResolved(thread: thread.id, true), completion: $0)
+        }
+      }
+    case (.draft(let serial), .add):
+      guard zone.hasText, !zone.isWriting, zone.canSend,
         let draft = drafts.first(where: { $0.zone === zone })
       else { return }
-      writeDraft(draft, body: body)
+      send(serial, draft)
     case (.draft, .cancel):
       guard !zone.isWriting else { return }
       closeDraft(zone)
@@ -31,31 +39,27 @@ extension PrCommentLayer {
     }
   }
 
-  /// スレッドへの書き込みを頼む。同じスレッドへの書き込みが走っていれば何もしない（2 回押しても 1 回）。削除されたスレッドと、
-  /// 行を移している最中のスレッドへは書かない。返信が通れば、解決が通らなくても欄を空にする（返信は保留中のレビューに積まれて
-  /// いるので、送り直すと同じ返信が 2 つ積まれる）。
-  private func write(_ write: GitHubReviewWrite, from zone: PrCommentZone, clears: Bool) {
+  /// スレッドへの書き込みを `request` で頼む。同じスレッドへの書き込みが走っていれば何もしない（2 回押しても 1 回）。削除された
+  /// スレッドと、行を移している最中のスレッドへは書かない。
+  private func write(
+    from zone: PrCommentZone, replying: Bool,
+    _ request: (@escaping (GitHubReviewWriteResult) -> Void) -> Bool
+  ) {
     guard case .thread(let thread) = zone.subject, zone.canSend,
       !state.isWritingReview(.thread(thread.id))
     else { return }
-    if case .reply = write, !isCurrentPullRequest {
+    if replying, !isCurrentPullRequest {
       zone.failure = L10n.string(.editorPrThreadNotCurrent, language())
       return
     }
     zone.failure = nil
-    let accepted = state.writeReview(write) { [weak self, weak zone] result in
-      guard let self, let zone else { return }
-      if let failure = result.failure {
-        zone.failure = PrPanelText.writeFailure(failure, language())
-      }
-      if clears, result.failure == nil || result.replied { zone.clearField() }
-    }
+    let accepted = request(failed(in: zone))
     if !accepted { zone.failure = L10n.string(.editorPrThreadNotReady, language()) }
   }
 
-  /// 新しいスレッドを頼む。書いている間は欄を押せない姿にし、通れば欄を閉じる（スレッドは読み直しで出る）。結果は頼んだ呼び出しの
-  /// 中に届くこともあるので、書いている姿は頼む前に付ける。
-  private func writeDraft(_ draft: PrCommentPlacement, body: String) {
+  /// 通し番号 `serial` の新しいコメントの書きかけを、欄 `draft` の行に新しいスレッドとして頼む。書いている間は、どの層の欄も
+  /// 押せない姿になる（→ `notes`）。
+  private func send(_ serial: Int, _ draft: PrCommentPlacement) {
     let zone = draft.zone
     // 欄が行を数えた両端が PR の今の両端でない間（ベースの付け替えを読んで、diff が新しい両端の本文を読み終える前）は書かない。
     guard state.diffEnds == draft.ends else {
@@ -67,23 +71,15 @@ extension PrCommentLayer {
       return
     }
     zone.failure = nil
-    zone.isWriting = true
-    let write = GitHubReviewWrite.addThread(
-      path: path, side: draft.version == .old ? .old : .new, line: draft.line + 1,
-      commit: draft.ends.head, body: body)
-    let accepted = state.writeReview(write) { [weak self, weak zone] result in
-      guard let self, let zone else { return }
-      zone.isWriting = false
-      if let failure = result.failure {
-        zone.failure = PrPanelText.writeFailure(failure, language())
-        return
-      }
-      zone.clearField()
-      closeDraft(zone)
-    }
-    if !accepted {
-      zone.isWriting = false
-      zone.failure = L10n.string(.editorPrThreadNotReady, language())
+    let accepted = state.sendComment(serial, completion: failed(in: zone))
+    if !accepted { zone.failure = L10n.string(.editorPrThreadNotReady, language()) }
+  }
+
+  /// 書き込みの結果が失敗なら、絵の差し込み `zone` に失敗の文を出す（層か差し込みが消えていれば何もしない）。
+  private func failed(in zone: PrCommentZone) -> (GitHubReviewWriteResult) -> Void {
+    { [weak self, weak zone] result in
+      guard let self, let zone, let failure = result.failure else { return }
+      zone.failure = PrPanelText.writeFailure(failure, language())
     }
   }
 }

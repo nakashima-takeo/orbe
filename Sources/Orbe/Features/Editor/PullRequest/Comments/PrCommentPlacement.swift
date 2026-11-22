@@ -10,7 +10,8 @@ import OrbeEditorCore
 /// 古い版のものとするのと同じ考え方）。移した行に印を出せないとき（diff の区間の外）も行が無くなったとする。行が無くなった欄は
 /// 閉じずに、変更区間の中ならその区間の新しい側の終わりの行の下に、印を出せないだけなら移した行の下に置き、書きかけを残す
 /// （`isGone`）。移し始めてから、移した行に印を出せるかを確かめ終えるまでは `isMoving` が立ち、絵の差し込みの
-/// `isLineMoving` にも写す（書き込みのボタンを押せない姿にする）。
+/// `isLineMoving` にも写す（書き込みのボタンを押せない姿にする）。行を移したとき、または行が無くなったときに `onMove` で
+/// 知らせる（載せる層が書きかけの欄の位置へ書き戻す）。
 @MainActor
 final class PrCommentPlacement {
   let zone: PrCommentZone
@@ -28,16 +29,22 @@ final class PrCommentPlacement {
   private(set) var isMoving = false {
     didSet { zone.isLineMoving = isMoving }
   }
+  var onMove: (PrCommentPlacement) -> Void = { _ in }
 
-  init(
-    zone: PrCommentZone, version: DiffRows.Version, line: Int, ends: PullRequestState.DiffEnds,
-    basis: EditorDiff.SideTexts
-  ) {
+  /// 欄を位置 `spot` に置く（`isGone` なら、行が今の版に無い欄）。
+  init(zone: PrCommentZone, spot: PullRequestState.CommentSpot, isGone: Bool = false) {
     self.zone = zone
-    self.version = version
-    self.line = line
-    self.ends = ends
-    self.basis = basis
+    version = spot.side == .old ? .old : .new
+    line = spot.line
+    ends = spot.ends
+    basis = spot.basis
+    self.isGone = isGone
+  }
+
+  /// 欄の今の位置。
+  var spot: PullRequestState.CommentSpot {
+    PullRequestState.CommentSpot(
+      side: version == .old ? .old : .new, line: line, ends: ends, basis: basis)
   }
 
   /// 行を移し終え、印を出せるかも確かめ終えた（裏の仕事が残っていない）。
@@ -79,6 +86,7 @@ final class PrCommentPlacement {
           isGone = true
           isMoving = false
         }
+        onMove(self)
         done()
       }
     }
@@ -91,6 +99,7 @@ final class PrCommentPlacement {
     isMoving = false
     if !DiffRows.contains(version == .old ? commentable.old : commentable.new, line) {
       isGone = true
+      onMove(self)
     }
   }
 

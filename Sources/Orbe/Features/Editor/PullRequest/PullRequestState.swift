@@ -6,9 +6,9 @@ protocol PullRequestStateObserver: AnyObject {
   func pullRequestStateDidChange(_ state: PullRequestState)
 }
 
-/// PR ごとの状態——最後に読めた中身、確認済み（GitHub が返した値と、書いている途中の値）、レビューのやりとり、diff の両端、
-/// 最後の失敗。手元のリポジトリ（`git-common-dir`）と PR の同一性ごとに 1 つで、アプリが動いている間持つ。PR のパネル・
-/// PR の diff タブ・タブ行のチェックが同じものを見るので、確認済みが面やウインドウで食い違わない。
+/// PR ごとの状態——最後に読めた中身、確認済み（GitHub が返した値と、書いている途中の値）、レビューのやりとり、コメントの
+/// 書きかけ、diff の両端、最後の失敗。手元のリポジトリ（`git-common-dir`）と PR の同一性ごとに 1 つで、アプリが動いている間
+/// 持つ。PR のパネル・PR の diff タブ・タブ行のチェックが同じものを見るので、確認済みと書きかけが面やウインドウで食い違わない。
 ///
 /// GitHub に問い合わせるのは見ている者（`beginWatching`）がいる間だけ。中身とレビューのやりとりを読み直すきっかけは、誰も見ていない状態から
 /// 見ている者が現れた・`reload`・PR のリポジトリで Orbe の中のネット操作が終わった・PR の先頭のブランチかベースブランチの
@@ -114,6 +114,9 @@ final class PullRequestState {
   var reviewDraft = ReviewDraft()
   /// 最後のレビューの送信の失敗（PR のパネルが書く。次に送るときに消す）。
   var submissionFailure: GitHubFailure?
+  /// スレッドへの返信の書きかけと、新しいコメントの書きかけ（→ `PullRequestState+CommentDrafts`）。
+  @ObservationIgnored var commentDrafts = CommentDrafts()
+  @ObservationIgnored var commentDraftsObservers: [WeakCommentDraftsObserver] = []
   /// レビューへの書き込みが走っている対象と、順番を待っている対象。
   var reviewWriteTargets: Set<ReviewTarget> = []
   @ObservationIgnored var reviewWrites: [ReviewWrite] = []

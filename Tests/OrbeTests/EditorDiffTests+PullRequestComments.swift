@@ -10,7 +10,7 @@ import XCTest
 /// 壊れると何が起きるか: スレッドが別の行の下に出る。印を押しても欄が開かない・焦点が入らない・⌘↵ で書けない。書いた行と
 /// 違う行にコメントが付く（古い側の行の印から新しい側の行へ書く・rename の判定が GitHub と食い違うファイルの古い側の行に
 /// 印やスレッドが出る）。2 回押すと同じコメントが 2 つ付く。
-/// 失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。同じ PR の別のタブの書きかけが消える。
+/// 失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。
 /// 同じ行の両側のスレッドが時刻の順に並ばない。消えたスレッドの絵の差し込みが層に残り続ける。
 extension EditorDiffTests {
   /// 差し替えの GitHub のレビューのやりとり（テストが書き換える）と、届いた書き込み。
@@ -355,35 +355,5 @@ extension EditorDiffTests {
     while !remote.held.isEmpty { remote.held.removeFirst()() }
     pumpMain(until: { layer.draft(.new, line: 1) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(remote.writes.count, 1)
-  }
-
-  /// 同じ PR の diff を 2 つのタブで開いても、片方のタブの返信が通って欄が空になる・失敗の文が出るのはそのタブだけで、
-  /// もう片方の書きかけは変わらない。
-  func testTwoTabsOfOnePullRequestKeepTheirOwnReplyDrafts() throws {
-    let remote = Remote()
-    remote.threads = [
-      GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
-        canResolve: true, canUnresolve: false,
-        comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
-    ]
-    let (first, _) = try commentedDiff(remote)
-    let (second, _) = try open(try XCTUnwrap(first.comments).state)
-    let mine = try XCTUnwrap(first.comments?.zone(thread: "T"))
-    let other = try XCTUnwrap(second.comments?.zone(thread: "T"))
-    pumpMain(until: { mine.surface != nil && other.surface != nil }, "両方のタブにスレッドが置かれる")
-    other.surface?.replaceText(of: other.field, with: "別のタブの書きかけ")
-
-    mine.surface?.replaceText(of: mine.field, with: "通る返信")
-    mine.zone(.pressed(PrCommentControl.add))
-    pumpMain(until: { mine.text.isEmpty }, "通れば欄が空になる")
-    XCTAssertEqual(other.text, "別のタブの書きかけ")
-
-    remote.failure = .unreachable
-    mine.surface?.replaceText(of: mine.field, with: "通らない返信")
-    mine.zone(.pressed(PrCommentControl.add))
-    pumpMain(until: { mine.failure != nil }, "失敗が届く")
-    XCTAssertNil(other.failure)
-    XCTAssertEqual(other.text, "別のタブの書きかけ")
   }
 }

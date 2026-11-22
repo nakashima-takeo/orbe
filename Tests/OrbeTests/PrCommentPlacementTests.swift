@@ -13,8 +13,9 @@ final class PrCommentPlacementTests: OrbeTestCase {
   /// 新しい側の行 `line` に、両端 `ends` の版（新しい側の本文 `base`）で数えた欄。
   private func placement(line: Int) -> PrCommentPlacement {
     PrCommentPlacement(
-      zone: PrCommentZone(subject: .draft, line: line + 1, fieldID: "draft"), version: .new,
-      line: line, ends: ends, basis: EditorDiff.SideTexts(old: base, new: base))
+      zone: PrCommentZone(subject: .draft(0), line: line + 1, fieldID: "draft"),
+      spot: PullRequestState.CommentSpot(
+        side: .new, line: line, ends: ends, basis: EditorDiff.SideTexts(old: base, new: base)))
   }
 
   /// 両端 `head` の版（新しい側の本文 `text`）へ追わせ、行差分を取り終えるまで待つ。

@@ -9,6 +9,8 @@ extension PullRequestState {
   /// 書き込みの対象。対象への書き込みが走っている間と順番を待っている間は、同じ対象への次の書き込みを受け付けない。
   enum ReviewTarget: Hashable {
     case thread(String)
+    /// 新しいコメントの書きかけ（通し番号）。
+    case comment(Int)
     /// レビューの送信。
     case submission
   }
@@ -68,10 +70,49 @@ extension PullRequestState {
   func writeReview(
     _ write: GitHubReviewWrite, completion: @escaping (GitHubReviewWriteResult) -> Void
   ) -> Bool {
+    enqueueReview(write, target: Self.target(of: write), completion: completion)
+  }
+
+  /// スレッド `thread` への返信の書きかけを送る（`resolve` なら、返信の後にスレッドを解決する）。本文は書きかけから読む。
+  /// 受け付けの条件は `writeReview` と同じで、書きかけが無ければ受け付けない。返信が通ったら（「解決して返信」で解決だけが
+  /// 通らなかったときも）、書きかけを消してから `completion` を呼ぶ——頼んだ層が消えていても消す（送り直して同じ返信を
+  /// 2 つ積まない）。
+  @discardableResult
+  func sendReply(
+    to thread: String, resolve: Bool, completion: @escaping (GitHubReviewWriteResult) -> Void
+  ) -> Bool {
+    guard let draft = commentDrafts.replies[thread] else { return false }
+    let write = GitHubReviewWrite.reply(thread: thread, body: draft.body, resolve: resolve)
+    return enqueueReview(write, target: .thread(thread)) { [weak self] result in
+      if result.failure == nil || result.replied { self?.removeReply(to: thread) }
+      completion(result)
+    }
+  }
+
+  /// 通し番号 `serial` の新しいコメントの書きかけを、その欄の位置の行に新しいスレッドとして送る。受け付けの条件は
+  /// `writeReview` と同じで、書きかけが無ければ受け付けない。通ったら書きかけを消してから `completion` を呼ぶ。
+  @discardableResult
+  func sendComment(
+    _ serial: Int, completion: @escaping (GitHubReviewWriteResult) -> Void
+  ) -> Bool {
+    guard let draft = commentDrafts.comments[serial] else { return false }
+    let spot = draft.spot
+    let write = GitHubReviewWrite.addThread(
+      path: draft.path, side: spot.side, line: spot.line + 1, commit: spot.ends.head,
+      body: draft.body)
+    return enqueueReview(write, target: .comment(serial)) { [weak self] result in
+      if result.failure == nil { self?.removeComment(serial) }
+      completion(result)
+    }
+  }
+
+  private func enqueueReview(
+    _ write: GitHubReviewWrite, target: ReviewTarget?,
+    completion: @escaping (GitHubReviewWriteResult) -> Void
+  ) -> Bool {
     guard let content, let review else { return false }
     if case .addThread(_, _, _, let commit, _) = write, commit != review.headCommit { return false }
     if case .submit = write, !isReviewAligned { return false }
-    let target = Self.target(of: write)
     if let target {
       guard !reviewWriteTargets.contains(target) else { return false }
       reviewWriteTargets.insert(target)
@@ -123,6 +164,7 @@ extension PullRequestState {
     }
   }
 
+  /// 書き込みの対象。新しいスレッドは nil（書きかけから送る `sendComment` は、その書きかけを対象として自分で渡す）。
   private static func target(of write: GitHubReviewWrite) -> ReviewTarget? {
     switch write {
     case .addThread: nil
