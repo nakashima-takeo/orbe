@@ -4,7 +4,8 @@ import XCTest
 
 /// 行を追う欄の置き場所——diff の両端が替わると行を新しい版へ移し、移した行に印を出せると確かめ終えるまで送れない姿にする。
 /// 壊れると、push の直後に古い行の番号のまま新しいコミットへ書ける・確かめる前に次の push が来た欄が「移している」姿で
-/// 固まって送れなくなる・印を出せない行へ移った欄が送れる。
+/// 固まって送れなくなる・印を出せない行へ移った欄が送れる・書き換えられた行が後の push で元に戻っても、欄が行の無い姿のまま
+/// 送れない。
 @MainActor
 final class PrCommentPlacementTests: OrbeTestCase {
   private let base = "one\ntwo\nthree\nfour\n"
@@ -54,5 +55,22 @@ final class PrCommentPlacementTests: OrbeTestCase {
     follow(placement, to: "H3", "zero\nzero\n" + base)
     XCTAssertEqual(placement.ends.head, "H3")
     XCTAssertEqual(placement.line, 5)
+  }
+
+  /// 書き換えられて行が無くなった欄も、後の版でその行が元に戻れば、欄を開いた行に戻って送れる（行は欄を開いた版から導き直し、
+  /// 前の版で導いた行から継ぎ足さない）。
+  func testALineGoneInOneHeadComesBackWhenALaterHeadRestoresIt() {
+    let placement = placement(line: 2)
+    follow(placement, to: "H2", "one\ntwo\nTRES\nfour\n")
+    XCTAssertTrue(placement.isGone, "前提: 書き換えられた行は無くなる")
+
+    follow(placement, to: "H3", base)
+    placement.follow(
+      PullRequestState.DiffEnds(mergeBase: "B", head: "H3", renames: [:]),
+      shown: EditorDiff.SideTexts(old: base, new: base), commentable: ([], [0..<4])
+    ) {}
+    XCTAssertEqual(placement.line, 2)
+    XCTAssertFalse(placement.isGone)
+    XCTAssertTrue(placement.zone.canSend)
   }
 }
