@@ -17,7 +17,6 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
     tab.group.view.addSubview(outsider)
     XCTAssertTrue(window.makeFirstResponder(outsider))
@@ -52,7 +51,6 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
       document = opened
       service = RootFiles.shared(for: repo.root)
       XCTAssertNotNil(service, "前提: 2 つの連が同じ根を握っている")
-      window.orderOut(nil)
       window.contentView = nil
     }
 
