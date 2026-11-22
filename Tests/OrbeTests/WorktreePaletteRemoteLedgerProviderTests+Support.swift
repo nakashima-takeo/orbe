@@ -174,14 +174,4 @@ extension WorktreePaletteRemoteLedgerProviderTests {
   func run(_ args: [String], in cwd: String) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: cwd)
   }
-
-  /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
-  func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
-  }
 }

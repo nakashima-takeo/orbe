@@ -89,12 +89,11 @@ extension EditorDiffTests {
     _ pane: EditorPaneView, truth: Truth, working: EditorDiff
   ) -> String? {
     var mismatch: String?
-    let deadline = Date().addingTimeInterval(10)
-    repeat {
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    waitUntil(10) {
       mismatch = self.mismatch(
         pane.diff, truth: truth, working: working, mode: pane.diffModes.mode)
-    } while mismatch != nil && Date() < deadline
+      return mismatch == nil
+    }
     return mismatch
   }
 

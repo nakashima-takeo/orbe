@@ -79,14 +79,14 @@ extension OrbeTestCase {
     _ pane: EditorPaneView, file: StaticString = #filePath, line: UInt = #line,
     until ready: (PaneProbe) throws -> Bool
   ) throws -> PaneProbe {
-    let deadline = Date().addingTimeInterval(5)
-    var probe = try PaneProbe(pane)
-    while try !ready(probe), Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-      probe = try PaneProbe(pane)
+    var probe: PaneProbe?
+    let settled = try waitUntil(5) {
+      let measured = try PaneProbe(pane)
+      probe = measured
+      return try ready(measured)
     }
-    XCTAssertTrue(try ready(probe), "5 秒以内に成立しない", file: file, line: line)
-    return probe
+    XCTAssertTrue(settled, "5 秒以内に成立しない", file: file, line: line)
+    return try XCTUnwrap(probe)
   }
 
   /// 行内入力の入力欄（field editor）が焦点を取るまで待って返す。

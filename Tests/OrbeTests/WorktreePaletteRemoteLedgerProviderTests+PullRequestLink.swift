@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -78,7 +79,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     ) {
       found = $0
     }
-    XCTAssertTrue(pump { found != nil })
+    XCTAssertTrue(waitUntil(20) { found != nil })
     return found
   }
 

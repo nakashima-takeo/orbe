@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -36,7 +37,7 @@ extension WorktreeCreateBaseTests {
   func testDivergedLocalBranchIsCreatedAsIs() throws {
     let localTip = advanceLocally("stale")
     let provider = try start()
-    XCTAssertTrue(pump({ provider.facts.remoteFetchLanded }), "前提: 着地している")
+    XCTAssertTrue(waitUntil(20) { provider.facts.remoteFetchLanded }, "前提: 着地している")
     let path = try resolve(provider, .localBranch(name: "stale"))
     XCTAssertEqual(head(of: path), localTip)
   }
@@ -50,7 +51,7 @@ extension WorktreeCreateBaseTests {
     var result: Result<WorktreeRepoFacts.DirectoryResolution, GitRefreshFailure>?
     provider.facts.refreshAndCreate(
       sync, creating: { creatingCalls += 1 }, completion: { result = $0 })
-    XCTAssertTrue(pump({ result != nil }, timeout: 30))
+    XCTAssertTrue(waitUntil(30) { result != nil })
     guard case .success(.ready(let path)) = try XCTUnwrap(result) else {
       return XCTFail("\(String(describing: result))")
     }
@@ -75,7 +76,7 @@ extension WorktreeCreateBaseTests {
     var result: Result<WorktreeRepoFacts.DirectoryResolution, GitRefreshFailure>?
     provider.facts.refreshAndCreate(
       sync, creating: { XCTFail("作成に進まない") }, completion: { result = $0 })
-    XCTAssertTrue(pump({ result != nil }, timeout: 30))
+    XCTAssertTrue(waitUntil(30) { result != nil })
     guard case .failure(.fastForward(nil)) = try XCTUnwrap(result) else {
       return XCTFail("\(String(describing: result))")
     }
@@ -93,7 +94,7 @@ extension WorktreeCreateBaseTests {
 
     var result: Result<WorktreeRepoFacts.DirectoryResolution, GitRefreshFailure>?
     provider.facts.refreshAndCreate(sync, creating: {}, completion: { result = $0 })
-    XCTAssertTrue(pump({ result != nil }, timeout: 30))
+    XCTAssertTrue(waitUntil(30) { result != nil })
     guard case .failure(.fastForward(.some(.reason(let reason)))) = try XCTUnwrap(result) else {
       return XCTFail("\(String(describing: result))")
     }
@@ -111,7 +112,7 @@ extension WorktreeCreateBaseTests {
 
     var resolution: WorktreeRepoFacts.DirectoryResolution?
     provider.facts.createLocalBranchWorktree(name: sync.name) { resolution = $0 }
-    XCTAssertTrue(pump({ resolution != nil }, timeout: 30))
+    XCTAssertTrue(waitUntil(30) { resolution != nil })
     guard case .ready(let path) = try XCTUnwrap(resolution) else {
       return XCTFail("\(String(describing: resolution))")
     }
@@ -128,7 +129,7 @@ extension WorktreeCreateBaseTests {
         .isSuccess)
     var result: Result<WorktreeRepoFacts.DirectoryResolution, GitRefreshFailure>?
     provider.facts.refreshAndCreate(sync, creating: {}, completion: { result = $0 })
-    XCTAssertTrue(pump({ result != nil }, timeout: 30))
+    XCTAssertTrue(waitUntil(30) { result != nil })
     guard case .failure(.fetch(.reason(let reason))) = try XCTUnwrap(result) else {
       return XCTFail("\(String(describing: result))")
     }
@@ -139,7 +140,7 @@ extension WorktreeCreateBaseTests {
   private func staleSync(_ provider: WorktreePaletteDataProvider) throws
     -> WorktreePaletteBranchSync
   {
-    XCTAssertTrue(pump({ provider.facts.remoteFetchLanded }), "前提: 着地している")
+    XCTAssertTrue(waitUntil(20) { provider.facts.remoteFetchLanded }, "前提: 着地している")
     let sync = try XCTUnwrap(palette.items.first { $0.name == "stale" }?.sync)
     XCTAssertTrue(sync.isFastForwardable)
     return sync

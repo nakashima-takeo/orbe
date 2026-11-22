@@ -63,10 +63,7 @@ final class TestIsolationTests: OrbeTestCase {
     XCTAssertNil(GitHubCLI().resolveGh(), "PATH の既知の場所に開発者の gh が入っていない")
     var availability: GitHubAvailability?
     GitHubCLI().probe(cwd: TestScratch.caseDir.path, isGitHub: true) { availability = $0 }
-    let deadline = Date().addingTimeInterval(10)
-    while availability == nil, Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-    }
+    waitUntil(10) { availability != nil }
     XCTAssertEqual(availability, .ghMissing)
 
     let environment = ProcessInfo.processInfo.environment

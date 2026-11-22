@@ -167,11 +167,7 @@ final class GitHangFixture {
   /// 連鎖）がある実行は、main を塞ぐ `waitUntilHung` では始まりもしない。
   @MainActor
   func pumpUntilHung(timeout: TimeInterval = 30) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !FileManager.default.fileExists(atPath: started), Date() < deadline {
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
-    }
-    return FileManager.default.fileExists(atPath: started)
+    waitUntil(timeout) { FileManager.default.fileExists(atPath: started) }
   }
 
   /// 待ちを解く。何度呼んでもよい。

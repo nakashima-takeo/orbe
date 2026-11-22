@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -31,10 +32,10 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
     provider.load()
     XCTAssertTrue(
-      pump({
+      waitUntil(20) {
         guard case .loaded = provider.branchPRStates["issue/1257"] else { return false }
         return model.classification?.first { $0.branch == "issue/1257" }?.isReady == true
-      }))
+      })
 
     XCTAssertEqual(
       provider.branchPRStates["issue/1257"],
@@ -68,10 +69,10 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
     provider.load()
     XCTAssertTrue(
-      pump({
+      waitUntil(20) {
         guard case .loaded = provider.branchPRStates["topic"] else { return false }
         return true
-      }))
+      })
 
     XCTAssertEqual(
       provider.branchPRStates["topic"],
@@ -106,10 +107,10 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
     provider.load()
     XCTAssertTrue(
-      pump({
+      waitUntil(20) {
         guard case .loaded = provider.branchPRStates["b"] else { return false }
         return true
-      }))
+      })
 
     XCTAssertEqual(provider.branchPRStates["a"], .failed, "確かめられない remote へ push する行")
     XCTAssertEqual(provider.branchPRStates["u"], .failed, "URL の remote へ push する行")
