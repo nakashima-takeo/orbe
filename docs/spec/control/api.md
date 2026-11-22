@@ -10,7 +10,7 @@ updated: 2026-11-22
 
 ## トランスポート
 
-Unix domain socket `control.sock`（workspaces.json と並置・パーミッション 0600）。置き場は `StateDir` が一元解決し、`ORBE_STATE_DIR`（非空）設定時はその dir 直下（検証用の隔離インスタンス。[persistence](../platform/persistence.md) と同じ解決）。プロトコルは改行区切り JSON-RPC 2.0。プロセスに 1 つで、起動は `applicationDidFinishLaunching` で行い、終了で socket を unlink する。accept/受信/行分割/応答/イベント配信/timeout は専用シリアルキュー 1 本上で直列実行し、domain 操作は main へ hop する（libghostty surface API と AppKit は main 規律）。AF_UNIX の sun_path 長上限を超えるパスでは無効化される。
+Unix domain socket `control.sock`（workspaces.json と並置・パーミッション 0600）。置き場は `StateDir` が一元解決し、`ORBE_STATE_DIR`（非空）設定時はその dir 直下（検証用の隔離インスタンス。[persistence](../platform/persistence.md) と同じ解決）。プロトコルは改行区切り JSON-RPC 2.0。プロセスに 1 つで、起動は `applicationDidFinishLaunching`・終了で socket を unlink する。accept/受信/行分割/応答/イベント配信/timeout は専用シリアルキュー 1 本上で直列実行し、domain 操作は main へ hop する（libghostty surface API と AppKit は main 規律）。AF_UNIX の sun_path 長上限を超えるパスでは無効化される。
 
 接続 fd は accept 後に非ブロッキング化し、I/O がキューをブロックしない——詰まった 1 接続が accept・他接続・event 配信・timeout を巻き添えにしないため。送信は per-connection 出力バッファ経由で、書込不可は書込可能まで待機・EINTR はリトライ・EPIPE 等は切断。出力滞留が上限を超えた接続は切断する。受信は改行が来ないまま 1 行が上限を超えた接続を切断する（メモリ枯渇防止）。
 
@@ -62,7 +62,7 @@ workspace の ID を読む動詞は、どれも同じ規則で `workspaceId` を
 
 ## ツール
 
-JSON-RPC メソッドと MCP の普段のツール名は 1 対 1 に対応し、各ツールの `inputSchema` の欄はその動詞が受ける引数の鍵とちょうど同じ（裏で動く agent の回の道具は、`run_tool` を通る別の名前の集まり → [MCP ブリッジ](#mcp-ブリッジ)）。ただし `report_agent`・`config_*`・workspace CRUD・`focus_tab`/`close_tab`/`open_file`/`open_diff`・`completion_*`・`run_tool` は socket 専用で、普段のツールには出さない。`report_agent` を呼ぶのは状態報告の `orbe-report`（→ [agent/notify](../agent/notify.md)）、`config_*`・workspace CRUD・`focus_tab`/`close_tab` を呼ぶのは `orb`（→ [cli](cli.md)）、`completion_*` を呼ぶのは zsh の補完の widget（→ [completion](../palette/completion.md)）。`run_tool` を呼ぶのは、回の札を持つ `orbe-mcp`。`open_file`/`open_diff` を呼ぶ同梱のクライアントは無く、呼び手が control.sock へ直に要求を書いて呼ぶ。
+JSON-RPC メソッド = MCP の普段のツール名の 1:1 で、各ツールの `inputSchema` の欄はその動詞が受ける引数の鍵とちょうど同じ（裏で動く agent の回の道具は、`run_tool` を通る別の名前の集まり → [MCP ブリッジ](#mcp-ブリッジ)）。ただし `report_agent`・`config_*`・workspace CRUD・`focus_tab`/`close_tab`/`open_file`/`open_diff`・`completion_*`・`run_tool` は socket 専用で、普段のツールには出さない。`report_agent` を呼ぶのは状態報告の `orbe-report`（→ [agent/notify](../agent/notify.md)）、`config_*`・workspace CRUD・`focus_tab`/`close_tab` を呼ぶのは `orb`（→ [cli](cli.md)）、`completion_*` を呼ぶのは zsh の補完の widget（→ [completion](../palette/completion.md)）。`run_tool` を呼ぶのは、回の札を持つ `orbe-mcp`。`open_file`/`open_diff` を呼ぶ同梱のクライアントは無く、呼び手が control.sock へ直に要求を書いて呼ぶ。
 
 - `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount・hasBoard。`hasBoard` はその workspace が[ボード](../chrome/board.md)を持つか（今は Home だけが true）で、ボードのウィジェットの 3 動詞の宛先を外から選ぶ唯一の手がかり——Home の root を知らない agent でも宛先を選べ、ボードを持つ workspace が増えても呼び手は変わらない。`activated` は配下にmaterialize開始済みタブが1枚以上あるかを表す現在値で、0タブまたは全タブ未activatedならfalse。`dormantAgentCount` は現在残る未消費の復元チケット（休眠agent）タブ数で、混在workspaceでは `activated: true` と正の値が同時に成立する。0タブworkspaceを前面化した場合は `active: true, activated: false, dormantAgentCount: 0` となる。
 - `list_tabs {workspaceId?}` → `{tabs:[…], seq}` … tabId・workspaceId・workspaceName・title・cwd・agentState・agentSessionId（resume 用・未設定なら null）・active（その workspace で選択中のタブ。背景 workspace でも 1 枚 true で、前面かは `list_workspaces` の `active` と合わせて分かる。[ボード](../chrome/board.md)を選んでいる workspace ではどのタブも false）。`workspaceId` 省略は全 workspace 横断、指定でその workspace のタブだけ（未知 id は `-32004`）。タブ順。ボードはタブではないので出ない。`seq` は snapshot 時点の履歴位置で、tab の状態と同じ瞬間の値。
