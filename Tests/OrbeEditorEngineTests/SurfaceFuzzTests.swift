@@ -37,8 +37,8 @@ final class SurfaceFuzzTests: EngineTestCase {
     .insertCursor(below: false), .cancel,
   ]
 
-  private static let operationSeeds: [UInt64] = [0x5eed, 6, 11]
-  private static let inputMethodSeeds: [UInt64] = [0x1e, 7, 12]
+  private static let operationSeeds: [UInt64] = [0x5eed, 0x6, 0xb]
+  private static let inputMethodSeeds: [UInt64] = [0x1e, 0x7, 0xc]
 
   func testRandomOperationsKeepTheTextSelectionAndUndoConsistent() throws {
     try run(seeds: Self.operationSeeds.prefix(1), steps: 400)
@@ -89,26 +89,29 @@ final class SurfaceFuzzTests: EngineTestCase {
       }
     }
     var generator = SplitMix(seed: seed)
+    // 種の並びの定義と同じ 16 進数で出す。
+    let hexSeed = "0x" + String(seed, radix: 16)
     var tip = original
     for step in 0..<steps {
-      let passed = Fuzz.step(self, "seed \(seed) step \(step)") {
+      let passed = Fuzz.step(self, "seed \(hexSeed) step \(step)") {
         try operationStep(opened, window, inputMethod: inputMethod, &generator)
-        try check(opened, "seed \(seed) step \(step)")
-        XCTAssertEqual(shadow as String, text(opened.document), "seed \(seed) step \(step): 配り先の畳み")
-        if inputMethod { assertConsistent(opened, "seed \(seed) step \(step)") }
+        try check(opened, "seed \(hexSeed) step \(step)")
+        XCTAssertEqual(
+          shadow as String, text(opened.document), "seed \(hexSeed) step \(step): 配り先の畳み")
+        if inputMethod { assertConsistent(opened, "seed \(hexSeed) step \(step)") }
         if !undo.canRedo && !view.hasMarkedText() { tip = text(opened.document) }
       }
       guard passed else { return false }
     }
-    return Fuzz.step(self, "seed \(seed)") {
+    return Fuzz.step(self, "seed \(hexSeed)") {
       if view.hasMarkedText() {
         view.unmarkText()
         if !undo.canRedo { tip = text(opened.document) }
       }
       while undo.canUndo { undo.undo() }
-      XCTAssertEqual(text(opened.document), original, "seed \(seed): undo を尽くすと元の本文")
+      XCTAssertEqual(text(opened.document), original, "seed \(hexSeed): undo を尽くすと元の本文")
       while undo.canRedo { undo.redo() }
-      XCTAssertEqual(text(opened.document), tip, "seed \(seed): redo を尽くすと履歴の先端の本文")
+      XCTAssertEqual(text(opened.document), tip, "seed \(hexSeed): redo を尽くすと履歴の先端の本文")
     }
   }
 

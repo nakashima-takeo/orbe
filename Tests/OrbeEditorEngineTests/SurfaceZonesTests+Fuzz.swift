@@ -16,7 +16,7 @@ import XCTest
 /// （付くメソッド）は種の並びの全部で 2,000 手ずつ流す。全部の段は、小さい段と同じ種で始まり、小さい段の 400 手を先頭に
 /// 持つ。main では両方のメソッドが走る。
 extension SurfaceZonesTests {
-  private static let fuzzSeeds: [UInt64] = [0x20e, 3, 17]
+  private static let fuzzSeeds: [UInt64] = [0x20e, 0x3, 0x11]
 
   func testRandomOperationsAcrossTheBodyFieldsAndZoneTextStayConsistent() throws {
     try fuzz(seeds: Self.fuzzSeeds.prefix(1), steps: 400)
@@ -48,8 +48,10 @@ extension SurfaceZonesTests {
     thread.surface = surface
     surface.setRows(zone(thread, at: 3))
     var generator = SplitMix(seed: seed)
+    // 種の並びの定義と同じ 16 進数で出す。
+    let hexSeed = "0x" + String(seed, radix: 16)
     for index in 0..<steps {
-      let label = "seed \(seed) step \(index)"
+      let label = "seed \(hexSeed) step \(index)"
       let passed = Fuzz.step(self, label) {
         let kind = Int.random(in: 0..<22, using: &generator)
         let before = (primary: surface.primary, body: text(opened.document), reply: field.string)
@@ -71,14 +73,14 @@ extension SurfaceZonesTests {
       }
       guard passed else { return false }
     }
-    return Fuzz.step(self, "seed \(seed)") {
+    return Fuzz.step(self, "seed \(hexSeed)") {
       surface.setPrimary(.body)
       let body = try XCTUnwrap(view.undoManager)
       while body.canUndo { body.undo() }
-      XCTAssertEqual(text(opened.document), original, "seed \(seed): 本文の undo を尽くすと元の本文")
+      XCTAssertEqual(text(opened.document), original, "seed \(hexSeed): 本文の undo を尽くすと元の本文")
       let site = try XCTUnwrap(surface.fields["reply"])
       while site.editor.undoManager.canUndo { site.editor.undoManager.undo() }
-      XCTAssertEqual(field.string, "", "seed \(seed): 入力欄の undo を尽くすと空")
+      XCTAssertEqual(field.string, "", "seed \(hexSeed): 入力欄の undo を尽くすと空")
     }
   }
 
