@@ -195,11 +195,14 @@ final class BackgroundRunsTests: OrbeTestCase {
     _ = runs.run(command("sleep 30 & echo $! > \(pidFile); wait")) { _ in }
     var waitingCompleted = false
     _ = runs.run(command("echo never")) { _ in waitingCompleted = true }
-    sleepUntil(10) { FileManager.default.fileExists(atPath: pidFile) }
-    let pid = try XCTUnwrap(
-      pid_t(
-        try String(contentsOfFile: pidFile, encoding: .utf8)
-          .trimmingCharacters(in: .whitespacesAndNewlines)))
+    var written: pid_t?
+    // ファイルはシェルが先に作り、中身は echo があとから書く。そのため、echo が書く末尾の改行まで書き込まれている場合だけ、その中身を pid として読む。
+    sleepUntil(10) {
+      written = (try? String(contentsOfFile: pidFile, encoding: .utf8))
+        .flatMap { $0.hasSuffix("\n") ? pid_t($0.dropLast()) : nil }
+      return written != nil
+    }
+    let pid = try XCTUnwrap(written, "10 秒待っても、末尾の改行まで書き込まれた孫プロセスの pid を読めない")
 
     let started = Date()
     runs.stopAll()
