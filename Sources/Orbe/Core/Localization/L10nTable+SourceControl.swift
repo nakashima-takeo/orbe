@@ -3,7 +3,6 @@ import Foundation
 /// エディター面のソース管理の文言分冊。本体 `L10n.table` が結合する。
 extension L10n {
   static let sourceControlTable: [L10nKey: (ja: String, en: String)] = [
-    .editorRailSourceControl: ("ソース管理", "Source Control"),
     .editorScmTitle: ("ソース管理", "Source Control"),
     .editorScmStaged: ("ステージされている変更", "Staged Changes"),
     .editorScmChanges: ("変更", "Changes"),

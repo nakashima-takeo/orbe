@@ -33,7 +33,8 @@ extension EditorPaneView {
     let trailing = bar.trailingAnchor.constraint(equalTo: trailingAnchor)
     NSLayoutConstraint.activate([
       trailing,
-      bar.topAnchor.constraint(equalTo: topAnchor, constant: headerHeight + Theme.Space.beat),
+      bar.topAnchor.constraint(
+        equalTo: topAnchor, constant: Theme.Layout.editorBar + headerHeight + Theme.Space.beat),
     ])
     searchBar = bar
     searchBarTrailing = trailing

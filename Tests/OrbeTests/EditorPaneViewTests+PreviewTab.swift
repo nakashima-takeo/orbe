@@ -38,8 +38,9 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
   private func treeRow(_ hosted: Hosted, _ name: String) throws -> NSPoint {
     let index = try XCTUnwrap(hosted.pane.tree.rows.firstIndex { $0.name == name })
     return NSPoint(
-      x: Theme.Layout.editorRail + 80,
-      y: Theme.Layout.editorPanelHeader + Theme.Layout.editorRow * (CGFloat(index) + 1.5))
+      x: 80,
+      y: Theme.Layout.editorBar + Theme.Layout.editorPanelHeader
+        + Theme.Layout.editorRow * (CGFloat(index) + 1.5))
   }
 
   private func names(_ hosted: Hosted) -> [String] {
@@ -76,7 +77,9 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
     let preview = try editor.open(try caseFile("b.txt", "b.txt"), as: .preview)
     try editor.open(try caseFile("c.txt", "c.txt"), as: .pinned)
     _ = try probe(pane) { _ in pane.shell.tabs.map(\.isPreview) == [false, true, false] }
-    let middle = NSPoint(x: fileTabSlotCenter(pane, 1).x - 30, y: Theme.Layout.editorFileTabs / 2)
+    let middle = NSPoint(
+      x: fileTabSlotCenter(pane, 1).x - 30,
+      y: Theme.Layout.editorBar + Theme.Layout.editorFileTabs / 2)
 
     try click(pane, at: middle)
     pumpMain(

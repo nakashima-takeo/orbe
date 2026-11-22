@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// プロジェクト検索の結線——⌘⇧F とレールで検索パネルを出す（Files の画面で）・種・結果を開いて一致を選び中央へ・パネルの中のキー
+/// プロジェクト検索の結線——⌘⇧F で検索パネルを出す（Files の画面で）・種・結果を開いて一致を選び中央へ・パネルの中のキー
 /// （⌘↓ / ⌘↑・⌥⌘C / W / R）・F4 / ⇧F4。列の外の押下で待っている ↑↓ の開きを捨てる（ソース管理の列も同じ）。
 extension EditorPaneView {
   func wireProjectSearch() {
@@ -13,7 +13,7 @@ extension EditorPaneView {
   /// 検索パネルが見えている（左の列が開いていて、画面が Files で、左の列が検索）。
   var showsSearchPanel: Bool { sidebar.isOpen && shell.panel == .search }
 
-  /// 焦点がサイドバー（骨の host 配下）にあるか。
+  /// 焦点が左の列（左の列の host 配下）にあるか。
   var focusIsInSidebar: Bool {
     (window?.firstResponder as? NSView)?.isDescendant(of: sideHost) == true
   }
@@ -21,27 +21,6 @@ extension EditorPaneView {
   /// 焦点が検索パネルの中（入力欄か結果の列）にあるか。
   var focusIsInSearchPanel: Bool {
     showsSearchPanel && focusIsInSidebar && projectSearch.focusedArea != nil
-  }
-
-  /// レールの項目を押した。左の列を開いていて、出している中身の項目なら閉じる。そうでなければ、その画面（「ファイル」
-  /// 「検索」は Files で、左の列をその中身に）を選んで左の列を開く。検索・ソース管理のパネルを出したら入力欄に焦点を入れる
-  /// （VS Code のアクティビティバーと同じ）。ソース管理の親「ソース管理」を畳んでいれば、欄も列も無いので焦点を求めない（当たら
-  /// ない要求を残すと、親を開いた瞬間に焦点を奪う）。PR のパネルは、列に行があれば列に焦点を入れる（行が無ければ求めない——
-  /// 同じ理由）。行があるかは、パネルを出して今の答えで行を組み直してから見る（左の列の観測の知らせは次のターンなので、待たずに
-  /// ここで出し入れを写す）。
-  func selectPanel(_ panel: EditorShellModel.Panel) {
-    guard let group else { return }
-    if sidebar.isOpen, shell.panel == panel {
-      sidebar.setOpen(false)
-      return
-    }
-    if panel.screen == .files { filesPanel = panel }
-    group.editor.selectScreen(panel.screen)
-    sidebar.setOpen(true)
-    updatePanelsShown()
-    if showsSearchPanel { projectSearch.requestFocus(.field) }
-    if showsSourceControl, scm.isRepositoryOpen { scm.requestFocus(.message) }
-    if showsPullRequest, !pullRequest.layout.items.isEmpty { pullRequest.requestFocus() }
   }
 
   /// ⌘⇧F の種——押した時点の焦点がテキスト面で、選択が 1 行以内の非空ならその文字列、⌘F のバーの入力欄ならその

@@ -2,9 +2,9 @@ import AppKit
 import OrbeEditorCore
 import SwiftUI
 
-/// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
-/// （タブ行 → 本体があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（セッションが
-/// 画面から導いた中身——文書のテキスト面か diff の面。無ければ文字だけの root）を frame で置く。地は chrome と同じ veil。
+/// エディター面の AppKit 側の根。骨の幾何——上のバー、その下に左の列（開いているとき）｜列の頭（タブ行 → 本体があれば
+/// パンくず）｜本体——を `layout()` が解き、SwiftUI の root 3 枚（上のバー・左の列・列の頭）と本体（セッションが画面から
+/// 導いた中身——文書のテキスト面か diff の面。無ければ文字だけの root）を frame で置く。地は chrome と同じ veil。
 ///
 /// 本体で編集する文書（文書の本体ならその文書、diff の本体なら新しい側の文書）の「変わった」（viewport・選択・本文）は
 /// pane が 1 つずつ受け、検索・出現の強調・diff・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。
@@ -26,6 +26,7 @@ final class EditorPaneView: NSView {
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
   private(set) var tree: FileTree
+  let barHost: EditorBarHost
   let sideHost: NSHostingView<EditorSideRoot>
   let headerHost: NSHostingView<EditorHeaderRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
@@ -71,7 +72,7 @@ final class EditorPaneView: NSView {
   private(set) var pullRequestHeader = PrDescriptionHeader(frame: .zero)
   /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
-  /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
+  /// 左の列の幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
   }
@@ -79,7 +80,7 @@ final class EditorPaneView: NSView {
   var filesPanel = EditorShellModel.Panel.files {
     didSet { syncPanel() }
   }
-  /// サイドバーと本体の境のドラッグの当たり。
+  /// 左の列と本体の境のドラッグの当たり。
   let sidebarHandle = SidebarResizeHandle()
   private(set) var localization = LocalizationStore(language: .systemDefault)
   private var fontResolver = ChromeFontResolver()
@@ -107,6 +108,10 @@ final class EditorPaneView: NSView {
     self.pullRequest = pullRequest
     let pullRequestList = Self.pullRequestList(pullRequest)
     self.pullRequestList = pullRequestList
+    barHost = EditorBarHost(
+      rootView: EditorBarRoot(
+        shell: shell, sidebar: sidebar, scm: scm, localization: localization,
+        fontResolver: fontResolver))
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
@@ -120,7 +125,7 @@ final class EditorPaneView: NSView {
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
-    for host in [sideHost, headerHost, faceHost] as [NSView] {
+    for host in [barHost, sideHost, headerHost, faceHost] as [NSView] {
       // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
       host.wantsLayer = true
       host.layer?.isOpaque = false
@@ -155,7 +160,7 @@ final class EditorPaneView: NSView {
 
   override var isFlipped: Bool { true }
 
-  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態・diff の見せ方）を面へ配る。別 root は Environment を継承
+  /// 窓の環境（透過・言語・フォント割り当て・左の列の状態・diff の見せ方）を面へ配る。別 root は Environment を継承
   /// しないので root を作り直す。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
@@ -179,6 +184,9 @@ final class EditorPaneView: NSView {
   }
 
   private func installRoots() {
+    barHost.rootView = EditorBarRoot(
+      shell: shell, sidebar: sidebar, scm: scm, localization: localization,
+      fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
       scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
@@ -270,9 +278,9 @@ final class EditorPaneView: NSView {
   /// 配置を頼み、文書を初めて画面に出すときはその配置で、最初の描画に色が間に合うよう上限つきで待つ（→
   /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
   /// 文書の知らせは、本体で編集する文書へ結び直す（→ `bindEditedDocument`）。
-  /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が面の中（サイドバーを除く）にあれば新しい
+  /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が面の中（左の列を除く）にあれば新しい
   /// 行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では
-  /// 「中にあった」ことが分からない）。サイドバーの焦点（検索結果・行内入力）は面を外しても残るので動かさない。
+  /// 「中にあった」ことが分からない）。左の列の焦点（検索結果・行内入力）は面を外しても残るので動かさない。
   func show(_ next: EditorBody) {
     guard !Self.same(next, body) else { return }
     let hadFocusInside = focusIsInside && !focusIsInSidebar

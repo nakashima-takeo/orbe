@@ -3,13 +3,13 @@ import XCTest
 
 @testable import Orbe
 
-/// エディター面に結んだ PR のパネル——レールで出したら、今の答えで行を組んでから、行があるときだけ列に焦点を入れる。列が
+/// エディター面に結んだ PR のパネル——上のバーで PR の画面を出したら、今の答えで行を組んでから、行があるときだけ列に焦点を入れる。列が
 /// 消える・パネルを隠す・cd で根が変わるとき、列にあった焦点は面の本文へ戻り、当てる列の無い焦点の要求は残らない。cd で
 /// 根が変わったら前の根の PR を見るのをやめる。ツリーかリストかをほかの面で選べば、この面の行も組み直し、言語を切り替え
 /// れば見えている行を読み直す。全体へのコメント欄の ↵ は改行、⌘↵ はその欄に焦点がある間だけレビューの送信。GitHub は、面を
 /// 作る前に登録した差し替えの出どころが答える。
 ///
-/// 壊れると何が起きるか: 新しい面や cd の後にレールで PR のパネルを出しても列に焦点が入らない。PR が無くなったのに残った
+/// 壊れると何が起きるか: 新しい面や cd の後に上のバーで PR の画面を出しても列に焦点が入らない。PR が無くなったのに残った
 /// 焦点の要求が、後で PR が現れた瞬間に本文や端末から焦点を奪う。PR がマージされた・ブランチを替えたときに焦点が窓へ落ち、
 /// 打鍵がどこにも届かない。cd の後も前の worktree の PR を GitHub に問い合わせ続ける。ほかの面でリストにしても、この面が
 /// ツリーのまま。言語を切り替えても、見えている見出しが前の言語のまま。全体へのコメント欄の ⌘↵ で送れない・変換中の字が
@@ -103,7 +103,7 @@ final class PullRequestPaneTests: OrbeTestCase {
     pane.layoutSubtreeIfNeeded()
     addTeardownBlock {
       MainActor.assumeIsolated {
-        pane.shell.selectPanel(.files)
+        pane.switchScreen(.files)
         window.orderOut(nil)
       }
     }
@@ -113,7 +113,7 @@ final class PullRequestPaneTests: OrbeTestCase {
 
   /// PR のパネルを出して、列に行が出るまで待つ。
   func shownWithRows(_ hosted: Hosted) {
-    hosted.pane.shell.selectPanel(.pullRequest)
+    hosted.pane.switchScreen(.pullRequest)
     pumpMain(until: { !hosted.pane.pullRequest.layout.items.isEmpty }, "前提: 列に行が出る")
     pumpMain(until: { hosted.list.window != nil }, "前提: 列が窓に載る")
   }
@@ -122,18 +122,18 @@ final class PullRequestPaneTests: OrbeTestCase {
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))
   }
 
-  /// PR を読んである根の新しい面でレールから出せば、列に焦点が入る。PR が無ければ焦点を求めない。
+  /// PR を読んである根の新しい面で上のバーから出せば、列に焦点が入る。PR が無ければ焦点を求めない。
   func testTheRailFocusesTheListOnlyWhenThereAreRows() throws {
     let root = try registeredRoot()
     shownWithRows(host(root))
 
     let other = host(root)
-    other.pane.shell.selectPanel(.pullRequest)
+    other.pane.switchScreen(.pullRequest)
     pumpMain(until: { other.window.firstResponder === other.list }, "新しい面でも列に焦点")
 
     gitHub.open = false
     let empty = host(try registeredRoot())
-    empty.pane.shell.selectPanel(.pullRequest)
+    empty.pane.switchScreen(.pullRequest)
     XCTAssertFalse(empty.pane.pullRequest.focusRequest, "行が無ければ求めない")
   }
 
@@ -142,11 +142,11 @@ final class PullRequestPaneTests: OrbeTestCase {
   func testAFocusRequestForRowsThatGoAwayIsNotLeftBehind() throws {
     let hosted = host(try registeredRoot())
     shownWithRows(hosted)
-    hosted.pane.shell.selectPanel(.files)
+    hosted.pane.switchScreen(.files)
     pumpMain(until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "前提: 本文")
 
     gitHub.open = false
-    hosted.pane.shell.selectPanel(.pullRequest)
+    hosted.pane.switchScreen(.pullRequest)
     pumpMain(until: { hosted.pane.pullRequest.layout.items.isEmpty }, "PR が無いと分かる")
     XCTAssertFalse(hosted.pane.pullRequest.focusRequest, "当てる列の無い要求は捨てる")
     settle()
@@ -194,7 +194,7 @@ final class PullRequestPaneTests: OrbeTestCase {
       hosted.pane.pullRequest.refresh()
       pumpMain(until: { hosted.list.window != nil }, "前提: PR が戻る")
       try focus(area, in: hosted)
-      hosted.pane.shell.selectPanel(.files)
+      hosted.pane.switchScreen(.files)
       pumpMain(
         until: { hosted.window.firstResponder === hosted.pane.focusTarget },
         "\(area) にあった焦点は、隠したら本文へ")

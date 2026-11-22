@@ -12,7 +12,6 @@ extension L10n {
       "ベースブランチと共通のコミットがないため、差分を表示できません",
       "Can’t show the diff because the PR shares no commits with its base branch"
     ),
-    .editorRailPullRequest: ("プルリクエスト", "Pull Request"),
     .editorPrTitle: ("プルリクエスト", "Pull Request"),
     .editorPrRefresh: ("再読込", "Refresh"),
     .editorPrOpenOnGitHub: ("GitHub で開く", "Open on GitHub"),

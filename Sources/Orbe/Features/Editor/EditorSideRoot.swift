@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// レール＋サイドバー（エクスプローラー・検索パネル・ソース管理パネル・PR のパネル）の SwiftUI ルート。器の中の別 root なので環境は明示注入する。
-/// 幅は pane が決める（レール 36 ＋ hairline、サイドバーが出るときは ＋幅 ＋ hairline）。レールは固定幅で、
-/// パネルは残りを埋める——サイドバーの幅の持ち主は pane で、ここは与えられた幅を埋めるだけ。
+/// 左の列（エクスプローラー・検索パネル・ソース管理パネル・PR のパネル）の SwiftUI ルート。器の中の別 root なので環境は明示
+/// 注入する。中身は画面で決まる（`EditorShellModel.Panel`）。幅は pane が決める（左の列の表示幅 ＋ hairline）——左の列の幅の
+/// 持ち主は pane で、ここは与えられた幅を埋めるだけ。左の列を閉じている間は中身を置かない（パネルは隠れたことになる）。
 struct EditorSideRoot: View {
   let shell: EditorShellModel
   let tree: FileTree
@@ -17,31 +17,25 @@ struct EditorSideRoot: View {
   let pullRequest: PrPanel
   let pullRequestList: RowList<PrListSource>
   let pullRequestHeader: PrDescriptionHeader
-  /// 開閉の真実（pane と同じ 1 つ。写しを挟まない）。
+  /// 開閉とグラフの枠の高さの持ち主（pane と同じ 1 つ。写しを挟まない）。
   let sidebar: EditorSidebarState
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
 
   var body: some View {
-    // GeometryReader は中身の最小幅に縛られず host の幅を取る——エクスプローラーのヘッダー（3 ボタン）より
-    // 狭く切り詰められても root が中央寄せで左へずれず、レールは 0〜36 に居る。溢れは右で、切り落とす。
+    // GeometryReader は中身の最小幅に縛られず host の幅を取る——エクスプローラーのヘッダー（3 ボタン）より狭く切り詰め
+    // られても root が中央寄せで左へずれない。溢れは右で、切り落とす。
     GeometryReader { _ in
-      HStack(spacing: 0) {
-        RailView(
-          selection: sidebar.isOpen ? shell.panel : nil, sourceControlCount: scm.count,
-          onSelect: shell.selectPanel)
-        if sidebar.isOpen {
-          switch shell.panel {
-          case .files: ExplorerView(shell: shell, tree: tree)
-          case .search: SearchPanelView(search: search, results: searchResults)
-          case .sourceControl:
-            ScmPanelView(panel: scm, list: scmList, graphList: scmGraphList, sidebar: sidebar)
-          case .pullRequest:
-            PrPanelView(panel: pullRequest, list: pullRequestList, header: pullRequestHeader)
-          }
+      if sidebar.isOpen {
+        switch shell.panel {
+        case .files: ExplorerView(shell: shell, tree: tree)
+        case .search: SearchPanelView(search: search, results: searchResults)
+        case .sourceControl:
+          ScmPanelView(panel: scm, list: scmList, graphList: scmGraphList, sidebar: sidebar)
+        case .pullRequest:
+          PrPanelView(panel: pullRequest, list: pullRequestList, header: pullRequestHeader)
         }
       }
-      .frame(maxHeight: .infinity)
     }
     .clipped()
     .environment(\.localization, localization)
@@ -49,102 +43,7 @@ struct EditorSideRoot: View {
   }
 }
 
-/// レール: 幅 36 のアイコン列。項目は「ファイル」「検索」「ソース管理」「プルリクエスト」（左の列の中身と 1 対 1。「ファイル」と
-/// 「検索」は Files の画面、「ソース管理」は Changes、「プルリクエスト」は PR）。選択は左 2px の accent の縦線 ＋ 淡い地
-/// （design-system §5 のエディター面の例外）で、左の列が閉じている間は無い（`selection == nil`）。押すと `onSelect`——選択中の
-/// 項目なら左の列を閉じ、別の項目ならその画面と中身にする（閉じていれば開く）。
-/// ソース管理の項目は、変更があれば右下に件数のバッジを出す（1000 以上は「999+」）。
-struct RailView: View {
-  typealias Item = EditorShellModel.Panel
-
-  let selection: Item?
-  /// ソース管理の件数（ステージ済み＋変更の行。0 なら出さない）。
-  let sourceControlCount: Int
-  let onSelect: (Item) -> Void
-  @Environment(\.colorScheme) private var scheme
-  @Environment(\.localization) private var l10n
-
-  // レールの不透明度と選択バーの幅。
-  private static let sunkAlpha = 0.22
-  private static let hairlineAlpha = 0.07
-  private static let selectedFillAlpha = 0.04
-  private let accentBar: CGFloat = 2
-
-  var body: some View {
-    let ink = EditorInk(scheme)
-    HStack(spacing: 0) {
-      VStack(spacing: 0) {
-        ForEach(Item.allCases, id: \.self) { item in
-          railItem(item, selected: selection == item, ink: ink)
-            .contentShape(Rectangle())
-            .onTapGesture { onSelect(item) }
-        }
-        Spacer(minLength: 0)
-      }
-      .frame(width: Theme.Layout.editorRail)
-      Rectangle().fill(ink.hairline(Self.hairlineAlpha)).frame(width: Theme.Stroke.hairline)
-    }
-    .frame(maxHeight: .infinity)
-    .background(ink.sunk(Self.sunkAlpha))
-  }
-
-  private func railItem(_ item: Item, selected: Bool, ink: EditorInk) -> some View {
-    EditorGlyphView(
-      glyph: glyph(item), size: Theme.Layout.editorRailGlyph,
-      color: selected ? Color.theme.textPrimary : Color.theme.editorTertiary
-    )
-    .overlay(alignment: .bottomTrailing) {
-      if item == .sourceControl, sourceControlCount > 0 { RailBadge(count: sourceControlCount) }
-    }
-    .frame(width: Theme.Layout.editorRail, height: Theme.Layout.editorRail)
-    .background(selected ? ink.fill(Self.selectedFillAlpha) : .clear)
-    .overlay(alignment: .leading) {
-      if selected { Rectangle().fill(Color.theme.accentPrimary).frame(width: accentBar) }
-    }
-    .help(l10n.string(help(item)))
-  }
-
-  private func glyph(_ item: Item) -> EditorGlyphs.Glyph {
-    switch item {
-    case .files: EditorGlyphs.railFiles
-    case .search: EditorGlyphs.railSearch
-    case .sourceControl: EditorGlyphs.railGit
-    case .pullRequest: EditorGlyphs.railPullRequest
-    }
-  }
-
-  private func help(_ item: Item) -> L10nKey {
-    switch item {
-    case .files: .editorExplorerTitle
-    case .search: .editorRailSearch
-    case .sourceControl: .editorRailSourceControl
-    case .pullRequest: .editorRailPullRequest
-    }
-  }
-}
-
-/// レールの件数バッジ（アイコンの右下から右 8・下 4 はみ出す、最小 15×15・radius 8・地 accent・字 tabActiveText
-/// 9 bold・padding 0 3）。
-private struct RailBadge: View {
-  let count: Int
-
-  private static let limit = 999
-
-  var body: some View {
-    Text(count > Self.limit ? "\(Self.limit)+" : "\(count)")
-      .font(Font.theme.editorRailBadge)
-      .foregroundStyle(Color.theme.tabActiveText)
-      .lineLimit(1)
-      .padding(.horizontal, 3)
-      .frame(minWidth: Theme.Layout.editorRailBadge, minHeight: Theme.Layout.editorRailBadge)
-      .fixedSize()
-      .background(Capsule().fill(Color.theme.accentPrimary))
-      .offset(
-        x: Theme.Layout.editorRailBadgeOffset.width, y: Theme.Layout.editorRailBadgeOffset.height)
-  }
-}
-
-/// サイドバーのパネルの器: 上から積む中身と右の hairline。地は沈み面、ぼかしは持たない。
+/// 左の列のパネルの器: 上から積む中身と右の hairline。地は沈み面、ぼかしは持たない。
 struct EditorSidebarPanel<Content: View>: View {
   @ViewBuilder let content: Content
   @Environment(\.colorScheme) private var scheme
@@ -185,14 +84,29 @@ struct EditorPanelHeader<Tools: View>: View {
   }
 }
 
-/// サイドバー: エクスプローラー（ヘッダー・ルート行・ツリー）。
+/// 左の列: エクスプローラー（ヘッダー・ルート行・ツリー）。ツリーのスクロール位置はツリーが覚え、画面を切り替えて・左の列を
+/// 閉じて作り直されても戻す。
 struct ExplorerView: View {
   let shell: EditorShellModel
   let tree: FileTree
+  /// 作り直した一覧を戻す位置（作られた時点でツリーが覚えていた位置。戻し終えたら nil）。中身が溢れるまで戻さずに待ち、その間の
+  /// 位置の知らせで覚えた位置を書き換えない。
+  @State private var pendingFraction: CGFloat?
+
+  init(shell: EditorShellModel, tree: FileTree) {
+    self.shell = shell
+    self.tree = tree
+    _pendingFraction = State(initialValue: tree.scrollFraction > 0 ? tree.scrollFraction : nil)
+  }
   @Environment(\.localization) private var l10n
 
-  /// ツリーの中身全体の id（つまみのドラッグが比の anchor で送る先。行の id と型で分ける）。
+  /// ツリーの中身全体の id（つまみのドラッグと位置の戻しが比の anchor で送る先。行の id と型で分ける）。
   private enum Content: Hashable { case tree }
+
+  /// 送れる範囲（pt）。
+  private static func range(_ geometry: ScrollGeometry) -> CGFloat {
+    geometry.contentSize.height - geometry.containerSize.height
+  }
 
   var body: some View {
     EditorSidebarPanel {
@@ -216,6 +130,18 @@ struct ExplorerView: View {
           .sidebarScrollContent(id: Content.tree)
         }
         .scrollIndicators(.never)
+        .onScrollGeometryChange(for: ScrollGeometry.self, of: \.self) { _, geometry in
+          let range = Self.range(geometry)
+          if let pending = pendingFraction {
+            guard range > 0 else { return }
+            // 作り直した一覧を、覚えた位置へ送る（比の anchor はつまみのドラッグと同じ送り方）。位置の知らせはレイアウトの
+            // 最中に届き、その場で送る要求は捨てられることがあるので、レイアウトを終えてから送る。
+            pendingFraction = nil
+            Task { @MainActor in proxy.scrollTo(Content.tree, anchor: UnitPoint(x: 0, y: pending)) }
+            return
+          }
+          tree.scrollFraction = range > 0 ? min(1, max(0, geometry.contentOffset.y / range)) : 0
+        }
         .sidebarScrollbar(proxy, contentID: Content.tree)
         // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
         .onChange(of: tree.newEntry?.generation) { _, _ in

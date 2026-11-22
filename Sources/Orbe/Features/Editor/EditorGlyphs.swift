@@ -13,46 +13,24 @@ enum EditorGlyphs {
     let parts: (CGFloat) -> [(path: Path, opacity: Double)]
   }
 
-  /// レールの「ファイル」（24 系・stroke 1.5）。前面の書類と、後ろに沈む 2 枚目の縁（opacity .8）。
-  static let railFiles = Glyph(viewBox: 24, stroke: 1.5) { k in
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
-    var sheet = Path()
-    sheet.move(to: p(8, 5.5))
-    sheet.addLine(to: p(15, 5.5))
-    sheet.addLine(to: p(18.5, 9))
-    sheet.addArc(tangent1End: p(18.5, 19), tangent2End: p(7, 19), radius: k)
-    sheet.addArc(tangent1End: p(7, 19), tangent2End: p(7, 5.5), radius: k)
-    sheet.addArc(tangent1End: p(7, 5.5), tangent2End: p(15, 5.5), radius: k)
-    sheet.closeSubpath()
-    sheet.move(to: p(15, 5.5))
-    sheet.addLine(to: p(15, 9))
-    sheet.addLine(to: p(18.5, 9))
-    var behind = Path()
-    behind.move(to: p(5.5, 8.5))
-    behind.addArc(tangent1End: p(5.5, 20.5), tangent2End: p(15, 20.5), radius: k)
-    behind.addLine(to: p(15, 20.5))
-    return [(sheet, 1), (behind, 0.8)]
-  }
-
-  /// レールの「検索」（24 系・stroke 1.6）。
-  static let railSearch = Glyph(viewBox: 24, stroke: 1.6) { k in
-    var path = Path(ellipseIn: CGRect(x: 5.5 * k, y: 5.5 * k, width: 11 * k, height: 11 * k))
-    path.move(to: CGPoint(x: 15.5 * k, y: 15.5 * k))
-    path.addLine(to: CGPoint(x: 20 * k, y: 20 * k))
+  /// 上のバーの左の列の開閉 `M2.5 3.5h11v9h-11zM6 3.5v9`（stroke 1.4）。
+  static let sidebarToggle = Glyph(viewBox: 16, stroke: 1.4) { k in
+    var path = Path(CGRect(x: 2.5 * k, y: 3.5 * k, width: 11 * k, height: 9 * k))
+    path.move(to: CGPoint(x: 6 * k, y: 3.5 * k))
+    path.addLine(to: CGPoint(x: 6 * k, y: 12.5 * k))
     return [(path, 1)]
   }
 
-  /// レールの「ソース管理」（24 系・stroke 1.5）。
-  static let railGit = Glyph(viewBox: 24, stroke: 1.5) { k in
+  /// キーの印の ⌥ `M2.25 3.5H6l4.25 9h3.5M9.75 3.5h4`（stroke 1.45）。
+  static let optionKey = Glyph(viewBox: 16, stroke: 1.45) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
-    for (x, y) in [(7.5, 6.5), (7.5, 17.5), (16.5, 9.0)] as [(CGFloat, CGFloat)] {
-      path.addEllipse(in: CGRect(x: (x - 2) * k, y: (y - 2) * k, width: 4 * k, height: 4 * k))
-    }
-    path.move(to: p(7.5, 8.5))
-    path.addLine(to: p(7.5, 15.5))
-    path.move(to: p(16.5, 11))
-    path.addCurve(to: p(10.5, 15), control1: p(16.5, 14), control2: p(13.5, 14.5))
+    path.move(to: p(2.25, 3.5))
+    path.addLine(to: p(6, 3.5))
+    path.addLine(to: p(10.25, 12.5))
+    path.addLine(to: p(13.75, 12.5))
+    path.move(to: p(9.75, 3.5))
+    path.addLine(to: p(13.75, 3.5))
     return [(path, 1)]
   }
 

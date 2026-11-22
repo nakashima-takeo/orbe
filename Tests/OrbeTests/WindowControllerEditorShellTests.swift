@@ -60,7 +60,7 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     XCTAssertTrue(
       first.group.view.editor.sidebar === second.group.view.editor.sidebar, "アプリ全体で 1 つ")
 
-    second.group.view.editor.shell.selectPanel(.files)
+    second.group.view.editor.toggleSidebar()
     XCTAssertTrue(first.group.view.editor.sidebar.isOpen, "どの連で開いても全連に効く")
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar,

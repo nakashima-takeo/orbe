@@ -7,7 +7,7 @@ import XCTest
 
 /// プロジェクト検索の flow（fixture は骨の `EditorShellFixtures`。状態は本物の操作が生む）: ⌘⇧F が pane に頼む検索パネル → 打鍵
 /// （300ms 後に検索）→ 結果 → ⌘↓ で結果へ → ↓（ファイルが仮のタブで開いて一致が選ばれ中央に。橙の地と現在の一致）→
-/// Enter（普通のタブにして本文へ）→ レールでエクスプローラーへ切り替えると地が消える → F4 で次の一致（検索パネルが戻り、
+/// Enter（普通のタブにして本文へ）→ エクスプローラーへ切り替えると地が消える → F4 で次の一致（検索パネルが戻り、
 /// 焦点は本文のまま——入力欄は焦点の枠を出さない）。
 extension DesignFlowSnapshotTests {
   func testEditorSearch() throws {
@@ -32,7 +32,7 @@ extension DesignFlowSnapshotTests {
         ("results_focused", { search.focusResults() }),
         ("down", { search.moveSelection(by: 1, isRepeat: false) }),
         ("enter_opens", { search.activateSelection() }),
-        ("explorer_hides_ground", { pane.selectPanel(.files) }),
+        ("explorer_hides_ground", { pane.filesPanel = .files }),
         (
           "f4_next",
           {

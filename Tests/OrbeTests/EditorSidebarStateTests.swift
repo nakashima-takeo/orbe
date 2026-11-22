@@ -12,7 +12,7 @@ import XCTest
 final class EditorSidebarStateTests: OrbeTestCase {
   func testCommitAndToggleWriteBackAndLoadedReadsThem() {
     let state = EditorSidebarState.loaded()
-    XCTAssertEqual(state.width, 240, "記録が無ければ既定の幅")
+    XCTAssertEqual(state.width, 263, "記録が無ければ既定の幅")
     XCTAssertTrue(state.isOpen, "記録が無ければ開")
     state.setWidth(300)
     XCTAssertEqual(AppStatePersistence.load()?.editorSidebar, nil, "ドラッグ中は書かない")
@@ -58,7 +58,7 @@ final class EditorSidebarStateTests: OrbeTestCase {
     state.setWidth(200.4)
     XCTAssertEqual(state.width, 200, "整数に丸める")
     state.setWidth(.nan)
-    XCTAssertEqual(state.width, 240, "非数は既定")
+    XCTAssertEqual(state.width, 263, "非数は既定")
   }
 
   func testUnreadableOrOutOfRangeRecordsFallBackWithoutLosingTheFile() throws {
@@ -68,13 +68,13 @@ final class EditorSidebarStateTests: OrbeTestCase {
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(), "読めない記録は全 field nil")
     let garbage = EditorSidebarState.loaded()
-    XCTAssertEqual(garbage.width, 240)
+    XCTAssertEqual(garbage.width, 263)
     XCTAssertTrue(garbage.isOpen)
 
     AppStatePersistence.save(
       AppStateFile(editorSidebar: EditorSidebarRecord(width: 12, isOpen: nil)))
     let narrow = EditorSidebarState.loaded()
-    XCTAssertEqual(narrow.width, 240, "下限未満は既定")
+    XCTAssertEqual(narrow.width, 263, "下限未満は既定")
     XCTAssertTrue(narrow.isOpen, "開閉の欠落は開")
   }
 

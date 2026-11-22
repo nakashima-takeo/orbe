@@ -603,7 +603,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorDiffPullRequestUnrelated
 
   // MARK: - Editor 面（PR）
-  case editorRailPullRequest
   case editorPrTitle
   case editorPrRefresh
   case editorPrOpenOnGitHub
@@ -664,6 +663,14 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrOutdatedThreads
   case editorPrCommentCount
 
+  // MARK: - Editor 面（骨: 上のバー）
+  case editorScreenChanges
+  case editorScreenPullRequest
+  case editorScreenFiles
+  case editorBarHideTree
+  case editorBarShowTree
+  case editorBarShowTerminal
+
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle
   case editorNewFile
@@ -672,7 +679,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorExpandAll
 
   // MARK: - Editor 面（プロジェクト検索）
-  case editorRailSearch
   case editorSearchTitle
   case editorSearchPlaceholder
   case editorSearchMatchCase
@@ -692,7 +698,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorSearchCouldNotStart
 
   // MARK: - Editor 面（ソース管理。L10nTable+SourceControl）
-  case editorRailSourceControl
   case editorScmTitle
   case editorScmStaged
   case editorScmChanges

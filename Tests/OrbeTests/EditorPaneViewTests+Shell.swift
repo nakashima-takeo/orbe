@@ -13,7 +13,7 @@ import XCTest
 @MainActor
 final class EditorPaneViewShellTests: OrbeTestCase {
   /// 行内入力を続けて出すと前の入力は消えて新しい入力だけが出る。入力の終わりは入力の状態が落ちることで、
-  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・作成先を畳む・レールで閉じる・cd でも落ち、入力欄に
+  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・作成先を畳む・左の列を閉じる・cd でも落ち、入力欄に
   /// 居た焦点は面の行き先（文書のテキスト面）へ移る。
   func testInlineInputIsRecreatedPerRequestAndEndsWhenItsStateDrops() throws {
     let dir = TestScratch.caseDir
@@ -48,8 +48,8 @@ final class EditorPaneViewShellTests: OrbeTestCase {
         until: { window.firstResponder === document.surface.responder }, timeout: 5,
         "\(how): 入力欄に居た焦点は面の行き先へ")
     }
-    try endsWhenTheStateDrops("レールで閉じる") { pane.shell.selectPanel(.files) }
-    pane.shell.selectPanel(.files)
+    try endsWhenTheStateDrops("左の列を閉じる") { pane.toggleSidebar() }
+    pane.toggleSidebar()
     try endsWhenTheStateDrops("根を畳む") { pane.tree.isRootOpen = false }
     pane.tree.isRootOpen = true
     try endsWhenTheStateDrops("すべて折りたたむ") { pane.shell.collapseAll() }
@@ -110,7 +110,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertTrue(pane.tree.expanded.isEmpty)
   }
 
-  /// 空状態でも骨（レール・サイドバー・タブ行）はクリックを自分で受け、本体だけが面自身に固定される。
+  /// 空状態でも骨（上のバー・左の列・タブ行）はクリックを自分で受け、本体だけが面自身に固定される。
   func testEmptyStateFixesOnlyTheBodyToThePane() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
@@ -121,10 +121,9 @@ final class EditorPaneViewShellTests: OrbeTestCase {
       pane.hitTest(pane.convert(NSPoint(x: x, y: y), to: pane.superview))
     }
     XCTAssertTrue(hit(pane.bodyRect.midX, pane.bodyRect.midY) === pane, "本体は面自身")
-    let rail = try XCTUnwrap(hit(18, 18))
-    XCTAssertFalse(rail === pane, "レールは host が受ける")
-    XCTAssertTrue(rail.isDescendant(of: pane))
-    let tabs = try XCTUnwrap(hit(pane.bodyRect.midX, 14))
+    let bar = try XCTUnwrap(hit(18, 18))
+    XCTAssertTrue(bar.isDescendant(of: pane.barHost), "上のバーは host が受ける")
+    let tabs = try XCTUnwrap(hit(pane.bodyRect.midX, Theme.Layout.editorBar + 14))
     XCTAssertFalse(tabs === pane, "タブ行の帯は host が受ける")
   }
 

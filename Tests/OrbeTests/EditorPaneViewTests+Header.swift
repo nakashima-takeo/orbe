@@ -21,9 +21,11 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
     XCTAssertEqual(pane.headerHeight, 29)
     pumpMain(until: { pane.headerHost.fittingSize.height == 29 }, "文書が無ければタブ行の帯だけ")
     let x = pane.bodyRect.midX
-    let drawn = try probe(pane) { p in !PaneProbe.same(try p.rgb(x, y: 14), try p.rgb(x, y: 200)) }
+    let drawn = try probe(pane) { p in
+      !PaneProbe.same(try p.rgb(x, y: 36 + 14), try p.rgb(x, y: 200))
+    }
     XCTAssertFalse(
-      PaneProbe.same(try drawn.rgb(x, y: 14), try drawn.rgb(x, y: 200)),
+      PaneProbe.same(try drawn.rgb(x, y: 36 + 14), try drawn.rgb(x, y: 200)),
       "文書が無くてもタブ行の帯（沈み面）は本体の地と違う色で残る")
 
     _ = try tab.group.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
@@ -39,7 +41,7 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 400)
     defer { window.orderOut(nil) }
-    pane.shell.selectPanel(.files)  // 列を本体だけにして溢れを作る（本体 363）
+    pane.toggleSidebar()  // 左の列を閉じて溢れを作る（本体 400）
     let documents = try (0..<8).map { index in
       try tab.group.editor.open(try caseFile("a-long-file-name-\(index).swift", "x"), as: .pinned)
     }

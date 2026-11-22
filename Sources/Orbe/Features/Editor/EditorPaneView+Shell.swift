@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// 骨の操作 → セッション。骨（タブ行・パンくず・ツリー・レール）の閉包を pane へ結び、pane が連経由でセッションに書く。
+/// 骨の操作 → セッション。骨（上のバー・タブ行・パンくず・ツリー）の閉包を pane へ結び、pane が連経由でセッションに書く。
 extension EditorPaneView {
   func wireShell() {
     shell.open = { [weak self] url, mode in self?.open(url, as: mode) }
@@ -19,7 +19,8 @@ extension EditorPaneView {
     shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
     shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
     shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
-    shell.selectPanel = { [weak self] panel in self?.selectPanel(panel) }
+    shell.selectScreen = { [weak self] screen in self?.switchScreen(screen) }
+    shell.toggleSidebar = { [weak self] in self?.toggleSidebar() }
     shell.inlineInputLostFocus = { [weak self] generation in
       self?.inlineInputLostFocus(generation: generation)
     }
@@ -32,6 +33,30 @@ extension EditorPaneView {
   func wireTree() {
     tree.onCreated = { [weak self] url in self?.open(url, as: .pinned) }
     tree.onInputEnded = { [weak self] in self?.inlineInputDidEnd() }
+  }
+
+  /// 上のバーで画面を選ぶ。選んだ後のフォーカスは、Changes・PR で左の列を開いていて一覧に行があれば一覧へ、それ以外は
+  /// 本体の行き先へ。一覧が受け取れないとき（行が無い・左の列を閉じている）は一覧へ要求を出さない——残した要求は、後で
+  /// 一覧が現れた瞬間にフォーカスを奪う。
+  func switchScreen(_ screen: EditorScreen) {
+    guard let group else { return }
+    group.editor.selectScreen(screen)
+    switch screen {
+    case .changes
+    where sidebar.isOpen && scm.isManaged != false && scm.isRepositoryOpen
+      && !scm.layout.items.isEmpty:
+      scm.requestFocus(.list)
+    case .pullRequest where sidebar.isOpen && !pullRequest.layout.items.isEmpty:
+      pullRequest.requestFocus()
+    default:
+      layoutSubtreeIfNeeded()
+      focusEditor()
+    }
+  }
+
+  /// 左の列を開閉する（上のバーの左端）。閉じるとき、左の列のパネルにあったフォーカスは本体へ移る（→ `sidebarDidChange`）。
+  func toggleSidebar() {
+    sidebar.setOpen(!sidebar.isOpen)
   }
 
   /// 骨から `mode` で開いて Files の画面を選ぶ。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）し、画面を
@@ -91,12 +116,12 @@ extension EditorPaneView {
   }
 
   /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・作成先を畳む・
-  /// サイドバーを閉じる・cd）。
+  /// 左の列を閉じる・cd）。
   func inlineInputDidEnd() {
     reclaimSidebarFocus()
   }
 
-  /// サイドバーの中の焦点が行き場を失った（行内入力が終わった・検索パネルが隠れた）。焦点がまだサイドバー（骨の host
+  /// 左の列の中の焦点が行き場を失った（行内入力が終わった・検索パネルが隠れた）。焦点がまだ左の列（左の列の host
   /// 配下）か面自身（`beginNew` が停めた・預かっている）か窓に居れば、その場で面の行き先へ移す。別の view へ移って
   /// 終わったなら（端末をクリックして抜けた）そこに居るので触らない。
   func reclaimSidebarFocus() {

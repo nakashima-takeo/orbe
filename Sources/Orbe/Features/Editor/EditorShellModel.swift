@@ -29,8 +29,8 @@ final class EditorShellModel {
     }
   }
 
-  /// 左の列の中身（レールの項目と 1 対 1）。画面と、Files の左の列がエクスプローラーか検索かで決まる。
-  enum Panel: CaseIterable {
+  /// 左の列の中身。画面と、Files の左の列がエクスプローラーか検索かで決まる。
+  enum Panel {
     case files
     case search
     case sourceControl
@@ -89,8 +89,10 @@ final class EditorShellModel {
   @ObservationIgnored var createFile: () -> Void = {}
   @ObservationIgnored var createDirectory: () -> Void = {}
   @ObservationIgnored var collapseAll: () -> Void = {}
-  /// レールの項目を押した（左の列を開いていて、出している中身なら閉じ、そうでなければその画面と中身にして開く）。
-  @ObservationIgnored var selectPanel: (Panel) -> Void = { _ in }
+  /// 上のバーで画面を選んだ。
+  @ObservationIgnored var selectScreen: (EditorScreen) -> Void = { _ in }
+  /// 上のバーの左端で左の列を開閉した。
+  @ObservationIgnored var toggleSidebar: () -> Void = {}
   /// 行内入力の入力欄が焦点を失った（その世代）。別の view へ移ったなら pane が取り消し、窓へ落ちたなら
   /// pane が預かる。
   @ObservationIgnored var inlineInputLostFocus: (Int) -> Void = { _ in }

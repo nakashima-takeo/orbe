@@ -4,8 +4,8 @@ import Foundation
 /// 親「ソース管理」・子の区分・グラフの枠の開閉・選択・パネルの中の焦点。worktree の事実（メッセージ・操作・失敗）は
 /// `SourceControl` が持ち、ここは見せ方と観測だけ。
 ///
-/// 面が見えている間（`isLive`）は根のサービスを握って status を受け、件数（レールのバッジ）を出す。行の組み立て・グラフ・
-/// HEAD の push 済みの読みは、Changes の画面を出している間（`isShown`。左の列を閉じていても）だけ行う——レールの件数のために
+/// 面が見えている間（`isLive`）は根のサービスを握って status を受け、件数（上のバーの Changes の添え字）を出す。行の組み立て・グラフ・
+/// HEAD の push 済みの読みは、Changes の画面を出している間（`isShown`。左の列を閉じていても）だけ行う——件数のために
 /// 行を組ませず、ほかの画面のために git を起こさない。変更の列の行の組み立ては裏で 1 本ずつ済ませ、main は結果を差し替えて列に行の版を渡す
 /// だけ。グラフの列の行は高々数百行なので main で作る（→ `ScmRows`）。
 @MainActor @Observable
@@ -23,7 +23,7 @@ final class ScmPanel {
   let root: String
   /// worktree の状態（メッセージ・操作・失敗）。
   let control: SourceControl
-  /// レールの件数（ステージ済み＋変更の行。git 管理外・未取得は 0）。
+  /// 件数（ステージ済み＋変更の行。git 管理外・未取得は 0）。
   private(set) var count = 0
   /// git 管理下か（nil = まだ分からない）。
   private(set) var isManaged: Bool?

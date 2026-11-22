@@ -15,7 +15,7 @@ extension DesignGallerySnapshotTests {
     let code = try EditorCodeFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
     defer { code.cleanup() }
     pumpMain(until: { code.isReady }, "index 版が届いて印が揃う")
-    // サイドバー 240 ＋ レール 36 ＋ 行番号の列 69 の右、俯瞰（ミニマップとスクロールバー）の左に本文。最長行は右端で切れる。
+    // 左の列 264 ＋ 行番号の列 69 の右、俯瞰（ミニマップとスクロールバー）の左に本文。最長行は右端で切れる。
     try writePNG(
       code.view, size: NSSize(width: 1000, height: 480), name: "editor_code.png", dir: dir)
   }

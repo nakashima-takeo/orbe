@@ -7,7 +7,7 @@ struct EditorInk {
 
   init(_ scheme: ColorScheme) { dark = scheme == .dark }
 
-  /// 沈み面（レール・サイドバー・タブ行の地）。
+  /// 沈み面（左の列・タブ行の地）。
   func sunk(_ alpha: Double) -> Color {
     Color.theme.sunkInk.opacity(dark ? alpha : alpha * Theme.Opacity.editorSunkLight)
   }

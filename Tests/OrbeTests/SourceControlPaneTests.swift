@@ -15,7 +15,7 @@ import XCTest
 /// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。未追跡の行を破棄してすぐ ↵ を打つと、自分の破棄のせいで
 /// 「表示と食い違う」と断られる。ボタンが「同期」の間に欄で ⌘↵ を打つと、同期が走る。⇧↵ の改行がコミットを起こす・↵ が
 /// 改行を入れて押せないことに気づかない・⌃↵ が見えない字をメッセージに入れる。改行しても欄が伸びず、打った行が見えない。タイ文字の欄が 10 行分の手前で止まる。
-/// コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの件数が古い数で
+/// コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、Changes の件数が古い数で
 /// 止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
 /// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・パネルを閉じた後の ⌘Z が、見えない欄の打鍵を
 /// 戻して前の worktree の打ちかけのメッセージや別の窓の打ち足しを黙って消す。＋ を続けて押すと、ステージ済みの区分が
@@ -102,7 +102,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")
   }
 
-  /// ソース管理を開くとメッセージ欄に焦点が入る。欄の ⌘↵ はコミットしてプッシュ——ボタンが「同期」でも同期は起こさず
+  /// メッセージ欄の ⌘↵ はコミットしてプッシュ——ボタンが「同期」でも同期は起こさず
   /// （押せなければ音で断る）、コミットできるときはコミットしてから push する。
   func testCommandReturnInTheMessageCommitsAndPushes() throws {
     let repo = try TempGitRepo()
@@ -287,12 +287,12 @@ final class SourceControlPaneTests: OrbeTestCase {
     let first = host(repo)
     let second = host(repo, showsPanel: false)
     _ = try type("first", in: first)
-    first.pane.shell.selectPanel(.files)
+    first.pane.switchScreen(.files)
     pumpMain(until: { self.messageField(in: first.pane) == nil }, "閉じたパネルの欄が外れる")
 
-    second.pane.shell.selectPanel(.sourceControl)
+    second.pane.switchScreen(.changes)
     _ = try type(" more", in: second)
-    first.pane.shell.selectPanel(.sourceControl)
+    first.pane.switchScreen(.changes)
     pumpMain(until: { self.messageField(in: first.pane)?.string == "first more" }, "開き直した欄")
     first.window.makeFirstResponder(try XCTUnwrap(messageField(in: first.pane)))
     _ = undo(in: first)
@@ -370,8 +370,8 @@ final class SourceControlPaneTests: OrbeTestCase {
 }
 
 extension SourceControlPaneTests {
-  /// 根 `repo` の連の面だけを窓に載せ、レールでソース管理パネルを出す（`showsPanel` が false なら Files の画面の
-  /// エクスプローラー）。
+  /// 根 `repo` の連の面だけを窓に載せ、上のバーで Changes の画面を出して、メッセージ欄から始める（`showsPanel` が false
+  /// なら Files の画面のエクスプローラー）。
   func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     tab.group.editor.selectScreen(.files)
@@ -382,7 +382,10 @@ extension SourceControlPaneTests {
     window.contentView = pane
     pane.layoutSubtreeIfNeeded()
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    if showsPanel { pane.shell.selectPanel(.sourceControl) }
+    if showsPanel {
+      pane.switchScreen(.changes)
+      pane.scm.requestFocus(.message)
+    }
     return Hosted(repo: repo, tab: tab, pane: pane, window: window)
   }
 

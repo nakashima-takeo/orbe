@@ -71,6 +71,9 @@ final class FileTree: RootFilesObserver {
   /// 行内入力が終わった（呼び手が焦点を引き取る）。
   @ObservationIgnored var onInputEnded: (() -> Void)?
   @ObservationIgnored private var files: RootFiles?
+  /// 一覧のスクロール位置（送れる範囲に対する比。0 が先頭、1 が末尾）。画面を切り替えて・左の列を閉じて一覧の view が
+  /// 作り直されても戻すために、ツリーが覚える。
+  @ObservationIgnored var scrollFraction: CGFloat = 0
 
   /// 面が見えている間 true。立てると根のサービスを握って展開中を取り直し、下ろすと離す。
   var isLive = false {

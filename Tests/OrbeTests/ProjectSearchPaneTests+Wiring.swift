@@ -57,7 +57,7 @@ extension ProjectSearchPaneTests {
         NSRange(location: 9, length: 6),
       ], "⌘F と同時に使えば両方の一致")
 
-    hosted.pane.shell.selectPanel(.files)
+    hosted.pane.filesPanel = .files
     pumpMain(
       until: { pushedFindGround(hosted) == [NSRange(location: 7, length: 1)] },
       "パネルを隠すとプロジェクト検索の地は消え、⌘F の地は残る")
@@ -97,7 +97,7 @@ extension ProjectSearchPaneTests {
     let pane = hosted.pane
     let document = try open(hosted, "a.txt")
     searchAll(hosted, "needle")
-    pane.shell.selectPanel(.files)
+    pane.filesPanel = .files
     hosted.window.makeFirstResponder(document.surface.responder)
 
     XCTAssertTrue(pane.handleStepKey(f4))
@@ -164,17 +164,6 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(editor.preview === hosted.pane.document)
   }
 
-  /// レールの「検索」は検索パネルへ切り替えて入力欄に焦点を入れ、出しているときに押すと閉じる。
-  func testTheRailsSearchItemShowsThePanelWithTheFieldFocused() throws {
-    let hosted = try host(["a.txt": "needle\n"])
-    hosted.pane.shell.selectPanel(.search)
-    XCTAssertTrue(hosted.pane.showsSearchPanel)
-    pumpMain(until: { hosted.search.focusedArea == .field }, "入力欄に焦点")
-
-    hosted.pane.shell.selectPanel(.search)
-    XCTAssertFalse(hosted.pane.sidebar.isOpen)
-  }
-
   /// 焦点がパネルにあるままパネルを隠すと、焦点は本文へ戻る。
   func testHidingThePanelReturnsItsFocusToTheText() throws {
     let hosted = try host(["a.txt": "needle\n"])
@@ -182,7 +171,7 @@ extension ProjectSearchPaneTests {
     searchAll(hosted, "needle")
     pumpMain(until: { hosted.search.focusedArea == .field })
 
-    hosted.pane.shell.selectPanel(.files)
+    hosted.pane.filesPanel = .files
     pumpMain(until: { textHasFocus(hosted) }, "本文へ戻る")
   }
 
@@ -192,7 +181,7 @@ extension ProjectSearchPaneTests {
     _ = try open(hosted, "a.txt")
     searchAll(hosted, "needle")
     pumpMain(until: { hosted.search.focusedArea == .field })
-    hosted.pane.shell.selectPanel(.files)
+    hosted.pane.filesPanel = .files
     pumpMain(until: { textHasFocus(hosted) })
 
     XCTAssertTrue(hosted.pane.handleStepKey(f4))

@@ -28,8 +28,8 @@ extension DesignFlowSnapshotTests {
       "editor_shell", size: NSSize(width: 1100, height: 640), render: { scene.view },
       steps: [
         ("open", {}),
-        ("sidebar_closed", { pane.shell.selectPanel(.files) }),  // レールに選択印が無い
-        ("sidebar_open", { pane.shell.selectPanel(.files) }),
+        ("sidebar_closed", { pane.toggleSidebar() }),  // 本体が全幅になる
+        ("sidebar_open", { pane.toggleSidebar() }),
         ("new_file_input", { pane.shell.createFile() }),  // 選択（FileTree.swift）の親の子の先頭
         ("new_folder_input", { pane.shell.createDirectory() }),  // 続けて押す → 入力行は 1 つだけ
         (

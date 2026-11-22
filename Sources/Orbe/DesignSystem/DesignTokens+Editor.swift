@@ -10,7 +10,7 @@ extension Theme.Color {
   /// エディター面の 2 段目の文字——コードの素文字・ファイル名・タブ題・パンくずの末尾。
   /// dark / light とも statusText と偶然同値だが役割が違うので別トークン。
   static let editorText = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
-  /// 三次の文字——レールの非選択・パンくずの区切り。`textTertiary` は `textMuted` の別名なので別値を持つ。
+  /// 三次の文字——パンくずの区切り。`textTertiary` は `textMuted` の別名なので別値を持つ。
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
   /// 説明文の段——PR の説明（editorText と textMuted の間）。
   static let editorProse = editorDyn(light: 0x6d647f, dark: 0xa9a2b5)
@@ -29,6 +29,9 @@ extension Theme.Color {
   static let editorTabCloseHover = editorDynAB(light: (0x3a3151, 0.10), dark: (0xffffff, 0.10))
   /// 仮のタブの地の斜線の基色（α は `Theme.Opacity.editorPreviewHatch*`）。dark は editorIcon と同じ色相。
   static let editorPreviewHatch = editorDyn(light: 0x3a3151, dark: 0xa99fb8)
+  /// 上のバーの画面の切り替えの溝の地と、溝・選んだ項目に落とす影の色（見本の `--sunk`・`--inset`）。
+  static let editorBarGroove = editorDynAB(light: (0x3a3151, 0.05), dark: (0x08060c, 0.32))
+  static let editorBarInset = editorDynAB(light: (0x3a3151, 0.14), dark: (0x000000, 0.4))
   /// 種別チップの色相。チップの文字色と、その α .16 の地に使う。
   static let editorHueOrange = editorDyn(light: 0xbf5f2a, dark: 0xd98a5f)
   static let editorHueBlue = editorDyn(light: 0x3f6fd6, dark: 0x85adff)
@@ -121,6 +124,10 @@ extension Theme.Typography {
   static let editorLineNumber = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// コード本体の行高（pt。`lineBody` 等の倍率とは単位が違う）。
   static let editorLineHeight: CGFloat = 18
+  /// 上のバーの画面の切り替えの項目（sans 12.5 medium）と添え字の件数・番号（mono 10.5 medium）、「⌥ 端末を表示」（mono 11）。
+  static let editorBarSwitch = NSFont.systemFont(ofSize: 12.5, weight: .medium)
+  static let editorBarCount = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .medium)
+  static let editorBarHint = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// パネルヘッダーの題（sans 11・tracking 0.5）。
   static let editorPanelTitle = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// エクスプローラーのルート行（sans 11 bold・tracking 0.8）。
@@ -152,8 +159,6 @@ extension Theme.Typography {
   static let editorSearchMatch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// 件数・打ち切り・0 件・エラーの文（sans 11）。
   static let editorSearchNote = NSFont.systemFont(ofSize: 11, weight: .regular)
-  /// レールの件数バッジ（sans 9 bold）。
-  static let editorRailBadge = NSFont.systemFont(ofSize: 9, weight: .bold)
   /// ソース管理。親・子の区分・グラフの枠の見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の名前
   /// （sans 13）とディレクトリ（sans 11）・メッセージ欄（sans 12）・コミットボタン（sans 12 semibold）・グラフの
   /// コミットの題（sans 12）・ref の札（mono 9）・ブランチの行（mono 11）・「さらに表示」（sans 11.5）・失敗の文
@@ -180,18 +185,15 @@ extension Theme.Typography {
 }
 
 extension Theme.Layout {
-  /// 骨の寸法（デザインキャンバス『CmdELayers』Main の値）。レール｜サイドバー｜列の頭（タブ行 →
-  /// パンくず）。レール・サイドバーの右、タブ行の下の hairline 1 はこれらの外側に足す。
-  static let editorRail: CGFloat = 36
-  /// レールのアイコン。
-  static let editorRailGlyph: CGFloat = 20
-  /// サイドバーの既定の幅（ドラッグで可変・app-state に記憶）。
-  static let editorSidebar: CGFloat = 240
-  /// サイドバーの幅の下限。
+  /// 上のバーの高さ（下端の hairline を含む）。
+  static let editorBar: CGFloat = 36
+  /// 左の列の既定の幅（ドラッグで可変・app-state に記憶）。右の hairline 1 はこの外側に足し、合わせて 264。
+  static let editorSidebar: CGFloat = 263
+  /// 左の列の幅の下限。
   static let editorSidebarMinWidth: CGFloat = 160
-  /// 本体（テキスト面）に残す最低幅。サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則が使う。
+  /// 本体（テキスト面）に残す最低幅。左の列の幅の上限と、狭い面で表示幅を切り詰める規則が使う。
   static let editorBodyMinWidth: CGFloat = 160
-  /// サイドバーと本体の境（hairline）に置くドラッグの当たりの幅。
+  /// 左の列と本体の境（hairline）に置くドラッグの当たりの幅。
   static let editorSidebarHandle: CGFloat = 4
   static let editorFileTabs: CGFloat = 28
   /// ファイルタブの右端の枠（× と未保存の ● の場所。押せる範囲）と、その中の × の字（VS Code の tab-actions の
@@ -226,7 +228,7 @@ extension Theme.Layout {
   static let editorScrollbar: CGFloat = 14
   /// 本文の区画の下端の横スクロールバーの高さ（VS Code の horizontalScrollbarSize）。
   static let editorHorizontalScrollbar: CGFloat = 12
-  /// サイドバーの一覧（エクスプローラーのツリー・検索結果・ソース管理の列）の縦のつまみの幅（VS Code の一覧の verticalScrollbarSize）。
+  /// 左の列の一覧（エクスプローラーのツリー・検索結果・ソース管理の列）の縦のつまみの幅（VS Code の一覧の verticalScrollbarSize）。
   static let editorSidebarScrollbar: CGFloat = 10
   /// ミニマップの幅の上限（字の左のガター込み。VS Code の maxColumn 120 × 1 字 1pt）。幅は本文の幅から計算し、
   /// 列が狭ければ細くなる。
@@ -244,9 +246,6 @@ extension Theme.Layout {
   static let editorSearchChevron: CGFloat = 10
   /// 進みの細い線（検索中・ソース管理の実行中）。
   static let editorProgressLine: CGFloat = 2
-  /// レールの件数バッジ（最小の幅と高さ）と、アイコンの右下からのはみ出し（右・下）。
-  static let editorRailBadge: CGFloat = 15
-  static let editorRailBadgeOffset = CGSize(width: 8, height: 4)
   /// ソース管理。行（見出し・ファイル・コミット・さらに表示）の高さ・種別チップ・行の中のボタンとその印・見出しの
   /// ツールの角とその間（親の見出しのツールも子の見出しの一括操作も）・メッセージ欄の 1 行の高さ・コミットボタンの
   /// 高さと ▾ の幅・ref の札の高さ・コミットの点・点の列の幅。

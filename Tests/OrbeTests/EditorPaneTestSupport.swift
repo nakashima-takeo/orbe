@@ -105,7 +105,7 @@ extension OrbeTestCase {
     }
     return NSPoint(
       x: right - Theme.Layout.editorFileTabTrailing - Theme.Layout.editorTabClose / 2,
-      y: Theme.Layout.editorFileTabs / 2)
+      y: Theme.Layout.editorBar + Theme.Layout.editorFileTabs / 2)
   }
 
   /// ポインタを面の座標の点へ動かす（`host` はその点の上の SwiftUI の器。既定は列の頭）。SwiftUI の onHover は

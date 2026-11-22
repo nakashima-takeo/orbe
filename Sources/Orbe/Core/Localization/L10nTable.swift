@@ -185,6 +185,14 @@ enum L10n {
       "Can't show the diff: the path is neither in HEAD nor in the index"
     ),
 
+    // MARK: Editor 面（骨: 上のバー）
+    .editorScreenChanges: ("Changes", "Changes"),
+    .editorScreenPullRequest: ("PR", "PR"),
+    .editorScreenFiles: ("Files", "Files"),
+    .editorBarHideTree: ("ツリーを閉じる", "Hide Tree"),
+    .editorBarShowTree: ("ツリーを開く", "Show Tree"),
+    .editorBarShowTerminal: ("端末を表示", "Show Terminal"),
+
     // MARK: Editor 面（骨: エクスプローラー）
     .editorExplorerTitle: ("エクスプローラー", "Explorer"),
     .editorNewFile: ("新規ファイル", "New File"),
@@ -193,7 +201,6 @@ enum L10n {
     .editorExpandAll: ("すべて展開", "Expand All"),
 
     // MARK: Editor 面（プロジェクト検索）
-    .editorRailSearch: ("検索 (⌘⇧F)", "Search (⌘⇧F)"),
     .editorSearchTitle: ("検索", "Search"),
     .editorSearchPlaceholder: ("検索", "Search"),
     .editorSearchMatchCase: ("大文字と小文字を区別 (⌥⌘C)", "Match Case (⌥⌘C)"),

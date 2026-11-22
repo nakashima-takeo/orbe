@@ -4,12 +4,12 @@ import XCTest
 @testable import Orbe
 
 /// 親「ソース管理」とグラフの枠（エディター面に結んだパネル）——親を畳むと、焦点のあった欄・列から本文へ焦点を移してから
-/// 隠す。cd で根が変わってパネルが作り直されるときも、レールでほかのパネルへ移ってパネルが隠れるときも、同じく本文へ
+/// 隠す。cd で根が変わってパネルが作り直されるときも、上のバーでほかの画面へ移ってパネルが隠れるときも、同じく本文へ
 /// 焦点を移す。親を畳んだままソース管理を出しても、パネルの中へ焦点を求めない。グラフの列で押して働くのは「さらに表示」
 /// だけで、押しても変更の列の焦点と選択は動かない。境目を引くとグラフの枠の高さが変わり、離すと記憶へ書き戻す。
 ///
 /// 壊れると何が起きるか。列で ↑↓ していて親を畳むと、焦点が窓へ落ちてキーがどこにも届かない（パネルは焦点があると思った
-/// まま）。欄や列に焦点がある間に cd しても、レールでパネルを替えても、焦点が窓へ落ちてキーがどこにも届かない。畳んだ親を
+/// まま）。欄や列に焦点がある間に cd しても、上のバーで画面を替えても、焦点が窓へ落ちてキーがどこにも届かない。畳んだ親を
 /// 開いた瞬間に、残っていた焦点の要求が本文の焦点を奪う。グラフのコミットを押すと、変更の列から焦点が抜けて ↑↓ が効かなく
 /// なる。「さらに表示」を押しても 50 件の先が出ない。境目を引いても枠が動かない・逆へ動く・ポインタから離れて動く、離しても
 /// 高さが残らず再起動で戻る。
@@ -72,7 +72,7 @@ extension SourceControlPaneTests {
     }
   }
 
-  /// 欄か列に焦点がある間にレールでほかのパネルへ移っても、焦点は面の焦点の行き先へ戻る（隠れるパネルと一緒に窓へ落ちない）。
+  /// 欄か列に焦点がある間に上のバーでほかの画面へ移っても、焦点は面の焦点の行き先へ戻る（隠れるパネルと一緒に窓へ落ちない）。
   func testHidingThePanelWithTheFocusInItReturnsItToTheBody() throws {
     for area in [ScmPanel.Area.message, .list] {
       let hosted = try layersPane()
@@ -80,19 +80,19 @@ extension SourceControlPaneTests {
       pumpMain(until: { scm.focusedArea == .message }, "\(area): 欄に焦点")
       if area == .list { hosted.window.makeFirstResponder(hosted.pane.scmList.list) }
       XCTAssertEqual(scm.focusedArea, area, "前提")
-      hosted.pane.shell.selectPanel(.files)
+      hosted.pane.switchScreen(.files)
       pumpMain(
         until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "\(area): 本文へ戻る")
     }
   }
 
-  /// 親を畳んだままレールでソース管理を出し直しても、パネルの中へ焦点を求めない。開いても焦点は本文のまま。
+  /// 親を畳んだまま上のバーで Changes を出し直しても、パネルの中へ焦点を求めない。開いても焦点は本文のまま。
   func testShowingThePanelWhileTheRepositoryIsClosedRequestsNoFocus() throws {
     let hosted = try layersPane()
     let scm = hosted.scm
     scm.setRepositoryOpen(false)
-    hosted.pane.shell.selectPanel(.files)
-    hosted.pane.shell.selectPanel(.sourceControl)
+    hosted.pane.switchScreen(.files)
+    hosted.pane.switchScreen(.changes)
     XCTAssertNil(scm.focusRequest)
     scm.setRepositoryOpen(true)
     pumpMain(until: { hosted.pane.scmList.list.window != nil }, "列が戻る")
@@ -152,7 +152,7 @@ extension SourceControlPaneTests {
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState.loaded(),
       diffModes: EditorDiffModeState())
-    hosted.pane.shell.selectPanel(.sourceControl)
+    hosted.pane.switchScreen(.changes)
     let graph = hosted.pane.scmGraphList
     func graphFrameHeight() -> CGFloat {
       hosted.pane.layoutSubtreeIfNeeded()

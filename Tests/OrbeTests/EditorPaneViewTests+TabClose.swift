@@ -35,7 +35,7 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     let window = hostEditor(tab, width: 900)
     window.appearance = NSAppearance(named: .darkAqua)
     placeOffscreen(window)
-    pane.shell.selectPanel(.files)
+    pane.toggleSidebar()
     let a = try tab.group.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
     a.surface.responder.perform(Selector(("insertText:")), with: "x")
     _ = try tab.group.editor.open(try caseFile("b.txt", "b"), as: .pinned)
