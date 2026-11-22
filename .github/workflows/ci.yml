@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 60
     env:
       # PR では、長時間ファズ（名前の末尾が AtFullScale のテスト）を飛ばす。ほかのイベントでは、この変数が空の文字列になり、長時間ファズも走る。
-      ORBE_SKIP_LONG_FUZZ: ${{ github.event_name == 'pull_request' && '1' || '' }}
+      ORBE_SKIP_LONG_FUZZ: ''
     steps:
       - uses: actions/checkout@v5
       - name: build (incl. tests)
