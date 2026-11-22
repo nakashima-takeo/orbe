@@ -355,19 +355,6 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertEqual(role(ofRow: 2500, in: document), .keyword)
   }
 
-  /// 構文の裏の仕事の列に目印を積み、目印が走ってから、裏の仕事が置いた結果を main が受け取るまで待つ。作り直しの 1 回の
-  /// 走りは列を譲らない 1 つの仕事なので、戻った時点で、目印より前に始まっていた走りは済み、その結果は文書に届いている。
-  private func waitForTheSyntaxRun(of document: EditorDocument) throws {
-    let worker = try XCTUnwrap(document.syntax)
-    let reached = OSAllocatedUnfairLock(initialState: false)
-    Task.detached {
-      await worker.mark()
-      reached.withLock { $0 = true }
-    }
-    pumpMain(until: { reached.withLock { $0 } }, "構文の裏の仕事の列の目印")
-    nextTurn()
-  }
-
   /// 面の見えている範囲を、行 `row` から 10 行にする。
   private func show(row: Int, of surface: FakeTextSurface) {
     surface.viewport = TextViewport(top: RowPosition(line: row), visibleLines: 10)
@@ -398,9 +385,4 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertTrue(observed.sawWorker, "前提: 構文の裏の仕事を手放す部品に入れた")
     XCTAssertFalse(observed.aliveAfterDrop, "裏で落とした後に main が構文の裏の仕事を持っていない")
   }
-}
-
-extension SyntaxWorker {
-  /// 何もしない仕事。列で、呼んだ時点より前に積まれた仕事の後に走る。
-  fileprivate func mark() {}
 }
