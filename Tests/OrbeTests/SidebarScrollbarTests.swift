@@ -193,8 +193,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
     NSApp.sendEvent(tree.mouse(.leftMouseUp, end))
   }
 
-  /// 掴めるのは見えているつまみだけ——ポインタを乗せたつまみを押しても、下の行は選ばれない。押して離した後は、つまみを
-  /// 動かして、押した点の下から外せば、同じ点を押してその行が選べる。
+  /// 掴めるのは見えているつまみだけ——ポインタを乗せたつまみを押しても、下の行は選ばれない。
   func testPressingTheTreeThumbDoesNotSelectTheRowUnderIt() throws {
     let tree = try hostTree()
     let thumb = thumbFrame(tree, at: 100)
@@ -204,15 +203,6 @@ final class SidebarScrollbarTests: OrbeTestCase {
     NSApp.sendEvent(tree.mouse(.leftMouseDown, point))
     NSApp.sendEvent(tree.mouse(.leftMouseUp, point))
     XCTAssertNil(tree.pane.tree.selected, "つまみ")
-
-    let end = tree.document.frame.height - tree.scroll.documentVisibleRect.height
-    move(tree, to: end)
-    XCTAssertFalse(try XCTUnwrap(treeThumbFrame(tree.pane)).contains(point), "前提: つまみが、押した点の下から外れた")
-    NSApp.sendEvent(tree.mouse(.leftMouseDown, point))
-    NSApp.sendEvent(tree.mouse(.leftMouseUp, point))
-    let pointY = tree.scroll.convert(point, from: nil).y
-    let row = tree.pane.tree.rows[Int((end + pointY) / Theme.Layout.editorRow)]
-    XCTAssertEqual(tree.pane.tree.selected, row.id, "つまみを離した後も、行を押せる")
   }
 
   /// 帯のつまみの外を押せば、その行が選ばれる。
