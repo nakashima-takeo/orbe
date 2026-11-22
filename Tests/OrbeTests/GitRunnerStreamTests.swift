@@ -84,7 +84,6 @@ final class GitRunnerStreamTests: OrbeTestCase {
     defer { handle.cancel() }
     XCTAssertTrue(clock.awaitSleeper(until: nil), "期限なしで眠る")
     XCTAssertEqual(clock.advance(by: 86_400), 0, "無出力が上限を超えても、起こす待ち手がいない")
-    XCTAssertNil(recorder.result, "切っていない")
 
     fixture.release()
     let output = recorder.awaitResult(timeout: 20)

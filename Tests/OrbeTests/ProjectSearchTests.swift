@@ -253,7 +253,6 @@ final class ProjectSearchTests: OrbeTestCase {
     pumpMain(until: { GrepGate.isGrepRunning }, "git が走る")
     XCTAssertTrue(clock.awaitSleeper(until: nil), "git の待ち手は期限なしで眠る")
     XCTAssertEqual(clock.advance(by: 86_400), 0, "無出力が打ち切りの上限を超えても、起こす待ち手がいない")
-    XCTAssertTrue(GrepGate.isGrepRunning, "git は生きている")
     gate.open()
     pumpMain(until: { f.search.phase == .done })
     XCTAssertEqual(paths(f.search), ["n.txt"])

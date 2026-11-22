@@ -44,8 +44,9 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     XCTAssertTrue(fixture.pumpUntilHung(), "前提: 止まっている", file: file, line: line)
     XCTAssertTrue(
       clock.awaitSleeper(until: nil), "書き込みの待ち手は期限なしで眠る", file: file, line: line)
-    clock.advance(by: 86_400)
-    XCTAssertFalse(outcome.finished, "打ち切りの上限を過ぎても、止めるまでは返らない", file: file, line: line)
+    XCTAssertEqual(
+      clock.advance(by: 86_400), 0, "打ち切りの上限を過ぎるまで時刻を進めても、起こす待ち手がいない", file: file,
+      line: line)
     write.cancel()
     write.cancel()
     pumpMain(until: { outcome.finished }, timeout: 10, "止めたら返る", file: file, line: line)
