@@ -40,9 +40,8 @@ final class ProjectSearchArrowPerfTests: OrbeTestCase {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let tab = TerminalTab.alone(
       cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: queries))
-    let window = mountEditor(tab, width: 1200, height: 800)
+    let window = hostEditor(tab, width: 1200, height: 800)
     window.appearance = NSAppearance(named: .darkAqua)
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     let hosted = Hosted(repo: repo, tab: tab, window: window)
     hosted.pane.showProjectSearch(seed: nil)
     hosted.search.setPattern("needle")
