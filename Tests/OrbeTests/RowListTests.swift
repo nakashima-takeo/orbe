@@ -35,7 +35,7 @@ final class RowListTests: OrbeTestCase {
     window.contentView = rows
     rows.update(rowsVersion: 0, selection: nil, emoji: nil, wantsFocus: false)
     rows.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     return Hosted(source: source, rows: rows, window: window)
   }
 
@@ -192,7 +192,7 @@ final class RowListTests: OrbeTestCase {
     let window = NSWindow(
       contentRect: container.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = container
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     rows.update(rowsVersion: 0, selection: nil, emoji: nil, wantsFocus: false)
     rows.layoutSubtreeIfNeeded()
     window.makeFirstResponder(other)

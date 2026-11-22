@@ -45,7 +45,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     window.appearance = NSAppearance(named: .darkAqua)
     window.contentView = ground
     ground.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     // 本文の最初の行が描かれるまで待つ（固定で眠らない）。
     waitDrawn {
       try stride(from: self.bodyX, to: self.bodyX + 24 * self.cell, by: 1).contains {

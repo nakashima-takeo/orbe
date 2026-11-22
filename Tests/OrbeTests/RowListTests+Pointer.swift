@@ -21,7 +21,7 @@ extension RowListTests {
     window.contentView = rows
     rows.update(rowsVersion: 0, selection: nil, emoji: nil, wantsFocus: false)
     rows.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     let hosted = Hosted(source: source, rows: rows, window: window)
     window.pointer = hosted.list.convert(NSPoint(x: 185, y: 50), to: nil)
     return (hosted, window)

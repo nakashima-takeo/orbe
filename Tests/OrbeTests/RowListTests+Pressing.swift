@@ -156,7 +156,7 @@ extension RowListTests {
       backing: .buffered, defer: false)
     window.contentView = host
     host.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     let clip = rows.contentView
     clip.scroll(to: NSPoint(x: 0, y: offset))
     rows.reflectScrolledClipView(clip)
