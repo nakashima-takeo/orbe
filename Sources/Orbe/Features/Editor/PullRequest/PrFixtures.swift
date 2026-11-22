@@ -86,9 +86,11 @@
         panel.openSelection(.commit)
       }
 
-      /// 開いた PR の diff の中身・並び・最初の位置・スレッドの絵（本文の測り・印を出せる行）が揃った。
+      /// 開いた PR の diff の中身・並び・最初の位置・スレッドの絵（本文の測り・印を出せる行）が揃った（表示できない diff は、
+      /// 理由が決まった時点で揃った）。
       var isDiffReady: Bool {
         guard let diff = pane.diff else { return false }
+        if case .unavailable = diff.content { return true }
         return diff.content == .ready && diff.placement == .placed && !diff.pending
           && diff.comments?.isSettled ?? true
       }
