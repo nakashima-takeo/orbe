@@ -31,7 +31,9 @@ extension WindowControllerControlTests {
       until: { MainActor.assumeIsolated { pane.diff?.content == .ready } }, "中身が届く")
     pumpMain(
       until: {
-        MainActor.assumeIsolated { pane.scm.selection == ScmRowID(section: .changes, path: "a.txt") }
+        MainActor.assumeIsolated {
+          pane.scm.selection == ScmRowID(section: .changes, path: "a.txt")
+        }
       }, "左の列でその行を選ぶ")
     _ = wc.controlOpenDiff(tabId: tabId, path: repo.url("a.txt").path, kind: .workingTree)
     XCTAssertTrue(

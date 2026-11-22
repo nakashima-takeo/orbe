@@ -106,9 +106,8 @@ final class TabGroupTests: OrbeTestCase {
     XCTAssertEqual(TabGroup(key: root, editorSurfaces: surfaces).editor.screen, .changes)
     XCTAssertEqual(
       TabGroup(key: TestScratch.caseDir.path, editorSurfaces: surfaces).editor.screen, .files)
-    XCTAssertEqual(
-      TabGroup(key: root, state: EditorState(screen: .files), editorSurfaces: surfaces).editor.screen,
-      .files)
+    let restored = TabGroup(key: root, state: EditorState(screen: .files), editorSurfaces: surfaces)
+    XCTAssertEqual(restored.editor.screen, .files)
   }
 
   // MARK: - cd で連が畳まれる

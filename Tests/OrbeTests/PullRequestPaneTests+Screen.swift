@@ -47,7 +47,8 @@ extension PullRequestPaneTests {
     gitHub.number = 10
     hosted.pane.pullRequest.refresh()
     pumpMain(
-      until: { hosted.tab.group.editorLocation == .pullRequest(number: 10, root: root) }, "次の PR の番号")
+      until: { hosted.tab.group.editorLocation == .pullRequest(number: 10, root: root) },
+      "次の PR の番号")
     XCTAssertGreaterThan(redraws, 0, "上位へ描き直しを求める")
   }
 }
