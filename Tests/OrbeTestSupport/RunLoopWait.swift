@@ -8,8 +8,9 @@ import XCTest
 ///
 /// 先に条件を見るので、既に成り立っていればランループを回さない。ランループは、main のキューの仕事などの
 /// 入力源を 1 つ処理すると戻る。そのため、main に届く完了があれば、条件を見直す間隔（5 ms）を待たずに
-/// 条件を見直す。間隔が効くのは、入力源にならない変化（別スレッドが書く値・ファイル・ソケット）だけ。
-/// 成否でテストの流れを分けるとき、`XCTAssertTrue` に自分の文言を添えるときに使う（ほかは `pumpMain(until:)`）。
+/// 条件を見直す。間隔が効くのは、入力源にならない変化（main のタイマー・別スレッドが書く値・ファイル・ソケット）だけ。
+/// 成否でテストの流れを分けるとき、`XCTAssertTrue` に自分の文言を添えるとき、待った後の確かめを続く検証に
+/// 任せるときに使う（ほかは `pumpMain(until:)`）。
 @discardableResult
 public func waitUntil(_ seconds: TimeInterval = 5, _ condition: () throws -> Bool) rethrows -> Bool
 {
@@ -57,8 +58,8 @@ public func pumpMainOnce() {
 /// すべて走り終えている。
 ///
 /// main のキューに積まれた仕事の結果を、その仕事が走り終えた時点で確かめるときに使う。起きるはずの結果を
-/// 確かめるときにも、否定条件の 3 段め（起きてはいけない結果を届けうる仕事が、既に main のキューに積まれている）
-/// にも使う。
+/// 確かめるときにも使う。否定条件のうち、起きてはいけない結果を届けうる仕事が既に main のキューに積まれている
+/// ものにも使う。
 public func nextTurn(file: StaticString = #filePath, line: UInt = #line) {
   var reached = false
   DispatchQueue.main.async { reached = true }
@@ -67,8 +68,8 @@ public func nextTurn(file: StaticString = #filePath, line: UInt = #line) {
 
 /// 条件が、渡した秒数のあいだ成り立ち続けるかを、実時間で見張る。破れた時点で false を返す。
 ///
-/// 否定条件の 5 段め（同期的に決まらず、終わりを観測できず、順序を保つ経路にも無く、時計を差し替えられない）
-/// だけで使う。見張る秒数は、結果が届くまでの本番の遅延の定数から決める。
+/// 否定条件のうち、同期的に決まらず、終わりを観測できず、順序を保つ経路にも無く、時計を差し替えられないもの
+/// にだけ使う。見張る秒数は、本番に、結果が届くまでの遅延の定数が在れば、そこから決める。
 public func holds(for seconds: TimeInterval, _ condition: () -> Bool) -> Bool {
   !waitUntil(seconds) { !condition() }
 }
