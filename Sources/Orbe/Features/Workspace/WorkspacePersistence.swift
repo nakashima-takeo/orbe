@@ -151,11 +151,12 @@ private struct Lenient<Value: Decodable>: Decodable {
   }
 }
 
-/// 連のエディターの状態——開いていた文書と、プロジェクト検索の問い（検索語と 3 つの切替。結果は持たない）。文書が無く
-/// 問いが既定なら空で、書かない。JSON は 1 段（`open` / `active` / `search`）で、既定の問いは書かず、読めない項目はその
-/// 項目だけを落とす（既定へ）。
+/// 連のエディターの状態——開いていた文書と、選んでいた画面と、プロジェクト検索の問い（検索語と 3 つの切替。結果は持たない）。
+/// 文書が無く、画面を選んでおらず、問いが既定なら空で、書かない。JSON は 1 段（`open` / `active` / `screen` / `search`）で、
+/// 選んでいない画面と既定の問いは書かず、読めない項目はその項目だけを落とす（既定へ。知らない画面は選んでいない）。
 struct EditorState: Codable, Equatable {
   var documents: OpenDocuments?
+  var screen: EditorScreen?
   var search: SearchQuery
 
   /// 開いていた文書の列（実体パス）と、その中のアクティブと仮のタブ。位置ではなくパスで指す——復元で読めないパスを落としても
@@ -176,16 +177,20 @@ struct EditorState: Codable, Equatable {
 
   /// `CaseIterable` は TabState と同じ seam（encode / decode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case open, active, preview, search
+    case open, active, preview, screen, search
   }
 
-  init(documents: OpenDocuments? = nil, search: SearchQuery = SearchQuery()) {
+  init(
+    documents: OpenDocuments? = nil, screen: EditorScreen? = nil,
+    search: SearchQuery = SearchQuery()
+  ) {
     self.documents = documents
+    self.screen = screen
     self.search = search
   }
 
   /// 空（書くものが無い）か。
-  var isEmpty: Bool { documents == nil && search == SearchQuery() }
+  var isEmpty: Bool { documents == nil && screen == nil && search == SearchQuery() }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -195,6 +200,7 @@ struct EditorState: Codable, Equatable {
       documents = OpenDocuments(
         open: open, active: active, preview: try? c.decodeIfPresent(String.self, forKey: .preview))
     }
+    screen = (try? c.decodeIfPresent(String.self, forKey: .screen)).flatMap(EditorScreen.init)
     search = (try? c.decodeIfPresent(SearchQuery.self, forKey: .search)) ?? SearchQuery()
   }
 
@@ -205,6 +211,7 @@ struct EditorState: Codable, Equatable {
       try c.encode(documents.active, forKey: .active)
       try c.encodeIfPresent(documents.preview, forKey: .preview)
     }
+    try c.encodeIfPresent(screen?.rawValue, forKey: .screen)
     if search != SearchQuery() { try c.encode(search, forKey: .search) }
   }
 }

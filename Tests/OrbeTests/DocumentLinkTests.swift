@@ -18,7 +18,7 @@ final class DocumentLinkTests: OrbeTestCase {
   }
 
   private func session() -> EditorSession {
-    EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
   }
 
   func testExternalWriteReplacesTheOpenDocument() throws {

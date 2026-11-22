@@ -20,8 +20,8 @@ extension EditorPaneView {
     scm.decideAutoFetch()
   }
 
-  /// ソース管理パネルが見えている（サイドバーが開いていて、ソース管理のパネルを出している）。
-  var showsSourceControl: Bool { sidebar.isOpen && sidebar.panel == .sourceControl }
+  /// ソース管理パネルが見えている（左の列が開いていて、ソース管理のパネルを出している）。
+  var showsSourceControl: Bool { sidebar.isOpen && shell.panel == .sourceControl }
 
   /// 焦点がソース管理パネルの中（メッセージ欄か列）にあるか。
   var focusIsInSourceControl: Bool {

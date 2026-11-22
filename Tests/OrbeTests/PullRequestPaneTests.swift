@@ -17,6 +17,8 @@ import XCTest
 @MainActor
 final class PullRequestPaneTests: OrbeTestCase {
   private struct Hosted {
+    /// 連を生かしておく（面は連を弱く持つ）。
+    let tab: TerminalTab
     let pane: EditorPaneView
     let window: NSWindow
     var list: NSView { pane.pullRequestList.list }
@@ -89,9 +91,10 @@ final class PullRequestPaneTests: OrbeTestCase {
     return root
   }
 
-  /// 根 `root` の連の面だけを窓に載せ、本文に焦点を置く。
+  /// 根 `root` の連の面だけを Files の画面で窓に載せ、本文に焦点を置く。
   private func host(_ root: String) -> Hosted {
     let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
     let pane = tab.group.view.editor
     let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
@@ -105,7 +108,7 @@ final class PullRequestPaneTests: OrbeTestCase {
       }
     }
     window.makeFirstResponder(pane.focusTarget)
-    return Hosted(pane: pane, window: window)
+    return Hosted(tab: tab, pane: pane, window: window)
   }
 
   /// PR のパネルを出して、列に行が出るまで待つ。

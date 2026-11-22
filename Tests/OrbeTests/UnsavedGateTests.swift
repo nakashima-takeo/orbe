@@ -18,7 +18,7 @@ final class UnsavedGateTests: OrbeTestCase {
   }
 
   private func session() -> EditorSession {
-    EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
   }
 
   func edit(_ document: EditorDocument, _ text: String = "x") {

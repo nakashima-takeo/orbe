@@ -30,6 +30,32 @@ final class EditorShellModel {
     }
   }
 
+  /// 左の列の中身（レールの項目と 1 対 1）。画面と、Files の左の列がエクスプローラーか検索かで決まる。
+  enum Panel: CaseIterable {
+    case files
+    case search
+    case sourceControl
+    case pullRequest
+
+    /// 画面 `screen` の左の列の中身。Files の画面では `files`（エクスプローラーか検索）。
+    init(screen: EditorScreen, files: Panel) {
+      switch screen {
+      case .files: self = files
+      case .changes: self = .sourceControl
+      case .pullRequest: self = .pullRequest
+      }
+    }
+
+    /// この中身を出す画面。
+    var screen: EditorScreen {
+      switch self {
+      case .files, .search: .files
+      case .sourceControl: .changes
+      case .pullRequest: .pullRequest
+      }
+    }
+  }
+
   struct Crumb: Identifiable, Equatable {
     let id: Int
     let name: String
@@ -38,6 +64,8 @@ final class EditorShellModel {
   }
 
   var tabs: [FileTab] = []
+  /// 左の列に出している中身（pane が画面から決めて写す）。
+  var panel = Panel.files
   var activeID: EditorTab.Key?
   /// 焦点のタブが diff のタブか（タブ行の右端に見せ方の切り替えを出す）と、今の見せ方。
   var showsDiffModes = false
@@ -60,8 +88,8 @@ final class EditorShellModel {
   @ObservationIgnored var createFile: () -> Void = {}
   @ObservationIgnored var createDirectory: () -> Void = {}
   @ObservationIgnored var collapseAll: () -> Void = {}
-  /// レールの項目を押した（出しているパネルなら閉じ、別のパネルならそれへ切り替える）。
-  @ObservationIgnored var selectPanel: (EditorSidebarState.Panel) -> Void = { _ in }
+  /// レールの項目を押した（左の列を開いていて、出している中身なら閉じ、そうでなければその画面と中身にして開く）。
+  @ObservationIgnored var selectPanel: (Panel) -> Void = { _ in }
   /// 行内入力の入力欄が焦点を失った（その世代）。別の view へ移ったなら pane が取り消し、窓へ落ちたなら
   /// pane が預かる。
   @ObservationIgnored var inlineInputLostFocus: (Int) -> Void = { _ in }

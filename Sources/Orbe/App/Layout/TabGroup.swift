@@ -21,15 +21,19 @@ final class TabGroup {
   /// 器が一度でも content に載ったか。
   private var materialized = false
 
-  /// タブの列・焦点のタブ・未保存の有無・検索の問いが変わった（chrome 更新・永続保存は上位）。
+  /// 画面・タブの列・焦点のタブ・未保存の有無・検索の問いが変わった（chrome 更新・永続保存は上位）。
   var onEditorChange: (() -> Void)?
   /// エディター面からのウィンドウレベルの chrome キーを上位へ届ける。
   var onWindowCommand: ((WindowCommand) -> Void)?
 
-  /// `state` は復元した連のエディターの状態（開いていた文書・検索の問い）。
+  /// `state` は復元した連のエディターの状態（開いていた文書・選んでいた画面・検索の問い）。
   init(key: String, state: EditorState? = nil, editorSurfaces: EditorSurfaces = .shared) {
     self.key = key
-    editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
+    editor = MainActor.assumeIsolated {
+      EditorSession(
+        surfaces: editorSurfaces, defaultScreen: Self.defaultScreen(of: key),
+        chosenScreen: state?.screen)
+    }
     view = GroupFacesView(editor: EditorPaneView(root: key))
     pendingDocuments = state?.documents
     wireView()
@@ -38,10 +42,16 @@ final class TabGroup {
     }
   }
 
+  /// 画面を選ぶまでの画面——根が git の worktree の根なら Changes、そうでなければ Files（連のキーを決めるのと同じ規則）。
+  private static func defaultScreen(of key: String) -> EditorScreen {
+    GitWorktreeRoot.locate(cwd: key) == key ? .changes : .files
+  }
+
   /// pane が連を知るよう配線する。セッションの変化は器（面の骨と中身）へ写してから上位へ 1 本で上げる。
   private func wireView() {
     view.editor.group = self
     MainActor.assumeIsolated {
+      view.editor.sessionDidChange()
       editor.onChange = { [weak self] in
         guard let self else { return }
         view.editor.sessionDidChange()
@@ -84,10 +94,12 @@ final class TabGroup {
     onWindowCommand?(command)
   }
 
-  /// 連の最後のタブが cd で別の根へ移り、行き先に連が無い。キーを書き換え、エディター面の根を付け替える。
+  /// 連の最後のタブが cd で別の根へ移り、行き先に連が無い。キーを書き換え、エディター面の根を付け替え、画面を選ぶまでの
+  /// 画面を新しい根で決め直す。
   func rekey(_ key: String) {
     self.key = key
     view.editor.setRoot(key)
+    MainActor.assumeIsolated { editor.rootDidChange(defaultScreen: Self.defaultScreen(of: key)) }
   }
 
   /// 連の最後のタブが cd で `other` から移ってきた。`other` のタブ（文書と diff）を自分の列の末尾へ引き取る
@@ -109,13 +121,14 @@ final class TabGroup {
     }
   }
 
-  /// この連の永続状態。文書も検索の問いも無ければ nil（書かない）。文書は開いているものに、未消費の復元状態
+  /// この連の永続状態。文書も選んだ画面も検索の問いも無ければ nil（書かない）。文書は開いているものに、未消費の復元状態
   /// を後ろに合わせたもの——まだ一度も載っていない連へ cd で文書が入っても、復元待ちの文書を書き落とさない。
   func groupState() -> GroupState? {
     let state: EditorState = MainActor.assumeIsolated {
       let opened = openedDocuments()
       let open = pendingDocuments.map { opened?.merging($0) ?? $0 } ?? opened
-      return EditorState(documents: open, search: view.editor.projectSearch.query)
+      return EditorState(
+        documents: open, screen: editor.chosenScreen, search: view.editor.projectSearch.query)
     }
     guard !state.isEmpty else { return nil }
     return GroupState(root: key, editor: state)

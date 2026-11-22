@@ -21,19 +21,43 @@ final class EditorSession {
   }
 
   private let surfaces: EditorSurfaces
+  /// 人か制御 API が選んだ画面（選ぶまでは nil）。
+  private(set) var chosenScreen: EditorScreen?
+  /// 選ぶまでの画面（連が根から決める）。
+  private(set) var defaultScreen: EditorScreen
   private(set) var tabs: [EditorTab] = []
   private(set) var activeID: EditorTab.Key?
   /// 仮のタブ（列の中の 1 つか nil）。
   private(set) var previewID: EditorTab.Key?
   /// 文書ごとの根のサービスとの結線。文書と同寿命（閉じれば捨てる）。
   private var links: [ObjectIdentifier: DocumentLink] = [:]
-  /// 列・焦点・仮のタブ・未保存の有無・「ディスクが変わった」の有無が変わった。
+  /// 画面・列・焦点・仮のタブ・未保存の有無・「ディスクが変わった」の有無が変わった。
   var onChange: (() -> Void)?
   /// 本体のテキスト面が first responder になった／やめた。
   var onFocusChange: (() -> Void)?
 
-  init(surfaces: EditorSurfaces) {
+  /// `chosenScreen` は復元した、選んでいた画面。
+  init(surfaces: EditorSurfaces, defaultScreen: EditorScreen, chosenScreen: EditorScreen? = nil) {
     self.surfaces = surfaces
+    self.defaultScreen = defaultScreen
+    self.chosenScreen = chosenScreen
+  }
+
+  /// 今の画面——選んだ画面、無ければ選ぶまでの画面。
+  var screen: EditorScreen { chosenScreen ?? defaultScreen }
+
+  /// 画面を選ぶ（人と制御 API の入口が、開く操作と合わせて呼ぶ。開く操作そのものは画面に触れない）。
+  func selectScreen(_ screen: EditorScreen) {
+    guard chosenScreen != screen else { return }
+    chosenScreen = screen
+    onChange?()
+  }
+
+  /// 連の根が替わった。選ぶまでの画面を新しい根で決め直す（選んだ画面は保つ）。
+  func rootDidChange(defaultScreen: EditorScreen) {
+    guard self.defaultScreen != defaultScreen else { return }
+    self.defaultScreen = defaultScreen
+    onChange?()
   }
 
   /// 焦点のタブ。

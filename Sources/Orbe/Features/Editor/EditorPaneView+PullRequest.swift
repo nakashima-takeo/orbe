@@ -19,8 +19,8 @@ extension EditorPaneView {
     }
   }
 
-  /// PR のパネルが見えている（サイドバーが開いていて、PR のパネルを出している）。
-  var showsPullRequest: Bool { sidebar.isOpen && sidebar.panel == .pullRequest }
+  /// PR のパネルが見えている（左の列が開いていて、PR のパネルを出している）。
+  var showsPullRequest: Bool { sidebar.isOpen && shell.panel == .pullRequest }
 
   /// PR のパネルの中のキー——全体へのコメント欄の ⌘↵ はレビューの送信（送れなければ音で断る）。変換中なら確定してから送る。
   /// 押し続けたキーリピートは食って何もしない。扱ったら true。

@@ -67,6 +67,10 @@ final class EditorPaneView: NSView {
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
   }
+  /// Files の画面の左の列の中身（エクスプローラーか検索。保存しない）。
+  var filesPanel = EditorShellModel.Panel.files {
+    didSet { syncPanel() }
+  }
   /// サイドバーと本体の境のドラッグの当たり。
   let sidebarHandle = SidebarResizeHandle()
   private(set) var localization = LocalizationStore(language: .systemDefault)
@@ -188,13 +192,14 @@ final class EditorPaneView: NSView {
 
   // MARK: - セッション → 骨
 
-  /// セッションが変わった。写しを無条件に組み直し、焦点のタブの本体を見せ、タブが変わっていればツリーの
-  /// 祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同一タブの未保存・衝突の変化は `show` の
+  /// セッションが変わった。左の列の中身を画面に合わせ、写しを無条件に組み直し、焦点のタブの本体を見せ、タブが変わって
+  /// いればツリーの祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同一タブの未保存・衝突の変化は `show` の
   /// guard で止まる。
   func sessionDidChange() {
     guard let group else { return }
     let active = group.editor.activeTab
     let changed = active?.id != shownID
+    syncPanel()
     shell.update(from: group.editor, root: tree.root, diffMode: diffModes.mode)
     show(Self.body(of: active))
     if changed, let url = active?.url { tree.reveal(url) }
@@ -374,25 +379,10 @@ final class EditorPaneView: NSView {
     needsLayout = true
   }
 
-  /// ソース管理パネルと PR のパネルを出しているか（面が見えていて、サイドバーがそのパネルを出している）を写す。
+  /// ソース管理パネルと PR のパネルを出しているか（面が見えていて、左の列を開いていて、そのパネルを出している）を写す。
   func updatePanelsShown() {
     let visible = window != nil && !isHiddenOrHasHiddenAncestor
     scm.isShown = visible && showsSourceControl
     pullRequest.isShown = visible && showsPullRequest
-  }
-
-  /// 面が画面に見えていれば、本体の文書・diff を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書・diff が何もしない）。
-  /// 隠れた面・窓に無い面では待たず、面が見えたときに待つ——エディターを閉じた連を復元しても main を止めない。呼ぶのは面の
-  /// 配置（`layout()`）の最後だけ。配置は描く前に、main の runloop の 1 周の終わりか、利用者の操作の中の
-  /// `layoutSubtreeIfNeeded()` で走り、どちらも文書の受け取りの知らせの外になる。受け取りの知らせの中から pane を同期で配置
-  /// させない——`EditorDocument.prepareToShow` は受け取りの途中で呼ばれると、待たないときも precondition で止まる（待てば
-  /// 同じ文書の受け取りが入れ子になる）。
-  func prepareBodyIfVisible() {
-    guard window != nil, !isHiddenOrHasHiddenAncestor else { return }
-    switch body {
-    case .document(let document): document.prepareToShow()
-    case .diff(let diff): diff.prepareToShow()
-    case .empty: break
-    }
   }
 }

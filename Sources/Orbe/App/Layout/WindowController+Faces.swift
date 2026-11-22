@@ -96,7 +96,7 @@ extension WindowController {
     select(.tab(tab), inWorkspaceAt: index, inEditor: true)
   }
 
-  /// ⌘⇧F。選んでいるタブをエディターで見せ、サイドバーを検索パネルで開いて入力欄に焦点を入れる。種は押した時点の焦点で
+  /// ⌘⇧F。選んでいるタブをエディターで見せ、Files の画面で左の列を検索パネルにして開き、入力欄に焦点を入れる。種は押した時点の焦点で
   /// 決めるので、エディターを開く前に取る。選んでいるタブが無ければ no-op。
   func findInProject() {
     guard let tab = activeTab else { return }

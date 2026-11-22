@@ -68,7 +68,7 @@ extension WorkspacePersistenceTests {
     let group = GroupState(
       root: "/w",
       editor: EditorState(
-        documents: .init(open: ["/w/a"], active: "/w/a", preview: "/w/a"),
+        documents: .init(open: ["/w/a"], active: "/w/a", preview: "/w/a"), screen: .pullRequest,
         search: SearchQuery(pattern: "p", matchCase: true, wholeWord: true, isRegex: true)))
     let data = try JSONEncoder().encode(group)
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

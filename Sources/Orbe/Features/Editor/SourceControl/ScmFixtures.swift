@@ -72,7 +72,7 @@
       let tab = TerminalTab(cwd: dir.path, group: group)
       group.view.add(terminal: tab.terminal)
       group.view.show(terminal: tab.terminal)
-      group.view.editor.selectPanel(.sourceControl)
+      group.editor.selectScreen(.changes)
       return Scene(tab: tab, directory: dir, origin: origin)
     }
 

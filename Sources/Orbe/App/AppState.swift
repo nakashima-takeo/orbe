@@ -47,20 +47,17 @@ struct EditorDiffModeRecord: Codable, Equatable {
 struct EditorSidebarRecord: Codable, Equatable {
   var width: Double?
   var isOpen: Bool?
-  /// 出しているパネル（`EditorSidebarState.Panel` の rawValue）。
-  var panel: String?
   /// ソース管理パネルのグラフの枠の高さ。
   var graphHeight: Double?
   /// PR のパネルの変更ファイルをツリーで見せるか。
   var pullRequestFilesAsTree: Bool?
 
   init(
-    width: Double? = nil, isOpen: Bool? = nil, panel: String? = nil, graphHeight: Double? = nil,
+    width: Double? = nil, isOpen: Bool? = nil, graphHeight: Double? = nil,
     pullRequestFilesAsTree: Bool? = nil
   ) {
     self.width = width
     self.isOpen = isOpen
-    self.panel = panel
     self.graphHeight = graphHeight
     self.pullRequestFilesAsTree = pullRequestFilesAsTree
   }
@@ -69,7 +66,6 @@ struct EditorSidebarRecord: Codable, Equatable {
     guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
     width = try? c.decodeIfPresent(Double.self, forKey: .width)
     isOpen = try? c.decodeIfPresent(Bool.self, forKey: .isOpen)
-    panel = try? c.decodeIfPresent(String.self, forKey: .panel)
     graphHeight = try? c.decodeIfPresent(Double.self, forKey: .graphHeight)
     pullRequestFilesAsTree = try? c.decodeIfPresent(Bool.self, forKey: .pullRequestFilesAsTree)
   }

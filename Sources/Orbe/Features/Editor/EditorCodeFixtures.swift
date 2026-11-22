@@ -160,6 +160,7 @@
       let group = TabGroup(
         key: GitWorktreeRoot.root(of: dir.path),
         editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
+      group.editor.selectScreen(.files)
       let document = try group.editor.open(url, as: .pinned)
       return Scene(group: group, document: document, directory: dir)
     }

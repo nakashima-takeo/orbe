@@ -172,8 +172,7 @@ extension SourceControlPaneTests {
     pumpMain(until: { graphFrameHeight() == standard + 40 }, "上へ引けば伸びる")
     drag(rising: -50)
     pumpMain(until: { graphFrameHeight() == standard - 50 }, "掴んだときの高さから、引いた分だけ")
-    XCTAssertEqual(
-      AppStatePersistence.load()?.editorSidebar?.graphHeight, standard, "引いている間は書かない")
+    XCTAssertNil(AppStatePersistence.load()?.editorSidebar?.graphHeight, "引いている間は書かない")
     handle.mouseUp(with: .mouse(.leftMouseUp, at: grab, in: hosted.window))
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar?.graphHeight, standard - 50, "離すと書き戻す")

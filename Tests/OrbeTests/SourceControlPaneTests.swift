@@ -30,24 +30,6 @@ final class SourceControlPaneTests: OrbeTestCase {
     @MainActor var scm: ScmPanel { pane.scm }
   }
 
-  /// 根 `repo` の連の面だけを窓に載せ、ソース管理パネルを出す（`showsPanel` が false ならサイドバーは既定のエクスプローラー）。
-  func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
-    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.group.view.editor
-    let window = OrbeWindowFake(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    window.contentView = pane
-    pane.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    if showsPanel { pane.shell.selectPanel(.sourceControl) }
-    return Hosted(repo: repo, tab: tab, pane: pane, window: window)
-  }
-
-  func row(_ hosted: Hosted, _ section: ScmSection, _ path: String) throws -> Int {
-    try XCTUnwrap(hosted.scm.layout.index[ScmRowID(section: section, path: path)])
-  }
-
   /// 「ステージされている変更」の行はステージ済みの diff を、「変更」の行は作業ツリーの diff を、同じ仮のタブで開く。
   func testRowsOpenTheDiffOfTheirSectionInThePreviewTab() throws {
     let repo = try TempGitRepo()
@@ -385,5 +367,27 @@ final class SourceControlPaneTests: OrbeTestCase {
     }
     return lists(in: pane).first { $0.source.panel === pane.scm }?.subviews
       .compactMap { $0 as? ScmRowView }.first { $0.row == row && !$0.isHidden }
+  }
+}
+
+extension SourceControlPaneTests {
+  /// 根 `repo` の連の面だけを窓に載せ、レールでソース管理パネルを出す（`showsPanel` が false なら Files の画面の
+  /// エクスプローラー）。
+  func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
+    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
+    let pane = tab.group.view.editor
+    let window = OrbeWindowFake(
+      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = pane
+    pane.layoutSubtreeIfNeeded()
+    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    if showsPanel { pane.shell.selectPanel(.sourceControl) }
+    return Hosted(repo: repo, tab: tab, pane: pane, window: window)
+  }
+
+  func row(_ hosted: Hosted, _ section: ScmSection, _ path: String) throws -> Int {
+    try XCTUnwrap(hosted.scm.layout.index[ScmRowID(section: section, path: path)])
   }
 }
