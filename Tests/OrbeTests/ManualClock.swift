@@ -6,7 +6,7 @@ import OrbeTestSupport
 /// 手で進める時計。時刻は `advance` を呼んだときだけ進む。本番の型へは `waits`（止める時計）か `timers`（予約の時計）を渡す。
 /// 2 つの時計の時刻は、同じだけ進む。
 ///
-/// テストは、偽スクリプトが止まったことと、待ち手が眠ったこと（`sleeping`）や予約が張られたこと（`scheduled`）を待ってから
+/// テストは、偽スクリプトが止まったことと、待ち手が眠ったこと（`sleepingDeadlines`）や予約が張られたこと（`scheduled`）を待ってから
 /// 時刻を進める。期限は時刻を進めたときにだけ来るので、結果がマシンの負荷に依らない。待ち手が眠る前に時刻が期限を過ぎていれば、
 /// 待ち手は眠らずに期限切れを知る。期限の来た予約は、時刻を進めた呼び出しの中で、その予約のキューの上で走り終える。
 final class ManualClock: @unchecked Sendable {
@@ -67,7 +67,7 @@ final class ManualClock: @unchecked Sendable {
   }
 
   /// いま眠っている待ち手の期限（期限なしは nil）。眠った順。
-  var sleeping: [WaitClock.Instant?] { asleep.map(\.deadline) }
+  var sleepingDeadlines: [WaitClock.Instant?] { asleep.map(\.deadline) }
 
   /// `sleeper` が、まだ起きずに眠っているか。
   func isAsleep(_ sleeper: Sleeper) -> Bool {

@@ -120,8 +120,8 @@ final class ShellPATHTests: OrbeTestCase {
     sut.start()
     let answer = value(of: sut)
     // main を回さずに待つ（`awaitSleeper(_:_:)` と同じ理由）。
-    XCTAssertTrue(sleepUntil(10) { answer.isDone || !clock.sleeping.isEmpty }, "返るか眠る")
-    XCTAssertEqual(clock.sleeping, [], "同期待ちへ落ちていない（時刻を進めずに返る）")
+    XCTAssertTrue(sleepUntil(10) { answer.isDone || !clock.sleepingDeadlines.isEmpty }, "返るか眠る")
+    XCTAssertEqual(clock.sleepingDeadlines, [], "同期待ちへ落ちていない（時刻を進めずに返る）")
     XCTAssertTrue(answer.value?.hasPrefix("/opt/custom/bin:/usr/bin:") == true, "キャッシュ値が先頭に載る")
   }
 
@@ -171,9 +171,9 @@ final class ShellPATHTests: OrbeTestCase {
 
     for _ in 0..<2 {
       let next = value(of: sut)
-      pumpMain(until: { next.value != nil || !clock.sleeping.isEmpty }, "返るか眠る")
+      pumpMain(until: { next.value != nil || !clock.sleepingDeadlines.isEmpty }, "返るか眠る")
       XCTAssertEqual(next.value, floor, "予算は呼び出しごとに配り直さない（眠らずに返る）")
-      XCTAssertEqual(clock.sleeping, [])
+      XCTAssertEqual(clock.sleepingDeadlines, [])
     }
   }
 
@@ -310,7 +310,7 @@ final class ShellPATHTests: OrbeTestCase {
   /// 裏の `value(wait:)` が、`deadline` で眠るまで待つ。main を回さずに待つ——ほかのテストが main に残した保存の書き込みが、
   /// 裏の呼び出しがディスクのキャッシュを読む前に、このテストの保存先へ書かれると、呼び出しが probe を待たずに返る。
   private func awaitSleeper(_ clock: ManualClock, _ deadline: WaitClock.Instant) -> Bool {
-    sleepUntil(10) { clock.sleeping.contains(deadline) }
+    sleepUntil(10) { clock.sleepingDeadlines.contains(deadline) }
   }
 
   /// 裏のスレッドで `value(wait:)` を呼ぶ（手で進める時計の上で眠る呼び出しに、テストのスレッドを止めさせない）。

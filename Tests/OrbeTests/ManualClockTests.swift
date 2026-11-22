@@ -31,7 +31,7 @@ final class ManualClockTests: OrbeTestCase {
     XCTAssertFalse(clock.isAsleep(sleeper), "期限で起こした待ち手は、進めた呼び出しが戻った時点で眠っていない")
     pumpMain(until: { woke() != nil })
     XCTAssertEqual(woke(), false, "期限で起きたことを返す")
-    XCTAssertEqual(clock.sleeping, [], "起きた待ち手は眠りの一覧から消える")
+    XCTAssertEqual(clock.sleepingDeadlines, [], "起きた待ち手は眠りの一覧から消える")
   }
 
   func testASleeperWithoutADeadlineWakesOnlyOnTheSignal() throws {
@@ -51,7 +51,7 @@ final class ManualClockTests: OrbeTestCase {
     let deadline = clock.now + 1
     clock.advance(by: 5)
     XCTAssertFalse(clock.waits.sleep(on: semaphore, until: deadline))
-    XCTAssertEqual(clock.sleeping, [])
+    XCTAssertEqual(clock.sleepingDeadlines, [])
   }
 
   func testAConditionSleeperWakesAtItsDeadline() {
