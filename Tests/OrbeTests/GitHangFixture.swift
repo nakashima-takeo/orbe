@@ -155,12 +155,7 @@ final class GitHangFixture {
 
   /// 待ちに入るまで待つ（ハングが本当に起きた状態からテストを始めるため）。
   func waitUntilHung(timeout: TimeInterval = 30) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
-      if FileManager.default.fileExists(atPath: started) { return true }
-      usleep(20_000)
-    }
-    return false
+    sleepUntil(timeout) { FileManager.default.fileExists(atPath: started) }
   }
 
   /// main を回しながら、待ちに入るまで待つ。止まるまでに main を経由する段（根のサービスの書き込みの前段・取り直しの

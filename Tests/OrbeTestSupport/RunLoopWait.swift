@@ -21,6 +21,20 @@ public func waitUntil(_ seconds: TimeInterval = 5, _ condition: () throws -> Boo
   }
 }
 
+/// ランループを回さずに、条件が成り立つまでこのスレッドを止めて待ち、期限までに成り立ったかを返す。
+///
+/// 条件は 1 ms ごとに見直す。main に届く出来事を待つなら `waitUntil` を使う。こちらは、main を塞いだまま待つ必要が
+/// 在るとき（main が進まないことが前提のテスト）と、main でないスレッドから待つときに使う。どのスレッドからも呼べる。
+@discardableResult
+public func sleepUntil(_ seconds: TimeInterval, _ condition: () throws -> Bool) rethrows -> Bool {
+  let deadline = Date().addingTimeInterval(seconds)
+  while true {
+    if try condition() { return true }
+    guard Date() < deadline else { return false }
+    Thread.sleep(forTimeInterval: 0.001)
+  }
+}
+
 /// 条件が成り立つまで待ち、成り立たなければ呼び出した行で失敗を記録する。
 public func pumpMain(
   until condition: () -> Bool, timeout: TimeInterval = 10,

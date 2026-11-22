@@ -33,8 +33,7 @@ final class GitRunnerStreamTests: OrbeTestCase {
 
     /// 終わりを `timeout` まで待つ（終わらなければ nil）。
     func awaitResult(timeout: TimeInterval) -> GitRunner.Output? {
-      let deadline = Date().addingTimeInterval(timeout)
-      while result == nil, Date() < deadline { usleep(10_000) }
+      sleepUntil(timeout) { result != nil }
       return result
     }
   }
