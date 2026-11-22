@@ -98,12 +98,12 @@ extension EditorDiffTests {
     return try open(state, path: path, modes: modes, as: mode)
   }
 
-  /// PR の状態 `state` のファイル `path` の diff を、新しいタブで開く。
-  private func open(
+  /// PR の状態 `state` のファイル `path` の diff を、タブ `into`（無ければ新しいタブ）で開く。
+  func open(
     _ state: PullRequestState, path: String = "a.txt", modes: EditorDiffModeState? = nil,
-    as mode: EditorSession.OpenMode = .pinned
+    as mode: EditorSession.OpenMode = .pinned, into: TerminalTab? = nil
   ) throws -> (diff: EditorDiff, tab: TerminalTab) {
-    let (tab, _) = tab(modes: modes)
+    let tab = into ?? tab(modes: modes).0
     let diff = try tab.group.editor.openDiff(id(path, .pullRequest(state)), as: mode)
     pumpMain(
       until: {
