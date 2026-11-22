@@ -64,9 +64,9 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     try endsWhenTheStateDrops("cd") { tab.group.rekey(GitWorktreeRoot.root(of: other.path)) }
   }
 
-  /// 骨の操作（新規ファイル・ツリーの行・開いている文書の切り替え・すべて折りたたむ・行内入力の確定）は pane に
-  /// 結線され、セッション・ツリー・焦点へ届く。閉包はどれも既定値持ちなので、結線が 1 本外れても
-  /// コンパイルは通り、操作が無反応のまま緑になる——それをここで固定する。
+  /// 骨の操作（上のバーの画面の切り替え・上のバーの左の列の開閉・新規ファイル・ツリーの行・開いている文書の切り替え・
+  /// すべて折りたたむ・行内入力の確定）は pane に結線され、セッション・ツリー・焦点へ届く。閉包はどれも既定値持ちなので、
+  /// 結線が 1 本外れてもコンパイルは通り、操作が無反応のまま緑になる——それをここで固定する。
   func testShellActionsReachTheSessionTreeAndFocus() throws {
     let dir = TestScratch.caseDir
     let sub = dir.appendingPathComponent("d")
@@ -105,6 +105,11 @@ final class EditorPaneViewShellTests: OrbeTestCase {
 
     pane.shell.collapseAll()
     XCTAssertTrue(pane.tree.expanded.isEmpty)
+
+    pane.shell.selectScreen(.changes)
+    XCTAssertEqual(tab.group.editor.screen, .changes, "上のバーの切り替えで画面を選ぶ")
+    pane.shell.toggleSidebar()
+    XCTAssertFalse(pane.sidebar.isOpen, "上のバーの左端で左の列を閉じる")
   }
 
   /// 空状態でも骨（上のバー・左の列）はクリックを自分で受け、本体だけが面自身に固定される。
