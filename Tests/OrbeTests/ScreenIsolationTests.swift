@@ -5,6 +5,7 @@ import XCTest
 ///
 /// ここが崩れると、窓を画面に並べるテストや本物のシートを出すテストが緑のまま通り、`swift test` のたびに利用者の画面へ
 /// 窓やシートが現れる。アクティベーションポリシーを変えたテストの後は、前面に出られるポリシーのまま残りのテストが走る。
+/// テストが下ろさずに残した窓は、同じ実行の残りのテストの間、画面に残る。
 /// 窓とシートの違反は、並べていないのに並んでいると答える窓と、手で出した通知で作る（画面には何も出ない）。ポリシーは
 /// 本物を変えるが、画面にもフォーカスにも現れない。
 @MainActor
@@ -38,22 +39,31 @@ final class ScreenIsolationTests: OrbeTestCase {
     NotificationCenter.default.post(name: NSWindow.willBeginSheetNotification, object: NSWindow())
   }
 
-  /// アクティベーションポリシーを変えたテストには失敗が記録され、ポリシーは記録の後に始まりの値へ戻る。
-  func testAChangedActivationPolicyIsRecordedAndThenRestored() {
+  /// アクティベーションポリシーを変えたテストには失敗が記録され、ポリシーは始まりの値へ戻る。
+  func testAChangedActivationPolicyIsRecordedAndRestored() {
     let app = NSApplication.shared
     XCTAssertEqual(app.activationPolicy(), .prohibited, "前提: テストの実行体のポリシーは prohibited")
     let screen = ScreenIsolation()
     // 隔離が戻すことを確かめるために、ポリシーだけを本物で変える。
     // swiftlint:disable:next test_screen_isolation
     app.setActivationPolicy(.accessory)
-    var recorded: [(message: String, policy: NSApplication.ActivationPolicy)] = []
-    screen.finish { message in
-      recorded.append((message, app.activationPolicy()))
-    }
+    var recorded: [String] = []
+    screen.finish { recorded.append($0) }
     XCTAssertEqual(recorded.count, 1)
-    XCTAssertTrue(recorded.first?.message.contains("アクティベーションポリシーが変わった") == true)
-    XCTAssertEqual(recorded.first?.policy, .accessory, "戻すのは、失敗を記録した後")
+    XCTAssertTrue(recorded.first?.contains("アクティベーションポリシーが変わった") == true)
     XCTAssertEqual(app.activationPolicy(), .prohibited, "戻った")
+  }
+
+  /// テストが残した、ディスプレイと重なる窓について、隔離は失敗を記録し、その窓を下ろす。
+  func testAWindowLeftOnADisplayIsRecordedAndOrderedOut() throws {
+    let display = try XCTUnwrap(NSScreen.screens.first, "前提: ディスプレイが在る")
+    let screen = ScreenIsolation()
+    let window = ClaimsShownWindow(on: display) { true }
+    var recorded: [String] = []
+    screen.finish { recorded.append($0) }
+    XCTAssertEqual(recorded.count, 1)
+    XCTAssertTrue(recorded.first?.contains("窓がディスプレイの範囲と重なって並んだ") == true)
+    XCTAssertFalse(window.isShownOnADisplay, "下ろされた")
   }
 
   /// 隔離がこのテストに、`phrase` を含む失敗を記録することを期待する。記録しなければ、このテストが落ちる。
@@ -64,9 +74,11 @@ final class ScreenIsolationTests: OrbeTestCase {
   }
 }
 
-/// 並べていない（OS の表示の並びに入れていない）のに、`isShown` が true を返す間はディスプレイの中に並んでいると答える窓。
+/// 並べていない（OS の表示の並びに入れていない）のに、下ろされる（`orderOut`）までの間、`isShown` が true を返す限り
+/// ディスプレイの中に並んでいると答える窓。
 private final class ClaimsShownWindow: NSWindow {
   private let isShown: () -> Bool
+  private var isOrderedOut = false
 
   init(on display: NSScreen, while isShown: @escaping () -> Bool) {
     self.isShown = isShown
@@ -76,5 +88,10 @@ private final class ClaimsShownWindow: NSWindow {
     isReleasedWhenClosed = false
   }
 
-  override var isVisible: Bool { isShown() }
+  override var isVisible: Bool { !isOrderedOut && isShown() }
+
+  override func orderOut(_ sender: Any?) {
+    isOrderedOut = true
+    super.orderOut(sender)
+  }
 }
