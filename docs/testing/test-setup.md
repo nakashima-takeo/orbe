@@ -1,7 +1,7 @@
 ---
 title: テスト基盤の導入メモ
 description: 新テストアーキテクチャの実現手段・ツール選定・本番および既存テスト改修の要点と落とし穴
-updated: 2026-11-22
+updated: 2026-11-23
 ---
 
 # テスト基盤の導入メモ
@@ -50,7 +50,7 @@ updated: 2026-11-22
   - `CompletionLearning`・`CompletionEngine` をインスタンス化・リセット可能にし（不可逆な `failed` 固着を廃止）、`TitleGlyphs.notoEmoji` の `static let` による固定化を `BundledResources.root` 連動へ改める。
   - エディター系の強参照静的レジストリ 4 種（`SourceControl`, `ScmAutoFetch`, `BranchPullRequest`, `PullRequestState`）および直呼びしている `RootFiles.shared` / `GitHubCache.shared` を、スコープ所有（ワークスペース／セッション寿命）へ移す。
   - `TestIsolation` を補強し、`beginCase()` へ `MetalTextView.pasteboard` 隔離、`endCase()` へ `NSApp.appearance` 復元を追加する。あわせて、スコープ所有へ移し終えるまでの過渡期に残る `GitHubCache` 等の共有キャッシュも `beginCase()` で初期化する。
-  - `Date()` / `CACurrentMediaTime()` / `Timer` / `asyncAfter` 直呼び（`ScmAutoFetch`, `SidebarScrollbar`, `Renderer`, `AutomationRunner+Recount`, `AutomationTrials`, `TaskStore`, `BackgroundRuns`, `MenuBarController`）と固定猶予時間（`BackgroundProcess.killGrace` / `drainGrace`）を注入可能にする。
+  - `Date()` / `CACurrentMediaTime()` / `Timer` / `asyncAfter` 直呼び（`ScmAutoFetch`, `SidebarScrollbar`, `Renderer`, `AutomationRunner+Recount`, `AutomationTrials`, `TaskStore`, `BackgroundRuns`, `MenuBarController`）を注入可能にする。
 
 ## 画面非表示化とヘッドレス UI テスト
 
