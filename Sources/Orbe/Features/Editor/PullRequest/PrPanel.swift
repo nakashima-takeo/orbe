@@ -4,8 +4,8 @@ import AppKit
 /// 開閉、選択、パネルの中の焦点（列と全体へのコメント欄。欄の変換中の字と、PR が替わったときの欄の後始末を含む）、
 /// ファイルごとのコメント数の覚え。PR の事実（どの PR か・中身・確認済み・両端）は 2 つの状態が持ち、ここは見せ方だけ。
 ///
-/// PR の画面を出している間（`isShown`。左の列を閉じていても）だけ worktree の今の PR を見る——GitHub に問い合わせるのは
-/// 見ている間だけ。列の行は、
+/// 面が見えている間（`isTracking`）は worktree の今の PR がどの PR かを追い（上のバーの番号）、PR の画面を出している間
+/// （`isShown`。左の列を閉じていても）は PR の中身も読む——GitHub に問い合わせるのは、このどちらかの間だけ。列の行は、
 /// PR の中身・ツリーかリストか・開閉で決まり、そのどれかが変わったときに 1 か所（`rebuild`）で組み直す（確認済みは描くときに
 /// 状態から読む）。選択は常に見えている行にある——組み直した後に選んでいた行が無ければ、そこで選び直す（ソース管理の
 /// 変更の列と同じ）。区分とフォルダの開閉・選択は面ごとで永続しない。ツリーかリストかはアプリ全体で 1 つ
@@ -72,18 +72,31 @@ final class PrPanel {
     let closedFolders: Set<String>
   }
 
-  /// PR の画面を出している間 true。立てると worktree の今の PR を見始めて行を組み、下ろすと見るのをやめる。隠している間は
-  /// 知らせを受けないので、出すときに下端の区画を作る元の状態を覚え直す。
+  /// 面が見えている間 true。立てると worktree の今の PR がどの PR かを追い始め、知らせを受ける。下ろすとやめる（先に
+  /// `isShown` を下ろす）。追っていない間は知らせを受けないので、追い始めるときに下端の区画を作る元の状態を覚え直す。
+  @ObservationIgnored var isTracking = false {
+    didSet {
+      guard isTracking != oldValue else { return }
+      if isTracking {
+        reviewedState = state.map(ObjectIdentifier.init)
+        pullRequest.addObserver(self)
+        pullRequest.beginTracking()
+        rebuild()
+      } else {
+        pullRequest.removeObserver(self)
+        pullRequest.endTracking()
+      }
+    }
+  }
+
+  /// PR の画面を出している間 true（追っている間だけ）。立てると PR の中身も読んで行を組み、下ろすと中身を読むのをやめる。
   @ObservationIgnored var isShown = false {
     didSet {
       guard isShown != oldValue else { return }
       if isShown {
-        reviewedState = state.map(ObjectIdentifier.init)
-        pullRequest.addObserver(self)
         pullRequest.beginWatching()
         rebuild()
       } else {
-        pullRequest.removeObserver(self)
         pullRequest.endWatching()
         panelDidHide()
       }

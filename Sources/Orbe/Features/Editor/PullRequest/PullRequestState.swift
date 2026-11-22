@@ -247,7 +247,7 @@ final class PullRequestState {
     isReading = true
     let order = issueOrder()
     notify()
-    tracking.record { [weak self] in
+    tracking.record { [weak self] _ in
       // 中身の読みが印の付いたまま（`isReading`）で、レビューのやりとりの読みを先に出す——答えがすぐ返っても、中身の答えより
       // 先に先頭のコミットを見比べない。
       self?.readReview()

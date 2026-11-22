@@ -270,18 +270,20 @@ extension BranchPullRequestTests {
     XCTAssertEqual(publishedChecks, [])
   }
 
-  /// 読み直しで前と同じ値の答えが出たら、前の答えの「GitHub に在るか」の結果は入れず、今の答えの結果だけを入れる。
-  func testAnEarlierPublishedCheckDoesNotLandOnTheNextAnswer() {
+  /// 読み直しで PR が無いままなら答えは替えず、読み直す前に走っていた「GitHub に在るか」の結果は入れずに問い合わせ直し、
+  /// 今の結果だけを入れる。問い合わせ直している間は前の値のまま。
+  func testAReloadWithoutAPullRequestChecksThePublishedStateAgainKeepingTheAnswer() {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     answers["feat"] = .gitHub(GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([]))
     holdsPublishedChecks = true
     let pullRequest = watch()
-    pumpMain(until: { self.heldChecks.count == 1 }, "前提: 前の答えの在るかを確かめている")
+    pumpMain(until: { self.heldChecks.count == 1 }, "前提: 在るかを確かめている")
     pullRequest.reload()
-    pumpMain(until: { self.heldChecks.count == 2 }, "前提: 同じ値の今の答えの在るかを確かめている")
+    pumpMain(until: { self.lookups.count == 2 }, "前提: 今のブランチの PR を引き直した")
 
     heldChecks[0](.success(false))
-    XCTAssertEqual(published(pullRequest), .checking, "前の答えの結果は入れない")
+    XCTAssertEqual(published(pullRequest), .checking, "読み直す前の結果は入れない")
+    pumpMain(until: { self.heldChecks.count == 2 }, "問い合わせ直す")
     heldChecks[1](.success(true))
     XCTAssertEqual(published(pullRequest), .yes)
   }

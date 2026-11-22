@@ -146,8 +146,9 @@ final class PullRequestPaneTests: OrbeTestCase {
     pumpMain(until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "前提: 本文")
 
     gitHub.open = false
-    hosted.pane.switchScreen(.pullRequest)
+    hosted.pane.pullRequest.refresh()
     pumpMain(until: { hosted.pane.pullRequest.layout.items.isEmpty }, "PR が無いと分かる")
+    hosted.pane.switchScreen(.pullRequest)
     XCTAssertFalse(hosted.pane.pullRequest.focusRequest, "当てる列の無い要求は捨てる")
     settle()
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "本文のまま")

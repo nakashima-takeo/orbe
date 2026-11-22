@@ -26,7 +26,10 @@ extension BranchPullRequest {
   /// open の PR が無いときの、作成の入口の材料。
   struct Creation: Equatable {
     let branch: String
-    let url: URL?
+    /// GitHub のどのブランチか（在るかを問い合わせる相手）。
+    let ref: GitHubBranchRef
+    /// GitHub の作成ページ。
+    var url: URL? { ref.pullRequestCreationURL }
     var published: Published
   }
 
@@ -55,5 +58,21 @@ extension BranchPullRequest {
     case diverged(ahead: Int, behind: Int)
     /// ずれを数えない（PR の先頭のコミットが手元に無い・読めない・浅いクローン）が、手元の HEAD が PR の先頭と違う。
     case differs
+  }
+
+  static func unavailable(_ reason: GitHubBranchPullRequestsUnavailable) -> Unavailable {
+    switch reason {
+    case .ghMissing: .ghMissing
+    case .ghUnauthed: .ghUnauthed
+    case .notGitHub: .notGitHub
+    case .unverified: .unverified
+    }
+  }
+
+  /// PR が置かれたリポジトリ `repository` を指す remote（台帳の中で正式名が等しいもの。名前の順で最初）。
+  static func remote(of repository: GitHubRepoName, in ledger: GitHubRemoteLedger.Resolved?)
+    -> String?
+  {
+    (ledger?.repositories ?? [:]).filter { $0.value == .github(repository) }.keys.sorted().first
   }
 }

@@ -53,8 +53,20 @@ final class PrPanelTests: OrbeTestCase {
   }
 
   override func tearDown() {
-    panel.isShown = false
+    hide(panel)
     super.tearDown()
+  }
+
+  /// 面が見えていて PR の画面を出している姿にする（追ってから中身も読む）。
+  private func show(_ panel: PrPanel) {
+    panel.isTracking = true
+    panel.isShown = true
+  }
+
+  /// 面が隠れた姿にする（中身を読むのをやめてから追うのをやめる）。
+  private func hide(_ panel: PrPanel) {
+    panel.isShown = false
+    panel.isTracking = false
   }
 
   private var source: PullRequestSource {
@@ -120,7 +132,7 @@ final class PrPanelTests: OrbeTestCase {
 
   /// パネルを出して、PR の中身が届くまで待つ。
   func shown() throws -> PullRequestState {
-    panel.isShown = true
+    show(panel)
     pumpMain(until: { self.panel.state?.content != nil }, "前提: PR の中身が届く")
     return try XCTUnwrap(panel.state)
   }
@@ -137,7 +149,7 @@ final class PrPanelTests: OrbeTestCase {
     let state = try shown()
     XCTAssertTrue(state.isWatched)
 
-    panel.isShown = false
+    hide(panel)
     XCTAssertFalse(state.isWatched, "隠せば PR の状態を見るのをやめる")
   }
 
@@ -145,16 +157,16 @@ final class PrPanelTests: OrbeTestCase {
   /// 欄の変換中の字を確定せず、焦点も移さない（区画は出し直したときの PR で作られていて、作り直しは起きていない）。
   func testAPullRequestThatChangedWhileHiddenLeavesTheFieldAloneAfterShowingAgain() throws {
     let other = PrPanel(root: repo.root, source: source)
-    other.isShown = true
-    defer { other.isShown = false }
+    show(other)
+    defer { hide(other) }
     let previous = try shown()
-    panel.isShown = false
+    hide(panel)
     number = 10
     other.refresh()
     pumpMain(
       until: { other.state.map { $0 !== previous && $0.content != nil } ?? false },
       "前提: ほかの面のパネルが次の PR を見る")
-    panel.isShown = true
+    show(panel)
     var confirms = 0
     var closings = 0
     panel.confirmReviewComposition = { confirms += 1 }

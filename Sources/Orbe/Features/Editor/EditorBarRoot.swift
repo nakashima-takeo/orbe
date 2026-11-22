@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// 上のバー（高さ 36。下端の hairline を含む）の SwiftUI ルート。左から、左の列の開閉・画面の切り替え（Changes は件数つき）、
+/// 上のバー（高さ 36。下端の hairline を含む）の SwiftUI ルート。左から、左の列の開閉・画面の切り替え（Changes の件数・PR の
+/// 番号つき）、
 /// 右寄せで「⌥ 端末を表示」の案内。器の中の別 root なので環境は明示注入する。押してもフォーカスを取らない（host が
 /// first responder を受けない）。幅が足りなければ案内を出さず、開閉と切り替えを守る。
 struct EditorBarRoot: View {
@@ -10,6 +11,8 @@ struct EditorBarRoot: View {
   let sidebar: EditorSidebarState
   /// Changes の件数の持ち主。
   let scm: ScmPanel
+  /// PR の番号の持ち主（worktree の今の PR）。
+  let pullRequest: BranchPullRequest
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
   @Environment(\.colorScheme) private var scheme
@@ -35,7 +38,8 @@ struct EditorBarRoot: View {
     HStack(spacing: 6) {
       EditorSidebarToggle(isOpen: sidebar.isOpen, action: shell.toggleSidebar)
       EditorScreenSwitch(
-        selection: shell.panel.screen, changesCount: scm.count, select: shell.selectScreen)
+        selection: shell.panel.screen, changesCount: scm.count,
+        pullRequestNumber: pullRequest.state?.key.id.number, select: shell.selectScreen)
       Spacer(minLength: 0)
       if showsHint { EditorPeekHint() }
     }
@@ -69,12 +73,13 @@ private struct EditorSidebarToggle: View {
   }
 }
 
-/// 画面の切り替え: 溝（padding 2・gap 2・radius 9・地 sunk・内側の影）に `Changes <件数>`・`PR`・`Files` の 3 項目
-/// （高さ 24・padding 0 11・radius 7）。選んでいる項目は地 ink .11 と上縁の明かり・下の影で浮かせ、添え字を accent にする。
-/// 件数は 0 なら出さない（1000 以上は「999+」）。
+/// 画面の切り替え: 溝（padding 2・gap 2・radius 9・地 sunk・内側の影）に `Changes <件数>`・`PR <#番号>`・`Files` の 3 項目
+/// （高さ 24・padding 0 11・radius 7）。選んでいる項目は地 ink .11 と上縁の明かり・下の影で浮かせ、件数・番号の字を accent にする。
+/// 件数は 0 なら出さない（1000 以上は「999+」）。番号は今のブランチに open の PR があるときだけ。
 private struct EditorScreenSwitch: View {
   let selection: EditorScreen
   let changesCount: Int
+  let pullRequestNumber: Int?
   let select: (EditorScreen) -> Void
   @Environment(\.localization) private var l10n
 
@@ -84,7 +89,7 @@ private struct EditorScreenSwitch: View {
   var body: some View {
     HStack(spacing: 2) {
       item(.changes, .editorScreenChanges, count: countText)
-      item(.pullRequest, .editorScreenPullRequest, count: nil)
+      item(.pullRequest, .editorScreenPullRequest, count: pullRequestNumber.map { "#\($0)" })
       item(.files, .editorScreenFiles, count: nil)
     }
     .padding(2)
