@@ -53,7 +53,7 @@ enum BoardAutomationHand {
 
   /// 一覧では ⌘↵＝終わりまで流す（今すぐ実行）、space＝止める ⇄ 再開、⌘⌫＝削除。地図のノードの段では ⌘↵＝選ばれているノードまで
   /// 流す、space＝選ばれているノードを止める ⇄ 再開。他のキーと場所は nil。
-  static func stroke(_ press: KeyPress, at place: BoardAutomationModel.Place) -> Stroke? {
+  static func stroke(_ press: KeyInput, at place: BoardAutomationModel.Place) -> Stroke? {
     let commandOnly =
       press.modifiers.contains(.command)
       && press.modifiers.isDisjoint(with: [.option, .control, .shift])
@@ -66,7 +66,7 @@ enum BoardAutomationHand {
     case (.map, .space): operation = .toggleNodePause
     default: return nil
     }
-    return press.phase == .down ? .press(operation) : .held
+    return press.isRepeat ? .held : .press(operation)
   }
 
   /// 走らせ役へ通す。`nodeId` はノードまで流す・ノードを止めるときの先（無ければ何もしない）。
