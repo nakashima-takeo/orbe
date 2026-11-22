@@ -216,24 +216,24 @@ final class ShellPATHTests: OrbeTestCase {
 
   func testProbeReadsPathFromEnvOutput() throws {
     let shell = try stubShell("echo HOME=/Users/test\necho PATH=/usr/bin:/bin\necho SHLVL=1")
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell), "/usr/bin:/bin")
   }
 
   /// rc が `PATH=` を echo するノイズより後に env の出力が来る。採るのは最後の行。
   func testProbeTakesLastPathLine() throws {
     let shell = try stubShell("echo PATH=/noise\necho PATH=/usr/bin:/bin")
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell), "/usr/bin:/bin")
   }
 
   func testProbeReturnsNilWhenNoPathLine() throws {
     let shell = try stubShell("echo SHLVL=1")
-    XCTAssertNil(ShellPATH.probeLoginShell(shell: shell, timeout: 5))
+    XCTAssertNil(ShellPATH.probeLoginShell(shell: shell))
   }
 
   /// 対話シェルは rc のエラーで非 0 終了しうる。PATH が出ていれば終了ステータスで捨てない。
   func testProbeAcceptsNonZeroExit() throws {
     let shell = try stubShell("echo PATH=/usr/bin:/bin\nexit 1")
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell), "/usr/bin:/bin")
   }
 
   /// login + interactive で起こす。`-i` を落とすと `.zshrc` を読まず、mise/asdf/nvm の shim を
@@ -242,7 +242,7 @@ final class ShellPATHTests: OrbeTestCase {
     let argsFile = stubDir.appendingPathComponent("args")
     let shell = try stubShell(
       "printf '%s\\n' \"$@\" > \"\(argsFile.path)\"\necho PATH=/usr/bin:/bin")
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell), "/usr/bin:/bin")
     XCTAssertEqual(
       try String(contentsOf: argsFile, encoding: .utf8), "-l\n-i\n-c\n/usr/bin/env\n")
   }
@@ -267,11 +267,11 @@ final class ShellPATHTests: OrbeTestCase {
       """)
     let probed = Probed()
     DispatchQueue.global().async {
-      probed.set(ShellPATH.probeLoginShell(shell: shell, timeout: 10, clock: clock.waits))
+      probed.set(ShellPATH.probeLoginShell(shell: shell, clock: clock.waits))
     }
-    let limit = clock.now + 10
+    let deadline = clock.now + ShellPATH.probeTimeout
     let drain = try XCTUnwrap(
-      clock.awaitSleeper(where: { $0.deadline.map { $0 < limit } ?? false })?.deadline,
+      clock.awaitSleeper(where: { $0.deadline.map { $0 < deadline } ?? false })?.deadline,
       "シェルの終了の後、上限より手前の期限（汲み出しの猶予）で眠る")
     clock.advance(to: drain)
     pumpMain(until: { probed.isDone }, "EOF を待ち続けない")
@@ -290,10 +290,10 @@ final class ShellPATHTests: OrbeTestCase {
     let shell = try stubShell(": > \"\(began)\"\nsleep 30")
     let probed = Probed()
     DispatchQueue.global().async {
-      probed.set(ShellPATH.probeLoginShell(shell: shell, timeout: 1, clock: clock.waits))
+      probed.set(ShellPATH.probeLoginShell(shell: shell, clock: clock.waits))
     }
     pumpMain(until: { FileManager.default.fileExists(atPath: began) }, "前提: シェルが固まっている")
-    let deadline = clock.now + 1
+    let deadline = clock.now + ShellPATH.probeTimeout
     XCTAssertNotNil(clock.awaitSleeper(until: deadline), "上限の期限で眠る")
     clock.advance(to: deadline)
     pumpMain(until: { probed.isDone }, "上限で戻る")

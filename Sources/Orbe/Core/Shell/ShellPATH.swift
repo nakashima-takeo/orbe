@@ -170,7 +170,7 @@ final class ShellPATH {
   /// 終了ステータスは見ない（対話シェルは rc のエラーで非 0 になりうるが PATH は正しく出ている）。
   static func probeLoginShell(
     shell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh",
-    timeout: TimeInterval = probeTimeout, clock: WaitClock = .wall
+    clock: WaitClock = .wall
   ) -> String? {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: shell)
@@ -198,7 +198,7 @@ final class ShellPATH {
     // 打ち切った後は EOF が来ないことがあるので、返る前に必ず読み手を外す（レーンも fd も残さない）。
     defer { pipe.fileHandleForReading.readabilityHandler = nil }
 
-    awaitProbe(proc, state: state, timeout: timeout, clock: clock)
+    awaitProbe(proc, state: state, clock: clock)
     // 不正バイトは U+FFFD へ落として読み進める。PATH と無関係な環境変数の 1 バイトで probe 全体を
     // 捨てると、失敗として検出できないまま floor に固定される。lint は「デコードの失敗を握り潰すな」と
     // 失敗しうる initializer を求めるが、ここで欲しいのは全か無かの成否ではなく、読めた分の PATH 行。
@@ -211,11 +211,9 @@ final class ShellPATH {
   /// シェルの終了と出力の汲み出しを待つ。**終わったことを決めるのはシェルの終了**であって EOF ではない
   /// ——EOF が来るかは pipe の書き込み端を握る第三者（rc が背景に残したプロセス）次第で、読み切りを
   /// 待つ形にすると、正しく取れた PATH を捨てて上限まで張り付く。終了後に残るのはバッファの汲み出し
-  /// だけなので `drainGrace` で有界にする。`timeout` は「シェルが終わらない」ケース専用の硬い上限。
-  private static func awaitProbe(
-    _ proc: Process, state: ProbeState, timeout: TimeInterval, clock: WaitClock
-  ) {
-    let deadline = clock.now() + timeout
+  /// だけなので `drainGrace` で有界にする。`probeTimeout` は「シェルが終わらない」ケース専用の硬い上限。
+  private static func awaitProbe(_ proc: Process, state: ProbeState, clock: WaitClock) {
+    let deadline = clock.now() + probeTimeout
     while true {
       let progress = state.progress()
       if progress.finished { return }
