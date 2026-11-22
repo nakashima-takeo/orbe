@@ -50,4 +50,15 @@ final class WorktreePaletteFieldKeyTests: OrbeTestCase {
     send(.backtab, .shift, to: model)
     XCTAssertEqual(model.selectedBaseChoice?.role, .previous, "⇧⇥ が末尾から先頭へ回る")
   }
+
+  /// ベースを選ぶ画面の ⇥・⇧⇥ は何もせずに握る（焦点を入力欄から逃がさない）。
+  func testTabAndShiftTabInTheBasePickerKeepTheFocusInTheField() {
+    let model = DesignSceneFixtures.worktreePaletteBasePickerModel()
+    XCTAssertEqual(model.mode, .basePicker, "前提: ベースを選ぶ画面")
+
+    send(.tab, to: model)
+    send(.backtab, .shift, to: model)
+
+    XCTAssertEqual(model.mode, .basePicker, "ベースを選ぶ画面に留まる")
+  }
 }

@@ -132,4 +132,16 @@ final class BoardAutomationKeyTests: OrbeTestCase {
     XCTAssertEqual(automation.place, .request, "欄の ↑ は何もしない")
     XCTAssertEqual(automation.hints.map(\.label), [.boardAskHint], "移る先が無いので ↓ の案内を出さない")
   }
+
+  /// 欄の ⇥・⇧⇥ は何もせずに握る（焦点をボードの外へ逃がさない）。
+  func testTabAndShiftTabInTheFieldKeepTheFocusOnTheBoard() {
+    let model = board()
+    let automation = model.automation
+    XCTAssertEqual(automation.place, .request, "前提: 欄から始まる")
+
+    send(.tab, to: automation)
+    send(.backtab, .shift, to: automation)
+
+    XCTAssertEqual(automation.place, .request, "欄に留まる")
+  }
 }
