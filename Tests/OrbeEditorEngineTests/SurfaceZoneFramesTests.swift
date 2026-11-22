@@ -170,8 +170,9 @@ private final class FrameProbe: Sendable {
   }
 }
 
-/// 画面外のテクスチャ 3 枚へ出し、GPU が描き終えたコマを読んで `FrameProbe` に渡し、すぐ「画面に出た」と知らせる。描く先を
-/// 取った回数（描いたコマの数）と、読み終えたコマの数を数える。
+/// 画面外のテクスチャ 3 枚へ出し、GPU が描き終えたコマを読んで `FrameProbe` に渡し、「画面に出た」を知らせてから、読み
+/// 終えたことを main へ知らせる（テストが次の刻みを打つ前に、描画スレッドが「画面に出た」を受け取る）。描く先を取った
+/// 回数（描いたコマの数）と、読み終えたコマの数を数える。
 private final class CapturingTarget: FrameTarget, @unchecked Sendable {
   private let textures: [MTLTexture]
   private let probe: FrameProbe
@@ -193,9 +194,7 @@ private final class CapturingTarget: FrameTarget, @unchecked Sendable {
     self.probe = probe
   }
 
-  /// テストは、コマが読まれたら次の刻みを打つ。「画面に出た」が描画スレッドに届くのは読まれた後なので、届く前に打った
-  /// 刻みが上限に当たって飛ばされないよう、画面に出ていないコマの上限を大きくする。
-  var limit: Int { 1_000 }
+  var limit: Int { 1 }
 
   func acquire() -> AcquiredFrame? {
     let texture = textures[next % textures.count]
@@ -211,8 +210,8 @@ private final class CapturingTarget: FrameTarget, @unchecked Sendable {
           &bytes, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height),
           mipmapLevel: 0)
         probe.read(bytes, width: width, height: height)
-        DispatchQueue.main.async { MainActor.assumeIsolated { self.delivered += 1 } }
         shown(CACurrentMediaTime())
+        DispatchQueue.main.async { MainActor.assumeIsolated { self.delivered += 1 } }
       }
     }
   }
