@@ -341,9 +341,9 @@ final class EditorDiffTests: OrbeTestCase {
 
   // MARK: - 永続と現在地
 
-  /// diff は永続に書かない。Changes の画面で diff を出していても、書くのは開いている文書の列と今の文書。現在地は diff でも
-  /// ファイルと同じ（根と相対パス）。
-  func testDiffsAreNotPersistedAndTheLocationIsTheFile() throws {
+  /// diff は永続に書かない。Changes の画面で diff を出していても、書くのは開いている文書の列と今の文書と選んだ画面。現在地は
+  /// 根だけ。
+  func testDiffsAreNotPersistedAndTheLocationIsTheRoot() throws {
     try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
     try tab.group.editor.open(repo.url("b.txt"), as: .pinned)
@@ -353,7 +353,8 @@ final class EditorDiffTests: OrbeTestCase {
     let documents = try XCTUnwrap(tab.group.groupState()?.editor.documents)
     XCTAssertEqual(documents.open, [repo.url("b.txt").path, repo.url("a.txt").path])
     XCTAssertEqual(documents.active, repo.url("a.txt").path)
-    XCTAssertEqual(tab.group.editorLocation, .file(root: repo.root, relative: "a.txt"))
+    XCTAssertEqual(tab.group.groupState()?.editor.screen, .changes)
+    XCTAssertEqual(tab.group.editorLocation, .root(repo.root))
   }
 }
 

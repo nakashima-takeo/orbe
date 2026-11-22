@@ -149,4 +149,14 @@ extension EditorPaneView {
     case .empty: break
     }
   }
+
+  /// 面を本体に載せる。境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なるので、テキスト面はその下。検索バーは後から
+  /// 足すので面の上。
+  func install(_ surface: any TextSurface) {
+    surface.host = self
+    let view = surface.view
+    view.autoresizingMask = []
+    view.frame = bodyRect
+    addSubview(view, positioned: .below, relativeTo: sidebarHandle)
+  }
 }

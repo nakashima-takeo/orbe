@@ -25,6 +25,8 @@ final class TabGroup {
   var onEditorChange: (() -> Void)?
   /// エディター面からのウィンドウレベルの chrome キーを上位へ届ける。
   var onWindowCommand: ((WindowCommand) -> Void)?
+  /// エディターで見せているときの現在地が変わったかもしれない（worktree の今の PR の答えが替わった。chrome 更新は上位）。
+  var onLocationChange: (() -> Void)?
 
   /// `state` は復元した連のエディターの状態（開いていた文書・選んでいた画面・検索の問い）。
   init(key: String, state: EditorState? = nil, editorSurfaces: EditorSurfaces = .shared) {
@@ -58,6 +60,7 @@ final class TabGroup {
         onEditorChange?()
       }
       view.editor.projectSearch.onQueryChange = { [weak self] in self?.onEditorChange?() }
+      view.editor.onPullRequestChange = { [weak self] in self?.onLocationChange?() }
       editor.onFocusChange = { [weak self] in self?.view.editor.focusDidChange() }
     }
   }
@@ -77,16 +80,24 @@ final class TabGroup {
     MainActor.assumeIsolated { editor.documentsToDiscard() }
   }
 
-  /// エディターでファイルを普通の文書として開いて今の文書にする（制御 API の入口。エージェントが見せたファイルを人の次の
-  /// クリックが入れ替えない）。読めない・UTF-8 でない・テキスト面を作れない（Metal の装置が無い）は throw。
+  /// エディターでファイルを普通の文書として開いて今の文書にし、Files の画面を選ぶ（制御 API の入口。エージェントが見せた
+  /// ファイルを人の次のクリックが入れ替えない）。読めない・UTF-8 でない・テキスト面を作れない（Metal の装置が無い）は
+  /// throw し、画面を選ばない。
   func openFile(_ url: URL) throws {
-    _ = try MainActor.assumeIsolated { try editor.open(url, as: .pinned) }
+    try MainActor.assumeIsolated {
+      try editor.open(url, as: .pinned)
+      editor.selectScreen(.files)
+    }
   }
 
-  /// エディターで diff を開く（制御 API の入口。エージェントが人に変更を見せる）。テキスト面を作れない（Metal の装置が
-  /// 無い）は throw。
+  /// エディターで diff を Changes の diff として開き、Changes の画面を選び、左の列でその行を選択表示する（制御 API の入口。
+  /// エージェントが人に変更を見せる。人が左の列で別の行を選べば入れ替わる）。テキスト面を作れない（Metal の装置が無い）は
+  /// throw し、画面を選ばない。
   func openDiff(_ id: EditorDiff.Key) throws {
-    _ = try MainActor.assumeIsolated { try editor.openDiff(id) }
+    try MainActor.assumeIsolated {
+      try view.editor.openDiff(id)
+      editor.selectScreen(id.kind.screen)
+    }
   }
 
   /// エディター面からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
@@ -134,24 +145,21 @@ final class TabGroup {
     return GroupState(root: key, editor: state)
   }
 
-  /// エディターで見せているときの、chrome の現在地。本体が根の下のファイル（文書・作業ツリーとステージ済みの diff）なら
-  /// 根と相対パス、PR の diff なら PR の番号と相対パス、根の外のファイルなら絶対パス、本体が空なら根だけ。
+  /// エディターで見せているときの、chrome の現在地。画面から導く——Files は今の文書（根の下なら根と相対パス、根の外なら
+  /// 絶対パス、文書が無ければ根だけ）、Changes は根だけ、PR は worktree の今の PR の番号と根（PR が分からなければ根だけ）。
   var editorLocation: TerminalTab.Location {
     let root = key
     return MainActor.assumeIsolated {
-      let url: URL
-      switch editor.body {
-      case .empty: return .root(root)
-      case .document(let document): url = document.url
-      case .diff(let diff):
-        if case .pullRequest(let state) = diff.id.kind {
-          return .pullRequest(number: state.key.id.number, relative: diff.id.path)
-        }
-        url = diff.id.url
+      switch editor.screen {
+      case .changes: return .root(root)
+      case .pullRequest:
+        guard let state = view.editor.pullRequest.state else { return .root(root) }
+        return .pullRequest(number: state.key.id.number, root: root)
+      case .files:
+        guard let path = editor.activeDocument?.url.path else { return .root(root) }
+        guard path.hasPrefix(root + "/") else { return .absolute(path) }
+        return .file(root: root, relative: String(path.dropFirst(root.count + 1)))
       }
-      let path = url.path
-      guard path.hasPrefix(root + "/") else { return .absolute(path) }
-      return .file(root: root, relative: String(path.dropFirst(root.count + 1)))
     }
   }
 

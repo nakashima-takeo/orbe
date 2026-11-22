@@ -22,6 +22,7 @@ extension WindowController {
       self?.scheduleSave()
     }
     group.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
+    group.onLocationChange = { [weak self] in self?.refreshChrome() }
     group.view.configure(
       translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
       sidebar: editorSidebar, diffModes: editorDiffModes)

@@ -120,11 +120,8 @@ enum TrafficLights: Equatable {
     case .root(let root): return [.dim(short(root))]
     case .file(let root, let relative): return [.dim(short(root) + "/"), .text(relative)]
     case .absolute(let path): return [.text(short(path))]
-    case .pullRequest(let number, let relative):
-      let directory = (relative as NSString).deletingLastPathComponent
-      return [.accent("PR #\(number)"), .dim(" · ")]
-        + (directory.isEmpty ? [] : [.dim(directory + "/")])
-        + [.text((relative as NSString).lastPathComponent)]
+    case .pullRequest(let number, let root):
+      return [.accent("PR #\(number)"), .dim(" · " + short(root))]
     }
   }
 

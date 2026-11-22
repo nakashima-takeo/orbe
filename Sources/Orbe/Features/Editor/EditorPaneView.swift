@@ -20,6 +20,8 @@ import SwiftUI
 /// 空状態では通常の打鍵を飲む——エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
   weak var group: TabGroup?
+  /// worktree の今の PR が替わった・その PR の状態が変わった（連が上段の現在地を描き直させる）。
+  var onPullRequestChange: () -> Void = {}
   /// 骨の写し（タブ行・パンくず）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
@@ -306,16 +308,6 @@ final class EditorPaneView: NSView {
     case (.empty, .empty): true
     default: false
     }
-  }
-
-  /// 面を本体に載せる。境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なるので、テキスト面はその下。検索バーは後から
-  /// 足すので面の上。
-  func install(_ surface: any TextSurface) {
-    surface.host = self
-    let view = surface.view
-    view.autoresizingMask = []
-    view.frame = bodyRect
-    addSubview(view, positioned: .below, relativeTo: sidebarHandle)
   }
 
   /// 見せている本体を、セッションに告げずに手放す（開いている文書を別の連のセッションへ移す前に、この面の観測・テキスト面の親・

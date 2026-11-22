@@ -75,9 +75,6 @@ extension EditorDiffTests {
     let (tab, _) = pullRequestTab()
 
     let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state)))
-    XCTAssertEqual(
-      tab.group.editorLocation, .pullRequest(number: 5, relative: "b.txt"), "TopBar の現在地は PR の diff"
-    )
 
     waitRows(diff, "元のパスと比べた 1 行の変更") { self.removedLines($0) == [2] }
     XCTAssertNil(diff.document, "新しい側は版の本文で、作業ツリーの文書ではない")
