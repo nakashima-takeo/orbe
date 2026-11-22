@@ -124,9 +124,10 @@ final class FindInProjectTests: OrbeTestCase {
     editor.setSelectedRange(NSRange(location: 3, length: 0))
 
     hosted.findInProject()
-    XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 8))
     pumpMain(until: { tab.group.view.editor.projectSearch.focusRequest == nil }, "焦点の要求が消費される")
     XCTAssertTrue(holds(for: 0.1) { window.firstResponder === editor }, "焦点は入力欄のまま")
+    XCTAssertEqual(
+      editor.selectedRange(), NSRange(location: 0, length: 8), "焦点が当たった後も、検索語の全体が選ばれている")
   }
 
   /// 焦点が端末か検索パネルにあれば、本文に選択があっても種にしない。
