@@ -36,7 +36,7 @@ final class EditorSession {
   private(set) var pullRequestDiff: EditorDiff?
   /// 文書ごとの根のサービスとの結線。文書と同寿命（閉じれば捨てる）。
   private var links: [ObjectIdentifier: DocumentLink] = [:]
-  /// 画面・列・今の文書・仮の文書・diff・未保存の有無・「ディスクが変わった」の有無が変わった。
+  /// 画面・列・今の文書・仮の文書・diff・未保存の有無・「ディスクが変わった」の有無・文書の状態の字が変わった。
   var onChange: (() -> Void)?
   /// 本体のテキスト面が first responder になった／やめた。
   var onFocusChange: (() -> Void)?
@@ -82,6 +82,11 @@ final class EditorSession {
   /// Files の今の文書（列の先頭）とその実体。
   var activeDocument: EditorDocument? { documents.first }
   var activeURL: URL? { activeDocument?.url }
+
+  /// 文書 `document` の git の状態の字（文書の属する根の status から。根の外・git 管理外・変化なしは nil）。
+  func badge(of document: EditorDocument) -> GitStatus.Badge? {
+    links[ObjectIdentifier(document)]?.badge
+  }
 
   /// 列の中の実体 `url` の文書。
   func document(at url: URL) -> EditorDocument? { documents.first { $0.url == url } }
@@ -239,6 +244,7 @@ final class EditorSession {
     }
     document.onDiskChange = { [weak self] _ in self?.onChange?() }
     document.onFocusChange = { [weak self] _ in self?.onFocusChange?() }
+    link?.onBadgeChange = { [weak self] in self?.onChange?() }
     links[ObjectIdentifier(document)] = link
   }
 
