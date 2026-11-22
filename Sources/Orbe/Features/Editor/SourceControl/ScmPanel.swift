@@ -70,8 +70,8 @@ final class ScmPanel {
   @ObservationIgnored var confirmComposition: () -> Void = {}
   /// 親を畳む直前（欄と列がまだ窓に居るうち）。焦点がパネルの中にあれば、面の本文へ移す。
   @ObservationIgnored var onRepositoryWillClose: () -> Void = {}
-  /// git 管理外と分かった（変更の列の状態が「無い」に決まる）。
-  @ObservationIgnored var onFoundUnmanaged: () -> Void = {}
+  /// 変更の列の状態（`listState`）が変わった（変わった後の main の回で知らせる）。
+  @ObservationIgnored var onListStateChange: () -> Void = {}
   /// 面の workspace の実効設定で、裏の fetch がオンか（使う時点で読む）。
   @ObservationIgnored var autoFetchEnabled: () -> Bool = { true }
   /// キーで行へ動いたときの開きの間引き。
@@ -80,10 +80,10 @@ final class ScmPanel {
   @ObservationIgnored private(set) var liveFiles: RootFiles?
   /// 欲しいと届けている裏の fetch の係。
   @ObservationIgnored private(set) var autoFetch: ScmAutoFetch?
-  @ObservationIgnored private var buildJob = Job()
+  private var buildJob = Job()
   @ObservationIgnored var ownWrites = ScmOwnWrites()
   /// 手元の 2 区分が今の status から作ったものでない（status が届いてから、行を作る組み立てがまだ始まっていない）。
-  @ObservationIgnored private var changesAreStale = true
+  private var changesAreStale = true
   @ObservationIgnored private var graphLimit = ScmPanel.graphPage
   @ObservationIgnored private var graphJob = Job()
   @ObservationIgnored private var headJob = Job()
@@ -136,6 +136,7 @@ final class ScmPanel {
     control = SourceControl.shared(for: root)
     control.addObserver(self)
     navigation.open = { [weak self] in self?.openSelection(.browse) }
+    observeListState(listState)
   }
 
   // MARK: - 観測
@@ -147,9 +148,8 @@ final class ScmPanel {
     if files.repo != nil {
       isManaged = true
       decideAutoFetch()
-    } else if files.isResolved, isManaged != false {
+    } else if files.isResolved {
       isManaged = false
-      onFoundUnmanaged()
     }
   }
 
@@ -163,7 +163,7 @@ final class ScmPanel {
   }
 
   /// 変更の列の行が、今の status からまだ出来ていない（status を受け取る前・組み立てを始める前・組み立ての最中）。
-  var rowsArePending: Bool { liveFiles?.status == nil || changesAreStale || buildJob.isRunning }
+  var rowsArePending: Bool { changesAreStale || buildJob.isRunning || liveFiles?.status == nil }
 
   /// status が届いた（か、握り直した根のサービスの status を読む）。
   func statusDidChange() {

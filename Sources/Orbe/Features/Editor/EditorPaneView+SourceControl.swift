@@ -9,7 +9,7 @@ extension EditorPaneView {
     scm.onChangesDidApply = { [weak self] emptied in self?.changesDidApply(emptied: emptied) }
     scm.onOpenFile = { [weak self] url in self?.open(url, as: .pinned) }
     scm.onDiscard = { [weak self] files in self?.confirmDiscard(files) }
-    scm.onFoundUnmanaged = { [weak self] in self?.reconcileWithLists() }
+    scm.onListStateChange = { [weak self] in self?.reconcileWithLists() }
     scm.onRepositoryWillClose = { [weak self] in
       guard let self, focusIsInSourceControl else { return }
       reclaimSidebarFocus()

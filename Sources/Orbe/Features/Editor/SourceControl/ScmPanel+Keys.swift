@@ -10,6 +10,21 @@ extension ScmPanel {
     return isManaged == nil || rowsArePending ? .coming : .none
   }
 
+  /// 列の状態を観測し、`reported` から変わったら知らせる。状態を決める値（判定・親の開閉・行の組・status から行を作って
+  /// いるか〔`changesAreStale`・`buildJob`〕）はどれも観測するので、どの道で変わってもここが知らせる。
+  func observeListState(_ reported: EditorListState) {
+    withObservationTracking {
+      _ = listState
+    } onChange: { [weak self] in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        let state = self.listState
+        if state != reported { self.onListStateChange() }
+        self.observeListState(state)
+      }
+    }
+  }
+
   /// 行の開き方。
   struct Opening: Equatable {
     let focusesText: Bool

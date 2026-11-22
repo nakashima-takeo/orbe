@@ -13,6 +13,7 @@ extension EditorPaneView {
       self?.reconcileWithLists()
       self?.onPullRequestChange()
     }
+    pullRequest.onListStateChange = { [weak self] in self?.reconcileWithLists() }
     pullRequest.onFocusWillClose = { [weak self] in
       guard let self, focusIsInPullRequest else { return }
       reclaimSidebarFocus()
