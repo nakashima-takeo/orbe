@@ -17,9 +17,7 @@ final class ScreenIsolationTests: OrbeTestCase {
   func testAWindowLeftOnADisplayFailsTheTest() throws {
     let display = try XCTUnwrap(NSScreen.screens.first, "前提: ディスプレイが在る")
     expectBreach("窓がディスプレイの範囲と重なって並んだ")
-    windowKeptToTheEnd = ClaimsShownWindow(on: display) { [weak self] in
-      self?.testRun?.stopDate == nil
-    }
+    windowKeptToTheEnd = ClaimsShownWindow(on: display) { true }
   }
 
   /// ランループが回った時点でディスプレイと重なっていた窓は、テストの終わりまでに下ろしても、そのテストを落とす。
