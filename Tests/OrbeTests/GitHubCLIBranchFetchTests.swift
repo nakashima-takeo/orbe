@@ -21,6 +21,7 @@ final class GitHubCLIBranchFetchTests: OrbeTestCase {
     try FileManager.default.createDirectory(at: gate, withIntermediateDirectories: true)
     // `--head <name>` の name を拾い、`bad/*` は非 0 で落ち、それ以外は 1 件返す。
     // 走っている間の重なりを記録して、同時実行の上限を測る。門（`gate`）が在るあいだは、始めたまま終わらない。
+    // 門が消えないまま 60 秒（壁時計）が過ぎたら、失敗する（exit 1。テストのプロセスが落ちて門が残っても、居座らない）。
     let script = """
       #!/bin/sh
       head=""
@@ -29,7 +30,11 @@ final class GitHubCLIBranchFetchTests: OrbeTestCase {
         shift
       done
       printf 'S\\n' >> "\(log!)"
-      while [ -d "\(gate.path)" ]; do sleep 0.05; done
+      end=$(( $(date +%s) + 60 ))
+      while [ -d "\(gate.path)" ]; do
+        [ "$(date +%s)" -lt "$end" ] || exit 1
+        sleep 0.05
+      done
       printf 'E\\n' >> "\(log!)"
       case "$head" in
         bad/*) exit 1 ;;
