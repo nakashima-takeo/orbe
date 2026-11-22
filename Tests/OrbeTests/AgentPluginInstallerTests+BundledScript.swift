@@ -13,12 +13,51 @@ extension AgentPluginInstallerTests {
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     .appendingPathComponent("app/agent-plugin/install.sh")
 
-  /// 時限のテストで、確かめる 1 つのコマンドに渡す時限と、ほかの 2 つのコマンドに渡す時限。確かめるコマンドは `hang` で止まる。
-  /// 確かめる時限が別のコマンドに掛かっていれば、止まったコマンドは長い時限か `sleep` の終わりまで続き、`runInstaller` の待ちの
-  /// 上限で落ちる。
+  /// 時限のテストで、確かめる 1 つのコマンドに最初に渡す時限（やり直すたびに倍にする）と、ほかの 2 つのコマンドに渡す時限。
+  /// 確かめるコマンドは `hang` で止まる。確かめる時限が別のコマンドに掛かっていれば、止まったコマンドは長い時限か `sleep` の
+  /// 終わりまで止まり続け、`runInstaller` の待ちの上限で落ちる。
   private static let cut: TimeInterval = 0.3
   private static let long: TimeInterval = 120
   private static let hang = "exec sleep 60"
+
+  /// 偽の claude が受ける、時限を掛けるコマンド。
+  private enum ClaudeCommand {
+    case register, list, install
+
+    /// 偽の claude が残す呼び出しの記録のうち、このコマンドを表す先頭の文字列。
+    var call: String {
+      switch self {
+      case .register: "plugin marketplace add"
+      case .list: "plugin list"
+      case .install: "plugin install"
+      }
+    }
+  }
+
+  /// `stopped` だけを `hang` で止め、その時限だけを短くして、ほかの 2 つを `long` にして実行する。時限は、偽の claude が
+  /// 呼び出しを残す前に来ることが在る（負荷で起動が遅れた回）。その回は、止めたコマンドが呼ばれたことを確かめられないので、
+  /// 呼び出しの記録を消し、時限を倍にしてやり直す（実行は 5 回まで）。返すのは、呼び出しを残せた回の結果か、5 回めの結果。
+  private func runCuttingClaude(_ stopped: ClaudeCommand) throws -> (
+    log: [String], calls: [String]
+  ) {
+    var limit = Self.cut
+    var run: (log: [String], calls: [String]) = ([], [])
+    for _ in 0..<5 {
+      try? FileManager.default.removeItem(at: pkg.appendingPathComponent("claude-calls.log"))
+      run = try runBundledInstaller(
+        claudeList: "No plugins installed.\n",
+        registerPrelude: stopped == .register ? Self.hang : "",
+        listPrelude: stopped == .list ? Self.hang : "",
+        installPrelude: stopped == .install ? Self.hang : "",
+        limits: .init(
+          register: stopped == .register ? limit : Self.long,
+          list: stopped == .list ? limit : Self.long,
+          install: stopped == .install ? limit : Self.long))
+      if run.calls.contains(where: { $0.hasPrefix(stopped.call) }) { break }
+      limit *= 2
+    }
+    return run
+  }
 
   /// 偽の CLI を、同梱の install.sh を実行するときの PATH に置く。偽の CLI は受けた引数を 1 行ずつ残してから `body` を実行する。
   private func placeFakeCLI(_ name: String, body: String) throws {
@@ -107,9 +146,7 @@ extension AgentPluginInstallerTests {
 
   /// 時限を過ぎても終わらない登録は打ち切り、登録の結果を見ずに一覧と導入へ進む。打ち切りが効かなければ起動時の導入が止まったままになる。
   func testClaudeRegisterPastItsTimeLimitIsCutOffAndTheInstallGoesOn() throws {
-    let run = try runBundledInstaller(
-      claudeList: "No plugins installed.\n", registerPrelude: Self.hang,
-      limits: .init(register: Self.cut, list: Self.long, install: Self.long))
+    let run = try runCuttingClaude(.register)
     XCTAssertTrue(run.calls.contains { $0.hasPrefix("plugin marketplace add") }, "\(run.calls)")
     XCTAssertTrue(run.log.contains("ok claude"), "\(run.log)")
     XCTAssertTrue(run.calls.contains("plugin install orbe-agent@orbe-agent"), "\(run.calls)")
@@ -117,9 +154,7 @@ extension AgentPluginInstallerTests {
 
   /// 時限を過ぎても終わらない一覧は打ち切って失敗として扱い、導入を試みない。打ち切りが効かなければ起動時の導入が止まったままになる。
   func testClaudeListPastItsTimeLimitIsCutOffAndAnErrorWithoutInstalling() throws {
-    let run = try runBundledInstaller(
-      listPrelude: Self.hang,
-      limits: .init(register: Self.long, list: Self.cut, install: Self.long))
+    let run = try runCuttingClaude(.list)
     XCTAssertTrue(run.calls.contains("plugin list"), "\(run.calls)")
     XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
     XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
@@ -127,9 +162,7 @@ extension AgentPluginInstallerTests {
 
   /// 時限を過ぎても終わらない導入は打ち切って失敗にする。打ち切りが効かなければ起動時の導入が止まったままになる。
   func testClaudeInstallPastItsTimeLimitIsCutOffAndAnError() throws {
-    let run = try runBundledInstaller(
-      claudeList: "No plugins installed.\n", installPrelude: Self.hang,
-      limits: .init(register: Self.long, list: Self.long, install: Self.cut))
+    let run = try runCuttingClaude(.install)
     XCTAssertTrue(run.calls.contains("plugin install orbe-agent@orbe-agent"), "\(run.calls)")
     XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
   }
