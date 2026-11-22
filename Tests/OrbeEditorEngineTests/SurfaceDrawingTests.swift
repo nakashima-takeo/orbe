@@ -199,10 +199,10 @@ final class SurfaceDrawingTests: EngineTestCase {
     let driver = HeadlessDriver()
     driver.start()
     defer { driver.stop() }
+    waitForPipelines()
     driver.bind(surface.id)
     func settle() {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-      waitUntil(5) { driver.isPaused(surface.id) }
+      XCTAssertTrue(driver.waitUntilStopped(surface), "刻みが止まる")
     }
     // 行の数が変わればつまみが現れて消えるまで描き続けるので、組版した行は合計の増分で数える。
     func total() -> Int {

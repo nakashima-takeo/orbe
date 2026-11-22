@@ -1,4 +1,5 @@
 import Metal
+import OrbeTestSupport
 import QuartzCore
 import os
 
@@ -62,6 +63,22 @@ final class HeadlessDriver: @unchecked Sendable {
   func isPaused(_ id: Int) -> Bool { state.withLock { $0.paused[id] ?? true } }
 
   func invalidate(_ id: Int) { state.withLock { $0.paused[id] = nil } }
+
+  /// 面の刻みが止まるまで待ち、止まったかを返す。出す前の変化を描画スレッドへ渡し、止まったら、描いたコマが main へ積んだ
+  /// 知らせを走らせる。知らせへの反応が刻みを再開させれば、また止まるまで待つ。止まったと返した時点で、main を経て刻みを
+  /// 再開させる知らせは残っていない。
+  @MainActor
+  func waitUntilStopped(_ surface: MetalTextSurface) -> Bool {
+    let id = surface.id
+    surface.flush()
+    RenderThread.shared.performAndWait { _ in }
+    for _ in 0..<5 {
+      guard waitUntil(5, { isPaused(id) }) else { return false }
+      nextTurn()
+      if RenderThread.shared.performAndWait({ _ in self.isPaused(id) }) { return true }
+    }
+    return false
+  }
 
   /// 表示の刻みと同じく時刻どおりに起きるよう、刻みのスレッドを時間制約つきにする（普通の優先度だと
   /// `mach_wait_until` がタイマーの合体で数 ms 遅れて起き、描画スレッドのせいでない遅れを数えてしまう）。

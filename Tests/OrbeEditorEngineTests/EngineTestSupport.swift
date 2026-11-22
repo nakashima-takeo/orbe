@@ -149,6 +149,12 @@ extension EngineTestCase {
       .value)
     return PixelShot(bytes: GlyphPixelTests.pixels(image), width: image.width, height: image.height)
   }
+
+  /// シェーダの用意が済むまで待つ。用意が済む前の刻みは、描かずに刻みを止める。
+  func waitForPipelines() {
+    XCTAssertTrue(
+      RenderThread.shared.performAndWait { $0.gate.wait() != nil }, "前提: シェーダの用意が済む")
+  }
 }
 
 /// 横のスクロールの観察（テストだけ）——見せている位置と範囲から読む。

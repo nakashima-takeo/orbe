@@ -317,7 +317,7 @@ extension SurfaceSharedScrollTests {
       let target = SinkTarget()
       RenderThread.shared.perform { $0.bind(id, target: target, clock: clock) }
     }
-    _ = RenderThread.shared.performAndWait { $0.gate.wait() != nil }
+    waitForPipelines()
     pair.0.surface.flush()
     pair.1.surface.flush()
     return clocks
