@@ -45,18 +45,10 @@ final class GitHubCLI {
   static let readTimeout: TimeInterval = 15
   static let writeTimeout: TimeInterval = 60
 
-  private let readTimeout: TimeInterval
-  private let writeTimeout: TimeInterval
   /// 時間上限と猶予の待ちを通す時計。
   private let clock: WaitClock
 
-  /// テストだけが短い上限を渡す（本番の上限を待つテストは書けないため）。
-  init(
-    readTimeout: TimeInterval = GitHubCLI.readTimeout,
-    writeTimeout: TimeInterval = GitHubCLI.writeTimeout, clock: WaitClock = .wall
-  ) {
-    self.readTimeout = readTimeout
-    self.writeTimeout = writeTimeout
+  init(clock: WaitClock = .wall) {
     self.clock = clock
   }
 
@@ -313,8 +305,8 @@ final class GitHubCLI {
     // ——ここを無期限にすると、打ち切ったのに返らないという新しいハングになる。
     let timeout =
       switch call {
-      case .read: readTimeout
-      case .write: writeTimeout
+      case .read: Self.readTimeout
+      case .write: Self.writeTimeout
       }
     guard awaitDrain(until: clock.now() + timeout) else {
       process.terminate()

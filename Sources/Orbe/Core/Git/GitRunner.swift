@@ -18,7 +18,6 @@ final class GitRunner {
   /// 間は延命し、何も起きていないときだけ切る。
   static let idleTimeout: TimeInterval = 120
 
-  private let idleTimeout: TimeInterval
   /// 時刻の読みと、期限つきの待ちを通す時計。
   private let clock: WaitClock
 
@@ -29,9 +28,7 @@ final class GitRunner {
   /// 孫を残さない実行がこの猶予を消費することはない。
   private static let terminationGrace: TimeInterval = 2
 
-  /// テストだけが短い `idleTimeout` を渡す（本番の 120 秒を待つテストは書けないため）。
-  init(idleTimeout: TimeInterval = GitRunner.idleTimeout, clock: WaitClock = .wall) {
-    self.idleTimeout = idleTimeout
+  init(clock: WaitClock = .wall) {
     self.clock = clock
   }
 
@@ -58,7 +55,7 @@ final class GitRunner {
     transform: @escaping (Output) -> Value, completion: @escaping (Value) -> Void
   ) {
     let state = RunState(
-      clock: clock, idleTimeout: handle.isAttended ? nil : idleTimeout,
+      clock: clock, idleTimeout: handle.isAttended ? nil : Self.idleTimeout,
       onStderrLine: onProgress.map { deliver in
         { line in DispatchQueue.main.async { deliver(line) } }
       })
@@ -76,7 +73,7 @@ final class GitRunner {
   func runSync(_ args: [String], cwd: String, stdin: Data? = nil) -> Output {
     execute(
       args, cwd: cwd, launch: Launch(stdin: stdin),
-      state: RunState(clock: clock, idleTimeout: idleTimeout),
+      state: RunState(clock: clock, idleTimeout: Self.idleTimeout),
       handle: Handle())
   }
 
