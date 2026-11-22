@@ -20,7 +20,6 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let document = try tab.group.editor.open(try caseFile("a.txt", "a"), as: .pinned)
 
     pane.shell.createFile()
@@ -76,7 +75,6 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     window.makeFirstResponder(nil)
 
     pane.shell.createFile()
@@ -114,8 +112,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
   func testEmptyStateFixesOnlyTheBodyToThePane() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
+    hostEditor(tab, width: 900)
 
     func hit(_ x: CGFloat, _ y: CGFloat) -> NSView? {
       pane.hitTest(pane.convert(NSPoint(x: x, y: y), to: pane.superview))
@@ -136,8 +133,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertFalse(pane.tree.isLive, "窓に付く前は握らない")
     XCTAssertFalse(pane.projectSearch.isLive)
 
-    let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
+    hostEditor(tab, width: 900)
     XCTAssertTrue(pane.tree.isLive, "窓に付いて見えていれば握る")
     XCTAssertTrue(pane.projectSearch.isLive)
 
@@ -168,8 +164,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
   func testChangingTheRootRebuildsTheTree() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
+    hostEditor(tab, width: 900)
     let before = pane.tree
     XCTAssertEqual(before.root, GitWorktreeRoot.normalizedPath("/tmp"))
 
@@ -186,8 +181,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     let dir = TestScratch.caseDir
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
+    hostEditor(tab, width: 900)
 
     let a = try tab.group.editor.open(try caseFile("a.swift", "a"), as: .pinned)
     let b = try tab.group.editor.open(try caseFile("b.md", "b"), as: .pinned)

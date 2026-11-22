@@ -34,7 +34,6 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 700, height: 400)
     window.appearance = NSAppearance(named: .darkAqua)
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     let file = try caseFile("o-\(UUID().uuidString).txt", text)
     let hosted = Hosted(
       tab: tab, pane: pane, document: try tab.group.editor.open(file, as: .pinned), window: window)

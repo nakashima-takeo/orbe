@@ -5,8 +5,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 全テストクラスの基底。隔離ハーネスへ点火し、テスト 1 件を画面と前面の隔離（`ScreenIsolation`）で包む。
-/// それ以外は素の `XCTestCase`。
+/// 全テストクラスの基底。隔離ハーネスへ点火し、テスト 1 件を画面と前面の隔離（`ScreenIsolation`）で包み、足場から
+/// 預かったウィンドウをテスト 1 件の終わりまで持つ。
 ///
 /// 点火は `class func setUp()`（クラス単位・全インスタンス setUp より前）で行う。最初に走った
 /// 1 クラスが `TestIsolation.installOnce()` を呼び、そこでテストの境界へ登録される口が以降の全テスト
@@ -29,11 +29,23 @@ class OrbeTestCase: XCTestCase {
   /// 隔離の対象から外れる。通常のテストがこれを上書きすると、lint が落とす。
   class var presentsOnScreen: Bool { false }
 
-  /// テスト 1 件（`setUp`・本文・`tearDown`）を、画面と前面の隔離で包む。失敗の記録は `tearDown` の後で、テストが
-  /// 終わったと記録される前に行う（テストの境界のフック（`TestScratch.addCaseHooks`）から記録すると、テストは既に
-  /// 終わっていて落とせない）。
+  private var heldWindows: [NSWindow] = []
+
+  /// ビューを載せるために足場が作ったウィンドウを、テスト 1 件の終わり（画面と前面の隔離の確認の後）まで持つ。渡された
+  /// ウィンドウをそのまま返す。
+  @discardableResult
+  func holdUntilTestEnds<Window: NSWindow>(_ window: Window) -> Window {
+    heldWindows.append(window)
+    return window
+  }
+
+  /// テスト 1 件（`setUp`・本文・`tearDown`）を、画面と前面の隔離で包み、最後に預かったウィンドウを手放す。失敗の記録は
+  /// `tearDown` の後で、テストが終わったと記録される前に行う（テストの境界のフック（`TestScratch.addCaseHooks`）から
+  /// 記録すると、テストは既に終わっていて落とせない）。手放すのが確認の後なのは、預かったウィンドウが画面に出ていれば
+  /// 確認が見つけるため。XCTest はテストのインスタンスを実行の終わりまで持つので、ここで手放さないとウィンドウが残る。
   /// `final` にするのは、サブクラスが `super` 抜きで上書きすると隔離が外れるため。
   final override func invokeTest() {
+    defer { heldWindows.removeAll() }
     guard !Self.presentsOnScreen else { return super.invokeTest() }
     let screen = MainActor.assumeIsolated { () -> ScreenIsolation in ScreenIsolation() }
     super.invokeTest()

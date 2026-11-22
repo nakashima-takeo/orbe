@@ -15,8 +15,7 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
     let dir = TestScratch.caseDir
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
+    hostEditor(tab, width: 900)
 
     XCTAssertEqual(pane.headerHeight, 29)
     pumpMain(until: { pane.headerHost.fittingSize.height == 29 }, "文書が無ければタブ行の帯だけ")
@@ -37,8 +36,7 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
     let dir = TestScratch.caseDir
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = hostEditor(tab, width: 400)
-    defer { window.orderOut(nil) }
+    hostEditor(tab, width: 400)
     pane.shell.selectPanel(.files)  // 列を本体だけにして溢れを作る（本体 363）
     let documents = try (0..<8).map { index in
       try tab.group.editor.open(try caseFile("a-long-file-name-\(index).swift", "x"), as: .pinned)

@@ -12,8 +12,7 @@ extension EditorPaneViewTests {
     let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostEditor(tab, width: 600)
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    hostEditor(tab, width: 600)
     tab.group.view.show(.terminal, animated: false)
     tab.group.view.layoutSubtreeIfNeeded()
     let document = try tab.group.editor.open(try caseFile("h.swift", "let a = 1\n"), as: .pinned)
