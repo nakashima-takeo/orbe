@@ -52,7 +52,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
         localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver()),
       size: NSSize(width: 1200, height: height))
     model.focus()
-    flush(window)
+    awaitFieldFocus(window)
     return window
   }
 

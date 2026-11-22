@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -20,11 +21,8 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     super.tearDown()
   }
 
-  func pump(_ seconds: TimeInterval) {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
-    }
+  func awaitFieldFocus(_ window: NSWindow, file: StaticString = #filePath, line: UInt = #line) {
+    pumpMain(until: { window.firstResponder is NSTextView }, "入力欄に焦点が入る", file: file, line: line)
   }
 
   /// keyDown を窓へ届ける（keyCode は macOS の仮想キーコード）。
@@ -40,7 +38,7 @@ class PaletteCardWindowTestCase: OrbeTestCase {
         isARepeat: repeating, keyCode: keyCode)
     else { return XCTFail("キーイベントを作れない") }
     deliverKeyDown(event, to: window)
-    pump(0.15)
+    flush(window)
   }
 
   /// 窓座標（原点は左下）の 1 点を実 NSEvent のマウスでクリックする。マウスは並んだ窓にしか届かないので、窓は
@@ -59,24 +57,18 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     }
     NSApp.postEvent(make(.leftMouseUp), atStart: false)
     NSApp.sendEvent(make(.leftMouseDown))
-    pump(0.05)
     if let pending = NSApp.nextEvent(
       matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
     {
       NSApp.sendEvent(pending)
     }
-    pump(0.3)
+    flush(window)
   }
 
   /// 保留中の SwiftUI 更新を 1 パス流し切る。モデルを書き換えただけでは子ビューは作られも壊されもせず、
   /// RunLoop（SwiftUI が仕込む observer）か強制レイアウトのどちらかが更新パスを回して初めて起きる。
   /// キーを送らずに状態だけ変える段（サブパレットへ潜る等）では回す機会が他に無いため、ここを挟まないと
   /// 描画パスでしか出ない欠陥は修正前でも再現しない。
-  func flush(_ window: NSWindow) {
-    window.contentView?.layoutSubtreeIfNeeded()
-    pump(0.3)
-    window.contentView?.layoutSubtreeIfNeeded()
-  }
 
   /// 中身を、並べない窓に載せて返す。主窓と同じ `OrbeWindow` に載せ、日本語入力の変換中に届いたキーをキーの処理に通さず
   /// 入力欄へ直に渡す `OrbeWindow.sendEvent` を、テストのキーにも通す。枠のある窓は macOS が画面内へ押し戻す
@@ -87,7 +79,7 @@ class PaletteCardWindowTestCase: OrbeTestCase {
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = content
     windows.append(window)
-    pump(0.4)
+    flush(window)
     return window
   }
 

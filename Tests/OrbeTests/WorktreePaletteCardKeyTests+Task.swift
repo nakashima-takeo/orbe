@@ -49,9 +49,7 @@ extension WorktreePaletteCardKeyTests {
   }
 
   private func wait(_ condition: () -> Bool, timeout: TimeInterval = 10) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline { pump(0.02) }
-    return condition()
+    waitUntil(timeout, condition)
   }
 
   func testOpeningAskedForThePrimaryPullRequest() {
@@ -65,13 +63,13 @@ extension WorktreePaletteCardKeyTests {
   func testAPullRequestBecomingThePrimaryWhileOpenIsAskedFor() throws {
     let items = PendingItems()
     let model = taskModel([], items: items.cache)
-    _ = mount(model)
+    let window = mount(model)
     XCTAssertEqual(items.requested, [], "前提: 主が無い間は頼まない")
 
     var update = TaskUpdate()
     update.links = [pr]
     _ = try model.tasks.update(1, update)
-    pump(0.3)
+    flush(window)
 
     XCTAssertEqual(items.requested, [pr.item])
   }

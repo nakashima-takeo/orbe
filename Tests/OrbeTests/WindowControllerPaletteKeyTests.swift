@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -31,16 +32,8 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
     let wc = WindowController()
     XCTAssertTrue(wc.handleWindowKeyCommand(.showSettings))
-    pump(0.6)
-    XCTAssertTrue(wc.window.firstResponder is NSTextView, "前提: 焦点は絞り込みの入力欄")
+    pumpMain(until: { wc.window.firstResponder is NSTextView }, "前提: 焦点は絞り込みの入力欄")
     return (wc, try XCTUnwrap(wc.model.settingsPalette))
-  }
-
-  private func pump(_ seconds: TimeInterval = 0.2) {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
-    }
   }
 
   private func press(
@@ -55,7 +48,7 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
         isARepeat: false, keyCode: keyCode)
     else { return XCTFail("キーイベントを作れない") }
     deliverKeyDown(event, to: wc.window)
-    pump()
+    flush(wc.window)
   }
 
   private func down(_ wc: WindowController) {
@@ -80,7 +73,6 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     palette.render.onActivate()
     palette.render.selected = 1
     _ = palette.render.onRight()
-    pump()
     XCTAssertFalse(palette.render.rows[1].inherited, "前提: 上書きしている")
   }
 

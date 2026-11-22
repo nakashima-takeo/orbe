@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -61,12 +62,9 @@ extension BoardAutomationTests {
   /// 「通知」の行が見える範囲へ引き寄せられるのを待つ。引き寄せ（`scrollTo`）はキーを処理した後の RunLoop で効くので、決まった
   /// 時間だけ回すと遅い環境では引き寄せが後から効き、そのあと流した詳細を引き戻してしまう。
   private func waitForNotifyRow(_ detail: NSScrollView, in window: NSWindow) -> Bool {
-    let deadline = Date().addingTimeInterval(5)
-    while detail.contentView.bounds.minY > Self.notifyRowTop, Date() < deadline {
-      pump(0.05)
-    }
+    let arrived = waitUntil { detail.contentView.bounds.minY <= Self.notifyRowTop }
     flush(window)
-    return detail.contentView.bounds.minY <= Self.notifyRowTop
+    return arrived
   }
 
   /// 先頭の自動化の地図の「通知」の段を選び、詳細を末尾まで流して「通知」の行を見える範囲の外にした低い窓。

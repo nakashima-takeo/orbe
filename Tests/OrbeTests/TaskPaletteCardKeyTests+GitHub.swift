@@ -62,13 +62,13 @@ extension TaskPaletteCardKeyTests {
     let source = GitHub.Source()
     let model = GitHub.model(
       [], issues: [GitHub.issue(7), GitHub.issue(6), GitHub.issue(5)], source: source)
-    _ = mount(model)
+    let window = mount(model)
     model.move(1)
 
     model.openLists.open(root: TaskPaletteSamples.root)
     try XCTUnwrap(source.fetches.first { $0.kind == .issue })
       .finish([GitHub.issue(7), GitHub.issue(5)])
-    pump(0.3)
+    flush(window)
 
     XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)))
   }

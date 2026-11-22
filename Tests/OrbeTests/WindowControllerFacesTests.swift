@@ -40,13 +40,6 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
   private static let plain = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
 
-  func pump(_ seconds: TimeInterval) {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
-    }
-  }
-
   func layout(_ wc: WindowController) {
     wc.window.contentView?.layoutSubtreeIfNeeded()
   }
@@ -197,7 +190,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     wc.window.makeFirstResponder(nil)
     XCTAssertFalse(wc.window.firstResponder === tab.group.view.editor, "前提: 焦点はヘルプ側にある")
     wc.dismissHelp()
-    pump(0.05)
+    nextTurn()
 
     XCTAssertTrue(tab.group.view.isEditorOpen)
     XCTAssertTrue(wc.window.firstResponder === tab.group.view.editor)
@@ -257,7 +250,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
       tab: tab, report: AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
 
     wc.handleWindowCommand(.closeTab)
-    pump(0.2)
+    nextTurn()
 
     XCTAssertTrue(wc.current.tabs.isEmpty, "アクティブタブが閉じる")
     let events = try SessionLogReader.read(XCTUnwrap(AgentSessionLog.fileURL)).events

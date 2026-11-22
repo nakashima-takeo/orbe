@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -30,7 +31,7 @@ final class PaletteCardQueryTests: SnapshotTestCase {
   /// SwiftUI の描画コミット（Binding・onChange の反映）を 1 巡させる。
   private func pump(_ host: NSView) {
     host.layoutSubtreeIfNeeded()
-    RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+    pumpMainOnce()
   }
 
   /// 絞り込み中の root からサブパレットへ潜ると `setMode` が `query` を空へ戻す。この **モデル自身の**

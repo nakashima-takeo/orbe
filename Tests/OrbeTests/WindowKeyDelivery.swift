@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 extension OrbeTestCase {
@@ -17,5 +18,11 @@ extension OrbeTestCase {
         matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
     else { return XCTFail("キーイベントがキューから取れない") }
     window.sendEvent(dequeued)
+  }
+
+  /// 保留中の SwiftUI の更新を、今ここで走らせる。
+  func flush(_ window: NSWindow) {
+    pumpMainOnce()
+    window.contentView?.layoutSubtreeIfNeeded()
   }
 }

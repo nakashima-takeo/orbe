@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -23,14 +24,17 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
     wc.showWorkspaceCreate(name: nil)
-    pump(0.6)
+    awaitCaretAtEnd(wc, of: "~")
+    nextTurn()
     return (wc, try XCTUnwrap(wc.model.workspaceCreate))
   }
 
-  private func pump(_ seconds: TimeInterval = 0.3) {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
+  /// 入力欄に焦点が入り、キャレットが `text` の末尾に置かれるまで待つ。
+  private func awaitCaretAtEnd(_ wc: WindowController, of text: String) {
+    waitUntil {
+      guard let editor = wc.window.firstResponder as? NSTextView else { return false }
+      return editor.string == text
+        && editor.selectedRange() == NSRange(location: text.utf16.count, length: 0)
     }
   }
 
@@ -44,7 +48,7 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
         isARepeat: false, keyCode: 48)
     else { return XCTFail("キーイベントを作れない") }
     deliverKeyDown(event, to: wc.window)
-    pump()
+    flush(wc.window)
   }
 
   /// focus のある欄の文字列と選択。
@@ -98,9 +102,9 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
   func testAcceptingSuggestionPutsCaretAtEndOfTheNewPath() throws {
     let (wc, model) = try openCreateForm()
     model.suggestions = [FolderSuggestion(name: "tmp", fullPath: "/private/tmp", isRepo: false)]
-    pump()
     tab(wc)
     XCTAssertEqual(model.path, "/private/tmp", "前提: ⇥ で候補を確定した")
+    awaitCaretAtEnd(wc, of: "/private/tmp")
     try assertCaretAtEnd(wc, of: "/private/tmp", "確定したパスの末尾")
   }
 
@@ -110,7 +114,7 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
     let (wc, model) = try openCreateForm()
     model.setCloneURL("https://github.com/you/repo.git")
     model.setSource(.clone)
-    pump(0.6)
+    awaitCaretAtEnd(wc, of: "https://github.com/you/repo.git")
     try assertCaretAtEnd(wc, of: "https://github.com/you/repo.git", "切替で入った URL 欄は末尾")
 
     tab(wc)
@@ -125,7 +129,7 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
     try assertCaretAtEnd(wc, of: "~", "⇧⇥ で入った clone 先欄は末尾")
 
     model.setSource(.folder)
-    pump(0.6)
+    awaitCaretAtEnd(wc, of: "~")
     try assertCaretAtEnd(wc, of: "~", "folder に戻したパス欄は末尾")
   }
 }

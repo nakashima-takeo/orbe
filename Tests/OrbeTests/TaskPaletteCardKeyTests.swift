@@ -35,12 +35,14 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
   func mount(
     _ model: TaskPaletteModel, width: CGFloat = 960, detailWidth: CGFloat = 340
   ) -> NSWindow {
-    host(
+    let window = host(
       NSHostingView(
         rootView: TaskPaletteCard(model: model, detailWidth: detailWidth)
           .frame(width: width, height: 600)
           .environment(\.localization, LocalizationStore(language: .ja))),
       size: NSSize(width: width + 40, height: 640))
+    awaitFieldFocus(window)
+    return window
   }
 
   /// ヘッダーの入力欄（カード左上の「❯」の右）をクリックする。窓はカードの大きさに揃うので、窓座標

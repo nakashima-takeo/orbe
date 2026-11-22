@@ -12,7 +12,10 @@ import XCTest
 @MainActor
 final class PaletteCardFocusTests: PaletteCardWindowTestCase {
   /// パレットモデルが `setMode` で行う立て下げ（選択・クエリ・入力欄可視・行・focusToken）の順序を再現する。
-  private func setMode(_ model: PaletteModel, fieldVisible: Bool, breadcrumb: String?, rows: Int) {
+  private func setMode(
+    _ model: PaletteModel, fieldVisible: Bool, breadcrumb: String?, rows: Int,
+    in window: NSWindow? = nil
+  ) {
     model.selected = 0
     model.query = ""
     model.fieldVisible = fieldVisible
@@ -20,7 +23,7 @@ final class PaletteCardFocusTests: PaletteCardWindowTestCase {
     model.breadcrumb = breadcrumb
     model.rows = (0..<rows).map { .init(label: "row\($0)") }
     model.focus()
-    pump(0.5)
+    window.map(flush)
   }
 
   /// ドリルイン（入力欄なし）→ Esc 復帰（入力欄あり）の後も ↵ と → が入力欄へ届く。
@@ -37,7 +40,7 @@ final class PaletteCardFocusTests: PaletteCardWindowTestCase {
     setMode(model, fieldVisible: true, breadcrumb: nil, rows: 5)
     let window = mount(model)
     model.focus()  // 提示元が次 tick で focus を再確定する経路（パレットを開く定石）
-    pump(0.4)
+    flush(window)
 
     log = []
     send(125, "\u{F701}", to: window)  // ↓
@@ -45,14 +48,14 @@ final class PaletteCardFocusTests: PaletteCardWindowTestCase {
     send(36, "\r", to: window)  // ↵
     XCTAssertEqual(log, ["down", "right", "activate"], "前提: 入力欄ありモードで 3 キーとも届く")
 
-    setMode(model, fieldVisible: false, breadcrumb: "‹ parent", rows: 3)  // ドリルイン
+    setMode(model, fieldVisible: false, breadcrumb: "‹ parent", rows: 3, in: window)  // ドリルイン
     log = []
     send(125, "\u{F701}", to: window)
     send(124, "\u{F703}", to: window)
     send(36, "\r", to: window)
     XCTAssertEqual(log, ["down", "right", "activate"], "入力欄なしモードでは器が 3 キーとも捕捉する")
 
-    setMode(model, fieldVisible: true, breadcrumb: nil, rows: 5)  // Esc 復帰
+    setMode(model, fieldVisible: true, breadcrumb: nil, rows: 5, in: window)  // Esc 復帰
     log = []
     send(125, "\u{F701}", to: window)
     send(124, "\u{F703}", to: window)
@@ -68,10 +71,10 @@ final class PaletteCardFocusTests: PaletteCardWindowTestCase {
     setMode(model, fieldVisible: true, breadcrumb: nil, rows: 5)
     let window = mount(model)
     model.focus()
-    pump(0.4)
+    flush(window)
 
-    setMode(model, fieldVisible: false, breadcrumb: "‹ parent", rows: 3)
-    setMode(model, fieldVisible: true, breadcrumb: nil, rows: 5)
+    setMode(model, fieldVisible: false, breadcrumb: "‹ parent", rows: 3, in: window)
+    setMode(model, fieldVisible: true, breadcrumb: nil, rows: 5, in: window)
     send(0, "a", to: window)
     XCTAssertEqual(model.query, "a", "復帰後の打鍵が絞り込み欄へ届く")
   }
