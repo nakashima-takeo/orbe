@@ -4,7 +4,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 本物の `WorktreePaletteCard` を実 `NSWindow` に載せ、実 `NSEvent` のキーを入力欄へ届ける。
+/// 本物の `WorktreePaletteCard` を実 `NSWindow` に載せ、実 `NSEvent` のキーを入力欄へ届ける。キーの判断そのものは
+/// `WorktreePaletteFieldKeyTests` が値で確かめる。
 /// ⇧⇥ は AppKit では backtab の文字で届き、SwiftUI の `.tab` 判定だけでは拾えない形がある——拾えないと
 /// ⇧⇥ が起動先を回したり、焦点が入力欄から外へ逃げて ↑↓ と打鍵が効かなくなる。ベースを選ぶ画面は
 /// 入力欄を一覧と使い回すので、行き先の切り替えを誤ると、絞り込みが一覧の入力を書き換える・戻った後に
@@ -14,31 +15,15 @@ import XCTest
 final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
   func mount(_ model: WorktreePaletteModel) -> NSWindow {
-    host(
+    let window = host(
       NSHostingView(rootView: WorktreePaletteCard(model: model, maxHeight: 520).frame(width: 720)),
       size: NSSize(width: 760, height: 520))
+    awaitFieldFocus(window)
+    return window
   }
 
   private func sendTab(shift: Bool, to window: NSWindow) {
     send(48, shift ? "\u{19}" : "\t", shift ? [.shift] : [], to: window)
-  }
-
-  /// 作成行の選択中、⇧⇥ はベースだけを回し、⇥ は起動先だけを回す。
-  func testShiftTabCyclesTheBaseAndTabCyclesTheTarget() {
-    let model = DesignSceneFixtures.worktreePaletteNewBranchModel()
-    let window = mount(model)
-    XCTAssertEqual(model.selectedBaseChoice?.role, .previous, "前提: 作成行・初めは前回")
-
-    sendTab(shift: true, to: window)
-    XCTAssertEqual(model.selectedBaseChoice?.role, .defaultBranch, "⇧⇥ でベースが進む")
-    XCTAssertEqual(model.selectedTargetName, "claude", "⇧⇥ は起動先を動かさない")
-
-    sendTab(shift: false, to: window)
-    XCTAssertEqual(model.selectedTargetName, "shell", "⇥ で起動先が進む")
-    XCTAssertEqual(model.selectedBaseChoice?.role, .defaultBranch, "⇥ はベースを動かさない")
-
-    sendTab(shift: true, to: window)
-    XCTAssertEqual(model.selectedBaseChoice?.role, .current, "焦点は入力欄に残り、続けて効く")
   }
 
   /// 「ほか…」で ↵ するとベースを選ぶ画面になり、同じ入力欄が絞り込みを受ける（一覧の入力は残る）。
@@ -79,21 +64,6 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     send(36, "\r", to: window)
 
     XCTAssertEqual(model.selectedBaseChoice?.name, "origin/feat/fetch-progress")
-  }
-
-  /// ベースを選ぶ画面の esc は選ばずに一覧へ戻り、ベースは「ほか…」のまま。入力欄は一覧のキーを受け直す。
-  func testEscapeFromTheBasePickerKeepsOtherAndTheFieldStillWorks() {
-    let model = DesignSceneFixtures.worktreePaletteBasePickerModel()
-    let window = mount(model)
-    XCTAssertEqual(model.mode, .basePicker, "前提: ベースを選ぶ画面")
-
-    send(53, "\u{1B}", to: window)
-
-    XCTAssertEqual(model.mode, .list)
-    XCTAssertEqual(model.selectedBaseChoice?.role, .other)
-    XCTAssertNil(model.pickedBase)
-    sendTab(shift: true, to: window)
-    XCTAssertEqual(model.selectedBaseChoice?.role, .previous, "⇧⇥ が末尾から先頭へ回る")
   }
 
   /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても確定しない（⌘⇧X の ⌘↵ の押し始めでこの画面に替わり、
@@ -157,13 +127,13 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     let model = DesignSceneFixtures.worktreePalettePullRequestModel()
     var rebuilds = 0
     model.onTaskInputsChanged = { rebuilds += 1 }
-    _ = mount(model)
+    let window = mount(model)
     let before = rebuilds
 
     var update = TaskUpdate()
     update.links = []
     _ = try model.tasks.update(4, update)
-    pump(0.3)
+    flush(window)
 
     XCTAssertGreaterThan(rebuilds, before)
   }

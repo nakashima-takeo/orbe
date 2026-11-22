@@ -48,30 +48,27 @@ extension WorktreePaletteCardKeyTests {
     return WorktreePaletteModel(tasks: store, githubItems: items, task: 1)
   }
 
-  private func wait(_ condition: () -> Bool, timeout: TimeInterval = 10) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline { pump(0.02) }
-    return condition()
-  }
-
   func testOpeningAskedForThePrimaryPullRequest() {
     let items = PendingItems()
 
     _ = mount(taskModel([pr], items: items.cache))
 
-    XCTAssertEqual(items.requested, [pr.item])
+    XCTAssertEqual(
+      items.requested, [pr.item],
+      "載せた直後に主の PR の値を頼む。testAPullRequestBecomingThePrimaryWhileOpenIsAskedFor の「主が無い間は頼まない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 
   func testAPullRequestBecomingThePrimaryWhileOpenIsAskedFor() throws {
     let items = PendingItems()
     let model = taskModel([], items: items.cache)
-    _ = mount(model)
+    let window = mount(model)
     XCTAssertEqual(items.requested, [], "前提: 主が無い間は頼まない")
 
     var update = TaskUpdate()
     update.links = [pr]
     _ = try model.tasks.update(1, update)
-    pump(0.3)
+    flush(window)
 
     XCTAssertEqual(items.requested, [pr.item])
   }
@@ -99,13 +96,14 @@ extension WorktreePaletteCardKeyTests {
       model.onExecute = { executed.append($0) }
       _ = mount(model)
       provider.load()
-      XCTAssertTrue(wait { model.hasLoadedOnce && provider.facts.remoteFetchLanded }, "\(name): 前提")
+      XCTAssertTrue(
+        waitUntil(10) { model.hasLoadedOnce && provider.facts.remoteFetchLanded }, "\(name): 前提")
       model.activate()
       XCTAssertTrue(model.hasPendingActivation, "\(name): 値が届くまで ↵ を預かる")
 
       items.answer([pr.item], batch)
 
-      XCTAssertTrue(wait { !executed.isEmpty }, "\(name): 預かった ↵ が解ける")
+      XCTAssertTrue(waitUntil(10) { !executed.isEmpty }, "\(name): 預かった ↵ が解ける")
       withExtendedLifetime(provider) {}
     }
   }

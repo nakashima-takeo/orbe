@@ -4,13 +4,13 @@ import SwiftUI
 extension BoardAutomationModel {
   /// 欄のキー。↑↓ は段を移り、esc は ↓ と同じく一覧の先頭の行へ。⇥・⇧⇥ は何もせずに握る（焦点をボードの外へ逃がさない）。
   /// 変換中のキーは窓が IME へ渡すので、ここへは来ない。ほかは入力欄へ流す。
-  func handleRequestKey(_ press: KeyPress) -> KeyPress.Result {
+  func handleRequestKey(_ press: KeyInput) -> KeyPress.Result {
     switch press.key {
     case .upArrow, .downArrow:
       guard !press.modifiers.contains(.command) else { return .ignored }
       move(press.key == .upArrow ? -1 : 1)
     case .escape:
-      if press.phase == .down { move(1) }
+      if !press.isRepeat { move(1) }
     case .tab, .backtab:
       break
     default:

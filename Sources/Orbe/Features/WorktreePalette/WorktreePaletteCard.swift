@@ -179,7 +179,7 @@ struct WorktreePaletteCard: View {
       // 実行＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。行タップと同じ決定 funnel。
       // 押し続けた ↵ のリピートでは確定しない（⌘⇧X の ⌘↵ の押し始めでこの画面に替わっても、残りのリピートで開かない）。
       .onSubmitIgnoringKeyRepeat { model.submit() }
-      .onKeyPress { WorktreePaletteFieldKeys.handle($0, model: model) }
+      .onKeyPress { WorktreePaletteFieldKeys.handle(KeyInput($0), model: model) }
   }
 
   /// モードに応じた入力の行き先。一覧の入力ロック中（作成中・預かった ↵ の待ち）は打鍵を握り潰す
