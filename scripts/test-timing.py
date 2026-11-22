@@ -11,6 +11,7 @@ log は、`swift test` の出力か、`gh run view <run> --log` で取得した 
 - 取得したログ: `gh run view <run> --log > run.log` で取得し、`python3 scripts/test-timing.py run.log` に通す。
   1 つ渡すと、合計、クラス別とテスト別の上位、全クラスの表を出す。
 - 複数のログの比較: 2 つ以上渡すと、クラス別の合計をログごとに並べ、最小・中央値・最大を添えた表を出す。
+  比較に使えないログは、名前と理由だけを表の前に出し、表に入れない。
 
 照合: バンドル（最上位のスイート `All tests` または `Selected tests` の 1 つ）ごとに、数えた本数と秒数を、
 XCTest の合計の行（`Executed N tests, … in X (Y) seconds`）の N と X に突き合わせる。秒数の差の許容は、
@@ -29,7 +30,7 @@ import statistics
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional
 
 TOP = 20
 CASE_START = re.compile(r"Test Case '-\[(\S+)\.(\S+) (\S+)\]' started\.")
@@ -201,13 +202,20 @@ def summary(bundles: List[Bundle]) -> List[str]:
 
 
 def comparison(paths: List[str], parsed: List[List[Bundle]]) -> List[str]:
-    names = [Path(p).name for p in paths]
-    out = [f"## テストの所要時間（{len(paths)} 回の比較）", ""]
-    for name, bundles in zip(names, parsed):
+    names: List[str] = []
+    sums: List[Dict[str, int]] = []
+    excluded: List[str] = []
+    for path, bundles in zip(paths, parsed):
         reasons = problems(bundles)
         if reasons:
-            out += [f"`{name}`:", ""] + reasons + [""]
-    sums = [{k: sum(v) for k, v in class_ms(bundles).items()} for bundles in parsed]
+            excluded += [f"`{Path(path).name}`（表から外した）:", ""] + reasons + [""]
+            continue
+        names.append(Path(path).name)
+        sums.append({k: sum(v) for k, v in class_ms(bundles).items()})
+    out = [f"## テストの所要時間（{len(names)} 回の比較）", ""] + excluded
+    if not names:
+        out.append("比較に使えるログが無い。")
+        return out
     out.append("| クラス | " + " | ".join(names) + " | 最小 | 中央値 | 最大 |")
     out.append("|---|" + "---:|" * (len(names) + 3))
 
