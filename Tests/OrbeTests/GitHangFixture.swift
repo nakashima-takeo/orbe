@@ -85,27 +85,33 @@ final class GitHangFixture {
     """
   }
 
-  /// **セッションごと抜けた孫**を残したうえで、すぐ成功で終わる sh。
+  /// **セッションごと抜けた孫**を残したうえで、待ちが解けたら成功で終わる sh。
   ///
   /// git 自身は正常終了するのに孫が stdout/stderr を継いだままなので、EOF は二度と来ない。
   /// 「切ったのに返らない」（`pipeHoldingBody`）の対になる「**終わったのに返らない**」を作る。
   /// hook が `npm run dev &` のように背景へ 1 本投げるだけで起きる形で、setsid は不要だが、
-  /// テストを孫の寿命に依存させないためここでは明示的にセッションを抜けさせる。この sh は、孫が離れ終えてから終わる。
+  /// テストを孫の寿命に依存させないためここでは明示的にセッションを抜けさせる。孫が離れ終えてから待ちに入り、`release()` で
+  /// 終わる（テストは、git が終わる前の待ち手を見てから、終わらせられる）。
   var daemonizingBody: String {
     """
     \(detachedGrandchild)
+    \(waitingBody)
     exit 0
     """
   }
 
-  /// セッションを離れた孫（10 秒生きる）を残し、孫が離れ終えるまで待つ sh の断片。孫は、離れた後に自分の pid を
-  /// `grandchild` へ置く（書き終えてから名前を替えるので、現れた時点で中身が読める）。
+  /// セッションを離れた孫を残し、孫が離れ終えるまで待つ sh の断片。孫は、離れた後に自分の pid を `grandchild` へ置き
+  /// （書き終えてから名前を替えるので、現れた時点で中身が読める）、fixture のディレクトリが消える（テストの終わり）まで生きる。
+  /// 暴走保険の 60 秒は、待ちの本体と同じ。
   private var detachedGrandchild: String {
     """
     /usr/bin/perl -e '
       use POSIX; POSIX::setsid();
-      open(my $f, ">", "\(grandchild).tmp") or die; print $f "$$\\n"; close($f);
-      rename("\(grandchild).tmp", "\(grandchild)"); exec "sleep", "10";' &
+      my ($dir, $marker) = @ARGV;
+      open(my $f, ">", "$marker.tmp") or die; print $f "$$\\n"; close($f);
+      rename("$marker.tmp", $marker);
+      my $end = time + 60;
+      select(undef, undef, undef, 0.05) while -d $dir && time < $end;' "\(dir.path)" "\(grandchild)" &
     end=$(( $(date +%s) + 60 ))
     while [ ! -f "\(grandchild)" ] && [ -d "\(dir.path)" ] && [ "$(date +%s)" -lt "$end" ]; do
       sleep 0.01
@@ -218,44 +224,70 @@ final class GitHangFixture {
     return kill(pid, 0) == 0
   }
 
-  /// 手で進める時計の上で、`clock` を渡した `GitRunner` の実行を、無出力の上限で切る。待ち手が上限の期限で眠るのを待って
-  /// その期限まで進め、`settled` が成り立つまで待つ。
+  /// `clock` を渡した `GitRunner` で止まった実行を、手で進める時計の上で、無出力の上限で切る。止まった git の待ち手が眠るのを
+  /// 待って、その期限まで進め、`settled` が成り立つまで待つ。上限の長さは、本番の定数を書き写さず、眠った期限から読む（眠ってから
+  /// 時刻は進めていないので、期限 − いま が上限）。
   ///
   /// git が止まる前に書いた出力（`Cloning into …` など）は、読みが遅れて、時計を進めた後に届くことがある。その場合
-  /// `GitRunner` は最後の出力の時刻を付け直して眠り直す。その期限（いま + 上限）で眠り直したら、もう一度進める（3 回まで）。猶予の期限（上限より手前）で
-  /// 眠っている待ち手は進めない（git の後始末を待たずに返らせないため）。
+  /// `GitRunner` は最後の出力の時刻を付け直して眠り直す。いまから上限ぶん先の期限で眠り直したら、もう一度進める（3 回まで）。
+  /// 上限より手前の期限（猶予）で眠っている待ち手は進めない（git の後始末を待たずに返らせないため）。
   func expireIdleLimit(
     on clock: ManualClock, until settled: () -> Bool, file: StaticString = #filePath,
     line: UInt = #line
   ) {
-    var idleDeadline: WaitClock.Instant { clock.now + GitRunner.idleTimeout }
-    guard clock.awaitSleeper(until: idleDeadline) else {
-      return XCTFail("無出力の上限で眠る待ち手が現れない", file: file, line: line)
+    expire(on: clock, until: { _ in settled() }, file: file, line: line)
+  }
+
+  /// `expireIdleLimit` と同じく切り、打ち切った後の猶予で眠る待ち手（上限より手前の期限）の期限を返す。手で進める時計と runner
+  /// を、この実行だけが使っている場合に限って使う。
+  func expireIdleLimitAwaitingGrace(
+    on clock: ManualClock, file: StaticString = #filePath, line: UInt = #line
+  ) -> WaitClock.Instant? {
+    var grace: WaitClock.Instant?
+    expire(
+      on: clock,
+      until: { limit in
+        grace = clock.asleep.compactMap(\.deadline).first { $0 - clock.now < limit - 0.001 }
+        return grace != nil
+      }, file: file, line: line)
+    return grace
+  }
+
+  /// 切って、`settled`（引数は、読んだ上限の長さ）が成り立つまで待つ。
+  private func expire(
+    on clock: ManualClock, until settled: (TimeInterval) -> Bool, file: StaticString,
+    line: UInt
+  ) {
+    guard clock.awaitSleeper(where: { $0.deadline != nil }) != nil,
+      var deadline = clock.asleep.compactMap(\.deadline).max()
+    else { return XCTFail("止まった git の待ち手が、期限つきで眠らない", file: file, line: line) }
+    let limit = deadline - clock.now
+    func resleeping(_ sleeper: ManualClock.Sleeper) -> Bool {
+      sleeper.deadline.map { abs(($0 - clock.now) - limit) < 0.001 } ?? false
     }
     for _ in 0..<3 {
       XCTAssertGreaterThanOrEqual(
-        clock.advance(to: idleDeadline), 1,
+        clock.advance(to: deadline), 1,
         "無出力の上限の期限まで進めると、眠っている待ち手を、進めた呼び出しの中で起こす。"
           + "進めた呼び出しが戻った時点で、まだ起こし終えていない形になったら、次のテストも、切らないことを確かめられなくなる: "
           + "GitRunnerStreamTests.testASilentRunIsNotCutAndCompletesWhenItEnds と、RootFilesWriteStopTests の、"
-          + "見ている手の書き込み（assertStopped）にある「待ち手が期限なしで眠り、時刻を進めても起こした待ち手の数が 0」という確認と、"
+          + "見ている手の書き込みにある「期限なしで眠った待ち手が、時刻を進めた後も眠ったまま」という確認と、"
           + "GitRunnerTimeoutTests.testStreamingCommandIsNotStopped にある「最後の出力から数え直した期限で眠り直す」という確認",
         file: file, line: line)
-      guard waitUntil(10, { settled() || clock.sleeping.contains(idleDeadline) }) else {
-        return XCTFail("上限まで進めた後、終わりも眠り直しも来ない", file: file, line: line)
-      }
-      if settled() { return }
+      var again: ManualClock.Sleeper?
+      guard
+        waitUntil(
+          10,
+          {
+            again = clock.asleep.first(where: resleeping)
+            return settled(limit) || again != nil
+          })
+      else { return XCTFail("上限まで進めた後、終わりも眠り直しも来ない", file: file, line: line) }
+      if settled(limit) { return }
+      guard let next = again?.deadline else { return }
+      deadline = next
     }
     XCTFail("3 回進めても、遅れた出力で眠り直し続ける", file: file, line: line)
-  }
-
-  /// 手で進める時計の上で、`GitRunner` の待ち手が、無出力の上限より手前の期限（汲み出しや打ち切りの後の猶予）で眠るまで待ち、
-  /// その期限を返す。
-  func awaitGrace(on clock: ManualClock, timeout: TimeInterval = 10) -> WaitClock.Instant? {
-    var grace: WaitClock.Instant? {
-      clock.sleeping.compactMap { $0 }.first { $0 < clock.now + GitRunner.idleTimeout }
-    }
-    return waitUntil(timeout) { grace != nil } ? grace : nil
   }
 
   // MARK: - 準備

@@ -42,11 +42,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     line: UInt = #line
   ) {
     XCTAssertTrue(fixture.pumpUntilHung(), "前提: 止まっている", file: file, line: line)
-    XCTAssertTrue(
-      clock.awaitSleeper(until: nil), "書き込みの待ち手は期限なしで眠る", file: file, line: line)
-    XCTAssertEqual(
-      clock.advance(by: 86_400), 0, "打ち切りの上限を過ぎるまで時刻を進めても、起こす待ち手がいない", file: file,
-      line: line)
+    assertNotTimedOut(file: file, line: line)
     write.cancel()
     write.cancel()
     pumpMain(until: { outcome.finished }, timeout: 10, "止めたら返る", file: file, line: line)
@@ -55,6 +51,18 @@ final class RootFilesWriteStopTests: OrbeTestCase {
       FileManager.default.fileExists(atPath: indexLock), "index.lock を残さない", file: file, line: line)
     XCTAssertTrue(
       fixture.git(["status", "--porcelain"]).isSuccess, "後続の git が通る", file: file, line: line)
+  }
+
+  /// 書き込みの待ち手が期限なしで眠り、打ち切りの上限を過ぎるまで時刻を進めても眠ったままであること。同じ時計では、根の監視が
+  /// 起こす status の取り直し（上限つき）も眠りうるので、時計の上の全部ではなく、書き込みの待ち手だけを見る。
+  private func assertNotTimedOut(file: StaticString = #filePath, line: UInt = #line) {
+    guard let write = clock.awaitSleeper(until: nil) else {
+      return XCTFail("書き込みの待ち手は期限なしで眠る", file: file, line: line)
+    }
+    clock.advance(by: 86_400)
+    XCTAssertTrue(
+      clock.isAsleep(write), "打ち切りの上限を過ぎるまで時刻を進めても、書き込みの待ち手は眠ったまま", file: file,
+      line: line)
   }
 
   func testStoppingAHangingCommit() throws {
@@ -106,6 +114,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     let write = files.commit(
       message: "slow hook", content: .staged("a.txt"), completion: outcome.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
+    let writing = try XCTUnwrap(clock.awaitSleeper(until: nil), "書き込みの待ち手は期限なしで眠る")
 
     let smudging = fixture.dir.appendingPathComponent("smudging").path
     let smudge = try fixture.installScript(
@@ -119,7 +128,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
       until: { FileManager.default.fileExists(atPath: smudging) }, "前提: 観測が smudge で止まっている")
     fixture.expireIdleLimit(on: clock, until: { version != nil })
     XCTAssertEqual(version, .failed, "観測は打ち切られて返る")
-    XCTAssertFalse(outcome.finished, "打ち切りの上限を過ぎても、書き込みは止めるまで待つ")
+    XCTAssertTrue(clock.isAsleep(writing), "打ち切りの上限を過ぎても、書き込みの待ち手は眠ったまま")
 
     write.cancel()
     pumpMain(until: { outcome.finished }, timeout: 10)
@@ -191,12 +200,10 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     let write = files.stage(
       [GitStatus.Row(path: "b.txt", originalPath: nil)], completion: queued.receive)
 
-    let started = Date()
     write.cancel()
-    pumpMain(until: { queued.finished }, timeout: 5, "前の書き込みを待たずに返る")
-    XCTAssertLessThan(Date().timeIntervalSince(started), 1)
+    pumpMain(until: { queued.finished }, "前の書き込みを待たずに返る")
     XCTAssertEqual(queued.failure, .cancelled)
-    XCTAssertFalse(first.finished, "前の書き込みはまだ止まっている")
+    XCTAssertFalse(first.finished, "前の書き込みはまだ止まっている（hook は待ちを解くまで返らない）")
 
     fixture.release()
     pumpMain(until: { first.finished }, timeout: 20)

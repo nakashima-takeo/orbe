@@ -8,7 +8,14 @@ import OrbeTestSupport
 /// テストは、偽スクリプトが止まったことと、待ち手が眠ったこと（`sleeping`）を待ってから時刻を進める。上限は時刻を進めたときにだけ
 /// 来るので、結果がマシンの負荷に依らない。待ち手が眠る前に時刻が期限を過ぎていれば、待ち手は眠らずに期限切れを知る。
 final class ManualClock: @unchecked Sendable {
-  private struct Sleeper {
+  /// 眠っている待ち手。`id` は眠った順の番号で、起きて眠り直した待ち手は、別の番号になる。
+  struct Sleeper: Equatable {
+    let id: Int
+    /// 期限。nil は期限なし。
+    let deadline: WaitClock.Instant?
+  }
+
+  private struct Parked {
     let deadline: WaitClock.Instant?
     let unpark: @Sendable () -> Void
     var expired = false
@@ -16,7 +23,7 @@ final class ManualClock: @unchecked Sendable {
 
   private let lock = NSLock()
   private var current = WaitClock.wall.now()
-  private var sleepers: [Int: Sleeper] = [:]
+  private var sleepers: [Int: Parked] = [:]
   private var nextID = 0
   private var reads = 0
 
@@ -26,11 +33,20 @@ final class ManualClock: @unchecked Sendable {
   /// 本番の型が時刻を読んだ回数。出力を受け取るたびに時刻を読む型では、出力が届いたことを、これが増えたことで待てる。
   var readings: Int { lock.withLock { reads } }
 
-  /// いま眠っている待ち手の期限（期限なしは nil）。眠った順。
-  var sleeping: [WaitClock.Instant?] {
+  /// いま眠っている待ち手。眠った順。
+  var asleep: [Sleeper] {
     lock.withLock {
-      sleepers.sorted { $0.key < $1.key }.filter { !$0.value.expired }.map(\.value.deadline)
+      sleepers.sorted { $0.key < $1.key }.filter { !$0.value.expired }
+        .map { Sleeper(id: $0.key, deadline: $0.value.deadline) }
     }
+  }
+
+  /// いま眠っている待ち手の期限（期限なしは nil）。眠った順。
+  var sleeping: [WaitClock.Instant?] { asleep.map(\.deadline) }
+
+  /// `sleeper` が、まだ起きずに眠っているか。
+  func isAsleep(_ sleeper: Sleeper) -> Bool {
+    lock.withLock { sleepers[sleeper.id].map { !$0.expired } ?? false }
   }
 
   /// 本番の型へ渡す、止める時計。
@@ -46,7 +62,7 @@ final class ManualClock: @unchecked Sendable {
         let id = lock.withLock { () -> Int? in
           if let deadline, deadline <= current { return nil }
           nextID += 1
-          sleepers[nextID] = Sleeper(deadline: deadline, unpark: unpark)
+          sleepers[nextID] = Parked(deadline: deadline, unpark: unpark)
           return nextID
         }
         guard let id else { return false }
@@ -78,8 +94,19 @@ final class ManualClock: @unchecked Sendable {
     return woken.count
   }
 
-  /// 期限が `deadline`（nil は期限なし）の待ち手が眠るまで、ランループを回して待ち、眠ったかを返す。
-  func awaitSleeper(until deadline: WaitClock.Instant?, timeout: TimeInterval = 10) -> Bool {
-    waitUntil(timeout) { sleeping.contains(deadline) }
+  /// 期限が `deadline`（nil は期限なし）の待ち手が眠るまで、ランループを回して待ち、その待ち手を返す。眠らなければ nil。
+  @discardableResult
+  func awaitSleeper(until deadline: WaitClock.Instant?, timeout: TimeInterval = 10) -> Sleeper? {
+    awaitSleeper(timeout: timeout) { $0.deadline == deadline }
+  }
+
+  /// `match` に合う待ち手が眠るまで、ランループを回して待ち、その待ち手を返す。眠らなければ nil。
+  func awaitSleeper(timeout: TimeInterval = 10, where match: (Sleeper) -> Bool) -> Sleeper? {
+    var found: Sleeper?
+    waitUntil(timeout) {
+      found = asleep.first(where: match)
+      return found != nil
+    }
+    return found
   }
 }

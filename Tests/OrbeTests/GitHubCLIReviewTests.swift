@@ -354,7 +354,8 @@ extension GitHubCLIReviewTests {
     return waitUntil(10) { FileManager.default.fileExists(atPath: waiting) }
   }
 
-  /// 書き込みは読みより長く待つ（本番は読み 15 秒・書き込み 60 秒）。上限を越えた書き込みは時間切れの失敗。
+  /// 書き込みは読みより長く待つ。上限を越えた書き込みは時間切れの失敗。上限の長さは、本番の定数を書き写さず、眠った待ち手の期限から
+  /// 読む（眠ってから時刻は進めていないので、期限 − いま が上限）。
   func testWritesWaitLongerThanReads() throws {
     let clock = ManualClock()
     let cli = GitHubCLI(clock: clock.waits)
@@ -362,9 +363,10 @@ extension GitHubCLIReviewTests {
     var read: Result<GitHubPullRequestReview, GitHubFailure>?
     cli.pullRequestReview(id) { read = $0 }
     XCTAssertTrue(awaitGate("first", 1), "前提: 読みが gh の中で止まっている")
-    let readDeadline = clock.now + GitHubCLI.readTimeout
-    XCTAssertTrue(clock.awaitSleeper(until: readDeadline), "読みは読みの上限で眠る")
-    clock.advance(to: readDeadline)
+    let reading = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil })?.deadline, "読みは上限の期限で眠る")
+    let readLimit = reading - clock.now
+    clock.advance(to: reading)
     pumpMain(until: { read != nil }, "読みが返る")
     XCTAssertEqual(read, .failure(.timedOut), "読みは読みの上限で打ち切る")
 
@@ -379,17 +381,18 @@ extension GitHubCLIReviewTests {
     }
     resolve(pendingReview: nil)
     XCTAssertTrue(awaitGate("resolve", 1), "前提: 書き込みが gh の中で止まっている")
-    XCTAssertTrue(
-      clock.awaitSleeper(until: clock.now + GitHubCLI.writeTimeout), "書き込みは書き込みの上限で眠る")
-    XCTAssertEqual(clock.advance(by: GitHubCLI.readTimeout), 0, "読みの上限では、書き込みを起こさない")
+    let writing = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil }), "書き込みは上限の期限で眠る")
+    clock.advance(by: readLimit)
+    XCTAssertTrue(clock.isAsleep(writing), "読みの上限まで進めても、書き込みの待ち手は眠ったまま")
     try serve("resolve.open.1", "")
     pumpMain(until: { written != nil }, "書き込みが返る")
     XCTAssertEqual(written?.failure, nil)
 
     resolve(pendingReview: "R1")
     XCTAssertTrue(awaitGate("resolve", 2), "前提: 書き込みが gh の中で止まっている")
-    let writeDeadline = clock.now + GitHubCLI.writeTimeout
-    XCTAssertTrue(clock.awaitSleeper(until: writeDeadline))
+    let writeDeadline = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil })?.deadline, "書き込みは上限の期限で眠る")
     clock.advance(to: writeDeadline)
     pumpMain(until: { written != nil }, "書き込みが返る")
     XCTAssertEqual(written, GitHubReviewWriteResult(pendingReview: "R1", failure: .timedOut))

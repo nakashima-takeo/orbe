@@ -82,8 +82,9 @@ final class GitRunnerStreamTests: OrbeTestCase {
     let recorder = Recorder()
     let handle = try streamHangingCommit(body: fixture.waitingBody, into: recorder)
     defer { handle.cancel() }
-    XCTAssertTrue(clock.awaitSleeper(until: nil), "期限なしで眠る")
-    XCTAssertEqual(clock.advance(by: 86_400), 0, "無出力が上限を超えても、起こす待ち手がいない")
+    let run = try XCTUnwrap(clock.awaitSleeper(until: nil), "期限なしで眠る")
+    clock.advance(by: 86_400)
+    XCTAssertTrue(clock.isAsleep(run), "無出力が上限を超えても、待ち手は眠ったまま")
 
     fixture.release()
     let output = recorder.awaitResult(timeout: 20)
@@ -97,7 +98,8 @@ final class GitRunnerStreamTests: OrbeTestCase {
     let handle = try streamHangingCommit(body: fixture.pipeHoldingBody, into: recorder)
     handle.cancel()
     handle.cancel()
-    let grace = try XCTUnwrap(fixture.awaitGrace(on: clock), "止めた後、猶予の期限で EOF を待つ")
+    let grace = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil })?.deadline, "止めた後、猶予の期限で EOF を待つ")
     clock.advance(to: grace)
     let output = recorder.awaitResult(timeout: 10)
     XCTAssertTrue(fixture.grandchildIsAlive(), "前提: 孫が pipe を握っていて EOF は来ていない（猶予で返った）")

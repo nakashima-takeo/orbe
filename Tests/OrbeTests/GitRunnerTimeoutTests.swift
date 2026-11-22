@@ -13,7 +13,7 @@ import XCTest
 /// hook の子）が pipe の書き込み端を握ったままなので、**切ったのに返らない**を作り直す。
 final class GitRunnerTimeoutTests: OrbeTestCase {
   /// 打ち切りを見る実行は、手で進める時計を渡した専用インスタンスで駆動する（`shared` のキューを一切汚さない）。本番の
-  /// 120 秒は、時計を進めたときにだけ来る。arrange と後続確認は本番既定の `shared` で回す。
+  /// 無出力の上限は、時計を進めたときにだけ来る。arrange と後続確認は本番既定の `shared` で回す。
   private let clock = ManualClock()
   private lazy var runner = GitRunner(clock: clock.waits)
   private var fixture: GitHangFixture!
@@ -107,8 +107,10 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     try stageChange()
     let pending = start(["commit", "-m", "slow but alive"])
     XCTAssertTrue(fixture.waitUntilHung(), "前提: hook が出力の合図を待っている")
-    let limit = GitRunner.idleTimeout
-    XCTAssertTrue(clock.awaitSleeper(until: clock.now + limit), "前提: 無出力の上限で眠っている")
+    let hung = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil }), "前提: 無出力の上限で眠っている")
+    // 上限の長さは、眠った期限から読む（眠ってから時刻は進めていない）。
+    let limit = try XCTUnwrap(hung.deadline) - clock.now
 
     XCTAssertEqual(clock.advance(by: limit * 3 / 4), 0, "前提: 上限の手前では起きない")
     let outputAt = clock.now
@@ -116,8 +118,11 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     fixture.tick()
     pumpMain(until: { self.clock.readings > read }, "hook の出力が届く")
     XCTAssertEqual(clock.advance(by: limit * 3 / 4), 1, "前提: 最初の期限は過ぎている")
-    XCTAssertTrue(
-      clock.awaitSleeper(until: outputAt + limit), "最後の出力から数え直した期限で眠り直す")
+    XCTAssertNotNil(
+      clock.awaitSleeper(where: {
+        $0.deadline.map { abs(($0 - outputAt) - limit) < 0.001 } ?? false
+      }),
+      "最後の出力から数え直した期限で眠り直す")
 
     fixture.release()
     let output = try result(of: pending)
@@ -134,9 +139,8 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     let pending = start(["commit", "-m", "blocked"])
     XCTAssertTrue(fixture.waitUntilHung(), "前提: 孫が pipe を握ったまま、hook が止まっている")
 
-    fixture.expireIdleLimit(
-      on: clock, until: { self.fixture.awaitGrace(on: self.clock, timeout: 0) != nil })
-    let grace = try XCTUnwrap(fixture.awaitGrace(on: clock), "打ち切りの後、猶予の期限で EOF を待つ")
+    let grace = try XCTUnwrap(
+      fixture.expireIdleLimitAwaitingGrace(on: clock), "打ち切りの後、猶予の期限で EOF を待つ")
     clock.advance(to: grace)
     let output = try result(of: pending)
 
@@ -217,23 +221,28 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// git が**自力で正常終了**したら、孫が pipe を握っていてもアイドル上限を待たずに返る。
   ///
   /// 待ちを EOF に賭けると、hook が背景へ投げたプロセス（`npm run dev &`・gpg-agent・言語サーバ）が
-  /// 生きている限り EOF が来ないので、成功した実行が本番の 120 秒を丸ごと待ち、根のサービスの書き込みなら
+  /// 生きている限り EOF が来ないので、成功した実行が本番の無出力の上限を丸ごと待ち、根のサービスの書き込みなら
   /// その間ずっと同じ worktree の順番を占有する——打ち切り機構が解こうとした詰まりを、成功した実行で作り直す。
   /// 実行の完了を決めるのは**子の終了**であって EOF ではない、という契約をここで固定する。
   func testSuccessfulRunReturnsWhileGrandchildHoldsThePipes() throws {
     try fixture.installHook("pre-commit", body: fixture.daemonizingBody)
     try stageChange()
     let pending = start(["commit", "-m", "daemonizing hook"])
+    XCTAssertTrue(fixture.waitUntilHung(), "前提: 孫が pipe を握ったまま、hook が止まっている")
+    let idle = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil })?.deadline, "前提: 無出力の上限で眠っている")
 
+    fixture.release()
     let grace = try XCTUnwrap(
-      fixture.awaitGrace(on: clock), "git の終了の後、無出力の上限より手前の期限で EOF を待つ")
+      clock.awaitSleeper(where: { $0.deadline.map { $0 < idle } ?? false })?.deadline,
+      "git の終了の後、無出力の上限より手前の期限で EOF を待つ")
     clock.advance(to: grace)
     let output = try result(of: pending)
 
     XCTAssertTrue(output.isSuccess, "前提: hook は成功で返るので commit も成功する")
     XCTAssertFalse(output.timedOut, "打ち切っていない——終了後に EOF を諦めただけ")
     XCTAssertTrue(
-      fixture.grandchildIsAlive(), "孫（10 秒生きる）の寿命に待ちを縛られない（EOF は来ていない）")
+      fixture.grandchildIsAlive(), "孫（テストの終わりまで生きる）の寿命に待ちを縛られない（EOF は来ていない）")
   }
 
   // MARK: - 失敗理由の整形（`--progress` を足したぶん）

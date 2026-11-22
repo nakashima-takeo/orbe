@@ -264,7 +264,7 @@ final class ShellPATHTests: OrbeTestCase {
     }
     pumpMain(until: { FileManager.default.fileExists(atPath: began) }, "前提: シェルが固まっている")
     let deadline = clock.now + 1
-    XCTAssertTrue(clock.awaitSleeper(until: deadline), "上限の期限で眠る")
+    XCTAssertNotNil(clock.awaitSleeper(until: deadline), "上限の期限で眠る")
     clock.advance(to: deadline)
     pumpMain(until: { probed.isDone }, "上限で戻る")
     XCTAssertNil(probed.value)
