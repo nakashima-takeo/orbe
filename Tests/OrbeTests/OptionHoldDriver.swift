@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 
 @testable import Orbe
 
@@ -34,20 +35,6 @@ final class OptionHoldDriver {
   /// ⌥ だけを押し、成立するまで待つ。
   func hold() {
     send(.option)
-    pump(upTo: 1, until: { monitor.isHolding })
-  }
-
-  /// キーボード以外の届いたイベントを配送しながら待つ（期限のタイマーを進める）。本物のキーボードから届いたイベントは
-  /// 配送しない——送った修飾とキーだけを判定に通すため。
-  func pump(upTo seconds: TimeInterval, until done: () -> Bool = { false }) {
-    let end = Date().addingTimeInterval(seconds)
-    let mask = NSEvent.EventTypeMask.any.subtracting([.keyDown, .keyUp, .flagsChanged])
-    while Date() < end, !done() {
-      guard
-        let event = NSApp.nextEvent(
-          matching: mask, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
-      else { continue }
-      NSApp.sendEvent(event)
-    }
+    pumpMain(until: { monitor.isHolding }, timeout: 1, "⌥ の長押しが成立する")
   }
 }

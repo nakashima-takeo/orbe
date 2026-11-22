@@ -47,6 +47,20 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.count, before, "素のシェルのタブは開かない")
   }
 
+  /// パレットを開いていないときの改名の取消は、その場で焦点を端末へ戻す。
+  func testCancelRenameWithoutAPaletteReturnsFocusToTheTerminalAtOnce() throws {
+    let wc = try restoreSingleTab()
+    let responder = { wc.window.firstResponder }
+    XCTAssertTrue(waitUntil { responder() is SurfaceView }, "前提: 起動直後は端末が焦点を持つ")
+    wc.beginTabRename()
+    XCTAssertTrue(waitUntil { responder() is NSTextView }, "前提: 改名欄が焦点を持つ")
+    wc.statusModel.onCancelRename()
+    XCTAssertTrue(
+      responder() is SurfaceView,
+      "取消の中で、焦点を端末へ戻す。これが待たずに成り立たなくなれば、"
+        + "testRenameBlurAfterOpeningAPaletteLeavesFocusOnThePalette の確かめる時点も成り立たない")
+  }
+
   /// タブ名の変更中に「＋」や Attention ストリップでパレットを開くと、改名欄の blur（改名の取消）が
   /// パレットより後に届きうる。そのときも焦点は、改名していないときに開いたのと同じパレットの受け手に
   /// 残り、打鍵が端末へ流れない。
@@ -84,8 +98,7 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
       }
       XCTAssertTrue(waitUntil { onPalette() }, "前提: \(name) パレットが焦点を取った")
       wc.statusModel.onCancelRename()
-      // 取消の非同期の効果（焦点を端末へ戻す退行）を流してから見る。条件は取消の前から真なので、待つだけでは流れない。
-      RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+      XCTAssertFalse(responder() is SurfaceView, "\(name): 取消の中で、焦点を端末へ戻さない")
 
       XCTAssertTrue(
         waitUntil { onPalette() },

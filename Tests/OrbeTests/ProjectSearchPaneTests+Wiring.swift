@@ -169,6 +169,10 @@ extension ProjectSearchPaneTests {
   func testTheRailsSearchItemShowsThePanelWithTheFieldFocused() throws {
     let hosted = try host(["a.txt": "needle\n"])
     hosted.pane.shell.selectPanel(.search)
+    XCTAssertEqual(
+      hosted.search.focusRequest, .field,
+      "レールは、その場で入力欄への焦点を求める。"
+        + "これが待たずに成り立たなくなれば、testAFocusRequestIsNotReplayedWhenThePanelReappears の確かめる時点も成り立たない")
     XCTAssertTrue(hosted.pane.showsSearchPanel)
     pumpMain(until: { hosted.search.focusedArea == .field }, "入力欄に焦点")
 
@@ -197,7 +201,8 @@ extension ProjectSearchPaneTests {
     pumpMain(until: { textHasFocus(hosted) })
 
     XCTAssertTrue(hosted.pane.handleStepKey(f4))
-    XCTAssertTrue(holds(for: 0.3) { textHasFocus(hosted) }, "現れたパネルが焦点を奪わない")
+    XCTAssertNil(hosted.search.focusRequest, "現れたパネルに、焦点を入れる要求は残っていない")
+    XCTAssertTrue(textHasFocus(hosted), "現れたパネルが焦点を奪わない")
   }
 
   // MARK: - 根の変化

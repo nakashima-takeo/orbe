@@ -49,6 +49,11 @@ final class AgentLauncherTests: OrbeTestCase {
     launcher.registersPlugin = true
 
     launcher.syncAgentPluginOnLaunch()
+    XCTAssertTrue(
+      FileManager.default.fileExists(
+        atPath: try XCTUnwrap(AgentPluginInstaller.stablePluginDir).path),
+      "登録する起動は、呼び出しの中で実体化する。"
+        + "これが待たずに成り立たなくなれば、testIsolatedLauncherNeitherMaterializesNorRegisters の確かめる時点も成り立たない")
     pumpMain(until: { registeredDigest != nil }, "登録の記録が無い起動で入れ直す")
     let first = registeredDigest
 
@@ -71,7 +76,6 @@ final class AgentLauncherTests: OrbeTestCase {
     XCTAssertFalse(launcher.registersPlugin, "ORBE_STATE_DIR を持つ Orbe は既定で登録しない")
 
     launcher.syncAgentPluginOnLaunch()
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 1))
 
     let place = try XCTUnwrap(AgentPluginInstaller.stablePluginDir)
     XCTAssertFalse(FileManager.default.fileExists(atPath: place.path), "実体化しない")

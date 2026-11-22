@@ -64,7 +64,6 @@ extension ProjectSearchPaneTests {
     held.closeWindow()
     hosted.search.navigation.keyDidRelease()
     held.closeWindow()
-    RunLoop.main.run(until: Date())
     XCTAssertEqual(
       hosted.pane.document?.url, url, "\(message): 待っていた一致に入れ替わらない", line: line)
     XCTAssertTrue(hosted.window.firstResponder === responder, "\(message): 焦点は動かない", line: line)
@@ -84,7 +83,11 @@ extension ProjectSearchPaneTests {
     list.keyUp(with: .keyRelease(String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!)))
     XCTAssertEqual(hosted.pane.document?.url, hosted.repo.url("a.txt"), "離してすぐには開かない")
     held.closeWindow()
-    XCTAssertEqual(hosted.pane.document?.url, hosted.repo.url("b.txt"), "離して窓が閉じたら最後の選択を開く")
+    XCTAssertEqual(
+      hosted.pane.document?.url, hosted.repo.url("b.txt"),
+      "離して窓が閉じたら、その場で最後の選択を開く。これが待たずに成り立たなくなれば、"
+        + "testPressingAFileTabWhileHoldingDownDropsTheWaitingOpen と "
+        + "testClosingATabWhileHoldingDownDropsTheWaitingOpen の確かめる時点も成り立たない")
     XCTAssertTrue(hosted.window.firstResponder === list, "遅れて開いても焦点は列のまま")
   }
 

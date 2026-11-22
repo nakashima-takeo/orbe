@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 /// 画面と前面の隔離（`ScreenIsolation`）が、破ったテストを実際に落とすことを固定する。
@@ -24,7 +25,7 @@ final class ScreenIsolationTests: OrbeTestCase {
     expectBreach("窓がディスプレイの範囲と重なって並んだ")
     var shown = true
     holdUntilTestEnds(ClaimsShownWindow(on: display) { shown })
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    pumpMainOnce()
     shown = false
   }
 
