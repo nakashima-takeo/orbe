@@ -127,35 +127,48 @@ final class EditorDocumentBackgroundTests: XCTestCase {
   /// 置く——打つのを止める前から結果が置かれる。構文の結果は打鍵ごとに先に届き、そのたびに要らなくなった編集の
   /// 記録が捨てられる。打つのは毎回別の変えていない行の頭で、行の数を変えないので、その行が区間に入るのは裏の結果が届いた
   /// ときだけ。
+  ///
+  /// 打鍵は、前の打鍵の構文の結果が届いてから次を打つ。先に打った行が区間に入った時点で、後に打った行がまだ入っていなければ、
+  /// 走っていた行差分の結果が、後の打鍵が済んだ本文に置かれた（場面を 1 回作れた）。場面を 3 回確かめる（2 回目と 3 回目は、
+  /// 続いて走った依頼の結果も、打ち続ける間に置かれること）。行差分の結果が後の打鍵より先に届いた回と、後の打鍵の行も同時に
+  /// 入った回（裏の仕事が先の依頼を取る前に、後の依頼に置き換わった）は数えず、試行は 40 回まで。
   func testHunkResultsArePlacedWhileTypingFasterThanTheDiff() throws {
     let base = (0..<2000).map { "let line\($0) = 0\n" }
     let current = base.enumerated().map {
       $0.offset.isMultiple(of: 2) ? "let changed\($0.offset) = 1\n" : $0.element
     }
     let (document, surface) = try open("slow.swift", current.joined())
-    let limit = LineDiff.Limit.edits(10_000)
-    document.hunkLimit = limit
+    document.hunkLimit = LineDiff.Limit.edits(10_000)
     document.baseline = base.joined()
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
-    let clock = ContinuousClock()
-    let took = clock.measure {
-      _ = LineDiff.hunks(base: base.joined(), current: document.text, limit: limit)
-    }
-    let interval = took / 4
-    let typed = 24
-    var covered = -1
-    for keystroke in 0..<typed {
-      let row = 1 + 2 * keystroke
+    var keystrokes = 0
+    // 次の変えていない行の頭に 1 字打ち、その打鍵の構文の結果が届くのを待って、打った行を返す。
+    func type() -> Int {
+      let row = 1 + 2 * keystrokes
+      keystrokes += 1
       surface.replace(NSRange(location: document.text.lineStart(row), length: 0), with: "x")
-      RunLoop.main.run(until: Date().addingTimeInterval(TimeInterval(interval / .seconds(1))))
-      let rows = document.hunks.map(\.newLines)
-      covered =
-        (0...keystroke).last { typedRow in
-          rows.contains { $0.contains(1 + 2 * typedRow) }
-        } ?? covered
+      XCTAssertTrue(waitUntil(30) { document.isFirstColorReady }, "打鍵の構文の結果が届く")
+      return row
     }
-    XCTAssertGreaterThanOrEqual(
-      covered, typed / 2, "打ち続けている間に、後半の打鍵を含む版の結果が置かれる（裏 1 回: \(took)）")
+    func covered(_ row: Int) -> Bool { document.hunks.contains { $0.newLines.contains(row) } }
+    let attempts = 40
+    var attempt = 0
+    var scenes = 0
+    var earlier = type()
+    while attempt < attempts, scenes < 3 {
+      attempt += 1
+      let later = type()
+      if !covered(earlier) {
+        XCTAssertTrue(waitUntil(30) { covered(earlier) }, "先に打った行が区間に入る")
+        if !covered(later), !document.hunksAreCurrent { scenes += 1 }
+      }
+      earlier = later
+    }
+    XCTAssertEqual(
+      scenes, 3,
+      scenes == 0
+        ? "\(attempts) 回の試行で、走っていた行差分の結果が後の打鍵の後に置かれる場面を、1 度も作れなかった"
+        : "\(attempts) 回の試行で、場面を作れたのは \(scenes) 回")
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
   }
 
@@ -292,10 +305,10 @@ final class EditorDocumentBackgroundTests: XCTestCase {
 
     surface.replace(NSRange(location: 4, length: 1), with: "")
     XCTAssertTrue(waitUntil { document.isFirstColorReady })
-    RunLoop.main.run(until: Date() + 0.2)
+    try waitForTheSyntaxRun(of: document)
     XCTAssertEqual(role(ofRow: 2, in: document), .keyword, "見えている行は作り直した")
     XCTAssertEqual(role(ofRow: 2500, in: document), .string, "見えていない行は前の色のまま")
-    XCTAssertFalse(document.isCaughtUp)
+    XCTAssertFalse(document.isCaughtUp, "追いついていない")
 
     show(row: 2500, of: surface)
     XCTAssertTrue(waitUntil { self.role(ofRow: 2500, in: document) == .keyword }, "見えた行は待たずに作る")
@@ -303,6 +316,21 @@ final class EditorDocumentBackgroundTests: XCTestCase {
 
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30), "待つ口は打鍵の止むのを待たずに揃える")
     XCTAssertEqual(role(ofRow: 1500, in: document), .keyword)
+  }
+
+  /// 打鍵の止むのを待たない文書（待ちが 0 秒）では、見えていない行も、編集を取り込んだ走りの中で作り直す。
+  func testWithoutTheQuietDelayTheHiddenLinesAreRebuiltInTheSameRun() throws {
+    let (document, surface) = try open("eager.js", Self.template, quietDelay: .seconds(0))
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    show(row: 0, of: surface)
+
+    surface.replace(NSRange(location: 4, length: 1), with: "")
+    XCTAssertTrue(waitUntil { document.isFirstColorReady })
+    try waitForTheSyntaxRun(of: document)
+    XCTAssertEqual(
+      role(ofRow: 2500, in: document), .keyword,
+      "見えていない行も作り直した。testWhileTypingOnlyTheVisibleLinesAreRebuilt の「見えていない行は前の色のまま」"
+        + "「追いついていない」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 
   /// 見えている行より上で、行の数を変えずに字の数が大きく変わる編集（上の行に長い文を足すなど）の後も、打鍵が続く間に
@@ -325,6 +353,19 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     surface.replace(NSRange(location: 4, length: 1), with: "")
     XCTAssertTrue(waitUntil(30) { document.isCaughtUp })
     XCTAssertEqual(role(ofRow: 2500, in: document), .keyword)
+  }
+
+  /// 構文の裏の仕事の列に目印を積み、目印が走ってから、裏の仕事が置いた結果を main が受け取るまで待つ。作り直しの 1 回の
+  /// 走りは列を譲らない 1 つの仕事なので、戻った時点で、目印より前に始まっていた走りは済み、その結果は文書に届いている。
+  private func waitForTheSyntaxRun(of document: EditorDocument) throws {
+    let worker = try XCTUnwrap(document.syntax)
+    let reached = OSAllocatedUnfairLock(initialState: false)
+    Task.detached {
+      await worker.mark()
+      reached.withLock { $0 = true }
+    }
+    pumpMain(until: { reached.withLock { $0 } }, "構文の裏の仕事の列の目印")
+    nextTurn()
   }
 
   /// 面の見えている範囲を、行 `row` から 10 行にする。
@@ -357,4 +398,9 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertTrue(observed.sawWorker, "前提: 構文の裏の仕事を手放す部品に入れた")
     XCTAssertFalse(observed.aliveAfterDrop, "裏で落とした後に main が構文の裏の仕事を持っていない")
   }
+}
+
+extension SyntaxWorker {
+  /// 何もしない仕事。列で、呼んだ時点より前に積まれた仕事の後に走る。
+  fileprivate func mark() {}
 }
