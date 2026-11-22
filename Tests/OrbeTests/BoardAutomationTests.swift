@@ -89,8 +89,6 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
       "走り出しても行は動かない")
   }
 
-  // MARK: - キー
-
   // MARK: - 追従
 
   /// ほかの口（AI・⌘⇧X）が選んでいる自動化を消すと、ボードは同じ位置の行を選び、キーはその行に効く。

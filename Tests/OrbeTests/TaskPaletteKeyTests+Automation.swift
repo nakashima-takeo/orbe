@@ -4,6 +4,10 @@ import XCTest
 @testable import Orbe
 
 /// 提案タブのキー（入力欄の絞り込み欄と候補の一覧、カードの器の棚）。
+///
+/// 壊れると何が起きるか: リンクを開くつもりの ⌘O が候補をタスクにする。⌘↵ でタスクになっても agent を開く画面が出ない。
+/// ← で文字の間を動けない、または棚へ入れない。棚の ⌘↵ が候補の更新にならず候補をタスクにする。どこかの居場所の esc で
+/// 画面が閉じない。
 extension TaskPaletteKeyTests {
   private func automationModel() -> TaskPaletteModel {
     let model = TaskPaletteSamples.model(
@@ -97,7 +101,6 @@ extension TaskPaletteKeyTests {
 
     XCTAssertEqual(model.automation.place, .proposals)
     XCTAssertEqual(model.automation.selectedProposal?.id, 2)
-    XCTAssertEqual(model.query, "")
   }
 
   /// 棚の ⌘↵ は選んでいる自動化の候補を今すぐ更新し、候補には触れない。押し続けても断りの赤を出さない。

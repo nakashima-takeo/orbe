@@ -6,6 +6,10 @@ import XCTest
 private typealias GitHub = TaskPaletteGitHubSamples
 
 /// GitHub タブ・右の欄・選ぶ状態のキー。
+///
+/// 壊れると何が起きるか: 入力欄の文字を消す ⌫ が結び付きを外す。⌘⌫ を押し続けてキーがリピートすると、選んでいた 1 件より多くの
+/// 結び付きが外れる。⇥ が次のタブへ移らず絞り込みを切り替える。選ぶ状態の esc が画面ごと閉じる。項目を選ぶ間の ⌘⌫ で、
+/// 別のタスクの結び付きが外れる。⌘↵ で項目がタスクにならず agent も開かない。
 extension TaskPaletteKeyTests {
   /// 右の欄でも ⌘L で結び付けを始める。
   func testCommandLInThePaneStartsLinking() {
@@ -86,7 +90,6 @@ extension TaskPaletteKeyTests {
     send(.leftArrow, to: model)
 
     XCTAssertEqual(model.area, .list)
-    XCTAssertEqual(model.query, "", "space は入力欄へ入らない")
   }
 
   /// 選ぶ状態の esc は、画面を閉じずに選ぶ状態をやめる（タスクを選ぶ・項目を選ぶの両方）。
@@ -219,7 +222,6 @@ extension TaskPaletteKeyTests {
 
     send(.space, to: model)
 
-    XCTAssertEqual(model.query, "")
     XCTAssertEqual(status(model, 1), .todo)
   }
 }

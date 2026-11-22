@@ -74,10 +74,6 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)))
   }
 
-  // MARK: - タスクにして開く（⌘↵）
-
-  // MARK: - ブラウザで開く（⌘O）
-
   /// 右の欄の期限で ↵ を押し続けても、押した ↵ で打ち始め、続くリピートで確定しない（編集のまま）。
   func testEnterHeldOnThePaneDueStartsTypingOnceAndKeepsTyping() {
     let model = GitHub.model([], issues: [GitHub.issue(5)])
@@ -135,8 +131,6 @@ extension TaskPaletteCardKeyTests {
     XCTAssertTrue(model.store.tasks.isEmpty)
     XCTAssertTrue(source.writes.isEmpty)
   }
-
-  // MARK: - 選ぶ状態の space
 
   // MARK: - 右の欄の期限
 
