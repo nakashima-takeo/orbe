@@ -1,5 +1,4 @@
 import AppKit
-import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,13 +9,6 @@ import XCTest
 /// self 固定のままだとテキスト面をクリックできない。
 @MainActor
 final class EditorPaneViewTests: OrbeTestCase {
-  private func file(_ name: String, _ text: String) throws -> URL {
-    let dir = TestScratch.caseDir
-    let url = dir.appendingPathComponent(name)
-    try Data(text.utf8).write(to: url)
-    return url
-  }
-
   func testShowingADocumentMountsItsSurfaceAndMovesTheFocusTarget() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
@@ -24,7 +16,7 @@ final class EditorPaneViewTests: OrbeTestCase {
     window.makeFirstResponder(pane)
     XCTAssertTrue(pane.focusTarget === pane, "空状態の行き先は pane")
 
-    let url = try file("a.swift", "let a = 1\n")
+    let url = try caseFile("a.swift", "let a = 1\n")
     let document = try XCTUnwrap(try tab.group.editor.open(url, as: .pinned))
     XCTAssertTrue(pane.document === document, "セッションの変化が器へ写る")
     XCTAssertTrue(document.surface.view.superview === pane)
@@ -50,8 +42,8 @@ final class EditorPaneViewTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 600)
-    let first = try tab.group.editor.open(try file("one.txt", "one"), as: .pinned)
-    let second = try tab.group.editor.open(try file("two.txt", "two"), as: .pinned)
+    let first = try tab.group.editor.open(try caseFile("one.txt", "one"), as: .pinned)
+    let second = try tab.group.editor.open(try caseFile("two.txt", "two"), as: .pinned)
     window.makeFirstResponder(second.surface.responder)
 
     first.surface.responder.keyDown(with: .key("X", []))
@@ -76,8 +68,8 @@ final class EditorPaneViewTests: OrbeTestCase {
   func testSwappingTheShownDocumentKeepsTheFocusInsideThePane() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 600)
-    let first = try tab.group.editor.open(try file("p.txt", "p"), as: .pinned)
-    let second = try tab.group.editor.open(try file("q.txt", "q"), as: .pinned)
+    let first = try tab.group.editor.open(try caseFile("p.txt", "p"), as: .pinned)
+    let second = try tab.group.editor.open(try caseFile("q.txt", "q"), as: .pinned)
     window.makeFirstResponder(second.surface.responder)
 
     tab.group.editor.activate(first)
@@ -99,7 +91,7 @@ final class EditorPaneViewTests: OrbeTestCase {
     tab.group.view.addSubview(outsider)
     window.makeFirstResponder(outsider)
 
-    let document = try tab.group.editor.open(try file("d.txt", "x"), as: .pinned)
+    let document = try tab.group.editor.open(try caseFile("d.txt", "x"), as: .pinned)
 
     XCTAssertTrue(tab.group.view.editor.document === document, "面の中身は入れ替わる")
     XCTAssertFalse(
@@ -118,7 +110,7 @@ final class EditorPaneViewTests: OrbeTestCase {
     pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: window))
     XCTAssertTrue(window.firstResponder === pane, "空状態では面自身")
 
-    let document = try tab.group.editor.open(try file("m.txt", "x"), as: .pinned)
+    let document = try tab.group.editor.open(try caseFile("m.txt", "x"), as: .pinned)
     window.makeFirstResponder(nil)
     pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: window))
     XCTAssertTrue(window.firstResponder === document.surface.responder, "文書があればテキスト面")
