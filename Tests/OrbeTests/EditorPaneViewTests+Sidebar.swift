@@ -79,7 +79,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     defer { window.orderOut(nil) }
     XCTAssertEqual(pane.shownSidebarWidth, 199)
 
-    let handle = try XCTUnwrap(pane.subviews.first { $0 is SidebarResizeHandle })
+    let handle = try XCTUnwrap(pane.belowBar.subviews.first { $0 is SidebarResizeHandle })
     XCTAssertEqual(handle.frame.minX, 199 - 2, "当たりは描かれている境に居る")
     XCTAssertFalse(handle.isHidden)
     handle.cursorUpdate(with: .mouse(.mouseMoved, at: panePoint(pane, 199), in: window))
@@ -125,7 +125,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
 
-    let handle = try XCTUnwrap(pane.subviews.first { $0 is SidebarResizeHandle })
+    let handle = try XCTUnwrap(pane.belowBar.subviews.first { $0 is SidebarResizeHandle })
     XCTAssertFalse(handle.isHidden)
     XCTAssertEqual(
       handle.frame, NSRect(x: 263 - 2, y: bar, width: 4, height: 400 - bar),
@@ -220,7 +220,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
         }, message)
     }
 
-    let handle = try XCTUnwrap(pane.subviews.first { $0 is SidebarResizeHandle })
+    let handle = try XCTUnwrap(pane.belowBar.subviews.first { $0 is SidebarResizeHandle })
     handle.mouseDown(with: .mouse(.leftMouseDown, at: panePoint(pane, 263), in: window))
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: panePoint(pane, 263 + 60), in: window))
     handle.mouseUp(with: .mouse(.leftMouseUp, at: panePoint(pane, 263 + 60), in: window))

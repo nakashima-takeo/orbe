@@ -46,11 +46,11 @@ extension EditorPaneView {
     for view in diffViews where !views.contains(where: { $0 === view }) {
       view.removeFromSuperview()
     }
-    for surface in surfaces where surface.view.superview !== self { install(surface) }
+    for surface in surfaces where surface.view.superview !== belowBar { install(surface) }
     diffViews = views
     if surfaces.count == 2 {
-      if diffDivider.superview !== self {
-        addSubview(diffDivider, positioned: .below, relativeTo: sidebarHandle)
+      if diffDivider.superview !== belowBar {
+        belowBar.addSubview(diffDivider, positioned: .below, relativeTo: sidebarHandle)
       }
     } else {
       diffDivider.removeFromSuperview()

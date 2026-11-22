@@ -41,7 +41,7 @@ struct EditorBarRoot: View {
         selection: shell.panel.screen, changesCount: scm.count,
         pullRequestNumber: pullRequest.state?.key.id.number, select: shell.selectScreen)
       Spacer(minLength: 0)
-      if showsHint { EditorPeekHint() }
+      if showsHint { EditorPeekHint(isPeeking: shell.isPeeking) }
     }
     .padding(.leading, 8)
     .padding(.trailing, 12)
@@ -160,22 +160,29 @@ private struct EditorScreenItem: View {
 }
 
 /// 右寄せの案内「⌥ 端末を表示」（gap 7・mono 11・textMuted）。⌥ の札は高さ 18・最小幅 18・padding 0 4・radius 5・地 ink .07。
-/// 押せない。
+/// 押せない。⌥ で透かしている間は押している間の姿（字を textPrimary、札を地 accent・印 onAccent）。
 private struct EditorPeekHint: View {
+  let isPeeking: Bool
   @Environment(\.localization) private var l10n
 
   private static let keyAlpha = 0.07
 
   var body: some View {
     HStack(spacing: 7) {
-      EditorGlyphView(glyph: EditorGlyphs.optionKey, size: 12, color: Color.theme.textSecondary)
-        .padding(.horizontal, 4)
-        .frame(minWidth: 18, minHeight: 18)
-        .background(
-          RoundedRectangle(cornerRadius: 5).fill(Color.theme.surfaceInk.opacity(Self.keyAlpha)))
+      EditorGlyphView(
+        glyph: EditorGlyphs.optionKey, size: 12,
+        color: isPeeking ? Color.theme.onAccent : Color.theme.textSecondary
+      )
+      .padding(.horizontal, 4)
+      .frame(minWidth: 18, minHeight: 18)
+      .background(
+        RoundedRectangle(cornerRadius: 5)
+          .fill(
+            isPeeking
+              ? Color.theme.accentPrimary : Color.theme.surfaceInk.opacity(Self.keyAlpha)))
       Text(l10n.string(.editorBarShowTerminal))
         .font(Font.theme.editorBarHint)
-        .foregroundStyle(Color.theme.textMuted)
+        .foregroundStyle(isPeeking ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
     }
     .fixedSize()
@@ -185,4 +192,9 @@ private struct EditorPeekHint: View {
 /// 上のバーの host。押してもフォーカスを取らない——フォーカスはバーの操作が決める（画面の切り替え・左の列の開閉）。
 final class EditorBarHost: NSHostingView<EditorBarRoot> {
   override var acceptsFirstResponder: Bool { false }
+}
+
+/// 上のバーより下の中身をまとめる view。中身の枠は pane と同じ座標で置く（面いっぱいの枠で、上下を反転した座標）。
+final class EditorBelowBar: NSView {
+  override var isFlipped: Bool { true }
 }

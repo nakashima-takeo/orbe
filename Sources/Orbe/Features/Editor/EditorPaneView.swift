@@ -4,7 +4,8 @@ import SwiftUI
 
 /// エディター面の AppKit 側の根。骨の幾何——上のバー、その下に左の列（開いているとき）｜本体——を `layout()` が解き、
 /// SwiftUI の root 2 枚（上のバー・左の列）と本体（セッションが画面から導いた中身——文書のテキスト面か diff の面。無ければ
-/// 文字だけの root）を frame で置く。地は chrome と同じ veil。
+/// 文字だけの root）を frame で置く。バーより下（左の列・本体・境の当たり・ファイル内検索のバー）は 1 枚の view
+/// （`belowBar`）にまとめ、⌥ の透かしの濃さはそこへ掛かる。地は chrome と同じ veil を、バーの分とバーより下の分に分けて塗る。
 ///
 /// 本体で編集する文書（文書の本体ならその文書、diff の本体なら新しい側の文書）の「変わった」（viewport・選択・本文）は
 /// pane が 1 つずつ受け、検索・出現の強調・diff・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。
@@ -27,6 +28,15 @@ final class EditorPaneView: NSView {
   /// エクスプローラーのツリー。根が変われば作り直す。
   private(set) var tree: FileTree
   let barHost: EditorBarHost
+  /// 上のバーより下の中身をまとめる view（面いっぱいの枠で、中身はバーの下に置く）。
+  let belowBar = EditorBelowBar()
+  /// 地の veil——上のバーの分と、バーより下の分（`belowBar` の中。透かしの間はバーより下と一緒に見えなくなる）。
+  let barGround = NSView()
+  let belowGround = NSView()
+  /// 器が透かしている（上のバーの「⌥ 端末を表示」を押している間の姿にする）。
+  var isPeeking = false {
+    didSet { shell.isPeeking = isPeeking }
+  }
   let sideHost: NSHostingView<EditorSideRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
   /// 本体（セッションが画面から導いた中身）。
@@ -122,22 +132,13 @@ final class EditorPaneView: NSView {
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
-    for host in [barHost, sideHost, faceHost] as [NSView] {
-      // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
-      host.wantsLayer = true
-      host.layer?.isOpaque = false
-      host.autoresizingMask = []
-      addSubview(host)
-    }
-    sidebarHandle.autoresizingMask = []
-    addSubview(sidebarHandle)
-    diffDivider.wantsLayer = true
-    diffDivider.autoresizingMask = []
+    assembleViews()
     search.onCountChange = { [weak self] selected, total, limited in
       self?.searchBar?.updateCount(selected: selected, total: total, limited: limited)
     }
     search.onMatchesChange = { [weak self] in self?.pushFindGround() }
     search.onNeedleChange = { [weak self] in self?.syncFindState() }
+    sidebarHandle.shownWidth = { [weak self] in self?.shownSidebarWidth ?? 0 }
     sidebarHandle.onDrag = { [weak self] width in self?.resizeSidebar(to: width) }
     sidebarHandle.onRelease = { [weak self] in self?.sidebar.commit() }
     wireShell()

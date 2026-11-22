@@ -104,6 +104,29 @@ extension EditorPaneView {
     if searchBarTrailing?.constant != constant { searchBarTrailing?.constant = constant }
   }
 
+  /// 骨の view を重ねる——下から、バーの地・バーより下（その地・左の列・文字だけの器・境の当たり。本体の面と検索バーは後から
+  /// 足す）・上のバー。
+  func assembleViews() {
+    for view in [barGround, belowGround, belowBar] {
+      view.wantsLayer = true
+      view.autoresizingMask = []
+    }
+    addSubview(barGround)
+    addSubview(belowBar)
+    belowBar.addSubview(belowGround)
+    for host in [sideHost, faceHost, barHost] as [NSView] {
+      // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
+      host.wantsLayer = true
+      host.layer?.isOpaque = false
+      host.autoresizingMask = []
+      (host === barHost ? self : belowBar).addSubview(host)
+    }
+    sidebarHandle.autoresizingMask = []
+    belowBar.addSubview(sidebarHandle)
+    diffDivider.wantsLayer = true
+    diffDivider.autoresizingMask = []
+  }
+
   override func layout() {
     // 面の大きさが右列の幅を決め、検索バーの制約はその幅から置く——制約は super.layout() が当てるので、その前に置く。
     document?.surface.view.frame = bodyRect
@@ -114,6 +137,9 @@ extension EditorPaneView {
     let bar = Theme.Layout.editorBar
     let below = max(0, bounds.height - bar)
     barHost.frame = NSRect(x: 0, y: 0, width: bounds.width, height: min(bar, bounds.height))
+    barGround.frame = barHost.frame
+    belowBar.frame = bounds
+    belowGround.frame = NSRect(x: 0, y: bar, width: bounds.width, height: below)
     sideHost.frame = NSRect(x: 0, y: bar, width: min(sideWidth, bounds.width), height: below)
     faceHost.frame = bodyRect
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない面に出すと本体の左 1pt を
@@ -149,6 +175,6 @@ extension EditorPaneView {
     let view = surface.view
     view.autoresizingMask = []
     view.frame = bodyRect
-    addSubview(view, positioned: .below, relativeTo: sidebarHandle)
+    belowBar.addSubview(view, positioned: .below, relativeTo: sidebarHandle)
   }
 }

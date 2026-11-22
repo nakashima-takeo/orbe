@@ -33,6 +33,8 @@ final class EditorShellModel {
 
   /// 左の列に出している中身（pane が画面から決めて写す）。
   var panel = Panel.files
+  /// 器が透かしている（上のバーの「⌥ 端末を表示」を押している間の姿にする）。
+  var isPeeking = false
 
   @ObservationIgnored var open: (URL, EditorSession.OpenMode) -> Void = { _, _ in }
   @ObservationIgnored var createFile: () -> Void = {}

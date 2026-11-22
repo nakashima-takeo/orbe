@@ -4,8 +4,8 @@ import XCTest
 @testable import Orbe
 
 /// 連の器の見せ方（fixture は `EditorShellFixtures`。見せ方は器の口が写す）: 閉じた器（端末面が器の左端から右端まで）→
-/// 開いた器（エディター面が器いっぱいに重なる）→ 透かし（エディター面が写らず、閉じた器と同じ姿）を dark で、続けて同じ並びを
-/// light で撮る。面を付けた窓の中でそのまま描く。
+/// 開いた器（エディター面が器いっぱいに重なる）→ 透かし（上のバーが残って「⌥ 端末を表示」が押している間の姿になり、その下に
+/// 端末面が写る）を dark で、続けて同じ並びを light で撮る。面を付けた窓の中でそのまま描く。
 extension DesignFlowSnapshotTests {
   func testFacesOverlay() throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
