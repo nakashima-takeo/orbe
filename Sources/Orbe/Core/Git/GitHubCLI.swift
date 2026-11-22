@@ -42,13 +42,14 @@ final class GitHubCLI {
   }
 
   /// 呼び出しの種類ごとの時間上限（ネット待ちのハングを引きずらない）。open 一覧では 1 ページごとにかかる。
-  private let readTimeout: TimeInterval
-  private let writeTimeout: TimeInterval
+  private static let readTimeout: TimeInterval = 15
+  private static let writeTimeout: TimeInterval = 60
 
-  /// テストだけが短い上限を渡す（本番の上限を待つテストは書けないため）。
-  init(readTimeout: TimeInterval = 15, writeTimeout: TimeInterval = 60) {
-    self.readTimeout = readTimeout
-    self.writeTimeout = writeTimeout
+  /// 時間上限と猶予の待ちを通す時計。
+  private let clock: WaitClock
+
+  init(clock: WaitClock = .wall) {
+    self.clock = clock
   }
 
   /// 打ち切り後に EOF を待つ猶予。pipe の書き込み端を握る子孫がいると EOF は来ないことがあり、
@@ -277,7 +278,8 @@ final class GitHubCLI {
         try? input.fileHandleForWriting.close()
       }
     }
-    // stdout/stderr は別スレッドで並行に吸い出す（片方だけ読むと相手の pipe 満杯で相互デッドロック）。
+    // stdout/stderr は別スレッドで並行に吸い出す（片方だけ読むと相手の pipe 満杯で相互デッドロック）。2 本とも読み終えたら
+    // `drained` へ 1 回だけ合図する。待ちは、期限つきの 1 回の待ちになる（期限を数え直さない）。
     var outData = Data()
     var errData = Data()
     let group = DispatchGroup()
@@ -291,17 +293,19 @@ final class GitHubCLI {
       errData = (try? err.fileHandleForReading.readToEnd()) ?? Data()
       group.leave()
     }
+    let drained = DispatchSemaphore(value: 0)
+    group.notify(queue: .global(qos: .userInitiated)) { drained.signal() }
     // ネット待ちのハングは時間上限で打ち切る（通常は terminate で pipe が EOF に達し読みも解ける）。
     // EOF が来るかは書き込み端を握る子孫次第なので、打ち切り後の読み終わり待ちも猶予で有界にする
     // ——ここを無期限にすると、打ち切ったのに返らないという新しいハングになる。
     let timeout =
       switch call {
-      case .read: readTimeout
-      case .write: writeTimeout
+      case .read: Self.readTimeout
+      case .write: Self.writeTimeout
       }
-    if group.wait(timeout: .now() + timeout) == .timedOut {
+    guard clock.sleep(on: drained, until: clock.now() + timeout) else {
       process.terminate()
-      _ = group.wait(timeout: .now() + Self.terminationGrace)
+      clock.sleep(on: drained, until: clock.now() + Self.terminationGrace)
       return Output(status: -1, stdout: Data(), failure: .timedOut)
     }
     process.waitUntilExit()

@@ -109,17 +109,20 @@ final class ShellPATHTests: OrbeTestCase {
   /// 起動クリティカルパスを塞がない要請。ディスクキャッシュがあれば probe の着地を待たない。
   func testDiskCacheAnswersWithoutWaitingForProbe() throws {
     AppStatePersistence.update { $0.cachedShellPath = "/opt/custom/bin:/usr/bin" }
+    let clock = ManualClock()
     let blocked = DispatchSemaphore(value: 0)
-    let sut = ShellPATH(probe: {
-      blocked.wait()  // 永久にブロックする probe（テスト終了時に解く）
-      return nil
-    })
+    defer { blocked.signal() }
+    let sut = ShellPATH(
+      probe: {
+        blocked.wait()  // 永久にブロックする probe（テスト終了時に解く）
+        return nil
+      }, clock: clock.waits)
     sut.start()
-    let started = Date()
-    XCTAssertTrue(sut.value().hasPrefix("/opt/custom/bin:/usr/bin:"), "キャッシュ値が先頭に載る")
-    XCTAssertLessThan(
-      Date().timeIntervalSince(started), ShellPATH.syncWaitBudget, "同期待ちへ落ちていない")
-    blocked.signal()
+    let answer = value(of: sut)
+    // main を回さずに待つ（`awaitSleeper(_:_:)` と同じ理由）。
+    XCTAssertTrue(sleepUntil(10) { answer.isDone || !clock.sleepingDeadlines.isEmpty }, "返るか眠る")
+    XCTAssertEqual(clock.sleepingDeadlines, [], "同期待ちへ落ちていない（時刻を進めずに返る）")
+    XCTAssertTrue(answer.value?.hasPrefix("/opt/custom/bin:/usr/bin:") == true, "キャッシュ値が先頭に載る")
   }
 
   /// 永続するのは union 前の login PATH。knownPaths は Orbe の版で変わるので焼き込まない。
@@ -133,83 +136,104 @@ final class ShellPATHTests: OrbeTestCase {
   /// probe の失敗でディスクキャッシュを壊さない。前回セッションが得た PATH は、次の起動が
   /// 既知パスだけから始まらないための安全網として残す。
   func testFailedProbeKeepsDiskCache() {
-    drainMain()  // 他テストが残した main 上の書き込みを流し切ってから測る
+    nextTurn()  // 他テストが main に残した書き込みを処理し終えてから測る
     AppStatePersistence.update { $0.cachedShellPath = "/opt/custom/bin:/usr/bin" }
     let sut = ShellPATH(probe: { nil })
     sut.start()
     _ = sut.value()
-    drainMain()
-    XCTAssertEqual(AppStatePersistence.load()?.cachedShellPath, "/opt/custom/bin:/usr/bin")
+    XCTAssertTrue(
+      holds(for: 0.1) { AppStatePersistence.load()?.cachedShellPath == "/opt/custom/bin:/usr/bin" },
+      "失敗した probe は保存を書き換えない")
   }
 
   /// 同期待ちの天井はプロセス全体で 1 つ。起動復元は agent タブの数だけ `value()` を呼ぶので、
   /// 呼び出しごとに配り直すとメインスレッドが止まる合計時間が掛け算になる。
   func testSyncWaitBudgetIsSharedAcrossCalls() {
+    let clock = ManualClock()
     let blocked = DispatchSemaphore(value: 0)
-    let sut = ShellPATH(probe: {
-      blocked.wait()  // 着地しない probe（テスト終了時に解く）
-      return nil
-    })
+    defer { blocked.signal() }
+    let sut = ShellPATH(
+      probe: {
+        blocked.wait()  // 着地しない probe（テスト終了時に解く）
+        return nil
+      }, clock: clock.waits)
     sut.start()
-    let started = Date()
     let floor = ShellPATH.knownPaths.joined(separator: ":")
-    for _ in 0..<3 { XCTAssertEqual(sut.value(), floor) }
-    let elapsed = Date().timeIntervalSince(started)
-    blocked.signal()
-    XCTAssertGreaterThan(elapsed, ShellPATH.syncWaitBudget / 2, "最初の呼びは天井まで待つ")
-    XCTAssertLessThan(elapsed, ShellPATH.syncWaitBudget * 2, "予算は呼び出しごとに配り直さない")
+
+    let first = value(of: sut)
+    XCTAssertTrue(awaitSleeper(clock, clock.now + ShellPATH.syncWaitBudget), "最初の呼びは天井まで待つ")
+    XCTAssertEqual(
+      clock.advance(by: ShellPATH.syncWaitBudget + 1), 1,
+      "天井まで進めると、待ち手を、進めた呼び出しの中で起こす。進めた呼び出しが戻った時点でこれが成り立たなくなったら、"
+        + "testSettledWaitReturnsProbeResult が、天井では返らないことを確かめる時点（進めた直後）も成り立たない")
+    pumpMain(until: { first.value != nil }, "天井で返る")
+    XCTAssertEqual(first.value, floor)
+
+    for _ in 0..<2 {
+      let next = value(of: sut)
+      pumpMain(until: { next.value != nil || !clock.sleepingDeadlines.isEmpty }, "返るか眠る")
+      XCTAssertEqual(next.value, floor, "予算は呼び出しごとに配り直さない（眠らずに返る）")
+      XCTAssertEqual(clock.sleepingDeadlines, [])
+    }
   }
 
   /// 背景の検出は着地を待てる。打ち切って floor で答えると、その結果がセッションに焼き付く。
   func testSettledWaitReturnsProbeResult() {
+    let clock = ManualClock()
     let released = DispatchSemaphore(value: 0)
-    let sut = ShellPATH(probe: {
-      released.wait()
-      return "/opt/custom/bin:/usr/bin"
-    })
+    let sut = ShellPATH(
+      probe: {
+        released.wait()
+        return "/opt/custom/bin:/usr/bin"
+      }, clock: clock.waits)
     sut.start()
-    DispatchQueue.global().asyncAfter(deadline: .now() + ShellPATH.syncWaitBudget + 0.5) {
-      released.signal()
-    }
+
+    let settled = value(of: sut, wait: .settled)
+    XCTAssertTrue(awaitSleeper(clock, clock.now + ShellPATH.probeTimeout), "probe の上限で眠る")
+    XCTAssertEqual(
+      clock.advance(by: ShellPATH.syncWaitBudget + 1), 0, "同期待ちの天井を越えても起こさない")
+    released.signal()
+    pumpMain(until: { settled.value != nil }, "probe の着地で返る")
     XCTAssertTrue(
-      sut.value(wait: .settled).hasPrefix("/opt/custom/bin:/usr/bin:"),
+      settled.value?.hasPrefix("/opt/custom/bin:/usr/bin:") == true,
       "同期待ちの天井を越えても probe の着地を待つ")
   }
 
   func testUnchangedValueIsNotRewritten() throws {
-    drainMain()  // 他テストが残した main 上の書き込みを流し切ってから測る
+    nextTurn()  // 他テストが main に残した書き込みを処理し終えてから測る
     AppStatePersistence.update { $0.cachedShellPath = "/opt/custom/bin:/usr/bin" }
     let url = try appStateFile()
     let before = try modificationDate(of: url)
     let sut = ShellPATH(probe: { "/opt/custom/bin:/usr/bin" })
     sut.start()
     _ = sut.value()
-    drainMain()  // 書き込みは main へ投げられるので、走る機会を与えてから変化が無いことを見る
-    XCTAssertEqual(try modificationDate(of: url), before, "値が変わらないなら書き直さない")
+    // 書き込みは main へ投げられるので、main を回しながら変化が無いことを見る
+    XCTAssertTrue(
+      holds(for: 0.1) { (try? modificationDate(of: url)) == before }, "値が変わらないなら書き直さない")
   }
 
   // MARK: - probe の subprocess 機構（スタブシェル）
 
   func testProbeReadsPathFromEnvOutput() throws {
     let shell = try stubShell("echo HOME=/Users/test\necho PATH=/usr/bin:/bin\necho SHLVL=1")
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell), "/usr/bin:/bin")
   }
 
   /// rc が `PATH=` を echo するノイズより後に env の出力が来る。採るのは最後の行。
   func testProbeTakesLastPathLine() throws {
     let shell = try stubShell("echo PATH=/noise\necho PATH=/usr/bin:/bin")
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell), "/usr/bin:/bin")
   }
 
   func testProbeReturnsNilWhenNoPathLine() throws {
     let shell = try stubShell("echo SHLVL=1")
-    XCTAssertNil(ShellPATH.probeLoginShell(shell: shell, timeout: 5))
+    XCTAssertNil(ShellPATH.probeLoginShell(shell: shell))
   }
 
   /// 対話シェルは rc のエラーで非 0 終了しうる。PATH が出ていれば終了ステータスで捨てない。
   func testProbeAcceptsNonZeroExit() throws {
     let shell = try stubShell("echo PATH=/usr/bin:/bin\nexit 1")
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell), "/usr/bin:/bin")
   }
 
   /// login + interactive で起こす。`-i` を落とすと `.zshrc` を読まず、mise/asdf/nvm の shim を
@@ -218,26 +242,62 @@ final class ShellPATHTests: OrbeTestCase {
     let argsFile = stubDir.appendingPathComponent("args")
     let shell = try stubShell(
       "printf '%s\\n' \"$@\" > \"\(argsFile.path)\"\necho PATH=/usr/bin:/bin")
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell), "/usr/bin:/bin")
     XCTAssertEqual(
       try String(contentsOf: argsFile, encoding: .utf8), "-l\n-i\n-c\n/usr/bin/env\n")
   }
 
   /// rc が背景に残した孫プロセスが stdout を握ると EOF は二度と来ない。終わりを決めるのは
   /// **シェルの終了**なので、正しく出ている PATH を捨てて上限まで張り付くことはない。
+  ///
+  /// スタブは、PATH の行の後に、pipe の容量（最大 64KB）の 2 倍を超える行を書いてから終わる。書き終えるには、読み手が PATH の
+  /// 行を含む塊を受け取り終えて、次の塊を読んでいる必要があるので、シェルが終わった時点で、PATH の行は届き終えている（汲み出しの
+  /// 猶予を、時刻を進めて縮めても取りこぼさない）。孫は、スタブのディレクトリが消える（テストの終わり）まで生きる。
   func testProbeSucceedsWhenGrandchildHoldsStdout() throws {
-    let shell = try stubShell("sleep 30 &\necho PATH=/usr/bin:/bin")
-    let started = Date()
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 10), "/usr/bin:/bin")
-    XCTAssertLessThan(Date().timeIntervalSince(started), 5, "EOF を待ち続けない")
+    let clock = ManualClock()
+    let grandchild = stubDir.appendingPathComponent("grandchild").path
+    let shell = try stubShell(
+      """
+      end=$(( $(date +%s) + 60 ))
+      (while [ -d "\(stubDir.path)" ] && [ "$(date +%s)" -lt "$end" ]; do sleep 0.05; done) &
+      echo $! > "\(grandchild).tmp" && mv "\(grandchild).tmp" "\(grandchild)"
+      echo PATH=/usr/bin:/bin
+      head -c 262144 /dev/zero | tr '\\0' x
+      echo
+      """)
+    let probed = Probed()
+    DispatchQueue.global().async {
+      probed.set(ShellPATH.probeLoginShell(shell: shell, clock: clock.waits))
+    }
+    let deadline = clock.now + ShellPATH.probeTimeout
+    let drain = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline.map { $0 < deadline } ?? false })?.deadline,
+      "シェルの終了の後、上限より手前の期限（汲み出しの猶予）で眠る")
+    clock.advance(to: drain)
+    pumpMain(until: { probed.isDone }, "EOF を待ち続けない")
+    XCTAssertEqual(probed.value, "/usr/bin:/bin")
+    let pid = try XCTUnwrap(
+      pid_t(
+        try String(contentsOfFile: grandchild, encoding: .utf8).trimmingCharacters(
+          in: .whitespacesAndNewlines)))
+    XCTAssertEqual(kill(pid, 0), 0, "前提: 孫が stdout を握っていて EOF は来ていない（猶予で返った）")
   }
 
   /// 固まった rc は上限で打ち切る。上限を超えて待たない＝呼び出し元が張り付かない。
   func testProbeGivesUpAtTimeout() throws {
-    let shell = try stubShell("sleep 30")
-    let started = Date()
-    XCTAssertNil(ShellPATH.probeLoginShell(shell: shell, timeout: 1))
-    XCTAssertLessThan(Date().timeIntervalSince(started), 5, "上限で戻る")
+    let clock = ManualClock()
+    let began = stubDir.appendingPathComponent("began").path
+    let shell = try stubShell(": > \"\(began)\"\nsleep 30")
+    let probed = Probed()
+    DispatchQueue.global().async {
+      probed.set(ShellPATH.probeLoginShell(shell: shell, clock: clock.waits))
+    }
+    pumpMain(until: { FileManager.default.fileExists(atPath: began) }, "前提: シェルが固まっている")
+    let deadline = clock.now + ShellPATH.probeTimeout
+    XCTAssertNotNil(clock.awaitSleeper(until: deadline), "上限の期限で眠る")
+    clock.advance(to: deadline)
+    pumpMain(until: { probed.isDone }, "上限で戻る")
+    XCTAssertNil(probed.value)
   }
 
   // MARK: - ヘルパ
@@ -247,11 +307,37 @@ final class ShellPATHTests: OrbeTestCase {
     waitUntil(2) { matches(AppStatePersistence.load()?.cachedShellPath) }
   }
 
-  private func drainMain() { RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+  /// 裏の `value(wait:)` が、`deadline` で眠るまで待つ。main を回さずに待つ——ほかのテストが main に残した保存の書き込みが、
+  /// 裏の呼び出しがディスクのキャッシュを読む前に、このテストの保存先へ書かれると、呼び出しが probe を待たずに返る。
+  private func awaitSleeper(_ clock: ManualClock, _ deadline: WaitClock.Instant) -> Bool {
+    sleepUntil(10) { clock.sleepingDeadlines.contains(deadline) }
+  }
+
+  /// 裏のスレッドで `value(wait:)` を呼ぶ（手で進める時計の上で眠る呼び出しに、テストのスレッドを止めさせない）。
+  private func value(of sut: ShellPATH, wait: ShellPATH.Wait = .bounded) -> Probed {
+    let probed = Probed()
+    DispatchQueue.global().async { probed.set(sut.value(wait: wait)) }
+    return probed
+  }
 
   private func modificationDate(of url: URL) throws -> Date? {
     try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
   }
+}
+
+/// 裏のスレッドで得た PATH。
+private final class Probed: @unchecked Sendable {
+  private let lock = NSLock()
+  private var done = false
+  private var stored: String?
+  func set(_ value: String?) {
+    lock.withLock {
+      done = true
+      stored = value
+    }
+  }
+  var isDone: Bool { lock.withLock { done } }
+  var value: String? { lock.withLock { stored } }
 }
 
 /// 並行に呼ばれる probe の回数を数える。

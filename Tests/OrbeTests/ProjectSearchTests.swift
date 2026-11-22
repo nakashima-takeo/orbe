@@ -237,15 +237,24 @@ final class ProjectSearchTests: OrbeTestCase {
   }
 
   /// 一致の無い間 git が何も出さなくても（無出力の打ち切りより長くても）切らず、終われば結果とともに完了する。
+  ///
+  /// 対になる場合が無い否定条件（検索の git は、いつも流しながら読む実行）なので、本番を一時的に変えると落ちることで裏づける。
+  /// 依っている前提: 検索の git は `GitRunner.stream` で走り、その待ち手は期限なしで眠る。この runner の上で期限なしで眠るのは
+  /// 検索の git だけなので、その待ち手が、時刻を進めた後も眠ったままなら、検索の git は打ち切られていない。次のいずれかを
+  /// 変えたときは、本番を一時的に変えて落ちることを確かめ直す: 検索が git を走らせる経路（`stream` 以外の実行を使う、同じ runner で
+  /// 期限なしで眠る別の git を並べる）、または `GitRunner` の待ち方。
   func testASilentSearchIsNotCut() throws {
-    let f = try fixture(runner: GitRunner(idleTimeout: 0.3))
+    let clock = ManualClock()
+    let f = try fixture(runner: GitRunner(clock: clock.waits))
     try f.repo.write("n.txt", "needle\n")
     let gate = try gate(f)
 
     f.search.setPattern("needle")
     f.search.search()
     pumpMain(until: { GrepGate.isGrepRunning }, "git が走る")
-    XCTAssertTrue(holds(for: 1) { GrepGate.isGrepRunning }, "無出力が打ち切りの上限を超えても git は生きている")
+    let grep = try XCTUnwrap(clock.awaitSleeper(until: nil), "git の待ち手は期限なしで眠る")
+    clock.advance(by: 86_400)
+    XCTAssertTrue(clock.isAsleep(grep), "無出力が打ち切りの上限を超えても、git の待ち手は眠ったまま")
     gate.open()
     pumpMain(until: { f.search.phase == .done })
     XCTAssertEqual(paths(f.search), ["n.txt"])

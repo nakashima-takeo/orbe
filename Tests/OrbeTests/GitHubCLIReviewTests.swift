@@ -16,7 +16,8 @@ final class GitHubCLIReviewTests: OrbeTestCase {
   /// 偽 `gh`。呼び出しを種類（読みは `first`・`threads-<カーソル>`、書き込みは標準入力の mutation の名前から `create`・`thread`・
   /// `reply`・`resolve`・`unresolve`・`submit`）に分けて `calls.log` に残し、argv を `argv.<n>`、標準入力を `in.<n>` に
   /// 残す。答えは種類ごとのファイル（n 回目の呼び出しは `<種類>.<n>` があればそれ）、無ければ `{"data":{"m":{"x":{"id":
-  /// "<種類>-id"}}}}`。`<種類>.sleep` の秒だけ待ち、`<種類>.stderr` を標準エラーへ出し、`<種類>.exit` の終了コードで終わる。
+  /// "<種類>-id"}}}}`。`<種類>.gate` があれば、その種類の k 回目の呼び出しは、待ちに入った印 `<種類>.waiting.<k>` を置いて、
+  /// 合図 `<種類>.open.<k>` が現れるまで待つ。`<種類>.stderr` を標準エラーへ出し、`<種類>.exit` の終了コードで終わる。
   override func setUpWithError() throws {
     dir = TestScratch.caseDir.appendingPathComponent("orbe-gh-review-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -59,7 +60,10 @@ final class GitHubCLIReviewTests: OrbeTestCase {
       k=$(( $(cat "$D/$kind.count" 2>/dev/null || echo 0) + 1 ))
       echo "$k" > "$D/$kind.count"
       f="$D/$kind"; [ -e "$f.$k" ] && f="$f.$k"
-      [ -e "$D/$kind.sleep" ] && sleep "$(cat "$D/$kind.sleep")"
+      if [ -e "$D/$kind.gate" ]; then
+        : > "$D/$kind.waiting.$k"
+        while [ ! -e "$D/$kind.open.$k" ] && [ -d "$D" ]; do sleep 0.05; done
+      fi
       if [ -e "$f" ]; then cat "$f"; else printf '{"data":{"m":{"x":{"id":"%s-id"}}}}' "$kind"; fi
       [ -e "$D/$kind.stderr" ] && cat "$D/$kind.stderr" >&2
       [ -e "$D/$kind.exit" ] && exit "$(cat "$D/$kind.exit")"
@@ -195,11 +199,11 @@ final class GitHubCLIReviewTests: OrbeTestCase {
   // MARK: - 書き込み
 
   private func write(
-    _ write: GitHubReviewWrite, pendingReview: String?, cli: GitHubCLI = GitHubCLI()
+    _ write: GitHubReviewWrite, pendingReview: String?
   ) -> GitHubReviewWriteResult? {
     var result: GitHubReviewWriteResult?
     let done = expectation(description: "writeReview")
-    cli.writeReview(
+    GitHubCLI().writeReview(
       write, pullRequest: "PR_1", pendingReview: pendingReview, reviewedCommit: "seen"
     ) {
       result = $0
@@ -339,27 +343,58 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     XCTAssertEqual(
       write(.setResolved(thread: "T1", true), pendingReview: "R1")?.failure, .reason(""))
   }
+}
 
-  /// 書き込みは読みより長く待つ（本番は読み 15 秒・書き込み 60 秒）。上限を越えた書き込みは時間切れの失敗。
+// MARK: - 時間上限
+
+extension GitHubCLIReviewTests {
+  /// 偽 `gh` の、その種類の k 回目の呼び出しが、合図を待ちに入るまで待つ。
+  private func awaitGate(_ kind: String, _ k: Int) -> Bool {
+    let waiting = dir.appendingPathComponent("\(kind).waiting.\(k)").path
+    return waitUntil(10) { FileManager.default.fileExists(atPath: waiting) }
+  }
+
+  /// 書き込みは読みより長く待つ。上限を越えた書き込みは時間切れの失敗。上限の長さは、本番の定数を書き写さず、眠った待ち手の期限から
+  /// 読む（眠ってから時刻は進めていないので、期限 − いま が上限）。
   func testWritesWaitLongerThanReads() throws {
-    let cli = GitHubCLI(readTimeout: 0.5, writeTimeout: 3)
-    try serve("first.sleep", "1.5")
+    let clock = ManualClock()
+    let cli = GitHubCLI(clock: clock.waits)
+    try serve("first.gate", "")
     var read: Result<GitHubPullRequestReview, GitHubFailure>?
-    let done = expectation(description: "read")
-    cli.pullRequestReview(id) {
-      read = $0
-      done.fulfill()
+    cli.pullRequestReview(id) { read = $0 }
+    XCTAssertTrue(awaitGate("first", 1), "前提: 読みが gh の中で止まっている")
+    let reading = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil })?.deadline, "読みは上限の期限で眠る")
+    let readLimit = reading - clock.now
+    clock.advance(to: reading)
+    pumpMain(until: { read != nil }, "読みが返る")
+    XCTAssertEqual(read, .failure(.timedOut), "読みは読みの上限で打ち切る")
+
+    try serve("resolve.gate", "")
+    var written: GitHubReviewWriteResult?
+    func resolve(pendingReview: String?) {
+      written = nil
+      cli.writeReview(
+        .setResolved(thread: "T1", true), pullRequest: "PR_1", pendingReview: pendingReview,
+        reviewedCommit: "seen"
+      ) { written = $0 }
     }
-    wait(for: [done], timeout: 30)
-    XCTAssertEqual(read, .failure(.timedOut), "読みは短い上限で打ち切る")
+    resolve(pendingReview: nil)
+    XCTAssertTrue(awaitGate("resolve", 1), "前提: 書き込みが gh の中で止まっている")
+    let writing = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil }), "書き込みは上限の期限で眠る")
+    clock.advance(by: readLimit)
+    XCTAssertTrue(clock.isAsleep(writing), "読みの上限まで進めても、書き込みの待ち手は眠ったまま")
+    try serve("resolve.open.1", "")
+    pumpMain(until: { written != nil }, "書き込みが返る")
+    XCTAssertEqual(written?.failure, nil)
 
-    try serve("resolve.sleep", "1.5")
-    XCTAssertEqual(
-      write(.setResolved(thread: "T1", true), pendingReview: nil, cli: cli)?.failure, nil)
-
-    try serve("resolve.sleep", "4")
-    XCTAssertEqual(
-      write(.setResolved(thread: "T1", true), pendingReview: "R1", cli: cli),
-      GitHubReviewWriteResult(pendingReview: "R1", failure: .timedOut))
+    resolve(pendingReview: "R1")
+    XCTAssertTrue(awaitGate("resolve", 2), "前提: 書き込みが gh の中で止まっている")
+    let writeDeadline = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil })?.deadline, "書き込みは上限の期限で眠る")
+    clock.advance(to: writeDeadline)
+    pumpMain(until: { written != nil }, "書き込みが返る")
+    XCTAssertEqual(written, GitHubReviewWriteResult(pendingReview: "R1", failure: .timedOut))
   }
 }
