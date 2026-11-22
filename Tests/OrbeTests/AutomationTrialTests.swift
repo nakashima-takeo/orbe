@@ -126,12 +126,14 @@ final class AutomationTrialTests: OrbeTestCase {
     ids.map(item).joined(separator: "\n")
   }
 
-  func waitCalls(_ script: String, _ count: Int, line: UInt = #line) {
-    pumpMain(until: { calls(script).count == count }, line: line)
+  func waitCalls(
+    _ script: String, _ count: Int, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    pumpMain(until: { calls(script).count == count }, file: file, line: line)
   }
 
-  func ended(_ trial: AutomationTrial, line: UInt = #line) {
-    pumpMain(until: { !trial.running }, line: line)
+  func ended(_ trial: AutomationTrial, file: StaticString = #filePath, line: UInt = #line) {
+    pumpMain(until: { !trial.running }, file: file, line: line)
   }
 
   func rows(_ trial: AutomationTrial, _ key: String) -> [String] {
