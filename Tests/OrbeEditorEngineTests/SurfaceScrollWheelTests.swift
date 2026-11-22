@@ -12,8 +12,9 @@ final class SurfaceScrollWheelTests: EngineTestCase {
     case none = 0, began = 1, changed = 2, ended = 4, mayBegin = 128
   }
 
-  /// 出来事の時刻と、位置を読む時刻（`CACurrentMediaTime` の時計）。テストが進める（戻さない）。面は窓に並べないので
-  /// コマは組まれず、位置は出来事と読む時刻だけで決まる。
+  /// 出来事の時刻と、位置を読む時刻（`CACurrentMediaTime` の時計）。テストが進める（戻さない）。面は窓に載せるが、窓を
+  /// 画面に出さないので面は見えておらず、描画スレッドはコマを組まない。スクロールの物理の状態を実時間で進めるのはコマを
+  /// 組むときだけなので、位置は出来事と読む時刻だけで決まる。
   private var now = 0.0
 
   override func setUpWithError() throws {
