@@ -179,9 +179,6 @@ final class ZoneTextLayoutTests: XCTestCase {
 
   /// 右から左の字・和文・括弧・コードを乱択で混ぜた段落で、コードの地が 1 行の中で割れず、コードの字を含み、余白が渡した
   /// 幅で入り、ほかの字にかぶらない（右から左の語を途中で割った行の、分け目の前の字の詰めの分は除く → `misplaced`）。
-  /// 小さい段（名前の末尾に `AtFullScale` が付かないメソッド）は先頭の種の 300 本、全部の段（付くメソッド）は種の
-  /// 並びの全部で 5,000 本ずつ組む。全部の段は、小さい段と同じ種で始まり、小さい段の 300 本を先頭に持つ。main では両方の
-  /// メソッドが走る。
   func testRandomMixedParagraphsNeverSplitTheCodeGround() {
     assertMixedParagraphs(seeds: Self.mixedParagraphSeeds.prefix(1), count: 300)
   }

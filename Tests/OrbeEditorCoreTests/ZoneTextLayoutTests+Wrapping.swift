@@ -12,9 +12,7 @@ extension ZoneTextLayoutTests {
   /// 位置。コードの外に語が続く文（「`String`s」「`nil`able」「`foo`-based」「re`build`」）・和文の直後のコード・「」。の
   /// 禁則・乱択で混ぜた文のどれでも、ほかの位置では割らない。
   ///
-  /// 小さい段（名前の末尾に `AtFullScale` が付かないメソッド）は決まった 8 件と、先頭の種の乱択の 20 件、全部の段
-  /// （付くメソッド）は決まった 8 件と、種の並びの全部で乱択の 200 件ずつを確かめる。全部の段は、小さい段と同じ種で始まり、
-  /// 小さい段の 20 件を先頭に持つ。main では両方のメソッドが走る。
+  /// 決まった 8 件は、どちらの段でも全部確かめる。
   func testLinesBreakOnlyWhereTheTextWithoutPaddingBreaks() {
     assertLinesBreak(seeds: Self.lineBreakSeeds.prefix(1), count: 20)
   }
