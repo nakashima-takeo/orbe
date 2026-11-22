@@ -20,14 +20,14 @@ enum PrCommentControl: Hashable {
 /// diff の行の下に置く、スレッド 1 つか新しいコメントの欄 1 つの絵の差し込み。中身（スレッドの値・書き込みの最中か・失敗の文・
 /// 畳んでいるか）は載せる層が置き、ホバーは面からの知らせ（`zone(_:)`）で自分が持つ。どれも変われば描き直させる。絵は
 /// `PrCommentPicture` が中身と幅から組む。コメントの本文の層は裏で組み、幅ごとに覚える（→ `PrCommentBodies`）——描き直しは
-/// 本文の層を同じ参照のまま絵に置くので、面は本文の層を写し直さない。返信・新しいコメントの本文は入力欄（`field`）が持ち、
-/// 描き直し・並びの置き直し・インライン ⇄ 並列をまたいで残る。
+/// 本文の層を同じ参照のまま絵に置くので、面は本文の層を写し直さない。返信・新しいコメントの本文は入力欄（`field`）に打ち、
+/// 載せる層が PR ごとの書きかけと同期する（→ `PrCommentLayer+Drafts`）。
 @MainActor
 final class PrCommentZone: SurfaceZone {
   enum Subject: Equatable {
     case thread(GitHubPullRequestReview.Thread)
-    /// 新しいコメントの欄。
-    case draft
+    /// 新しいコメントの欄（書きかけの通し番号）。
+    case draft(Int)
   }
 
   let field: ZoneTextField
@@ -48,6 +48,8 @@ final class PrCommentZone: SurfaceZone {
   var onPress: (PrCommentZone, PrCommentControl) -> Void = { _, _ in }
   /// 入力欄が主になった・外れた。
   var onFieldFocus: (PrCommentZone, Bool) -> Void = { _, _ in }
+  /// 人が入力欄の本文を変えた（`setText` で置いた本文は知らせない）。
+  var onTextChange: (PrCommentZone) -> Void = { _ in }
   /// 入力欄に空白でない字があるか（`hasText`）が変わった。
   var onHasTextChange: (PrCommentZone) -> Void = { _ in }
 
@@ -74,7 +76,7 @@ final class PrCommentZone: SurfaceZone {
   /// 削除された）でない。
   var canSend: Bool { !isLineMoving && notice?.stopsWriting != true }
   /// 入力欄に、空白と改行のほかの字がある。
-  var hasText: Bool { !text.allSatisfy(\.isWhitespace) }
+  var hasText: Bool { PullRequestState.hasText(text) }
   /// スレッドの最初のコメントの時刻（同じ所のスレッドの並び順。欄なら最も古い）。
   var firstCommentTime: Date {
     guard case .thread(let thread) = subject else { return .distantPast }
@@ -89,7 +91,9 @@ final class PrCommentZone: SurfaceZone {
   private var links: [String: [Int: URL]] = [:]
   private let bodies = PrCommentBodies()
   /// 入力欄の行の数と、空か（字が無いか）と、空白と改行のほかの字が無いか（どれかが変わったときだけ描き直す）。
-  private var fieldShape = FieldShape(lines: 1, empty: true, blank: true)
+  private var fieldShape: FieldShape
+  /// `setText` が本文を置いている最中。
+  private var isSettingText = false
 
   private struct FieldShape: Equatable {
     let lines: Int
@@ -97,10 +101,13 @@ final class PrCommentZone: SurfaceZone {
     let blank: Bool
   }
 
-  init(subject: Subject, line: Int, fieldID: String) {
+  /// 入力欄の本文の初期値を `text` にする。
+  init(subject: Subject, line: Int, fieldID: String, text: String = "") {
     self.subject = subject
     self.line = line
-    field = ZoneTextField(id: fieldID, style: PrCommentStyle.field)
+    field = ZoneTextField(id: fieldID, text: text, style: PrCommentStyle.field)
+    fieldShape = FieldShape(
+      lines: field.lineCount, empty: text.isEmpty, blank: !PullRequestState.hasText(text))
     field.didChange = { [weak self] field in self?.fieldDidChange(field) }
     field.didChangePrimary = { [weak self] _, primary in
       guard let self else { return }
@@ -128,14 +135,23 @@ final class PrCommentZone: SurfaceZone {
   /// 入力欄の今の本文。
   var text: String { field.string }
 
-  /// 入力欄を空にする（書き込みが通った）。
-  func clearField() {
-    guard !field.string.isEmpty else { return }
+  /// 新しいコメントの欄なら、その書きかけの通し番号。
+  var draftSerial: Int? {
+    guard case .draft(let serial) = subject else { return nil }
+    return serial
+  }
+
+  /// 入力欄の本文を `text` にする（同じなら何もしない）。載せる層が PR ごとの書きかけを欄へ反映するための口で、
+  /// `onTextChange` は呼ばない（反映した本文を書きかけへ書き戻さない）。
+  func setText(_ text: String) {
+    guard field.string != text else { return }
+    isSettingText = true
+    defer { isSettingText = false }
     if let surface {
-      surface.replaceText(of: field, with: "")
+      surface.replaceText(of: field, with: text)
     } else {
       field.apply([
-        TextEdit(range: NSRange(location: 0, length: field.text.length), replacement: "")
+        TextEdit(range: NSRange(location: 0, length: field.text.length), replacement: text)
       ])
     }
   }
@@ -145,6 +161,7 @@ final class PrCommentZone: SurfaceZone {
   }
 
   private func fieldDidChange(_ field: ZoneTextField) {
+    if !isSettingText { onTextChange(self) }
     let shape = FieldShape(lines: field.lineCount, empty: field.string.isEmpty, blank: !hasText)
     guard shape != fieldShape else { return }
     let wasBlank = fieldShape.blank
