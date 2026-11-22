@@ -121,13 +121,15 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
   }
 
   /// 保存 → 復元 → 再保存。前面の連の文書は開かれて焦点の文書が面に載り、一度も起きない背景 workspace の
-  /// 連の文書は未消費のまま同じ形で書き戻る。
+  /// 連の文書は未消費のまま同じ形で書き戻る。今の文書が列の先頭でない保存の状態からも、今の文書が先頭で戻り、最近使った
+  /// 順で書き戻る。
   func testOpenDocumentsRoundTripThroughRestoreAndSave() throws {
     let dir = try caseDirectory("repo")
     let a = try caseFile("repo/a.txt", "a").resolvingSymlinksInPath()
     let b = try caseFile("repo/b.txt", "b").resolvingSymlinksInPath()
     let c = try caseFile("repo/c.txt", "c").resolvingSymlinksInPath()
     let front = EditorState(documents: .init(open: [a.path, b.path], active: b.path))
+    let recent = EditorState(documents: .init(open: [b.path, a.path], active: b.path))
     let dormant = EditorState(documents: .init(open: [c.path], active: c.path))
     let wc = launch([
       WorkspaceState(
@@ -138,7 +140,7 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
         groups: [group(dir, editor: dormant)]),
     ])
     let active = try XCTUnwrap(wc.activeTab)
-    XCTAssertEqual(active.group.editor.documents.map(\.url), [a, b])
+    XCTAssertEqual(active.group.editor.documents.map(\.url), [b, a], "今の文書が先頭")
     XCTAssertTrue(
       active.group.view.editor.document === active.group.editor.activeDocument, "焦点の文書が面に載る")
     XCTAssertEqual(active.group.view.editor.document?.url, b)
@@ -147,7 +149,7 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
 
     wc.flushSave()
     let saved = try XCTUnwrap(WorkspacePersistence.load())
-    XCTAssertEqual(saved.workspaces[0].groups, [group(dir, editor: front)])
+    XCTAssertEqual(saved.workspaces[0].groups, [group(dir, editor: recent)])
     XCTAssertEqual(saved.workspaces[1].groups, [group(dir, editor: dormant)], "未消費の状態を同じ形で書き戻す")
   }
 

@@ -62,7 +62,8 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
     try click(hosted.pane, at: try treeRow(hosted, "b.txt"), count: 2)
     pumpMain(until: { editor.preview == nil }, "2 回目で普通の文書")
     try click(hosted.pane, at: try treeRow(hosted, "c.txt"))
-    pumpMain(until: { self.names(hosted) == ["b.txt", "c.txt"] }, "普通の文書は残り、別の仮の文書が開く")
+    pumpMain(
+      until: { self.names(hosted) == ["c.txt", "b.txt"] }, "普通の文書は残り、別の仮の文書が先頭に開く")
     XCTAssertEqual(editor.preview?.url.lastPathComponent, "c.txt")
   }
 }
