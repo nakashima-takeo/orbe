@@ -34,7 +34,7 @@ extension EditorDiffTests {
   func testAPreviewDiffIsPinnedWhenItSwitchesToAnUnsavedDocument() throws {
     let (tab, _) = tab()
     let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
-    document.surface.responder.perform(Selector(("insertText:")), with: "Z")
+    document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "Z")
     let contents = try Data(contentsOf: repo.url("a.txt"))
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     let key = id("a.txt", .workingTree)
@@ -53,7 +53,7 @@ extension EditorDiffTests {
     try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
     let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
-    document.surface.responder.perform(Selector(("insertText:")), with: "Z")
+    document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "Z")
     try tab.group.editor.open(repo.url("b.txt"), as: .preview)
     let preview = try XCTUnwrap(tab.group.editor.previewID)
     let key = id("a.txt", .workingTree)
@@ -68,7 +68,7 @@ extension EditorDiffTests {
     try repo.write("u.txt", "u\n")
     let (tab, _) = tab()
     let document = try tab.group.editor.open(repo.url("u.txt"), as: .pinned)
-    document.surface.responder.perform(Selector(("insertText:")), with: "Z")
+    document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "Z")
     let diff = try tab.group.editor.openDiff(id("u.txt", .workingTree), as: .pinned)
     waitRows(diff, "追加が出る") { $0.style(ofLine: 0) == DiffStyle.added }
     try FileManager.default.removeItem(at: repo.url("u.txt"))
@@ -160,6 +160,10 @@ extension EditorDiffTests {
   /// コミットする）。
   func testASubmoduleDiffFollowsRepeatedCommitsInsideInBothGitDirLayouts() throws {
     let (tab, _) = tab()
+    let files = RootFiles.shared(for: repo.root)
+    let recorder = RootFilesTests.Recorder()
+    files.addObserver(recorder)
+    addTeardownBlock { @MainActor in files.removeObserver(recorder) }
     for (path, inTree) in [("sub", false), ("near", true)] {
       try repo.addSubmodule(path, gitDirInWorkingTree: inTree)
       let head = {
@@ -169,7 +173,8 @@ extension EditorDiffTests {
       let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
       let first = head()
       pumpMain(until: { self.text(diff.newRevision) == "Subproject commit \(first)" }, path)
-      RunLoop.main.run(until: Date().addingTimeInterval(BatchDebounce.maximumDelay * 2))
+      XCTAssertTrue(
+        recorder.settles(counting: \.watchNotifications), "\(path): サブモジュールを足したときの変化の知らせが出尽くす")
 
       for round in 1...2 {
         XCTAssertTrue(

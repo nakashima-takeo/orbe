@@ -160,15 +160,19 @@ extension RootFilesTests {
   /// status の通知は status が返った時点で出る——baseline の取得（smudge filter で遅くなりうる）の後ろに
   /// バッジを並べない。
   func testStatusIsPublishedBeforeBaselinesAreFetched() throws {
+    let fixture = try GitHangFixture()
+    let smudge = try fixture.installScript("smudge.sh", body: fixture.waitingBody + "\ncat")
     try repo.write(".gitattributes", "*.txt filter=slow\n")
-    XCTAssertTrue(repo.git(["config", "filter.slow.smudge", "sleep 1; cat"]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "filter.slow.smudge", smudge]).isSuccess)
     let files = RootFiles(root: repo.root)
     let recorder = Recorder()
     let url = repo.url("a.txt")
     files.addObserver(recorder, interest: url)
     pumpMain(until: { files.status != nil }, "status")
+    XCTAssertTrue(fixture.pumpUntilHung(), "前提: baseline の smudge が止まっている")
     XCTAssertNil(files.baseline(for: url), "smudge が終わる前に status が届く")
     XCTAssertEqual(recorder.versionChanges, [])
+    fixture.release()
     pumpMain(until: { files.baseline(for: url) == "one\n" }, timeout: 20, "その後 baseline が届く")
   }
 

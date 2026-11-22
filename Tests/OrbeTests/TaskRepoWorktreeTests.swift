@@ -9,6 +9,9 @@ import XCTest
 /// 壊れると何が起きるか: gh が遅れて失敗すると start_task が永久に応答せず、呼んだ claude がその後の Orbe のツールまで
 /// 待たされる。
 final class TaskRepoWorktreeTests: OrbeTestCase {
+  /// 前提「head の答えを待っている」は、リポジトリの事実が出揃った直後に確かめる。行き先の判断は、事実が変わった知らせの
+  /// 中で同期に下される、という前提に依る（答えを待たずに進む形へ判断を壊すと、この前提のアサートで落ちることを確かめて
+  /// ある）。本番が判断を下す経路を変えたときは、確かめ直す。
   func testAFailedFetchOfThePullRequestHeadStillGetsAnAnswer() throws {
     // origin は手元の bare（fetch がすぐ着地し、GitHub でないので gh も問わない）。主の PR のリポジトリは upstream。
     let dir = TestScratch.caseDir.path
@@ -49,8 +52,11 @@ final class TaskRepoWorktreeTests: OrbeTestCase {
         facts?.remoteFetchLanded == true && facts?.probedGitHubState != nil
           && facts?.hasRemote(for: task.links[0].item.repo) == true
       }, "前提: リポジトリの事実が出揃い、head の答えだけを待つ")
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-    XCTAssertNil(outcome, "前提: head の答えを待っている")
+    XCTAssertEqual(
+      try XCTUnwrap(facts).taskTarget(WorktreePaletteTaskInputs(task: task, items: items)),
+      .pending,
+      "前提: head の答えを待っている")
+    XCTAssertNil(outcome, "前提: 作業場所を決めていない")
     batch?(asked, nil)
 
     XCTAssertTrue(waitUntil(20) { outcome != nil }, "取得が失敗しても答える")

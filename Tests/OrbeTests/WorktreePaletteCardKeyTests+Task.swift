@@ -30,15 +30,9 @@ extension WorktreePaletteCardKeyTests {
 
   /// 1 コミットのリポジトリ（remote なし）を caseDir に作る。
   private func repository() throws -> String {
-    let dir = TestScratch.caseDir.appendingPathComponent("repo").path
-    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    for args in [
-      ["init", "-q", "-b", "main"], ["config", "user.email", "t@example.com"],
-      ["config", "user.name", "t"], ["commit", "-q", "--allow-empty", "-m", "init"],
-    ] {
-      XCTAssertTrue(GitRunner.shared.runSync(args, cwd: dir).isSuccess, "git \(args[0])")
-    }
-    return dir
+    let dir = TestScratch.caseDir.appendingPathComponent("repo")
+    try TempGitRepo.place(at: dir)
+    return dir.path
   }
 
   private func taskModel(_ links: [TaskLink], items: GitHubItemCache) -> WorktreePaletteModel {

@@ -113,15 +113,7 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
   override func setUpWithError() throws {
     dir = TestScratch.caseDir
       .appendingPathComponent("orbe-exclude-repo-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
-    try "x".write(
-      toFile: (dir.path as NSString).appendingPathComponent("a.txt"), atomically: true,
-      encoding: .utf8)
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
+    try TempGitRepo.place(at: dir)
     repo = try open()
   }
 

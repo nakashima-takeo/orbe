@@ -29,9 +29,8 @@ final class GitHangFixture {
 
   init() throws {
     dir = TestScratch.caseDir.appendingPathComponent("orbe-githang-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(
-      at: dir.appendingPathComponent("repo"), withIntermediateDirectories: true)
-    try makeRepository()
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try TempGitRepo.place(at: dir.appendingPathComponent("repo"))
   }
 
   // MARK: - パス
@@ -176,23 +175,6 @@ final class GitHangFixture {
   @discardableResult
   func git(_ args: [String]) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: root)
-  }
-
-  private func makeRepository() throws {
-    for args in [
-      ["init", "-q", "-b", "main"],
-      ["config", "user.email", "t@example.com"],
-      ["config", "user.name", "t"],
-      ["config", "commit.gpgsign", "false"],
-    ] {
-      guard git(args).isSuccess else {
-        throw Failure.setup(args.joined(separator: " "))
-      }
-    }
-    try "x\n".write(
-      toFile: (root as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-    guard git(["add", "-A"]).isSuccess, git(["commit", "-qm", "init"]).isSuccess
-    else { throw Failure.setup("initial commit") }
   }
 
   enum Failure: Error { case setup(String) }

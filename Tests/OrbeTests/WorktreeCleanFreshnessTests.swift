@@ -13,14 +13,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
   override func setUpWithError() throws {
     dir = TestScratch.caseDir
       .appendingPathComponent("orbe-freshness-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
-    try "x".write(
-      toFile: dir.appendingPathComponent("a.txt").path, atomically: true, encoding: .utf8)
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
+    try TempGitRepo.place(at: dir)
   }
 
   // MARK: - prune の後にだけ分類する
@@ -55,12 +48,12 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
   /// prune は数秒なので、実機で日常的に起きる順序。ここが破れると最初の確定が prune 前データで
   /// 起き、prune 後に安全群へ移った行が二度と自動チェックされない（確定は 1 度きりなので）。
   func testGitHubLandingBeforePruneFiresNoProbe() throws {
-    try makeSlowRemote()
+    let releaseFetch = try makeSlowRemote()
     try makeWorktree("wt-x", branch: "feat/x")
     let model = WorktreePaletteModel()
     let provider = makeProvider(model)
     provider.load()
-    // prune は数秒かかるので、worktree 一覧の着地だけを待てば「prune 未着地」の窓に居る。
+    // prune は門を開けるまで着地しないので、worktree 一覧の着地だけを待てば「prune 未着地」の窓に居る。
     XCTAssertTrue(waitUntil(20) { !provider.facts.worktrees.isEmpty })
     XCTAssertNil(model.classification, "前提: まだ prune が着地していない")
 
@@ -77,6 +70,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     XCTAssertTrue(provider.probingPaths.isEmpty, "gh 着地は prune 前にプローブを撃たない")
     XCTAssertNil(model.classification)
 
+    releaseFetch()
     XCTAssertTrue(waitUntil(30) { model.classification != nil }, "prune 着地後に初めて分類が出る")
     XCTAssertTrue(waitUntil(30) { !provider.classificationPending })
   }
@@ -228,10 +222,10 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     model.classification?.first { $0.branch == branch }
   }
 
-  /// `fetch --prune` が数秒かかる origin を用意する（gh の着地が prune より先に来る実機の順序を
-  /// 手元で再現するため）。`uploadpack` を眠るラッパーへ差し替えるだけなので、特別な transport も
+  /// `fetch --prune` が、返した関数を呼ぶまで着地しない origin を用意する（gh の着地が prune より先に来る実機の順序を
+  /// 手元で再現するため）。`uploadpack` を、門で止まるラッパーへ差し替えるだけなので、特別な transport も
   /// ネットワークも要らない。
-  private func makeSlowRemote() throws {
+  private func makeSlowRemote() throws -> () -> Void {
     let remote = TestScratch.caseDir
       .appendingPathComponent("orbe-freshness-slow-\(UUID().uuidString)")
     XCTAssertTrue(
@@ -240,11 +234,14 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
       ).isSuccess)
     XCTAssertTrue(git(["remote", "add", "origin", remote.path]).isSuccess)
     XCTAssertTrue(git(["push", "-q", "-u", "origin", "main"]).isSuccess)
+    let gate = remote.path + "-gate"
+    try FileManager.default.createDirectory(atPath: gate, withIntermediateDirectories: true)
     let wrapper = dir.appendingPathComponent("slow-upload-pack").path
-    try "#!/bin/sh\nsleep 2\nexec git-upload-pack \"$@\"\n".write(
-      toFile: wrapper, atomically: true, encoding: .utf8)
+    try "#!/bin/sh\nwhile [ -d \"\(gate)\" ]; do sleep 0.05; done\nexec git-upload-pack \"$@\"\n"
+      .write(toFile: wrapper, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper)
     XCTAssertTrue(git(["config", "remote.origin.uploadpack", wrapper]).isSuccess)
+    return { try? FileManager.default.removeItem(atPath: gate) }
   }
 
   @discardableResult

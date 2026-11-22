@@ -20,23 +20,11 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
   private var dir: String!
   private var local: String!
 
-  /// origin（bare）と、それを clone した手元。手元の `stale` は origin の `stale` を追跡し、1 コミット遅れる。
+  /// origin（bare）と、それを clone した手元の組（`StaleCloneFixture`）を置く。
   override func setUpWithError() throws {
     dir = TestScratch.caseDir.appendingPathComponent("git").path
-    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    let origin = (dir as NSString).appendingPathComponent("origin.git")
+    try StaleCloneFixture.place(at: URL(fileURLWithPath: dir))
     local = (dir as NSString).appendingPathComponent("web")
-    let other = (dir as NSString).appendingPathComponent("other")
-    try git(["init", "-q", "--bare", "-b", "main", origin], in: dir)
-    try git(["clone", "-q", origin, other], in: dir)
-    try identify(other)
-    try git(["commit", "-q", "--allow-empty", "-m", "a"], in: other)
-    try git(["push", "-q", "origin", "HEAD:main", "HEAD:stale"], in: other)
-    try git(["clone", "-q", origin, local], in: dir)
-    try identify(local)
-    try git(["branch", "-q", "--track", "stale", "origin/stale"], in: local)
-    try git(["commit", "-q", "--allow-empty", "-m", "b"], in: other)
-    try git(["push", "-q", "origin", "HEAD:stale"], in: other)
   }
 
   private func git(_ args: [String], in cwd: String) throws {
@@ -150,6 +138,10 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
   /// 札を外した時点でタスクのリポジトリの読み取り（提示時の fetch）がまだ途中でも、それが後から着地して
   /// パレットにタスクのリポジトリの行を書き戻すことはない。git の一覧の読み取りは provider を強く捕まえる
   /// ので、途中の読み取りがある間は前の provider が生き残る——その状態をテストが provider を持つことで作る。
+  ///
+  /// 「戻らない」は、前の provider の fetch の着地と、それに続く分類の読みの完了を待ってから確かめる。一覧の作り直しは、
+  /// その 2 つの完了の処理の中でしか起きない、という前提に依る（前の provider を切り離す処理を外すと、このテストが落ちる
+  /// ことを確かめてある）。本番が一覧を作り直すきっかけを足したときは、確かめ直す。
   func testAReadOfTheTasksRepositoryLandingAfterRemovingTheTaskDoesNotComeBack() throws {
     let gate = (dir as NSString).appendingPathComponent("fetch-gate")
     let wrapper = (dir as NSString).appendingPathComponent("held-upload-pack")
@@ -171,8 +163,9 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     XCTAssertTrue(
       waitUntil(20) { taskProvider.facts.remoteFetchLanded }, "前提: タスクのリポジトリの fetch が着地した")
     XCTAssertTrue(
-      holds(for: 1) { !palette.items.contains { $0.action == repositoryRow } },
-      "タスクのリポジトリの行は戻らない")
+      waitUntil(20) { taskProvider.cleanProbes != nil }, "前提: タスクのリポジトリの分類の読みが済んだ")
+    XCTAssertFalse(
+      palette.items.contains { $0.action == repositoryRow }, "タスクのリポジトリの行は戻らない")
   }
 
   /// 遅れたブランチは最新化の画面を通ってから作られる。その経路でもタスクは進行中になり、worktree が付く。
