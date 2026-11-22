@@ -9,11 +9,17 @@ import XCTest
 /// 前に除外ファイルを開くので、書き手が現れるまでそこで待つ。本番コードへのフックなしで「git が走っている最中」を決定論的に
 /// 作る。git が生きているかは、このテストプロセスの子の git grep を見て確かめる。
 ///
-/// 門が閉じたまま残らないように: `close()`（tearDown）が待っている git を通し、それも呼び損ねたとき（テストプロセスが落ちた）
-/// のために、60 秒後に待っている git を通して自ら終わる見張りを置く。
+/// 門で止まるのは git grep だけではなく、除外ファイルを読む git の全部（開いた文書の根の status など）。1 回の実行が除外ファイルを
+/// 何度も開くこともある。だから開くときは、待っている git を 1 度通すのではなく、書き手を開いたまま持ち、後から来る git も、
+/// 同じ実行の 2 度目の open も止めない（FIFO は空なので、git は空の除外ファイルとして読む）。
+///
+/// 門が閉じたまま残らないように: `close()`（tearDown）が門を開いて FIFO を普通の空ファイルに置き換え、それも呼び損ねたとき
+/// （テストプロセスが落ちた）のために、60 秒後に待っている git を通して自ら終わる見張りを置く。
 final class GrepGate {
   private let fifo: String
   private let watchdog: Process
+  /// 開いた門の書き手（読み書きで開くので、読み手を待たずに開け、開いている間は FIFO の open が止まらない）。閉じている間は nil。
+  private var held: Int32?
 
   /// `repo` の git grep をこの後から門で止める（設定を書くだけなので、既に走っているものには効かない）。
   init(_ repo: TempGitRepo) throws {
@@ -66,21 +72,32 @@ final class GrepGate {
       .flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
   }
 
-  /// 門で待っている git を通す（着くまで待ってから）。
+  /// 門で待っている git が着くまで待ってから、門を開いたままにする。
   func open(timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
-    XCTAssertTrue(sleepUntil(timeout) { release() }, "門で待つ git がいない", file: file, line: line)
-    while release() {}
+    XCTAssertTrue(sleepUntil(timeout) { isWaited }, "門で待つ git がいない", file: file, line: line)
+    hold()
   }
 
-  /// 後始末。待っている git を通し、見張りを止めて FIFO を消す。
+  /// 後始末。門を開き、FIFO を普通の空ファイルに置き換えてから書き手を閉じ、見張りを止める（置き換えた後に除外ファイルを開く
+  /// git は、空のファイルを読む）。
   func close() {
-    while release() {}
+    hold()
+    let empty = fifo + ".empty"
+    FileManager.default.createFile(atPath: empty, contents: Data())
+    rename(empty, fifo)
+    if let held { Darwin.close(held) }
+    held = nil
     watchdog.terminate()
-    unlink(fifo)
   }
 
-  /// 書き手として開いて閉じる（待っている読み手がいれば通る）。読み手がいなければ false。
-  private func release() -> Bool {
+  private func hold() {
+    guard held == nil else { return }
+    let fd = Darwin.open(fifo, O_RDWR)
+    if fd >= 0 { held = fd }
+  }
+
+  /// 門で git が待っているか（書き手として開けるのは、読み手がいるときだけ）。開いて閉じるので、待っている git は通る。
+  private var isWaited: Bool {
     let fd = Darwin.open(fifo, O_WRONLY | O_NONBLOCK)
     guard fd >= 0 else { return false }
     Darwin.close(fd)
