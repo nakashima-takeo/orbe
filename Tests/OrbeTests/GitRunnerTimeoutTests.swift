@@ -46,8 +46,8 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     return try XCTUnwrap(pending.output)
   }
 
-  private func runSync(_ args: [String], cwd: String? = nil) throws -> GitRunner.Output {
-    try result(of: start(args, cwd: cwd))
+  private func runSync(_ args: [String]) throws -> GitRunner.Output {
+    try result(of: start(args))
   }
 
   /// 止まった実行を無出力の上限で切り、その結果を受ける。

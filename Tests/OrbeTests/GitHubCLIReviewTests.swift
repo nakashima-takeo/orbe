@@ -199,11 +199,11 @@ final class GitHubCLIReviewTests: OrbeTestCase {
   // MARK: - 書き込み
 
   private func write(
-    _ write: GitHubReviewWrite, pendingReview: String?, cli: GitHubCLI = GitHubCLI()
+    _ write: GitHubReviewWrite, pendingReview: String?
   ) -> GitHubReviewWriteResult? {
     var result: GitHubReviewWriteResult?
     let done = expectation(description: "writeReview")
-    cli.writeReview(
+    GitHubCLI().writeReview(
       write, pullRequest: "PR_1", pendingReview: pendingReview, reviewedCommit: "seen"
     ) {
       result = $0

@@ -78,6 +78,11 @@ final class GitRunnerStreamTests: OrbeTestCase {
   }
 
   /// 無出力が打ち切りの上限を超えて続いても切らず、終われば「完了」で返る。
+  ///
+  /// 対になる場合が無い否定条件（流しながら読む実行は、いつも無出力では打ち切らない）なので、本番を一時的に変えると落ちることで
+  /// 裏づける。依っている前提: 流しながら読む実行の待ち手は期限なしで眠り、この runner の上で期限なしで眠るのは、この実行だけで
+  /// ある。その待ち手が、時刻を進めた後も眠ったままなら、実行は打ち切られていない。次のいずれかを変えたときは、本番を一時的に
+  /// 変えて落ちることを確かめ直す: 流しながら読む実行の待ち方（期限なしで眠らない形にする）、または `GitRunner` の待ち方。
   func testASilentRunIsNotCutAndCompletesWhenItEnds() throws {
     let recorder = Recorder()
     let handle = try streamHangingCommit(body: fixture.waitingBody, into: recorder)

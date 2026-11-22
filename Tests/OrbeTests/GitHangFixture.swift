@@ -269,8 +269,8 @@ final class GitHangFixture {
         clock.advance(to: deadline), 1,
         "無出力の上限の期限まで進めると、眠っている待ち手を、進めた呼び出しの中で起こす。"
           + "進めた呼び出しが戻った時点で、まだ起こし終えていない形になったら、次のテストも、切らないことを確かめられなくなる: "
-          + "GitRunnerStreamTests.testASilentRunIsNotCutAndCompletesWhenItEnds と、RootFilesWriteStopTests の、"
-          + "見ている手の書き込みにある「期限なしで眠った待ち手が、時刻を進めた後も眠ったまま」という確認と、"
+          + "RootFilesWriteStopTests の、見ている手の書き込みにある「期限なしで眠った待ち手が、時刻を進めた後も眠ったまま」"
+          + "という確認と、"
           + "GitRunnerTimeoutTests.testStreamingCommandIsNotStopped にある「最後の出力から数え直した期限で眠り直す」という確認",
         file: file, line: line)
       var again: ManualClock.Sleeper?
