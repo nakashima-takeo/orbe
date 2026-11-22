@@ -64,9 +64,8 @@ final class OrbeReportWireTests: OrbeTestCase {
   /// listener が 1 本の接続から受け取ったもの。
   private struct Served {
     var line: String
-    /// 1 行を受けて少し置いた後も、接続の向こうのプロセスが取れた。Orbe は接続の向こうから報告者の
-    /// プロセスグループをたどるので、受け取りが遅れても報告者が残っていなければならない。
-    var peerHeld: Bool
+    /// listener を用意してから（報告者を起動する直前から）報告者が閉じるまで。
+    var closedAfterStart: TimeInterval
     /// 応答の 1 行を書いてから報告者が閉じるまで（応答しなかったときは nil）。
     var closedAfterReply: TimeInterval?
   }
@@ -80,7 +79,9 @@ final class OrbeReportWireTests: OrbeTestCase {
     private var stopped = false
     private var served: Served?
     private let done = DispatchSemaphore(value: 0)
+    private let started = Date()
 
+    /// 報告者を起動する直前に作る。
     init(listenFD: Int32, reply: Bool) {
       DispatchQueue.global().async { [self] in
         defer { done.signal() }
@@ -101,8 +102,6 @@ final class OrbeReportWireTests: OrbeTestCase {
         _ = setsockopt(
           fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
         let line = Self.readLine(fd)
-        usleep(200_000)
-        let peerHeld = ProcessGroup.peer(of: fd).map { kill($0, 0) == 0 } ?? false
         var repliedAt: Date?
         if reply {
           let response = Data(#"{"jsonrpc":"2.0","id":1,"result":{}}"#.utf8 + [0x0A])
@@ -110,9 +109,11 @@ final class OrbeReportWireTests: OrbeTestCase {
           repliedAt = Date()
         }
         _ = Self.readLine(fd)  // 相手が閉じる（EOF）まで保つ
+        let closedAt = Date()
         let result = Served(
-          line: String(data: line, encoding: .utf8) ?? "", peerHeld: peerHeld,
-          closedAfterReply: repliedAt.map { Date().timeIntervalSince($0) })
+          line: String(data: line, encoding: .utf8) ?? "",
+          closedAfterStart: closedAt.timeIntervalSince(started),
+          closedAfterReply: repliedAt.map { closedAt.timeIntervalSince($0) })
         lock.withLock { served = result }
       }
     }
@@ -250,23 +251,29 @@ final class OrbeReportWireTests: OrbeTestCase {
 
   // MARK: - 接続の保ち方
 
-  /// 報告者は Orbe の応答の 1 行まで接続を保ち、受けたら待たずに閉じる。保たないと、Orbe が受け取るのが
-  /// 遅れたとき報告者のグループをたどれず、会話のタブは解けた待ちの続きを貼ってよくならない。受けても閉じないと、Orbe は
-  /// 接続を畳まないので、hook のたびに claude が待ちの上限まで止まる。
-  func testReporterHoldsTheConnectionUntilTheReplyAndNoLonger() throws {
+  /// 報告者は Orbe の応答の 1 行を受けたら、待たずに接続を閉じる。受けても閉じないと、Orbe は接続を畳まないので、hook の
+  /// たびに claude が待ちの上限まで止まる。
+  func testReporterClosesTheConnectionAsSoonAsTheReplyArrives() throws {
     let served = try XCTUnwrap(
       run(state: "idle", stdin: #"{"session_id":"s-1"}"#).served, "orbe-report が接続しない")
-    XCTAssertTrue(served.peerHeld, "1 行を書いた後、応答を待たずに報告者が消えている")
     // 待ちの上限（2 秒）より十分短い。
     XCTAssertLessThan(
       try XCTUnwrap(served.closedAfterReply), 1, "応答を受けた後も、上限まで接続を保っている")
   }
 
-  /// Orbe が受け取っても応答しないときは、上限で諦めて exit 0 で抜ける。hook は claude のターンを
-  /// 同期で止めるので、ここが無限待ちになると Orbe の固まりが claude に伝わる。
-  func testUnresponsiveOrbeReleasesTheHookWithinTheLimit() throws {
+  /// Orbe が受け取っても応答しないときは、上限まで接続を保ち、上限で諦めて exit 0 で抜ける。保たないと、Orbe が受け取るのが
+  /// 遅れたとき報告者のグループをたどれず、会話のタブは解けた待ちの続きを貼ってよくならない。hook は claude のターンを
+  /// 同期で止めるので、上限で諦めないと Orbe の固まりが claude に伝わる。
+  ///
+  /// 保つことは、報告者を起動する直前から接続が閉じるまでが 1 秒以上かかることで確かめる（測り始めを起動の直前に置くので、
+  /// 負荷は測る長さを延ばす向きにしか効かない）。1 秒は、報告者の待ちの上限（2 秒）の半分で、上限はテストから読めない。
+  /// 報告者が 1 行を書いた直後に終わるようにすると、この確かめが落ちることを確かめてある。報告者の待ちの上限か、応答の
+  /// 待ち方を変えたときは、確かめ直す。
+  func testReporterHoldsTheConnectionForAnUnresponsiveOrbeUntilTheLimitAndNoLonger() throws {
     let result = run(state: "idle", stdin: "{}", reply: false)
-    XCTAssertNotNil(result.served, "orbe-report が接続しない")
+    let served = try XCTUnwrap(result.served, "orbe-report が接続しない")
+    XCTAssertGreaterThanOrEqual(
+      served.closedAfterStart, 1, "応答を待たずに、報告者が接続を閉じている")
     XCTAssertLessThan(result.elapsed, 5, "応答しない Orbe を上限を超えて待っている")
   }
 }
