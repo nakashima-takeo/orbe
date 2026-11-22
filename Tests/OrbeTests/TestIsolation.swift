@@ -147,7 +147,12 @@ enum TestIsolation {
           + "テスト本体より前に ORBE_STATE_DIR を張れていない")
     }
 
-    // 5. 毎テストの隔離。以降の全テストへ効く。
+    // 5. ポインタの非表示。SwiftUI は、ホバーを決め直すたびに AppKit のポインタの非表示（`+[NSCursor _isHidden]`）を読み、
+    //    非表示ならホバーを受け付けない。この値は利用者の実際の状態で、利用者がほかのアプリで打鍵してポインタが非表示に
+    //    なっているあいだは、テストが送ったホバーが効かない。テストの中では、非表示ではないと返させる。
+    CursorVisibility.pinShown()
+
+    // 6. 毎テストの隔離。以降の全テストへ効く。
     TestScratch.addCaseHooks(begin: beginCase, end: endCase)
   }
 
@@ -236,5 +241,22 @@ enum TestIsolation {
   /// テスト 1 件の終わり（`tearDown` の後）。
   static func endCase() {
     Ghostty.pasteboard.releaseGlobally()
+  }
+}
+
+/// SwiftUI のホバーが読むポインタの非表示（AppKit の非公開のクラスメソッド `+[NSCursor _isHidden]`）を、テストの実行体の中で
+/// 「非表示ではない」に固定する。メソッドが無いときは差し替えず、`isPinned` を偽のままにする（`TestIsolationTests` の
+/// 1 本が落ちる。固定できないときに働かなくなるのは、ホバーに依るテストだけ）。SwiftUI がこのメソッドを読まなくなったことは
+/// 検知しない。
+enum CursorVisibility {
+  private(set) nonisolated(unsafe) static var isPinned = false
+
+  static let selector = NSSelectorFromString("_isHidden")
+
+  static func pinShown() {
+    guard let method = class_getClassMethod(NSCursor.self, selector) else { return }
+    let shown: @convention(block) (AnyObject) -> Bool = { _ in false }
+    method_setImplementation(method, imp_implementationWithBlock(shown))
+    isPinned = true
   }
 }

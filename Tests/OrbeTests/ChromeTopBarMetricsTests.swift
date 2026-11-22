@@ -48,8 +48,6 @@ final class ChromeTopBarMetricsTests: OrbeTestCase {
     window.contentView = host
     holdUntilTestEnds(window)
     host.layoutSubtreeIfNeeded()
-    // SwiftUI の描画コミットに猶予を与える（固定 sleep 無しでは白紙を測りうる）。
-    RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
     let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
     host.cacheDisplay(in: host.bounds, to: rep)

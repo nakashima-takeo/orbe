@@ -196,9 +196,9 @@ final class GroupFacesViewTests: OrbeTestCase {
     XCTAssertEqual(try XCTUnwrap(view.editor.superview).alphaValue, 1, "濃さの行き先")
 
     view.show(.terminal, animated: true)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.03))
-    XCTAssertFalse(
-      view.editor.isHiddenOrHasHiddenAncestor, "置き換えられた動きの完了では解けず、閉じる途中のエディター面は見えている")
+    XCTAssertTrue(
+      holds(for: Theme.Motion.base / 6) { !view.editor.isHiddenOrHasHiddenAncestor },
+      "置き換えられた動きの完了では解けず、閉じる途中のエディター面は見えている")
     XCTAssertEqual(try XCTUnwrap(view.editor.superview).alphaValue, 0)
 
     pumpMain(until: { view.editor.isHiddenOrHasHiddenAncestor }, timeout: 2, "最後の動きが終わって隠れる")

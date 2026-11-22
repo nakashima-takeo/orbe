@@ -17,6 +17,20 @@ final class TestIsolationTests: OrbeTestCase {
     XCTAssertNotEqual(Ghostty.pasteboard.name, NSPasteboard.general.name)
   }
 
+  /// テストの中では、SwiftUI のホバーが読むポインタの非表示（`+[NSCursor _isHidden]`）が、利用者の実際の状態に依らず
+  /// 「非表示ではない」と答える。この固定が外れると、利用者がほかのアプリで打鍵してポインタが非表示のあいだ、テストが送ったホバーが
+  /// 効かず、ホバーに依るテストが手元でだけ落ちる。
+  func testThePointerIsNeverHiddenForSwiftUIHover() throws {
+    XCTAssertTrue(
+      CursorVisibility.isPinned,
+      "+[NSCursor _isHidden] が無く、ポインタの非表示を固定できていない。SwiftUI のホバーがポインタの非表示を読む方法が"
+        + "変わったので、何を読むかを調べて、TestIsolation の CursorVisibility を作り直す")
+    let method = try XCTUnwrap(class_getClassMethod(NSCursor.self, CursorVisibility.selector))
+    typealias IsHidden = @convention(c) (AnyClass, Selector) -> Bool
+    let isHidden = unsafeBitCast(method_getImplementation(method), to: IsHidden.self)
+    XCTAssertFalse(isHidden(NSCursor.self, CursorVisibility.selector), "差し替えた実装が、非表示ではないと答える")
+  }
+
   /// 同梱リソースの探索根は管理下の空ディレクトリ（既定の Xcode bin ではない）。
   ///
   /// caseDir の下であることが要点——根の直下だと、テストが同梱物を組んだ中身がテスト終了の

@@ -58,6 +58,11 @@ extension SourceControlPaneTests {
   }
 
   /// 欄か列に焦点がある間に cd で根が変わっても、焦点は面の焦点の行き先へ戻る（作り直されるパネルと一緒に窓へ落ちない）。
+  ///
+  /// 作り直されたパネルが焦点を奪わないことは、待たずに確かめる。前提は、パネルの中へ焦点を入れる経路が、どれも走る時点で
+  /// 焦点の要求（`focusRequest`）を見直すことと、要求を出すのが明示の呼び出しだけであること。作り直されたパネルが要求を
+  /// 持って始まるようにすると、このテストが落ちることを確かめてある。焦点を入れる経路か、要求を出す経路を変えたときは、
+  /// 確かめ直す。
   func testChangingTheRootWithTheFocusInThePanelReturnsItToTheBody() throws {
     for area in [ScmPanel.Area.message, .list] {
       let hosted = try layersPane()
@@ -67,7 +72,7 @@ extension SourceControlPaneTests {
       XCTAssertEqual(old.focusedArea, area, "前提")
       hosted.pane.setRoot(try TempGitRepo().root)
       pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "\(area): 新しいパネル")
-      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+      XCTAssertNil(hosted.scm.focusRequest, "\(area): 新しいパネルは焦点を求めない")
       XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "\(area)")
     }
   }
@@ -87,6 +92,10 @@ extension SourceControlPaneTests {
   }
 
   /// 親を畳んだままレールでソース管理を出し直しても、パネルの中へ焦点を求めない。開いても焦点は本文のまま。
+  ///
+  /// 開いても焦点を奪わないことは、待たずに確かめる。前提は、パネルの中へ焦点を入れる経路が、どれも走る時点で焦点の要求
+  /// （`focusRequest`）を見直すことと、要求を出すのが明示の呼び出しだけであること。親を開く操作が焦点を求めるようにすると、
+  /// このテストが落ちることを確かめてある。焦点を入れる経路か、要求を出す経路を変えたときは、確かめ直す。
   func testShowingThePanelWhileTheRepositoryIsClosedRequestsNoFocus() throws {
     let hosted = try layersPane()
     let scm = hosted.scm
@@ -96,7 +105,7 @@ extension SourceControlPaneTests {
     XCTAssertNil(scm.focusRequest)
     scm.setRepositoryOpen(true)
     pumpMain(until: { hosted.pane.scmList.list.window != nil }, "列が戻る")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+    XCTAssertNil(scm.focusRequest, "開いても焦点を求めない")
     XCTAssertNil(scm.focusedArea, "開いても焦点を奪わない")
   }
 
@@ -133,8 +142,7 @@ extension SourceControlPaneTests {
     }
 
     press(row: 1)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-    XCTAssertEqual(commits(), ScmPanel.graphPage, "コミットは押しても何も起きない")
+    XCTAssertTrue(holds(for: 0.2) { commits() == ScmPanel.graphPage }, "コミットは押しても何も起きない")
     press(row: scm.graphLayout.items.count - 1)
     pumpMain(until: { commits() == ScmPanel.graphPage + 1 }, "さらに表示で先のコミットが出る")
     XCTAssertFalse(scm.graphLayout.items.contains(.more), "続きが無くなれば、さらに表示は消える")

@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -154,7 +155,7 @@ final class ChromeMiddleClickTests: OrbeTestCase {
     let flip = try screenFlipOrigin()
     let cg = try XCTUnwrap(
       CGEvent(
-        mouseEventSource: nil, mouseType: .otherMouseDown,
+        mouseEventSource: SyntheticInput.source, mouseType: .otherMouseDown,
         mouseCursorPosition: CGPoint(x: point.x, y: flip - point.y), mouseButton: .center),
       "otherMouseDown の CGEvent")
     cg.setIntegerValueField(.mouseEventButtonNumber, value: Int64(button))
@@ -165,7 +166,7 @@ final class ChromeMiddleClickTests: OrbeTestCase {
   private func screenFlipOrigin() throws -> CGFloat {
     let probe = try XCTUnwrap(
       CGEvent(
-        mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: .zero,
+        mouseEventSource: SyntheticInput.source, mouseType: .mouseMoved, mouseCursorPosition: .zero,
         mouseButton: .left), "座標校正の CGEvent")
     return try XCTUnwrap(NSEvent(cgEvent: probe), "座標校正の NSEvent").locationInWindow.y
   }

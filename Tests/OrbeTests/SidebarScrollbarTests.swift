@@ -66,7 +66,6 @@ final class SidebarScrollbarTests: OrbeTestCase {
     func move(to y: CGFloat) {
       scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
       scroll.reflectScrolledClipView(scroll.contentView)
-      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     }
 
     func geometry(at y: CGFloat) -> ScrollbarGeometry {
@@ -84,7 +83,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
   }
 
   private func hostTree() throws -> Tree {
-    let dir = TestScratch.caseDir
+    // 作業ディレクトリそのものには、隔離のハーネスと本番が置くファイルが在り、ツリーの行になる。
+    let dir = TestScratch.caseDir.appendingPathComponent("tree")
     for index in 0..<40 {
       try FileManager.default.createDirectory(
         at: dir.appendingPathComponent(String(format: "d%02d", index)),
@@ -105,22 +105,60 @@ final class SidebarScrollbarTests: OrbeTestCase {
     return NSPoint(x: frame.midX, y: frame.midY)
   }
 
-  /// ポインタを `point`（窓の座標）へ。
+  /// 位置 `position` へ送ったときの、つまみの枠（窓の座標）。
+  private func thumbFrame(_ tree: Tree, at position: CGFloat) -> NSRect {
+    let geometry = tree.geometry(at: position)
+    let width = Theme.Layout.editorSidebarScrollbar
+    return tree.scroll.convert(
+      NSRect(
+        x: tree.scroll.bounds.maxX - width, y: geometry.sliderPosition, width: width,
+        height: geometry.sliderLength), to: nil)
+  }
+
+  /// つまみが、いまのスクロール位置の枠に描かれているか。枠の両端の内側で、つまみの列の画素がすぐ左の画素と違い、
+  /// 両端の外側（一覧の中に在る側）では同じ。
+  private func thumbIsDrawn(_ tree: Tree) -> Bool {
+    guard let frame = treeThumbFrame(tree.pane), let probe = try? PaneProbe(tree.pane) else {
+      return false
+    }
+    let track = tree.scroll.convert(tree.scroll.bounds, to: nil)
+    func differs(_ y: CGFloat) -> Bool? {
+      guard y > track.minY, y < track.maxY else { return nil }
+      let on = tree.pane.convert(NSPoint(x: frame.midX, y: y), from: nil)
+      let beside = tree.pane.convert(NSPoint(x: frame.minX - 6, y: y), from: nil)
+      guard let a = try? probe.rgb(on.x, y: on.y), let b = try? probe.rgb(beside.x, y: beside.y)
+      else { return nil }
+      return !PaneProbe.same(a, b)
+    }
+    return differs(frame.minY + 2) == true && differs(frame.maxY - 2) == true
+      && differs(frame.minY - 3) != true && differs(frame.maxY + 3) != true
+  }
+
+  /// ポインタを `point`（窓の座標）へ動かし、つまみが現れるまで待つ。つまみが隠れているとき（位置を送る前）に呼ぶ——
+  /// 現れたことを、ホバーが届いた印として待つので、つまみが既に見えていると、待ちはホバーが届く前に成り立つ。
   private func hover(_ tree: Tree, _ point: NSPoint) {
     movePointer(tree.pane, to: tree.pane.convert(point, from: nil), over: tree.pane.sideHost)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+    pumpMain(until: { thumbIsDrawn(tree) }, "ポインタを乗せると、つまみが現れる")
+  }
+
+  /// 位置 `position` へ送り、つまみがその位置に描かれるまで待つ。
+  private func move(_ tree: Tree, to position: CGFloat) {
+    tree.move(to: position)
+    pumpMain(until: { thumbIsDrawn(tree) }, "つまみが、送った位置に描かれる")
   }
 
   /// ポインタを乗せたツリーのつまみの上でホイールを回すとツリーが送られる（つまみは当たりを持たない）。
   func testTheWheelOverTheTreeThumbScrollsTheTree() throws {
     let tree = try hostTree()
-    tree.move(to: 100)
+    let thumb = thumbFrame(tree, at: 100)
+    hover(tree, NSPoint(x: thumb.midX, y: thumb.midY))
+    move(tree, to: 100)
     let wheel = try XCTUnwrap(
       CGEvent(
-        scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -3, wheel2: 0,
+        scrollWheelEvent2Source: SyntheticInput.source, units: .line, wheelCount: 1, wheel1: -3,
+        wheel2: 0,
         wheel3: 0))
     let point = try thumbCenter(tree)
-    hover(tree, point)
     // CGEvent の座標は主ディスプレイの左上が原点。窓を持たない NSEvent の locationInWindow は、主ディスプレイの高さで
     // 上下を反転した値になるので、窓の座標 `point` がそのまま出るように逆算する。
     let flip = NSScreen.screens.first?.frame.height ?? 0
@@ -138,14 +176,15 @@ final class SidebarScrollbarTests: OrbeTestCase {
     for step in 1...10 {
       NSApp.sendEvent(
         tree.mouse(.leftMouseDragged, NSPoint(x: start.x, y: start.y - CGFloat(step) * 5)))
-      RunLoop.main.run(until: Date().addingTimeInterval(0.03))
     }
+    let expected = tree.geometry(at: 0).position(afterDragging: 50)
+    waitUntil(10) { abs(tree.scroll.documentVisibleRect.minY - expected) <= 1 }
+    pumpMain(until: { thumbIsDrawn(tree) }, "つまみが、送られた位置に描かれる")
     XCTAssertEqual(
-      tree.scroll.documentVisibleRect.minY, tree.geometry(at: 0).position(afterDragging: 50),
-      accuracy: 1)
+      tree.scroll.documentVisibleRect.minY, expected, accuracy: 1, "引いた 50pt ぶん送られる")
     let end = NSPoint(x: start.x, y: start.y - 1000)
     NSApp.sendEvent(tree.mouse(.leftMouseDragged, end))
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+    waitUntil(10) { abs(tree.scroll.documentVisibleRect.maxY - tree.document.frame.height) <= 1 }
     XCTAssertEqual(
       tree.scroll.documentVisibleRect.maxY, tree.document.frame.height, accuracy: 1, "末尾まで届く")
     XCTAssertEqual(
@@ -154,25 +193,33 @@ final class SidebarScrollbarTests: OrbeTestCase {
     NSApp.sendEvent(tree.mouse(.leftMouseUp, end))
   }
 
-  /// 掴めるのは見えているつまみだけ——つまみを押しても下の行は選ばれず、帯のつまみの外を押せばその行が選ばれる。
-  func testOnlyTheTreeThumbIsGrabbedAndTheRestOfTheBandSelectsTheRow() throws {
+  /// 掴めるのは見えているつまみだけ——ポインタを乗せたつまみを押しても、下の行は選ばれない。
+  func testPressingTheTreeThumbDoesNotSelectTheRowUnderIt() throws {
     let tree = try hostTree()
-    func click(_ point: NSPoint) {
-      hover(tree, point)
-      NSApp.sendEvent(tree.mouse(.leftMouseDown, point))
-      NSApp.sendEvent(tree.mouse(.leftMouseUp, point))
-      RunLoop.main.run(until: Date().addingTimeInterval(NSEvent.doubleClickInterval + 0.1))
-    }
-    let position: CGFloat = 100
-    tree.move(to: position)
-    let thumb = try XCTUnwrap(treeThumbFrame(tree.pane))
-    click(NSPoint(x: thumb.midX, y: thumb.midY))
+    let thumb = thumbFrame(tree, at: 100)
+    let point = NSPoint(x: thumb.midX, y: thumb.midY)
+    hover(tree, point)
+    move(tree, to: 100)
+    NSApp.sendEvent(tree.mouse(.leftMouseDown, point))
+    NSApp.sendEvent(tree.mouse(.leftMouseUp, point))
     XCTAssertNil(tree.pane.tree.selected, "つまみ")
+  }
 
+  /// 帯のつまみの外を押せば、その行が選ばれる。
+  func testPressingTheBandOutsideTheTreeThumbSelectsTheRow() throws {
+    let tree = try hostTree()
+    let position: CGFloat = 100
+    let thumb = thumbFrame(tree, at: position)
     let band = NSPoint(x: thumb.midX, y: thumb.minY - Theme.Layout.editorRow)
-    click(band)
+    hover(tree, band)
+    move(tree, to: position)
+    NSApp.sendEvent(tree.mouse(.leftMouseDown, band))
+    NSApp.sendEvent(tree.mouse(.leftMouseUp, band))
     let bandY = tree.scroll.convert(band, from: nil).y
     let row = tree.pane.tree.rows[Int((position + bandY) / Theme.Layout.editorRow)]
-    XCTAssertEqual(tree.pane.tree.selected, row.id, "帯のつまみの外")
+    XCTAssertEqual(
+      tree.pane.tree.selected, row.id,
+      "帯のつまみの外を押せば、離すイベントの配送の中で行が選ばれる。これが待たずに成り立たなくなれば、"
+        + "testPressingTheTreeThumbDoesNotSelectTheRowUnderIt の確かめる時点も成り立たない")
   }
 }

@@ -220,8 +220,7 @@ final class PaletteFitTests: OrbeTestCase {
     window.contentView = host
     holdUntilTestEnds(window)
     host.layoutSubtreeIfNeeded()
-    // chrome の実測が preference で遡上し、リスト上限へ反映されるまで 1 パス回す。
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+    // chrome の実測は preference で遡上し、次のレイアウトでリスト上限へ反映される。
     host.layoutSubtreeIfNeeded()
     return host.fittingSize.height
   }
