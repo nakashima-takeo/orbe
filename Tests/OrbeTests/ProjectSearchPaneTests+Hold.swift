@@ -19,15 +19,12 @@ extension ProjectSearchPaneTests {
     let closeWindow: () -> Void
   }
 
-  /// a.txt・b.txt に一致、z.txt・x.txt は一致なしで普通のタブで開いておく。窓は物理画面の外へ並べる（`sendEvent` は
-  /// ordered-in の窓にしか配送しない）。結果の列で ↓ を押し続け、b.txt の一致を待たせた状態で返す（`released` なら離して、
-  /// 窓が閉じる前）。
+  /// a.txt・b.txt に一致、z.txt・x.txt は一致なしで普通のタブで開いておく。結果の列で ↓ を押し続け、b.txt の一致を
+  /// 待たせた状態で返す（`released` なら離して、窓が閉じる前）。
   private func holding(released: Bool) throws -> Held {
     let hosted = try host([
       "a.txt": "needle\n", "b.txt": "needle\n", "x.txt": "xxx\n", "z.txt": "zzz\n",
     ])
-    hosted.window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
-    hosted.window.orderFront(nil)
     _ = try open(hosted, "z.txt")
     _ = try open(hosted, "x.txt")
     searchAll(hosted, "needle")
@@ -93,6 +90,7 @@ extension ProjectSearchPaneTests {
   func testPressingAFileTabWhileHoldingDownDropsTheWaitingOpen() throws {
     for released in [false, true] {
       let held = try holding(released: released)
+      placeOffscreen(held.hosted.window)
       try click(held.hosted.pane, at: tabPoint(held.hosted, "z.txt"))
       assertTheWaitingMatchStaysClosed(
         held, shows: held.hosted.repo.url("z.txt"), released ? "離した直後にタブ" : "押したままタブ")
@@ -103,6 +101,7 @@ extension ProjectSearchPaneTests {
     for released in [false, true] {
       let held = try holding(released: released)
       let hosted = held.hosted
+      placeOffscreen(hosted.window)
       let x = hosted.repo.url("x.txt")
       let index = try XCTUnwrap(hosted.pane.shell.tabs.firstIndex { $0.id == .document(x) })
       try click(hosted.pane, at: fileTabSlotCenter(hosted.pane, index))

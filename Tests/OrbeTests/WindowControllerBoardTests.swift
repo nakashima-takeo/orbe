@@ -12,19 +12,10 @@ import XCTest
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerBoardTests: OrbeTestCase {
-  /// 画面外に出した（ordered-in の）窓。終わりに下ろす。
-  private var shown: WindowController?
-
   override func setUp() {
     super.setUp()
     // 言語確定済み（returning user）として起動し、初回言語選択 overlay を出さない。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
-  }
-
-  override func tearDown() {
-    shown?.window.orderOut(nil)
-    shown = nil
-    super.tearDown()
   }
 
   // MARK: - fixture
@@ -48,14 +39,6 @@ final class WindowControllerBoardTests: OrbeTestCase {
           "fetch", "取る", .scheduled(.every(1800)), script: "true", coverage: .currentSet)
         return sample
       })
-  }
-
-  /// 窓を画面外に出す。非アクティブなアプリの窓は key にならないが、`NSApp.sendEvent` は ordered-in の窓の first responder
-  /// へ届ける。
-  func show(_ wc: WindowController) {
-    shown = wc
-    NSApplication.shared.setActivationPolicy(.accessory)
-    wc.window.makeKeyAndOrderFront(nil)
   }
 
   /// content に載っていて見えているビュー。
@@ -119,7 +102,6 @@ final class WindowControllerBoardTests: OrbeTestCase {
   /// どのタブにも何も起こさない。
   @MainActor func testTabKeysStopAtTheFocusedBoard() throws {
     let wc = try homeOnBoard(tabs: 2)
-    show(wc)
     pump()
     XCTAssertTrue(wc.window.firstResponder is NSTextView, "前提: 焦点は依頼の欄")
     let tabs = wc.current.tabs
@@ -164,7 +146,6 @@ final class WindowControllerBoardTests: OrbeTestCase {
   @MainActor func testEnteringTheBoardStartsAtTheRequestField() throws {
     savePausedAutomations()
     let wc = WindowController()
-    show(wc)
     let home = try XCTUnwrap(wc.store.homeIndex)
     wc.switchWorkspace(to: home)
     wc.newTab()
@@ -206,7 +187,6 @@ final class WindowControllerBoardTests: OrbeTestCase {
   /// 打ちかけは全文が選ばれている（⌘⇧X の入力欄と同じ）。端末タブを選んでいる間、隠れた欄はキーを取らない。
   @MainActor func testFocusReturnsToTheRequestFieldWhereItWasLeft() throws {
     let wc = WindowController()
-    show(wc)
     let home = try XCTUnwrap(wc.store.homeIndex)
     wc.switchWorkspace(to: home)
     wc.newTab()
@@ -243,7 +223,6 @@ final class WindowControllerBoardTests: OrbeTestCase {
   @MainActor func testAutomationsVanishingUnderThePaletteLeaveTheFocusInThePalette() throws {
     savePausedAutomations()
     let wc = WindowController()
-    show(wc)
     wc.switchWorkspace(to: try XCTUnwrap(wc.store.homeIndex))
     let automation = wc.board.automation
     wc.statusModel.onSelectBoard()
@@ -287,7 +266,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
       timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: wc.window.windowNumber,
       context: nil, characters: characters, charactersIgnoringModifiers: characters,
       isARepeat: false, keyCode: keyCode)
-    NSApp.sendEvent(try XCTUnwrap(event))
+    deliverKeyDown(try XCTUnwrap(event), to: wc.window)
     pump()
   }
 
@@ -331,7 +310,6 @@ final class WindowControllerBoardTests: OrbeTestCase {
   /// 焦点はそのタブに残る——戻る途中でボードが一瞬選ばれても、そのときの欄への焦点の合図が後から端末の焦点を奪わない。
   @MainActor func testFocusTabFromAnotherWorkspaceLeavesNoFocusRequestBehind() throws {
     let wc = try homeOnBoard(tabs: 1)
-    show(wc)
     pump()
     let target = wc.current.tabs[0]
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))

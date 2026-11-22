@@ -40,13 +40,6 @@ extension WindowControllerReportAgentTests {
     return (task.id, try XCTUnwrap(resolution, "前提: 解けている"))
   }
 
-  /// 初回起動の言語選択（真のモーダル）を下ろした窓。⌘⇧X を開くテストの足場。
-  private func launchWithoutFirstRun() throws -> WindowController {
-    let (wc, _) = try makeControllerAndTab()
-    wc.dismissPalette()
-    return wc
-  }
-
   private func pr214() throws -> TaskLink {
     TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/orbe", number: 214)), kind: .pr)
   }
@@ -96,8 +89,9 @@ extension WindowControllerReportAgentTests {
 
   /// 前面の ⌘⇧X でそのタスクを選んでいれば、ピルも音も出ない。別のタスクが解けたときは出る。
   func testTaskNoticeSuppressedWhileViewingThatTask() throws {
-    let wc = try launchWithoutFirstRun()
-    makeKey(wc)
+    let window = OrbeWindowFake()
+    let wc = try launchWithoutFirstRun(window: window)
+    window.isKey = true
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     let viewed = try resolveTask(wc)
     let other = try resolveTask(wc, title: "別のタスク")

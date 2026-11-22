@@ -15,17 +15,11 @@ import XCTest
 /// libghostty ランタイムを起動する（ヘッドレスな純ロジック検証ではない）。
 final class WindowControllerReportAgentTests: OrbeTestCase {
 
-  /// `makeKey` で前面化した窓。次のテスト（背面前提）へ key を持ち越さないため tearDown で下ろす。
-  private var openedWindows: [NSWindow] = []
-  override func tearDown() {
-    openedWindows.forEach { $0.orderOut(nil) }
-    openedWindows.removeAll()
-    super.tearDown()
-  }
-
-  /// 1 workspace 1 タブで起動し、そのタブを返す。
+  /// 1 workspace 1 タブで `window` の上に起動し、そのタブを返す。
   /// 分割した拡張ファイルからも使うため internal。
-  func makeControllerAndTab() throws -> (WindowController, TerminalTab) {
+  func makeControllerAndTab(window: OrbeWindow = OrbeWindow()) throws -> (
+    WindowController, TerminalTab
+  ) {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -34,15 +28,25 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
           tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
-    let wc = WindowController()
+    let wc = WindowController(window: window)
     let tab = try XCTUnwrap(wc.current.tabs.first)
     return (wc, tab)
   }
 
-  /// 1 workspace 2 タブ（アクティブはタブ0＝見ているタブ）で起動し、
+  /// `window` の上に `makeControllerAndTab` で起動し、初回起動の言語選択（真のモーダル）を閉じた `WindowController`。
+  /// オーバーレイが出ていない窓を前提にするテストの足場。分割した拡張ファイルからも使うため internal。
+  func launchWithoutFirstRun(window: OrbeWindow = OrbeWindow()) throws -> WindowController {
+    let (wc, _) = try makeControllerAndTab(window: window)
+    wc.dismissPalette()
+    return wc
+  }
+
+  /// 1 workspace 2 タブ（アクティブはタブ0＝見ているタブ）で `window` の上に起動し、
   /// タブ順に並べた各タブ（`tabs[i]` がタブ i）を返す。
   /// 分割した拡張ファイルからも使うため internal。
-  func makeControllerAndTwoTabs() throws -> (WindowController, [TerminalTab]) {
+  func makeControllerAndTwoTabs(window: OrbeWindow = OrbeWindow()) throws -> (
+    WindowController, [TerminalTab]
+  ) {
     let tab = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
@@ -50,7 +54,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
         WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [tab, tab])
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
-    let wc = WindowController()
+    let wc = WindowController(window: window)
     XCTAssertEqual(wc.current.tabs.count, 2)
     // 通知の可視性境界を測る fixture なので、hidden mount の queue 進行速度に依存せず
     // 両タブを lifecycle 上の live 側へ進める。workspace の setter は使わない。
@@ -97,33 +101,6 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     let dormant = try XCTUnwrap(wc.regularWorkspaces.last)
     XCTAssertFalse(dormant.activated, "前提: 復元直後の未切替 workspace は休眠")
     return (wc, try XCTUnwrap(dormant.tabs.first))
-  }
-
-  /// AppKit のイベントを実際に取り出して配送し、`done` が真になるまで回す。活性化（`activate` → key 化）は
-  /// WindowServer から届くイベントを NSApp が捌いて初めて成立するため、素の `RunLoop.run` では key にならない。
-  /// `seconds` は上限。速い機械では待たず、詰まった共有ランナーでも取りこぼさない。前面にした間に本物のキーボードから届いた
-  /// イベントは配送しない——利用者の打鍵をテストの判定（⌥ の長押しなど）へ通さないため。
-  private func pumpApp(upTo seconds: TimeInterval, until done: () -> Bool) {
-    let end = Date().addingTimeInterval(seconds)
-    let mask = NSEvent.EventTypeMask.any.subtracting([.keyDown, .keyUp, .flagsChanged])
-    while Date() < end, !done() {
-      guard
-        let event = NSApp.nextEvent(
-          matching: mask, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
-      else { continue }
-      NSApp.sendEvent(event)
-    }
-  }
-
-  /// ウィンドウを実際に key（前面）にする。`isKeyWindow` を要求する契約を実経路で測るため。
-  /// 分割した拡張ファイル（+Sound）からも使うため internal。
-  func makeKey(_ wc: WindowController) {
-    NSApplication.shared.setActivationPolicy(.accessory)
-    wc.window.makeKeyAndOrderFront(nil)
-    NSApplication.shared.activate(ignoringOtherApps: true)
-    openedWindows.append(wc.window)
-    pumpApp(upTo: 2, until: { wc.window.isKeyWindow })
-    XCTAssertTrue(wc.window.isKeyWindow, "前提: ウィンドウが key にならない環境ではこの契約を測れない")
   }
 
   func testStateChangedAtMovesOnlyOnActualChange() throws {
@@ -196,8 +173,9 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
   /// 見ているタブ（前面ウィンドウのアクティブ表示タブ）のタブでは②を立てない。
   /// 抑制されるのはピルだけで、一覧（rows）と done のフォーカス消費は従来どおり効く。
   func testTransientSuppressedOnVisibleTab() throws {
-    let (wc, tab) = try makeControllerAndTab()
-    makeKey(wc)
+    let window = OrbeWindowFake()
+    let (wc, tab) = try makeControllerAndTab(window: window)
+    window.isKey = true
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
 
     wc.controlReportAgent(
@@ -225,8 +203,9 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
 
   /// 前面のままでも、見ていない別タブなら②は立つ。
   func testTransientFiresForBackgroundTabWhileKey() throws {
-    let (wc, tabs) = try makeControllerAndTwoTabs()
-    makeKey(wc)
+    let window = OrbeWindowFake()
+    let (wc, tabs) = try makeControllerAndTwoTabs(window: window)
+    window.isKey = true
 
     wc.controlReportAgent(
       tab: tabs[1],
@@ -238,8 +217,9 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
 
   /// 抑制は「立てない」だけ。別の場所で起きた変化の既存ピルには触らない。
   func testSuppressionKeepsExistingTransient() throws {
-    let (wc, tabs) = try makeControllerAndTwoTabs()
-    makeKey(wc)
+    let window = OrbeWindowFake()
+    let (wc, tabs) = try makeControllerAndTwoTabs(window: window)
+    window.isKey = true
 
     wc.controlReportAgent(
       tab: tabs[1],

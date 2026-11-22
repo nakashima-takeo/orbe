@@ -76,7 +76,7 @@ final class UnsavedGateTests: OrbeTestCase {
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [WorkspaceState(name: "main", rootPath: repo.root, activeTab: 0, tabs: tabs)])
     try JSONEncoder().encode(file).write(to: workspacesFile())
-    return WindowController()
+    return WindowController(window: OrbeWindowFake())
   }
 
   /// 人の操作（⌘W・中クリック）は、連の最後のタブを閉じるときだけ未保存を sheet で確認し、保存しないで閉じる。
@@ -170,11 +170,7 @@ final class UnsavedGateTests: OrbeTestCase {
 
   func testFileTabCloseAsksOnlyWhenDirty() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    window.contentView = tab.group.view
-    tab.group.view.show(.editor, animated: false)
+    let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     try repo.write("b.txt", "b\n")
@@ -199,11 +195,7 @@ final class UnsavedGateTests: OrbeTestCase {
   /// 印が落ちる。上書きされるのは確認を出した文書——sheet の間に別の文書を開いて焦点が移っても変わらない。
   func testCommandSOverwritesOnlyTheDocumentThatWasConfirmed() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    window.contentView = tab.group.view
-    tab.group.view.show(.editor, animated: false)
+    let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)

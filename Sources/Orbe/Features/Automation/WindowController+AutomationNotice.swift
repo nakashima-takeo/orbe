@@ -93,8 +93,7 @@ extension WindowController {
 
   /// 通知センターの通知のクリック。ピルのクリックと同じく、前面化してから Home のボードでその自動化を開く。
   func openAutomationFromSystemNotification(_ id: Int) {
-    NSApp.activate(ignoringOtherApps: true)
-    window.makeKeyAndOrderFront(nil)
+    window.bringToFront()
     showAutomation(id)
   }
 

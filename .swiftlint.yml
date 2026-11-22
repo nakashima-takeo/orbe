@@ -79,6 +79,35 @@ custom_rules:
     message: "swift-testing は使わない（隔離ハーネスを通らない）。XCTest ＋ OrbeTestCase を使う"
     severity: error
 
+  test_screen_isolation:
+    name: "通常のテストは画面と前面に出ない"
+    included: ".*/Tests/.*\\.swift"
+    excluded:
+      - ".*/Tests/OrbeTests/OffscreenWindowPlacement\\.swift"
+      - ".*/Tests/OrbeTests/ScreenIsolation\\.swift"
+      - ".*/Tests/OrbeTests/EditorRowsTrialTests(\\+Side)?\\.swift"
+      - ".*/Tests/OrbeTests/EditorPresentPerfTests\\.swift"
+    # 窓を並べる API と、アプリを前面にする API を検出する。`activate` は `NSApp.` と `NSApplication.shared.` に続くものだけを、
+    # `order` は `relativeTo:` を取る呼び出しだけを見る（本番コードの、同名のほかのメソッドを巻き込まない）。別名を経た呼び出しと、
+    # ここに無い経路は lint では検出されない（実行時の隔離 `ScreenIsolation` が見る）。`\s*` は swift format の折返しを許すため。
+    regex: "\\b(?:setActivationPolicy|makeKeyAndOrderFront|orderFrontRegardless|orderFront|orderBack|setIsVisible|showWindow)\\b|\\.\\s*order\\s*\\((?=[^()]*\\brelativeTo\\b)|\\bNSApp\\s*\\.\\s*activate\\b|\\bNSApplication\\s*\\.\\s*shared\\s*\\.\\s*activate\\b"
+    match_kinds: [identifier, typeidentifier]
+    message: "通常のテストは窓を並べず、アプリを前面にしない（キーの配送は deliverKeyDown。マウスの配送が要るテストだけ、placeOffscreen で画面外へ並べる）"
+    severity: error
+
+  test_screen_isolation_exemption:
+    name: "画面と前面の隔離から外れるのは、画面に出す道具だけ"
+    included: ".*/Tests/.*\\.swift"
+    excluded:
+      - ".*/Tests/OrbeTests/TestIsolation\\.swift"
+      - ".*/Tests/OrbeTests/EditorRowsTrialTests\\.swift"
+      - ".*/Tests/OrbeTests/EditorPresentPerfTests\\.swift"
+    # 宣言の綴り（修飾子の順）に依らないよう、識別子そのものを見る。
+    regex: "\\bpresentsOnScreen\\b"
+    match_kinds: [identifier]
+    message: "presentsOnScreen を宣言するのは、画面に出して人が見る・計測する道具だけ（通常のテストは画面と前面の隔離の対象）"
+    severity: error
+
 identifier_name:
   min_length: 1 # 座標 (x, y, w, h)・ループ変数等の短い局所名は本リポジトリのイディオム
 

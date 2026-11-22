@@ -14,25 +14,9 @@ import XCTest
 final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
   func mount(_ model: WorktreePaletteModel) -> NSWindow {
-    NSApplication.shared.setActivationPolicy(.accessory)
-    let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 760, height: 520),
-      styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = NSHostingView(
-      rootView: WorktreePaletteCard(model: model, maxHeight: 520).frame(width: 720))
-    window.makeKeyAndOrderFront(nil)
-    hold(window)
-    pump(0.4)
-    return window
-  }
-
-  private var held: [NSWindow] = []
-  private func hold(_ window: NSWindow) { held.append(window) }
-
-  override func tearDown() {
-    held.forEach { $0.orderOut(nil) }
-    held.removeAll()
-    super.tearDown()
+    host(
+      NSHostingView(rootView: WorktreePaletteCard(model: model, maxHeight: 520).frame(width: 720)),
+      size: NSSize(width: 760, height: 520))
   }
 
   private func sendTab(shift: Bool, to window: NSWindow) {

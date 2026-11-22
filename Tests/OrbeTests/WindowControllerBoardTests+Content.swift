@@ -42,7 +42,6 @@ extension WindowControllerBoardTests {
   /// ボードを選んでいる間に裏のタブが cd で別の連へ移っても、ボードは出たままで、焦点もボードに残る。
   @MainActor func testACdBehindTheBoardKeepsTheBoardShownAndFocused() throws {
     let wc = try homeOnBoard(tabs: 2)
-    show(wc)
     pump()
     XCTAssertTrue(wc.window.firstResponder is NSTextView, "前提: 焦点は依頼の欄")
     let moved = wc.current.tabs[1]

@@ -11,28 +11,17 @@ import XCTest
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerBoardWidgetsTests: OrbeTestCase {
-  private var shown: WindowController?
-
   override func setUp() {
     super.setUp()
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
   }
 
-  override func tearDown() {
-    shown?.window.orderOut(nil)
-    shown = nil
-    super.tearDown()
-  }
-
   private static let nextTabKey = NSEvent.key("}", [.command, .shift])
   private static let prevTabKey = NSEvent.key("{", [.command, .shift])
 
-  /// Home を前面にしてタブを `count` 枚開き、ボードを選んで、画面外に出した WindowController。焦点は依頼の欄。
+  /// Home を前面にしてタブを `count` 枚開き、ボードを選んだ WindowController。焦点は依頼の欄。
   @MainActor private func homeOnBoard(tabs count: Int) throws -> WindowController {
     let wc = WindowController()
-    shown = wc
-    NSApplication.shared.setActivationPolicy(.accessory)
-    wc.window.makeKeyAndOrderFront(nil)
     wc.switchWorkspace(to: try XCTUnwrap(wc.store.homeIndex))
     for _ in 0..<count { wc.newTab() }
     wc.statusModel.onSelectBoard()
@@ -53,7 +42,7 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
       timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: wc.window.windowNumber,
       context: nil, characters: character, charactersIgnoringModifiers: character,
       isARepeat: false, keyCode: 0)
-    NSApp.sendEvent(try XCTUnwrap(event))
+    deliverKeyDown(try XCTUnwrap(event), to: wc.window)
     pump()
   }
 
