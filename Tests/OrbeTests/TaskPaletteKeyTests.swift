@@ -123,7 +123,6 @@ final class TaskPaletteKeyTests: OrbeTestCase {
 
     send(.space, to: model)
     send(.space, repeating: true, to: model)
-    send(.space, repeating: true, to: model)
 
     XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .done], "完了は押した 1 件だけ")
     XCTAssertEqual(model.query, "", "リピートは入力欄に空白を入れない")

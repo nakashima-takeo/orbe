@@ -114,13 +114,16 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
   /// 名前は全選択で入る。folder に戻したパス欄も末尾。
   func testCloneFieldsCaretOnSourceSwitchAndTabCycle() throws {
     let (wc, model) = try openCreateForm()
+    // folder に戻した後は、キャレットが `~` の末尾に来るのを待つ。focus が clone 先欄に残っていても、この待ちが成り立たないよう、
+    // clone 先をパスと違う値にする。
+    model.setCloneDir("~/src")
     model.setCloneURL("https://github.com/you/repo.git")
     model.setSource(.clone)
     awaitCaretAtEnd(wc, of: "https://github.com/you/repo.git")
     try assertCaretAtEnd(wc, of: "https://github.com/you/repo.git", "切替で入った URL 欄は末尾")
 
     tab(wc)
-    try assertCaretAtEnd(wc, of: "~", "⇥ で入った clone 先欄は末尾")
+    try assertCaretAtEnd(wc, of: "~/src", "⇥ で入った clone 先欄は末尾")
     tab(wc)
     try assertAllSelected(wc, of: "repo", "⇥ で入った名前欄は全選択")
     tab(wc)
@@ -128,7 +131,7 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
     tab(wc, shift: true)
     try assertAllSelected(wc, of: "repo", "⇧⇥ で入った名前欄は全選択")
     tab(wc, shift: true)
-    try assertCaretAtEnd(wc, of: "~", "⇧⇥ で入った clone 先欄は末尾")
+    try assertCaretAtEnd(wc, of: "~/src", "⇧⇥ で入った clone 先欄は末尾")
 
     model.setSource(.folder)
     awaitCaretAtEnd(wc, of: "~")

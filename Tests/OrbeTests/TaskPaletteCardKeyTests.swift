@@ -83,6 +83,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let window = mount(model)
 
     send(Key.space, " ", to: window)
+    send(Key.space, " ", repeating: true, to: window)
     XCTAssertEqual(status(model, 3), .done, "空の入力欄の space は選んだタスクを完了にする")
 
     type("b", into: window)

@@ -45,6 +45,7 @@ extension TaskPaletteKeyTests {
 
     enterDetail(model, at: .priority)
     send(.space, to: model)
+    send(.space, repeating: true, to: model)
     XCTAssertEqual(status(model, 3), .done, "右の欄でも space はそのタスクに効く")
     XCTAssertEqual(model.area, .detail(.field(.priority)), "右の欄に居たまま")
   }
