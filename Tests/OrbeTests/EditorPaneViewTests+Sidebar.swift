@@ -192,7 +192,6 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
       cwd: TestScratch.caseDir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let commandB = NSEvent.key("b")
 
     window.makeFirstResponder(pane)

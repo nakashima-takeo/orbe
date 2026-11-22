@@ -115,15 +115,13 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     XCTAssertFalse(state.isWatched, "PR ごとの状態を見ている者は残らない")
   }
 
-  /// 面だけを載せる窓（テストの終わりに面を外す）。
+  /// 面だけを載せる窓（テストの終わりまで持ち、テストの終わりに面を外す）。
   private func paneWindow() -> NSWindow {
-    let window = OrbeWindowFake(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    addTeardownBlock {
-      window.orderOut(nil)
-      window.contentView = nil
-    }
+    let window = holdUntilTestEnds(
+      OrbeWindowFake(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
+        backing: .buffered, defer: false))
+    addTeardownBlock { window.contentView = nil }
     return window
   }
 }
