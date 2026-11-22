@@ -46,11 +46,11 @@ extension EditorPaneView {
     for view in diffViews where !views.contains(where: { $0 === view }) {
       view.removeFromSuperview()
     }
-    for surface in surfaces where surface.view.superview !== self { install(surface) }
+    for surface in surfaces where surface.view.superview !== belowBar { install(surface) }
     diffViews = views
     if surfaces.count == 2 {
-      if diffDivider.superview !== self {
-        addSubview(diffDivider, positioned: .below, relativeTo: sidebarHandle)
+      if diffDivider.superview !== belowBar {
+        belowBar.addSubview(diffDivider, positioned: .below, relativeTo: sidebarHandle)
       }
     } else {
       diffDivider.removeFromSuperview()
@@ -91,7 +91,7 @@ extension EditorPaneView {
     diff.onFocusChange = on ? { [weak self] _ in self?.focusDidChange() } : nil
   }
 
-  /// 本体に文字だけを出す器（空状態・表示できない diff の一文・読み込み中の diff）の見え隠れと中身。
+  /// 本体に文字だけを出す器（空・使えないときの表示・表示できない diff の一文・読み込み中の diff）の見え隠れと中身。
   func refreshNotice() {
     switch body {
     case .document: faceHost.isHidden = true
@@ -99,16 +99,19 @@ extension EditorPaneView {
     case .empty: faceHost.isHidden = false
     }
     let content = faceContent
-    if faceHost.rootView.content != content {
-      faceHost.rootView = EditorFaceRoot(localization: localization, content: content)
-    }
+    if faceHost.rootView.content != content { faceHost.rootView = faceRoot(content) }
   }
 
-  /// 器に出すもの。本体が空なら、Files は空状態、Changes・PR は何も出さない。
+  /// 器の root。空・使えないときの表示は今の一覧の状態を読み、ボタンの外を押せば面が焦点を取る。
+  func faceRoot(_ content: EditorFaceRoot.Content) -> EditorFaceRoot {
+    EditorFaceRoot(
+      localization: localization, content: content, scm: scm, pullRequest: pullRequest
+    ) { [weak self] in self?.focusEditor() }
+  }
+
+  /// 器に出すもの。本体が空なら、その画面の空・使えないときの表示。
   var faceContent: EditorFaceRoot.Content {
-    guard case .diff(let diff) = body else {
-      return (group?.editor.screen ?? .files) == .files ? .empty : .blank
-    }
+    guard case .diff(let diff) = body else { return .empty(group?.editor.screen ?? .files) }
     switch diff.content {
     case .ready, .loading: return .blank
     case .unavailable(.notText): return .notice(.editorDiffNotText)
@@ -130,7 +133,7 @@ extension EditorPaneView {
     }
   }
 
-  /// 見せ方の選択を観測して、見せている diff を見せ直す（タブ行の右端の切り替えは写しにも写す）。
+  /// 見せ方の選択を観測して、見せている diff を見せ直す。
   func observeDiffModes() {
     withObservationTracking {
       _ = diffModes.mode
@@ -142,7 +145,6 @@ extension EditorPaneView {
           installDiffSurfaces(diff)
           needsLayout = true
         }
-        shell.diffMode = diffModes.mode
         observeDiffModes()
       }
     }
@@ -180,13 +182,16 @@ extension EditorPaneView {
     }
   }
 
-  /// Changes・PR の diff を、画面・面の可視性・一覧の行・worktree の今の PR に合わせる 1 か所。きっかけは、セッションの変化
-  /// （画面が替わった・diff が閉じた）・面の可視性の変化・一覧の行の組み直し・worktree の今の PR の答えの変化。
+  /// 一覧の行が揃ったら済ませる用事（本体の diff・一覧のための焦点の預かり）を、画面・面の可視性・一覧の行・worktree の
+  /// 今の PR に合わせる 1 か所。きっかけは、セッションの変化（画面が替わった・diff が閉じた）・面の可視性の変化・一覧の行の
+  /// 組み直し・一覧の状態の変化・worktree の今の PR の答えの変化。
+  /// - 焦点を預かっていれば、一覧の状態に合わせて進める（→ `advanceListFocusHold`）。
   /// - PR の diff の PR が、worktree の今の PR（答えが出ているとき）と違えば閉じる。
   /// - 開いた diff の行を待っていれば、行ができたときに選ぶ。
   /// - 面が見えていて、今の画面（Changes・PR）に diff が無く、一覧にファイルの行があれば、選んでいる行（ファイルの行でなければ
   ///   先頭のファイルの行）を開く。画面は選ばず、焦点も動かさない。開けなければ何もしない（次のきっかけまで試さない）。
-  func reconcileDiffs() {
+  func reconcileWithLists() {
+    advanceListFocusHold()
     guard let group else { return }
     let session = group.editor
     if case .pullRequest(let state)? = session.pullRequestDiff?.id.kind, hasPullRequestAnswer,

@@ -39,7 +39,7 @@ final class EditorSurfaceHostTests: OrbeTestCase {
     pane.openFiles([dir, other])
     XCTAssertEqual(tab.group.editor.activeDocument?.url, other, "フォルダは開かず、ファイルを開く")
     XCTAssertEqual(tab.group.editor.documents.count, 2)
-    XCTAssertNil(tab.group.editor.preview, "ドロップは普通のタブ")
+    XCTAssertNil(tab.group.editor.preview, "ドロップは普通の文書")
   }
 
   /// 変換中に pane が解く chrome キーを押すと、走らせる前に変換を確定する。⌘R（タブの名前。タブに依らない window

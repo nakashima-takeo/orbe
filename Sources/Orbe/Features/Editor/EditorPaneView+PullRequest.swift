@@ -10,9 +10,10 @@ extension EditorPaneView {
   func wirePullRequest() {
     pullRequest.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
     pullRequest.onPullRequestChange = { [weak self] in
-      self?.reconcileDiffs()
+      self?.reconcileWithLists()
       self?.onPullRequestChange()
     }
+    pullRequest.onListStateChange = { [weak self] in self?.reconcileWithLists() }
     pullRequest.onFocusWillClose = { [weak self] in
       guard let self, focusIsInPullRequest else { return }
       reclaimSidebarFocus()
@@ -41,9 +42,10 @@ extension EditorPaneView {
     }
   }
 
-  /// 焦点が PR のパネルの列か全体へのコメント欄にあるか。
+  /// 焦点が PR のパネルの列か全体へのコメント欄にあるか（列のために面が預かっている焦点を含む）。
   var focusIsInPullRequest: Bool {
     showsPullRequest && focusIsInSidebar
-      && (pullRequest.isListFocused || pullRequest.isReviewFieldFocused)
+      && (pullRequest.isListFocused || pullRequest.isReviewFieldFocused
+        || heldListFocus == .pullRequest)
   }
 }

@@ -6,13 +6,14 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 面の結線——一致の地は検索パネルが見えている間だけ ⌘F の一致との和で本文と俯瞰に出る、パネルの中のキー（⌥⌘C / W / R・
-/// ⌘↓ / ⌘↑）、エディター面の F4 / ⇧F4、開き方と焦点（シングルクリックは仮のタブで結果に残り、ダブルクリック・Enter は
-/// 普通のタブで本文へ、一致は中央へ）、パネルを隠すと焦点は本文へ戻り、焦点の要求は後で奪わない、裏のタブの cd では
-/// 探さない。
+/// ⌘↓ / ⌘↑）、エディター面の F4 / ⇧F4、ほかの画面・閉じた左の列からの ⌘⇧F、開き方と焦点（シングルクリックは仮の文書として
+/// 結果に残り、ダブルクリック・Enter は普通の文書として本文へ、一致は中央へ）、パネルを隠すと焦点は本文へ戻り、焦点の要求は
+/// 後で奪わない、裏のタブの cd では探さない。
 ///
 /// 壊れると何が起きるか。パネルを隠しても地が残る、⌘F の地が消える。パネルのキーが効かない、本文の打鍵を奪う。端末の F4 が
-/// 奪われる、本文の F4 が効かない。クリックで渡るたびに焦点が本文へ飛ぶ、タブが増える。隠れたパネルに焦点が取り残されて
-/// 打鍵が消える。見ていないタブが cd のたびに根の全体を探す。
+/// 奪われる、本文の F4 が効かない。左の列を閉じている・Changes や PR の画面に居ると、⌘⇧F を押しても入力欄が出ない。
+/// クリックで渡るたびに焦点が本文へ飛ぶ、タブが増える。隠れたパネルに焦点が取り残されて打鍵が消える。見ていないタブが cd の
+/// たびに根の全体を探す。
 extension ProjectSearchPaneTests {
   typealias RowID = ProjectSearch.RowID
 
@@ -57,7 +58,7 @@ extension ProjectSearchPaneTests {
         NSRange(location: 9, length: 6),
       ], "⌘F と同時に使えば両方の一致")
 
-    hosted.pane.shell.selectPanel(.files)
+    hosted.pane.filesPanel = .files
     pumpMain(
       until: { pushedFindGround(hosted) == [NSRange(location: 7, length: 1)] },
       "パネルを隠すとプロジェクト検索の地は消え、⌘F の地は残る")
@@ -97,7 +98,7 @@ extension ProjectSearchPaneTests {
     let pane = hosted.pane
     let document = try open(hosted, "a.txt")
     searchAll(hosted, "needle")
-    pane.shell.selectPanel(.files)
+    pane.filesPanel = .files
     hosted.window.makeFirstResponder(document.surface.responder)
 
     XCTAssertTrue(pane.handleStepKey(f4))
@@ -114,6 +115,20 @@ extension ProjectSearchPaneTests {
     hosted.window.makeFirstResponder(pane.focusTarget)
     hosted.search.clear()
     XCTAssertFalse(pane.handleStepKey(f4), "結果が無ければ素通し")
+  }
+
+  /// ⌘⇧F は、ほかの画面に居ても左の列を閉じていても、Files の画面にして左の列を検索パネルで開き、入力欄に焦点を入れる。
+  func testFindInProjectFromAnotherScreenWithTheSidebarClosedFocusesTheSearchField() throws {
+    let hosted = try host(["a.txt": "needle\n"])
+    let pane = hosted.pane
+    pane.switchScreen(.changes)
+    pane.toggleSidebar()
+
+    pane.showProjectSearch(seed: nil)
+    XCTAssertEqual(hosted.tab.group.editor.screen, .files)
+    XCTAssertTrue(pane.showsSearchPanel, "左の列を検索パネルで開く")
+    pumpMain(
+      until: { hosted.search.focusedArea == .field && pane.focusIsInSidebar }, "入力欄に焦点")
   }
 
   // MARK: - 開き方と焦点
@@ -145,8 +160,8 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(textHasFocus(hosted), "ダブルクリックは本文へ")
   }
 
-  /// 一致のクリックは仮のタブで開き、次のクリックがそのタブを入れ替える（タブが増えない）。ダブルクリックは普通のタブにし、
-  /// 次のクリックは別の仮のタブで開く。
+  /// 一致のクリックは仮の文書として開き、次のクリックがそのタブを入れ替える（タブが増えない）。ダブルクリックは普通の文書にし、
+  /// 次のクリックは別の仮の文書として開く。
   func testClickingMatchesBrowsesInOnePreviewTab() throws {
     let hosted = try host(["a.txt": "needle\n", "b.txt": "needle\n", "c.txt": "needle\n"])
     searchAll(hosted, "needle")
@@ -154,25 +169,14 @@ extension ProjectSearchPaneTests {
 
     hosted.search.click(RowID(path: "a.txt", match: 0))
     hosted.search.click(RowID(path: "b.txt", match: 0))
-    XCTAssertEqual(editor.documents.map(\.url.lastPathComponent), ["b.txt"], "仮のタブが入れ替わる")
+    XCTAssertEqual(editor.documents.map(\.url.lastPathComponent), ["b.txt"], "仮の文書が入れ替わる")
     XCTAssertTrue(editor.preview === hosted.pane.document)
 
     hosted.search.doubleClick(RowID(path: "b.txt", match: 0))
-    XCTAssertNil(editor.preview, "ダブルクリックで普通のタブ")
+    XCTAssertNil(editor.preview, "ダブルクリックで普通の文書")
     hosted.search.click(RowID(path: "c.txt", match: 0))
     XCTAssertEqual(editor.documents.map(\.url.lastPathComponent), ["b.txt", "c.txt"])
     XCTAssertTrue(editor.preview === hosted.pane.document)
-  }
-
-  /// レールの「検索」は検索パネルへ切り替えて入力欄に焦点を入れ、出しているときに押すと閉じる。
-  func testTheRailsSearchItemShowsThePanelWithTheFieldFocused() throws {
-    let hosted = try host(["a.txt": "needle\n"])
-    hosted.pane.shell.selectPanel(.search)
-    XCTAssertTrue(hosted.pane.showsSearchPanel)
-    pumpMain(until: { hosted.search.focusedArea == .field }, "入力欄に焦点")
-
-    hosted.pane.shell.selectPanel(.search)
-    XCTAssertFalse(hosted.pane.sidebar.isOpen)
   }
 
   /// 焦点がパネルにあるままパネルを隠すと、焦点は本文へ戻る。
@@ -182,7 +186,7 @@ extension ProjectSearchPaneTests {
     searchAll(hosted, "needle")
     pumpMain(until: { hosted.search.focusedArea == .field })
 
-    hosted.pane.shell.selectPanel(.files)
+    hosted.pane.filesPanel = .files
     pumpMain(until: { textHasFocus(hosted) }, "本文へ戻る")
   }
 
@@ -192,7 +196,7 @@ extension ProjectSearchPaneTests {
     _ = try open(hosted, "a.txt")
     searchAll(hosted, "needle")
     pumpMain(until: { hosted.search.focusedArea == .field })
-    hosted.pane.shell.selectPanel(.files)
+    hosted.pane.filesPanel = .files
     pumpMain(until: { textHasFocus(hosted) })
 
     XCTAssertTrue(hosted.pane.handleStepKey(f4))

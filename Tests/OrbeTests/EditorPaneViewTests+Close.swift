@@ -6,7 +6,7 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// 閉じる——ファイルタブの × は焦点を動かさず、連が消えれば（最後のタブが閉じれば）面・ツリー・文書は解放され、
+/// 閉じる——文書を閉じても焦点を動かさず、連が消えれば（最後のタブが閉じれば）面・ツリー・文書は解放され、
 /// 同じ根を握る別の連（別の workspace の同じ worktree）の監視は続く。面が窓に残っても、本体に見せていた diff は連と一緒に
 /// 終わる。
 ///
@@ -28,7 +28,7 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     let b = try tab.group.editor.open(try caseFile("b.txt", "b"), as: .pinned)
     XCTAssertTrue(pane.document === b)
 
-    pane.shell.requestClose(b.url)
+    pane.requestClose(b.url)
 
     XCTAssertTrue(pane.document === a, "焦点の文書を閉じれば隣の文書が見える")
     let responder = try XCTUnwrap(window.firstResponder as? NSView)

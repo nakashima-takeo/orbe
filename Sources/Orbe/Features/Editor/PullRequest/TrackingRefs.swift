@@ -21,11 +21,14 @@ final class TrackingRefs {
     self.names = names
   }
 
-  /// 今の値を覚え（次に動いたかを比べる相手）、`completion` を呼ぶ。
-  func record(_ completion: @escaping () -> Void = {}) {
+  /// 今の値を覚え（次に動いたかを比べる相手）、前に覚えた値から動いていたか（`moved`）を添えて `completion` を呼ぶ。比べる
+  /// のは `check` と同じく、前と今の両方で見ている ref だけ。
+  func record(_ completion: @escaping (_ moved: Bool) -> Void = { _ in }) {
+    let previous = recorded
     read { [weak self] read in
       self?.recorded = read
-      completion()
+      completion(
+        previous.flatMap { previous in read.map { Self.moved(from: previous, to: $0) } } ?? false)
     }
   }
 
@@ -41,13 +44,13 @@ final class TrackingRefs {
     read { [weak self] read in
       guard let self, let read else { return }
       recorded = read
-      guard
-        previous.refs.filter(read.refs.contains).contains(where: {
-          previous.values[$0] != read.values[$0]
-        })
-      else { return }
-      moved()
+      if Self.moved(from: previous, to: read) { moved() }
     }
+  }
+
+  /// 前と今の両方で見ている ref のどれかの値が変わった。
+  private static func moved(from previous: Read, to read: Read) -> Bool {
+    previous.refs.filter(read.refs.contains).contains { previous.values[$0] != read.values[$0] }
   }
 
   private func read(_ completion: @escaping (Read?) -> Void) {

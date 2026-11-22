@@ -35,6 +35,7 @@ extension L10n {
       "押している間、エディターの下のターミナルを表示", "Hold to show the terminal under the editor"
     ),
     .helpShortcutSaveDocument: ("エディターのファイルを保存", "Save the editor file"),
+    .helpShortcutToggleEditorSidebar: ("エディターのツリーを開く・閉じる", "Show or hide the editor tree"),
     .helpShortcutFindInProject: ("プロジェクト全体を検索", "Search the whole project"),
     .helpShortcutScmCommit: ("ソース管理のメッセージでコミット", "Commit from the Source Control message"),
     .helpShortcutScmCommitAndPush: (

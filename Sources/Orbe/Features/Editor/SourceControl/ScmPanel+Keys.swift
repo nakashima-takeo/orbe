@@ -2,6 +2,29 @@ import Foundation
 
 /// 変更の列の選択・キー・押下（検索結果の列と同じ型。→ `ScmListSource`）。
 extension ScmPanel {
+  /// 変更の列の状態。git 管理外・親「ソース管理」を畳んでいる（欄と列が左の列に出ていない）なら無い。行があればある。
+  /// 無ければ、git 管理下かの判定の前・行が今の status からまだ出来ていない間はこれから来る、それ以外（変更なし）は無い。
+  var listState: EditorListState {
+    if isManaged == false || !isRepositoryOpen { return .none }
+    if !layout.items.isEmpty { return .rows }
+    return isManaged == nil || rowsArePending ? .coming : .none
+  }
+
+  /// 列の状態を観測し、`reported` から変わったら知らせる。状態を決める値（判定・親の開閉・行の組・status から行を作って
+  /// いるか〔`changesAreStale`・`buildJob`〕）はどれも観測するので、どの道で変わってもここが知らせる。
+  func observeListState(_ reported: EditorListState) {
+    withObservationTracking {
+      _ = listState
+    } onChange: { [weak self] in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        let state = self.listState
+        if state != reported { self.onListStateChange() }
+        self.observeListState(state)
+      }
+    }
+  }
+
   /// 行の開き方。
   struct Opening: Equatable {
     let focusesText: Bool

@@ -4,13 +4,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 検索結果の ↑↓ で一致を仮のタブで開くときの main の仕事を計って記録する（関門にはしない。判定するのは押し続けで開く回数
+/// 検索結果の ↑↓ で一致を仮の文書として開くときの main の仕事を計って記録する（関門にはしない。判定するのは押し続けで開く回数
 /// だけ）。`ORBE_EDITOR_PERF=1` のときだけ走る（時間はマシンと環境で変わるので通常のテストでは見ない）。結果は `PERF` で
 /// 始まる行に出す。時間は壁時計。
 ///
 /// 1MB の Swift のファイル 30 個（どれも先頭に一致 1 件）の結果の列で、実際の押しっぱなしの並び（リピートでない押下 1 つ →
 /// 初期遅延 0.5 秒 → リピート約 2 秒 → 離す）を、リピートの間隔 30ms（最速）と 90ms（macOS の既定相当）で流し、キー 1 回
-/// ごとの main の時間（押下と、続く run loop の 1 周）と開いた回数を出す。開く時間は、仮のタブを入れ替える開きと、入れ替えの
+/// ごとの main の時間（押下と、続く run loop の 1 周）と開いた回数を出す。開く時間は、仮の文書を入れ替える開きと、入れ替えの
 /// 無い開き（今の「結果をクリックして開く」）で並べる。
 @MainActor
 final class ProjectSearchArrowPerfTests: OrbeTestCase {
@@ -131,7 +131,7 @@ final class ProjectSearchArrowPerfTests: OrbeTestCase {
       "1MB×\(Self.files)", "arrow-hold keys without opening (reference)", reference, digits: 2)
   }
 
-  /// 仮のタブを入れ替える開きと、入れ替えの無い開き（文書の無い面でクリックして開く）の main の時間を並べる。
+  /// 仮の文書を入れ替える開きと、入れ替えの無い開き（文書の無い面でクリックして開く）の main の時間を並べる。
   func testMeasuresReplacingThePreviewAgainstAPlainOpen() throws {
     let hosted = try host()
     let editor = hosted.tab.group.editor
@@ -153,7 +153,7 @@ final class ProjectSearchArrowPerfTests: OrbeTestCase {
     var replacing: [Double] = []
     for index in 10..<20 {
       idle(0.2)
-      XCTAssertNotNil(editor.preview, "前提: 入れ替える仮のタブがある")
+      XCTAssertNotNil(editor.preview, "前提: 入れ替える仮の文書がある")
       replacing.append(click(index))
     }
     XCTAssertEqual(editor.documents.count, 1, "入れ替えでタブは増えない")

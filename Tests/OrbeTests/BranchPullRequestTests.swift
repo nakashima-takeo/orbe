@@ -87,7 +87,7 @@ final class BranchPullRequestTests: OrbeTestCase {
   }
 
   /// open の PR が無ければ（閉じた PR だけでも）、答えは作成の入口の材料になる。公開済みかは、ブランチが GitHub に無いと
-  /// 確かめられたときだけ「無い」になる。先行の数は既定のブランチの追跡 ref に対して数える。
+  /// 確かめられたときだけ「無い」になる。
   func testWithoutAnOpenPullRequestTheCreationEntryAsksWhetherTheBranchIsPublished() throws {
     repo.addOrigin()
     XCTAssertTrue(repo.git(["remote", "set-head", "origin", "main"]).isSuccess)
@@ -108,29 +108,7 @@ final class BranchPullRequestTests: OrbeTestCase {
       return XCTFail("作成の入口の材料")
     }
     XCTAssertEqual(creation.branch, "feat")
-    XCTAssertEqual(creation.defaultBranch, "main")
     XCTAssertEqual(creation.url, ref.pullRequestCreationURL)
-    XCTAssertEqual(creation.ahead, 1, "既定のブランチの追跡 ref に対する先行の数")
-  }
-
-  /// 作成の入口を出している間に手元でコミットすると、GitHub に問い合わせずに先行の数を数え直す。
-  func testACommitWhileShowingTheCreationEntryCountsTheLeadAgain() throws {
-    repo.addOrigin()
-    XCTAssertTrue(repo.git(["remote", "set-head", "origin", "main"]).isSuccess)
-    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
-    answers["feat"] = .gitHub(GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([]))
-    let pullRequest = watch()
-    pumpMain(until: { self.ahead(pullRequest) == 0 }, "前提: 先行の数は 0")
-
-    try commit("b.txt")
-    pumpMain(until: { self.ahead(pullRequest) == 1 }, "コミットで数え直す")
-    XCTAssertEqual(lookups, ["feat"], "GitHub に問い合わせない")
-  }
-
-  /// 作成の入口の先行の数（PR が無い答えでなければ nil）。
-  private func ahead(_ pullRequest: BranchPullRequest) -> Int? {
-    guard case .noPullRequest(let creation) = pullRequest.answer else { return nil }
-    return creation.ahead
   }
 
   /// ファイル `name` を足して 1 つコミットする。

@@ -4,8 +4,8 @@ import AppKit
 /// 開閉、選択、パネルの中の焦点（列と全体へのコメント欄。欄の変換中の字と、PR が替わったときの欄の後始末を含む）、
 /// ファイルごとのコメント数の覚え。PR の事実（どの PR か・中身・確認済み・両端）は 2 つの状態が持ち、ここは見せ方だけ。
 ///
-/// PR の画面を出している間（`isShown`。左の列を閉じていても）だけ worktree の今の PR を見る——GitHub に問い合わせるのは
-/// 見ている間だけ。列の行は、
+/// 面が見えている間（`isTracking`）は worktree の今の PR がどの PR かを追い（上のバーの番号）、PR の画面を出している間
+/// （`isShown`。左の列を閉じていても）は PR の中身も読む——GitHub に問い合わせるのは、このどちらかの間だけ。列の行は、
 /// PR の中身・ツリーかリストか・開閉で決まり、そのどれかが変わったときに 1 か所（`rebuild`）で組み直す（確認済みは描くときに
 /// 状態から読む）。選択は常に見えている行にある——組み直した後に選んでいた行が無ければ、そこで選び直す（ソース管理の
 /// 変更の列と同じ）。区分とフォルダの開閉・選択は面ごとで永続しない。ツリーかリストかはアプリ全体で 1 つ
@@ -40,6 +40,8 @@ final class PrPanel {
   @ObservationIgnored var onOpenDiff: (EditorDiff.Key, ScmPanel.Opening) -> Void = { _, _ in }
   /// worktree の今の PR が替わった・その PR の状態が変わった（行の組を組み直した後）。
   @ObservationIgnored var onPullRequestChange: () -> Void = {}
+  /// 列の状態（`listState`）が変わった（変わった後の main の回で知らせる）。
+  @ObservationIgnored var onListStateChange: () -> Void = {}
   /// 変更ファイルをツリーで見せるか（アプリ全体の選択を読む）と、ツリーかリストかを選んだ（アプリ全体の選択へ書く）。
   @ObservationIgnored var filesAsTree: () -> Bool = { true }
   @ObservationIgnored var onViewAsTree: (Bool) -> Void = { _ in }
@@ -72,18 +74,31 @@ final class PrPanel {
     let closedFolders: Set<String>
   }
 
-  /// PR の画面を出している間 true。立てると worktree の今の PR を見始めて行を組み、下ろすと見るのをやめる。隠している間は
-  /// 知らせを受けないので、出すときに下端の区画を作る元の状態を覚え直す。
+  /// 面が見えている間 true。立てると worktree の今の PR がどの PR かを追い始め、知らせを受ける。下ろすとやめる（先に
+  /// `isShown` を下ろす）。追っていない間は知らせを受けないので、追い始めるときに下端の区画を作る元の状態を覚え直す。
+  @ObservationIgnored var isTracking = false {
+    didSet {
+      guard isTracking != oldValue else { return }
+      if isTracking {
+        reviewedState = state.map(ObjectIdentifier.init)
+        pullRequest.addObserver(self)
+        pullRequest.beginTracking()
+        rebuild()
+      } else {
+        pullRequest.removeObserver(self)
+        pullRequest.endTracking()
+      }
+    }
+  }
+
+  /// PR の画面を出している間 true（追っている間だけ）。立てると PR の中身も読んで行を組み、下ろすと中身を読むのをやめる。
   @ObservationIgnored var isShown = false {
     didSet {
       guard isShown != oldValue else { return }
       if isShown {
-        reviewedState = state.map(ObjectIdentifier.init)
-        pullRequest.addObserver(self)
         pullRequest.beginWatching()
         rebuild()
       } else {
-        pullRequest.removeObserver(self)
         pullRequest.endWatching()
         panelDidHide()
       }
@@ -94,6 +109,7 @@ final class PrPanel {
     self.root = root
     pullRequest = BranchPullRequest.shared(for: root, source: source)
     navigation.open = { [weak self] in self?.openSelection(.browse) }
+    observeListState(listState)
   }
 
   /// 今の PR の状態（PR があるときだけ）。
@@ -168,9 +184,36 @@ final class PrPanel {
     selection = id
   }
 
+  /// 列の状態。行があればある。無ければ、worktree の今の PR の答えを読んでいる・PR があってその中身を読んでいる間は
+  /// これから来る、それ以外（PR が無い・表示できない・中身が無く読んでもいない）は無い。
+  var listState: EditorListState {
+    if !layout.items.isEmpty { return .rows }
+    if case .reading = pullRequest.answer { return .coming }
+    return state?.isReading == true ? .coming : .none
+  }
+
+  /// 列の状態を観測し、`reported` から変わったら知らせる。状態を決める値（行の組・worktree の今の PR の答え・PR の中身を
+  /// 読んでいるか）はどれも観測するので、どの道で変わってもここが知らせる——答えが「読んでいる」から「PR が無い」「表示
+  /// できない」へ変わっても、PR の状態は替わらないので、worktree の今の PR の知らせは出ない。
+  private func observeListState(_ reported: EditorListState) {
+    withObservationTracking {
+      _ = listState
+    } onChange: { [weak self] in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        let state = self.listState
+        if state != reported { self.onListStateChange() }
+        self.observeListState(state)
+      }
+    }
+  }
+
   func requestFocus() { focusRequest = true }
 
   func focusRequestDidApply() { focusRequest = false }
+
+  /// 列へ焦点を入れる要求が残っていれば取り消す。
+  func cancelFocusRequest() { focusRequest = false }
 
   func focusDidChange(_ focused: Bool) {
     if !focused { navigation.drop() }

@@ -4,14 +4,14 @@ import XCTest
 @testable import Orbe
 
 /// 結果の列で ↓ を押し続けると、押している間は窓が閉じても開かず、列でキーを離して窓が閉じたら最後の一致だけが開き、焦点は
-/// 列のまま。押している間（か離した直後、窓が閉じる前）に、人が結果の外——ファイルタブ・タブの ×——を押したら、待っていた
-/// 一致は開かない。押したものが見え、焦点も押した先のまま。
+/// 列のまま。押している間（か離した直後、窓が閉じる前）に、人が結果の外——本文——を押したら、待っていた一致は開かない。
+/// 本文は押す前の文書のまま、焦点も押した先のまま。
 ///
 /// 窓の時計は手で進める——押下の座標を測る・描くのに掛かる時間は機械で変わり、遅い機械では本物の時計の窓が押す前に閉じて
 /// しまう（「離した直後」を作れない）。押した後に窓を閉じて、待ちが捨てられていることを見る。
 ///
 /// 壊れると何が起きるか。押し続けても離しても最後の一致が開かない、遅れて開いた一致が焦点を本文へ奪う。↓ でたどった直後に
-/// タブを押すと、押したファイルが一瞬見えた後で待っていた一致に入れ替わり、焦点もその本文へ奪われる。
+/// 本文を押すと、押した文書が待っていた一致に入れ替わる。
 extension ProjectSearchPaneTests {
   struct Held {
     let hosted: Hosted
@@ -19,14 +19,9 @@ extension ProjectSearchPaneTests {
     let closeWindow: () -> Void
   }
 
-  /// a.txt・b.txt に一致、z.txt・x.txt は一致なしで普通のタブで開いておく。結果の列で ↓ を押し続け、b.txt の一致を
-  /// 待たせた状態で返す（`released` なら離して、窓が閉じる前）。
+  /// a.txt・b.txt に一致。結果の列で ↓ を押し続け、b.txt の一致を待たせた状態で返す（`released` なら離して、窓が閉じる前）。
   private func holding(released: Bool) throws -> Held {
-    let hosted = try host([
-      "a.txt": "needle\n", "b.txt": "needle\n", "x.txt": "xxx\n", "z.txt": "zzz\n",
-    ])
-    _ = try open(hosted, "z.txt")
-    _ = try open(hosted, "x.txt")
+    let hosted = try host(["a.txt": "needle\n", "b.txt": "needle\n"])
     searchAll(hosted, "needle")
     let list = try list(hosted)
     hosted.window.makeFirstResponder(list)
@@ -42,15 +37,7 @@ extension ProjectSearchPaneTests {
     XCTAssertEqual(hosted.search.selection, RowID(path: "b.txt", match: 0), "前提: b.txt を待っている")
     if released { list.keyUp(with: .keyRelease(arrow)) }
     hosted.pane.layoutSubtreeIfNeeded()
-    _ = try probe(hosted.pane) { _ in hosted.pane.shell.tabs.count == 3 }
     return Held(hosted: hosted, closeWindow: { window?() })
-  }
-
-  /// ファイルタブ `name` の名前の上（面の座標）。
-  private func tabPoint(_ hosted: Hosted, _ name: String) throws -> NSPoint {
-    let index = try XCTUnwrap(hosted.pane.shell.tabs.firstIndex { $0.name == name })
-    let slot = fileTabSlotCenter(hosted.pane, index)
-    return NSPoint(x: slot.x - 30, y: slot.y)
   }
 
   /// 押したものが見え、窓が閉じても待っていた一致に入れ替わらず、焦点も動かない。
@@ -87,27 +74,15 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(hosted.window.firstResponder === list, "遅れて開いても焦点は列のまま")
   }
 
-  func testPressingAFileTabWhileHoldingDownDropsTheWaitingOpen() throws {
-    for released in [false, true] {
-      let held = try holding(released: released)
-      placeOffscreen(held.hosted.window)
-      try click(held.hosted.pane, at: tabPoint(held.hosted, "z.txt"))
-      assertTheWaitingMatchStaysClosed(
-        held, shows: held.hosted.repo.url("z.txt"), released ? "離した直後にタブ" : "押したままタブ")
-    }
-  }
-
-  func testClosingATabWhileHoldingDownDropsTheWaitingOpen() throws {
+  func testPressingTheBodyWhileHoldingDownDropsTheWaitingOpen() throws {
     for released in [false, true] {
       let held = try holding(released: released)
       let hosted = held.hosted
       placeOffscreen(hosted.window)
-      let x = hosted.repo.url("x.txt")
-      let index = try XCTUnwrap(hosted.pane.shell.tabs.firstIndex { $0.id == x })
-      try click(hosted.pane, at: fileTabSlotCenter(hosted.pane, index))
-      pumpMain(until: { !hosted.tab.group.editor.documents.contains { $0.url == x } }, "× で閉じる")
+      let body = hosted.pane.bodyRect
+      try click(hosted.pane, at: NSPoint(x: body.midX, y: body.midY))
       assertTheWaitingMatchStaysClosed(
-        held, shows: hosted.repo.url("a.txt"), released ? "離した直後に ×" : "押したまま ×")
+        held, shows: hosted.repo.url("a.txt"), released ? "離した直後に本文" : "押したまま本文")
     }
   }
 }

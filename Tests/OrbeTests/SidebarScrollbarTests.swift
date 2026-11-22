@@ -157,6 +157,28 @@ final class SidebarScrollbarTests: OrbeTestCase {
     NSApp.sendEvent(tree.mouse(.leftMouseUp, end))
   }
 
+  /// 左の列の中身を替えて・左の列を閉じて戻すと、作り直したツリーは前のスクロール位置に戻る。
+  func testTheTreeKeepsItsScrollPositionAcrossPanelChangesAndClosing() throws {
+    let tree = try hostTree()
+    tree.move(to: 100)
+    let pane = tree.pane
+    for (name, away, back) in [
+      ("中身を替える", { pane.filesPanel = .search }, { pane.filesPanel = .files }),
+      ("左の列を閉じる", { pane.toggleSidebar() }, { pane.toggleSidebar() }),
+    ] {
+      away()
+      pumpMain(until: { self.scrollView(in: pane.sideHost) !== tree.scroll }, "\(name): ツリーが外れる")
+      back()
+      pumpMain(
+        until: {
+          guard let scroll = self.scrollView(in: pane.sideHost), scroll !== tree.scroll else {
+            return false
+          }
+          return abs(scroll.documentVisibleRect.minY - 100) < 1
+        }, "\(name): 作り直したツリーが前の位置に戻る")
+    }
+  }
+
   /// 掴めるのは見えているつまみだけ——つまみを押しても下の行は選ばれず、帯のつまみの外を押せばその行が選ばれる。
   func testOnlyTheTreeThumbIsGrabbedAndTheRestOfTheBandSelectsTheRow() throws {
     let tree = try hostTree()

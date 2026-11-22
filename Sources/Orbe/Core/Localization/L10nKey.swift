@@ -582,14 +582,19 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorNotFoundTitle
   case editorNotFoundMessage
 
-  // MARK: - Editor 面（空状態）
+  // MARK: - Editor 面（空・使えないときの表示）
   case editorEmptyLead
   case editorEmptySearchProject
   case editorEmptyBackToTerminal
+  case editorUnavailable
+  case editorScmUnavailableTitle
+  case editorScmNoChanges
+  case editorScmNoChangesLead
+  case editorPrNone
+  case editorPrNoneLead
+  case editorPrUnavailableTitle
 
   // MARK: - Editor 面（diff）
-  case editorDiffInline
-  case editorDiffSide
   case editorDiffNotText
   case editorDiffSymlink
   case editorDiffDirectory
@@ -603,7 +608,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorDiffPullRequestUnrelated
 
   // MARK: - Editor 面（PR）
-  case editorRailPullRequest
   case editorPrTitle
   case editorPrRefresh
   case editorPrOpenOnGitHub
@@ -618,7 +622,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrTreeView
   case editorPrListView
   case editorPrOlderCommitsHidden
-  case editorPrMarkViewed
   case editorPrCreate
   case editorPrPublishFirst
   case editorPrNotDetached
@@ -664,6 +667,14 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrOutdatedThreads
   case editorPrCommentCount
 
+  // MARK: - Editor 面（骨: 上のバー）
+  case editorScreenChanges
+  case editorScreenPullRequest
+  case editorScreenFiles
+  case editorBarHideTree
+  case editorBarShowTree
+  case editorBarShowTerminal
+
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle
   case editorNewFile
@@ -672,7 +683,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorExpandAll
 
   // MARK: - Editor 面（プロジェクト検索）
-  case editorRailSearch
   case editorSearchTitle
   case editorSearchPlaceholder
   case editorSearchMatchCase
@@ -692,7 +702,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorSearchCouldNotStart
 
   // MARK: - Editor 面（ソース管理。L10nTable+SourceControl）
-  case editorRailSourceControl
   case editorScmTitle
   case editorScmStaged
   case editorScmChanges
@@ -1036,6 +1045,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutToggleEditorFace
   case helpShortcutPeekTerminal
   case helpShortcutSaveDocument
+  case helpShortcutToggleEditorSidebar
   case helpShortcutFindInProject
   case helpShortcutScmCommit
   case helpShortcutScmCommitAndPush

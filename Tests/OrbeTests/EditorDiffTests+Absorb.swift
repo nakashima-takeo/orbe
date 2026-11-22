@@ -38,7 +38,7 @@ extension EditorDiffTests {
     pumpMain(until: { files.status?.badge(of: "a.txt") == .modified }, "元の連の解放後の書き換え")
   }
 
-  /// 元の連で見せていた diff は畳みで見せるのをやめる——同じファイルを行き先のファイルタブで見せていれば、そのタブは
+  /// 元の連で見せていた diff は畳みで見せるのをやめる——同じファイルを行き先の文書の本体で見せていれば、その面は
   /// コードの見え方のまま（diff の見え方が載らない）。
   func testAbsorbDoesNotCarryTheShownDiffsLookOntoTheDestinationsFileTab() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
@@ -75,7 +75,7 @@ extension EditorDiffTests {
     pumpMain(
       until: { a.surface.view.isDescendant(of: dest.group.view.editor) },
       "見せている diff は、勝った文書で並びを置けたらその面を出す")
-    XCTAssertEqual(dest.group.view.editor.shell.tabs.map(\.isDirty), [true, true], "未保存の印が割れない")
+    XCTAssertEqual(dest.group.editor.documents.map(\.isDirty), [true, true], "未保存が割れない")
     XCTAssertEqual(dest.group.unsavedDocuments().count, 2, "確認は実体ごとに 1 件")
   }
 }

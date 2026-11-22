@@ -2,7 +2,7 @@ import AppKit
 import OrbeEditorCore
 
 /// 未保存を捨てる前の確認（保存／保存しない／キャンセル）と、外部変更で失敗した保存の上書き確認。
-/// 「提示」と「解決」を分け、保存の実行と可否の規則は `proceed` にしか無い——提示点（ファイルタブの ×・
+/// 「提示」と「解決」を分け、保存の実行と可否の規則は `proceed` にしか無い——提示点（文書を閉じる・
 /// 人の操作でタブを閉じる・workspace の削除・終了）は sheet か runModal かを選ぶだけ。
 @MainActor
 enum UnsavedGate {

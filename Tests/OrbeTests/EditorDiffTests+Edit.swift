@@ -7,7 +7,7 @@ import XCTest
 
 /// diff の中の編集——作業ツリー diff の新しい側（インラインの本文・並列の右）で打った字は文書に入り、diff の行の並び（追加の
 /// 行・削除行・並列の詰め物）は編集に追従し、⌘S で保存できる。壊れると、diff で打った字が本文に入らない・並びが本文から
-/// ずれる・並列の左右の高さがずれる・変換中の字が消える・diff で打った未保存の文書がタブ行に出ない・diff で直した変更を保存
+/// ずれる・並列の左右の高さがずれる・変換中の字が消える・diff で打った未保存の文書が開いている文書の列に入らない・diff で直した変更を保存
 /// できない・プロジェクト検索の一致が diff で打った字からずれる。
 extension EditorDiffTests {
   private func type(_ text: String, at location: Int, on surface: MetalTextSurface) {
@@ -143,7 +143,7 @@ extension EditorDiffTests {
     XCTAssertEqual(tab.group.editor.documents.map(\.url), [document.url], "未保存になった文書が列に入る")
     XCTAssertNil(tab.group.editor.previewURL, "普通の文書")
     XCTAssertEqual(tab.group.editor.screen, .changes, "画面は変わらない")
-    XCTAssertEqual(tab.group.view.editor.shell.tabs.map(\.isDirty), [true], "タブに未保存の印")
+    XCTAssertEqual(tab.group.editor.documents.map(\.isDirty), [true], "列の文書が未保存")
 
     try tab.group.editor.openDiff(id("b.txt", .workingTree))
     XCTAssertEqual(tab.group.editor.documents.map(\.url), [document.url], "別の diff へ入れ替えても文書は残る")
@@ -165,7 +165,7 @@ extension EditorDiffTests {
     type("Z", at: 0, on: surface)
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("s")))
     XCTAssertFalse(document.isDirty)
-    XCTAssertEqual(pane.shell.tabs.map(\.isDirty), [false], "未保存の印が消える")
+    XCTAssertEqual(tab.group.editor.documents.map(\.isDirty), [false], "未保存が消える")
     XCTAssertEqual(
       try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "Zone\nTWO\nthree\nfour\n")
 

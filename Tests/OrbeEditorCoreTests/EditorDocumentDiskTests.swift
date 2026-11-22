@@ -25,7 +25,7 @@ final class EditorDocumentDiskTests: XCTestCase {
 
   // MARK: - 外部変更
 
-  /// 未保存でない文書は、外で書き換えられた内容に本文が差し替わる——未保存にならず（途中でも立たない。立てば仮のタブが
+  /// 未保存でない文書は、外で書き換えられた内容に本文が差し替わる——未保存にならず（途中でも立たない。立てば仮の文書が
   /// 普通になる）、⌘Z で戻せる区切りになり、差し替えた本文が保存時の本文になる。
   func testExternalChangeReplacesACleanDocument() throws {
     let url = try temp("a.txt", "old\n")

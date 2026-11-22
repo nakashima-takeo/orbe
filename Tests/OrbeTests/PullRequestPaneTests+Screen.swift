@@ -9,7 +9,7 @@ import XCTest
 /// 壊れると何が起きるか: PR の画面を出しても本体が空のまま。ブランチの PR が替わった後も前の PR の diff が本体に残り、もう今の
 /// PR でない diff を見て確かめた気になる。上段の現在地が前の PR の番号のまま残る。
 extension PullRequestPaneTests {
-  /// レールで PR を出すと、diff を開いていなければ、今の PR の先頭のファイルの行の diff が本体に出て、その行が選択表示される。
+  /// 上のバーで PR を出すと、diff を開いていなければ、今の PR の先頭のファイルの行の diff が本体に出て、その行が選択表示される。
   /// worktree の今の PR が替わると、前の PR の diff は本体から消え、次の PR の diff が出る。
   func testThePullRequestScreenShowsADiffOfTheCurrentPullRequest() throws {
     let hosted = host(try registeredRoot())

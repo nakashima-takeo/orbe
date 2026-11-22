@@ -3,13 +3,13 @@ import XCTest
 @testable import Orbe
 
 /// PR のパネルの面ごとの見せ方（`PrPanel`）——出している間だけ worktree の今の PR を見ること、列のキー（↑↓ は選べる行だけを
-/// 渡り、ファイル行なら PR の diff を仮のタブで開く。← → はフォルダと区分の開閉と親・子への移動。Enter はファイル行を
-/// 普通のタブで開き、フォルダと見出しは開閉。押し続けた ↑↓ は離すまで開かない）、選択の選び直し、フォルダのチェック。
+/// 渡り、ファイル行なら PR の diff を仮の文書として開く。← → はフォルダと区分の開閉と親・子への移動。Enter はファイル行を
+/// 普通の文書として開き、フォルダと見出しは開閉。押し続けた ↑↓ は離すまで開かない）、選択の選び直し、フォルダのチェック。
 /// GitHub は差し替えの構造体が答え、git は一時リポジトリで実際に問う。
 ///
 /// 壊れると何が起きるか: パネルを隠しても GitHub に問い合わせ続ける・出しても PR が出ない。↓ がコミットの行に止まる・
 /// フォルダへ動いただけで diff が開く。← で親へ戻れない。畳んだ後や、選んでいた行が読み直しで消えた後の ↑↓ が列の先頭へ
-/// 飛ぶ。Enter でファイルが普通のタブで開かない。↓ を押し続けると 1 行ごとに diff を開く・Enter や本文へ移った後に、待って
+/// 飛ぶ。Enter でファイルが普通の文書として開かない。↓ を押し続けると 1 行ごとに diff を開く・Enter や本文へ移った後に、待って
 /// いた前の行の diff が開く。一部だけ確認済みのフォルダのチェックを押すと、付けるはずが配下の確認済みを全部外す。
 @MainActor
 final class PrPanelTests: OrbeTestCase {
@@ -53,8 +53,20 @@ final class PrPanelTests: OrbeTestCase {
   }
 
   override func tearDown() {
-    panel.isShown = false
+    hide(panel)
     super.tearDown()
+  }
+
+  /// 面が見えていて PR の画面を出している姿にする（追ってから中身も読む）。
+  private func show(_ panel: PrPanel) {
+    panel.isTracking = true
+    panel.isShown = true
+  }
+
+  /// 面が隠れた姿にする（中身を読むのをやめてから追うのをやめる）。
+  private func hide(_ panel: PrPanel) {
+    panel.isShown = false
+    panel.isTracking = false
   }
 
   private var source: PullRequestSource {
@@ -120,7 +132,7 @@ final class PrPanelTests: OrbeTestCase {
 
   /// パネルを出して、PR の中身が届くまで待つ。
   func shown() throws -> PullRequestState {
-    panel.isShown = true
+    show(panel)
     pumpMain(until: { self.panel.state?.content != nil }, "前提: PR の中身が届く")
     return try XCTUnwrap(panel.state)
   }
@@ -137,7 +149,7 @@ final class PrPanelTests: OrbeTestCase {
     let state = try shown()
     XCTAssertTrue(state.isWatched)
 
-    panel.isShown = false
+    hide(panel)
     XCTAssertFalse(state.isWatched, "隠せば PR の状態を見るのをやめる")
   }
 
@@ -145,16 +157,16 @@ final class PrPanelTests: OrbeTestCase {
   /// 欄の変換中の字を確定せず、焦点も移さない（区画は出し直したときの PR で作られていて、作り直しは起きていない）。
   func testAPullRequestThatChangedWhileHiddenLeavesTheFieldAloneAfterShowingAgain() throws {
     let other = PrPanel(root: repo.root, source: source)
-    other.isShown = true
-    defer { other.isShown = false }
+    show(other)
+    defer { hide(other) }
     let previous = try shown()
-    panel.isShown = false
+    hide(panel)
     number = 10
     other.refresh()
     pumpMain(
       until: { other.state.map { $0 !== previous && $0.content != nil } ?? false },
       "前提: ほかの面のパネルが次の PR を見る")
-    panel.isShown = true
+    show(panel)
     var confirms = 0
     var closings = 0
     panel.confirmReviewComposition = { confirms += 1 }
@@ -169,7 +181,7 @@ final class PrPanelTests: OrbeTestCase {
   // MARK: - キー
 
   /// ↓ は未選択なら先頭から、区分の見出し・フォルダ・ファイル行だけを順に渡り（コミットの行は飛ばす）、末尾で止まる。
-  /// ファイル行へ動いたときだけ、その PR の diff を仮のタブで開く。
+  /// ファイル行へ動いたときだけ、その PR の diff を仮の文書として開く。
   func testDownCrossesOnlySelectableRowsAndPreviewsTheFilesItReaches() throws {
     let state = try shown()
     var visited: [PrRowID?] = []
@@ -191,7 +203,7 @@ final class PrPanelTests: OrbeTestCase {
   }
 
   /// ← はファイル・フォルダから親のフォルダへ、開いたフォルダなら畳み、一番上のフォルダからは変更ファイルの見出しへ。
-  /// → は畳んだフォルダを開き、開いたフォルダなら最初の子へ動く（ファイルなら仮のタブで開く）。
+  /// → は畳んだフォルダを開き、開いたフォルダなら最初の子へ動く（ファイルなら仮の文書として開く）。
   func testLeftAndRightWalkUpAndDownTheTree() throws {
     _ = try shown()
     panel.select(.file("src/a/y.swift"))
@@ -217,7 +229,7 @@ final class PrPanelTests: OrbeTestCase {
     XCTAssertEqual(opened.map(\.key.path), ["src/a/x.swift"], "ファイルへ動いたときだけ開く")
   }
 
-  /// Enter はファイル行を普通のタブで開き、フォルダと区分の見出しは開閉するだけで開かない。
+  /// Enter はファイル行を普通の文書として開き、フォルダと区分の見出しは開閉するだけで開かない。
   func testEnterOpensAFileForGoodAndTogglesFoldersAndHeaders() throws {
     _ = try shown()
     let list = PrListSource(panel: panel)
@@ -226,7 +238,7 @@ final class PrPanelTests: OrbeTestCase {
     panel.select(.file("README.md"))
     list.perform(enter, in: panel.layout)
     XCTAssertEqual(opened.map(\.key.path), ["README.md"])
-    XCTAssertEqual(opened.last?.opening, .commit, "普通のタブ")
+    XCTAssertEqual(opened.last?.opening, .commit, "普通の文書")
 
     panel.select(.folder("src"))
     list.perform(enter, in: panel.layout)

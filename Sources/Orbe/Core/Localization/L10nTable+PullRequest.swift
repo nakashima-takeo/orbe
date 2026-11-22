@@ -12,7 +12,6 @@ extension L10n {
       "ベースブランチと共通のコミットがないため、差分を表示できません",
       "Can’t show the diff because the PR shares no commits with its base branch"
     ),
-    .editorRailPullRequest: ("プルリクエスト", "Pull Request"),
     .editorPrTitle: ("プルリクエスト", "Pull Request"),
     .editorPrRefresh: ("再読込", "Refresh"),
     .editorPrOpenOnGitHub: ("GitHub で開く", "Open on GitHub"),
@@ -29,7 +28,6 @@ extension L10n {
     .editorPrTreeView: ("ツリー表示", "View as Tree"),
     .editorPrListView: ("リスト表示", "View as List"),
     .editorPrOlderCommitsHidden: ("古いコミット %lld 件は表示していません", "Older commits not shown: %lld"),
-    .editorPrMarkViewed: ("確認済みにする", "Viewed"),
     .editorPrCreate: ("プルリクエストを作成", "Create Pull Request"),
     .editorPrPublishFirst: ("先にブランチを公開してください", "Publish the branch first"),
     .editorPrNotDetached: ("ブランチにいません", "Not on a branch"),

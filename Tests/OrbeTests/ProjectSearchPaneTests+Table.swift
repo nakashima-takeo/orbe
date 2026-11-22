@@ -110,7 +110,7 @@ extension ProjectSearchPaneTests {
     XCTAssertEqual(rowView(list, 1)?.accessibilityLabel(), "beta needle")
     XCTAssertEqual(rowView(list, 3), nil, "無い行の view は隠れる")
 
-    hosted.pane.shell.selectPanel(.files)
+    hosted.pane.filesPanel = .files
     pumpMain(until: { hosted.pane.searchResults.window == nil }, "パネルを隠すと列は外れる")
     hosted.pane.showProjectSearch(seed: nil)
     pumpMain(until: { hosted.pane.searchResults.window != nil }, "出し直すと同じ列が載る")

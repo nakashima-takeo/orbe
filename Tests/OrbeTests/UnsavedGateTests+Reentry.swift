@@ -11,7 +11,7 @@ import XCTest
 /// 壊れると何が起きるか。エージェントが `open_file` した別の文書が代わりに閉じられる／上書きされる。
 /// 制御 API が別の workspace を畳んだ直後の応答で、指していない workspace が丸ごと消える。
 extension UnsavedGateTests {
-  /// ファイルタブの × の確認は、応答までに焦点が別の文書へ移っても、閉じるのは確認を出した文書。
+  /// 文書を閉じる確認は、応答までに焦点が別の文書へ移っても、閉じるのは確認を出した文書。
   func testFileTabCloseSheetClosesTheDocumentItAskedAboutEvenIfTheFocusMoved() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     tab.group.editor.selectScreen(.files)
@@ -20,7 +20,7 @@ extension UnsavedGateTests {
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     edit(a)
 
-    tab.group.view.editor.shell.requestClose(a.url)
+    tab.group.view.editor.requestClose(a.url)
     try repo.write("b.txt", "b\n")
     let b = try tab.group.editor.open(repo.url("b.txt"), as: .pinned)  // sheet の間にエージェントが別の文書を開く
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertSecondButtonReturn)

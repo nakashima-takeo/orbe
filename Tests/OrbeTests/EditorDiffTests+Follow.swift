@@ -5,7 +5,7 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// diff の追従——index・HEAD・作業ツリーの姿・ファイルタブでの編集が変わっても、並びは今の本文と古い側に付き、面は今の
+/// diff の追従——index・HEAD・作業ツリーの姿・文書の本体での編集が変わっても、並びは今の本文と古い側に付き、面は今の
 /// 本文を描き、見えている行と焦点を保つ。
 extension EditorDiffTests {
   /// diff を開いたまま git add すれば作業ツリー diff は変化なしになり、外のツールが書けば追従する。並びの差し込みは古い側の

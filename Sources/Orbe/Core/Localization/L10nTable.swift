@@ -148,14 +148,21 @@ enum L10n {
       "Add one of VS Code, Cursor, Windsurf, Zed, or Sublime to your PATH, or set a GUI editor in $VISUAL/$EDITOR."
     ),
 
-    // MARK: Editor 面（空状態）
+    // MARK: Editor 面（空・使えないときの表示）
     .editorEmptyLead: ("ファイルを開いて編集を開始", "Open a file to start editing"),
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
+    .editorUnavailable: ("表示できません", "Unavailable"),
+    .editorScmUnavailableTitle: ("変更を表示できません", "Can’t Show Changes"),
+    .editorScmNoChanges: ("変更なし", "No Changes"),
+    .editorScmNoChangesLead: ("作業ツリーは HEAD と同じです。", "The working tree matches HEAD."),
+    .editorPrNone: ("プルリクエストなし", "No Pull Request"),
+    .editorPrNoneLead: (
+      "このブランチのプルリクエストは、まだありません。", "This branch doesn’t have a pull request yet."
+    ),
+    .editorPrUnavailableTitle: ("プルリクエストを表示できません", "Can’t Show the Pull Request"),
 
     // MARK: Editor 面（diff）
-    .editorDiffInline: ("インライン", "Inline"),
-    .editorDiffSide: ("並列", "Side by Side"),
     .editorDiffNotText: (
       "バイナリか UTF-8 でないファイルのため、差分を表示できません",
       "Can't show the diff: the file is binary or not UTF-8"
@@ -185,6 +192,14 @@ enum L10n {
       "Can't show the diff: the path is neither in HEAD nor in the index"
     ),
 
+    // MARK: Editor 面（骨: 上のバー）
+    .editorScreenChanges: ("Changes", "Changes"),
+    .editorScreenPullRequest: ("PR", "PR"),
+    .editorScreenFiles: ("Files", "Files"),
+    .editorBarHideTree: ("ツリーを閉じる", "Hide Tree"),
+    .editorBarShowTree: ("ツリーを開く", "Show Tree"),
+    .editorBarShowTerminal: ("端末を表示", "Show Terminal"),
+
     // MARK: Editor 面（骨: エクスプローラー）
     .editorExplorerTitle: ("エクスプローラー", "Explorer"),
     .editorNewFile: ("新規ファイル", "New File"),
@@ -193,7 +208,6 @@ enum L10n {
     .editorExpandAll: ("すべて展開", "Expand All"),
 
     // MARK: Editor 面（プロジェクト検索）
-    .editorRailSearch: ("検索 (⌘⇧F)", "Search (⌘⇧F)"),
     .editorSearchTitle: ("検索", "Search"),
     .editorSearchPlaceholder: ("検索", "Search"),
     .editorSearchMatchCase: ("大文字と小文字を区別 (⌥⌘C)", "Match Case (⌥⌘C)"),

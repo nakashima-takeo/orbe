@@ -2,17 +2,18 @@ import AppKit
 import OrbeEditorCore
 import SwiftUI
 
-/// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
-/// （タブ行 → 本体があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（セッションが
-/// 画面から導いた中身——文書のテキスト面か diff の面。無ければ文字だけの root）を frame で置く。地は chrome と同じ veil。
+/// エディター面の AppKit 側の根。骨の幾何——上のバー、その下に左の列（開いているとき）｜本体——を `layout()` が解き、
+/// SwiftUI の root 2 枚（上のバー・左の列）と本体（セッションが画面から導いた中身——文書のテキスト面か diff の面。無ければ
+/// 文字だけの root）を frame で置く。バーより下（左の列・本体・境の当たり・ファイル内検索のバー）は 1 枚の view
+/// （`belowBar`）にまとめ、⌥ の透かしの濃さはそこへ掛かる。地は chrome と同じ veil を、バーの分とバーより下の分に分けて塗る。
 ///
 /// 本体で編集する文書（文書の本体ならその文書、diff の本体なら新しい側の文書）の「変わった」（viewport・選択・本文）は
 /// pane が 1 つずつ受け、検索・出現の強調・diff・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。
 /// 一致の地は、ファイル内検索とプロジェクト検索の 2 つの出どころの和を pane が面へ押す（`pushFindGround`）。
 /// 俯瞰（ミニマップ・スクロールバーと印・影）は面が、押された強調の地から自分で描く。
 ///
-/// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
-/// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
+/// 骨の状態は写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれと件数・番号・開閉の持ち主だけを読む。
+/// セッションの変化は `sessionDidChange` 1 本で受け、左の列の中身 → 面の差し替え → ツリーの追従の順に進める。
 /// ツリー・プロジェクト検索・ソース管理パネルは面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
 ///
 /// chrome キーは `performKeyEquivalent` で先取りし、window コマンドは連経由で上位へ、⌘S は保存、
@@ -22,12 +23,21 @@ final class EditorPaneView: NSView {
   weak var group: TabGroup?
   /// worktree の今の PR が替わった・その PR の状態が変わった（連が上段の現在地を描き直させる）。
   var onPullRequestChange: () -> Void = {}
-  /// 骨の写し（タブ行・パンくず）。
+  /// 骨の写し（左の列の中身と、骨の操作の閉包）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
   private(set) var tree: FileTree
+  let barHost: EditorBarHost
+  /// 上のバーより下の中身をまとめる view（面いっぱいの枠で、中身はバーの下に置く）。
+  let belowBar = EditorBelowBar()
+  /// 地の veil——上のバーの分と、バーより下の分（`belowBar` の中。透かしの間はバーより下と一緒に見えなくなる）。
+  let barGround = NSView()
+  let belowGround = NSView()
+  /// 器が透かしている（上のバーの「⌥ 端末を表示」を押している間の姿にする）。
+  var isPeeking = false {
+    didSet { shell.isPeeking = isPeeking }
+  }
   let sideHost: NSHostingView<EditorSideRoot>
-  let headerHost: NSHostingView<EditorHeaderRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
   /// 本体（セッションが画面から導いた中身）。
   private(set) var body = EditorBody.empty
@@ -37,6 +47,8 @@ final class EditorPaneView: NSView {
   private var watchedDiff: EditorDiff?
   /// 開いた diff の行が左の列の一覧にまだ無い間の、その diff（行ができたら選択表示する）。
   var diffAwaitingRow: EditorDiff.Key?
+  /// 焦点を預かっている一覧の画面（Changes・PR。行が出たら一覧へ渡す。→ `holdListFocus`）。
+  var heldListFocus: EditorScreen?
   /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
   private(set) var diffModes = EditorDiffModeState() {
     didSet { observeDiffModes() }
@@ -71,7 +83,7 @@ final class EditorPaneView: NSView {
   private(set) var pullRequestHeader = PrDescriptionHeader(frame: .zero)
   /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
-  /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
+  /// 左の列の幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
   }
@@ -79,7 +91,7 @@ final class EditorPaneView: NSView {
   var filesPanel = EditorShellModel.Panel.files {
     didSet { syncPanel() }
   }
-  /// サイドバーと本体の境のドラッグの当たり。
+  /// 左の列と本体の境のドラッグの当たり。
   let sidebarHandle = SidebarResizeHandle()
   private(set) var localization = LocalizationStore(language: .systemDefault)
   private var fontResolver = ChromeFontResolver()
@@ -107,35 +119,28 @@ final class EditorPaneView: NSView {
     self.pullRequest = pullRequest
     let pullRequestList = Self.pullRequestList(pullRequest)
     self.pullRequestList = pullRequestList
+    barHost = EditorBarHost(
+      rootView: EditorBarRoot(
+        shell: shell, sidebar: sidebar, scm: scm, pullRequest: pullRequest.pullRequest,
+        localization: localization, fontResolver: fontResolver))
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
         scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
         pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
-    headerHost = NSHostingView(
-      rootView: EditorHeaderRoot(
-        shell: shell, localization: localization, fontResolver: fontResolver))
-    faceHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
+    faceHost = NSHostingView(
+      rootView: EditorFaceRoot(localization: localization, scm: scm, pullRequest: pullRequest))
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
-    for host in [sideHost, headerHost, faceHost] as [NSView] {
-      // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
-      host.wantsLayer = true
-      host.layer?.isOpaque = false
-      host.autoresizingMask = []
-      addSubview(host)
-    }
-    sidebarHandle.autoresizingMask = []
-    addSubview(sidebarHandle)
-    diffDivider.wantsLayer = true
-    diffDivider.autoresizingMask = []
+    assembleViews()
     search.onCountChange = { [weak self] selected, total, limited in
       self?.searchBar?.updateCount(selected: selected, total: total, limited: limited)
     }
     search.onMatchesChange = { [weak self] in self?.pushFindGround() }
     search.onNeedleChange = { [weak self] in self?.syncFindState() }
+    sidebarHandle.shownWidth = { [weak self] in self?.shownSidebarWidth ?? 0 }
     sidebarHandle.onDrag = { [weak self] width in self?.resizeSidebar(to: width) }
     sidebarHandle.onRelease = { [weak self] in self?.sidebar.commit() }
     wireShell()
@@ -155,7 +160,7 @@ final class EditorPaneView: NSView {
 
   override var isFlipped: Bool { true }
 
-  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態・diff の見せ方）を面へ配る。別 root は Environment を継承
+  /// 窓の環境（透過・言語・フォント割り当て・左の列の状態・diff の見せ方）を面へ配る。別 root は Environment を継承
   /// しないので root を作り直す。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
@@ -179,19 +184,21 @@ final class EditorPaneView: NSView {
   }
 
   private func installRoots() {
+    barHost.rootView = EditorBarRoot(
+      shell: shell, sidebar: sidebar, scm: scm, pullRequest: pullRequest.pullRequest,
+      localization: localization, fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
       scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
       pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
       localization: localization, fontResolver: fontResolver)
-    headerHost.rootView = EditorHeaderRoot(
-      shell: shell, localization: localization, fontResolver: fontResolver)
-    faceHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
+    faceHost.rootView = faceRoot(faceContent)
   }
 
-  /// 行内入力を預かっている間に焦点を明け渡した。行き先が決まった次のターンに、入力欄と同じ判定へ通す
-  /// （戻った行の入力欄なら残り、面の外なら取り消し）。
+  /// 焦点を明け渡した。一覧のための預かりはここで終わる。行内入力を預かっていたなら、行き先が決まった次のターンに、
+  /// 入力欄と同じ判定へ通す（戻った行の入力欄なら残り、面の外なら取り消し）。
   override func resignFirstResponder() -> Bool {
+    endListFocusHold()
     if let generation = tree.newEntry?.generation {
       DispatchQueue.main.async { [weak self] in self?.inlineInputLostFocus(generation: generation) }
     }
@@ -200,14 +207,12 @@ final class EditorPaneView: NSView {
 
   // MARK: - セッション → 骨
 
-  /// セッションが変わった。左の列の中身を画面に合わせ、写しを無条件に組み直し、セッションが画面から導いた本体を見せ、
-  /// Files の今の文書が替わっていればツリーの祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同じ
-  /// 本体の未保存・衝突の変化は `show` の guard で止まる。本体が空のまま画面が替わったときも、器の中身は画面で決まるので
+  /// セッションが変わった。左の列の中身を画面に合わせ、セッションが画面から導いた本体を見せ、Files の今の文書が替わって
+  /// いればツリーの祖先を開いてそのファイルを選択する。本体が空のまま画面が替わったときも、器の中身は画面で決まるので
   /// 置き直す。
   func sessionDidChange() {
     guard let group else { return }
     syncPanel()
-    shell.update(from: group.editor, root: tree.root, diffMode: diffModes.mode)
     show(group.editor.body)
     refreshNotice()
     let active = group.editor.activeURL
@@ -215,7 +220,7 @@ final class EditorPaneView: NSView {
       revealedDocument = active
       if let active { tree.reveal(active) }
     }
-    reconcileDiffs()
+    reconcileWithLists()
   }
 
   /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
@@ -252,6 +257,7 @@ final class EditorPaneView: NSView {
     wireSourceControl()
     if focusIsInPullRequest { reclaimSidebarFocus() }
     pullRequest.isShown = false
+    pullRequest.isTracking = false
     pullRequest = PrPanel(root: root, source: .gh())
     pullRequestList = Self.pullRequestList(pullRequest)
     pullRequestHeader = PrDescriptionHeader(frame: .zero)
@@ -259,10 +265,7 @@ final class EditorPaneView: NSView {
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
-    if let group {
-      shell.update(from: group.editor, root: root, diffMode: diffModes.mode)
-      if let url = group.editor.activeURL { tree.reveal(url) }
-    }
+    if let url = group?.editor.activeURL { tree.reveal(url) }
   }
 
   /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の
@@ -270,9 +273,9 @@ final class EditorPaneView: NSView {
   /// 配置を頼み、文書を初めて画面に出すときはその配置で、最初の描画に色が間に合うよう上限つきで待つ（→
   /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
   /// 文書の知らせは、本体で編集する文書へ結び直す（→ `bindEditedDocument`）。
-  /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が面の中（サイドバーを除く）にあれば新しい
+  /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が面の中（左の列を除く）にあれば新しい
   /// 行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では
-  /// 「中にあった」ことが分からない）。サイドバーの焦点（検索結果・行内入力）は面を外しても残るので動かさない。
+  /// 「中にあった」ことが分からない）。左の列の焦点（検索結果・行内入力）は面を外しても残るので動かさない。
   func show(_ next: EditorBody) {
     guard !Self.same(next, body) else { return }
     let hadFocusInside = focusIsInside && !focusIsInSidebar
@@ -354,8 +357,8 @@ final class EditorPaneView: NSView {
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。ソース管理の一覧は、Changes の画面の間だけ行とグラフを組む。PR のパネルは、PR の画面の間だけ
-  /// worktree の今の PR を見る。本体の PR の diff は、面が見えている間だけ PR ごとの状態を見る。本体の diff を整合させ、配置を
+  /// だけを使う間は払わない）。ソース管理の一覧は、Changes の画面の間だけ行とグラフを組む。PR のパネルは、面が見えている間は
+  /// worktree の今の PR を追い、PR の画面の間だけ中身も読む。本体の PR の diff は、面が見えている間だけ PR ごとの状態を見る。本体の diff を整合させ、配置を
   /// 頼み、見えるようになった本体を初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても、見えたときにもう
   /// 一度配置して待つ）。
   private func updateLiveness() {
@@ -366,19 +369,23 @@ final class EditorPaneView: NSView {
     updatePanelsShown()
     updateDiffWatching()
     if live { group?.editor.prepareSurfaces() }
-    reconcileDiffs()
+    reconcileWithLists()
     needsLayout = true
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）。
   var isFaceVisible: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
 
-  /// ソース管理の一覧が行を組むか（面が見えていて、画面が Changes）と、PR のパネルが worktree の今の PR を見るか（面が見えて
-  /// いて、画面が PR）を写す。左の列を閉じていても同じ——Changes・PR の画面で本体に自動で開く行を決めるのに一覧が要る。
+  /// ソース管理の一覧が行を組むか（面が見えていて、画面が Changes）と、PR のパネルが worktree の今の PR を追うか（面が
+  /// 見えている間。上のバーの番号）と中身も読むか（面が見えていて、画面が PR）を写す。左の列を閉じていても同じ——Changes・
+  /// PR の画面で本体に自動で開く行を決めるのに一覧が要る。
   func updatePanelsShown() {
+    let visible = isFaceVisible
     let screen = group?.editor.screen
-    scm.isShown = isFaceVisible && screen == .changes
-    pullRequest.isShown = isFaceVisible && screen == .pullRequest
+    scm.isShown = visible && screen == .changes
+    if !visible { pullRequest.isShown = false }
+    pullRequest.isTracking = visible
+    pullRequest.isShown = visible && screen == .pullRequest
   }
 
   /// 本体の diff を、面が見えている間だけ見る（PR の diff はこの間だけ PR ごとの状態を見る）。替われば前の diff を見終わる。

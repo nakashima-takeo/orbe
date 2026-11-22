@@ -10,8 +10,8 @@ import XCTest
 /// 奪う。本体の diff が左の列のどの行か分からない。ステージした途端に本体の diff が消える。変更が無くなっても前の diff が本体に
 /// 残る。
 extension SourceControlPaneTests {
-  /// レールで Changes を出すと、diff を開いていなければ先頭のファイルの行の diff が本体に出て、その行が選択表示される。焦点は
-  /// レールが入れたメッセージ欄に残る。
+  /// 上のバーで Changes を出すと、diff を開いていなければ先頭のファイルの行の diff が本体に出て、その行が選択表示される。
+  /// 自動で開いた diff は焦点を動かさない（メッセージ欄に入れた焦点はそのまま残る）。
   func testShowingChangesOpensTheFirstFileRowsDiffAndLeavesTheFocus() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "edited\n")
