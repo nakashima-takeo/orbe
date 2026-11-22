@@ -292,19 +292,19 @@ import SwiftUI
 
   /// 地図の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・⌘↵ と space（ノードの段。`BoardAutomationHand.stroke` に任せる）・
   /// ↵ / →（「通知」の段）・← / esc のほかは何も起こさず、どれも握る（焦点をボードの外へ逃がさない）。
-  func handleMapKey(_ press: KeyPress) -> KeyPress.Result {
+  func handleMapKey(_ press: KeyInput) -> KeyPress.Result {
     if let cursor = notifyCursor {
       handleNotifyKey(press, cursor)
     } else if let stroke = BoardAutomationHand.stroke(press, at: .map) {
       if case .press(let operation) = stroke { perform(operation) }
     } else if press.key == .return || press.key == .rightArrow,
-      press.modifiers.isDisjoint(with: Self.chords)
+      press.modifiers.isEmpty
     {
-      if press.phase == .down, selectedMapStop == .notify { openNotify() }
+      if !press.isRepeat, selectedMapStop == .notify { openNotify() }
     } else if press.key == .leftArrow || press.key == .escape,
-      press.modifiers.isDisjoint(with: Self.chords)
+      press.modifiers.isEmpty
     {
-      if press.phase == .down { leaveMap() }
+      if !press.isRepeat { leaveMap() }
     } else if press.key == .upArrow || press.key == .downArrow,
       !press.modifiers.contains(.command)
     {
@@ -315,13 +315,13 @@ import SwiftUI
 
   /// 一覧の器のキー。↑↓・↵ / →（地図へ）・`BoardAutomationHand.stroke` に任せるキーのほかは何も起こさず、どれも握る（⇥ で
   /// 焦点をボードの外へ逃がさない）。
-  func handleKey(_ press: KeyPress) -> KeyPress.Result {
+  func handleKey(_ press: KeyInput) -> KeyPress.Result {
     if let stroke = BoardAutomationHand.stroke(press, at: .list) {
       if case .press(let operation) = stroke { perform(operation) }
     } else if press.key == .return || press.key == .rightArrow,
-      press.modifiers.isDisjoint(with: Self.chords)
+      press.modifiers.isEmpty
     {
-      if press.phase == .down { enterMap() }
+      if !press.isRepeat { enterMap() }
     } else if press.key == .upArrow || press.key == .downArrow,
       !press.modifiers.contains(.command)
     {
@@ -369,13 +369,13 @@ import SwiftUI
 
   /// サブメニューのキー。↑↓ は端で巡回し、↵ で決め、← / esc で何もせず閉じて「通知」の段へ。ほかは下の操作を起こさずに
   /// 握る。
-  private func handleNotifyKey(_ press: KeyPress, _ cursor: Int) {
+  private func handleNotifyKey(_ press: KeyInput, _ cursor: Int) {
     switch press.key {
     case .upArrow, .downArrow:
       guard !press.modifiers.contains(.command) else { return }
       moveNotify(press.key == .upArrow ? -1 : 1)
     case .return:
-      guard press.phase == .down, press.modifiers.isDisjoint(with: Self.chords) else { return }
+      guard !press.isRepeat, press.modifiers.isEmpty else { return }
       chooseNotify(Self.notifyChoices[cursor])
     case .leftArrow, .escape:
       closeNotify()
@@ -383,7 +383,4 @@ import SwiftUI
       break
     }
   }
-
-  /// 修飾なしのキーとみなさない修飾（矢印キーが伴う numericPad・function は含めない）。
-  private static let chords: EventModifiers = [.command, .option, .control, .shift]
 }

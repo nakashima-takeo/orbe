@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -176,7 +177,8 @@ extension SurfaceInputMethodTests {
       case .select(let range): view.setSelectedRange(range)
       case .ime(let call): call.send(to: view)
       }
-      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+      pumpMainOnce()
+      XCTAssertEqual(view.undoManager?.groupingLevel, 0, "前提: undo の組が閉じている")
     }
     guard let undo = view.undoManager else { return [] }
     var trail = [view.string]

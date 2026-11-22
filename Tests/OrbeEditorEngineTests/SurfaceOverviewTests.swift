@@ -110,21 +110,27 @@ final class SurfaceOverviewTests: EngineTestCase {
     let onBar = CGPoint(x: bar.minX + 100, y: bar.midY)
     XCTAssertEqual(view.overview.area(at: onBar), .horizontal, "前提: 下端の帯の中の横スクロールバー")
     let drag = FakeDraggingInfo(at: view.convert(onBar, to: nil), pasteboard: board)
-    _ = view.draggingEntered(drag)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-    _ = view.draggingUpdated(drag)
+    var now = CACurrentMediaTime()
+    _ = view.draggingEntered(drag, now: now)
+    now += 0.05
+    _ = view.draggingUpdated(drag, now: now)
+    // 「右列の上では送らない」「戻った最初の出来事は時刻を取るだけ」の対。同じ時点で、起きる場合を待たずに確かめる。
     XCTAssertGreaterThan(opened.surface.scrollPosition.y, 0, "横スクロールバーの上でも送る")
 
     drag.draggingLocation = view.convert(
       CGPoint(x: layout.minimap.midX, y: bar.midY), to: nil)
     let before = opened.surface.scrollPosition.y
-    _ = view.draggingUpdated(drag)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-    _ = view.draggingUpdated(drag)
+    _ = view.draggingUpdated(drag, now: now)
+    now += 0.3
+    _ = view.draggingUpdated(drag, now: now)
     XCTAssertEqual(opened.surface.scrollPosition.y, before, "右列の上では送らない")
     drag.draggingLocation = view.convert(onBar, to: nil)
-    _ = view.draggingUpdated(drag)
+    _ = view.draggingUpdated(drag, now: now)
     XCTAssertEqual(opened.surface.scrollPosition.y, before, "戻った最初の出来事は時刻を取るだけ")
+    now += 0.05
+    _ = view.draggingUpdated(drag, now: now)
+    // 「戻った最初の出来事は時刻を取るだけ」の対。同じ時点で、起きる場合を待たずに確かめる。
+    XCTAssertGreaterThan(opened.surface.scrollPosition.y, before, "端の範囲の中で続く出来事は送る")
     view.draggingExited(drag)
   }
 

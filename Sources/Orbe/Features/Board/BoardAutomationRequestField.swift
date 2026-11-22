@@ -33,7 +33,7 @@ struct BoardAutomationRequestField: View {
           font: Font.theme.code, color: Color.theme.textMuted
         )
         .onSubmitIgnoringKeyRepeat { model.send() }
-        .onKeyPress { model.handleRequestKey($0) }
+        .onKeyPress { model.handleRequestKey(KeyInput($0)) }
         .allowsHitTesting(here)
       Text("↵ " + l10n.string(.boardAskHint))
         .font(Font.theme.codeSmall)

@@ -10,9 +10,9 @@ import XCTest
 /// 掴んで外で離しても残る、帯を掴んで外へ出た途端に消える。
 @MainActor
 final class SurfaceThumbTests: EngineTestCase {
-  /// 縦のつまみの上端近くの画素（キャレットの印より下）。
-  private func verticalThumb(_ opened: Opened) throws -> [Int] {
-    try pixelShot(opened).rgb(opened.surface.surfaceLayout.verticalScrollbar.midX, 10)
+  /// 時刻 `time` のコマの、縦のつまみの上端近くの画素（キャレットの印より下）。
+  private func verticalThumb(_ opened: Opened, at time: Double) throws -> [Int] {
+    try pixelShot(opened, at: time).rgb(opened.surface.surfaceLayout.verticalScrollbar.midX, 10)
   }
 
   /// つまみはスクロールの状態が変わると現れる——縦の位置に限らず、面の高さと幅・改行（行数）・横スクロールでも。行の中の
@@ -20,13 +20,19 @@ final class SurfaceThumbTests: EngineTestCase {
   func testTheThumbShowsWhenTheScrollStateChanges() throws {
     let opened = try hosted(String(repeating: "x", count: 400) + "\n" + rows(1000))
     let surface = opened.surface
-    XCTAssertEqual(try verticalThumb(opened), [0, 0, 0], "前提: 開いた直後は隠れる")
+    // 撮るコマの時刻。つまみの濃さはコマの時刻の前後で決まるので、進める向きにだけ変える。
+    var now = CACurrentMediaTime()
+    XCTAssertEqual(try verticalThumb(opened, at: now), [0, 0, 0], "前提: 開いた直後は隠れる")
     let rope = opened.document.text
     surface.selectedRange = NSRange(location: rope.lineStart(3), length: 0)
     let shows = { (label: String, change: () -> Void) throws in
       change()
-      XCTAssertNotEqual(try self.verticalThumb(opened), [0, 0, 0], "\(label) で現れる")
-      pumpMain(until: { (try? self.verticalThumb(opened)) == [0, 0, 0] }, "\(label) の後、止まれば消える")
+      XCTAssertNotEqual(try self.verticalThumb(opened, at: now), [0, 0, 0], "\(label) で現れる")
+      now += 0.6
+      XCTAssertEqual(
+        try self.verticalThumb(opened, at: now), [0, 0, 0],
+        "\(label) の後、止まれば消える。testReleasingADragOutsideTheBodyHidesTheThumb の"
+          + "「ドラッグ中は外でも、止まって 500ms を過ぎても見える」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     }
     try shows("面の高さ") {
       surface.viewStateDidChange(size: CGSize(width: 800, height: 300), scale: 2, visible: false)
@@ -36,7 +42,7 @@ final class SurfaceThumbTests: EngineTestCase {
     }
     try shows("改行") { surface.responder.doCommand(by: #selector(NSResponder.insertNewline(_:))) }
     type(opened, "a")
-    XCTAssertEqual(try verticalThumb(opened), [0, 0, 0], "行の中の打鍵では出ない")
+    XCTAssertEqual(try verticalThumb(opened, at: now), [0, 0, 0], "行の中の打鍵では出ない")
     try shows("横スクロール") { surface.scroll(toX: 200) }
   }
 
@@ -55,8 +61,10 @@ final class SurfaceThumbTests: EngineTestCase {
           timestamp: CACurrentMediaTime(), windowNumber: view.window?.windowNumber ?? 0,
           context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
     }
+    // 撮るコマの時刻。つまみの濃さはコマの時刻の前後で決まるので、進める向きにだけ変える。
+    var now = CACurrentMediaTime()
     let shown = { () throws -> Bool in
-      let shot = try self.pixelShot(opened)
+      let shot = try self.pixelShot(opened, at: now)
       return stride(from: CGFloat(5), to: bar.maxY, by: 2).contains { shot.hasInk(bar.midX, $0) }
     }
     view.mouseEntered(with: try crossing(.mouseEntered, grab))
@@ -65,7 +73,7 @@ final class SurfaceThumbTests: EngineTestCase {
     XCTAssertGreaterThan(opened.surface.viewportLines.first, 0, "前提: ドラッグで動いた")
     XCTAssertTrue(try shown())
     view.mouseExited(with: try crossing(.mouseExited, outside))
-    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+    now += 0.6
     XCTAssertTrue(try shown(), "ドラッグ中は外でも、止まって 500ms を過ぎても見える")
     try mouse(opened, .leftMouseDragged, at: CGPoint(x: outside.x, y: 80))
     XCTAssertTrue(try shown())

@@ -12,6 +12,13 @@ enum AgentPluginInstaller {
     case skip(String)  // skip-no-cli（未検出）
   }
 
+  /// install.sh が各 CLI のコマンドに掛ける時限（秒）。
+  struct TimeLimits {
+    var register: TimeInterval = 30  // marketplace add
+    var list: TimeInterval = 15  // plugin list
+    var install: TimeInterval = 60  // plugin install / plugin add
+  }
+
   /// 同梱プラグインのディレクトリ（`<bundle>/Contents/Resources/agent-plugin`）。
   /// `swift run`（バンドル無し）では nil。同梱が在るかのゲート判定に使う。
   static var bundledPluginDir: URL? {
@@ -108,22 +115,23 @@ enum AgentPluginInstaller {
     digest.map { String(format: "%02x", $0) }.joined()
   }
 
-  /// 同梱 `install.sh <pluginDir> <pluginName>` をバックグラウンド実行し、stdout の各行を Event として
-  /// メインスレッドで `onEvent` に、読み切りを `onComplete` に流す。子プロセスは呼び出し側が
-  /// 戻り値で保持する（実行中の Process 寿命を UI に紐付ける）。
+  /// 同梱 `install.sh <pluginDir> <pluginName> <limits の 3 つの時限>` をバックグラウンド実行し、
+  /// stdout の各行を Event としてメインスレッドで `onEvent` に渡し、読み取りの完了を `onComplete` に通知する。
+  /// 子プロセスは呼び出し側が戻り値で保持する（実行中の Process 寿命を UI に紐付ける）。
   ///
   /// 完了は stdout の EOF で発火する: 全行を読み切ってから同じ読み取りキューで `onComplete` を
   /// main へ投入するので、`onComplete` は必ず最後の `onEvent` の後に届く。呼び出し側はこの順序に
   /// 依って完了時点で失敗の有無を判定する（`AgentLauncher` は 1 つでも失敗すれば指紋を記録しない）。
   @discardableResult
   static func run(
-    pluginDir: URL, pluginName: String, shellPATH: String,
+    pluginDir: URL, pluginName: String, shellPATH: String, limits: TimeLimits = TimeLimits(),
     onEvent: @escaping (Event) -> Void, onComplete: @escaping () -> Void
   ) -> Process {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/bin/sh")
     proc.arguments = [
       pluginDir.appendingPathComponent("install.sh").path, pluginDir.path, pluginName,
+      String(limits.register), String(limits.list), String(limits.install),
     ]
     var env = ProcessInfo.processInfo.environment
     env["PATH"] = shellPATH

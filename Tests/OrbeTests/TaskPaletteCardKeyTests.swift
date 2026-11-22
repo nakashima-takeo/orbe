@@ -4,14 +4,15 @@ import XCTest
 
 @testable import Orbe
 
-/// 本物の `TaskPaletteCard` を実 `NSWindow` に載せ、実 `NSEvent` のキーを届けて、焦点の行き先（入力欄 /
-/// 右の欄の項目 / 右の欄の編集欄）ごとにキーが意図した操作になることを固定する。agent の変更をカードが
-/// 付け直しへ届ける配線も、キーの当たり先として測る。
+/// 本物の `TaskPaletteCard` を実 `NSWindow` に載せ、実 `NSEvent` のキーとクリックを届けて、キーの判断（`TaskPaletteKeyTests`
+/// が値で確かめる）の外側を固定する: 実機のキーがモデルの受けるキーの値になる形（矢印キーのフラグ・CapsLock・⌫・⇧⇥・
+/// リピート）、握ったキーが入力欄へ届かず、流したキーが入力欄と ↵ の確定（`onSubmit`）へ届くこと、焦点の行き先、クリック、
+/// agent の変更をカードが付け直しへ届ける配線。
 ///
-/// 壊れると何が起きるか: 入力欄に文字があるのに space がタスクを完了にする、入力を消そうと ⌘⌫ を押し続けた
-/// リピートで次のタスクまで消える。→ で右の欄に入れない、右の欄で打った文字が編集欄に届かず一覧の入力に入る、
-/// ⇥ で焦点がカードの外へ逃げて以後のキーが効かない。どれもモデル単体では再現せず、実際に描いて
-/// キーを届けないと分からない。
+/// 壊れると何が起きるか: 入力欄に文字があるのに space がタスクを完了にする、文字があるときの ⌘⌫ が入力を消さずにタスクを
+/// 消す。CapsLock を入れていると space が効かない。右の欄で打った文字が編集欄に届かず一覧の入力に入る、⇥ で焦点がカードの
+/// 外へ逃げて以後のキーが効かない。agent がタスクを消した直後の space が、消えたタスクに向かう。どれもモデル単体では
+/// 再現せず、実際に描いてキーを届けないと分からない。
 @MainActor
 final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
   enum Key {
@@ -34,12 +35,14 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
   func mount(
     _ model: TaskPaletteModel, width: CGFloat = 960, detailWidth: CGFloat = 340
   ) -> NSWindow {
-    host(
+    let window = host(
       NSHostingView(
         rootView: TaskPaletteCard(model: model, detailWidth: detailWidth)
           .frame(width: width, height: 600)
           .environment(\.localization, LocalizationStore(language: .ja))),
       size: NSSize(width: width + 40, height: 640))
+    awaitFieldFocus(window)
+    return window
   }
 
   /// ヘッダーの入力欄（カード左上の「❯」の右）をクリックする。窓はカードの大きさに揃うので、窓座標
@@ -80,6 +83,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let window = mount(model)
 
     send(Key.space, " ", to: window)
+    send(Key.space, " ", repeating: true, to: window)
     XCTAssertEqual(status(model, 3), .done, "空の入力欄の space は選んだタスクを完了にする")
 
     type("b", into: window)
@@ -102,71 +106,18 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let window = mount(model)
 
     send(Key.enter, "\r", to: window)
-    XCTAssertEqual(status(model, 3), .done)
+    XCTAssertEqual(
+      status(model, 3), .done,
+      "↵ で選んだタスクを完了にする。testEnterKeyRepeatAloneInTheFieldDoesNothing の「完了にしない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
 
     type("新しい", into: window)
     send(Key.enter, "\r", to: window)
-    XCTAssertTrue(model.store.tasks.contains { $0.title == "新しい" })
+    XCTAssertTrue(
+      model.store.tasks.contains { $0.title == "新しい" },
+      "追加の行の ↵ で追加する。testEnterKeyRepeatAloneInTheFieldDoesNothing の「追加しない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     XCTAssertEqual(model.query, "")
-  }
-
-  /// 入力欄の ⌘↵ は onSubmit（↵ = 追加）へ流れず、打った文を agent に任せる。タスクの行を選んで ⌘↵ なら、そのタスクの
-  /// agent を開く。
-  func testCommandEnterInTheFieldHandsTheTextOverAndOnARowOpensTheAgent() {
-    let model = model()
-    var asks: [String] = []
-    model.onAskSecretary = {
-      asks.append($0)
-      return nil
-    }
-    var opened: [Int] = []
-    model.onOpenWorktreePalette = { opened.append($0) }
-    let window = mount(model)
-
-    type("見積もり", into: window)
-    send(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(asks, ["見積もり"])
-    XCTAssertEqual(model.store.tasks.count, 3, "足さない")
-
-    send(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(opened, [3], "選んでいる行のタスクの agent を開く")
-    XCTAssertEqual(asks.count, 1)
-  }
-
-  /// 行の ⌘↵ は、待ちが解けたタスクなら、一覧でも右の欄でも ⌘T の画面を開かずに会話を続きから始める。
-  func testCommandEnterOnAResolvedWaitContinuesTheConversationFromTheListAndTheDetail() {
-    let condition = WaitCondition(
-      WaitConditionRequest(
-        description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,
-        deadline: DesignSceneFixtures.taskToday.addingTimeInterval(86400),
-        conversation: WaitConversation(command: "claude", sessionId: "s-1", workspace: nil)),
-      setAt: DesignSceneFixtures.taskToday)
-    let model = TaskPaletteSamples.model([
-      TaskPaletteSamples.task(1, "a", .inProgress) {
-        $0.wait = .resolved(
-          WaitResolution(
-            waiting: TaskItem.Waiting(
-              reason: "レビュー待ち", since: DesignSceneFixtures.taskToday, condition: condition),
-            how: .satisfied(output: "レビューが付いた"), at: DesignSceneFixtures.taskToday))
-      }
-    ])
-    var continued: [Int] = []
-    var opened: [Int] = []
-    model.onContinueWait = {
-      continued.append($0)
-      return nil
-    }
-    model.onOpenWorktreePalette = { opened.append($0) }
-    let window = mount(model)
-    XCTAssertEqual(model.selectedID, .task(1), "前提")
-
-    send(Key.enter, "\r", .command, to: window)
-    model.enterDetail()
-    flush(window)
-    send(Key.enter, "\r", .command, to: window)
-
-    XCTAssertEqual(continued, [1, 1])
-    XCTAssertEqual(opened, [])
   }
 
   /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても、完了にも追加にもならない。
@@ -183,29 +134,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.query, "新しい")
   }
 
-  func testCommandBackspaceDeletesOneTaskEvenWhenHeldDown() {
-    let model = model()
-    let window = mount(model)
-
-    send(Key.delete, "\u{7F}", .command, to: window)
-    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
-    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
-
-    XCTAssertEqual(model.store.tasks.map(\.id), [1, 2], "消えるのは押した 1 件だけ")
-  }
-
-  func testSpaceHeldDownCompletesOneTaskAndTypesNoSpace() {
-    let model = model()
-    let window = mount(model)
-
-    send(Key.space, " ", to: window)
-    send(Key.space, " ", repeating: true, to: window)
-    send(Key.space, " ", repeating: true, to: window)
-
-    XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .done], "完了は押した 1 件だけ")
-    XCTAssertEqual(model.query, "", "リピートは入力欄に空白を入れない")
-  }
-
   func testCommandBackspaceWithTextEditsTheFieldInsteadOfDeleting() {
     let model = model()
     let window = mount(model)
@@ -219,15 +147,19 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.query, "", "入力欄の文字を行頭まで消す")
   }
 
-  func testOptionArrowsMoveLikeArrowsAndCommandArrowsJump() {
+  /// 空の入力欄の ⌘⌫ は、選んだタスクを消す。
+  func testCommandBackspaceOnAnEmptyFieldDeletesTheSelectedTask() throws {
     let model = model()
     let window = mount(model)
+    arrow(Key.down, to: window)
+    guard case .task(let id) = model.selectedID else { return XCTFail("前提: タスクを選んだ") }
 
-    arrow(Key.down, .command, to: window)
-    XCTAssertEqual(model.selectedID, .task(1), "⌘↓ で末尾へ")
+    send(Key.delete, "\u{7F}", .command, to: window)
 
-    arrow(Key.up, .option, to: window)
-    XCTAssertEqual(model.selectedID, .task(2), "⌥↑ は ↑ と同じく前の行へ")
+    XCTAssertFalse(
+      model.store.tasks.contains { $0.id == id },
+      "空の入力欄の ⌘⌫ で選んだタスクを消す。testCommandBackspaceWithTextEditsTheFieldInsteadOfDeleting の"
+        + "「文字があるときはタスクを消さない」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 
   func testTabAndShiftTabCycleTheTabsWhileTheFieldKeepsTheKeys() {
@@ -235,7 +167,10 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let window = mount(model)
 
     send(Key.tab, "\t", to: window)
-    XCTAssertEqual(model.tab, .github)
+    XCTAssertEqual(
+      model.tab, .github,
+      "⇥ でタブを替える。testTabWhilePickingKeepsPickingAndTheFieldKeepsTheKeys の「選ぶ状態を保つ」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
 
     send(Key.tab, "\t", to: window)
     XCTAssertEqual(model.tab, .automation)
@@ -271,32 +206,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.query, "a")
   }
 
-  func testEscapeInTheListClosesTheScreen() {
-    let model = model()
-    var dismissed = false
-    model.onDismiss = { dismissed = true }
-    let window = mount(model)
-
-    send(Key.escape, "\u{1B}", to: window)
-
-    XCTAssertTrue(dismissed)
-  }
-
-  func testEscapeClosesTheOpenFilterMenuBeforeTheScreen() {
-    let model = model()
-    var dismissed = false
-    model.onDismiss = { dismissed = true }
-    model.toggleFilterMenu(.workspace)
-    let window = mount(model)
-
-    send(Key.escape, "\u{1B}", to: window)
-    XCTAssertNil(model.openFilterMenu)
-    XCTAssertFalse(dismissed, "メニューだけを閉じる")
-
-    send(Key.escape, "\u{1B}", to: window)
-    XCTAssertTrue(dismissed)
-  }
-
   /// 期限のメニューの値を上から 3 つ続けてクリックすると、3 つともオンになり、メニューは開いたまま。カードは窓が
   /// 広いときの最大の寸法（880 幅・右の欄は 1/3）で、1 つ目をオンにするとドロップダウンの表記が伸びて次の行へ
   /// 折り返す。メニューがドロップダウンを追って動くと、2 つ目のクリックがメニューの外に当たって閉じる。
@@ -322,6 +231,25 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
       XCTAssertEqual(model.openFilterMenu, .due, "\(row + 1) つ目のクリックの後も開いたまま")
       XCTAssertTrue(model.filter.dues.contains(bucket), "\(row + 1) つ目の値がオン")
     }
+  }
+
+  /// 絞り込みのメニューの外のクリックは、メニューを閉じる。
+  func testClickingOutsideTheFilterMenuClosesIt() throws {
+    let model = model()
+    model.toggleFilterMenu(.due)
+    let window = mount(model, width: 880, detailWidth: 880 / 3)
+    placeOffscreen(window)
+    let content = try XCTUnwrap(window.contentView)
+    let menu = try XCTUnwrap(scrollViews(in: content).last)
+    let frame = menu.convert(menu.bounds, to: nil)
+    XCTAssertEqual(model.openFilterMenu, .due, "前提: 開いている")
+
+    click(NSPoint(x: frame.maxX + 40, y: frame.midY), in: window)
+
+    XCTAssertNil(
+      model.openFilterMenu,
+      "メニューの外のクリックで閉じる。testClickingThreeValuesInARowKeepsTheFilterMenuOpenAndTurnsAllOn の"
+        + "「クリックの後も開いたまま」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 
   /// view の木を深さ優先でたどった順のスクロール。先頭が表で、絞り込みのメニューはカードの最後に重ねるので末尾。
