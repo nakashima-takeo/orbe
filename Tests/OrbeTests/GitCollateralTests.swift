@@ -119,7 +119,7 @@ final class GitCollateralTests: OrbeTestCase {
       observed.fulfill()
     }
     repo.version(of: "a.txt", atCommit: "HEAD") { version in
-      XCTAssertEqual(version, .present(Data("x\n".utf8)))
+      XCTAssertEqual(version, .present(Data("one\n".utf8)))
       observed.fulfill()
     }
     repo.commitGraph(limit: 10) { graph in

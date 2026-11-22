@@ -207,12 +207,9 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
 
   /// `dir/repo` に 1 コミットのリポジトリを作る。
   private func makeRepository() throws -> String {
-    let repo = dir.appendingPathComponent("repo").path
-    XCTAssertTrue(run(["init", "-q", "-b", "main", repo], cwd: dir.path).isSuccess)
-    XCTAssertTrue(run(["config", "user.email", "t@example.com"], cwd: repo).isSuccess)
-    XCTAssertTrue(run(["config", "user.name", "t"], cwd: repo).isSuccess)
-    XCTAssertTrue(run(["commit", "-q", "--allow-empty", "-m", "init"], cwd: repo).isSuccess)
-    return repo
+    let repo = dir.appendingPathComponent("repo")
+    try TempGitRepo.place(at: repo)
+    return repo.path
   }
 
   @discardableResult

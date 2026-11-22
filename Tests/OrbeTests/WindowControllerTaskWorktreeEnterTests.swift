@@ -20,23 +20,11 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
   private var dir: String!
   private var local: String!
 
-  /// origin（bare）と、それを clone した手元。手元の `stale` は origin の `stale` を追跡し、1 コミット遅れる。
+  /// origin（bare）と、それを clone した手元の組（`StaleCloneFixture`）を置く。
   override func setUpWithError() throws {
     dir = TestScratch.caseDir.appendingPathComponent("git").path
-    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    let origin = (dir as NSString).appendingPathComponent("origin.git")
+    try StaleCloneFixture.place(at: URL(fileURLWithPath: dir))
     local = (dir as NSString).appendingPathComponent("web")
-    let other = (dir as NSString).appendingPathComponent("other")
-    try git(["init", "-q", "--bare", "-b", "main", origin], in: dir)
-    try git(["clone", "-q", origin, other], in: dir)
-    try identify(other)
-    try git(["commit", "-q", "--allow-empty", "-m", "a"], in: other)
-    try git(["push", "-q", "origin", "HEAD:main", "HEAD:stale"], in: other)
-    try git(["clone", "-q", origin, local], in: dir)
-    try identify(local)
-    try git(["branch", "-q", "--track", "stale", "origin/stale"], in: local)
-    try git(["commit", "-q", "--allow-empty", "-m", "b"], in: other)
-    try git(["push", "-q", "origin", "HEAD:stale"], in: other)
   }
 
   private func git(_ args: [String], in cwd: String) throws {
