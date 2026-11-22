@@ -119,6 +119,8 @@ extension Theme.Typography {
   static let editorEmptyButton = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
   /// キーの札の字（sans 10.5 semibold）。
   static let editorKeyCap = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+  /// 字のボタンの字（sans 11.5）。
+  static let editorTextButton = NSFont.systemFont(ofSize: 11.5, weight: .regular)
   static let editorSidebarNote = NSFont.systemFont(ofSize: 12, weight: .regular)
   /// コード本体（mono 12）。
   static let editorCode = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -196,6 +198,13 @@ extension Theme.Layout {
   static let editorKeyCapPadX: CGFloat = 4
   static let editorKeyCapRadius: CGFloat = 5
   static let editorKeyCapGlyph: CGFloat = 12
+  /// 字のボタンの高さ・左右の余白・角丸・印の大きさ・印と字の間・字とキーの札の間。
+  static let editorTextButton: CGFloat = 22
+  static let editorTextButtonPadX: CGFloat = 7
+  static let editorTextButtonRadius: CGFloat = 6
+  static let editorTextButtonGlyph: CGFloat = 14
+  static let editorTextButtonGap: CGFloat = 5
+  static let editorTextButtonKeyGap: CGFloat = 11
   static let editorPanelHeader: CGFloat = 28
   static let editorRow: CGFloat = 20
   /// ツリー行の種別チップ。
@@ -263,6 +272,9 @@ extension Theme.Opacity {
   static let editorHairlineLight: Double = 1.4
   /// キーの札の地（`surfaceInk` の α）。
   static let editorKeyCap: Double = 0.07
+  /// 字のボタンの地（`surfaceInk` の α）——地つきの変種と素の姿のホバー、地つきの変種のホバー。
+  static let editorTextButtonFill: Double = 0.08
+  static let editorTextButtonFillHover: Double = 0.12
   /// diff の追加・削除の行の地の不透明度（構文色が地の上で読める濃さ）。
   static let editorDiffRow: CGFloat = 0.12
   /// diff の詰め物の行の地（塗りの α）と、並列の 2 面の境（hairline の α）。

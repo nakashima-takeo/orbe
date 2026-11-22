@@ -146,6 +146,7 @@ struct ThemeFonts {
   let editorBarCount = Font(Theme.Typography.editorBarCount as CTFont)
   let editorBarHint = Font(Theme.Typography.editorBarHint as CTFont)
   let editorKeyCap = Font(Theme.Typography.editorKeyCap as CTFont)
+  let editorTextButton = Font(Theme.Typography.editorTextButton as CTFont)
   let editorPanelTitle = Font(Theme.Typography.editorPanelTitle as CTFont)
   let editorRootLabel = Font(Theme.Typography.editorRootLabel as CTFont)
   let editorTreeRow = Font(Theme.Typography.editorTreeRow as CTFont)
