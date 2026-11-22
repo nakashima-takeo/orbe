@@ -229,4 +229,5 @@ def main() -> int:
     return 1 if any(problems(bundles) for bundles in parsed) else 0
 
 
-sys.exit(main())
+if __name__ == "__main__":
+    sys.exit(main())
