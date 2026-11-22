@@ -32,7 +32,7 @@ extension ScmPanelTests {
     }
   }
 
-  /// 外の `git add` で断られたコミットを、行が追いつく前（断った知らせの中）に押し直しても、また何も書かずに断る——何も
+  /// 外の `git add` で断られたコミットを、断った後、行が追いつく前に押し直しても、また何も書かずに断る——何も
   /// 書かずに断ったコミットは、先にステージする行を書いたことにならない。先のステージの後で hook に拒まれたコミットの
   /// 押し直しは、自分のステージを数えて通る。コミットとコミットしてプッシュは 1 段目の終わりを別の道で知らせる。
   func testPressingAgainRightAfterAFailedCommitCountsOnlyTheStageItWrote() throws {
@@ -51,7 +51,7 @@ extension ScmPanelTests {
       let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
       var rowsWereBehind = false
       pressRightAfter(
-        kind, name, first: act,
+        name, first: act,
         then: {
           rowsWereBehind = $0.changes.staged.isEmpty
           act($0)
@@ -73,7 +73,7 @@ extension ScmPanelTests {
       panel.control.message = "m"
       let repo = self.repo!
       pressRightAfter(
-        kind, name, first: act,
+        name, first: act,
         then: {
           XCTAssertTrue(
             FileManager.default.createFile(atPath: repo.root + "/.git/allow", contents: nil))

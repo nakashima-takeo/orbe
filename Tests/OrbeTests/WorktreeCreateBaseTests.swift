@@ -11,7 +11,7 @@ import XCTest
 /// 古いベースから切られ、その上でエージェントが仕事を始める。upstream が破れると新しいブランチで
 /// `git push` がベースへ向かって拒否される。
 ///
-/// 遅い fetch は `remote.origin.uploadpack` を眠るラッパーへ差し替えて作る（ネットワーク不要）。
+/// 遅い fetch は `remote.origin.uploadpack` を、門で止まるラッパーへ差し替えて作る（ネットワーク不要）。
 /// 「待っている」ことは所要時間ではなく**出来上がった HEAD**で測る——待たなければ手元の古い
 /// `refs/remotes/origin/*` が base になり、origin の新しい tip とは一致しない。
 @MainActor
@@ -41,7 +41,8 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     let provider = try startWithSlowFetch()
     XCTAssertTrue(
       waitUntil(20) { provider.facts.defaultBranchName == "origin/main" }, "前提: 既定ブランチの解決は着地している")
-    let outcome = try prepare(provider, .newBranch(name: "issue/44", base: .defaultBranch))
+    let outcome = try prepareAfterTheFetch(
+      provider, .newBranch(name: "issue/44", base: .defaultBranch))
     guard case .created(let path, let base) = outcome else {
       return XCTFail("新しいブランチの作成として返る: \(outcome)")
     }
@@ -53,7 +54,8 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   /// fetch の着地後に切り、使ったベースはその名前で返る。
   func testNewBranchIsCutFromTheChosenBranchAfterTheFetch() throws {
     let provider = try startWithSlowFetch()
-    let outcome = try prepare(provider, .newBranch(name: "issue/45", base: .ref("origin/feat")))
+    let outcome = try prepareAfterTheFetch(
+      provider, .newBranch(name: "issue/45", base: .ref("origin/feat")))
     guard case .created(let path, let base) = outcome else {
       return XCTFail("新しいブランチの作成として返る: \(outcome)")
     }
@@ -64,7 +66,8 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   /// Remote branch 行も remote ref から新しいローカルブランチを切る経路。
   func testRemoteBranchWorktreeIsCutFromTheFetchedRemoteRef() throws {
     let provider = try startWithSlowFetch()
-    let path = try resolve(provider, .remoteBranch(name: "origin/feat", existingWorktree: nil))
+    let path = try createdPath(
+      prepareAfterTheFetch(provider, .remoteBranch(name: "origin/feat", existingWorktree: nil)))
     XCTAssertEqual(head(of: path), originTip("feat"), "fetch 後の origin/feat が base")
   }
 
@@ -77,7 +80,7 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   /// ——窓の中で作成（非同期 git 2 本）を走らせるので、遅い機械では窓が先に閉じて「正しい実装のまま
   /// 赤」になる。fetch はテストが門を開けるまで待たせ、作成が返ってから開ける。
   func testLocalBranchWithoutUpstreamDoesNotWaitForTheFetch() throws {
-    let provider = try startWithSlowFetch(holdingFetch: true)
+    let provider = try startWithSlowFetch()
     let path = try resolve(provider, .localBranch(name: "mine"))
     XCTAssertNotEqual(
       localRemoteTip("main"), originTip("main"), "作成が返った時点で fetch はまだ着地していない")
@@ -144,8 +147,8 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
       run(["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"], cwd: local).isSuccess)
     let provider = try startWithSlowFetch()
     XCTAssertEqual(provider.facts.defaultBranchName, "main", "前提: 提示時の名前はフォールバック")
-    let path = try resolve(
-      provider, .newBranch(name: "issue/44", base: .defaultBranch))
+    let path = try createdPath(
+      prepareReleasingTheFetch(provider, .newBranch(name: "issue/44", base: .defaultBranch)))
     XCTAssertEqual(
       oid(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd: local), "origin/main",
       "前提: fetch が origin/HEAD を作り直している")
@@ -174,24 +177,15 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     return provider
   }
 
-  /// fetch を遅らせてから provider を起こす。返るのは fetch が未着地の窓に居る provider——ここで
-  /// 作成を撃たないと「待つかどうか」を測れない。遅延は `remote.origin.uploadpack` を眠るラッパーへ
-  /// 差し替えて作る（ネットワークも特別な transport も要らない）。
-  ///
-  /// `holdingFetch` は眠りを `releaseFetch()` まで続けさせる。着地を待ち切るまで手が戻らないテスト
-  /// （`resolve`・`prepare` の中で着地を待つ等）は fetch が自力で明ける必要があるので数秒の眠りのまま、
-  /// 着地の前と後を分けて測るテストが門を使い、自分で `releaseFetch()` を呼ぶ。
-  func startWithSlowFetch(holdingFetch: Bool = false) throws
-    -> WorktreePaletteDataProvider
-  {
+  /// fetch を門で止めてから provider を起こす。返るのは fetch が未着地の窓に居る provider——ここで
+  /// 作成を撃たないと「待つかどうか」を測れない。fetch は `releaseFetch()` まで着地しない。止めるのは
+  /// `remote.origin.uploadpack` を差し替えたラッパー（ネットワークも特別な transport も要らない）。
+  func startWithSlowFetch() throws -> WorktreePaletteDataProvider {
     let wrapper = dir.appendingPathComponent("slow-upload-pack").path
-    if holdingFetch {
-      try FileManager.default.createDirectory(
-        atPath: fetchGate, withIntermediateDirectories: true)
-    }
-    let wait = holdingFetch ? "while [ -d \"\(fetchGate)\" ]; do sleep 0.05; done" : "sleep 2"
-    try "#!/bin/sh\n\(wait)\nexec git-upload-pack \"$@\"\n".write(
-      toFile: wrapper, atomically: true, encoding: .utf8)
+    try FileManager.default.createDirectory(atPath: fetchGate, withIntermediateDirectories: true)
+    try
+      "#!/bin/sh\nwhile [ -d \"\(fetchGate)\" ]; do sleep 0.05; done\nexec git-upload-pack \"$@\"\n"
+      .write(toFile: wrapper, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper)
     XCTAssertTrue(run(["config", "remote.origin.uploadpack", wrapper], cwd: local).isSuccess)
     let provider = try start()
@@ -210,7 +204,12 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     throws
     -> String
   {
-    switch try prepare(provider, destination) {
+    try createdPath(prepare(provider, destination))
+  }
+
+  /// 解決の結果の worktree のパス（作れなかったなら投げる）。
+  func createdPath(_ outcome: WorktreeRepoFacts.PrepareOutcome) throws -> String {
+    switch outcome {
     case .resolved(.ready(let path)), .created(let path, _): return path
     case let outcome: throw CreationFailed(detail: String(describing: outcome))
     }
@@ -220,10 +219,45 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     throws
     -> WorktreeRepoFacts.PrepareOutcome
   {
+    try returned(request(provider, destination))
+  }
+
+  /// 作成を頼み、門を閉じたまま、作成が返らないことを見張ってから門を開け、返るまで待つ。着地を待たない実装は、
+  /// 見張る間に古い ref から作成を終えて返る。作成（`git worktree add`）を着地の前に実行したかは、外から読めない。
+  func prepareAfterTheFetch(
+    _ provider: WorktreePaletteDataProvider, _ destination: WorktreePaletteDestination
+  ) throws -> WorktreeRepoFacts.PrepareOutcome {
+    let outcome = request(provider, destination)
+    XCTAssertTrue(holds(for: 1) { outcome() == nil }, "fetch の着地の前に作成を返さない")
+    releaseFetch()
+    return try returned(outcome)
+  }
+
+  /// 作成を頼み、同じ周で門を開け、返るまで待つ。名前や遅れの判定を頼んだ呼び出しの中で決める実装は、着地の前の値で
+  /// 決めるので、結果が違う。
+  func prepareReleasingTheFetch(
+    _ provider: WorktreePaletteDataProvider, _ destination: WorktreePaletteDestination
+  ) throws -> WorktreeRepoFacts.PrepareOutcome {
+    let outcome = request(provider, destination)
+    releaseFetch()
+    return try returned(outcome)
+  }
+
+  /// 作成を頼み、返った結果を読む関数を返す（返る前は nil を返す）。
+  private func request(
+    _ provider: WorktreePaletteDataProvider, _ destination: WorktreePaletteDestination
+  ) -> () -> WorktreeRepoFacts.PrepareOutcome? {
     var outcome: WorktreeRepoFacts.PrepareOutcome?
     provider.facts.prepareDirectory(for: destination) { outcome = $0 }
-    XCTAssertTrue(waitUntil(30) { outcome != nil }, "解決が返らない")
-    return try XCTUnwrap(outcome)
+    return { outcome }
+  }
+
+  /// 頼んだ作成が返るまで待ち、その結果を返す。
+  private func returned(_ read: () -> WorktreeRepoFacts.PrepareOutcome?) throws
+    -> WorktreeRepoFacts.PrepareOutcome
+  {
+    XCTAssertTrue(waitUntil(30) { read() != nil }, "解決が返らない")
+    return try XCTUnwrap(read())
   }
 
   func head(of worktree: String) -> String {
