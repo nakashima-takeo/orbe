@@ -109,17 +109,20 @@ final class ShellPATHTests: OrbeTestCase {
   /// 起動クリティカルパスを塞がない要請。ディスクキャッシュがあれば probe の着地を待たない。
   func testDiskCacheAnswersWithoutWaitingForProbe() throws {
     AppStatePersistence.update { $0.cachedShellPath = "/opt/custom/bin:/usr/bin" }
+    let clock = ManualClock()
     let blocked = DispatchSemaphore(value: 0)
-    let sut = ShellPATH(probe: {
-      blocked.wait()  // 永久にブロックする probe（テスト終了時に解く）
-      return nil
-    })
+    defer { blocked.signal() }
+    let sut = ShellPATH(
+      probe: {
+        blocked.wait()  // 永久にブロックする probe（テスト終了時に解く）
+        return nil
+      }, clock: clock.waits)
     sut.start()
-    let started = Date()
-    XCTAssertTrue(sut.value().hasPrefix("/opt/custom/bin:/usr/bin:"), "キャッシュ値が先頭に載る")
-    XCTAssertLessThan(
-      Date().timeIntervalSince(started), ShellPATH.syncWaitBudget, "同期待ちへ落ちていない")
-    blocked.signal()
+    let answer = value(of: sut)
+    // main を回さずに待つ（`awaitSleeper(_:_:)` と同じ理由）。
+    XCTAssertTrue(sleepUntil(10) { answer.isDone || !clock.sleeping.isEmpty }, "返るか眠る")
+    XCTAssertEqual(clock.sleeping, [], "同期待ちへ落ちていない（時刻を進めずに返る）")
+    XCTAssertTrue(answer.value?.hasPrefix("/opt/custom/bin:/usr/bin:") == true, "キャッシュ値が先頭に載る")
   }
 
   /// 永続するのは union 前の login PATH。knownPaths は Orbe の版で変わるので焼き込まない。
@@ -246,11 +249,38 @@ final class ShellPATHTests: OrbeTestCase {
 
   /// rc が背景に残した孫プロセスが stdout を握ると EOF は二度と来ない。終わりを決めるのは
   /// **シェルの終了**なので、正しく出ている PATH を捨てて上限まで張り付くことはない。
+  ///
+  /// スタブは、PATH の行の後に、pipe の容量（最大 64KB）の 2 倍を超える行を書いてから終わる。書き終えるには、読み手が PATH の
+  /// 行を含む塊を受け取り終えて、次の塊を読んでいる必要があるので、シェルが終わった時点で、PATH の行は届き終えている（汲み出しの
+  /// 猶予を、時刻を進めて縮めても取りこぼさない）。孫は、スタブのディレクトリが消える（テストの終わり）まで生きる。
   func testProbeSucceedsWhenGrandchildHoldsStdout() throws {
-    let shell = try stubShell("sleep 30 &\necho PATH=/usr/bin:/bin")
-    let started = Date()
-    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 10), "/usr/bin:/bin")
-    XCTAssertLessThan(Date().timeIntervalSince(started), 5, "EOF を待ち続けない")
+    let clock = ManualClock()
+    let grandchild = stubDir.appendingPathComponent("grandchild").path
+    let shell = try stubShell(
+      """
+      end=$(( $(date +%s) + 60 ))
+      (while [ -d "\(stubDir.path)" ] && [ "$(date +%s)" -lt "$end" ]; do sleep 0.05; done) &
+      echo $! > "\(grandchild).tmp" && mv "\(grandchild).tmp" "\(grandchild)"
+      echo PATH=/usr/bin:/bin
+      head -c 262144 /dev/zero | tr '\\0' x
+      echo
+      """)
+    let probed = Probed()
+    DispatchQueue.global().async {
+      probed.set(ShellPATH.probeLoginShell(shell: shell, timeout: 10, clock: clock.waits))
+    }
+    let limit = clock.now + 10
+    let drain = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline.map { $0 < limit } ?? false })?.deadline,
+      "シェルの終了の後、上限より手前の期限（汲み出しの猶予）で眠る")
+    clock.advance(to: drain)
+    pumpMain(until: { probed.isDone }, "EOF を待ち続けない")
+    XCTAssertEqual(probed.value, "/usr/bin:/bin")
+    let pid = try XCTUnwrap(
+      pid_t(
+        try String(contentsOfFile: grandchild, encoding: .utf8).trimmingCharacters(
+          in: .whitespacesAndNewlines)))
+    XCTAssertEqual(kill(pid, 0), 0, "前提: 孫が stdout を握っていて EOF は来ていない（猶予で返った）")
   }
 
   /// 固まった rc は上限で打ち切る。上限を超えて待たない＝呼び出し元が張り付かない。
