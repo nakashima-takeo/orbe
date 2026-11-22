@@ -4,8 +4,8 @@ import XCTest
 
 @testable import Orbe
 
-/// `open_diff` の実体——diff が Changes の diff として開き、そのタブのエディターが開き、焦点になる。パスは `open_file` と同じ解き方で根と相対パスになり、git 管理外は
-/// -32000、未知のタブは -32004。
+/// `open_diff` の実体——Files の画面からでも Changes にして diff を本体に出し、左の列でその行を選び、そのタブのエディターが
+/// 開き、焦点になる。パスは `open_file` と同じ解き方で根と相対パスになり、git 管理外は -32000、未知のタブは -32004。
 ///
 /// 重要: 実 NSWindow に接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 extension WindowControllerControlTests {
@@ -17,19 +17,23 @@ extension WindowControllerControlTests {
       [tabbed("main", tabs: [TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])])
     let tabId = try XCTUnwrap(wc.controlListTabs(workspaceId: nil).get()[0]["tabId"] as? Int)
     let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
+    let pane = tab.group.view.editor
+    MainActor.assumeIsolated { tab.group.editor.selectScreen(.files) }
 
     let result = wc.controlOpenDiff(tabId: tabId, path: "a.txt", kind: .workingTree)
     guard case .success = result else { return XCTFail("\(result)") }
     XCTAssertTrue(tab.group.view.isEditorOpen, "エディターが開く")
-    let opened = try XCTUnwrap(MainActor.assumeIsolated { tab.group.editor.changesDiff })
+    let opened = try XCTUnwrap(MainActor.assumeIsolated { pane.diff }, "Files の画面からでも本体に出る")
     XCTAssertEqual(
       MainActor.assumeIsolated { opened.id },
       EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree), "根と根からの相対パスの diff")
     pumpMain(
-      until: { MainActor.assumeIsolated { tab.group.view.editor.diff?.content == .ready } },
-      "中身が届く")
+      until: { MainActor.assumeIsolated { pane.diff?.content == .ready } }, "中身が届く")
+    pumpMain(
+      until: {
+        MainActor.assumeIsolated { pane.scm.selection == ScmRowID(section: .changes, path: "a.txt") }
+      }, "左の列でその行を選ぶ")
     _ = wc.controlOpenDiff(tabId: tabId, path: repo.url("a.txt").path, kind: .workingTree)
-    let pane = tab.group.view.editor
     XCTAssertTrue(
       wc.window.firstResponder === pane.focusTarget && pane.focusTarget !== pane,
       "開き直すと diff の面へフォーカス")
