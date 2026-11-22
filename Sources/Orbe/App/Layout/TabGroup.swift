@@ -6,6 +6,9 @@ import OrbeEditorCore
 ///
 /// 寿命は、それを所属に持つタブが居る間だけ。作る・付け替える・畳むのは `WindowController` だけで、キー K の連は
 /// 「キー K のタブの所属」で引く（表は持たない）。器は AppKit の NSView のまま作り直さない（cf. `TerminalTab`）。
+///
+/// 文書と diff の持ち主はセッションだけで、pane は本体を見せている間だけ借りる。器は窓に残って連より長く生きうるので、
+/// 連が終わるときに pane へ本体を返させる（→ `deinit`）。
 final class TabGroup {
   /// 連のキー＝worktree ルート（管理外は cwd 自身の正規形パス）。エディター面の根も同じ値。書くのは `rekey` だけ。
   private(set) var key: String
@@ -27,6 +30,14 @@ final class TabGroup {
   var onWindowCommand: ((WindowCommand) -> Void)?
   /// エディターで見せているときの現在地が変わったかもしれない（worktree の今の PR の答えが替わった。chrome 更新は上位）。
   var onLocationChange: (() -> Void)?
+
+  /// pane に本体を返させ、見ている diff の問い合わせを止める。これで diff はセッションと一緒に解放され、根のサービスの
+  /// 観測もやめる。連を強く持つのはタブ（`TerminalTab.group`）だけで、タブを持つのは main で使う workspace の列と
+  /// `TabRef` だけなので、連は main で解放される（main の外で解放されれば `assumeIsolated` が止める）。
+  deinit {
+    let pane = view.editor
+    MainActor.assumeIsolated { pane.releaseBody() }
+  }
 
   /// `state` は復元した連のエディターの状態（開いていた文書・選んでいた画面・検索の問い）。
   init(key: String, state: EditorState? = nil, editorSurfaces: EditorSurfaces = .shared) {
