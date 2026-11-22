@@ -245,13 +245,18 @@ enum TestIsolation {
 }
 
 /// SwiftUI のホバーが読むポインタの非表示（AppKit の非公開のクラスメソッド `+[NSCursor _isHidden]`）を、テストの実行体の中で
-/// 「非表示ではない」に固定する。メソッドが無い（OS が読み方を変えた）ときは、隔離が黙って外れないよう落とす。
-private enum CursorVisibility {
+/// 「非表示ではない」に固定する。メソッドが無いときは差し替えず、`isPinned` を偽のままにする（`TestIsolationTests` の
+/// 1 本が落ちる。固定できないときに働かなくなるのは、ホバーに依るテストだけ）。SwiftUI がこのメソッドを読まなくなったことは
+/// 検知しない。
+enum CursorVisibility {
+  private(set) nonisolated(unsafe) static var isPinned = false
+
+  static let selector = NSSelectorFromString("_isHidden")
+
   static func pinShown() {
-    guard let method = class_getClassMethod(NSCursor.self, NSSelectorFromString("_isHidden")) else {
-      fatalError("+[NSCursor _isHidden] が無い。SwiftUI のホバーがポインタの非表示を読む方法が変わったので、隔離を作り直す")
-    }
+    guard let method = class_getClassMethod(NSCursor.self, selector) else { return }
     let shown: @convention(block) (AnyObject) -> Bool = { _ in false }
     method_setImplementation(method, imp_implementationWithBlock(shown))
+    isPinned = true
   }
 }
