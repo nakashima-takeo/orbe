@@ -13,9 +13,10 @@ extension EditorPaneView {
   /// 検索パネルが見えている（左の列が開いていて、画面が Files で、左の列が検索）。
   var showsSearchPanel: Bool { sidebar.isOpen && shell.panel == .search }
 
-  /// 焦点が左の列（左の列の host 配下）にあるか。
+  /// 焦点が左の列にあるか——左の列の host 配下か、一覧のために面が預かっている（→ `holdListFocus`）。
   var focusIsInSidebar: Bool {
-    (window?.firstResponder as? NSView)?.isDescendant(of: sideHost) == true
+    guard let responder = window?.firstResponder as? NSView else { return false }
+    return responder.isDescendant(of: sideHost) || (heldListFocus != nil && responder === self)
   }
 
   /// 焦点が検索パネルの中（入力欄か結果の列）にあるか。

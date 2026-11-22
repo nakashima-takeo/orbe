@@ -181,9 +181,20 @@ final class PrPanel {
     selection = id
   }
 
+  /// 列の状態。行があればある。無ければ、worktree の今の PR の答えを読んでいる・PR があってその中身を読んでいる間は
+  /// これから来る、それ以外（PR が無い・表示できない・中身が無く読んでもいない）は無い。
+  var listState: EditorListState {
+    if !layout.items.isEmpty { return .rows }
+    if case .reading = pullRequest.answer { return .coming }
+    return state?.isReading == true ? .coming : .none
+  }
+
   func requestFocus() { focusRequest = true }
 
   func focusRequestDidApply() { focusRequest = false }
+
+  /// 列へ焦点を入れる要求が残っていれば取り消す。
+  func cancelFocusRequest() { focusRequest = false }
 
   func focusDidChange(_ focused: Bool) {
     if !focused { navigation.drop() }

@@ -182,13 +182,16 @@ extension EditorPaneView {
     }
   }
 
-  /// Changes・PR の diff を、画面・面の可視性・一覧の行・worktree の今の PR に合わせる 1 か所。きっかけは、セッションの変化
-  /// （画面が替わった・diff が閉じた）・面の可視性の変化・一覧の行の組み直し・worktree の今の PR の答えの変化。
+  /// 一覧の行が揃ったら済ませる用事（本体の diff・一覧のための焦点の預かり）を、画面・面の可視性・一覧の行・worktree の
+  /// 今の PR に合わせる 1 か所。きっかけは、セッションの変化（画面が替わった・diff が閉じた）・面の可視性の変化・一覧の行の
+  /// 組み直し・git 管理外と分かった・worktree の今の PR の答えの変化。
+  /// - 焦点を預かっていれば、一覧の状態に合わせて進める（→ `advanceListFocusHold`）。
   /// - PR の diff の PR が、worktree の今の PR（答えが出ているとき）と違えば閉じる。
   /// - 開いた diff の行を待っていれば、行ができたときに選ぶ。
   /// - 面が見えていて、今の画面（Changes・PR）に diff が無く、一覧にファイルの行があれば、選んでいる行（ファイルの行でなければ
   ///   先頭のファイルの行）を開く。画面は選ばず、焦点も動かさない。開けなければ何もしない（次のきっかけまで試さない）。
-  func reconcileDiffs() {
+  func reconcileWithLists() {
+    advanceListFocusHold()
     guard let group else { return }
     let session = group.editor
     if case .pullRequest(let state)? = session.pullRequestDiff?.id.kind, hasPullRequestAnswer,

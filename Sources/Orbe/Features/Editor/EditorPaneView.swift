@@ -47,6 +47,8 @@ final class EditorPaneView: NSView {
   private var watchedDiff: EditorDiff?
   /// 開いた diff の行が左の列の一覧にまだ無い間の、その diff（行ができたら選択表示する）。
   var diffAwaitingRow: EditorDiff.Key?
+  /// 焦点を預かっている一覧の画面（Changes・PR。行が出たら一覧へ渡す。→ `holdListFocus`）。
+  var heldListFocus: EditorScreen?
   /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
   private(set) var diffModes = EditorDiffModeState() {
     didSet { observeDiffModes() }
@@ -193,9 +195,10 @@ final class EditorPaneView: NSView {
     faceHost.rootView = faceRoot(faceContent)
   }
 
-  /// 行内入力を預かっている間に焦点を明け渡した。行き先が決まった次のターンに、入力欄と同じ判定へ通す
-  /// （戻った行の入力欄なら残り、面の外なら取り消し）。
+  /// 焦点を明け渡した。一覧のための預かりはここで終わる。行内入力を預かっていたなら、行き先が決まった次のターンに、
+  /// 入力欄と同じ判定へ通す（戻った行の入力欄なら残り、面の外なら取り消し）。
   override func resignFirstResponder() -> Bool {
+    endListFocusHold()
     if let generation = tree.newEntry?.generation {
       DispatchQueue.main.async { [weak self] in self?.inlineInputLostFocus(generation: generation) }
     }
@@ -217,7 +220,7 @@ final class EditorPaneView: NSView {
       revealedDocument = active
       if let active { tree.reveal(active) }
     }
-    reconcileDiffs()
+    reconcileWithLists()
   }
 
   /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
@@ -366,7 +369,7 @@ final class EditorPaneView: NSView {
     updatePanelsShown()
     updateDiffWatching()
     if live { group?.editor.prepareSurfaces() }
-    reconcileDiffs()
+    reconcileWithLists()
     needsLayout = true
   }
 

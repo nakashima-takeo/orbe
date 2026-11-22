@@ -24,22 +24,77 @@ extension EditorPaneView {
     tree.onInputEnded = { [weak self] in self?.inlineInputDidEnd() }
   }
 
-  /// 上のバーで画面を選ぶ。選んだ後のフォーカスは、Changes・PR で左の列を開いていて一覧に行があれば一覧へ、それ以外は
-  /// 本体の行き先へ。一覧が受け取れないとき（行が無い・左の列を閉じている）は一覧へ要求を出さない——残した要求は、後で
-  /// 一覧が現れた瞬間にフォーカスを奪う。
+  /// 上のバーで画面を選ぶ。選んだ後のフォーカスは、Changes・PR で左の列を開いていて、一覧の状態が「無い」でなければ
+  /// 面が預かって一覧へ渡し（→ `holdListFocus`）、それ以外は本体の行き先へ。一覧が既にフォーカスを持っていれば触らない。
   func switchScreen(_ screen: EditorScreen) {
     guard let group else { return }
     group.editor.selectScreen(screen)
-    switch screen {
-    case .changes
-    where sidebar.isOpen && scm.isManaged != false && scm.isRepositoryOpen
-      && !scm.layout.items.isEmpty:
-      scm.requestFocus(.list)
-    case .pullRequest where sidebar.isOpen && !pullRequest.layout.items.isEmpty:
-      pullRequest.requestFocus()
-    default:
+    if sidebar.isOpen, screen != .files {
+      if listHasFocus(screen) { return }
+      if listState(of: screen) != .none {
+        holdListFocus(for: screen)
+        return
+      }
+    }
+    layoutSubtreeIfNeeded()
+    focusEditor()
+  }
+
+  /// 一覧 `screen` のためにフォーカスを預かる——面自身がフォーカスを持ち、行があれば一覧へ求め、行がまだ無ければ出た時点で
+  /// 求める（→ `advanceListFocusHold`）。預かっているフォーカスは、左の列のそのパネルのフォーカスとして数える（本体が
+  /// 替わっても動かず、パネルが隠れれば本体へ戻る）。預かりは、面がフォーカスを手放したとき（一覧が受け取ったときを含む）と、
+  /// 本体へフォーカスを求めたとき（`focusEditor`・`reclaimSidebarFocus`）に終わる。
+  private func holdListFocus(for screen: EditorScreen) {
+    window?.makeFirstResponder(self)
+    heldListFocus = screen
+    advanceListFocusHold()
+  }
+
+  /// 預かりを一覧の状態に合わせて進める——行があれば一覧へフォーカスを求め、「無い」と決まれば本体の行き先へ移す。
+  func advanceListFocusHold() {
+    guard let screen = heldListFocus else { return }
+    switch listState(of: screen) {
+    case .rows:
+      switch screen {
+      case .changes: scm.requestFocus(.list)
+      case .pullRequest: pullRequest.requestFocus()
+      case .files: break
+      }
+    case .coming:
+      break
+    case .none:
       layoutSubtreeIfNeeded()
       focusEditor()
+    }
+  }
+
+  /// 預かりを終える。一覧への要求が残っていれば取り消す——預かりの外で残った要求は、後で現れた一覧が、人の移した
+  /// フォーカスを奪う。
+  func endListFocusHold() {
+    guard let screen = heldListFocus else { return }
+    heldListFocus = nil
+    switch screen {
+    case .changes: scm.cancelListFocusRequest()
+    case .pullRequest: pullRequest.cancelFocusRequest()
+    case .files: break
+    }
+  }
+
+  private func listState(of screen: EditorScreen) -> EditorListState {
+    switch screen {
+    case .changes: scm.listState
+    case .pullRequest: pullRequest.listState
+    case .files: .none
+    }
+  }
+
+  /// 画面 `screen` の一覧が、既にフォーカスを持っている。
+  private func listHasFocus(_ screen: EditorScreen) -> Bool {
+    guard focusIsInSidebar, heldListFocus == nil else { return false }
+    switch screen {
+    case .changes: return scm.focusedArea == .list
+    case .pullRequest: return pullRequest.isListFocused
+    case .files: return false
     }
   }
 
@@ -124,6 +179,7 @@ extension EditorPaneView {
   /// 配下）か面自身（`beginNew` が停めた・預かっている）か窓に居れば、その場で面の行き先へ移す。別の view へ移って
   /// 終わったなら（端末をクリックして抜けた）そこに居るので触らない。
   func reclaimSidebarFocus() {
+    endListFocusHold()
     guard let window else { return }
     let responder = window.firstResponder
     let strayed =
@@ -132,7 +188,10 @@ extension EditorPaneView {
     if strayed { window.makeFirstResponder(focusTarget) }
   }
 
+  /// 本体の行き先へフォーカスを移す。一覧のための預かりはここで終わる（本体が文字だけの表示なら行き先は面自身で、面は
+  /// フォーカスを手放さない）。
   func focusEditor() {
+    endListFocusHold()
     window?.makeFirstResponder(focusTarget)
   }
 }

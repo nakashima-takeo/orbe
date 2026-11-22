@@ -34,7 +34,7 @@ extension EditorPaneView {
   }
 
   override func mouseDown(with event: NSEvent) {
-    window?.makeFirstResponder(focusTarget)
+    focusEditor()
   }
 
   /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れた連の pane も窓に残るので、

@@ -70,6 +70,8 @@ final class ScmPanel {
   @ObservationIgnored var confirmComposition: () -> Void = {}
   /// 親を畳む直前（欄と列がまだ窓に居るうち）。焦点がパネルの中にあれば、面の本文へ移す。
   @ObservationIgnored var onRepositoryWillClose: () -> Void = {}
+  /// git 管理外と分かった（変更の列の状態が「無い」に決まる）。
+  @ObservationIgnored var onFoundUnmanaged: () -> Void = {}
   /// 面の workspace の実効設定で、裏の fetch がオンか（使う時点で読む）。
   @ObservationIgnored var autoFetchEnabled: () -> Bool = { true }
   /// キーで行へ動いたときの開きの間引き。
@@ -145,8 +147,9 @@ final class ScmPanel {
     if files.repo != nil {
       isManaged = true
       decideAutoFetch()
-    } else if files.isResolved {
+    } else if files.isResolved, isManaged != false {
       isManaged = false
+      onFoundUnmanaged()
     }
   }
 
@@ -158,6 +161,9 @@ final class ScmPanel {
     autoFetch = next
     next?.setWanted(autoFetchEnabled(), by: self)
   }
+
+  /// 変更の列の行が、今の status からまだ出来ていない（status を受け取る前・組み立てを始める前・組み立ての最中）。
+  var rowsArePending: Bool { liveFiles?.status == nil || changesAreStale || buildJob.isRunning }
 
   /// status が届いた（か、握り直した根のサービスの status を読む）。
   func statusDidChange() {
@@ -370,6 +376,9 @@ final class ScmPanel {
   func focusRequestDidApply() {
     focusRequest = nil
   }
+
+  /// 列へ焦点を入れる要求が残っていれば取り消す（欄への要求は残す）。
+  func cancelListFocusRequest() { if focusRequest == .list { focusRequest = nil } }
 
   /// 欄か列の焦点が入った・抜けた（抜けたほうが今の置き場のときだけ消す）。列から抜けたら待っている開きを捨てる。
   func focusDidChange(_ area: Area, focused: Bool) {

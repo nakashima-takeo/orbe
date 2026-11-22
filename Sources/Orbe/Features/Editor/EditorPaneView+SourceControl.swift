@@ -9,6 +9,7 @@ extension EditorPaneView {
     scm.onChangesDidApply = { [weak self] emptied in self?.changesDidApply(emptied: emptied) }
     scm.onOpenFile = { [weak self] url in self?.open(url, as: .pinned) }
     scm.onDiscard = { [weak self] files in self?.confirmDiscard(files) }
+    scm.onFoundUnmanaged = { [weak self] in self?.reconcileWithLists() }
     scm.onRepositoryWillClose = { [weak self] in
       guard let self, focusIsInSourceControl else { return }
       reclaimSidebarFocus()
@@ -19,7 +20,7 @@ extension EditorPaneView {
   /// ソース管理の件数と行の組が差し替わった。件数が 1 以上から 0 になったら Changes の diff を閉じ、本体の diff を整合させる。
   private func changesDidApply(emptied: Bool) {
     if emptied { group?.editor.closeDiff(on: .changes) }
-    reconcileDiffs()
+    reconcileWithLists()
   }
 
   /// 面の workspace の実効設定が変わった（裏の fetch を欲しがるか決め直す）。
@@ -30,9 +31,10 @@ extension EditorPaneView {
   /// ソース管理パネルが見えている（左の列が開いていて、ソース管理のパネルを出している）。
   var showsSourceControl: Bool { sidebar.isOpen && shell.panel == .sourceControl }
 
-  /// 焦点がソース管理パネルの中（メッセージ欄か列）にあるか。
+  /// 焦点がソース管理パネルの中（メッセージ欄か列。列のために面が預かっている焦点を含む）にあるか。
   var focusIsInSourceControl: Bool {
-    showsSourceControl && focusIsInSidebar && scm.focusedArea != nil
+    showsSourceControl && focusIsInSidebar
+      && (scm.focusedArea != nil || heldListFocus == .changes)
   }
 
   /// 行の diff を開き、その種類の画面（作業ツリー・ステージ済みは Changes、PR は PR）を選ぶ。開けなければ beep し、画面を
