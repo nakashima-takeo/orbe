@@ -59,7 +59,7 @@ private enum FirstMouse {
   static func end() {
     depth -= 1
     guard depth == 0, let original else { return }
-    method_setImplementation(method, original)
+    imp_removeBlock(method_setImplementation(method, original))
     self.original = nil
   }
 }
