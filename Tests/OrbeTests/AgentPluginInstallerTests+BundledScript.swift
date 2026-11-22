@@ -137,16 +137,18 @@ extension AgentPluginInstallerTests {
   /// 打ち切った一覧は、CLI が終了の要求（SIGTERM）を受けて 0 で終わっても失敗にする（agy は SIGTERM を受けて 0 で終わる
   /// ことがある）。打ち切った一覧を成功と読めば、未導入と見て導入する。偽の claude は、SIGTERM に 0 で終わる trap を置いた後に、
   /// 時限を数える perl（自分の親）の pid を印のファイル（`tmo.pid`）に書いて止まる。その pid へ SIGALRM を送って、時限の到来を起こす。
+  /// 時限はどれも長くするので、打ち切りはテストが送った SIGALRM でしか起きない。
   func testClaudeListCutOffIsAnErrorEvenWhenTheCLIExitsZero() throws {
     let pidMark = pkg.appendingPathComponent("tmo.pid")
     let trapped = pkg.appendingPathComponent("trapped")
     let run = try runBundledInstaller(
       listPrelude: """
         trap ': > "\(trapped.path)"; kill $! 2>/dev/null; exit 0' TERM
-        sleep 30 &
+        sleep 60 &
         echo "$PPID" > "\(pidMark.path).tmp" && mv "\(pidMark.path).tmp" "\(pidMark.path)"
         wait
         """,
+      limits: .init(register: Self.long, list: Self.long, install: Self.long),
       whileRunning: { _ in
         var timer: pid_t?
         pumpMain(
