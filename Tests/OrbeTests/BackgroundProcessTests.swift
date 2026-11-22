@@ -12,10 +12,14 @@ import XCTest
 final class BackgroundProcessTests: OrbeTestCase {
   /// 上限と猶予を見るテストは、手で進める時計を渡した実行（`timed`）で駆動する。上限と猶予は、時計を進めたときにだけ来る。
   let clock = ManualClock()
-  /// 黙った子を無出力の上限で切るテストの、無出力の上限。経過の上限（既定の 30 秒）より短い。
+  /// `timed` の実行へ渡す予約の時計。テストは、この渡し先の予約と時刻の読みだけを見る。
+  lazy var runTimers = clock.makeTimers()
+  /// 経過の上限の既定。
+  static let elapsedLimit: TimeInterval = 30
+  /// 黙った子を無出力の上限で切るテストの、無出力の上限。経過の上限の既定より短い。
   static let idleLimit: TimeInterval = 10
   func spec(
-    _ script: String, elapsed: TimeInterval = 30, idle: TimeInterval? = 30,
+    _ script: String, elapsed: TimeInterval = elapsedLimit, idle: TimeInterval? = 30,
     stdout: BackgroundProcess.Stdout = .collect(.init(limit: 1 << 20, overflowStops: true)),
     stderr: BackgroundProcess.Capture = .init(limit: 1 << 20, overflowStops: true),
     stdin: Data? = nil
@@ -27,7 +31,7 @@ final class BackgroundProcessTests: OrbeTestCase {
   }
 
   func timed(_ spec: BackgroundProcess.Spec) -> BackgroundProcess {
-    BackgroundProcess(spec, clock: clock.timers)
+    BackgroundProcess(spec, clock: runTimers.clock)
   }
 
   /// 裏で走らせた `run` の結果。main で届く。
@@ -114,13 +118,6 @@ final class BackgroundProcessTests: OrbeTestCase {
   private func killProcess(pidIn path: String) {
     guard let pid = try? pid(in: path) else { return }
     kill(pid, SIGKILL)
-  }
-
-  /// 実行が始まり、上限の予約を張るのを待って、その予約を返す。
-  func awaitLimit(file: StaticString = #filePath, line: UInt = #line) throws
-    -> ManualClock.Reservation
-  {
-    try XCTUnwrap(clock.awaitReservation(), "前提: 上限の予約が張られる", file: file, line: line)
   }
 
   // MARK: - 終わり方
@@ -258,7 +255,7 @@ final class BackgroundProcessTests: OrbeTestCase {
     let marker = scratch("term")
     let ready = scratch("ready")
     let process = BackgroundProcess(
-      spec("trap 'echo got > \(marker); exit 0' TERM; : > '\(ready)'; sleep 30 & wait"))
+      spec("trap 'echo got > \(marker); exit 0' TERM; sleep 30 & : > '\(ready)'; wait"))
     let pending = start(process)
     awaitFile(ready, "前提: 子が SIGTERM の trap を設定している")
 
@@ -282,11 +279,11 @@ final class BackgroundProcessTests: OrbeTestCase {
     let process = timed(spec("trap '' TERM; : > '\(ready)'; sleep 30"))
     let pending = start(process)
     awaitFile(ready, "前提: 子が SIGTERM を無視している")
-    let limit = try awaitLimit()
+    let limit = try awaitLimit(expected: Self.elapsedLimit)
 
     process.stop()
-    let grace = try XCTUnwrap(
-      clock.awaitReservation(where: { $0 != limit }), "止めた後、SIGKILL までの猶予の予約が張られる")
+    let grace = try awaitReservation(
+      after: limit, lasting: BackgroundProcess.killGrace, "止めた後、SIGKILL までの猶予の予約が張られる")
     clock.advance(to: grace.deadline)
 
     XCTAssertEqual(try outcome(of: pending).ending, .stopped)
@@ -296,7 +293,7 @@ final class BackgroundProcessTests: OrbeTestCase {
   func testLimitStopsGrandchildren() throws {
     let pending = start(timed(spec("sleep 30 & \(recordPID); wait", idle: Self.idleLimit)))
     awaitFile(pidFile, "前提: 孫が起動している")
-    clock.advance(to: try awaitLimit().deadline)
+    clock.advance(to: try awaitLimit(expected: Self.idleLimit).deadline)
 
     XCTAssertEqual(try outcome(of: pending).ending, .limited(.idle))
     XCTAssertTrue(try isGone(pidIn: pidFile))
@@ -316,10 +313,10 @@ final class BackgroundProcessTests: OrbeTestCase {
     ready: String, file: StaticString = #filePath, line: UInt = #line
   ) throws -> ManualClock.Reservation {
     awaitFile(ready, "前提: 孫が準備を終えている", file: file, line: line)
-    let limit = try awaitLimit(file: file, line: line)
+    let limit = try awaitLimit(expected: Self.elapsedLimit, file: file, line: line)
     touch(scratch("exit"))
-    return try XCTUnwrap(
-      clock.awaitReservation(where: { $0 != limit }), "子が終わった後、汲み出しの猶予の予約が張られる",
+    return try awaitReservation(
+      after: limit, lasting: BackgroundProcess.drainGrace, "子が終わった後、汲み出しの猶予の予約が張られる",
       file: file, line: line)
   }
 

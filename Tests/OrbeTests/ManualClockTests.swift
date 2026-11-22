@@ -86,8 +86,11 @@ final class ManualClockTests: OrbeTestCase {
     XCTAssertEqual(clock.readings, 0)
     _ = clock.waits.now()
     _ = clock.waits.now()
-    _ = clock.timers.now()
+    let timers = clock.makeTimers()
+    _ = timers.clock.now()
     XCTAssertEqual(clock.readings, 3)
+    XCTAssertEqual(clock.readings(of: timers), 1, "予約の時計の読みは、渡し先ごとにも数える")
+    XCTAssertEqual(clock.readings(of: clock.makeTimers()), 0)
   }
 
   // MARK: - 予約
@@ -116,7 +119,7 @@ final class ManualClockTests: OrbeTestCase {
   private func schedule(
     _ name: String, at deadline: TimerClock.Instant, into fired: Fired
   ) -> @Sendable () -> Void {
-    let timers = clock.timers
+    let timers = clock.makeTimers().clock
     return timers.schedule(deadline, queue) { [onQueue] in
       fired.append(
         name, at: timers.now(), onQueue: DispatchQueue.getSpecific(key: onQueue) == true)
@@ -161,7 +164,7 @@ final class ManualClockTests: OrbeTestCase {
   func testDueReservationsRunInDeadlineOrderIncludingOnesTheyArm() {
     let fired = Fired()
     let start = clock.timerNow
-    let timers = clock.timers
+    let timers = clock.makeTimers().clock
     _ = schedule("late", at: start + 3, into: fired)
     _ = timers.schedule(start + 1, queue) {
       fired.append("early", at: timers.now(), onQueue: true)

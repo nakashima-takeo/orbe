@@ -3,7 +3,7 @@ import OrbeTestSupport
 
 @testable import Orbe
 
-/// 手で進める時計。時刻は `advance` を呼んだときだけ進む。本番の型へは `waits`（止める時計）か `timers`（予約の時計）を渡す。
+/// 手で進める時計。時刻は `advance` を呼んだときだけ進む。本番の型へは `waits`（止める時計）か `makeTimers()` の `clock`（予約の時計）を渡す。
 /// 2 つの時計の時刻は、同じだけ進む。
 ///
 /// テストは、偽スクリプトが止まったことと、待ち手が眠ったこと（`sleepingDeadlines`）や予約が張られたこと（`scheduled`）を待ってから
@@ -21,6 +21,15 @@ final class ManualClock: @unchecked Sendable {
   struct Reservation: Equatable {
     let id: Int
     let deadline: TimerClock.Instant
+    /// 張った渡し先（`Timers.id`）。
+    let owner: Int
+  }
+
+  /// 予約の時計の、1 つの渡し先。この渡し先が時刻を読んだ回数と張った予約を、同じ時刻を使うほかの渡し先のものと見分ける。
+  struct Timers {
+    let id: Int
+    /// 本番の型へ渡す、予約の時計。
+    let clock: TimerClock
   }
 
   private struct Parked {
@@ -31,6 +40,7 @@ final class ManualClock: @unchecked Sendable {
 
   private struct Armed {
     let deadline: TimerClock.Instant
+    let owner: Int
     let queue: DispatchQueue
     let fire: () -> Void
   }
@@ -47,6 +57,7 @@ final class ManualClock: @unchecked Sendable {
   private var reservations: [Int: Armed] = [:]
   private var nextID = 0
   private var reads = 0
+  private var readsByOwner: [Int: Int] = [:]
 
   /// いまの時刻（止める時計の時刻）。読んでも `readings` は増えない。
   var now: WaitClock.Instant { lock.withLock { current.wait } }
@@ -57,6 +68,9 @@ final class ManualClock: @unchecked Sendable {
   /// 本番の型が時刻を読んだ回数（2 つの時計の合計）。出力を受け取るたびに時刻を読む型では、出力が届いたことを、
   /// `readings` が増えたことで待てる。
   var readings: Int { lock.withLock { reads } }
+
+  /// `timers` を渡した本番の型が、予約の時計の時刻を読んだ回数。
+  func readings(of timers: Timers) -> Int { lock.withLock { readsByOwner[timers.id, default: 0] } }
 
   /// いま眠っている待ち手。眠った順。
   var asleep: [Sleeper] {
@@ -78,7 +92,7 @@ final class ManualClock: @unchecked Sendable {
   var scheduled: [Reservation] {
     lock.withLock {
       reservations.sorted { $0.key < $1.key }.map {
-        Reservation(id: $0.key, deadline: $0.value.deadline)
+        Reservation(id: $0.key, deadline: $0.value.deadline, owner: $0.value.owner)
       }
     }
   }
@@ -111,23 +125,29 @@ final class ManualClock: @unchecked Sendable {
       })
   }
 
-  /// 本番の型へ渡す、予約の時計。張った時点で期限が過ぎている予約は、次に時刻を進めたときに走る。
-  var timers: TimerClock {
-    TimerClock(
+  /// 予約の時計の、新しい渡し先を作る。張った時点で期限が過ぎている予約は、次に時刻を進めたときに走る。
+  func makeTimers() -> Timers {
+    let owner = lock.withLock { () -> Int in
+      nextID += 1
+      return nextID
+    }
+    let clock = TimerClock(
       now: { [self] in
         lock.withLock {
           reads += 1
+          readsByOwner[owner, default: 0] += 1
           return current.timer
         }
       },
       schedule: { [self] deadline, queue, fire in
         let id = lock.withLock { () -> Int in
           nextID += 1
-          reservations[nextID] = Armed(deadline: deadline, queue: queue, fire: fire)
+          reservations[nextID] = Armed(deadline: deadline, owner: owner, queue: queue, fire: fire)
           return nextID
         }
         return { [self] in _ = lock.withLock { reservations.removeValue(forKey: id) } }
       })
+    return Timers(id: owner, clock: clock)
   }
 
   /// 時刻を `seconds` 進める。起こした待ち手の数と走らせた予約の数の和を返す（`advance(to:)` と同じ）。
