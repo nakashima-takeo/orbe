@@ -113,11 +113,12 @@ extension Theme.Typography {
   /// 表示できない diff の理由の一文・ボードの空状態の一文（サンセリフ 13）。
   static let editorLead = NSFont.systemFont(ofSize: 13, weight: .regular)
   /// 本体の空・使えないときの表示——見出し（sans 14 medium）・案内の一文とショートカットの行（sans 12.5）・ボタン（sans 12.5
-  /// semibold）・キーの札（sans 10.5 semibold）。左の列の一言（sans 12）。
+  /// semibold）。左の列の一言（sans 12）。
   static let editorEmptyTitle = NSFont.systemFont(ofSize: 14, weight: .medium)
   static let editorEmptyText = NSFont.systemFont(ofSize: 12.5, weight: .regular)
   static let editorEmptyButton = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
-  static let editorEmptyKey = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+  /// キーの札の字（sans 10.5 semibold）。
+  static let editorKeyCap = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
   static let editorSidebarNote = NSFont.systemFont(ofSize: 12, weight: .regular)
   /// コード本体（mono 12）。
   static let editorCode = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -190,6 +191,11 @@ extension Theme.Layout {
   static let editorBodyMinWidth: CGFloat = 160
   /// 左の列と本体の境（hairline）に置くドラッグの当たりの幅。
   static let editorSidebarHandle: CGFloat = 4
+  /// キーの札の高さと最小幅・左右の余白・角丸・中の印の大きさ。
+  static let editorKeyCap: CGFloat = 18
+  static let editorKeyCapPadX: CGFloat = 4
+  static let editorKeyCapRadius: CGFloat = 5
+  static let editorKeyCapGlyph: CGFloat = 12
   static let editorPanelHeader: CGFloat = 28
   static let editorRow: CGFloat = 20
   /// ツリー行の種別チップ。
@@ -255,6 +261,8 @@ extension Theme.Opacity {
   static let editorSunkLight: Double = 0.3
   static let editorFillLight: Double = 0.6
   static let editorHairlineLight: Double = 1.4
+  /// キーの札の地（`surfaceInk` の α）。
+  static let editorKeyCap: Double = 0.07
   /// diff の追加・削除の行の地の不透明度（構文色が地の上で読める濃さ）。
   static let editorDiffRow: CGFloat = 0.12
   /// diff の詰め物の行の地（塗りの α）と、並列の 2 面の境（hairline の α）。

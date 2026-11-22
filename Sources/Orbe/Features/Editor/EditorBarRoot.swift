@@ -159,27 +159,21 @@ private struct EditorScreenItem: View {
   }
 }
 
-/// 右寄せの案内「⌥ 端末を表示」（gap 7・mono 11・textMuted）。⌥ の札は高さ 18・最小幅 18・padding 0 4・radius 5・地 ink .07。
-/// 押せない。⌥ で透かしている間は押している間の姿（字を textPrimary、札を地 accent・印 onAccent）。
+/// 右寄せの案内「⌥ 端末を表示」（gap 7・mono 11・textMuted）。⌥ はキーの札。押せない。⌥ で透かしている間は押している間の姿
+/// （字を textPrimary、札を地 accent・印 onAccent）。
 private struct EditorPeekHint: View {
   let isPeeking: Bool
   @Environment(\.localization) private var l10n
 
-  private static let keyAlpha = 0.07
-
   var body: some View {
     HStack(spacing: 7) {
-      EditorGlyphView(
-        glyph: EditorGlyphs.optionKey, size: 12,
-        color: isPeeking ? Color.theme.onAccent : Color.theme.textSecondary
-      )
-      .padding(.horizontal, 4)
-      .frame(minWidth: 18, minHeight: 18)
-      .background(
-        RoundedRectangle(cornerRadius: 5)
-          .fill(
-            isPeeking
-              ? Color.theme.accentPrimary : Color.theme.surfaceInk.opacity(Self.keyAlpha)))
+      if isPeeking {
+        EditorKeyCap(
+          content: .glyph(EditorGlyphs.optionKey), foreground: Color.theme.onAccent,
+          ground: Color.theme.accentPrimary)
+      } else {
+        EditorKeyCap(content: .glyph(EditorGlyphs.optionKey))
+      }
       Text(l10n.string(.editorBarShowTerminal))
         .font(Font.theme.editorBarHint)
         .foregroundStyle(isPeeking ? Color.theme.textPrimary : Color.theme.textMuted)
