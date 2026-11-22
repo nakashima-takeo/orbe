@@ -278,28 +278,23 @@ final class GitHubCLI {
         try? input.fileHandleForWriting.close()
       }
     }
-    // stdout/stderr は別スレッドで並行に吸い出す（片方だけ読むと相手の pipe 満杯で相互デッドロック）。読み終えたら `drained`
-    // へ 1 回ずつ合図する。
+    // stdout/stderr は別スレッドで並行に吸い出す（片方だけ読むと相手の pipe 満杯で相互デッドロック）。2 本とも読み終えたら
+    // `drained` へ 1 回だけ合図する。待ちは、期限つきの 1 回の待ちになる（期限を数え直さない）。
     var outData = Data()
     var errData = Data()
-    let drained = DispatchSemaphore(value: 0)
+    let group = DispatchGroup()
+    group.enter()
     DispatchQueue.global(qos: .userInitiated).async {
       outData = (try? out.fileHandleForReading.readToEnd()) ?? Data()
-      drained.signal()
+      group.leave()
     }
+    group.enter()
     DispatchQueue.global(qos: .userInitiated).async {
       errData = (try? err.fileHandleForReading.readToEnd()) ?? Data()
-      drained.signal()
+      group.leave()
     }
-    var reading = 2
-    /// `deadline` を上限に、2 本とも読み終えるまで待つ。間に合ったら true。
-    func awaitDrain(until deadline: WaitClock.Instant) -> Bool {
-      while reading > 0 {
-        guard clock.sleep(on: drained, until: deadline) else { return false }
-        reading -= 1
-      }
-      return true
-    }
+    let drained = DispatchSemaphore(value: 0)
+    group.notify(queue: .global(qos: .userInitiated)) { drained.signal() }
     // ネット待ちのハングは時間上限で打ち切る（通常は terminate で pipe が EOF に達し読みも解ける）。
     // EOF が来るかは書き込み端を握る子孫次第なので、打ち切り後の読み終わり待ちも猶予で有界にする
     // ——ここを無期限にすると、打ち切ったのに返らないという新しいハングになる。
@@ -308,9 +303,9 @@ final class GitHubCLI {
       case .read: Self.readTimeout
       case .write: Self.writeTimeout
       }
-    guard awaitDrain(until: clock.now() + timeout) else {
+    guard clock.sleep(on: drained, until: clock.now() + timeout) else {
       process.terminate()
-      _ = awaitDrain(until: clock.now() + Self.terminationGrace)
+      clock.sleep(on: drained, until: clock.now() + Self.terminationGrace)
       return Output(status: -1, stdout: Data(), failure: .timedOut)
     }
     process.waitUntilExit()
