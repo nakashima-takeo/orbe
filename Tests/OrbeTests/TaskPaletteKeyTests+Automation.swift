@@ -61,6 +61,8 @@ extension TaskPaletteKeyTests {
   func testAutomationArrowsMoveBetweenFieldShelfAndProposals() {
     let model = automationModel()
 
+    send(.downArrow, .command, to: model)
+    XCTAssertEqual(model.automation.place, .field, "絞り込み欄の ⌘↓ は何もしない")
     send(.downArrow, to: model)
     XCTAssertEqual(model.automation.place, .shelf)
     send(.downArrow, to: model)
