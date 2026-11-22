@@ -31,6 +31,11 @@ final class AgentHookPathTests: OrbeTestCase {
   /// シムは `exec` で `orbe-report` に置き換わり、`orbe-report` は Orbe の応答の 1 行まで待つ（上限 2 秒）。Orbe は、
   /// 報告をタブへ適用してから応答を書く。そのため、返った時点で、報告する経路なら適用まで済んでいる。返るまでに 2 秒以上
   /// かかったなら、`orbe-report` は応答を受けずに諦めている。
+  ///
+  /// このクラスの「届く場合」の確かめが裏づけるのは、報告する経路の報告が、シムが返った時点でタブの状態に適用されている
+  /// こと。`orbe-report` が応答まで待つことは裏づけない——`orbe-report` が応答を待たずに接続を閉じて終わっても、報告の
+  /// ほうが、`orbe-report` のプロセスの終了通知より先に main に届くので、この確かめは通る。応答まで待つことは
+  /// `OrbeReportWireTests` が確かめる。
   @discardableResult
   private func runShim(
     _ shim: URL, agent: String = "claude", env: [String: String], state: String, stdin: String,
