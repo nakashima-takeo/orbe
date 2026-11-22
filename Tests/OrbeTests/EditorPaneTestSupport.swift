@@ -16,8 +16,17 @@ extension OrbeTestCase {
     return url
   }
 
-  /// タブの器を幅 `width` の窓に載せ、エディターを開く。窓はテスト用の `OrbeWindowFake` で、確認のシートを画面に出さない。
+  /// タブの器を幅 `width` の窓に載せ、エディターを開く（→ `mountEditor`）。窓は、テストの終わりまで足場が持つ。窓は
+  /// タブより長く生きるので、タブを先に手放した後もランループを回すテストは、タブも終わりまで持つ。
+  @discardableResult
   func hostEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
+    holdUntilTestEnds(mountEditor(tab, width: width, height: height))
+  }
+
+  /// タブの器を幅 `width` の窓に載せ、エディターを開く。窓はテスト用の `OrbeWindowFake` で、確認のシートを画面に出さない。
+  /// 窓をテストに預けないので、寿命は呼び出し元が決める。呼ぶのは、窓の解放そのものを確かめるテストと、計測の区間ごとに
+  /// 窓を手放す性能計測だけ（ほかは `hostEditor`）。
+  func mountEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
     let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)

@@ -40,11 +40,11 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     weak var service: RootFiles?
     var keeper: TerminalTab? = TerminalTab.alone(
       cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let keeperWindow = hostEditor(try XCTUnwrap(keeper), width: 900)
+    let keeperWindow = mountEditor(try XCTUnwrap(keeper), width: 900)
 
     try autoreleasepool {
       let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-      let window = hostEditor(tab, width: 900)
+      let window = mountEditor(tab, width: 900)
       let opened = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
       window.makeFirstResponder(opened.surface.responder)
       pane = tab.group.view.editor
