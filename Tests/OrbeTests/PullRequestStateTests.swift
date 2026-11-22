@@ -225,9 +225,8 @@ final class PullRequestStateTests: OrbeTestCase {
   /// 両端を求めている間に見ている者が去れば、手元に無いコミットを取りに行かない。戻れば、読み直しを頼まなくても求め直して
   /// 両端が揃う。
   ///
-  /// 「取りに行かない」は、両端が「求めていない」に戻った時点で確かめる。取りに行くかは、両端を求める処理の中で、その戻す
-  /// 判断と同じ場で同期に決まる、という前提に依る（本番の判定を外すと、このテストが落ちることを確かめてある）。本番が両端を
-  /// 求める処理の届け方を変えたときは、確かめ直す。
+  /// 取りに行ったかは、origin の upload-pack が呼ばれたかで知る。取りに行く fetch は非同期で、実行しなかったことを観測する口が
+  /// 無いので、両端が「求めていない」（`.none`）に戻った後、呼ばれないことを 1 秒見張る。
   func testBoundsAreNotFetchedAfterTheWatchersLeaveAndAreResolvedOnReturn() throws {
     let repo = try TempGitRepo()
     let bare = repo.addOrigin()
@@ -239,6 +238,11 @@ final class PullRequestStateTests: OrbeTestCase {
     let clone = try TempGitRepo(name: "orbe-clone", initialCommit: false)
     XCTAssertTrue(clone.git(["remote", "add", "origin", bare]).isSuccess)
     XCTAssertTrue(clone.git(["fetch", "-q", "origin", "main"]).isSuccess)
+    let fixture = try GitHangFixture()
+    let fetched = fixture.dir.appendingPathComponent("fetched").path
+    let uploadPack = try fixture.installScript(
+      "upload-pack", body: ": > \"\(fetched)\"\nexec git-upload-pack \"$@\"")
+    XCTAssertTrue(clone.git(["config", "remote.origin.uploadpack", uploadPack]).isSuccess)
     let state = PullRequestState.shared(for: key, source: gitHub.source)
     state.beginWatching()
     gitHub.content = .success(content(base: base, head: head))
@@ -247,13 +251,14 @@ final class PullRequestStateTests: OrbeTestCase {
     state.endWatching()
 
     pumpMain(until: { state.bounds == .none }, "求めるのをやめる")
-    XCTAssertNotEqual(clone.git(["cat-file", "-e", head + "^{commit}"]).status, 0, "取りに行かない")
+    XCTAssertTrue(holds(for: 1) { !FileManager.default.fileExists(atPath: fetched) }, "取りに行かない")
 
     state.beginWatching()
     addTeardownBlock { @MainActor in state.endWatching() }
     pumpMain(
       until: { if case .ready = state.bounds { true } else { false } },
       "戻ったら、読み直しを頼まなくても求め直して揃う")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: fetched), "前提: 取りに行くと upload-pack が呼ばれる")
   }
 
   /// 中身を読む間に見ている者が去って両端を求めなかったときも、戻れば、読み直しを頼まなくても求めて揃う。
