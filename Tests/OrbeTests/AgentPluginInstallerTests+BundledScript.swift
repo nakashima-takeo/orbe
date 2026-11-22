@@ -38,23 +38,32 @@ extension AgentPluginInstallerTests {
   /// 置いたときに初回の起動の評価を払ってあるが、負荷で起動が遅れると、呼び出しを残す前に打ち切られることが在る。その回は、
   /// 止めたコマンドが呼ばれたことを確かめられないので、呼び出しの記録を消し、時限を倍にしてやり直す（実行は 5 回まで）。返すのは、
   /// 呼び出しを残せた回の結果か、5 回めの結果。
-  private func runCuttingClaude(_ stopped: ClaudeCommand) throws -> (
-    log: [String], calls: [String]
-  ) {
+  ///
+  /// `prelude` を渡すと、`stopped` のコマンドは `hang` の代わりにそれを実行する。`ready` を渡すと、場面を作れたかは、呼び出しの
+  /// 記録ではなく、`ready` の印のファイルが在るかで決める。やり直す前に、呼び出しの記録と `marks` の印のファイルを消す。
+  private func runCuttingClaude(
+    _ stopped: ClaudeCommand, prelude: String = AgentPluginInstallerTests.hang, ready: URL? = nil,
+    marks: [URL] = []
+  ) throws -> (log: [String], calls: [String]) {
     var limit = Self.cut
     var run: (log: [String], calls: [String]) = ([], [])
     for _ in 0..<5 {
-      try? FileManager.default.removeItem(at: pkg.appendingPathComponent("claude-calls.log"))
+      for file in [pkg.appendingPathComponent("claude-calls.log")] + marks {
+        try? FileManager.default.removeItem(at: file)
+      }
       run = try runBundledInstaller(
         claudeList: "No plugins installed.\n",
-        registerPrelude: stopped == .register ? Self.hang : "",
-        listPrelude: stopped == .list ? Self.hang : "",
-        installPrelude: stopped == .install ? Self.hang : "",
+        registerPrelude: stopped == .register ? prelude : "",
+        listPrelude: stopped == .list ? prelude : "",
+        installPrelude: stopped == .install ? prelude : "",
         limits: .init(
           register: stopped == .register ? limit : Self.long,
           list: stopped == .list ? limit : Self.long,
           install: stopped == .install ? limit : Self.long))
-      if run.calls.contains(where: { $0.hasPrefix(stopped.call) }) { break }
+      let staged =
+        ready.map { FileManager.default.fileExists(atPath: $0.path) }
+        ?? run.calls.contains { $0.hasPrefix(stopped.call) }
+      if staged { break }
       limit *= 2
     }
     return run
@@ -180,53 +189,27 @@ extension AgentPluginInstallerTests {
   }
 
   /// 打ち切った一覧は、CLI が終了の要求（SIGTERM）を受けて 0 で終わっても失敗にする（agy は SIGTERM を受けて 0 で終わる
-  /// ことがある）。打ち切った一覧を成功と読めば、未導入と見て導入する。偽の claude は、SIGTERM に 0 で終わる trap を置いた後に、
-  /// 時限を数える perl（自分の親）の pid を印のファイル（`tmo.pid`）に書いて止まる。その pid へ SIGALRM を送って、時限の到来を起こす。
-  /// 時限はどれも長くするので、打ち切りはテストが送った SIGALRM でしか起きない。
+  /// ことがある）。打ち切った一覧を成功と読めば、未導入と見て導入する。偽の claude は、agy と同じく SIGALRM では終わらず、
+  /// SIGTERM には印のファイル（`trapped`）を書いて 0 で終わる。2 つの trap を置いた後に、準備の印のファイル（`ready`）を書いて止まる。
   func testClaudeListCutOffIsAnErrorEvenWhenTheCLIExitsZero() throws {
-    let pidMark = pkg.appendingPathComponent("tmo.pid")
+    let ready = pkg.appendingPathComponent("ready")
     let trapped = pkg.appendingPathComponent("trapped")
-    let run = try runBundledInstaller(
-      listPrelude: """
+    let run = try runCuttingClaude(
+      .list,
+      prelude: """
+        trap '' ALRM
         trap ': > "\(trapped.path)"; kill $! 2>/dev/null; exit 0' TERM
+        : > "\(ready.path)"
         sleep 60 &
-        echo "$PPID" > "\(pidMark.path).tmp" && mv "\(pidMark.path).tmp" "\(pidMark.path)"
         wait
         """,
-      limits: .init(register: Self.long, list: Self.long, install: Self.long),
-      whileRunning: { _ in
-        var timer: pid_t?
-        pumpMain(
-          until: {
-            guard let text = try? String(contentsOf: pidMark, encoding: .utf8),
-              text.hasSuffix("\n")
-            else { return false }
-            timer = pid_t(text.dropLast())
-            return true
-          }, "時限を数える perl の pid")
-        kill(try XCTUnwrap(timer, "tmo.pid の中身が pid でない"), SIGALRM)
-      })
+      ready: ready, marks: [ready, trapped])
+    XCTAssertTrue(
+      FileManager.default.fileExists(atPath: ready.path), "どの回も、偽の claude が trap を置く前に打ち切られた")
     XCTAssertTrue(
       FileManager.default.fileExists(atPath: trapped.path), "一覧が SIGTERM を受けて 0 で終わっていない")
     XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
     XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
-  }
-
-  /// CLI は、tmo がブロックした SIGALRM を受けられる状態で起動する。ブロックしたまま起動すると、CLI が自分で掛けた alarm が
-  /// 届かず、CLI の振る舞いが黙って変わる。偽の claude は、一覧で自分に SIGALRM を送る。受けられれば既定の動作で終わり、一覧は
-  /// 失敗になる。受けられなければ、送った後に印のファイルを書き、一覧は成功で終わる。
-  func testTheCLIStartsWithSIGALRMUnblocked() throws {
-    let survived = pkg.appendingPathComponent("survived")
-    let run = try runBundledInstaller(
-      claudeList: "No plugins installed.\n",
-      listPrelude: """
-        kill -ALRM $$
-        : > "\(survived.path)"
-        """)
-    XCTAssertTrue(run.calls.contains("plugin list"), "\(run.calls)")
-    XCTAssertFalse(
-      FileManager.default.fileExists(atPath: survived.path), "SIGALRM をブロックしたまま CLI を起動している")
-    XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
   }
 
   // MARK: - codex と agy の導入

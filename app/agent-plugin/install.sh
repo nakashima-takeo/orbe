@@ -19,22 +19,17 @@ INSTALL_LIMIT="${5:?install_limit required}"
 # 残っていれば強制終了（SIGKILL）する。SIGALRM を CLI へ直に届けないのは、agy が SIGALRM では終わらないため。
 # 打ち切ったら CLI の終了コードによらず失敗（124）を返す——agy は SIGTERM を受けて 0 で終わることがある。
 # 時限が正の数でなければ CLI を起こさずに失敗（125）を返す——空や 0 の時限で alarm を掛けると、時限が黙って外れる。
-# SIGALRM は、fork の前から、ハンドラと子の pid がそろうまでブロックしておく（子は exec の前にブロックを解除する）。
-# そろう前に外から届いた SIGALRM も、捨てずに、そろった後で時限の到来として受ける。
 # stderr は常に捨てる: このスクリプトの stdout は status 行の通り道で、混ざると Orbe が誤読する。
 tmo() {
-  perl -MTime::HiRes=alarm -mPOSIX -e '
+  perl -MTime::HiRes=alarm -e '
     my $limit = shift;
     exit 125 unless $limit =~ /^\d+(?:\.\d+)?\z/ && $limit > 0;
-    my ($alrm, $mask) = (POSIX::SigSet->new(POSIX::SIGALRM()), POSIX::SigSet->new);
-    POSIX::sigprocmask(POSIX::SIG_BLOCK(), $alrm, $mask);
     my $pid = fork;
     exit 127 unless defined $pid;
-    if (!$pid) { POSIX::sigprocmask(POSIX::SIG_SETMASK(), $mask); exec @ARGV; exit 127 }
+    if (!$pid) { exec @ARGV; exit 127 }
     my $cut = 0;
     $SIG{ALRM} = sub { kill($cut++ ? "KILL" : "TERM", $pid); alarm 2 };
     alarm $limit;
-    POSIX::sigprocmask(POSIX::SIG_SETMASK(), $mask);
     waitpid($pid, 0);
     exit 124 if $cut;
     exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
