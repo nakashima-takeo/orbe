@@ -200,6 +200,23 @@ extension AgentPluginInstallerTests {
     XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
   }
 
+  /// CLI は、tmo がブロックした SIGALRM を受けられる状態で起動する。ブロックしたまま起動すると、CLI が自分で掛けた alarm が
+  /// 届かず、CLI の振る舞いが黙って変わる。偽の claude は、一覧で自分に SIGALRM を送る。受けられれば既定の動作で終わり、一覧は
+  /// 失敗になる。受けられなければ、送った後に印のファイルを書き、一覧は成功で終わる。
+  func testTheCLIStartsWithSIGALRMUnblocked() throws {
+    let survived = pkg.appendingPathComponent("survived")
+    let run = try runBundledInstaller(
+      claudeList: "No plugins installed.\n",
+      listPrelude: """
+        kill -ALRM $$
+        : > "\(survived.path)"
+        """)
+    XCTAssertTrue(run.calls.contains("plugin list"), "\(run.calls)")
+    XCTAssertFalse(
+      FileManager.default.fileExists(atPath: survived.path), "SIGALRM をブロックしたまま CLI を起動している")
+    XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
+  }
+
   // MARK: - codex と agy の導入
 
   /// codex は、登録の後に一覧を読み、利用者が無効にしていなければ `plugin add` で入れ直す（キャッシュのコピーを今の中身へ
