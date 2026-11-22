@@ -1,6 +1,6 @@
 import Foundation
 
-/// diff の見せ方（インライン / 並列）。アプリ全体で 1 つ（どの diff タブにも効く）で、app-state に永続する。
+/// diff の見せ方（インライン / 並列）。アプリ全体で 1 つ（どの diff にも効く）で、app-state に永続する。
 @MainActor @Observable
 final class EditorDiffModeState {
   private(set) var mode: EditorDiff.Mode

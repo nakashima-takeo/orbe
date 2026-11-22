@@ -46,7 +46,7 @@ extension PullRequestState {
   }
 
   /// 今の PR の diff の両端——求め終えていて、その先頭が中身の先頭と同じとき（求めている・求められない・中身が新しい先頭を
-  /// 読んだ後で求め直す前は nil）。PR ごとの値で、diff タブの有無と数に依らない。
+  /// 読んだ後で求め直す前は nil）。PR ごとの値で、開いている diff の有無と数に依らない。
   var diffEnds: DiffEnds? {
     guard case .ready(_, let ends) = bounds, ends.head == content?.headCommit else { return nil }
     return ends

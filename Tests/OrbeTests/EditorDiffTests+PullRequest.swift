@@ -3,11 +3,12 @@ import XCTest
 @testable import Orbe
 
 /// PR の diff——古い側は PR のマージベースの版（rename なら元のパス）、新しい側は PR の先頭の版。両側とも読むだけで、PR に
-/// push があれば新しい両端で作り直す。PR の中身は差し替えの構造体が答える。
+/// push があれば新しい両端で作り直す。GitHub を読むのは本体に出ていて面が見えている間だけで、出し直せば読み直す。PR の中身は
+/// 差し替えの構造体が答える。
 ///
 /// 壊れると何が起きるか: rename したファイルの diff が全部の行の追加になる。PR に push があっても古い diff のまま。手元の
 /// 作業ツリーの本文が新しい側に出る。打鍵で PR の diff の本文が変わる。PR が動かしたサブモジュールの diff が出ない。
-/// TopBar の現在地が PR の diff でなく作業ツリーのファイルの姿になる。
+/// 本体に出していない PR の diff のために GitHub を読み続ける・出し直しても古い両端のまま。
 extension EditorDiffTests {
   /// 差し替えの構造体が返す中身（テストが書き換えて、次の読み直しに答えさせる）。
   private final class Reply {
@@ -23,6 +24,22 @@ extension EditorDiffTests {
       state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
       baseCommit: base, headCommit: head, commitCount: 1, commits: [],
       files: [.init(path: "b.txt", change: .renamed, isViewed: false)])
+  }
+
+  /// PR の画面を出した窓のタブ（PR の diff を本体に出す）。PR の画面は worktree の今の PR を見て、それと違う PR の diff を
+  /// 閉じるので、worktree の今の PR は答えを出さない差し替えの出どころにする（本物の gh も呼ばない）。どのブランチに居ても
+  /// 問い合わせまで進むよう、既定のブランチを別の名前にしておく。
+  private func pullRequestTab() -> (TerminalTab, NSWindow) {
+    XCTAssertTrue(
+      repo.git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk"]).isSuccess)
+    _ = BranchPullRequest.shared(
+      for: GitWorktreeRoot.root(of: repo.root),
+      source: PullRequestSource(
+        branchPullRequests: { _, _, _ in }, branchExists: { _, _ in }, content: { _, _ in },
+        setViewed: { _, _, _, _ in }, review: { _, _ in }, writeReview: { _, _, _, _, _ in }))
+    let hosted = tab()
+    hosted.0.group.editor.selectScreen(.pullRequest)
+    return hosted
   }
 
   /// `reply` の中身を答える PR の状態を作り、手元のリポジトリを結ぶ。
@@ -56,12 +73,9 @@ extension EditorDiffTests {
     let reply = Reply()
     reply.content = content(base: base, head: head)
     let state = try pullRequest(reply)
-    let (tab, _) = tab()
+    let (tab, _) = pullRequestTab()
 
-    let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state)), as: .pinned)
-    XCTAssertEqual(
-      tab.group.editorLocation, .pullRequest(number: 5, relative: "b.txt"), "TopBar の現在地は PR の diff"
-    )
+    let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state)))
 
     waitRows(diff, "元のパスと比べた 1 行の変更") { self.removedLines($0) == [2] }
     XCTAssertNil(diff.document, "新しい側は版の本文で、作業ツリーの文書ではない")
@@ -95,8 +109,8 @@ extension EditorDiffTests {
     let reply = Reply()
     reply.content = content(base: base, head: head)
     let state = try pullRequest(reply)
-    let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("x.bad", .pullRequest(state)), as: .pinned)
+    let (tab, _) = pullRequestTab()
+    let diff = try tab.group.editor.openDiff(id("x.bad", .pullRequest(state)))
     pumpMain(until: { diff.content == .unavailable(.failed) }, "前提: 版の本文を読めない")
 
     XCTAssertTrue(repo.git(["config", "filter.bad.smudge", "cat"]).isSuccess)
@@ -119,10 +133,10 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["commit", "-qam", "move sub"]).isSuccess)
     let reply = Reply()
     reply.content = content(base: base, head: repo.head())
-    let (tab, _) = tab()
+    let (tab, _) = pullRequestTab()
 
     let diff = try tab.group.editor.openDiff(
-      id("sub", .pullRequest(try pullRequest(reply))), as: .pinned)
+      id("sub", .pullRequest(try pullRequest(reply))))
 
     waitRows(diff, "1 行の差") { self.removedLines($0) == [0] }
     XCTAssertEqual(text(diff.old), "Subproject commit \(first)")
@@ -131,19 +145,19 @@ extension EditorDiffTests {
 
   /// 表示できない PR の diff は、PR の種類の理由の一文を出す——両側とも無いパスと、手元に揃わない PR のコミット。
   func testAPullRequestDiffThatCannotBeShownSaysWhy() throws {
-    let (tab, _) = tab()
+    let (tab, _) = pullRequestTab()
     let pane = tab.group.view.editor
     let reply = Reply()
     reply.content = content(base: repo.head(), head: repo.head())
     let nowhere = try tab.group.editor.openDiff(
-      id("nope.txt", .pullRequest(try pullRequest(reply))), as: .pinned)
+      id("nope.txt", .pullRequest(try pullRequest(reply))))
     pumpMain(until: { pane.faceContent == .notice(.editorDiffNowherePullRequest) }, "どちらの側にもない")
     XCTAssertEqual(nowhere.content, .unavailable(.nowhere))
 
     let missing = Reply()
     missing.content = content(base: repo.head(), head: String(repeating: "0", count: 40), number: 6)
     _ = try tab.group.editor.openDiff(
-      id("a.txt", .pullRequest(try pullRequest(missing, number: 6))), as: .pinned)
+      id("a.txt", .pullRequest(try pullRequest(missing, number: 6))))
     pumpMain(
       until: { pane.faceContent == .notice(.editorDiffPullRequestCommitsMissing) }, "コミットを取得できない")
   }
@@ -159,11 +173,50 @@ extension EditorDiffTests {
     state.beginWatching()
     addTeardownBlock { @MainActor in state.endWatching() }
     pumpMain(until: { reply.requests == 1 }, "前提: ほかの者が見始めて読んだ")
-    let (tab, _) = tab()
+    let (tab, _) = pullRequestTab()
 
-    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)))
 
     waitRows(diff, "先に読んである中身で出る") { _ in diff.newRevision != nil }
     XCTAssertEqual(reply.requests, 1, "開いても問い直さない")
+  }
+
+  /// PR の diff が GitHub から中身を読むのは、本体に出ていて面が見えている間だけ。Files の画面へ移る・エディターを閉じると
+  /// 読むのをやめ、古い両端のまま残る。PR の画面を出し直す・エディターを開き直すと読み直し、その間の push は新しい両端の
+  /// diff になる。
+  func testAPullRequestDiffReadsGitHubOnlyWhileItIsShown() throws {
+    let base = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    let first = "one\ntwo\nTHREE\nfour\n"
+    try repo.write("a.txt", first)
+    XCTAssertTrue(repo.git(["commit", "-qam", "change"]).isSuccess)
+    let reply = Reply()
+    reply.content = content(base: base, head: repo.head())
+    let state = try pullRequest(reply)
+    let (tab, _) = pullRequestTab()
+    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)))
+    pumpMain(until: { self.text(diff.newRevision) == first }, "前提: 本体に出た diff が中身を読む")
+    XCTAssertEqual(reply.requests, 1)
+
+    tab.group.editor.selectScreen(.files)
+    let pushed = "one\ntwo\nTHREE\nfour\nfive\n"
+    try repo.write("a.txt", pushed)
+    XCTAssertTrue(repo.git(["commit", "-qam", "push"]).isSuccess)
+    reply.content = content(base: base, head: repo.head())
+    state.reload()
+    XCTAssertEqual(reply.requests, 1, "Files の画面の間は読まない")
+    XCTAssertEqual(text(diff.newRevision), first, "古い両端のまま残る")
+
+    tab.group.editor.selectScreen(.pullRequest)
+    pumpMain(until: { self.text(diff.newRevision) == pushed }, "出し直すと読み直し、新しい両端になる")
+    XCTAssertEqual(reply.requests, 2)
+
+    tab.group.view.show(.terminal, animated: false)
+    tab.group.view.layoutSubtreeIfNeeded()
+    state.reload()
+    XCTAssertEqual(reply.requests, 2, "エディターを閉じている間は読まない")
+    tab.group.view.show(.editor, animated: false)
+    tab.group.view.layoutSubtreeIfNeeded()
+    pumpMain(until: { reply.requests == 3 }, "エディターを開き直すと読み直す")
   }
 }

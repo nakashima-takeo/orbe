@@ -1,17 +1,17 @@
 import AppKit
 import OrbeEditorCore
 
-/// プロジェクト検索の結線——⌘⇧F とレールで検索パネルを出す・種・結果を開いて一致を選び中央へ・パネルの中のキー
+/// プロジェクト検索の結線——⌘⇧F とレールで検索パネルを出す（Files の画面で）・種・結果を開いて一致を選び中央へ・パネルの中のキー
 /// （⌘↓ / ⌘↑・⌥⌘C / W / R）・F4 / ⇧F4。列の外の押下で待っている ↑↓ の開きを捨てる（ソース管理の列も同じ）。
 extension EditorPaneView {
   func wireProjectSearch() {
-    projectSearch.documents = { [weak self] in self?.group?.editor.documents ?? [] }
+    projectSearch.documents = { [weak self] in self?.group?.editor.heldDocuments ?? [] }
     projectSearch.onOpen = { [weak self] id, opening in self?.openProjectMatch(id, opening) }
     projectSearch.onGroundChange = { [weak self] in self?.pushFindGround() }
   }
 
-  /// 検索パネルが見えている（サイドバーが開いていて、検索のパネルを出している）。
-  var showsSearchPanel: Bool { sidebar.isOpen && sidebar.panel == .search }
+  /// 検索パネルが見えている（左の列が開いていて、画面が Files で、左の列が検索）。
+  var showsSearchPanel: Bool { sidebar.isOpen && shell.panel == .search }
 
   /// 焦点がサイドバー（骨の host 配下）にあるか。
   var focusIsInSidebar: Bool {
@@ -23,12 +23,21 @@ extension EditorPaneView {
     showsSearchPanel && focusIsInSidebar && projectSearch.focusedArea != nil
   }
 
-  /// レールの項目を押した。検索・ソース管理のパネルを出したら入力欄に焦点を入れる（VS Code のアクティビティバーと同じ）。
-  /// ソース管理の親「ソース管理」を畳んでいれば、欄も列も無いので焦点を求めない（当たらない要求を残すと、親を開いた瞬間に
-  /// 焦点を奪う）。PR のパネルは、列に行があれば列に焦点を入れる（行が無ければ求めない——同じ理由）。行があるかは、パネルを
-  /// 出して今の答えで行を組み直してから見る（サイドバーの観測の知らせは次のターンなので、待たずにここで出し入れを写す）。
-  func selectPanel(_ panel: EditorSidebarState.Panel) {
-    sidebar.select(panel)
+  /// レールの項目を押した。左の列を開いていて、出している中身の項目なら閉じる。そうでなければ、その画面（「ファイル」
+  /// 「検索」は Files で、左の列をその中身に）を選んで左の列を開く。検索・ソース管理のパネルを出したら入力欄に焦点を入れる
+  /// （VS Code のアクティビティバーと同じ）。ソース管理の親「ソース管理」を畳んでいれば、欄も列も無いので焦点を求めない（当たら
+  /// ない要求を残すと、親を開いた瞬間に焦点を奪う）。PR のパネルは、列に行があれば列に焦点を入れる（行が無ければ求めない——
+  /// 同じ理由）。行があるかは、パネルを出して今の答えで行を組み直してから見る（左の列の観測の知らせは次のターンなので、待たずに
+  /// ここで出し入れを写す）。
+  func selectPanel(_ panel: EditorShellModel.Panel) {
+    guard let group else { return }
+    if sidebar.isOpen, shell.panel == panel {
+      sidebar.setOpen(false)
+      return
+    }
+    if panel.screen == .files { filesPanel = panel }
+    group.editor.selectScreen(panel.screen)
+    sidebar.setOpen(true)
     updatePanelsShown()
     if showsSearchPanel { projectSearch.requestFocus(.field) }
     if showsSourceControl, scm.isRepositoryOpen { scm.requestFocus(.message) }
@@ -53,13 +62,20 @@ extension EditorPaneView {
     return nil
   }
 
-  /// サイドバーを検索パネルで開き、入力欄に焦点を入れる（前の検索語は全選択）。種があれば入れて即時に検索する。
+  /// Files の画面を選び、左の列を検索パネルで開き、入力欄に焦点を入れる（前の検索語は全選択）。種があれば入れて即時に検索する。
   func showProjectSearch(seed: String?) {
-    sidebar.show(.search)
+    showSearchPanel()
     if let seed { projectSearch.seed(seed) }
     projectSearch.requestFocus(.field)
     selectSearchFieldText()
     pushFindGround()
+  }
+
+  /// Files の画面を選び、左の列を検索パネルで開く。
+  private func showSearchPanel() {
+    filesPanel = .search
+    group?.editor.selectScreen(.files)
+    sidebar.setOpen(true)
   }
 
   /// 入力欄に焦点があれば検索語を全選択する（焦点がこれから入るなら、入るときに AppKit が全選択する）。
@@ -70,7 +86,7 @@ extension EditorPaneView {
     editor.selectAll(nil)
   }
 
-  /// 一致を `opening` の開き方で開く——文書を開いて見せてから、一致を選択に置き、その行を中央へ（見えていても送る。
+  /// 一致を `opening` の開き方で開く——文書を開いて Files の画面で見せてから、一致を選択に置き、その行を中央へ（見えていても送る。
   /// VS Code と同じ）、横に隠れていれば寄せる。本文へ焦点を移す開き方でなければ焦点に触らない（クリックでは列が押下で
   /// 焦点を取っていて、遅れて走るキーの開きは、その間に人が移した焦点を奪わない）。
   func openProjectMatch(_ id: ProjectSearch.RowID, _ opening: ProjectSearch.Opening) {
@@ -84,6 +100,7 @@ extension EditorPaneView {
       NSSound.beep()
       return
     }
+    group.editor.selectScreen(.files)
     tree.reveal(document.url)
     layoutSubtreeIfNeeded()
     projectSearch.documentDidShow(document)
@@ -126,13 +143,13 @@ extension EditorPaneView {
   }
 
   /// エディター面（pane の配下）に焦点があるときの F4 / ⇧F4: 次・前の一致を開く（結果が無ければ素通し）。検索パネルが
-  /// 隠れていれば出す。扱ったら true。
+  /// 隠れていれば出す（Files の画面で）。扱ったら true。
   func handleStepKey(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
     guard event.specialKey == .f4, flags.isSubset(of: [.shift]), focusIsInside,
       projectSearch.step(forward: flags.isEmpty)
     else { return false }
-    sidebar.show(.search)
+    showSearchPanel()
     return true
   }
 

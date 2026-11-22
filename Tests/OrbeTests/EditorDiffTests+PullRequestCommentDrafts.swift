@@ -6,9 +6,9 @@ import XCTest
 
 /// PR の diff のコメントの書きかけは、PR ごとの状態が持ち、その PR の diff ならどれにも出て、diff を閉じても残る。
 ///
-/// 壊れると何が起きるか: diff のタブを閉じる・別の連のタブで開き直すと、打っていた返信や新しいコメントが消える。同じファイルを
+/// 壊れると何が起きるか: diff を閉じる・別の連のタブで開き直すと、打っていた返信や新しいコメントが消える。同じファイルを
 /// 2 か所で開くと、片方の書きかけがもう片方に出ない。片方から送ったコメントを、もう片方から送り直せて、同じコメントが 2 つ付く。
-/// 送った直後にタブを閉じると、通った返信が書きかけに残り、開き直して送ると同じ返信が 2 つ付く。GitHub から消えたスレッドへの
+/// 送った直後に diff を閉じると、通った返信が書きかけに残り、開き直して送ると同じ返信が 2 つ付く。GitHub から消えたスレッドへの
 /// 返信の書きかけが、開き直した diff で見えなくなる。
 extension EditorDiffTests {
   /// 新しい側の行 3 に付いた、返信できるスレッド T。
@@ -31,9 +31,9 @@ extension EditorDiffTests {
       }, message, file: file, line: line)
   }
 
-  /// 返信と新しいコメントの書きかけは、diff のタブを閉じて同じファイルを開き直すと、同じスレッドの返信欄と、同じ行の欄に出る。
+  /// 返信と新しいコメントの書きかけは、diff を閉じて同じファイルを開き直すと、同じスレッドの返信欄と、同じ行の欄に出る。
   /// 「取り消す」で閉じた欄の書きかけは出ない。
-  func testDraftsSurviveClosingTheDiffTab() throws {
+  func testDraftsSurviveClosingTheDiff() throws {
     let remote = Remote()
     remote.threads = [replyable]
     let (diff, tab) = try commentedTab(remote)
@@ -49,7 +49,7 @@ extension EditorDiffTests {
     surface.replaceText(of: cancelled.field, with: "取り消す書きかけ")
     cancelled.zone(.pressed(PrCommentControl.cancel))
 
-    tab.group.editor.close(.diff(diff.id))
+    tab.group.editor.closeDiff(on: .pullRequest)
     let (reopened, _) = try open(layer.state, into: tab)
     let next = try XCTUnwrap(reopened.comments)
     XCTAssertFalse(next === layer, "前提: 開き直した diff は別の層を持つ")
@@ -129,9 +129,9 @@ extension EditorDiffTests {
       ])
   }
 
-  /// 返信を送った直後、結果が届く前にその diff のタブを閉じても、通れば書きかけは消え、開き直した diff の返信欄は空（送り直して
+  /// 返信を送った直後、結果が届く前にその diff を閉じても、通れば書きかけは消え、開き直した diff の返信欄は空（送り直して
   /// 同じ返信を 2 つ付けない）。
-  func testAReplySentJustBeforeTheTabClosesIsGoneOnceItGoesThrough() throws {
+  func testAReplySentJustBeforeTheDiffClosesIsGoneOnceItGoesThrough() throws {
     let remote = Remote()
     remote.threads = [replyable]
     remote.holds = true
@@ -144,7 +144,7 @@ extension EditorDiffTests {
       waitPlaced(diff, [zone], "スレッドが置かれる")
       try engine(diff.newSurface).replaceText(of: zone.field, with: "一度だけ")
       zone.zone(.pressed(PrCommentControl.add))
-      tab.group.editor.close(.diff(diff.id))
+      tab.group.editor.closeDiff(on: .pullRequest)
       return (layer.state, tab)
     }()
     XCTAssertNil(closed, "前提: 閉じた diff の層は残っていない")
@@ -175,7 +175,7 @@ extension EditorDiffTests {
     layer.state.reload()
     pumpMain(until: { zone.notice == .deleted }, "前提: 消えたスレッドの書きかけが残る")
 
-    tab.group.editor.close(.diff(diff.id))
+    tab.group.editor.closeDiff(on: .pullRequest)
     let (reopened, _) = try open(layer.state, into: tab)
     let next = try XCTUnwrap(reopened.comments?.zone(thread: "T"))
     waitPlaced(reopened, [next], "消えたスレッドの返信欄が置かれる")

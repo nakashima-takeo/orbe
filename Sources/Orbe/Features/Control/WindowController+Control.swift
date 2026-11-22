@@ -142,8 +142,8 @@ extension WindowController: ControlTarget {
     return .success(["ok": true])
   }
 
-  /// 指定タブの連のエディターでファイルを開く（open_file）。`path` は絶対か、`~` 展開の上でタブの実効 cwd
-  /// からの相対。開けたらタブを選んでエディターで見せ（別 WS ならその WS へ移る）、first responder を移す。
+  /// 指定タブの連のエディターでファイルを開き、Files の画面で見せる（open_file）。`path` は絶対か、`~` 展開の上でタブの
+  /// 実効 cwd からの相対。開けたらタブを選んでエディターで見せ（別 WS ならその WS へ移る）、first responder を移す。
   func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError> {
     guard let tab = controlResolveTab(tabId) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))
@@ -163,7 +163,7 @@ extension WindowController: ControlTarget {
     return .success(["ok": true])
   }
 
-  /// 指定タブの連のエディターで diff を開く（open_diff）。`path` は `open_file` と同じ解き方で、それを含む worktree の根と根から
+  /// 指定タブの連のエディターで diff を開き、Changes の画面で見せる（open_diff）。`path` は `open_file` と同じ解き方で、それを含む worktree の根と根から
   /// の相対パスにする（ファイル自体の symlink は解かない——diff は git の座標の上のもの）。開けたら `open_file` と同じく
   /// タブを選んでエディターで見せ、本体へ焦点を移す。
   func controlOpenDiff(tabId: Int, path: String, kind: EditorDiff.Kind) -> Result<Any, ControlError>

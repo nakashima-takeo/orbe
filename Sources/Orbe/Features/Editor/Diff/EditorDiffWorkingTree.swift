@@ -12,7 +12,7 @@ final class EditorDiffWorkingTree: EditorDiffSource {
   let id: EditorDiff.Key
   let files: RootFiles
   var onChange: ((EditorDiff.SourceChange) -> Void)?
-  private var documents: EditorDiff.Documents
+  private let documents: EditorDiff.Documents
   private var catchUp: RootFilesCatchUp?
   /// 作業ツリーの姿と、それを読み直すべきか（ファイルが変わった）。
   private(set) var working: Side
@@ -52,10 +52,6 @@ final class EditorDiffWorkingTree: EditorDiffSource {
     guard document !== next else { return false }
     working = .document(next)
     return true
-  }
-
-  func rebind(_ documents: EditorDiff.Documents) {
-    self.documents = documents
   }
 
   /// 未保存の間に保留した作業ツリーの読み直しを、未保存でなくなった時点で行う。
@@ -116,9 +112,9 @@ final class EditorDiffWorkingTree: EditorDiffSource {
 
   // MARK: - 作業ツリーの姿
 
-  /// 作業ツリーの姿を読み直し、新しい側の文書を合わせる。文書が替われば、前の文書をファイルタブの見え方に戻して手放す。
-  /// 今の文書が未保存なら、作業ツリーの姿が変わっても手放さず新しい側のまま——未保存の本文を確認なしに失わない（ファイル
-  /// タブが、消えたファイルの未保存の本文を保つのと同じ）。読み直しは保留のまま残し、未保存でなくなった後の作り直しで
+  /// 作業ツリーの姿を読み直し、新しい側の文書を合わせる。文書が替われば、前の文書をコードの見え方に戻して手放す。
+  /// 今の文書が未保存なら、作業ツリーの姿が変わっても手放さず新しい側のまま——未保存の本文を確認なしに失わない（開いている
+  /// 文書が、消えたファイルの未保存の本文を保つのと同じ）。読み直しは保留のまま残し、未保存でなくなった後の作り直しで
   /// 行う。読み直しでテキスト面を作れなければ、ファイルを読めないとして表示できない。
   private func updateWorkingSide() {
     if document?.isDirty == true { return }

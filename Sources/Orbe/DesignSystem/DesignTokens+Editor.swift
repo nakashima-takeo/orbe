@@ -14,7 +14,7 @@ extension Theme.Color {
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
   /// 説明文の段——PR の説明（editorText と textMuted の間）。
   static let editorProse = editorDyn(light: 0x6d647f, dark: 0xa9a2b5)
-  /// 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地・diff タブの種類の注記と選択の上縁。
+  /// 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地。
   /// dark は conflict と偶然同値だが light が違い、git 競合でもない。
   static let editorCaution = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
   /// git の変化の種類の色（追加＝青・削除＝オレンジ・変更＝黄）。赤と緑を見分けにくい人でも区別できるよう、成否の
@@ -133,8 +133,6 @@ extension Theme.Typography {
   static let editorFileTab = NSFont.systemFont(ofSize: 12, weight: .regular)
   /// パンくず（sans 11）。
   static let editorBreadcrumb = NSFont.systemFont(ofSize: 11, weight: .regular)
-  /// diff タブの種類の注記（「（作業ツリー）」。sans 11）。
-  static let editorDiffNote = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// タブ行の右端の「インライン / 並列」（mono 10.5）。
   static let editorDiffSegment = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
   /// 種別チップのグリフ（mono bold。サイズはチップが決める）。

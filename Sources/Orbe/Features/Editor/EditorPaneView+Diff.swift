@@ -104,9 +104,11 @@ extension EditorPaneView {
     }
   }
 
-  /// 器に出すもの。
+  /// 器に出すもの。本体が空なら、Files は空状態、Changes・PR は何も出さない。
   var faceContent: EditorFaceRoot.Content {
-    guard case .diff(let diff) = body else { return .empty }
+    guard case .diff(let diff) = body else {
+      return (group?.editor.screen ?? .files) == .files ? .empty : .blank
+    }
     switch diff.content {
     case .ready, .loading: return .blank
     case .unavailable(.notText): return .notice(.editorDiffNotText)
@@ -144,5 +146,76 @@ extension EditorPaneView {
         observeDiffModes()
       }
     }
+  }
+
+  // MARK: - 本体の diff を整合させる
+
+  /// diff `key` を、その種類の画面の diff として開き、左の列でその行を選択表示する（行がまだ一覧に無ければ、行ができたとき
+  /// に）。画面は選ばない。テキスト面を作れなければ `EditorSurfaceError.noMetalDevice` で失敗する。
+  @discardableResult
+  func openDiff(_ key: EditorDiff.Key) throws -> EditorDiff {
+    guard let group else { throw EditorSurfaceError.noMetalDevice }
+    let opened = try group.editor.openDiff(key)
+    revealRow(of: key)
+    return opened
+  }
+
+  /// diff `key` の行を左の列の一覧で選ぶ。一覧にまだ無ければ、行ができたときに選ぶ。
+  private func revealRow(of key: EditorDiff.Key) {
+    diffAwaitingRow = nil
+    switch key.kind {
+    case .workingTree, .staged:
+      let id = scm.rowID(of: key)
+      guard scm.layout.index[id] != nil else {
+        diffAwaitingRow = key
+        return
+      }
+      scm.select(id)
+    case .pullRequest(let state):
+      guard pullRequest.state === state, pullRequest.layout.index[.file(key.path)] != nil else {
+        diffAwaitingRow = key
+        return
+      }
+      pullRequest.select(.file(key.path))
+    }
+  }
+
+  /// Changes・PR の diff を、画面・面の可視性・一覧の行・worktree の今の PR に合わせる 1 か所。きっかけは、セッションの変化
+  /// （画面が替わった・diff が閉じた）・面の可視性の変化・一覧の行の組み直し・worktree の今の PR の答えの変化。
+  /// - PR の diff の PR が、worktree の今の PR（答えが出ているとき）と違えば閉じる。
+  /// - 開いた diff の行を待っていれば、行ができたときに選ぶ。
+  /// - 面が見えていて、今の画面（Changes・PR）に diff が無く、一覧にファイルの行があれば、選んでいる行（ファイルの行でなければ
+  ///   先頭のファイルの行）を開く。画面は選ばず、焦点も動かさない。開けなければ何もしない（次のきっかけまで試さない）。
+  func reconcileDiffs() {
+    guard let group else { return }
+    let session = group.editor
+    if case .pullRequest(let state)? = session.pullRequestDiff?.id.kind, hasPullRequestAnswer,
+      pullRequest.state !== state
+    {
+      session.closeDiff(on: .pullRequest)
+      return
+    }
+    if let key = diffAwaitingRow {
+      if session.diff(on: key.kind.screen)?.id == key {
+        revealRow(of: key)
+      } else {
+        diffAwaitingRow = nil
+      }
+    }
+    guard isFaceVisible, session.diff(on: session.screen) == nil else { return }
+    let key: EditorDiff.Key?
+    switch session.screen {
+    case .changes: key = scm.rowToOpen.flatMap(scm.diffKey(of:))
+    case .pullRequest: key = pullRequest.fileToOpen.flatMap(pullRequest.diffKey(of:))
+    case .files: key = nil
+    }
+    guard let key else { return }
+    _ = try? openDiff(key)
+  }
+
+  /// worktree の今の PR の答えが出ている（読んでいる最中でない）。
+  private var hasPullRequestAnswer: Bool {
+    if case .reading = pullRequest.pullRequest.answer { return false }
+    return true
   }
 }

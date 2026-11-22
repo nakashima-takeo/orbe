@@ -40,10 +40,10 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 **editor/ — エディター面**
 
 - [faces](spec/editor/faces.md) — 面の機構（⌘E の開閉・重なり・⌥ の透かし）
-- [shell](spec/editor/shell.md) — 面の骨（レール・エクスプローラー・タブ行・パンくず・未保存の確認・復元）
+- [shell](spec/editor/shell.md) — 面の骨（画面と本体・レール・エクスプローラー・タブ行・パンくず・未保存の確認・復元）
 - [code](spec/editor/code.md) — 文書とテキスト面（開く/編集/保存・外部変更・色付け・ファイル内検索（⌘F）・キー）
 - [search](spec/editor/search.md) — プロジェクト検索（⌘⇧F・入力しながら検索・問いの規則・対象と除外・結果から一致へ飛ぶ）
-- [diff](spec/editor/diff.md) — diff タブ（作業ツリー / ステージ済み・インラインと並列・追従・文書の共有）
+- [diff](spec/editor/diff.md) — Changes と PR の画面の diff（作業ツリー / ステージ済み / PR・インラインと並列・追従・文書の共有）
 - [source-control](spec/editor/source-control.md) — ソース管理パネル（変更・ステージ・コミット・push / pull / fetch・実行中と止める・グラフ）
 - [files](spec/editor/files.md) — ファイルと git（根のサービス・監視・status・版の本文と baseline・git の書き込みの入口・外部変更）
 

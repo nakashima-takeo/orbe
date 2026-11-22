@@ -56,7 +56,7 @@
 
       /// 検索パネルを出し、問いで実際に検索する（開いている文書は保存前の中身、ほかは git grep）。
       func search(_ query: SearchQuery) {
-        pane.sidebar.show(.search)
+        pane.filesPanel = .search
         pane.projectSearch.restore(query)
         pane.projectSearch.search()
       }
@@ -104,6 +104,7 @@
       let tab = TerminalTab(cwd: dir.path, group: group)
       group.view.add(terminal: tab.terminal)
       group.view.show(terminal: tab.terminal)
+      group.editor.selectScreen(.files)
       let readmeDocument = try group.editor.open(readme, as: .pinned)
       readmeDocument.surface.responder.perform(Selector(("insertText:")), with: "# ")
       _ = try group.editor.open(dir.appendingPathComponent("docs/design/tokens.json"), as: .preview)

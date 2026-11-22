@@ -15,7 +15,6 @@ extension PrCommentLayer {
     zone.isCollapsed = thread.isResolved && !zone.hasText
     zone.onPress = { [weak self] zone, control in self?.press(control, in: zone) }
     zone.onTextChange = { [weak self] zone in self?.replyDidChange(zone) }
-    zone.onHasTextChange = { [weak self] _ in self?.onDraftChange() }
     zone.onFieldFocus = { [weak self] zone, primary in
       // 置けなくなった・削除されたスレッドは、書きかけを空にして焦点が外れたら手放す。
       guard let self, !primary, !zone.hasText, case .thread(let thread) = zone.subject,
@@ -87,7 +86,6 @@ extension PrCommentLayer {
       guard let self, let draft else { return }
       state.writeComment(serial, path: path, body: zone.text, from: draft.origin)
     }
-    zone.onHasTextChange = { [weak self] _ in self?.onDraftChange() }
     zone.onFieldFocus = { [weak self] zone, primary in
       guard let self, !primary, !zone.hasText, !zone.isWriting else { return }
       closeDraft(zone)
@@ -124,8 +122,7 @@ extension PrCommentLayer {
 /// ほかの層（か状態）が書いた変化を自分の欄へ合わせる。
 /// 返信の欄は、本文を置く。空白と改行のほかの字がある欄の書きかけが消えたら、その欄を空にする。行を追っている欄は、焦点が無ければ手放す。
 /// 新しいコメントの欄は、本文を置く。空白と改行のほかの字がある欄の書きかけが消えていれば、閉じる（送った・取り消した・ほかの場所で空にした）。
-/// 層にまだ無い書きかけがあれば、並びを置き直させて欄にし、層が書きかけを持ったと `onDraftChange` で知らせる（仮のタブを普通の
-/// タブにする）。
+/// 層にまだ無い書きかけがあれば、並びを置き直させて欄にする。
 extension PrCommentLayer: PullRequestCommentDraftsObserver {
   func pullRequestCommentDraftsDidChange(_ state: PullRequestState) {
     let stored = state.commentDrafts
@@ -151,6 +148,5 @@ extension PrCommentLayer: PullRequestCommentDraftsObserver {
       stored.replies.values.contains { adopts($0) }
       || stored.comments.contains { adopts($0.key, $0.value) }
     if changed || adopting { onRowsChange() }
-    if adopting { onDraftChange() }
   }
 }

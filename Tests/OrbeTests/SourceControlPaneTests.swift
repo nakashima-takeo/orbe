@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、index の版へ戻す破棄は確かめてから行い、
+/// エディター面に結んだソース管理パネル——行は区分に合った diff を Changes の diff として開き、index の版へ戻す破棄は確かめてから行い、
 /// メッセージ欄の ↵ はコミット、⌘↵ はコミットしてプッシュ（同期・公開は起こさない）、改行は ⇧↵・⌥↵・⌃↵。欄は中身の行に
 /// 合わせて伸び縮みし、1 行が高い文字でも 10 行分の高さまで伸びる。欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出して
 /// いなくても面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を出して押せば
@@ -30,26 +30,9 @@ final class SourceControlPaneTests: OrbeTestCase {
     @MainActor var scm: ScmPanel { pane.scm }
   }
 
-  /// 根 `repo` の連の面だけを窓に載せ、ソース管理パネルを出す（`showsPanel` が false ならサイドバーは既定のエクスプローラー）。
-  func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
-    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.group.view.editor
-    let window = OrbeWindowFake(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    window.contentView = pane
-    pane.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    if showsPanel { pane.shell.selectPanel(.sourceControl) }
-    return Hosted(repo: repo, tab: tab, pane: pane, window: window)
-  }
-
-  func row(_ hosted: Hosted, _ section: ScmSection, _ path: String) throws -> Int {
-    try XCTUnwrap(hosted.scm.layout.index[ScmRowID(section: section, path: path)])
-  }
-
-  /// 「ステージされている変更」の行はステージ済みの diff を、「変更」の行は作業ツリーの diff を、同じ仮のタブで開く。
-  func testRowsOpenTheDiffOfTheirSectionInThePreviewTab() throws {
+  /// 「ステージされている変更」の行はステージ済みの diff を、「変更」の行は作業ツリーの diff を、Changes の diff として開く
+  /// （前の diff と入れ替わり、Changes の画面を選ぶ）。
+  func testRowsOpenTheDiffOfTheirSectionAsTheChangesDiff() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "staged\n")
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
@@ -61,16 +44,14 @@ final class SourceControlPaneTests: OrbeTestCase {
     let editor = hosted.tab.group.editor
 
     hosted.scm.click(try row(hosted, .staged, "a.txt"), in: hosted.scm.layout)
-    let staged = EditorTab.Key.diff(EditorDiff.Key(root: repo.root, path: "a.txt", kind: .staged))
-    XCTAssertEqual(editor.activeID, staged)
-    XCTAssertEqual(editor.previewID, staged)
+    XCTAssertEqual(
+      editor.changesDiff?.id, EditorDiff.Key(root: repo.root, path: "a.txt", kind: .staged))
+    XCTAssertEqual(editor.chosenScreen, .changes)
 
     hosted.scm.click(try row(hosted, .changes, "a.txt"), in: hosted.scm.layout)
-    let working = EditorTab.Key.diff(
-      EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree))
-    XCTAssertEqual(editor.activeID, working)
-    XCTAssertEqual(editor.previewID, working)
-    XCTAssertEqual(editor.tabs.map(\.id), [working], "仮のタブを入れ替える")
+    XCTAssertEqual(
+      editor.changesDiff?.id, EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree))
+    XCTAssertTrue(editor.documents.isEmpty, "diff は開いている文書の列に入らない")
   }
 
   /// 未追跡だけの破棄は確かめずにゴミ箱へ移し、同じ位置で続けて押せるように次の行を留める。index の版へ戻す破棄は確認の
@@ -288,7 +269,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     let previous = hosted.scm.control
     let other = try TempGitRepo(name: "orbe-scm-pane-other")
 
-    hosted.pane.setRoot(other.root)
+    hosted.tab.group.rekey(other.root)
     pumpMain(
       until: { self.messageField(in: hosted.pane).map { $0 !== old } ?? false }, "新しい根の欄")
     let new = try type("new", in: hosted)
@@ -340,7 +321,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     let hosted = host(repo)
     pumpMain(until: { hosted.scm.changes.changes.map(\.path) == ["a.txt"] }, "前の根の行")
 
-    hosted.pane.setRoot(other.root)
+    hosted.tab.group.rekey(other.root)
     pumpMain(until: { hosted.scm.changes.changes.map(\.path) == ["m.txt"] }, "新しい根の行")
     let row = try row(hosted, .changes, "m.txt")
     pumpMain(until: { self.slot(row, in: hosted.pane) != nil }, timeout: 3, "載っている列に新しい根の行")
@@ -352,8 +333,8 @@ final class SourceControlPaneTests: OrbeTestCase {
         modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
         eventNumber: 0, clickCount: 1, pressure: 1)!)
     XCTAssertEqual(
-      hosted.tab.group.editor.activeID,
-      .diff(EditorDiff.Key(root: other.root, path: "m.txt", kind: .workingTree)))
+      hosted.tab.group.editor.changesDiff?.id,
+      EditorDiff.Key(root: other.root, path: "m.txt", kind: .workingTree))
   }
 
   /// 面のメッセージ欄（載っていなければ nil）。
@@ -385,5 +366,27 @@ final class SourceControlPaneTests: OrbeTestCase {
     }
     return lists(in: pane).first { $0.source.panel === pane.scm }?.subviews
       .compactMap { $0 as? ScmRowView }.first { $0.row == row && !$0.isHidden }
+  }
+}
+
+extension SourceControlPaneTests {
+  /// 根 `repo` の連の面だけを窓に載せ、レールでソース管理パネルを出す（`showsPanel` が false なら Files の画面の
+  /// エクスプローラー）。
+  func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
+    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
+    let pane = tab.group.view.editor
+    let window = OrbeWindowFake(
+      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = pane
+    pane.layoutSubtreeIfNeeded()
+    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    if showsPanel { pane.shell.selectPanel(.sourceControl) }
+    return Hosted(repo: repo, tab: tab, pane: pane, window: window)
+  }
+
+  func row(_ hosted: Hosted, _ section: ScmSection, _ path: String) throws -> Int {
+    try XCTUnwrap(hosted.scm.layout.index[ScmRowID(section: section, path: path)])
   }
 }

@@ -150,7 +150,7 @@ private final class ScmPlainScene {
     tab = TerminalTab(cwd: directory.path, group: group)
     group.view.add(terminal: tab.terminal)
     group.view.show(terminal: tab.terminal)
-    group.view.editor.selectPanel(.sourceControl)
+    group.editor.selectScreen(.changes)
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1100, height: 640), styleMask: [.borderless],
       backing: .buffered, defer: false)

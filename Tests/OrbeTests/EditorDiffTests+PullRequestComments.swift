@@ -36,11 +36,11 @@ extension EditorDiffTests {
     return (opened.diff, try engine(opened.diff.newSurface))
   }
 
-  /// `commentedDiff` と同じ PR の diff を、`mode` のタブで開き、そのタブも返す。
+  /// `commentedDiff` と同じ PR の diff を開き、そのタブも返す。
   func commentedTab(
     _ remote: Remote, path: String = "a.txt",
     change: GitHubPullRequestContent.Change = .modified, modes: EditorDiffModeState? = nil,
-    as mode: EditorSession.OpenMode = .pinned, edit: (() throws -> Void)? = nil
+    edit: (() throws -> Void)? = nil
   ) throws -> (diff: EditorDiff, tab: TerminalTab) {
     let base = repo.head()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
@@ -95,16 +95,17 @@ extension EditorDiffTests {
     state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
     // 面が作る PR のパネルより先に、根の worktree の今の PR を差し替えの出どころで登録する（本物の gh を呼ばない）。
     _ = BranchPullRequest.shared(for: repo.root, source: state.source)
-    return try open(state, path: path, modes: modes, as: mode)
+    return try open(state, path: path, modes: modes)
   }
 
-  /// PR の状態 `state` のファイル `path` の diff を、タブ `into`（無ければ新しいタブ）で開く。
+  /// PR の状態 `state` のファイル `path` の diff を、タブ `into`（無ければ新しいタブ）の PR の画面で開く。
   func open(
     _ state: PullRequestState, path: String = "a.txt", modes: EditorDiffModeState? = nil,
-    as mode: EditorSession.OpenMode = .pinned, into: TerminalTab? = nil
+    into: TerminalTab? = nil
   ) throws -> (diff: EditorDiff, tab: TerminalTab) {
     let tab = into ?? tab(modes: modes).0
-    let diff = try tab.group.editor.openDiff(id(path, .pullRequest(state)), as: mode)
+    let diff = try tab.group.editor.openDiff(id(path, .pullRequest(state)))
+    tab.group.editor.selectScreen(.pullRequest)
     pumpMain(
       until: {
         diff.content == .ready && diff.comments?.isSettled == true && diff.newSurface != nil
@@ -114,7 +115,7 @@ extension EditorDiffTests {
     return (diff, tab)
   }
 
-  /// タブの PR がタブの根の worktree の今の PR でなくなったら（ブランチを切り替えた後）、新しいスレッドを書かずに、送れる所を
+  /// diff の PR が diff の根の worktree の今の PR でなくなったら（ブランチを切り替えた後）、新しいスレッドを書かずに、送れる所を
   /// 告げる（積んでも、Orbe から送る所が無い）。
   func testAPullRequestThatIsNoLongerTheWorktreesDoesNotTakeNewComments() throws {
     let remote = Remote()
@@ -132,23 +133,6 @@ extension EditorDiffTests {
       [Language.ja, .en].map { L10n.string(.editorPrThreadNotCurrent, $0) }.contains(draft.failure),
       "送れる所を告げる")
     XCTAssertEqual(draft.text, "書きかけ")
-  }
-
-  /// 仮のタブで開いた PR の diff は、コメントの書きかけを打ち始めたら普通のタブになる（次の仮のタブとの入れ替えで書きかけを
-  /// 失わない）。
-  func testADraftInAPreviewPullRequestDiffPinsTheTab() throws {
-    let remote = Remote()
-    let (diff, tab) = try commentedTab(remote, as: .preview)
-    let session = tab.group.editor
-    XCTAssertEqual(session.previewID, .diff(diff.id), "前提: 仮のタブ")
-    let layer = try XCTUnwrap(diff.comments)
-    let surface = try engine(diff.newSurface)
-    layer.surface(surface, didPressTrailingMarkOn: .document(3))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 3))
-    surface.replaceText(of: draft.field, with: " ")
-    XCTAssertEqual(session.previewID, .diff(diff.id), "空白だけなら仮のまま")
-    surface.replaceText(of: draft.field, with: "書きかけ")
-    XCTAssertNil(session.previewID, "打てば普通のタブ")
   }
 
   /// 新しい側の行 3 のスレッドは文書の行 3 の下に置かれ、その行の地はスレッドのある行の型になる。変更の前後 3 行は印を出せ、

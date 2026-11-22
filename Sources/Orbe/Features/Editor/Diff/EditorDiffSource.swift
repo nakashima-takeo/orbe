@@ -25,18 +25,24 @@ protocol EditorDiffSource: AnyObject {
 
   /// 新しい側を、同じ実体の文書 `next` にした（替えたら true。前の文書は手放さない）。
   func replaceDocument(with next: EditorDocument) -> Bool
-  /// 新しい側の文書を引く口を `documents`（引き取ったセッション）に結び直す。
-  func rebind(_ documents: EditorDiff.Documents)
   /// 新しい側の文書の未保存が変わった。
   func documentDirtyDidChange()
+  /// 本体に出ていて面が見えている間の始まりと終わり（対で呼ぶ）。PR の diff は、この間だけ PR ごとの状態を見る。
+  func beginWatching()
+  func endWatching()
 }
 
 /// 新しい側に文書を使わない出どころ——文書の知らせでは何もしない。
 extension EditorDiffSource {
   var document: EditorDocument? { nil }
   func replaceDocument(with next: EditorDocument) -> Bool { false }
-  func rebind(_ documents: EditorDiff.Documents) {}
   func documentDirtyDidChange() {}
+}
+
+/// 見ている間に読むものを持たない出どころ（作業ツリー・ステージ済み。根のサービスの観測は diff がある間続く）。
+extension EditorDiffSource {
+  func beginWatching() {}
+  func endWatching() {}
 }
 
 extension EditorDiff {

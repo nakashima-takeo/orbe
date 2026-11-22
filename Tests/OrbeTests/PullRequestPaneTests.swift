@@ -16,7 +16,9 @@ import XCTest
 /// 抜けた本文を送る・押し続けると何度も送る・欄の外の ⌘↵ でレビューを送る。↵ で改行できない。
 @MainActor
 final class PullRequestPaneTests: OrbeTestCase {
-  private struct Hosted {
+  struct Hosted {
+    /// 連を生かしておく（面は連を弱く持つ）。
+    let tab: TerminalTab
     let pane: EditorPaneView
     let window: NSWindow
     var list: NSView { pane.pullRequestList.list }
@@ -24,7 +26,7 @@ final class PullRequestPaneTests: OrbeTestCase {
 
   /// 根ごとの差し替えの出どころ。`open` が偽なら、ブランチに open の PR が無いと答える。レビューの送信は通し、届いた書き込みを
   /// `reviewWrites` に残す。
-  private final class FakeGitHub {
+  final class FakeGitHub {
     var open = true
     var reviewWrites: [GitHubReviewWrite] = []
     /// PR の先頭のコミット（ベースも同じ）。手元のコミットにすると diff の両端が求まる。
@@ -72,7 +74,7 @@ final class PullRequestPaneTests: OrbeTestCase {
     }
   }
 
-  private var gitHub: FakeGitHub!
+  var gitHub: FakeGitHub!
 
   override func setUpWithError() throws {
     gitHub = FakeGitHub()
@@ -80,7 +82,7 @@ final class PullRequestPaneTests: OrbeTestCase {
 
   /// ブランチ feat に居る一時リポジトリの根。面が作る PR のパネルが本物の gh を呼ばないよう、差し替えの出どころを先に
   /// 登録する。
-  private func registeredRoot() throws -> String {
+  func registeredRoot() throws -> String {
     let repo = try TempGitRepo()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     gitHub.head = repo.head()
@@ -89,9 +91,10 @@ final class PullRequestPaneTests: OrbeTestCase {
     return root
   }
 
-  /// 根 `root` の連の面だけを窓に載せ、本文に焦点を置く。
-  private func host(_ root: String) -> Hosted {
+  /// 根 `root` の連の面だけを Files の画面で窓に載せ、本文に焦点を置く。
+  func host(_ root: String) -> Hosted {
     let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
     let pane = tab.group.view.editor
     let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
@@ -105,11 +108,11 @@ final class PullRequestPaneTests: OrbeTestCase {
       }
     }
     window.makeFirstResponder(pane.focusTarget)
-    return Hosted(pane: pane, window: window)
+    return Hosted(tab: tab, pane: pane, window: window)
   }
 
   /// PR のパネルを出して、列に行が出るまで待つ。
-  private func shownWithRows(_ hosted: Hosted) {
+  func shownWithRows(_ hosted: Hosted) {
     hosted.pane.shell.selectPanel(.pullRequest)
     pumpMain(until: { !hosted.pane.pullRequest.layout.items.isEmpty }, "前提: 列に行が出る")
     pumpMain(until: { hosted.list.window != nil }, "前提: 列が窓に載る")
@@ -207,7 +210,7 @@ final class PullRequestPaneTests: OrbeTestCase {
       try focus(area, in: hosted)
 
       let next = try registeredRoot()
-      hosted.pane.setRoot(next)
+      hosted.tab.group.rekey(next)
       XCTAssertFalse(previous.isWatched, "前の根の PR を見るのをやめる")
       pumpMain(until: { hosted.pane.pullRequest.state != nil }, "新しい根の PR を見る")
       XCTAssertEqual(hosted.pane.pullRequest.root, next)

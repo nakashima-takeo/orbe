@@ -24,7 +24,7 @@ extension EditorDiffTests {
     for mode in [EditorDiff.Mode.inline, .side] {
       modes.select(mode)
       for (path, boundary) in [("middle.txt", 100), ("tail.txt", 190)] {
-        let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
+        let diff = try tab.group.editor.openDiff(id(path, .workingTree))
         pumpMain(
           until: { diff.placement == .placed && diff.newSurface != nil },
           "\(mode) \(path): 最初の変更区間へ送る")
@@ -37,7 +37,7 @@ extension EditorDiffTests {
           Double(first), rows.unit(ofLine: boundary - 1), "\(mode) \(path): 上の文脈の行から")
         XCTAssertGreaterThanOrEqual(
           Double(first + visible), rows.unit(ofLine: boundary), "\(mode) \(path): 削除行の終わりまで見える")
-        tab.group.editor.close(.diff(id(path, .workingTree)))
+        tab.group.editor.closeDiff(on: .changes)
       }
     }
   }
@@ -49,7 +49,7 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree))
     pumpMain(until: { diff.placement == .placed }, "位置を決める")
     let surface = try engine(diff.newSurface)
     surface.flush()
@@ -75,7 +75,7 @@ extension EditorDiffTests {
 
     lines[250] = "changed 250"
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
-    let working = try tab.group.editor.openDiff(id("long.txt", .workingTree), as: .pinned)
+    let working = try tab.group.editor.openDiff(id("long.txt", .workingTree))
     pumpMain(until: { working.placement == .placed }, "作業ツリー: 位置を決める")
     let surface = try engine(working.newSurface)
     surface.flush()
@@ -84,7 +84,7 @@ extension EditorDiffTests {
     lines[260] = "staged 260"
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "long.txt"]).isSuccess)
-    let staged = try tab.group.editor.openDiff(id("long.txt", .staged), as: .pinned)
+    let staged = try tab.group.editor.openDiff(id("long.txt", .staged))
     pumpMain(until: { staged.placement == .placed && staged.newSurface != nil }, "ステージ済み: 位置を決める")
     let stagedSurface = try engine(staged.newSurface)
     stagedSurface.flush()
@@ -113,7 +113,7 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
     try FileManager.default.setAttributes(
       [.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: repo.url("slow.txt").path)
-    let diff = try tab.group.editor.openDiff(id("b.txt", .staged), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("b.txt", .staged))
     pumpMain(until: { diff.placement == .placed && diff.newSurface != nil }, "位置を決める")
     XCTAssertEqual(
       diff.revisionHunks, [LineHunk(oldStart: 251, oldCount: 1, newStart: 251, newCount: 1)],
@@ -137,7 +137,7 @@ extension EditorDiffTests {
     try repo.write("w.txt", lines.joined(separator: "\n") + "\n")
     pumpMain(until: { document.hunks.count == 1 && document.hunksAreCurrent }, "前提: ハンクが届く")
 
-    let diff = try tab.group.editor.openDiff(id("w.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("w.txt", .workingTree))
     tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(diff.content, .ready, "前提: 追いつく前から見せられる")
     XCTAssertNotEqual(diff.placement, .placed, "前提: まだ位置を決めていない")

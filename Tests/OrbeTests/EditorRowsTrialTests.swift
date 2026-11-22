@@ -140,6 +140,8 @@ final class EditorRowsTrialTests: OrbeTestCase {
 
   /// 前面に出した窓と、その面。
   private struct Shown {
+    /// 連を生かしておく（面は連を弱く持ち、連が終わると本体を返す）。
+    let tab: TerminalTab
     let window: NSWindow
     let surface: MetalTextSurface
   }
@@ -171,7 +173,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
     window.makeFirstResponder(surface.responder)
     runShownWindow(for: 0.5)
     XCTAssertTrue(surface.material.read().visible, "前提: 窓が見えていると面が知っている")
-    return Shown(window: window, surface: surface)
+    return Shown(tab: tab, window: window, surface: surface)
   }
 
   /// 文書に無い行の字。

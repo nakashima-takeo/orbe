@@ -28,10 +28,10 @@ struct EditorSideRoot: View {
     GeometryReader { _ in
       HStack(spacing: 0) {
         RailView(
-          selection: sidebar.isOpen ? sidebar.panel : nil, sourceControlCount: scm.count,
+          selection: sidebar.isOpen ? shell.panel : nil, sourceControlCount: scm.count,
           onSelect: shell.selectPanel)
         if sidebar.isOpen {
-          switch sidebar.panel {
+          switch shell.panel {
           case .files: ExplorerView(shell: shell, tree: tree)
           case .search: SearchPanelView(search: search, results: searchResults)
           case .sourceControl:
@@ -49,12 +49,13 @@ struct EditorSideRoot: View {
   }
 }
 
-/// レール: 幅 36 のアイコン列。項目は「ファイル」「検索」「ソース管理」「プルリクエスト」（サイドバーのパネルと 1 対 1）。選択は左 2px の
-/// accent の縦線 ＋ 淡い地（design-system §5 のエディター面の例外）で、サイドバーが閉じている間は無い（`selection == nil`）。
-/// 押すと `onSelect`——選択中の項目ならサイドバーを閉じ、別の項目ならそのパネルへ切り替える（閉じていれば開く）。
+/// レール: 幅 36 のアイコン列。項目は「ファイル」「検索」「ソース管理」「プルリクエスト」（左の列の中身と 1 対 1。「ファイル」と
+/// 「検索」は Files の画面、「ソース管理」は Changes、「プルリクエスト」は PR）。選択は左 2px の accent の縦線 ＋ 淡い地
+/// （design-system §5 のエディター面の例外）で、左の列が閉じている間は無い（`selection == nil`）。押すと `onSelect`——選択中の
+/// 項目なら左の列を閉じ、別の項目ならその画面と中身にする（閉じていれば開く）。
 /// ソース管理の項目は、変更があれば右下に件数のバッジを出す（1000 以上は「999+」）。
 struct RailView: View {
-  typealias Item = EditorSidebarState.Panel
+  typealias Item = EditorShellModel.Panel
 
   let selection: Item?
   /// ソース管理の件数（ステージ済み＋変更の行。0 なら出さない）。

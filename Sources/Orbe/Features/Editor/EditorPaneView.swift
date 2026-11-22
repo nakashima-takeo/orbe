@@ -3,8 +3,8 @@ import OrbeEditorCore
 import SwiftUI
 
 /// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
-/// （タブ行 → タブがあればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点のタブ
-/// の本体——文書のテキスト面か diff の面。無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
+/// （タブ行 → 本体があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（セッションが
+/// 画面から導いた中身——文書のテキスト面か diff の面。無ければ文字だけの root）を frame で置く。地は chrome と同じ veil。
 ///
 /// 本体で編集する文書（文書の本体ならその文書、diff の本体なら新しい側の文書）の「変わった」（viewport・選択・本文）は
 /// pane が 1 つずつ受け、検索・出現の強調・diff・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。
@@ -20,6 +20,8 @@ import SwiftUI
 /// 空状態では通常の打鍵を飲む——エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
   weak var group: TabGroup?
+  /// worktree の今の PR が替わった・その PR の状態が変わった（連が上段の現在地を描き直させる）。
+  var onPullRequestChange: () -> Void = {}
   /// 骨の写し（タブ行・パンくず）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
@@ -27,8 +29,14 @@ final class EditorPaneView: NSView {
   let sideHost: NSHostingView<EditorSideRoot>
   let headerHost: NSHostingView<EditorHeaderRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
-  /// 本体（焦点のタブの中身）。
+  /// 本体（セッションが画面から導いた中身）。
   private(set) var body = EditorBody.empty
+  /// ツリーで最後に選択表示した Files の今の文書（替わったときだけツリーを追従させる）。
+  private var revealedDocument: URL?
+  /// 見ている（本体に出ていて、面が見えている）diff。
+  private var watchedDiff: EditorDiff?
+  /// 開いた diff の行が左の列の一覧にまだ無い間の、その diff（行ができたら選択表示する）。
+  var diffAwaitingRow: EditorDiff.Key?
   /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
   private(set) var diffModes = EditorDiffModeState() {
     didSet { observeDiffModes() }
@@ -66,6 +74,10 @@ final class EditorPaneView: NSView {
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
+  }
+  /// Files の画面の左の列の中身（エクスプローラーか検索。保存しない）。
+  var filesPanel = EditorShellModel.Panel.files {
+    didSet { syncPanel() }
   }
   /// サイドバーと本体の境のドラッグの当たり。
   let sidebarHandle = SidebarResizeHandle()
@@ -188,36 +200,25 @@ final class EditorPaneView: NSView {
 
   // MARK: - セッション → 骨
 
-  /// セッションが変わった。写しを無条件に組み直し、焦点のタブの本体を見せ、タブが変わっていればツリーの
-  /// 祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同一タブの未保存・衝突の変化は `show` の
-  /// guard で止まる。
+  /// セッションが変わった。左の列の中身を画面に合わせ、写しを無条件に組み直し、セッションが画面から導いた本体を見せ、
+  /// Files の今の文書が替わっていればツリーの祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同じ
+  /// 本体の未保存・衝突の変化は `show` の guard で止まる。本体が空のまま画面が替わったときも、器の中身は画面で決まるので
+  /// 置き直す。
   func sessionDidChange() {
     guard let group else { return }
-    let active = group.editor.activeTab
-    let changed = active?.id != shownID
+    syncPanel()
     shell.update(from: group.editor, root: tree.root, diffMode: diffModes.mode)
-    show(Self.body(of: active))
-    if changed, let url = active?.url { tree.reveal(url) }
-  }
-
-  /// 本体が見せているタブの識別。
-  var shownID: EditorTab.Key? {
-    switch body {
-    case .document(let document): .document(document.url)
-    case .diff(let diff): .diff(diff.id)
-    case .empty: nil
+    show(group.editor.body)
+    refreshNotice()
+    let active = group.editor.activeURL
+    if active != revealedDocument {
+      revealedDocument = active
+      if let active { tree.reveal(active) }
     }
+    reconcileDiffs()
   }
 
-  private static func body(of tab: EditorTab?) -> EditorBody {
-    switch tab {
-    case .document(let document)?: .document(document)
-    case .diff(let diff)?: .diff(diff)
-    case nil: .empty
-    }
-  }
-
-  /// 本体が文書のタブなら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
+  /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
   var document: EditorDocument? {
     if case .document(let document) = body { return document }
     return nil
@@ -226,7 +227,7 @@ final class EditorPaneView: NSView {
   /// 本体で編集する文書——文書の本体ならその文書、diff の本体なら新しい側の文書（無ければ nil）。
   var editedDocument: EditorDocument? { document ?? diff?.document }
 
-  /// 本体が diff のタブなら、その diff。
+  /// 本体が diff なら、その diff。
   var diff: EditorDiff? {
     if case .diff(let diff) = body { return diff }
     return nil
@@ -260,7 +261,7 @@ final class EditorPaneView: NSView {
     installRoots()
     if let group {
       shell.update(from: group.editor, root: root, diffMode: diffModes.mode)
-      if let url = group.editor.activeTab?.url { tree.reveal(url) }
+      if let url = group.editor.activeURL { tree.reveal(url) }
     }
   }
 
@@ -296,6 +297,7 @@ final class EditorPaneView: NSView {
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
     }
+    updateDiffWatching()
   }
 
   /// 同じ本体か（同じ文書・同じ diff・どちらも空）。
@@ -308,25 +310,16 @@ final class EditorPaneView: NSView {
     }
   }
 
-  /// 面を本体に載せる。境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なるので、テキスト面はその下。検索バーは後から
-  /// 足すので面の上。
-  func install(_ surface: any TextSurface) {
-    surface.host = self
-    let view = surface.view
-    view.autoresizingMask = []
-    view.frame = bodyRect
-    addSubview(view, positioned: .below, relativeTo: sidebarHandle)
-  }
-
-  /// 見せている本体を、セッションに告げずに手放す（タブの列を別の連のセッションへ移す前に、この面の観測・テキスト面の親・
-  /// 一致の強調を外し、diff は見せるのをやめる。外さないと、この面の後片付けが移した先の文書や diff を壊す）。焦点は
-  /// 動かさない。
+  /// 見せている本体を、セッションに告げずに手放す——この面の観測・テキスト面の親・一致の強調を外し、diff は見せるのをやめて
+  /// 問い合わせを止める。開いている文書を別の連のセッションへ移す前（外さないと、この面の後片付けが移した先の文書や diff を
+  /// 壊す）と、連が終わるとき（器が連より長く生きても、diff と文書をセッションより長く生かさない）に呼ぶ。焦点は動かさない。
   func releaseBody() {
     unbind(body)
     body = .empty
     search.bind(nil)
     occurrences.bind(nil)
     bindEditedDocument()
+    updateDiffWatching()
   }
 
   /// 本体を外す——文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の見え方をコードへ戻す。
@@ -361,38 +354,39 @@ final class EditorPaneView: NSView {
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。PR のパネルは、出しているときだけ
-  /// worktree の今の PR を見る。配置を頼み、見えるようになった本体を初めて見せる前の待ちをその配置で通す（隠れている間に
-  /// 配置が済んでいても、見えたときにもう一度配置して待つ）。
+  /// だけを使う間は払わない）。ソース管理の一覧は、Changes の画面の間だけ行とグラフを組む。PR のパネルは、PR の画面の間だけ
+  /// worktree の今の PR を見る。本体の PR の diff は、面が見えている間だけ PR ごとの状態を見る。本体の diff を整合させ、配置を
+  /// 頼み、見えるようになった本体を初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても、見えたときにもう
+  /// 一度配置して待つ）。
   private func updateLiveness() {
-    let live = window != nil && !isHiddenOrHasHiddenAncestor
+    let live = isFaceVisible
     tree.isLive = live
     projectSearch.isLive = live
     scm.isLive = live
     updatePanelsShown()
+    updateDiffWatching()
     if live { group?.editor.prepareSurfaces() }
+    reconcileDiffs()
     needsLayout = true
   }
 
-  /// ソース管理パネルと PR のパネルを出しているか（面が見えていて、サイドバーがそのパネルを出している）を写す。
+  /// 面が画面に見えているか（窓に付き、隠れていない）。
+  var isFaceVisible: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
+
+  /// ソース管理の一覧が行を組むか（面が見えていて、画面が Changes）と、PR のパネルが worktree の今の PR を見るか（面が見えて
+  /// いて、画面が PR）を写す。左の列を閉じていても同じ——Changes・PR の画面で本体に自動で開く行を決めるのに一覧が要る。
   func updatePanelsShown() {
-    let visible = window != nil && !isHiddenOrHasHiddenAncestor
-    scm.isShown = visible && showsSourceControl
-    pullRequest.isShown = visible && showsPullRequest
+    let screen = group?.editor.screen
+    scm.isShown = isFaceVisible && screen == .changes
+    pullRequest.isShown = isFaceVisible && screen == .pullRequest
   }
 
-  /// 面が画面に見えていれば、本体の文書・diff を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書・diff が何もしない）。
-  /// 隠れた面・窓に無い面では待たず、面が見えたときに待つ——エディターを閉じた連を復元しても main を止めない。呼ぶのは面の
-  /// 配置（`layout()`）の最後だけ。配置は描く前に、main の runloop の 1 周の終わりか、利用者の操作の中の
-  /// `layoutSubtreeIfNeeded()` で走り、どちらも文書の受け取りの知らせの外になる。受け取りの知らせの中から pane を同期で配置
-  /// させない——`EditorDocument.prepareToShow` は受け取りの途中で呼ばれると、待たないときも precondition で止まる（待てば
-  /// 同じ文書の受け取りが入れ子になる）。
-  func prepareBodyIfVisible() {
-    guard window != nil, !isHiddenOrHasHiddenAncestor else { return }
-    switch body {
-    case .document(let document): document.prepareToShow()
-    case .diff(let diff): diff.prepareToShow()
-    case .empty: break
-    }
+  /// 本体の diff を、面が見えている間だけ見る（PR の diff はこの間だけ PR ごとの状態を見る）。替われば前の diff を見終わる。
+  private func updateDiffWatching() {
+    let next = isFaceVisible ? diff : nil
+    guard next !== watchedDiff else { return }
+    watchedDiff?.endWatching()
+    next?.beginWatching()
+    watchedDiff = next
   }
 }

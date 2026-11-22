@@ -251,7 +251,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
 
     editor.editingIndex = nil
     editor.location = StatusRowModel.parts(
-      of: .pullRequest(number: 131, relative: "src/agent/StateHooks.swift"))
+      of: .pullRequest(number: 131, root: NSHomeDirectory() + "/dev/orbe"))
     try writeChromeBandPair(editor, size: size, name: "statusrow_pull_request", dir: dir)
   }
 

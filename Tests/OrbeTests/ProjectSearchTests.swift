@@ -21,7 +21,7 @@ final class ProjectSearchTests: OrbeTestCase {
 
   func fixture(runner: GitRunner = .shared) throws -> Fixture {
     let repo = try TempGitRepo(name: "orbe-search")
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let search = ProjectSearch(root: repo.root, runner: runner)
     search.documents = { [weak session] in session?.documents ?? [] }
     return Fixture(repo: repo, session: session, search: search)

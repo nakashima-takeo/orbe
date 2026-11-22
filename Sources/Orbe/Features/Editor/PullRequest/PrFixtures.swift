@@ -80,15 +80,17 @@
         panel.state?.reload()
       }
 
-      /// 変更ファイル `path` の PR の diff を普通のタブで開く。
+      /// 変更ファイル `path` の PR の diff を開く。
       func openDiff(_ path: String = PrFixtureReview.path) {
         panel.select(.file(path))
         panel.openSelection(.commit)
       }
 
-      /// 開いた PR の diff の中身・並び・最初の位置・スレッドの絵（本文の測り・印を出せる行）が揃った。
+      /// 開いた PR の diff の中身・並び・最初の位置・スレッドの絵（本文の測り・印を出せる行）が揃った（表示できない diff は、
+      /// 理由が決まった時点で揃った）。
       var isDiffReady: Bool {
         guard let diff = pane.diff else { return false }
+        if case .unavailable = diff.content { return true }
         return diff.content == .ready && diff.placement == .placed && !diff.pending
           && diff.comments?.isSettled ?? true
       }
@@ -113,7 +115,7 @@
       let tab = TerminalTab(cwd: dir.path, group: group)
       group.view.add(terminal: tab.terminal)
       group.view.show(terminal: tab.terminal)
-      group.view.editor.selectPanel(.pullRequest)
+      group.editor.selectScreen(.pullRequest)
       return Scene(tab: tab, directory: dir, review: review)
     }
 

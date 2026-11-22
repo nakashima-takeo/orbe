@@ -43,13 +43,14 @@ extension SourceControlPaneTests {
 
     scm.setRepositoryOpen(false)
     pumpMain(until: { list.window == nil }, "列が窓から外れる")
-    XCTAssertTrue(hosted.window.firstResponder === hosted.pane, "焦点は本文の行き先へ")
+    XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "焦点は本文の行き先へ")
     XCTAssertNil(scm.focusedArea)
     XCTAssertEqual(scm.selection, selected, "選択は残る")
 
     scm.setRepositoryOpen(true)
     pumpMain(until: { list.window != nil }, "列が戻る")
-    XCTAssertTrue(hosted.window.firstResponder === hosted.pane, "開いても焦点は奪わない")
+    XCTAssertTrue(
+      hosted.window.firstResponder === hosted.pane.focusTarget, "開いても焦点は奪わない")
     list.mouseDown(
       with: .mouse(
         .leftMouseDown, at: list.convert(NSPoint(x: 60, y: 33), to: nil), in: hosted.window))
@@ -64,7 +65,7 @@ extension SourceControlPaneTests {
       pumpMain(until: { old.focusedArea == .message }, "\(area): 欄に焦点")
       if area == .list { hosted.window.makeFirstResponder(hosted.pane.scmList.list) }
       XCTAssertEqual(old.focusedArea, area, "前提")
-      hosted.pane.setRoot(try TempGitRepo().root)
+      hosted.tab.group.rekey(try TempGitRepo().root)
       pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "\(area): 新しいパネル")
       RunLoop.main.run(until: Date().addingTimeInterval(0.2))
       XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "\(area)")
@@ -172,8 +173,7 @@ extension SourceControlPaneTests {
     pumpMain(until: { graphFrameHeight() == standard + 40 }, "上へ引けば伸びる")
     drag(rising: -50)
     pumpMain(until: { graphFrameHeight() == standard - 50 }, "掴んだときの高さから、引いた分だけ")
-    XCTAssertEqual(
-      AppStatePersistence.load()?.editorSidebar?.graphHeight, standard, "引いている間は書かない")
+    XCTAssertNil(AppStatePersistence.load()?.editorSidebar?.graphHeight, "引いている間は書かない")
     handle.mouseUp(with: .mouse(.leftMouseUp, at: grab, in: hosted.window))
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar?.graphHeight, standard - 50, "離すと書き戻す")

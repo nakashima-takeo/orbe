@@ -57,7 +57,7 @@ extension ProjectSearchPaneTests {
         NSRange(location: 9, length: 6),
       ], "⌘F と同時に使えば両方の一致")
 
-    hosted.pane.sidebar.select(.files)
+    hosted.pane.shell.selectPanel(.files)
     pumpMain(
       until: { pushedFindGround(hosted) == [NSRange(location: 7, length: 1)] },
       "パネルを隠すとプロジェクト検索の地は消え、⌘F の地は残る")
@@ -97,7 +97,7 @@ extension ProjectSearchPaneTests {
     let pane = hosted.pane
     let document = try open(hosted, "a.txt")
     searchAll(hosted, "needle")
-    pane.sidebar.select(.files)
+    pane.shell.selectPanel(.files)
     hosted.window.makeFirstResponder(document.surface.responder)
 
     XCTAssertTrue(pane.handleStepKey(f4))
@@ -182,7 +182,7 @@ extension ProjectSearchPaneTests {
     searchAll(hosted, "needle")
     pumpMain(until: { hosted.search.focusedArea == .field })
 
-    hosted.pane.sidebar.select(.files)
+    hosted.pane.shell.selectPanel(.files)
     pumpMain(until: { textHasFocus(hosted) }, "本文へ戻る")
   }
 
@@ -192,7 +192,7 @@ extension ProjectSearchPaneTests {
     _ = try open(hosted, "a.txt")
     searchAll(hosted, "needle")
     pumpMain(until: { hosted.search.focusedArea == .field })
-    hosted.pane.sidebar.select(.files)
+    hosted.pane.shell.selectPanel(.files)
     pumpMain(until: { textHasFocus(hosted) })
 
     XCTAssertTrue(hosted.pane.handleStepKey(f4))
@@ -209,12 +209,12 @@ extension ProjectSearchPaneTests {
     searchAll(hosted, "needle")
 
     hosted.pane.isHidden = true
-    hosted.pane.setRoot(other.root)
+    hosted.tab.group.rekey(other.root)
     XCTAssertEqual(hosted.search.phase, .idle, "見えていない面では探さない")
     XCTAssertTrue(hosted.search.results.isEmpty)
 
     hosted.pane.isHidden = false
-    hosted.pane.setRoot(hosted.repo.root)
+    hosted.tab.group.rekey(hosted.repo.root)
     pumpMain(until: { hosted.search.phase == .done }, "見えている面は探し直す")
     XCTAssertEqual(hosted.search.results.files.map(\.path), ["a.txt"])
   }

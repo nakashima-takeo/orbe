@@ -4,7 +4,8 @@ import AppKit
 /// 開閉、選択、パネルの中の焦点（列と全体へのコメント欄。欄の変換中の字と、PR が替わったときの欄の後始末を含む）、
 /// ファイルごとのコメント数の覚え。PR の事実（どの PR か・中身・確認済み・両端）は 2 つの状態が持ち、ここは見せ方だけ。
 ///
-/// パネルを出している間（`isShown`）だけ worktree の今の PR を見る——GitHub に問い合わせるのは見ている間だけ。列の行は、
+/// PR の画面を出している間（`isShown`。左の列を閉じていても）だけ worktree の今の PR を見る——GitHub に問い合わせるのは
+/// 見ている間だけ。列の行は、
 /// PR の中身・ツリーかリストか・開閉で決まり、そのどれかが変わったときに 1 か所（`rebuild`）で組み直す（確認済みは描くときに
 /// 状態から読む）。選択は常に見えている行にある——組み直した後に選んでいた行が無ければ、そこで選び直す（ソース管理の
 /// 変更の列と同じ）。区分とフォルダの開閉・選択は面ごとで永続しない。ツリーかリストかはアプリ全体で 1 つ
@@ -37,6 +38,8 @@ final class PrPanel {
   @ObservationIgnored private var reviewedState: ObjectIdentifier?
   /// 行の diff を開く。
   @ObservationIgnored var onOpenDiff: (EditorDiff.Key, ScmPanel.Opening) -> Void = { _, _ in }
+  /// worktree の今の PR が替わった・その PR の状態が変わった（行の組を組み直した後）。
+  @ObservationIgnored var onPullRequestChange: () -> Void = {}
   /// 変更ファイルをツリーで見せるか（アプリ全体の選択を読む）と、ツリーかリストかを選んだ（アプリ全体の選択へ書く）。
   @ObservationIgnored var filesAsTree: () -> Bool = { true }
   @ObservationIgnored var onViewAsTree: (Bool) -> Void = { _ in }
@@ -69,7 +72,7 @@ final class PrPanel {
     let closedFolders: Set<String>
   }
 
-  /// パネルを出している間 true。立てると worktree の今の PR を見始めて行を組み、下ろすと見るのをやめる。隠している間は
+  /// PR の画面を出している間 true。立てると worktree の今の PR を見始めて行を組み、下ろすと見るのをやめる。隠している間は
   /// 知らせを受けないので、出すときに下端の区画を作る元の状態を覚え直す。
   @ObservationIgnored var isShown = false {
     didSet {
@@ -263,6 +266,7 @@ extension PrPanel: BranchPullRequestObserver {
   func branchPullRequestDidChange(_ pullRequest: BranchPullRequest) {
     reviewStateDidChange()
     rebuild()
+    onPullRequestChange()
   }
 
   /// PR の状態が替わったら、下端の区画を作り直す前に、前の PR の欄の変換中の字を前の PR の書きかけへ確定し、写していた変換中の

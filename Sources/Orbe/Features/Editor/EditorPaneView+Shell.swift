@@ -5,14 +5,15 @@ import OrbeEditorCore
 extension EditorPaneView {
   func wireShell() {
     shell.open = { [weak self] url, mode in self?.open(url, as: mode) }
-    shell.activate = { [weak self] id in
-      guard let self, let group, let opened = group.editor.tab(id) else { return }
-      group.editor.activate(id)
-      tree.reveal(opened.url)
+    shell.activate = { [weak self] url in
+      guard let self, let group, group.editor.document(at: url) != nil else { return }
+      group.editor.activate(url)
+      group.editor.selectScreen(.files)
+      tree.reveal(url)
       focusEditor()
     }
-    shell.pin = { [weak self] id in self?.group?.editor.pin(id) }
-    shell.requestClose = { [weak self] id in self?.requestClose(id) }
+    shell.pin = { [weak self] url in self?.group?.editor.pin(url) }
+    shell.requestClose = { [weak self] url in self?.requestClose(url) }
     shell.selectDiffMode = { [weak self] mode in self?.diffModes.select(mode) }
     shell.revealDirectory = { [weak self] url in self?.tree.revealDirectory(url) }
     shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
@@ -33,8 +34,8 @@ extension EditorPaneView {
     tree.onInputEnded = { [weak self] in self?.inlineInputDidEnd() }
   }
 
-  /// 骨から `mode` で開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
-  /// 選択して焦点を面へ——既に焦点の文書ならセッションは変わらないので、選択はここで明示に移す。
+  /// 骨から `mode` で開いて Files の画面を選ぶ。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）し、画面を
+  /// 選ばない。開けたらその行を選択して焦点を面へ——既に今の文書ならセッションは変わらないので、選択はここで明示に移す。
   func open(_ url: URL, as mode: EditorSession.OpenMode) {
     guard let group else { return }
     let document: EditorDocument
@@ -44,26 +45,26 @@ extension EditorPaneView {
       NSSound.beep()
       return
     }
+    group.editor.selectScreen(.files)
     tree.reveal(document.url)
     focusEditor()
   }
 
-  /// タブの ×。その文書を使う最後のタブで、文書が未保存なら確認を sheet で出し、保存／保存しないで閉じる（保存が外部
-  /// 変更で失敗すれば閉じない）。ほかのタブ（同じ文書の diff・ファイルタブ）が使っていれば確認せずに閉じる——未保存の
-  /// 文書は残ったタブに出る。応答が返るまでにタブが消えていれば何もしない。
-  func requestClose(_ id: EditorTab.Key) {
-    guard let group, group.editor.tab(id) != nil else { return }
-    guard let document = group.editor.documentClosed(byClosing: id), document.isDirty, let window
-    else {
-      group.editor.close(id)
+  /// タブの ×。文書が未保存なら必ず確認を sheet で出し、保存／保存しないで閉じる（保存が外部変更で失敗すれば閉じない）。
+  /// 応答が返るまでにその文書が列から消えていれば何もしない。
+  func requestClose(_ url: URL) {
+    guard let group, let document = group.editor.document(at: url) else { return }
+    guard document.isDirty, let window else {
+      group.editor.close(url)
       return
     }
     let alert = UnsavedGate.alert(count: 1, language: localization.language)
     alert.beginSheetModal(for: window) { [weak self, weak document] response in
-      guard let self, let group = self.group, let document, group.editor.tab(id) != nil,
+      guard let self, let group = self.group, let document,
+        group.editor.document(at: url) === document,
         UnsavedGate.proceed(response, discarding: [document])
       else { return }
-      group.editor.close(id)
+      group.editor.close(url)
     }
   }
 

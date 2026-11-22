@@ -16,8 +16,16 @@ extension EditorDiff {
     case workingTree
     case staged
     /// PR。PR ごとの状態そのものを持ち、識別は状態の key（手元のリポジトリと PR の同一性）——状態を手にしている者
-    /// だけが開ける。コミットは識別に入れない——PR に push があっても同じタブのまま。
+    /// だけが開ける。コミットは識別に入れない——PR に push があっても同じ diff のまま。
     case pullRequest(PullRequestState)
+
+    /// この種類の diff を出す画面。
+    var screen: EditorScreen {
+      switch self {
+      case .workingTree, .staged: .changes
+      case .pullRequest: .pullRequest
+      }
+    }
 
     static func == (lhs: Kind, rhs: Kind) -> Bool {
       switch (lhs, rhs) {
@@ -78,8 +86,8 @@ extension EditorDiff {
   /// 作業ツリー diff が新しい側の文書を引く口と、替わったと知らせる口（文書は実体ごとに 1 つで、セッションが持ち主を数える）。
   struct Documents {
     let open: (URL) throws -> EditorDocument
-    /// diff が作業ツリーの姿で新しい側の文書を替えた（引数は前の文書。無かったなら nil）。前の文書はほかに使うタブが無ければ
-    /// 閉じ、仮のタブとタブ行を今の文書に合わせる。
+    /// diff が作業ツリーの姿で新しい側の文書を替えた（引数は前の文書。無かったなら nil）。前の文書は開いている文書の列に
+    /// 無ければ閉じる。
     let switched: (EditorDocument?) -> Void
   }
 

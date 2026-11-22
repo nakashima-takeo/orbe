@@ -65,7 +65,7 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar,
       EditorSidebarRecord(
-        width: 300, isOpen: true, panel: "files", graphHeight: 198, pullRequestFilesAsTree: true),
+        width: 300, isOpen: true, graphHeight: 198, pullRequestFilesAsTree: true),
       "開閉は app-state へ書き戻る")
     XCTAssertEqual(AppStatePersistence.load()?.preferredLanguage, "ja", "他の項目は巻き込まない")
   }
@@ -113,7 +113,11 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
 
     XCTAssertEqual(
       try XCTUnwrap(WorkspacePersistence.load()).workspaces[0].groups,
-      [group(dir, editor: EditorState(documents: .init(open: [a.path], active: a.path)))])
+      [
+        group(
+          dir, editor: EditorState(documents: .init(open: [a.path], active: a.path), screen: .files)
+        )
+      ], "open_file は Files の画面を選ぶ")
   }
 
   /// 保存 → 復元 → 再保存。前面の連の文書は開かれて焦点の文書が面に載り、一度も起きない背景 workspace の
