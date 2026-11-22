@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -216,14 +217,5 @@ final class ProjectSearchPaneTests: OrbeTestCase {
     replace(document, NSRange(location: 0, length: 0), with: "needle ")
     XCTAssertTrue(
       holds(for: ProjectSearch.refreshDelay * 2) { hosted.search.results["c.txt"] == nil })
-  }
-
-  func holds(for seconds: TimeInterval, _ condition: () -> Bool) -> Bool {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      guard condition() else { return false }
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
-    return condition()
   }
 }

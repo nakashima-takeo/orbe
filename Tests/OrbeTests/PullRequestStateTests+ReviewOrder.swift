@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -13,9 +14,23 @@ import XCTest
 /// 2 回押した返信が 2 回送られる。push の後に先頭が食い違ったまま読むのをやめ、diff にスレッドを置けず、新しいスレッドも
 /// 書けなくなる。GitHub への問い合わせが止まらない。
 /// 失敗した種と手順はメッセージに出る（同じ種で回せば同じ手順になる）。
+///
+/// 小さい段も、答えが一貫している種と一貫していない種（奇数と偶数）を同じ数だけ実行する。
 extension PullRequestStateTests {
+  private static let reviewOrderSeeds = Array(UInt64(1)...400)
+
   func testInterleavedWritesAndRereadsKeepTheWriteRules() throws {
-    for seed: UInt64 in 1...400 {
+    try playReviewWrites(seeds: Self.reviewOrderSeeds.prefix(40), steps: 150)
+  }
+
+  func testInterleavedWritesAndRereadsKeepTheWriteRulesAtFullScale() throws {
+    try Fuzz.skipFullScaleIfExcluded()
+    try playReviewWrites(seeds: Self.reviewOrderSeeds, steps: 150)
+  }
+
+  /// 種ごとに `steps` 手を実行する。最初に規則が破れた種で止める。
+  private func playReviewWrites(seeds: some Sequence<UInt64>, steps: Int) throws {
+    for seed in seeds {
       gitHub = PullRequestFakeGitHub()
       key = PullRequestState.Key(
         commonDir: "/tmp/\(UUID().uuidString)",
@@ -31,7 +46,7 @@ extension PullRequestStateTests {
       let run = ReviewWriteRun(
         state: state, gitHub: gitHub, seed: seed, consistent: seed % 2 == 1,
         content: { self.content(head: $0) })
-      run.play(steps: 150)
+      run.play(steps: steps)
       run.drain()
       if let violation = run.violation {
         XCTFail("種 \(seed): \(violation)\n手順: \(run.log.joined(separator: " → "))")

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -103,10 +104,7 @@ private struct TrackedState {
   func move(_ ref: String, to commit: String) {
     let before = recorder.moves
     XCTAssertTrue(repo.git(["update-ref", ref, commit]).isSuccess)
-    let until = Date().addingTimeInterval(10)
-    while recorder.moves == before, Date() < until {
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
-    }
+    waitUntil(10) { recorder.moves != before }
     XCTAssertGreaterThan(recorder.moves, before, "前提: リモート追跡の ref が動いたと知らせる")
   }
 }

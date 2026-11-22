@@ -180,7 +180,7 @@ extension AutomationReferenceTests {
   ) throws -> [String: Any] {
     var reply: Result<Any, ControlError>?
     wc.controlAutomationTrial(trialId: trialId, wait: true, timeoutMs: timeoutMs) { reply = $0 }
-    test.waitUntil(15) { reply != nil }
+    waitUntil(15) { reply != nil }
     return try test.success(try XCTUnwrap(reply))
   }
 
@@ -210,9 +210,9 @@ extension AutomationReferenceTests {
       wc.automationStore.automation(id)?.state(key: key).runs.count ?? 0
     }
     _ = try test.success(wc.controlRunAutomation(automationId: id, nodeKey: nil))
-    XCTAssertTrue(test.waitUntil(10) { runs("send") == 1 }, "前提: 副作用が 1 回実行される")
+    XCTAssertTrue(waitUntil(10) { runs("send") == 1 }, "前提: 副作用が 1 回実行される")
     _ = try test.success(wc.controlRunAutomation(automationId: id, nodeKey: "fetch"))
-    XCTAssertTrue(test.waitUntil(10) { runs("fetch") == 2 }, "前提: 取得が 2 回実行される")
+    XCTAssertTrue(waitUntil(10) { runs("fetch") == 2 }, "前提: 取得が 2 回実行される")
     let lines = (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
     return lines.split(separator: "\n").compactMap {
       $0.split(separator: "=").first.map(String.init)

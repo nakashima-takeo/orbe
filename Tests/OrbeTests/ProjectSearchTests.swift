@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -46,16 +47,6 @@ final class ProjectSearchTests: OrbeTestCase {
   func replace(_ document: EditorDocument, _ range: NSRange, with text: String) {
     document.surface.selectedRange = range
     document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: text)
-  }
-
-  /// 条件が `seconds` の間ずっと成り立つ（来てはいけないものが来ないこと）。
-  func holds(for seconds: TimeInterval, _ condition: () -> Bool) -> Bool {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      guard condition() else { return false }
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
-    return condition()
   }
 
   // MARK: - 結果

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -43,11 +44,7 @@ final class WaitConditionWatcherTests: OrbeTestCase {
 
   /// 係の書き戻しと登録し直しは次の main の回へ送られるので、それを流す。
   private func settle() {
-    for _ in 0..<3 {
-      let turn = expectation(description: "main")
-      DispatchQueue.main.async { turn.fulfill() }
-      wait(for: [turn], timeout: 1)
-    }
+    for _ in 0..<3 { nextTurn() }
   }
 
   private func request(_ description: String = "レビューが付いたら", deadlineIn: TimeInterval = 3600)

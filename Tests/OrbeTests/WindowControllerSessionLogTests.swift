@@ -124,9 +124,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
 
     wc.switchWorkspace(to: 0)  // 起床: 先頭は同期 mount・2 枚目は次 tick の分割 mount
     XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "d-1")?.kind, .opened, "resume が解けたら opened")
-    let drained = expectation(description: "hidden mount")
-    DispatchQueue.main.async { drained.fulfill() }
-    wait(for: [drained], timeout: 1)
+    nextTurn()
     XCTAssertEqual(
       wc.sessionLog.lastEvent(sessionId: "u-1")?.closeOrigin, .unresolved,
       "resume を解決できなければ unresolved で終わる")

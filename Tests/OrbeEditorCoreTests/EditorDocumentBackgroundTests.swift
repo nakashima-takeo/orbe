@@ -278,7 +278,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
   /// 開いてから一度も編集しない文書も、急かさずに文書全体の役割が揃う——編集が無ければ打鍵の止むのを待たない。
   func testAnOpenedDocumentCompletesWithoutHurrying() throws {
     let (document, _) = try open("opened.js", Self.template)
-    XCTAssertTrue(pump(document, timeout: 30) { $0.isCaughtUp })
+    XCTAssertTrue(waitUntil(30) { document.isCaughtUp })
     XCTAssertEqual(role(ofRow: 2900, in: document), .string, "末尾の行まで作った")
   }
 
@@ -291,14 +291,14 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     show(row: 0, of: surface)
 
     surface.replace(NSRange(location: 4, length: 1), with: "")
-    XCTAssertTrue(pump(document) { $0.isFirstColorReady })
+    XCTAssertTrue(waitUntil { document.isFirstColorReady })
     RunLoop.main.run(until: Date() + 0.2)
     XCTAssertEqual(role(ofRow: 2, in: document), .keyword, "見えている行は作り直した")
     XCTAssertEqual(role(ofRow: 2500, in: document), .string, "見えていない行は前の色のまま")
     XCTAssertFalse(document.isCaughtUp)
 
     show(row: 2500, of: surface)
-    XCTAssertTrue(pump(document) { self.role(ofRow: 2500, in: $0) == .keyword }, "見えた行は待たずに作る")
+    XCTAssertTrue(waitUntil { self.role(ofRow: 2500, in: document) == .keyword }, "見えた行は待たずに作る")
     XCTAssertEqual(role(ofRow: 1500, in: document), .string, "見えていない行は前の色のまま")
 
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30), "待つ口は打鍵の止むのを待たずに揃える")
@@ -314,26 +314,17 @@ final class EditorDocumentBackgroundTests: XCTestCase {
 
     surface.replace(NSRange(location: 4, length: 1), with: String(repeating: " ", count: 40_000))
     XCTAssertTrue(
-      pump(document) { self.role(ofRow: 2500, in: $0) == .keyword }, "見えている行を作り直した")
+      waitUntil { self.role(ofRow: 2500, in: document) == .keyword }, "見えている行を作り直した")
   }
 
   /// 打鍵が止んで待ちが明ければ、急かさなくても文書全体を作り直す。
   func testTheRestIsRebuiltWithoutHurryingOnceTypingStops() throws {
     let (document, surface) = try open("quiet.js", Self.template, quietDelay: .milliseconds(10))
-    XCTAssertTrue(pump(document, timeout: 30) { $0.isCaughtUp })
+    XCTAssertTrue(waitUntil(30) { document.isCaughtUp })
     show(row: 0, of: surface)
     surface.replace(NSRange(location: 4, length: 1), with: "")
-    XCTAssertTrue(pump(document, timeout: 30) { $0.isCaughtUp })
+    XCTAssertTrue(waitUntil(30) { document.isCaughtUp })
     XCTAssertEqual(role(ofRow: 2500, in: document), .keyword)
-  }
-
-  /// 急かさずに main を回して、`done` が成り立つか期限が来るまで待つ。
-  private func pump(
-    _ document: EditorDocument, timeout: TimeInterval = 5, _ done: (EditorDocument) -> Bool
-  ) -> Bool {
-    let deadline = Date() + timeout
-    while !done(document), Date() < deadline { RunLoop.main.run(until: Date() + 0.005) }
-    return done(document)
   }
 
   /// 面の見えている範囲を、行 `row` から 10 行にする。

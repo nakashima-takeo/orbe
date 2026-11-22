@@ -37,14 +37,6 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
     return (WindowController(), GitWorktreeRoot.normalizedPath(root))
   }
 
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 5) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-    }
-    return condition()
-  }
-
   private func report(_ state: String, on tab: TerminalTab, in wc: WindowController) {
     wc.controlReportAgent(
       tab: tab, report: AgentHookReport(agent: "claude", state: state, sessionId: "s-1"))
@@ -55,20 +47,20 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
     let tab = try XCTUnwrap(wc.current.tabs.first)
 
     report("working", on: tab, in: wc)
-    XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .working }, "作業中が載る")
+    XCTAssertTrue(waitUntil { wc.worktreeAgents.agents[root]?.state == .working }, "作業中が載る")
     XCTAssertEqual(wc.worktreeAgents.agents[root]?.tabId, tab.id)
     XCTAssertEqual(wc.worktreeAgents.agents[root]?.name, "claude")
 
     report("waiting", on: tab, in: wc)
-    XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .waiting }, "入力待ちへ追従する")
+    XCTAssertTrue(waitUntil { wc.worktreeAgents.agents[root]?.state == .waiting }, "入力待ちへ追従する")
 
     report("done", on: tab, in: wc)
-    XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .done }, "応答を終えても残る")
+    XCTAssertTrue(waitUntil { wc.worktreeAgents.agents[root]?.state == .done }, "応答を終えても残る")
     report("idle", on: tab, in: wc)
-    XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .idle }, "休止しても残る")
+    XCTAssertTrue(waitUntil { wc.worktreeAgents.agents[root]?.state == .idle }, "休止しても残る")
 
     _ = wc.controlCloseTab(tabId: tab.id)
-    XCTAssertTrue(pump { wc.worktreeAgents.agents[root] == nil }, "タブが去ると外れる")
+    XCTAssertTrue(waitUntil { wc.worktreeAgents.agents[root] == nil }, "タブが去ると外れる")
   }
 
   /// worktree の作業のブランチが確定していれば（既定ブランチ以外で付けた）、タスクがその worktree の
@@ -89,23 +81,23 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
     let task = try wc.taskStore.add(TaskDraft(title: "a", worktree: TaskWorktree(key: root)))
 
     report("working", on: tab, in: wc)
-    XCTAssertTrue(pump { task.agent(in: wc.worktreeAgents.agents) != nil }, "付けたときのブランチ")
+    XCTAssertTrue(waitUntil { task.agent(in: wc.worktreeAgents.agents) != nil }, "付けたときのブランチ")
 
     git(["checkout", "-q", "-b", "other"])
     report("waiting", on: tab, in: wc)
-    XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .waiting })
+    XCTAssertTrue(waitUntil { wc.worktreeAgents.agents[root]?.state == .waiting })
     XCTAssertNil(task.agent(in: wc.worktreeAgents.agents), "別のブランチにいる間")
 
     git(["checkout", "-q", "task"])
     report("working", on: tab, in: wc)
-    XCTAssertTrue(pump { task.agent(in: wc.worktreeAgents.agents) != nil }, "戻った後")
+    XCTAssertTrue(waitUntil { task.agent(in: wc.worktreeAgents.agents) != nil }, "戻った後")
   }
 
   func testGoingToTheAgentFromTheTaskDetailFocusesItsTabAndClosesTheScreen() throws {
     let (wc, root) = try launch()
     let tab = try XCTUnwrap(wc.current.tabs.first)
     report("working", on: tab, in: wc)
-    XCTAssertTrue(pump { wc.worktreeAgents.agents[root] != nil })
+    XCTAssertTrue(waitUntil { wc.worktreeAgents.agents[root] != nil })
     let task = try wc.taskStore.add(TaskDraft(title: "a", worktree: TaskWorktree(key: root)))
     XCTAssertTrue(wc.handleWindowKeyCommand(.showTaskPalette))
     let palette = try XCTUnwrap(wc.model.taskPalette)

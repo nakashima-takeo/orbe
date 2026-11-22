@@ -25,10 +25,7 @@ final class RevisionDocumentTests: XCTestCase {
     document.attach(surface)
     XCTAssertFalse(surface.isEditable, "結んだ面は読むだけ")
     // 追いつくのを待つ口（自分で受け取る）を使わず、main を回すだけで届くのを待つ。
-    let deadline = Date().addingTimeInterval(10)
-    while !surface.texts(of: .keyword).contains("func"), Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
+    waitUntil(10) { surface.texts(of: .keyword).contains("func") }
     let keywords = surface.texts(of: .keyword)
     XCTAssertTrue(keywords.contains("let") && keywords.contains("func"), "\(keywords)")
     XCTAssertFalse(surface.changedRoles.isEmpty, "結んだ面へ役割の変化を知らせる")
@@ -48,10 +45,7 @@ final class RevisionDocumentTests: XCTestCase {
       document.roles.roles(
         in: NSRange(location: document.text.lineStart(line), length: "let".utf16.count))
     }
-    let deadline = Date().addingTimeInterval(10)
-    while roles(0).isEmpty, Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.001))
-    }
+    waitUntil(10) { !roles(0).isEmpty }
     XCTAssertFalse(roles(0).isEmpty, "前提: 先頭の画面の色が届く")
     let far = lineCount - 100
     XCTAssertTrue(roles(far).isEmpty, "前提: 遠くの行はまだ作っていない")
@@ -95,10 +89,7 @@ final class RevisionDocumentTests: XCTestCase {
         }
       }
     }
-    let deadline = Date().addingTimeInterval(5)
-    while !released.withLock({ $0 }), Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
+    waitUntil(5) { released.withLock { $0 } }
     XCTAssertTrue(released.withLock { $0 }, "裏の仕事が裏へ渡る")
   }
 }

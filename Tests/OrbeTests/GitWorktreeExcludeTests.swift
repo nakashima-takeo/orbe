@@ -161,16 +161,6 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
     return (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
   }
 
-  /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
-  }
-
   private func occurrences(of pattern: String) -> Int {
     excludeFileText().split(separator: "\n", omittingEmptySubsequences: false)
       .filter { $0.trimmingCharacters(in: .whitespaces) == pattern }.count
@@ -227,14 +217,14 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
       cwd: repo.root, model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: "{repo_path}/{slug}")
     provider.load()
-    XCTAssertTrue(pump { provider.facts.repo != nil }, "前提: リポジトリを解決できている")
+    XCTAssertTrue(waitUntil(20) { provider.facts.repo != nil }, "前提: リポジトリを解決できている")
 
     var outcome: WorktreeRepoFacts.PrepareOutcome?
     // 作成先は既存の追跡済み `docs/` なので `git worktree add` が失敗する。
     provider.facts.prepareDirectory(for: .newBranch(name: "docs", base: .defaultBranch)) {
       outcome = $0
     }
-    XCTAssertTrue(pump { outcome != nil }, "解決が返らない")
+    XCTAssertTrue(waitUntil(20) { outcome != nil }, "解決が返らない")
 
     guard case .resolved(.failed) = try XCTUnwrap(outcome) else {
       return XCTFail("前提: 作成は失敗する: \(String(describing: outcome))")

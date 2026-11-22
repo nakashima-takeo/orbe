@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -34,8 +35,8 @@ extension SurfaceInputMethodTests {
     let marked = context.invalidations
     let viewport = opened.surface.viewport
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.hiddenColumns > 0 }, "前提: 描画スレッドがキャレットへ横に寄せる")
-    pump(until: { context.invalidations > marked }, "横に寄せたら知らせる")
+    pumpMain(until: { opened.surface.hiddenColumns > 0 }, "前提: 描画スレッドがキャレットへ横に寄せる")
+    pumpMain(until: { context.invalidations > marked }, "横に寄せたら知らせる")
     XCTAssertEqual(opened.surface.viewport, viewport, "前提: 見えている範囲は変わらない")
     let revealed = context.invalidations
     opened.surface.scroll(ScrollInput(timestamp: 0, delta: SIMD2(3, 0), precise: false))

@@ -118,19 +118,6 @@ final class TempGitRepo {
   }
 }
 
-/// main queue を回しながら条件の成立を待つ（completion と FSEvents は main で届く）。時間で眠らない。
-func pumpMain(
-  until condition: () -> Bool, timeout: TimeInterval = 10,
-  _ message: @autoclosure () -> String = "",
-  file: StaticString = #filePath, line: UInt = #line
-) {
-  let deadline = Date().addingTimeInterval(timeout)
-  while !condition(), Date() < deadline {
-    RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
-  }
-  XCTAssertTrue(condition(), "\(timeout) 秒以内に成立しない: \(message())", file: file, line: line)
-}
-
 /// 根のサービスの書き込みの完了を記録する。
 @MainActor
 final class WriteOutcome {
