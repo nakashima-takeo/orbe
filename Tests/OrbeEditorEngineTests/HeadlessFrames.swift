@@ -1,4 +1,5 @@
 import Metal
+import OrbeTestSupport
 import QuartzCore
 import os
 
@@ -63,6 +64,22 @@ final class HeadlessDriver: @unchecked Sendable {
 
   func invalidate(_ id: Int) { state.withLock { $0.paused[id] = nil } }
 
+  /// 面の刻みが止まるまで待ち、止まったかを返す。出す前の変化を描画スレッドへ渡し、止まったら、描いたコマが main へ積んだ
+  /// 知らせを走らせる。知らせへの反応が刻みを再開させれば、また止まるまで待つ。止まったと返した時点で、main を経て刻みを
+  /// 再開させる知らせは残っていない。
+  @MainActor
+  func waitUntilStopped(_ surface: MetalTextSurface) -> Bool {
+    let id = surface.id
+    surface.flush()
+    RenderThread.shared.performAndWait { _ in }
+    for _ in 0..<5 {
+      guard waitUntil(5, { isPaused(id) }) else { return false }
+      nextTurn()
+      if RenderThread.shared.performAndWait({ _ in self.isPaused(id) }) { return true }
+    }
+    return false
+  }
+
   /// 表示の刻みと同じく時刻どおりに起きるよう、刻みのスレッドを時間制約つきにする（普通の優先度だと
   /// `mach_wait_until` がタイマーの合体で数 ms 遅れて起き、描画スレッドのせいでない遅れを数えてしまう）。
   private static func makeRealtime(_ timebase: mach_timebase_info_data_t) {
@@ -92,9 +109,10 @@ final class HeadlessDriver: @unchecked Sendable {
     var tick = (CACurrentMediaTime() / Self.period).rounded(.up) * Self.period
     while true {
       mach_wait_until(UInt64(tick * 1e9) * UInt64(timebase.denom) / UInt64(timebase.numer))
+      let current = tick
       let step = state.withLock { s -> Step in
-        let due = s.presents.filter { $0.at <= tick + 1e-6 }
-        s.presents.removeAll { $0.at <= tick + 1e-6 }
+        let due = s.presents.filter { $0.at <= current + 1e-6 }
+        s.presents.removeAll { $0.at <= current + 1e-6 }
         let ids = s.paused.filter { !$0.value }.map(\.key)
         for id in ids { s.ticks[id, default: 0] += 1 }
         return Step(due: due, ids: ids, running: s.running)
@@ -132,6 +150,22 @@ final class VirtualClock: FrameClock {
   }
 
   func invalidate() { driver.invalidate(id) }
+}
+
+/// 自分では刻まない刻み。テストが `Renderer.tick` を呼んで刻みを打つ。次に画面に出る刻みは、いつ問われても `lead` 秒後
+/// （既定の 0 なら、起こされてもその場では描かない）。止まっているかは描画スレッドだけが書く。
+final class ManualClock: FrameClock, @unchecked Sendable {
+  private let lead: Double
+  var isPaused = false
+  var period: Double { HeadlessDriver.period }
+
+  init(lead: Double = 0) {
+    self.lead = lead
+  }
+
+  func nextTarget(after now: Double) -> Double { now + lead }
+
+  func invalidate() {}
 }
 
 /// 画面外のテクスチャ 3 枚へ出す。画面に出ていないコマは drawable 2 枚の画面と同じく 1 つまで。描く先を取った回数

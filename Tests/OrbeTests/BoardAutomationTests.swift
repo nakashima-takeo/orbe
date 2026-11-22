@@ -3,22 +3,20 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの自動化のウィジェット——一覧の並びと、選んだ自動化へのキー。本物の `BoardView`（中身は SwiftUI）を実窓に載せ、実
-/// `NSEvent` のキーを届ける。走らせ役は取得が終わらない偽物で、本物の claude は起きない。
+/// ボードの自動化のウィジェット——一覧の並びと、キーとクリックが実際に届く先（依頼の欄・一覧・地図の焦点、欄の文字、詳細の
+/// スクロール）と、ほかの口の変更をビューが付け直しへ届ける配線。本物の `BoardView`（中身は SwiftUI）を実窓に載せ、実
+/// `NSEvent` のキーとクリックを届ける。キーの判断そのものは `BoardAutomationKeyTests` が値で確かめる。走らせ役は取得が
+/// 終わらない偽物で、本物の claude は起きない。
 ///
-/// 壊れると何が起きるか: 前回が失敗した自動化が一覧の上に来ず、壊れた取得に気づけない。走り出すたびに行が跳ね、⌘↵ を押した
-/// 直後に選択の位置が狂う。⌘⌫ を押し続けたリピートで次の自動化まで消える（戻せない）。space のリピートで止める ⇄ 再開が
-/// 往復し、どちらになったか分からない。⇧↵ で今すぐ実行が走る。AI や ⌘⇧X が選んでいる自動化を消すと選択が宙に浮き、
-/// 詳細が消えてキーが効かなくなる。
+/// 壊れると何が起きるか: 前回が失敗した自動化が一覧の上に来ず、壊れた取得に気づけない。走り出すたびに行が跳ねる。ほかの口
+/// （AI・⌘⇧X）が、ボードで選んでいる自動化やノードを消すと選択が宙に浮き、詳細が消えてキーが効かなくなる。
 @MainActor
 final class BoardAutomationTests: PaletteCardWindowTestCase {
   enum Key {
     static let a: UInt16 = 0
-    static let x: UInt16 = 7
     static let tab: UInt16 = 48
     static let escape: UInt16 = 53
     static let space: UInt16 = 49
-    static let delete: UInt16 = 51
     static let enter: UInt16 = 36
     static let down: UInt16 = 125
     static let up: UInt16 = 126
@@ -54,7 +52,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
         localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver()),
       size: NSSize(width: 1200, height: height))
     model.focus()
-    flush(window)
+    awaitFieldFocus(window)
     return window
   }
 
@@ -89,78 +87,6 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     XCTAssertEqual(
       automation.ids, [Self.failingBacklog, Self.slack, Self.github, Self.pausedGmail],
       "走り出しても行は動かない")
-  }
-
-  // MARK: - キー
-
-  /// ↓ で選び、space で止める ⇄ 再開（沈んでも選択は付いていく）、⌘↵ で今すぐ実行、⌘⌫ で消して同じ位置の行を選ぶ。
-  func testKeysActOnTheSelectedAutomation() {
-    let model = board()
-    let automation = model.automation
-    let window = mount(model)
-
-    down(window)
-    down(window)
-    XCTAssertEqual(automation.selectedAutomation?.id, Self.slack)
-
-    send(Key.space, " ", to: window)
-    XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true)
-    XCTAssertEqual(automation.selectedAutomation?.id, Self.slack, "末尾へ沈んでも選択は同じ自動化")
-    send(Key.space, " ", to: window)
-    XCTAssertEqual(automation.store.automation(Self.slack)?.paused, false)
-
-    send(Key.enter, "\r", .command, to: window)
-    XCTAssertTrue(automation.runner.isRunning(Self.slack))
-    send(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(model.refusal, .automationErrRunning, "走っている間の ⌘↵ は赤で断る")
-
-    down(window)
-    XCTAssertNil(model.refusal, "↓ で消える")
-    XCTAssertEqual(automation.selectedAutomation?.id, Self.github, "前提")
-    send(Key.delete, "\u{7F}", .command, to: window)
-    XCTAssertNil(automation.store.automation(Self.github))
-    XCTAssertEqual(automation.selectedAutomation?.id, Self.pausedGmail, "同じ位置の行")
-  }
-
-  /// space・⌘↵・⌘⌫ は押し続けても 1 回だけ効く。
-  func testHeldKeysActOnce() {
-    let model = board()
-    let automation = model.automation
-    let window = mount(model)
-    down(window)
-    down(window)
-
-    send(Key.space, " ", to: window)
-    send(Key.space, " ", repeating: true, to: window)
-    XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true, "止める ⇄ 再開は 1 回だけ（往復しない）")
-
-    send(Key.enter, "\r", .command, to: window)
-    send(Key.enter, "\r", .command, repeating: true, to: window)
-    XCTAssertTrue(automation.runner.isRunning(Self.slack))
-    XCTAssertNil(model.refusal, "リピートで「実行中のため、今は実行できません」の赤を出さない")
-
-    send(Key.delete, "\u{7F}", .command, to: window)
-    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
-    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
-    XCTAssertEqual(
-      automation.store.automations.map(\.id), [Self.github, Self.failingBacklog, Self.pausedGmail],
-      "消えるのは 1 件だけ")
-  }
-
-  /// 今すぐ実行は ⌘↵ だけ。⇧↵・文字キーは何も起こさない。
-  func testModifiedEnterAndLettersDoNothing() {
-    let model = board()
-    let automation = model.automation
-    let window = mount(model)
-    down(window)
-
-    send(Key.enter, "\r", .shift, to: window)
-    send(Key.x, "x", to: window)
-
-    XCTAssertFalse(
-      automation.store.automations.contains { automation.runner.isRunning($0.id) }, "どれも走らない")
-    XCTAssertEqual(automation.store.automations, untouched, "どれも変わらない")
-    XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "選択も動かない")
   }
 
   // MARK: - 追従

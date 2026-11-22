@@ -215,7 +215,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       XCTAssertTrue(clock.isPaused, "前提: 描くものが無く刻みを止めている")
     }
     pumpMain(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
-    RenderThread.shared.performAndWait { _ in 0 }
+    RenderThread.shared.performAndWait { _ in }
     XCTAssertFalse(clock.isPaused, "残った面の刻みを再開する")
     tick(a.surface, t)
     let end = a.surface.rows.lastTop(lineCount: a.document.text.lineCount)
@@ -264,15 +264,6 @@ final class SurfaceSharedScrollTests: EngineTestCase {
 /// 描画スレッドの 1 コマの順を決めて流す場——2 面の刻みを手で打ち、どちらの面が先に描くかを決める。
 @MainActor
 extension SurfaceSharedScrollTests {
-  /// 刻みを手で打つ時計（止める・再開するは描画スレッドが書き、刻みの順はテストが決める。次の刻みはいつも今なので、起こされて
-  /// その場で描くことはしない）。
-  private final class ManualClock: FrameClock {
-    var isPaused = false
-    var period: Double { HeadlessDriver.period }
-    func nextTarget(after now: Double) -> Double { now }
-    func invalidate() {}
-  }
-
   /// 画面外の 1 枚へ描き、画面に出た知らせを出さない（上限に当たらないよう、出ていないコマの上限を大きくする）。
   private final class SinkTarget: FrameTarget, @unchecked Sendable {
     private let texture: MTLTexture
@@ -294,10 +285,7 @@ extension SurfaceSharedScrollTests {
 
   private func tick(_ surface: MetalTextSurface, _ target: Double) {
     let id = surface.id
-    RenderThread.shared.performAndWait { renderer in
-      renderer.tick(id, target: target)
-      return 0
-    }
+    RenderThread.shared.performAndWait { $0.tick(id, target: target) }
     // GPU に出した命令の列が終わるのを待つ（上限 3 に当たって飛ばさない）。
     sleepUntil(5) { RenderThread.shared.performAndWait { $0.gpuInflight } <= 0 }
   }
@@ -317,7 +305,7 @@ extension SurfaceSharedScrollTests {
       let target = SinkTarget()
       RenderThread.shared.perform { $0.bind(id, target: target, clock: clock) }
     }
-    _ = RenderThread.shared.performAndWait { $0.gate.wait() != nil }
+    waitForPipelines()
     pair.0.surface.flush()
     pair.1.surface.flush()
     return clocks

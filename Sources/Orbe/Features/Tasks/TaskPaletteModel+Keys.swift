@@ -7,7 +7,7 @@ extension TaskPaletteModel {
   var cyclesTabs: Bool { draft == nil && pick == nil }
 
   /// カードの唯一のキーの入口。⇥・⇧⇥ は巡れなくても握る（握らないと焦点がカードの外へ逃げ、以後のキーが届かない）。
-  func handleKey(_ press: KeyPress) -> KeyPress.Result {
+  func handleKey(_ press: KeyInput) -> KeyPress.Result {
     if press.key == .tab || press.key == .backtab {
       if cyclesTabs { setTab(press.key == .tab ? tab.next : tab.previous) }
       return .handled
@@ -15,7 +15,7 @@ extension TaskPaletteModel {
     // 入口が 1 つなので、押し始めを受けたここへキーリピートも届き続ける。押し始めと違う場所に届いたリピートは場所の
     // キーにせず、焦点の持ち主（編集欄なら文字入力）へ流す（esc を押し続けて一段より深く抜けない・棚で ↵ を押し続けて
     // 候補をタスクにしない。詳細の ↵ を押し続けると、編集を始めた後のリピートは改行になる）。
-    if press.phase == .down {
+    if !press.isRepeat {
       keyDownTarget = focusTarget
     } else if keyDownTarget != focusTarget {
       return .ignored
@@ -29,7 +29,7 @@ extension TaskPaletteModel {
 
   /// ヘッダーの入力欄（一覧）。↵ は `onSubmit` が受ける（変換確定の ↵ では発火しない。押し続けたキーリピート
   /// は確定の入口が捨てる——押し続けて次々に完了にする・タスクにしない）。
-  private func handleFieldKey(_ press: KeyPress) -> KeyPress.Result {
+  private func handleFieldKey(_ press: KeyInput) -> KeyPress.Result {
     switch visibleTab {
     case .tasks: return handleTaskFieldKey(press)
     case .github: return handleGitHubFieldKey(press)
@@ -40,7 +40,7 @@ extension TaskPaletteModel {
     }
   }
 
-  private func handleTaskFieldKey(_ press: KeyPress) -> KeyPress.Result {
+  private func handleTaskFieldKey(_ press: KeyInput) -> KeyPress.Result {
     switch press.key {
     case .upArrow, .downArrow:
       let direction = press.key == .upArrow ? -1 : 1
@@ -51,27 +51,27 @@ extension TaskPaletteModel {
       }
     case .return where press.modifiers.contains(.command):
       // onSubmit（↵ = 選んだ行の操作）へ流さず握る。押し続けたリピートでは動かない。
-      guard press.phase == .down, pick == nil else { break }
+      guard !press.isRepeat, pick == nil else { break }
       switch selectedID {
       case .add: askWithQuery()
       case .task(let id): openAgent(forTask: id)
       case nil: break
       }
     case .rightArrow:
-      guard Self.isUnmodified(press), pick == nil, selectedTask != nil else { return .ignored }
+      guard press.modifiers.isEmpty, pick == nil, selectedTask != nil else { return .ignored }
       enterDetail()
     case .space:
       // 文字があるときの space は空白を打つ。
-      guard query.isEmpty, Self.isUnmodified(press) else { return .ignored }
+      guard query.isEmpty, press.modifiers.isEmpty else { return .ignored }
       // 結び付けるタスクを選ぶ間は完了にしない。空の入力欄へ空白も入れない。
       guard pick == nil else { return .handled }
       // 押し続けたキーリピートは握り潰す（次の行を次々に完了にしない。入力欄へ空白も入れない）。
-      guard press.phase == .down else { return .handled }
+      guard !press.isRepeat else { return .handled }
       if case .task(let id) = selectedID { toggleDone(id) }
     case _ where Self.isCommandBackspace(press):
       // 文字があるときの ⌘⌫ は行頭まで消す。消して空になった瞬間のキーリピートは削除に使わない。
       guard query.isEmpty else { return .ignored }
-      if press.phase == .down, case .task(let id) = selectedID { delete(id) }
+      if !press.isRepeat, case .task(let id) = selectedID { delete(id) }
     case .escape:
       escapeTaskList()
     default:
@@ -96,7 +96,7 @@ extension TaskPaletteModel {
   /// 修飾付きのキーにして、絞り込みの文字を打つ・消すのと衝突させない。どれも押した瞬間だけを操作にする（押し続けた
   /// キーリピートで、選択が移った先の行まで操作しない）。⌘↵ は選ぶ状態でも握る（`onSubmit` へ流すと ↵ の
   /// 結び付けとして働く）。
-  private func handleGitHubFieldKey(_ press: KeyPress) -> KeyPress.Result {
+  private func handleGitHubFieldKey(_ press: KeyInput) -> KeyPress.Result {
     switch press.key {
     case .upArrow, .downArrow:
       let direction = press.key == .upArrow ? -1 : 1
@@ -106,17 +106,17 @@ extension TaskPaletteModel {
         move(direction)
       }
     case .rightArrow:
-      guard Self.isUnmodified(press), pick == nil, let row = selectedGitHubRow, row.task == nil
+      guard press.modifiers.isEmpty, pick == nil, let row = selectedGitHubRow, row.task == nil
       else { return .ignored }
       enterPane()
     case _ where Self.isLinkKey(press):
-      if press.phase == .down, pick == nil { linkSelectedGitHubItem() }
+      if !press.isRepeat, pick == nil { linkSelectedGitHubItem() }
     case _ where Self.isOpenInBrowserKey(press):
-      if press.phase == .down, pick == nil { openSelectedGitHubItemInBrowser() }
+      if !press.isRepeat, pick == nil { openSelectedGitHubItemInBrowser() }
     case .return where press.modifiers.contains(.command):
-      if press.phase == .down, pick == nil { openSelectedGitHubItemAsTask() }
+      if !press.isRepeat, pick == nil { openSelectedGitHubItemAsTask() }
     case _ where Self.isCommandBackspace(press):
-      if press.phase == .down, pick == nil, selectedGitHubRow?.task != nil {
+      if !press.isRepeat, pick == nil, selectedGitHubRow?.task != nil {
         unlinkSelectedGitHubItem()
       }
     case .escape:
@@ -128,7 +128,7 @@ extension TaskPaletteModel {
   }
 
   /// 右の欄の項目・提案タブの棚。
-  private func handlePlaceKey(_ press: KeyPress) -> KeyPress.Result {
+  private func handlePlaceKey(_ press: KeyInput) -> KeyPress.Result {
     if visibleTab == .automation {
       guard press.key == .escape else { return automation.handleShelfKey(press) }
       onDismiss()
@@ -141,9 +141,9 @@ extension TaskPaletteModel {
     }
   }
 
-  private func handleDetailKey(_ press: KeyPress, _ stop: TaskDetailStop) -> KeyPress.Result {
+  private func handleDetailKey(_ press: KeyInput, _ stop: TaskDetailStop) -> KeyPress.Result {
     if press.key == .return, press.modifiers.contains(.command) {
-      if press.phase == .down, let task = selectedTask { openAgent(forTask: task.id) }
+      if !press.isRepeat, let task = selectedTask { openAgent(forTask: task.id) }
       return .handled
     }
     switch press.key {
@@ -151,7 +151,7 @@ extension TaskPaletteModel {
     case .downArrow: moveField(1)
     case .leftArrow, .rightArrow:
       // 押し続けたキーリピートで、ステータスが完了に入って待ちを消さない。
-      if stop == .field(.status), press.phase != .down { break }
+      if stop == .field(.status), press.isRepeat { break }
       if press.key == .rightArrow {
         changeValue(1)
       } else if !changeValue(-1) {
@@ -159,13 +159,13 @@ extension TaskPaletteModel {
       }
     case .return: activate(stop, press)
     case .space:
-      if press.phase == .down, let task = selectedTask { toggleDone(task.id) }
+      if !press.isRepeat, let task = selectedTask { toggleDone(task.id) }
     case _ where Self.isCommandBackspace(press):
-      if press.phase == .down, let task = selectedTask { delete(task.id) }
+      if !press.isRepeat, let task = selectedTask { delete(task.id) }
     case _ where Self.isBackspace(press):
       // 押し続けたキーリピートで、焦点が移った先の結び付きまで外さない。
       guard case .link(let item) = stop else { return .ignored }
-      if press.phase == .down { unlink(item) }
+      if !press.isRepeat { unlink(item) }
     case .escape: leaveDetail()
     default: return .ignored
     }
@@ -173,8 +173,8 @@ extension TaskPaletteModel {
   }
 
   /// 右の欄の止まる場所の ↵。押し続けたキーリピートでは繰り返さない（同じページを何度も開かない・開閉を繰り返さない）。
-  private func activate(_ stop: TaskDetailStop, _ press: KeyPress) {
-    guard press.phase == .down else { return }
+  private func activate(_ stop: TaskDetailStop, _ press: KeyInput) {
+    guard !press.isRepeat else { return }
     switch stop {
     case .field(let field):
       if field.isText { beginEditing() }
@@ -188,27 +188,27 @@ extension TaskPaletteModel {
 
   /// 右の欄の項目。↵（期限の項目以外）・⌘L・⌘↵・⌘O は、行の「タスクにする」「結び付ける」「タスクにして開く」
   /// 「ブラウザで開く」と同じ。
-  private func handlePaneKey(_ press: KeyPress, _ stop: TaskGitHubPaneStop) -> KeyPress.Result {
+  private func handlePaneKey(_ press: KeyInput, _ stop: TaskGitHubPaneStop) -> KeyPress.Result {
     switch press.key {
     case .upArrow: movePaneStop(-1)
     case .downArrow: movePaneStop(1)
     case .leftArrow: if !changePaneValue(-1) { leavePane() }
     case .rightArrow: changePaneValue(1)
     case .space:
-      if press.phase == .down, stop == .assign { togglePaneAssign() }
+      if !press.isRepeat, stop == .assign { togglePaneAssign() }
     case .return where press.modifiers.contains(.command):
-      if press.phase == .down { openSelectedGitHubItemAsTask() }
+      if !press.isRepeat { openSelectedGitHubItemAsTask() }
     case .return:
-      guard press.phase == .down else { break }
+      guard !press.isRepeat else { break }
       if stop == .due {
         beginPaneDue()
       } else if let row = selectedGitHubRow {
         makeTask(row)
       }
     case _ where Self.isLinkKey(press):
-      if press.phase == .down { linkSelectedGitHubItem() }
+      if !press.isRepeat { linkSelectedGitHubItem() }
     case _ where Self.isOpenInBrowserKey(press):
-      if press.phase == .down { openSelectedGitHubItemInBrowser() }
+      if !press.isRepeat { openSelectedGitHubItemInBrowser() }
     case .escape: leavePane()
     default: return .ignored
     }
@@ -219,7 +219,7 @@ extension TaskPaletteModel {
   /// 捨てる——押し続けて確定と編集の開始を繰り返さない）、esc で取り消す。⌘↵ も確定で、GitHub タブの右の欄の
   /// 期限ではタスクにして開かない。複数行の項目は ↵ を改行に使う（リピートも改行）ので、esc で確定し、⌘↵ では
   /// 何もしない。
-  private func handleEditKey(_ press: KeyPress) -> KeyPress.Result {
+  private func handleEditKey(_ press: KeyInput) -> KeyPress.Result {
     guard let draft else { return .ignored }
     switch press.key {
     case .escape: endEditing(commit: draft.isMultiline)
@@ -230,31 +230,25 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// 押している修飾キーが無いか。実機の矢印キーは numericPad と function の修飾を伴って届くので、
-  /// 修飾の集合が空かでは判定しない。
-  static func isUnmodified(_ press: KeyPress) -> Bool {
-    press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
-  }
-
   /// ⌘⌫。
-  static func isCommandBackspace(_ press: KeyPress) -> Bool {
+  static func isCommandBackspace(_ press: KeyInput) -> Bool {
     press.modifiers.contains(.command) && press.key == .backspace
   }
 
   /// ブラウザで開く（⌘O）。
-  static func isOpenInBrowserKey(_ press: KeyPress) -> Bool {
+  static func isOpenInBrowserKey(_ press: KeyInput) -> Bool {
     press.modifiers.contains(.command) && press.modifiers.isDisjoint(with: [.option, .control])
       && press.key.character.lowercased() == "o"
   }
 
   /// 結び付ける（⌘L）。
-  private static func isLinkKey(_ press: KeyPress) -> Bool {
+  private static func isLinkKey(_ press: KeyInput) -> Bool {
     press.modifiers.contains(.command) && press.modifiers.isDisjoint(with: [.option, .control])
       && press.key.character.lowercased() == "l"
   }
 
   /// 修飾なしの ⌫。
-  private static func isBackspace(_ press: KeyPress) -> Bool {
-    isUnmodified(press) && press.key == .backspace
+  private static func isBackspace(_ press: KeyInput) -> Bool {
+    press.modifiers.isEmpty && press.key == .backspace
   }
 }

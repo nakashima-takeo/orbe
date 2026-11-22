@@ -101,11 +101,6 @@ extension EngineTestCase {
     try mouse(opened, .leftMouseUp, at: at, clicks: clicks, flags: flags)
   }
 
-  /// main のランループを 10 ms 回す。
-  func pump() {
-    RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-  }
-
   func text(_ document: EditorDocument) -> String {
     document.text.substring(NSRange(location: 0, length: document.text.length))
   }

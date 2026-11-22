@@ -18,7 +18,6 @@ final class MetalTextSurfaceTests: EngineTestCase {
   /// 見えている範囲は、先頭に見えている行（一部が上へ隠れていてもその行）の行頭と、上端の余白を除いた高さに入る行数。
   func testViewportIsTheFirstVisibleLineAndTheVisibleLineCount() throws {
     let opened = try open(lines(300), size: CGSize(width: 800, height: 604))
-    let text = opened.document.text
     opened.surface.scroll(toFirstLine: 50.25)
     let viewport = opened.surface.viewport
     XCTAssertEqual(viewport.top, RowPosition(line: 50))
@@ -67,7 +66,8 @@ final class MetalTextSurfaceTests: EngineTestCase {
     opened.document.onViewportChange = { notified += 1 }
     let event = try XCTUnwrap(
       CGEvent(
-        scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -90, wheel2: 0,
+        scrollWheelEvent2Source: SyntheticInput.source, units: .pixel, wheelCount: 1, wheel1: -90,
+        wheel2: 0,
         wheel3: 0))
     opened.surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
     XCTAssertEqual(notified, 1)
@@ -159,11 +159,11 @@ final class MetalTextSurfaceTests: EngineTestCase {
   func testClipsRightTellsWhetherTheTextContinuesToTheRight() throws {
     let narrow = try open("short\n")
     _ = narrow.surface.snapshot()
-    pump()
-    XCTAssertFalse(narrow.surface.clipsRight)
+    XCTAssertFalse(narrow.surface.clipsRight, "短い行は続かない")
     let wide = try open(String(repeating: "x", count: 300) + "\n")
     _ = wide.surface.snapshot()
-    pumpMain(until: { wide.surface.clipsRight }, "組んだ行で範囲が伸びれば続く")
+    // 「短い行は続かない」の対。同じ時点で、起きる場合を待たずに確かめる。
+    XCTAssertTrue(wide.surface.clipsRight, "組んだ行で範囲が伸びれば続く")
     wide.surface.scroll(ScrollInput(timestamp: 0, delta: SIMD2(-10_000, 0), precise: false))
     XCTAssertFalse(wide.surface.clipsRight, "右端まで送れば続かない")
   }
@@ -180,11 +180,11 @@ final class MetalTextSurfaceTests: EngineTestCase {
     opened.surface.replaceAll(with: "y" + wide)
     XCTAssertEqual(opened.surface.hiddenColumns, hidden, "差し替えただけでは動かない")
     _ = opened.surface.snapshot()
-    pump()
     XCTAssertEqual(opened.surface.hiddenColumns, hidden, "測り直しても範囲の中なら保つ")
     opened.surface.replaceAll(with: "short\n")
     _ = opened.surface.snapshot()
-    pumpMain(until: { opened.surface.hiddenColumns == 0 }, "短くなれば新しい範囲に収める")
+    // 「測り直しても範囲の中なら保つ」の対。同じ時点で、起きる場合を待たずに確かめる。
+    XCTAssertEqual(opened.surface.hiddenColumns, 0, "短くなれば新しい範囲に収める")
   }
 
   /// 面が閉じたら、描画スレッドが写しの最後の参照と面ごとの持ち物を手放す（大きな木の解放を main で行わない）——
@@ -211,8 +211,10 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let gray = MTLClearColor(red: 128.0 / 255, green: 128.0 / 255, blue: 128.0 / 255, alpha: 1)
     opened.surface.flush()
     let image = try XCTUnwrap(
-      RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id, background: gray)) }
-        .value)
+      RenderThread.shared.performAndWait {
+        Transfer(value: $0.snapshot(id, at: CACurrentMediaTime(), background: gray))
+      }
+      .value)
     return (GlyphPixelTests.pixels(image), image.width)
   }
 

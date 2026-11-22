@@ -12,7 +12,7 @@ import XCTest
 /// 基線に落ちる・画面で字の縁と絵文字の色が AppKit の描く字とずれる。
 @MainActor
 final class GlyphPixelTests: EngineTestCase {
-  private static let background = MTLClearColor(
+  private nonisolated static let background = MTLClearColor(
     red: 30.0 / 255, green: 30.0 / 255, blue: 30.0 / 255, alpha: 1)
 
   private static let sample = """
@@ -52,7 +52,7 @@ final class GlyphPixelTests: EngineTestCase {
       opened.surface.flush()
       let metal = try XCTUnwrap(
         RenderThread.shared.performAndWait {
-          Transfer(value: $0.snapshot(id, background: Self.background))
+          Transfer(value: $0.snapshot(id, at: CACurrentMediaTime(), background: Self.background))
         }.value)
       let reference = try coreText(opened)
       let name = "\(spaceName)-\(Int(scale))x"
