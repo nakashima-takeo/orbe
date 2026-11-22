@@ -106,7 +106,7 @@ final class SurfaceZoneFramesTests: EngineTestCase {
     let id = surface.id
     let shown = now + HeadlessDriver.period
     RenderThread.shared.performAndWait { $0.tick(id, target: shown) }
-    pumpMain(until: { target.probe.frames == target.acquired }, "描いたコマを読む")
+    pumpMain(until: { target.delivered == target.acquired }, "描いたコマを読む")
   }
 }
 
@@ -171,15 +171,18 @@ private final class FrameProbe: Sendable {
 }
 
 /// 画面外のテクスチャ 3 枚へ出し、GPU が描き終えたコマを読んで `FrameProbe` に渡し、すぐ「画面に出た」と知らせる。描く先を
-/// 取った回数（描いたコマの数）を数える。
+/// 取った回数（描いたコマの数）と、読み終えたコマの数を数える。
 private final class CapturingTarget: FrameTarget, @unchecked Sendable {
   private let textures: [MTLTexture]
-  let probe: FrameProbe
+  private let probe: FrameProbe
   private var next = 0
   private let count = OSAllocatedUnfairLock(initialState: 0)
 
   /// 描く先を取った回数（描いたコマの数）。
   var acquired: Int { count.withLock { $0 } }
+  /// 読み終えたコマの数。読み手が main のキューで足すので、これを条件に待つ main は、見直しの間隔を待たずに読み終えた
+  /// 知らせで起きる。
+  @MainActor private(set) var delivered = 0
 
   init(device: MTLDevice, probe: FrameProbe) {
     let descriptor = MTLTextureDescriptor.texture2DDescriptor(
@@ -208,6 +211,7 @@ private final class CapturingTarget: FrameTarget, @unchecked Sendable {
           &bytes, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height),
           mipmapLevel: 0)
         probe.read(bytes, width: width, height: height)
+        DispatchQueue.main.async { MainActor.assumeIsolated { self.delivered += 1 } }
         shown(CACurrentMediaTime())
       }
     }
