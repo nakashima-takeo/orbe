@@ -15,7 +15,8 @@ import AppKit
 /// スクロールしない。並べていない間の答えは変えない。
 ///
 /// ポインタの位置（`mouseLocationOutsideOfEventStream`）は、テストが `pointer` に置いた値を返し、利用者の実際のポインタの
-/// 位置を読まない。既定は、どのビューの枠にも入らない、ウィンドウの外の点。
+/// 位置を読まない。既定は、どのビューの枠にも入らない、ウィンドウの外の点。`pointer` は、ウィンドウへ送ったマウスのイベント
+/// では動かないので、ポインタの位置に依る結果を確かめるテストは、送るイベントの位置に合わせて `pointer` も置く。
 final class OrbeWindowFake: OrbeWindow {
   var isKey = false {
     didSet {
