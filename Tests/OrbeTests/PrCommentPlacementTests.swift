@@ -14,7 +14,7 @@ final class PrCommentPlacementTests: OrbeTestCase {
   private func placement(line: Int) -> PrCommentPlacement {
     PrCommentPlacement(
       zone: PrCommentZone(subject: .draft(0), line: line + 1, fieldID: "draft"),
-      spot: PullRequestState.CommentSpot(
+      origin: PullRequestState.CommentSpot(
         side: .new, line: line, ends: ends, basis: EditorDiff.SideTexts(old: base, new: base)))
   }
 

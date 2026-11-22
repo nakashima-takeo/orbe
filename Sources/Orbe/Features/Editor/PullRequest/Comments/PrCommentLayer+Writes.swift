@@ -57,21 +57,20 @@ extension PrCommentLayer {
     if !accepted { zone.failure = L10n.string(.editorPrThreadNotReady, language()) }
   }
 
-  /// 通し番号 `serial` の新しいコメントの書きかけを、欄 `draft` の行に新しいスレッドとして頼む。書いている間は、どの層の欄も
-  /// 押せない姿になる（→ `notes`）。
+  /// 通し番号 `serial` の新しいコメントの書きかけを、欄 `draft` が導いた行に新しいスレッドとして頼む。欄が行を導いた両端が、
+  /// PR の今の両端でない間（diff が古い両端を見せたままのときと、PR ごとの状態がベースの付け替えを読んでから、diff が新しい
+  /// 両端の本文を読み終えるまで）は、状態が受け付けず、最新の内容を読み込んでからやり直すよう告げる。書いている間は、どの層の
+  /// 欄も押せない姿になる（→ `PrCommentLayer.notes(shown:)`）。
   private func send(_ serial: Int, _ draft: PrCommentPlacement) {
     let zone = draft.zone
-    // 欄が行を数えた両端が PR の今の両端でない間（ベースの付け替えを読んで、diff が新しい両端の本文を読み終える前）は書かない。
-    guard state.diffEnds == draft.ends else {
-      zone.failure = L10n.string(.editorPrThreadNotReady, language())
-      return
-    }
     guard isCurrentPullRequest else {
       zone.failure = L10n.string(.editorPrThreadNotCurrent, language())
       return
     }
     zone.failure = nil
-    let accepted = state.sendComment(serial, completion: failed(in: zone))
+    let accepted = state.sendComment(
+      serial, side: draft.version == .old ? .old : .new, line: draft.line, ends: draft.ends,
+      completion: failed(in: zone))
     if !accepted { zone.failure = L10n.string(.editorPrThreadNotReady, language()) }
   }
 

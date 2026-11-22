@@ -22,7 +22,7 @@ final class PrCommentLayer {
   var onDraftChange: () -> Void = {}
   let language: () -> Language
   var threads: [String: PrCommentZone] = [:]
-  /// スレッドを最後に置いた所（今の diff に置けなくなったときに、行を追い始める所）。
+  /// スレッドを最後に置いた所（返信の書きかけを作るときの欄の位置と、読み直しが届くまでスレッドをその行に残すのに使う）。
   var lastPlaced: [String: PullRequestState.CommentSpot] = [:]
   /// 返信の書きかけを持ったまま今の diff に置けなくなったスレッドの置き場所。
   var held: [String: PrCommentPlacement] = [:]
@@ -78,7 +78,7 @@ final class PrCommentLayer {
   var state: PullRequestState { pullRequest.state }
   var path: String { pullRequest.id.path }
 
-  /// 裏の仕事（本文の組版・印を出せる行・欄の行の移し）が残っていない。
+  /// 裏の仕事（本文の組版・印を出せる行・欄の行の導き）が残っていない。
   var isSettled: Bool {
     !threads.values.contains(where: \.isTypesetting) && drafts.allSatisfy(\.isSettled)
       && held.values.allSatisfy(\.isSettled) && (placed == nil || commentable?.lines != nil)
@@ -105,7 +105,7 @@ final class PrCommentLayer {
   /// diff が見せている両側の本文 `shown` の並びに混ぜる注記。PR ごとの書きかけのうち層にまだ無いものを欄にし、スレッドの値と
   /// 書き込みの最中かを絵の差し込みへ写し、見せている両端の先頭のコミットで読んだスレッドのうち今の diff に置けるもの
   /// （`PullRequestState.canPlace`）と、行を追う欄（新しいコメントの欄と、返信の書きかけを持ったまま置けなくなったスレッド）を
-  /// 置く。別の両端で行を数えた欄は、行を今の版へ移し始める。見せている本文が前に注記を渡した本文のままなら、そのときの
+  /// 置く。行を導いた両端が見せている両端と違う欄は、欄の起点から今の版の行を導き始める。見せている本文が前に注記を渡した本文のままなら、そのときの
   /// 両端で置く（出どころが新しい両端の本文を読み終えても、diff がそれを見せるまでは前の両端）。両端が分からなければ何も
   /// 置かない。
   func notes(shown: EditorDiff.SideTexts?) -> DiffRows.Notes {
@@ -151,7 +151,6 @@ final class PrCommentLayer {
         let spot = PullRequestState.CommentSpot(
           side: thread.side, line: line - 1, ends: ends, basis: shown)
         lastPlaced[thread.id] = spot
-        state.placeReply(to: thread, at: spot)
         place(zone, at: spot, in: &notes)
       }
     } else {
@@ -190,7 +189,7 @@ final class PrCommentLayer {
 
   /// レビューのやりとりが、diff が見せている先頭と違う先頭を読んだ間（PR への push を読み、diff が新しい両端を見せるまで）は、
   /// diff が見せている両端と本文 `current` で最後に置いたスレッドを、その行に残す（古い側の行のスレッドは、両端が PR の今の
-  /// 両端の間だけ）。ほかの返信の書きかけは、最後に置いた所から行を追う。
+  /// 両端の間だけ）。ほかの返信の書きかけは、書きかけの欄の位置から行を追う。
   private func keepPlaced(
     _ current: Placed, isCurrent: Bool, language: Language, in notes: inout DiffRows.Notes
   ) {
@@ -222,19 +221,16 @@ final class PrCommentLayer {
     }
   }
 
-  /// 今の diff に置けないスレッド `thread` に返信の書きかけがあれば、最後に置いた所から行を追う（返信と解決は送れる）。
+  /// 今の diff に置けないスレッド `thread` に返信の書きかけがあれば、書きかけの欄の位置から行を追う（返信と解決は送れる）。
   /// 書きかけが無ければ置かない。
   private func hold(_ thread: GitHubPullRequestReview.Thread) {
-    guard let zone = threads[thread.id], startHolding(thread.id, zone),
-      let placement = held[thread.id]
-    else { return }
+    guard let zone = threads[thread.id], startHolding(thread.id, zone) else { return }
     zone.notice = .detached
     zone.update(.thread(thread))
     zone.isWriting = state.isWritingReview(.thread(thread.id))
-    state.placeReply(to: thread, at: placement.spot)
   }
 
-  /// レビューのやりとりから消えたスレッド `id` を手放す。返信の書きかけがあれば、最後に置いた所から行を追って残し、削除
+  /// レビューのやりとりから消えたスレッド `id` を手放す。返信の書きかけがあれば、書きかけの欄の位置から行を追って残し、削除
   /// された旨を出して送れない姿にする（書きかけを空にして焦点が外れたら手放す）。
   private func forget(_ id: String, _ zone: PrCommentZone) {
     guard startHolding(id, zone) else {
@@ -246,19 +242,13 @@ final class PrCommentLayer {
     zone.notice = .deleted
   }
 
-  /// スレッド `id` の絵の差し込み `zone` を、最後に置いた所（この層で置いていなければ、書きかけの欄の位置）から追い始める
-  /// （追っていればそのまま）。返信の書きかけが無ければ追わずに false。
+  /// スレッド `id` の絵の差し込み `zone` を、返信の書きかけの欄の位置（書きかけを作ったときにスレッドが置かれていた位置）を
+  /// 起点に追い始める（追っていればそのまま）。どの層でも同じ起点なので、同じ行に出る。返信の書きかけが無ければ追わずに false。
   private func startHolding(_ id: String, _ zone: PrCommentZone) -> Bool {
     if held[id] != nil { return true }
-    guard zone.hasText, let spot = lastPlaced[id] ?? state.commentDrafts.replies[id]?.spot
-    else { return false }
+    guard let spot = state.commentDrafts.replies[id]?.spot else { return false }
     zone.isCollapsed = false
-    let placement = PrCommentPlacement(zone: zone, spot: spot)
-    placement.onMove = { [weak self] placement in
-      guard case .thread(let thread) = placement.zone.subject else { return }
-      self?.state.placeReply(to: thread, at: placement.spot)
-    }
-    held[id] = placement
+    held[id] = PrCommentPlacement(zone: zone, origin: spot)
     return true
   }
 

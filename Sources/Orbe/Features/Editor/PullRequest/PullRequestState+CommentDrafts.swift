@@ -10,10 +10,11 @@ protocol PullRequestCommentDraftsObserver: AnyObject {
 /// コメントの書きかけ——PR の diff のスレッドへの返信と新しいコメントの、まだ送っていない本文と欄の位置。PR ごとに 1 つで、
 /// どのコメントの層も同じものを読み書きするので、diff を閉じても・連が替わっても残り、同じ PR の diff を 2 か所で開いていれば
 /// 両方に同じ書きかけが出る。アプリを終えると消える。空白と改行だけの本文は書きかけとして持たない（欄が空なのと同じ）ので、
-/// 持っている書きかけは、そのファイルの diff を開けば欄に出る（置ける行が無いときを除く）。知らせるのは書きかけの追加と削除と
-/// 本文の変化だけで、欄の位置とスレッドの値の書き戻しは知らせない（開き直した diff が読む）。
+/// 持っている書きかけは、そのファイルの diff を開けば欄に出る（置ける行が無いときを除く）。欄の位置は書きかけを作ったときの値で、
+/// 作った後は書き換えない——push の後にどの行へ移るか・行が無くなったかは、各層が、この位置から自分が見せている両端へ
+/// その都度導く（古い両端を見せている層が、新しい両端で数えた位置を壊さない）。知らせるのは書きかけの追加と削除と本文の変化だけ。
 extension PullRequestState {
-  /// 書きかけの欄の位置——側と行（0 始まり）と、その行を数えた diff の両端と両側の本文（push の後に行を移すのに使う）。
+  /// 書きかけの欄の位置——側と行（0 始まり）と、その行を数えた diff の両端と両側の本文（ほかの両端での行を導くのに使う）。
   struct CommentSpot: Equatable {
     let side: GitHubDiffSide
     let line: Int
@@ -21,20 +22,19 @@ extension PullRequestState {
     let basis: EditorDiff.SideTexts
   }
 
-  /// スレッドへの返信の書きかけ。スレッドの値は最後に読めたもの（GitHub から消えたスレッドも、開き直した diff に描く）。
+  /// スレッドへの返信の書きかけ。スレッドの値は最後に読めたもの（GitHub から消えたスレッドも、開き直した diff に描く）。位置は、
+  /// 書きかけを作ったときにスレッドが置かれていた位置。
   struct ReplyDraft {
     var body: String
     var thread: GitHubPullRequestReview.Thread
-    var spot: CommentSpot
+    let spot: CommentSpot
   }
 
-  /// 新しいコメントの書きかけ。
+  /// 新しいコメントの書きかけ。位置は欄を開いた位置。
   struct CommentDraft {
     let path: String
     var body: String
-    var spot: CommentSpot
-    /// 欄の行が今の版に無い（→ `PrCommentPlacement.isGone`）。
-    var isGone: Bool
+    let spot: CommentSpot
   }
 
   struct CommentDrafts {
@@ -69,20 +69,26 @@ extension PullRequestState {
 
   // MARK: - 返信
 
-  /// スレッド `thread` への返信の本文を `body` にする（空白と改行だけなら書きかけを消す）。欄の位置は `spot`。
-  func setReply(_ body: String, to thread: GitHubPullRequestReview.Thread, at spot: CommentSpot) {
-    let kept = Self.hasText(body) ? body : nil
-    let changed = commentDrafts.replies[thread.id]?.body != kept
-    commentDrafts.replies[thread.id] =
-      kept.map { ReplyDraft(body: $0, thread: thread, spot: spot) }
-    if changed { notifyCommentDrafts() }
+  /// スレッド `thread` への返信の本文を `body` にする。書きかけが無ければ、位置 `spot` で作る。在れば本文だけを書き換える
+  /// （位置とスレッドの値には触れない）。空白と改行だけなら書きかけを消す。
+  func writeReply(_ body: String, to thread: GitHubPullRequestReview.Thread, from spot: CommentSpot)
+  {
+    guard Self.hasText(body) else { return removeReply(to: thread.id) }
+    if let draft = commentDrafts.replies[thread.id] {
+      guard draft.body != body else { return }
+      commentDrafts.replies[thread.id]?.body = body
+    } else {
+      commentDrafts.replies[thread.id] = ReplyDraft(body: body, thread: thread, spot: spot)
+    }
+    notifyCommentDrafts()
   }
 
-  /// スレッド `thread` への返信の書きかけがあれば、スレッドの値と欄の位置を置き換える。
-  func placeReply(to thread: GitHubPullRequestReview.Thread, at spot: CommentSpot) {
-    guard commentDrafts.replies[thread.id] != nil else { return }
-    commentDrafts.replies[thread.id]?.thread = thread
-    commentDrafts.replies[thread.id]?.spot = spot
+  /// 読めたレビューのやりとり `review` のスレッドの値で、返信の書きかけのスレッドの値を差し替える（読めなかったスレッドは
+  /// 最後の値のまま）。
+  func refreshReplyThreads(from review: GitHubPullRequestReview) {
+    for thread in review.threads where commentDrafts.replies[thread.id] != nil {
+      commentDrafts.replies[thread.id]?.thread = thread
+    }
   }
 
   func removeReply(to thread: String) {
@@ -98,22 +104,17 @@ extension PullRequestState {
     return commentDrafts.lastSerial
   }
 
-  /// 通し番号 `serial` の新しいコメントの本文を `body` にする（空白と改行だけなら書きかけを消す）。
-  func setComment(
-    _ serial: Int, path: String, body: String, at spot: CommentSpot, isGone: Bool
-  ) {
-    let kept = Self.hasText(body) ? body : nil
-    let changed = commentDrafts.comments[serial]?.body != kept
-    commentDrafts.comments[serial] =
-      kept.map { CommentDraft(path: path, body: $0, spot: spot, isGone: isGone) }
-    if changed { notifyCommentDrafts() }
-  }
-
-  /// 通し番号 `serial` の新しいコメントの書きかけがあれば、欄の位置と、行が無くなったかを置き換える。
-  func moveComment(_ serial: Int, to spot: CommentSpot, isGone: Bool) {
-    guard commentDrafts.comments[serial] != nil else { return }
-    commentDrafts.comments[serial]?.spot = spot
-    commentDrafts.comments[serial]?.isGone = isGone
+  /// 通し番号 `serial` の新しいコメントの本文を `body` にする。書きかけが無ければ、ファイル `path` の位置 `spot` で作る。在れば
+  /// 本文だけを書き換える。空白と改行だけなら書きかけを消す。
+  func writeComment(_ serial: Int, path: String, body: String, from spot: CommentSpot) {
+    guard Self.hasText(body) else { return removeComment(serial) }
+    if let draft = commentDrafts.comments[serial] {
+      guard draft.body != body else { return }
+      commentDrafts.comments[serial]?.body = body
+    } else {
+      commentDrafts.comments[serial] = CommentDraft(path: path, body: body, spot: spot)
+    }
+    notifyCommentDrafts()
   }
 
   func removeComment(_ serial: Int) {

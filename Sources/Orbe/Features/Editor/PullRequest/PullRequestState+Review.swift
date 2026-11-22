@@ -89,17 +89,17 @@ extension PullRequestState {
     }
   }
 
-  /// 通し番号 `serial` の新しいコメントの書きかけを、その欄の位置の行に新しいスレッドとして送る。受け付けの条件は
-  /// `writeReview` と同じで、書きかけが無ければ受け付けない。通ったら書きかけを消してから `completion` を呼ぶ。
+  /// 通し番号 `serial` の新しいコメントの書きかけを、頼んだ層が導いた側 `side`・行 `line`（0 始まり）・両端 `ends` で示す位置に
+  /// 新しいスレッドとして送る。`ends` が PR の今の diff の両端（`diffEnds`）と同じときだけ受け付け、新しいスレッドを `ends` の先頭のコミットに結んで書く。ほかの
+  /// 受け付けの条件は `writeReview` と同じで、書きかけが無ければ受け付けない。通ったら書きかけを消してから `completion` を呼ぶ。
   @discardableResult
   func sendComment(
-    _ serial: Int, completion: @escaping (GitHubReviewWriteResult) -> Void
+    _ serial: Int, side: GitHubDiffSide, line: Int, ends: DiffEnds,
+    completion: @escaping (GitHubReviewWriteResult) -> Void
   ) -> Bool {
-    guard let draft = commentDrafts.comments[serial] else { return false }
-    let spot = draft.spot
+    guard let draft = commentDrafts.comments[serial], ends == diffEnds else { return false }
     let write = GitHubReviewWrite.addThread(
-      path: draft.path, side: spot.side, line: spot.line + 1, commit: spot.ends.head,
-      body: draft.body)
+      path: draft.path, side: side, line: line + 1, commit: ends.head, body: draft.body)
     return enqueueReview(write, target: .comment(serial)) { [weak self] result in
       if result.failure == nil { self?.removeComment(serial) }
       completion(result)
@@ -148,6 +148,7 @@ extension PullRequestState {
         switch result {
         case .success(let read):
           review = read
+          refreshReplyThreads(from: read)
           reviewOrder = order
           reviewFailure = nil
           pendingReviewID = read.pendingReview?.id
