@@ -76,8 +76,8 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     panel.isLive = false
     panel.isLive = true
     pumpMain(until: { autoFetch.rules.isWanted }, "面がまた見える")
-    RunLoop.main.run(until: Date().addingTimeInterval(1))
-    XCTAssertEqual(sshAttempts(), 1, "値が同じなら止まったまま撃たない")
+    XCTAssertTrue(
+      holds(for: 1) { self.sshAttempts() == 1 && autoFetch.rules.isBlocked }, "値が同じなら止まったまま撃たない")
 
     panel.isLive = false
     XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pushed"]).isSuccess)
