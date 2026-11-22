@@ -7,8 +7,8 @@ import XCTest
 /// 乱択の編集を重ねても、構文の層が新しく解いたものと毎手一致する（`SyntaxLayersTests` の性質を、乱択の手で確かめる）。
 ///
 /// 4 つの言語のどれも、2 つの段で確かめる。小さい段（名前の末尾に `AtFullScale` が付かないメソッド）は先頭の
-/// 種で 3 手、全部の段（付くメソッド）は種の並びの全部で 8 手ずつ重ね、そのあと 1 手ずつ取り消す。全部の段は、小さい段と
-/// 同じ種で始まり、小さい段の 3 手を先頭に持つ（取り消しの手は段ごとに別）。main では両方のメソッドが走る。
+/// 種で 5 手、全部の段（付くメソッド）は種の並びの全部で 8 手ずつ重ね、そのあと 1 手ずつ取り消す。全部の段は、小さい段と
+/// 同じ種で始まり、小さい段の 5 手を先頭に持つ（取り消しの手は段ごとに別）。main では両方のメソッドが走る。
 extension SyntaxLayersTests {
   private static let randomEditSeeds: [UInt64] = [1, 2]
 
@@ -53,7 +53,7 @@ extension SyntaxLayersTests {
     pieces: ["println!(", "vec![", "foo!(", ")", "]", "\"", "{", "}", "\n", "//", "x", "!"])
 
   func testMarkdownFollowsRandomEdits() throws {
-    try fuzz(Self.markdown, seeds: Self.randomEditSeeds.prefix(1), steps: 3)
+    try fuzz(Self.markdown, seeds: Self.randomEditSeeds.prefix(1), steps: 5)
   }
 
   func testMarkdownFollowsRandomEditsAtFullScale() throws {
@@ -62,7 +62,7 @@ extension SyntaxLayersTests {
   }
 
   func testTaggedTemplatesFollowRandomEdits() throws {
-    try fuzz(Self.taggedTemplates, seeds: Self.randomEditSeeds.prefix(1), steps: 3)
+    try fuzz(Self.taggedTemplates, seeds: Self.randomEditSeeds.prefix(1), steps: 5)
   }
 
   func testTaggedTemplatesFollowRandomEditsAtFullScale() throws {
@@ -71,7 +71,7 @@ extension SyntaxLayersTests {
   }
 
   func testHTMLFollowsRandomEdits() throws {
-    try fuzz(Self.html, seeds: Self.randomEditSeeds.prefix(1), steps: 3)
+    try fuzz(Self.html, seeds: Self.randomEditSeeds.prefix(1), steps: 5)
   }
 
   func testHTMLFollowsRandomEditsAtFullScale() throws {
@@ -80,7 +80,7 @@ extension SyntaxLayersTests {
   }
 
   func testRustMacrosFollowRandomEdits() throws {
-    try fuzz(Self.rustMacros, seeds: Self.randomEditSeeds.prefix(1), steps: 3)
+    try fuzz(Self.rustMacros, seeds: Self.randomEditSeeds.prefix(1), steps: 5)
   }
 
   func testRustMacrosFollowRandomEditsAtFullScale() throws {
