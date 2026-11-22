@@ -14,10 +14,16 @@ import AppKit
 ///
 /// 終わりだけを見ないのは、テストの窓が、終わりより前に下ろされるか解放されるため。
 ///
-/// 違反を失敗として記録した後、テストが変えたアクティベーションポリシーを始まりの値へ戻し、テストが前面にしたアプリを
-/// 前面から降ろす（`deactivate`）。前面に残ると、その実行の残りの間、利用者のキー入力がテストの実行体へ向かう。前面から
-/// 降りるのは、ウィンドウサーバーのイベントが捌かれた後になるので、降りるまでは待たない。並んだ窓とシートは、持ち主のテストが
-/// 下ろす。
+/// 終わりには、違反を見た後、次の 3 つを行ってから、違反を失敗として記録する。先に戻すのは、利用者の画面と前面を元へ戻すことを、
+/// 渡された `record` の動きに左右させないため。
+///
+/// - テストが変えたアクティベーションポリシーを、始まりの値へ戻す。
+/// - アプリが前面なら、前面から降ろす（`deactivate`）。始まりで前面だったかどうかに依らない。前面に残ると、同じ実行の
+///   残りのテストの間、利用者のキー入力がテストの実行体へ向かう。前面から降りるのは、ウィンドウサーバーのイベントが処理された
+///   後になるので、降りるまでは待たない。
+/// - このテストの間に増え、ディスプレイの範囲と面積を持って重なっている窓を下ろす（`orderOut`）。終わりは `tearDown` の後なので、
+///   残っている窓を下ろすテストのコードは、もう走らない。シートの窓も下ろすが、シートには応答しない（`endSheet` を呼ぶと、
+///   完了ハンドラがテストの決めていない応答で走る）。
 ///
 /// 仕組みの性質から、届かない範囲が在る。
 ///
@@ -25,12 +31,13 @@ import AppKit
 ///   1 件の中で変えて戻したアクティベーションポリシーにも届かない。テストの終わりより後に届いた出来事（前面にする要求、
 ///   遅れて届いたシートの通知など）は、次のテストの違反として記録される。
 /// - 前面かどうかは、始まりとの差で見る。始まりの時点で既に前面のテスト（前のテストの後、前面から降りるのが遅れた場合など）は、
-///   前面になったことでは落ちない。
+///   前面であることでは落ちない（終わりに前面から降ろすのは同じ）。
 /// - 見るのは、テストの実行体だけ。ほかのアプリを起動する・前面にする操作（`NSWorkspace.shared.open` など）には届かない。
 /// - 落とすのは、テスト 1 件が戻った後に、ふつうの失敗を記録する形。戻らないテスト（モーダルで止まるもの）と skip した
 ///   テストは落ちない。ブロックなしの `XCTExpectFailure` で、条件が隔離の失敗に合う期待を宣言したテストも落ちない（ブロックの
 ///   形の期待を宣言したテストと、条件が合わない期待を宣言したテストは落ちる）。クラスの `setUp`・`tearDown` は包まない。
-/// - 破ったテストが下ろさなかった窓とシートは、同じ実行の残りのテストの間も残る（落ちるのは破ったテストだけ）。
+/// - 終わりに下ろすのは、このテストの間に増え、ディスプレイと重なる窓だけ。始まりの時点で既に重なっていた窓と、画面外へ
+///   並べた窓は、並んだまま残る。下ろしたシートの完了ハンドラは走らない。
 /// - 包むのは、`OrbeTestCase` を継承するテストだけ。
 ///
 /// 前面になった通知（`NSApplication.didBecomeActiveNotification`）では見ない。この通知を手で出して、前面と背面で
@@ -104,7 +111,8 @@ final class ScreenIsolation {
     for breach in now.breaches(since: start) { note(breach) }
   }
 
-  /// テストの終わりに呼ぶ。見つけた違反を、失敗の文言で `record` に渡してから、テストが変えたポリシーと前面を戻す。
+  /// テストの終わりに呼ぶ。違反を見て、ポリシーを戻し、アプリを前面から降ろし、このテストの間に増えてディスプレイと重なる窓を
+  /// 下ろしてから、見つけた違反を失敗の文言で `record` に渡す。
   func finish(recording record: (String) -> Void) {
     if let sheetObserver { NotificationCenter.default.removeObserver(sheetObserver) }
     if let runLoopObserver { CFRunLoopObserverInvalidate(runLoopObserver) }
@@ -115,9 +123,13 @@ final class ScreenIsolation {
     }
     let end = State.current()
     note(breachesOf: end)
-    for breach in breaches { record("画面と前面の隔離: \(breach)") }
     if policy != startPolicy { app.setActivationPolicy(startPolicy) }
-    if end.isActive, !start.isActive { app.deactivate() }
+    if end.isActive { app.deactivate() }
+    for window in app.windows
+    where window.isShownOnADisplay && start.windowsOnDisplays[ObjectIdentifier(window)] == nil {
+      window.orderOut(nil)
+    }
+    for breach in breaches { record("画面と前面の隔離: \(breach)") }
   }
 }
 

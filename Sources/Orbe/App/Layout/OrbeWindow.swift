@@ -17,7 +17,7 @@ class OrbeWindow: NSWindow {
     )
   }
 
-  /// Orbe を前面に出す。主窓を人の前に出すにはアプリごと前面にするしかないので、アプリを前面にしてから窓を key にして最前面へ出す。
+  /// Orbe を前面に出す。主窓にキー入力を受けさせるにはアプリごと前面にするしかないので、アプリを前面にしてから窓を key にして最前面へ出す。
   func bringToFront() {
     NSApp.activate(ignoringOtherApps: true)
     makeKeyAndOrderFront(nil)
