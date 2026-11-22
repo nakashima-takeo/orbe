@@ -26,7 +26,8 @@ final class SurfaceScrollWheelTests: EngineTestCase {
   private func finger(_ opened: Opened, _ dy: Int32, _ phase: Phase) throws {
     let event = try XCTUnwrap(
       CGEvent(
-        scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: dy, wheel2: 0,
+        scrollWheelEvent2Source: Self.eventSource, units: .pixel, wheelCount: 1, wheel1: dy,
+        wheel2: 0,
         wheel3: 0))
     event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
     event.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase.rawValue)
@@ -37,7 +38,8 @@ final class SurfaceScrollWheelTests: EngineTestCase {
   private func wheel(_ opened: Opened, lines: Int32) throws {
     let event = try XCTUnwrap(
       CGEvent(
-        scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: lines, wheel2: 0,
+        scrollWheelEvent2Source: Self.eventSource, units: .line, wheelCount: 1, wheel1: lines,
+        wheel2: 0,
         wheel3: 0))
     try send(opened, event)
   }
