@@ -3,11 +3,12 @@ import XCTest
 @testable import Orbe
 
 /// PR の diff——古い側は PR のマージベースの版（rename なら元のパス）、新しい側は PR の先頭の版。両側とも読むだけで、PR に
-/// push があれば新しい両端で作り直す。PR の中身は差し替えの構造体が答える。
+/// push があれば新しい両端で作り直す。GitHub を読むのは本体に出ていて面が見えている間だけで、出し直せば読み直す。PR の中身は
+/// 差し替えの構造体が答える。
 ///
 /// 壊れると何が起きるか: rename したファイルの diff が全部の行の追加になる。PR に push があっても古い diff のまま。手元の
 /// 作業ツリーの本文が新しい側に出る。打鍵で PR の diff の本文が変わる。PR が動かしたサブモジュールの diff が出ない。
-/// TopBar の現在地が PR の diff でなく作業ツリーのファイルの姿になる。
+/// 本体に出していない PR の diff のために GitHub を読み続ける・出し直しても古い両端のまま。
 extension EditorDiffTests {
   /// 差し替えの構造体が返す中身（テストが書き換えて、次の読み直しに答えさせる）。
   private final class Reply {
@@ -178,5 +179,44 @@ extension EditorDiffTests {
 
     waitRows(diff, "先に読んである中身で出る") { _ in diff.newRevision != nil }
     XCTAssertEqual(reply.requests, 1, "開いても問い直さない")
+  }
+
+  /// PR の diff が GitHub から中身を読むのは、本体に出ていて面が見えている間だけ。Files の画面へ移る・エディターを閉じると
+  /// 読むのをやめ、古い両端のまま残る。PR の画面を出し直す・エディターを開き直すと読み直し、その間の push は新しい両端の
+  /// diff になる。
+  func testAPullRequestDiffReadsGitHubOnlyWhileItIsShown() throws {
+    let base = repo.head()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    let first = "one\ntwo\nTHREE\nfour\n"
+    try repo.write("a.txt", first)
+    XCTAssertTrue(repo.git(["commit", "-qam", "change"]).isSuccess)
+    let reply = Reply()
+    reply.content = content(base: base, head: repo.head())
+    let state = try pullRequest(reply)
+    let (tab, _) = pullRequestTab()
+    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)))
+    pumpMain(until: { self.text(diff.newRevision) == first }, "前提: 本体に出た diff が中身を読む")
+    XCTAssertEqual(reply.requests, 1)
+
+    tab.group.editor.selectScreen(.files)
+    let pushed = "one\ntwo\nTHREE\nfour\nfive\n"
+    try repo.write("a.txt", pushed)
+    XCTAssertTrue(repo.git(["commit", "-qam", "push"]).isSuccess)
+    reply.content = content(base: base, head: repo.head())
+    state.reload()
+    XCTAssertEqual(reply.requests, 1, "Files の画面の間は読まない")
+    XCTAssertEqual(text(diff.newRevision), first, "古い両端のまま残る")
+
+    tab.group.editor.selectScreen(.pullRequest)
+    pumpMain(until: { self.text(diff.newRevision) == pushed }, "出し直すと読み直し、新しい両端になる")
+    XCTAssertEqual(reply.requests, 2)
+
+    tab.group.view.show(.terminal, animated: false)
+    tab.group.view.layoutSubtreeIfNeeded()
+    state.reload()
+    XCTAssertEqual(reply.requests, 2, "エディターを閉じている間は読まない")
+    tab.group.view.show(.editor, animated: false)
+    tab.group.view.layoutSubtreeIfNeeded()
+    pumpMain(until: { reply.requests == 3 }, "エディターを開き直すと読み直す")
   }
 }
