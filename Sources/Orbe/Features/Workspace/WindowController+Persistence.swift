@@ -108,21 +108,18 @@ extension WindowController {
 
   /// 構成が変わったら 1 秒のデバウンス後に 1 回保存する（高頻度な cwd 報告をまとめる）。
   func scheduleSave() {
-    pendingSave?.cancel()
-    let work = DispatchWorkItem { [weak self] in self?.saveNow() }
-    pendingSave = work
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: work)
+    MainActor.assumeIsolated {
+      saveDelay.run(after: 1.0) { [weak self] in self?.saveNow() }
+    }
   }
 
   /// 終了時などにデバウンス待ちを取りこぼさず確定保存する。
   func flushSave() {
-    pendingSave?.cancel()
-    pendingSave = nil
-    WorkspacePersistence.save(snapshotFile())
+    MainActor.assumeIsolated { saveDelay.cancel() }
+    saveNow()
   }
 
   private func saveNow() {
-    pendingSave = nil
     WorkspacePersistence.save(snapshotFile())
   }
 
