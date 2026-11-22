@@ -170,8 +170,8 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
 
     XCTAssertTrue(
       waitUntil(20) { taskProvider.facts.remoteFetchLanded }, "前提: タスクのリポジトリの fetch が着地した")
-    XCTAssertFalse(
-      waitUntil(1) { palette.items.contains { $0.action == repositoryRow } },
+    XCTAssertTrue(
+      holds(for: 1) { !palette.items.contains { $0.action == repositoryRow } },
       "タスクのリポジトリの行は戻らない")
   }
 

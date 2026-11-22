@@ -49,16 +49,6 @@ final class ProjectSearchTests: OrbeTestCase {
     document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: text)
   }
 
-  /// 条件が `seconds` の間ずっと成り立つ（来てはいけないものが来ないこと）。
-  func holds(for seconds: TimeInterval, _ condition: () -> Bool) -> Bool {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      guard condition() else { return false }
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
-    return condition()
-  }
-
   // MARK: - 結果
 
   func testResultsAreGroupedByFileInPathOrder() throws {

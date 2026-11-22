@@ -218,13 +218,4 @@ final class ProjectSearchPaneTests: OrbeTestCase {
     XCTAssertTrue(
       holds(for: ProjectSearch.refreshDelay * 2) { hosted.search.results["c.txt"] == nil })
   }
-
-  func holds(for seconds: TimeInterval, _ condition: () -> Bool) -> Bool {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      guard condition() else { return false }
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
-    return condition()
-  }
 }

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import Sparkle
 import XCTest
 
@@ -238,9 +239,7 @@ final class UpdateDriverTests: OrbeTestCase {
       dummyUpdater(), willInstallUpdateOnQuit: SUAppcastItem.empty(),
       immediateInstallationBlock: { XCTFail("押していないのに再起動してはならない") })
 
-    let settled = expectation(description: "drain の async turn を通す")
-    DispatchQueue.main.async { settled.fulfill() }
-    wait(for: [settled], timeout: 1)
+    nextTurn()
   }
 
   /// updater が起動していないビルド（`SUFeedURL` の無いテスト/dev バイナリ）は「進行中」ではなく

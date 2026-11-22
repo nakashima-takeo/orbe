@@ -84,7 +84,7 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     provider.load()
     XCTAssertTrue(
       waitUntil(20) { provider.facts.remoteListing != nil && model.classification != nil })
-    XCTAssertFalse(waitUntil(1) { !self.calls("R").isEmpty }, "認証確認が着地するまで撃たない")
+    XCTAssertTrue(holds(for: 1) { self.calls("R").isEmpty }, "認証確認が着地するまで撃たない")
 
     try ungate("auth")
     XCTAssertTrue(waitUntil(20) { self.calls("R").count == 2 }, "認証確認の着地で撃つ")
