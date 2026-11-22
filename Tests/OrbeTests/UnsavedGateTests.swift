@@ -171,7 +171,6 @@ final class UnsavedGateTests: OrbeTestCase {
   func testFileTabCloseAsksOnlyWhenDirty() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     try repo.write("b.txt", "b\n")
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
@@ -196,7 +195,6 @@ final class UnsavedGateTests: OrbeTestCase {
   func testCommandSOverwritesOnlyTheDocumentThatWasConfirmed() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     window.makeFirstResponder(a.surface.responder)

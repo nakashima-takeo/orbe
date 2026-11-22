@@ -22,18 +22,10 @@ import XCTest
 /// ビュー階層を歩いて実 frame を拾う方向へは行かない（脆く、腐る）。
 @MainActor
 final class PaletteFitTests: OrbeTestCase {
-  private var windows: [NSWindow] = []
-
   /// 代数の検証に使う chrome。逆算は chrome の**値に依らず**成り立つので実測値である必要はない
   /// （実測は面ごとに違う——設定 root / フォント / 改名が 84、通知音が 143）。ただし下の窓高の
   /// 並びは「窓が chrome ＋ 余白 82 を割る」領域を狙って選んであるので、ここを動かすなら一緒に動かす。
   private let sampleChrome: CGFloat = 83
-
-  override func tearDown() {
-    windows.forEach { $0.orderOut(nil) }
-    windows.removeAll()
-    super.tearDown()
-  }
 
   // MARK: - 1. 逆算の代数
 
@@ -226,7 +218,7 @@ final class PaletteFitTests: OrbeTestCase {
     let window = NSWindow(
       contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = host
-    windows.append(window)
+    holdUntilTestEnds(window)
     host.layoutSubtreeIfNeeded()
     // chrome の実測が preference で遡上し、リスト上限へ反映されるまで 1 パス回す。
     RunLoop.current.run(until: Date().addingTimeInterval(0.2))

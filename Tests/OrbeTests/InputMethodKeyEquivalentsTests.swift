@@ -46,6 +46,7 @@ final class InputMethodKeyEquivalentsTests: OrbeTestCase {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.borderless],
       backing: .buffered, defer: false)
+    holdUntilTestEnds(window)
     window.contentView = view
     view.layoutSubtreeIfNeeded()
     window.makeFirstResponder(receiver)
