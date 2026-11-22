@@ -21,12 +21,14 @@ final class GitHubCLITimeoutTests: OrbeTestCase {
     }
     XCTAssertTrue(fixture.waitUntilHung(), "前提: 孫が pipe を握ったまま、gh が止まっている")
 
+    let started = clock.now
     let limit = try XCTUnwrap(
       clock.awaitSleeper(where: { $0.deadline != nil })?.deadline, "時間上限の期限で眠る")
     clock.advance(to: limit)
     let grace = try XCTUnwrap(
       clock.awaitSleeper(where: { $0.deadline != nil })?.deadline,
       "打ち切った後、読み終わりを猶予の期限まで待つ（期限なしでは待たない）")
+    XCTAssertLessThan(grace - clock.now, limit - started, "猶予は、時間上限より短い")
     clock.advance(to: grace)
     pumpMain(until: { output != nil }, "猶予で返る")
 
