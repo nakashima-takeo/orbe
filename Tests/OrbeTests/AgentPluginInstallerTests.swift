@@ -192,46 +192,66 @@ final class AgentPluginInstallerTests: OrbeTestCase {
   private static let long: TimeInterval = 120
   private static let hang = "exec sleep 60"
 
-  /// 偽の claude だけを PATH に置いて同梱の install.sh を実行する。偽の claude は受けた引数を 1 行ずつ残し、登録
-  /// （`plugin marketplace add`）・一覧（`plugin list`）・導入（`plugin install`）では、それぞれの prelude を実行する。
-  /// その後、一覧は `list` を出力して `listStatus` で終わり、ほかは 0 で終わる。`limits` と `whileRunning` は `runInstaller`
-  /// へ渡す。返すのは届いた Event と、claude が受けた呼び出しの列。
+  /// 偽の CLI を、同梱の install.sh を実行するときの PATH に置く。偽の CLI は受けた引数を 1 行ずつ残してから `body` を実行する。
+  private func placeFakeCLI(_ name: String, body: String) throws {
+    let bin = pkg.appendingPathComponent("bin")
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    let cli = bin.appendingPathComponent(name)
+    try """
+    #!/bin/sh
+    echo "$*" >> "\(pkg.appendingPathComponent("\(name)-calls.log").path)"
+    \(body)
+    """.write(to: cli, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+  }
+
+  /// 偽の CLI が受けた呼び出しの列。
+  private func calls(of name: String) -> [String] {
+    ((try? String(contentsOf: pkg.appendingPathComponent("\(name)-calls.log"), encoding: .utf8))
+      ?? "").split(separator: "\n").map(String.init)
+  }
+
+  /// `placeFakeCLI` で置いた偽の CLI だけが PATH に在る状態で、同梱の install.sh を `runInstaller` で実行する。
+  private func runBundledScript(
+    limits: AgentPluginInstaller.TimeLimits = .init(),
+    whileRunning: (Process) throws -> Void = { _ in }
+  ) throws -> [String] {
+    try runInstaller(
+      script: String(contentsOf: Self.bundledInstallScript, encoding: .utf8),
+      shellPATH: "\(pkg.appendingPathComponent("bin").path):/usr/bin:/bin", limits: limits,
+      whileRunning: whileRunning)
+  }
+
+  /// 偽の claude だけを置いて同梱の install.sh を実行する。偽の claude は、登録（`plugin marketplace add`）・一覧
+  /// （`plugin list`）・導入（`plugin install`）では、それぞれの prelude を実行する。その後、一覧は `list` を出力して
+  /// 終了コード `listStatus` で終了し、ほかは終了コード 0 で終了する。返すのは届いた Event と、claude が受けた呼び出しの列。
   private func runBundledInstaller(
     claudeList list: String = "", listStatus: Int32 = 0, registerPrelude: String = "",
     listPrelude: String = "", installPrelude: String = "",
     limits: AgentPluginInstaller.TimeLimits = .init(),
     whileRunning: (Process) throws -> Void = { _ in }
   ) throws -> (log: [String], calls: [String]) {
-    let bin = pkg.appendingPathComponent("bin")
-    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-    let calls = pkg.appendingPathComponent("claude-calls.log")
     let listed = pkg.appendingPathComponent("claude-list.txt")
     try Data(list.utf8).write(to: listed)
-    let claude = bin.appendingPathComponent("claude")
-    try """
-    #!/bin/sh
-    echo "$*" >> "\(calls.path)"
-    case "$1 $2" in
-    "plugin marketplace")
-    \(registerPrelude)
-    ;;
-    "plugin list")
-    \(listPrelude)
-    cat "\(listed.path)"; exit \(listStatus)
-    ;;
-    "plugin install")
-    \(installPrelude)
-    ;;
-    esac
-    exit 0
-    """.write(to: claude, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
-    let log = try runInstaller(
-      script: String(contentsOf: Self.bundledInstallScript, encoding: .utf8),
-      shellPATH: "\(bin.path):/usr/bin:/bin", limits: limits, whileRunning: whileRunning)
-    let called = ((try? String(contentsOf: calls, encoding: .utf8)) ?? "")
-      .split(separator: "\n").map(String.init)
-    return (log, called)
+    try placeFakeCLI(
+      "claude",
+      body: """
+        case "$1 $2" in
+        "plugin marketplace")
+        \(registerPrelude)
+        ;;
+        "plugin list")
+        \(listPrelude)
+        cat "\(listed.path)"; exit \(listStatus)
+        ;;
+        "plugin install")
+        \(installPrelude)
+        ;;
+        esac
+        exit 0
+        """)
+    let log = try runBundledScript(limits: limits, whileRunning: whileRunning)
+    return (log, calls(of: "claude"))
   }
 
   /// claude の一覧が失敗し、このプラグインの行も出さなかったときは導入を試みず失敗にする。claude の plugin install は無効にした
@@ -315,5 +335,37 @@ final class AgentPluginInstallerTests: OrbeTestCase {
       FileManager.default.fileExists(atPath: trapped.path), "一覧が SIGTERM を受けて 0 で終わっていない")
     XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
     XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
+  }
+
+  // MARK: - codex と agy の導入
+
+  /// codex は、登録の後に一覧を読み、利用者が無効にしていなければ `plugin add` で入れ直す（キャッシュのコピーを今の中身へ
+  /// 置き換える）。入れ直さなければ、中身の更新が codex に届かない。
+  func testCodexNotDisabledIsReinstalled() throws {
+    try placeFakeCLI(
+      "codex",
+      body: """
+        if [ "$1 $2" = "plugin list" ]; then
+          echo '{"installed":[{"pluginId":"orbe-agent@orbe-agent","enabled":true}]}'
+        fi
+        exit 0
+        """)
+    let log = try runBundledScript()
+    XCTAssertTrue(log.contains("ok codex"), "\(log)")
+    XCTAssertEqual(
+      calls(of: "codex"),
+      [
+        "plugin marketplace add \(pkg.path)", "plugin list --json --marketplace orbe-agent",
+        "plugin add orbe-agent@orbe-agent",
+      ])
+  }
+
+  /// agy は、プラグイン本体のディレクトリを `plugin install` で入れ直す（ステージ先を今の中身へ置き換える）。入れ直さなければ、
+  /// 中身の更新が agy に届かない。
+  func testAgyIsReinstalledFromThePluginDirectory() throws {
+    try placeFakeCLI("agy", body: "exit 0")
+    let log = try runBundledScript()
+    XCTAssertTrue(log.contains("ok agy"), "\(log)")
+    XCTAssertEqual(calls(of: "agy"), ["plugin install \(pkg.path)/plugins/orbe-agent"])
   }
 }
