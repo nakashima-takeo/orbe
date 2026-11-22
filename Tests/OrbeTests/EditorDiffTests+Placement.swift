@@ -95,10 +95,11 @@ extension EditorDiffTests {
   /// ステージ済みの rename を、根のサービスの status が rename を知る前に開いても、status で決まる元パスの HEAD が届いてから
   /// 初めての位置を決め、実際の変更へ送る（元パスの HEAD 抜きの「全部追加」の仮の並びで決めない）。
   func testAStagedRenameOpenedBeforeTheStatusKnowsItRevealsTheRealChange() throws {
-    // status だけを遅くする——stat の変わった filter 付きのファイルを、status は clean を通して比べ直す（版の取り直しは
+    // status だけを止める——stat の変わった filter 付きのファイルを、status は clean を通して比べ直す（版の取り直しは
     // 作業ツリーを読まない）。
+    let fixture = try GitHangFixture()
+    let clean = try fixture.installScript("clean.sh", body: fixture.waitingBody + "\ncat")
     try repo.write(".gitattributes", "slow.txt filter=slow\n")
-    XCTAssertTrue(repo.git(["config", "filter.slow.clean", "sleep 0.5; cat"]).isSuccess)
     try repo.write("slow.txt", "s\n")
     var lines = (0..<300).map { "line \($0)" }
     try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
@@ -114,7 +115,18 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
     try FileManager.default.setAttributes(
       [.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: repo.url("slow.txt").path)
+    // filter は足場の git を呼び終えてから有効にする（足場の git も clean filter を通る）。
+    XCTAssertTrue(repo.git(["config", "filter.slow.clean", clean]).isSuccess)
     let diff = try tab.group.editor.openDiff(id("b.txt", .staged), as: .pinned)
+    XCTAssertTrue(fixture.pumpUntilHung(), "前提: status の読みが clean filter で止まっている")
+    // diff が引く HEAD の版は、status が rename を知っていれば元のパスの版。
+    let head = { files.status?.entries["b.txt"]?.originalPath ?? "b.txt" }
+    pumpMain(
+      until: {
+        [RootFiles.Version(path: "b.txt", revision: .index), .init(path: head(), revision: .head)]
+          .allSatisfy { files.state(of: $0) != nil }
+      }, "前提: index と HEAD の版が届く")
+    fixture.release()
     pumpMain(until: { diff.placement == .placed && diff.newSurface != nil }, "位置を決める")
     XCTAssertEqual(
       diff.revisionHunks, [LineHunk(oldStart: 251, oldCount: 1, newStart: 251, newCount: 1)],
