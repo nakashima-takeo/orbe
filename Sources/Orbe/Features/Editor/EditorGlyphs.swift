@@ -37,9 +37,6 @@ enum EditorGlyphs {
   /// 折りたたみのシェブロン `M6 4.5L10 8l-4 3.5`（stroke 1.3）。開いていると 90° 回す。
   static let chevron = Glyph(viewBox: 16, stroke: 1.3) { k in [(chevronPath(k), 1)] }
 
-  /// パンくずの区切り（同じ形で stroke 1.5）。
-  static let crumbChevron = Glyph(viewBox: 16, stroke: 1.5) { k in [(chevronPath(k), 1)] }
-
   private static func chevronPath(_ k: CGFloat) -> Path {
     var path = Path()
     path.move(to: CGPoint(x: 6 * k, y: 4.5 * k))
@@ -133,17 +130,6 @@ enum EditorGlyphs {
     var path = Path(ellipseIn: CGRect(x: 2.5 * k, y: 2.5 * k, width: 11 * k, height: 11 * k))
     path.move(to: CGPoint(x: 4.2 * k, y: 4.2 * k))
     path.addLine(to: CGPoint(x: 11.8 * k, y: 11.8 * k))
-    return [(path, 1)]
-  }
-
-  /// ファイルタブの ×（ブラウザ層の停止印と同じ 2 本の斜線）。
-  static let close = Glyph(viewBox: 16, stroke: 1.5) { k in
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
-    var path = Path()
-    path.move(to: p(4, 4))
-    path.addLine(to: p(12, 12))
-    path.move(to: p(12, 4))
-    path.addLine(to: p(4, 12))
     return [(path, 1)]
   }
 }

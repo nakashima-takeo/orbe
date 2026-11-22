@@ -159,7 +159,7 @@ struct EditorState: Codable, Equatable {
   var screen: EditorScreen?
   var search: SearchQuery
 
-  /// 開いていた文書の列（実体パス）と、その中のアクティブと仮のタブ。位置ではなくパスで指す——復元で読めないパスを落としても
+  /// 開いていた文書の列（実体パス）と、その中のアクティブと仮の文書。位置ではなくパスで指す——復元で読めないパスを落としても
   /// 列がずれず、「列があるのにアクティブが無い」という表せない状態を持たない（落ちていれば先頭。仮は無しへ）。
   struct OpenDocuments: Equatable {
     var open: [String]

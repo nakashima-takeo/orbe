@@ -142,7 +142,6 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     XCTAssertTrue(
       active.group.view.editor.document === active.group.editor.activeDocument, "焦点の文書が面に載る")
     XCTAssertEqual(active.group.view.editor.document?.url, b)
-    XCTAssertEqual(active.group.view.editor.shell.tabs.map(\.name), ["a.txt", "b.txt"])
     XCTAssertTrue(
       wc.workspaces[1].tabs[0].group.editor.documents.isEmpty, "背景 workspace の連は起きない")
 

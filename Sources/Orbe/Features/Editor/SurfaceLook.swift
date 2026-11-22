@@ -9,7 +9,7 @@ struct SurfaceLook {
   var rows: SurfaceRows
   var hunkLimit: LineDiff.Limit
 
-  /// ファイルタブの見え方——コードの構成・並びなし・ガターの上限。
+  /// コードの見え方（文書の本体）——コードの構成・並びなし・ガターの上限。
   static let code = SurfaceLook(
     presentation: .code, rows: SurfaceRows(), hunkLimit: LineDiff.gutter)
 

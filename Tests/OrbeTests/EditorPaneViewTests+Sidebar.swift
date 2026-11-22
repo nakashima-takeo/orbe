@@ -25,14 +25,14 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
 
     XCTAssertTrue(pane.sidebar.isOpen)
     XCTAssertEqual(
-      pane.bodyRect, NSRect(x: side, y: bar + 29, width: 900 - side, height: 400 - bar - 29),
-      "左の列の右、タブ行の下の hairline はその外側")
+      pane.bodyRect, NSRect(x: side, y: bar, width: 900 - side, height: 400 - bar),
+      "本体の上端はバーのすぐ下、左端は左の列の右の hairline の外側")
     let wide = try probe(pane) { p in try !PaneProbe.same(p.rgb(60), p.rgb(side + 60)) }
     let explorerGround = try wide.rgb(60)
 
     let document = try tab.group.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
     tab.group.view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(pane.bodyRect.minY, bar + 29 + 20, "文書があればパンくずの分だけ下がる")
+    XCTAssertEqual(pane.bodyRect.minY, bar, "文書があっても本体の上端はバーのすぐ下")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
     window.setContentSize(NSSize(width: 360, height: 400))

@@ -2,7 +2,7 @@ import Foundation
 import OrbeEditorCore
 
 /// 作業ツリー diff の出どころ——古い側は index の版、新しい側は作業ツリーの姿（文書・消した・ディレクトリ・表示できない）。
-/// 新しい側の文書はファイルタブと共有する文書（実体ごとに 1 つで、`documents` が引く）で、diff の中でも編集できる。
+/// 新しい側の文書は開いている文書と共有する文書（実体ごとに 1 つで、`documents` が引く）で、diff の中でも編集できる。
 /// サブモジュールは「Subproject commit」の行で見せる。
 ///
 /// 差分は文書のハンク（裏・版つき・編集でずらす）そのもので、古い側はそのハンクが比べた底から作る——底とハンクと今の
@@ -168,7 +168,7 @@ final class EditorDiffWorkingTree: EditorDiffSource {
 
   /// 作業ツリーの姿（新しい側）。
   enum Side {
-    /// 開いた文書（ファイルタブと共有する）。
+    /// 開いた文書（開いている文書と共有する）。
     case document(EditorDocument)
     /// 作業ツリーに無い（消した）。
     case missing

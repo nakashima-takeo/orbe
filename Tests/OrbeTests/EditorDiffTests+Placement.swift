@@ -42,7 +42,7 @@ extension EditorDiffTests {
     }
   }
 
-  /// 変更の無い状態で開いた diff は、後から変更が現れても見えている位置が動かない（ファイルタブと共有する面も動かない）。
+  /// 変更の無い状態で開いた diff は、後から変更が現れても見えている位置が動かない（開いている文書と共有する面も動かない）。
   func testADiffOpenedWithoutChangesDoesNotJumpWhenAChangeAppears() throws {
     var lines = (0..<300).map { "line \($0)" }
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
@@ -62,7 +62,7 @@ extension EditorDiffTests {
   }
 
   /// 監視の知らせより先に開いた diff も、開いた時点の中身に追いついてから最初の変更へ送る——エージェントがファイルを書いた
-  /// 直後の作業ツリー diff（ファイルタブで開いている文書）も、`git add` の直後のステージ済み diff も。
+  /// 直後の作業ツリー diff（開いている文書）も、`git add` の直後のステージ済み diff も。
   func testADiffOpenedRightAfterAWriteRevealsTheWrittenChange() throws {
     var lines = (0..<300).map { "line \($0)" }
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")

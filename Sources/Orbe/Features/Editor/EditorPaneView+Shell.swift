@@ -1,21 +1,10 @@
 import AppKit
 import OrbeEditorCore
 
-/// 骨の操作 → セッション。骨（上のバー・タブ行・パンくず・ツリー）の閉包を pane へ結び、pane が連経由でセッションに書く。
+/// 骨の操作 → セッション。骨（上のバー・ツリー）の閉包を pane へ結び、pane が連経由でセッションに書く。
 extension EditorPaneView {
   func wireShell() {
     shell.open = { [weak self] url, mode in self?.open(url, as: mode) }
-    shell.activate = { [weak self] url in
-      guard let self, let group, group.editor.document(at: url) != nil else { return }
-      group.editor.activate(url)
-      group.editor.selectScreen(.files)
-      tree.reveal(url)
-      focusEditor()
-    }
-    shell.pin = { [weak self] url in self?.group?.editor.pin(url) }
-    shell.requestClose = { [weak self] url in self?.requestClose(url) }
-    shell.selectDiffMode = { [weak self] mode in self?.diffModes.select(mode) }
-    shell.revealDirectory = { [weak self] url in self?.tree.revealDirectory(url) }
     shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
     shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
     shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
@@ -75,7 +64,17 @@ extension EditorPaneView {
     focusEditor()
   }
 
-  /// タブの ×。文書が未保存なら必ず確認を sheet で出し、保存／保存しないで閉じる（保存が外部変更で失敗すれば閉じない）。
+  /// 開いている文書 `url` を今の文書にして Files の画面を選び、ツリーでその行を選択して焦点を本文へ移す（開いている文書の
+  /// 列に無ければ何もしない）。
+  func activate(_ url: URL) {
+    guard let group, group.editor.document(at: url) != nil else { return }
+    group.editor.activate(url)
+    group.editor.selectScreen(.files)
+    tree.reveal(url)
+    focusEditor()
+  }
+
+  /// 文書 `url` を閉じる。文書が未保存なら必ず確認を sheet で出し、保存／保存しないで閉じる（保存が外部変更で失敗すれば閉じない）。
   /// 応答が返るまでにその文書が列から消えていれば何もしない。
   func requestClose(_ url: URL) {
     guard let group, let document = group.editor.document(at: url) else { return }

@@ -108,7 +108,7 @@ final class EditorDiff {
     return document?.surface ?? newRevisionSurface
   }
 
-  /// 新しい側の文書が `previous` から替わった（出どころが知らせる）——前の文書をファイルタブの見え方に戻し、今の文書の
+  /// 新しい側の文書が `previous` から替わった（出どころが知らせる）——前の文書をコードの見え方に戻し、今の文書の
   /// ハンクを追う（見せていれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。新しい側で並びを置けるように
   /// なるまで、中身は「読み込み中」（本体に何も出さない。開くときと同じ）——文書が無くなって版の本文に替わるときも同じ。
   private func documentDidSwitch(from previous: EditorDocument?) {
@@ -185,7 +185,7 @@ final class EditorDiff {
     if let document { restoreCode(document) }
   }
 
-  /// 文書の面をファイルタブの見え方に戻し、文書のハンクを追うのをやめる。
+  /// 文書の面をコードの見え方に戻し、文書のハンクを追うのをやめる。
   private func restoreCode(_ document: EditorDocument) {
     document.onHunksChange = nil
     SurfaceLook.code.apply(to: document.surface, document: document)

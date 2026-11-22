@@ -42,15 +42,9 @@ struct EditorNoticeView: View {
 }
 
 /// pane の本体の種類——文書（文書の面）・diff（新しい側の面、並列なら左右 2 面）・空状態。本体の矩形・右列・焦点の行き先・
-/// 当たり・検索バー・列の頭の高さはこの種類で分かれる。
+/// 当たり・検索バーはこの種類で分かれる。
 enum EditorBody {
   case document(EditorDocument)
   case diff(EditorDiff)
   case empty
-
-  /// パンくずの段を持つか（空状態だけ持たない）。
-  var hasBreadcrumb: Bool {
-    if case .empty = self { return false }
-    return true
-  }
 }

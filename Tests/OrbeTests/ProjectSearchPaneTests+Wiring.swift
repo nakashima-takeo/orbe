@@ -6,8 +6,8 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 面の結線——一致の地は検索パネルが見えている間だけ ⌘F の一致との和で本文と俯瞰に出る、パネルの中のキー（⌥⌘C / W / R・
-/// ⌘↓ / ⌘↑）、エディター面の F4 / ⇧F4、開き方と焦点（シングルクリックは仮のタブで結果に残り、ダブルクリック・Enter は
-/// 普通のタブで本文へ、一致は中央へ）、パネルを隠すと焦点は本文へ戻り、焦点の要求は後で奪わない、裏のタブの cd では
+/// ⌘↓ / ⌘↑）、エディター面の F4 / ⇧F4、開き方と焦点（シングルクリックは仮の文書として結果に残り、ダブルクリック・Enter は
+/// 普通の文書として本文へ、一致は中央へ）、パネルを隠すと焦点は本文へ戻り、焦点の要求は後で奪わない、裏のタブの cd では
 /// 探さない。
 ///
 /// 壊れると何が起きるか。パネルを隠しても地が残る、⌘F の地が消える。パネルのキーが効かない、本文の打鍵を奪う。端末の F4 が
@@ -145,8 +145,8 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(textHasFocus(hosted), "ダブルクリックは本文へ")
   }
 
-  /// 一致のクリックは仮のタブで開き、次のクリックがそのタブを入れ替える（タブが増えない）。ダブルクリックは普通のタブにし、
-  /// 次のクリックは別の仮のタブで開く。
+  /// 一致のクリックは仮の文書として開き、次のクリックがそのタブを入れ替える（タブが増えない）。ダブルクリックは普通の文書にし、
+  /// 次のクリックは別の仮の文書として開く。
   func testClickingMatchesBrowsesInOnePreviewTab() throws {
     let hosted = try host(["a.txt": "needle\n", "b.txt": "needle\n", "c.txt": "needle\n"])
     searchAll(hosted, "needle")
@@ -154,11 +154,11 @@ extension ProjectSearchPaneTests {
 
     hosted.search.click(RowID(path: "a.txt", match: 0))
     hosted.search.click(RowID(path: "b.txt", match: 0))
-    XCTAssertEqual(editor.documents.map(\.url.lastPathComponent), ["b.txt"], "仮のタブが入れ替わる")
+    XCTAssertEqual(editor.documents.map(\.url.lastPathComponent), ["b.txt"], "仮の文書が入れ替わる")
     XCTAssertTrue(editor.preview === hosted.pane.document)
 
     hosted.search.doubleClick(RowID(path: "b.txt", match: 0))
-    XCTAssertNil(editor.preview, "ダブルクリックで普通のタブ")
+    XCTAssertNil(editor.preview, "ダブルクリックで普通の文書")
     hosted.search.click(RowID(path: "c.txt", match: 0))
     XCTAssertEqual(editor.documents.map(\.url.lastPathComponent), ["b.txt", "c.txt"])
     XCTAssertTrue(editor.preview === hosted.pane.document)

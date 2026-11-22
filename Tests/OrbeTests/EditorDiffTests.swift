@@ -69,14 +69,14 @@ final class EditorDiffTests: OrbeTestCase {
 
   /// 作業ツリー diff は index の版 ↔ 文書。インラインでは削除行が古い側（index の本文）の行を指す差し込みになり、追加の
   /// 区間に型が付く。新しい側の面は開いている文書と同じ文書の面で、Files の画面でその文書に戻ればコードの見え方に戻る。
-  /// diff はタブ行に並ばず、同じ diff をもう一度開いても開き直さない。
+  /// diff は開いている文書の列に入らず、同じ diff をもう一度開いても開き直さない。
   func testAWorkingTreeDiffShowsTheIndexAgainstTheDocument() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\nfive\n")
     let (tab, _) = tab()
     let pane = tab.group.view.editor
     let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
-    XCTAssertTrue(diff.document === document, "ファイルタブと同じ文書")
+    XCTAssertTrue(diff.document === document, "開いている文書と同じ文書")
     XCTAssertTrue(pane.diff === diff, "本体は diff")
     waitRows(diff, "並びが届く") { !$0.isEmpty }
     XCTAssertEqual(diff.old?.text.contiguousUnits().count, "one\ntwo\nthree\nfour\n".utf16.count)
@@ -89,17 +89,19 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertEqual(surface.rows.style(ofLine: 4), DiffStyle.added)
     XCTAssertEqual(surface.presentation, DiffStyle.inline)
     XCTAssertTrue(pane.focusTarget === surface.responder, "焦点の行き先は diff の面")
-    XCTAssertEqual(pane.shell.tabs.map(\.name), ["a.txt"], "タブ行は文書だけ")
+    XCTAssertEqual(
+      tab.group.editor.documents.map(\.url.lastPathComponent), ["a.txt"],
+      "diff は開いている文書の列に入らない")
 
     XCTAssertTrue(try tab.group.editor.openDiff(id("a.txt", .workingTree)) === diff, "開き直さない")
 
     tab.group.editor.show(document)
     XCTAssertTrue(pane.document === document)
-    XCTAssertTrue(surface.rows.isEmpty, "ファイルタブではコードの見え方")
+    XCTAssertTrue(surface.rows.isEmpty, "文書の本体ではコードの見え方")
     XCTAssertEqual(surface.presentation, .code)
   }
 
-  /// diff の間は、ガターなら 1 つの区間にまとめる大きさでも、離れた変更を行ごとに出す。ファイルタブへ戻れば、ガターは
+  /// diff の間は、ガターなら 1 つの区間にまとめる大きさでも、離れた変更を行ごとに出す。文書の本体へ戻れば、ガターは
   /// 同じ変更を 1 つの区間にまとめる（打鍵ごとの手間を抑える上限に戻る）。
   func testADiffShowsDistantChangesLineByLineBeyondTheGutterLimit() throws {
     var lines = (0..<(LineDiff.maximumComparedLines + 200)).map { "line \($0)" }
@@ -217,8 +219,6 @@ final class EditorDiffTests: OrbeTestCase {
     let link = try tab.group.editor.openDiff(id("link.txt", .workingTree))
     pumpMain(until: { link.content == .unavailable(.symlink) }, "シンボリックリンク")
     XCTAssertTrue(pane.focusTarget === pane, "面が無ければ行き先は pane")
-    XCTAssertEqual(
-      pane.headerHeight, Theme.Layout.editorFileTabs + 1 + Theme.Layout.editorBreadcrumb)
     try tab.group.editor.openDiff(id("d.txt", .workingTree))
     pumpMain(until: { pane.faceContent == .notice(.editorDiffDirectory) }, "ディレクトリ")
 
@@ -315,10 +315,10 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(tab.group.editor.documents.isEmpty, "前提: 未保存でなければ列に入らない")
     document.surface.responder.perform(Selector(("insertText:")), with: "Z")
     XCTAssertTrue(tab.group.editor.documents.map(\.url) == [document.url], "未保存になると列に入る")
-    XCTAssertEqual(pane.shell.tabs.map(\.isDirty), [true], "タブに未保存の印")
+    XCTAssertEqual(tab.group.editor.documents.map(\.isDirty), [true], "列の文書が未保存")
     XCTAssertEqual(tab.group.unsavedDocuments().count, 1, "閉じれば失われる文書に数える")
 
-    pane.shell.requestClose(document.url)
+    pane.requestClose(document.url)
     let sheet = try XCTUnwrap(window.attachedSheet, "必ず確認")
     window.endSheet(sheet, returnCode: .alertSecondButtonReturn)
     XCTAssertTrue(tab.group.editor.documents.isEmpty)

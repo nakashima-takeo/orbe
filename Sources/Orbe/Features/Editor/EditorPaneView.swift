@@ -2,17 +2,17 @@ import AppKit
 import OrbeEditorCore
 import SwiftUI
 
-/// エディター面の AppKit 側の根。骨の幾何——上のバー、その下に左の列（開いているとき）｜列の頭（タブ行 → 本体があれば
-/// パンくず）｜本体——を `layout()` が解き、SwiftUI の root 3 枚（上のバー・左の列・列の頭）と本体（セッションが画面から
-/// 導いた中身——文書のテキスト面か diff の面。無ければ文字だけの root）を frame で置く。地は chrome と同じ veil。
+/// エディター面の AppKit 側の根。骨の幾何——上のバー、その下に左の列（開いているとき）｜本体——を `layout()` が解き、
+/// SwiftUI の root 2 枚（上のバー・左の列）と本体（セッションが画面から導いた中身——文書のテキスト面か diff の面。無ければ
+/// 文字だけの root）を frame で置く。地は chrome と同じ veil。
 ///
 /// 本体で編集する文書（文書の本体ならその文書、diff の本体なら新しい側の文書）の「変わった」（viewport・選択・本文）は
 /// pane が 1 つずつ受け、検索・出現の強調・diff・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。
 /// 一致の地は、ファイル内検索とプロジェクト検索の 2 つの出どころの和を pane が面へ押す（`pushFindGround`）。
 /// 俯瞰（ミニマップ・スクロールバーと印・影）は面が、押された強調の地から自分で描く。
 ///
-/// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
-/// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
+/// 骨の状態は写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれと件数・番号・開閉の持ち主だけを読む。
+/// セッションの変化は `sessionDidChange` 1 本で受け、左の列の中身 → 面の差し替え → ツリーの追従の順に進める。
 /// ツリー・プロジェクト検索・ソース管理パネルは面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
 ///
 /// chrome キーは `performKeyEquivalent` で先取りし、window コマンドは連経由で上位へ、⌘S は保存、
@@ -22,13 +22,12 @@ final class EditorPaneView: NSView {
   weak var group: TabGroup?
   /// worktree の今の PR が替わった・その PR の状態が変わった（連が上段の現在地を描き直させる）。
   var onPullRequestChange: () -> Void = {}
-  /// 骨の写し（タブ行・パンくず）。
+  /// 骨の写し（左の列の中身と、骨の操作の閉包）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
   private(set) var tree: FileTree
   let barHost: EditorBarHost
   let sideHost: NSHostingView<EditorSideRoot>
-  let headerHost: NSHostingView<EditorHeaderRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
   /// 本体（セッションが画面から導いた中身）。
   private(set) var body = EditorBody.empty
@@ -118,14 +117,11 @@ final class EditorPaneView: NSView {
         scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
         pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
-    headerHost = NSHostingView(
-      rootView: EditorHeaderRoot(
-        shell: shell, localization: localization, fontResolver: fontResolver))
     faceHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
-    for host in [barHost, sideHost, headerHost, faceHost] as [NSView] {
+    for host in [barHost, sideHost, faceHost] as [NSView] {
       // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
       host.wantsLayer = true
       host.layer?.isOpaque = false
@@ -192,8 +188,6 @@ final class EditorPaneView: NSView {
       scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
       pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
       localization: localization, fontResolver: fontResolver)
-    headerHost.rootView = EditorHeaderRoot(
-      shell: shell, localization: localization, fontResolver: fontResolver)
     faceHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
   }
 
@@ -208,14 +202,12 @@ final class EditorPaneView: NSView {
 
   // MARK: - セッション → 骨
 
-  /// セッションが変わった。左の列の中身を画面に合わせ、写しを無条件に組み直し、セッションが画面から導いた本体を見せ、
-  /// Files の今の文書が替わっていればツリーの祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同じ
-  /// 本体の未保存・衝突の変化は `show` の guard で止まる。本体が空のまま画面が替わったときも、器の中身は画面で決まるので
+  /// セッションが変わった。左の列の中身を画面に合わせ、セッションが画面から導いた本体を見せ、Files の今の文書が替わって
+  /// いればツリーの祖先を開いてそのファイルを選択する。本体が空のまま画面が替わったときも、器の中身は画面で決まるので
   /// 置き直す。
   func sessionDidChange() {
     guard let group else { return }
     syncPanel()
-    shell.update(from: group.editor, root: tree.root, diffMode: diffModes.mode)
     show(group.editor.body)
     refreshNotice()
     let active = group.editor.activeURL
@@ -267,10 +259,7 @@ final class EditorPaneView: NSView {
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
-    if let group {
-      shell.update(from: group.editor, root: root, diffMode: diffModes.mode)
-      if let url = group.editor.activeURL { tree.reveal(url) }
-    }
+    if let url = group?.editor.activeURL { tree.reveal(url) }
   }
 
   /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の

@@ -165,13 +165,6 @@ final class FileTree: RootFilesObserver {
     revealPath(path, isDirectory: false)
   }
 
-  /// パンくずのディレクトリ。祖先ごと開いて選択表示する。
-  func revealDirectory(_ url: URL) {
-    guard let path = relativePath(of: url) else { return }
-    revealPath(path, isDirectory: true)
-    expand(path)
-  }
-
   private func revealPath(_ path: String, isDirectory: Bool) {
     isRootOpen = true
     for ancestor in Self.ancestors(of: path) { expand(ancestor) }

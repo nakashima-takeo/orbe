@@ -588,8 +588,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorEmptyBackToTerminal
 
   // MARK: - Editor 面（diff）
-  case editorDiffInline
-  case editorDiffSide
   case editorDiffNotText
   case editorDiffSymlink
   case editorDiffDirectory
@@ -617,7 +615,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrTreeView
   case editorPrListView
   case editorPrOlderCommitsHidden
-  case editorPrMarkViewed
   case editorPrCreate
   case editorPrPublishFirst
   case editorPrNotDetached

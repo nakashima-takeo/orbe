@@ -28,7 +28,6 @@ extension L10n {
     .editorPrTreeView: ("ツリー表示", "View as Tree"),
     .editorPrListView: ("リスト表示", "View as List"),
     .editorPrOlderCommitsHidden: ("古いコミット %lld 件は表示していません", "Older commits not shown: %lld"),
-    .editorPrMarkViewed: ("確認済みにする", "Viewed"),
     .editorPrCreate: ("プルリクエストを作成", "Create Pull Request"),
     .editorPrPublishFirst: ("先にブランチを公開してください", "Publish the branch first"),
     .editorPrNotDetached: ("ブランチにいません", "Not on a branch"),

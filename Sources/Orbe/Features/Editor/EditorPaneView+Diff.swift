@@ -130,7 +130,7 @@ extension EditorPaneView {
     }
   }
 
-  /// 見せ方の選択を観測して、見せている diff を見せ直す（タブ行の右端の切り替えは写しにも写す）。
+  /// 見せ方の選択を観測して、見せている diff を見せ直す。
   func observeDiffModes() {
     withObservationTracking {
       _ = diffModes.mode
@@ -142,7 +142,6 @@ extension EditorPaneView {
           installDiffSurfaces(diff)
           needsLayout = true
         }
-        shell.diffMode = diffModes.mode
         observeDiffModes()
       }
     }

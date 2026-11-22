@@ -97,22 +97,10 @@ extension OrbeTestCase {
     return try XCTUnwrap(window.firstResponder as? NSTextView)
   }
 
-  /// ファイルタブ `index` の右端の枠（× / ●）の中心（面の座標）。タブの幅は同じ view を単独で組んで測る。
-  @MainActor
-  func fileTabSlotCenter(_ pane: EditorPaneView, _ index: Int) -> NSPoint {
-    let right = pane.shell.tabs.prefix(index + 1).reduce(pane.headerHost.frame.minX) { x, tab in
-      x + NSHostingView(rootView: FileTabView(tab: tab, shell: pane.shell)).fittingSize.width
-    }
-    return NSPoint(
-      x: right - Theme.Layout.editorFileTabTrailing - Theme.Layout.editorTabClose / 2,
-      y: Theme.Layout.editorBar + Theme.Layout.editorFileTabs / 2)
-  }
-
-  /// ポインタを面の座標の点へ動かす（`host` はその点の上の SwiftUI の器。既定は列の頭）。SwiftUI の onHover は
+  /// ポインタを面の座標の点へ動かす（`host` はその点の上の SwiftUI の器）。SwiftUI の onHover は
   /// ポインタの下の view が受ける mouseEntered / mouseMoved で動く。
   @MainActor
-  func movePointer(_ pane: EditorPaneView, to point: NSPoint, over host: NSView? = nil) {
-    let host = host ?? pane.headerHost
+  func movePointer(_ pane: EditorPaneView, to point: NSPoint, over host: NSView) {
     let local = host.convert(point, from: pane)
     guard let target = host.hitTest(host.convert(local, to: host.superview)) else { return }
     let event = timedMouse(.mouseMoved, at: pane.convert(point, to: nil), in: pane.window)

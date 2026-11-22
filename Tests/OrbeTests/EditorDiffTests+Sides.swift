@@ -6,9 +6,9 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// diff の側の決まり方——新しい側の文書が替わったとき（並びが載るまで出さない・タブ行の未保存の印・未保存が下りたとき）、
+/// diff の側の決まり方——新しい側の文書が替わったとき（並びが載るまで出さない・開いている文書の未保存・未保存が下りたとき）、
 /// 両側とも無いパス、途中のシンボリックリンク、サブモジュール。壊れると、diff に並びの無い面が一瞬出る・未保存の文書が
-/// タブ行に出ない・消えたファイルの diff が古いまま残る・リンク先の別のファイルが出る・空の diff が理由
+/// 開いている文書の列に入らない・消えたファイルの diff が古いまま残る・リンク先の別のファイルが出る・空の diff が理由
 /// なしに出る・サブモジュールの行が「git から取れない」になる。
 extension EditorDiffTests {
   /// diff だけが持つファイルが消えて戻った直後は、新しい文書の行差分が届くまで本体に何も出さず、届けば出す。
@@ -29,7 +29,7 @@ extension EditorDiffTests {
     waitRows(diff, "行差分が届く") { self.removedLines($0) == [1] }
   }
 
-  /// 未保存のファイルが外で消えて戻ると、diff はその未保存の文書を新しい側に使い、タブ行の文書に未保存の印が出る。ほかの
+  /// 未保存のファイルが外で消えて戻ると、diff はその未保存の文書を新しい側に使い、開いている文書は未保存のまま。ほかの
   /// 変更（未追跡の b.txt）を残し、戻したときに変更が 1 件も無くなって diff が閉じないようにする。
   func testADiffSwitchesToTheUnsavedDocumentWhenItsFileComesBack() throws {
     try repo.write("b.txt", "b\n")
@@ -43,7 +43,7 @@ extension EditorDiffTests {
 
     try contents.write(to: repo.url("a.txt"))
     pumpMain(until: { diff.document === document }, "戻ったファイルの未保存の文書を使う")
-    XCTAssertEqual(tab.group.view.editor.shell.tabs.map(\.isDirty), [true], "未保存の印")
+    XCTAssertEqual(tab.group.editor.documents.map(\.isDirty), [true], "未保存のまま")
   }
 
   /// 未追跡のファイルの作業ツリー diff を見せている間に、未保存のままファイルが消え、保存時の本文へ戻して未保存が下りると、

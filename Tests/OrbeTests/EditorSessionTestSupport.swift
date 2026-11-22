@@ -10,7 +10,7 @@ extension EditorSession {
   func pin(_ document: EditorDocument) { pin(document.url) }
   func close(_ document: EditorDocument) { close(document.url) }
 
-  /// 文書を今の文書にして Files の画面を選ぶ（タブを押したのと同じ）。
+  /// 文書を今の文書にして Files の画面を選ぶ（開いている文書を人が選んだのと同じ）。
   func show(_ document: EditorDocument) {
     activate(document.url)
     selectScreen(.files)
@@ -18,14 +18,6 @@ extension EditorSession {
 
   /// 仮の文書。
   var preview: EditorDocument? { previewURL.flatMap(document(at:)) }
-}
-
-@MainActor
-extension EditorShellModel {
-  /// diff の見せ方を既定（インライン）にした写し。
-  func update(from session: EditorSession, root: String) {
-    update(from: session, root: root, diffMode: .inline)
-  }
 }
 
 @MainActor

@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// 骨の幾何——上のバー（全幅）、その下に左の列（開いているとき。狭い面では表示幅を切り詰める）｜列の頭｜本体——を解き、
+/// 骨の幾何——上のバー（全幅）、その下に左の列（開いているとき。狭い面では表示幅を切り詰める）｜本体——を解き、
 /// `layout()` で host・本体・境の当たりを置く。
 extension EditorPaneView {
   /// 左の列の幅（開いていれば表示幅 ＋ 右の hairline、閉じていれば 0）。
@@ -85,16 +85,9 @@ extension EditorPaneView {
     }
   }
 
-  /// 列の頭の高さ（タブ行 ＋ 下の hairline、本体がパンくずを持てばパンくずも——空状態だけ持たない）。SwiftUI 側の
-  /// パンくずの出し分けも同じ事実（`EditorShellModel.activeName`、本体の種類から作る）で決まる。
-  var headerHeight: CGFloat {
-    Theme.Layout.editorFileTabs + Theme.Stroke.hairline
-      + (body.hasBreadcrumb ? Theme.Layout.editorBreadcrumb : 0)
-  }
-
-  /// 本体（文書の面・diff の面・文字だけの器）の矩形——バーの下、左の列の右、列の頭の下。
+  /// 本体（文書の面・diff の面・文字だけの器）の矩形——バーの下、左の列の右。
   var bodyRect: NSRect {
-    let top = Theme.Layout.editorBar + headerHeight
+    let top = Theme.Layout.editorBar
     return NSRect(
       x: sideWidth, y: top, width: max(0, bounds.width - sideWidth),
       height: max(0, bounds.height - top))
@@ -122,8 +115,6 @@ extension EditorPaneView {
     let below = max(0, bounds.height - bar)
     barHost.frame = NSRect(x: 0, y: 0, width: bounds.width, height: min(bar, bounds.height))
     sideHost.frame = NSRect(x: 0, y: bar, width: min(sideWidth, bounds.width), height: below)
-    headerHost.frame = NSRect(
-      x: sideWidth, y: bar, width: max(0, bounds.width - sideWidth), height: headerHeight)
     faceHost.frame = bodyRect
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない面に出すと本体の左 1pt を
     // 覆ってリサイズカーソルだけが出る。

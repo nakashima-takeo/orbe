@@ -7,14 +7,14 @@ extension Theme.Color {
   static let editorGhost = editorDyn(light: 0xd9d3e6, dark: 0x3d3752)
   /// エディター面のアイコン・kbd の文字。dark / light とも kbKeyText と偶然同値だが役割が違うので別トークン。
   static let editorIcon = editorDyn(light: 0x766e8d, dark: 0xa99fb8)
-  /// エディター面の 2 段目の文字——コードの素文字・ファイル名・タブ題・パンくずの末尾。
+  /// エディター面の 2 段目の文字——コードの素文字・ファイル名。
   /// dark / light とも statusText と偶然同値だが役割が違うので別トークン。
   static let editorText = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
-  /// 三次の文字——パンくずの区切り。`textTertiary` は `textMuted` の別名なので別値を持つ。
+  /// 三次の文字。`textTertiary` は `textMuted` の別名なので別値を持つ。
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
   /// 説明文の段——PR の説明（editorText と textMuted の間）。
   static let editorProse = editorDyn(light: 0x6d647f, dark: 0xa9a2b5)
-  /// 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地。
+  /// 注意の黄——検索の一致の地・PR のパネルの手元とのずれと保留中の印。
   /// dark は conflict と偶然同値だが light が違い、git 競合でもない。
   static let editorCaution = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
   /// git の変化の種類の色（追加＝青・削除＝オレンジ・変更＝黄）。赤と緑を見分けにくい人でも区別できるよう、成否の
@@ -25,10 +25,6 @@ extension Theme.Color {
   /// diff の追加・削除の行の地（diff.added / diff.removed の α `editorDiffRow`）。
   static let editorDiffAddedRow = diffAdded.withAlphaComponent(Theme.Opacity.editorDiffRow)
   static let editorDiffRemovedRow = diffRemoved.withAlphaComponent(Theme.Opacity.editorDiffRow)
-  /// ファイルタブの × にポインタがあるときの枠の地（VS Code の toolbar.hoverBackground に当たる）。
-  static let editorTabCloseHover = editorDynAB(light: (0x3a3151, 0.10), dark: (0xffffff, 0.10))
-  /// 仮のタブの地の斜線の基色（α は `Theme.Opacity.editorPreviewHatch*`）。dark は editorIcon と同じ色相。
-  static let editorPreviewHatch = editorDyn(light: 0x3a3151, dark: 0xa99fb8)
   /// 上のバーの画面の切り替えの溝の地と、溝・選んだ項目に落とす影の色（見本の `--sunk`・`--inset`）。
   static let editorBarGroove = editorDynAB(light: (0x3a3151, 0.05), dark: (0x08060c, 0.32))
   static let editorBarInset = editorDynAB(light: (0x3a3151, 0.14), dark: (0x000000, 0.4))
@@ -136,12 +132,6 @@ extension Theme.Typography {
   static let editorTreeRow = NSFont.systemFont(ofSize: 12.5, weight: .regular)
   /// ツリー行の git バッジ（mono 11）。
   static let editorBadge = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-  /// ファイルタブの題（sans 12）。
-  static let editorFileTab = NSFont.systemFont(ofSize: 12, weight: .regular)
-  /// パンくず（sans 11）。
-  static let editorBreadcrumb = NSFont.systemFont(ofSize: 11, weight: .regular)
-  /// タブ行の右端の「インライン / 並列」（mono 10.5）。
-  static let editorDiffSegment = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
   /// 種別チップのグリフ（mono bold。サイズはチップが決める）。
   static func editorChip(size: CGFloat) -> NSFont {
     NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
@@ -195,22 +185,10 @@ extension Theme.Layout {
   static let editorBodyMinWidth: CGFloat = 160
   /// 左の列と本体の境（hairline）に置くドラッグの当たりの幅。
   static let editorSidebarHandle: CGFloat = 4
-  static let editorFileTabs: CGFloat = 28
-  /// ファイルタブの右端の枠（× と未保存の ● の場所。押せる範囲）と、その中の × の字（VS Code の tab-actions の
-  /// action-label 16 ＋ padding 2 と同じ 20 四方）。
-  static let editorTabClose: CGFloat = 20
-  static let editorTabCloseGlyph: CGFloat = 12
-  /// ファイルタブの右の余白（× の枠の右）。
-  static let editorFileTabTrailing: CGFloat = 6
-  /// 仮のタブの地の斜線の周期（線に直交する向きで測る。線の太さは `Theme.Stroke.editorPreviewHatch`）。
-  static let editorPreviewHatchPeriod: CGFloat = 6
-  static let editorBreadcrumb: CGFloat = 20
   static let editorPanelHeader: CGFloat = 28
   static let editorRow: CGFloat = 20
-  /// ツリー行・ファイルタブの種別チップ。
+  /// ツリー行の種別チップ。
   static let editorChip: CGFloat = 14
-  /// パンくずの末尾のチップ。
-  static let editorChipSmall: CGFloat = 12
   /// 行番号ガター（右寄せの数字が収まる幅）と、その右の git の印の列。本文は 2 つの右端から始まる。
   static let editorLineNumberGutter: CGFloat = 50
   static let editorMarkGutter: CGFloat = 19
@@ -219,11 +197,6 @@ extension Theme.Layout {
   static let editorDiffNumberTrailingInline: CGFloat = 6
   static let editorDiffNumberTrailingSide: CGFloat = 8
   static let editorDiffSign: CGFloat = 18
-  /// タブ行の右端の「インライン / 並列」の項目の内側の余白（横・縦）と、項目の間・帯の左右の余白。
-  static let editorDiffSegmentPadX: CGFloat = 10
-  static let editorDiffSegmentPadY: CGFloat = 2
-  static let editorDiffSegmentGap: CGFloat = 2
-  static let editorDiffSegmentInset: CGFloat = 10
   /// 本体の右端の縦スクロールバー（印を載せる。VS Code の verticalScrollbarSize）。
   static let editorScrollbar: CGFloat = 14
   /// 本文の区画の下端の横スクロールバーの高さ（VS Code の horizontalScrollbarSize）。
@@ -271,34 +244,17 @@ extension Theme.Layout {
   static let editorScmStop: CGFloat = 20
 }
 
-extension Theme.Radius {
-  /// ファイルタブの × の枠。
-  static let editorTabClose: CGFloat = 6
-  /// 「インライン / 並列」の項目。
-  static let editorDiffSegment: CGFloat = 3
-}
-
-extension Theme.Stroke {
-  /// 仮のタブの地の斜線の太さ。
-  static let editorPreviewHatch: CGFloat = 1
-}
-
 extension Theme.Opacity {
   /// 半透明面の light 換算。`sunkInk` の沈み面は tabRowBg の比に倣い ×0.3、`surfaceInk` の塗りは
   /// tabSegBg の比に倣い ×0.6、`borderInk` の hairline は紙面で濃くする ×1.4。
   static let editorSunkLight: Double = 0.3
   static let editorFillLight: Double = 0.6
   static let editorHairlineLight: Double = 1.4
-  /// 仮のタブの地の斜線の不透明度——見ているとき／見ていないとき（見ているときの 0.65 倍）。
-  static let editorPreviewHatchActive: Double = 0.06
-  static let editorPreviewHatchInactive: Double = 0.039
   /// diff の追加・削除の行の地の不透明度（構文色が地の上で読める濃さ）。
   static let editorDiffRow: CGFloat = 0.12
   /// diff の詰め物の行の地（塗りの α）と、並列の 2 面の境（hairline の α）。
   static let editorDiffPad: Double = 0.02
   static let editorDiffDivider: Double = 0.07
-  /// 「インライン / 並列」の選んでいない項目の地（塗りの α）。
-  static let editorDiffSegmentIdle: Double = 0.08
 }
 
 extension Theme.Motion {

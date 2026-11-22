@@ -154,8 +154,6 @@ enum L10n {
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
 
     // MARK: Editor 面（diff）
-    .editorDiffInline: ("インライン", "Inline"),
-    .editorDiffSide: ("並列", "Side by Side"),
     .editorDiffNotText: (
       "バイナリか UTF-8 でないファイルのため、差分を表示できません",
       "Can't show the diff: the file is binary or not UTF-8"

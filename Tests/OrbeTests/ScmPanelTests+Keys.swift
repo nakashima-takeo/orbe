@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// 変更の列のキー——↑↓ は子の見出しとファイル行を渡り（グラフは別の列で、キーでは入らない）、ファイル行でだけ仮で開く。
-/// ← → Enter は見出しの開閉と見出し・ファイル行の行き来、Enter はファイル行を普通のタブで開く。⌘↑ は先頭の行から欄へ戻る。
+/// ← → Enter は見出しの開閉と見出し・ファイル行の行き来、Enter はファイル行を普通の文書として開く。⌘↑ は先頭の行から欄へ戻る。
 /// 押し続けた ↑↓ は離すまで開かず、待っている開きは人の注意が列から移ったら捨てる。
 ///
 /// 壊れると何が起きるか。↓ が列の末尾を越えて選択を失う。見出しへ動いただけで diff が開く。Enter で開いても焦点が列に残る。
@@ -56,7 +56,7 @@ extension ScmPanelTests {
   }
 
   /// ← はファイル行から見出しへ、開いた見出しなら畳む。→ は畳んだ見出しを開き、開いた見出しなら最初のファイル行へ動いて
-  /// 仮で開く。Enter は見出しなら開閉、ファイル行なら普通のタブで開く。
+  /// 仮で開く。Enter は見出しなら開閉、ファイル行なら普通の文書として開く。
   func testLeftRightAndEnterMoveBetweenAHeaderAndItsFilesAndToggleIt() throws {
     let opened = try keysPanel()
     panel.select(id(.changes, "n.txt"))
@@ -74,7 +74,7 @@ extension ScmPanelTests {
     panel.activateSelection()
     XCTAssertEqual(opened().last?.key.path, "a.txt")
     XCTAssertEqual(opened().last?.key.kind, .workingTree)
-    XCTAssertEqual(opened().last?.opening, .commit, "Enter は普通のタブで本文へ")
+    XCTAssertEqual(opened().last?.opening, .commit, "Enter は普通の文書として本文へ")
     let count = opened().count
     panel.select(id(.staged))
     panel.activateSelection()
