@@ -30,7 +30,10 @@ extension BoardAutomationTests {
     send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertEqual(asks(), ["abc"], "押し続けても 1 回")
-    XCTAssertEqual(model.automation.requestText, "")
+    XCTAssertEqual(
+      model.automation.requestText, "",
+      "頼んだら欄を空にする。testArrowsMoveOneSelectionThroughTheFieldAndTheRows の「esc の後も打った文字は残る」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     XCTAssertNil(model.refusal)
   }
 

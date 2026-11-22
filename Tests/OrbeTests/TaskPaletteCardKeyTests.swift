@@ -146,6 +146,21 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.query, "", "入力欄の文字を行頭まで消す")
   }
 
+  /// 空の入力欄の ⌘⌫ は、選んだタスクを消す。
+  func testCommandBackspaceOnAnEmptyFieldDeletesTheSelectedTask() throws {
+    let model = model()
+    let window = mount(model)
+    arrow(Key.down, to: window)
+    guard case .task(let id) = model.selectedID else { return XCTFail("前提: タスクを選んだ") }
+
+    send(Key.delete, "\u{7F}", .command, to: window)
+
+    XCTAssertFalse(
+      model.store.tasks.contains { $0.id == id },
+      "空の入力欄の ⌘⌫ で選んだタスクを消す。testCommandBackspaceWithTextEditsTheFieldInsteadOfDeleting の"
+        + "「文字があるときはタスクを消さない」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
+  }
+
   func testTabAndShiftTabCycleTheTabsWhileTheFieldKeepsTheKeys() {
     let model = model()
     let window = mount(model)
@@ -215,6 +230,25 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
       XCTAssertEqual(model.openFilterMenu, .due, "\(row + 1) つ目のクリックの後も開いたまま")
       XCTAssertTrue(model.filter.dues.contains(bucket), "\(row + 1) つ目の値がオン")
     }
+  }
+
+  /// 絞り込みのメニューの外のクリックは、メニューを閉じる。
+  func testClickingOutsideTheFilterMenuClosesIt() throws {
+    let model = model()
+    model.toggleFilterMenu(.due)
+    let window = mount(model, width: 880, detailWidth: 880 / 3)
+    placeOffscreen(window)
+    let content = try XCTUnwrap(window.contentView)
+    let menu = try XCTUnwrap(scrollViews(in: content).last)
+    let frame = menu.convert(menu.bounds, to: nil)
+    XCTAssertEqual(model.openFilterMenu, .due, "前提: 開いている")
+
+    click(NSPoint(x: frame.maxX + 40, y: frame.midY), in: window)
+
+    XCTAssertNil(
+      model.openFilterMenu,
+      "メニューの外のクリックで閉じる。testClickingThreeValuesInARowKeepsTheFilterMenuOpenAndTurnsAllOn の"
+        + "「クリックの後も開いたまま」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 
   /// view の木を深さ優先でたどった順のスクロール。先頭が表で、絞り込みのメニューはカードの最後に重ねるので末尾。

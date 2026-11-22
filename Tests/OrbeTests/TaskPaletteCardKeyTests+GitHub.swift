@@ -52,6 +52,7 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.draft?.text, "10/6")
 
     send(Key.escape, "\u{1B}", to: window)
+    XCTAssertNil(model.draft, "esc は打った期限を取り消す")
     XCTAssertEqual(model.area, .pane(.due), "前提: 期限の項目に居る")
     send(Key.tab, "\t", to: window)
     XCTAssertEqual(model.tab, .automation)
