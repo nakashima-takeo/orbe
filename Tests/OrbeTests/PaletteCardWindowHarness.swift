@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -9,7 +10,7 @@ import XCTest
 /// モデル単体テストでは掴めない欠陥——focus の所在、SwiftUI の更新パスで消えゆく子の評価——は
 /// 実際に描いて実際にキーを届けないと再現しない。窓は並べず（OS の表示の並びに入れず。並べるのは
 /// `placeOffscreen` だけ）、キーは窓を名指しして届ける。SwiftUI の focus と更新は並べない窓でも回る。
-/// 窓の作り方・pump の刻み・キーとクリックの届け方はどれも微妙で、コピーすると片方だけ腐るため 1 か所に置く。
+/// 窓の作り方・キーとクリックの届け方・その後の更新の走らせ方はどれも微妙で、コピーすると片方だけ腐るため 1 か所に置く。
 @MainActor
 class PaletteCardWindowTestCase: OrbeTestCase {
   /// 返した窓を捨てるテストがあるので、載せた中身がテストの間に解放されないよう、テストの終わりまで保持する。
@@ -20,11 +21,9 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     super.tearDown()
   }
 
-  func pump(_ seconds: TimeInterval) {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
-    }
+  /// 載せたカードの入力欄に焦点が入るまで待つ。新しく載せたビューへの焦点は、`flush` の 1 回の更新の後にもう 1 段かかる。
+  func awaitFieldFocus(_ window: NSWindow, file: StaticString = #filePath, line: UInt = #line) {
+    pumpMain(until: { window.firstResponder is NSTextView }, "入力欄に焦点が入る", file: file, line: line)
   }
 
   /// keyDown を窓へ届ける（keyCode は macOS の仮想キーコード）。
@@ -40,7 +39,7 @@ class PaletteCardWindowTestCase: OrbeTestCase {
         isARepeat: repeating, keyCode: keyCode)
     else { return XCTFail("キーイベントを作れない") }
     deliverKeyDown(event, to: window)
-    pump(0.15)
+    flush(window)
   }
 
   /// 窓座標（原点は左下）の 1 点を実 NSEvent のマウスでクリックする。マウスは並んだ窓にしか届かないので、窓は
@@ -59,23 +58,12 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     }
     NSApp.postEvent(make(.leftMouseUp), atStart: false)
     NSApp.sendEvent(make(.leftMouseDown))
-    pump(0.05)
     if let pending = NSApp.nextEvent(
       matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
     {
       NSApp.sendEvent(pending)
     }
-    pump(0.3)
-  }
-
-  /// 保留中の SwiftUI 更新を 1 パス流し切る。モデルを書き換えただけでは子ビューは作られも壊されもせず、
-  /// RunLoop（SwiftUI が仕込む observer）か強制レイアウトのどちらかが更新パスを回して初めて起きる。
-  /// キーを送らずに状態だけ変える段（サブパレットへ潜る等）では回す機会が他に無いため、ここを挟まないと
-  /// 描画パスでしか出ない欠陥は修正前でも再現しない。
-  func flush(_ window: NSWindow) {
-    window.contentView?.layoutSubtreeIfNeeded()
-    pump(0.3)
-    window.contentView?.layoutSubtreeIfNeeded()
+    flush(window)
   }
 
   /// 中身を、並べない窓に載せて返す。主窓と同じ `OrbeWindow` に載せ、日本語入力の変換中に届いたキーをキーの処理に通さず
@@ -87,7 +75,7 @@ class PaletteCardWindowTestCase: OrbeTestCase {
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = content
     windows.append(window)
-    pump(0.4)
+    flush(window)
     return window
   }
 

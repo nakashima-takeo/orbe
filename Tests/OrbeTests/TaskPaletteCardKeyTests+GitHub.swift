@@ -62,13 +62,13 @@ extension TaskPaletteCardKeyTests {
     let source = GitHub.Source()
     let model = GitHub.model(
       [], issues: [GitHub.issue(7), GitHub.issue(6), GitHub.issue(5)], source: source)
-    _ = mount(model)
+    let window = mount(model)
     model.move(1)
 
     model.openLists.open(root: TaskPaletteSamples.root)
     try XCTUnwrap(source.fetches.first { $0.kind == .issue })
       .finish([GitHub.issue(7), GitHub.issue(5)])
-    pump(0.3)
+    flush(window)
 
     XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)))
   }
@@ -84,7 +84,10 @@ extension TaskPaletteCardKeyTests {
     arrow(Key.right, to: window)
     arrow(Key.down, to: window)
     arrow(Key.down, to: window)
-    XCTAssertEqual(model.area, .pane(.due), "前提: 期限")
+    XCTAssertEqual(
+      model.area, .pane(.due),
+      "前提: → で右の欄へ入り、期限に居る。testRightArrowWhilePickingATaskMovesTheCaretInTheField の"
+        + "「選ぶ状態の → は右の欄へ入らない」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
 
     send(Key.enter, "\r", to: window)
     send(Key.enter, "\r", repeating: true, to: window)
@@ -151,12 +154,18 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.query, "", "打った文字は絞り込みに入らない")
     send(Key.enter, "\r", to: window)
     XCTAssertEqual(model.pane.due, TaskItem.DueDate("2025-10-06"))
-    XCTAssertNil(model.draft)
+    XCTAssertNil(
+      model.draft,
+      "期限の ↵ で確定する。testEnterHeldOnThePaneDueStartsTypingOnceAndKeepsTyping の「リピートで確定しない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
 
     arrow(Key.up, to: window)
     send(Key.enter, "\r", to: window)
 
-    let made = try XCTUnwrap(model.store.tasks.first)
+    let made = try XCTUnwrap(
+      model.store.tasks.first,
+      "優先度の ↵ でタスクにする。testEnterHeldOnMoreOnlyExpandsTheSection の「リピートでタスクを作らない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     XCTAssertEqual(made.due, TaskItem.DueDate("2025-10-06"))
     XCTAssertEqual(made.links, [GitHub.link(5)])
   }

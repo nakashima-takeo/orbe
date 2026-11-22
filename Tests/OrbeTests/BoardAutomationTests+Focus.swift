@@ -31,6 +31,10 @@ extension BoardAutomationTests {
   /// 欄は一覧の上の 1 段で、欄と行は 1 つの選択を分け合う。ウィジェットは欄から始まり、欄を選んでいる間は行の選択と詳細が無い。
   /// 欄の ↓ で一覧の先頭、先頭の行の ↑ で欄、欄の ↑ で一覧の末尾（巡回）、末尾の行の ↓ で欄（巡回）、欄の esc は ↓ と同じく
   /// 一覧の先頭へ。⇥・⇧⇥ は欄でも一覧でも何もせず、一覧の → で地図へ入り、地図の ← で一覧へ戻る。
+  ///
+  /// ⇥・⇧⇥ が居場所（欄・一覧）を動かす場合は無いので、この確かめには対のテストを置けない。⇥・⇧⇥ の判断は、キーを届けた
+  /// 呼び出しの中で同期に決まるので、キーを届けた直後に確かめる。この時点で足りることは、本番で欄の ⇥ が居場所を動かすように
+  /// 変えると、このテストが落ちることで確かめた。本番がキーの判断を届ける経路を変えたときは、確かめ直す。
   func testArrowsMoveOneSelectionThroughTheFieldAndTheRows() {
     let model = board()
     let automation = model.automation
@@ -137,9 +141,15 @@ extension BoardAutomationTests {
 
     click(Point.secondRow, in: window)
     XCTAssertEqual(automation.place, .list)
-    XCTAssertEqual(automation.selectedAutomation?.id, Self.slack)
+    XCTAssertEqual(
+      automation.selectedAutomation?.id, Self.slack,
+      "行のクリックで行を選ぶ。testClickingARowChoosesAndClickingOutsideOnlyCloses の「メニューの外のクリックは下の行を選ばない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     send(Key.space, " ", to: window)
-    XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true, "行のクリックの直後の space は一覧に効く")
+    XCTAssertEqual(
+      automation.store.automation(Self.slack)?.paused, true,
+      "行のクリックの直後の space は一覧に効く。testArrowsMoveOneSelectionThroughTheFieldAndTheRows の"
+        + "「欄の space は一覧の止めるにならない」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     XCTAssertEqual(automation.requestText, "b")
 
     click(Point.field, in: window)

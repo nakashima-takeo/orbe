@@ -54,11 +54,19 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.automation.store.proposals.map(\.state), [.open, .open, .open])
 
     send(Key.delete, "\u{7F}", .command, to: window)
-    XCTAssertEqual(try model.automation.store.decision(of: 1), .dismissed)
+    XCTAssertEqual(
+      try model.automation.store.decision(of: 1), .dismissed,
+      "空の入力欄の ⌘⌫ で選んだ候補を捨てる。testAutomationOpensOnTheFieldWhereTypingFiltersAndEnterDoesNothing の"
+        + "「捨てない」と testAutomationCommandDeleteHeldDownAfterClearingTheFieldDismissesNothing の「リピートでは捨てない」"
+        + "の対で、これが待たずに成り立たなくなったら、それらのテストが確かめる時点も成り立たない")
     XCTAssertEqual(model.automation.proposalList.selectedID, 2)
 
     send(Key.enter, "\r", to: window)
-    XCTAssertTrue(model.store.tasks.contains { $0.title == "オンボーディングの環境構築手順を見る" })
+    XCTAssertTrue(
+      model.store.tasks.contains { $0.title == "オンボーディングの環境構築手順を見る" },
+      "↵ で選んだ候補をタスクにする。testAutomationOpensOnTheFieldWhereTypingFiltersAndEnterDoesNothing の"
+        + "「タスクにしない」と testAutomationEnterHeldOnTheShelfStopsAtTheProposals の「リピートではタスクにしない」"
+        + "の対で、これが待たずに成り立たなくなったら、それらのテストが確かめる時点も成り立たない")
   }
 
   /// 入力を行頭まで消した ⌘⌫ を押し続けても、空になった後のリピートでは候補を捨てない（捨てた候補は戻せない）。

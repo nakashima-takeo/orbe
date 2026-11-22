@@ -35,12 +35,14 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
   func mount(
     _ model: TaskPaletteModel, width: CGFloat = 960, detailWidth: CGFloat = 340
   ) -> NSWindow {
-    host(
+    let window = host(
       NSHostingView(
         rootView: TaskPaletteCard(model: model, detailWidth: detailWidth)
           .frame(width: width, height: 600)
           .environment(\.localization, LocalizationStore(language: .ja))),
       size: NSSize(width: width + 40, height: 640))
+    awaitFieldFocus(window)
+    return window
   }
 
   /// ヘッダーの入力欄（カード左上の「❯」の右）をクリックする。窓はカードの大きさに揃うので、窓座標
@@ -103,11 +105,17 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let window = mount(model)
 
     send(Key.enter, "\r", to: window)
-    XCTAssertEqual(status(model, 3), .done)
+    XCTAssertEqual(
+      status(model, 3), .done,
+      "↵ で選んだタスクを完了にする。testEnterKeyRepeatAloneInTheFieldDoesNothing の「完了にしない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
 
     type("新しい", into: window)
     send(Key.enter, "\r", to: window)
-    XCTAssertTrue(model.store.tasks.contains { $0.title == "新しい" })
+    XCTAssertTrue(
+      model.store.tasks.contains { $0.title == "新しい" },
+      "追加の行の ↵ で追加する。testEnterKeyRepeatAloneInTheFieldDoesNothing の「追加しない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     XCTAssertEqual(model.query, "")
   }
 
@@ -143,7 +151,10 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let window = mount(model)
 
     send(Key.tab, "\t", to: window)
-    XCTAssertEqual(model.tab, .github)
+    XCTAssertEqual(
+      model.tab, .github,
+      "⇥ でタブを替える。testTabWhilePickingKeepsPickingAndTheFieldKeepsTheKeys の「選ぶ状態を保つ」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
 
     send(Key.tab, "\t", to: window)
     XCTAssertEqual(model.tab, .automation)
