@@ -158,9 +158,11 @@ final class ShellPATHTests: OrbeTestCase {
     let floor = ShellPATH.knownPaths.joined(separator: ":")
 
     let first = value(of: sut)
-    XCTAssertTrue(
-      clock.awaitSleeper(until: clock.now + ShellPATH.syncWaitBudget), "最初の呼びは天井まで待つ")
-    clock.advance(by: ShellPATH.syncWaitBudget + 1)
+    XCTAssertTrue(awaitSleeper(clock, clock.now + ShellPATH.syncWaitBudget), "最初の呼びは天井まで待つ")
+    XCTAssertEqual(
+      clock.advance(by: ShellPATH.syncWaitBudget + 1), 1,
+      "天井まで進めると、待ち手を、進めた呼び出しの中で起こす。進めた呼び出しが戻った時点でこれが成り立たなくなったら、"
+        + "testSettledWaitReturnsProbeResult が、天井では返らないことを確かめる時点（進めた直後）も成り立たない")
     pumpMain(until: { first.value != nil }, "天井で返る")
     XCTAssertEqual(first.value, floor)
 
@@ -184,8 +186,7 @@ final class ShellPATHTests: OrbeTestCase {
     sut.start()
 
     let settled = value(of: sut, wait: .settled)
-    XCTAssertTrue(
-      clock.awaitSleeper(until: clock.now + ShellPATH.probeTimeout), "probe の上限で眠る")
+    XCTAssertTrue(awaitSleeper(clock, clock.now + ShellPATH.probeTimeout), "probe の上限で眠る")
     XCTAssertEqual(
       clock.advance(by: ShellPATH.syncWaitBudget + 1), 0, "同期待ちの天井を越えても起こさない")
     released.signal()
@@ -274,6 +275,12 @@ final class ShellPATHTests: OrbeTestCase {
   /// probe の着地は main への非同期書き込みを伴うので、条件が満たされるまで RunLoop を回す。
   private func waitForCachedShellPath(_ matches: (String?) -> Bool) -> Bool {
     waitUntil(2) { matches(AppStatePersistence.load()?.cachedShellPath) }
+  }
+
+  /// 裏の `value(wait:)` が、`deadline` で眠るまで待つ。main を回さずに待つ——ほかのテストが main に残した保存の書き込みが、
+  /// 裏の呼び出しがディスクのキャッシュを読む前に、このテストの保存先へ書かれると、呼び出しが probe を待たずに返る。
+  private func awaitSleeper(_ clock: ManualClock, _ deadline: WaitClock.Instant) -> Bool {
+    sleepUntil(10) { clock.sleeping.contains(deadline) }
   }
 
   /// 裏のスレッドで `value(wait:)` を呼ぶ（手で進める時計の上で眠る呼び出しに、テストのスレッドを止めさせない）。
