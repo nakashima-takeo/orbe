@@ -38,7 +38,8 @@ final class RenderLoopTests: EngineTestCase {
     waitUntilPaused(surface)
     let first = target.acquired
     XCTAssertGreaterThan(first, 0, "結んだら描く")
-    XCTAssertTrue(staysStopped(surface), "止まったまま、起こすタイマーも無い")
+    XCTAssertTrue(
+      staysStopped(surface, for: Renderer.gestureSettle), "止まっている間は刻みが来ない")
 
     surface.setIndentation(Indentation(unit: 2, usesTabs: false))
     surface.flush()
@@ -59,14 +60,14 @@ final class RenderLoopTests: EngineTestCase {
     surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -1), precise: false))
     waitUntilPaused(surface)
-    // 下の「消え終わった後も止まったまま」の対。同じ時点で、起きる場合を待たずに確かめる。
     XCTAssertNotNil(
       blinkWake(surface),
       "つまみが消え始める時刻に起きるタイマー。testOpeningADocumentWithALongLineDoesNotShowTheThumb の"
         + "「消え始めるのを待って起きない」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     waitUntil(3) { blinkWake(surface) == nil && driver.isPaused(surface.id) }
     XCTAssertNil(blinkWake(surface), "消え終わったらタイマーは無い")
-    XCTAssertTrue(staysStopped(surface), "消え終わった後も止まったまま")
+    XCTAssertTrue(
+      staysStopped(surface, for: Renderer.gestureSettle), "消え終わった後は起きない")
   }
 
   /// スクロールの直後（つまみが消え始める前）に隠れた面は、消え始める時刻に起きるタイマーを置かず、刻みも来ない。
@@ -79,14 +80,18 @@ final class RenderLoopTests: EngineTestCase {
     surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -1), precise: false))
     waitUntilPaused(surface)
-    // 下の「隠れた面はタイマーを置かない」と「止まったままで、消え始める時刻に起こすタイマーも無い」の対。同じ時点で、
-    // 起きる場合を待たずに確かめる。
+    // 下の「隠れた面はタイマーを置かない」の対。同じ時点で、起きる場合を待たずに確かめる。
     XCTAssertNotNil(blinkWake(surface), "前提: つまみが消え始める時刻に起きるタイマー")
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: false)
     surface.flush()
     waitUntilPaused(surface)
     XCTAssertNil(blinkWake(surface), "隠れた面はタイマーを置かない")
-    XCTAssertTrue(staysStopped(surface), "止まったままで、消え始める時刻に起こすタイマーも無い")
+    // 消え始める時刻は、スクロールの後、つまみを隠すまでの待ちが明けたとき。見張り始める前にスクロールしたので、見張る
+    // あいだに過ぎる。
+    let hideDelay = Double(Self.overviewStyle().hideDelay)
+    XCTAssertTrue(
+      staysStopped(surface, for: max(hideDelay, Renderer.gestureSettle)),
+      "消え始める時刻を過ぎても起きない")
   }
 
   /// 見えている幅より長い行がある文書を開いても、最初に長さを測ったことによる横の範囲の変化ではつまみを出さない。
@@ -158,10 +163,7 @@ final class RenderLoopTests: EngineTestCase {
     surface.updateFocus(true)
     driver.bind(surface.id)
     waitUntilPaused(surface)
-    let fire = try XCTUnwrap(
-      blinkWake(surface),
-      "焦点のある面はタイマーを置く。testDrawsOnceAfterAChangeAndStopsAgain の「止まったまま、起こすタイマーも無い」"
-        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
+    let fire = try XCTUnwrap(blinkWake(surface), "焦点のある面はタイマーを置く")
     let period = HeadlessDriver.period
     let target = fire + period / 2
     XCTAssertEqual(
@@ -269,16 +271,14 @@ final class RenderLoopTests: EngineTestCase {
     XCTAssertTrue(driver.waitUntilStopped(surface), "刻みが止まる", file: file, line: line)
   }
 
-  /// 刻みが止まっていて、止まった面を起こすタイマーも置いていないか。止まるのを待ってから、描画スレッドの 1 つの仕事の中で
-  /// 読む。止まるのを待った後は、main を経て刻みを再開させる知らせが残っていないので、スクロールを共にする面が無ければ、
-  /// テストが触らない限りもう起きない。
-  private func staysStopped(_ surface: MetalTextSurface) -> Bool {
+  /// 面の刻みが止まるのを待ってから、`seconds` のあいだ止まったままで、刻みが 1 つも来ないか。本番は、刻みを止めた後に、
+  /// main を経ずに、実時間の遅れの後で描画スレッドの仕事を走らせる（点滅とつまみのタイマー、ジェスチャーを締める
+  /// `Renderer.gestureSettle` 後の仕事。打鍵の塊を締める遅れは、打鍵の無いこれらのテストでは置かれない）。その遅れの時計を
+  /// 差し替える口が無いので、実時間で見張る。長さは、その遅れの定数から決める。
+  private func staysStopped(_ surface: MetalTextSurface, for seconds: TimeInterval) -> Bool {
     guard driver.waitUntilStopped(surface) else { return false }
     let id = surface.id
-    let driver = driver!
-    return RenderThread.shared.performAndWait { renderer in
-      guard let slot = renderer.slot(id) else { return false }
-      return slot.blinkTimer == nil && driver.isPaused(id)
-    }
+    let ticks = driver.ticks(id)
+    return holds(for: seconds) { driver.isPaused(id) && driver.ticks(id) == ticks }
   }
 }
