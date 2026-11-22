@@ -99,7 +99,7 @@ updated: 2026-11-22
 
 ## CI 構成と実行時間プロファイリング
 
-- **採用**: **PR と `main`/定期の 2 段階ワークフロー（`.github/workflows/ci.yml` ＋ 定期/main ジョブ）**、**依存ダウンロード物（`checkouts` + `artifacts` / SwiftPM キャッシュ）に絞った `actions/cache@v6`**、および **`--xunit-output` / Swift Testing `--event-stream-output-path` による所要時間プロファイリング**。見た目の自動 VRT は置かず、既存の `visual-check`（`Shots/`）を運用維持する。
+- **採用**: **PR と `main`/定期の 2 段階ワークフロー（`.github/workflows/ci.yml` ＋ 定期/main ジョブ）**、**依存ダウンロード物（`checkouts` + `artifacts` / SwiftPM キャッシュ）に絞った `actions/cache@v6`**、および **所要時間プロファイリング（XCTest は `swift test` の出力を `scripts/test-timing.py` で集計、Swift Testing は `--event-stream-output-path`）**。見た目の自動 VRT は置かず、既存の `visual-check`（`Shots/`）を運用維持する。
 - **棄却**:
   - **`.build` ディレクトリ丸ごとの `actions/cache`**: Orbe の `.build` 実測は 6.5 GB（`.build/out` 単体 2.4 GB、`index-build` 1.6 GB）。GitHub Actions のキャッシュ上限は既定でリポジトリ合計 10 GB（LRU 自動削除。引き上げた超過分は課金）のため複数 PR でスラッシングし、さらに `actions/checkout` の `mtime` リセットでインクリメンタルビルドが無効化されやすい。
   - **`pointfreeco/swift-snapshot-testing` による自動 VRT**: [テストアーキテクチャ](test-architecture.md) で自動 VRT を対象外とし、既存の `visual-check` を継続する方針のため不要。将来 VRT を導入する場合も、次の点に注意する。`swift-snapshot-testing` は `Package.swift` 解決時に `swift-syntax` を引き込む。また `InlineSnapshotTesting` を誤ってリンクすると、非マクロターゲットが `swift-syntax` に依存することになり、SwiftPM はパッケージグラフ全体で `swift-syntax` のプリビルドを使わず、ソースからフルビルドする。加えて、macOS の 1x 固定・`NSHostingView` ラップ・確定的待機は結局自前実装になる（既存 `SnapshotTestSupport.swift` 拡張＋Swift Testing `Attachment` のゼロ依存構成が第一候補）。
@@ -109,7 +109,7 @@ updated: 2026-11-22
     - PR 必須: `lint-format` / `fast-tests`（独立ライブラリ群・ユニット・永続化・制御プロトコル契約・ヘッドレス UI） / `integration-tests`（厳選した実プロセス・実 git・実 PTY・オフスクリーン Metal 描画）。
     - `main` push / 夜間定期: 上記に加え `artifacts`（`build-app.sh` ＋ `.app` 静的検査）/ `long-fuzz`（長時間ファズ）/ `isolation-verify`（`verify-test-isolation.sh`）。
   - キャッシュ対象として `~/Library/Caches/org.swift.swiftpm` および解決済み依存（`GhosttyKit.zip` 展開物・tree-sitter 15 リポジトリ）を `hashFiles('Package.resolved', 'Package.swift')` キーで保持し、`--disable-index-store` 併用でディスク消費（14 GB SSD 枠）とビルド負荷を抑える。
-  - 各テストジョブで `--xunit-output`（XCTest）と `--event-stream-output-path`（Swift Testing）を指定して結果を出力し、遅いテスト上位（例: 単体 1 秒超のユニットテスト）をサマリ表示して再肥大化を防ぐ。
+  - XCTest の所要時間は、`swift test` の出力を `scripts/test-timing.py` が集計して、ジョブの要約に出す。直列実行の `swift test` は、XCTest の `--xunit-output` のファイルを生成しない。Swift Testing を導入したターゲットは、`--event-stream-output-path` で結果を出力する。遅いテストの上位を見て、再肥大化を防ぐ。
 
 ## 落とし穴
 
