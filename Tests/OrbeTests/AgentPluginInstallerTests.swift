@@ -94,16 +94,20 @@ final class AgentPluginInstallerTests: OrbeTestCase {
 
   /// `pkg` を install.sh の置き場にして `run` を回し、届いた Event と完了を届いた順に記録する。
   /// 完了は "complete" として同じ列に積むので、取りこぼしと順序を 1 本の列で検証できる。
-  private func runInstaller(script: String?, shellPATH: String = "/usr/bin:/bin") throws -> [String]
-  {
+  /// `whileRunning` は、プロセスを起動した後、完了を待つ前に、そのプロセスを引数に受けて実行される。
+  private func runInstaller(
+    script: String?, shellPATH: String = "/usr/bin:/bin",
+    limits: AgentPluginInstaller.TimeLimits = .init(),
+    whileRunning: (Process) throws -> Void = { _ in }
+  ) throws -> [String] {
     if let script {
       try script.write(
         to: pkg.appendingPathComponent("install.sh"), atomically: true, encoding: .utf8)
     }
     var log: [String] = []
     let done = expectation(description: "install.sh complete")
-    AgentPluginInstaller.run(
-      pluginDir: pkg, pluginName: "orbe-agent", shellPATH: shellPATH,
+    let process = AgentPluginInstaller.run(
+      pluginDir: pkg, pluginName: "orbe-agent", shellPATH: shellPATH, limits: limits,
       onEvent: { event in
         switch event {
         case .start(let cli): log.append("start \(cli)")
@@ -115,6 +119,7 @@ final class AgentPluginInstallerTests: OrbeTestCase {
         log.append("complete")
         done.fulfill()
       })
+    try whileRunning(process)
     wait(for: [done], timeout: 30)
     return log
   }
@@ -142,11 +147,20 @@ final class AgentPluginInstallerTests: OrbeTestCase {
   /// 完了の起点はプロセスの終了ではなく stdout の読み切り。プロセスが先に終わっても、
   /// stdout を持ったままの子が出した行は届き、その後で完了が来る（終了で打ち切ると落ちる行）。
   func testLineWrittenAfterExitStillArrivesBeforeCompletion() throws {
+    let gate = pkg.appendingPathComponent("gate")
     let log = try runInstaller(
       script: """
         echo "start agy"
-        (sleep 0.3; echo "error agy") &
-        """)
+        (
+          end=$(( $(date +%s) + 60 ))
+          while [ ! -e "\(gate.path)" ] && [ "$(date +%s)" -lt "$end" ]; do sleep 0.05; done
+          echo "error agy"
+        ) &
+        """,
+      whileRunning: { process in
+        pumpMain(until: { !process.isRunning }, "install.sh の終了")
+        FileManager.default.createFile(atPath: gate.path, contents: nil)
+      })
     XCTAssertEqual(log, ["start agy", "ng agy", "complete"])
   }
 
@@ -172,13 +186,13 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     .appendingPathComponent("app/agent-plugin/install.sh")
 
   /// 偽の claude だけを PATH に置いて同梱の install.sh を実行する。偽の claude は受けた引数を 1 行ずつ残し、`plugin list` には
-  /// `list` を出して `listStatus` で終わる。`listHangs` なら、`plugin list` は agy と同じく SIGALRM では終わらず、終了の要求
-  /// （SIGTERM）には 0 で終わる形で 30 秒固まる。返すのは届いた Event と、claude が受けた呼び出しの列。
+  /// `listPrelude` の sh を実行した後に `list` を出力して `listStatus` で終わる。`limits` と `whileRunning` は `runInstaller` へ渡す。
+  /// 返すのは届いた Event と、claude が受けた呼び出しの列。
   private func runBundledInstaller(
-    claudeList list: String = "", listStatus: Int32 = 0, listHangs: Bool = false
+    claudeList list: String = "", listStatus: Int32 = 0, listPrelude: String = "",
+    limits: AgentPluginInstaller.TimeLimits = .init(),
+    whileRunning: (Process) throws -> Void = { _ in }
   ) throws -> (log: [String], calls: [String]) {
-    let hang =
-      listHangs ? "trap '' ALRM; trap 'kill $! 2>/dev/null; exit 0' TERM; sleep 30 & wait; " : ""
     let bin = pkg.appendingPathComponent("bin")
     try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
     let calls = pkg.appendingPathComponent("claude-calls.log")
@@ -188,13 +202,16 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     try """
     #!/bin/sh
     echo "$*" >> "\(calls.path)"
-    if [ "$1 $2" = "plugin list" ]; then \(hang)cat "\(listed.path)"; exit \(listStatus); fi
+    if [ "$1 $2" = "plugin list" ]; then
+    \(listPrelude)
+    cat "\(listed.path)"; exit \(listStatus)
+    fi
     exit 0
     """.write(to: claude, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
     let log = try runInstaller(
       script: String(contentsOf: Self.bundledInstallScript, encoding: .utf8),
-      shellPATH: "\(bin.path):/usr/bin:/bin")
+      shellPATH: "\(bin.path):/usr/bin:/bin", limits: limits, whileRunning: whileRunning)
     let called = ((try? String(contentsOf: calls, encoding: .utf8)) ?? "")
       .split(separator: "\n").map(String.init)
     return (log, called)
@@ -223,10 +240,41 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     XCTAssertTrue(run.calls.contains("plugin install orbe-agent@orbe-agent"), "\(run.calls)")
   }
 
-  /// 時限を過ぎても終わらない一覧は打ち切り、CLI が 0 で終わっても失敗として導入を試みない。打ち切りが効かなければ起動時の導入が
-  /// 止まったままになり、打ち切った一覧を成功と読めば、未導入と見て導入する。時限（15 秒）を実時間で待つ。
+  /// 時限を過ぎても終わらない一覧は打ち切って失敗として扱い、導入を試みない。打ち切りが効かなければ起動時の導入が止まったままになる。
+  /// 一覧の時限には短い値を渡す。時限が掛かっていなければ、一覧は 30 秒後に成功で終わり、未導入と見て導入する。
   func testClaudeListPastItsTimeLimitIsCutOffAndAnErrorWithoutInstalling() throws {
-    let run = try runBundledInstaller(listHangs: true)
+    let run = try runBundledInstaller(listPrelude: "exec sleep 30", limits: .init(list: 0.3))
+    XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
+    XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
+  }
+
+  /// 打ち切った一覧は、CLI が終了の要求（SIGTERM）を受けて 0 で終わっても失敗にする（agy は SIGTERM を受けて 0 で終わる
+  /// ことがある）。打ち切った一覧を成功と読めば、未導入と見て導入する。偽の claude は、SIGTERM に 0 で終わる trap を置いた後に、
+  /// 時限を数える perl（自分の親）の pid を印のファイル（`tmo.pid`）に書いて止まる。その pid へ SIGALRM を送って、時限の到来を起こす。
+  func testClaudeListCutOffIsAnErrorEvenWhenTheCLIExitsZero() throws {
+    let pidMark = pkg.appendingPathComponent("tmo.pid")
+    let trapped = pkg.appendingPathComponent("trapped")
+    let run = try runBundledInstaller(
+      listPrelude: """
+        trap ': > "\(trapped.path)"; kill $! 2>/dev/null; exit 0' TERM
+        sleep 30 &
+        echo "$PPID" > "\(pidMark.path).tmp" && mv "\(pidMark.path).tmp" "\(pidMark.path)"
+        wait
+        """,
+      whileRunning: { _ in
+        var timer: pid_t?
+        pumpMain(
+          until: {
+            guard let text = try? String(contentsOf: pidMark, encoding: .utf8),
+              text.hasSuffix("\n")
+            else { return false }
+            timer = pid_t(text.dropLast())
+            return true
+          }, "時限を数える perl の pid")
+        kill(try XCTUnwrap(timer, "tmo.pid の中身が pid でない"), SIGALRM)
+      })
+    XCTAssertTrue(
+      FileManager.default.fileExists(atPath: trapped.path), "一覧が SIGTERM を受けて 0 で終わっていない")
     XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
     XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
   }
