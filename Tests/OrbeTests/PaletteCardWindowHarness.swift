@@ -13,14 +13,6 @@ import XCTest
 /// 窓の作り方・キーとクリックの届け方・その後の更新の走らせ方はどれも微妙で、コピーすると片方だけ腐るため 1 か所に置く。
 @MainActor
 class PaletteCardWindowTestCase: OrbeTestCase {
-  /// 返した窓を捨てるテストがあるので、載せた中身がテストの間に解放されないよう、テストの終わりまで保持する。
-  private var windows: [NSWindow] = []
-
-  override func tearDown() {
-    windows.removeAll()
-    super.tearDown()
-  }
-
   /// 載せたカードの入力欄に焦点が入るまで待つ。新しく載せたビューへの焦点は、`flush` の 1 回の更新の後にもう 1 段かかる。
   func awaitFieldFocus(_ window: NSWindow, file: StaticString = #filePath, line: UInt = #line) {
     pumpMain(until: { window.firstResponder is NSTextView }, "入力欄に焦点が入る", file: file, line: line)
@@ -74,7 +66,7 @@ class PaletteCardWindowTestCase: OrbeTestCase {
       contentRect: NSRect(origin: Self.offscreenOrigin, size: size),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = content
-    windows.append(window)
+    holdUntilTestEnds(window)
     flush(window)
     return window
   }

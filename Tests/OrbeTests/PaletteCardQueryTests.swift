@@ -9,13 +9,6 @@ import XCTest
 /// その 1 点だけをここで実描画（`SnapshotTestCase` の `NSHostingView` 基盤）で固定する。
 @MainActor
 final class PaletteCardQueryTests: SnapshotTestCase {
-  private var windows: [NSWindow] = []
-
-  override func tearDown() {
-    windows.removeAll()
-    super.tearDown()
-  }
-
   /// view を実際にマウントし、SwiftUI の更新を回せる状態にする。
   private func mount<V: View>(_ view: V) -> NSWindow {
     let host = NSHostingView(rootView: view)
@@ -23,7 +16,7 @@ final class PaletteCardQueryTests: SnapshotTestCase {
     let window = NSWindow(
       contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = host
-    windows.append(window)  // view ツリーを生かしておく
+    holdUntilTestEnds(window)
     flush(window)
     return window
   }
