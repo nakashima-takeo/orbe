@@ -2,24 +2,22 @@ import Foundation
 import OrbeEditorCore
 
 /// PR の diff のコメントの層——PR ごとの状態のスレッドを diff の行の下に置き、行の右端の印から新しいコメントの欄を開き、
-/// 返信・解決・新しいスレッドの書き込みを PR ごとの状態へ頼む。PR の diff タブ 1 つに 1 つ。
+/// 返信・解決・新しいスレッドの書き込みを PR ごとの状態へ頼む。PR の diff 1 つに 1 つ。
 ///
 /// 返信と新しいコメントの書きかけは PR ごとの状態が持ち、層はそれを欄へ反映して、打った本文を書き戻す（→
 /// `PrCommentLayer+Drafts`）。層が持つのは見せ方——スレッドの id → 絵の差し込み、開いている新しいコメントの欄と、返信の
 /// 書きかけを持ったまま今の diff に置けなくなったスレッドの置き場所（`PrCommentPlacement`）、畳んでいるか、失敗の文。絵の
 /// 差し込みはスレッドの id で使い回すので、読み直し・並びの置き直し・インライン ⇄ 並列をまたいで同じ欄が残る。スレッドを
 /// 置くのは、diff が見せている両端の先頭のコミットで読んだスレッドだけ（古い版の行に付けない）。書き込みの失敗は頼んだ層へ
-/// 返り、失敗の文を出す。タブの PR がタブの根の worktree の今の open の PR でない間は、新しいスレッドと返信を書かずに、
+/// 返り、失敗の文を出す。diff の PR が diff の根の worktree の今の open の PR でない間は、新しいスレッドと返信を書かずに、
 /// 送れる所を告げる。
 @MainActor
 final class PrCommentLayer {
   let pullRequest: EditorDiffPullRequest
-  /// タブの根の worktree の今の PR（タブがある間見る）。保留中のレビューを送れるのは、その PR を出すパネルだけ。
+  /// diff の根の worktree の今の PR（diff がある間見る）。保留中のレビューを送れるのは、その PR を出すパネルだけ。
   private let current: BranchPullRequest
   /// 並びを置き直させる（スレッドの出入り・新しいコメントの欄の開閉・印を出せる行が分かった）。
   var onRowsChange: () -> Void = {}
-  /// 書きかけがあるか（`holdsDrafts`）が変わったかもしれない（入力欄に空白でない字が入った・無くなった）。
-  var onDraftChange: () -> Void = {}
   let language: () -> Language
   var threads: [String: PrCommentZone] = [:]
   /// スレッドを最後に置いた所（返信の書きかけを作るときの欄の位置と、読み直しが届くまでスレッドをその行に残すのに使う）。
@@ -71,7 +69,7 @@ final class PrCommentLayer {
     for zone in threads.values { zone.redraw() }
   }
 
-  /// この PR が、タブの根の worktree の今の PR で open か。そうでない間（ブランチの切り替え・マージ・クローズの後）は、保留中の
+  /// この PR が、diff の根の worktree の今の PR で open か。そうでない間（ブランチの切り替え・マージ・クローズの後）は、保留中の
   /// レビューに積む書き込み（新しいスレッド・返信）を断る——積んでも、Orbe から送る所が無い。
   var isCurrentPullRequest: Bool { current.state === state && state.content?.state == .open }
 
@@ -82,14 +80,6 @@ final class PrCommentLayer {
   var isSettled: Bool {
     !threads.values.contains(where: \.isTypesetting) && drafts.allSatisfy(\.isSettled)
       && held.values.allSatisfy(\.isSettled) && (placed == nil || commentable?.lines != nil)
-  }
-
-  /// このファイルへの返信か新しいコメントの書きかけがある（人が打った内容——仮のタブを普通のタブにする。書きかけを残した
-  /// PR の diff は、開き直すとはじめから普通のタブになる）。
-  var holdsDrafts: Bool {
-    let stored = state.commentDrafts
-    return stored.replies.values.contains { $0.thread.path == path }
-      || stored.comments.values.contains { $0.path == path }
   }
 
   /// スレッド `id` の絵の差し込み（まだ置いていなければ nil）。

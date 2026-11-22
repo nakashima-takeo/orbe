@@ -148,7 +148,6 @@ struct ThemeFonts {
   let editorSearchField = Font(Theme.Typography.editorSearchField as CTFont)
   let editorSearchOption = Font(Theme.Typography.editorSearchOption as CTFont)
   let editorSearchNote = Font(Theme.Typography.editorSearchNote as CTFont)
-  let editorDiffNote = Font(Theme.Typography.editorDiffNote as CTFont)
   let editorDiffSegment = Font(Theme.Typography.editorDiffSegment as CTFont)
   // エディター面のソース管理
   let editorRailBadge = Font(Theme.Typography.editorRailBadge as CTFont)

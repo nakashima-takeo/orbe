@@ -104,9 +104,11 @@ extension EditorPaneView {
     }
   }
 
-  /// 器に出すもの。
+  /// 器に出すもの。本体が空なら、Files は空状態、Changes・PR は何も出さない。
   var faceContent: EditorFaceRoot.Content {
-    guard case .diff(let diff) = body else { return .empty }
+    guard case .diff(let diff) = body else {
+      return (group?.editor.screen ?? .files) == .files ? .empty : .blank
+    }
     switch diff.content {
     case .ready, .loading: return .blank
     case .unavailable(.notText): return .notice(.editorDiffNotText)

@@ -25,6 +25,13 @@ extension EditorDiffTests {
       files: [.init(path: "b.txt", change: .renamed, isViewed: false)])
   }
 
+  /// PR の画面を出した窓のタブ（PR の diff を本体に出す）。
+  private func pullRequestTab() -> (TerminalTab, NSWindow) {
+    let hosted = tab()
+    hosted.0.group.editor.selectScreen(.pullRequest)
+    return hosted
+  }
+
   /// `reply` の中身を答える PR の状態を作り、手元のリポジトリを結ぶ。
   private func pullRequest(_ reply: Reply, number: Int = 5) throws -> PullRequestState {
     let state = PullRequestState.shared(
@@ -56,9 +63,9 @@ extension EditorDiffTests {
     let reply = Reply()
     reply.content = content(base: base, head: head)
     let state = try pullRequest(reply)
-    let (tab, _) = tab()
+    let (tab, _) = pullRequestTab()
 
-    let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state)), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("b.txt", .pullRequest(state)))
     XCTAssertEqual(
       tab.group.editorLocation, .pullRequest(number: 5, relative: "b.txt"), "TopBar の現在地は PR の diff"
     )
@@ -95,8 +102,8 @@ extension EditorDiffTests {
     let reply = Reply()
     reply.content = content(base: base, head: head)
     let state = try pullRequest(reply)
-    let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("x.bad", .pullRequest(state)), as: .pinned)
+    let (tab, _) = pullRequestTab()
+    let diff = try tab.group.editor.openDiff(id("x.bad", .pullRequest(state)))
     pumpMain(until: { diff.content == .unavailable(.failed) }, "前提: 版の本文を読めない")
 
     XCTAssertTrue(repo.git(["config", "filter.bad.smudge", "cat"]).isSuccess)
@@ -119,10 +126,10 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["commit", "-qam", "move sub"]).isSuccess)
     let reply = Reply()
     reply.content = content(base: base, head: repo.head())
-    let (tab, _) = tab()
+    let (tab, _) = pullRequestTab()
 
     let diff = try tab.group.editor.openDiff(
-      id("sub", .pullRequest(try pullRequest(reply))), as: .pinned)
+      id("sub", .pullRequest(try pullRequest(reply))))
 
     waitRows(diff, "1 行の差") { self.removedLines($0) == [0] }
     XCTAssertEqual(text(diff.old), "Subproject commit \(first)")
@@ -131,19 +138,19 @@ extension EditorDiffTests {
 
   /// 表示できない PR の diff は、PR の種類の理由の一文を出す——両側とも無いパスと、手元に揃わない PR のコミット。
   func testAPullRequestDiffThatCannotBeShownSaysWhy() throws {
-    let (tab, _) = tab()
+    let (tab, _) = pullRequestTab()
     let pane = tab.group.view.editor
     let reply = Reply()
     reply.content = content(base: repo.head(), head: repo.head())
     let nowhere = try tab.group.editor.openDiff(
-      id("nope.txt", .pullRequest(try pullRequest(reply))), as: .pinned)
+      id("nope.txt", .pullRequest(try pullRequest(reply))))
     pumpMain(until: { pane.faceContent == .notice(.editorDiffNowherePullRequest) }, "どちらの側にもない")
     XCTAssertEqual(nowhere.content, .unavailable(.nowhere))
 
     let missing = Reply()
     missing.content = content(base: repo.head(), head: String(repeating: "0", count: 40), number: 6)
     _ = try tab.group.editor.openDiff(
-      id("a.txt", .pullRequest(try pullRequest(missing, number: 6))), as: .pinned)
+      id("a.txt", .pullRequest(try pullRequest(missing, number: 6))))
     pumpMain(
       until: { pane.faceContent == .notice(.editorDiffPullRequestCommitsMissing) }, "コミットを取得できない")
   }
@@ -159,9 +166,9 @@ extension EditorDiffTests {
     state.beginWatching()
     addTeardownBlock { @MainActor in state.endWatching() }
     pumpMain(until: { reply.requests == 1 }, "前提: ほかの者が見始めて読んだ")
-    let (tab, _) = tab()
+    let (tab, _) = pullRequestTab()
 
-    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .pullRequest(state)))
 
     waitRows(diff, "先に読んである中身で出る") { _ in diff.newRevision != nil }
     XCTAssertEqual(reply.requests, 1, "開いても問い直さない")

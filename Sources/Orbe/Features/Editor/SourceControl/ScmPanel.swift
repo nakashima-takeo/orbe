@@ -59,7 +59,7 @@ final class ScmPanel {
 
   /// 行を開く（diff）。
   @ObservationIgnored var onOpenDiff: (EditorDiff.Key, Opening) -> Void = { _, _ in }
-  /// ファイルを普通のタブで開く。
+  /// ファイルを普通の文書として開く（Files の画面で）。
   @ObservationIgnored var onOpenFile: (URL) -> Void = { _ in }
   /// 破棄の確認を出す（確認が要らなければそのまま破棄する）。
   @ObservationIgnored var onDiscard: ([ScmChanges.File]) -> Void = { _ in }

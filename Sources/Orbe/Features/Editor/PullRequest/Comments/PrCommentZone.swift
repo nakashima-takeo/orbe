@@ -50,8 +50,6 @@ final class PrCommentZone: SurfaceZone {
   var onFieldFocus: (PrCommentZone, Bool) -> Void = { _, _ in }
   /// 人が入力欄の本文を変えた（`setText` で置いた本文は知らせない）。
   var onTextChange: (PrCommentZone) -> Void = { _ in }
-  /// 入力欄に空白でない字があるか（`hasText`）が変わった。
-  var onHasTextChange: (PrCommentZone) -> Void = { _ in }
 
   var isCollapsed = false {
     didSet { if isCollapsed != oldValue { redraw() } }
@@ -164,10 +162,8 @@ final class PrCommentZone: SurfaceZone {
     if !isSettingText { onTextChange(self) }
     let shape = FieldShape(lines: field.lineCount, empty: field.string.isEmpty, blank: !hasText)
     guard shape != fieldShape else { return }
-    let wasBlank = fieldShape.blank
     fieldShape = shape
     redraw()
-    if shape.blank != wasBlank { onHasTextChange(self) }
   }
 
   // MARK: - 絵の差し込み

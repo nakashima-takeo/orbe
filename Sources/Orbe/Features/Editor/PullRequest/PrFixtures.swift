@@ -80,7 +80,7 @@
         panel.state?.reload()
       }
 
-      /// 変更ファイル `path` の PR の diff を普通のタブで開く。
+      /// 変更ファイル `path` の PR の diff を開く。
       func openDiff(_ path: String = PrFixtureReview.path) {
         panel.select(.file(path))
         panel.openSelection(.commit)

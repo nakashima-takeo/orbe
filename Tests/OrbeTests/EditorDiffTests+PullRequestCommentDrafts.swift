@@ -49,7 +49,7 @@ extension EditorDiffTests {
     surface.replaceText(of: cancelled.field, with: "取り消す書きかけ")
     cancelled.zone(.pressed(PrCommentControl.cancel))
 
-    tab.group.editor.close(.diff(diff.id))
+    tab.group.editor.closeDiff(on: .pullRequest)
     let (reopened, _) = try open(layer.state, into: tab)
     let next = try XCTUnwrap(reopened.comments)
     XCTAssertFalse(next === layer, "前提: 開き直した diff は別の層を持つ")
@@ -144,7 +144,7 @@ extension EditorDiffTests {
       waitPlaced(diff, [zone], "スレッドが置かれる")
       try engine(diff.newSurface).replaceText(of: zone.field, with: "一度だけ")
       zone.zone(.pressed(PrCommentControl.add))
-      tab.group.editor.close(.diff(diff.id))
+      tab.group.editor.closeDiff(on: .pullRequest)
       return (layer.state, tab)
     }()
     XCTAssertNil(closed, "前提: 閉じた diff の層は残っていない")
@@ -175,7 +175,7 @@ extension EditorDiffTests {
     layer.state.reload()
     pumpMain(until: { zone.notice == .deleted }, "前提: 消えたスレッドの書きかけが残る")
 
-    tab.group.editor.close(.diff(diff.id))
+    tab.group.editor.closeDiff(on: .pullRequest)
     let (reopened, _) = try open(layer.state, into: tab)
     let next = try XCTUnwrap(reopened.comments?.zone(thread: "T"))
     waitPlaced(reopened, [next], "消えたスレッドの返信欄が置かれる")

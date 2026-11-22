@@ -28,17 +28,18 @@ extension EditorPaneView {
     showsSourceControl && focusIsInSidebar && scm.focusedArea != nil
   }
 
-  /// 行の diff を `opening` の開き方で開く。本文へ焦点を移す開き方でなければ焦点に触らない（列に残る。遅れて走るキーの開きが、
-  /// その間に人が移した焦点を奪わない）。
+  /// 行の diff を開き、その種類の画面（作業ツリー・ステージ済みは Changes、PR は PR）を選ぶ。開けなければ beep し、画面を
+  /// 選ばない。本文へ焦点を移す開き方でなければ焦点に触らない（列に残る。遅れて走るキーの開きが、その間に人が移した焦点を
+  /// 奪わない）。
   func openScmDiff(_ key: EditorDiff.Key, _ opening: ScmPanel.Opening) {
     guard let group else { return }
     do {
-      _ = try group.editor.openDiff(key, as: opening.mode)
+      _ = try group.editor.openDiff(key)
     } catch {
       NSSound.beep()
       return
     }
-    tree.reveal(key.url)
+    group.editor.selectScreen(key.kind.screen)
     if opening.focusesText {
       layoutSubtreeIfNeeded()
       focusEditor()

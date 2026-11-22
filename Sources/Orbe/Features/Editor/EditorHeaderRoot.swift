@@ -21,9 +21,9 @@ struct EditorHeaderRoot: View {
   }
 }
 
-/// タブ行: 自然幅のタブ（文書のタブと diff のタブ）を横に並べ、溢れは横スクロール（スクローラー非表示・アクティブを
-/// 可視位置へ）。焦点が diff のタブなら右端に見せ方の切り替え。焦点が PR の diff のタブで、そのパスが PR の変更ファイルに
-/// あれば、切り替えの左に「確認済みにする」。
+/// タブ行: 開いている文書の自然幅のタブを横に並べ、溢れは横スクロール（スクローラー非表示・今の文書を可視位置へ）。本体が
+/// diff なら右端に見せ方の切り替え。本体が PR の diff で、そのパスが PR の変更ファイルにあれば、切り替えの左に「確認済みに
+/// する」。
 struct FileTabsView: View {
   let shell: EditorShellModel
   @Environment(\.colorScheme) private var scheme
@@ -59,17 +59,16 @@ struct FileTabsView: View {
   }
 }
 
-/// タブ 1 枚: チップ ＋ 名前（diff のタブは ＋ 種類の注記）＋ 右端の枠（未保存の ● か ×）。アクティブは淡い地と上縁
-/// 1.5px——文書のタブは accent、diff のタブは注意の黄（design-system §5 のエディター面の例外）。仮のタブは名前を斜体に
-/// し、地に斜線を敷く（アクティブなら淡い地の上）。押すと切り替え、2 回目の押下（ダブルクリック）で普通のタブにする——
-/// 1 回目をダブルクリックの判定で待たせない。
+/// タブ 1 枚: チップ ＋ 名前 ＋ 右端の枠（未保存の ● か ×）。今の文書（画面が Files のとき）は淡い地と accent の上縁
+/// 1.5px（design-system §5 のエディター面の例外）。仮の文書は名前を斜体にし、地に斜線を敷く（今の文書なら淡い地の上）。
+/// 押すとその文書を今の文書にして Files の画面へ移り、2 回目の押下（ダブルクリック）で普通の文書にする——1 回目を
+/// ダブルクリックの判定で待たせない。
 struct FileTabView: View {
   let tab: EditorShellModel.FileTab
   let shell: EditorShellModel
   @State private var hovering = false
   @Environment(\.colorScheme) private var scheme
   @Environment(\.chromeFontResolver) private var fontResolver
-  @Environment(\.localization) private var l10n
 
   // タブ 1 枚の不透明度と寸法。
   private static let activeFillAlpha = 0.045
@@ -86,13 +85,6 @@ struct FileTabView: View {
         .font(Font.theme.editorFileTab)
         .foregroundStyle(tab.isActive ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
-      if let kind = tab.diffKind {
-        Text(Self.note(of: kind, l10n))
-          .italic(tab.isPreview)
-          .font(Font.theme.editorDiffNote)
-          .foregroundStyle(Color.theme.editorCaution)
-          .lineLimit(1)
-      }
       FileTabCloseSlot(tab: tab, tabHovered: hovering, shell: shell)
     }
     .padding(.leading, padLeading)
@@ -106,9 +98,7 @@ struct FileTabView: View {
     }
     .overlay(alignment: .top) {
       if tab.isActive {
-        Rectangle()
-          .fill(tab.diffKind == nil ? Color.theme.accentPrimary : Color.theme.editorCaution)
-          .frame(height: accentBar)
+        Rectangle().fill(Color.theme.accentPrimary).frame(height: accentBar)
       }
     }
     .overlay(alignment: .trailing) {
@@ -118,15 +108,6 @@ struct FileTabView: View {
     .onHover { hovering = $0 }
     .onTapGesture { shell.activate(tab.id) }
     .simultaneousGesture(TapGesture(count: 2).onEnded { shell.pin(tab.id) })
-  }
-
-  /// diff のタブの注記。
-  private static func note(of kind: EditorDiff.Kind, _ l10n: LocalizationStore) -> String {
-    switch kind {
-    case .workingTree: l10n.string(.editorDiffWorkingTree)
-    case .staged: l10n.string(.editorDiffStaged)
-    case .pullRequest(let state): l10n.format(.editorDiffPullRequest, state.key.id.number)
-    }
   }
 }
 

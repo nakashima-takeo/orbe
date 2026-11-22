@@ -124,8 +124,7 @@ final class TabGroupTests: OrbeTestCase {
 
     dest.absorb(from)
 
-    XCTAssertEqual(
-      dest.editor.tabs.map(\.id), [.document(a.url), .document(shared), .document(b.url)])
+    XCTAssertEqual(dest.editor.documents.map(\.url), [a.url, shared, b.url])
     XCTAssertTrue(dest.editor.documents[1] === edited, "元だけが未保存なら元の文書が入る")
     XCTAssertTrue(dest.editor.activeDocument === edited, "行き先の焦点の位置を保ち、入れ替わった文書が焦点")
     XCTAssertTrue(from.editor.documents.isEmpty)

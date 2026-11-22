@@ -25,8 +25,6 @@ protocol EditorDiffSource: AnyObject {
 
   /// 新しい側を、同じ実体の文書 `next` にした（替えたら true。前の文書は手放さない）。
   func replaceDocument(with next: EditorDocument) -> Bool
-  /// 新しい側の文書を引く口を `documents`（引き取ったセッション）に結び直す。
-  func rebind(_ documents: EditorDiff.Documents)
   /// 新しい側の文書の未保存が変わった。
   func documentDirtyDidChange()
 }
@@ -35,7 +33,6 @@ protocol EditorDiffSource: AnyObject {
 extension EditorDiffSource {
   var document: EditorDocument? { nil }
   func replaceDocument(with next: EditorDocument) -> Bool { false }
-  func rebind(_ documents: EditorDiff.Documents) {}
   func documentDirtyDidChange() {}
 }
 

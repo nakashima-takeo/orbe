@@ -57,7 +57,7 @@ extension EditorPaneView {
       if let command = action.windowCommand { group?.requestWindowCommand(command) }
       return true
     case .editor:
-      saveActive()
+      saveEdited()
       return true
     case .terminal:
       return true
@@ -71,20 +71,20 @@ extension EditorPaneView {
   /// 面の無い本体で通常の打鍵を飲む（面があれば打鍵はテキスト面に届き、ここへは来ない）。
   override func keyDown(with event: NSEvent) {}
 
-  /// ⌘S。ディスクが変わっていて失敗したら「上書き／キャンセル」を sheet で出し、上書きで force 保存する。
-  /// force 保存するのは同意した文書——sheet の間もセッションは動く（エージェントの `open_file` が焦点を
-  /// 差し替える）ので、応答時点の焦点ではなく出した時点の文書を束ね、まだ居ることを確かめてから書く
+  /// ⌘S。本体で編集している文書を保存する。ディスクが変わっていて失敗したら「上書き／キャンセル」を sheet で出し、上書きで
+  /// force 保存する。force 保存するのは同意した文書——sheet の間もセッションは動く（エージェントの `open_file` が本体を
+  /// 差し替える）ので、応答時点の本体ではなく出した時点の文書を束ね、まだ居ることを確かめてから書く
   /// （`requestClose` と同型）。それ以外の失敗は beep（`open` と同じ理由でエラー面は持たない）。
-  private func saveActive() {
+  private func saveEdited() {
     guard let group else { return }
     do {
-      try group.editor.saveActive()
+      try group.editor.saveEdited()
     } catch EditorDocumentError.diskChanged {
-      guard let window, let target = group.editor.activeTab?.document else { return }
+      guard let window, let target = group.editor.editedDocument else { return }
       let alert = UnsavedGate.overwriteAlert(language: localization.language)
       alert.beginSheetModal(for: window) { [weak self, weak target] response in
         guard let self, let group = self.group, let target,
-          group.editor.documents.contains(where: { $0 === target }),
+          group.editor.holds(target),
           UnsavedGate.shouldOverwrite(response)
         else { return }
         do {

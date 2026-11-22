@@ -14,12 +14,13 @@ extension UnsavedGateTests {
   /// ファイルタブの × の確認は、応答までに焦点が別の文書へ移っても、閉じるのは確認を出した文書。
   func testFileTabCloseSheetClosesTheDocumentItAskedAboutEvenIfTheFocusMoved() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     edit(a)
 
-    tab.group.view.editor.shell.requestClose(.document(a.url))
+    tab.group.view.editor.shell.requestClose(a.url)
     try repo.write("b.txt", "b\n")
     let b = try tab.group.editor.open(repo.url("b.txt"), as: .pinned)  // sheet の間にエージェントが別の文書を開く
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertSecondButtonReturn)
@@ -32,6 +33,7 @@ extension UnsavedGateTests {
   /// 上書き確認の応答までにその文書が閉じられていれば何もしない（ディスクを触らない）。
   func testOverwriteDoesNothingWhenTheDocumentWasClosedMeanwhile() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
@@ -51,6 +53,7 @@ extension UnsavedGateTests {
   /// 上書きも書けない先（親ディレクトリが書けない）では失敗し、印は立ったまま残る。
   func testOverwriteThatCannotWriteKeepsTheMarks() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let pane = tab.group.view.editor

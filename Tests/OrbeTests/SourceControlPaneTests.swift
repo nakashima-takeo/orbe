@@ -30,8 +30,9 @@ final class SourceControlPaneTests: OrbeTestCase {
     @MainActor var scm: ScmPanel { pane.scm }
   }
 
-  /// 「ステージされている変更」の行はステージ済みの diff を、「変更」の行は作業ツリーの diff を、同じ仮のタブで開く。
-  func testRowsOpenTheDiffOfTheirSectionInThePreviewTab() throws {
+  /// 「ステージされている変更」の行はステージ済みの diff を、「変更」の行は作業ツリーの diff を、Changes の diff として開く
+  /// （前の diff と入れ替わり、Changes の画面を選ぶ）。
+  func testRowsOpenTheDiffOfTheirSectionAsTheChangesDiff() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "staged\n")
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
@@ -43,16 +44,14 @@ final class SourceControlPaneTests: OrbeTestCase {
     let editor = hosted.tab.group.editor
 
     hosted.scm.click(try row(hosted, .staged, "a.txt"), in: hosted.scm.layout)
-    let staged = EditorTab.Key.diff(EditorDiff.Key(root: repo.root, path: "a.txt", kind: .staged))
-    XCTAssertEqual(editor.activeID, staged)
-    XCTAssertEqual(editor.previewID, staged)
+    XCTAssertEqual(
+      editor.changesDiff?.id, EditorDiff.Key(root: repo.root, path: "a.txt", kind: .staged))
+    XCTAssertEqual(editor.chosenScreen, .changes)
 
     hosted.scm.click(try row(hosted, .changes, "a.txt"), in: hosted.scm.layout)
-    let working = EditorTab.Key.diff(
-      EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree))
-    XCTAssertEqual(editor.activeID, working)
-    XCTAssertEqual(editor.previewID, working)
-    XCTAssertEqual(editor.tabs.map(\.id), [working], "仮のタブを入れ替える")
+    XCTAssertEqual(
+      editor.changesDiff?.id, EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree))
+    XCTAssertTrue(editor.documents.isEmpty, "diff は開いている文書の列に入らない")
   }
 
   /// 未追跡だけの破棄は確かめずにゴミ箱へ移し、同じ位置で続けて押せるように次の行を留める。index の版へ戻す破棄は確認の
@@ -334,8 +333,8 @@ final class SourceControlPaneTests: OrbeTestCase {
         modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
         eventNumber: 0, clickCount: 1, pressure: 1)!)
     XCTAssertEqual(
-      hosted.tab.group.editor.activeID,
-      .diff(EditorDiff.Key(root: other.root, path: "m.txt", kind: .workingTree)))
+      hosted.tab.group.editor.changesDiff?.id,
+      EditorDiff.Key(root: other.root, path: "m.txt", kind: .workingTree))
   }
 
   /// 面のメッセージ欄（載っていなければ nil）。

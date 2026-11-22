@@ -3,8 +3,8 @@ import OrbeEditorCore
 import SwiftUI
 
 /// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
-/// （タブ行 → タブがあればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点のタブ
-/// の本体——文書のテキスト面か diff の面。無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
+/// （タブ行 → 本体があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（セッションが
+/// 画面から導いた中身——文書のテキスト面か diff の面。無ければ文字だけの root）を frame で置く。地は chrome と同じ veil。
 ///
 /// 本体で編集する文書（文書の本体ならその文書、diff の本体なら新しい側の文書）の「変わった」（viewport・選択・本文）は
 /// pane が 1 つずつ受け、検索・出現の強調・diff・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。
@@ -27,8 +27,10 @@ final class EditorPaneView: NSView {
   let sideHost: NSHostingView<EditorSideRoot>
   let headerHost: NSHostingView<EditorHeaderRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
-  /// 本体（焦点のタブの中身）。
+  /// 本体（セッションが画面から導いた中身）。
   private(set) var body = EditorBody.empty
+  /// ツリーで最後に選択表示した Files の今の文書（替わったときだけツリーを追従させる）。
+  private var revealedDocument: URL?
   /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
   private(set) var diffModes = EditorDiffModeState() {
     didSet { observeDiffModes() }
@@ -192,37 +194,24 @@ final class EditorPaneView: NSView {
 
   // MARK: - セッション → 骨
 
-  /// セッションが変わった。左の列の中身を画面に合わせ、写しを無条件に組み直し、焦点のタブの本体を見せ、タブが変わって
-  /// いればツリーの祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同一タブの未保存・衝突の変化は `show` の
-  /// guard で止まる。
+  /// セッションが変わった。左の列の中身を画面に合わせ、写しを無条件に組み直し、セッションが画面から導いた本体を見せ、
+  /// Files の今の文書が替わっていればツリーの祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同じ
+  /// 本体の未保存・衝突の変化は `show` の guard で止まる。本体が空のまま画面が替わったときも、器の中身は画面で決まるので
+  /// 置き直す。
   func sessionDidChange() {
     guard let group else { return }
-    let active = group.editor.activeTab
-    let changed = active?.id != shownID
     syncPanel()
     shell.update(from: group.editor, root: tree.root, diffMode: diffModes.mode)
-    show(Self.body(of: active))
-    if changed, let url = active?.url { tree.reveal(url) }
-  }
-
-  /// 本体が見せているタブの識別。
-  var shownID: EditorTab.Key? {
-    switch body {
-    case .document(let document): .document(document.url)
-    case .diff(let diff): .diff(diff.id)
-    case .empty: nil
+    show(group.editor.body)
+    refreshNotice()
+    let active = group.editor.activeURL
+    if active != revealedDocument {
+      revealedDocument = active
+      if let active { tree.reveal(active) }
     }
   }
 
-  private static func body(of tab: EditorTab?) -> EditorBody {
-    switch tab {
-    case .document(let document)?: .document(document)
-    case .diff(let diff)?: .diff(diff)
-    case nil: .empty
-    }
-  }
-
-  /// 本体が文書のタブなら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
+  /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
   var document: EditorDocument? {
     if case .document(let document) = body { return document }
     return nil
@@ -231,7 +220,7 @@ final class EditorPaneView: NSView {
   /// 本体で編集する文書——文書の本体ならその文書、diff の本体なら新しい側の文書（無ければ nil）。
   var editedDocument: EditorDocument? { document ?? diff?.document }
 
-  /// 本体が diff のタブなら、その diff。
+  /// 本体が diff なら、その diff。
   var diff: EditorDiff? {
     if case .diff(let diff) = body { return diff }
     return nil
@@ -265,7 +254,7 @@ final class EditorPaneView: NSView {
     installRoots()
     if let group {
       shell.update(from: group.editor, root: root, diffMode: diffModes.mode)
-      if let url = group.editor.activeTab?.url { tree.reveal(url) }
+      if let url = group.editor.activeURL { tree.reveal(url) }
     }
   }
 
@@ -323,7 +312,7 @@ final class EditorPaneView: NSView {
     addSubview(view, positioned: .below, relativeTo: sidebarHandle)
   }
 
-  /// 見せている本体を、セッションに告げずに手放す（タブの列を別の連のセッションへ移す前に、この面の観測・テキスト面の親・
+  /// 見せている本体を、セッションに告げずに手放す（開いている文書を別の連のセッションへ移す前に、この面の観測・テキスト面の親・
   /// 一致の強調を外し、diff は見せるのをやめる。外さないと、この面の後片付けが移した先の文書や diff を壊す）。焦点は
   /// 動かさない。
   func releaseBody() {

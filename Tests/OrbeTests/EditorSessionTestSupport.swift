@@ -3,19 +3,21 @@ import OrbeEditorCore
 
 @testable import Orbe
 
-/// 文書のタブの操作の略記（テスト）。製品はタブの識別で操作する。
+/// 開いている文書の操作の略記（テスト）。製品は文書の実体の URL で操作する。
 @MainActor
 extension EditorSession {
-  func activate(_ document: EditorDocument) { activate(.document(document.url)) }
-  func pin(_ document: EditorDocument) { pin(.document(document.url)) }
-  func close(_ document: EditorDocument) { close(.document(document.url)) }
+  func activate(_ document: EditorDocument) { activate(document.url) }
+  func pin(_ document: EditorDocument) { pin(document.url) }
+  func close(_ document: EditorDocument) { close(document.url) }
 
-  /// 仮のタブが文書のタブなら、その文書。
-  var preview: EditorDocument? {
-    guard case .document(let url)? = previewID, case .document(let document)? = tab(.document(url))
-    else { return nil }
-    return document
+  /// 文書を今の文書にして Files の画面を選ぶ（タブを押したのと同じ）。
+  func show(_ document: EditorDocument) {
+    activate(document.url)
+    selectScreen(.files)
   }
+
+  /// 仮の文書。
+  var preview: EditorDocument? { previewURL.flatMap(document(at:)) }
 }
 
 @MainActor

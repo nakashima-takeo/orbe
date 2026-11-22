@@ -47,10 +47,10 @@ final class DocumentLinkTests: OrbeTestCase {
     pumpMain(until: { document.isDiskChanged }, "未保存なら印が立つ")
     XCTAssertEqual(bodyText(document), "mine one\n")
     XCTAssertEqual(changes, 1, "印の変化はセッションの通知に載る")
-    XCTAssertThrowsError(try session.saveActive())
+    XCTAssertThrowsError(try session.saveEdited())
     XCTAssertEqual(try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "theirs\n")
 
-    try session.saveActive(force: true)
+    try session.saveEdited(force: true)
     XCTAssertEqual(try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "mine one\n")
     XCTAssertFalse(document.isDiskChanged)
     pumpMain(

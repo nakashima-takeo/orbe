@@ -21,7 +21,7 @@ final class TabGroup {
   /// 器が一度でも content に載ったか。
   private var materialized = false
 
-  /// 画面・タブの列・焦点のタブ・未保存の有無・検索の問いが変わった（chrome 更新・永続保存は上位）。
+  /// 画面・開いている文書・今の文書・diff・未保存の有無・検索の問いが変わった（chrome 更新・永続保存は上位）。
   var onEditorChange: (() -> Void)?
   /// エディター面からのウィンドウレベルの chrome キーを上位へ届ける。
   var onWindowCommand: ((WindowCommand) -> Void)?
@@ -77,16 +77,16 @@ final class TabGroup {
     MainActor.assumeIsolated { editor.documentsToDiscard() }
   }
 
-  /// エディターでファイルを普通のタブで開いて焦点の文書にする（制御 API の入口。エージェントが見せたファイルを人の次の
+  /// エディターでファイルを普通の文書として開いて今の文書にする（制御 API の入口。エージェントが見せたファイルを人の次の
   /// クリックが入れ替えない）。読めない・UTF-8 でない・テキスト面を作れない（Metal の装置が無い）は throw。
   func openFile(_ url: URL) throws {
     _ = try MainActor.assumeIsolated { try editor.open(url, as: .pinned) }
   }
 
-  /// エディターで diff を普通のタブで開いて焦点にする（制御 API の入口。エージェントが人に変更を見せる）。テキスト面を
-  /// 作れない（Metal の装置が無い）は throw。
+  /// エディターで diff を開く（制御 API の入口。エージェントが人に変更を見せる）。テキスト面を作れない（Metal の装置が
+  /// 無い）は throw。
   func openDiff(_ id: EditorDiff.Key) throws {
-    _ = try MainActor.assumeIsolated { try editor.openDiff(id, as: .pinned) }
+    _ = try MainActor.assumeIsolated { try editor.openDiff(id) }
   }
 
   /// エディター面からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
@@ -102,8 +102,8 @@ final class TabGroup {
     MainActor.assumeIsolated { editor.rootDidChange(defaultScreen: Self.defaultScreen(of: key)) }
   }
 
-  /// 連の最後のタブが cd で `other` から移ってきた。`other` のタブ（文書と diff）を自分の列の末尾へ引き取る
-  /// （→ `EditorSession.adopt`）。本体の束縛（テキスト面の親・観測・一致の強調・diff の見せ方）は pane が 1 枚だけ持つので、
+  /// 連の最後のタブが cd で `other` から移ってきた。`other` の開いている文書を自分の列の末尾へ引き取り、`other` の diff は
+  /// 手放させる（→ `EditorSession.adopt`）。本体の束縛（テキスト面の親・観測・一致の強調・diff の見せ方）は pane が 1 枚だけ持つので、
   /// 先に `other` の pane から離してから移す。
   /// `other` に復元待ちが残っていれば（一度も載らなかった）、自分が載っていれば開き、まだなら自分の復元待ちへ合わせる。
   func absorb(_ other: TabGroup) {
@@ -134,39 +134,33 @@ final class TabGroup {
     return GroupState(root: key, editor: state)
   }
 
-  /// エディターで見せているときの、chrome の現在地。根の下のファイル（文書のタブ・作業ツリーとステージ済みの diff のタブ）は
-  /// 根と相対パス、PR の diff のタブは PR の番号と相対パス、根の外のファイルは絶対パス、タブが無ければ根だけ。
+  /// エディターで見せているときの、chrome の現在地。本体が根の下のファイル（文書・作業ツリーとステージ済みの diff）なら
+  /// 根と相対パス、PR の diff なら PR の番号と相対パス、根の外のファイルなら絶対パス、本体が空なら根だけ。
   var editorLocation: TerminalTab.Location {
     let root = key
     return MainActor.assumeIsolated {
-      guard let tab = editor.activeTab else { return .root(root) }
-      if case .diff(let diff) = tab, case .pullRequest(let state) = diff.id.kind {
-        return .pullRequest(number: state.key.id.number, relative: diff.id.path)
+      let url: URL
+      switch editor.body {
+      case .empty: return .root(root)
+      case .document(let document): url = document.url
+      case .diff(let diff):
+        if case .pullRequest(let state) = diff.id.kind {
+          return .pullRequest(number: state.key.id.number, relative: diff.id.path)
+        }
+        url = diff.id.url
       }
-      let path = tab.url.path
+      let path = url.path
       guard path.hasPrefix(root + "/") else { return .absolute(path) }
       return .file(root: root, relative: String(path.dropFirst(root.count + 1)))
     }
   }
 
-  /// 開いている文書のタブ（diff のタブは戻さないので書かない）。焦点が diff のタブなら、diff のタブを除いた列でその位置に
-  /// ある文書のタブ——右隣、無ければ左隣。焦点のタブを閉じたときに焦点が移る規則（`EditorSession.close`）と同じ。
+  /// 開いている文書の列と、今の文書と仮の文書。
   @MainActor
   private func openedDocuments() -> EditorState.OpenDocuments? {
-    let tabs = editor.tabs
-    let files = tabs.compactMap { tab -> EditorDocument? in
-      if case .document(let document) = tab { return document }
-      return nil
-    }
-    guard !files.isEmpty else { return nil }
-    let index = tabs.firstIndex { $0.id == editor.activeID } ?? 0
-    let before = tabs[..<index].filter { if case .document = $0 { true } else { false } }.count
-    let active = editor.activeDocument ?? files[min(before, files.count - 1)]
-    let preview = editor.previewID.flatMap { id -> String? in
-      guard case .document(let url) = id else { return nil }
-      return url.path
-    }
+    guard let active = editor.activeDocument else { return nil }
     return EditorState.OpenDocuments(
-      open: files.map(\.url.path), active: active.url.path, preview: preview)
+      open: editor.documents.map(\.url.path), active: active.url.path,
+      preview: editor.previewURL?.path)
   }
 }

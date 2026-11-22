@@ -93,7 +93,7 @@ final class EditorSessionTests: OrbeTestCase {
     XCTAssertFalse(session.documentsToDiscard().isEmpty)
     XCTAssertEqual(changes, 1)
 
-    try session.saveActive()
+    try session.saveEdited()
     XCTAssertTrue(session.documentsToDiscard().isEmpty)
     XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "!hello")
     XCTAssertEqual(changes, 2)
@@ -114,7 +114,7 @@ final class EditorSessionTests: OrbeTestCase {
     XCTAssertEqual(viaLink.url, target.resolvingSymlinksInPath())
 
     viaLink.surface.responder.perform(Selector(("insertText:")), with: "NEW ")
-    try session.saveActive()
+    try session.saveEdited()
     XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "NEW OLD", "実体へ書かれる")
     let attributes = try FileManager.default.attributesOfItem(atPath: link.path)
     XCTAssertEqual(
@@ -179,7 +179,7 @@ final class EditorSessionTests: OrbeTestCase {
   func testAPreviewIsPinnedTheMomentItIsEdited() throws {
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let saved = try session.open(try file("a.txt", "a"), as: .preview)
-    try session.saveActive()
+    try session.saveEdited()
     XCTAssertTrue(session.preview === saved, "保存では普通にならない")
 
     let count = notifications(session) {
@@ -187,7 +187,7 @@ final class EditorSessionTests: OrbeTestCase {
     }
     XCTAssertEqual(count, 1)
     XCTAssertNil(session.preview, "未保存になった瞬間に普通になる")
-    try session.saveActive()
+    try session.saveEdited()
     XCTAssertNil(session.preview, "保存しても仮に戻らない")
 
     try session.open(try file("b.txt", "b"), as: .preview)

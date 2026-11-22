@@ -154,8 +154,6 @@ enum L10n {
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
 
     // MARK: Editor 面（diff）
-    .editorDiffWorkingTree: ("（作業ツリー）", "(Working Tree)"),
-    .editorDiffStaged: ("（ステージ済み）", "(Staged)"),
     .editorDiffInline: ("インライン", "Inline"),
     .editorDiffSide: ("並列", "Side by Side"),
     .editorDiffNotText: (

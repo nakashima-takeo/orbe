@@ -118,11 +118,11 @@ final class EditorDiffPerfTests: OrbeTestCase {
       diffModes: EditorDiffModeState(mode: mode))
     let key = EditorDiff.Key(root: repo.root, path: "big.swift", kind: .workingTree)
     defer {
-      tab.group.editor.close(.diff(key))
+      tab.group.editor.closeDiff(on: .changes)
       window.orderOut(nil)
       window.contentView = nil
     }
-    let diff = try tab.group.editor.openDiff(key, as: .pinned)
+    let diff = try tab.group.editor.openDiff(key)
     pumpMain(
       until: { diff.content == .ready && diff.placement == .placed }, timeout: 60,
       "\(name): 並びが出る")
