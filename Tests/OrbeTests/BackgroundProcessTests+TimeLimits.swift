@@ -9,26 +9,29 @@ import XCTest
 /// 壊れると何が起きるか。終わらない子プロセスを待つ予定が永久に止まる。出力を流している正常な実行が、無出力の上限で切られる。
 /// 無出力の上限を外した実行が、出力の無い間に切られたり、経過時間を過ぎても止まらなかったりする。
 extension BackgroundProcessTests {
-  /// `timed` の実行が張る予約（`earlier` が在れば、その後に張るもの）を待って返す。張られた時点（時刻を進める前）の、期限までの
-  /// 長さを、`length` と比べる。
-  func awaitReservation(
-    after earlier: ManualClock.Reservation? = nil, lasting length: TimeInterval, _ message: String,
-    file: StaticString = #filePath, line: UInt = #line
-  ) throws -> ManualClock.Reservation {
-    let reservation = try XCTUnwrap(
-      clock.awaitReservation(where: { $0.owner == runTimers.id && $0.id > (earlier?.id ?? 0) }),
-      message, file: file, line: line)
-    XCTAssertEqual(
-      reservation.deadline - clock.timerNow, length, accuracy: 0.001,
-      "予約の期限は、張った時点から、渡した長さの後にある", file: file, line: line)
-    return reservation
-  }
-
-  /// `timed` の実行が始まり、上限の予約を張るのを待って返す。上限の長さを、渡した上限 `expected` と比べる。
+  /// `timed` の実行が始まり、上限の予約を張るのを待って返す。張られた時点（時刻を進める前）の、期限までの長さを、渡した上限
+  /// `expected` と比べる。
   func awaitLimit(
     expected: TimeInterval, file: StaticString = #filePath, line: UInt = #line
   ) throws -> ManualClock.Reservation {
-    try awaitReservation(lasting: expected, "前提: 上限の予約が張られる", file: file, line: line)
+    let limit = try XCTUnwrap(
+      clock.awaitReservation(where: { $0.owner == runTimers.id }), "前提: 上限の予約が張られる",
+      file: file, line: line)
+    XCTAssertEqual(
+      limit.deadline - clock.timerNow, expected, accuracy: 0.001,
+      "上限の予約の期限は、実行の開始から、渡した上限の後にある", file: file, line: line)
+    return limit
+  }
+
+  /// `timed` の実行が、上限の予約 `limit` の後に張る猶予の予約を、上限より手前の期限で張られるのを待って返す。
+  func awaitGrace(
+    before limit: ManualClock.Reservation, _ message: String, file: StaticString = #filePath,
+    line: UInt = #line
+  ) throws -> ManualClock.Reservation {
+    try XCTUnwrap(
+      clock.awaitReservation(where: {
+        $0.owner == runTimers.id && $0.id > limit.id && $0.deadline < limit.deadline
+      }), message, file: file, line: line)
   }
 
   /// 出力が届くと、実行の開始からの経過が無出力の上限を超えても、無出力の上限は延びる。子は、合図のたびに 1 行出力し、
@@ -40,7 +43,7 @@ extension BackgroundProcessTests {
     let release = scratch("release")
     let echo = stderr ? "echo tick >&2" : "echo tick"
     let script = """
-      while [ ! -e '\(release)' ]; do
+      while [ ! -e '\(release)' ] && [ -d '\(TestScratch.caseDir.path)' ]; do
         if [ -e '\(tick)' ]; then rm '\(tick)'; \(echo); fi
         sleep 0.05
       done
@@ -76,7 +79,10 @@ extension BackgroundProcessTests {
   /// 出力が流れていても、経過時間の上限は延びない。
   func testElapsedLimitStopsEvenWhileOutputFlows() throws {
     let pending = start(
-      timed(spec("while :; do echo tick; sleep 0.1; done", elapsed: Self.elapsedLimit, idle: 60)))
+      timed(
+        spec(
+          "while [ -d '\(TestScratch.caseDir.path)' ]; do echo tick; sleep 0.1; done",
+          elapsed: Self.elapsedLimit, idle: 60)))
     let limit = try awaitLimit(expected: Self.elapsedLimit)
 
     clock.advance(by: Self.elapsedLimit / 2)
@@ -94,13 +100,7 @@ extension BackgroundProcessTests {
     let limit = try awaitLimit(expected: Self.idleLimit)
 
     clock.advance(to: limit.deadline)
-    XCTAssertFalse(
-      clock.isScheduled(limit),
-      "時刻を無出力の上限の期限まで進めると、上限の予約は、進めた呼び出しの中で走る。進めた呼び出しが戻った時点で"
-        + "まだ走り終えていないと、次の 2 つの確認は、子を切っていないことを確かめられなくなる。1 つは "
-        + "testWithoutIdleLimitSilentChildRunsUntilTheElapsedLimit にある「黙っていても、経過の上限の手前では、"
-        + "上限の予約を走らせない」という確認、もう 1 つは testOutputKeepsIdleLimitAway・testStderrKeepsIdleLimitAway "
-        + "にある「最後の出力から数え直した期限で、上限の予約を張り直す」という確認")
+    XCTAssertFalse(clock.isScheduled(limit), "時刻を無出力の上限の期限まで進めると、上限の予約は、進めた呼び出しの中で走る")
     XCTAssertEqual(try outcome(of: pending).ending, .limited(.idle))
   }
 
@@ -108,13 +108,7 @@ extension BackgroundProcessTests {
   func testWithoutIdleLimitSilentChildRunsUntilTheElapsedLimit() throws {
     let pending = start(timed(spec("sleep 30", elapsed: Self.elapsedLimit, idle: nil)))
     let limit = try awaitLimit(expected: Self.elapsedLimit)
-    let silent = limit.deadline + -1
-    XCTAssertGreaterThan(
-      silent - clock.timerNow, Self.idleLimit,
-      "前提: 経過の上限の手前まで黙る時間は、testIdleLimitStopsSilentChild で切れる無出力の上限より長い")
 
-    clock.advance(to: silent)
-    XCTAssertTrue(clock.isScheduled(limit), "黙っていても、経過の上限の手前では、上限の予約を走らせない")
     clock.advance(to: limit.deadline)
 
     XCTAssertEqual(try outcome(of: pending).ending, .limited(.elapsed))

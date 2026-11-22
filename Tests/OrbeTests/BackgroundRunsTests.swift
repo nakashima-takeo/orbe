@@ -139,7 +139,8 @@ final class BackgroundRunsTests: OrbeTestCase {
     done.expectedFulfillmentCount = 3
     for index in 0..<3 {
       let script =
-        ": > '\(file("started", index))'; while [ ! -e '\(file("go", index))' ]; do sleep 0.05; done"
+        ": > '\(file("started", index))'; while [ ! -e '\(file("go", index))' ]"
+        + " && [ -d '\(TestScratch.caseDir.path)' ]; do sleep 0.05; done"
       _ = runs.run(command(script)) {
         results.append($0)
         done.fulfill()

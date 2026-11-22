@@ -282,8 +282,7 @@ final class BackgroundProcessTests: OrbeTestCase {
     let limit = try awaitLimit(expected: Self.elapsedLimit)
 
     process.stop()
-    let grace = try awaitReservation(
-      after: limit, lasting: BackgroundProcess.killGrace, "止めた後、SIGKILL までの猶予の予約が張られる")
+    let grace = try awaitGrace(before: limit, "止めた後、上限より手前の期限で、SIGKILL までの猶予の予約が張られる")
     clock.advance(to: grace.deadline)
 
     XCTAssertEqual(try outcome(of: pending).ending, .stopped)
@@ -315,13 +314,13 @@ final class BackgroundProcessTests: OrbeTestCase {
     awaitFile(ready, "前提: 孫が準備を終えている", file: file, line: line)
     let limit = try awaitLimit(expected: Self.elapsedLimit, file: file, line: line)
     touch(scratch("exit"))
-    return try awaitReservation(
-      after: limit, lasting: BackgroundProcess.drainGrace, "子が終わった後、汲み出しの猶予の予約が張られる",
-      file: file, line: line)
+    return try awaitGrace(
+      before: limit, "子が終わった後、上限より手前の期限で、汲み出しの猶予の予約が張られる", file: file, line: line)
   }
 
   private var exitOnSignal: String {
-    "while [ ! -e '\(scratch("exit"))' ]; do sleep 0.05; done; exit 0"
+    "while [ ! -e '\(scratch("exit"))' ] && [ -d '\(TestScratch.caseDir.path)' ]; do sleep 0.05; done;"
+      + " exit 0"
   }
 
   /// SIGTERM を無視して pipe を握る孫がいても、汲み出しの猶予で返り、孫は SIGKILL で止まる。

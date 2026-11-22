@@ -38,10 +38,13 @@ final class TimerClockTests: OrbeTestCase {
 
   func testACancelledReservationDoesNotRun() throws {
     let cancelled = Record()
-    let cancel = clock.schedule(clock.now() + 0.01, queue) { [clock] in
-      cancelled.set(at: clock.now(), onQueue: true)
+    // 本番と同じく、予約のキューの上で取り消す。キューを塞いだまま取り消すので、取り消す前に期限が来ても走らない。
+    queue.sync {
+      let cancel = clock.schedule(clock.now() + 0.01, queue) { [clock] in
+        cancelled.set(at: clock.now(), onQueue: true)
+      }
+      cancel()
     }
-    cancel()
     // 同じキューの上の、期限が後の予約を目印にする。取り消しが効かなければ、取り消した予約は目印より先に走っている。
     let marker = expectation(description: "marker")
     _ = clock.schedule(clock.now() + 0.2, queue) { marker.fulfill() }
