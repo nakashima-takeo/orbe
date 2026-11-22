@@ -81,16 +81,9 @@ extension EditorDiffTests {
         FileHandle.standardError.write(Data("遷移 種 \(seed) \(log.joined(separator: " "))\n".utf8))
         try op()
 
-        let truth: Truth
-        do {
-          truth = try readTruth()
-        } catch {
-          XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後、期待を読む git が失敗: \(error)")
-          return
-        }
+        let truth = try readTruth()
         if let mismatch = settle(pane, truth: truth, working: working) {
           XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後: \(mismatch)")
-          return
         }
       }
       guard passed else { return false }
