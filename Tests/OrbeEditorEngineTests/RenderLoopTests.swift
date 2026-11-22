@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -57,10 +58,7 @@ final class RenderLoopTests: EngineTestCase {
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -1), precise: false))
     waitUntilPaused(surface)
     XCTAssertNotNil(blinkWake(surface), "つまみが消え始める時刻に起きるタイマー")
-    let deadline = Date().addingTimeInterval(3)
-    repeat {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-    } while (blinkWake(surface) != nil || !driver.isPaused(surface.id)) && Date() < deadline
+    waitUntil(3) { blinkWake(surface) == nil && driver.isPaused(surface.id) }
     XCTAssertNil(blinkWake(surface), "消え終わったらタイマーは無い")
     let ticks = driver.ticks(surface.id)
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
@@ -94,10 +92,7 @@ final class RenderLoopTests: EngineTestCase {
     let surface = opened.surface
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
     driver.bind(surface.id)
-    let deadline = Date().addingTimeInterval(5)
-    while !surface.clipsRight, Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
+    waitUntil(5) { surface.clipsRight }
     XCTAssertTrue(surface.clipsRight, "前提: 長さを測った")
     waitUntilPaused(surface)
     let id = surface.id
@@ -264,11 +259,8 @@ final class RenderLoopTests: EngineTestCase {
   }
 
   private func waitUntilPaused(_ surface: MetalTextSurface) {
-    let deadline = Date().addingTimeInterval(5)
-    repeat {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    } while !driver.isPaused(surface.id) && Date() < deadline
-    XCTAssertTrue(driver.isPaused(surface.id), "刻みが止まる")
+    RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    XCTAssertTrue(waitUntil(5) { driver.isPaused(surface.id) }, "刻みが止まる")
   }
 }
 

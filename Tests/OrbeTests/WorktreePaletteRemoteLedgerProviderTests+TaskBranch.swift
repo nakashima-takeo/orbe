@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -80,7 +81,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     let (model, provider) = makeTaskProvider(task, items: items)
     model.onExecute = executed
     provider.load()
-    XCTAssertTrue(pump { model.hasLoadedOnce && model.newBranchRules != nil }, "前提: 一覧が届く")
+    XCTAssertTrue(waitUntil(20) { model.hasLoadedOnce && model.newBranchRules != nil }, "前提: 一覧が届く")
     return (model, provider)
   }
 
@@ -103,7 +104,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
     try releaseFetch()
 
-    XCTAssertTrue(pump { !executed.isEmpty })
+    XCTAssertTrue(waitUntil(20) { !executed.isEmpty })
     XCTAssertTrue(fetchWentThroughTheLocalOrigin(), "前提: fetch はローカルの origin で済んだ")
     XCTAssertEqual(
       executed, [.remoteBranch(name: "origin/feat", existingWorktree: nil)], "届いたブランチで効く")
@@ -124,7 +125,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
     try releaseFetch()
 
-    XCTAssertTrue(pump { !executed.isEmpty })
+    XCTAssertTrue(waitUntil(20) { !executed.isEmpty })
     XCTAssertTrue(fetchWentThroughTheLocalOrigin(), "前提: fetch はローカルの origin で済んだ")
     XCTAssertNil(taskSection(model), "欄を出さない")
     XCTAssertEqual(executed, [.directory(path: root)], "今の worktree に効く")
@@ -145,7 +146,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
     try releaseFetch()
 
-    XCTAssertTrue(pump { !executed.isEmpty })
+    XCTAssertTrue(waitUntil(20) { !executed.isEmpty })
     XCTAssertTrue(fetchWentThroughTheLocalOrigin(), "前提: fetch はローカルの origin で済んだ")
     XCTAssertEqual(
       executed, [.remoteBranch(name: "origin/issue/221", existingWorktree: nil)],
@@ -185,14 +186,14 @@ extension WorktreePaletteRemoteLedgerProviderTests {
       task { $0.links = [pr] },
       items: items(pr, head: GitHubBranchRef(repo: mine, branch: "docs/readme-en"))
     ) { executed.append($0) }
-    XCTAssertTrue(pump { calls("R").contains("me/r") }, "前提: 正式名を問い合わせている")
+    XCTAssertTrue(waitUntil(20) { calls("R").contains("me/r") }, "前提: 正式名を問い合わせている")
     XCTAssertTrue(model.taskTargetPending, "正式名が届くまで決めない")
     model.activate()
     XCTAssertEqual(executed, [], "↵ は預かる")
 
     try ungate("resolve")
 
-    XCTAssertTrue(pump { !executed.isEmpty })
+    XCTAssertTrue(waitUntil(20) { !executed.isEmpty })
     XCTAssertEqual(executed, [.localBranch(name: "docs/readme-en")])
     withExtendedLifetime(provider) {}
   }
@@ -234,16 +235,16 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     let (model, provider) = open(task { $0.links = [link(.issue, "me/r", 221)] }) {
       executed.append($0)
     }
-    XCTAssertTrue(pump { calls("R").contains("me/old-name") }, "前提: 正式名を問い合わせている")
+    XCTAssertTrue(waitUntil(20) { calls("R").contains("me/old-name") }, "前提: 正式名を問い合わせている")
     XCTAssertTrue(model.taskTargetPending, "正式名が届くまで決めない")
     model.activate()
     XCTAssertEqual(executed, [], "↵ は預かる")
 
     try ungate("resolve")
 
-    XCTAssertTrue(pump { !model.taskTargetPending })
+    XCTAssertTrue(waitUntil(20) { !model.taskTargetPending })
     XCTAssertEqual(taskSection(model)?.items.map(\.action), [.createBranch(name: "issue/221")])
-    XCTAssertTrue(pump { !model.hasPendingActivation }, "預かった ↵ は欄の行で解ける")
+    XCTAssertTrue(waitUntil(20) { !model.hasPendingActivation }, "預かった ↵ は欄の行で解ける")
     withExtendedLifetime(provider) {}
   }
 }

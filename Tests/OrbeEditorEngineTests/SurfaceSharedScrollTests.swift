@@ -1,6 +1,7 @@
 import AppKit
 import Metal
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -149,7 +150,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
         a.surface.scrollState().limits.maximum.y, a.surface.rows.lastTop(lineCount: 31),
         "前提: 長い面の範囲を共にしている")
     }
-    pump(until: { a.surface.partner == nil }, "相手が閉じれば外れる")
+    pumpMain(until: { a.surface.partner == nil }, "相手が閉じれば外れる")
     XCTAssertEqual(
       a.surface.scrollState().limits.maximum.y,
       max(0, a.surface.rows.lastTop(lineCount: a.document.text.lineCount)))
@@ -171,7 +172,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       let b = try surface(300)
       a.surface.shareScroll(with: b.surface)
     }
-    pump(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    pumpMain(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
     do {
       let c = try surface(100)
       a.surface.shareScroll(with: c.surface)
@@ -184,7 +185,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       c.surface.flush()
       XCTAssertEqual(a.surface.scrollState().limits.maximum.y, end(c), "新しい相手の範囲に従う")
     }
-    pump(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    pumpMain(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
     let d = try surface(100)
     d.surface.shareScroll(with: a.surface)
     let order = { (opened: Opened) in opened.surface.scrollGroup.map(ObjectIdentifier.init) }
@@ -213,7 +214,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       XCTAssertEqual(drawn(a.surface)?.y, 250 * 18, "前提: 長い面の範囲で描いた")
       XCTAssertTrue(clock.isPaused, "前提: 描くものが無く刻みを止めている")
     }
-    pump(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    pumpMain(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
     RenderThread.shared.performAndWait { _ in 0 }
     XCTAssertFalse(clock.isPaused, "残った面の刻みを再開する")
     tick(a.surface, t)
@@ -298,10 +299,7 @@ extension SurfaceSharedScrollTests {
       return 0
     }
     // GPU に出した命令の列が終わるのを待つ（上限 3 に当たって飛ばさない）。
-    let deadline = Date().addingTimeInterval(5)
-    while RenderThread.shared.performAndWait({ $0.gpuInflight }) > 0, Date() < deadline {
-      Thread.sleep(forTimeInterval: 0.001)
-    }
+    sleepUntil(5) { RenderThread.shared.performAndWait { $0.gpuInflight } <= 0 }
   }
 
   private func drawn(_ surface: MetalTextSurface) -> SIMD2<Double>? {

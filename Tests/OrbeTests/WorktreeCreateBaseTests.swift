@@ -40,7 +40,7 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   func testNewBranchIsCutFromTheFetchedDefaultBranch() throws {
     let provider = try startWithSlowFetch()
     XCTAssertTrue(
-      pump({ provider.facts.defaultBranchName == "origin/main" }), "前提: 既定ブランチの解決は着地している")
+      waitUntil(20) { provider.facts.defaultBranchName == "origin/main" }, "前提: 既定ブランチの解決は着地している")
     let outcome = try prepare(provider, .newBranch(name: "issue/44", base: .defaultBranch))
     guard case .created(let path, let base) = outcome else {
       return XCTFail("新しいブランチの作成として返る: \(outcome)")
@@ -167,10 +167,10 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
       worktreeTemplate: "{parent}/wt-{slug}")
     provider.load()
     XCTAssertTrue(
-      pump({
+      waitUntil(20) {
         palette.items.contains { $0.glyph == .worktree }
           && palette.items.contains { $0.glyph == .localBranch }
-      }), "前提: git レーンは着地している（worktree 行と Local branch 行が組まれるまで）")
+      }, "前提: git レーンは着地している（worktree 行と Local branch 行が組まれるまで）")
     return provider
   }
 
@@ -222,7 +222,7 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   {
     var outcome: WorktreeRepoFacts.PrepareOutcome?
     provider.facts.prepareDirectory(for: destination) { outcome = $0 }
-    XCTAssertTrue(pump({ outcome != nil }, timeout: 30), "解決が返らない")
+    XCTAssertTrue(waitUntil(30) { outcome != nil }, "解決が返らない")
     return try XCTUnwrap(outcome)
   }
 
@@ -245,15 +245,5 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   @discardableResult
   func run(_ args: [String], cwd: String) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: cwd)
-  }
-
-  /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
-  func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
   }
 }

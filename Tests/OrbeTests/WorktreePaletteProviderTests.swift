@@ -26,7 +26,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
     for (name, expected) in [("feat/x", true), ("bad..name", false), ("trailing.lock", false)] {
       model.query = name
       provider.checkBranchName(name)
-      XCTAssertTrue(pump { model.branchNameAnswer?.name == name }, "\(name) に答えが届く")
+      XCTAssertTrue(waitUntil(20) { model.branchNameAnswer?.name == name }, "\(name) に答えが届く")
       XCTAssertEqual(model.branchNameAnswer?.isValid, expected, name)
     }
   }
@@ -47,12 +47,12 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
       worktreeTemplate: WorktreePathTemplate.defaultTemplate)
     model.onCheckBranchName = { provider.checkBranchName($0) }
     provider.load()
-    XCTAssertTrue(pump { model.newBranchRules != nil })
+    XCTAssertTrue(waitUntil(20) { model.newBranchRules != nil })
 
     for (name, creatable) in [("@{-1}", false), ("topic/new", true)] {
       model.query = name
       model.onQueryChanged()
-      XCTAssertTrue(pump { model.branchNameAnswer?.name == name }, "\(name) に答えが届く")
+      XCTAssertTrue(waitUntil(20) { model.branchNameAnswer?.name == name }, "\(name) に答えが届く")
       XCTAssertEqual(
         model.items.contains { $0.action == .createBranch(name: name) }, creatable, name)
     }
@@ -65,7 +65,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
       cwd: dir.path, model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: WorktreePathTemplate.defaultTemplate)
     provider.load()
-    XCTAssertTrue(pump { model.hasLoadedOnce })
+    XCTAssertTrue(waitUntil(20) { model.hasLoadedOnce })
     XCTAssertEqual(model.items.map(\.action), [.open(.directory(path: dir.path))])
     XCTAssertNil(model.newBranchRules)
     XCTAssertNil(model.baseFacts)
@@ -87,7 +87,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
         cwd: repo, model: model, localization: LocalizationStore(language: .ja),
         worktreeTemplate: template, previousBase: previous)
       provider.load()
-      XCTAssertTrue(pump { model.baseFacts != nil && model.newBranchRules != nil })
+      XCTAssertTrue(waitUntil(20) { model.baseFacts != nil && model.newBranchRules != nil })
       return (model.baseFacts, model.newBranchRules)
     }
 
@@ -120,7 +120,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
       cwd: clone, model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: WorktreePathTemplate.defaultTemplate)
     provider.load()
-    XCTAssertTrue(pump { model.newBranchRules != nil })
+    XCTAssertTrue(waitUntil(20) { model.newBranchRules != nil })
 
     let rules = try XCTUnwrap(model.newBranchRules)
     XCTAssertFalse(rules.allows("feat/x"), "origin/feat/x の行が作るローカル名")
@@ -144,8 +144,8 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
     XCTAssertEqual(executed, [], "↵ は預かられる")
 
     provider.load()
-    XCTAssertTrue(pump { !executed.isEmpty })
-    XCTAssertTrue(pump { provider.facts.remoteFetchLanded })
+    XCTAssertTrue(waitUntil(20) { !executed.isEmpty })
+    XCTAssertTrue(waitUntil(20) { provider.facts.remoteFetchLanded })
     XCTAssertEqual(executed, [.directory(path: repo)])
   }
 
@@ -169,7 +169,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
       cwd: repo, model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: "\(link)/{slug}")
     provider.load()
-    XCTAssertTrue(pump { model.newBranchRules != nil })
+    XCTAssertTrue(waitUntil(20) { model.newBranchRules != nil })
 
     let rules = try XCTUnwrap(model.newBranchRules)
     XCTAssertFalse(rules.allows("issue-1"), "作成先が実体の消えた登録と同じ場所")
@@ -197,7 +197,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
       cwd: "\(real)/feat", model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: WorktreePathTemplate.defaultTemplate)
     provider.load()
-    XCTAssertTrue(pump { model.hasLoadedOnce })
+    XCTAssertTrue(waitUntil(20) { model.hasLoadedOnce })
 
     XCTAssertEqual(
       model.items.filter(\.isCurrent).map(\.action), [.open(.directory(path: "\(link)/feat"))])
@@ -215,14 +215,5 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
   @discardableResult
   private func run(_ args: [String], cwd: String) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: cwd)
-  }
-
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
   }
 }

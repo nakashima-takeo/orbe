@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -125,23 +126,14 @@ final class AutomationTrialTests: OrbeTestCase {
     ids.map(item).joined(separator: "\n")
   }
 
-  /// 写しと試走の流れは main の後の番で進むので、条件が立つまで回す。
-  func settle(
-    until condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line
+  func waitCalls(
+    _ script: String, _ count: Int, file: StaticString = #filePath, line: UInt = #line
   ) {
-    let deadline = Date().addingTimeInterval(5)
-    while !condition() && Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.005))
-    }
-    XCTAssertTrue(condition(), "条件が立たないまま時間が過ぎた", file: file, line: line)
+    pumpMain(until: { calls(script).count == count }, file: file, line: line)
   }
 
-  func waitCalls(_ script: String, _ count: Int, line: UInt = #line) {
-    settle(until: { calls(script).count == count }, line: line)
-  }
-
-  func ended(_ trial: AutomationTrial, line: UInt = #line) {
-    settle(until: { !trial.running }, line: line)
+  func ended(_ trial: AutomationTrial, file: StaticString = #filePath, line: UInt = #line) {
+    pumpMain(until: { !trial.running }, file: file, line: line)
   }
 
   func rows(_ trial: AutomationTrial, _ key: String) -> [String] {

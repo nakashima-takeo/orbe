@@ -195,8 +195,7 @@ final class BackgroundRunsTests: OrbeTestCase {
     _ = runs.run(command("sleep 30 & echo $! > \(pidFile); wait")) { _ in }
     var waitingCompleted = false
     _ = runs.run(command("echo never")) { _ in waitingCompleted = true }
-    let deadline = Date().addingTimeInterval(10)
-    while !FileManager.default.fileExists(atPath: pidFile), Date() < deadline { usleep(20_000) }
+    sleepUntil(10) { FileManager.default.fileExists(atPath: pidFile) }
     let pid = try XCTUnwrap(
       pid_t(
         try String(contentsOfFile: pidFile, encoding: .utf8)

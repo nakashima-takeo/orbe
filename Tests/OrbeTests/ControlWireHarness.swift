@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -27,7 +28,7 @@ final class ControlWire {
   /// 応答待ちの上限。**実時間の検証ではない**——タイムアウト値の契約は `timeoutMs` を明示指定した
   /// テストだけが測り、ここは「進まなくなったら諦める」ための上限に過ぎない。
   private static let deadlineSeconds: TimeInterval = 2
-  /// runloop を 1 回まわす刻み。control queue と main hop の両方をここで進ませる。
+  /// 送信バッファが空くのを待つ `poll` 1 回の上限。
   private static let stepSeconds: TimeInterval = 0.005
 
   /// `ControlServer.shared.target` は weak なので、Fake の寿命はここが持つ。
@@ -176,19 +177,18 @@ final class ControlWire {
 
   /// サーバが接続を畳んだ（read が EOF を返した）ことを待つ。
   func waitForDisconnect(file: StaticString = #filePath, line: UInt = #line) {
-    let deadline = Date().addingTimeInterval(Self.deadlineSeconds)
     var buf = [UInt8](repeating: 0, count: 4096)
-    while true {
-      let n = read(clientFD, &buf, buf.count)
-      if n > 0 { continue }  // 切断前に残っていた応答は読み飛ばす
-      if n == 0 { return }  // EOF＝サーバが畳んだ
-      if errno == EINTR { continue }
-      guard errno == EAGAIN || errno == EWOULDBLOCK else { return }  // 相手が落ちた扱い
-      guard Date() < deadline else {
-        XCTFail("接続が切れない（上限超過で切断する契約が働いていない）", file: file, line: line)
-        return
+    let closed = waitUntil(Self.deadlineSeconds) {
+      while true {
+        let n = read(clientFD, &buf, buf.count)
+        if n > 0 { continue }  // 切断前に残っていた応答は読み飛ばす
+        if n == 0 { return true }  // EOF＝サーバが畳んだ
+        if errno == EINTR { continue }
+        return errno != EAGAIN && errno != EWOULDBLOCK  // 相手が落ちた扱い
       }
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(Self.stepSeconds))
+    }
+    if !closed {
+      XCTFail("接続が切れない（上限超過で切断する契約が働いていない）", file: file, line: line)
     }
   }
 
@@ -204,8 +204,17 @@ final class ControlWire {
   /// 改行までを 1 行として取り出す。EAGAIN のあいだは runloop を回し、control queue と
   /// `handle` の main hop の両方を進ませる（テスト本体は main に留まる）。
   private func nextLine() -> LineOutcome {
-    let deadline = Date().addingTimeInterval(Self.deadlineSeconds)
     var buf = [UInt8](repeating: 0, count: 4096)
+    var outcome: LineOutcome?
+    waitUntil(Self.deadlineSeconds) {
+      outcome = takeLine(&buf)
+      return outcome != nil
+    }
+    return outcome ?? .timedOut
+  }
+
+  /// 読めるだけ読み、行・EOF のどちらかに決まればそれを返す。まだ届いていない（EAGAIN）ときは nil。
+  private func takeLine(_ buf: inout [UInt8]) -> LineOutcome? {
     while true {
       if let nl = pending.firstIndex(of: 0x0A) {
         let line = Data(pending[pending.startIndex..<nl])
@@ -220,8 +229,7 @@ final class ControlWire {
       if n == 0 { return .eof }
       if errno == EINTR { continue }
       guard errno == EAGAIN || errno == EWOULDBLOCK else { return .eof }  // 相手が落ちた扱い
-      guard Date() < deadline else { return .timedOut }
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(Self.stepSeconds))
+      return nil
     }
   }
 }

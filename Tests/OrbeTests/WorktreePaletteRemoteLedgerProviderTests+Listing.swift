@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -15,7 +16,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     _ = try addWorktree("wt-feat", branch: "feat")
     let (_, provider) = makeProvider()
     provider.load()
-    XCTAssertTrue(pump({ provider.facts.remoteLedger != .pending }), "前提: 読めた一覧で台帳が確定する")
+    XCTAssertTrue(waitUntil(20) { provider.facts.remoteLedger != .pending }, "前提: 読めた一覧で台帳が確定する")
 
     provider.facts.remoteListing = .unreadable
 
@@ -49,6 +50,6 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     let (_, provider) = makeProvider(cwd: partial)
 
     provider.load()
-    XCTAssertTrue(pump({ provider.branchPRStates["feat"] == .loaded([open]) }))
+    XCTAssertTrue(waitUntil(20) { provider.branchPRStates["feat"] == .loaded([open]) })
   }
 }

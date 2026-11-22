@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -111,7 +112,7 @@ extension SurfaceSharedScrollTests {
       a.surface.shareScroll(with: b.surface)
       XCTAssertEqual(b.surface.drawn.rows.heights, [45], "相手が付けば相手の絵の高さ")
     }
-    pump(until: { b.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    pumpMain(until: { b.surface.partner == nil }, "前提: 相手が閉じれば外れる")
     XCTAssertEqual(b.surface.drawn.rows.heights, [0], "相手が閉じれば 0")
   }
 
@@ -159,7 +160,7 @@ extension SurfaceSharedScrollTests {
       a.surface.flush()
       XCTAssertEqual(b.surface.viewport.top, top, "前提: 結んだまま行 50")
     }
-    pump(until: { b.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    pumpMain(until: { b.surface.partner == nil }, "前提: 相手が閉じれば外れる")
     b.surface.flush()
     XCTAssertEqual(b.surface.drawn.rows.heights, [0], "前提: 空きは 0 に戻る")
     XCTAssertEqual(b.surface.viewport.top, top, "相手が閉じた後")

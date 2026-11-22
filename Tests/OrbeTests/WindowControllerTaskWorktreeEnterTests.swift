@@ -60,21 +60,14 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     return (wc, task)
   }
 
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-    }
-    return condition()
-  }
-
   /// タスクの ⌘T を開き、`action` の行が出るまで待ってから、起動先を shell にする。
   private func open(
     _ wc: WindowController, for task: TaskItem, row action: WorktreePaletteAction
   ) throws -> WorktreePaletteModel {
     wc.showWorktreePalette(task: task.id)
     let palette = try XCTUnwrap(wc.model.worktreePalette)
-    XCTAssertTrue(pump { palette.items.contains { $0.action == action } }, "行が出る: \(action)")
+    XCTAssertTrue(
+      waitUntil(20) { palette.items.contains { $0.action == action } }, "行が出る: \(action)")
     palette.chooseTarget(at: try XCTUnwrap(palette.targets.firstIndex(of: .shell)))
     return palette
   }
@@ -112,7 +105,7 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
 
     palette.onExecute(.newBranch(name: "issue/9", base: .ref("origin/no-such-branch")))
 
-    XCTAssertTrue(pump { palette.errorMessage != nil }, "作成に失敗する")
+    XCTAssertTrue(waitUntil(20) { palette.errorMessage != nil }, "作成に失敗する")
     XCTAssertEqual(stored(task, in: wc), task, "タスクは変わらない")
   }
 
@@ -128,7 +121,8 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     palette.clearTaskContext()
 
     XCTAssertTrue(
-      pump { palette.items.contains { $0.glyph == .directory } }, "開いた時点の workspace の場所を読み直す")
+      waitUntil(20) { palette.items.contains { $0.glyph == .directory } },
+      "開いた時点の workspace の場所を読み直す")
     XCTAssertFalse(
       palette.items.contains { $0.action == repositoryRow }, "タスクの workspace のリポジトリの行は残らない")
     wc.switchWorkspace(to: 1)
@@ -159,12 +153,13 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     XCTAssertFalse(taskProvider.facts.remoteFetchLanded, "前提: タスクのリポジトリの fetch はまだ着地していない")
 
     palette.clearTaskContext()
-    XCTAssertTrue(pump { palette.items.contains { $0.glyph == .directory } })
+    XCTAssertTrue(waitUntil(20) { palette.items.contains { $0.glyph == .directory } })
     try FileManager.default.removeItem(atPath: gate)
 
-    XCTAssertTrue(pump { taskProvider.facts.remoteFetchLanded }, "前提: タスクのリポジトリの fetch が着地した")
-    XCTAssertFalse(
-      pump({ palette.items.contains { $0.action == repositoryRow } }, timeout: 1),
+    XCTAssertTrue(
+      waitUntil(20) { taskProvider.facts.remoteFetchLanded }, "前提: タスクのリポジトリの fetch が着地した")
+    XCTAssertTrue(
+      holds(for: 1) { !palette.items.contains { $0.action == repositoryRow } },
       "タスクのリポジトリの行は戻らない")
   }
 
@@ -177,10 +172,10 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
       at: try XCTUnwrap(
         palette.items.firstIndex { $0.action == .open(.localBranch(name: "stale")) })
     )
-    XCTAssertTrue(pump { palette.mode == .refresh }, "前提: 遅れているので最新化の画面に入る")
+    XCTAssertTrue(waitUntil(20) { palette.mode == .refresh }, "前提: 遅れているので最新化の画面に入る")
     palette.confirmRefresh(.refreshed)
 
-    XCTAssertTrue(pump { stored(task, in: wc)?.status == .inProgress }, "タスクは進行中になる")
+    XCTAssertTrue(waitUntil(20) { stored(task, in: wc)?.status == .inProgress }, "タスクは進行中になる")
     let worktree = try XCTUnwrap(stored(task, in: wc)?.worktree)
     XCTAssertEqual(
       GitRunner.shared.runSync(["branch", "--show-current"], cwd: worktree.path).stdoutText
@@ -200,16 +195,18 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     palette.query = name
     palette.onQueryChanged()
     XCTAssertTrue(
-      pump { palette.items.contains { $0.action == .createBranch(name: name) } },
+      waitUntil(20) { palette.items.contains { $0.action == .createBranch(name: name) } },
       "前提: 打った名前の作成行が出る")
 
     palette.clearTaskContext()
 
     XCTAssertTrue(
-      pump { wc.model.worktreePaletteProvider?.facts.cwd == home && palette.newBranchRules != nil },
+      waitUntil(20) {
+        wc.model.worktreePaletteProvider?.facts.cwd == home && palette.newBranchRules != nil
+      },
       "前提: 開いた時点の workspace のリポジトリを読み直した")
     XCTAssertFalse(palette.isAwaitingBranchNameAnswer, "名前の答えは残る")
     palette.activate()
-    XCTAssertTrue(pump { !palette.hasPendingActivation }, "↵ は預かられたままにならない")
+    XCTAssertTrue(waitUntil(20) { !palette.hasPendingActivation }, "↵ は預かられたままにならない")
   }
 }

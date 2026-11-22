@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import Foundation
 import OrbePaths
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -27,8 +28,6 @@ final class ControlProcess {
   /// 実タブへ送った入力が画面へ反映されるまでの上限。タブの spawn ＋ ログインシェルの起動 ＋
   /// 描画までを含むので `processTimeout` と別に持つ。これも実時間の検証ではない。
   static let tabSettleTimeout: TimeInterval = 15
-  /// runloop を 1 回まわす刻み。control queue と main hop の両方をここで進ませる。
-  private static let stepSeconds: TimeInterval = 0.01
 
   // MARK: - ビルド済み実行体の解決
 
@@ -124,7 +123,7 @@ final class ControlProcess {
       "制御 socket が隔離根を指していない（隔離前に ControlServer が構築された）", file: file, line: line)
     ControlServer.shared.start(target: target)
     XCTAssertTrue(
-      Self.waitUntil(5) { FileManager.default.fileExists(atPath: expected) },
+      waitUntil(5) { FileManager.default.fileExists(atPath: expected) },
       "control.sock が bind されない（bind 失敗は無言なので待ってから測る）", file: file, line: line)
   }
 
@@ -214,17 +213,6 @@ final class ControlProcess {
   /// 出力を文字列へ。非 UTF-8 は握り潰さず、そうと分かる形で残す（空文字と区別できるようにする）。
   private static func text(_ data: Data) -> String {
     String(data: data, encoding: .utf8) ?? "<非 UTF-8 \(data.count) バイト>"
-  }
-
-  /// runloop を回しながら条件成立を待つ。`Process.waitUntilExit()` の代わりに必ずこれを通す。
-  @discardableResult
-  static func waitUntil(_ seconds: TimeInterval, _ body: () -> Bool) -> Bool {
-    let deadline = Date().addingTimeInterval(seconds)
-    while true {
-      if body() { return true }
-      guard Date() < deadline else { return false }
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(stepSeconds))
-    }
   }
 
   // MARK: - orb（orbe-cli）
@@ -390,11 +378,5 @@ extension OrbeTestCase {
     let control = ControlProcess(target: WindowController())
     addTeardownBlock { control.teardown() }
     return control
-  }
-
-  /// runloop を回しながら条件成立を待つ（ポーリング）。
-  @discardableResult
-  func waitUntil(_ seconds: TimeInterval = 5, _ body: () -> Bool) -> Bool {
-    ControlProcess.waitUntil(seconds, body)
   }
 }

@@ -138,11 +138,11 @@ final class WorktreePaletteBranchNameTests: OrbeTestCase {
       worktreeTemplate: "{parent}/wt-{slug}")
     provider.load()
     XCTAssertTrue(
-      pump({
+      waitUntil(20) {
         [.worktree, .localBranch, .remoteBranch].allSatisfy { glyph in
           palette.items.contains { $0.glyph == glyph }
         }
-      }), "前提: git レーンは着地している（worktree・Local branch・Remote branch の行が組まれるまで）")
+      }, "前提: git レーンは着地している（worktree・Local branch・Remote branch の行が組まれるまで）")
     return provider
   }
 
@@ -162,7 +162,7 @@ final class WorktreePaletteBranchNameTests: OrbeTestCase {
     }
     var outcome: WorktreeRepoFacts.PrepareOutcome?
     provider.facts.prepareDirectory(for: destination) { outcome = $0 }
-    XCTAssertTrue(pump({ outcome != nil }, timeout: 30), "解決が返らない")
+    XCTAssertTrue(waitUntil(30) { outcome != nil }, "解決が返らない")
     guard case .resolved(.ready(let path)) = try XCTUnwrap(outcome) else {
       throw CreationFailed(detail: String(describing: outcome))
     }
@@ -189,15 +189,5 @@ final class WorktreePaletteBranchNameTests: OrbeTestCase {
   @discardableResult
   private func run(_ args: [String], cwd: String) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: cwd)
-  }
-
-  /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
   }
 }

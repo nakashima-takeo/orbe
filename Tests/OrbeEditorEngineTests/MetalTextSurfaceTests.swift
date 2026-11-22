@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -40,13 +41,13 @@ final class MetalTextSurfaceTests: EngineTestCase {
     opened.surface.reveal(NSRange(location: target, length: 1), policy: .minimal)
     XCTAssertEqual(opened.surface.viewport.top, RowPosition(line: 0), "縦は見えているので動かない")
     _ = opened.surface.snapshot()
-    pump(
+    pumpMain(
       until: { opened.surface.hiddenColumns > 0 }, "横は描画スレッドが行を組んで寄せる")
     let columns = opened.surface
     XCTAssertLessThanOrEqual(281, columns.hiddenColumns + columns.visibleColumns + 0.5)
     opened.surface.reveal(NSRange(location: text.lineStart(80), length: 0), policy: .minimal)
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.hiddenColumns == 0 }, "行頭へ戻る")
+    pumpMain(until: { opened.surface.hiddenColumns == 0 }, "行頭へ戻る")
     XCTAssertGreaterThan(opened.surface.viewportLines.first, 40, "下の行が見えるまで送る")
   }
 
@@ -162,7 +163,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertFalse(narrow.surface.clipsRight)
     let wide = try open(String(repeating: "x", count: 300) + "\n")
     _ = wide.surface.snapshot()
-    pump(until: { wide.surface.clipsRight }, "組んだ行で範囲が伸びれば続く")
+    pumpMain(until: { wide.surface.clipsRight }, "組んだ行で範囲が伸びれば続く")
     wide.surface.scroll(ScrollInput(timestamp: 0, delta: SIMD2(-10_000, 0), precise: false))
     XCTAssertFalse(wide.surface.clipsRight, "右端まで送れば続かない")
   }
@@ -174,7 +175,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     _ = opened.surface.snapshot()
     opened.surface.reveal(NSRange(location: 250, length: 0), policy: .minimal)
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.hiddenColumns > 0 })
+    pumpMain(until: { opened.surface.hiddenColumns > 0 })
     let hidden = opened.surface.hiddenColumns
     opened.surface.replaceAll(with: "y" + wide)
     XCTAssertEqual(opened.surface.hiddenColumns, hidden, "差し替えただけでは動かない")
@@ -183,7 +184,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertEqual(opened.surface.hiddenColumns, hidden, "測り直しても範囲の中なら保つ")
     opened.surface.replaceAll(with: "short\n")
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.hiddenColumns == 0 }, "短くなれば新しい範囲に収める")
+    pumpMain(until: { opened.surface.hiddenColumns == 0 }, "短くなれば新しい範囲に収める")
   }
 
   /// 面が閉じたら、描画スレッドが写しの最後の参照と面ごとの持ち物を手放す（大きな木の解放を main で行わない）——
