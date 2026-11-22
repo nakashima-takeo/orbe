@@ -15,12 +15,24 @@ import XCTest
 public func waitUntil(_ seconds: TimeInterval = 5, _ condition: () throws -> Bool) rethrows -> Bool
 {
   let deadline = Date().addingTimeInterval(seconds)
+  var tick: DispatchSourceTimer?
+  defer { tick?.cancel() }
   while true {
     if try condition() { return true }
     guard Date() < deadline else { return false }
+    if tick == nil {
+      let timer = DispatchSource.makeTimerSource(flags: .strict, queue: pollQueue)
+      timer.schedule(
+        deadline: .now() + .milliseconds(5), repeating: .milliseconds(5), leeway: .nanoseconds(0))
+      timer.setEventHandler { DispatchQueue.main.async {} }
+      timer.resume()
+      tick = timer
+    }
     RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
   }
 }
+
+private let pollQueue = DispatchQueue(label: "orbe.test.poll", qos: .userInteractive)
 
 /// ランループを回さずに、条件が成り立つまでこのスレッドを止めて待ち、期限までに成り立ったかを返す。
 ///
@@ -32,7 +44,13 @@ public func sleepUntil(_ seconds: TimeInterval, _ condition: () throws -> Bool) 
   while true {
     if try condition() { return true }
     guard Date() < deadline else { return false }
-    Thread.sleep(forTimeInterval: 0.001)
+    let fired = DispatchSemaphore(value: 0)
+    let timer = DispatchSource.makeTimerSource(flags: .strict, queue: pollQueue)
+    timer.schedule(deadline: .now() + .milliseconds(1), leeway: .nanoseconds(0))
+    timer.setEventHandler { fired.signal() }
+    timer.resume()
+    fired.wait()
+    timer.cancel()
   }
 }
 
