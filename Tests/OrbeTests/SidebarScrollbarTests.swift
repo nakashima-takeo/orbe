@@ -154,7 +154,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
     move(tree, to: 100)
     let wheel = try XCTUnwrap(
       CGEvent(
-        scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -3, wheel2: 0,
+        scrollWheelEvent2Source: SyntheticInput.source, units: .line, wheelCount: 1, wheel1: -3,
+        wheel2: 0,
         wheel3: 0))
     let point = try thumbCenter(tree)
     // CGEvent の座標は主ディスプレイの左上が原点。窓を持たない NSEvent の locationInWindow は、主ディスプレイの高さで
