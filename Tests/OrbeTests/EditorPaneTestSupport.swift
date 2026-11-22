@@ -121,23 +121,35 @@ extension OrbeTestCase {
   }
 
   /// ポインタを面の座標の点へ動かす（`host` はその点の上の SwiftUI の器。既定は列の頭）。SwiftUI の onHover は
-  /// ポインタの下の view が受ける mouseEntered / mouseMoved で動く。
+  /// ポインタの下の view が受ける mouseEntered / mouseMoved で動く。点の下に view が無ければ、呼んだ行で失敗を記録する。
   @MainActor
-  func movePointer(_ pane: EditorPaneView, to point: NSPoint, over host: NSView? = nil) {
+  func movePointer(
+    _ pane: EditorPaneView, to point: NSPoint, over host: NSView? = nil,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
     let host = host ?? pane.headerHost
     let local = host.convert(point, from: pane)
-    guard let target = host.hitTest(host.convert(local, to: host.superview)) else { return }
+    guard let target = host.hitTest(host.convert(local, to: host.superview)) else {
+      XCTFail("ポインタを動かす点 \(point) の下に view が無い", file: file, line: line)
+      return
+    }
     let event = timedMouse(.mouseMoved, at: pane.convert(point, to: nil), in: pane.window)
     target.mouseExited(with: event)
     target.mouseEntered(with: event)
     target.mouseMoved(with: event)
   }
 
-  /// ポインタを面の座標の点 `point`（`host` の上）から面の外へ出す。
+  /// ポインタを面の座標の点 `point`（`host` の上）から面の外へ出す。点の下に view が無ければ、呼んだ行で失敗を記録する。
   @MainActor
-  func movePointerOut(_ pane: EditorPaneView, from point: NSPoint, over host: NSView) {
+  func movePointerOut(
+    _ pane: EditorPaneView, from point: NSPoint, over host: NSView,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
     let local = host.convert(point, from: pane)
-    guard let target = host.hitTest(host.convert(local, to: host.superview)) else { return }
+    guard let target = host.hitTest(host.convert(local, to: host.superview)) else {
+      XCTFail("ポインタを出す点 \(point) の下に view が無い", file: file, line: line)
+      return
+    }
     target.mouseExited(with: timedMouse(.mouseMoved, at: NSPoint(x: -10, y: -10), in: pane.window))
   }
 
