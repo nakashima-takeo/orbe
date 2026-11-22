@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -200,10 +201,8 @@ final class SurfaceDrawingTests: EngineTestCase {
     defer { driver.stop() }
     driver.bind(surface.id)
     func settle() {
-      let deadline = Date().addingTimeInterval(5)
-      repeat {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-      } while !driver.isPaused(surface.id) && Date() < deadline
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+      waitUntil(5) { driver.isPaused(surface.id) }
     }
     // 行の数が変わればつまみが現れて消えるまで描き続けるので、組版した行は合計の増分で数える。
     func total() -> Int {
