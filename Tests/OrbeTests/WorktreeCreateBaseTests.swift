@@ -22,49 +22,15 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   /// provider が弱参照で持つモデル（行の同期を読むテストのために生かしておく）。
   var palette: WorktreePaletteModel!
 
-  /// `main` / `feat` / `stale` を持つ origin を立て、手元の clone の remote 追跡 ref を**わざと
-  /// 古いまま**にする。`mine` は upstream の無い手元だけのローカルブランチ（着地を待たない題材）、
-  /// `stale` は origin を追跡する手元のブランチ（分冊 `+Refresh` の題材）。
+  /// 組（`pair`）の複製を置き、clone の origin を複製の中の `origin.git` へ向け直す。
   override func setUpWithError() throws {
     dir = TestScratch.caseDir
       .appendingPathComponent("orbe-wtbase-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     origin = dir.appendingPathComponent("origin.git").path
     local = dir.appendingPathComponent("local").path
-    let other = dir.appendingPathComponent("other").path
-
-    XCTAssertTrue(run(["init", "-q", "--bare", "-b", "main", origin], cwd: dir.path).isSuccess)
-    XCTAssertTrue(run(["init", "-q", "-b", "main", local], cwd: dir.path).isSuccess)
-    try identify(local)
-    try commit("a", in: local)
-    XCTAssertTrue(run(["remote", "add", "origin", origin], cwd: local).isSuccess)
-    XCTAssertTrue(run(["push", "-q", "-u", "origin", "main"], cwd: local).isSuccess)
-    XCTAssertTrue(run(["branch", "mine", "main"], cwd: local).isSuccess)
-
-    XCTAssertTrue(run(["clone", "-q", origin, other], cwd: dir.path).isSuccess)
-    try identify(other)
-    for branch in ["feat", "stale"] {
-      XCTAssertTrue(run(["checkout", "-q", "-b", branch, "main"], cwd: other).isSuccess)
-      try commit("\(branch)-1", in: other)
-      XCTAssertTrue(run(["push", "-q", "-u", "origin", branch], cwd: other).isSuccess)
-    }
-
-    // ここまでを手元へ取り込み、`origin/HEAD` を据える（通常の clone と同じ形）。
-    XCTAssertTrue(run(["fetch", "-q", "origin"], cwd: local).isSuccess)
-    XCTAssertTrue(
-      run(
-        ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], cwd: local
-      ).isSuccess)
-    // `stale` は origin を追跡する手元のブランチ（checkout していない＝Local branch 行の題材）。
-    XCTAssertTrue(run(["branch", "-q", "--track", "stale", "origin/stale"], cwd: local).isSuccess)
-
-    // 以降の origin 側の前進は手元に入らない＝手元の remote 追跡 ref は古い。
-    for branch in ["main", "feat", "stale"] {
-      XCTAssertTrue(run(["checkout", "-q", branch], cwd: other).isSuccess)
-      try commit("\(branch)-2", in: other)
-      XCTAssertTrue(run(["push", "-q", "origin", branch], cwd: other).isSuccess)
-      XCTAssertNotEqual(
-        originTip(branch), localRemoteTip(branch), "前提: 手元の origin/\(branch) は古い")
+    try Self.pair.copy(to: dir)
+    for clone in [local!, dir.appendingPathComponent("other").path] {
+      try GitFixtureTemplate.git(["remote", "set-url", "origin", origin], in: clone)
     }
   }
 
@@ -258,19 +224,6 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     provider.facts.prepareDirectory(for: destination) { outcome = $0 }
     XCTAssertTrue(pump({ outcome != nil }, timeout: 30), "解決が返らない")
     return try XCTUnwrap(outcome)
-  }
-
-  private func identify(_ repo: String) throws {
-    XCTAssertTrue(run(["config", "user.email", "t@example.com"], cwd: repo).isSuccess)
-    XCTAssertTrue(run(["config", "user.name", "t"], cwd: repo).isSuccess)
-  }
-
-  func commit(_ name: String, in repo: String) throws {
-    try name.write(
-      toFile: (repo as NSString).appendingPathComponent("\(name).txt"), atomically: true,
-      encoding: .utf8)
-    XCTAssertTrue(run(["add", "-A"], cwd: repo).isSuccess)
-    XCTAssertTrue(run(["commit", "-qm", name], cwd: repo).isSuccess)
   }
 
   func head(of worktree: String) -> String {
