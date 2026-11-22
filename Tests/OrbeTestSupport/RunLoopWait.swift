@@ -1,7 +1,7 @@
 import Foundation
 import XCTest
 
-// テストの待ちの唯一の実装。どれも、テストが走る main のスレッドで呼ぶ。
+// テストが条件の成立や main の進みを待つ処理の実装。`sleepUntil` のほかは、テストが走る main のスレッドで呼ぶ。
 // 否定条件の確かめ方の順（docs/testing/test-architecture.md の「待ち」）との対応は、関数ごとに書く。
 
 /// 条件が成り立つまでランループを回して待ち、期限までに成り立ったかを返す。
@@ -56,7 +56,9 @@ public func pumpMainOnce() {
 /// main のキューに目印を積み、目印が走るまで待つ。戻ったとき、呼ぶ前に main のキューへ積まれていた仕事は、
 /// すべて走り終えている。
 ///
-/// 否定条件の 3 段め（起きてはいけない結果を届けうる仕事が、既に main のキューに積まれている）で使う。
+/// main のキューに積まれた仕事の結果を、その仕事が走り終えた時点で確かめるときに使う。起きるはずの結果を
+/// 確かめるときにも、否定条件の 3 段め（起きてはいけない結果を届けうる仕事が、既に main のキューに積まれている）
+/// にも使う。
 public func nextTurn(file: StaticString = #filePath, line: UInt = #line) {
   var reached = false
   DispatchQueue.main.async { reached = true }
