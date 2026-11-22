@@ -33,7 +33,6 @@ final class WorktreeBasePickerListTests: OrbeTestCase {
     window.contentView = host
     holdUntilTestEnds(window)
     host.layoutSubtreeIfNeeded()
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
     host.layoutSubtreeIfNeeded()
   }
 

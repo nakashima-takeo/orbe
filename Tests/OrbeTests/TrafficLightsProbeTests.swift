@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -19,9 +20,9 @@ final class TrafficLightsProbeTests: OrbeTestCase {
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
   }
 
-  /// probe は `DispatchQueue.main.async` で書くので、次の run loop まで回して読む。
+  /// probe は `DispatchQueue.main.async` で書くので、main のキューに積まれた仕事が走り終えてから読む。
   private func settle() {
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+    nextTurn()
   }
 
   /// macOS がフルスクリーンで信号機を引き取る先の帯に相当する別窓。

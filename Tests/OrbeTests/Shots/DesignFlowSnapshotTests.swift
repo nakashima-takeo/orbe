@@ -10,7 +10,7 @@ import XCTest
 /// 通常の `swift test` を汚さないよう `ORBE_FLOWS=1` でゲート。出力先 <repo>/.preview/flows（gitignore 済）。
 /// flow ごとに独立した test メソッドへ分け、`--filter "…/test<Flow>"` で 1 本だけ撮れる。
 @MainActor
-final class DesignFlowSnapshotTests: SnapshotTestCase {
+final class DesignFlowSnapshotTests: ShotTestCase {
 
   private var dir: URL!
   private let cardSize = NSSize(width: 500, height: 320)

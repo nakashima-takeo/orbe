@@ -28,13 +28,15 @@ class SnapshotTestCase: OrbeTestCase {
     window.contentView = host
     host.layoutSubtreeIfNeeded()
     if let ready { pumpMain(until: ready, "載せ直した面の読み直しが終わる") }
-    // SwiftUI の描画コミットに猶予を与える
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+    settleBeforeCapture()
 
     guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
     host.cacheDisplay(in: host.bounds, to: rep)
     return rep.representation(using: .png, properties: [:])
   }
+
+  /// 撮る直前に呼ぶ。既定は何もしない（`cacheDisplay` は、その場で描く）。
+  func settleBeforeCapture() {}
 
   /// repo 内 `.preview/<sub>` を返す。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
   func previewDir(_ sub: String) -> URL {
