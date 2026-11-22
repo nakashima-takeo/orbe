@@ -151,7 +151,7 @@ extension RowListTests {
     let band = Band()
     band.isShown = true
     let host = NSHostingView(rootView: BandOverList(band: band, rows: rows))
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 200, height: 300), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = host

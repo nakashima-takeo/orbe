@@ -1,5 +1,4 @@
 import AppKit
-import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -11,11 +10,11 @@ import XCTest
 /// アプリが背後にある間や、ポインタが列を出た後に行が読み直されると、ポインタの無い行にホバーの地が付く。
 extension RowListTests {
   /// 幅 200・高さ 100 の列を、ポインタを差し替えられる窓に載せる。ポインタは行 2 の部品の上。
-  private func hostUnderThePointer() -> (Hosted, PointerWindow) {
+  private func hostUnderThePointer() -> (Hosted, OrbeWindowFake) {
     let source = Source()
     source.rowCount = 10
     let rows = RowList(source: source, rowHeight: rowHeight)
-    let window = PointerWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = rows

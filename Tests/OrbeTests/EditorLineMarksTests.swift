@@ -40,7 +40,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     let ground = Ground(frame: NSRect(origin: .zero, size: size))
     document.surface.view.frame = ground.bounds
     ground.addSubview(document.surface.view)
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: ground.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.appearance = NSAppearance(named: .darkAqua)
     window.contentView = ground
