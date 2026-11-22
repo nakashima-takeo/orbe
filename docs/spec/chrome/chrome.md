@@ -1,7 +1,7 @@
 ---
 title: chrome
 description: 常駐 StatusRow 2 段 — 上段に現在地と横断エージェント件数、下段に全幅セグメント形タブ行。イベント駆動で更新する
-updated: 2026-11-21
+updated: 2026-11-22
 ---
 
 # chrome
@@ -18,7 +18,7 @@ updated: 2026-11-21
 
 ## 上段（TopBar）
 
-左から、信号機ぶんの余白（信号機が chrome の上にあるときだけ。無い間は通常の左右余白）・workspace 名・アクティブタブの現在地（`~` 短縮・先頭側省略。ボード選択中は出さない）——現在地を粗→細の順に読ませる並び。現在地は**見せているもの**に追従し、トーン付きの断片列で描く: 端末で見せていれば実効 cwd（`currentPwd ?? initialCwd`）1 本を弱く、エディターで見せていれば根（cwd が属する git worktree ルート。管理外は cwd）を弱く、その下の焦点のタブのファイル（文書のタブも diff のタブも同じ）の相対パスを強く（根の外のファイルは絶対パス 1 本、タブが無ければ根だけ。PR の diff のタブは根の代わりに `PR #N` を accent で出し、区切りとディレクトリを弱く、ファイル名を強く → [editor/pull-request-panel](../editor/pull-request-panel.md#topbar-の現在地)）（→ [editor/faces](../editor/faces.md)・[editor/shell](../editor/shell.md)）。`~` 短縮は根とパスにかけ、区切りはその後に足す。右端に全 workspace 横断のエージェント状態件数ストリップ（後述）、中央は空けて窓ドラッグ面にする。幅が足りないときは現在地から縮む（workspace 名・ストリップは保護）。テキストの縦位置は信号機 close ボタン中央へ寄せる（信号機が chrome の上に無い間は行の縦中央）。
+左から、信号機ぶんの余白（信号機が chrome の上にあるときだけ。無い間は通常の左右余白）・workspace 名・アクティブタブの現在地（`~` 短縮・先頭側省略。ボード選択中は出さない）——現在地を粗→細の順に読ませる並び。現在地は**見せているもの**に追従し、トーン付きの断片列で描く: 端末で見せていれば実効 cwd（`currentPwd ?? initialCwd`）1 本を弱く、エディターで見せていれば連の画面から導く——Files は根（cwd が属する git worktree ルート。管理外は cwd）を弱く、その下の今の文書の相対パスを強く（根の外の文書は絶対パス 1 本、文書が無ければ根だけ）、Changes は根だけ、PR は `PR #N`（worktree の今の PR の番号）を accent で、区切りと根を弱く出す（PR が分からなければ根だけ → [editor/pull-request-panel](../editor/pull-request-panel.md#topbar-の現在地)）（→ [editor/faces](../editor/faces.md)・[editor/shell](../editor/shell.md)）。`~` 短縮は根とパスにかけ、区切りはその後に足す。右端に全 workspace 横断のエージェント状態件数ストリップ（後述）、中央は空けて窓ドラッグ面にする。幅が足りないときは現在地から縮む（workspace 名・ストリップは保護）。テキストの縦位置は信号機 close ボタン中央へ寄せる（信号機が chrome の上に無い間は行の縦中央）。
 
 環境変数 `ORBE_STATE_DIR` 設定時のみ、workspace 名の右隣に build-id（ビルド時の git 短縮 SHA）を dim 表示する。検証用の隔離インスタンスでビルドの鮮度を見分けるための表示で、未設定の常用 Orbe では出ない（[persistence](../platform/persistence.md)）。
 
