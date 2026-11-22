@@ -25,7 +25,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     window.makeFirstResponder(nil)
 
     pane.shell.createFile()
@@ -47,7 +46,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let document = try tab.group.editor.open(try caseFile("a.txt", "a"), as: .pinned)
 
     pane.shell.createDirectory()
@@ -67,7 +65,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     var commands: [WindowCommand] = []
     tab.group.onWindowCommand = { commands.append($0) }
 
@@ -86,7 +83,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
     tab.group.view.addSubview(outsider)
 
@@ -115,7 +111,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
 
     pane.shell.createFile()
     let first = try inputField(pane, in: window)
@@ -137,7 +132,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let document = try tab.group.editor.open(try caseFile("a.txt", "a"), as: .pinned)
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
     tab.group.view.addSubview(outsider)
@@ -163,7 +157,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900, height: 240)
-    defer { window.orderOut(nil) }
     let scroll = try XCTUnwrap(scrollView(in: pane.sideHost))
     XCTAssertEqual(scroll.documentVisibleRect.minY, 0, "前提: 先頭に居る")
 

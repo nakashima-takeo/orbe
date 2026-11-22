@@ -37,7 +37,7 @@ final class StatusRowViewRenderTests: OrbeTestCase {
     hosting.frame = NSRect(x: 0, y: 0, width: 800, height: Chrome.barHeight)
     window.contentView = hosting
     hosting.layoutSubtreeIfNeeded()
-    return window
+    return holdUntilTestEnds(window)
   }
 
   /// 描いているタブの枚数（タブ 1 枚に中クリックの受け口が 1 つ載る）。

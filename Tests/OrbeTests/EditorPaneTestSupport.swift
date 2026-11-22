@@ -16,8 +16,20 @@ extension OrbeTestCase {
     return url
   }
 
-  /// タブの器を幅 `width` の窓に載せ、エディターを開く。窓はテスト用の `OrbeWindowFake` で、確認のシートを画面に出さない。
+  /// タブの器を幅 `width` の窓に載せ、エディターを開く（→ `mountEditor`）。足場が持つのは窓だけで、窓はテストの終わりまで
+  /// 残る。タブは呼び出し元が持つので、窓はタブより後まで残る。タブを手放した後もランループを回すテストは、タブもテストの
+  /// 終わりまで持つこと。持たないと、窓に載ったままの面が、タブへの参照（`EditorPaneView.group`。弱い参照）を失ったまま
+  /// 根のサービス（ファイルの監視と git）を保持し続け、ランループが回ると監視の通知を受けて動作する。本番には無いこの状態での
+  /// 動作に、テストの結果が左右される。
+  @discardableResult
   func hostEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
+    holdUntilTestEnds(mountEditor(tab, width: width, height: height))
+  }
+
+  /// タブの器を幅 `width` の窓に載せ、エディターを開く。窓はテスト用の `OrbeWindowFake` で、確認のシートを画面に出さない。
+  /// 窓をテストに預けないので、寿命は呼び出し元が決める。呼ぶのは、窓の解放そのものを確かめるテストと、計測の区間ごとに
+  /// 窓を手放す性能計測だけ（ほかは `hostEditor`）。
+  func mountEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
     let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)

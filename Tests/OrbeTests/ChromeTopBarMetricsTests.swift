@@ -15,14 +15,7 @@ import XCTest
 /// 数値は宣言を読めば分かるが、どのトークンが上段のどこに効くかは描いて測らないと分からない。
 @MainActor
 final class ChromeTopBarMetricsTests: OrbeTestCase {
-  private var windows: [NSWindow] = []
   private let canvasWidth: CGFloat = 600
-
-  override func tearDown() {
-    windows.forEach { $0.orderOut(nil) }
-    windows.removeAll()
-    super.tearDown()
-  }
 
   /// 上段の帯に落ちた墨の広がり（pt・上段左上が原点）。
   private struct Ink {
@@ -53,7 +46,7 @@ final class ChromeTopBarMetricsTests: OrbeTestCase {
       contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.appearance = appearance
     window.contentView = host
-    windows.append(window)
+    holdUntilTestEnds(window)
     host.layoutSubtreeIfNeeded()
     // SwiftUI の描画コミットに猶予を与える（固定 sleep 無しでは白紙を測りうる）。
     RunLoop.current.run(until: Date().addingTimeInterval(0.3))

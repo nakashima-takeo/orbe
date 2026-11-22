@@ -32,7 +32,7 @@ final class ProjectSearchPaneTests: OrbeTestCase {
       backing: .buffered, defer: false)
     window.contentView = pane
     pane.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     return Hosted(repo: repo, tab: tab, pane: pane, window: window)
   }
 

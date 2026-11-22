@@ -35,7 +35,7 @@ final class GroupFacesViewTests: OrbeTestCase {
     window.contentView = tab.group.view
     tab.group.view.reduceMotion = false
     tab.group.view.layoutSubtreeIfNeeded()
-    return window
+    return holdUntilTestEnds(window)
   }
 
   private func rect(of view: NSView, in container: NSView) -> NSRect {

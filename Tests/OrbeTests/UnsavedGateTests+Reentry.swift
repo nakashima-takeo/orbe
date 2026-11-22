@@ -15,7 +15,6 @@ extension UnsavedGateTests {
   func testFileTabCloseSheetClosesTheDocumentItAskedAboutEvenIfTheFocusMoved() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     edit(a)
 
@@ -33,7 +32,6 @@ extension UnsavedGateTests {
   func testOverwriteDoesNothingWhenTheDocumentWasClosedMeanwhile() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     window.makeFirstResponder(a.surface.responder)
@@ -52,7 +50,6 @@ extension UnsavedGateTests {
   func testOverwriteThatCannotWriteKeepsTheMarks() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let pane = tab.group.view.editor
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     window.makeFirstResponder(a.surface.responder)
