@@ -42,8 +42,8 @@ final class GitHubCLI {
   }
 
   /// 呼び出しの種類ごとの時間上限（ネット待ちのハングを引きずらない）。open 一覧では 1 ページごとにかかる。
-  static let readTimeout: TimeInterval = 15
-  static let writeTimeout: TimeInterval = 60
+  private static let readTimeout: TimeInterval = 15
+  private static let writeTimeout: TimeInterval = 60
 
   /// 時間上限と猶予の待ちを通す時計。
   private let clock: WaitClock

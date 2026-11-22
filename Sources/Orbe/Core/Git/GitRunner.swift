@@ -16,7 +16,7 @@ final class GitRunner {
   /// 「1 バイトも出力が無いまま」この時間が過ぎたら打ち切る上限。経過時間ではなく無出力時間で
   /// 測るのは、巨大リポジトリの clone のような正当な長時間実行を切らないため——出力が流れている
   /// 間は延命し、何も起きていないときだけ切る。
-  static let idleTimeout: TimeInterval = 120
+  private static let idleTimeout: TimeInterval = 120
 
   /// 時刻の読みと、期限つきの待ちを通す時計。
   private let clock: WaitClock
