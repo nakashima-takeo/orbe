@@ -21,7 +21,6 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
 
   private struct Row {
     let tab: TerminalTab
-    let window: NSWindow
     var pane: EditorPaneView { tab.group.view.editor }
   }
 
@@ -43,7 +42,7 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     tab.group.view.layoutSubtreeIfNeeded()
     pumpMain(
       until: { pane.shell.tabs.map(\.isDirty) == [true, false, false] }, "a だけ未保存・c がアクティブ")
-    return Row(tab: tab, window: window)
+    return Row(tab: tab)
   }
 
   private func looks(_ probe: PaneProbe, _ pane: EditorPaneView) throws -> [SlotLook] {
