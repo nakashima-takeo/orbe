@@ -76,7 +76,7 @@ final class PrCommentZone: SurfaceZone {
   /// 削除された）でない。
   var canSend: Bool { !isLineMoving && notice?.stopsWriting != true }
   /// 入力欄に、空白と改行のほかの字がある。
-  var hasText: Bool { Self.hasText(text) }
+  var hasText: Bool { PullRequestState.hasText(text) }
   /// スレッドの最初のコメントの時刻（同じ所のスレッドの並び順。欄なら最も古い）。
   var firstCommentTime: Date {
     guard case .thread(let thread) = subject else { return .distantPast }
@@ -105,7 +105,7 @@ final class PrCommentZone: SurfaceZone {
     self.line = line
     field = ZoneTextField(id: fieldID, text: text, style: PrCommentStyle.field)
     fieldShape = FieldShape(
-      lines: field.lineCount, empty: text.isEmpty, blank: !Self.hasText(text))
+      lines: field.lineCount, empty: text.isEmpty, blank: !PullRequestState.hasText(text))
     field.didChange = { [weak self] field in self?.fieldDidChange(field) }
     field.didChangePrimary = { [weak self] _, primary in
       guard let self else { return }
@@ -132,9 +132,6 @@ final class PrCommentZone: SurfaceZone {
 
   /// 入力欄の今の本文。
   var text: String { field.string }
-
-  /// 本文 `text` に、空白と改行のほかの字がある。
-  nonisolated static func hasText(_ text: String) -> Bool { !text.allSatisfy(\.isWhitespace) }
 
   /// 新しいコメントの欄なら、その書きかけの通し番号。
   var draftSerial: Int? {

@@ -84,14 +84,12 @@ final class PrCommentLayer {
       && held.values.allSatisfy(\.isSettled) && (placed == nil || commentable?.lines != nil)
   }
 
-  /// このファイルへの返信か新しいコメントに、空白でない字の書きかけがある（人が打った内容——仮のタブを普通のタブにする。
-  /// 書きかけを残した PR の diff は、開き直すとはじめから普通のタブになる）。
+  /// このファイルへの返信か新しいコメントの書きかけがある（人が打った内容——仮のタブを普通のタブにする。書きかけを残した
+  /// PR の diff は、開き直すとはじめから普通のタブになる）。
   var holdsDrafts: Bool {
     let stored = state.commentDrafts
-    return stored.replies.values.contains {
-      $0.thread.path == path && PrCommentZone.hasText($0.body)
-    }
-      || stored.comments.values.contains { $0.path == path && PrCommentZone.hasText($0.body) }
+    return stored.replies.values.contains { $0.thread.path == path }
+      || stored.comments.values.contains { $0.path == path }
   }
 
   /// スレッド `id` の絵の差し込み（まだ置いていなければ nil）。

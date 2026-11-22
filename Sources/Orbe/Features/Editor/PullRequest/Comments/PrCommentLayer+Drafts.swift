@@ -1,8 +1,8 @@
 import Foundation
 
 /// PR のコメントの層と、PR ごとの書きかけ——書きかけを欄へ反映し（無い欄は作る）、打った本文と欄の位置を書き戻し、ほかの層が
-/// 書いた変化を自分の欄へ合わせる。本文が同じなら何もしないので、通知は層と状態の間を往復しない。空の新しいコメントの欄
-/// （開いただけ）は層だけが持ち、字が入った時点で書きかけになる。
+/// 書いた変化を自分の欄へ合わせる。本文が同じなら何もしないので、通知は層と状態の間を往復しない。空白と改行だけの欄の本文
+/// （開いただけの新しいコメントの欄を含む）は層だけが持ち、ほかの字が入った時点で書きかけになる。
 extension PrCommentLayer {
   // MARK: - スレッド
 
@@ -33,14 +33,13 @@ extension PrCommentLayer {
     state.setReply(zone.text, to: thread, at: spot)
   }
 
-  /// 行を追っているスレッド `id` の絵の差し込み `zone` を手放す（追っていなければ false）。削除されたスレッドは、絵の差し込みと
-  /// 返信の書きかけごと手放す。
+  /// 行を追っているスレッド `id` の絵の差し込み `zone` を手放す（追っていなければ false）。削除されたスレッドは、絵の差し込みごと
+  /// 手放す。
   private func release(_ id: String, _ zone: PrCommentZone) -> Bool {
     guard held.removeValue(forKey: id) != nil else { return false }
     if zone.notice == .deleted {
       threads[id] = nil
       lastPlaced[id] = nil
-      state.removeReply(to: id)
     }
     zone.notice = nil
     zone.isLineMoving = false
@@ -101,7 +100,7 @@ extension PrCommentLayer {
 
   // MARK: - 書きかけの反映
 
-  /// このファイルの書きかけのうち、層にまだ無いもの（空白と改行だけの本文を除く）を欄にする——返信は絵の差し込みを作り
+  /// このファイルの書きかけのうち、層にまだ無いものを欄にする——返信は絵の差し込みを作り
   /// （置けるかは並びが決め、置けなければ書きかけの欄の位置から行を追う）、新しいコメントは書きかけの欄の位置に欄を開く。
   func adoptDrafts() {
     let stored = state.commentDrafts
@@ -118,32 +117,35 @@ extension PrCommentLayer {
 
   private func adopts(_ reply: PullRequestState.ReplyDraft) -> Bool {
     reply.thread.path == path && threads[reply.thread.id] == nil
-      && PrCommentZone.hasText(reply.body)
   }
 
   private func adopts(_ serial: Int, _ comment: PullRequestState.CommentDraft) -> Bool {
     comment.path == path && !drafts.contains { $0.zone.draftSerial == serial }
-      && PrCommentZone.hasText(comment.body)
   }
 }
 
-/// ほかの層（か状態）が書いた変化を自分の欄へ合わせる。返信の欄は本文を置き（書きかけが消えたら空にし、行を追っている欄は、
-/// 焦点が無ければ手放す）、新しいコメントの欄は、本文を置くか、字のある欄の書きかけが消えていれば閉じる（送った・取り消した）。
-/// 層にまだ無い書きかけがあれば、並びを置き直させて欄にし、書きかけを持ったと通知する。
+/// ほかの層（か状態）が書いた変化を自分の欄へ合わせる。
+/// 返信の欄は、本文を置く。空白と改行のほかの字がある欄の書きかけが消えたら、その欄を空にする。行を追っている欄は、焦点が無ければ手放す。
+/// 新しいコメントの欄は、本文を置く。空白と改行のほかの字がある欄の書きかけが消えていれば、閉じる（送った・取り消した・ほかの場所で空にした）。
+/// 層にまだ無い書きかけがあれば、並びを置き直させて欄にし、層が書きかけを持ったと `onDraftChange` で知らせる（仮のタブを普通の
+/// タブにする）。
 extension PrCommentLayer: PullRequestCommentDraftsObserver {
   func pullRequestCommentDraftsDidChange(_ state: PullRequestState) {
     let stored = state.commentDrafts
     var changed = false
     for (id, zone) in threads {
-      let body = stored.replies[id]?.body ?? ""
-      zone.setText(body)
-      if body.isEmpty, !zone.isFieldPrimary, release(id, zone) { changed = true }
+      if let reply = stored.replies[id] {
+        zone.setText(reply.body)
+        continue
+      }
+      if zone.hasText { zone.setText("") }
+      if !zone.isFieldPrimary, release(id, zone) { changed = true }
     }
     for draft in drafts {
       guard let serial = draft.zone.draftSerial else { continue }
       if let comment = stored.comments[serial] {
         draft.zone.setText(comment.body)
-      } else if !draft.zone.text.isEmpty {
+      } else if draft.zone.hasText {
         drafts.removeAll { $0 === draft }
         changed = true
       }

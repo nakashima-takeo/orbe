@@ -9,8 +9,9 @@ protocol PullRequestCommentDraftsObserver: AnyObject {
 
 /// コメントの書きかけ——PR の diff のスレッドへの返信と新しいコメントの、まだ送っていない本文と欄の位置。PR ごとに 1 つで、
 /// どのコメントの層も同じものを読み書きするので、diff を閉じても・連が替わっても残り、同じ PR の diff を 2 か所で開いていれば
-/// 両方に同じ書きかけが出る。アプリを終えると消える。本文が空（字が 1 つも無い）の書きかけは持たない。知らせるのは書きかけの
-/// 追加と削除と本文の変化だけで、欄の位置とスレッドの値の書き戻しは知らせない（開き直した diff が読む）。
+/// 両方に同じ書きかけが出る。アプリを終えると消える。空白と改行だけの本文は書きかけとして持たない（欄が空なのと同じ）ので、
+/// 持っている書きかけは、そのファイルの diff を開けば欄に出る（置ける行が無いときを除く）。知らせるのは書きかけの追加と削除と
+/// 本文の変化だけで、欄の位置とスレッドの値の書き戻しは知らせない（開き直した diff が読む）。
 extension PullRequestState {
   /// 書きかけの欄の位置——側と行（0 始まり）と、その行を数えた diff の両端と両側の本文（push の後に行を移すのに使う）。
   struct CommentSpot: Equatable {
@@ -57,6 +58,9 @@ extension PullRequestState {
     commentDraftsObservers.removeAll { $0.value == nil || $0.value === observer }
   }
 
+  /// 本文 `body` に、空白と改行のほかの字がある（書きかけとして持つ）。
+  nonisolated static func hasText(_ body: String) -> Bool { !body.allSatisfy(\.isWhitespace) }
+
   private func notifyCommentDrafts() {
     for observer in commentDraftsObservers {
       observer.value?.pullRequestCommentDraftsDidChange(self)
@@ -65,11 +69,12 @@ extension PullRequestState {
 
   // MARK: - 返信
 
-  /// スレッド `thread` への返信の本文を `body` にする（空なら書きかけを消す）。欄の位置は `spot`。
+  /// スレッド `thread` への返信の本文を `body` にする（空白と改行だけなら書きかけを消す）。欄の位置は `spot`。
   func setReply(_ body: String, to thread: GitHubPullRequestReview.Thread, at spot: CommentSpot) {
-    let changed = commentDrafts.replies[thread.id]?.body != (body.isEmpty ? nil : body)
+    let kept = Self.hasText(body) ? body : nil
+    let changed = commentDrafts.replies[thread.id]?.body != kept
     commentDrafts.replies[thread.id] =
-      body.isEmpty ? nil : ReplyDraft(body: body, thread: thread, spot: spot)
+      kept.map { ReplyDraft(body: $0, thread: thread, spot: spot) }
     if changed { notifyCommentDrafts() }
   }
 
@@ -87,20 +92,20 @@ extension PullRequestState {
 
   // MARK: - 新しいコメント
 
-  /// 新しいコメントの欄の通し番号を 1 つ出す（欄を開いたとき。本文が入るまで書きかけは持たない）。
+  /// 新しいコメントの欄の通し番号を 1 つ出す（欄を開いたとき。空白と改行のほかの字が入るまで書きかけは持たない）。
   func issueCommentSerial() -> Int {
     commentDrafts.lastSerial += 1
     return commentDrafts.lastSerial
   }
 
-  /// 通し番号 `serial` の新しいコメントの本文を `body` にする（空なら書きかけを消す）。
+  /// 通し番号 `serial` の新しいコメントの本文を `body` にする（空白と改行だけなら書きかけを消す）。
   func setComment(
     _ serial: Int, path: String, body: String, at spot: CommentSpot, isGone: Bool
   ) {
-    let changed = commentDrafts.comments[serial]?.body != (body.isEmpty ? nil : body)
+    let kept = Self.hasText(body) ? body : nil
+    let changed = commentDrafts.comments[serial]?.body != kept
     commentDrafts.comments[serial] =
-      body.isEmpty
-      ? nil : CommentDraft(path: path, body: body, spot: spot, isGone: isGone)
+      kept.map { CommentDraft(path: path, body: $0, spot: spot, isGone: isGone) }
     if changed { notifyCommentDrafts() }
   }
 
