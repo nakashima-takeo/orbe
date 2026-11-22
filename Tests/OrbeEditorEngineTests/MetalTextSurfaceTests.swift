@@ -18,7 +18,6 @@ final class MetalTextSurfaceTests: EngineTestCase {
   /// 見えている範囲は、先頭に見えている行（一部が上へ隠れていてもその行）の行頭と、上端の余白を除いた高さに入る行数。
   func testViewportIsTheFirstVisibleLineAndTheVisibleLineCount() throws {
     let opened = try open(lines(300), size: CGSize(width: 800, height: 604))
-    let text = opened.document.text
     opened.surface.scroll(toFirstLine: 50.25)
     let viewport = opened.surface.viewport
     XCTAssertEqual(viewport.top, RowPosition(line: 50))

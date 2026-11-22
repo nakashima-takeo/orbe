@@ -161,10 +161,11 @@ private final class FrameProbe: Sendable {
       found.above.append(first - a)
       found.below.append(c - last)
     }
+    let read = found
     state.withLock {
       $0.frames += 1
-      $0.gaps.above += found.above
-      $0.gaps.below += found.below
+      $0.gaps.above += read.above
+      $0.gaps.below += read.below
     }
   }
 }

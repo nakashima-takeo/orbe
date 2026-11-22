@@ -109,9 +109,10 @@ final class HeadlessDriver: @unchecked Sendable {
     var tick = (CACurrentMediaTime() / Self.period).rounded(.up) * Self.period
     while true {
       mach_wait_until(UInt64(tick * 1e9) * UInt64(timebase.denom) / UInt64(timebase.numer))
+      let current = tick
       let step = state.withLock { s -> Step in
-        let due = s.presents.filter { $0.at <= tick + 1e-6 }
-        s.presents.removeAll { $0.at <= tick + 1e-6 }
+        let due = s.presents.filter { $0.at <= current + 1e-6 }
+        s.presents.removeAll { $0.at <= current + 1e-6 }
         let ids = s.paused.filter { !$0.value }.map(\.key)
         for id in ids { s.ticks[id, default: 0] += 1 }
         return Step(due: due, ids: ids, running: s.running)

@@ -388,7 +388,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
       let (document, _) = try open("close.swift", "let a = 1\n")
       XCTAssertTrue(document.waitUntilCaughtUp())
       document.releaseParts = { parcel in
-        weak var worker = parcel.withLock { $0?.syntax }
+        weak let worker = parcel.withLock { $0?.syntax }
         let saw = worker != nil
         DispatchQueue.global().sync { parcel.withLock { $0 = nil } }
         result.withLock { $0 = (saw, worker != nil) }

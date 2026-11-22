@@ -52,7 +52,6 @@ final class ScrolledFrameTests: EngineTestCase {
   func testVerticalScrollMovesTextNumbersAndMarksTogether() throws {
     let opened = try openMarked()
     let before = try shoot(opened)
-    let text = opened.document.text
     opened.surface.scroll(toFirstLine: 1.5)
     let after = try shoot(opened)
     let shift = 27 * 2

@@ -215,7 +215,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       XCTAssertTrue(clock.isPaused, "前提: 描くものが無く刻みを止めている")
     }
     pumpMain(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
-    RenderThread.shared.performAndWait { _ in 0 }
+    RenderThread.shared.performAndWait { _ in }
     XCTAssertFalse(clock.isPaused, "残った面の刻みを再開する")
     tick(a.surface, t)
     let end = a.surface.rows.lastTop(lineCount: a.document.text.lineCount)
@@ -285,10 +285,7 @@ extension SurfaceSharedScrollTests {
 
   private func tick(_ surface: MetalTextSurface, _ target: Double) {
     let id = surface.id
-    RenderThread.shared.performAndWait { renderer in
-      renderer.tick(id, target: target)
-      return 0
-    }
+    RenderThread.shared.performAndWait { $0.tick(id, target: target) }
     // GPU に出した命令の列が終わるのを待つ（上限 3 に当たって飛ばさない）。
     sleepUntil(5) { RenderThread.shared.performAndWait { $0.gpuInflight } <= 0 }
   }
