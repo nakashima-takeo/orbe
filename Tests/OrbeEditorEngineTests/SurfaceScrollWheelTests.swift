@@ -60,10 +60,11 @@ final class SurfaceScrollWheelTests: EngineTestCase {
     try finger(opened, 0, .ended)
     let released = position(opened)
     XCTAssertLessThan(released, -20, "前提: 上端の外へ伸びている")
-    // 「指を置いている間は戻りの式で上書きされない」「端の内側で離せば止まる」「戻りは打ち切られている」の対。同じ時点で、
-    // 起きる場合を待たずに確かめる。
     XCTAssertGreaterThan(
-      position(opened, ahead: 0.3), released / 10, "触らなければ、0.3 秒先の位置は端へ戻っている")
+      position(opened, ahead: 0.3), released / 10,
+      "触らなければ、0.3 秒先の位置は端へ戻っている。testNewFingerGestureDuringReturnMovesAtOnce の"
+        + "「指を置いている間は戻りの式で上書きされない」「端の内側で離せば止まる」と、testWheelDuringReturnMovesAtOnce の"
+        + "「戻りは打ち切られている」の対で、これが待たずに成り立たなくなったら、それらのテストが確かめる時点も成り立たない")
     now += 0.04
   }
 

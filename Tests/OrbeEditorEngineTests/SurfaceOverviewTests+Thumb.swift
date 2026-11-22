@@ -29,10 +29,10 @@ final class SurfaceThumbTests: EngineTestCase {
       change()
       XCTAssertNotEqual(try self.verticalThumb(opened, at: now), [0, 0, 0], "\(label) で現れる")
       now += 0.6
-      // testReleasingADragOutsideTheBodyHidesTheThumb の「ドラッグ中は外でも、止まって 500ms を過ぎても見える」の対。
-      // 同じ時点で、起きる場合を待たずに確かめる。
       XCTAssertEqual(
-        try self.verticalThumb(opened, at: now), [0, 0, 0], "\(label) の後、止まれば消える")
+        try self.verticalThumb(opened, at: now), [0, 0, 0],
+        "\(label) の後、止まれば消える。testReleasingADragOutsideTheBodyHidesTheThumb の"
+          + "「ドラッグ中は外でも、止まって 500ms を過ぎても見える」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     }
     try shows("面の高さ") {
       surface.viewStateDidChange(size: CGSize(width: 800, height: 300), scale: 2, visible: false)

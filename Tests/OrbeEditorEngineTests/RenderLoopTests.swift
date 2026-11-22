@@ -43,9 +43,10 @@ final class RenderLoopTests: EngineTestCase {
     surface.setIndentation(Indentation(unit: 2, usesTabs: false))
     surface.flush()
     waitUntilPaused(surface)
-    // testInvisibleSurfaceDoesNotDraw の「起こされても見えていなければ描かない」の対。同じ時点で、起きる場合を待たずに
-    // 確かめる。
-    XCTAssertEqual(target.acquired, first + 1, "変わったコマだけ描く")
+    XCTAssertEqual(
+      target.acquired, first + 1,
+      "変わったコマだけ描く。testInvisibleSurfaceDoesNotDraw の「起こされても見えていなければ描かない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 
   /// スクロールするとつまみが現れ、止まって消え始める時刻にだけ起きて消え、消え終わったら起きない。
@@ -58,9 +59,11 @@ final class RenderLoopTests: EngineTestCase {
     surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -1), precise: false))
     waitUntilPaused(surface)
-    // 下の「消え終わった後も止まったまま」と、testOpeningADocumentWithALongLineDoesNotShowTheThumb の
-    // 「消え始めるのを待って起きない」の対。同じ時点で、起きる場合を待たずに確かめる。
-    XCTAssertNotNil(blinkWake(surface), "つまみが消え始める時刻に起きるタイマー")
+    // 下の「消え終わった後も止まったまま」の対。同じ時点で、起きる場合を待たずに確かめる。
+    XCTAssertNotNil(
+      blinkWake(surface),
+      "つまみが消え始める時刻に起きるタイマー。testOpeningADocumentWithALongLineDoesNotShowTheThumb の"
+        + "「消え始めるのを待って起きない」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     waitUntil(3) { blinkWake(surface) == nil && driver.isPaused(surface.id) }
     XCTAssertNil(blinkWake(surface), "消え終わったらタイマーは無い")
     XCTAssertTrue(staysStopped(surface), "消え終わった後も止まったまま")
@@ -155,9 +158,10 @@ final class RenderLoopTests: EngineTestCase {
     surface.updateFocus(true)
     driver.bind(surface.id)
     waitUntilPaused(surface)
-    // testDrawsOnceAfterAChangeAndStopsAgain の「止まったまま、起こすタイマーも無い」の対。同じ時点で、起きる場合を待たずに
-    // 確かめる。
-    let fire = try XCTUnwrap(blinkWake(surface), "焦点のある面はタイマーを置く")
+    let fire = try XCTUnwrap(
+      blinkWake(surface),
+      "焦点のある面はタイマーを置く。testDrawsOnceAfterAChangeAndStopsAgain の「止まったまま、起こすタイマーも無い」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     let period = HeadlessDriver.period
     let target = fire + period / 2
     XCTAssertEqual(
