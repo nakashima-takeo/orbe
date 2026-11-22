@@ -34,9 +34,10 @@ extension AgentPluginInstallerTests {
     }
   }
 
-  /// `stopped` だけを `hang` で止め、その時限だけを短くして、ほかの 2 つを `long` にして実行する。時限は、偽の claude が
-  /// 呼び出しを残す前に来ることが在る（負荷で起動が遅れた回）。その回は、止めたコマンドが呼ばれたことを確かめられないので、
-  /// 呼び出しの記録を消し、時限を倍にしてやり直す（実行は 5 回まで）。返すのは、呼び出しを残せた回の結果か、5 回めの結果。
+  /// `stopped` だけを `hang` で止め、その時限だけを短くする。ほかの 2 つのコマンドの時限は `long` にする。偽の claude は、
+  /// 置いたときに初回の起動の評価を払ってあるが、負荷で起動が遅れると、呼び出しを残す前に打ち切られることが在る。その回は、
+  /// 止めたコマンドが呼ばれたことを確かめられないので、呼び出しの記録を消し、時限を倍にしてやり直す（実行は 5 回まで）。返すのは、
+  /// 呼び出しを残せた回の結果か、5 回めの結果。
   private func runCuttingClaude(_ stopped: ClaudeCommand) throws -> (
     log: [String], calls: [String]
   ) {
@@ -60,16 +61,27 @@ extension AgentPluginInstallerTests {
   }
 
   /// 偽の CLI を、同梱の install.sh を実行するときの PATH に置く。偽の CLI は受けた引数を 1 行ずつ残してから `body` を実行する。
+  ///
+  /// macOS は、新しく作った実行体の初回の起動に評価を挟む（数百 ms）。置くたびに新しく作るので、置いた直後に一度起動して
+  /// 評価を払う。払わないと、短い時限が評価と競合し、偽の CLI が呼び出しを残す前に打ち切られる。この起動は、
+  /// `ORBE_FAKE_CLI_PRIME` を設定し、冒頭の行で終了コード 0 で終わらせる（呼び出しを残さず、`body` に入らない）。
   private func placeFakeCLI(_ name: String, body: String) throws {
     let bin = pkg.appendingPathComponent("bin")
     try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
     let cli = bin.appendingPathComponent(name)
     try """
     #!/bin/sh
+    [ -n "$ORBE_FAKE_CLI_PRIME" ] && exit 0
     echo "$*" >> "\(pkg.appendingPathComponent("\(name)-calls.log").path)"
     \(body)
     """.write(to: cli, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    let prime = Process()
+    prime.executableURL = cli
+    prime.environment = ["ORBE_FAKE_CLI_PRIME": "1"]
+    try prime.run()
+    prime.waitUntilExit()
+    XCTAssertEqual(prime.terminationStatus, 0, "偽の \(name) の初回の起動")
   }
 
   /// 偽の CLI が受けた呼び出しの列。
