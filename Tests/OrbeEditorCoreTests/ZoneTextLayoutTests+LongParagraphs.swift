@@ -13,26 +13,20 @@ extension ZoneTextLayoutTests {
   /// 閉じない isolate と埋め込みと上書き・割れない長い語・中立の字が区切りより長く続く段落・行の頭より前のヘブライ文字が
   /// 数字の向きを決める段落のどれでも。
   ///
-  /// 小さい段（名前の末尾に `AtFullScale` が付かないメソッド）は、全部の入力を、区切り（4,096 字）を 1 回またぐ
-  /// 5,000 字、幅 120 で組む。また、Core Text が既定で簡略に組む長さを超える 12,000 字では、絵文字の入力を幅 120 で組む。
-  /// 全部の段（付くメソッド）は、小さい段と同じ組み合わせで組んだうえで、12,000 字では全部の入力を幅 120 と 600 で組む。
-  /// main では両方のメソッドが走る。
+  /// 小さい段は、全部の入力を、区切り（4,096 字）を 1 回またぐ 5,000 字で組む。Core Text が既定で簡略に組む長さを超える
+  /// 12,000 字は、絵文字の入力で確かめる。全部の段は、全部の入力を、5,000 字は幅 120 で、12,000 字は幅 120 と 600 で組む。
   func testLongParagraphsBreakWhereTheWholeParagraphBreaks() {
-    assertBreaksMatchTheWholeParagraph(Self.smallLongParagraphLayouts)
+    assertBreaksMatchTheWholeParagraph(
+      LongParagraph.all.map { LongParagraphLayout(input: $0, width: 120, length: 5_000) }
+        + [LongParagraphLayout(input: .emoji, width: 120, length: 12_000)])
   }
 
   func testLongParagraphsBreakWhereTheWholeParagraphBreaksAtFullScale() throws {
     try Fuzz.skipFullScaleIfExcluded()
-    let small = Self.smallLongParagraphLayouts
-    let whole = LongParagraph.all.flatMap { input in
-      [120.0, 600].map { LongParagraphLayout(input: input.name, width: $0, length: 12_000) }
-    }
-    assertBreaksMatchTheWholeParagraph(small + whole.filter { !small.contains($0) })
-  }
-
-  private static var smallLongParagraphLayouts: [LongParagraphLayout] {
-    LongParagraph.all.map { LongParagraphLayout(input: $0.name, width: 120, length: 5_000) }
-      + [LongParagraphLayout(input: "emoji", width: 120, length: 12_000)]
+    assertBreaksMatchTheWholeParagraph(
+      [(120.0, 5_000), (120, 12_000), (600, 12_000)].flatMap { width, length in
+        LongParagraph.all.map { LongParagraphLayout(input: $0, width: width, length: length) }
+      })
   }
 
   private func assertBreaksMatchTheWholeParagraph(_ layouts: [LongParagraphLayout]) {
@@ -40,12 +34,11 @@ extension ZoneTextLayoutTests {
       typeset.lines.map { "\($0.range) \($0.width) \($0.runs.map(\.xs))" }
     }
     for layout in layouts {
-      let input = LongParagraph.all.first { $0.name == layout.input }!
-      let text = input.text(length: layout.length, plain: plain, code: code)
+      let text = layout.input.text(length: layout.length, plain: plain, code: code)
       XCTAssertEqual(
         lines(ZoneTextLayout.typeset(text, width: layout.width)),
         lines(ZoneTextLayout.typeset(text, width: layout.width, window: 1 << 20)),
-        "\(layout.input) 幅 \(layout.width) 長さ \(layout.length)")
+        "\(layout.input.name) 幅 \(layout.width) 長さ \(layout.length)")
     }
   }
 
@@ -113,9 +106,9 @@ extension ZoneTextLayoutTests {
   private var code: ZoneTextStyle { ZoneTextStyle(font: mono, color: .red, padding: 4) }
 }
 
-/// 長い段落のテストが組む 1 通り——入力の名前 `input` を、幅 `width`、`length` 字ほどの段落で組む。
-private struct LongParagraphLayout: Equatable {
-  let input: String
+/// 長い段落のテストが組む 1 通り——入力 `input` を、幅 `width`、`length` 字ほどの段落で組む。
+private struct LongParagraphLayout {
+  let input: LongParagraph
   let width: Double
   let length: Int
 }
@@ -127,6 +120,9 @@ private struct LongParagraph {
   let head: String
   let tail: String
 
+  /// ZWJ でつないだ絵文字。Core Text が既定で簡略に組むと崩れる入力の 1 つで、12,000 字でも組むのが速い。
+  static let emoji = LongParagraph("emoji", [("👩‍👩‍👧‍👦 ", false), ("🏳️‍🌈", true)])
+
   /// 長い段落のテストが組む入力の全部。
   static let all: [LongParagraph] = [
     LongParagraph("latin+code", [("word and more ", false), ("code", true), (" ", false)]),
@@ -135,7 +131,7 @@ private struct LongParagraph {
     LongParagraph("hebrew+code", [("שלום עולם 1 ", false), ("ab1", true), (" world ", false)]),
     LongParagraph("thai", [("ภาษาไทยไม่มีช่องว่าง", false)]),
     LongParagraph("lao", [("ພາສາລາວບໍ່ມີຍະຫວ່າງ", false)]),
-    LongParagraph("emoji", [("👩‍👩‍👧‍👦 ", false), ("🏳️‍🌈", true)]),
+    emoji,
     LongParagraph("open isolate", [("שלום 1 abc ", false)], head: "\u{2067}"),
     LongParagraph("open embedding", [("word 12 مرحبا 3.5 。", false)], head: "\u{202B}"),
     LongParagraph("override", [("abc 123 。( x ) ", false)], head: "\u{202E}"),
