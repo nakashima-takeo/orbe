@@ -165,9 +165,9 @@ extension BranchPullRequestTests {
     pumpMain(until: { self.lookups.count == looked + 1 }, "push 先の追跡 ref が動いたら問い直す")
   }
 
-  /// 同じきっかけでは、worktree の今の PR と PR の diff タブが同じ PR を見ていても、中身の問い合わせは 1 回。パネルを隠して
-  /// PR の diff タブだけが見ていても、きっかけで中身を読み直す（ブランチの PR は問い直さない）。
-  func testATriggerReadsTheContentOnceAndTheTabAloneKeepsFollowing() throws {
+  /// 同じきっかけでは、worktree の今の PR と PR の diff が同じ PR を見ていても、中身の問い合わせは 1 回。worktree の今の PR が
+  /// 見るのをやめて PR の diff だけが見ていても、きっかけで中身を読み直す（ブランチの PR は問い直さない）。
+  func testATriggerReadsTheContentOnceAndThePullRequestDiffAloneKeepsFollowing() throws {
     let refs = try trackedBranch()
     repositories = ["origin": .github(me)]
     content = pullRequestContent(base: refs.main)
@@ -189,7 +189,7 @@ extension BranchPullRequestTests {
     pullRequest.endWatching()
     contentReads = 0
     try moveRemoteRef("refs/remotes/origin/feat", to: refs.main, watchedBy: refs.recorder)
-    pumpMain(until: { self.contentReads == 1 }, "PR の diff タブだけで読み直す")
+    pumpMain(until: { self.contentReads == 1 }, "PR の diff だけで読み直す")
     XCTAssertEqual(lookups.count, 2, "ブランチの PR は問い直さない")
   }
 

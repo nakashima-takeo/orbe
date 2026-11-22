@@ -7,7 +7,7 @@ import XCTest
 
 /// diff の中の編集——作業ツリー diff の新しい側（インラインの本文・並列の右）で打った字は文書に入り、diff の行の並び（追加の
 /// 行・削除行・並列の詰め物）は編集に追従し、⌘S で保存できる。壊れると、diff で打った字が本文に入らない・並びが本文から
-/// ずれる・並列の左右の高さがずれる・変換中の字が消える・仮の diff タブが未保存のまま入れ替わる・diff で直した変更を保存
+/// ずれる・並列の左右の高さがずれる・変換中の字が消える・diff で打った未保存の文書がタブ行に出ない・diff で直した変更を保存
 /// できない・プロジェクト検索の一致が diff で打った字からずれる。
 extension EditorDiffTests {
   private func type(_ text: String, at location: Int, on surface: MetalTextSurface) {

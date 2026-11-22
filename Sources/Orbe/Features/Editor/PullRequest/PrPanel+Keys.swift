@@ -24,7 +24,7 @@ extension PrPanel {
     return nil
   }
 
-  /// ↑↓: 選べる行を順に渡る。未選択なら先頭の選べる行。ファイル行へ動けば仮で開く（間引く）。
+  /// ↑↓: 選べる行を順に渡る。未選択なら先頭の選べる行。ファイル行へ動けば diff を開く（間引く）。
   func moveSelection(by delta: Int, isRepeat: Bool, in layout: PrLayout) {
     let selectable = layout.items.indices.filter { layout.id(at: $0).isSelectable }
     guard !selectable.isEmpty else { return }
@@ -50,7 +50,7 @@ extension PrPanel {
     }
   }
 
-  /// →: 畳んだ見出し・フォルダなら開き、開いていれば最初の子の行へ動く（ファイル行なら仮で開く）。
+  /// →: 畳んだ見出し・フォルダなら開き、開いていれば最初の子の行へ動く（ファイル行なら diff を開く）。
   func moveRight(isRepeat: Bool, in layout: PrLayout) {
     switch selection {
     case .section(let section)? where !isOpen(section): toggle(section)

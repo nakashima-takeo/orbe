@@ -6,7 +6,7 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// diff のタブ——作業ツリー（index の版 ↔ 文書）とステージ済み（HEAD の版 ↔ index の版）の側と並び、片側だけの diff、
+/// diff——作業ツリー（index の版 ↔ 文書）とステージ済み（HEAD の版 ↔ index の版）の側と並び、片側だけの diff、
 /// 表示できない理由、git と外の書き換えへの追従、インライン / 並列の面。壊れると、diff の削除行が古い版の別の行を指す・
 /// ステージ済みの rename が元のパスの版で比べられない・git add しても diff が古いまま・並列の 2 面が揃わない・大きな
 /// ファイルの離れた変更が 1 つの区間にまとまる・ほかのファイルが次々に変わる間、ステージ済み diff の中身が届かない。
@@ -195,7 +195,7 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(try engine(reopened.newSurface).presentation.numbersOwnLines)
   }
 
-  /// バイナリ・シンボリックリンク・追跡中のファイルを置き換えたディレクトリ・競合中は、タブは開き、本体に理由の一文が出る。
+  /// バイナリ・シンボリックリンク・追跡中のファイルを置き換えたディレクトリ・競合中は、diff は開き、本体に理由の一文が出る。
   func testUnavailableDiffsShowAReason() throws {
     try Data([0xFF, 0xFE, 0x00, 0x01]).write(to: repo.url("bin.dat"))
     try repo.write("d.txt", "d\n")

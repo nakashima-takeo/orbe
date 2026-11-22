@@ -37,7 +37,7 @@ extension ScmPanel {
     return layout.items.indices.lazy.compactMap(layout.id(at:)).first { $0.path != nil }
   }
 
-  /// ↑↓: 子の見出しとファイル行を順に渡る。未選択なら先頭。ファイル行へ動けば仮で開く（間引く）。
+  /// ↑↓: 子の見出しとファイル行を順に渡る。未選択なら先頭。ファイル行へ動けば diff を開く（間引く）。
   func moveSelection(by delta: Int, isRepeat: Bool, in layout: ScmLayout) {
     let rows = layout.items.indices
     guard !rows.isEmpty else { return }
@@ -63,7 +63,7 @@ extension ScmPanel {
     }
   }
 
-  /// →: 畳んだ見出しなら開き、開いた見出しなら最初のファイル行へ動いて仮で開く（間引く）。
+  /// →: 畳んだ見出しなら開き、開いた見出しなら最初のファイル行へ動いて diff を開く（間引く）。
   func moveRight(isRepeat: Bool, in layout: ScmLayout) {
     guard let selection, selection.path == nil else { return }
     if !isOpen(selection.section) {
