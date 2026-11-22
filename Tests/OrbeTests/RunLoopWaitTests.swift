@@ -50,6 +50,7 @@ final class RunLoopWaitTests: OrbeTestCase {
     options.issueMatcher = {
       $0.compactDescription.contains("0.05 秒以内に成立しない: 成り立たない条件")
         && $0.sourceCodeContext.location?.lineNumber == callingLine
+        && $0.sourceCodeContext.location?.fileURL.lastPathComponent == "RunLoopWaitTests.swift"
     }
     XCTExpectFailure("成り立たない条件は、呼び出した行で失敗になる", options: options)
     callingLine = #line + 1
@@ -79,6 +80,12 @@ final class RunLoopWaitTests: OrbeTestCase {
         return checks < 3
       })
     XCTAssertEqual(checks, 3, "破れた時点で見張るのをやめる")
+  }
+
+  func testHoldsRunsTheMainQueueWhileWatching() {
+    var broken = false
+    DispatchQueue.main.async { broken = true }
+    XCTAssertFalse(holds(for: 5) { !broken }, "見張るあいだ、main のキューの仕事を走らせる")
   }
 
   func testHoldsWatchesForTheWholeDuration() {
