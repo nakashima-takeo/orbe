@@ -13,14 +13,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
   override func setUpWithError() throws {
     dir = TestScratch.caseDir
       .appendingPathComponent("orbe-freshness-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
-    try "x".write(
-      toFile: dir.appendingPathComponent("a.txt").path, atomically: true, encoding: .utf8)
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
+    try TempGitRepo.place(at: dir)
   }
 
   // MARK: - prune の後にだけ分類する

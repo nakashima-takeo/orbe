@@ -28,15 +28,9 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     try FileManager.default.createDirectory(at: created, withIntermediateDirectories: true)
     dir = URL(fileURLWithPath: String(cString: realpath(created.path, nil)))
     root = dir.appendingPathComponent("repo").path
-    XCTAssertTrue(run(["init", "-q", "-b", "main", root], in: dir.path).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
+    try TempGitRepo.place(at: URL(fileURLWithPath: root))
     // origin を github.com の URL にしても、提示時の fetch がネットへ出ないようにする（即失敗する）。
     XCTAssertTrue(git(["config", "protocol.https.allow", "never"]).isSuccess)
-    try "x".write(
-      toFile: (root as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
     try stageGh()
   }
 
