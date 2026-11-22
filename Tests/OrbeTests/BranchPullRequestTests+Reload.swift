@@ -105,15 +105,15 @@ extension BranchPullRequestTests {
     holdsLookups = true
     let pullRequest = try watchAnOpenPullRequest()
     pumpMain(until: { self.held.count == 1 }, "前提: 問い合わせの最中")
+    // PR の状態の鍵を作る `repo.open()` はランループを回すので、留めた問い合わせに答える前に作る。
+    let key = PullRequestState.Key(
+      commonDir: try repo.open().commonDir,
+      id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 9)))
     pullRequest.endWatching()
     holdsLookups = false
     releaseLookups()
 
-    let state = PullRequestState.shared(
-      for: PullRequestState.Key(
-        commonDir: try repo.open().commonDir,
-        id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 9))),
-      source: source)
+    let state = PullRequestState.shared(for: key, source: source)
     XCTAssertFalse(state.isWatched)
     XCTAssertNil(pullRequest.state, "答えは出さない")
   }
@@ -123,14 +123,15 @@ extension BranchPullRequestTests {
     holdsLookups = true
     let pullRequest = try watchAnOpenPullRequest()
     pumpMain(until: { self.held.count == 1 }, "前提: 問い合わせの最中")
+    // PR の状態の鍵を作る `repo.open()` はランループを回すので、留めた問い合わせに答える前に作る（答えた後に回すと、PR の
+    // 状態を見始めるのを待ってから確かめることになる）。
+    let key = PullRequestState.Key(
+      commonDir: try repo.open().commonDir,
+      id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 9)))
     holdsLookups = false
     releaseLookups()
 
-    let state = PullRequestState.shared(
-      for: PullRequestState.Key(
-        commonDir: try repo.open().commonDir,
-        id: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 9))),
-      source: source)
+    let state = PullRequestState.shared(for: key, source: source)
     XCTAssertTrue(
       state.isWatched,
       "答えた直後に PR の状態を見始める。これが待たずに成り立たなくなったら、"
