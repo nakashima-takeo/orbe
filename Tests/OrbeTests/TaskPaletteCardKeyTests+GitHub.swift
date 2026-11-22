@@ -5,17 +5,15 @@ import XCTest
 
 private typealias GitHub = TaskPaletteGitHubSamples
 
-/// GitHub タブ・右の欄・選ぶ状態のキーと、一覧の置き場の変化をカードが付け直しへ届ける配線。
+/// GitHub タブ・右の欄・選ぶ状態の、入力欄に届くキーと、一覧の置き場の変化をカードが付け直しへ届ける配線。
 ///
-/// 壊れると何が起きるか: 絞り込みに「l」を打つと結び付けが始まる、入力を消す ⌫ が結び付きを外す。押し続けた
-/// ⌘⌫・↵ が、押した行の先まで外す・タスクにする（未確認の項目に自分をアサインする）。⇥ が次のタブへ移らず絞り込みを
-/// 切り替える。選ぶ状態の esc で画面ごと閉じる。項目を選ぶ間の ⌘⌫ で、別のタスクの結び付きが外れる。右の欄の
-/// 期限で打った日付が絞り込みに入る、期限の ↵ でタスクができる。一覧が取り直されて行が消えても、消えた行を
-/// 選んだまま ↵ が空振りする。⌘↵ で項目がタスクにならず agent も開かない。
+/// 壊れると何が起きるか: 絞り込みに「l」を打つと結び付けが始まる。押し続けた ↵ が、押した行より先の行までタスクにする
+/// （未確認の項目に自分をアサインする）。右の欄の期限で打った日付が絞り込みに入る、期限の ↵ でタスクができる、期限を
+/// 打っている間の ⇥ で打った文字が消える。選ぶ状態の → で文字のカーソルが動かない。一覧が取り直されて行が消えても、
+/// 消えた行を選んだまま ↵ が空振りする。
 extension TaskPaletteCardKeyTests {
   private enum GitHubKey {
     static let l: UInt16 = 37
-    static let o: UInt16 = 31
   }
 
   /// ⌘L は入力欄に文字があっても結び付けを始め、入力は変えない。素の l・L は文字として入る。
@@ -39,79 +37,6 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.query, "5", "GitHub タブの入力は変えない")
   }
 
-  /// 右の欄でも ⌘L で結び付けを始める。
-  func testCommandLInThePaneStartsLinking() {
-    let model = GitHub.model([TaskPaletteSamples.task(1, "a")], issues: [GitHub.issue(5)])
-    let window = mount(model)
-    arrow(Key.right, to: window)
-    XCTAssertEqual(model.area, .pane(.assign), "前提: 右の欄")
-
-    send(GitHubKey.l, "l", .command, to: window)
-
-    XCTAssertNotNil(model.pick)
-  }
-
-  /// ⌘⌫ は入力欄に文字があっても結び付きを外す。素の ⌫ は、空の入力欄でも外さない。
-  func testCommandBackspaceUnlinksAndPlainBackspaceNeverDoes() {
-    let model = GitHub.model(
-      [TaskPaletteSamples.task(1, "a") { $0.links = [GitHub.link(6), GitHub.link(5)] }],
-      issues: [GitHub.issue(6), GitHub.issue(5)])
-    let window = mount(model)
-
-    send(Key.delete, "\u{7F}", to: window)
-    send(Key.delete, "\u{7F}", repeating: true, to: window)
-    XCTAssertEqual(model.store.tasks.first?.links.count, 2, "素の ⌫ は外さない")
-
-    type("6", into: window)
-    send(Key.delete, "\u{7F}", .command, to: window)
-
-    XCTAssertEqual(model.store.tasks.first?.links, [GitHub.link(5)])
-    XCTAssertEqual(model.query, "6", "⌘⌫ は入力を消さない")
-  }
-
-  /// ⌘⌫ のキーリピートでは外さない（押し始めが別の場所で、リピートだけが届いても）。
-  func testCommandBackspaceKeyRepeatDoesNotUnlink() {
-    let model = GitHub.model(
-      [TaskPaletteSamples.task(1, "a") { $0.links = [GitHub.link(5)] }], issues: [GitHub.issue(5)])
-    let window = mount(model)
-
-    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
-    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
-
-    XCTAssertEqual(model.store.tasks.first?.links, [GitHub.link(5)])
-  }
-
-  /// 選ぶ状態の間は、⌘L・⌘⌫ とも何もしない。
-  func testCommandLAndCommandBackspaceDoNothingWhilePicking() {
-    let model = GitHub.model(
-      [
-        TaskPaletteSamples.task(1, "a"),
-        TaskPaletteSamples.task(2, "b") { $0.links = [GitHub.link(5)] },
-      ], issues: [GitHub.issue(5)])
-    model.setTab(.tasks)
-    model.area = .detail(.addLink)
-    model.beginPickingItem()
-    let window = mount(model)
-    XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)), "前提: 別のタスクの結び付いた行")
-
-    send(Key.delete, "\u{7F}", .command, to: window)
-    send(GitHubKey.l, "l", .command, to: window)
-
-    XCTAssertEqual(model.store.tasks.last?.links, [GitHub.link(5)])
-    XCTAssertEqual(model.visibleTab, .github, "タスクを選ぶ状態へ移らない")
-  }
-
-  /// GitHub タブの ⇥ は次のタブへ移り、絞り込みの札は変えない。
-  func testTabMovesToTheNextTabOnTheGitHubTab() {
-    let model = GitHub.model([], issues: [GitHub.issue(5)])
-    let window = mount(model)
-
-    send(Key.tab, "\t", to: window)
-
-    XCTAssertEqual(model.tab, .automation)
-    XCTAssertEqual(model.githubFilters, [])
-  }
-
   /// 右の欄の項目でも ⇥ で次のタブへ移る。期限を打っている間は何もせず、打った文字が残る。
   func testTabInThePaneMovesToTheNextTabButNotWhileTypingTheDue() {
     let model = GitHub.model([], issues: [GitHub.issue(5)])
@@ -132,44 +57,6 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.tab, .automation)
   }
 
-  /// → で右の欄へ入り、space でチェックを切り替え、← で一覧へ戻る。
-  func testArrowKeysEnterAndLeaveThePaneAndSpaceTogglesTheCheck() {
-    let model = GitHub.model([], issues: [GitHub.issue(5)])
-    let window = mount(model)
-
-    arrow(Key.right, to: window)
-    XCTAssertEqual(model.area, .pane(.assign))
-    send(Key.space, " ", to: window)
-    XCTAssertFalse(model.pane.assignsSelf)
-    arrow(Key.left, to: window)
-
-    XCTAssertEqual(model.area, .list)
-    XCTAssertEqual(model.query, "", "space は入力欄へ入らない")
-  }
-
-  /// 選ぶ状態の esc は、画面を閉じずに選ぶ状態をやめる（タスクを選ぶ・項目を選ぶの両方）。
-  func testEscapeWhilePickingCancelsInsteadOfDismissing() {
-    let model = GitHub.model([TaskPaletteSamples.task(1, "a")], issues: [GitHub.issue(5)])
-    var dismissed = false
-    model.onDismiss = { dismissed = true }
-    let window = mount(model)
-
-    send(GitHubKey.l, "l", .command, to: window)
-    send(Key.escape, "\u{1B}", to: window)
-    XCTAssertNil(model.pick)
-    XCTAssertEqual(model.visibleTab, .github)
-
-    model.setTab(.tasks)
-    model.area = .detail(.addLink)
-    model.beginPickingItem()
-    flush(window)
-    send(Key.escape, "\u{1B}", to: window)
-    XCTAssertNil(model.pick)
-    XCTAssertEqual(model.area, .detail(.addLink))
-
-    XCTAssertFalse(dismissed)
-  }
-
   /// 一覧が取り直されて選んだ行が消えたら、カードが付け直し、同じ位置の行を選ぶ。
   func testListRefetchRemovingTheSelectedRowMovesTheSelection() throws {
     let source = GitHub.Source()
@@ -188,109 +75,7 @@ extension TaskPaletteCardKeyTests {
 
   // MARK: - タスクにして開く（⌘↵）
 
-  /// 一覧でも右の欄でも、⌘↵ は結び付いていない項目をタスクにしてからそのタスクで、結び付いている項目はそのタスクで
-  /// agent を開く。ブラウザでは開かない。
-  func testCommandEnterOpensTheSelectedItemAsATaskFromTheListAndThePane() throws {
-    let model = GitHub.model(
-      [TaskPaletteSamples.task(1, "a") { $0.links = [GitHub.link(6)] }],
-      issues: [GitHub.issue(6), GitHub.issue(5)], pullRequests: [GitHub.pullRequest(9)])
-    var opened: [Int] = []
-    var browsed: [URL] = []
-    model.onOpenWorktreePalette = { opened.append($0) }
-    model.onOpenURL = { browsed.append($0) }
-    let window = mount(model)
-
-    for id in [GitHub.id(6), GitHub.id(5)] {
-      model.tapGitHubRow(.item(id))
-      flush(window)
-      send(Key.enter, "\r", .command, to: window)
-    }
-    model.tapGitHubRow(.item(GitHub.id(9)))
-    flush(window)
-    arrow(Key.right, to: window)
-    XCTAssertEqual(model.area, .pane(.assign), "前提: 結び付いていない PR の右の欄")
-    send(Key.enter, "\r", .command, to: window)
-
-    let issueTask = try XCTUnwrap(
-      model.store.tasks.first { $0.links.map(\.item) == [GitHub.id(5)] })
-    let prTask = try XCTUnwrap(model.store.tasks.first { $0.links.map(\.item) == [GitHub.id(9)] })
-    XCTAssertEqual(opened, [1, issueTask.id, prTask.id])
-    XCTAssertEqual(model.store.tasks.count, 3, "結び付いている項目はタスクを足さない")
-    XCTAssertEqual(browsed, [])
-  }
-
   // MARK: - ブラウザで開く（⌘O）
-
-  /// 一覧でも右の欄でも、⌘O は選んでいる項目の GitHub のページをブラウザで開く（結び付きの有無を問わない）。
-  /// タスクにはしない。
-  func testCommandOOpensTheSelectedItemInTheBrowserFromTheListAndThePane() {
-    let model = GitHub.model(
-      [TaskPaletteSamples.task(1, "a") { $0.links = [GitHub.link(6)] }],
-      issues: [GitHub.issue(6), GitHub.issue(5)], pullRequests: [GitHub.pullRequest(9)])
-    var opened: [String] = []
-    model.onOpenURL = { opened.append($0.absoluteString) }
-    let window = mount(model)
-
-    for id in [GitHub.id(6), GitHub.id(5), GitHub.id(9)] {
-      model.tapGitHubRow(.item(id))
-      flush(window)
-      send(GitHubKey.o, "o", .command, to: window)
-    }
-    arrow(Key.right, to: window)
-    XCTAssertEqual(model.area, .pane(.assign), "前提: 結び付いていない PR の右の欄")
-    send(GitHubKey.o, "o", .command, to: window)
-
-    XCTAssertEqual(
-      opened,
-      [
-        "https://github.com/o/n/issues/6", "https://github.com/o/n/issues/5",
-        "https://github.com/o/n/pull/9", "https://github.com/o/n/pull/9",
-      ])
-    XCTAssertEqual(model.store.tasks.count, 1, "タスクにしない")
-  }
-
-  /// 結び付ける項目を選ぶ間の ⌘↵・⌘O は、タスクにも開きもせず、↵ の結び付けとしても働かない。
-  func testCommandEnterAndCommandOWhilePickingAnItemNeitherOpenNorLink() {
-    let model = GitHub.model([TaskPaletteSamples.task(1, "a")], issues: [GitHub.issue(5)])
-    var opened: [URL] = []
-    var openedTasks: [Int] = []
-    model.onOpenURL = { opened.append($0) }
-    model.onOpenWorktreePalette = { openedTasks.append($0) }
-    model.setTab(.tasks)
-    model.area = .detail(.addLink)
-    model.beginPickingItem()
-    let window = mount(model)
-    XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)), "前提: 項目を選ぶ状態")
-
-    send(Key.enter, "\r", .command, to: window)
-    send(GitHubKey.o, "o", .command, to: window)
-
-    XCTAssertEqual(opened, [])
-    XCTAssertEqual(openedTasks, [])
-    XCTAssertEqual(model.store.tasks.count, 1)
-    XCTAssertEqual(model.store.tasks.first?.links, [])
-    XCTAssertNotNil(model.pick)
-  }
-
-  /// 右の欄の期限を打っている間の ⌘↵ は、打った期限の確定で、タスクにして開かない。
-  func testCommandEnterWhileTypingThePaneDueCommitsIt() {
-    let model = GitHub.model([], issues: [GitHub.issue(5)])
-    var opened: [Int] = []
-    model.onOpenWorktreePalette = { opened.append($0) }
-    let window = mount(model)
-    arrow(Key.right, to: window)
-    arrow(Key.down, to: window)
-    arrow(Key.down, to: window)
-    send(Key.enter, "\r", to: window)
-    type("10/6", into: window)
-
-    send(Key.enter, "\r", .command, to: window)
-
-    XCTAssertEqual(model.pane.due, TaskItem.DueDate("2025-10-06"))
-    XCTAssertNil(model.draft)
-    XCTAssertEqual(model.store.tasks, [])
-    XCTAssertEqual(opened, [])
-  }
 
   /// 右の欄の期限で ↵ を押し続けても、押した ↵ で打ち始め、続くリピートで確定しない（編集のまま）。
   func testEnterHeldOnThePaneDueStartsTypingOnceAndKeepsTyping() {
@@ -348,19 +133,6 @@ extension TaskPaletteCardKeyTests {
   }
 
   // MARK: - 選ぶ状態の space
-
-  /// 結び付けるタスクを選ぶ間、空の入力欄の space は何もしない（完了にせず、空白も入れない）。
-  func testSpaceWhilePickingATaskDoesNothing() {
-    let model = GitHub.model([TaskPaletteSamples.task(1, "a")], issues: [GitHub.issue(5)])
-    let window = mount(model)
-    send(GitHubKey.l, "l", .command, to: window)
-    XCTAssertNotNil(model.pick, "前提: タスクを選ぶ状態")
-
-    send(Key.space, " ", to: window)
-
-    XCTAssertEqual(model.query, "")
-    XCTAssertEqual(status(model, 1), .todo)
-  }
 
   // MARK: - 右の欄の期限
 

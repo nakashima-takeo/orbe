@@ -87,23 +87,6 @@ extension BoardAutomationTests {
     XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 3))
   }
 
-  /// 自動化が 0 件なら、欄の ↑↓ は何もしない（移る行が無い）。
-  func testWithNoAutomationsTheFieldIsTheOnlyStop() {
-    let model = BoardModel(
-      automation: BoardAutomationModel(
-        runner: DesignSceneFixtures.automationRunner([])),
-      widgets: [.automation])
-    let automation = model.automation
-    let window = mount(model)
-    XCTAssertEqual(automation.place, .request)
-
-    down(window)
-    XCTAssertEqual(automation.place, .request, "欄の ↓ は何もしない")
-    up(window)
-    XCTAssertEqual(automation.place, .request, "欄の ↑ は何もしない")
-    XCTAssertEqual(automation.hints.map(\.label), [.boardAskHint], "移る先が無いので ↓ の案内を出さない")
-  }
-
   /// 一覧に居る間に行がすべて消えると欄になり、焦点も欄へ移って続けて打てる。
   func testWhenEveryRowIsGoneTheFieldTakesOver() throws {
     let model = board()

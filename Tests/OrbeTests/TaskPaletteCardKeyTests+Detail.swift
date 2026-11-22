@@ -6,16 +6,6 @@ import XCTest
 
 /// 右の欄（→ で入る）の項目に焦点があるときと、右の欄の編集欄のキー、右の欄から入力欄へのクリック。
 extension TaskPaletteCardKeyTests {
-  /// 一覧から → で右の欄へ入る。→ 以外の右の欄のテストは、ここに依らずモデルから右の欄へ入れて測る。
-  func testRightArrowEntersTheDetailOfTheSelectedTask() {
-    let model = model()
-    let window = mount(model)
-
-    arrow(Key.right, to: window)
-
-    XCTAssertEqual(model.area, .detail(.field(.status)))
-  }
-
   /// 右の欄の項目に入れた状態（焦点はカードの器へ移る）。
   func enterDetail(
     _ model: TaskPaletteModel, at field: TaskDetailField, in window: NSWindow
@@ -44,48 +34,6 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.area, .list, "選択式でない項目の ← は一覧へ戻る")
     type("x", into: window)
     XCTAssertEqual(model.query, "x", "一覧へ戻ると入力欄が再びキーを受ける")
-  }
-
-  /// 完了はストアが待ちを外すので、→ を押し続けたリピートで未着手から完了まで進まない。
-  func testHoldingRightArrowOnTheStatusStepsOnceAndKeepsTheWait() {
-    let waiting = TaskItem.Waiting(reason: "レビュー待ち", since: DesignSceneFixtures.taskToday)
-    let model = TaskPaletteSamples.model([
-      TaskPaletteSamples.task(1, "a") { $0.wait = .waiting(waiting) }
-    ])
-    let window = mount(model)
-    enterDetail(model, at: .status, in: window)
-
-    arrow(Key.right, to: window)
-    arrow(Key.right, repeating: true, to: window)
-    arrow(Key.right, repeating: true, to: window)
-
-    XCTAssertEqual(status(model, 1), .inProgress)
-    XCTAssertNotNil(model.store.tasks.first?.wait, "待ちは消えない")
-  }
-
-  func testSpaceAndEscapeInDetail() {
-    let model = model()
-    let window = mount(model)
-    enterDetail(model, at: .status, in: window)
-
-    send(Key.escape, "\u{1B}", to: window)
-    XCTAssertEqual(model.area, .list, "右の欄の esc は一覧へ戻る")
-
-    enterDetail(model, at: .priority, in: window)
-    send(Key.space, " ", to: window)
-    XCTAssertEqual(status(model, 3), .done, "右の欄でも space はそのタスクに効く")
-    XCTAssertEqual(model.area, .detail(.field(.priority)), "右の欄に居たまま")
-  }
-
-  func testSpaceKeyRepeatInDetailCompletesNothing() {
-    let model = model()
-    let window = mount(model)
-    enterDetail(model, at: .priority, in: window)
-
-    send(Key.space, " ", repeating: true, to: window)
-
-    XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .todo])
-    XCTAssertEqual(model.area, .detail(.field(.priority)))
   }
 
   /// 右の欄で編集している間に入力欄をクリックすると、打った内容を確定して一覧へ戻り、続く打鍵は入力欄に入る。
@@ -143,51 +91,6 @@ extension TaskPaletteCardKeyTests {
     send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertNotNil(model.draft, "リピートで確定しない")
-  }
-
-  func testEnterKeyRepeatAloneDoesNotStartEditing() {
-    let model = model()
-    let window = mount(model)
-    enterDetail(model, at: .waiting, in: window)
-
-    send(Key.enter, "\r", repeating: true, to: window)
-
-    XCTAssertNil(model.draft)
-  }
-
-  /// 編集中に esc を押し続けても、押し始めの esc で編集を終えて項目に留まる——続くリピートで一覧へ抜けたり画面を
-  /// 閉じたりしない。
-  func testEscapeHeldWhileEditingOnlyEndsTheEdit() {
-    let model = model()
-    var dismissed = false
-    model.onDismiss = { dismissed = true }
-    let window = mount(model)
-    enterDetail(model, at: .waiting, in: window)
-    send(Key.enter, "\r", to: window)
-
-    send(Key.escape, "\u{1B}", to: window)
-    send(Key.escape, "\u{1B}", repeating: true, to: window)
-    send(Key.escape, "\u{1B}", repeating: true, to: window)
-
-    XCTAssertNil(model.draft)
-    XCTAssertEqual(model.area, .detail(.field(.waiting)))
-    XCTAssertFalse(dismissed)
-  }
-
-  /// ⌘↵ は 1 行の項目の確定のキーなので、文字の項目（編集していない状態）で押しても編集を始めない。そのタスクの
-  /// agent を開くキーとして働く。
-  func testCommandEnterOnATextFieldOpensTheAgentInsteadOfEditing() {
-    let model = model()
-    var opened: [Int] = []
-    model.onOpenWorktreePalette = { opened.append($0) }
-    let window = mount(model)
-
-    for field in [TaskDetailField.title, .description] {
-      enterDetail(model, at: field, in: window)
-      send(Key.enter, "\r", .command, to: window)
-      XCTAssertNil(model.draft, "\(field): 編集は始めない")
-      XCTAssertEqual(opened.last, model.selectedTask?.id, "\(field): agent を開く")
-    }
   }
 
   /// 詳細の欄は ↵ が改行で（押し続けたリピートも改行）、esc で確定して欄に居たまま編集を終える。もう一度の
