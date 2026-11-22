@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -25,7 +26,9 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
     wc.switchWorkspace(to: try XCTUnwrap(wc.store.homeIndex))
     for _ in 0..<count { wc.newTab() }
     wc.statusModel.onSelectBoard()
-    pump()
+    pumpMain(
+      until: { wc.window.firstResponder is NSTextView && wc.boardView.focusIsInside },
+      "依頼の欄に焦点が入る")
     return wc
   }
 
@@ -43,14 +46,7 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
       context: nil, characters: character, charactersIgnoringModifiers: character,
       isARepeat: false, keyCode: 0)
     deliverKeyDown(try XCTUnwrap(event), to: wc.window)
-    pump()
-  }
-
-  private func pump() {
-    let end = Date().addingTimeInterval(0.3)
-    while Date() < end {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
-    }
+    flush(wc.window)
   }
 
   // MARK: - 焦点
@@ -64,8 +60,8 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
 
     XCTAssertEqual(
       widgets(wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)), [])
-    pump()
     XCTAssertEqual(wc.board.widgets, [], "ボードはすぐ空になる")
+    flush(wc.window)
     XCTAssertTrue(wc.boardView.focusIsInside, "焦点は窓へ落ちずボードの中に残る")
     try type(wc, "a")
     XCTAssertTrue(wc.boardView.focusIsInside, "空のボードの打鍵は飲まれ、焦点は動かない")
@@ -73,58 +69,62 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
     XCTAssertTrue(wc.window.performKeyEquivalent(with: Self.prevTabKey), "⌘⇧[ が効く")
     XCTAssertEqual(wc.current.selection, .tab(wc.current.tabs[0]), "ボードから巡回してタブへ")
     wc.statusModel.onSelectBoard()
-    pump()
+    flush(wc.window)
     XCTAssertTrue(wc.boardView.focusIsInside, "空のボードを選ぶと焦点はボードの中")
     XCTAssertTrue(wc.window.performKeyEquivalent(with: Self.nextTabKey), "⌘⇧] が効く")
     XCTAssertEqual(wc.current.selection, .tab(wc.current.tabs[0]))
     wc.statusModel.onSelectBoard()
-    pump()
+    flush(wc.window)
 
     XCTAssertEqual(
       widgets(wc.controlAddBoardWidget(workspaceId: homeId, widget: .automation)), ["automation"])
-    pump()
     XCTAssertEqual(wc.board.automation.place, .request)
-    XCTAssertTrue(wc.window.firstResponder is NSTextView, "置かれたウィジェットの欄に焦点が入る")
+    pumpMain(
+      until: { wc.window.firstResponder is NSTextView && wc.boardView.focusIsInside },
+      "置かれたウィジェットの欄に焦点が入る")
     try type(wc, "b")
     XCTAssertEqual(wc.board.automation.requestText, "b", "そのまま打てる")
   }
 
-  /// 端末タブで作業中にウィジェットを外しても置いても、焦点と選択は動かない。
+  /// 端末タブで作業中にウィジェットを外しても置いても、焦点と選択は動かない。端末から焦点を奪う処理の終わりを観測する口が
+  /// 無いので、動かないことは実時間で見張る。
   @MainActor func testChangingTheWidgetsBehindATerminalTabLeavesTheFocusThere() throws {
     let wc = try homeOnBoard(tabs: 1)
     let homeId = wc.current.id
     let tab = wc.current.tabs[0]
     wc.select(.tab(tab))
-    pump()
     let focused = wc.window.firstResponder
+    XCTAssertTrue(focused === tab.surface, "前提: 焦点は端末")
 
     _ = wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)
-    pump()
-    XCTAssertTrue(wc.window.firstResponder === focused, "外しても端末の焦点は動かない")
+    XCTAssertTrue(holds(for: 0.3) { wc.window.firstResponder === focused }, "外しても端末の焦点は動かない")
     _ = wc.controlAddBoardWidget(workspaceId: homeId, widget: .automation)
-    pump()
-    XCTAssertTrue(wc.window.firstResponder === focused, "置いても依頼の欄が焦点を奪わない")
+    XCTAssertTrue(
+      holds(for: 0.3) { wc.window.firstResponder === focused }, "置いても依頼の欄が焦点を奪わない")
     XCTAssertEqual(wc.current.selection, .tab(tab), "選択も動かない")
   }
 
-  /// ボードの上に ⌘⇧X を開いている間にウィジェットを置いても外しても、打鍵は ⌘⇧X の入力欄に届いたまま。
+  /// ボードの上に ⌘⇧X を開いている間にウィジェットを置いても外しても、打鍵は ⌘⇧X の入力欄に届いたまま。別のホストから
+  /// 焦点を奪う処理の終わりを観測する口が無いので、奪わないことは実時間で見張る。
   @MainActor func testChangingTheWidgetsUnderThePaletteLeavesTheFocusInThePalette() throws {
     let wc = try homeOnBoard(tabs: 0)
     let homeId = wc.current.id
     _ = wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)
-    pump()
+    flush(wc.window)
     wc.showTaskPalette()
-    pump()
+    pumpMain(
+      until: { wc.window.firstResponder is NSTextView && !wc.boardView.focusIsInside },
+      "前提: 焦点は ⌘⇧X の入力欄")
     let palette = try XCTUnwrap(wc.model.taskPalette)
 
     _ = wc.controlAddBoardWidget(workspaceId: homeId, widget: .automation)
-    pump()
+    XCTAssertTrue(holds(for: 0.3) { !wc.boardView.focusIsInside }, "置いてもボードは焦点を奪わない")
     try type(wc, "x")
     XCTAssertEqual(palette.query, "x", "置いても打鍵は ⌘⇧X に届く")
     XCTAssertEqual(wc.board.automation.requestText, "", "ボードの欄は焦点を奪わない")
 
     _ = wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)
-    pump()
+    XCTAssertTrue(holds(for: 0.3) { !wc.boardView.focusIsInside }, "外してもボードは焦点を奪わない")
     try type(wc, "y")
     XCTAssertEqual(palette.query, "xy", "外しても打鍵は ⌘⇧X に届く")
   }
@@ -140,7 +140,7 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
     _ = wc.controlRemoveBoardWidget(workspaceId: homeId, widget: .automation)
     XCTAssertEqual(wc.activeWorkspace, other, "前面の workspace は動かない")
     wc.switchWorkspace(to: homeIndex)
-    pump()
+    flush(wc.window)
     XCTAssertEqual(wc.board.widgets, [], "戻ると空のボード")
     XCTAssertTrue(wc.boardView.focusIsInside, "焦点はボードの中")
   }
