@@ -94,22 +94,18 @@ extension ScmPanelTests {
       panel.control.message = "m"
       let row = try XCTUnwrap(
         panel.layout.index[ScmRowID(section: scene.section, path: scene.path)], name)
-      var rowsCaughtUp: Bool?
-      let staged = panel.changes.staged.count
-      let hook = FinishHook(scene.kind) { [panel] in
-        guard let panel, scene.afterFinish else { return }
-        rowsCaughtUp = panel.changes.staged.count != staged
+      let press = { (panel: ScmPanel) in _ = panel.press(row, scene.control, in: panel.layout) }
+      if scene.afterFinish {
+        let staged = panel.changes.staged.count
+        pressAfterItFinishes(name, first: press) {
+          XCTAssertEqual($0.changes.staged.count, staged, "\(name): 前提: 行はまだ組み直されていない")
+          $0.commitSnapshot().commit()
+        }
+      } else {
+        press(panel)
         panel.commitSnapshot().commit()
-      }
-      panel.control.addObserver(hook)
-      withExtendedLifetime(hook) {
-        panel.press(row, scene.control, in: panel.layout)
-        if !scene.afterFinish { panel.commitSnapshot().commit() }
-        pumpMain(
-          until: { !scene.afterFinish || rowsCaughtUp != nil }, "\(name): 書き込みが終わる")
         idle("\(name): コミット")
       }
-      if scene.afterFinish { XCTAssertEqual(rowsCaughtUp, false, "\(name): 前提: 行はまだ組み直されていない") }
       XCTAssertNil(panel.control.failure, name)
       XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, scene.left, name)
     }
@@ -167,7 +163,7 @@ extension ScmPanelTests {
     show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 1 }, "両方の区分")
     panel.control.message = "s"
     pressRightAfter(
-      .commit, "コミットの直後のコミット", first: { $0.commitSnapshot().commit() },
+      "コミットの直後のコミット", first: { $0.commitSnapshot().commit() },
       then: {
         $0.control.message = "rest"
         $0.commitSnapshot().commit()
@@ -180,7 +176,7 @@ extension ScmPanelTests {
     pumpMain(until: { self.panel.changes.count == 0 }, "変更が無くなる")
     panel.control.message = "one"
     pressRightAfter(
-      .amend, "メッセージだけの amend の直後の amend", first: { $0.commitSnapshot().amend() },
+      "メッセージだけの amend の直後の amend", first: { $0.commitSnapshot().amend() },
       then: {
         $0.control.message = "two"
         $0.commitSnapshot().amend()
@@ -192,7 +188,7 @@ extension ScmPanelTests {
     let parent = repo.git(["rev-parse", "HEAD~1"]).stdoutText
     pumpMain(until: { self.panel.changes.head == self.repo.head() }, "行が今の HEAD に追いつく")
     pressRightAfter(
-      .undo, "取り消しの直後のコミット", first: { $0.commitSnapshot().undoLastCommit() },
+      "取り消しの直後のコミット", first: { $0.commitSnapshot().undoLastCommit() },
       then: {
         $0.control.message = "again"
         $0.commitSnapshot().commit()
@@ -214,7 +210,7 @@ extension ScmPanelTests {
     var outside = ""
     let repo = self.repo!
     pressRightAfter(
-      .commit, "自分のコミットの直後の外のコミット", first: { $0.commitSnapshot().commit() },
+      "自分のコミットの直後の外のコミット", first: { $0.commitSnapshot().commit() },
       then: {
         XCTAssertTrue(repo.git(["add", "z.txt"]).isSuccess)
         XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
@@ -224,6 +220,40 @@ extension ScmPanelTests {
       })
     XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch))
     XCTAssertEqual(repo.head(), outside)
+  }
+
+  /// 自分の取り消しが終わる前に、監視の知らせによる取り直しで行が先に追いついても、終わった後に押したコミットは押したとおりに
+  /// 数える。既に行に出ている取り消しを、もう 1 回重ねない（重ねると、見えていた HEAD が 1 代ずれて断る）。
+  func testCommittingAfterOwnUndoThatTheRowsShowedBeforeItFinishedTakesWhatWasPressed() throws {
+    try repo.write("u.txt", "undone\n")
+    XCTAssertTrue(repo.git(["add", "u.txt"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "undone"]).isSuccess)
+    let parent = repo.git(["rev-parse", "HEAD~1"]).stdoutText.trimmingCharacters(in: .newlines)
+    show(until: { $0.changes.head == self.repo.head() }, "行が今の HEAD に揃う")
+    // 取り消しがブランチを戻した後、git が返る前で止める。hook は ref の更新のたびに呼ばれるので、足場の git の後に有効にする。
+    let hook = try GitHangFixture()
+    try hook.installScript(
+      "reference-transaction",
+      body: """
+        [ "$1" = committed ] || exit 0
+        grep -q ' refs/heads/main$' || exit 0
+        \(hook.waitingBody)
+        """)
+    XCTAssertTrue(repo.git(["config", "core.hooksPath", hook.dir.path]).isSuccess)
+
+    panel.commitSnapshot().undoLastCommit()
+    XCTAssertTrue(hook.pumpUntilHung(), "前提: 取り消しがブランチを戻したところで止まる")
+    pumpMain(until: { self.panel.changes.head == parent }, "行が取り消しの後の HEAD に追いつく")
+    XCTAssertFalse(panel.control.operations.isEmpty, "前提: 取り消しはまだ終わっていない")
+    hook.release()
+    idle("取り消し")
+    panel.control.message = "again"
+    panel.commitSnapshot().commit()
+    idle("コミット")
+    XCTAssertNil(panel.control.failure)
+    XCTAssertEqual(repo.git(["rev-parse", "HEAD~1"]).stdoutText, parent + "\n")
+    XCTAssertEqual(
+      repo.git(["show", "--name-only", "--format=%s", "HEAD"]).stdoutText, "again\n\nu.txt\n")
   }
 
   /// 走っているプルの後ろで押したコミットは、プルが動かした HEAD の上に、見えていたステージ済みをコミットする。
@@ -244,32 +274,31 @@ extension ScmPanelTests {
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "s.txt\n")
   }
 
-  /// `first` で始めた種類 `kind` の操作が終わった知らせの中で（行が新しい HEAD に追いつく前に）`then` を押し、終わるまで回す。
-  func pressRightAfter(
-    _ kind: SourceControl.Kind, _ name: String, first: (ScmPanel) -> Void,
-    then: @escaping (ScmPanel) -> Void
-  ) {
+  /// `first` で始めた操作が終わった後、行が新しい HEAD に追いつく前に `then` を押し、終わるまで回す（→ `pressAfterItFinishes`）。
+  func pressRightAfter(_ name: String, first: (ScmPanel) -> Void, then: (ScmPanel) -> Void) {
     let head = panel.changes.head
-    var rowsHead: String??
-    let hook = FinishHook(kind) { [panel] in
-      guard let panel else { return }
-      rowsHead = panel.changes.head
-      then(panel)
+    pressAfterItFinishes(name, first: first) {
+      XCTAssertEqual($0.changes.head, head, "\(name): 前提: 行はまだ前の HEAD のまま")
+      then($0)
     }
-    panel.control.addObserver(hook)
-    withExtendedLifetime(hook) {
-      first(panel)
-      pumpMain(until: { rowsHead != nil }, "\(name): 書き込みが終わる")
-      idle("\(name): 次の書き込み")
-    }
-    XCTAssertEqual(rowsHead, head, "\(name): 前提: 行はまだ前の HEAD のまま")
+  }
+
+  /// `first` を押し、その操作が終わった後、行が組み直される前の周で `then` を呼び、終わるまで回す。押した周でパネルを隠して
+  /// 行の組み直しを止め（面は見えたままなので、status は受け続ける）、終わった後に出し直した周で `then` を呼ぶ。出し直しは
+  /// 組み直しを裏へ頼むだけなので、その周の行は、監視の知らせがいつ届いても押す前の姿のまま。
+  func pressAfterItFinishes(_ name: String, first: (ScmPanel) -> Void, then: (ScmPanel) -> Void) {
+    first(panel)
+    panel.isShown = false
+    idle("\(name): 書き込みが終わる")
+    panel.isShown = true
+    then(panel)
+    idle("\(name): 次の書き込み")
   }
 }
 
 /// 自分の書き込みを押してからコミットする場面。`left` はコミットの後に残る変更。
 private struct OwnWriteScene {
   let name: String
-  let kind: SourceControl.Kind
   let control: ScmControl
   let section: ScmSection
   let path: String?
@@ -283,34 +312,10 @@ private struct OwnWriteScene {
   ) {
     self.name = name
     self.control = control
-    kind = control == .unstage ? .unstage : .stage
     self.section = section
     self.path = path
     self.staged = staged
     self.afterFinish = afterFinish
     self.left = left
-  }
-}
-
-/// `kind` の操作が終わった知らせの中で 1 回だけ `body` を呼ぶ。
-@MainActor
-private final class FinishHook: SourceControlObserver {
-  private let kind: SourceControl.Kind
-  private var body: (() -> Void)?
-
-  init(_ kind: SourceControl.Kind, _ body: @escaping () -> Void) {
-    self.kind = kind
-    self.body = body
-  }
-
-  func sourceControl(
-    _ control: SourceControl, firstStepDidFinish operation: SourceControl.Operation,
-    outcome: SourceControl.FirstStepOutcome
-  ) {}
-
-  func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind) {
-    guard kind == self.kind, let body else { return }
-    self.body = nil
-    body()
   }
 }

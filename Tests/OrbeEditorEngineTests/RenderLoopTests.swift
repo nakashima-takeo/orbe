@@ -17,6 +17,7 @@ final class RenderLoopTests: EngineTestCase {
     try super.setUpWithError()
     driver = HeadlessDriver()
     driver.start()
+    waitForPipelines()
   }
 
   override func tearDownWithError() throws {
@@ -37,14 +38,15 @@ final class RenderLoopTests: EngineTestCase {
     waitUntilPaused(surface)
     let first = target.acquired
     XCTAssertGreaterThan(first, 0, "結んだら描く")
-    let ticks = driver.ticks(surface.id)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-    XCTAssertEqual(driver.ticks(surface.id), ticks, "止まっている間は刻みが来ない")
+    XCTAssertTrue(staysStopped(surface, for: 0.2), "止まっている間は刻みが来ない")
 
     surface.setIndentation(Indentation(unit: 2, usesTabs: false))
     surface.flush()
     waitUntilPaused(surface)
-    XCTAssertEqual(target.acquired, first + 1, "変わったコマだけ描く")
+    XCTAssertEqual(
+      target.acquired, first + 1,
+      "変わったコマだけ描く。testInvisibleSurfaceDoesNotDraw の「起こされても見えていなければ描かない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 
   /// スクロールするとつまみが現れ、止まって消え始める時刻にだけ起きて消え、消え終わったら起きない。
@@ -60,9 +62,7 @@ final class RenderLoopTests: EngineTestCase {
     XCTAssertNotNil(blinkWake(surface), "つまみが消え始める時刻に起きるタイマー")
     waitUntil(3) { blinkWake(surface) == nil && driver.isPaused(surface.id) }
     XCTAssertNil(blinkWake(surface), "消え終わったらタイマーは無い")
-    let ticks = driver.ticks(surface.id)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-    XCTAssertEqual(driver.ticks(surface.id), ticks, "消え終わった後は起きない")
+    XCTAssertTrue(staysStopped(surface, for: 0.3), "消え終わった後は起きない")
   }
 
   /// スクロールの直後（つまみが消え始める前）に隠れた面は、消え始める時刻に起きるタイマーを置かず、刻みも来ない。
@@ -75,15 +75,16 @@ final class RenderLoopTests: EngineTestCase {
     surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -1), precise: false))
     waitUntilPaused(surface)
+    // 下の「隠れた面はタイマーを置かない」の対。同じ時点で、起きる場合を待たずに確かめる。
     XCTAssertNotNil(blinkWake(surface), "前提: つまみが消え始める時刻に起きるタイマー")
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: false)
     surface.flush()
     waitUntilPaused(surface)
     XCTAssertNil(blinkWake(surface), "隠れた面はタイマーを置かない")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.7))
-    let ticks = driver.ticks(surface.id)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-    XCTAssertEqual(driver.ticks(surface.id), ticks, "消え始める時刻を過ぎても起きない")
+    // 消え始める時刻は、スクロールの後、つまみを隠すまでの待ちが明けたとき。見張り始める前にスクロールしたので、その待ちの
+    // 長さだけ見張れば、見張るあいだに過ぎる。
+    XCTAssertTrue(
+      staysStopped(surface, for: Self.overviewStyle().hideDelay), "消え始める時刻を過ぎても起きない")
   }
 
   /// 見えている幅より長い行がある文書を開いても、最初に長さを測ったことによる横の範囲の変化ではつまみを出さない。
@@ -125,11 +126,10 @@ final class RenderLoopTests: EngineTestCase {
       let target = OffscreenTarget(
         device: try XCTUnwrap(RenderThread.device), driver: driver, holds: false)
       RenderThread.shared.perform { $0.bind(id, target: target, clock: clock) }
+      surface.flush()
       // 手で刻んで、描いてから止まるまで進める（描いたコマが画面に出るのも待つ）。
-      var stopped = false
-      for _ in 0..<50 where !stopped {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-        stopped = RenderThread.shared.performAndWait { renderer in
+      let stopped = waitUntil(5) {
+        RenderThread.shared.performAndWait { renderer in
           renderer.tick(id, target: CACurrentMediaTime() + lead)
           return clock.isPaused && target.acquired == target.settled
         }
@@ -258,23 +258,21 @@ final class RenderLoopTests: EngineTestCase {
       constraint: seconds(policy.constraint))
   }
 
-  private func waitUntilPaused(_ surface: MetalTextSurface) {
-    RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    XCTAssertTrue(waitUntil(5) { driver.isPaused(surface.id) }, "刻みが止まる")
-  }
-}
-
-/// 自分では刻まない刻み。次に画面に出る刻みは、いつ問われても `lead` 秒後。止める・再開するは描画スレッドだけが書く。
-private final class ManualClock: FrameClock, @unchecked Sendable {
-  private let lead: Double
-  var isPaused = false
-  let period = 1.0 / 120
-
-  init(lead: Double) {
-    self.lead = lead
+  private func waitUntilPaused(
+    _ surface: MetalTextSurface, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertTrue(driver.waitUntilStopped(surface), "刻みが止まる", file: file, line: line)
   }
 
-  func nextTarget(after now: Double) -> Double { now + lead }
-
-  func invalidate() {}
+  /// 面の刻みが止まるのを待ってから、`seconds` のあいだ止まったままで、刻みが 1 つも来ないか。止まった刻みを起こし直す
+  /// 経路は、いまは点滅とつまみのタイマーだけで、その有無は止まった時点の状態で読める（`blinkWake`）。この見張りは、
+  /// タイマー以外の経路で起こし直す退行を、仕組みに依らずに捕まえるために置く。「もう起こし直さない」と言える処理の終わりを
+  /// 観測する口が無いので、実時間で見張る。結び付けられる本番の遅れの定数は無いので、長さは呼び手が決める（ほかに決める
+  /// 理由が無ければ、刻みの数十倍の 0.2〜0.3 秒。止まった刻みが起き直していれば、そのあいだに刻みが来る）。
+  private func staysStopped(_ surface: MetalTextSurface, for seconds: TimeInterval) -> Bool {
+    guard driver.waitUntilStopped(surface) else { return false }
+    let id = surface.id
+    let ticks = driver.ticks(id)
+    return holds(for: seconds) { driver.isPaused(id) && driver.ticks(id) == ticks }
+  }
 }

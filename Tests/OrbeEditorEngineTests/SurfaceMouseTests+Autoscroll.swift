@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -174,7 +175,7 @@ extension SurfaceMouseTests {
     let opened = try open((0..<20).map { _ in long }.joined(separator: "\n"))
     _ = host(opened, size: CGSize(width: 400, height: 300))
     _ = opened.surface.snapshot()
-    pump()
+    nextTurn()
     let pointer = try pointer(opened)
     var clock: CFTimeInterval = 10
     let text = opened.document.text
@@ -199,7 +200,7 @@ extension SurfaceMouseTests {
     let opened = try open((0..<20).map { _ in long }.joined(separator: "\n"))
     _ = host(opened, size: CGSize(width: 400, height: 300))
     _ = opened.surface.snapshot()
-    pump()
+    nextTurn()
     let config = opened.surface.config
     let area = opened.surface.surfaceLayout.text
     let column = area.minX

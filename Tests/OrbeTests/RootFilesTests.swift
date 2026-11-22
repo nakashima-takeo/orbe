@@ -39,6 +39,21 @@ final class RootFilesTests: OrbeTestCase {
     }
     func rootFilesNestedGitStateDidChange(_ files: RootFiles) { nestedGitStateChanges += 1 }
     func rootFilesDidResolve(_ files: RootFiles) { resolutions += 1 }
+
+    /// 監視の知らせの数（ファイルの変化・git の状態・入れ子の git dir の状態）。
+    var watchNotifications: Int { changes.count + gitStateChanges + nestedGitStateChanges }
+
+    /// `count` が数える知らせが、`BatchDebounce.maximumDelay * 2` のあいだ 1 つも来なくなるまで待ち、20 秒以内に静まったかを
+    /// 返す。ある時刻までに起きた変化は、通常は FSEvents の遅れ（0.1 秒）とデバウンスの上限を足した時間の内に知らせとして
+    /// 届くので、そのあいだ来なければ、その前の変化は出尽くしたとみなす（見張る長さのうち、その 2 つを越える分は、知らせの
+    /// 原因になる status の読みと、配送の遅れ（fseventsd・main のキュー）に見込む余裕）。監視の遅れの時計を差し替える口が
+    /// 無いので、実時間で見張る。
+    func settles(counting count: @escaping (Recorder) -> Int) -> Bool {
+      waitUntil(20) {
+        let seen = count(self)
+        return holds(for: BatchDebounce.maximumDelay * 2) { count(self) == seen }
+      }
+    }
   }
 
   // MARK: - 根の判定
@@ -280,10 +295,8 @@ final class RootFilesTests: OrbeTestCase {
         until: { files.status?.entries[path]?.unstagedSubmodule == .content }, "\(path): 戻る")
     }
 
-    RunLoop.main.run(until: Date().addingTimeInterval(BatchDebounce.maximumDelay * 2))
-    let settled = recorder.nestedGitStateChanges
-    RunLoop.main.run(until: Date().addingTimeInterval(BatchDebounce.maximumDelay * 2))
-    XCTAssertEqual(recorder.nestedGitStateChanges, settled, "親の status の読みは入れ子の git dir を書かない")
+    XCTAssertTrue(
+      recorder.settles(counting: \.nestedGitStateChanges), "親の status の読みは入れ子の git dir を書かない")
   }
 
   // MARK: - 一覧と新規作成

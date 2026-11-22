@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -23,14 +24,19 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
     wc.showWorkspaceCreate(name: nil)
-    pump(0.6)
+    awaitCaretAtEnd(wc, of: "~")
+    // 開いたときの焦点の当て直しが積んだ欄の置き直しを走らせ終える。残すと続く ⇥ の後に走り、焦点をパス欄へ引き戻す。
+    nextTurn()
     return (wc, try XCTUnwrap(wc.model.workspaceCreate))
   }
 
-  private func pump(_ seconds: TimeInterval = 0.3) {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
+  /// 入力欄に焦点が入り、キャレットが `text` の末尾に置かれるまで待つ。成り立たなくても失敗にしない（確かめは続く
+  /// `assertCaretAtEnd` が持ち、失敗のときに期待と実際の値が出る）。
+  private func awaitCaretAtEnd(_ wc: WindowController, of text: String) {
+    waitUntil {
+      guard let editor = wc.window.firstResponder as? NSTextView else { return false }
+      return editor.string == text
+        && editor.selectedRange() == NSRange(location: text.utf16.count, length: 0)
     }
   }
 
@@ -44,7 +50,7 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
         isARepeat: false, keyCode: 48)
     else { return XCTFail("キーイベントを作れない") }
     deliverKeyDown(event, to: wc.window)
-    pump()
+    flush(wc.window)
   }
 
   /// focus のある欄の文字列と選択。
@@ -98,9 +104,9 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
   func testAcceptingSuggestionPutsCaretAtEndOfTheNewPath() throws {
     let (wc, model) = try openCreateForm()
     model.suggestions = [FolderSuggestion(name: "tmp", fullPath: "/private/tmp", isRepo: false)]
-    pump()
     tab(wc)
     XCTAssertEqual(model.path, "/private/tmp", "前提: ⇥ で候補を確定した")
+    awaitCaretAtEnd(wc, of: "/private/tmp")
     try assertCaretAtEnd(wc, of: "/private/tmp", "確定したパスの末尾")
   }
 
@@ -108,13 +114,16 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
   /// 名前は全選択で入る。folder に戻したパス欄も末尾。
   func testCloneFieldsCaretOnSourceSwitchAndTabCycle() throws {
     let (wc, model) = try openCreateForm()
+    // folder に戻した後は、キャレットが `~` の末尾に来るのを待つ。focus が clone 先欄に残っていても、この待ちが成り立たないよう、
+    // clone 先をパスと違う値にする。
+    model.setCloneDir("~/src")
     model.setCloneURL("https://github.com/you/repo.git")
     model.setSource(.clone)
-    pump(0.6)
+    awaitCaretAtEnd(wc, of: "https://github.com/you/repo.git")
     try assertCaretAtEnd(wc, of: "https://github.com/you/repo.git", "切替で入った URL 欄は末尾")
 
     tab(wc)
-    try assertCaretAtEnd(wc, of: "~", "⇥ で入った clone 先欄は末尾")
+    try assertCaretAtEnd(wc, of: "~/src", "⇥ で入った clone 先欄は末尾")
     tab(wc)
     try assertAllSelected(wc, of: "repo", "⇥ で入った名前欄は全選択")
     tab(wc)
@@ -122,10 +131,10 @@ final class WorkspaceCreateCaretTests: OrbeTestCase {
     tab(wc, shift: true)
     try assertAllSelected(wc, of: "repo", "⇧⇥ で入った名前欄は全選択")
     tab(wc, shift: true)
-    try assertCaretAtEnd(wc, of: "~", "⇧⇥ で入った clone 先欄は末尾")
+    try assertCaretAtEnd(wc, of: "~/src", "⇧⇥ で入った clone 先欄は末尾")
 
     model.setSource(.folder)
-    pump(0.6)
+    awaitCaretAtEnd(wc, of: "~")
     try assertCaretAtEnd(wc, of: "~", "folder に戻したパス欄は末尾")
   }
 }

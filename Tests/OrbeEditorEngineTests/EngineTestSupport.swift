@@ -135,18 +135,25 @@ struct PixelShot {
 
 @MainActor
 extension EngineTestCase {
-  /// 出す前の状態を出し、不透明な地（既定は黒）に今の位置の 1 コマを描いて撮る。
+  /// 出す前の状態を出し、不透明な地（既定は黒）に、時刻 `time`（省けば今）のコマを描いて撮る。
   func pixelShot(
-    _ opened: Opened, background: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+    _ opened: Opened, at time: Double? = nil,
+    background: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
   ) throws -> PixelShot {
     let id = opened.surface.id
     opened.surface.flush()
     let image = try XCTUnwrap(
       RenderThread.shared.performAndWait {
-        Transfer(value: $0.snapshot(id, background: background))
+        Transfer(value: $0.snapshot(id, at: time ?? CACurrentMediaTime(), background: background))
       }
       .value)
     return PixelShot(bytes: GlyphPixelTests.pixels(image), width: image.width, height: image.height)
+  }
+
+  /// シェーダの用意が済むまで待つ。用意が済む前の刻みは、描かずに刻みを止める。
+  func waitForPipelines() {
+    XCTAssertTrue(
+      RenderThread.shared.performAndWait { $0.gate.wait() != nil }, "前提: シェーダの用意が済む")
   }
 }
 

@@ -375,7 +375,9 @@ final class MetalTextSurface: TextSurface {
   func snapshot() -> CGImage? {
     flush()
     let id = id
-    return RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id)) }.value
+    return RenderThread.shared.performAndWait {
+      Transfer(value: $0.snapshot(id, at: CACurrentMediaTime()))
+    }.value
   }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 /// 画面と前面の隔離（`ScreenIsolation`）が、破ったテストを実際に落とすことを固定する。
@@ -10,14 +11,12 @@ import XCTest
 /// 本物を変えるが、画面にもフォーカスにも現れない。
 @MainActor
 final class ScreenIsolationTests: OrbeTestCase {
-  /// テストの終わり（`tearDown` の後）まで生きている窓。テスト本体のローカル変数の窓は、終わりの確認より前に解放される。
-  private var windowKeptToTheEnd: ClaimsShownWindow?
 
   /// 並んでいてディスプレイと重なる窓を残したまま終わったテストは、ランループを回していなくても落ちる。
   func testAWindowLeftOnADisplayFailsTheTest() throws {
     let display = try XCTUnwrap(NSScreen.screens.first, "前提: ディスプレイが在る")
     expectBreach("窓がディスプレイの範囲と重なって並んだ")
-    windowKeptToTheEnd = ClaimsShownWindow(on: display)
+    holdUntilTestEnds(ClaimsShownWindow(on: display))
   }
 
   /// ランループが回った時点でディスプレイと重なっていた窓は、テストの終わりまでに下ろしても、そのテストを落とす。
@@ -25,10 +24,9 @@ final class ScreenIsolationTests: OrbeTestCase {
     let display = try XCTUnwrap(NSScreen.screens.first, "前提: ディスプレイが在る")
     expectBreach("窓がディスプレイの範囲と重なって並んだ")
     var shown = true
-    let window = ClaimsShownWindow(on: display) { shown }
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    holdUntilTestEnds(ClaimsShownWindow(on: display) { shown })
+    pumpMainOnce()
     shown = false
-    _ = window
   }
 
   /// 本物のシートが出たテストは落ちる。

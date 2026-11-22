@@ -29,8 +29,10 @@ final class MetalLineMarksTests: EngineTestCase {
     let black = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
     opened.surface.flush()
     let image = try XCTUnwrap(
-      RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id, background: black)) }
-        .value)
+      RenderThread.shared.performAndWait {
+        Transfer(value: $0.snapshot(id, at: CACurrentMediaTime(), background: black))
+      }
+      .value)
     let lineCount = opened.document.text.lineCount
     let column = opened.surface.config.columnWidth(lineCount: lineCount)
     let barX = column - style.marks.gutterWidth + style.marks.barInset + style.marks.barWidth / 2

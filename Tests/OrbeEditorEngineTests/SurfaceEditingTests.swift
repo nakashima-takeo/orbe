@@ -209,7 +209,7 @@ final class SurfaceEditingTests: EngineTestCase {
     opened.surface.rolesDidChange(IndexSet())
     undo.undo()
     XCTAssertEqual(text(opened.document), "Qyzabc\n")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    nextTurn()
     XCTAssertFalse(undo.canUndo)
   }
 
@@ -322,11 +322,11 @@ final class SurfaceEditingTests: EngineTestCase {
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(100_000, 0), precise: true))
     XCTAssertEqual(opened.surface.hiddenColumns, 0, "前提: 人が行頭へ戻した")
     _ = opened.surface.snapshot()
-    pump()
     _ = opened.surface.snapshot()
     XCTAssertEqual(opened.surface.hiddenColumns, 0, "戻したまま")
     type(opened, "z")
     _ = opened.surface.snapshot()
-    pumpMain(until: { opened.surface.hiddenColumns > 0 }, "次の打鍵はまた寄せる")
+    // 「戻したまま」の対。同じ時点で、起きる場合を待たずに確かめる。
+    XCTAssertGreaterThan(opened.surface.hiddenColumns, 0, "次の打鍵はまた寄せる")
   }
 }

@@ -268,10 +268,10 @@ extension Renderer {
 
   // MARK: - 撮影
 
-  /// 今の位置の 1 コマを画面外に描いた絵（面が描く色空間の絵。キャレットは点滅の位相に依らず、焦点があれば描く——撮影を
-  /// 時刻に依らせない）。`background` を与えればその不透明な地に描く（無ければ透明な地）。シェーダのコンパイルが済むまで
-  /// 待つ。
-  func snapshot(_ id: Int, background: MTLClearColor? = nil) -> CGImage? {
+  /// 時刻 `time` のコマを画面外に描いた絵（面が描く色空間の絵）。スクロールの位置と、ミニマップの見えている範囲の枠・
+  /// スクロールバーのつまみの濃さは、この時刻で決まる。キャレットは点滅の位相に依らず、焦点があれば描く。`background` を
+  /// 与えればその不透明な地に描く（無ければ透明な地）。シェーダのコンパイルが済むまで待つ。
+  func snapshot(_ id: Int, at time: Double, background: MTLClearColor? = nil) -> CGImage? {
     guard let slot = slot(id), let pipelines = gate.wait() else { return nil }
     let material = slot.material.take()
     slot.receive(material)
@@ -294,8 +294,8 @@ extension Renderer {
     slot.zones.images.beginFrame()
     let built = slot.builder
     slot.build(
-      material, scroll: slot.scroll.peek(at: CACurrentMediaTime()),
-      moment: (material.primaryCaret.showsCaret, CACurrentMediaTime()),
+      material, scroll: slot.scroll.peek(at: time),
+      moment: (material.primaryCaret.showsCaret, time),
       target: ((width, height), atlas),
       fonts: fonts)
     let widened = slot.scroll.measured(

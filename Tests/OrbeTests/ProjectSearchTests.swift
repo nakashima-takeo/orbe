@@ -153,7 +153,8 @@ final class ProjectSearchTests: OrbeTestCase {
     f.search.search()
     pumpMain(until: { GrepGate.isGrepRunning }, "git が走る")
     XCTAssertTrue(
-      holds(for: 0.3) { paths(f.search) == ["n.txt"] }, "開いている文書の結果（一致 0）では置き換えない")
+      holds(for: ProjectSearchRun.batchInterval * 3) { paths(f.search) == ["n.txt"] },
+      "開いている文書の結果（一致 0）では置き換えない")
     gate.open()
     pumpMain(until: { f.search.phase == .done })
     XCTAssertEqual(paths(f.search), ["o.txt"])

@@ -16,8 +16,20 @@ extension OrbeTestCase {
     return url
   }
 
-  /// タブの器を幅 `width` の窓に載せ、エディターを開く。窓はテスト用の `OrbeWindowFake` で、確認のシートを画面に出さない。
+  /// タブの器を幅 `width` の窓に載せ、エディターを開く（→ `mountEditor`）。足場が持つのは窓だけで、窓はテストの終わりまで
+  /// 残る。タブは呼び出し元が持つので、窓はタブより後まで残る。タブを手放した後もランループを回すテストは、タブもテストの
+  /// 終わりまで持つこと。持たないと、窓に載ったままの面が、タブへの参照（`EditorPaneView.group`。弱い参照）を失ったまま
+  /// 根のサービス（ファイルの監視と git）を保持し続け、ランループが回ると監視の通知を受けて動作する。本番には無いこの状態での
+  /// 動作に、テストの結果が左右される。
+  @discardableResult
   func hostEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
+    holdUntilTestEnds(mountEditor(tab, width: width, height: height))
+  }
+
+  /// タブの器を幅 `width` の窓に載せ、エディターを開く。窓はテスト用の `OrbeWindowFake` で、確認のシートを画面に出さない。
+  /// 窓をテストに預けないので、寿命は呼び出し元が決める。呼ぶのは、窓の解放そのものを確かめるテストと、計測の区間ごとに
+  /// 窓を手放す性能計測だけ（ほかは `hostEditor`）。
+  func mountEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
     let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)
@@ -109,23 +121,35 @@ extension OrbeTestCase {
   }
 
   /// ポインタを面の座標の点へ動かす（`host` はその点の上の SwiftUI の器。既定は列の頭）。SwiftUI の onHover は
-  /// ポインタの下の view が受ける mouseEntered / mouseMoved で動く。
+  /// ポインタの下の view が受ける mouseEntered / mouseMoved で動く。点の下に view が無ければ、呼んだ行で失敗を記録する。
   @MainActor
-  func movePointer(_ pane: EditorPaneView, to point: NSPoint, over host: NSView? = nil) {
+  func movePointer(
+    _ pane: EditorPaneView, to point: NSPoint, over host: NSView? = nil,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
     let host = host ?? pane.headerHost
     let local = host.convert(point, from: pane)
-    guard let target = host.hitTest(host.convert(local, to: host.superview)) else { return }
+    guard let target = host.hitTest(host.convert(local, to: host.superview)) else {
+      XCTFail("ポインタを動かす点 \(point) の下に view が無い", file: file, line: line)
+      return
+    }
     let event = timedMouse(.mouseMoved, at: pane.convert(point, to: nil), in: pane.window)
     target.mouseExited(with: event)
     target.mouseEntered(with: event)
     target.mouseMoved(with: event)
   }
 
-  /// ポインタを面の座標の点 `point`（`host` の上）から面の外へ出す。
+  /// ポインタを面の座標の点 `point`（`host` の上）から面の外へ出す。点の下に view が無ければ、呼んだ行で失敗を記録する。
   @MainActor
-  func movePointerOut(_ pane: EditorPaneView, from point: NSPoint, over host: NSView) {
+  func movePointerOut(
+    _ pane: EditorPaneView, from point: NSPoint, over host: NSView,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
     let local = host.convert(point, from: pane)
-    guard let target = host.hitTest(host.convert(local, to: host.superview)) else { return }
+    guard let target = host.hitTest(host.convert(local, to: host.superview)) else {
+      XCTFail("ポインタを出す点 \(point) の下に view が無い", file: file, line: line)
+      return
+    }
     target.mouseExited(with: timedMouse(.mouseMoved, at: NSPoint(x: -10, y: -10), in: pane.window))
   }
 

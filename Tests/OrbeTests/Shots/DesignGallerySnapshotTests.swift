@@ -12,7 +12,7 @@ import XCTest
 /// 通常の `swift test` を汚さないよう `ORBE_GALLERY=1` でゲート。
 /// 出力先: <repo>/.preview/gallery（gitignore 済）。$ORBE_GALLERY_DIR で上書き可。
 @MainActor
-final class DesignGallerySnapshotTests: SnapshotTestCase {
+final class DesignGallerySnapshotTests: ShotTestCase {
 
   func testRenderGallery() throws {
     try XCTSkipIf(

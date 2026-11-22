@@ -30,7 +30,6 @@ final class EditorSearchTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 700)
     window.appearance = NSAppearance(named: .darkAqua)
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     let document = try tab.group.editor.open(try caseFile(name, text), as: .pinned)
     pane.layoutSubtreeIfNeeded()
     window.makeFirstResponder(document.surface.responder)

@@ -72,14 +72,6 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     return WindowController()
   }
 
-  /// main runloop を `seconds` 回す（デバウンスの締切をまたぐ）。main キューは締切順に捌かれるため、
-  /// 1 秒のデバウンスは 1.5 秒待ちより必ず先に発火する＝待ち時間の伸縮に頼らず決定的。
-  private func spinMainRunLoop(_ seconds: TimeInterval) {
-    let done = expectation(description: "main runloop \(seconds)s")
-    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { done.fulfill() }
-    wait(for: [done], timeout: seconds + 2.0)
-  }
-
   // MARK: - 保存 → 復元 → 再保存のラウンドトリップ
 
   /// アクティブが 0 タブ（休眠）なら surface が 1 つも起きず、`WorkspacesFile` が**完全に等値**で戻る。
@@ -279,9 +271,11 @@ final class WindowControllerRestoreTests: OrbeTestCase {
 
   /// `scheduleSave` は即書かず、締切を過ぎてから 1 回書く（高頻度な cwd 報告をまとめるため）。
   /// アクティブを 0 タブにするのは、タブ由来の予期しない保存予約を混ぜないため。
-  func testScheduleSaveWritesOnlyAfterDebounce() throws {
+  @MainActor func testScheduleSaveWritesOnlyAfterDebounce() throws {
     let wc = launch(activeWorkspace: 0, [state("dormant", activeTab: 0, tabs: 0)])
     wc.flushSave()  // 起動由来の予約を確定させて場を空にする
+    var deadline: (@MainActor () -> Void)?
+    wc.saveDelay.schedule = { _, fire in deadline = fire }
     let saved = try workspacesFile()
     try FileManager.default.removeItem(at: saved)
 
@@ -289,20 +283,22 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     XCTAssertFalse(
       FileManager.default.fileExists(atPath: saved.path), "予約した直後は書かない（変化をまとめる）")
 
-    spinMainRunLoop(1.5)
+    try XCTUnwrap(deadline, "保存が予約されていない")()
     XCTAssertTrue(FileManager.default.fileExists(atPath: saved.path), "締切を過ぎたら書く")
   }
 
   /// `flushSave` は待ち中の予約を取り消す。取り消せないと、終了時に確定保存した後から
   /// 古いスナップショットが遅れて上書きする。
-  func testFlushSaveCancelsPendingDebounce() throws {
+  @MainActor func testFlushSaveCancelsPendingDebounce() throws {
     let wc = launch(activeWorkspace: 0, [state("dormant", activeTab: 0, tabs: 0)])
+    var deadline: (@MainActor () -> Void)?
+    wc.saveDelay.schedule = { _, fire in deadline = fire }
     wc.scheduleSave()
     wc.flushSave()
     let saved = try workspacesFile()
     try FileManager.default.removeItem(at: saved)
 
-    spinMainRunLoop(1.5)
+    try XCTUnwrap(deadline, "保存が予約されていない")()
     XCTAssertFalse(
       FileManager.default.fileExists(atPath: saved.path), "flushSave 後に取り残された予約は書かない")
   }

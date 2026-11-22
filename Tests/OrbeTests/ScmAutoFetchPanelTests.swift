@@ -15,6 +15,8 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
   private var repo: TempGitRepo?
   /// その origin の bare リポジトリ（`panelWithABlockedBackgroundFetch` が作る）。
   private var origin: String?
+  /// 裏の fetch の hook を止めている門（`panelWithAStubbornBackgroundFetch` が作る）。
+  private var hook: GitHangFixture?
 
   override func tearDown() {
     panel?.isShown = false
@@ -74,8 +76,8 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     panel.isLive = false
     panel.isLive = true
     pumpMain(until: { autoFetch.rules.isWanted }, "面がまた見える")
-    RunLoop.main.run(until: Date().addingTimeInterval(1))
-    XCTAssertEqual(sshAttempts(), 1, "値が同じなら止まったまま撃たない")
+    XCTAssertTrue(
+      holds(for: 1) { self.sshAttempts() == 1 && autoFetch.rules.isBlocked }, "値が同じなら止まったまま撃たない")
 
     panel.isLive = false
     XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pushed"]).isSuccess)
@@ -161,22 +163,19 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
   }
 
   /// 出しているパネルで裏の fetch を走らせる。止めても終わりが遅れるように、ref を書く hook の最初の 1 回を、SIGTERM を
-  /// 無視して git の stderr を握ったまま数秒眠るものにする（自然に終わる）。origin の `branch` が 1 コミット進んでいる。
+  /// 無視して git の stderr を握ったまま、門（`hook`）が開くまで待つものにする。origin の `branch` が 1 コミット進んでいる。
   private func panelWithAStubbornBackgroundFetch(
     advancing branch: String = "main"
   ) throws -> (ScmPanel, ScmAutoFetch) {
     let repo = try TempGitRepo()
     repo.addOrigin()
     try repo.advanceOrigin(writing: "o.txt", "o\n", onto: branch)
-    let hooks = repo.root + "-hooks"
-    let started = hooks + "/started"
-    try FileManager.default.createDirectory(atPath: hooks, withIntermediateDirectories: true)
-    let hook = hooks + "/reference-transaction"
-    try "#!/bin/sh\n[ -e '\(started)' ] && exit 0\ntrap '' TERM\ntouch '\(started)'\nsleep 4\n"
-      .write(
-        toFile: hook, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook)
-    XCTAssertTrue(repo.git(["config", "core.hooksPath", hooks]).isSuccess)
+    let hook = try GitHangFixture()
+    try hook.installScript(
+      "reference-transaction",
+      body: "[ -e \"\(hook.started)\" ] && exit 0\ntrap '' TERM\n\(hook.waitingBody)")
+    self.hook = hook
+    XCTAssertTrue(repo.git(["config", "core.hooksPath", hook.dir.path]).isSuccess)
     let panel = ScmPanel(root: repo.root)
     self.panel = panel
     panel.isLive = true
@@ -185,7 +184,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     let autoFetch = ScmAutoFetch.shared(for: try XCTUnwrap(panel.liveFiles?.repo))
     NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
     pumpMain(
-      until: { autoFetch.rules.isRunning && FileManager.default.fileExists(atPath: started) },
+      until: { autoFetch.rules.isRunning && FileManager.default.fileExists(atPath: hook.started) },
       "裏の fetch が ref を書き始める")
     self.repo = repo
     return (panel, autoFetch)
@@ -198,7 +197,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     panel.control.fetch()
     XCTAssertEqual(autoFetch.rules.humans, 1)
     let operation = try XCTUnwrap(panel.control.operations.first)
-    pumpMain(until: { panel.control.bandOperation === operation }, timeout: 1.5, "待つ間も帯に出る")
+    pumpMain(until: { panel.control.bandOperation === operation }, "待つ間も帯に出る")
     XCTAssertTrue(autoFetch.rules.isRunning, "前提: 裏の fetch はまだ終わっていない")
 
     operation.stop()
@@ -206,6 +205,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     XCTAssertNil(panel.control.failure, "止めたのは失敗にしない")
     XCTAssertEqual(autoFetch.rules.humans, 0, "係の人の数が戻る")
     XCTAssertTrue(autoFetch.rules.isRunning)
+    try XCTUnwrap(hook).release()
     pumpMain(until: { !autoFetch.rules.isRunning }, "裏の fetch もやがて終わる")
     XCTAssertEqual(autoFetch.rules.humans, 0)
   }
@@ -215,7 +215,8 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
     panel.control.fetch()
     let operation = try XCTUnwrap(panel.control.operations.first)
-    pumpMain(until: { panel.control.bandOperation === operation }, timeout: 1.5, "待つ間も帯に出る")
+    pumpMain(until: { panel.control.bandOperation === operation }, "待つ間も帯に出る")
+    try XCTUnwrap(hook).release()
 
     pumpMain(until: { panel.control.operations.isEmpty }, timeout: 20, "待ちが明けて走り、終わる")
     XCTAssertNil(panel.control.failure)
@@ -236,7 +237,10 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
 
     panel.control.message = "a only"
     panel.commitSnapshot().commitAndPush()
+    let operation = try XCTUnwrap(panel.control.operations.first)
     panel.control.stage([GitStatus.Row(path: "b.txt", originalPath: nil)])
+    pumpMain(until: { operation.step == .network(.push) }, "push の段の前で待ち始める")
+    try XCTUnwrap(hook).release()
     pumpMain(until: { panel.control.operations.isEmpty }, timeout: 20, "コミットしてプッシュとステージ")
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")
     XCTAssertEqual(autoFetch.rules.humans, 0)
@@ -244,20 +248,23 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
 
   /// push の段の前の待ちも帯に出て止められ、止めればその場で終わる（コミットは残り、裏の fetch が終わった後も push は
   /// 走らない）。origin の main は進めない——走れば通る push にしておく。
+  ///
+  /// 「push は走らない」は、裏の fetch が終わった時点で確かめる。待っていた操作を起こすかは、裏の fetch の終わりの処理の中で
+  /// 同期に決まる、という前提に依る（取り下げた待ちを列から外さない形に壊すと、このテストが落ちることを確かめてある）。本番が
+  /// 待っていた操作を起こす経路を変えたときは、確かめ直す。
   func testTheWaitBeforeThePushStepShowsTheBandAndStopsAtOnce() throws {
     let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch(advancing: "other")
     let repo = try XCTUnwrap(self.repo)
     try repo.write("a.txt", "edited\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(until: { panel.changes.staged.count == 1 }, "a.txt がステージ済み")
-    let origin = repo.git(["ls-remote", "origin", "main"]).stdoutText
 
     panel.control.message = "a"
     panel.commitSnapshot().commitAndPush()
     let operation = try XCTUnwrap(panel.control.operations.first)
     pumpMain(
       until: { panel.control.bandOperation === operation && operation.step == .network(.push) },
-      timeout: 1.5, "push の段の前で待つ間も帯に出る")
+      "push の段の前で待つ間も帯に出る")
     XCTAssertTrue(autoFetch.rules.isRunning, "前提: 裏の fetch はまだ終わっていない")
     XCTAssertFalse(panel.control.isCommitting, "コミットの段は終わっている")
 
@@ -266,9 +273,9 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(autoFetch.rules.humans, 0)
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "a\n")
+    try XCTUnwrap(hook).release()
     pumpMain(until: { !autoFetch.rules.isRunning }, "裏の fetch が終わる")
-    // 取り下げ損ねた待ちは裏の fetch の終わりで push を起こすので、その push が返るだけ回してから見る。
-    RunLoop.main.run(until: Date().addingTimeInterval(1))
-    XCTAssertEqual(repo.git(["ls-remote", "origin", "main"]).stdoutText, origin, "push しない")
+    // 待っていた操作を起こすかは、裏の fetch の終わりの処理の中で決まる。取り下げ損ねた待ちは、そこで push を起こす。
+    XCTAssertFalse(operation.isRunning, "push は走らない")
   }
 }

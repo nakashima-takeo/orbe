@@ -5,8 +5,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 全テストクラスの基底。隔離ハーネスへ点火し、テスト 1 件を画面と前面の隔離（`ScreenIsolation`）で包む。
-/// それ以外は素の `XCTestCase`。
+/// 全テストクラスの基底。隔離ハーネスへ点火し、テスト 1 件を画面と前面の隔離（`ScreenIsolation`）で包み、足場から
+/// 預かったウィンドウをテスト 1 件の終わりまで持つ。
 ///
 /// 点火は `class func setUp()`（クラス単位・全インスタンス setUp より前）で行う。最初に走った
 /// 1 クラスが `TestIsolation.installOnce()` を呼び、そこでテストの境界へ登録される口が以降の全テスト
@@ -29,11 +29,23 @@ class OrbeTestCase: XCTestCase {
   /// 隔離の対象から外れる。通常のテストがこれを上書きすると、lint が落とす。
   class var presentsOnScreen: Bool { false }
 
-  /// テスト 1 件（`setUp`・本文・`tearDown`）を、画面と前面の隔離で包む。失敗の記録は `tearDown` の後で、テストが
-  /// 終わったと記録される前に行う（テストの境界のフック（`TestScratch.addCaseHooks`）から記録すると、テストは既に
-  /// 終わっていて落とせない）。
+  private var heldWindows: [NSWindow] = []
+
+  /// ビューを載せるために足場が作ったウィンドウを、テスト 1 件の終わり（画面と前面の隔離の確認の後）まで持つ。渡された
+  /// ウィンドウをそのまま返す。
+  @discardableResult
+  func holdUntilTestEnds<Window: NSWindow>(_ window: Window) -> Window {
+    heldWindows.append(window)
+    return window
+  }
+
+  /// テスト 1 件（`setUp`・本文・`tearDown`）を、画面と前面の隔離で包み、最後に預かったウィンドウを手放す。失敗の記録は
+  /// `tearDown` の後で、テストが終わったと記録される前に行う（テストの境界のフック（`TestScratch.addCaseHooks`）から
+  /// 記録すると、テストは既に終わっていて落とせない）。手放すのが確認の後なのは、預かったウィンドウが画面に出ていれば
+  /// 確認が見つけるため。XCTest はテストのインスタンスを実行の終わりまで持つので、ここで手放さないとウィンドウが残る。
   /// `final` にするのは、サブクラスが `super` 抜きで上書きすると隔離が外れるため。
   final override func invokeTest() {
+    defer { heldWindows.removeAll() }
     guard !Self.presentsOnScreen else { return super.invokeTest() }
     let screen = MainActor.assumeIsolated { () -> ScreenIsolation in ScreenIsolation() }
     super.invokeTest()
@@ -90,7 +102,7 @@ enum TestIsolation {
     // 2. state dir（本番と同じ ORBE_STATE_DIR 経路）。永続ファイルは下の `beginCase` が caseDir へ
     //    張り直すので、この根の直下に出るのは `c<連番>` の caseDir 群と、パス長のために直下へ
     //    置かざるを得ない AF_UNIX socket（`control.sock` / `OrbeReportWireTests` の `r.sock`）と
-    //    補完の学習ストアと、テストをまたぐ fixture（`GitWorktreeCleanIntegrationTests` の雛形）だけ。
+    //    補完の学習ストアと、テストをまたぐ fixture（`GitFixtureTemplate` のテンプレート）だけ。
     //    子プロセス（`ControlProcess.childEnv`）へ渡すのもこの根で、in-process 側の caseDir とは違う。
     setenv(OrbePaths.stateDirEnvVar, dir.path, 1)
     // git は開発者の global / system 設定（署名・hook・除外・fsmonitor 等）を読まない。`GitRunner` は
@@ -135,7 +147,12 @@ enum TestIsolation {
           + "テスト本体より前に ORBE_STATE_DIR を張れていない")
     }
 
-    // 5. 毎テストの隔離。以降の全テストへ効く。
+    // 5. ポインタの非表示。SwiftUI は、ホバーを決め直すたびに AppKit のポインタの非表示（`+[NSCursor _isHidden]`）を読み、
+    //    非表示ならホバーを受け付けない。この値は利用者の実際の状態で、利用者がほかのアプリで打鍵してポインタが非表示に
+    //    なっているあいだは、テストが送ったホバーが効かない。テストの中では、非表示ではないと返させる。
+    CursorVisibility.pinShown()
+
+    // 6. 毎テストの隔離。以降の全テストへ効く。
     TestScratch.addCaseHooks(begin: beginCase, end: endCase)
   }
 
@@ -224,5 +241,22 @@ enum TestIsolation {
   /// テスト 1 件の終わり（`tearDown` の後）。
   static func endCase() {
     Ghostty.pasteboard.releaseGlobally()
+  }
+}
+
+/// SwiftUI のホバーが読むポインタの非表示（AppKit の非公開のクラスメソッド `+[NSCursor _isHidden]`）を、テストの実行体の中で
+/// 「非表示ではない」に固定する。メソッドが無いときは差し替えず、`isPinned` を偽のままにする（`TestIsolationTests` の
+/// 1 本が落ちる。固定できないときに働かなくなるのは、ホバーに依るテストだけ）。SwiftUI がこのメソッドを読まなくなったことは
+/// 検知しない。
+enum CursorVisibility {
+  private(set) nonisolated(unsafe) static var isPinned = false
+
+  static let selector = NSSelectorFromString("_isHidden")
+
+  static func pinShown() {
+    guard let method = class_getClassMethod(NSCursor.self, selector) else { return }
+    let shown: @convention(block) (AnyObject) -> Bool = { _ in false }
+    method_setImplementation(method, imp_implementationWithBlock(shown))
+    isPinned = true
   }
 }

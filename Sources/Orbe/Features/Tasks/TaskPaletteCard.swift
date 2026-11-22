@@ -60,7 +60,7 @@ struct TaskPaletteCard: View {
     .focusable()
     .focusEffectDisabled()
     .focused($focus, equals: .card)
-    .onKeyPress { model.handleKey($0) }
+    .onKeyPress { model.handleKey(KeyInput($0)) }
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) { focus = model.focusTarget }
     // agent の変更を含むタスク一覧の変化を、描画の外で付け直しへ届ける。

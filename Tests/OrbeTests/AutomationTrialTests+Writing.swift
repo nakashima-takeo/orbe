@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -42,10 +43,11 @@ extension AutomationTrialTests {
     waitCalls("q", 1)
     let triedAtWriting = [ids("p2"), ids("q")]
     finish("p2", "a")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    nextTurn()
     XCTAssertEqual(calls("gh").count, 1, "書いた時点の回がすべて終わるまで流さない")
     finish("q", "a")
-    waitCalls("gh", 2)
+    nextTurn()
+    XCTAssertEqual(calls("gh").count, 2, "すべて終わった次の回で流す")
     finish("gh", fetched(["a", "b"]))
     waitCalls("p2", 2)
     waitCalls("q", 2)
