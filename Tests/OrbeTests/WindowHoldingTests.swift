@@ -5,7 +5,9 @@ import XCTest
 @testable import Orbe
 
 /// 足場が預けたウィンドウ（`holdUntilTestEnds`・`hostEditor`）は、戻り値を捨てても、テスト 1 件の終わりまで生きていて、
-/// その後に解放される。
+/// その後に解放される。ここでは、預ける足場のうち最も多く呼び出される `hostEditor` で確かめる。テストの終わりに行う、画面と
+/// 前面の隔離の確認の時点まで生きていることは、`ScreenIsolationTests` のうち、ディスプレイと重なるウィンドウを残したテストが
+/// 確かめる。
 ///
 /// 壊れると何が起きるか。預けたウィンドウがテストの途中で解放されると、載せたビューがウィンドウを失い、ウィンドウに載って
 /// いる間だけ動く部品（first responder・ポインタの位置・エディターの面のファイルの監視）が、テストがウィンドウを保持する
@@ -26,16 +28,6 @@ final class WindowHoldingTests: OrbeTestCase {
     XCTAssertTrue(released.allSatisfy { $0.window == nil }, "預けたウィンドウはテストの後に解放される")
     released.removeAll()
     super.tearDown()
-  }
-
-  func testAHeldWindowLivesUntilTheTeardownBlocks() {
-    let view = NSView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
-    let window = holdUntilTestEnds(
-      OrbeWindowFake(
-        contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false))
-    window.contentView = view
-    Self.released.append(Released(window: window))
-    addTeardownBlock { @MainActor in XCTAssertNotNil(view.window, "テスト本文の後もウィンドウに載っている") }
   }
 
   func testAnEditorWindowLivesUntilTheTeardownBlocks() {
