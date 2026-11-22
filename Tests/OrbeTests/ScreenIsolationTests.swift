@@ -17,7 +17,7 @@ final class ScreenIsolationTests: OrbeTestCase {
   func testAWindowLeftOnADisplayFailsTheTest() throws {
     let display = try XCTUnwrap(NSScreen.screens.first, "前提: ディスプレイが在る")
     expectBreach("窓がディスプレイの範囲と重なって並んだ")
-    windowKeptToTheEnd = ClaimsShownWindow(on: display) { true }
+    windowKeptToTheEnd = ClaimsShownWindow(on: display)
   }
 
   /// ランループが回った時点でディスプレイと重なっていた窓は、テストの終わりまでに下ろしても、そのテストを落とす。
@@ -56,7 +56,7 @@ final class ScreenIsolationTests: OrbeTestCase {
   func testAWindowLeftOnADisplayIsRecordedAndOrderedOut() throws {
     let display = try XCTUnwrap(NSScreen.screens.first, "前提: ディスプレイが在る")
     let screen = ScreenIsolation()
-    let window = ClaimsShownWindow(on: display) { true }
+    let window = ClaimsShownWindow(on: display)
     var recorded: [String] = []
     screen.finish { recorded.append($0) }
     XCTAssertEqual(recorded.count, 1)
@@ -78,7 +78,7 @@ private final class ClaimsShownWindow: NSWindow {
   private let isShown: () -> Bool
   private var isOrderedOut = false
 
-  init(on display: NSScreen, while isShown: @escaping () -> Bool) {
+  init(on display: NSScreen, while isShown: @escaping () -> Bool = { true }) {
     self.isShown = isShown
     super.init(
       contentRect: NSRect(x: display.frame.midX, y: display.frame.midY, width: 200, height: 100),
