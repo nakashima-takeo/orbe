@@ -6,7 +6,7 @@ import XCTest
 
 /// PR のパネルの flow（fixture は `PrFixtures`——本物の git の場と、PR #131 を答える差し替えの出どころ）:
 /// 初期状態 → 確認済みを付ける → フォルダの配下をまとめて外す → リスト表示 → 説明とコミットを畳む → 変更
-/// ファイルを開く（PR の diff。タブ行に「確認済みにする」）→ 確認済みにする → PR が無い（作成の入口）→ ブランチが未公開
+/// ファイルを開く（PR の diff）→ 確認済みにする → PR が無い（作成の入口）→ ブランチが未公開
 /// → gh が認証されていない → PR の先頭が手元に無い（数えない違いの帯）→ 既定のブランチ → コミットの題とファイル名に絵文字。
 extension DesignFlowSnapshotTests {
   func testEditorPr() throws {
@@ -32,7 +32,14 @@ extension DesignFlowSnapshotTests {
       "editor_pr", size: NSSize(width: 1100, height: 640), render: { current.view },
       until: { current.isReady && (current.pane.diff == nil || current.isDiffReady) },
       steps: [
-        ("open", { panel.select(.file("src/agent/StateHooks.swift")) }),
+        (
+          "open",
+          {
+            panel.click(.file("src/agent/StateHooks.swift"))
+            pumpMain(
+              until: { scene.pane.showsDiff(of: "src/agent/StateHooks.swift") }, "押した行の diff")
+          }
+        ),
         ("viewed", { panel.toggleViewed("README.md") }),
         (
           "folder_unviewed",

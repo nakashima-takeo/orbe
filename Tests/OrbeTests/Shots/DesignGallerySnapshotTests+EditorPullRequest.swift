@@ -15,9 +15,10 @@ extension DesignGallerySnapshotTests {
     defer { scene.cleanup() }
     scene.warmUp()
     pumpMain(until: { scene.isReady }, "PR の中身と帯が揃う")
-    scene.panel.select(.file("src/agent/StateHooks.swift"))
+    scene.panel.click(.file("src/agent/StateHooks.swift"))
     try writePNG(
-      scene.view, size: size, name: "editor_pr.png", dir: dir, until: { scene.isReady })
+      scene.view, size: size, name: "editor_pr.png", dir: dir,
+      until: { scene.isReady && scene.pane.showsDiff(of: "src/agent/StateHooks.swift") })
     scene.openDiff()
     pumpMain(until: { scene.isDiffReady }, "PR の diff とスレッドが揃う")
     try writePNG(

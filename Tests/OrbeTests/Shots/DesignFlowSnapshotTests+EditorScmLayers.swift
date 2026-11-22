@@ -24,7 +24,7 @@ extension DesignFlowSnapshotTests {
     var hovers = false
     var rise: CGFloat?
     let steps: [(label: String, action: () -> Void)] = [
-      ("open", { panel.select(ScmRowID(section: .changes, path: "src/agent/StateHooks.swift")) }),
+      ("open", { panel.click(ScmRowID(section: .changes, path: Self.opened)) }),
       ("header_selected", { panel.select(ScmRowID(section: .changes, path: nil)) }),
       ("graph_hover", { hovers = true }),
       ("resized", { (hovers, rise) = (false, 66) }),
@@ -55,7 +55,7 @@ extension DesignFlowSnapshotTests {
           renderPNG(
             scene.view, size: size, dark: dark,
             until: {
-              guard panel.isHeadPushed != nil else { return false }
+              guard panel.isHeadPushed != nil, pane.showsDiff(of: Self.opened) else { return false }
               if let amount = rise {
                 Self.dragHandle(in: pane, by: amount)
                 rise = nil
@@ -71,6 +71,9 @@ extension DesignFlowSnapshotTests {
       }
     }
   }
+
+  /// 最初の手順で押し、以降の手順でも本体に出ている diff のファイル。
+  private static let opened = "src/agent/StateHooks.swift"
 
   /// 境目の当たりを掴んで上へ `rise` 引いて離す（窓の座標で）。
   private static func dragHandle(in pane: EditorPaneView, by rise: CGFloat) {

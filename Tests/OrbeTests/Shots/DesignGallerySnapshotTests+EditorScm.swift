@@ -13,10 +13,10 @@ extension DesignGallerySnapshotTests {
     defer { scene.cleanup() }
     scene.warmUp()
     pumpMain(until: { scene.isReady }, "行・グラフ・HEAD の push 済みが揃う")
-    scene.panel.select(ScmRowID(section: .changes, path: "src/agent/StateHooks.swift"))
+    scene.panel.click(ScmRowID(section: .changes, path: "src/agent/StateHooks.swift"))
     try writePNG(
       scene.view, size: NSSize(width: 1100, height: 640), name: "editor_scm.png", dir: dir,
-      until: { scene.isReady })
+      until: { scene.isReady && scene.pane.showsDiff(of: "src/agent/StateHooks.swift") })
 
     try scene.git(["add", "-A"])
     try scene.git(["commit", "-qm", "gallery: すべてコミット"])
