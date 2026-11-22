@@ -119,10 +119,17 @@ def problems(bundles: List[Bundle]) -> List[str]:
                 "集計（`scripts/test-timing.py`）が XCTest の出力の形に合っていない。"
             )
             continue
-        if b.executed is None:
+        if b.executed is None and b.unfinished:
             lines.append("> **テストの実行が途中で終わった。** 記録は途中まで。")
-            if b.unfinished:
-                lines.append(f"> - 終わらなかったテスト: `{b.unfinished}`")
+            lines.append(f"> - 終わらなかったテスト: `{b.unfinished}`")
+            continue
+        if b.executed is None:
+            lines += [
+                "> **XCTest の実行終了の行（`Test Suite 'All tests' passed at …` など）がログに無い。** 記録は途中まで。"
+                "考えられる場合:",
+                "> - テストの実行が、テストとテストの間で終わった。",
+                "> - XCTest の出力の形が変わり、集計（`scripts/test-timing.py`）が終了の行を読めない。",
+            ]
             continue
         counted = sum(c.ms for c in b.cases)
         bound = 0.5 * (b.executed.count + 1)
