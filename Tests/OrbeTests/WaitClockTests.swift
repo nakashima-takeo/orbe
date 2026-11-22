@@ -23,6 +23,15 @@ final class WaitClockTests: OrbeTestCase {
     XCTAssertTrue(clock.sleep(on: semaphore, until: nil), "期限なしでも、合図で起きる")
   }
 
+  /// 期限が過ぎてから眠ろうとしても、合図が既に届いていれば、止まらずに合図を受け取って true を返す。
+  func testAPassedDeadlineStillTakesAPendingSignal() {
+    let semaphore = DispatchSemaphore(value: 0)
+    let passed = clock.now()
+    semaphore.signal()
+    XCTAssertTrue(clock.sleep(on: semaphore, until: passed), "届いている合図を優先する")
+    XCTAssertFalse(clock.sleep(on: semaphore, until: passed), "合図を受け取ったので、次は期限切れ")
+  }
+
   func testConditionSleepWakesAtTheDeadlineAndOnTheBroadcast() {
     let condition = NSCondition()
     condition.lock()

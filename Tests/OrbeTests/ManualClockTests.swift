@@ -54,6 +54,16 @@ final class ManualClockTests: OrbeTestCase {
     XCTAssertEqual(clock.sleepingDeadlines, [])
   }
 
+  /// 期限が過ぎてから眠ろうとしても、合図が既に届いていれば、本番の時計と同じく、合図を受け取って true を返す。
+  func testAPassedDeadlineStillTakesAPendingSignal() {
+    let deadline = clock.now + 1
+    clock.advance(by: 5)
+    semaphore.signal()
+    XCTAssertTrue(clock.waits.sleep(on: semaphore, until: deadline), "届いている合図を優先する")
+    XCTAssertFalse(
+      clock.waits.sleep(on: semaphore, until: deadline), "合図を受け取ったので、次は期限切れ")
+  }
+
   func testAConditionSleeperWakesAtItsDeadline() {
     let condition = NSCondition()
     let deadline = clock.now + 2

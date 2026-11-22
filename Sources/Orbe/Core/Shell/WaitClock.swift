@@ -20,7 +20,8 @@ struct WaitClock: Sendable {
 
   /// 現在の時刻。
   var now: @Sendable () -> Instant
-  /// 合図か期限（nil は期限なし）まで、呼び出したスレッドを止める。期限で起きたら false。
+  /// 合図か期限（nil は期限なし）まで、呼び出したスレッドを止める。期限で起きたら false。期限を過ぎて呼ばれたら、止まらずに、
+  /// 届いている合図を優先して返す（合図が届いていれば true）。
   /// `park` は、渡した秒数まで（nil は合図まで）止まり、合図で起きたら true を返す処理。`unpark` はそれを解く合図。
   var sleep:
     @Sendable (

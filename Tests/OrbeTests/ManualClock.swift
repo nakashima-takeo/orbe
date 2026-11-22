@@ -8,7 +8,7 @@ import OrbeTestSupport
 ///
 /// テストは、偽スクリプトが止まったことと、待ち手が眠ったこと（`sleepingDeadlines`）や予約が張られたこと（`scheduled`）を待ってから
 /// 時刻を進める。期限は時刻を進めたときにだけ来るので、結果がマシンの負荷に依らない。待ち手が眠る前に時刻が期限を過ぎていれば、
-/// 待ち手は眠らずに期限切れを知る。期限の来た予約は、時刻を進めた呼び出しの中で、その予約のキューの上で走り終える。
+/// 待ち手は眠らずに、届いている合図を受け取るか、期限切れを知る。期限の来た予約は、時刻を進めた呼び出しの中で、その予約のキューの上で走り終える。
 final class ManualClock: @unchecked Sendable {
   /// 眠っている待ち手。`id` は眠った順の番号で、起きて眠り直した待ち手は、別の番号になる。
   struct Sleeper: Equatable {
@@ -104,7 +104,8 @@ final class ManualClock: @unchecked Sendable {
           sleepers[nextID] = Parked(deadline: deadline, unpark: unpark)
           return nextID
         }
-        guard let id else { return false }
+        // 期限が過ぎていれば止まらず、本番の時計と同じく、届いている合図を優先して返す。
+        guard let id else { return park(0) }
         _ = park(nil)
         return lock.withLock { sleepers.removeValue(forKey: id)?.expired == false }
       })
