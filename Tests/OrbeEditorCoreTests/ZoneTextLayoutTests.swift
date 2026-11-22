@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorCore
@@ -174,31 +175,48 @@ final class ZoneTextLayoutTests: XCTestCase {
     XCTAssertEqual(wrong, [])
   }
 
-  /// 右から左の字・和文・括弧・コードを乱択で混ぜた段落 5,000 本で、コードの地が 1 行の中で割れず、コードの字を含み、
-  /// 余白が渡した幅で入り、ほかの字にかぶらない（右から左の語を途中で割った行の、分け目の前の字の詰めの分は除く →
-  /// `misplaced`）。
+  private static let mixedParagraphSeeds: [UInt64] = [7]
+
+  /// 右から左の字・和文・括弧・コードを乱択で混ぜた段落で、コードの地が 1 行の中で割れず、コードの字を含み、余白が渡した
+  /// 幅で入り、ほかの字にかぶらない（右から左の語を途中で割った行の、分け目の前の字の詰めの分は除く → `misplaced`）。
+  /// 小さい段（名前の末尾に `AtFullScale` が付かないメソッド）は先頭の種の 300 本、全部の段（付くメソッド）は種の
+  /// 並びの全部で 5,000 本ずつ組む。全部の段は、小さい段と同じ種で始まり、小さい段の 300 本を先頭に持つ。main では両方の
+  /// メソッドが走る。
   func testRandomMixedParagraphsNeverSplitTheCodeGround() {
-    var random = SplitMix(seed: 7)
+    assertMixedParagraphs(seeds: Self.mixedParagraphSeeds.prefix(1), count: 300)
+  }
+
+  func testRandomMixedParagraphsNeverSplitTheCodeGroundAtFullScale() throws {
+    try Fuzz.skipFullScaleIfExcluded()
+    assertMixedParagraphs(seeds: Self.mixedParagraphSeeds, count: 5_000)
+  }
+
+  private func assertMixedParagraphs(seeds: some Sequence<UInt64>, count: Int) {
     let words = [
       "あいう", "漢字", "abc", "de f", "אבג", "דה ו", " ", "、", "(", ")", "12", "กำ", "。", "x-y", "「",
       "」", ": ",
     ]
     var wrong: [String] = []
-    for _ in 0..<5_000 {
-      var parts: [String] = []
-      var codes: [Int] = []
-      for _ in 0..<(3 + random.next(9)) {
-        if random.next(3) == 0 {
-          codes.append(parts.count)
-          parts.append(words[random.next(words.count)] + words[random.next(words.count)])
-        } else {
-          parts.append(words[random.next(words.count)])
+    for seed in seeds {
+      var random = SplitMix(seed: seed)
+      for index in 0..<count {
+        var parts: [String] = []
+        var codes: [Int] = []
+        for _ in 0..<(3 + random.next(9)) {
+          if random.next(3) == 0 {
+            codes.append(parts.count)
+            parts.append(words[random.next(words.count)] + words[random.next(words.count)])
+          } else {
+            parts.append(words[random.next(words.count)])
+          }
         }
-      }
-      guard !codes.isEmpty else { continue }
-      let width = CGFloat(60 + random.next(140))
-      for code in codes {
-        wrong += check(parts, code: code, width: width, codes: codes)
+        guard !codes.isEmpty else { continue }
+        let width = CGFloat(60 + random.next(140))
+        for code in codes {
+          wrong += check(parts, code: code, width: width, codes: codes).map {
+            "種 \(seed) の \(index) 本め: \($0)"
+          }
+        }
       }
     }
     XCTAssertEqual(wrong.prefix(10), [])

@@ -1,11 +1,12 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
 
 /// 乱択の操作列——打鍵・削除・移動・字下げ・大小文字・キル・マウスの選択・外からの選択・undo / redo と、カーソルを増やす
-/// 操作（⌘D・⌘⇧L・⌥⌘↑↓・⌥クリック・Esc）を何千手流しても、
+/// 操作（⌘D・⌘⇧L・⌥⌘↑↓・⌥クリック・Esc）を流しても、
 /// 文書の写し・面の写し・選択とキャレットがどの時点でも本文の範囲に収まり、配り先が編集の列を順に畳んだ本文（行の増減
 /// つき）が文書の本文と一致し続け、undo を尽くすと元の本文、redo を尽くすと履歴の先端の本文に戻る。壊れると「ある並びの
 /// 操作でだけ」本文や選択がずれる、検索の一致やミニマップが本文からずれる。
@@ -14,6 +15,10 @@ import XCTest
 /// 変換を含む）、IME から見える状態と全カーソルの未確定が本文と一致し続け、undo と redo を尽くすと元と先端の本文に戻る。
 /// 壊れると「ある順の操作でだけ」未確定の範囲が本文とずれて字が重なる・消える、変換の取り消しや確定の後の undo が本文と
 /// ずれて履歴が空になる。
+///
+/// どちらの性質も、2 つの段で確かめる。小さい段（名前の末尾に `AtFullScale` が付かないメソッド）は先頭の種で
+/// 400 手、全部の段（付くメソッド）は種の並びの全部で 3,000 手ずつ流す。全部の段は、小さい段と同じ種で始まり、小さい段の
+/// 400 手を先頭に持つ。main では両方のメソッドが走る。
 @MainActor
 final class SurfaceFuzzTests: EngineTestCase {
   private static let commands: [EditCommand] = [
@@ -32,15 +37,35 @@ final class SurfaceFuzzTests: EngineTestCase {
     .insertCursor(below: false), .cancel,
   ]
 
+  private static let operationSeeds: [UInt64] = [0x5eed, 6, 11]
+  private static let inputMethodSeeds: [UInt64] = [0x1e, 7, 12]
+
   func testRandomOperationsKeepTheTextSelectionAndUndoConsistent() throws {
-    for seed: UInt64 in [0x5eed, 6, 11] { try run(seed: seed, steps: 3000) }
+    try run(seeds: Self.operationSeeds.prefix(1), steps: 400)
+  }
+
+  func testRandomOperationsKeepTheTextSelectionAndUndoConsistentAtFullScale() throws {
+    try Fuzz.skipFullScaleIfExcluded()
+    try run(seeds: Self.operationSeeds, steps: 3000)
   }
 
   func testRandomInputMethodCallsAmongOtherEntriesKeepTheTextAndUndoConsistent() throws {
-    for seed: UInt64 in [0x1e, 7, 12] { try run(seed: seed, steps: 3000, inputMethod: true) }
+    try run(seeds: Self.inputMethodSeeds.prefix(1), steps: 400, inputMethod: true)
   }
 
-  private func run(seed: UInt64, steps: Int, inputMethod: Bool = false) throws {
+  func testRandomInputMethodCallsAmongOtherEntriesKeepTheTextAndUndoConsistentAtFullScale() throws {
+    try Fuzz.skipFullScaleIfExcluded()
+    try run(seeds: Self.inputMethodSeeds, steps: 3000, inputMethod: true)
+  }
+
+  /// 種ごとに `steps` 手を流す。最初に失敗した手で止める。
+  private func run(seeds: some Sequence<UInt64>, steps: Int, inputMethod: Bool = false) throws {
+    for seed in seeds {
+      guard try run(seed: seed, steps: steps, inputMethod: inputMethod) else { return }
+    }
+  }
+
+  private func run(seed: UInt64, steps: Int, inputMethod: Bool) throws -> Bool {
     let original = "func a() {\n    let x = 1 // c\n\treturn x\n}\r\nend\n"
     let opened = try open(original, waitForColors: false)
     let window = host(opened)
@@ -66,40 +91,53 @@ final class SurfaceFuzzTests: EngineTestCase {
     var generator = SplitMix(seed: seed)
     var tip = original
     for step in 0..<steps {
-      switch Int.random(in: 0..<(inputMethod ? 30 : 20), using: &generator) {
-      case 0:
-        view.undo(nil)
-      case 1:
-        view.redo(nil)
-      case 2:
-        let length = opened.document.text.length
-        let a = Int.random(in: 0...length, using: &generator)
-        let b = Int.random(in: 0...length, using: &generator)
-        opened.surface.selectedRange = NSRange(location: min(a, b), length: abs(a - b))
-      case 3:
-        try click(
-          opened, row: Int.random(in: 0...8, using: &generator),
-          column: CGFloat(Int.random(in: 0...20, using: &generator)),
-          clicks: Int.random(in: 1...3, using: &generator),
-          flags: Bool.random(using: &generator) ? .option : [])
-      case 20..<30:
-        inputMethodStep(opened, window, &generator)
-      default:
-        opened.surface.editor.perform(Self.commands.randomElement(using: &generator)!)
+      let passed = Fuzz.step(self, "seed \(seed) step \(step)") {
+        try operationStep(opened, window, inputMethod: inputMethod, &generator)
+        try check(opened, "seed \(seed) step \(step)")
+        XCTAssertEqual(shadow as String, text(opened.document), "seed \(seed) step \(step): 配り先の畳み")
+        if inputMethod { assertConsistent(opened, "seed \(seed) step \(step)") }
+        if !undo.canRedo && !view.hasMarkedText() { tip = text(opened.document) }
       }
-      try check(opened, "seed \(seed) step \(step)")
-      XCTAssertEqual(shadow as String, text(opened.document), "seed \(seed) step \(step): 配り先の畳み")
-      if inputMethod { assertConsistent(opened, "seed \(seed) step \(step)") }
-      if !undo.canRedo && !view.hasMarkedText() { tip = text(opened.document) }
+      guard passed else { return false }
     }
-    if view.hasMarkedText() {
-      view.unmarkText()
-      if !undo.canRedo { tip = text(opened.document) }
+    return Fuzz.step(self, "seed \(seed)") {
+      if view.hasMarkedText() {
+        view.unmarkText()
+        if !undo.canRedo { tip = text(opened.document) }
+      }
+      while undo.canUndo { undo.undo() }
+      XCTAssertEqual(text(opened.document), original, "seed \(seed): undo を尽くすと元の本文")
+      while undo.canRedo { undo.redo() }
+      XCTAssertEqual(text(opened.document), tip, "seed \(seed): redo を尽くすと履歴の先端の本文")
     }
-    while undo.canUndo { undo.undo() }
-    XCTAssertEqual(text(opened.document), original, "seed \(seed): undo を尽くすと元の本文")
-    while undo.canRedo { undo.redo() }
-    XCTAssertEqual(text(opened.document), tip, "seed \(seed): redo を尽くすと履歴の先端の本文")
+  }
+
+  /// 操作 1 手。IME の呼び出しを混ぜるときは、3 回に 1 回が IME の手（→ `inputMethodStep`）。
+  private func operationStep(
+    _ opened: Opened, _ window: NSWindow, inputMethod: Bool, _ generator: inout SplitMix
+  ) throws {
+    let view = opened.surface.textView
+    switch Int.random(in: 0..<(inputMethod ? 30 : 20), using: &generator) {
+    case 0:
+      view.undo(nil)
+    case 1:
+      view.redo(nil)
+    case 2:
+      let length = opened.document.text.length
+      let a = Int.random(in: 0...length, using: &generator)
+      let b = Int.random(in: 0...length, using: &generator)
+      opened.surface.selectedRange = NSRange(location: min(a, b), length: abs(a - b))
+    case 3:
+      try click(
+        opened, row: Int.random(in: 0...8, using: &generator),
+        column: CGFloat(Int.random(in: 0...20, using: &generator)),
+        clicks: Int.random(in: 1...3, using: &generator),
+        flags: Bool.random(using: &generator) ? .option : [])
+    case 20..<30:
+      inputMethodStep(opened, window, &generator)
+    default:
+      opened.surface.editor.perform(Self.commands.randomElement(using: &generator)!)
+    }
   }
 
   private static let readings = ["k", "か", "かn", "かな", "漢字", "👍🏽", "é", " ", "x\ny"]
