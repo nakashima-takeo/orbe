@@ -59,12 +59,13 @@ extension BoardAutomationTests {
   /// 詳細の中の「通知」の行の上端（見本の寸法: 上の余白 20・名前の行 21・間 4）。
   private static let notifyRowTop: CGFloat = 45
 
-  /// 「通知」の行が見える範囲へ引き寄せられる（`scrollTo`）のを待ち、引き寄せた後の位置を SwiftUI に反映する。引き寄せが
-  /// 効き終わる前に詳細をスクロールすると、引き寄せが後から効き、スクロールした位置を引き戻してしまう。
+  /// 「通知」の行が見える範囲へ引き寄せられる（`scrollTo`）のを待ち、引き寄せた後の位置を SwiftUI に反映してから、行が
+  /// 見える範囲に在るかを返す。引き寄せが効き終わる前に詳細をスクロールすると、引き寄せが後から効き、スクロールした位置を
+  /// 引き戻してしまう。
   private func waitForNotifyRow(_ detail: NSScrollView, in window: NSWindow) -> Bool {
-    let arrived = waitUntil { detail.contentView.bounds.minY <= Self.notifyRowTop }
+    waitUntil { detail.contentView.bounds.minY <= Self.notifyRowTop }
     flush(window)
-    return arrived
+    return detail.contentView.bounds.minY <= Self.notifyRowTop
   }
 
   /// 先頭の自動化の地図の「通知」の段を選び、詳細を末尾まで流して「通知」の行を見える範囲の外にした低い窓。
