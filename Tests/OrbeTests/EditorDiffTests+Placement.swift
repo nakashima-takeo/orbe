@@ -105,25 +105,32 @@ extension EditorDiffTests {
     try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
+    // slow.txt の index の記録を index より古い時刻にしておく（racy clean だと、足場の git が index を書くときにも clean
+    // filter を通る）。
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date().addingTimeInterval(-3600)], ofItemAtPath: repo.url("slow.txt").path
+    )
+    XCTAssertTrue(repo.git(["update-index", "--refresh"]).isSuccess)
     let (tab, _) = tab()
     let files = RootFiles.shared(for: repo.root)
     pumpMain(until: { files.status != nil }, "前提: rename の前の status を持つ")
 
+    // rename の前の index を読んだ status の読みを、clean filter で止めておく。止まっている間、次の読みは始まらない（終わった
+    // 後に 1 本へ畳まれる）ので、diff を開いた時点の status は、必ず rename を知らない。
+    XCTAssertTrue(repo.git(["config", "filter.slow.clean", clean]).isSuccess)
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: repo.url("slow.txt").path)
+    files.requestStatusRefresh()
+    XCTAssertTrue(fixture.pumpUntilHung(), "前提: rename の前の index を読んだ status の読みが止まっている")
     XCTAssertTrue(repo.git(["mv", "a.txt", "b.txt"]).isSuccess)
     lines[250] = "changed 250"
     try repo.write("b.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
-    try FileManager.default.setAttributes(
-      [.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: repo.url("slow.txt").path)
-    // filter は足場の git を呼び終えてから有効にする（足場の git も clean filter を通る）。
-    XCTAssertTrue(repo.git(["config", "filter.slow.clean", clean]).isSuccess)
     let diff = try tab.group.editor.openDiff(id("b.txt", .staged), as: .pinned)
-    XCTAssertTrue(fixture.pumpUntilHung(), "前提: status の読みが clean filter で止まっている")
-    // diff が引く HEAD の版は、status が rename を知っていれば元のパスの版。
-    let head = { files.status?.entries["b.txt"]?.originalPath ?? "b.txt" }
+    XCTAssertNil(files.status?.entries["b.txt"], "前提: status は rename をまだ知らない")
     pumpMain(
       until: {
-        [RootFiles.Version(path: "b.txt", revision: .index), .init(path: head(), revision: .head)]
+        [RootFiles.Version(path: "b.txt", revision: .index), .init(path: "b.txt", revision: .head)]
           .allSatisfy { files.state(of: $0) != nil }
       }, "前提: index と HEAD の版が届く")
     fixture.release()
