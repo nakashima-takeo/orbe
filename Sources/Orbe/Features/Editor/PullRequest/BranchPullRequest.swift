@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// worktree の今の PR が見せる PR か、その PR の状態が変わったことを受ける者（PR のパネル）。
 @MainActor
@@ -16,10 +16,11 @@ protocol BranchPullRequestObserver: AnyObject {
 ///
 /// 今のブランチの PR を引き直すきっかけは、誰も見ていない状態から見ている者が現れた・`reload`・今のブランチ名が変わった・
 /// Orbe の中のネット操作が終わった・リモート追跡の ref が動き、このブランチの push 先の追跡 ref か PR のベースブランチの
-/// 追跡 ref の値が前と変わった、のどれか。読んでいる間に次のきっかけが来たら、終わった後に 1 回だけ読み直す。引いた PR が
-/// 今と同じなら何も替えず、PR が無いままなら答えも通し番号も替えない。作成の入口の材料は、材料が古いときだけ読み直す——
-/// 材料を古くするのは、上のきっかけと、引き直す前に覚え直した追跡 ref の値が前と違っていたこと。読み直している間は前の値を
-/// 出したまま。手元の HEAD が動いただけなら、GitHub に問い合わせずに手元とのずれを数え直す。
+/// 追跡 ref の値が前と変わった・Orbe が前面に戻った、のどれか。読んでいる間に次のきっかけが来たら、終わった後に 1 回だけ
+/// 読み直す。引いた PR が今と同じなら何も替えず、PR が無いままなら答えも通し番号も替えない。作成の入口の材料は、材料が古い
+/// ときだけ読み直す——材料を古くするのは、Orbe が前面に戻ったこと以外のきっかけと、引き直す前に覚え直した追跡 ref の値が
+/// 前と違っていたこと。読み直している間は前の値を出したまま。手元の HEAD が動いただけなら、GitHub に問い合わせずに手元との
+/// ずれを数え直す。
 @MainActor @Observable
 final class BranchPullRequest {
   let root: String
@@ -64,9 +65,13 @@ final class BranchPullRequest {
 
   private static var registry: [String: BranchPullRequest] = [:]
 
+  /// Orbe が前面に戻った通知の観測（アプリ全体で 1 つ）。
+  private static var activation: NSObjectProtocol?
+
   /// 根 `root`（正準形）の今の PR。無ければ `source` で作る。
   static func shared(for root: String, source: PullRequestSource) -> BranchPullRequest {
     if let live = registry[root] { return live }
+    observeActivation()
     let pullRequest = BranchPullRequest(root: root, source: source)
     registry[root] = pullRequest
     return pullRequest
@@ -143,6 +148,20 @@ final class BranchPullRequest {
     files?.removeObserver(self)
     files = nil
     SourceControl.shared(for: root).removeObserver(self)
+  }
+
+  /// Orbe が前面に戻ったら、見ている者がいる今の PR だけが、今のブランチの PR を引き直す（作成の入口の材料は古くしない）。
+  private static func observeActivation() {
+    guard activation == nil else { return }
+    activation = NotificationCenter.default.addObserver(
+      forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+    ) { _ in
+      MainActor.assumeIsolated {
+        for pullRequest in registry.values where pullRequest.watchers > 0 {
+          pullRequest.lookUpPullRequest()
+        }
+      }
+    }
   }
 
   /// 読み直す——作成の入口の材料を古くして、今のブランチの PR を引き直す。PR の中身は、PR ごとの状態が自分のきっかけで
