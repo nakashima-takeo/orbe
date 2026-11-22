@@ -211,8 +211,10 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let gray = MTLClearColor(red: 128.0 / 255, green: 128.0 / 255, blue: 128.0 / 255, alpha: 1)
     opened.surface.flush()
     let image = try XCTUnwrap(
-      RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id, background: gray)) }
-        .value)
+      RenderThread.shared.performAndWait {
+        Transfer(value: $0.snapshot(id, at: CACurrentMediaTime(), background: gray))
+      }
+      .value)
     return (GlyphPixelTests.pixels(image), image.width)
   }
 

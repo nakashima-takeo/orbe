@@ -38,7 +38,7 @@ final class ScrolledFrameTests: EngineTestCase {
     opened.surface.flush()
     let image = try XCTUnwrap(
       RenderThread.shared.performAndWait {
-        Transfer(value: $0.snapshot(id, background: Self.background))
+        Transfer(value: $0.snapshot(id, at: CACurrentMediaTime(), background: Self.background))
       }.value)
     let config = opened.surface.config
     return Shot(
