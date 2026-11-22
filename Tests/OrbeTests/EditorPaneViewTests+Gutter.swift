@@ -77,7 +77,6 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
       sidebar: pane.sidebar)
     let window = hostEditor(tab, width: 700)
     window.appearance = NSAppearance(named: .darkAqua)
-    defer { window.orderOut(nil) }
     let veil = 128
     let center = pane.bodyRect
     let empty = try layer(

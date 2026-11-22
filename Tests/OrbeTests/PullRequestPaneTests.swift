@@ -99,12 +99,8 @@ final class PullRequestPaneTests: OrbeTestCase {
       backing: .buffered, defer: false)
     window.contentView = pane
     pane.layoutSubtreeIfNeeded()
-    addTeardownBlock {
-      MainActor.assumeIsolated {
-        pane.shell.selectPanel(.files)
-        window.orderOut(nil)
-      }
-    }
+    holdUntilTestEnds(window)
+    addTeardownBlock { MainActor.assumeIsolated { pane.shell.selectPanel(.files) } }
     window.makeFirstResponder(pane.focusTarget)
     return Hosted(pane: pane, window: window)
   }

@@ -119,7 +119,7 @@ final class ChromeMiddleClickTests: OrbeTestCase {
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = try XCTUnwrap(wc.window.contentView, "SwiftUI ルートの contentView")
     window.contentView?.layoutSubtreeIfNeeded()
-    return window
+    return holdUntilTestEnds(window)
   }
 
   /// タブ行の catcher を左から順に返す（index がタブ index に一致する）。
