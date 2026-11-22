@@ -3,13 +3,15 @@ import XCTest
 
 @testable import Orbe
 
-/// エディター面に結んだ PR のパネル——上のバーで PR の画面を出したら、今の答えで行を組んでから、行があるときだけ列に焦点を入れる。列が
+/// エディター面に結んだ PR のパネル——面が見えていれば、PR の画面を出していなくても今のブランチの PR を引く（中身は PR の画面を
+/// 出してから読む）。上のバーで PR の画面を出したら、今の答えで行を組んでから、行があるときだけ列に焦点を入れる。列が
 /// 消える・パネルを隠す・cd で根が変わるとき、列にあった焦点は面の本文へ戻り、当てる列の無い焦点の要求は残らない。cd で
 /// 根が変わったら前の根の PR を見るのをやめる。ツリーかリストかをほかの面で選べば、この面の行も組み直し、言語を切り替え
 /// れば見えている行を読み直す。全体へのコメント欄の ↵ は改行、⌘↵ はその欄に焦点がある間だけレビューの送信。GitHub は、面を
 /// 作る前に登録した差し替えの出どころが答える。
 ///
-/// 壊れると何が起きるか: 新しい面や cd の後に上のバーで PR の画面を出しても列に焦点が入らない。PR が無くなったのに残った
+/// 壊れると何が起きるか: PR の画面を一度出すまで、上のバーに PR の番号が出ない。見ているだけの面のために PR の中身と
+/// スレッドを GitHub から読む。新しい面や cd の後に上のバーで PR の画面を出しても列に焦点が入らない。PR が無くなったのに残った
 /// 焦点の要求が、後で PR が現れた瞬間に本文や端末から焦点を奪う。PR がマージされた・ブランチを替えたときに焦点が窓へ落ち、
 /// 打鍵がどこにも届かない。cd の後も前の worktree の PR を GitHub に問い合わせ続ける。ほかの面でリストにしても、この面が
 /// ツリーのまま。言語を切り替えても、見えている見出しが前の言語のまま。全体へのコメント欄の ⌘↵ で送れない・変換中の字が
@@ -135,6 +137,21 @@ final class PullRequestPaneTests: OrbeTestCase {
     let empty = host(try registeredRoot())
     empty.pane.switchScreen(.pullRequest)
     XCTAssertFalse(empty.pane.pullRequest.focusRequest, "行が無ければ求めない")
+  }
+
+  /// 面が見えていれば、PR の画面を一度も出していなくても今のブランチの PR を引く（上のバーの番号が出る）。中身は PR の画面を
+  /// 出すまで読まない。
+  func testAShownPaneTracksThePullRequestWithoutReadingItsContentUntilThePullRequestScreen() throws
+  {
+    let hosted = host(try registeredRoot())
+    pumpMain(
+      until: { hosted.pane.pullRequest.state?.key.id.number == self.gitHub.number },
+      "Files の画面のままでも今の PR が分かる")
+    let state = try XCTUnwrap(hosted.pane.pullRequest.state)
+    XCTAssertFalse(state.isWatched, "PR の画面を出すまで中身は読まない")
+
+    hosted.pane.switchScreen(.pullRequest)
+    XCTAssertTrue(state.isWatched, "PR の画面を出せば中身を読む")
   }
 
   /// 行がある状態で隠し、PR が無くなってから出し直したら、当てる列の無い焦点の要求は残らない——後で PR が現れても、本文の
