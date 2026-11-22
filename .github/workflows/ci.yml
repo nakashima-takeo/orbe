@@ -32,4 +32,13 @@ jobs:
       - name: build (incl. tests)
         run: swift build --build-tests
       - name: test
-        run: swift test --skip-build
+        id: test
+        # 既定のシェル（bash -e）には pipefail が無く、パイプの終了コードは tee のものになる。
+        run: |
+          set -o pipefail
+          swift test --skip-build 2>&1 | tee "$RUNNER_TEMP/swift-test.log"
+      - name: test timing
+        if: ${{ !cancelled() && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') }}
+        run: |
+          set -o pipefail
+          python3 scripts/test-timing.py "$RUNNER_TEMP/swift-test.log" | tee -a "$GITHUB_STEP_SUMMARY"
