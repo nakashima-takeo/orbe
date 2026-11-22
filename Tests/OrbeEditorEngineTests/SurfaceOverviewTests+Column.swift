@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -35,7 +36,8 @@ final class SurfaceRightColumnTests: EngineTestCase {
     let layout = opened.surface.surfaceLayout
     let event = try XCTUnwrap(
       CGEvent(
-        scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -90, wheel2: 0,
+        scrollWheelEvent2Source: SyntheticInput.source, units: .pixel, wheelCount: 1, wheel1: -90,
+        wheel2: 0,
         wheel3: 0))
     for point in [
       CGPoint(x: layout.minimap.midX, y: 200), CGPoint(x: layout.verticalScrollbar.midX, y: 200),

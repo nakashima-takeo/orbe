@@ -23,7 +23,7 @@ final class GitRepoCommitsTests: OrbeTestCase {
   private func open(_ path: String) throws -> GitRepo {
     var opened: GitRepo?
     GitRepo.open(cwd: path) { opened = $0 }
-    XCTAssertTrue(pump { opened != nil })
+    XCTAssertTrue(waitUntil(20) { opened != nil })
     return try XCTUnwrap(opened)
   }
 
@@ -44,16 +44,8 @@ final class GitRepoCommitsTests: OrbeTestCase {
       result = $0
       landed = true
     }
-    XCTAssertTrue(pump { landed })
+    XCTAssertTrue(waitUntil(20) { landed })
     return result
-  }
-
-  private func pump(_ condition: () -> Bool) -> Bool {
-    let deadline = Date().addingTimeInterval(20)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-    }
-    return condition()
   }
 
   /// remote に、どのブランチにも無い（`refs/pull/1/head` だけが指す）コミットを置く。そのコミットには remote のタグも付け、

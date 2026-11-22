@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -35,8 +36,9 @@ final class OptionHoldMonitorTests: OrbeTestCase {
     XCTAssertEqual(subject.changes, [true], "前提")
 
     subject.option.actualModifiers = []
-    subject.option.pump(
-      upTo: OptionHoldDetector.checkInterval * 5, until: { !subject.monitor.isHolding })
+    pumpMain(
+      until: { !subject.monitor.isHolding }, timeout: OptionHoldDetector.checkInterval * 5,
+      "成立中の確かめが終わらせる")
 
     XCTAssertEqual(subject.changes, [true, false])
   }
@@ -53,9 +55,8 @@ final class OptionHoldMonitorTests: OrbeTestCase {
         pressure: 1))
 
     NSApp.sendEvent(click)
-    subject.option.pump(upTo: OptionHoldDetector.delay * 2)
-
-    XCTAssertEqual(subject.changes, [])
+    XCTAssertTrue(
+      holds(for: OptionHoldDetector.delay * 2) { subject.changes.isEmpty }, "間合いが過ぎても成立しない")
   }
 
   /// 成立中にキーを打つと、そのイベントの配送の中で（local monitor は配送より前に呼ばれるので、キーが届く前に）終わりを知らせる。

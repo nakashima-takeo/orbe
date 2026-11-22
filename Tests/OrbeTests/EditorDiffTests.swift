@@ -29,7 +29,6 @@ final class EditorDiffTests: OrbeTestCase {
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
       diffModes: modes ?? EditorDiffModeState())
-    addTeardownBlock { window.orderOut(nil) }
     return (tab, window)
   }
 

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -71,12 +72,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
 
   /// lock が現れるまで待つ（フィルタ起動と lock 取得の順序に依存しないため）。
   private func waitForIndexLock(timeout: TimeInterval = 5) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
-      if FileManager.default.fileExists(atPath: indexLockPath) { return true }
-      usleep(10_000)
-    }
-    return false
+    sleepUntil(timeout) { FileManager.default.fileExists(atPath: indexLockPath) }
   }
 
   /// 返らない `ext::` transport を相手にした clone。clone は hook を持たないので、止める手段は

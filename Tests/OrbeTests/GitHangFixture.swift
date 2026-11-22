@@ -29,9 +29,8 @@ final class GitHangFixture {
 
   init() throws {
     dir = TestScratch.caseDir.appendingPathComponent("orbe-githang-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(
-      at: dir.appendingPathComponent("repo"), withIntermediateDirectories: true)
-    try makeRepository()
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try TempGitRepo.place(at: dir.appendingPathComponent("repo"))
   }
 
   // MARK: - パス
@@ -155,23 +154,14 @@ final class GitHangFixture {
 
   /// 待ちに入るまで待つ（ハングが本当に起きた状態からテストを始めるため）。
   func waitUntilHung(timeout: TimeInterval = 30) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
-      if FileManager.default.fileExists(atPath: started) { return true }
-      usleep(20_000)
-    }
-    return false
+    sleepUntil(timeout) { FileManager.default.fileExists(atPath: started) }
   }
 
   /// main を回しながら、待ちに入るまで待つ。止まるまでに main を経由する段（根のサービスの書き込みの前段・取り直しの
   /// 連鎖）がある実行は、main を塞ぐ `waitUntilHung` では始まりもしない。
   @MainActor
   func pumpUntilHung(timeout: TimeInterval = 30) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !FileManager.default.fileExists(atPath: started), Date() < deadline {
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
-    }
-    return FileManager.default.fileExists(atPath: started)
+    waitUntil(timeout) { FileManager.default.fileExists(atPath: started) }
   }
 
   /// 待ちを解く。何度呼んでもよい。
@@ -185,23 +175,6 @@ final class GitHangFixture {
   @discardableResult
   func git(_ args: [String]) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: root)
-  }
-
-  private func makeRepository() throws {
-    for args in [
-      ["init", "-q", "-b", "main"],
-      ["config", "user.email", "t@example.com"],
-      ["config", "user.name", "t"],
-      ["config", "commit.gpgsign", "false"],
-    ] {
-      guard git(args).isSuccess else {
-        throw Failure.setup(args.joined(separator: " "))
-      }
-    }
-    try "x\n".write(
-      toFile: (root as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-    guard git(["add", "-A"]).isSuccess, git(["commit", "-qm", "init"]).isSuccess
-    else { throw Failure.setup("initial commit") }
   }
 
   enum Failure: Error { case setup(String) }

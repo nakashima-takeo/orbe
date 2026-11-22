@@ -42,14 +42,6 @@ final class WindowControllerTaskWorktreeBranchTests: OrbeTestCase {
     XCTAssertTrue(GitRunner.shared.runSync(args, cwd: cwd).isSuccess, args.joined(separator: " "))
   }
 
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 10) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-    }
-    return condition()
-  }
-
   private func report(_ state: String, in wc: WindowController) throws {
     let tab = try XCTUnwrap(wc.current.tabs.first)
     wc.controlReportAgent(
@@ -74,21 +66,21 @@ final class WindowControllerTaskWorktreeBranchTests: OrbeTestCase {
 
     git(["switch", "-q", "-c", "feat"], in: root)
     try report("working", in: wc)
-    XCTAssertTrue(pump { (try? shownAgent(wc, task.id)) != nil }, "切ったブランチの agent")
+    XCTAssertTrue(waitUntil(10) { (try? shownAgent(wc, task.id)) != nil }, "切ったブランチの agent")
 
     XCTAssertTrue(wc.handleWindowKeyCommand(.showTaskPalette))
     XCTAssertTrue(
-      pump { (try? stored(wc, task.id).worktreeBranch) == "feat" }, "開くと今のブランチで確定")
+      waitUntil(10) { (try? stored(wc, task.id).worktreeBranch) == "feat" }, "開くと今のブランチで確定")
     XCTAssertEqual(TaskStore().tasks.first { $0.id == task.id }?.worktreeBranch, "feat", "保存される")
 
     git(["switch", "-q", "-c", "other"], in: root)
     try report("waiting", in: wc)
-    XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .waiting })
+    XCTAssertTrue(waitUntil(10) { wc.worktreeAgents.agents[root]?.state == .waiting })
     XCTAssertNil(try shownAgent(wc, task.id), "確定の後は別のブランチの agent を示さない")
 
     git(["switch", "-q", "feat"], in: root)
     try report("working", in: wc)
-    XCTAssertTrue(pump { (try? shownAgent(wc, task.id)) != nil }, "戻ればまた示す")
+    XCTAssertTrue(waitUntil(10) { (try? shownAgent(wc, task.id)) != nil }, "戻ればまた示す")
   }
 
   /// ブランチを読めないリポジトリ（reftable）で付けた記録は無く（未確定）、⌘⇧X を開くと git の答えの
@@ -101,7 +93,7 @@ final class WindowControllerTaskWorktreeBranchTests: OrbeTestCase {
 
     XCTAssertTrue(wc.handleWindowKeyCommand(.showTaskPalette))
 
-    XCTAssertTrue(pump { (try? stored(wc, task.id).worktreeBranch) == "feat" })
+    XCTAssertTrue(waitUntil(10) { (try? stored(wc, task.id).worktreeBranch) == "feat" })
   }
 
   /// 確定は、答えが届いた時点の記録が、問い合わせたときの記録と同じ場合だけ——その間に人が付け直した記録を、
@@ -133,7 +125,7 @@ final class WindowControllerTaskWorktreeBranchTests: OrbeTestCase {
     git(["switch", "-q", "feat"], in: root)
 
     XCTAssertTrue(
-      pump { (try? stored(wc, sentinel.id).worktreeBranch) == "side" }, "前提: 答えが届き終えた")
+      waitUntil(10) { (try? stored(wc, sentinel.id).worktreeBranch) == "side" }, "前提: 答えが届き終えた")
     XCTAssertNil(try stored(wc, task.id).worktreeBranch)
   }
 }

@@ -1,11 +1,12 @@
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
 @testable import Orbe
 
-/// gallery（静止 fixture）と flow（アクション駆動の連番）が共有する低レベルのスナップショット基盤。
-/// オフスクリーン描画（`NSHostingView`＋`cacheDisplay`）・出力先解決・カードを地に置く view ビルダを持つ。
-/// アサートはしない（AI/人間が見る）。両テストクラスがこれを継承して使う（重複を作らない）。
+/// 描画と出力先の基盤。オフスクリーン描画（`NSHostingView`＋`cacheDisplay`）・出力先解決・カードを地に置く view ビルダを持つ。
+/// 撮影道具（gallery と flow）は `ShotTestCase` を経て使う。描いた画を確かめる通常のテスト（`PaletteCardQueryTests`・
+/// `WorktreeCleanRowRenderTests`・`WorktreePaletteRefreshRowRenderTests`）は、これを直に継承する。
 @MainActor
 class SnapshotTestCase: OrbeTestCase {
 
@@ -27,13 +28,15 @@ class SnapshotTestCase: OrbeTestCase {
     window.contentView = host
     host.layoutSubtreeIfNeeded()
     if let ready { pumpMain(until: ready, "載せ直した面の読み直しが終わる") }
-    // SwiftUI の描画コミットに猶予を与える
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+    settleBeforeCapture()
 
     guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
     host.cacheDisplay(in: host.bounds, to: rep)
     return rep.representation(using: .png, properties: [:])
   }
+
+  /// 撮る直前に呼ぶ。既定は何もしない（`cacheDisplay` は、その場で描く）。
+  func settleBeforeCapture() {}
 
   /// repo 内 `.preview/<sub>` を返す。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
   func previewDir(_ sub: String) -> URL {

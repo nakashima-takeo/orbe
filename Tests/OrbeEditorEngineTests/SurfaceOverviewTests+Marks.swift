@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -99,7 +100,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
       String(repeating: "x", count: 400) + String(repeating: "\n", count: 60),
       size: CGSize(width: 800, height: 400), style: style)
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.clipsRight }, "前提: 長い行の長さを測った")
+    pumpMain(until: { opened.surface.clipsRight }, "前提: 長い行の長さを測った")
     let edge = opened.surface.surfaceLayout.minimap.minX
     let y: CGFloat = 200
     let shot = try pixelShot(opened, background: Self.white)

@@ -42,7 +42,7 @@ extension OrbeTestCase {
     let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: queries))
-    let window = hostEditor(tab, width: 1200, height: 800)
+    let window = mountEditor(tab, width: 1200, height: 800)
     window.appearance = NSAppearance(named: .darkAqua)
     return EditorWindow(tab: tab, pane: tab.group.view.editor, window: window)
   }

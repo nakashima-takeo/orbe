@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -27,7 +28,7 @@ final class SurfaceFlushTests: EngineTestCase {
     let first = opened.surface.viewportLines.first
     XCTAssertEqual(
       first + opened.surface.viewportLines.visible / 2, 300.5, accuracy: 1, "読み取りは今の値")
-    RunLoop.main.run(until: Date())
+    pumpMainOnce()
     XCTAssertEqual(surface.material.revision, before + 1, "周の終わりに 1 回だけ書く")
     let material = surface.material.read()
     XCTAssertEqual(material.caret.selections, [NSRange(location: target, length: 3)])
@@ -41,11 +42,11 @@ final class SurfaceFlushTests: EngineTestCase {
   func testTheLinkPointerIsWrittenWithTheTurnAndClearedWhenTheFocusLeaves() throws {
     let surface = try open(rows(20)).surface
     surface.updateFocus(true)
-    RunLoop.main.run(until: Date())
+    pumpMainOnce()
     let before = surface.material.revision
     surface.setLinkPointer(CGPoint(x: 40, y: 10))
     XCTAssertEqual(surface.material.revision, before, "並びの途中では箱へ書かない")
-    RunLoop.main.run(until: Date())
+    pumpMainOnce()
     XCTAssertEqual(surface.material.revision, before + 1, "周の終わりに 1 回だけ書く")
     XCTAssertNotNil(surface.material.read().linkPointer)
     surface.updateFocus(false)
@@ -60,7 +61,7 @@ final class SurfaceFlushTests: EngineTestCase {
     let b = try open(rows(120), size: CGSize(width: 400, height: 300))
     let c = try open(rows(20))
     a.surface.shareScroll(with: b.surface)
-    RunLoop.main.run(until: Date())
+    pumpMainOnce()
     let scheduler = FlushScheduler.shared
     var woken = 0
     let wake = scheduler.wakeMain
@@ -69,10 +70,10 @@ final class SurfaceFlushTests: EngineTestCase {
     b.document.onViewportChange = { c.surface.setLinkPointer(CGPoint(x: 40, y: 10)) }
     a.surface.scroll(toFirstLine: 20)
     XCTAssertTrue(c.surface.pending.isEmpty, "前提: 出す前は c に変化が無い")
-    RunLoop.main.run(until: Date())
+    pumpMainOnce()
     XCTAssertFalse(c.surface.pending.isEmpty, "前提: 出す中で c に変化が積まれた")
     XCTAssertEqual(woken, 1, "すぐ次の周を起こす")
-    RunLoop.main.run(until: Date())
+    pumpMainOnce()
     XCTAssertTrue(c.surface.pending.isEmpty, "次の周で出る")
     XCTAssertEqual(woken, 1, "残りが無ければ起こさない")
   }
@@ -140,7 +141,7 @@ final class SurfaceFlushTests: EngineTestCase {
       surface.selectedRange = NSRange(location: text.lineStart(row), length: 3)
       surface.reveal(NSRange(location: text.lineStart(row), length: 0), policy: .center)
       let y = surface.scrollState().position.y
-      RunLoop.main.run(until: Date())
+      pumpMainOnce()
       return y
     }
     let first = jump(to: 200)

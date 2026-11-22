@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -122,10 +123,7 @@ extension WindowControllerAutomationControlTests {
     let trialId = try XCTUnwrap((started["trial"] as? [String: Any])?["trialId"] as? Int)
     var reply: Result<Any, ControlError>?
     wc.controlAutomationTrial(trialId: trialId, wait: true, timeoutMs: 5000) { reply = $0 }
-    let deadline = Date().addingTimeInterval(5)
-    while reply == nil && Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
+    waitUntil(5) { reply != nil }
     let trial = try XCTUnwrap(try success(try XCTUnwrap(reply))["trial"] as? [String: Any])
     XCTAssertNil(trial["failure"])
     XCTAssertEqual((trial["nodes"] as? [[String: Any]])?.map { $0["state"] as? String }, ["given"])

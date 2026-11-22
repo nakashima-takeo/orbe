@@ -42,7 +42,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   // 言語変更の通知（AppDelegate がメインメニューの再構築へ配線する）。
   var onLanguageChanged: (() -> Void)?
   // 保存系（WindowController+Persistence）が別ファイルから触るため internal。
-  var pendingSave: DispatchWorkItem?
+  let saveDelay = MainActor.assumeIsolated { EditorDelay() }
   // 設定パレットのドメインA連続変更（font-size ←→ 長押し等）の reloadConfig 畳み込み（WindowController+Palette）。
   var pendingConfigReload: DispatchWorkItem?
   // 記憶するウィンドウサイズ（ユーザーが選んだ意図サイズ。表示用クランプは含めない）。

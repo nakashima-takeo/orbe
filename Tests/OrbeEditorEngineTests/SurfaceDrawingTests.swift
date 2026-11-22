@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -198,12 +199,10 @@ final class SurfaceDrawingTests: EngineTestCase {
     let driver = HeadlessDriver()
     driver.start()
     defer { driver.stop() }
+    waitForPipelines()
     driver.bind(surface.id)
-    func settle() {
-      let deadline = Date().addingTimeInterval(5)
-      repeat {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-      } while !driver.isPaused(surface.id) && Date() < deadline
+    func waitUntilPaused() {
+      XCTAssertTrue(driver.waitUntilStopped(surface), "刻みが止まる")
     }
     // 行の数が変わればつまみが現れて消えるまで描き続けるので、組版した行は合計の増分で数える。
     func total() -> Int {
@@ -214,13 +213,13 @@ final class SurfaceDrawingTests: EngineTestCase {
       let before = total()
       action()
       surface.flush()
-      settle()
+      waitUntilPaused()
       return total() - before
     }
-    settle()
+    waitUntilPaused()
     surface.selectedRange = NSRange(location: opened.document.text.lineStart(5) + 3, length: 0)
     surface.flush()
-    settle()
+    waitUntilPaused()
     XCTAssertEqual(shaped { surface.editor.perform(.insert("x")) }, 1, "打鍵した行だけ")
     XCTAssertEqual(
       shaped { surface.editor.perform(.newline(indents: true)) }, 2, "Enter で分かれた 2 行だけ")
@@ -228,7 +227,7 @@ final class SurfaceDrawingTests: EngineTestCase {
     surface.selectedRange = NSRange(
       location: text.lineStart(10), length: text.lineStart(12) + 3 - text.lineStart(10))
     surface.flush()
-    settle()
+    waitUntilPaused()
     XCTAssertEqual(shaped { surface.editor.perform(.tab) }, 3, "字下げした 3 行だけ")
   }
 }

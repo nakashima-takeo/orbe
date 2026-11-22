@@ -9,46 +9,11 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   var dir: URL!
   /// 分冊（`+Containment`）も読む。
   var repo: GitRepo!
-  /// init + 1 コミットの雛形。作るのはクラスで 1 回で、各テストは複製を `dir` に受け取る。
-  /// テストをまたいで使うので、テスト 1 件の作業ディレクトリではなく `TestScratch.root` の下に置く。
-  private nonisolated(unsafe) static var template: URL?
 
   override func setUpWithError() throws {
     dir = TestScratch.caseDir.appendingPathComponent("repo")
-    let template = try Self.template ?? Self.makeTemplate()
-    Self.template = template
-    try FileManager.default.copyItem(at: template, to: dir)
+    try TempGitRepo.place(at: dir)
     repo = try open()
-  }
-
-  override static func tearDown() {
-    if let template { try? FileManager.default.removeItem(at: template) }
-    template = nil
-    super.tearDown()
-  }
-
-  /// 雛形を作れなかったら空の repo を配らずそのテストを落とす。
-  private struct TemplateFailure: Error {}
-
-  private static func makeTemplate() throws -> URL {
-    let url = TestScratch.root
-      .appendingPathComponent("orbe-clean-template-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    func git(_ args: [String]) throws {
-      guard GitRunner.shared.runSync(args, cwd: url.path).isSuccess else {
-        XCTFail("雛形リポジトリを作れない: git \(args.joined(separator: " "))")
-        throw TemplateFailure()
-      }
-    }
-    try git(["init", "-q", "-b", "main"])
-    try git(["config", "user.email", "t@example.com"])
-    try git(["config", "user.name", "t"])
-    try "x".write(
-      toFile: (url.path as NSString).appendingPathComponent("a.txt"), atomically: true,
-      encoding: .utf8)
-    try git(["add", "-A"])
-    try git(["commit", "-qm", "init"])
-    return url
   }
 
   // MARK: - 作業ツリーの clean 判定

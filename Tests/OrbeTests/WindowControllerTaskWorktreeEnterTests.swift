@@ -20,23 +20,11 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
   private var dir: String!
   private var local: String!
 
-  /// origin（bare）と、それを clone した手元。手元の `stale` は origin の `stale` を追跡し、1 コミット遅れる。
+  /// origin（bare）と、それを clone した手元の組（`StaleCloneFixture`）を置く。
   override func setUpWithError() throws {
     dir = TestScratch.caseDir.appendingPathComponent("git").path
-    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    let origin = (dir as NSString).appendingPathComponent("origin.git")
+    try StaleCloneFixture.place(at: URL(fileURLWithPath: dir))
     local = (dir as NSString).appendingPathComponent("web")
-    let other = (dir as NSString).appendingPathComponent("other")
-    try git(["init", "-q", "--bare", "-b", "main", origin], in: dir)
-    try git(["clone", "-q", origin, other], in: dir)
-    try identify(other)
-    try git(["commit", "-q", "--allow-empty", "-m", "a"], in: other)
-    try git(["push", "-q", "origin", "HEAD:main", "HEAD:stale"], in: other)
-    try git(["clone", "-q", origin, local], in: dir)
-    try identify(local)
-    try git(["branch", "-q", "--track", "stale", "origin/stale"], in: local)
-    try git(["commit", "-q", "--allow-empty", "-m", "b"], in: other)
-    try git(["push", "-q", "origin", "HEAD:stale"], in: other)
   }
 
   private func git(_ args: [String], in cwd: String) throws {
@@ -72,21 +60,14 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     return (wc, task)
   }
 
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-    }
-    return condition()
-  }
-
   /// タスクの ⌘T を開き、`action` の行が出るまで待ってから、起動先を shell にする。
   private func open(
     _ wc: WindowController, for task: TaskItem, row action: WorktreePaletteAction
   ) throws -> WorktreePaletteModel {
     wc.showWorktreePalette(task: task.id)
     let palette = try XCTUnwrap(wc.model.worktreePalette)
-    XCTAssertTrue(pump { palette.items.contains { $0.action == action } }, "行が出る: \(action)")
+    XCTAssertTrue(
+      waitUntil(20) { palette.items.contains { $0.action == action } }, "行が出る: \(action)")
     palette.chooseTarget(at: try XCTUnwrap(palette.targets.firstIndex(of: .shell)))
     return palette
   }
@@ -124,7 +105,7 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
 
     palette.onExecute(.newBranch(name: "issue/9", base: .ref("origin/no-such-branch")))
 
-    XCTAssertTrue(pump { palette.errorMessage != nil }, "作成に失敗する")
+    XCTAssertTrue(waitUntil(20) { palette.errorMessage != nil }, "作成に失敗する")
     XCTAssertEqual(stored(task, in: wc), task, "タスクは変わらない")
   }
 
@@ -140,7 +121,8 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     palette.clearTaskContext()
 
     XCTAssertTrue(
-      pump { palette.items.contains { $0.glyph == .directory } }, "開いた時点の workspace の場所を読み直す")
+      waitUntil(20) { palette.items.contains { $0.glyph == .directory } },
+      "開いた時点の workspace の場所を読み直す")
     XCTAssertFalse(
       palette.items.contains { $0.action == repositoryRow }, "タスクの workspace のリポジトリの行は残らない")
     wc.switchWorkspace(to: 1)
@@ -156,6 +138,10 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
   /// 札を外した時点でタスクのリポジトリの読み取り（提示時の fetch）がまだ途中でも、それが後から着地して
   /// パレットにタスクのリポジトリの行を書き戻すことはない。git の一覧の読み取りは provider を強く捕まえる
   /// ので、途中の読み取りがある間は前の provider が生き残る——その状態をテストが provider を持つことで作る。
+  ///
+  /// 「戻らない」は、前の provider の fetch の着地と、それに続く分類の読みの完了を待ってから確かめる。一覧の作り直しは、
+  /// その 2 つの完了の処理の中でしか起きない、という前提に依る（前の provider を切り離す処理を外すと、このテストが落ちる
+  /// ことを確かめてある）。本番が一覧を作り直すきっかけを足したときは、確かめ直す。
   func testAReadOfTheTasksRepositoryLandingAfterRemovingTheTaskDoesNotComeBack() throws {
     let gate = (dir as NSString).appendingPathComponent("fetch-gate")
     let wrapper = (dir as NSString).appendingPathComponent("held-upload-pack")
@@ -171,13 +157,15 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     XCTAssertFalse(taskProvider.facts.remoteFetchLanded, "前提: タスクのリポジトリの fetch はまだ着地していない")
 
     palette.clearTaskContext()
-    XCTAssertTrue(pump { palette.items.contains { $0.glyph == .directory } })
+    XCTAssertTrue(waitUntil(20) { palette.items.contains { $0.glyph == .directory } })
     try FileManager.default.removeItem(atPath: gate)
 
-    XCTAssertTrue(pump { taskProvider.facts.remoteFetchLanded }, "前提: タスクのリポジトリの fetch が着地した")
+    XCTAssertTrue(
+      waitUntil(20) { taskProvider.facts.remoteFetchLanded }, "前提: タスクのリポジトリの fetch が着地した")
+    XCTAssertTrue(
+      waitUntil(20) { taskProvider.cleanProbes != nil }, "前提: タスクのリポジトリの分類の読みが済んだ")
     XCTAssertFalse(
-      pump({ palette.items.contains { $0.action == repositoryRow } }, timeout: 1),
-      "タスクのリポジトリの行は戻らない")
+      palette.items.contains { $0.action == repositoryRow }, "タスクのリポジトリの行は戻らない")
   }
 
   /// 遅れたブランチは最新化の画面を通ってから作られる。その経路でもタスクは進行中になり、worktree が付く。
@@ -189,10 +177,10 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
       at: try XCTUnwrap(
         palette.items.firstIndex { $0.action == .open(.localBranch(name: "stale")) })
     )
-    XCTAssertTrue(pump { palette.mode == .refresh }, "前提: 遅れているので最新化の画面に入る")
+    XCTAssertTrue(waitUntil(20) { palette.mode == .refresh }, "前提: 遅れているので最新化の画面に入る")
     palette.confirmRefresh(.refreshed)
 
-    XCTAssertTrue(pump { stored(task, in: wc)?.status == .inProgress }, "タスクは進行中になる")
+    XCTAssertTrue(waitUntil(20) { stored(task, in: wc)?.status == .inProgress }, "タスクは進行中になる")
     let worktree = try XCTUnwrap(stored(task, in: wc)?.worktree)
     XCTAssertEqual(
       GitRunner.shared.runSync(["branch", "--show-current"], cwd: worktree.path).stdoutText
@@ -212,16 +200,18 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     palette.query = name
     palette.onQueryChanged()
     XCTAssertTrue(
-      pump { palette.items.contains { $0.action == .createBranch(name: name) } },
+      waitUntil(20) { palette.items.contains { $0.action == .createBranch(name: name) } },
       "前提: 打った名前の作成行が出る")
 
     palette.clearTaskContext()
 
     XCTAssertTrue(
-      pump { wc.model.worktreePaletteProvider?.facts.cwd == home && palette.newBranchRules != nil },
+      waitUntil(20) {
+        wc.model.worktreePaletteProvider?.facts.cwd == home && palette.newBranchRules != nil
+      },
       "前提: 開いた時点の workspace のリポジトリを読み直した")
     XCTAssertFalse(palette.isAwaitingBranchNameAnswer, "名前の答えは残る")
     palette.activate()
-    XCTAssertTrue(pump { !palette.hasPendingActivation }, "↵ は預かられたままにならない")
+    XCTAssertTrue(waitUntil(20) { !palette.hasPendingActivation }, "↵ は預かられたままにならない")
   }
 }

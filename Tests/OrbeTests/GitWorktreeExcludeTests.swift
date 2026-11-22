@@ -113,15 +113,7 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
   override func setUpWithError() throws {
     dir = TestScratch.caseDir
       .appendingPathComponent("orbe-exclude-repo-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
-    try "x".write(
-      toFile: (dir.path as NSString).appendingPathComponent("a.txt"), atomically: true,
-      encoding: .utf8)
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
+    try TempGitRepo.place(at: dir)
     repo = try open()
   }
 
@@ -159,16 +151,6 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
   private func excludeFileText() -> String {
     let file = (repo.commonDir as NSString).appendingPathComponent("info/exclude")
     return (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
-  }
-
-  /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
   }
 
   private func occurrences(of pattern: String) -> Int {
@@ -227,14 +209,14 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
       cwd: repo.root, model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: "{repo_path}/{slug}")
     provider.load()
-    XCTAssertTrue(pump { provider.facts.repo != nil }, "前提: リポジトリを解決できている")
+    XCTAssertTrue(waitUntil(20) { provider.facts.repo != nil }, "前提: リポジトリを解決できている")
 
     var outcome: WorktreeRepoFacts.PrepareOutcome?
     // 作成先は既存の追跡済み `docs/` なので `git worktree add` が失敗する。
     provider.facts.prepareDirectory(for: .newBranch(name: "docs", base: .defaultBranch)) {
       outcome = $0
     }
-    XCTAssertTrue(pump { outcome != nil }, "解決が返らない")
+    XCTAssertTrue(waitUntil(20) { outcome != nil }, "解決が返らない")
 
     guard case .resolved(.failed) = try XCTUnwrap(outcome) else {
       return XCTFail("前提: 作成は失敗する: \(String(describing: outcome))")

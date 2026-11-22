@@ -119,7 +119,7 @@ final class GitCollateralTests: OrbeTestCase {
       observed.fulfill()
     }
     repo.version(of: "a.txt", atCommit: "HEAD") { version in
-      XCTAssertEqual(version, .present(Data("x\n".utf8)))
+      XCTAssertEqual(version, .present(Data("one\n".utf8)))
       observed.fulfill()
     }
     repo.commitGraph(limit: 10) { graph in
@@ -136,14 +136,12 @@ final class GitCollateralTests: OrbeTestCase {
     try startHangingCommit(files)
     try "b\n".write(toFile: root + "/b.txt", atomically: true, encoding: .utf8)
     var order: [String] = []
+    var stageStarted = false
     files.stage([GitStatus.Row(path: "b.txt", originalPath: nil)]) { failure in
       XCTAssertNil(failure)
       order.append("stage")
-    }
-    RunLoop.main.run(until: Date().addingTimeInterval(1))
-    XCTAssertEqual(
-      fixture.git(["diff", "--cached", "--name-only"]).stdoutText, "a.txt\n",
-      "止まったコミットの間、後ろのステージは走らない")
+    }.whenStarted { stageStarted = true }
+    XCTAssertFalse(stageStarted, "止まったコミットの間、後ろのステージは走らない")
 
     fixture.release()
     pumpMain(until: { self.hangReturned && order == ["stage"] }, timeout: 20, "順に終わる")
@@ -151,5 +149,22 @@ final class GitCollateralTests: OrbeTestCase {
       fixture.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n",
       "ステージはコミットに混ざらない")
     XCTAssertEqual(fixture.git(["diff", "--cached", "--name-only"]).stdoutText, "b.txt\n")
+  }
+
+  /// 書き込み中でない worktree への書き込みは、順番に入れたその場で走り始める（止まったコミットの後ろで待つステージとの対）。
+  func testAWriteToAnIdleWorktreeStartsAtOnce() throws {
+    let files = managed(root)
+    try "b\n".write(toFile: root + "/b.txt", atomically: true, encoding: .utf8)
+    var finished = false
+    var stageStarted = false
+    files.stage([GitStatus.Row(path: "b.txt", originalPath: nil)]) { failure in
+      XCTAssertNil(failure)
+      finished = true
+    }.whenStarted { stageStarted = true }
+    XCTAssertTrue(
+      stageStarted,
+      "順番に入れたその場で走り始める。これが待たずに成り立たなくなったら、"
+        + "testWritesToOneWorktreeRunOneAtATimeInOrder の確かめる時点も成り立たない")
+    pumpMain(until: { finished }, "ステージが終わる")
   }
 }

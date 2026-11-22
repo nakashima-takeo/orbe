@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -55,7 +56,7 @@ final class SurfaceClipboardTests: OrbeTestCase {
     for type in [CGEventType.otherMouseDown, .otherMouseUp] {
       let cgEvent = try XCTUnwrap(
         CGEvent(
-          mouseEventSource: nil, mouseType: type, mouseCursorPosition: center,
+          mouseEventSource: SyntheticInput.source, mouseType: type, mouseCursorPosition: center,
           mouseButton: .center))
       let event = try XCTUnwrap(NSEvent(cgEvent: cgEvent))
       if type == .otherMouseDown {

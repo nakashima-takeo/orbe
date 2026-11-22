@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -48,8 +49,24 @@ extension BranchPullRequestTests {
     pullRequest.endWatching()
     holdsLookups = false
     releaseLookups()
-    letTheLookUpSettle()
     XCTAssertNil(pullRequest.lookupFailure)
+  }
+
+  /// 引き直しの最中も見ている者が居れば、失敗の答えが届いたその場で理由を持つ（去った後に届いた失敗との対）。
+  func testAFailureArrivingWhileWatchedHoldsTheReasonAtOnce() throws {
+    let pullRequest = try watchAnOpenPullRequest()
+    pumpMain(until: { pullRequest.state?.content != nil }, "前提: PR の中身が届く")
+    answers["feat"] = .gitHub(
+      GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .failure(.rateLimited))
+    holdsLookups = true
+    pullRequest.reload()
+    pumpMain(until: { self.held.count == 1 }, "前提: 引き直しの問い合わせの最中")
+    holdsLookups = false
+    releaseLookups()
+    XCTAssertEqual(
+      pullRequest.lookupFailure, .failed(.rateLimited),
+      "失敗を返した直後に理由を持つ。これが待たずに成り立たなくなったら、"
+        + "testAFailureArrivingAfterTheLastWatcherLeftHoldsNoReason の確かめる時点も成り立たない")
   }
 
   /// gh が無い・未ログイン・GitHub でない答えと、成功の答えで open の PR が無いときは、PR を保たずに答えを替え、前の PR を

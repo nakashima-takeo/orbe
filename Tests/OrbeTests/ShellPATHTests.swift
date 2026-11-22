@@ -244,12 +244,7 @@ final class ShellPATHTests: OrbeTestCase {
 
   /// probe の着地は main への非同期書き込みを伴うので、条件が満たされるまで RunLoop を回す。
   private func waitForCachedShellPath(_ matches: (String?) -> Bool) -> Bool {
-    let deadline = Date().addingTimeInterval(2)
-    while Date() < deadline {
-      if matches(AppStatePersistence.load()?.cachedShellPath) { return true }
-      RunLoop.current.run(until: Date().addingTimeInterval(0.02))
-    }
-    return false
+    waitUntil(2) { matches(AppStatePersistence.load()?.cachedShellPath) }
   }
 
   private func drainMain() { RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }

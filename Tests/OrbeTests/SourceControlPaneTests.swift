@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -39,7 +40,7 @@ final class SourceControlPaneTests: OrbeTestCase {
       backing: .buffered, defer: false)
     window.contentView = pane
     pane.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     if showsPanel { pane.shell.selectPanel(.sourceControl) }
     return Hosted(repo: repo, tab: tab, pane: pane, window: window)
   }

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -18,8 +19,8 @@ extension PullRequestStateTests {
     gitHub.answerContent()
 
     tracked.move("refs/remotes/origin/other", to: tracked.main)
-    letGitSettle()
-    XCTAssertTrue(gitHub.contentRequests.isEmpty, "無関係なブランチの追跡 ref では読み直さない")
+    XCTAssertTrue(
+      holds(for: 1) { self.gitHub.contentRequests.isEmpty }, "無関係なブランチの追跡 ref では読み直さない")
 
     tracked.move("refs/remotes/origin/main", to: tracked.head)
     pumpMain(until: { self.gitHub.contentRequests.count == 1 }, "ベースブランチの追跡 ref で読み直す")
@@ -36,8 +37,7 @@ extension PullRequestStateTests {
 
     tracked.state.endWatching()
     tracked.move("refs/remotes/origin/feat", to: tracked.main)
-    letGitSettle()
-    XCTAssertTrue(gitHub.contentRequests.isEmpty, "見ている者がいなければ読まない")
+    XCTAssertTrue(holds(for: 1) { self.gitHub.contentRequests.isEmpty }, "見ている者がいなければ読まない")
   }
 
   /// 読み直しが追跡 ref の値を読んでいる間に最後の見ている者が去れば、GitHub に問い合わせず、戻ったら読み直す。
@@ -46,11 +46,12 @@ extension PullRequestStateTests {
 
     tracked.state.reload()
     tracked.state.endWatching()
-    letGitSettle()
+    pumpMain(until: { self.readEndedOrAsked(tracked.state) }, "追跡 ref の値を読み終える")
     XCTAssertTrue(gitHub.contentRequests.isEmpty, "見ている者がいなければ問い合わせない")
 
     tracked.state.beginWatching()
-    pumpMain(until: { self.gitHub.contentRequests.count == 1 }, "戻ったら読み直す")
+    pumpMain(until: { self.readEndedOrAsked(tracked.state) }, "追跡 ref の値を読み終える")
+    XCTAssertEqual(gitHub.contentRequests.count, 1, "戻ったら読み直す")
   }
 
   // MARK: - 道具
@@ -77,16 +78,15 @@ extension PullRequestStateTests {
     addTeardownBlock { @MainActor in state.endWatching() }
     pumpMain(until: { state.content != nil }, "前提: 中身が読める")
     gitHub.answersAtOnce = false
-    letGitSettle()
+    pumpMain(
+      until: { !state.trackedRefs.contains(where: state.tracking.lacks) },
+      "前提: 中身から分かった追跡 ref の値を覚える")
     return TrackedState(repo: repo, state: state, main: main, head: head, recorder: recorder)
   }
 
-  /// 問い合わせと、その前後の git の読み取りが、起きるなら終わるまで main を回す（起きなかったことは外から見えない）。
-  private func letGitSettle() {
-    let until = Date().addingTimeInterval(1)
-    while Date() < until {
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
-    }
+  /// 読み直しが、問い合わせを出さずに終わったか、問い合わせを出した（留めた問い合わせの答えを待つ間も、読んでいる最中）。
+  private func readEndedOrAsked(_ state: PullRequestState) -> Bool {
+    !state.isReading || !gitHub.contentRequests.isEmpty
   }
 }
 
@@ -103,10 +103,7 @@ private struct TrackedState {
   func move(_ ref: String, to commit: String) {
     let before = recorder.moves
     XCTAssertTrue(repo.git(["update-ref", ref, commit]).isSuccess)
-    let until = Date().addingTimeInterval(10)
-    while recorder.moves == before, Date() < until {
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
-    }
+    waitUntil(10) { recorder.moves != before }
     XCTAssertGreaterThan(recorder.moves, before, "前提: リモート追跡の ref が動いたと知らせる")
   }
 }

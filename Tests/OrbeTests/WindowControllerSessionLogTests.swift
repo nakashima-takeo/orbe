@@ -124,9 +124,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
 
     wc.switchWorkspace(to: 0)  // 起床: 先頭は同期 mount・2 枚目は次 tick の分割 mount
     XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "d-1")?.kind, .opened, "resume が解けたら opened")
-    let drained = expectation(description: "hidden mount")
-    DispatchQueue.main.async { drained.fulfill() }
-    wait(for: [drained], timeout: 1)
+    nextTurn()
     XCTAssertEqual(
       wc.sessionLog.lastEvent(sessionId: "u-1")?.closeOrigin, .unresolved,
       "resume を解決できなければ unresolved で終わる")
@@ -173,9 +171,18 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     let recent = opened("recent", secondsAgo: 60)
     try SessionLogWriter.append(old, to: url)
     try SessionLogWriter.append(recent, to: url)
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: url.path)
+    let before =
+      try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
 
     let log = AgentSessionLog()
 
+    XCTAssertNotEqual(
+      try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date,
+      before,
+      "落とす行が在れば、初期化の中で書き直す。"
+        + "これが待たずに成り立たなくなれば、testInitWithoutChangesDoesNotRewrite の確かめる時点も成り立たない")
     XCTAssertEqual(log.events, [recent])
     XCTAssertEqual(try SessionLogReader.read(url).events, [recent], "30 日より古い行はファイルからも落ちる")
     let siblings = try FileManager.default.contentsOfDirectory(
@@ -188,9 +195,10 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     let url = try XCTUnwrap(AgentSessionLog.fileURL)
     let recent = opened("recent", secondsAgo: 60)
     try SessionLogWriter.append(recent, to: url)
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: url.path)
     let before =
       try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
-    Thread.sleep(forTimeInterval: 0.02)
 
     _ = AgentSessionLog()
 

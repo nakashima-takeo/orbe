@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorCore
@@ -11,41 +12,33 @@ extension ZoneTextLayoutTests {
   /// ヘブライ文字の文・右から左の段落・区切りをまたぐ長いコード・タイ語・ラオ語・ZWJ でつないだ絵文字・段落の頭で開いて
   /// 閉じない isolate と埋め込みと上書き・割れない長い語・中立の字が区切りより長く続く段落・行の頭より前のヘブライ文字が
   /// 数字の向きを決める段落のどれでも。
+  ///
+  /// 小さい段は、全部の入力を、区切り（4,096 字）を 1 回またぐ 5,000 字で組む。Core Text が既定で簡略に組む長さを超える
+  /// 12,000 字は、絵文字の入力で確かめる。全部の段は、全部の入力を、5,000 字は幅 120 で、12,000 字は幅 120 と 600 で組む。
   func testLongParagraphsBreakWhereTheWholeParagraphBreaks() {
-    let inputs: [LongParagraph] = [
-      LongParagraph("latin+code", [("word and more ", false), ("code", true), (" ", false)]),
-      LongParagraph("japanese+code", [("日本語の文を書いて折り返す", false), ("x1", true), ("。", false)]),
-      LongParagraph("arabic+latin", [("مرحبا بالعالم 0 hello ", false)]),
-      LongParagraph("hebrew+code", [("שלום עולם 1 ", false), ("ab1", true), (" world ", false)]),
-      LongParagraph("thai", [("ภาษาไทยไม่มีช่องว่าง", false)]),
-      LongParagraph("lao", [("ພາສາລາວບໍ່ມີຍະຫວ່າງ", false)]),
-      LongParagraph("emoji", [("👩‍👩‍👧‍👦 ", false), ("🏳️‍🌈", true)]),
-      LongParagraph("open isolate", [("שלום 1 abc ", false)], head: "\u{2067}"),
-      LongParagraph("open embedding", [("word 12 مرحبا 3.5 。", false)], head: "\u{202B}"),
-      LongParagraph("override", [("abc 123 。( x ) ", false)], head: "\u{202E}"),
-      LongParagraph("one long token", [("x", false)]),
-      LongParagraph("hebrew text", [("שלום עולם זה משפט ארוך ", false)]),
-      LongParagraph("arabic text", [("مرحبا بالعالم هذه جملة طويلة ", false)]),
-      LongParagraph("alef", [("א ", false)]),
-      LongParagraph(
-        "long code in rtl",
-        [("שלום ", false), ("א " + String(repeating: "ab ", count: 2_000), true)]),
-      LongParagraph("neutral then hebrew", [("1 ", false)], head: "", tail: "שלום"),
-      LongParagraph(
-        "digits after hebrew", [("שלום ", false), ((0..<100).map { "\($0) " }.joined(), false)],
-        head: "a "),
-    ]
+    assertBreaksMatchTheWholeParagraph(
+      LongParagraph.all.map { LongParagraphLayout(input: $0, width: 120, length: 5_000) }
+        + [LongParagraphLayout(input: .emoji, width: 120, length: 12_000)])
+  }
+
+  func testLongParagraphsBreakWhereTheWholeParagraphBreaksAtFullScale() throws {
+    try Fuzz.skipFullScaleIfExcluded()
+    assertBreaksMatchTheWholeParagraph(
+      [(120.0, 5_000), (120, 12_000), (600, 12_000)].flatMap { width, length in
+        LongParagraph.all.map { LongParagraphLayout(input: $0, width: width, length: length) }
+      })
+  }
+
+  private func assertBreaksMatchTheWholeParagraph(_ layouts: [LongParagraphLayout]) {
     let lines = { (typeset: ZoneTypeset) in
       typeset.lines.map { "\($0.range) \($0.width) \($0.runs.map(\.xs))" }
     }
-    for input in inputs {
-      let text = input.text(length: 12_000, plain: plain, code: code)
-      for width in [120.0, 600] {
-        XCTAssertEqual(
-          lines(ZoneTextLayout.typeset(text, width: width)),
-          lines(ZoneTextLayout.typeset(text, width: width, window: 1 << 20)),
-          "\(input.name) 幅 \(width)")
-      }
+    for layout in layouts {
+      let text = layout.input.text(length: layout.length, plain: plain, code: code)
+      XCTAssertEqual(
+        lines(ZoneTextLayout.typeset(text, width: layout.width)),
+        lines(ZoneTextLayout.typeset(text, width: layout.width, window: 1 << 20)),
+        "\(layout.input.name) 幅 \(layout.width) 長さ \(layout.length)")
     }
   }
 
@@ -113,12 +106,47 @@ extension ZoneTextLayoutTests {
   private var code: ZoneTextStyle { ZoneTextStyle(font: mono, color: .red, padding: 4) }
 }
 
+/// 長い段落のテストが組む 1 通り——入力 `input` を、幅 `width`、`length` 字ほどの段落で組む。
+private struct LongParagraphLayout {
+  let input: LongParagraph
+  let width: Double
+  let length: Int
+}
+
 /// 長い段落の入力——段落の頭の字 `head` の後に、字の連なり（コードか）の組 `unit` を繰り返し、`tail` で終える。
 private struct LongParagraph {
   let name: String
   let unit: [(String, Bool)]
   let head: String
   let tail: String
+
+  /// ZWJ でつないだ絵文字。Core Text が既定で簡略に組むと崩れる入力の 1 つで、12,000 字でも組むのが速い。
+  static let emoji = LongParagraph("emoji", [("👩‍👩‍👧‍👦 ", false), ("🏳️‍🌈", true)])
+
+  /// 長い段落のテストが組む入力の全部。
+  static let all: [LongParagraph] = [
+    LongParagraph("latin+code", [("word and more ", false), ("code", true), (" ", false)]),
+    LongParagraph("japanese+code", [("日本語の文を書いて折り返す", false), ("x1", true), ("。", false)]),
+    LongParagraph("arabic+latin", [("مرحبا بالعالم 0 hello ", false)]),
+    LongParagraph("hebrew+code", [("שלום עולם 1 ", false), ("ab1", true), (" world ", false)]),
+    LongParagraph("thai", [("ภาษาไทยไม่มีช่องว่าง", false)]),
+    LongParagraph("lao", [("ພາສາລາວບໍ່ມີຍະຫວ່າງ", false)]),
+    emoji,
+    LongParagraph("open isolate", [("שלום 1 abc ", false)], head: "\u{2067}"),
+    LongParagraph("open embedding", [("word 12 مرحبا 3.5 。", false)], head: "\u{202B}"),
+    LongParagraph("override", [("abc 123 。( x ) ", false)], head: "\u{202E}"),
+    LongParagraph("one long token", [("x", false)]),
+    LongParagraph("hebrew text", [("שלום עולם זה משפט ארוך ", false)]),
+    LongParagraph("arabic text", [("مرحبا بالعالم هذه جملة طويلة ", false)]),
+    LongParagraph("alef", [("א ", false)]),
+    LongParagraph(
+      "long code in rtl",
+      [("שלום ", false), ("א " + String(repeating: "ab ", count: 2_000), true)]),
+    LongParagraph("neutral then hebrew", [("1 ", false)], head: "", tail: "שלום"),
+    LongParagraph(
+      "digits after hebrew", [("שלום ", false), ((0..<100).map { "\($0) " }.joined(), false)],
+      head: "a "),
+  ]
 
   init(_ name: String, _ unit: [(String, Bool)], head: String = "", tail: String = "") {
     self.name = name

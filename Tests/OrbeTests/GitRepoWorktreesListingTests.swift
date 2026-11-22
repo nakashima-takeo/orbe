@@ -25,10 +25,7 @@ final class GitRepoWorktreesListingTests: OrbeTestCase {
     // git は worktree のパスを realpath で報告する（`/var` → `/private/var`）。
     dir = URL(fileURLWithPath: String(cString: realpath(created.path, nil)))
     root = dir.appendingPathComponent("repo").path
-    XCTAssertTrue(gitIn(dir.path, ["init", "-q", "-b", "main", root]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
-    try commit("a", in: root)
+    try TempGitRepo.place(at: URL(fileURLWithPath: root))
     repo = try open()
   }
 
