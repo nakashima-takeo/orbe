@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,6 +11,10 @@ import XCTest
 /// 壊れると何が起きるか: ブラウザで PR を作って Orbe に戻っても「プルリクエストなし」のまま。前面に戻るたびに在るかの
 /// 問い合わせが重なり、作成のボタンの姿がちらつく。エディターを閉じていても GitHub に問い合わせる。
 extension BranchPullRequestTests {
+  /// 在るかを問い合わせ直さないことは、引き直しの答えが届いた時点で、待たずに確かめる。前提は、差し替えの出どころが
+  /// 問い合わせの中で同期に答え、答えを受けた処理が、在るかを問い合わせるかをその場で決めること。前面に戻ったときに材料を
+  /// 古くするようにすると、このテストが落ちることを確かめてある。答えを受けてから在るかを問い合わせるまでの経路を変えたときは、
+  /// 確かめ直す。
   func testBecomingActiveLooksUpThePullRequestOnceWithoutCheckingThePublishedStateAgain() {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     let ref = GitHubBranchRef(repo: me, branch: "feat")
@@ -21,7 +26,6 @@ extension BranchPullRequestTests {
 
     becomeActive()
     pumpMain(until: { self.lookups.count == 2 }, "前面に戻れば今のブランチの PR を引き直す")
-    letTheLookUpSettle()
     XCTAssertEqual(publishedChecks.count, 1, "PR が無いままなら、在るかを問い合わせ直さない")
     XCTAssertTrue(isPublished(pullRequest), "作成の入口の姿は動かない")
 
@@ -43,8 +47,7 @@ extension BranchPullRequestTests {
 
     pullRequest.endTracking()
     becomeActive()
-    letTheLookUpSettle()
-    XCTAssertEqual(lookups.count, 2, "誰も見ていなければ問い合わせない")
+    XCTAssertTrue(holds(for: 1) { self.lookups.count == 2 }, "誰も見ていなければ問い合わせない")
   }
 
   private func becomeActive() {

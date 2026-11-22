@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -16,14 +17,14 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     GitHubBranchPullRequestLookup(gitHub: GitHubCLI(), cache: cache).lookup(
       repo, branches: branches
     ) { found = $0 }
-    XCTAssertTrue(pump { found != nil })
+    XCTAssertTrue(waitUntil(20) { found != nil })
     return try XCTUnwrap(found)
   }
 
   private func openRepo() throws -> GitRepo {
     var repo: GitRepo?
     GitRepo.open(cwd: root) { repo = $0 }
-    XCTAssertTrue(pump { repo != nil })
+    XCTAssertTrue(waitUntil(20) { repo != nil })
     return try XCTUnwrap(repo)
   }
 

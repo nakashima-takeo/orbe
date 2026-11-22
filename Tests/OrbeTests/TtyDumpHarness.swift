@@ -97,7 +97,7 @@ final class TtyDumpTab {
       command: "/usr/bin/python3 \(scriptURL.path) \(mode.rawValue)"
     ).get()
     tab = try XCTUnwrap(controller.controlResolveTab(tabId), file: file, line: line)
-    let ready = ControlProcess.waitUntil(ControlProcess.tabSettleTimeout) {
+    let ready = waitUntil(ControlProcess.tabSettleTimeout) {
       self.screen().contains("READY")
     }
     guard ready else {
@@ -110,7 +110,7 @@ final class TtyDumpTab {
   /// 記録して nil（符号化の違いではなく未着だと分かるように）。
   func next(file: StaticString = #filePath, line: UInt = #line) -> String? {
     guard
-      ControlProcess.waitUntil(Self.keyTimeout, { self.received().count > self.consumed })
+      waitUntil(Self.keyTimeout, { self.received().count > self.consumed })
     else {
       XCTFail(
         "\(Self.keyTimeout) 秒で 1 バイトも届かない（受信済み \(consumed) 打）: \(screen())",
@@ -126,7 +126,7 @@ final class TtyDumpTab {
   func next(bytes byteCount: Int, file: StaticString = #filePath, line: UInt = #line) -> String? {
     var joined = ""
     var taken = 0
-    let arrived = ControlProcess.waitUntil(Self.keyTimeout) {
+    let arrived = waitUntil(Self.keyTimeout) {
       let pending = self.received().dropFirst(self.consumed)
       joined = ""
       taken = 0

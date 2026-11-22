@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -31,16 +32,8 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
     let wc = WindowController()
     XCTAssertTrue(wc.handleWindowKeyCommand(.showSettings))
-    pump(0.6)
-    XCTAssertTrue(wc.window.firstResponder is NSTextView, "前提: 焦点は絞り込みの入力欄")
+    pumpMain(until: { wc.window.firstResponder is NSTextView }, "前提: 焦点は絞り込みの入力欄")
     return (wc, try XCTUnwrap(wc.model.settingsPalette))
-  }
-
-  private func pump(_ seconds: TimeInterval = 0.2) {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
-    }
   }
 
   private func press(
@@ -55,7 +48,7 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
         isARepeat: false, keyCode: keyCode)
     else { return XCTFail("キーイベントを作れない") }
     deliverKeyDown(event, to: wc.window)
-    pump()
+    flush(wc.window)
   }
 
   private func down(_ wc: WindowController) {
@@ -80,7 +73,6 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     palette.render.onActivate()
     palette.render.selected = 1
     _ = palette.render.onRight()
-    pump()
     XCTAssertFalse(palette.render.rows[1].inherited, "前提: 上書きしている")
   }
 
@@ -105,6 +97,10 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     compose(in: field)
     press(Key.escape, "\u{1B}", to: wc)
     XCTAssertEqual(wc.presentedOverlay, .settingsPalette, "変換中の esc でパレットは閉じない")
+
+    field.unmarkText()
+    press(Key.escape, "\u{1B}", to: wc)
+    XCTAssertEqual(wc.presentedOverlay, .none, "変換していない esc はパレットを閉じる")
   }
 
   /// ⌫ は打った絞り込みの文字を先に消す。消し切ると選択はスコープ行へ戻るので、続く ⌫ は何も外さない。↑↓ で行を
@@ -130,6 +126,9 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
 
     down(wc)
     backspace(wc)
-    XCTAssertTrue(palette.render.rows[1].inherited, "選び直した行の上書きを外し、グローバルを継承する")
+    XCTAssertTrue(
+      palette.render.rows[1].inherited,
+      "選び直した行の上書きを外し、グローバルを継承する。testKeysWhileComposingGoToTheInputMethodInsteadOfThePalette の"
+        + "「変換中の ⌫ で上書きは外れない」の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 }

@@ -21,7 +21,6 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
 
     XCTAssertTrue(pane.sidebar.isOpen)
     XCTAssertEqual(
@@ -76,7 +75,6 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 360)
-    defer { window.orderOut(nil) }
     XCTAssertEqual(pane.shownSidebarWidth, 199)
 
     let handle = try XCTUnwrap(pane.belowBar.subviews.first { $0 is SidebarResizeHandle })
@@ -123,7 +121,6 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     }
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
 
     let handle = try XCTUnwrap(pane.belowBar.subviews.first { $0 is SidebarResizeHandle })
     XCTAssertFalse(handle.isHidden)
@@ -153,8 +150,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(state.width, 900 - 1 - 160, "本体に 160 残るまで")
     handle.mouseUp(with: .mouse(.leftMouseUp, at: point(263 + 600), in: window))
 
-    let otherWindow = hostEditor(other, width: 900)
-    defer { otherWindow.orderOut(nil) }
+    hostEditor(other, width: 900)
     XCTAssertEqual(other.group.view.editor.bodyRect.minX, 739 + 1, "同じ状態を配られた面は同じ幅")
   }
 
@@ -165,8 +161,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let root = TestScratch.caseDir.path
     let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
+    hostEditor(tab, width: 900)
     let open = try probe(pane) { p in try !PaneProbe.same(p.rgb(60), p.rgb(side + 60)) }
     let explorerGround = try open.rgb(60)
 
@@ -197,7 +192,6 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
       cwd: TestScratch.caseDir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let commandB = NSEvent.key("b")
 
     window.makeFirstResponder(pane)
@@ -228,11 +222,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let otherPane = other.group.view.editor
     let window = hostEditor(tab, width: 900)
-    let otherWindow = hostEditor(other, width: 900)
-    defer {
-      window.orderOut(nil)
-      otherWindow.orderOut(nil)
-    }
+    hostEditor(other, width: 900)
     func settled(_ bodyMinX: CGFloat, _ message: String) {
       pumpMain(
         until: {

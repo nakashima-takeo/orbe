@@ -295,7 +295,7 @@ struct PaletteCard: View {
       // TextField の文字削除に委ねる。
       .onKeyPress(keys: [.backspace]) { press in
         guard model.fieldIsFilter, model.query.isEmpty,
-          press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
+          KeyInput(press).modifiers.isEmpty
         else { return .ignored }
         model.onDelete()
         return .handled

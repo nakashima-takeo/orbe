@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -94,10 +95,11 @@ extension EditorDiffTests {
   /// ステージ済みの rename を、根のサービスの status が rename を知る前に開いても、status で決まる元パスの HEAD が届いてから
   /// 初めての位置を決め、実際の変更へ送る（元パスの HEAD 抜きの「全部追加」の仮の並びで決めない）。
   func testAStagedRenameOpenedBeforeTheStatusKnowsItRevealsTheRealChange() throws {
-    // status だけを遅くする——stat の変わった filter 付きのファイルを、status は clean を通して比べ直す（版の取り直しは
+    // status だけを止める——stat の変わった filter 付きのファイルを、status は clean を通して比べ直す（版の取り直しは
     // 作業ツリーを読まない）。
+    let fixture = try GitHangFixture()
+    let clean = try fixture.installScript("clean.sh", body: fixture.waitingBody + "\ncat")
     try repo.write(".gitattributes", "slow.txt filter=slow\n")
-    XCTAssertTrue(repo.git(["config", "filter.slow.clean", "sleep 0.5; cat"]).isSuccess)
     try repo.write("slow.txt", "s\n")
     var lines = (0..<300).map { "line \($0)" }
     try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
@@ -107,13 +109,25 @@ extension EditorDiffTests {
     let files = RootFiles.shared(for: repo.root)
     pumpMain(until: { files.status != nil }, "前提: rename の前の status を持つ")
 
+    // rename の前の index を読んだ status の読みを、clean filter で止めておく。止まっている間、次の読みは始まらない（終わった
+    // 後に 1 本へ畳まれる）ので、diff を開いた時点の status は、必ず rename を知らない。
+    XCTAssertTrue(repo.git(["config", "filter.slow.clean", clean]).isSuccess)
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: repo.url("slow.txt").path)
+    files.requestStatusRefresh()
+    XCTAssertTrue(fixture.pumpUntilHung(), "前提: rename の前の index を読んだ status の読みが止まっている")
     XCTAssertTrue(repo.git(["mv", "a.txt", "b.txt"]).isSuccess)
     lines[250] = "changed 250"
     try repo.write("b.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
-    try FileManager.default.setAttributes(
-      [.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: repo.url("slow.txt").path)
     let diff = try tab.group.editor.openDiff(id("b.txt", .staged))
+    XCTAssertNil(files.status?.entries["b.txt"], "前提: status は rename をまだ知らない")
+    pumpMain(
+      until: {
+        [RootFiles.Version(path: "b.txt", revision: .index), .init(path: "b.txt", revision: .head)]
+          .allSatisfy { files.state(of: $0) != nil }
+      }, "前提: index と HEAD の版が届く")
+    fixture.release()
     pumpMain(until: { diff.placement == .placed && diff.newSurface != nil }, "位置を決める")
     XCTAssertEqual(
       diff.revisionHunks, [LineHunk(oldStart: 251, oldCount: 1, newStart: 251, newCount: 1)],

@@ -111,7 +111,7 @@ final class EditorDiffPerfTests: OrbeTestCase {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let tab = TerminalTab.alone(
       cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: queries))
-    let window = hostEditor(tab, width: 1200, height: 800)
+    let window = mountEditor(tab, width: 1200, height: 800)
     tab.group.view.editor.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),

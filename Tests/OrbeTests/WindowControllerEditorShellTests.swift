@@ -96,7 +96,7 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
   }
 
   /// 文書を開く・閉じるは構成の変化なので保存が予約され、デバウンスの締切の後にディスクへ書かれる（予約
-  /// されなければ再起動で開いていた文書が戻らない）。
+  /// されなければ再起動で開いていた文書が戻らない）。締切の到来は、取っておいた予約をテストが実行して起こす。
   func testOpeningADocumentSchedulesASave() throws {
     let dir = try caseDirectory("w")
     let a = try caseFile("w/a.txt", "a").resolvingSymlinksInPath()
@@ -105,11 +105,11 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     ])
     wc.flushSave()
     XCTAssertEqual(try XCTUnwrap(WorkspacePersistence.load()).workspaces[0].groups, [])
+    var deadline: (@MainActor () -> Void)?
+    wc.saveDelay.schedule = { _, fire in deadline = fire }
 
     try XCTUnwrap(wc.activeTab).group.openFile(a)
-    pumpMain(
-      until: { WorkspacePersistence.load()?.workspaces[0].groups.first != nil }, timeout: 4,
-      "デバウンスの締切をまたいで書かれる")
+    try XCTUnwrap(deadline, "文書を開いても保存が予約されていない")()
 
     XCTAssertEqual(
       try XCTUnwrap(WorkspacePersistence.load()).workspaces[0].groups,

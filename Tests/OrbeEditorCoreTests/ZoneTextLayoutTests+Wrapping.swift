@@ -1,5 +1,6 @@
 import AppKit
 import CoreText
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorCore
@@ -10,35 +11,54 @@ extension ZoneTextLayoutTests {
   /// 行を割る位置は、余白を付けないときに割れる位置だけ——どの行の境も、その行の頭から余白なしで組むと、どれかの幅で割れる
   /// 位置。コードの外に語が続く文（「`String`s」「`nil`able」「`foo`-based」「re`build`」）・和文の直後のコード・「」。の
   /// 禁則・乱択で混ぜた文のどれでも、ほかの位置では割らない。
+  ///
+  /// 決まった 8 件は、どちらの段でも全部確かめる。
   func testLinesBreakOnlyWhereTheTextWithoutPaddingBreaks() {
-    var cases: [([String], [Int])] = [
+    assertLinesBreak(seeds: Self.lineBreakSeeds.prefix(1), count: 20)
+  }
+
+  func testLinesBreakOnlyWhereTheTextWithoutPaddingBreaksAtFullScale() throws {
+    try Fuzz.skipFullScaleIfExcluded()
+    assertLinesBreak(seeds: Self.lineBreakSeeds, count: 200)
+  }
+
+  private static let lineBreakSeeds: [UInt64] = [3]
+
+  private func assertLinesBreak(seeds: some Sequence<UInt64>, count: Int) {
+    let fixed: [([String], [Int])] = [
       (["あいうえお", "code", "かきくけこ"], [1]), (["これは", "a", "と", "b", "と", "c", "です。"], [1, 3, 5]),
       (["あいうえお「", "code", "」。かきく"], [1]), (["see the ", "code", " and then more words"], [1]),
       (["aaaa bbbb cccc dddd ", "String", "s are values"], [1]),
       (["several ", "Int", "s and ", "nil", "able values here"], [1, 3]),
       (["use the ", "foo", "-based one"], [1]), (["now re", "build", " it again"], [1]),
     ]
-    var random = SplitMix(seed: 3)
+    var cases = fixed.enumerated().map {
+      (label: "決まった \($0) 件め", parts: $1.0, codes: $1.1, step: CGFloat(1.5))
+    }
     let words = ["see", " ", "the", "-", "あいう", "。", "「", "」", "אבג", "x"]
-    for _ in 0..<200 {
-      let parts = (0..<(3 + random.next(8))).map { _ in
-        words[random.next(words.count)] + words[random.next(words.count)]
+    for seed in seeds {
+      var random = SplitMix(seed: seed)
+      for index in 0..<count {
+        let parts = (0..<(3 + random.next(8))).map { _ in
+          words[random.next(words.count)] + words[random.next(words.count)]
+        }
+        let codes = parts.indices.filter { _ in random.next(3) == 0 }
+        cases.append((label: "種 \(seed) の \(index) 件め", parts: parts, codes: codes, step: 30))
       }
-      cases.append((parts, parts.indices.filter { _ in random.next(3) == 0 }))
     }
     var wrong: [String] = []
-    for (index, (parts, codes)) in cases.enumerated() {
+    for (label, parts, codes, step) in cases {
       let string = parts.joined()
       let units = Array(string.utf16)
       let bare = bareTypesetter(parts, codes: codes)
-      for width in stride(from: CGFloat(20), through: 260, by: index < 8 ? 1.5 : 30) {
+      for width in stride(from: CGFloat(20), through: 260, by: step) {
         for line in ZoneTextLayout.typeset(
           styled(parts, codes: codes, padding: padding), width: width
         ).lines {
           let end = NSMaxRange(line.range)
           guard end < units.count, units[end] != 0x0A else { continue }
           if !breaks(bare, count: units.count, from: line.range.location, at: end) {
-            wrong.append("\(string) を幅 \(width) で割った行 \(line.range)")
+            wrong.append("\(label): \(string) を幅 \(width) で割った行 \(line.range)")
           }
         }
       }

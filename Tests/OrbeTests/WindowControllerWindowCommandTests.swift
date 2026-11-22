@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -46,11 +47,28 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.count, before, "素のシェルのタブは開かない")
   }
 
+  /// パレットを開いていないときの改名の取消は、その場で焦点を端末へ戻す。
+  func testCancelRenameWithoutAPaletteReturnsFocusToTheTerminalAtOnce() throws {
+    let wc = try restoreSingleTab()
+    let responder = { wc.window.firstResponder }
+    XCTAssertTrue(waitUntil { responder() is SurfaceView }, "前提: 起動直後は端末が焦点を持つ")
+    wc.beginTabRename()
+    XCTAssertTrue(waitUntil { responder() is NSTextView }, "前提: 改名欄が焦点を持つ")
+    wc.statusModel.onCancelRename()
+    XCTAssertTrue(
+      responder() is SurfaceView,
+      "取消の中で、焦点を端末へ戻す。これが待たずに成り立たなくなれば、"
+        + "testRenameBlurAfterOpeningAPaletteLeavesFocusOnThePalette の確かめる時点も成り立たない")
+  }
+
   /// タブ名の変更中に「＋」や Attention ストリップでパレットを開くと、改名欄の blur（改名の取消）が
   /// パレットより後に届きうる。そのときも焦点は、改名していないときに開いたのと同じパレットの受け手に
   /// 残り、打鍵が端末へ流れない。
   ///
-  /// 焦点は SwiftUI の描画を経て次の回以降に移るので、各段は経過時間ではなく焦点が移ったことを待つ。
+  /// 焦点は SwiftUI の描画を経て次の回以降に移るので、各段は経過時間ではなく焦点が移ったことを待つ。取消の後に焦点が
+  /// パレットの受け手から外れないことは、0.3 秒のあいだ見張る。去りゆく改名欄の取り壊しと、焦点の掛け直し（`@FocusState`）は
+  /// SwiftUI の更新で走り、走り終えたことを外から観測できない。本番に遅延の定数は無い。0.3 秒は、取消から 0.05 秒後に
+  /// 焦点を端末へ戻すようにするとこのテストが落ちる、と確かめた長さ。
   func testRenameBlurAfterOpeningAPaletteLeavesFocusOnThePalette() throws {
     let openers = [
       PaletteOpener(
@@ -83,13 +101,12 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
       }
       XCTAssertTrue(waitUntil { onPalette() }, "前提: \(name) パレットが焦点を取った")
       wc.statusModel.onCancelRename()
-      // 取消の非同期の効果（焦点を端末へ戻す退行）を流してから見る。条件は取消の前から真なので、待つだけでは流れない。
-      RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+      XCTAssertFalse(responder() is SurfaceView, "\(name): 取消の中で、焦点を端末へ戻さない")
 
       XCTAssertTrue(
-        waitUntil { onPalette() },
-        "\(name): 改名していないときと同じパレットの受け手が焦点を持つ（実際: \(String(describing: responder()))）")
-      XCTAssertFalse(responder() is SurfaceView, "\(name): 焦点が端末へ戻らない")
+        holds(for: 0.3) { onPalette() && !(responder() is SurfaceView) },
+        "\(name): 取消の後も、改名していないときと同じパレットの受け手が焦点を持ち続ける"
+          + "（実際: \(String(describing: responder()))）")
       wc.dismissPalette()
     }
   }

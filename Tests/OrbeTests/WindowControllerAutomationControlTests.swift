@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -350,10 +351,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
     var reply: Result<Any, ControlError>?
     wc.controlAutomationTrial(trialId: trialId, wait: true, timeoutMs: 5000) { reply = $0 }
-    let deadline = Date().addingTimeInterval(5)
-    while reply == nil && Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
+    waitUntil(5) { reply != nil }
     let read = try success(try XCTUnwrap(reply))
     XCTAssertNil(read["timedOut"])
     let ended = try XCTUnwrap(read["trial"] as? [String: Any])

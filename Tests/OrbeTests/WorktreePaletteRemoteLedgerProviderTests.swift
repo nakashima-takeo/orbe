@@ -28,15 +28,9 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     try FileManager.default.createDirectory(at: created, withIntermediateDirectories: true)
     dir = URL(fileURLWithPath: String(cString: realpath(created.path, nil)))
     root = dir.appendingPathComponent("repo").path
-    XCTAssertTrue(run(["init", "-q", "-b", "main", root], in: dir.path).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
+    try TempGitRepo.place(at: URL(fileURLWithPath: root))
     // origin を github.com の URL にしても、提示時の fetch がネットへ出ないようにする（即失敗する）。
     XCTAssertTrue(git(["config", "protocol.https.allow", "never"]).isSuccess)
-    try "x".write(
-      toFile: (root as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
     try stageGh()
   }
 
@@ -55,10 +49,10 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
 
     provider.load()
     XCTAssertTrue(
-      pump({
+      waitUntil(20) {
         self.calls("R").contains("me/old-name") && model.classification != nil
           && provider.probingPaths.isEmpty
-      }), "前提: 分類は着地し、正式名の問い合わせだけが着地していない")
+      }, "前提: 分類は着地し、正式名の問い合わせだけが着地していない")
     XCTAssertEqual(provider.branchPRStates["feat"], .fetching, "clean の PR の事実はまだ分からない")
     XCTAssertEqual(calls("H"), [], "同一性が決まるまでブランチの PR を問わない")
 
@@ -66,7 +60,7 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     let open = GitHubBranchPR(
       number: 1, headRefName: "feat", state: "OPEN", baseRefName: "main", headRepository: mine)
     XCTAssertTrue(
-      pump({ provider.branchPRStates["feat"] == .loaded([open]) }), "答えの着地で自分の PR が事実になる")
+      waitUntil(20) { provider.branchPRStates["feat"] == .loaded([open]) }, "答えの着地で自分の PR が事実になる")
   }
 
   /// 撃つのは remote の一覧と認証確認の両方が揃ってから。GitHub の remote ごとに 1 回だけで、着地前に
@@ -82,19 +76,20 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     let (model, provider) = makeProvider()
 
     provider.load()
-    XCTAssertTrue(pump({ provider.facts.remoteListing != nil && model.classification != nil }))
-    XCTAssertFalse(pump({ !self.calls("R").isEmpty }, timeout: 1), "認証確認が着地するまで撃たない")
+    XCTAssertTrue(
+      waitUntil(20) { provider.facts.remoteListing != nil && model.classification != nil })
+    XCTAssertTrue(holds(for: 1) { self.calls("R").isEmpty }, "認証確認が着地するまで撃たない")
 
     try ungate("auth")
-    XCTAssertTrue(pump({ self.calls("R").count == 2 }), "認証確認の着地で撃つ")
+    XCTAssertTrue(waitUntil(20) { self.calls("R").count == 2 }, "認証確認の着地で撃つ")
     var relanded = false
     provider.facts.loadGit(try XCTUnwrap(provider.facts.repo), classifying: false) {
       relanded = true
     }
-    XCTAssertTrue(pump({ relanded }), "前提: 問い合わせ中に git の一覧が引き直された")
+    XCTAssertTrue(waitUntil(20) { relanded }, "前提: 問い合わせ中に git の一覧が引き直された")
 
     try ungate("resolve")
-    XCTAssertTrue(pump({ provider.facts.remoteLedger != .pending }))
+    XCTAssertTrue(waitUntil(20) { provider.facts.remoteLedger != .pending })
     XCTAssertEqual(calls("R").sorted(), ["base/r", "me/r"])
   }
 
@@ -108,27 +103,27 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     let (_, provider) = makeProvider()
 
     provider.load()
-    XCTAssertTrue(pump({ self.originUnverified(provider) }))
+    XCTAssertTrue(waitUntil(20) { self.originUnverified(provider) })
     XCTAssertEqual(provider.branchPRStates["feat"], .failed, "安全群に入らない側に倒れる")
     var relanded = false
     provider.facts.loadGit(try XCTUnwrap(provider.facts.repo), classifying: false) {
       relanded = true
     }
-    XCTAssertTrue(pump({ relanded }))
+    XCTAssertTrue(waitUntil(20) { relanded })
     XCTAssertEqual(calls("R"), ["me/r"], "同じ回では問い合わせ直さない")
 
     try answer("me/r", found: "me/r")
     try gate("auth")
     let (reopened, again) = makeProvider()
     again.load()
-    XCTAssertTrue(pump({ reopened.hasLoadedOnce }))
+    XCTAssertTrue(waitUntil(20) { reopened.hasLoadedOnce })
     XCTAssertTrue(originUnverified(again), "問い直す前の台帳から、覚えた答えで読む")
 
     try ungate("auth")
     let open = GitHubBranchPR(
       number: 1, headRefName: "feat", state: "OPEN", baseRefName: "main", headRepository: mine)
     XCTAssertTrue(
-      pump({ again.branchPRStates["feat"] == .loaded([open]) }), "裏で問い直した正式名が着地すると直る")
+      waitUntil(20) { again.branchPRStates["feat"] == .loaded([open]) }, "裏で問い直した正式名が着地すると直る")
     XCTAssertEqual(calls("R"), ["me/r", "me/r"], "確かめられない答えは開き直すと問い直す")
   }
 
@@ -142,19 +137,20 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     _ = try addWorktree("wt-feat", branch: "feat")
     let (_, provider) = makeProvider()
     provider.load()
-    XCTAssertTrue(pump({ self.calls("R").count == 2 && provider.facts.remoteLedger != .pending }))
-    XCTAssertTrue(pump({ !self.originUnverified(provider) }), "前提: 1 回目で origin の答えが揃う")
+    XCTAssertTrue(
+      waitUntil(20) { self.calls("R").count == 2 && provider.facts.remoteLedger != .pending })
+    XCTAssertTrue(waitUntil(20) { !self.originUnverified(provider) }, "前提: 1 回目で origin の答えが揃う")
 
     try gate("auth")
     let (model, again) = makeProvider()
     again.load()
-    XCTAssertTrue(pump({ model.hasLoadedOnce }))
+    XCTAssertTrue(waitUntil(20) { model.hasLoadedOnce })
     XCTAssertNotEqual(again.facts.remoteLedger, .pending, "認証確認より前の描画から台帳が確定している")
     XCTAssertFalse(originUnverified(again))
 
     try ungate("auth")
-    XCTAssertTrue(pump({ again.facts.githubReady }))
-    XCTAssertTrue(pump({ self.calls("R").count == 3 }))
+    XCTAssertTrue(waitUntil(20) { again.facts.githubReady })
+    XCTAssertTrue(waitUntil(20) { self.calls("R").count == 3 })
     XCTAssertEqual(calls("R").sorted(), ["base/r", "base/r", "me/r"], "正式名の答えは問い合わせ直さない")
   }
 
@@ -181,10 +177,10 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
 
     provider.load()
     XCTAssertTrue(
-      pump({
+      waitUntil(20) {
         guard case .loaded = provider.branchPRStates["feat"] else { return false }
         return model.classification != nil
-      }))
+      })
 
     XCTAssertEqual(calls("H"), ["feat"], "追跡先の main ではなくローカル名 feat で問う")
     XCTAssertEqual(
@@ -209,10 +205,10 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
 
     provider.load()
     XCTAssertTrue(
-      pump({
+      waitUntil(20) {
         guard case .loaded = provider.branchPRStates["feat"] else { return false }
         return model.classification != nil
-      }), "前提: clean の PR の事実まで着地した")
+      }, "前提: clean の PR の事実まで着地した")
 
     XCTAssertEqual(calls("R"), ["me/r"])
     XCTAssertEqual(calls("H"), ["feat"])
@@ -230,20 +226,21 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     XCTAssertTrue(run(["branch", "-q", "--set-upstream-to=mirror/side"], in: worktree).isSuccess)
     let (_, first) = makeProvider()
     first.load()
-    XCTAssertTrue(pump({ first.facts.remoteLedger != .pending && !self.originUnverified(first) }))
+    XCTAssertTrue(
+      waitUntil(20) { first.facts.remoteLedger != .pending && !self.originUnverified(first) })
 
     try gate("auth")
     let (model, provider) = makeProvider()
     provider.load()
     XCTAssertTrue(
-      pump({
+      waitUntil(20) {
         provider.facts.remoteFetchLanded && model.classification != nil
           && provider.probingPaths.isEmpty
-      }), "前提: gh の確認の他はすべて着地した")
+      }, "前提: gh の確認の他はすべて着地した")
     XCTAssertTrue(model.classificationPending, "前提: gh の確認を待っている")
 
     try ungate("auth")
-    XCTAssertTrue(pump({ !model.classificationPending }), "gh の確認が着地したら待機をやめる")
+    XCTAssertTrue(waitUntil(20) { !model.classificationPending }, "gh の確認が着地したら待機をやめる")
     XCTAssertEqual(calls("H"), [], "前提: 問い合わせるブランチの PR は無い")
   }
 
@@ -258,7 +255,8 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     let (model, provider) = makeProvider()
 
     provider.load()
-    XCTAssertTrue(pump({ provider.facts.remoteLedger != .pending && model.classification != nil }))
+    XCTAssertTrue(
+      waitUntil(20) { provider.facts.remoteLedger != .pending && model.classification != nil })
     XCTAssertEqual(provider.branchPRStates["side"], .loaded([]))
     XCTAssertEqual(calls("H"), [])
   }
@@ -272,7 +270,7 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     let (model, provider) = makeProvider()
 
     provider.load()
-    XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
+    XCTAssertTrue(waitUntil(20) { model.classification != nil && !provider.classificationPending })
     XCTAssertEqual(provider.facts.remoteLedger, .pending, "前提: GitHub の remote の正式名は問い合わせない")
     XCTAssertEqual(provider.branchPRStates["feat"], .loaded([]))
   }

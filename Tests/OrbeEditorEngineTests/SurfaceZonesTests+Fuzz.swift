@@ -1,21 +1,36 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
 
 /// 主が本文でない間に本文へ直接届く操作（view へのセレクタ・契約の口・IME の呼び出し）を、入力欄の打鍵・絵の差し込みの
-/// 文の選択・Esc・押下と混ぜて何千手流しても、打鍵・削除・undo / redo は主の場にだけ効き、契約の選択の口は主を
+/// 文の選択・Esc・押下と混ぜて流しても、打鍵・削除・undo / redo は主の場にだけ効き、契約の選択の口は主を
 /// 本文にし、本文の写し・カーソルが文書と一致し、入力欄の場の文・カーソル・変換中の文字が入力欄の文と一致し、主と
 /// 絵の差し込みの文の選択が規則どおり（絵の差し込みの文が主なら選択がまとまりの中にあり、そうでなければ選択は無い。
 /// 変換中なのは主の場だけ）で、最後に本文と入力欄の undo を尽くすとそれぞれ元に戻る。壊れると「ある順の操作でだけ」
 /// 返信の字がソースへ入る・undo が別の場を戻す・変換中の字が場からずれる。
 extension SurfaceZonesTests {
+  private static let fuzzSeeds: [UInt64] = [0x20e, 0x3, 0x11]
+
   func testRandomOperationsAcrossTheBodyFieldsAndZoneTextStayConsistent() throws {
-    for seed: UInt64 in [0x20e, 3, 17] { try fuzz(seed: seed, steps: 2000) }
+    try fuzz(seeds: Self.fuzzSeeds.prefix(1), steps: 400)
   }
 
-  private func fuzz(seed: UInt64, steps: Int) throws {
+  func testRandomOperationsAcrossTheBodyFieldsAndZoneTextStayConsistentAtFullScale() throws {
+    try Fuzz.skipFullScaleIfExcluded()
+    try fuzz(seeds: Self.fuzzSeeds, steps: 2000)
+  }
+
+  /// 種ごとに `steps` 手を流す。最初に失敗した手で止める。
+  private func fuzz(seeds: some Sequence<UInt64>, steps: Int) throws {
+    for seed in seeds {
+      guard try fuzz(seed: seed, steps: steps) else { return }
+    }
+  }
+
+  private func fuzz(seed: UInt64, steps: Int) throws -> Bool {
     let original = rows(12)
     let opened = try open(original, size: CGSize(width: 600, height: 400), waitForColors: false)
     opened.surface.setPresentation(SurfacePresentation(showsMinimap: false))
@@ -29,33 +44,40 @@ extension SurfaceZonesTests {
     thread.surface = surface
     surface.setRows(zone(thread, at: 3))
     var generator = SplitMix(seed: seed)
+    // 種の並びの定義と同じ 16 進数で出す。
+    let hexSeed = "0x" + String(seed, radix: 16)
     for index in 0..<steps {
-      let kind = Int.random(in: 0..<22, using: &generator)
-      let before = (primary: surface.primary, body: text(opened.document), reply: field.string)
-      try step(kind, on: opened, thread, &generator)
-      let label = "seed \(seed) step \(index)"
-      try check(opened, field, label)
-      switch kind {
-      case 4...8:
-        // 打鍵・削除・undo / redo は主の場にだけ効く。
-        if before.primary != .body {
-          XCTAssertEqual(text(opened.document), before.body, "\(label): 主でない本文は変わらない")
+      let label = "seed \(hexSeed) step \(index)"
+      let passed = Fuzz.step(self, label) {
+        let kind = Int.random(in: 0..<22, using: &generator)
+        let before = (primary: surface.primary, body: text(opened.document), reply: field.string)
+        try step(kind, on: opened, thread, &generator)
+        try check(opened, field, label)
+        switch kind {
+        case 4...8:
+          // 打鍵・削除・undo / redo は主の場にだけ効く。
+          if before.primary != .body {
+            XCTAssertEqual(text(opened.document), before.body, "\(label): 主でない本文は変わらない")
+          }
+          if before.primary != .field("reply") {
+            XCTAssertEqual(field.string, before.reply, "\(label): 主でない入力欄は変わらない")
+          }
+        case 9:
+          XCTAssertEqual(surface.primary, .body, "\(label): 契約の選択の口は主を本文にする")
+        default: break
         }
-        if before.primary != .field("reply") {
-          XCTAssertEqual(field.string, before.reply, "\(label): 主でない入力欄は変わらない")
-        }
-      case 9:
-        XCTAssertEqual(surface.primary, .body, "\(label): 契約の選択の口は主を本文にする")
-      default: break
       }
+      guard passed else { return false }
     }
-    surface.setPrimary(.body)
-    let body = try XCTUnwrap(view.undoManager)
-    while body.canUndo { body.undo() }
-    XCTAssertEqual(text(opened.document), original, "seed \(seed): 本文の undo を尽くすと元の本文")
-    let site = try XCTUnwrap(surface.fields["reply"])
-    while site.editor.undoManager.canUndo { site.editor.undoManager.undo() }
-    XCTAssertEqual(field.string, "", "seed \(seed): 入力欄の undo を尽くすと空")
+    return Fuzz.step(self, "seed \(hexSeed)") {
+      surface.setPrimary(.body)
+      let body = try XCTUnwrap(view.undoManager)
+      while body.canUndo { body.undo() }
+      XCTAssertEqual(text(opened.document), original, "seed \(hexSeed): 本文の undo を尽くすと元の本文")
+      let site = try XCTUnwrap(surface.fields["reply"])
+      while site.editor.undoManager.canUndo { site.editor.undoManager.undo() }
+      XCTAssertEqual(field.string, "", "seed \(hexSeed): 入力欄の undo を尽くすと空")
+    }
   }
 
   /// 操作 1 手（`kind` は 0..<22）。

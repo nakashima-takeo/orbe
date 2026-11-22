@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -28,13 +29,13 @@ final class RowListTests: OrbeTestCase {
     let source = Source()
     source.rowCount = rowCount
     let rows = RowList(source: source, rowHeight: rowHeight)
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = rows
     rows.update(rowsVersion: 0, selection: nil, emoji: nil, wantsFocus: false)
     rows.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     return Hosted(source: source, rows: rows, window: window)
   }
 
@@ -188,10 +189,10 @@ final class RowListTests: OrbeTestCase {
     rows.frame = NSRect(x: 0, y: 0, width: 200, height: 100)
     container.addSubview(rows)
     container.addSubview(other)
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: container.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = container
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     rows.update(rowsVersion: 0, selection: nil, emoji: nil, wantsFocus: false)
     rows.layoutSubtreeIfNeeded()
     window.makeFirstResponder(other)

@@ -1,12 +1,14 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
 
 /// 本文へ落とす受け口——落とす位置の印をドラッグの間だけ同じ 1 コマに出し、他のアプリの文字は貼るときと同じ改行で入れ、この
 /// 面から運んだ文字は移動（⌥ ならコピー）にし、Finder のファイルは載せる側へ開かせる。壊れると CRLF の文書に LF が混ざる・
-/// 印が残る・移動が元の字を残す・外部変更の後の落としが関係の無い字を消す・ファイルの名前が本文に入る。
+/// 印が残る・移動が元の字を残す・外部変更の後の落としが関係の無い字を消す・ファイルの名前が本文に入る・端の帯に留めても
+/// スクロールしない。
 extension SurfaceClipboardTests {
   /// 他のアプリの文字——ドラッグの間は落とす位置に印を出し（外れたら消す）、落とすと文書の改行の作法で入って選ばれる。
   func testDroppingTextFromAnotherAppInsertsItWithTheDocumentLineBreak() throws {
@@ -82,6 +84,26 @@ extension SurfaceClipboardTests {
     XCTAssertTrue(view.performDragOperation(drop))
     XCTAssertEqual(hostSide.openedFiles, [[file]])
     XCTAssertEqual(text(opened.document), "abc\n")
+  }
+
+  /// AppKit が周期で呼ぶ入口は、呼ばれた時刻で自動スクロールを進める——本文の下端の帯の中に留めている間、呼ばれるたびに
+  /// スクロールする。
+  func testDropAutoscrollFromTheAppKitEntryAdvancesWithTheCurrentTime() throws {
+    let opened = try open(rows(400))
+    _ = host(opened)
+    let view = opened.surface.textView
+    let inBand = CGPoint(
+      x: opened.surface.surfaceLayout.text.midX,
+      y: view.bounds.height - opened.surface.config.lineHeight / 2)
+    let drag = FakeDraggingInfo(
+      at: view.convert(inBand, to: nil), pasteboard: try dragBoard(string: "x"))
+    _ = view.draggingEntered(drag)
+    XCTAssertTrue(
+      waitUntil {
+        _ = view.draggingUpdated(drag)
+        return opened.surface.scrollPosition.y > 0
+      }, "帯の中に留めている間、呼ばれるたびにスクロールを進める")
+    view.draggingExited(drag)
   }
 
   /// 落とすときの判断——ファイルは開き（⇧ ならパス）、この面のドラッグは移動（コピーならコピー）で選択の中（両端を含む）へは

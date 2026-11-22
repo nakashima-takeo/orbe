@@ -20,7 +20,6 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    defer { window.orderOut(nil) }
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
     tab.group.view.addSubview(outsider)
     XCTAssertTrue(window.makeFirstResponder(outsider))
@@ -43,11 +42,11 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     weak var service: RootFiles?
     var keeper: TerminalTab? = TerminalTab.alone(
       cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let keeperWindow = hostEditor(try XCTUnwrap(keeper), width: 900)
+    let keeperWindow = mountEditor(try XCTUnwrap(keeper), width: 900)
 
     try autoreleasepool {
       let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-      let window = hostEditor(tab, width: 900)
+      let window = mountEditor(tab, width: 900)
       let opened = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
       window.makeFirstResponder(opened.surface.responder)
       pane = tab.group.view.editor
@@ -55,7 +54,6 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
       document = opened
       service = RootFiles.shared(for: repo.root)
       XCTAssertNotNil(service, "前提: 2 つの連が同じ根を握っている")
-      window.orderOut(nil)
       window.contentView = nil
     }
 
@@ -117,15 +115,13 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     XCTAssertFalse(state.isWatched, "PR ごとの状態を見ている者は残らない")
   }
 
-  /// 面だけを載せる窓（テストの終わりに面を外す）。
+  /// 面だけを載せる窓（テストの終わりまで持ち、テストの終わりに面を外す）。
   private func paneWindow() -> NSWindow {
-    let window = OrbeWindowFake(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    addTeardownBlock {
-      window.orderOut(nil)
-      window.contentView = nil
-    }
+    let window = holdUntilTestEnds(
+      OrbeWindowFake(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
+        backing: .buffered, defer: false))
+    addTeardownBlock { window.contentView = nil }
     return window
   }
 }

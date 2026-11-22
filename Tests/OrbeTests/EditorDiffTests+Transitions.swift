@@ -15,15 +15,27 @@ import XCTest
 /// 壊れると何が起きるか: 側が替わった後も、並びが前の両側のまま残るか、今の両側と食い違う。失敗した種と手順はメッセージに
 /// 出る（同じ種で回せば同じ手順になる）。
 extension EditorDiffTests {
+  private static let transitionSeeds: [UInt64] = [1, 2, 3]
+
   func testRandomTransitionsKeepTheRowsMatchingBothSides() throws {
+    try runTransitions(seeds: Self.transitionSeeds.prefix(1), steps: 30)
+  }
+
+  func testRandomTransitionsKeepTheRowsMatchingBothSidesAtFullScale() throws {
+    try Fuzz.skipFullScaleIfExcluded()
+    try runTransitions(seeds: Self.transitionSeeds, steps: 30)
+  }
+
+  /// 種ごとに `steps` 手を当てる。並びが最初に食い違った手で止める。
+  private func runTransitions(seeds: some Sequence<UInt64>, steps: Int) throws {
     // 種ごとに別のリポジトリで回し、前の種のタブはテストの終わりまで持つ（窓がタブより長く生きるので、タブを先に
     // 手放すと、窓に残った diff がテストにしか無い順で解放済みのセッションを引く）。
     var tabs: [TerminalTab] = []
-    for seed: UInt64 in [1, 2, 3] {
+    for seed in seeds {
       if !tabs.isEmpty { try setUpWithError() }
       let tab = tab(modes: EditorDiffModeState())
       tabs.append(tab.0)
-      guard try runTransitions(seed: seed, steps: 30, in: tab.0) else { return }
+      guard try runTransitions(seed: seed, steps: steps, in: tab.0) else { return }
     }
   }
 
@@ -40,50 +52,46 @@ extension EditorDiffTests {
     var log: [String] = []
 
     for step in 0..<steps {
-      let shown = pane.diff
-      // 作業ツリーと index の手を、見せ方の手より多く引く（側の替わり方を多く試す）。
-      var ops: [(String, () throws -> Void)] = [
-        ("write", { try self.writeFile(self.randomText(&random)) }),
-        ("write", { try self.writeFile(self.randomText(&random)) }),
-        ("delete", { try self.removeEntry() }),
-        ("delete", { try self.removeEntry() }),
-        ("add", { self.repo.git(["add", "-A", "--", "a.txt"]) }),
-        ("add", { self.repo.git(["add", "-A", "--", "a.txt"]) }),
-        ("unstage", { self.repo.git(["restore", "--staged", "--", "a.txt"]) }),
-        ("repository", { try self.placeRepository() }),
-        ("repository", { try self.placeRepository() }),
-        ("conflict", { try self.conflict() }),
-        (
-          shown == nil ? "show" : "hide",
-          { shown == nil ? session.selectScreen(.changes) : session.show(other) }
-        ),
-        (
-          "switch kind",
-          {
-            let kind = session.changesDiff?.id.kind
-            try session.openDiff(self.id("a.txt", kind == .workingTree ? .staged : .workingTree))
-            session.selectScreen(.changes)
-          }
-        ),
-        ("mode", { modes.select(modes.mode == .inline ? .side : .inline) }),
-      ]
-      let (name, op) = ops[random.next(below: ops.count)]
-      log.append("\(step):\(name)")
-      // 落ちたときにも種と手順が残るように、当てる前に標準エラーへ出す。
-      FileHandle.standardError.write(Data("遷移 種 \(seed) \(log.joined(separator: " "))\n".utf8))
-      try op()
+      let passed = Fuzz.step(self, "種 \(seed) の手順 \(log.joined(separator: " "))") {
+        let shown = pane.diff
+        // 作業ツリーと index の手を、見せ方の手より多く引く（側の替わり方を多く試す）。
+        var ops: [(String, () throws -> Void)] = [
+          ("write", { try self.writeFile(self.randomText(&random)) }),
+          ("write", { try self.writeFile(self.randomText(&random)) }),
+          ("delete", { try self.removeEntry() }),
+          ("delete", { try self.removeEntry() }),
+          ("add", { self.repo.git(["add", "-A", "--", "a.txt"]) }),
+          ("add", { self.repo.git(["add", "-A", "--", "a.txt"]) }),
+          ("unstage", { self.repo.git(["restore", "--staged", "--", "a.txt"]) }),
+          ("repository", { try self.placeRepository() }),
+          ("repository", { try self.placeRepository() }),
+          ("conflict", { try self.conflict() }),
+          (
+            shown == nil ? "show" : "hide",
+            { shown == nil ? session.selectScreen(.changes) : session.show(other) }
+          ),
+          (
+            "switch kind",
+            {
+              let kind = session.changesDiff?.id.kind
+              try session.openDiff(self.id("a.txt", kind == .workingTree ? .staged : .workingTree))
+              session.selectScreen(.changes)
+            }
+          ),
+          ("mode", { modes.select(modes.mode == .inline ? .side : .inline) }),
+        ]
+        let (name, op) = ops[random.next(below: ops.count)]
+        log.append("\(step):\(name)")
+        // 落ちたときにも種と手順が残るように、当てる前に標準エラーへ出す。
+        FileHandle.standardError.write(Data("遷移 種 \(seed) \(log.joined(separator: " "))\n".utf8))
+        try op()
 
-      let truth: Truth
-      do {
-        truth = try readTruth()
-      } catch {
-        XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後、期待を読む git が失敗: \(error)")
-        return false
+        let truth = try readTruth()
+        if let mismatch = settle(pane, truth: truth) {
+          XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後: \(mismatch)")
+        }
       }
-      if let mismatch = settle(pane, truth: truth) {
-        XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後: \(mismatch)")
-        return false
-      }
+      guard passed else { return false }
     }
     return true
   }
@@ -92,11 +100,10 @@ extension EditorDiffTests {
   /// 食い違い。
   private func settle(_ pane: EditorPaneView, truth: Truth) -> String? {
     var mismatch: String?
-    let deadline = Date().addingTimeInterval(10)
-    repeat {
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    waitUntil(10) {
       mismatch = self.mismatch(pane.diff, truth: truth, mode: pane.diffModes.mode)
-    } while mismatch != nil && Date() < deadline
+      return mismatch == nil
+    }
     return mismatch
   }
 

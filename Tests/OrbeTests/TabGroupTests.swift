@@ -119,8 +119,7 @@ final class TabGroupTests: OrbeTestCase {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "edited\n")
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostEditor(tab, width: 900)
-    addTeardownBlock { window.orderOut(nil) }
+    hostEditor(tab, width: 900)
     let pane = tab.group.view.editor
     pumpMain(until: { pane.diff != nil }, "前提: Changes の diff が自動で開く")
     XCTAssertNil(tab.group.groupState(), "画面を選んでいないので、書くものが無い")

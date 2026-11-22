@@ -61,7 +61,7 @@ final class WindowControllerWorktreePaletteBaseTests: OrbeTestCase {
     wc.showWorktreePalette()
     let palette = try XCTUnwrap(wc.model.worktreePalette)
     XCTAssertTrue(
-      pump { palette.items.contains { $0.action == .open(.directory(path: toplevel)) } },
+      waitUntil(20) { palette.items.contains { $0.action == .open(.directory(path: toplevel)) } },
       "root path のリポジトリの worktree 行が並ぶ")
     palette.chooseTarget(at: try XCTUnwrap(palette.targets.firstIndex(of: .shell)))
     let row = try XCTUnwrap(
@@ -74,7 +74,7 @@ final class WindowControllerWorktreePaletteBaseTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.map(\.cwd), [toplevel], "選んだ行の解決先で新タブが 1 枚開く")
     let opened = try XCTUnwrap(wc.current.tabs.first)
     XCTAssertTrue(
-      pump { wc.window.firstResponder === opened.surface }, "キー入力はその新タブの surface へ入る")
+      waitUntil(20) { wc.window.firstResponder === opened.surface }, "キー入力はその新タブの surface へ入る")
   }
 
   /// 開いた後に（制御 API 等で）アクティブな workspace が替わっても、タブは開いた workspace に開く。
@@ -94,7 +94,7 @@ final class WindowControllerWorktreePaletteBaseTests: OrbeTestCase {
     wc.showWorktreePalette()
     let palette = try XCTUnwrap(wc.model.worktreePalette)
     XCTAssertTrue(
-      pump { palette.items.contains { $0.action == .open(.directory(path: toplevel)) } })
+      waitUntil(20) { palette.items.contains { $0.action == .open(.directory(path: toplevel)) } })
     palette.chooseTarget(at: try XCTUnwrap(palette.targets.firstIndex(of: .shell)))
     wc.switchWorkspace(to: 1)
     XCTAssertEqual(wc.current.name, "other", "前提: アクティブな workspace が替わった")
@@ -155,13 +155,14 @@ final class WorktreePaletteWorkspaceBindingTests: OrbeTestCase {
     palette.query = "feat/x"
     palette.onQueryChanged()
     XCTAssertTrue(
-      pump { palette.selectedItem?.action == .createBranch(name: "feat/x") }, "前提: 作成行が選ばれている")
+      waitUntil(20) { palette.selectedItem?.action == .createBranch(name: "feat/x") },
+      "前提: 作成行が選ばれている")
     XCTAssertEqual(palette.selectedBaseChoice?.role, .defaultBranch, "前提: 前回が無いので既定から作る")
 
     palette.activate()
     wc.switchWorkspace(to: 1)
 
-    XCTAssertTrue(pump { wc.workspaces[0].tabs.count == 1 }, "開いた workspace にタブが開く")
+    XCTAssertTrue(waitUntil(20) { wc.workspaces[0].tabs.count == 1 }, "開いた workspace にタブが開く")
     XCTAssertTrue(
       try XCTUnwrap(wc.workspaces[0].tabs.first).cwd.hasSuffix("/repo-worktrees/feat-x"),
       "作った worktree で開く")
@@ -175,26 +176,8 @@ final class WorktreePaletteWorkspaceBindingTests: OrbeTestCase {
 private extension OrbeTestCase {
   /// root path に置く 1 コミットのリポジトリ（origin 無し＝gh へは問い合わせない）。
   func makeRepository() throws -> String {
-    let dir = TestScratch.caseDir.appendingPathComponent("repo").path
-    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    try "x".write(
-      toFile: (dir as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-    for args in [
-      ["init", "-q", "-b", "main"], ["config", "user.email", "t@example.com"],
-      ["config", "user.name", "t"], ["add", "-A"], ["commit", "-qm", "init"],
-    ] {
-      XCTAssertTrue(GitRunner.shared.runSync(args, cwd: dir).isSuccess, "git \(args[0])")
-    }
-    return dir
-  }
-
-  /// main queue を回しながら条件の成立を待つ（provider の completion と次 tick のフォーカス確定は main で届く）。
-  func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
+    let dir = TestScratch.caseDir.appendingPathComponent("repo")
+    try TempGitRepo.place(at: dir)
+    return dir.path
   }
 }

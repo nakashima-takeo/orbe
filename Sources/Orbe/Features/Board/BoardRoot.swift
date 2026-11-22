@@ -102,7 +102,7 @@ struct BoardAutomationColumns: View {
         .focusable()
         .focusEffectDisabled()
         .focused(focused, equals: .list)
-        .onKeyPress { model.handleKey($0) }
+        .onKeyPress { model.handleKey(KeyInput($0)) }
       if case .automation(let id) = model.list.selectedID,
         let standing = standings.first(where: { $0.id == id }), let reason = standing.unreadable
       {
@@ -121,7 +121,7 @@ struct BoardAutomationColumns: View {
         .focusable()
         .focusEffectDisabled()
         .focused(focused, equals: .map)
-        .onKeyPress { model.handleMapKey($0) }
+        .onKeyPress { model.handleMapKey(KeyInput($0)) }
       } else {
         BoardAutomationGuide()
       }

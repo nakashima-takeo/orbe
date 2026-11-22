@@ -30,7 +30,8 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
       surface.scroll(toFirstLine: 0)
       let event = try XCTUnwrap(
         CGEvent(
-          scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -notches, wheel2: 0,
+          scrollWheelEvent2Source: SyntheticInput.source, units: .line, wheelCount: 1,
+          wheel1: -notches, wheel2: 0,
           wheel3: 0))
       surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
       XCTAssertEqual(

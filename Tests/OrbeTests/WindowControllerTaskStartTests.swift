@@ -18,33 +18,16 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
   let webId = UUID()
   var local: String!
 
-  /// origin（bare）と、それを clone した手元。手元の `stale` は origin の `stale` を追跡し、1 コミット遅れる。
+  /// origin（bare）と、それを clone した手元の組（`StaleCloneFixture`）を置く。
   override func setUpWithError() throws {
-    let dir = TestScratch.caseDir.appendingPathComponent("git").path
-    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    let origin = (dir as NSString).appendingPathComponent("origin.git")
-    local = (dir as NSString).appendingPathComponent("web")
-    let other = (dir as NSString).appendingPathComponent("other")
-    try git(["init", "-q", "--bare", "-b", "main", origin], in: dir)
-    try git(["clone", "-q", origin, other], in: dir)
-    try identify(other)
-    try git(["commit", "-q", "--allow-empty", "-m", "a"], in: other)
-    try git(["push", "-q", "origin", "HEAD:main", "HEAD:stale"], in: other)
-    try git(["clone", "-q", origin, local], in: dir)
-    try identify(local)
-    try git(["branch", "-q", "--track", "stale", "origin/stale"], in: local)
-    try git(["commit", "-q", "--allow-empty", "-m", "b"], in: other)
-    try git(["push", "-q", "origin", "HEAD:stale"], in: other)
+    let dir = TestScratch.caseDir.appendingPathComponent("git")
+    try StaleCloneFixture.place(at: dir)
+    local = dir.appendingPathComponent("web").path
   }
 
   func git(_ args: [String], in cwd: String) throws {
     let output = GitRunner.shared.runSync(args, cwd: cwd)
     XCTAssertTrue(output.isSuccess, "git \(args.joined(separator: " ")): \(output.stderrText)")
-  }
-
-  func identify(_ repo: String) throws {
-    try git(["config", "user.email", "t@example.com"], in: repo)
-    try git(["config", "user.name", "t"], in: repo)
   }
 
   /// 前面は main（素のタブ 1 枚）、背景に web（root が手元のリポジトリ・0 タブ）と Home。`webRoot`・`webTabs` で
