@@ -153,7 +153,7 @@ final class VirtualClock: FrameClock {
 }
 
 /// 自分では刻まない刻み。テストが `Renderer.tick` を呼んで刻みを打つ。次に画面に出る刻みは、いつ問われても `lead` 秒後
-/// （既定の 0 なら、起こされてもその場では描かない）。止める・再開するは描画スレッドだけが書く。
+/// （既定の 0 なら、起こされてもその場では描かない）。止まっているかは描画スレッドだけが書く。
 final class ManualClock: FrameClock, @unchecked Sendable {
   private let lead: Double
   var isPaused = false
