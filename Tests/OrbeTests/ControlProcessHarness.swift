@@ -122,9 +122,11 @@ final class ControlProcess {
       ControlServer.shared.socketPath, expected,
       "制御 socket が隔離根を指していない（隔離前に ControlServer が構築された）", file: file, line: line)
     ControlServer.shared.start(target: target)
+    // 待ち受けを開く仕事（bind・listen・権限の設定）は制御キューで走る。同じキューに後から積んで、走り終えるのを待つ。
+    ControlServer.shared.queue.sync {}
     XCTAssertTrue(
-      waitUntil(5) { FileManager.default.fileExists(atPath: expected) },
-      "control.sock が bind されない（bind 失敗は無言なので待ってから測る）", file: file, line: line)
+      FileManager.default.fileExists(atPath: expected),
+      "control.sock が bind されない（bind 失敗は無言なので、開き終えてから測る）", file: file, line: line)
   }
 
   /// `start` と必ず対にする。`openSocket()` は再入すると listenFD を漏らし `acceptSource` を

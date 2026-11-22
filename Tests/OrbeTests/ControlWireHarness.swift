@@ -38,6 +38,10 @@ final class ControlWire {
   /// 読んだが行に切れていない残り。
   private var pending = Data()
   private var barrierSeq = 0
+  /// client fd が読めるようになったら、main のランループを起こす入力源。応答はサーバの制御キューから書かれ、そのままでは
+  /// main を起こさないので、`waitUntil` は条件を見直す間隔のぶん待ってしまう。知らせは 1 回きりで、待つあいだだけ有効にする
+  /// （待っていないあいだは、読み残しが在っても起こさない）。
+  private var readable: CFFileDescriptor?
 
   init(target: FakeControlTarget?) {
     self.target = target
@@ -56,6 +60,12 @@ final class ControlWire {
     let flags = fcntl(clientFD, F_GETFL)
     precondition(flags >= 0 && fcntl(clientFD, F_SETFL, flags | O_NONBLOCK) >= 0, "O_NONBLOCK 失敗")
 
+    let descriptor = CFFileDescriptorCreate(nil, clientFD, false, { _, _, _ in }, nil)
+    if let descriptor, let source = CFFileDescriptorCreateRunLoopSource(nil, descriptor, 0) {
+      CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+    }
+    readable = descriptor
+
     // 生の fd の所有権はこの呼びで制御プレーンへ移る（以後この fd は Connection が閉じる）。
     ControlServer.shared.adopt(fd: fds[1])
   }
@@ -66,6 +76,9 @@ final class ControlWire {
   }
 
   func teardown() {
+    // 入力源を外してから fd を閉じる（閉じた番号を、後で開いた別の fd が使い回しうる）。
+    if let readable { CFFileDescriptorInvalidate(readable) }
+    readable = nil
     if clientFD >= 0 {
       Darwin.close(clientFD)
       clientFD = -1
@@ -178,13 +191,16 @@ final class ControlWire {
   /// サーバが接続を畳んだ（read が EOF を返した）ことを待つ。
   func waitForDisconnect(file: StaticString = #filePath, line: UInt = #line) {
     var buf = [UInt8](repeating: 0, count: 4096)
+    defer { wakeWhenReadable(false) }
     let closed = waitUntil(Self.deadlineSeconds) {
       while true {
         let n = read(clientFD, &buf, buf.count)
         if n > 0 { continue }  // 切断前に残っていた応答は読み飛ばす
         if n == 0 { return true }  // EOF＝サーバが畳んだ
         if errno == EINTR { continue }
-        return errno != EAGAIN && errno != EWOULDBLOCK  // 相手が落ちた扱い
+        guard errno == EAGAIN || errno == EWOULDBLOCK else { return true }  // 相手が落ちた扱い
+        wakeWhenReadable(true)
+        return false
       }
     }
     if !closed {
@@ -206,11 +222,23 @@ final class ControlWire {
   private func nextLine() -> LineOutcome {
     var buf = [UInt8](repeating: 0, count: 4096)
     var outcome: LineOutcome?
+    defer { wakeWhenReadable(false) }
     waitUntil(Self.deadlineSeconds) {
       outcome = takeLine(&buf)
+      if outcome == nil { wakeWhenReadable(true) }
       return outcome != nil
     }
     return outcome ?? .timedOut
+  }
+
+  /// 有効にすると、次に読めるようになったときに 1 回だけ main を起こす。有効にする前に届いていたなら、すぐに起こす。
+  private func wakeWhenReadable(_ enabled: Bool) {
+    guard let readable else { return }
+    if enabled {
+      CFFileDescriptorEnableCallBacks(readable, kCFFileDescriptorReadCallBack)
+    } else {
+      CFFileDescriptorDisableCallBacks(readable, kCFFileDescriptorReadCallBack)
+    }
   }
 
   /// 読めるだけ読み、行・EOF のどちらかに決まればそれを返す。まだ届いていない（EAGAIN）ときは nil。
