@@ -22,6 +22,8 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["commit", "-qm", "four lines"]).isSuccess)
   }
 
+  /// 根のタブを窓に載せる。タブ（連とセッション）は、製品で workspace が持つのと同じく、このテストがテストの終わりまで持つ——
+  /// pane は連が生きている間だけ本体を見せるので、呼び手がタブを捨てても diff と文書の持ち主が残る。
   func tab(modes: EditorDiffModeState? = nil) -> (TerminalTab, NSWindow) {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
@@ -29,7 +31,10 @@ final class EditorDiffTests: OrbeTestCase {
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
       diffModes: modes ?? EditorDiffModeState())
-    addTeardownBlock { window.orderOut(nil) }
+    addTeardownBlock {
+      window.orderOut(nil)
+      withExtendedLifetime(tab) {}
+    }
     return (tab, window)
   }
 

@@ -58,6 +58,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
 
   /// 溢れたツリー（41 行・見えている 192pt）を載せ、`placeOffscreen` で並べた窓。
   private struct Tree {
+    /// 連を生かしておく（面は連を弱く持つ）。
+    let tab: TerminalTab
     let pane: EditorPaneView
     let window: NSWindow
     let scroll: NSScrollView
@@ -96,7 +98,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
     let scroll = try XCTUnwrap(scrollView(in: tab.group.view.editor.sideHost))
     let document = try XCTUnwrap(scroll.documentView)
     pumpMain(until: { document.frame.height > scroll.documentVisibleRect.height * 2 }, "ツリーが溢れる")
-    return Tree(pane: tab.group.view.editor, window: window, scroll: scroll, document: document)
+    return Tree(
+      tab: tab, pane: tab.group.view.editor, window: window, scroll: scroll, document: document)
   }
 
   /// 今の位置のつまみの中央（窓の座標）。
