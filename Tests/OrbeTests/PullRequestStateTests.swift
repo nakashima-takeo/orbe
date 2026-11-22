@@ -224,6 +224,10 @@ final class PullRequestStateTests: OrbeTestCase {
 
   /// 両端を求めている間に見ている者が去れば、手元に無いコミットを取りに行かない。戻れば、読み直しを頼まなくても求め直して
   /// 両端が揃う。
+  ///
+  /// 「取りに行かない」は、両端が「求めていない」に戻った時点で確かめる。取りに行くかは、両端を求める処理の中で、その戻す
+  /// 判断と同じ場で同期に決まる、という前提に依る（本番の判定を外すと、このテストが落ちることを確かめてある）。本番が両端を
+  /// 求める処理の届け方を変えたときは、確かめ直す。
   func testBoundsAreNotFetchedAfterTheWatchersLeaveAndAreResolvedOnReturn() throws {
     let repo = try TempGitRepo()
     let bare = repo.addOrigin()
@@ -243,10 +247,6 @@ final class PullRequestStateTests: OrbeTestCase {
     state.endWatching()
 
     pumpMain(until: { state.bounds == .none }, "求めるのをやめる")
-    let until = Date().addingTimeInterval(1)
-    while Date() < until {
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
-    }
     XCTAssertNotEqual(clone.git(["cat-file", "-e", head + "^{commit}"]).status, 0, "取りに行かない")
 
     state.beginWatching()
