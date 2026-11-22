@@ -6,13 +6,14 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 面の結線——一致の地は検索パネルが見えている間だけ ⌘F の一致との和で本文と俯瞰に出る、パネルの中のキー（⌥⌘C / W / R・
-/// ⌘↓ / ⌘↑）、エディター面の F4 / ⇧F4、開き方と焦点（シングルクリックは仮の文書として結果に残り、ダブルクリック・Enter は
-/// 普通の文書として本文へ、一致は中央へ）、パネルを隠すと焦点は本文へ戻り、焦点の要求は後で奪わない、裏のタブの cd では
-/// 探さない。
+/// ⌘↓ / ⌘↑）、エディター面の F4 / ⇧F4、ほかの画面・閉じた左の列からの ⌘⇧F、開き方と焦点（シングルクリックは仮の文書として
+/// 結果に残り、ダブルクリック・Enter は普通の文書として本文へ、一致は中央へ）、パネルを隠すと焦点は本文へ戻り、焦点の要求は
+/// 後で奪わない、裏のタブの cd では探さない。
 ///
 /// 壊れると何が起きるか。パネルを隠しても地が残る、⌘F の地が消える。パネルのキーが効かない、本文の打鍵を奪う。端末の F4 が
-/// 奪われる、本文の F4 が効かない。クリックで渡るたびに焦点が本文へ飛ぶ、タブが増える。隠れたパネルに焦点が取り残されて
-/// 打鍵が消える。見ていないタブが cd のたびに根の全体を探す。
+/// 奪われる、本文の F4 が効かない。左の列を閉じている・Changes や PR の画面に居ると、⌘⇧F を押しても入力欄が出ない。
+/// クリックで渡るたびに焦点が本文へ飛ぶ、タブが増える。隠れたパネルに焦点が取り残されて打鍵が消える。見ていないタブが cd の
+/// たびに根の全体を探す。
 extension ProjectSearchPaneTests {
   typealias RowID = ProjectSearch.RowID
 
@@ -114,6 +115,20 @@ extension ProjectSearchPaneTests {
     hosted.window.makeFirstResponder(pane.focusTarget)
     hosted.search.clear()
     XCTAssertFalse(pane.handleStepKey(f4), "結果が無ければ素通し")
+  }
+
+  /// ⌘⇧F は、ほかの画面に居ても左の列を閉じていても、Files の画面にして左の列を検索パネルで開き、入力欄に焦点を入れる。
+  func testFindInProjectFromAnotherScreenWithTheSidebarClosedFocusesTheSearchField() throws {
+    let hosted = try host(["a.txt": "needle\n"])
+    let pane = hosted.pane
+    pane.switchScreen(.changes)
+    pane.toggleSidebar()
+
+    pane.showProjectSearch(seed: nil)
+    XCTAssertEqual(hosted.tab.group.editor.screen, .files)
+    XCTAssertTrue(pane.showsSearchPanel, "左の列を検索パネルで開く")
+    pumpMain(
+      until: { hosted.search.focusedArea == .field && pane.focusIsInSidebar }, "入力欄に焦点")
   }
 
   // MARK: - 開き方と焦点
