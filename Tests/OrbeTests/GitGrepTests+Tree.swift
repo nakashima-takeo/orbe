@@ -26,8 +26,7 @@ extension GitGrepTests {
       environment: GitGrep.environment,
       onOutput: { data in lock.withLock { paths.formUnion(parser.feed(data).map(\.path)) } },
       completion: { output in lock.withLock { ended = output } })
-    let deadline = Date().addingTimeInterval(20)
-    while lock.withLock({ ended == nil }), Date() < deadline { usleep(10_000) }
+    sleepUntil(20) { lock.withLock { ended != nil } }
     return try lock.withLock { (paths, try XCTUnwrap(ended, "git grep が終わらない")) }
   }
 

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -84,7 +85,7 @@ extension AutomationTrialTests {
     let trial = try trials.start(.saved(id), .init())
     var reply: (AutomationTrial?, Bool)?
     trials.wait(trial.id, timeout: .milliseconds(30)) { reply = ((try? $0.get()), $1) }
-    settle(until: { reply != nil })
+    pumpMain(until: { reply != nil })
     XCTAssertEqual(reply?.1, true)
     XCTAssertEqual(reply?.0?.running, true)
   }

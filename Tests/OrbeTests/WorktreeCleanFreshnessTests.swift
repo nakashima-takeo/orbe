@@ -31,7 +31,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     let model = WorktreePaletteModel()
     let provider = makeProvider(model)
     provider.load()
-    XCTAssertTrue(pump({ model.classification != nil }, timeout: 30), "prune の失敗で止まらない")
+    XCTAssertTrue(waitUntil(30) { model.classification != nil }, "prune の失敗で止まらない")
     XCTAssertFalse(provider.classificationPending, "材料が出揃えば待機は解ける")
   }
 
@@ -42,8 +42,8 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     let model = WorktreePaletteModel()
     let provider = makeProvider(model)
     provider.load()
-    XCTAssertTrue(pump({ model.classification != nil }, timeout: 30))
-    XCTAssertTrue(pump({ !provider.classificationPending }, timeout: 30))
+    XCTAssertTrue(waitUntil(30) { model.classification != nil })
+    XCTAssertTrue(waitUntil(30) { !provider.classificationPending })
 
     let gone = try XCTUnwrap(row(model, branch: "feat/gone"))
     XCTAssertEqual(gone.group, .safe, "gh 抜きでも安全群は機能する")
@@ -61,7 +61,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     let provider = makeProvider(model)
     provider.load()
     // prune は数秒かかるので、worktree 一覧の着地だけを待てば「prune 未着地」の窓に居る。
-    XCTAssertTrue(pump({ !provider.facts.worktrees.isEmpty }))
+    XCTAssertTrue(waitUntil(20) { !provider.facts.worktrees.isEmpty })
     XCTAssertNil(model.classification, "前提: まだ prune が着地していない")
 
     // ここから先は同期。completion はメインで返るので、この間に prune が割り込むことはない。
@@ -77,8 +77,8 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     XCTAssertTrue(provider.probingPaths.isEmpty, "gh 着地は prune 前にプローブを撃たない")
     XCTAssertNil(model.classification)
 
-    XCTAssertTrue(pump({ model.classification != nil }, timeout: 30), "prune 着地後に初めて分類が出る")
-    XCTAssertTrue(pump({ !provider.classificationPending }, timeout: 30))
+    XCTAssertTrue(waitUntil(30) { model.classification != nil }, "prune 着地後に初めて分類が出る")
+    XCTAssertTrue(waitUntil(30) { !provider.classificationPending })
   }
 
   // MARK: - 発行と着地の帳簿
@@ -90,7 +90,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     let model = WorktreePaletteModel()
     let provider = makeProvider(model)
     provider.load()
-    XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
+    XCTAssertTrue(waitUntil(20) { model.classification != nil && !provider.classificationPending })
     let repo = try XCTUnwrap(provider.facts.repo)
     // 比較は git が返した path そのもの（一時ディレクトリは symlink 越しに見える）。
     let path = try XCTUnwrap(row(model, branch: "feat/x")).id
@@ -101,7 +101,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     XCTAssertEqual(provider.probingPaths[path], 2, "重なった発行は 2 本として数える")
     XCTAssertTrue(provider.classificationPending)
 
-    XCTAssertTrue(pump({ provider.probingPaths.isEmpty }, timeout: 30), "着地でどちらも減る")
+    XCTAssertTrue(waitUntil(30) { provider.probingPaths.isEmpty }, "着地でどちらも減る")
     XCTAssertTrue(
       try XCTUnwrap(row(model, branch: "feat/x")).isReady, "両方着地して初めて確定へ戻る")
     XCTAssertFalse(provider.classificationPending)
@@ -116,7 +116,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     let model = WorktreePaletteModel()
     let provider = makeProvider(model)
     provider.load()
-    XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
+    XCTAssertTrue(waitUntil(20) { model.classification != nil && !provider.classificationPending })
     let repo = try XCTUnwrap(provider.facts.repo)
 
     provider.facts.probedGitHubState = nil
@@ -165,7 +165,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     let provider = makeProvider(model)
 
     provider.load()
-    XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
+    XCTAssertTrue(waitUntil(20) { model.classification != nil && !provider.classificationPending })
 
     XCTAssertEqual(
       provider.facts.worktrees.filter { $0.branch == "feat/x" }.count, 2,
@@ -250,15 +250,5 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
   @discardableResult
   private func git(_ args: [String]) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: dir.path)
-  }
-
-  /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
   }
 }

@@ -56,11 +56,7 @@ final class BackgroundProcessTests: OrbeTestCase {
   private func isGone(pidIn path: String, within timeout: TimeInterval = 3) throws -> Bool {
     let text = try String(contentsOfFile: path, encoding: .utf8)
     let pid = try XCTUnwrap(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
-      if kill(pid, 0) == -1, errno == ESRCH { return true }
-      usleep(20_000)
-    }
+    if sleepUntil(timeout, { kill(pid, 0) == -1 && errno == ESRCH }) { return true }
     kill(pid, SIGKILL)
     return false
   }

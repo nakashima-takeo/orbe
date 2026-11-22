@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -25,7 +26,7 @@ final class SurfaceThumbTests: EngineTestCase {
     let shows = { (label: String, change: () -> Void) throws in
       change()
       XCTAssertNotEqual(try self.verticalThumb(opened), [0, 0, 0], "\(label) で現れる")
-      self.pump(until: { (try? self.verticalThumb(opened)) == [0, 0, 0] }, "\(label) の後、止まれば消える")
+      pumpMain(until: { (try? self.verticalThumb(opened)) == [0, 0, 0] }, "\(label) の後、止まれば消える")
     }
     try shows("面の高さ") {
       surface.viewStateDidChange(size: CGSize(width: 800, height: 300), scale: 2, visible: false)

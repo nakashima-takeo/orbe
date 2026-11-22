@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -25,12 +26,6 @@ extension AutomationNodePassTests {
   private func directory(_ index: Int) -> String? {
     guard case .command(let command, _) = jobs.calls[index].job.work else { return nil }
     return command.directory
-  }
-
-  private func nextTurn() {
-    let turned = expectation(description: "main の次の巡り")
-    DispatchQueue.main.async { turned.fulfill() }
-    wait(for: [turned], timeout: 1)
   }
 
   func testACommandRunsUnderTheWorkspaceRootOfTheMoment() {

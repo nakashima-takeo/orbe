@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -38,7 +39,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
   /// 欄が決まった（まだ決まらない間ではない）状態まで待つ。
   func settle(_ model: WorktreePaletteModel) -> Bool {
-    pump { model.hasLoadedOnce && !model.taskTargetPending && model.newBranchRules != nil }
+    waitUntil(20) { model.hasLoadedOnce && !model.taskTargetPending && model.newBranchRules != nil }
   }
 
   func taskSection(_ model: WorktreePaletteModel) -> WorktreePaletteSection? {
@@ -114,7 +115,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     items.ensure([pr.item])
 
     provider.load()
-    XCTAssertTrue(pump { model.hasLoadedOnce && model.newBranchRules != nil })
+    XCTAssertTrue(waitUntil(20) { model.hasLoadedOnce && model.newBranchRules != nil })
     XCTAssertTrue(model.taskTargetPending, "ブランチ名が届くまで欄は決まらない")
     model.activate()
     XCTAssertEqual(executed, [], "↵ は預かる（今の worktree で決めない）")
@@ -133,7 +134,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
         ]))
     provider.rebuild()
 
-    XCTAssertTrue(pump { !executed.isEmpty })
+    XCTAssertTrue(waitUntil(20) { !executed.isEmpty })
     XCTAssertEqual(executed, [.localBranch(name: "docs/readme-en")], "届いたブランチで効く")
     let row = try XCTUnwrap(taskSection(model)?.items.first)
     XCTAssertEqual(row.pullRequest, 230, "PR のブランチと分かる")
