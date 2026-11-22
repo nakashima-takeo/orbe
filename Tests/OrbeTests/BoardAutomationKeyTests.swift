@@ -118,6 +118,7 @@ final class BoardAutomationKeyTests: OrbeTestCase {
       automation.store.automations.contains { automation.runner.isRunning($0.id) }, "どれも走らない")
     XCTAssertEqual(automation.store.automations, untouched, "どれも変わらない")
     XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "選択も動かない")
+    XCTAssertEqual(automation.place, .list, "地図へ入らない")
   }
 
   /// 自動化が 0 件なら、欄の ↑↓ は何もしない（移る行が無い）。
