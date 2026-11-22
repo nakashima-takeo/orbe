@@ -29,8 +29,10 @@ extension EditorDiffTests {
     waitRows(diff, "行差分が届く") { self.removedLines($0) == [1] }
   }
 
-  /// 未保存のファイルが外で消えて戻ると、diff はその未保存の文書を新しい側に使い、タブ行の文書に未保存の印が出る。
+  /// 未保存のファイルが外で消えて戻ると、diff はその未保存の文書を新しい側に使い、タブ行の文書に未保存の印が出る。ほかの
+  /// 変更（未追跡の b.txt）を残し、戻したときに変更が 1 件も無くなって diff が閉じないようにする。
   func testADiffSwitchesToTheUnsavedDocumentWhenItsFileComesBack() throws {
+    try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
     let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     document.surface.responder.perform(Selector(("insertText:")), with: "Z")
@@ -45,8 +47,10 @@ extension EditorDiffTests {
   }
 
   /// 未追跡のファイルの作業ツリー diff を見せている間に、未保存のままファイルが消え、保存時の本文へ戻して未保存が下りると、
-  /// その時点で diff が今の作業ツリーの姿（両側とも無い）に追いつく。
+  /// その時点で diff が今の作業ツリーの姿（両側とも無い）に追いつく。ほかの変更（未追跡の b.txt）を残し、消したときに変更が
+  /// 1 件も無くなって diff が閉じないようにする。
   func testAnUntrackedFilesDiffCatchesUpWhenTheUnsavedMarkClearsLater() throws {
+    try repo.write("b.txt", "b\n")
     try repo.write("u.txt", "u\n")
     let (tab, _) = tab()
     let document = try tab.group.editor.open(repo.url("u.txt"), as: .pinned)
@@ -64,8 +68,9 @@ extension EditorDiffTests {
   }
 
   /// index にも作業ツリーにも無いパス・HEAD にも index にも無いパスの diff は、種類ごとの理由の一文を出す。開いた後で両側とも
-  /// 無くなったときも同じ。
+  /// 無くなったときも同じ。ほかの変更（未追跡の b.txt）を残し、消したときに変更が 1 件も無くなって diff が閉じないようにする。
   func testADiffOfAPathInNeitherSideSaysWhy() throws {
+    try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
     let pane = tab.group.view.editor
     let working = try tab.group.editor.openDiff(id("nope.txt", .workingTree))
