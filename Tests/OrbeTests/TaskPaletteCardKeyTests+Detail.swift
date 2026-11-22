@@ -67,7 +67,10 @@ extension TaskPaletteCardKeyTests {
     send(Key.enter, "\r", to: window)
 
     XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.waiting?.reason, "review")
-    XCTAssertNil(model.draft)
+    XCTAssertNil(
+      model.draft,
+      "↵ で編集を確定する。testEnterHeldOnAOneLineFieldStartsEditingOnceAndKeepsEditing の「リピートで確定しない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
 
     send(Key.enter, "\r", to: window)
     type("x", into: window)
@@ -108,7 +111,10 @@ extension TaskPaletteCardKeyTests {
     type("2", into: window)
     send(Key.escape, "\u{1B}", to: window)
 
-    XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "1\n\n\n2")
+    XCTAssertEqual(
+      model.store.tasks.first { $0.id == 3 }?.description, "1\n\n\n2",
+      "↵ で改行し、esc で確定する。testCommandEnterWhileEditingTheDescriptionDoesNothing の「確定も改行もしない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     XCTAssertNil(model.draft)
     XCTAssertEqual(model.area, .detail(.field(.description)))
 
@@ -141,7 +147,10 @@ extension TaskPaletteCardKeyTests {
 
     send(Key.tab, "\t", to: window)
 
-    XCTAssertEqual(model.tab, .github)
+    XCTAssertEqual(
+      model.tab, .github,
+      "右の欄の ⇥ で次のタブへ移る。testTabWhileEditingKeepsTheTabAndTheEdit の「編集中はタブを替えない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     type("x", into: window)
     XCTAssertEqual(model.query, "x")
   }

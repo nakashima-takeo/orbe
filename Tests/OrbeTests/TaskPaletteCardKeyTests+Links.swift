@@ -21,12 +21,12 @@ extension TaskPaletteCardKeyTests {
   func testAnItemTheAgentLinksWhileOpenIsFetched() throws {
     var requested: [Set<GitHubItemID>] = []
     let model = linkedModel(githubItems: GitHubItemCache { ids, _ in requested.append(Set(ids)) })
-    _ = mount(model)
+    let window = mount(model)
 
     var update = TaskUpdate()
     update.links = [link(.issue, 7)]
     _ = try model.store.update(2, update)
-    pump(0.3)
+    flush(window)
 
     XCTAssertEqual(requested.last, [link(.issue, 7).item])
   }

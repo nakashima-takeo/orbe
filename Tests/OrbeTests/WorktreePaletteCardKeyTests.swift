@@ -15,9 +15,11 @@ import XCTest
 final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
   func mount(_ model: WorktreePaletteModel) -> NSWindow {
-    host(
+    let window = host(
       NSHostingView(rootView: WorktreePaletteCard(model: model, maxHeight: 520).frame(width: 720)),
       size: NSSize(width: 760, height: 520))
+    awaitFieldFocus(window)
+    return window
   }
 
   private func sendTab(shift: Bool, to window: NSWindow) {
@@ -125,13 +127,13 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     let model = DesignSceneFixtures.worktreePalettePullRequestModel()
     var rebuilds = 0
     model.onTaskInputsChanged = { rebuilds += 1 }
-    _ = mount(model)
+    let window = mount(model)
     let before = rebuilds
 
     var update = TaskUpdate()
     update.links = []
     _ = try model.tasks.update(4, update)
-    pump(0.3)
+    flush(window)
 
     XCTAssertGreaterThan(rebuilds, before)
   }

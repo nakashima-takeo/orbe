@@ -41,10 +41,13 @@ extension WindowControllerBoardTests {
   // MARK: - 照合を呼ぶ他の経路
 
   /// ボードを選んでいる間に裏のタブが cd で別の連へ移っても、ボードは出たままで、焦点もボードに残る。
+  ///
+  /// 裏のタブの cd で焦点が動く場合は無いので、この確かめには対のテストを置けない。cd でタブが別の連へ移る処理も、焦点に
+  /// 触る処理も同期なので、`flush` の直後に確かめる。この時点で足りることは、本番で cd の後に端末へ焦点を移すように変えると、
+  /// このテストが落ちることで確かめた。本番が cd の結果を届ける経路を変えたときは、確かめ直す。
   @MainActor func testACdBehindTheBoardKeepsTheBoardShownAndFocused() throws {
     let wc = try homeOnBoard(tabs: 2)
-    pump()
-    XCTAssertTrue(wc.window.firstResponder is NSTextView, "前提: 焦点は依頼の欄")
+    awaitRequestField(wc)
     let moved = wc.current.tabs[1]
 
     moved.surface.currentPwd = "/tmp"  // OSC 7
@@ -52,7 +55,7 @@ extension WindowControllerBoardTests {
     XCTAssertFalse(moved.group === wc.current.tabs[0].group, "前提: 別の連へ移る")
     XCTAssertEqual(wc.current.selection, .board)
     XCTAssertEqual(visibleContent(wc), [wc.boardView])
-    pump()
+    flush(wc.window)
     XCTAssertTrue(wc.window.firstResponder is NSTextView, "焦点はボードのまま")
   }
 
@@ -108,6 +111,11 @@ extension WindowControllerBoardTests {
   }
 
   /// 裏で起こすタブ（`select: false` の spawn——`start_task` と同じ経路）は、ボードを押しのけずに起きる。
+  ///
+  /// 選ばずに起こしたタブがボードを押しのける場合は無いので、この確かめには対のテストを置けない。押しのけが起きるなら、
+  /// タブが起きるまでの処理の中で起きるので、タブが起きた後に確かめる。この時点で足りることは、本番の、選ばずにタブを起こす
+  /// 処理を、起こした後にそのタブを選ぶように変えると、このテストが落ちることで確かめた。本番がタブを起こす経路を変えたときは、
+  /// 確かめ直す。
   func testUnselectedSpawnWakesBehindTheBoard() throws {
     let wc = try homeOnBoard(tabs: 0)
     let homeId = wc.current.id
@@ -115,9 +123,9 @@ extension WindowControllerBoardTests {
     let tabId = try wc.controlSpawn(workspaceId: homeId, cwd: nil, command: nil, selects: false)
       .get()
 
-    XCTAssertEqual(wc.current.selection, .board, "ボードのまま")
-    XCTAssertEqual(visibleContent(wc), [wc.boardView])
     let opened = try XCTUnwrap(wc.controlResolveTab(tabId))
     XCTAssertTrue(waitUntil { opened.surface.surfacePtr != nil }, "そのタブは起きる")
+    XCTAssertEqual(wc.current.selection, .board, "ボードのまま")
+    XCTAssertEqual(visibleContent(wc), [wc.boardView])
   }
 }
