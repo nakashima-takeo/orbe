@@ -96,11 +96,18 @@ final class ScmPanelTests: OrbeTestCase {
     try repo.write("c.txt", "c\n")
     show(until: { $0.isHeadPushed == false && $0.changes.changes.count == 1 }, "未 push の HEAD と変更")
 
+    var knewWhileStaging = true
     panel.control.stage([GitStatus.Row(path: "c.txt", originalPath: nil)])
+    pumpMain(
+      until: {
+        knewWhileStaging = knewWhileStaging && self.panel.isHeadPushed != nil
+        return self.panel.control.operations.isEmpty
+      }, timeout: 20, "ステージが終わる")
+    XCTAssertTrue(knewWhileStaging, "ステージの間")
+    // index の変化の知らせは、ステージが終わった後に届き、それに続く読み直しもその後になる。
     XCTAssertTrue(
       holds(for: BatchDebounce.maximumDelay + 0.5) { self.panel.isHeadPushed != nil },
-      "ステージと、index の変化の後の読み直し")
-    idle("ステージ")
+      "index の変化の後の読み直し")
     pumpMain(until: { self.panel.changes.staged.map(\.path) == ["c.txt"] }, "c.txt がステージ済みへ")
   }
 
