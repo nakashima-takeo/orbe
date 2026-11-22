@@ -6,9 +6,9 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// diff の flow（fixture は `EditorDiffFixtures`——本物のコード片の git リポジトリ。開くのは `open_diff` と同じセッション
-/// の口）。作業ツリー / ステージ済み × インライン / 並列 × dark / light、長い行を横に送った状態、削除の多い区間、表示できない
-/// 一文、新しいファイル・消したファイル（版が無い側は 0 行。見えている高さより長く消したファイルは削除行の頭から開く）、diff の
+/// diff の flow（fixture は `EditorDiffFixtures`——本物のコード片の git リポジトリ。開くのは `open_diff` と同じ連の口）。
+/// 作業ツリー / ステージ済み × インライン / 並列 × dark / light、長い行を横に送った状態、削除の多い区間、表示できない一文、
+/// 新しいファイル・消したファイル（版が無い側は 0 行。見えている高さより長く消したファイルは削除行の頭から開く）、diff の
 /// 中で編集して未保存にした文書がタブ行に残ったまま別の diff へ移った姿を撮る。
 extension DesignFlowSnapshotTests {
   func testEditorDiff() throws {
@@ -96,12 +96,16 @@ private final class DiffStage {
     scene.cleanup()
   }
 
-  /// diff を開き、中身・並び・色が揃うまで待つ。
+  /// diff を `open_diff` と同じ連の口で開き（Changes の画面を選び、左の列でその行を選ぶ）、行の選択と、中身・並び・色が揃う
+  /// まで待つ。
   @discardableResult
   func open(_ path: String, _ kind: EditorDiff.Kind) throws -> EditorDiff {
-    let diff = try scene.group.editor.openDiff(scene.key(path, kind))
+    let key = scene.key(path, kind)
+    try scene.group.openDiff(key)
+    let pane = pane
+    pumpMain(until: { pane.scm.selection == pane.scm.rowID(of: key) }, "左の列でその行を選ぶ")
     settle()
-    return diff
+    return try XCTUnwrap(pane.diff)
   }
 
   func select(_ mode: EditorDiff.Mode) {
