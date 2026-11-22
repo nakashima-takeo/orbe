@@ -5,13 +5,14 @@ import XCTest
 
 /// 親「ソース管理」とグラフの枠（エディター面に結んだパネル）——親を畳むと、焦点のあった欄・列から本文へ焦点を移してから
 /// 隠す。cd で根が変わってパネルが作り直されるときも、上のバーでほかの画面へ移ってパネルが隠れるときも、同じく本文へ
-/// 焦点を移す。親を畳んだままソース管理を出しても、パネルの中へ焦点を求めない。グラフの列で押して働くのは「さらに表示」
+/// 焦点を移す。上のバーで Changes へ切り替えると、左の列を開いていて変更の列に行があれば列へ焦点を入れる。親を畳んだまま・
+/// 左の列を閉じたままソース管理を出しても、パネルの中へ焦点を求めない。グラフの列で押して働くのは「さらに表示」
 /// だけで、押しても変更の列の焦点と選択は動かない。境目を引くとグラフの枠の高さが変わり、離すと記憶へ書き戻す。
 ///
 /// 壊れると何が起きるか。列で ↑↓ していて親を畳むと、焦点が窓へ落ちてキーがどこにも届かない（パネルは焦点があると思った
 /// まま）。欄や列に焦点がある間に cd しても、上のバーで画面を替えても、焦点が窓へ落ちてキーがどこにも届かない。畳んだ親を
-/// 開いた瞬間に、残っていた焦点の要求が本文の焦点を奪う。グラフのコミットを押すと、変更の列から焦点が抜けて ↑↓ が効かなく
-/// なる。「さらに表示」を押しても 50 件の先が出ない。境目を引いても枠が動かない・逆へ動く・ポインタから離れて動く、離しても
+/// 開いた瞬間に、残っていた焦点の要求が本文の焦点を奪う。上のバーで Changes を押しても列に焦点が入らず、↑↓ が列に効かない。
+/// グラフのコミットを押すと、変更の列から焦点が抜けて ↑↓ が効かなくなる。「さらに表示」を押しても 50 件の先が出ない。境目を引いても枠が動かない・逆へ動く・ポインタから離れて動く、離しても
 /// 高さが残らず再起動で戻る。
 extension SourceControlPaneTests {
   /// 変更 a.txt・b.txt と 1 コミットのグラフが出た面。
@@ -98,6 +99,24 @@ extension SourceControlPaneTests {
     pumpMain(until: { hosted.pane.scmList.list.window != nil }, "列が戻る")
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     XCTAssertNil(scm.focusedArea, "開いても焦点を奪わない")
+  }
+
+  /// 上のバーで Changes へ切り替えると、変更の列に行があれば列に焦点が入る。左の列を閉じていれば本文の行き先へ移し、列へ
+  /// 焦点を求めない（開いた瞬間に焦点を奪わない）。
+  func testSwitchingToChangesFocusesTheListOnlyWhileTheSidebarIsOpen() throws {
+    let hosted = try layersPane()
+    let pane = hosted.pane
+    pane.switchScreen(.files)
+    pumpMain(until: { hosted.window.firstResponder === pane.focusTarget }, "前提: 本文")
+
+    pane.switchScreen(.changes)
+    pumpMain(until: { hosted.window.firstResponder === pane.scmList.list }, "変更の列に焦点")
+
+    pane.switchScreen(.files)
+    pane.toggleSidebar()
+    pane.switchScreen(.changes)
+    XCTAssertTrue(hosted.window.firstResponder === pane.focusTarget, "閉じていれば本文の行き先")
+    XCTAssertNil(hosted.scm.focusRequest, "列へ焦点を求めない")
   }
 
   /// グラフの列のコミットを押しても何も起きず、「さらに表示」を押すと 50 件の先のコミットが出る。どちらでも変更の列の
