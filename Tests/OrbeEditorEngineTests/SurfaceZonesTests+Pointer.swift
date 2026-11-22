@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -94,7 +95,7 @@ extension SurfaceZonesTests {
     surface.setRows(zone(thread, at: 4))
     let hits = try XCTUnwrap(surface.zones[ObjectIdentifier(thread)]?.hits)
     surface.hover(at: viewPoint(surface, thread, center(hits.buttons[0].frame)))
-    RunLoop.main.run(until: Date())
+    pumpMainOnce()
     let before = surface.material.revision
 
     surface.selectedRange = NSRange(location: 1, length: 2)
@@ -102,7 +103,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(
       thread.events.last, .exited(ThreadZone.resolve), "前提: key でない窓ではポインタを持たず、押せる場所から出る")
     XCTAssertEqual(surface.material.revision, before, "並びの途中では箱へ書かない")
-    RunLoop.main.run(until: Date())
+    pumpMainOnce()
     XCTAssertEqual(surface.material.revision, before + 1, "周の終わりに 1 回だけ書く")
   }
 

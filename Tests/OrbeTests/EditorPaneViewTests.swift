@@ -33,7 +33,6 @@ final class EditorPaneViewTests: OrbeTestCase {
     XCTAssertNil(document.surface.view.superview)
     XCTAssertTrue(pane.focusTarget === pane)
     XCTAssertTrue(pane.hitTest(point) === pane, "空状態では面自身が受ける")
-    window.orderOut(nil)
   }
 
   /// 文書を切り替えると見せる面が入れ替わり、それぞれの文書の本文・undo はその文書の面に残る
@@ -59,7 +58,6 @@ final class EditorPaneViewTests: OrbeTestCase {
 
     first.surface.responder.undoManager?.undo()
     XCTAssertEqual(bodyText(first), "one", "undo 履歴も文書ごとに残っている")
-    window.orderOut(nil)
   }
 
   /// 見せる文書が入れ替わるとき、面の中にあった焦点は新しい行き先（次の文書の面・空状態なら面自身）へ移る。
@@ -80,7 +78,6 @@ final class EditorPaneViewTests: OrbeTestCase {
 
     tab.group.editor.close(second)
     XCTAssertTrue(window.firstResponder === tab.group.view.editor, "最後の文書を閉じたら面自身へ")
-    window.orderOut(nil)
   }
 
   /// 面の外（端末）に焦点があるときに文書を開いても、焦点は奪わない。
@@ -96,7 +93,6 @@ final class EditorPaneViewTests: OrbeTestCase {
     XCTAssertTrue(tab.group.view.editor.document === document, "面の中身は入れ替わる")
     XCTAssertFalse(
       window.firstResponder === document.surface.responder, "面の外にある焦点は動かさない")
-    window.orderOut(nil)
   }
 
   /// 面のクリックは焦点の行き先（文書があればテキスト面）へ焦点を運ぶ。pane 自身を指すと、テキスト面が
@@ -114,6 +110,5 @@ final class EditorPaneViewTests: OrbeTestCase {
     window.makeFirstResponder(nil)
     pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: window))
     XCTAssertTrue(window.firstResponder === document.surface.responder, "文書があればテキスト面")
-    window.orderOut(nil)
   }
 }

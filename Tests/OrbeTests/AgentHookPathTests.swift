@@ -25,13 +25,23 @@ final class AgentHookPathTests: OrbeTestCase {
     try ControlProcess.stageCodexPlugin().appendingPathComponent("hooks/orbe-agent-status.sh")
   }
 
-  /// 同梱シムを実 `/bin/sh` で起動する。env はタブから受け取った実値そのままで、親からは継承しない。`detached` なら
-  /// 制御端末を持たない親から起動する。
+  /// 同梱シムを実 `/bin/sh` で起動し、終わるまでの秒数を返す。env はタブから受け取った実値そのままで、親からは継承しない。
+  /// `detached` なら制御端末を持たない親から起動する。
+  ///
+  /// シムは `exec` で `orbe-report` に置き換わり、`orbe-report` は Orbe の応答の 1 行まで待つ（上限 2 秒）。Orbe は、
+  /// 報告をタブへ適用してから応答を書く。そのため、返った時点で、報告する経路なら適用まで済んでいる。返るまでに 2 秒以上
+  /// かかったなら、`orbe-report` は応答を受けずに諦めている。
+  ///
+  /// このクラスの「届く場合」の確かめが裏づけるのは、報告する経路の報告が、シムが返った時点でタブの状態に適用されている
+  /// こと。`orbe-report` が応答まで待つことは裏づけない——`orbe-report` が応答を待たずに接続を閉じて終わっても、報告の
+  /// 適用が `orbe-report` のプロセスの終了通知より先に main に届けば、この確かめは通る（どちらが先に届くかは決まって
+  /// いない）。応答まで待つことは `OrbeReportWireTests` が確かめる。
   @discardableResult
   private func runShim(
     _ shim: URL, agent: String = "claude", env: [String: String], state: String, stdin: String,
     detached: Bool = false, file: StaticString = #filePath, line: UInt = #line
-  ) -> ControlProcess.Outcome {
+  ) -> TimeInterval {
+    let started = Date()
     let sh = URL(fileURLWithPath: "/bin/sh")
     let args = [shim.path, agent, state]
     let outcome =
@@ -41,7 +51,7 @@ final class AgentHookPathTests: OrbeTestCase {
       : ControlProcess.run(sh, args, env: env, stdin: stdin, file: file, line: line)
     XCTAssertEqual(
       outcome.status, 0, "シムは常に exit 0（hook を落とさない）: \(outcome.stderr)", file: file, line: line)
-    return outcome
+    return Date().timeIntervalSince(started)
   }
 
   /// タブの実 env を取る。`PATH` だけ明示で種を置く——`prependBundledBin` は空なら親プロセスの
@@ -71,11 +81,13 @@ final class AgentHookPathTests: OrbeTestCase {
       "同梱 orbe-report の絶対パスが注入される")
     XCTAssertEqual(env["ORBE_BUNDLE_ID"], StateDir.bundleId, "シムのチャネルゲートが突き合わせる identity")
 
-    runShim(shim, env: env, state: "waiting", stdin: #"{"session_id":"s-1","message":"許可しますか"}"#)
+    let took = runShim(
+      shim, env: env, state: "waiting", stdin: #"{"session_id":"s-1","message":"許可しますか"}"#)
 
-    XCTAssertTrue(
-      waitUntil(5) { tab.agentState == "waiting" },
-      "hook の報告がタブ \(tab.id) に届かない（agentState=\(tab.agentState ?? "nil")）")
+    XCTAssertEqual(
+      tab.agentState, "waiting",
+      "hook の報告が、シムが返った時点でタブ \(tab.id) に届いていない（シムは \(took) 秒で返った）。"
+        + "これが待たずに成り立たなくなれば、testHookOutsideOrbeTabLeavesTabStateUntouched の確かめる時点も成り立たない")
     XCTAssertEqual(
       tab.agentSlot.session?.sessionId, "s-1", "stdin の session_id が resume 鍵としてタブまで届く")
   }
@@ -145,14 +157,13 @@ final class AgentHookPathTests: OrbeTestCase {
     let env = tabEnv(tab)
 
     runShim(codexShim, agent: "codex", env: env, state: "working", stdin: "{}", detached: true)
-    XCTAssertFalse(
-      waitUntil(0.5) { tab.agentState != nil },
-      "切り離した codex の hook でタブ状態が動いた（agentState=\(tab.agentState ?? "nil")）")
+    XCTAssertNil(tab.agentState, "切り離した codex の hook でタブ状態が動いた")
 
-    runShim(shim, agent: "claude", env: env, state: "working", stdin: "{}", detached: true)
-    XCTAssertTrue(
-      waitUntil(5) { tab.agentState == "working" },
-      "切り離した claude の hook の報告が届かない（agentState=\(tab.agentState ?? "nil")）")
+    let took = runShim(
+      shim, agent: "claude", env: env, state: "working", stdin: "{}", detached: true)
+    XCTAssertEqual(
+      tab.agentState, "working",
+      "切り離した claude の hook の報告が、シムが返った時点で届いていない（シムは \(took) 秒で返った）")
   }
 
   /// Orbe 外の端末（`ORBE_TAB` / `ORBE_SOCK` が無い）で走った hook はタブを一切動かさない。
@@ -168,11 +179,7 @@ final class AgentHookPathTests: OrbeTestCase {
       var partial = env
       partial.removeValue(forKey: dropped)
       runShim(shim, env: partial, state: "working", stdin: "{}")
-      // `runShim` は同期で、シムは `exec` で `orbe-report` に置き換わり、`orbe-report` は Orbe の応答まで
-      // 待つため、返った時点で報告する経路なら適用まで済んでいる。短い猶予で足りる。
-      XCTAssertFalse(
-        waitUntil(0.5) { tab.agentState != nil },
-        "\(dropped) が無い呼び出しでタブ状態が動いた（agentState=\(tab.agentState ?? "nil")）")
+      XCTAssertNil(tab.agentState, "\(dropped) が無い呼び出しでタブ状態が動いた")
     }
   }
 }

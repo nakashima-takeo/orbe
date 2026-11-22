@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -40,12 +41,12 @@ final class EditorLineMarksTests: OrbeTestCase {
     let ground = Ground(frame: NSRect(origin: .zero, size: size))
     document.surface.view.frame = ground.bounds
     ground.addSubview(document.surface.view)
-    let window = NSWindow(
+    let window = OrbeWindowFake(
       contentRect: ground.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.appearance = NSAppearance(named: .darkAqua)
     window.contentView = ground
     ground.layoutSubtreeIfNeeded()
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    holdUntilTestEnds(window)
     // 本文の最初の行が描かれるまで待つ（固定で眠らない）。
     waitDrawn {
       try stride(from: self.bodyX, to: self.bodyX + 24 * self.cell, by: 1).contains {

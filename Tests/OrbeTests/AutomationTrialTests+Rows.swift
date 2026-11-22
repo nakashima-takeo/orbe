@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -57,7 +58,7 @@ extension AutomationTrialTests {
         return false
       }
     }
-    settle(until: { agents().count == 1 })
+    pumpMain(until: { agents().count == 1 })
     guard let index = agents().first, case .agent(let call) = jobs.calls[index].job.work else {
       return XCTFail("p の agent が呼ばれていない")
     }

@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -341,10 +342,10 @@ extension EditorDiffTests {
     let diff = try tab.group.editor.openDiff(id("big.txt", .staged))
     let observer = try XCTUnwrap(diff.rootObserver)
 
-    let deadline = Date().addingTimeInterval(10)
-    while diff.content != .ready, Date() < deadline {
+    waitUntil(10) {
+      guard diff.content != .ready else { return true }
       observer.rootFilesStatusDidChange(diff.files)
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.005))
+      return false
     }
     XCTAssertEqual(diff.content, .ready, "status が変わり続けても中身が届く")
     XCTAssertEqual(diff.newRevision?.text.lineCount, staged.count + 1, "新しい側は index の本文")

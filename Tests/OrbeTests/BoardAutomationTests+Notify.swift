@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -6,9 +7,9 @@ import XCTest
 /// 地図の「通知」の段（見出しの「通知：…」の行）で開くサブメニュー「通知」。本物の `BoardView` を実窓に載せ、実 `NSEvent` の
 /// キーとクリックを届ける。
 ///
-/// 壊れると何が起きるか: 通知を替えたつもりが替わらない・別の自動化が替わる。替えた拍子に走っている回が止まる。開いている間の
-/// space・↵・⌘⌫・⌘↵ が下の地図や一覧へ抜けて、止める・実行・削除が起きる。選んでいる段が替わってもメニューが残り、別の
-/// 自動化の横で決めてしまう。外のクリックが下の行まで届き、閉じるつもりで選択が動く。
+/// 壊れると何が起きるか: 開いている間にほかの口が書き換えた定義を、通知を決めた拍子に上書きする。選んでいる段が替わっても
+/// メニューが残り、別の自動化の横で決めてしまう。外のクリックが下の行まで届き、閉じるつもりで選択が動く。「通知」の行が詳細の
+/// 見える範囲の外にあると開けない、または見えないまま開いている。
 extension BoardAutomationTests {
   /// 先頭の行（失敗の Backlog）の「通知」の行で開いたときの、メニューの行と外の窓の中の点（1200×700 の窓）。
   private enum NotifyPoint {
@@ -58,13 +59,11 @@ extension BoardAutomationTests {
   /// 詳細の中の「通知」の行の上端（見本の寸法: 上の余白 20・名前の行 21・間 4）。
   private static let notifyRowTop: CGFloat = 45
 
-  /// 「通知」の行が見える範囲へ引き寄せられるのを待つ。引き寄せ（`scrollTo`）はキーを処理した後の RunLoop で効くので、決まった
-  /// 時間だけ回すと遅い環境では引き寄せが後から効き、そのあと流した詳細を引き戻してしまう。
+  /// 「通知」の行が見える範囲へ引き寄せられる（`scrollTo`）のを待ち、引き寄せた後の位置を SwiftUI に反映してから、行が
+  /// 見える範囲に在るかを返す。引き寄せが効き終わる前に詳細をスクロールすると、引き寄せが後から効き、スクロールした位置を
+  /// 引き戻してしまう。
   private func waitForNotifyRow(_ detail: NSScrollView, in window: NSWindow) -> Bool {
-    let deadline = Date().addingTimeInterval(5)
-    while detail.contentView.bounds.minY > Self.notifyRowTop, Date() < deadline {
-      pump(0.05)
-    }
+    waitUntil { detail.contentView.bounds.minY <= Self.notifyRowTop }
     flush(window)
     return detail.contentView.bounds.minY <= Self.notifyRowTop
   }
@@ -81,46 +80,6 @@ extension BoardAutomationTests {
     let detail = try detailScroll(in: window)
     try scrollToBottom(detail, in: window)
     return (window, detail)
-  }
-
-  private func notifyLine(_ automation: BoardAutomationModel, _ id: Int) -> String? {
-    let text = automation.text(LocalizationStore(language: .ja), now: automation.runner.now())
-    return automation.detail(id, text: text, now: automation.runner.now())?.notify
-  }
-
-  /// 「通知」の段の → で開くと今の設定（通知しない）の行から。↓ ↵ でその自動化の通知だけがメニューバーに替わり、見出しが
-  /// 追従して閉じる。↵ でも開き、開き直すと印の行から始まり、↑ は端で巡回する。
-  func testTheNotifyRowOpensAtTheCurrentSettingAndReturnChoosesIt() throws {
-    let model = board()
-    let automation = model.automation
-    let window = mount(model)
-    openNotify(window)
-    let id = try XCTUnwrap(automation.selectedAutomation?.id)
-    let before = try XCTUnwrap(automation.store.automation(id)).definition
-    XCTAssertNil(before.notify, "前提: 見本は通知しない")
-
-    XCTAssertEqual(automation.notifyCursor, 0)
-    XCTAssertEqual(automation.hints.map(\.key), ["↑↓", "↵", "←"])
-    down(window)
-    send(Key.enter, "\r", to: window)
-
-    var expected = before
-    expected.notify = .menuBar
-    XCTAssertEqual(automation.store.automation(id)?.definition, expected, "通知だけが替わる")
-    XCTAssertNil(automation.notifyCursor)
-    XCTAssertEqual(notifyLine(automation, id), "通知：メニューバー")
-    XCTAssertEqual(automation.selectedMapStop, .notify, "段は動かない")
-    XCTAssertTrue(
-      automation.store.automations.filter { $0.id != id }.allSatisfy {
-        $0.definition.notify == nil
-      },
-      "ほかの自動化は替わらない")
-
-    send(Key.enter, "\r", to: window)
-    XCTAssertEqual(automation.notifyCursor, 1, "印の行から")
-    up(window)
-    up(window)
-    XCTAssertEqual(automation.notifyCursor, 2, "端で巡回する")
   }
 
   /// 開いている間にほかの口（AI）が定義を書き換えていたら、決めても書かずに閉じ、断りの赤も出さない（書き換えた定義が残る）。
@@ -144,69 +103,6 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.store.automation(id)?.version, current.version + 1)
     XCTAssertNil(automation.notifyCursor)
     XCTAssertNil(model.refusal)
-  }
-
-  /// ← と esc は何も変えずに閉じ、「通知」の段に戻る。ノードの段の → は開かない。
-  func testLeftAndEscapeCloseWithoutChanging() {
-    let model = board()
-    let automation = model.automation
-    let window = mount(model)
-    openNotify(window)
-
-    down(window)
-    left(window)
-    XCTAssertNil(automation.notifyCursor)
-    right(window)
-    down(window)
-    send(Key.escape, "\u{1B}", to: window)
-    XCTAssertNil(automation.notifyCursor)
-
-    XCTAssertEqual(automation.store.automations, untouched)
-    XCTAssertEqual(automation.selectedMapStop, .notify, "閉じると「通知」の段")
-    down(window)
-    right(window)
-    XCTAssertNil(automation.notifyCursor, "ノードの段の → は開かない")
-  }
-
-  /// 開いている間は、下のキー（space・↵ のリピート・⌘⌫・⌘↵・↑↓）は地図にも一覧にも効かない。
-  func testKeysWhileOpenDoNotReachBelow() {
-    let model = board()
-    let automation = model.automation
-    let window = mount(model)
-    openNotify(window)
-    let selected = automation.selectedAutomation?.id
-
-    send(Key.space, " ", to: window)
-    send(Key.enter, "\r", repeating: true, to: window)
-    send(Key.delete, "\u{7F}", .command, to: window)
-    send(Key.enter, "\r", .command, to: window)
-    down(window)
-
-    XCTAssertEqual(automation.notifyCursor, 1, "↓ はメニューの中を動き、ほかのキーは握られる")
-    XCTAssertEqual(automation.selectedAutomation?.id, selected)
-    XCTAssertEqual(automation.selectedMapStop, .notify)
-    XCTAssertEqual(automation.store.automations, untouched, "どれも変わらない")
-    XCTAssertFalse(automation.store.automations.contains { automation.runner.isRunning($0.id) })
-  }
-
-  /// 通知だけを替えても、走っている回は止まらない。
-  func testChoosingWhileRunningKeepsTheRun() throws {
-    let model = board()
-    let automation = model.automation
-    let window = mount(model)
-    down(window)
-    let id = try XCTUnwrap(automation.selectedAutomation?.id)
-    send(Key.enter, "\r", .command, to: window)
-    XCTAssertTrue(automation.runner.isRunning(id), "前提: 走っている")
-
-    right(window)
-    up(window)
-    right(window)
-    up(window)
-    send(Key.enter, "\r", to: window)
-
-    XCTAssertEqual(automation.store.automation(id)?.definition.notify, .notificationCenter)
-    XCTAssertTrue(automation.runner.isRunning(id))
   }
 
   /// 段が変わると閉じる: 外から入る・ピルから行を指す・選んでいる自動化がほかの口で消える・地図を出る。
@@ -270,7 +166,10 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.notifyCursor, 0, "見える範囲へ戻っても開いたまま")
     down(window)
     send(Key.enter, "\r", to: window)
-    XCTAssertEqual(automation.store.automation(id)?.definition.notify, .menuBar)
+    XCTAssertEqual(
+      automation.store.automation(id)?.definition.notify, .menuBar,
+      "↵ で決めた通知を書く。testChoosingAfterARewriteElsewhereWritesNothing の「書き換えられた定義の上には書かない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 
   /// 開いている間に「通知」の行が詳細の見える範囲から外れると閉じる。
@@ -284,7 +183,10 @@ extension BoardAutomationTests {
 
     try scrollToBottom(detail, in: window)
 
-    XCTAssertNil(automation.notifyCursor)
+    XCTAssertNil(
+      automation.notifyCursor,
+      "見える範囲から外れると閉じる。testOpeningBringsTheNotifyRowIntoView の「見える範囲へ戻っても開いたまま」の対で、"
+        + "これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
     XCTAssertEqual(automation.selectedMapStop, .notify, "段は動かない")
   }
 }

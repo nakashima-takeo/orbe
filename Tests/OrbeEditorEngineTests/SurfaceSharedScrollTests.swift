@@ -1,6 +1,7 @@
 import AppKit
 import Metal
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -149,7 +150,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
         a.surface.scrollState().limits.maximum.y, a.surface.rows.lastTop(lineCount: 31),
         "前提: 長い面の範囲を共にしている")
     }
-    pump(until: { a.surface.partner == nil }, "相手が閉じれば外れる")
+    pumpMain(until: { a.surface.partner == nil }, "相手が閉じれば外れる")
     XCTAssertEqual(
       a.surface.scrollState().limits.maximum.y,
       max(0, a.surface.rows.lastTop(lineCount: a.document.text.lineCount)))
@@ -171,7 +172,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       let b = try surface(300)
       a.surface.shareScroll(with: b.surface)
     }
-    pump(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    pumpMain(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
     do {
       let c = try surface(100)
       a.surface.shareScroll(with: c.surface)
@@ -184,7 +185,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       c.surface.flush()
       XCTAssertEqual(a.surface.scrollState().limits.maximum.y, end(c), "新しい相手の範囲に従う")
     }
-    pump(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    pumpMain(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
     let d = try surface(100)
     d.surface.shareScroll(with: a.surface)
     let order = { (opened: Opened) in opened.surface.scrollGroup.map(ObjectIdentifier.init) }
@@ -213,8 +214,8 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       XCTAssertEqual(drawn(a.surface)?.y, 250 * 18, "前提: 長い面の範囲で描いた")
       XCTAssertTrue(clock.isPaused, "前提: 描くものが無く刻みを止めている")
     }
-    pump(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
-    RenderThread.shared.performAndWait { _ in 0 }
+    pumpMain(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    RenderThread.shared.performAndWait { _ in }
     XCTAssertFalse(clock.isPaused, "残った面の刻みを再開する")
     tick(a.surface, t)
     let end = a.surface.rows.lastTop(lineCount: a.document.text.lineCount)
@@ -263,15 +264,6 @@ final class SurfaceSharedScrollTests: EngineTestCase {
 /// 描画スレッドの 1 コマの順を決めて流す場——2 面の刻みを手で打ち、どちらの面が先に描くかを決める。
 @MainActor
 extension SurfaceSharedScrollTests {
-  /// 刻みを手で打つ時計（止める・再開するは描画スレッドが書き、刻みの順はテストが決める。次の刻みはいつも今なので、起こされて
-  /// その場で描くことはしない）。
-  private final class ManualClock: FrameClock {
-    var isPaused = false
-    var period: Double { HeadlessDriver.period }
-    func nextTarget(after now: Double) -> Double { now }
-    func invalidate() {}
-  }
-
   /// 画面外の 1 枚へ描き、画面に出た知らせを出さない（上限に当たらないよう、出ていないコマの上限を大きくする）。
   private final class SinkTarget: FrameTarget, @unchecked Sendable {
     private let texture: MTLTexture
@@ -293,15 +285,9 @@ extension SurfaceSharedScrollTests {
 
   private func tick(_ surface: MetalTextSurface, _ target: Double) {
     let id = surface.id
-    RenderThread.shared.performAndWait { renderer in
-      renderer.tick(id, target: target)
-      return 0
-    }
+    RenderThread.shared.performAndWait { $0.tick(id, target: target) }
     // GPU に出した命令の列が終わるのを待つ（上限 3 に当たって飛ばさない）。
-    let deadline = Date().addingTimeInterval(5)
-    while RenderThread.shared.performAndWait({ $0.gpuInflight }) > 0, Date() < deadline {
-      Thread.sleep(forTimeInterval: 0.001)
-    }
+    sleepUntil(5) { RenderThread.shared.performAndWait { $0.gpuInflight } <= 0 }
   }
 
   private func drawn(_ surface: MetalTextSurface) -> SIMD2<Double>? {
@@ -319,7 +305,7 @@ extension SurfaceSharedScrollTests {
       let target = SinkTarget()
       RenderThread.shared.perform { $0.bind(id, target: target, clock: clock) }
     }
-    _ = RenderThread.shared.performAndWait { $0.gate.wait() != nil }
+    waitForPipelines()
     pair.0.surface.flush()
     pair.1.surface.flush()
     return clocks

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -24,7 +25,7 @@ extension AutomationTrialTests {
     var read: [String: [[String]]] = [:]
     var next = start
     while true {
-      settle(until: { done() || jobs.calls.count > next })
+      pumpMain(until: { done() || jobs.calls.count > next })
       guard jobs.calls.count > next else { return read }
       let script = script(at: next) ?? ""
       read[script, default: []].append(ids(at: next))

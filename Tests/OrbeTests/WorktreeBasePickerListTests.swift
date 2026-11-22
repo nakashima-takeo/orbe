@@ -9,14 +9,6 @@ import XCTest
 /// 直され、ブランチの多いリポジトリでベースを選ぶ画面のスクロールと ↑↓ がもたつく。
 @MainActor
 final class WorktreeBasePickerListTests: OrbeTestCase {
-  private var windows: [NSWindow] = []
-
-  override func tearDown() {
-    windows.forEach { $0.orderOut(nil) }
-    windows.removeAll()
-    super.tearDown()
-  }
-
   /// 候補が上限を超える高さになっても、伝える実測高は一覧と同じ上限で止まる。
   func testReportedHeightStopsAtTheListCap() {
     let candidates = (0..<300).map {
@@ -39,9 +31,8 @@ final class WorktreeBasePickerListTests: OrbeTestCase {
     let window = NSWindow(
       contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = host
-    windows.append(window)
+    holdUntilTestEnds(window)
     host.layoutSubtreeIfNeeded()
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
     host.layoutSubtreeIfNeeded()
   }
 

@@ -52,14 +52,14 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
     of pane: EditorPaneView, until ready: (Layer) throws -> Bool, _ message: String,
     file: StaticString = #filePath, line: UInt = #line
   ) throws -> Layer {
-    let deadline = Date().addingTimeInterval(5)
-    var layer = try Layer(pane)
-    while try !ready(layer), Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-      layer = try Layer(pane)
+    var layer: Layer?
+    let settled = try waitUntil(5) {
+      let measured = try Layer(pane)
+      layer = measured
+      return try ready(measured)
     }
-    XCTAssertTrue(try ready(layer), "5 秒以内に成立しない: \(message)", file: file, line: line)
-    return layer
+    XCTAssertTrue(settled, "5 秒以内に成立しない: \(message)", file: file, line: line)
+    return try XCTUnwrap(layer)
   }
 
   private var gutter: CGFloat { style.gutterWidth + style.marks.gutterWidth }
@@ -77,7 +77,6 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
       sidebar: pane.sidebar)
     let window = hostEditor(tab, width: 700)
     window.appearance = NSAppearance(named: .darkAqua)
-    defer { window.orderOut(nil) }
     let veil = 128
     // 空状態の見出し・案内は本体の中央に出る（字の位置は言語とフォントで変わる）ので、空状態の地は本体の隅で測る。
     let body = pane.bodyRect

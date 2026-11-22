@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 import os
 
@@ -208,7 +209,7 @@ final class SurfaceEditingTests: EngineTestCase {
     opened.surface.rolesDidChange(IndexSet())
     undo.undo()
     XCTAssertEqual(text(opened.document), "Qyzabc\n")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    nextTurn()
     XCTAssertFalse(undo.canUndo)
   }
 
@@ -303,7 +304,7 @@ final class SurfaceEditingTests: EngineTestCase {
     type(opened, "y")
     XCTAssertEqual(opened.surface.hiddenColumns, 0, "main は横に寄せない")
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.hiddenColumns > 0 }, "描画スレッドが行の末尾まで寄せる")
+    pumpMain(until: { opened.surface.hiddenColumns > 0 }, "描画スレッドが行の末尾まで寄せる")
     let surface = opened.surface
     XCTAssertGreaterThanOrEqual(surface.hiddenColumns + surface.visibleColumns + 0.5, 301)
   }
@@ -316,16 +317,16 @@ final class SurfaceEditingTests: EngineTestCase {
     opened.surface.selectedRange = NSRange(location: 300, length: 0)
     type(opened, "y")
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.hiddenColumns > 0 }, "前提: 行の末尾まで寄せる")
+    pumpMain(until: { opened.surface.hiddenColumns > 0 }, "前提: 行の末尾まで寄せる")
     opened.surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(100_000, 0), precise: true))
     XCTAssertEqual(opened.surface.hiddenColumns, 0, "前提: 人が行頭へ戻した")
     _ = opened.surface.snapshot()
-    pump()
     _ = opened.surface.snapshot()
     XCTAssertEqual(opened.surface.hiddenColumns, 0, "戻したまま")
     type(opened, "z")
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.hiddenColumns > 0 }, "次の打鍵はまた寄せる")
+    // 「戻したまま」の対。同じ時点で、起きる場合を待たずに確かめる。
+    XCTAssertGreaterThan(opened.surface.hiddenColumns, 0, "次の打鍵はまた寄せる")
   }
 }

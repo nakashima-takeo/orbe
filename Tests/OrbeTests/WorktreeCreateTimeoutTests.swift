@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -25,7 +26,7 @@ final class WorktreeCreateTimeoutTests: OrbeTestCase {
       worktreeTemplate: "{parent}/wt-{slug}", runner: GitRunner(idleTimeout: 0.6))
     provider.load()
     XCTAssertTrue(
-      pumpMainUntil({ provider.facts.repo != nil }, timeout: 10), "前提: リポジトリを解決できていること")
+      waitUntil(10) { provider.facts.repo != nil }, "前提: リポジトリを解決できていること")
 
     var resolution: WorktreeRepoFacts.DirectoryResolution?
     let done = expectation(description: "prepareDirectory")
@@ -45,15 +46,5 @@ final class WorktreeCreateTimeoutTests: OrbeTestCase {
     XCTAssertEqual(
       message, localization.string(.gitTimedOut),
       "git は何も言い残さないので、モデル層が専用文言を当てる")
-  }
-
-  /// main queue を回しながら条件の成立を待つ（`GitRepo` の completion は main で届く）。
-  private func pumpMainUntil(_ condition: () -> Bool, timeout: TimeInterval) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
   }
 }

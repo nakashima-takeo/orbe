@@ -13,13 +13,7 @@ final class WorktreeCleanerTests: OrbeTestCase {
   override func setUpWithError() throws {
     dir = TestScratch.caseDir
       .appendingPathComponent("orbe-cleaner-repo-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
-    try write("a.txt", "x")
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
+    try TempGitRepo.place(at: dir)
     repo = try open()
     cleaner = WorktreeCleaner(
       repo: repo, localization: LocalizationStore(language: .ja), prunablePaths: [])

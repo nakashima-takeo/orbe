@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -125,6 +126,10 @@ extension ProjectSearchPaneTests {
     pane.toggleSidebar()
 
     pane.showProjectSearch(seed: nil)
+    XCTAssertEqual(
+      hosted.search.focusRequest, .field,
+      "⌘⇧F は、その場で入力欄への焦点を求める。"
+        + "これが待たずに成り立たなくなれば、testAFocusRequestIsNotReplayedWhenThePanelReappears の確かめる時点も成り立たない")
     XCTAssertEqual(hosted.tab.group.editor.screen, .files)
     XCTAssertTrue(pane.showsSearchPanel, "左の列を検索パネルで開く")
     pumpMain(
@@ -191,6 +196,11 @@ extension ProjectSearchPaneTests {
   }
 
   /// 焦点を入れる要求はその場の 1 回きり——パネルが後で現れても、F4 で本文へ移した焦点を奪わない。
+  ///
+  /// 焦点を奪わないことは、パネルが窓に載ったのを待った時点で確かめる。前提は、パネルの中へ焦点を入れる経路が、どれも走る時点で
+  /// 焦点の要求（`focusRequest`）を見直すことと、要求を出すのが明示の呼び出しだけであること。再び表示されたパネルが要求を経ずに
+  /// 入力欄へ焦点を入れるようにすると、このテストが落ちることを確かめてある。焦点を入れる経路か、要求を出す経路を変えたときは、
+  /// 確かめ直す。
   func testAFocusRequestIsNotReplayedWhenThePanelReappears() throws {
     let hosted = try host(["a.txt": "needle\n"])
     _ = try open(hosted, "a.txt")
@@ -200,7 +210,9 @@ extension ProjectSearchPaneTests {
     pumpMain(until: { textHasFocus(hosted) })
 
     XCTAssertTrue(hosted.pane.handleStepKey(f4))
-    XCTAssertTrue(holds(for: 0.3) { textHasFocus(hosted) }, "現れたパネルが焦点を奪わない")
+    pumpMain(until: { hosted.pane.searchResults.window != nil }, "F4 でパネルが再び表示される")
+    XCTAssertNil(hosted.search.focusRequest, "現れたパネルに、焦点を入れる要求は残っていない")
+    XCTAssertTrue(textHasFocus(hosted), "現れたパネルが焦点を奪わない")
   }
 
   // MARK: - 根の変化

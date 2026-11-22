@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -13,23 +14,15 @@ import XCTest
 /// 逆に窓状態で `.absent` へ転ぶと、上段テキストが信号機の下へ潜り込む。移っても `superview` は
 /// 残るので、在否は「自窓に居るか」でしか見分けられない。
 final class TrafficLightsProbeTests: OrbeTestCase {
-  private var bands: [NSWindow] = []
-
   override func setUp() {
     super.setUp()
     // 言語確定済み（returning user）として起動し、初回言語選択 overlay を出さない。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
   }
 
-  override func tearDown() {
-    bands.forEach { $0.orderOut(nil) }
-    bands.removeAll()
-    super.tearDown()
-  }
-
-  /// probe は `DispatchQueue.main.async` で書くので、次の run loop まで回して読む。
+  /// probe は `DispatchQueue.main.async` で書くので、main のキューに積まれた仕事が走り終えてから読む。
   private func settle() {
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+    nextTurn()
   }
 
   /// macOS がフルスクリーンで信号機を引き取る先の帯に相当する別窓。
@@ -37,7 +30,7 @@ final class TrafficLightsProbeTests: OrbeTestCase {
     let window = NSWindow(
       contentRect: NSRect(x: -20000, y: -20000, width: 400, height: 32),
       styleMask: [.borderless], backing: .buffered, defer: false)
-    bands.append(window)
+    holdUntilTestEnds(window)
     return window
   }
 

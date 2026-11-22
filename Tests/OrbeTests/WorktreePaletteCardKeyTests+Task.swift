@@ -30,15 +30,9 @@ extension WorktreePaletteCardKeyTests {
 
   /// 1 コミットのリポジトリ（remote なし）を caseDir に作る。
   private func repository() throws -> String {
-    let dir = TestScratch.caseDir.appendingPathComponent("repo").path
-    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    for args in [
-      ["init", "-q", "-b", "main"], ["config", "user.email", "t@example.com"],
-      ["config", "user.name", "t"], ["commit", "-q", "--allow-empty", "-m", "init"],
-    ] {
-      XCTAssertTrue(GitRunner.shared.runSync(args, cwd: dir).isSuccess, "git \(args[0])")
-    }
-    return dir
+    let dir = TestScratch.caseDir.appendingPathComponent("repo")
+    try TempGitRepo.place(at: dir)
+    return dir.path
   }
 
   private func taskModel(_ links: [TaskLink], items: GitHubItemCache) -> WorktreePaletteModel {
@@ -48,30 +42,27 @@ extension WorktreePaletteCardKeyTests {
     return WorktreePaletteModel(tasks: store, githubItems: items, task: 1)
   }
 
-  private func wait(_ condition: () -> Bool, timeout: TimeInterval = 10) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline { pump(0.02) }
-    return condition()
-  }
-
   func testOpeningAskedForThePrimaryPullRequest() {
     let items = PendingItems()
 
     _ = mount(taskModel([pr], items: items.cache))
 
-    XCTAssertEqual(items.requested, [pr.item])
+    XCTAssertEqual(
+      items.requested, [pr.item],
+      "載せた直後に主の PR の値を頼む。testAPullRequestBecomingThePrimaryWhileOpenIsAskedFor の「主が無い間は頼まない」"
+        + "の対で、これが待たずに成り立たなくなったら、そのテストが確かめる時点も成り立たない")
   }
 
   func testAPullRequestBecomingThePrimaryWhileOpenIsAskedFor() throws {
     let items = PendingItems()
     let model = taskModel([], items: items.cache)
-    _ = mount(model)
+    let window = mount(model)
     XCTAssertEqual(items.requested, [], "前提: 主が無い間は頼まない")
 
     var update = TaskUpdate()
     update.links = [pr]
     _ = try model.tasks.update(1, update)
-    pump(0.3)
+    flush(window)
 
     XCTAssertEqual(items.requested, [pr.item])
   }
@@ -99,13 +90,14 @@ extension WorktreePaletteCardKeyTests {
       model.onExecute = { executed.append($0) }
       _ = mount(model)
       provider.load()
-      XCTAssertTrue(wait { model.hasLoadedOnce && provider.facts.remoteFetchLanded }, "\(name): 前提")
+      XCTAssertTrue(
+        waitUntil(10) { model.hasLoadedOnce && provider.facts.remoteFetchLanded }, "\(name): 前提")
       model.activate()
       XCTAssertTrue(model.hasPendingActivation, "\(name): 値が届くまで ↵ を預かる")
 
       items.answer([pr.item], batch)
 
-      XCTAssertTrue(wait { !executed.isEmpty }, "\(name): 預かった ↵ が解ける")
+      XCTAssertTrue(waitUntil(10) { !executed.isEmpty }, "\(name): 預かった ↵ が解ける")
       withExtendedLifetime(provider) {}
     }
   }

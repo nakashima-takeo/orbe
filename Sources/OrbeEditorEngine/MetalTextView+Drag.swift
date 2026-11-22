@@ -80,14 +80,23 @@ extension MetalTextView: NSDraggingSource {
   // MARK: - 受ける
 
   override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-    dropScrollTime = nil
-    return draggingUpdated(sender)
+    draggingEntered(sender, now: CACurrentMediaTime())
   }
 
-  /// 落とす位置の印を置き、端の帯の中なら自動でスクロールする（AppKit が周期で呼ぶ）。スクロールと印は 1 つの取引で置き、
-  /// 当たりは取引の中で置いた位置で取る。右列（ミニマップと縦スクロールバー）の上は本文の外として扱い、送らず、戻ったとき
-  /// 上にいた時間ぶん跳ばない。本文に重なる横スクロールバーの上は、落とさないが帯の中なら送る。
   override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+    draggingUpdated(sender, now: CACurrentMediaTime())
+  }
+
+  func draggingEntered(_ sender: NSDraggingInfo, now: CFTimeInterval) -> NSDragOperation {
+    dropScrollTime = nil
+    return draggingUpdated(sender, now: now)
+  }
+
+  /// 時刻 `now` に届いた出来事として、落とす位置の印を置き、端の帯の中なら自動でスクロールする（AppKit が周期で呼ぶ
+  /// `draggingUpdated(_:)` が、今の時刻で呼ぶ）。スクロールと印は 1 つの取引で置き、当たりは取引の中で置いた位置で取る。
+  /// 右列（ミニマップと縦スクロールバー）の上は本文の外として扱い、送らず、戻ったとき上にいた時間ぶん跳ばない。本文に重なる
+  /// 横スクロールバーの上は、落とさないが帯の中なら送る。
+  func draggingUpdated(_ sender: NSDraggingInfo, now: CFTimeInterval) -> NSDragOperation {
     guard let surface else { return [] }
     var operation: NSDragOperation = []
     surface.input {
@@ -96,7 +105,7 @@ extension MetalTextView: NSDraggingSource {
       if area == .minimap || area == .vertical {
         dropScrollTime = nil
       } else {
-        autoscrollDrop(at: point)
+        autoscrollDrop(at: point, now: now)
       }
       guard area == nil else { return showDrop(nil) }
       switch surface.target(at: point) {
@@ -197,10 +206,10 @@ extension MetalTextView: NSDraggingSource {
     surface.write { $0.drop = offset }
   }
 
-  /// 本文の上下の端から 1 行の帯の中にいる間、前の刻みからの経過時間ぶん、選択のドラッグと同じ速さの式でスクロールする。
-  private func autoscrollDrop(at point: CGPoint) {
+  /// 本文の上下の端から 1 行の帯の中にいる間、前の刻みから `now` までの経過時間ぶん、選択のドラッグと同じ速さの式で
+  /// スクロールする。
+  private func autoscrollDrop(at point: CGPoint, now: CFTimeInterval) {
     guard let surface else { return }
-    let now = CACurrentMediaTime()
     defer { dropScrollTime = now }
     let config = surface.config
     let band = config.lineHeight

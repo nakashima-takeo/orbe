@@ -34,7 +34,6 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 700, height: 400)
     window.appearance = NSAppearance(named: .darkAqua)
-    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     let file = try caseFile("o-\(UUID().uuidString).txt", text)
     let hosted = Hosted(
       tab: tab, pane: pane, document: try tab.group.editor.open(file, as: .pinned), window: window)
@@ -128,8 +127,9 @@ final class EditorOccurrencesTests: OrbeTestCase {
     clock.word = nil
     hosted.document.surface.responder.keyDown(with: .key("x", []))
     XCTAssertEqual(occurrences.wordOccurrences, [], "打鍵で消える")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.02))
     XCTAssertNil(clock.word, "打鍵に伴うキャレットの移動では出直さない")
+    nextTurn()
+    XCTAssertNil(clock.word, "打鍵に続く main のキューの仕事が走り終えても、打鍵に伴うキャレットの移動では出直さない")
     caret(hosted, 7)
     try XCTUnwrap(clock.word)()
     XCTAssertEqual(occurrences.wordOccurrences.count, 1, "明示的な移動で出直す（fxoo は別の語）")
@@ -149,7 +149,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let bar = try XCTUnwrap(pane.searchBar)
     pumpMain(
       until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true }, "バーへ")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+    nextTurn()
     XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "検索バーへ移っても消えない")
     pane.closeSearch()
     catchUp(hosted.document)
@@ -157,7 +157,11 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let outside = NSTextField(frame: .zero)
     hosted.tab.group.view.addSubview(outside)
     hosted.window.makeFirstResponder(outside)
-    pumpMain(until: { pane.occurrences.wordOccurrences.isEmpty }, "面の外へ出れば消える")
+    nextTurn()
+    XCTAssertTrue(
+      pane.occurrences.wordOccurrences.isEmpty,
+      "語の出現は、面の外へ出れば、焦点が移った後の main のキューの仕事で消える。これが待たずに成り立たなくなれば、このテストと "
+        + "testFocusLeavingFromTheFindBarClears が、検索バーにいる間は残ることを確かめる時点も成り立たない")
     clock.word = nil
     hosted.window.makeFirstResponder(hosted.document.surface.responder)
     pumpMain(until: { clock.word != nil }, "戻れば取りに行く")
@@ -177,7 +181,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let bar = try XCTUnwrap(pane.searchBar)
     pumpMain(
       until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true }, "バーへ")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+    nextTurn()
     XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "前提: バーにいる間は残る")
     let outside = NSTextField(frame: .zero)
     hosted.tab.group.view.addSubview(outside)

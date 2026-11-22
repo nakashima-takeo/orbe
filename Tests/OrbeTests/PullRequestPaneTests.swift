@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -125,12 +126,8 @@ final class PullRequestPaneTests: OrbeTestCase {
       backing: .buffered, defer: false)
     window.contentView = pane
     pane.layoutSubtreeIfNeeded()
-    addTeardownBlock {
-      MainActor.assumeIsolated {
-        pane.switchScreen(.files)
-        window.orderOut(nil)
-      }
-    }
+    holdUntilTestEnds(window)
+    addTeardownBlock { MainActor.assumeIsolated { pane.switchScreen(.files) } }
     window.makeFirstResponder(pane.focusTarget)
     return Hosted(tab: tab, pane: pane, window: window)
   }
@@ -142,10 +139,6 @@ final class PullRequestPaneTests: OrbeTestCase {
     pumpMain(until: { hosted.list.window != nil }, "前提: 列が窓に載る")
   }
 
-  private func settle() {
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-  }
-
   /// PR を読んである根の新しい面で上のバーから出せば、列に焦点が入る。PR が無ければ焦点を求めない。
   func testTheRailFocusesTheListOnlyWhenThereAreRows() throws {
     let root = try registeredRoot()
@@ -153,6 +146,10 @@ final class PullRequestPaneTests: OrbeTestCase {
 
     let other = host(root)
     other.pane.switchScreen(.pullRequest)
+    XCTAssertTrue(
+      other.pane.pullRequest.focusRequest,
+      "行が在れば、その場で列への焦点を求める。"
+        + "これが待たずに成り立たなくなれば、testAFocusRequestForRowsThatGoAwayIsNotLeftBehind の確かめる時点も成り立たない")
     pumpMain(until: { other.window.firstResponder === other.list }, "新しい面でも列に焦点")
 
     gitHub.open = false
@@ -163,6 +160,10 @@ final class PullRequestPaneTests: OrbeTestCase {
 
   /// 行がある状態で隠し、PR が無くなってから出し直したら、当てる列の無い焦点の要求は残らない——後で PR が現れても、本文の
   /// 焦点を奪わない。
+  ///
+  /// PR が後から現れても焦点を奪わないことは、待たずに確かめる。前提は、列へ焦点を入れる経路が、どれも走る時点で焦点の要求
+  /// （`focusRequest`）を見直すことと、要求を出すのが明示の呼び出しだけであること。PR の読み直しが焦点を求めるようにすると、
+  /// このテストが落ちることを確かめてある。焦点を入れる経路か、要求を出す経路を変えたときは、確かめ直す。
   func testAFocusRequestForRowsThatGoAwayIsNotLeftBehind() throws {
     let hosted = host(try registeredRoot())
     shownWithRows(hosted)
@@ -174,13 +175,12 @@ final class PullRequestPaneTests: OrbeTestCase {
     pumpMain(until: { hosted.pane.pullRequest.layout.items.isEmpty }, "PR が無いと分かる")
     hosted.pane.switchScreen(.pullRequest)
     XCTAssertFalse(hosted.pane.pullRequest.focusRequest, "当てる列の無い要求は捨てる")
-    settle()
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "本文のまま")
 
     gitHub.open = true
     hosted.pane.pullRequest.refresh()
     pumpMain(until: { hosted.list.window != nil }, "PR が現れる")
-    settle()
+    XCTAssertFalse(hosted.pane.pullRequest.focusRequest, "現れた列への焦点の要求は無い")
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "現れても焦点を奪わない")
   }
 
@@ -227,6 +227,10 @@ final class PullRequestPaneTests: OrbeTestCase {
   }
 
   /// cd で根が変われば、前の根の PR を見るのをやめ、列か全体へのコメント欄にあった焦点は本文へ戻り、新しい根の PR を見る。
+  ///
+  /// 新しい根のパネルが焦点を奪わないことは、待たずに確かめる。前提は、列へ焦点を入れる経路が、どれも走る時点で焦点の要求
+  /// （`focusRequest`）を見直すことと、要求を出すのが明示の呼び出しだけであること。根を変える処理の終わりで新しい根のパネルが
+  /// 焦点を求めるようにすると、このテストが落ちることを確かめてある。焦点を入れる経路か、要求を出す経路を変えたときは、確かめ直す。
   func testChangingTheRootStopsWatchingThePreviousPullRequest() throws {
     for area in Area.allCases {
       let hosted = host(try registeredRoot())
@@ -240,7 +244,7 @@ final class PullRequestPaneTests: OrbeTestCase {
       pumpMain(until: { hosted.pane.pullRequest.state != nil }, "新しい根の PR を見る")
       XCTAssertEqual(hosted.pane.pullRequest.root, next)
       XCTAssertTrue(try XCTUnwrap(hosted.pane.pullRequest.state).isWatched)
-      settle()
+      XCTAssertFalse(hosted.pane.pullRequest.focusRequest, "\(area): 新しい根のパネルは焦点を求めない")
       XCTAssertTrue(
         hosted.window.firstResponder === hosted.pane.focusTarget, "\(area) にあった焦点は本文へ")
     }
