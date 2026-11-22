@@ -42,13 +42,22 @@ final class GitHubCLI {
   }
 
   /// 呼び出しの種類ごとの時間上限（ネット待ちのハングを引きずらない）。open 一覧では 1 ページごとにかかる。
+  static let readTimeout: TimeInterval = 15
+  static let writeTimeout: TimeInterval = 60
+
   private let readTimeout: TimeInterval
   private let writeTimeout: TimeInterval
+  /// 時間上限と猶予の待ちを通す時計。
+  private let clock: WaitClock
 
   /// テストだけが短い上限を渡す（本番の上限を待つテストは書けないため）。
-  init(readTimeout: TimeInterval = 15, writeTimeout: TimeInterval = 60) {
+  init(
+    readTimeout: TimeInterval = GitHubCLI.readTimeout,
+    writeTimeout: TimeInterval = GitHubCLI.writeTimeout, clock: WaitClock = .wall
+  ) {
     self.readTimeout = readTimeout
     self.writeTimeout = writeTimeout
+    self.clock = clock
   }
 
   /// 打ち切り後に EOF を待つ猶予。pipe の書き込み端を握る子孫がいると EOF は来ないことがあり、
@@ -277,19 +286,27 @@ final class GitHubCLI {
         try? input.fileHandleForWriting.close()
       }
     }
-    // stdout/stderr は別スレッドで並行に吸い出す（片方だけ読むと相手の pipe 満杯で相互デッドロック）。
+    // stdout/stderr は別スレッドで並行に吸い出す（片方だけ読むと相手の pipe 満杯で相互デッドロック）。読み終えたら `drained`
+    // へ 1 回ずつ合図する。
     var outData = Data()
     var errData = Data()
-    let group = DispatchGroup()
-    group.enter()
+    let drained = DispatchSemaphore(value: 0)
     DispatchQueue.global(qos: .userInitiated).async {
       outData = (try? out.fileHandleForReading.readToEnd()) ?? Data()
-      group.leave()
+      drained.signal()
     }
-    group.enter()
     DispatchQueue.global(qos: .userInitiated).async {
       errData = (try? err.fileHandleForReading.readToEnd()) ?? Data()
-      group.leave()
+      drained.signal()
+    }
+    var reading = 2
+    /// `deadline` を上限に、2 本とも読み終えるまで待つ。間に合ったら true。
+    func awaitDrain(until deadline: WaitClock.Instant) -> Bool {
+      while reading > 0 {
+        guard clock.sleep(on: drained, until: deadline) else { return false }
+        reading -= 1
+      }
+      return true
     }
     // ネット待ちのハングは時間上限で打ち切る（通常は terminate で pipe が EOF に達し読みも解ける）。
     // EOF が来るかは書き込み端を握る子孫次第なので、打ち切り後の読み終わり待ちも猶予で有界にする
@@ -299,9 +316,9 @@ final class GitHubCLI {
       case .read: readTimeout
       case .write: writeTimeout
       }
-    if group.wait(timeout: .now() + timeout) == .timedOut {
+    guard awaitDrain(until: clock.now() + timeout) else {
       process.terminate()
-      _ = group.wait(timeout: .now() + Self.terminationGrace)
+      _ = awaitDrain(until: clock.now() + Self.terminationGrace)
       return Output(status: -1, stdout: Data(), failure: .timedOut)
     }
     process.waitUntilExit()
