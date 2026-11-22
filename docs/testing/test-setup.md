@@ -68,7 +68,7 @@ updated: 2026-11-22
     - マウス・ホイールのイベントを AppKit の配送で届けるテスト（`SidebarScrollbarTests` など）: タイトルバーの無いウィンドウに載せ、`placeOffscreen` を通る。ホイールでスクロールさせるテストは `OrbeWindowFake` に載せる（`OrbeWindow` のサブクラスなので、`OrbeWindow` が要る部品にもそのまま使える）。
   - 確認のシートは、本番コードが `NSAlert.beginSheetModal(for:)` で自分のウィンドウに出す形のまま変えない。`NSAlert` はウィンドウの公開のシートの API（`beginSheet`・`beginCriticalSheet`）を通るので、`OrbeWindowFake` がこの API を上書きし、シートを画面に出さずに応答待ちとして持つ。テストは `attachedSheet` で確認が出たことを読み、`endSheet(_:returnCode:)` で応答する。主ウィンドウに確認を出すテストは、`WindowController(window:)` に `OrbeWindowFake` を渡す。
   - `BoardAutomationTests` の生座標クリック（`(300, 669)` 等）や `EditorPaneViewTests+TabClose` / `+Sidebar` / `EditorSearchTests+Ground` / `EditorLineMarksTests` の画素座標と RGB 値のハードコード（`c.x - 8` の位置での輝度差判定等）を廃止し、モデル状態・レイアウト矩形・`firstResponder`・アクセシビリティ要素で検証する。
-  - 条件を待つ処理は、テスト支援の 1 ファイル（`Tests/OrbeTestSupport/RunLoopWait.swift`）の `waitUntil`・`pumpMain(until:)` を使う。固定秒数を待つ独自の `pump` ヘルパ（`PaletteCardWindowHarness` など）は廃止し、`layoutSubtreeIfNeeded()`＋条件待機に置き換える。固定秒数の待機（`PaletteFitTests` の 0.2s×24 等）は描画完了の確定的シグナルへ置き換える。
+  - 条件を待つ処理は、テスト支援の 1 ファイル（`Tests/OrbeTestSupport/RunLoopWait.swift`）の `waitUntil`・`pumpMain(until:)` を使う（main を塞いだまま待つとき・main でないスレッドから待つときは `sleepUntil`）。固定秒数を待つ独自の `pump` ヘルパ（`PaletteCardWindowHarness` など）は廃止し、`layoutSubtreeIfNeeded()`＋条件待機に置き換える。固定秒数の待機（`PaletteFitTests` の 0.2s×24 等）は描画完了の確定的シグナルへ置き換える。
 
 ## 重い依存を使うテストの高速化と既存テストの刷新
 
