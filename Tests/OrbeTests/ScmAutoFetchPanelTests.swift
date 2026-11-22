@@ -197,7 +197,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     panel.control.fetch()
     XCTAssertEqual(autoFetch.rules.humans, 1)
     let operation = try XCTUnwrap(panel.control.operations.first)
-    pumpMain(until: { panel.control.bandOperation === operation }, timeout: 1.5, "待つ間も帯に出る")
+    pumpMain(until: { panel.control.bandOperation === operation }, "待つ間も帯に出る")
     XCTAssertTrue(autoFetch.rules.isRunning, "前提: 裏の fetch はまだ終わっていない")
 
     operation.stop()
@@ -215,7 +215,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
     panel.control.fetch()
     let operation = try XCTUnwrap(panel.control.operations.first)
-    pumpMain(until: { panel.control.bandOperation === operation }, timeout: 1.5, "待つ間も帯に出る")
+    pumpMain(until: { panel.control.bandOperation === operation }, "待つ間も帯に出る")
     try XCTUnwrap(hook).release()
 
     pumpMain(until: { panel.control.operations.isEmpty }, timeout: 20, "待ちが明けて走り、終わる")
@@ -264,7 +264,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     let operation = try XCTUnwrap(panel.control.operations.first)
     pumpMain(
       until: { panel.control.bandOperation === operation && operation.step == .network(.push) },
-      timeout: 1.5, "push の段の前で待つ間も帯に出る")
+      "push の段の前で待つ間も帯に出る")
     XCTAssertTrue(autoFetch.rules.isRunning, "前提: 裏の fetch はまだ終わっていない")
     XCTAssertFalse(panel.control.isCommitting, "コミットの段は終わっている")
 
