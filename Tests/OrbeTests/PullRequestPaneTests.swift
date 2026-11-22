@@ -210,7 +210,7 @@ final class PullRequestPaneTests: OrbeTestCase {
       try focus(area, in: hosted)
 
       let next = try registeredRoot()
-      hosted.pane.setRoot(next)
+      hosted.tab.group.rekey(next)
       XCTAssertFalse(previous.isWatched, "前の根の PR を見るのをやめる")
       pumpMain(until: { hosted.pane.pullRequest.state != nil }, "新しい根の PR を見る")
       XCTAssertEqual(hosted.pane.pullRequest.root, next)

@@ -43,13 +43,14 @@ extension SourceControlPaneTests {
 
     scm.setRepositoryOpen(false)
     pumpMain(until: { list.window == nil }, "列が窓から外れる")
-    XCTAssertTrue(hosted.window.firstResponder === hosted.pane, "焦点は本文の行き先へ")
+    XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "焦点は本文の行き先へ")
     XCTAssertNil(scm.focusedArea)
     XCTAssertEqual(scm.selection, selected, "選択は残る")
 
     scm.setRepositoryOpen(true)
     pumpMain(until: { list.window != nil }, "列が戻る")
-    XCTAssertTrue(hosted.window.firstResponder === hosted.pane, "開いても焦点は奪わない")
+    XCTAssertTrue(
+      hosted.window.firstResponder === hosted.pane.focusTarget, "開いても焦点は奪わない")
     list.mouseDown(
       with: .mouse(
         .leftMouseDown, at: list.convert(NSPoint(x: 60, y: 33), to: nil), in: hosted.window))

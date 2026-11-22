@@ -18,7 +18,7 @@ extension EditorDiffTests {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     try repo.write("b.txt", "b\n")
     let (dest, _) = tab()
-    try dest.group.editor.open(repo.url("b.txt"), as: .pinned)
+    dest.group.editor.show(try dest.group.editor.open(repo.url("b.txt"), as: .pinned))
     weak var gone: TabGroup?
     weak var released: EditorDiff?
     try {
@@ -31,7 +31,7 @@ extension EditorDiffTests {
     }()
     XCTAssertNil(gone, "前提: 元の連は解放された")
     XCTAssertNil(released, "元の連の diff は手放される")
-    XCTAssertNil(dest.group.editor.changesDiff, "行き先の Changes の diff は変わらない")
+    XCTAssertNil(dest.group.editor.changesDiff, "行き先の Changes の diff は変わらない（Files の画面）")
     XCTAssertEqual(dest.group.editor.documents.map(\.url), [repo.url("b.txt")])
     try repo.write("a.txt", "one\nTWO\nthree\n")
     let files = RootFiles.shared(for: repo.root)
@@ -44,6 +44,7 @@ extension EditorDiffTests {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (dest, _) = tab()
     let document = try dest.group.editor.open(repo.url("a.txt"), as: .pinned)
+    dest.group.editor.show(document)
     let from = bareGroup()
     let diff = try from.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "元の連で見せている") { !$0.isEmpty }

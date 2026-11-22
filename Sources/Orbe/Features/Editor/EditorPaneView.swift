@@ -31,6 +31,10 @@ final class EditorPaneView: NSView {
   private(set) var body = EditorBody.empty
   /// ツリーで最後に選択表示した Files の今の文書（替わったときだけツリーを追従させる）。
   private var revealedDocument: URL?
+  /// 見ている（本体に出ていて、面が見えている）diff。
+  private var watchedDiff: EditorDiff?
+  /// 開いた diff の行が左の列の一覧にまだ無い間の、その diff（行ができたら選択表示する）。
+  var diffAwaitingRow: EditorDiff.Key?
   /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
   private(set) var diffModes = EditorDiffModeState() {
     didSet { observeDiffModes() }
@@ -209,6 +213,7 @@ final class EditorPaneView: NSView {
       revealedDocument = active
       if let active { tree.reveal(active) }
     }
+    reconcileDiffs()
   }
 
   /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
@@ -290,6 +295,7 @@ final class EditorPaneView: NSView {
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
     }
+    updateDiffWatching()
   }
 
   /// 同じ本体か（同じ文書・同じ diff・どちらも空）。
@@ -321,6 +327,7 @@ final class EditorPaneView: NSView {
     search.bind(nil)
     occurrences.bind(nil)
     bindEditedDocument()
+    updateDiffWatching()
   }
 
   /// 本体を外す——文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の見え方をコードへ戻す。
@@ -355,23 +362,39 @@ final class EditorPaneView: NSView {
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。PR のパネルは、出しているときだけ
-  /// worktree の今の PR を見る。配置を頼み、見えるようになった本体を初めて見せる前の待ちをその配置で通す（隠れている間に
-  /// 配置が済んでいても、見えたときにもう一度配置して待つ）。
+  /// だけを使う間は払わない）。ソース管理の一覧は、Changes の画面の間だけ行とグラフを組む。PR のパネルは、PR の画面の間だけ
+  /// worktree の今の PR を見る。本体の PR の diff は、面が見えている間だけ PR ごとの状態を見る。本体の diff を整合させ、配置を
+  /// 頼み、見えるようになった本体を初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても、見えたときにもう
+  /// 一度配置して待つ）。
   private func updateLiveness() {
-    let live = window != nil && !isHiddenOrHasHiddenAncestor
+    let live = isFaceVisible
     tree.isLive = live
     projectSearch.isLive = live
     scm.isLive = live
     updatePanelsShown()
+    updateDiffWatching()
     if live { group?.editor.prepareSurfaces() }
+    reconcileDiffs()
     needsLayout = true
   }
 
-  /// ソース管理パネルと PR のパネルを出しているか（面が見えていて、左の列を開いていて、そのパネルを出している）を写す。
+  /// 面が画面に見えているか（窓に付き、隠れていない）。
+  var isFaceVisible: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
+
+  /// ソース管理の一覧が行を組むか（面が見えていて、画面が Changes）と、PR のパネルが worktree の今の PR を見るか（面が見えて
+  /// いて、画面が PR）を写す。左の列を閉じていても同じ——Changes・PR の画面で本体に自動で開く行を決めるのに一覧が要る。
   func updatePanelsShown() {
-    let visible = window != nil && !isHiddenOrHasHiddenAncestor
-    scm.isShown = visible && showsSourceControl
-    pullRequest.isShown = visible && showsPullRequest
+    let screen = group?.editor.screen
+    scm.isShown = isFaceVisible && screen == .changes
+    pullRequest.isShown = isFaceVisible && screen == .pullRequest
+  }
+
+  /// 本体の diff を、面が見えている間だけ見る（PR の diff はこの間だけ PR ごとの状態を見る）。替われば前の diff を見終わる。
+  private func updateDiffWatching() {
+    let next = isFaceVisible ? diff : nil
+    guard next !== watchedDiff else { return }
+    watchedDiff?.endWatching()
+    next?.beginWatching()
+    watchedDiff = next
   }
 }

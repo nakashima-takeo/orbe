@@ -139,6 +139,10 @@ final class EditorDiff {
     source.documentDirtyDidChange()
   }
 
+  /// 本体に出ていて面が見えている間の始まりと終わり（pane が対で呼ぶ。→ `EditorDiffSource.beginWatching`）。
+  func beginWatching() { source.beginWatching() }
+  func endWatching() { source.endWatching() }
+
   /// 積んだ作り直しを、見せていれば今行う。
   func settle() {
     guard stale, presented != nil else { return }

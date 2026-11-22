@@ -14,7 +14,8 @@ import OrbeEditorCore
 @MainActor
 final class PrCommentLayer {
   let pullRequest: EditorDiffPullRequest
-  /// diff の根の worktree の今の PR（diff がある間見る）。保留中のレビューを送れるのは、その PR を出すパネルだけ。
+  /// diff の根の worktree の今の PR（答えを読むだけで、見ている者にはならない——見ているのは PR のパネル）。保留中のレビューを
+  /// 送れるのは、その PR を出すパネルだけ。
   private let current: BranchPullRequest
   /// 並びを置き直させる（スレッドの出入り・新しいコメントの欄の開閉・印を出せる行が分かった）。
   var onRowsChange: () -> Void = {}
@@ -45,7 +46,6 @@ final class PrCommentLayer {
     self.language = language
     current = BranchPullRequest.shared(
       for: pullRequest.id.root, source: pullRequest.state.source)
-    current.beginWatching()
     let clock = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
       // main の runloop の timer なので main で届く。描き直しで作り直すのは時刻を載せる小さな層だけ（本文は組み直さない）。
       MainActor.assumeIsolated { self?.tick() }
@@ -56,13 +56,9 @@ final class PrCommentLayer {
   }
 
   deinit {
-    let current = current
     let state = pullRequest.state
     clock?.invalidate()
-    MainActor.assumeIsolated {
-      current.endWatching()
-      state.removeCommentDraftsObserver(self)
-    }
+    MainActor.assumeIsolated { state.removeCommentDraftsObserver(self) }
   }
 
   private func tick() {

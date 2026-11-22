@@ -6,8 +6,22 @@ extension PrPanel {
   /// 選んだファイル行の PR の diff を開く（見出し・フォルダ・選択なしは開かない）。
   func openSelection(_ opening: ScmPanel.Opening) {
     navigation.drop()
-    guard case .file(let path)? = selection, let state else { return }
-    onOpenDiff(EditorDiff.Key(root: root, path: path, kind: .pullRequest(state)), opening)
+    guard case .file(let path)? = selection, let key = diffKey(of: path) else { return }
+    onOpenDiff(key, opening)
+  }
+
+  /// 変更ファイル `path` の、今の PR の diff（PR が無ければ nil）。
+  func diffKey(of path: String) -> EditorDiff.Key? {
+    state.map { EditorDiff.Key(root: root, path: path, kind: .pullRequest($0)) }
+  }
+
+  /// 本体に自動で開く変更ファイル——選んでいるファイル行、無ければ先頭のファイル行のパス（ファイル行が無ければ nil）。
+  var fileToOpen: String? {
+    if case .file(let path)? = selection, layout.index[.file(path)] != nil { return path }
+    for row in layout.items.indices {
+      if case .file(let path) = layout.id(at: row) { return path }
+    }
+    return nil
   }
 
   /// ↑↓: 選べる行を順に渡る。未選択なら先頭の選べる行。ファイル行へ動けば仮で開く（間引く）。

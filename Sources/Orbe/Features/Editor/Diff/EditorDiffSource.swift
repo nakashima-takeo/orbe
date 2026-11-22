@@ -27,6 +27,9 @@ protocol EditorDiffSource: AnyObject {
   func replaceDocument(with next: EditorDocument) -> Bool
   /// 新しい側の文書の未保存が変わった。
   func documentDirtyDidChange()
+  /// 本体に出ていて面が見えている間の始まりと終わり（対で呼ぶ）。PR の diff は、この間だけ PR ごとの状態を見る。
+  func beginWatching()
+  func endWatching()
 }
 
 /// 新しい側に文書を使わない出どころ——文書の知らせでは何もしない。
@@ -34,6 +37,12 @@ extension EditorDiffSource {
   var document: EditorDocument? { nil }
   func replaceDocument(with next: EditorDocument) -> Bool { false }
   func documentDirtyDidChange() {}
+}
+
+/// 見ている間に読むものを持たない出どころ（作業ツリー・ステージ済み。根のサービスの観測は diff がある間続く）。
+extension EditorDiffSource {
+  func beginWatching() {}
+  func endWatching() {}
 }
 
 extension EditorDiff {

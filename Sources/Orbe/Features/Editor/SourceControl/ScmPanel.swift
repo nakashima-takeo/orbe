@@ -5,8 +5,8 @@ import Foundation
 /// `SourceControl` が持ち、ここは見せ方と観測だけ。
 ///
 /// 面が見えている間（`isLive`）は根のサービスを握って status を受け、件数（レールのバッジ）を出す。行の組み立て・グラフ・
-/// HEAD の push 済みの読みは、パネルを出している間（`isShown`）だけ行う——レールの件数のためにパネルを開かせず、隠れた
-/// パネルのために git を起こさない。変更の列の行の組み立ては裏で 1 本ずつ済ませ、main は結果を差し替えて列に行の版を渡す
+/// HEAD の push 済みの読みは、Changes の画面を出している間（`isShown`。左の列を閉じていても）だけ行う——レールの件数のために
+/// 行を組ませず、ほかの画面のために git を起こさない。変更の列の行の組み立ては裏で 1 本ずつ済ませ、main は結果を差し替えて列に行の版を渡す
 /// だけ。グラフの列の行は高々数百行なので main で作る（→ `ScmRows`）。
 @MainActor @Observable
 final class ScmPanel {
@@ -59,6 +59,8 @@ final class ScmPanel {
 
   /// 行を開く（diff）。
   @ObservationIgnored var onOpenDiff: (EditorDiff.Key, Opening) -> Void = { _, _ in }
+  /// 件数と、行を組んでいれば変更の列の行の組を差し替えた（`emptied` は件数が 1 以上から 0 になったか）。
+  @ObservationIgnored var onChangesDidApply: (_ emptied: Bool) -> Void = { _ in }
   /// ファイルを普通の文書として開く（Files の画面で）。
   @ObservationIgnored var onOpenFile: (URL) -> Void = { _ in }
   /// 破棄の確認を出す（確認が要らなければそのまま破棄する）。
@@ -114,7 +116,7 @@ final class ScmPanel {
     }
   }
 
-  /// パネルを出している間 true。出したら行を組み、グラフと HEAD の push 済みを読む。
+  /// Changes の画面を出している間 true。出したら行を組み、グラフと HEAD の push 済みを読む。
   @ObservationIgnored var isShown = false {
     didSet {
       guard isShown != oldValue else { return }
@@ -217,6 +219,7 @@ final class ScmPanel {
     builtFrom: Int
   ) {
     buildJob.isRunning = false
+    let emptied = self.count > 0 && count == 0
     self.branch = branch
     self.count = count
     if let changes, let layout {
@@ -229,6 +232,7 @@ final class ScmPanel {
       DispatchQueue.global(qos: .utility).async { withExtendedLifetime(replaced) {} }
       updateGraphRows()
     }
+    onChangesDidApply(emptied)
     if buildJob.again {
       buildJob.again = false
       build()

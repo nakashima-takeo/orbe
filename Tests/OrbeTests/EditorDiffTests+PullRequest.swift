@@ -25,8 +25,17 @@ extension EditorDiffTests {
       files: [.init(path: "b.txt", change: .renamed, isViewed: false)])
   }
 
-  /// PR の画面を出した窓のタブ（PR の diff を本体に出す）。
+  /// PR の画面を出した窓のタブ（PR の diff を本体に出す）。PR の画面は worktree の今の PR を見て、それと違う PR の diff を
+  /// 閉じるので、worktree の今の PR は答えを出さない差し替えの出どころにする（本物の gh も呼ばない）。どのブランチに居ても
+  /// 問い合わせまで進むよう、既定のブランチを別の名前にしておく。
   private func pullRequestTab() -> (TerminalTab, NSWindow) {
+    XCTAssertTrue(
+      repo.git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk"]).isSuccess)
+    _ = BranchPullRequest.shared(
+      for: GitWorktreeRoot.root(of: repo.root),
+      source: PullRequestSource(
+        branchPullRequests: { _, _, _ in }, branchExists: { _, _ in }, content: { _, _ in },
+        setViewed: { _, _, _, _ in }, review: { _, _ in }, writeReview: { _, _, _, _, _ in }))
     let hosted = tab()
     hosted.0.group.editor.selectScreen(.pullRequest)
     return hosted

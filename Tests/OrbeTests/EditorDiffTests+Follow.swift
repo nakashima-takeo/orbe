@@ -65,9 +65,11 @@ extension EditorDiffTests {
   }
 
   /// 作業ツリー diff は開いた後の作業ツリーの姿に追従する——ファイルを消せば全部の行が削除、戻せば文書との差分、UTF-8 で
-  /// ない中身になれば理由の一文。
+  /// ない中身になれば理由の一文。ほかの変更（未追跡の b.txt）を残し、戻したときに変更が 1 件も無くなって diff が閉じないように
+  /// する。
   func testAWorkingTreeDiffFollowsTheFileBeingRemovedRestoredAndMadeBinary() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
     let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { $0.boundaries == [1] }

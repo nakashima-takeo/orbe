@@ -6,6 +6,7 @@ import OrbeEditorCore
 extension EditorPaneView {
   func wireSourceControl() {
     scm.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
+    scm.onChangesDidApply = { [weak self] emptied in self?.changesDidApply(emptied: emptied) }
     scm.onOpenFile = { [weak self] url in self?.open(url, as: .pinned) }
     scm.onDiscard = { [weak self] files in self?.confirmDiscard(files) }
     scm.onRepositoryWillClose = { [weak self] in
@@ -13,6 +14,12 @@ extension EditorPaneView {
       reclaimSidebarFocus()
     }
     scm.autoFetchEnabled = { [weak self] in self?.settings()[SettingKeys.scmAutoFetch] ?? false }
+  }
+
+  /// ソース管理の件数と行の組が差し替わった。件数が 1 以上から 0 になったら Changes の diff を閉じ、本体の diff を整合させる。
+  private func changesDidApply(emptied: Bool) {
+    if emptied { group?.editor.closeDiff(on: .changes) }
+    reconcileDiffs()
   }
 
   /// 面の workspace の実効設定が変わった（裏の fetch を欲しがるか決め直す）。
@@ -34,7 +41,7 @@ extension EditorPaneView {
   func openScmDiff(_ key: EditorDiff.Key, _ opening: ScmPanel.Opening) {
     guard let group else { return }
     do {
-      _ = try group.editor.openDiff(key)
+      try openDiff(key)
     } catch {
       NSSound.beep()
       return
