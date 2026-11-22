@@ -33,8 +33,8 @@ final class OptionHoldDriver {
   }
 
   /// ⌥ だけを押し、成立するまで待つ。
-  func hold() {
+  func hold(file: StaticString = #filePath, line: UInt = #line) {
     send(.option)
-    pumpMain(until: { monitor.isHolding }, timeout: 1, "⌥ の長押しが成立する")
+    pumpMain(until: { monitor.isHolding }, timeout: 1, "⌥ の長押しが成立する", file: file, line: line)
   }
 }

@@ -10,7 +10,7 @@ import XCTest
 /// 行を書いて応答を読む。サーバ側は本番と同じ実 `Connection`・実 `LineFramer`・実 `handle` を通る。
 ///
 /// listener は張らない（`start()` を呼ばない）ので、実 socket に bind するプロセス境界のテストと同じ singleton を
-/// 共有していても待ち受けを奪い合わず、bind 完了を待つポーリングも要らない。
+/// 共有していても待ち受けを奪い合わず、bind 完了を待つ必要も無い。
 ///
 /// `teardown` は client fd を閉じて target を外すだけで、サーバ側の EOF 処理（`connections` からの
 /// 自己除去）が control queue 上で非同期に終わるのは待たない。待たなくてよいのは `emit` が

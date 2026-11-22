@@ -4,9 +4,9 @@ import XCTest
 
 @testable import Orbe
 
-/// gallery（静止 fixture）と flow（アクション駆動の連番）が共有する低レベルのスナップショット基盤。
-/// オフスクリーン描画（`NSHostingView`＋`cacheDisplay`）・出力先解決・カードを地に置く view ビルダを持つ。
-/// アサートはしない（AI/人間が見る）。両テストクラスがこれを継承して使う（重複を作らない）。
+/// 描画と出力先の基盤。オフスクリーン描画（`NSHostingView`＋`cacheDisplay`）・出力先解決・カードを地に置く view ビルダを持つ。
+/// 撮影道具（gallery と flow）は `ShotTestCase` を経て使う。描いた画を確かめる通常のテスト（`PaletteCardQueryTests`・
+/// `WorktreeCleanRowRenderTests`・`WorktreePaletteRefreshRowRenderTests`）は、これを直に継承する。
 @MainActor
 class SnapshotTestCase: OrbeTestCase {
 

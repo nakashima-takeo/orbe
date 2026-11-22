@@ -34,8 +34,8 @@ final class AgentHookPathTests: OrbeTestCase {
   ///
   /// このクラスの「届く場合」の確かめが裏づけるのは、報告する経路の報告が、シムが返った時点でタブの状態に適用されている
   /// こと。`orbe-report` が応答まで待つことは裏づけない——`orbe-report` が応答を待たずに接続を閉じて終わっても、報告の
-  /// ほうが、`orbe-report` のプロセスの終了通知より先に main に届くので、この確かめは通る。応答まで待つことは
-  /// `OrbeReportWireTests` が確かめる。
+  /// 適用が `orbe-report` のプロセスの終了通知より先に main に届けば、この確かめは通る（どちらが先に届くかは決まって
+  /// いない）。応答まで待つことは `OrbeReportWireTests` が確かめる。
   @discardableResult
   private func runShim(
     _ shim: URL, agent: String = "claude", env: [String: String], state: String, stdin: String,
