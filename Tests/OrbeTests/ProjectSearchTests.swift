@@ -237,14 +237,17 @@ final class ProjectSearchTests: OrbeTestCase {
 
   /// 一致の無い間 git が何も出さなくても（無出力の打ち切りより長くても）切らず、終われば結果とともに完了する。
   func testASilentSearchIsNotCut() throws {
-    let f = try fixture(runner: GitRunner(idleTimeout: 0.3))
+    let clock = ManualClock()
+    let f = try fixture(runner: GitRunner(clock: clock.waits))
     try f.repo.write("n.txt", "needle\n")
     let gate = try gate(f)
 
     f.search.setPattern("needle")
     f.search.search()
     pumpMain(until: { GrepGate.isGrepRunning }, "git が走る")
-    XCTAssertTrue(holds(for: 1) { GrepGate.isGrepRunning }, "無出力が打ち切りの上限を超えても git は生きている")
+    XCTAssertTrue(clock.awaitSleeper(until: nil), "git の待ち手は期限なしで眠る")
+    XCTAssertEqual(clock.advance(by: 86_400), 0, "無出力が打ち切りの上限を超えても、起こす待ち手がいない")
+    XCTAssertTrue(GrepGate.isGrepRunning, "git は生きている")
     gate.open()
     pumpMain(until: { f.search.phase == .done })
     XCTAssertEqual(paths(f.search), ["n.txt"])

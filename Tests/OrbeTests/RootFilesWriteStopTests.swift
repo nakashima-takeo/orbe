@@ -13,6 +13,8 @@ import XCTest
 @MainActor
 final class RootFilesWriteStopTests: OrbeTestCase {
   private var fixture: GitHangFixture!
+  /// 根のサービスの git を走らせる runner の時計。本番の無出力の上限は、これを進めたときにだけ来る。
+  private let clock = ManualClock()
 
   override func setUpWithError() throws {
     fixture = try GitHangFixture()
@@ -21,13 +23,10 @@ final class RootFilesWriteStopTests: OrbeTestCase {
 
   private var root: String { GitWorktreeRoot.normalizedPath(fixture.root) }
 
-  /// 書き込みが打ち切られないことを、待てる長さで確かめるための上限。
-  private let shortIdleTimeout: TimeInterval = 0.6
-
   private var indexLock: String { root + "/.git/index.lock" }
 
-  private func managed(runner: GitRunner = .shared) -> RootFiles {
-    let files = RootFiles(root: root, runner: runner)
+  private func managed() -> RootFiles {
+    let files = RootFiles(root: root, runner: GitRunner(clock: clock.waits))
     pumpMain(until: { files.status != nil }, "status の初回取得")
     return files
   }
@@ -43,13 +42,13 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     line: UInt = #line
   ) {
     XCTAssertTrue(fixture.pumpUntilHung(), "前提: 止まっている", file: file, line: line)
-    RunLoop.main.run(until: Date().addingTimeInterval(shortIdleTimeout * 2))
+    XCTAssertTrue(
+      clock.awaitSleeper(until: nil), "書き込みの待ち手は期限なしで眠る", file: file, line: line)
+    clock.advance(by: 86_400)
     XCTAssertFalse(outcome.finished, "打ち切りの上限を過ぎても、止めるまでは返らない", file: file, line: line)
-    let started = Date()
     write.cancel()
     write.cancel()
     pumpMain(until: { outcome.finished }, timeout: 10, "止めたら返る", file: file, line: line)
-    XCTAssertLessThan(Date().timeIntervalSince(started), 5, file: file, line: line)
     XCTAssertEqual(outcome.failure, .cancelled, file: file, line: line)
     XCTAssertFalse(
       FileManager.default.fileExists(atPath: indexLock), "index.lock を残さない", file: file, line: line)
@@ -74,7 +73,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     try "*.big filter=hang\n".write(
       toFile: root + "/.gitattributes", atomically: true, encoding: .utf8)
     try "payload\n".write(toFile: root + "/big.big", atomically: true, encoding: .utf8)
-    let files = managed(runner: GitRunner(idleTimeout: shortIdleTimeout))
+    let files = managed()
     let outcome = WriteOutcome()
     let write = files.stage(
       [GitStatus.Row(path: "big.big", originalPath: nil)], completion: outcome.receive)
@@ -88,7 +87,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     XCTAssertTrue(fixture.git(["remote", "add", "origin", bare]).isSuccess)
     try fixture.installHook(
       "pre-push", body: "echo 'checking before push' >&2\n" + fixture.waitingBody)
-    let files = managed(runner: GitRunner(idleTimeout: shortIdleTimeout))
+    let files = managed()
     let outcome = WriteOutcome()
     var progress: [String] = []
     let write = files.push(onProgress: { progress.append($0) }, completion: outcome.receive)
@@ -96,26 +95,29 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     assertStopped(write, outcome)
   }
 
-  /// 打ち切りの上限が短い runner でも、書き込みは打ち切られない。同じ runner の観測（smudge で止まった版の本文）は
+  /// 無出力の上限を過ぎても、書き込みは打ち切られない。同じ runner の観測（smudge で止まった版の本文）は
   /// 打ち切られる——分かれ目は「止められる人が見ているか」。
   func testWritesAreNotTimedOutButObservationIs() throws {
     try fixture.installHook("pre-commit", body: fixture.waitingBody)
     try stageChange()
-    let runner = GitRunner(idleTimeout: shortIdleTimeout)
-    let files = managed(runner: runner)
+    let files = managed()
     let outcome = WriteOutcome()
     let write = files.commit(
       message: "slow hook", content: .staged("a.txt"), completion: outcome.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
 
-    let smudge = try fixture.installScript("smudge.sh", body: "sleep 30")
+    let smudging = fixture.dir.appendingPathComponent("smudging").path
+    let smudge = try fixture.installScript(
+      "smudge.sh", body: ": > \"\(smudging)\"\nsleep 30")
     XCTAssertTrue(fixture.git(["config", "filter.slow.smudge", smudge]).isSuccess)
     try "*.txt filter=slow\n".write(
       toFile: root + "/.gitattributes", atomically: true, encoding: .utf8)
     var version: GitVersionText?
     files.repo?.version(of: "a.txt", atCommit: "HEAD") { version = $0 }
-    pumpMain(until: { version != nil }, timeout: 10, "観測は打ち切られて返る")
-    XCTAssertEqual(version, .failed)
+    pumpMain(
+      until: { FileManager.default.fileExists(atPath: smudging) }, "前提: 観測が smudge で止まっている")
+    fixture.expireIdleLimit(on: clock, until: { version != nil })
+    XCTAssertEqual(version, .failed, "観測は打ち切られて返る")
     XCTAssertFalse(outcome.finished, "打ち切りの上限を過ぎても、書き込みは止めるまで待つ")
 
     write.cancel()
@@ -128,12 +130,13 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     let helper = try fixture.installScript("hang-remote.sh", body: fixture.waitingBody)
     XCTAssertTrue(fixture.git(["config", "protocol.ext.allow", "always"]).isSuccess)
     XCTAssertTrue(fixture.git(["remote", "add", "origin", "ext::\(helper)"]).isSuccess)
-    let files = managed(runner: GitRunner(idleTimeout: shortIdleTimeout))
+    let files = managed()
     let outcome = WriteOutcome()
 
     _ = files.fetch(attended: false, onProgress: { _ in }, completion: outcome.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
-    pumpMain(until: { outcome.finished }, timeout: 10, "止めずに返る")
+    fixture.expireIdleLimit(on: clock, until: { outcome.finished })
+    XCTAssertTrue(outcome.finished, "止めずに返る")
     XCTAssertNotNil(outcome.failure)
     XCTAssertNotEqual(outcome.failure, .cancelled)
   }
@@ -143,7 +146,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     let helper = try fixture.installScript("hang-remote.sh", body: fixture.waitingBody)
     XCTAssertTrue(fixture.git(["config", "protocol.ext.allow", "always"]).isSuccess)
     XCTAssertTrue(fixture.git(["remote", "add", "origin", "ext::\(helper)"]).isSuccess)
-    let files = managed(runner: GitRunner(idleTimeout: shortIdleTimeout))
+    let files = managed()
     let outcome = WriteOutcome()
     let write = files.fetch(onProgress: { _ in }, completion: outcome.receive)
     assertStopped(write, outcome)

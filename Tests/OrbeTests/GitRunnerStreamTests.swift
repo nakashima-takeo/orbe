@@ -10,8 +10,9 @@ import XCTest
 /// 検索や根が消えた検索が「git が断った」と読まれる。止めても git が走り続ける。受け手が呼び出し側を掴んだまま残り、
 /// 検索のたびにメモリが増える。
 final class GitRunnerStreamTests: OrbeTestCase {
-  /// 本番の 120 秒は待てないので、無出力の打ち切りが短い runner で「流す実行には効かない」ことを見る。
-  private let runner = GitRunner(idleTimeout: 0.6)
+  /// 手で進める時計の上で、本番の無出力の上限を過ぎても「流しながら読む実行には効かない」ことを見る。
+  private let clock = ManualClock()
+  private lazy var runner = GitRunner(clock: clock.waits)
   private var fixture: GitHangFixture!
 
   override func setUpWithError() throws {
@@ -81,7 +82,9 @@ final class GitRunnerStreamTests: OrbeTestCase {
     let recorder = Recorder()
     let handle = try streamHangingCommit(body: fixture.waitingBody, into: recorder)
     defer { handle.cancel() }
-    XCTAssertNil(recorder.awaitResult(timeout: 1.5), "無出力が上限（0.6 秒）を超えても切らない")
+    XCTAssertTrue(clock.awaitSleeper(until: nil), "期限なしで眠る")
+    XCTAssertEqual(clock.advance(by: 86_400), 0, "無出力が上限を超えても、起こす待ち手がいない")
+    XCTAssertNil(recorder.result, "切っていない")
 
     fixture.release()
     let output = recorder.awaitResult(timeout: 20)
@@ -89,15 +92,16 @@ final class GitRunnerStreamTests: OrbeTestCase {
     XCTAssertEqual(output?.status, 0)
   }
 
-  /// 止めると SIGTERM で切り、孫が pipe を握っていても猶予の内に「止めた」で返る。何度止めてもよい。
+  /// 止めると SIGTERM で切り、孫が pipe を握っていても猶予で「止めた」として返る。何度止めてもよい。
   func testCancellingStopsTheRunAndReportsItWasCancelled() throws {
     let recorder = Recorder()
     let handle = try streamHangingCommit(body: fixture.pipeHoldingBody, into: recorder)
-    let started = Date()
     handle.cancel()
     handle.cancel()
+    let grace = try XCTUnwrap(fixture.awaitGrace(on: clock), "止めた後、猶予の期限で EOF を待つ")
+    clock.advance(to: grace)
     let output = recorder.awaitResult(timeout: 10)
-    XCTAssertLessThan(Date().timeIntervalSince(started), 5, "止めたら猶予の内に返る")
+    XCTAssertTrue(fixture.grandchildIsAlive(), "前提: 孫が pipe を握っていて EOF は来ていない（猶予で返った）")
     XCTAssertEqual(output?.ending, .cancelled)
     XCTAssertEqual(output?.timedOut, false, "止めた実行を打ち切りと読ませない")
   }
