@@ -66,7 +66,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     opened.document.onViewportChange = { notified += 1 }
     let event = try XCTUnwrap(
       CGEvent(
-        scrollWheelEvent2Source: Self.eventSource, units: .pixel, wheelCount: 1, wheel1: -90,
+        scrollWheelEvent2Source: SyntheticInput.source, units: .pixel, wheelCount: 1, wheel1: -90,
         wheel2: 0,
         wheel3: 0))
     opened.surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))

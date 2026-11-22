@@ -104,11 +104,6 @@ class EngineTestCase: XCTestCase {
     return Opened(document: document, surface: surface)
   }
 
-  /// テストが作るスクロールの出来事（`CGEvent`）の出どころ。自分だけの状態を持つ出どころにして、利用者の実際の入力の状態から
-  /// 切り離す。出どころを nil にすると、出来事はその状態を合わせて持ち、利用者が実際にスクロールした直後には、量を 0 に
-  /// した出来事ができることが在る。
-  static let eventSource = CGEventSource(stateID: .privateState)
-
   /// queries はテスト実行体の隣（`.build/<config>`）の資源バンドルから解く。
   static let registry = LanguageRegistry(
     queriesRoot: Bundle(for: EngineTestCase.self).bundleURL.deletingLastPathComponent())
