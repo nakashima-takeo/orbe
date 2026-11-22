@@ -48,7 +48,7 @@ final class PrCommentZone: SurfaceZone {
   var onPress: (PrCommentZone, PrCommentControl) -> Void = { _, _ in }
   /// 入力欄が主になった・外れた。
   var onFieldFocus: (PrCommentZone, Bool) -> Void = { _, _ in }
-  /// 入力欄の本文が変わった。
+  /// 人が入力欄の本文を変えた（`setText` で置いた本文は知らせない）。
   var onTextChange: (PrCommentZone) -> Void = { _ in }
   /// 入力欄に空白でない字があるか（`hasText`）が変わった。
   var onHasTextChange: (PrCommentZone) -> Void = { _ in }
@@ -92,6 +92,8 @@ final class PrCommentZone: SurfaceZone {
   private let bodies = PrCommentBodies()
   /// 入力欄の行の数と、空か（字が無いか）と、空白と改行のほかの字が無いか（どれかが変わったときだけ描き直す）。
   private var fieldShape: FieldShape
+  /// `setText` が本文を置いている最中。
+  private var isSettingText = false
 
   private struct FieldShape: Equatable {
     let lines: Int
@@ -139,9 +141,12 @@ final class PrCommentZone: SurfaceZone {
     return serial
   }
 
-  /// 入力欄の本文を `text` にする（同じなら何もしない）。
+  /// 入力欄の本文を `text` にする（同じなら何もしない）。載せる層が PR ごとの書きかけを欄へ反映するための口で、
+  /// `onTextChange` は呼ばない（反映した本文を書きかけへ書き戻さない）。
   func setText(_ text: String) {
     guard field.string != text else { return }
+    isSettingText = true
+    defer { isSettingText = false }
     if let surface {
       surface.replaceText(of: field, with: text)
     } else {
@@ -156,7 +161,7 @@ final class PrCommentZone: SurfaceZone {
   }
 
   private func fieldDidChange(_ field: ZoneTextField) {
-    onTextChange(self)
+    if !isSettingText { onTextChange(self) }
     let shape = FieldShape(lines: field.lineCount, empty: field.string.isEmpty, blank: !hasText)
     guard shape != fieldShape else { return }
     let wasBlank = fieldShape.blank
