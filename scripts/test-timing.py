@@ -178,7 +178,8 @@ def summary(bundles: List[Bundle]) -> List[str]:
     def class_table(rows):
         table = ["| 順位 | クラス | 本数 | 合計（秒） | 割合 |", "|---:|---|---:|---:|---:|"]
         for i, (name, ms) in enumerate(rows, 1):
-            table.append(f"| {i} | {name} | {len(ms)} | {sec(sum(ms))} | {100 * sum(ms) / total:.1f}% |")
+            share = f"{100 * sum(ms) / total:.1f}%" if total else "-"
+            table.append(f"| {i} | {name} | {len(ms)} | {sec(sum(ms))} | {share} |")
         return table
 
     out += ["", f"### クラス別の上位 {TOP}", ""]
