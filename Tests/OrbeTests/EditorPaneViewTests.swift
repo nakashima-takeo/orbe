@@ -17,20 +17,10 @@ final class EditorPaneViewTests: OrbeTestCase {
     return url
   }
 
-  private func hosted(_ tab: TerminalTab) -> NSWindow {
-    let window = OrbeWindowFake(
-      contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    window.contentView = tab.group.view
-    tab.group.view.show(.editor, animated: false)
-    tab.group.view.layoutSubtreeIfNeeded()
-    return window
-  }
-
   func testShowingADocumentMountsItsSurfaceAndMovesTheFocusTarget() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = hosted(tab)
+    let window = hostEditor(tab, width: 600)
     window.makeFirstResponder(pane)
     XCTAssertTrue(pane.focusTarget === pane, "空状態の行き先は pane")
 
@@ -59,7 +49,7 @@ final class EditorPaneViewTests: OrbeTestCase {
   func testSwitchingDocumentsSwapsTheSurfacesAndKeepsEachDocumentsState() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = hosted(tab)
+    let window = hostEditor(tab, width: 600)
     let first = try tab.group.editor.open(try file("one.txt", "one"), as: .pinned)
     let second = try tab.group.editor.open(try file("two.txt", "two"), as: .pinned)
     window.makeFirstResponder(second.surface.responder)
@@ -85,7 +75,7 @@ final class EditorPaneViewTests: OrbeTestCase {
   /// ならない——外した後に見ると焦点は窓に落ちたままになり、切り替えても閉じても打鍵の行き先が消える。
   func testSwappingTheShownDocumentKeepsTheFocusInsideThePane() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hosted(tab)
+    let window = hostEditor(tab, width: 600)
     let first = try tab.group.editor.open(try file("p.txt", "p"), as: .pinned)
     let second = try tab.group.editor.open(try file("q.txt", "q"), as: .pinned)
     window.makeFirstResponder(second.surface.responder)
@@ -104,7 +94,7 @@ final class EditorPaneViewTests: OrbeTestCase {
   /// 面の外（端末）に焦点があるときに文書を開いても、焦点は奪わない。
   func testOpeningADocumentDoesNotStealFocusFromOutsideThePane() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hosted(tab)
+    let window = hostEditor(tab, width: 600)
     let outsider = NSTextField(frame: .zero)
     tab.group.view.addSubview(outsider)
     window.makeFirstResponder(outsider)
@@ -122,7 +112,7 @@ final class EditorPaneViewTests: OrbeTestCase {
   func testMouseDownFocusesTheFocusTarget() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
-    let window = hosted(tab)
+    let window = hostEditor(tab, width: 600)
     window.makeFirstResponder(nil)
 
     pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: window))
