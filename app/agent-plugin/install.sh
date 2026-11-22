@@ -18,10 +18,12 @@ INSTALL_LIMIT="${5:?install_limit required}"
 # macOS に timeout が無いため perl で代替する。CLI を子として起こし、時限で終了を要求（SIGTERM）し、猶予の後も
 # 残っていれば強制終了（SIGKILL）する。SIGALRM を CLI へ直に届けないのは、agy が SIGALRM では終わらないため。
 # 打ち切ったら CLI の終了コードによらず失敗（124）を返す——agy は SIGTERM を受けて 0 で終わることがある。
+# 時限が正の数でなければ CLI を起こさずに失敗（125）を返す——空や 0 の時限で alarm を掛けると、時限が黙って外れる。
 # stderr は常に捨てる: このスクリプトの stdout は status 行の通り道で、混ざると Orbe が誤読する。
 tmo() {
   perl -MTime::HiRes=alarm -e '
     my $limit = shift;
+    exit 125 unless $limit =~ /^\d+(?:\.\d+)?\z/ && $limit > 0;
     my $pid = fork;
     exit 127 unless defined $pid;
     if (!$pid) { exec @ARGV; exit 127 }
@@ -31,7 +33,7 @@ tmo() {
     waitpid($pid, 0);
     exit 124 if $cut;
     exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
-  ' "$@" </dev/null 2>/dev/null
+  ' -- "$@" </dev/null 2>/dev/null
 }
 
 # list の出力はパイプでなくこのファイルで受ける（毎回 truncate される）。CLI が孫プロセスを残した
