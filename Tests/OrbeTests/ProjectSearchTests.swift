@@ -236,6 +236,12 @@ final class ProjectSearchTests: OrbeTestCase {
   }
 
   /// 一致の無い間 git が何も出さなくても（無出力の打ち切りより長くても）切らず、終われば結果とともに完了する。
+  ///
+  /// 対になる場合が無い否定条件（検索の git は、いつも流しながら読む実行）なので、本番を一時的に変えると落ちることで裏づける。
+  /// 依っている前提: 検索の git は `GitRunner.stream` で走り、その待ち手は期限なしで眠る。この runner の上で走る git は検索の
+  /// 1 本だけである。時刻を進めた呼び出しが起こした数が 0 なら、期限つきで眠る待ち手（打ち切られうる実行）は無い。次のいずれかを
+  /// 変えたときは、本番を一時的に変えて落ちることを確かめ直す: 検索が git を走らせる経路（`stream` 以外の実行を使う、同じ runner で
+  /// 別の git を並べる）、または `GitRunner` の待ち方。
   func testASilentSearchIsNotCut() throws {
     let clock = ManualClock()
     let f = try fixture(runner: GitRunner(clock: clock.waits))

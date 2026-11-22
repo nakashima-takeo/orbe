@@ -233,7 +233,13 @@ final class GitHangFixture {
       return XCTFail("無出力の上限で眠る待ち手が現れない", file: file, line: line)
     }
     for _ in 0..<3 {
-      clock.advance(to: idleDeadline)
+      XCTAssertGreaterThanOrEqual(
+        clock.advance(to: idleDeadline), 1,
+        "無出力の上限の期限まで進めると、眠っている待ち手を、進めた呼び出しの中で起こす。進めた呼び出しが戻った時点でこれが成り立たなくなったら、"
+          + "GitRunnerStreamTests.testASilentRunIsNotCutAndCompletesWhenItEnds・"
+          + "GitRunnerTimeoutTests.testStreamingCommandIsNotStopped・RootFilesWriteStopTests の見ている手の書き込み"
+          + "（assertStopped）が、切らないことを確かめる時点（進めた直後）も成り立たない",
+        file: file, line: line)
       guard waitUntil(10, { settled() || clock.sleeping.contains(idleDeadline) }) else {
         return XCTFail("上限まで進めた後、終わりも眠り直しも来ない", file: file, line: line)
       }
