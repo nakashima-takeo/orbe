@@ -19,39 +19,66 @@ final class WorktreePaletteBranchNameTests: OrbeTestCase {
   /// provider が弱参照で持つモデル（行を読むために生かしておく）。
   private var palette: WorktreePaletteModel!
 
-  /// origin に `feat` と `feat|x`（別のコミット）を置き、手元の clone に次のローカルブランチを作る。
-  /// `mine|x` は worktree を持たない。`tagged` は同名タグを持ち worktree で checkout 中。`solo` は
-  /// 同名タグを持ち worktree を持たない。
+  /// 組（`pair`）の複製を置き、手元の origin を複製の中の `origin.git` へ向け直して、`tagged` を worktree で
+  /// checkout する。
   override func setUpWithError() throws {
     dir = TestScratch.caseDir
       .appendingPathComponent("orbe-branchname-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     origin = dir.appendingPathComponent("origin.git").path
     local = dir.appendingPathComponent("local").path
-    let other = dir.appendingPathComponent("other").path
-
-    XCTAssertTrue(run(["init", "-q", "--bare", "-b", "main", origin], cwd: dir.path).isSuccess)
-    XCTAssertTrue(run(["clone", "-q", origin, other], cwd: dir.path).isSuccess)
-    try identify(other)
-    try commit("a", in: other)
-    XCTAssertTrue(run(["push", "-q", "origin", "HEAD:main"], cwd: other).isSuccess)
-    for branch in ["feat", "feat|x"] {
-      XCTAssertTrue(run(["checkout", "-q", "-b", branch, "main"], cwd: other).isSuccess)
-      try commit(branch, in: other)
-      XCTAssertTrue(run(["push", "-q", "origin", branch], cwd: other).isSuccess)
-    }
-    XCTAssertNotEqual(originTip("feat"), originTip("feat|x"), "前提: 2 つの remote ブランチは別物")
-
-    XCTAssertTrue(run(["clone", "-q", origin, local], cwd: dir.path).isSuccess)
-    for name in ["mine|x", "tagged", "solo"] {
-      XCTAssertTrue(run(["branch", name, "main"], cwd: local).isSuccess)
-    }
-    for name in ["tagged", "solo"] {
-      XCTAssertTrue(run(["tag", name, "main"], cwd: local).isSuccess)
-    }
+    try Self.pair.copy(to: dir)
+    try GitFixtureTemplate.git(["remote", "set-url", "origin", origin], in: local)
     let taggedWorktree = dir.appendingPathComponent("wt-tagged").path
     XCTAssertTrue(run(["worktree", "add", "-q", taggedWorktree, "tagged"], cwd: local).isSuccess)
     XCTAssertEqual(checkedOutRef(at: taggedWorktree), "refs/heads/tagged", "前提: ブランチを checkout 中")
+  }
+
+  /// origin に `feat` と `feat|x`（別のコミット）を置き、手元の clone（`local`）に次のローカルブランチを作る。
+  /// `mine|x` は worktree を持たない。`tagged` は同名タグを持つ（worktree での checkout は `setUp` が行う）。`solo` は
+  /// 同名タグを持ち worktree を持たない。origin を作るための clone（`other`）は残さない。
+  private nonisolated(unsafe) static let pair = GitFixtureTemplate(
+    name: "orbe-branchname", build: buildPair)
+
+  private nonisolated static func buildPair(_ dir: URL) throws {
+    let origin = dir.appendingPathComponent("origin.git").path
+    let local = dir.appendingPathComponent("local").path
+    let other = dir.appendingPathComponent("other").path
+    @discardableResult
+    func git(_ args: [String], in cwd: String) throws -> String {
+      try GitFixtureTemplate.git(args, in: cwd).stdoutText
+    }
+    func commit(_ name: String) throws {
+      try name.write(
+        toFile: (other as NSString).appendingPathComponent("\(name).txt"), atomically: true,
+        encoding: .utf8)
+      try git(["add", "-A"], in: other)
+      try git(["commit", "-qm", name], in: other)
+    }
+
+    try git(["init", "-q", "--bare", "-b", "main", origin], in: dir.path)
+    try git(["clone", "-q", origin, other], in: dir.path)
+    try git(["config", "user.email", "t@example.com"], in: other)
+    try git(["config", "user.name", "t"], in: other)
+    try commit("a")
+    try git(["push", "-q", "origin", "HEAD:main"], in: other)
+    for branch in ["feat", "feat|x"] {
+      try git(["checkout", "-q", "-b", branch, "main"], in: other)
+      try commit(branch)
+      try git(["push", "-q", "origin", branch], in: other)
+    }
+    guard
+      try git(["rev-parse", "refs/heads/feat"], in: origin)
+        != git(["rev-parse", "refs/heads/feat|x"], in: origin)
+    else { throw GitFixtureTemplate.Failure(description: "前提: 2 つの remote ブランチは別物") }
+
+    try git(["clone", "-q", origin, local], in: dir.path)
+    for name in ["mine|x", "tagged", "solo"] {
+      try git(["branch", name, "main"], in: local)
+    }
+    for name in ["tagged", "solo"] {
+      try git(["tag", name, "main"], in: local)
+    }
+    try FileManager.default.removeItem(atPath: other)
   }
 
   // MARK: - `|` を含む名前
@@ -145,19 +172,6 @@ final class WorktreePaletteBranchNameTests: OrbeTestCase {
   /// worktree が checkout している ref。detached なら空。
   private func checkedOutRef(at worktree: String) -> String {
     oid(["symbolic-ref", "-q", "HEAD"], cwd: worktree)
-  }
-
-  private func identify(_ repo: String) throws {
-    XCTAssertTrue(run(["config", "user.email", "t@example.com"], cwd: repo).isSuccess)
-    XCTAssertTrue(run(["config", "user.name", "t"], cwd: repo).isSuccess)
-  }
-
-  private func commit(_ name: String, in repo: String) throws {
-    try name.write(
-      toFile: (repo as NSString).appendingPathComponent("\(name).txt"), atomically: true,
-      encoding: .utf8)
-    XCTAssertTrue(run(["add", "-A"], cwd: repo).isSuccess)
-    XCTAssertTrue(run(["commit", "-qm", name], cwd: repo).isSuccess)
   }
 
   private func head(of worktree: String) -> String {

@@ -15,13 +15,7 @@ final class GitWorktreeOperationTests: OrbeTestCase {
   override func setUpWithError() throws {
     dir = TestScratch.caseDir
       .appendingPathComponent("orbe-op-repo-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
-    try write(dir.path, "a.txt", "x")
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
+    try TempGitRepo.place(at: dir)
     repo = try open()
   }
 

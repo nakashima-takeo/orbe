@@ -176,16 +176,8 @@ final class WorktreePaletteWorkspaceBindingTests: OrbeTestCase {
 private extension OrbeTestCase {
   /// root path に置く 1 コミットのリポジトリ（origin 無し＝gh へは問い合わせない）。
   func makeRepository() throws -> String {
-    let dir = TestScratch.caseDir.appendingPathComponent("repo").path
-    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    try "x".write(
-      toFile: (dir as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-    for args in [
-      ["init", "-q", "-b", "main"], ["config", "user.email", "t@example.com"],
-      ["config", "user.name", "t"], ["add", "-A"], ["commit", "-qm", "init"],
-    ] {
-      XCTAssertTrue(GitRunner.shared.runSync(args, cwd: dir).isSuccess, "git \(args[0])")
-    }
-    return dir
+    let dir = TestScratch.caseDir.appendingPathComponent("repo")
+    try TempGitRepo.place(at: dir)
+    return dir.path
   }
 }

@@ -7,6 +7,9 @@ import XCTest
 /// テストの作業ディレクトリに作る実 git リポジトリ（初期コミット付き）。根のサービス・監視・観測のテストが共有する。
 /// `root` は根の正規形（`GitWorktreeRoot.normalizedPath`）で、タブの `groupKey` と同じ綴り。ref の形式は files に固定する
 /// （監視が remote 追跡 ref の変化を ref 名で見分けるのは files だけ。git の既定や環境変数に左右されない）。
+///
+/// 生成は、実 git で 1 回だけ組んだテンプレート（`GitFixtureTemplate`）の複製と、index を作業ツリーに合わせる git の
+/// 1 回（初回コミット前の形では 0 回）。初期コミットは全テストで同じ（ハッシュも時刻も）。
 final class TempGitRepo {
   let dir: URL
   let root: String
@@ -15,15 +18,33 @@ final class TempGitRepo {
   init(name: String = "orbe-repo", initialCommit: Bool = true) throws {
     dir = TestScratch.caseDir.appendingPathComponent(
       "\(name)-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try Self.place(at: dir, initialCommit: initialCommit)
     root = GitWorktreeRoot.normalizedPath(dir.path)
-    XCTAssertTrue(git(["init", "-q", "-b", "main", "--ref-format=files"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
-    guard initialCommit else { return }
-    try write("a.txt", "one\n")
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
+  }
+
+  /// 基本形のリポジトリ（`main` に作者の設定と、`a.txt`（`one\n`）の初期コミット 1 つ）の複製を、`destination`
+  /// （まだ無いパス）に置く。`initialCommit` が false なら、初回コミット前の形（作者の設定まで）。
+  static func place(at destination: URL, initialCommit: Bool = true) throws {
+    try (initialCommit ? committed : uncommitted).copy(to: destination)
+  }
+
+  private nonisolated(unsafe) static let uncommitted = GitFixtureTemplate(
+    name: "orbe-repo-uncommitted", build: initialize)
+
+  private nonisolated(unsafe) static let committed = GitFixtureTemplate(name: "orbe-repo") { url in
+    try initialize(url)
+    try Data("one\n".utf8).write(to: url.appendingPathComponent("a.txt"))
+    try GitFixtureTemplate.git(["add", "-A"], in: url.path)
+    try GitFixtureTemplate.git(["commit", "-qm", "init"], in: url.path)
+  }
+
+  private static func initialize(_ url: URL) throws {
+    for args in [
+      ["init", "-q", "-b", "main", "--ref-format=files"],
+      ["config", "user.email", "t@example.com"], ["config", "user.name", "t"],
+    ] {
+      try GitFixtureTemplate.git(args, in: url.path)
+    }
   }
 
   /// ローカルの bare リポジトリを `origin` として足し、main を upstream 付きで送る。bare のパスを返す。

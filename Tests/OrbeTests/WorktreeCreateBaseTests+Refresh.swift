@@ -18,7 +18,7 @@ extension WorktreeCreateBaseTests {
   func testStaleLocalBranchIsReportedAfterTheFetchLands() throws {
     let provider = try startWithSlowFetch()
     guard
-      case .staleBranch(let sync, let relativeDate) = try prepare(
+      case .staleBranch(let sync, let relativeDate) = try prepareReleasingTheFetch(
         provider, .localBranch(name: "stale"))
     else {
       return XCTFail("着地後の値で遅れを返す")
