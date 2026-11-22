@@ -2,9 +2,12 @@ import AppKit
 import OrbeEditorCore
 
 /// diff の本体——インラインなら新しい側の面 1 枚、並列なら左右 2 面と境の線（1px）、表示できないなら理由の一文（空状態と
-/// 同じ器）。見え方の付け外しは diff の `present` / `dismiss`。
+/// 同じ器）。見え方の付け外しは diff の `present` / `dismiss`。見せ方は本体の幅で決まる。
 extension EditorPaneView {
-  /// diff を本体に載せる——今の見せ方で見せ、面を置き、知らせを結ぶ。
+  /// 本体の今の幅での見せ方。
+  var fittingDiffMode: EditorDiff.Mode { EditorDiff.Mode(bodyWidth: bodyRect.width) }
+
+  /// diff を本体に載せる——本体の幅で決まる見せ方で見せ、面を置き、知らせを結ぶ。
   func showDiff(_ diff: EditorDiff) {
     diffFocusesLeft = false
     diff.onPresentationChange = { [weak self, weak diff] in
@@ -13,7 +16,19 @@ extension EditorPaneView {
       refreshNotice()
       needsLayout = true
     }
-    diff.present(diffModes.mode)
+    diff.present(fittingDiffMode)
+    installDiffSurfaces(diff)
+  }
+
+  /// 見せている diff の見せ方を本体の幅に合わせる（配置の最初に呼ぶ）。面が見えていない間は見せ直さず、見えたときの配置で
+  /// 合わせる。見せ直したら、主の入力欄が居る面を焦点の行き先にし（並列でなくなれば右へ戻す）、面の view を入れ替える——
+  /// 焦点が本体にあれば、入れ替えがその行き先へ移す。
+  func fitDiffMode() {
+    let mode = fittingDiffMode
+    guard let diff, isFaceVisible, let presented = diff.presented, presented != mode else { return }
+    diff.present(mode)
+    let fieldOnLeft = diff.primaryFieldSurface.map { $0 === diff.oldSurface } == true
+    diffFocusesLeft = mode == .side && fieldOnLeft
     installDiffSurfaces(diff)
   }
 
@@ -130,23 +145,6 @@ extension EditorPaneView {
       return .notice(.editorDiffPullRequestCommitsMissing)
     case .unavailable(.pullRequestUnrelated):
       return .notice(.editorDiffPullRequestUnrelated)
-    }
-  }
-
-  /// 見せ方の選択を観測して、見せている diff を見せ直す。
-  func observeDiffModes() {
-    withObservationTracking {
-      _ = diffModes.mode
-    } onChange: { [weak self] in
-      DispatchQueue.main.async { [weak self] in
-        guard let self else { return }
-        if let diff {
-          diff.present(diffModes.mode)
-          installDiffSurfaces(diff)
-          needsLayout = true
-        }
-        observeDiffModes()
-      }
     }
   }
 

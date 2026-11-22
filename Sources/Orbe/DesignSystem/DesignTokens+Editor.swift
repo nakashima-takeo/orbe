@@ -217,6 +217,8 @@ extension Theme.Layout {
   static let editorDiffNumberTrailingInline: CGFloat = 6
   static let editorDiffNumberTrailingSide: CGFloat = 8
   static let editorDiffSign: CGFloat = 18
+  /// diff を並列で見せる本体の幅の下限（これ未満はインライン）。
+  static let editorDiffSideWidth: CGFloat = 1000
   /// 本体の右端の縦スクロールバー（印を載せる。VS Code の verticalScrollbarSize）。
   static let editorScrollbar: CGFloat = 14
   /// 本文の区画の下端の横スクロールバーの高さ（VS Code の horizontalScrollbarSize）。

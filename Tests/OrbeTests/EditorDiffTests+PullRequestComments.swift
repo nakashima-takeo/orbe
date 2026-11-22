@@ -27,20 +27,20 @@ extension EditorDiffTests {
   }
 
   /// PR の diff を開く。PR のコミットは `edit`（無ければ a.txt の行 3 を変える）で作り、GitHub はファイル `path` を `change`
-  /// と答える。diff の見せ方は `modes` が選ぶ。
+  /// と答える。窓の幅は `width`（→ `tab(width:)`）。
   func commentedDiff(
     _ remote: Remote, path: String = "a.txt",
-    change: GitHubPullRequestContent.Change = .modified, modes: EditorDiffModeState? = nil,
+    change: GitHubPullRequestContent.Change = .modified, width: CGFloat = 900,
     edit: (() throws -> Void)? = nil
   ) throws -> (EditorDiff, MetalTextSurface) {
-    let opened = try commentedTab(remote, path: path, change: change, modes: modes, edit: edit)
+    let opened = try commentedTab(remote, path: path, change: change, width: width, edit: edit)
     return (opened.diff, try engine(opened.diff.newSurface))
   }
 
   /// `commentedDiff` と同じ PR の diff を開き、そのタブも返す。
   func commentedTab(
     _ remote: Remote, path: String = "a.txt",
-    change: GitHubPullRequestContent.Change = .modified, modes: EditorDiffModeState? = nil,
+    change: GitHubPullRequestContent.Change = .modified, width: CGFloat = 900,
     edit: (() throws -> Void)? = nil
   ) throws -> (diff: EditorDiff, tab: TerminalTab) {
     let base = repo.head()
@@ -96,15 +96,15 @@ extension EditorDiffTests {
     state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
     // 面が作る PR のパネルより先に、根の worktree の今の PR を差し替えの出どころで登録する（本物の gh を呼ばない）。
     _ = BranchPullRequest.shared(for: repo.root, source: state.source)
-    return try open(state, path: path, modes: modes)
+    return try open(state, path: path, width: width)
   }
 
   /// PR の状態 `state` のファイル `path` の diff を、タブ `into`（無ければ新しいタブ）の PR の画面で開く。
   func open(
-    _ state: PullRequestState, path: String = "a.txt", modes: EditorDiffModeState? = nil,
+    _ state: PullRequestState, path: String = "a.txt", width: CGFloat = 900,
     into: TerminalTab? = nil
   ) throws -> (diff: EditorDiff, tab: TerminalTab) {
-    let tab = into ?? tab(modes: modes).0
+    let tab = into ?? tab(width: width).0
     let diff = try tab.group.editor.openDiff(id(path, .pullRequest(state)))
     tab.group.editor.selectScreen(.pullRequest)
     pumpMain(
@@ -226,8 +226,8 @@ extension EditorDiffTests {
   /// へ書く。
   func testOldSideMarksWriteToTheOldSideLine() throws {
     let remote = Remote()
-    let modes = EditorDiffModeState()
-    let (diff, surface) = try commentedDiff(remote, modes: modes)
+    let (diff, surface) = try commentedDiff(remote)
+    let window = try XCTUnwrap(surface.textView.window)
     let layer = try XCTUnwrap(diff.comments)
     layer.surface(surface, didPressTrailingMarkOn: .source(2))
     let draft = try XCTUnwrap(layer.draft(.old, line: 2), "削除行「three」の下に開く")
@@ -238,7 +238,7 @@ extension EditorDiffTests {
       remote.writes,
       [.addThread(path: "a.txt", side: .old, line: 3, commit: remote.head, body: "消した行")])
 
-    modes.select(.side)
+    resize(window, width: Self.sideWidth)
     pumpMain(until: { diff.oldSurface != nil && layer.isSettled }, "並列の 2 面が揃う")
     layer.surface(try engine(diff.oldSurface), didPressTrailingMarkOn: .document(1))
     XCTAssertNotNil(layer.draft(.old, line: 1), "左の面の行は古い側の行")

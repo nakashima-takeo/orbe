@@ -20,10 +20,9 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
     try repo.write("middle.txt", (lines[..<100] + lines[118...]).joined(separator: "\n") + "\n")
     try repo.write("tail.txt", lines[..<190].joined(separator: "\n") + "\n")
-    let modes = EditorDiffModeState()
-    let (tab, _) = tab(modes: modes)
+    let (tab, window) = tab()
     for mode in [EditorDiff.Mode.inline, .side] {
-      modes.select(mode)
+      resize(window, width: mode == .side ? Self.sideWidth : 900)
       for (path, boundary) in [("middle.txt", 100), ("tail.txt", 190)] {
         let diff = try tab.group.editor.openDiff(id(path, .workingTree))
         pumpMain(

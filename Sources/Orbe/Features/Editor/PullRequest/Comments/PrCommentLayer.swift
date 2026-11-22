@@ -31,6 +31,10 @@ final class PrCommentLayer {
   private var commentable: (ends: PullRequestState.DiffEnds, lines: GitDiffHunkLines?)?
   /// 最後に並びへ注記を渡した両端とその両側の本文、並列の古い側の面（インラインでは nil）。
   private(set) var placed: Placed?
+  /// 並びを置いている間（注記を渡してから、置いた面を知らされるまで）の、注記に載せた絵の差し込みと、その間に入力欄の主が
+  /// 外れた絵の差し込み。並びを置き直すと、前の面は並びから外れた入力欄の場を閉じて主を本文へ戻す。欄が別の面へ移っただけなら
+  /// 移った先で主のまま残すので、この間の「主が外れた」はその場で扱わず、置いた面が分かってから決める（→ `place`）。
+  private var placing: (zones: [PrCommentZone], lost: [PrCommentZone])?
   private weak var oldSurface: (any TextSurface)?
   /// スレッドの絵を 1 分ごとに描き直させる（コメントの相対時刻を、時の経過に合わせて進める）。
   private var clock: Timer?
@@ -95,6 +99,12 @@ final class PrCommentLayer {
   /// 両端で置く（出どころが新しい両端の本文を読み終えても、diff がそれを見せるまでは前の両端）。両端が分からなければ何も
   /// 置かない。
   func notes(shown: EditorDiff.SideTexts?) -> DiffRows.Notes {
+    let notes = compose(shown: shown)
+    placing = (notes.zones.compactMap { $0.zone as? PrCommentZone }, [])
+    return notes
+  }
+
+  private func compose(shown: EditorDiff.SideTexts?) -> DiffRows.Notes {
     guard let shown,
       let ends = pullRequest.ends(of: shown) ?? (placed?.shown == shown ? placed?.ends : nil)
     else {
@@ -239,14 +249,59 @@ final class PrCommentLayer {
   }
 
   /// 並びを置いた面を絵の差し込みへ写す（`old` は並列の古い側の面。インラインなら nil で、どの差し込みも `new` に置く）。
+  /// 並びに載せた入力欄が、主のまま別の面へ移った・置く間に主が外れたなら、置いた面で主にする（push を読んだ面の作り直し・
+  /// 見せ方の切り替え）。並びに載らなかった入力欄の、置く間に外れた主は、ここで外れたものとして扱う。
   func place(old: (any TextSurface)?, new: any TextSurface) {
     oldSurface = old
+    let (zones, lost) = placing ?? ([], [])
+    placing = nil
+    var moved: [PrCommentZone] = []
+    func put(_ zone: PrCommentZone, on surface: any TextSurface) {
+      if zone.isFieldPrimary, zone.surface !== surface { moved.append(zone) }
+      zone.surface = surface
+    }
     for zone in threads.values {
       guard case .thread(let thread) = zone.subject else { continue }
-      zone.surface = thread.side == .old ? old ?? new : new
+      put(zone, on: thread.side == .old ? old ?? new : new)
     }
     for placement in Array(held.values) + drafts {
-      placement.zone.surface = placement.version == .old ? old ?? new : new
+      put(placement.zone, on: placement.version == .old ? old ?? new : new)
+    }
+    for zone in moved + lost {
+      if zones.contains(where: { $0 === zone }) {
+        zone.surface?.focus(zone.field)
+      } else if !zone.isFieldPrimary {
+        fieldDidLoseFocus(zone)
+      }
+    }
+  }
+
+  /// 主の入力欄が居る面（主の入力欄が無ければ nil）。
+  var primaryFieldSurface: (any TextSurface)? {
+    (Array(threads.values) + drafts.map(\.zone)).first(where: \.isFieldPrimary)?.surface
+  }
+
+  /// 絵の差し込み `zone` の入力欄が主になった・外れた。並びを置いている間に外れた主は、置いた面が分かるまで取っておく。
+  func fieldFocusDidChange(_ zone: PrCommentZone, primary: Bool) {
+    guard !primary else { return }
+    guard placing == nil else {
+      placing?.lost.append(zone)
+      return
+    }
+    fieldDidLoseFocus(zone)
+  }
+
+  /// 絵の差し込み `zone` の入力欄の主が外れた。空の新しいコメントの欄は閉じ、置けなくなった・削除されたスレッドは、返信の
+  /// 書きかけを空にして主が外れたら手放す。
+  private func fieldDidLoseFocus(_ zone: PrCommentZone) {
+    guard !zone.hasText else { return }
+    switch zone.subject {
+    case .thread(let thread):
+      guard release(thread.id, zone) else { return }
+      onRowsChange()
+    case .draft:
+      guard !zone.isWriting else { return }
+      closeDraft(zone)
     }
   }
 

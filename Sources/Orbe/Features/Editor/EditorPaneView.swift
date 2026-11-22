@@ -49,10 +49,6 @@ final class EditorPaneView: NSView {
   var diffAwaitingRow: EditorDiff.Key?
   /// 焦点を預かっている一覧の画面（Changes・PR。行が出たら一覧へ渡す。→ `holdListFocus`）。
   var heldListFocus: EditorScreen?
-  /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
-  private(set) var diffModes = EditorDiffModeState() {
-    didSet { observeDiffModes() }
-  }
   /// 並列の diff で最後に焦点のあった側（焦点の行き先。既定は右）。
   var diffFocusesLeft = false
   /// 並列の diff の 2 面の境。
@@ -149,7 +145,6 @@ final class EditorPaneView: NSView {
     wireSourceControl()
     wirePullRequest()
     observeSidebar()
-    observeDiffModes()
     registerForDraggedTypes([.fileURL])
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
@@ -160,17 +155,16 @@ final class EditorPaneView: NSView {
 
   override var isFlipped: Bool { true }
 
-  /// 窓の環境（透過・言語・フォント割り当て・左の列の状態・diff の見せ方）を面へ配る。別 root は Environment を継承
-  /// しないので root を作り直す。
+  /// 窓の環境（透過・言語・フォント割り当て・左の列の状態）を面へ配る。別 root は Environment を継承しないので root を
+  /// 作り直す。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
-    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState, diffModes: EditorDiffModeState
+    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
   ) {
     self.translucency = translucency
     self.localization = localization
     self.fontResolver = fontResolver
     self.sidebar = sidebar
-    self.diffModes = diffModes
     installRoots()
     needsLayout = true
   }

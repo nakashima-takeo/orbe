@@ -47,7 +47,7 @@ extension EditorDiffTests {
   /// 並列の右で行を足し引きしても、左右の同じ行は同じ高さに揃い続ける（裏の結果を待つ前も後も）。
   func testTheRightSideOfASideBySideDiffIsEditedAndStaysAligned() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let (tab, window) = tab(modes: EditorDiffModeState(mode: .side))
+    let (tab, window) = tab(width: Self.sideWidth)
     let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     let document = try XCTUnwrap(diff.document)
@@ -78,7 +78,7 @@ extension EditorDiffTests {
   /// ない diff は、本文が変わるたびに今の行の数で並びを置き直す）。
   func testAddingLinesToAnUntrackedFileKeepsTheSideBySideAligned() throws {
     try repo.write("new.txt", "x\ny\n")
-    let (tab, window) = tab(modes: EditorDiffModeState(mode: .side))
+    let (tab, window) = tab(width: Self.sideWidth)
     let diff = try tab.group.editor.openDiff(id("new.txt", .workingTree))
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     let document = try XCTUnwrap(diff.document)
@@ -101,8 +101,7 @@ extension EditorDiffTests {
   /// 切り替えても、変換は続き、確定した字が本文に入る。
   func testTheCompositionContinuesWhileTheRowsChangeUnderIt() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let modes = EditorDiffModeState()
-    let (tab, window) = tab(modes: modes)
+    let (tab, window) = tab()
     let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { self.removedLines($0) == [1] }
     let document = try XCTUnwrap(diff.document)
@@ -116,7 +115,7 @@ extension EditorDiffTests {
 
     waitRows(diff, "変換中の行の元の行が削除行に出る") { self.removedLines($0) == [1, 2] }
     XCTAssertTrue(client.hasMarkedText(), "削除行が差し込まれても変換は続く")
-    modes.select(.side)
+    resize(window, width: Self.sideWidth)
     pumpMain(until: { diff.oldSurface != nil }, "並列")
     XCTAssertTrue(diff.newSurface === surface, "前提: 同じ面")
     XCTAssertTrue(client.hasMarkedText(), "見せ方を切り替えても変換は続く")

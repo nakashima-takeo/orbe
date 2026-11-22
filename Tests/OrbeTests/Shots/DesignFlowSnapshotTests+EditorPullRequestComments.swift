@@ -8,8 +8,8 @@ import XCTest
 
 /// PR のコメントの flow（fixture は `PrFixtures` と `PrFixtureReview`——本物の git の場と、PR #131 とスレッドを答える
 /// 差し替えの出どころ）: PR の diff のスレッド（既定のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
-/// コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 並列 → パネルの
-/// 下端で全体へのコメントと「承認」を選ぶ → 送信の最中 → 送信の失敗 → 送信の後（保留中が 0）→ 書きかけの欄の行を書き換える
+/// コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 左の列を閉じて並列 →
+/// 左の列を開き（インラインに戻る）、パネルの下端で全体へのコメントと「承認」を選ぶ → 送信の最中 → 送信の失敗 → 送信の後（保留中が 0）→ 書きかけの欄の行を書き換える
 /// push の後（欄が書きかけを残して送れない姿）。
 extension DesignFlowSnapshotTests {
   func testEditorPrComments() throws {
@@ -126,15 +126,21 @@ private struct CommentSteps {
     settle()
   }
 
+  /// 左の列を閉じる（本体が並列の境の値より広くなる）。
   func side() {
     zone("T_coalesce")?.zone(.pressed(PrCommentControl.collapse))
-    scene.pane.diffModes.select(.side)
+    scene.pane.sidebar.setOpen(false)
     let pane = scene.pane
     pumpMain(until: { pane.diff.map { pane.diffSurfaces($0).count == 2 } ?? false }, "並列になる")
     settle()
   }
 
+  /// 左の列を開き（インラインに戻る）、パネルの下端で全体へのコメントと「承認」を選ぶ。
   func draftReview() {
+    scene.pane.sidebar.setOpen(true)
+    let pane = scene.pane
+    pumpMain(until: { pane.diff.map { pane.diffSurfaces($0).count == 1 } ?? false }, "インラインになる")
+    settle()
     scene.panel.state?.reviewDraft.body = "コメントの分岐を確かめました。"
     scene.panel.chooseReviewEvent(.approve)
   }
@@ -151,12 +157,8 @@ private struct CommentSteps {
     pumpMain(until: { panel.state?.submissionFailure != nil }, "失敗が届く")
   }
 
-  /// インラインに戻して行 7 に新しいコメントの欄を開いて打ち、行 7 を書き換える push を起こす。
+  /// 行 7 に新しいコメントの欄を開いて打ち、行 7 を書き換える push を起こす。
   func rewriteDraftLine() {
-    scene.pane.diffModes.select(.inline)
-    let pane = scene.pane
-    pumpMain(until: { pane.diff.map { pane.diffSurfaces($0).count == 1 } ?? false }, "インラインになる")
-    settle()
     surface?.scroll(toFirstLine: 2)
     diff?.comments?.openDraft(.new, line: 6)
     settle()

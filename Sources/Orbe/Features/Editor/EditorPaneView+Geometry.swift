@@ -128,6 +128,8 @@ extension EditorPaneView {
   }
 
   override func layout() {
+    // 見せ方は面の枠を置く前に決める——並列とインラインで面の数が変わり、開いた直後に送る位置も見せ方で変わる。
+    fitDiffMode()
     // 面の大きさが右列の幅を決め、検索バーの制約はその幅から置く——制約は super.layout() が当てるので、その前に置く。
     document?.surface.view.frame = bodyRect
     if let diff { layoutDiff(diff) }

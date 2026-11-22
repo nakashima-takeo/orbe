@@ -33,15 +33,16 @@ extension EditorDiffTests {
     var tabs: [TerminalTab] = []
     for seed in seeds {
       if !tabs.isEmpty { try setUpWithError() }
-      let tab = tab(modes: EditorDiffModeState())
+      let tab = tab()
       tabs.append(tab.0)
-      guard try runTransitions(seed: seed, steps: steps, in: tab.0) else { return }
+      guard try runTransitions(seed: seed, steps: steps, in: tab.0, window: tab.1) else { return }
     }
   }
 
   /// 種 `seed` で `steps` 手を当てる。食い違えば記録して false を返す。
-  private func runTransitions(seed: UInt64, steps: Int, in tab: TerminalTab) throws -> Bool {
-    let modes = tab.group.view.editor.diffModes
+  private func runTransitions(
+    seed: UInt64, steps: Int, in tab: TerminalTab, window: NSWindow
+  ) throws -> Bool {
     let session = tab.group.editor
     let pane = tab.group.view.editor
     try repo.write("other.txt", "other\n")
@@ -78,7 +79,13 @@ extension EditorDiffTests {
               session.selectScreen(.changes)
             }
           ),
-          ("mode", { modes.select(modes.mode == .inline ? .side : .inline) }),
+          (
+            "mode",
+            {
+              let side = pane.fittingDiffMode == .inline
+              self.resize(window, width: side ? Self.sideWidth : 900)
+            }
+          ),
         ]
         let (name, op) = ops[random.next(below: ops.count)]
         log.append("\(step):\(name)")
@@ -101,7 +108,7 @@ extension EditorDiffTests {
   private func settle(_ pane: EditorPaneView, truth: Truth) -> String? {
     var mismatch: String?
     waitUntil(10) {
-      mismatch = self.mismatch(pane.diff, truth: truth, mode: pane.diffModes.mode)
+      mismatch = self.mismatch(pane.diff, truth: truth, mode: pane.fittingDiffMode)
       return mismatch == nil
     }
     return mismatch

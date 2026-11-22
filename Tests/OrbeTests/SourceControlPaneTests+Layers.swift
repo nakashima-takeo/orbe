@@ -159,8 +159,7 @@ extension SourceControlPaneTests {
     hosted.window.setContentSize(NSSize(width: 900, height: 700))
     hosted.pane.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState.loaded(),
-      diffModes: EditorDiffModeState())
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState.loaded())
     hosted.pane.switchScreen(.changes)
     let graph = hosted.pane.scmGraphList
     func graphFrameHeight() -> CGFloat {

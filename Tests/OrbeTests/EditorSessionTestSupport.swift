@@ -19,29 +19,3 @@ extension EditorSession {
   /// 仮の文書。
   var preview: EditorDocument? { previewURL.flatMap(document(at:)) }
 }
-
-@MainActor
-extension GroupFacesView {
-  /// diff の見せ方を既定にして窓の環境を配る。
-  func configure(
-    translucency: ChromeTranslucency, localization: LocalizationStore,
-    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
-  ) {
-    configure(
-      translucency: translucency, localization: localization, fontResolver: fontResolver,
-      sidebar: sidebar, diffModes: EditorDiffModeState())
-  }
-}
-
-@MainActor
-extension EditorPaneView {
-  /// diff の見せ方を既定にして窓の環境を配る。
-  func configure(
-    translucency: ChromeTranslucency, localization: LocalizationStore,
-    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
-  ) {
-    configure(
-      translucency: translucency, localization: localization, fontResolver: fontResolver,
-      sidebar: sidebar, diffModes: EditorDiffModeState())
-  }
-}
