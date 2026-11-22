@@ -133,59 +133,79 @@ final class ShellPATHTests: OrbeTestCase {
   /// probe の失敗でディスクキャッシュを壊さない。前回セッションが得た PATH は、次の起動が
   /// 既知パスだけから始まらないための安全網として残す。
   func testFailedProbeKeepsDiskCache() {
-    drainMain()  // 他テストが残した main 上の書き込みを流し切ってから測る
+    nextTurn()  // 他テストが main に残した書き込みを処理し終えてから測る
     AppStatePersistence.update { $0.cachedShellPath = "/opt/custom/bin:/usr/bin" }
     let sut = ShellPATH(probe: { nil })
     sut.start()
     _ = sut.value()
-    drainMain()
-    XCTAssertEqual(AppStatePersistence.load()?.cachedShellPath, "/opt/custom/bin:/usr/bin")
+    XCTAssertTrue(
+      holds(for: 0.1) { AppStatePersistence.load()?.cachedShellPath == "/opt/custom/bin:/usr/bin" },
+      "失敗した probe は保存を書き換えない")
   }
 
   /// 同期待ちの天井はプロセス全体で 1 つ。起動復元は agent タブの数だけ `value()` を呼ぶので、
   /// 呼び出しごとに配り直すとメインスレッドが止まる合計時間が掛け算になる。
   func testSyncWaitBudgetIsSharedAcrossCalls() {
+    let clock = ManualClock()
     let blocked = DispatchSemaphore(value: 0)
-    let sut = ShellPATH(probe: {
-      blocked.wait()  // 着地しない probe（テスト終了時に解く）
-      return nil
-    })
+    defer { blocked.signal() }
+    let sut = ShellPATH(
+      probe: {
+        blocked.wait()  // 着地しない probe（テスト終了時に解く）
+        return nil
+      }, clock: clock.waits)
     sut.start()
-    let started = Date()
     let floor = ShellPATH.knownPaths.joined(separator: ":")
-    for _ in 0..<3 { XCTAssertEqual(sut.value(), floor) }
-    let elapsed = Date().timeIntervalSince(started)
-    blocked.signal()
-    XCTAssertGreaterThan(elapsed, ShellPATH.syncWaitBudget / 2, "最初の呼びは天井まで待つ")
-    XCTAssertLessThan(elapsed, ShellPATH.syncWaitBudget * 2, "予算は呼び出しごとに配り直さない")
+
+    let first = value(of: sut)
+    XCTAssertTrue(
+      clock.awaitSleeper(until: clock.now + ShellPATH.syncWaitBudget), "最初の呼びは天井まで待つ")
+    clock.advance(by: ShellPATH.syncWaitBudget + 1)
+    pumpMain(until: { first.value != nil }, "天井で返る")
+    XCTAssertEqual(first.value, floor)
+
+    for _ in 0..<2 {
+      let next = value(of: sut)
+      pumpMain(until: { next.value != nil || !clock.sleeping.isEmpty }, "返るか眠る")
+      XCTAssertEqual(next.value, floor, "予算は呼び出しごとに配り直さない（眠らずに返る）")
+      XCTAssertEqual(clock.sleeping, [])
+    }
   }
 
   /// 背景の検出は着地を待てる。打ち切って floor で答えると、その結果がセッションに焼き付く。
   func testSettledWaitReturnsProbeResult() {
+    let clock = ManualClock()
     let released = DispatchSemaphore(value: 0)
-    let sut = ShellPATH(probe: {
-      released.wait()
-      return "/opt/custom/bin:/usr/bin"
-    })
+    let sut = ShellPATH(
+      probe: {
+        released.wait()
+        return "/opt/custom/bin:/usr/bin"
+      }, clock: clock.waits)
     sut.start()
-    DispatchQueue.global().asyncAfter(deadline: .now() + ShellPATH.syncWaitBudget + 0.5) {
-      released.signal()
-    }
+
+    let settled = value(of: sut, wait: .settled)
     XCTAssertTrue(
-      sut.value(wait: .settled).hasPrefix("/opt/custom/bin:/usr/bin:"),
+      clock.awaitSleeper(until: clock.now + ShellPATH.probeTimeout), "probe の上限で眠る")
+    XCTAssertEqual(
+      clock.advance(by: ShellPATH.syncWaitBudget + 1), 0, "同期待ちの天井を越えても起こさない")
+    released.signal()
+    pumpMain(until: { settled.value != nil }, "probe の着地で返る")
+    XCTAssertTrue(
+      settled.value?.hasPrefix("/opt/custom/bin:/usr/bin:") == true,
       "同期待ちの天井を越えても probe の着地を待つ")
   }
 
   func testUnchangedValueIsNotRewritten() throws {
-    drainMain()  // 他テストが残した main 上の書き込みを流し切ってから測る
+    nextTurn()  // 他テストが main に残した書き込みを処理し終えてから測る
     AppStatePersistence.update { $0.cachedShellPath = "/opt/custom/bin:/usr/bin" }
     let url = try appStateFile()
     let before = try modificationDate(of: url)
     let sut = ShellPATH(probe: { "/opt/custom/bin:/usr/bin" })
     sut.start()
     _ = sut.value()
-    drainMain()  // 書き込みは main へ投げられるので、走る機会を与えてから変化が無いことを見る
-    XCTAssertEqual(try modificationDate(of: url), before, "値が変わらないなら書き直さない")
+    // 書き込みは main へ投げられるので、main を回しながら変化が無いことを見る
+    XCTAssertTrue(
+      holds(for: 0.1) { (try? modificationDate(of: url)) == before }, "値が変わらないなら書き直さない")
   }
 
   // MARK: - probe の subprocess 機構（スタブシェル）
@@ -234,10 +254,19 @@ final class ShellPATHTests: OrbeTestCase {
 
   /// 固まった rc は上限で打ち切る。上限を超えて待たない＝呼び出し元が張り付かない。
   func testProbeGivesUpAtTimeout() throws {
-    let shell = try stubShell("sleep 30")
-    let started = Date()
-    XCTAssertNil(ShellPATH.probeLoginShell(shell: shell, timeout: 1))
-    XCTAssertLessThan(Date().timeIntervalSince(started), 5, "上限で戻る")
+    let clock = ManualClock()
+    let began = stubDir.appendingPathComponent("began").path
+    let shell = try stubShell(": > \"\(began)\"\nsleep 30")
+    let probed = Probed()
+    DispatchQueue.global().async {
+      probed.set(ShellPATH.probeLoginShell(shell: shell, timeout: 1, clock: clock.waits))
+    }
+    pumpMain(until: { FileManager.default.fileExists(atPath: began) }, "前提: シェルが固まっている")
+    let deadline = clock.now + 1
+    XCTAssertTrue(clock.awaitSleeper(until: deadline), "上限の期限で眠る")
+    clock.advance(to: deadline)
+    pumpMain(until: { probed.isDone }, "上限で戻る")
+    XCTAssertNil(probed.value)
   }
 
   // MARK: - ヘルパ
@@ -247,11 +276,31 @@ final class ShellPATHTests: OrbeTestCase {
     waitUntil(2) { matches(AppStatePersistence.load()?.cachedShellPath) }
   }
 
-  private func drainMain() { RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+  /// 裏のスレッドで `value(wait:)` を呼ぶ（手で進める時計の上で眠る呼び出しに、テストのスレッドを止めさせない）。
+  private func value(of sut: ShellPATH, wait: ShellPATH.Wait = .bounded) -> Probed {
+    let probed = Probed()
+    DispatchQueue.global().async { probed.set(sut.value(wait: wait)) }
+    return probed
+  }
 
   private func modificationDate(of url: URL) throws -> Date? {
     try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
   }
+}
+
+/// 裏のスレッドで得た PATH。
+private final class Probed: @unchecked Sendable {
+  private let lock = NSLock()
+  private var done = false
+  private var stored: String?
+  func set(_ value: String?) {
+    lock.withLock {
+      done = true
+      stored = value
+    }
+  }
+  var isDone: Bool { lock.withLock { done } }
+  var value: String? { lock.withLock { stored } }
 }
 
 /// 並行に呼ばれる probe の回数を数える。
