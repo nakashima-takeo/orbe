@@ -14,7 +14,7 @@ extension EditorDocumentBackgroundTests {
       await worker.mark()
       reached.withLock { $0 = true }
     }
-    pumpMain(until: { reached.withLock { $0 } }, "構文の裏の仕事の列の目印")
+    pumpMain(until: { reached.withLock { $0 } }, timeout: 30, "構文の裏の仕事の列の目印")
     nextTurn()
   }
 }
