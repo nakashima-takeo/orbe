@@ -3,16 +3,20 @@ import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
 /// 連の永続状態とエディター——開いている文書と仮のタブはそのまま書き、復元した状態は器が初めて載るとき（`materialize`）に
 /// 消費して開き（仮のタブは仮のまま）、未消費のまま保存すれば同じ形で書き戻す。検索の問いは復元で入力欄に戻り（探さない）、
-/// 変えれば書き戻す。制御 API の `open_file` は普通のタブで開く。cd で連が畳まれるときは、文書を行き先へ移す（`absorb`）か
-/// 根を付け替える（`rekey`）。
+/// 変えれば書き戻す。復元した連は選んでいた画面で開き、選んでいない連は根で決まる画面で開く。制御 API の `open_file` は
+/// 普通のタブで開く。cd で連が畳まれるときは、文書を行き先へ移す（`absorb`）か根を付け替える（`rekey`。前の根の diff は
+/// 残さない）。
 ///
 /// 壊れると何が起きるか。一度も見なかった連の文書が終了で失われる。復元で読めないファイルが復元を止める。再起動で
 /// 仮のタブが普通のタブとして積もる。エージェントが見せたファイルを人の次のクリックが黙って入れ替える。再起動で
 /// 連の検索語と切替が消える、復元のたびに根の全体を探す。cd で連を移ったタブの文書が消える、未保存の編集が黙って上書きされる、
-/// 移った文書が外の書き換えを見失って ⌘S がエージェントの編集を潰す。
+/// 移った文書が外の書き換えを見失って ⌘S がエージェントの編集を潰す。再起動で選んでいた画面が戻らない。diff が自動で開いた
+/// だけで Changes を選んだことになり、git 管理外へ cd しても Changes の空の本体で開く。cd した後も前の worktree の diff が
+/// 本体に出る。
 @MainActor
 final class TabGroupTests: OrbeTestCase {
   private func file(_ name: String) throws -> URL {
@@ -94,7 +98,39 @@ final class TabGroupTests: OrbeTestCase {
       SearchQuery(pattern: "needle", matchCase: true, wholeWord: true))
   }
 
+  /// 復元した連は選んでいた画面で開く。画面を選んでいない連は、根が git の worktree の根なら Changes、そうでなければ Files で
+  /// 開く。
+  func testARestoredGroupOpensOnTheChosenScreenOrOnTheOneItsRootDecides() throws {
+    let root = GitWorktreeRoot.root(of: try TempGitRepo().root)
+    let surfaces = EditorSurfaces(queriesRoot: nil)
+    XCTAssertEqual(TabGroup(key: root, editorSurfaces: surfaces).editor.screen, .changes)
+    XCTAssertEqual(
+      TabGroup(key: TestScratch.caseDir.path, editorSurfaces: surfaces).editor.screen, .files)
+    XCTAssertEqual(
+      TabGroup(key: root, state: EditorState(screen: .files), editorSurfaces: surfaces).editor.screen,
+      .files)
+  }
+
   // MARK: - cd で連が畳まれる
+
+  /// Changes の diff が自動で開いただけの連は画面を選んだことにならない——最後のタブが git 管理外のフォルダへ cd して根が
+  /// 付け替わると、Files で開き、前の根の Changes の diff は残らない。
+  func testAGroupWhoseChangesDiffOnlyOpenedByItselfOpensOnFilesOutsideGit() throws {
+    try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "edited\n")
+    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let window = hostEditor(tab, width: 900)
+    addTeardownBlock { window.orderOut(nil) }
+    let pane = tab.group.view.editor
+    pumpMain(until: { pane.diff != nil }, "前提: Changes の diff が自動で開く")
+    XCTAssertNil(tab.group.groupState(), "画面を選んでいないので、書くものが無い")
+
+    tab.group.rekey(TestScratch.caseDir.path)
+    XCTAssertEqual(tab.group.editor.screen, .files)
+    tab.group.editor.selectScreen(.changes)
+    XCTAssertNil(pane.diff, "前の根の diff は残らない")
+  }
 
   /// 連の最後のタブが行き先の無い根へ移ると、連ごとキーとエディター面の根が付け替わる（文書はそのまま）。
   func testRekeyMovesTheKeyAndTheEditorRoot() throws {
