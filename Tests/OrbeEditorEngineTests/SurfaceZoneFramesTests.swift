@@ -1,13 +1,15 @@
 import AppKit
 import Metal
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 import os
 
 @testable import OrbeEditorEngine
 
-/// 絵の差し込みは本文と同じコマに描かれる——窓を出さず画面外に実際の刻み（120Hz）で描き、合成のはじき（6000pt/s）と
-/// 端の弾みを流しながら、描画スレッドが出したコマを 1 枚ずつ読む。読んだコマから、絵の差し込みの上端・下端と、上下の
+/// 絵の差し込みは本文と同じコマに描かれる——窓を出さず画面外に、テストが 1/120 秒ごとに打つ刻みで描き、合成のはじき
+/// （6000pt/s）と端の弾みを流しながら、描画スレッドが出したコマを 1 枚ずつ読む。出来事とコマの時刻はテストが決め、刻みの
+/// 時刻までの出来事を面へ流してから、その刻みのコマを描かせる。読んだコマから、絵の差し込みの上端・下端と、上下の
 /// 印の行（全角の塗りの字）の字の画素の距離を引く。絵の差し込みと本文が同じコマに組まれていれば、距離はどのコマでも
 /// 同じ。壊れると（絵の差し込みを別の刻み・別の位置で描くと）、速いスクロールの間に絵の差し込みが本文の空きから離れたり
 /// 行に重なったりする。
@@ -33,20 +35,17 @@ final class SurfaceZoneFramesTests: EngineTestCase {
     let probe = FrameProbe(
       zoneX: Int((left + 100) * 2), markerX: Int((left + 10) * 2),
       top: Int((surface.config.topInset + 8) * 2))
-    let driver = HeadlessDriver()
-    driver.start()
-    defer { driver.stop() }
     let id = surface.id
     let target = CapturingTarget(device: try XCTUnwrap(RenderThread.device), probe: probe)
-    let clock = VirtualClock(id: id, driver: driver)
-    driver.setPaused(id, false)
+    let clock = ManualClock()
     RenderThread.shared.perform { $0.bind(id, target: target, clock: clock) }
+    waitForPipelines()
     surface.scroll(toFirstLine: 10)
     surface.flush()
-    flick(surface, peak: 6000)
-    flick(surface, peak: -6000)
-    flick(surface, peak: -6000)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+    var now = CACurrentMediaTime()
+    flick(surface, peak: 6000, target: target, now: &now)
+    flick(surface, peak: -6000, target: target, now: &now)
+    flick(surface, peak: -6000, target: target, now: &now)
     let gaps = probe.gaps
     print(
       "[zone-frames] frames \(probe.frames), zones \(gaps.above.count)",
@@ -61,8 +60,10 @@ final class SurfaceZoneFramesTests: EngineTestCase {
   }
 
   /// はじく: 80ms で速さ `peak`（pt/秒。正は下へ送る）まで上げて離し、OS の momentum の出来事（0.95 倍ずつ落ちる列）が
-  /// 続く。出来事は実時間で面の入口へ流す。
-  private func flick(_ surface: MetalTextSurface, peak: Double) {
+  /// 続く。時刻 `now` から始め、出来事が尽きた後も 0.3 秒ぶんの刻みを打ち、`now` を最後の刻みの時刻へ進める。
+  private func flick(
+    _ surface: MetalTextSurface, peak: Double, target: CapturingTarget, now: inout Double
+  ) {
     typealias Planned = FramePerfTests.Planned
     let step = 0.0057
     var inputs = [Planned(at: 0, phase: .began)]
@@ -82,17 +83,30 @@ final class SurfaceZoneFramesTests: EngineTestCase {
       inputs.append(Planned(at: t, momentum: .changed, dy: d))
     }
     inputs.append(Planned(at: t + step, momentum: .ended))
-    let start = CACurrentMediaTime()
-    for input in inputs {
-      while CACurrentMediaTime() < start + input.at {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.001))
+    let start = now
+    let end = start + inputs[inputs.count - 1].at + 0.3
+    var next = 0
+    while now < end {
+      now += HeadlessDriver.period
+      while next < inputs.count, start + inputs[next].at <= now {
+        let input = inputs[next]
+        surface.scroll(
+          ScrollInput(
+            timestamp: start + input.at, delta: SIMD2(0, input.dy), precise: true,
+            phase: input.phase, momentum: input.momentum))
+        next += 1
       }
-      surface.scroll(
-        ScrollInput(
-          timestamp: CACurrentMediaTime(), delta: SIMD2(0, input.dy), precise: true,
-          phase: input.phase, momentum: input.momentum))
+      tick(surface, at: now, target: target)
     }
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+  }
+
+  /// 時刻 `now` の刻みを打つ（コマは次の刻みの時刻に画面に出る予定）。描いたら、そのコマが読まれるまで待つ。
+  private func tick(_ surface: MetalTextSurface, at now: Double, target: CapturingTarget) {
+    surface.flush()
+    let id = surface.id
+    let shown = now + HeadlessDriver.period
+    RenderThread.shared.performAndWait { $0.tick(id, target: shown) }
+    pumpMain(until: { target.probe.frames == target.acquired }, "描いたコマを読む")
   }
 }
 
@@ -155,11 +169,16 @@ private final class FrameProbe: Sendable {
   }
 }
 
-/// 画面外のテクスチャ 3 枚へ出し、GPU が描き終えたコマを読んで `FrameProbe` に渡し、すぐ「画面に出た」と知らせる。
+/// 画面外のテクスチャ 3 枚へ出し、GPU が描き終えたコマを読んで `FrameProbe` に渡し、すぐ「画面に出た」と知らせる。描く先を
+/// 取った回数（描いたコマの数）を数える。
 private final class CapturingTarget: FrameTarget, @unchecked Sendable {
   private let textures: [MTLTexture]
-  private let probe: FrameProbe
+  let probe: FrameProbe
   private var next = 0
+  private let count = OSAllocatedUnfairLock(initialState: 0)
+
+  /// 描く先を取った回数（描いたコマの数）。
+  var acquired: Int { count.withLock { $0 } }
 
   init(device: MTLDevice, probe: FrameProbe) {
     let descriptor = MTLTextureDescriptor.texture2DDescriptor(
@@ -170,11 +189,14 @@ private final class CapturingTarget: FrameTarget, @unchecked Sendable {
     self.probe = probe
   }
 
-  var limit: Int { 1 }
+  /// テストは、コマが読まれたら次の刻みを打つ。「画面に出た」が描画スレッドに届くのは読まれた後なので、届く前に打った
+  /// 刻みが上限に当たって飛ばされないよう、画面に出ていないコマの上限を大きくする。
+  var limit: Int { 1_000 }
 
   func acquire() -> AcquiredFrame? {
     let texture = textures[next % textures.count]
     next += 1
+    count.withLock { $0 += 1 }
     let probe = probe
     return AcquiredFrame(texture: texture) { commands, shown in
       commands.addCompletedHandler { _ in

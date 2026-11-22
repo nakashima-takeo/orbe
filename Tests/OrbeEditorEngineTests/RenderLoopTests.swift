@@ -278,18 +278,3 @@ final class RenderLoopTests: EngineTestCase {
     }
   }
 }
-
-/// 自分では刻まない刻み。次に画面に出る刻みは、いつ問われても `lead` 秒後。止める・再開するは描画スレッドだけが書く。
-private final class ManualClock: FrameClock, @unchecked Sendable {
-  private let lead: Double
-  var isPaused = false
-  let period = 1.0 / 120
-
-  init(lead: Double) {
-    self.lead = lead
-  }
-
-  func nextTarget(after now: Double) -> Double { now + lead }
-
-  func invalidate() {}
-}

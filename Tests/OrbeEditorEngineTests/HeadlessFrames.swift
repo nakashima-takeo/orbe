@@ -151,6 +151,22 @@ final class VirtualClock: FrameClock {
   func invalidate() { driver.invalidate(id) }
 }
 
+/// 自分では刻まない刻み。テストが `Renderer.tick` を呼んで刻みを打つ。次に画面に出る刻みは、いつ問われても `lead` 秒後
+/// （既定の 0 なら、起こされてもその場では描かない）。止める・再開するは描画スレッドだけが書く。
+final class ManualClock: FrameClock, @unchecked Sendable {
+  private let lead: Double
+  var isPaused = false
+  var period: Double { HeadlessDriver.period }
+
+  init(lead: Double = 0) {
+    self.lead = lead
+  }
+
+  func nextTarget(after now: Double) -> Double { now + lead }
+
+  func invalidate() {}
+}
+
 /// 画面外のテクスチャ 3 枚へ出す。画面に出ていないコマは drawable 2 枚の画面と同じく 1 つまで。描く先を取った回数
 /// （描いたコマの数）と、そのうち画面に出た（出ずに捨てられた）数を数える。
 final class OffscreenTarget: FrameTarget, @unchecked Sendable {
