@@ -144,6 +144,11 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   /// 焦点が外から入る（ボードを選ぶ・パレットを閉じる・workspace を戻る）と、ウィジェットは欄から始まり、↓ で一覧の先頭へ下りる。
   /// 一覧で選んでいた行は入り直すと保たないが、裏のタブが閉じただけ（焦点は中のまま）なら保つ。
+  ///
+  /// 裏のタブを閉じて選択が欄へ戻る場合は無いので、選択を保つことの確かめには対のテストを置けない。閉じる処理が選択を戻すなら、
+  /// その処理の中、処理が main のキューへ積む仕事の中、続く 1 回の更新のいずれかで戻すので、`flush` の後に確かめる。この時点で足りる
+  /// ことは、本番の閉じる処理の後に、main のキューを経て欄から入り直させるように変えると、このテストが落ちることで確かめた。
+  /// 本番がタブを閉じた後の焦点の当て直しを変えたときは、確かめ直す。
   @MainActor func testEnteringTheBoardStartsAtTheRequestField() throws {
     savePausedAutomations()
     let wc = WindowController()
@@ -164,6 +169,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     guard case .success = wc.controlCloseTab(tabId: behind.id) else {
       return XCTFail("close_tab は success")
     }
+    flush(wc.window)
     XCTAssertEqual(automation.selectedAutomation?.id, 2, "裏のタブが閉じても、焦点は中のままなので選択を保つ")
 
     wc.showWorkspacePalette()

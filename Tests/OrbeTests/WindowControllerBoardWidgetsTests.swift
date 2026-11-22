@@ -53,6 +53,11 @@ final class WindowControllerBoardWidgetsTests: OrbeTestCase {
 
   /// 欄に焦点があるところでウィジェットを外すと、ボードは空になり、焦点はボードの中（ホスト）に残って ⌘⇧] / ⌘⇧[ が効く。置き直すと
   /// 欄に焦点が入り、そのまま打てる。
+  ///
+  /// 焦点が窓へ落ちる場合は無いので、外した後も焦点がボードの中に残ることの確かめには対のテストを置けない。落ちるなら、焦点を
+  /// 持つ欄が更新で画面から外れるときに落ちるので、`flush` の 1 回の更新の後に確かめる。この時点で足りることは、本番で、
+  /// ウィジェットを外したときにホストへ焦点を渡さないように変えると、このテストが落ちることで確かめた。本番がウィジェットを
+  /// 外すときの焦点の扱いを変えたときは、確かめ直す。
   @MainActor func testRemovingTheWidgetKeepsTheFocusInTheBoardAndAddingItStartsAtTheField() throws {
     let wc = try homeOnBoard(tabs: 1)
     let homeId = wc.current.id
