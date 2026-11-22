@@ -185,11 +185,20 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     .appendingPathComponent("app/agent-plugin/install.sh")
 
-  /// 偽の claude だけを PATH に置いて同梱の install.sh を実行する。偽の claude は受けた引数を 1 行ずつ残し、`plugin list` には
-  /// `listPrelude` の sh を実行した後に `list` を出力して `listStatus` で終わる。`limits` と `whileRunning` は `runInstaller` へ渡す。
-  /// 返すのは届いた Event と、claude が受けた呼び出しの列。
+  /// 時限のテストで、確かめる 1 つのコマンドに渡す時限と、ほかの 2 つのコマンドに渡す時限。確かめるコマンドは `hang` で止まる。
+  /// 確かめる時限が別のコマンドに掛かっていれば、止まったコマンドは長い時限か `sleep` の終わりまで続き、`runInstaller` の待ちの
+  /// 上限で落ちる。
+  private static let cut: TimeInterval = 0.3
+  private static let long: TimeInterval = 120
+  private static let hang = "exec sleep 60"
+
+  /// 偽の claude だけを PATH に置いて同梱の install.sh を実行する。偽の claude は受けた引数を 1 行ずつ残し、登録
+  /// （`plugin marketplace add`）・一覧（`plugin list`）・導入（`plugin install`）では、それぞれの prelude を実行する。
+  /// その後、一覧は `list` を出力して `listStatus` で終わり、ほかは 0 で終わる。`limits` と `whileRunning` は `runInstaller`
+  /// へ渡す。返すのは届いた Event と、claude が受けた呼び出しの列。
   private func runBundledInstaller(
-    claudeList list: String = "", listStatus: Int32 = 0, listPrelude: String = "",
+    claudeList list: String = "", listStatus: Int32 = 0, registerPrelude: String = "",
+    listPrelude: String = "", installPrelude: String = "",
     limits: AgentPluginInstaller.TimeLimits = .init(),
     whileRunning: (Process) throws -> Void = { _ in }
   ) throws -> (log: [String], calls: [String]) {
@@ -202,10 +211,18 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     try """
     #!/bin/sh
     echo "$*" >> "\(calls.path)"
-    if [ "$1 $2" = "plugin list" ]; then
+    case "$1 $2" in
+    "plugin marketplace")
+    \(registerPrelude)
+    ;;
+    "plugin list")
     \(listPrelude)
     cat "\(listed.path)"; exit \(listStatus)
-    fi
+    ;;
+    "plugin install")
+    \(installPrelude)
+    ;;
+    esac
     exit 0
     """.write(to: claude, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
@@ -240,12 +257,33 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     XCTAssertTrue(run.calls.contains("plugin install orbe-agent@orbe-agent"), "\(run.calls)")
   }
 
+  /// 時限を過ぎても終わらない登録は打ち切り、登録の結果を見ずに一覧と導入へ進む。打ち切りが効かなければ起動時の導入が止まったままになる。
+  func testClaudeRegisterPastItsTimeLimitIsCutOffAndTheInstallGoesOn() throws {
+    let run = try runBundledInstaller(
+      claudeList: "No plugins installed.\n", registerPrelude: Self.hang,
+      limits: .init(register: Self.cut, list: Self.long, install: Self.long))
+    XCTAssertTrue(run.calls.contains { $0.hasPrefix("plugin marketplace add") }, "\(run.calls)")
+    XCTAssertTrue(run.log.contains("ok claude"), "\(run.log)")
+    XCTAssertTrue(run.calls.contains("plugin install orbe-agent@orbe-agent"), "\(run.calls)")
+  }
+
   /// 時限を過ぎても終わらない一覧は打ち切って失敗として扱い、導入を試みない。打ち切りが効かなければ起動時の導入が止まったままになる。
-  /// 一覧の時限には短い値を渡す。時限が掛かっていなければ、一覧は 30 秒後に成功で終わり、未導入と見て導入する。
   func testClaudeListPastItsTimeLimitIsCutOffAndAnErrorWithoutInstalling() throws {
-    let run = try runBundledInstaller(listPrelude: "exec sleep 30", limits: .init(list: 0.3))
+    let run = try runBundledInstaller(
+      listPrelude: Self.hang,
+      limits: .init(register: Self.long, list: Self.cut, install: Self.long))
+    XCTAssertTrue(run.calls.contains("plugin list"), "\(run.calls)")
     XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
     XCTAssertFalse(run.calls.contains { $0.hasPrefix("plugin install") }, "\(run.calls)")
+  }
+
+  /// 時限を過ぎても終わらない導入は打ち切って失敗にする。打ち切りが効かなければ起動時の導入が止まったままになる。
+  func testClaudeInstallPastItsTimeLimitIsCutOffAndAnError() throws {
+    let run = try runBundledInstaller(
+      claudeList: "No plugins installed.\n", installPrelude: Self.hang,
+      limits: .init(register: Self.long, list: Self.long, install: Self.cut))
+    XCTAssertTrue(run.calls.contains("plugin install orbe-agent@orbe-agent"), "\(run.calls)")
+    XCTAssertTrue(run.log.contains("ng claude"), "\(run.log)")
   }
 
   /// 打ち切った一覧は、CLI が終了の要求（SIGTERM）を受けて 0 で終わっても失敗にする（agy は SIGTERM を受けて 0 で終わる
