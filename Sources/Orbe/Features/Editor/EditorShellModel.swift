@@ -31,9 +31,11 @@ final class EditorShellModel {
     }
   }
 
-  /// 上のバーの今の項目——今の項目のボタンが示す対象。Files の画面で今の文書があるとき、そのファイル。
+  /// 上のバーの今の項目——今の項目のボタンが示す対象。Files の画面で今の文書があるとき、そのファイル。Changes・PR の画面で
+  /// 左の列を閉じていて、本体が diff のとき、その diff（差分のファイルの見出しの写しと同じ値）。
   enum CurrentItem: Equatable {
     case file(CurrentFile)
+    case diff(DiffFileHeaderRoot.Subject)
   }
 
   /// 今の項目のファイルの写し（ボタンに出すもの）。

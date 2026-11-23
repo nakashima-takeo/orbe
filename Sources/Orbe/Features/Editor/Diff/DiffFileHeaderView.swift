@@ -26,21 +26,28 @@ struct DiffFileHeaderRoot: View {
     Group {
       if let subject {
         DiffFileHeaderBar(
-          header: DiffFileHeader(subject.key, facts: facts(subject), isDirty: subject.isDirty),
-          isPullRequest: subject.key.kind.isPullRequest, openFile: openFile,
-          toggleViewed: toggleViewed)
+          header: subject.header(scm: scm), isPullRequest: subject.key.kind.isPullRequest,
+          openFile: openFile, toggleViewed: toggleViewed)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .environment(\.localization, localization)
   }
+}
 
-  private func facts(_ subject: Subject) -> DiffFileHeader.Facts {
-    switch subject.key.kind {
+extension DiffFileHeaderRoot.Subject {
+  /// この diff のファイルの見出しの値。一覧の持ち主（Changes はソース管理パネルの状態 `scm`、PR は diff が持つ PR ごとの
+  /// 状態）から読む。見出しと、上のバーの今のファイルのボタンが、同じ値を使う。
+  @MainActor func header(scm: ScmPanel) -> DiffFileHeader {
+    DiffFileHeader(key, facts: facts(scm: scm), isDirty: isDirty)
+  }
+
+  @MainActor private func facts(scm: ScmPanel) -> DiffFileHeader.Facts {
+    switch key.kind {
     case .workingTree, .staged:
-      return .changes(scm.file(of: subject.key), usesDocument: subject.usesDocument)
+      return .changes(scm.file(of: key), usesDocument: usesDocument)
     case .pullRequest(let state):
-      let path = subject.key.path
+      let path = key.path
       return .pullRequest(
         state.content?.files.first { $0.path == path }?.change, isViewed: state.isViewed(path))
     }

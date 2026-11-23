@@ -81,6 +81,30 @@ struct EditorCurrentFileLabel: View {
   }
 }
 
+/// 今の diff のボタンの中身: 状態の字（mono 10.5 semibold・色は左の列の行と同じ決まり。無ければ出さない）・ファイル名
+/// （mono 12 semibold・primary）。ディレクトリと未保存の丸は、すぐ下の差分の見出しに出ているので出さない。`fitsName` が偽
+/// なら名前を省略して縮める（上のバーが狭いとき）。
+struct EditorCurrentDiffLabel: View {
+  let header: DiffFileHeader
+  let fitsName: Bool
+
+  var body: some View {
+    HStack(spacing: Theme.Layout.editorItemButtonGap) {
+      if let badge = header.badge {
+        Text(badge.label)
+          .font(Font.theme.editorDiffHeaderBadge)
+          .foregroundStyle(badge.color)
+          .frame(width: Theme.Layout.editorDiffHeaderBadge)
+      }
+      Text(header.name)
+        .font(Font.theme.editorItemButtonName)
+        .foregroundStyle(Color.theme.textPrimary)
+        .truncationMode(.middle)
+        .fixedSize(horizontal: fitsName, vertical: false)
+    }
+  }
+}
+
 /// 状態を示す札（「プレビュー」。sans 10.5・secondary・1px の枠 `surfaceInk` .2・角丸 4・余白 1 6）。一覧の行の札と同じ形。
 struct EditorTag: View {
   let text: String

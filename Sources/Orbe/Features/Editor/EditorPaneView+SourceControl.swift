@@ -17,10 +17,12 @@ extension EditorPaneView {
     scm.autoFetchEnabled = { [weak self] in self?.settings()[SettingKeys.scmAutoFetch] ?? false }
   }
 
-  /// ソース管理の件数と行の組が差し替わった。件数が 1 以上から 0 になったら Changes の diff を閉じ、本体の diff を整合させる。
+  /// ソース管理の件数と行の組が差し替わった。件数が 1 以上から 0 になったら Changes の diff を閉じ、本体の diff を整合させ、
+  /// 開いている変更ファイルの一覧の中身を作り直す。
   private func changesDidApply(emptied: Bool) {
     if emptied { group?.editor.closeDiff(on: .changes) }
     reconcileWithLists()
+    refreshCurrentItem()
   }
 
   /// 面の workspace の実効設定が変わった（裏の fetch を欲しがるか決め直す）。

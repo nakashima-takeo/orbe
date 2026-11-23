@@ -85,6 +85,8 @@ final class EditorPaneView: NSView {
   let itemListHost: EditorItemListHost
   /// Files の一覧を器に載せる側。
   private(set) lazy var openFilesList = OpenFilesList(pane: self)
+  /// Changes・PR の変更ファイルの一覧を器に載せる側。
+  private(set) lazy var changedFilesList = ChangedFilesList(pane: self)
   /// 上のバーの今の項目のボタンの枠（バーの座標＝面の座標。ボタンが出ていなければ nil）。一覧の矩形の入力。
   var itemButtonFrame: CGRect?
   /// F4 / ⇧F4・PR の画面のキー v と、結果の列・一覧の器の外の押下を拾うイベントの監視（窓に付いている間だけ）。

@@ -8,8 +8,20 @@ import Foundation
 /// 通らなければ、書いている間に届いた読み直しの値が出る）。走っている書き込みは、見ている者がいなくなっても最後まで走る。
 extension PullRequestState {
   /// 変更ファイル `path` が確認済みか（書いている途中なら、その値）。
-  func isViewed(_ path: String) -> Bool {
-    pendingViewed[path]?.value ?? viewed[path] ?? false
+  func isViewed(_ path: String) -> Bool { viewedSnapshot.contains(path) }
+
+  /// 今の確認済みの写し（変更ファイルの数に比例せずに取れる。後から付け外ししても変わらない）。
+  var viewedSnapshot: ViewedSnapshot {
+    ViewedSnapshot(viewed: viewed, pending: pendingViewed)
+  }
+
+  /// 確認済みの写し。
+  struct ViewedSnapshot {
+    let viewed: [String: Bool]
+    let pending: [String: PendingViewed]
+
+    /// 変更ファイル `path` が確認済みか（書いている途中なら、その値）。
+    func contains(_ path: String) -> Bool { pending[path]?.value ?? viewed[path] ?? false }
   }
 
   /// 変更ファイルのうち確認済みの数と、変更ファイルの数。

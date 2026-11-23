@@ -65,16 +65,8 @@ struct EditorBarRoot: View {
   ) -> some View {
     switch item {
     case .file(let file):
-      EditorItemButton(
-        isOpen: shell.isItemListOpen, help: localization.string(.editorBarOpenFiles),
-        action: shell.toggleItemList
-      ) {
+      itemButton(help: .editorBarOpenFiles) {
         EditorCurrentFileLabel(file: file, showsPath: showsPath, fitsName: fitsName)
-      }
-      .onGeometryChange(for: CGRect.self) {
-        $0.frame(in: .named(Self.space))
-      } action: {
-        shell.itemButtonFrameDidChange($0)
       }
       if file.isPreview {
         EditorTag(text: localization.string(.editorOpenFilesPreview))
@@ -83,6 +75,25 @@ struct EditorBarRoot: View {
           key: file.showsKeepOpenKey ? .glyph(EditorGlyphs.returnKey) : nil, style: .filled,
           action: shell.keepOpen)
       }
+    case .diff(let subject):
+      itemButton(help: .editorBarChangedFiles) {
+        EditorCurrentDiffLabel(header: subject.header(scm: scm), fitsName: fitsName)
+      }
+    }
+  }
+
+  /// 今の項目のボタン。枠は閉包で pane へ知らせる（一覧の器の位置の入力）。
+  private func itemButton<Label: View>(
+    help: L10nKey, @ViewBuilder label: @escaping () -> Label
+  ) -> some View {
+    EditorItemButton(
+      isOpen: shell.isItemListOpen, help: localization.string(help),
+      action: shell.toggleItemList, label: label
+    )
+    .onGeometryChange(for: CGRect.self) {
+      $0.frame(in: .named(Self.space))
+    } action: {
+      shell.itemButtonFrameDidChange($0)
     }
   }
 }

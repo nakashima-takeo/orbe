@@ -678,6 +678,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorBarShowTree
   case editorBarShowTerminal
   case editorBarOpenFiles
+  case editorBarChangedFiles
   case editorItemUnsaved
   case editorItemDiskChanged
 
@@ -687,6 +688,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorItemListRun
   case editorItemListBack
   case editorItemListClose
+  case editorItemListOpen
   case editorOpenFilesTitle
   case editorOpenFilesCurrent
   case editorOpenFilesPreview

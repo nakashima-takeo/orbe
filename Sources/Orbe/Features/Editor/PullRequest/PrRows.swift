@@ -139,9 +139,15 @@ struct PrLayout {
   }
 
   private static func list(_ files: [GitHubPullRequestContent.File]) -> [Item] {
+    listOrder(files).map { .file(path: $0.path, change: $0.change, depth: 0) }
+  }
+
+  /// リスト表示の並び——ソース管理の行と同じパス順（上のバーの変更ファイルの一覧も同じ順に並べる）。
+  static func listOrder(_ files: [GitHubPullRequestContent.File]) -> [GitHubPullRequestContent.File]
+  {
     files.map { (FileNameOrder.PathKey($0.path), $0) }
       .sorted { FileNameOrder.comparePaths($0.0, $1.0) == .orderedAscending }
-      .map { .file(path: $0.1.path, change: $0.1.change, depth: 0) }
+      .map(\.1)
   }
 
   /// フォルダの木の 1 段。
