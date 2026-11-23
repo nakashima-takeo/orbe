@@ -11,7 +11,7 @@ import XCTest
 /// 壊れると何が起きるか: スレッドが別の行の下に出る。印を押しても欄が開かない・焦点が入らない・⌘↵ で書けない。書いた行と
 /// 違う行にコメントが付く（古い側の行の印から新しい側の行へ書く・rename の判定が GitHub と食い違うファイルの古い側の行に
 /// 印やスレッドが出る）。2 回押すと同じコメントが 2 つ付く。
-/// 失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。同じ PR の別のタブの書きかけが消える。
+/// 失敗した書き込みで書きかけが消える。通った後も欄が残る。空の欄が開いたまま残る。
 /// 同じ行の両側のスレッドが時刻の順に並ばない。消えたスレッドの絵の差し込みが層に残り続ける。
 extension EditorDiffTests {
   /// 差し替えの GitHub のレビューのやりとり（テストが書き換える）と、届いた書き込み。
@@ -27,21 +27,21 @@ extension EditorDiffTests {
   }
 
   /// PR の diff を開く。PR のコミットは `edit`（無ければ a.txt の行 3 を変える）で作り、GitHub はファイル `path` を `change`
-  /// と答える。diff の見せ方は `modes` が選ぶ。
+  /// と答える。窓の幅は `width`（→ `tab(width:)`）。
   func commentedDiff(
     _ remote: Remote, path: String = "a.txt",
-    change: GitHubPullRequestContent.Change = .modified, modes: EditorDiffModeState? = nil,
+    change: GitHubPullRequestContent.Change = .modified, width: CGFloat = 900,
     edit: (() throws -> Void)? = nil
   ) throws -> (EditorDiff, MetalTextSurface) {
-    let opened = try commentedTab(remote, path: path, change: change, modes: modes, edit: edit)
+    let opened = try commentedTab(remote, path: path, change: change, width: width, edit: edit)
     return (opened.diff, try engine(opened.diff.newSurface))
   }
 
-  /// `commentedDiff` と同じ PR の diff を、`mode` のタブで開き、そのタブも返す。
+  /// `commentedDiff` と同じ PR の diff を開き、そのタブも返す。
   func commentedTab(
     _ remote: Remote, path: String = "a.txt",
-    change: GitHubPullRequestContent.Change = .modified, modes: EditorDiffModeState? = nil,
-    as mode: EditorSession.OpenMode = .pinned, edit: (() throws -> Void)? = nil
+    change: GitHubPullRequestContent.Change = .modified, width: CGFloat = 900,
+    edit: (() throws -> Void)? = nil
   ) throws -> (diff: EditorDiff, tab: TerminalTab) {
     let base = repo.head()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
@@ -96,16 +96,17 @@ extension EditorDiffTests {
     state.attach(repo: try repo.open(), fetchRemote: nil, headRemote: nil)
     // 面が作る PR のパネルより先に、根の worktree の今の PR を差し替えの出どころで登録する（本物の gh を呼ばない）。
     _ = BranchPullRequest.shared(for: repo.root, source: state.source)
-    return try open(state, path: path, modes: modes, as: mode)
+    return try open(state, path: path, width: width)
   }
 
-  /// PR の状態 `state` のファイル `path` の diff を、新しいタブで開く。
-  private func open(
-    _ state: PullRequestState, path: String = "a.txt", modes: EditorDiffModeState? = nil,
-    as mode: EditorSession.OpenMode = .pinned
+  /// PR の状態 `state` のファイル `path` の diff を、タブ `into`（無ければ新しいタブ）の PR の画面で開く。
+  func open(
+    _ state: PullRequestState, path: String = "a.txt", width: CGFloat = 900,
+    into: TerminalTab? = nil
   ) throws -> (diff: EditorDiff, tab: TerminalTab) {
-    let (tab, _) = tab(modes: modes)
-    let diff = try tab.group.editor.openDiff(id(path, .pullRequest(state)), as: mode)
+    let tab = into ?? tab(width: width).0
+    let diff = try tab.group.editor.openDiff(id(path, .pullRequest(state)))
+    tab.group.editor.selectScreen(.pullRequest)
     pumpMain(
       until: {
         diff.content == .ready && diff.comments?.isSettled == true && diff.newSurface != nil
@@ -115,7 +116,7 @@ extension EditorDiffTests {
     return (diff, tab)
   }
 
-  /// タブの PR がタブの根の worktree の今の PR でなくなったら（ブランチを切り替えた後）、新しいスレッドを書かずに、送れる所を
+  /// diff の PR が diff の根の worktree の今の PR でなくなったら（ブランチを切り替えた後）、新しいスレッドを書かずに、送れる所を
   /// 告げる（積んでも、Orbe から送る所が無い）。
   func testAPullRequestThatIsNoLongerTheWorktreesDoesNotTakeNewComments() throws {
     let remote = Remote()
@@ -133,23 +134,6 @@ extension EditorDiffTests {
       [Language.ja, .en].map { L10n.string(.editorPrThreadNotCurrent, $0) }.contains(draft.failure),
       "送れる所を告げる")
     XCTAssertEqual(draft.text, "書きかけ")
-  }
-
-  /// 仮のタブで開いた PR の diff は、コメントの書きかけを打ち始めたら普通のタブになる（次の仮のタブとの入れ替えで書きかけを
-  /// 失わない）。
-  func testADraftInAPreviewPullRequestDiffPinsTheTab() throws {
-    let remote = Remote()
-    let (diff, tab) = try commentedTab(remote, as: .preview)
-    let session = tab.group.editor
-    XCTAssertEqual(session.previewID, .diff(diff.id), "前提: 仮のタブ")
-    let layer = try XCTUnwrap(diff.comments)
-    let surface = try engine(diff.newSurface)
-    layer.surface(surface, didPressTrailingMarkOn: .document(3))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 3))
-    surface.replaceText(of: draft.field, with: " ")
-    XCTAssertEqual(session.previewID, .diff(diff.id), "空白だけなら仮のまま")
-    surface.replaceText(of: draft.field, with: "書きかけ")
-    XCTAssertNil(session.previewID, "打てば普通のタブ")
   }
 
   /// 新しい側の行 3 のスレッドは文書の行 3 の下に置かれ、その行の地はスレッドのある行の型になる。変更の前後 3 行は印を出せ、
@@ -242,8 +226,8 @@ extension EditorDiffTests {
   /// へ書く。
   func testOldSideMarksWriteToTheOldSideLine() throws {
     let remote = Remote()
-    let modes = EditorDiffModeState()
-    let (diff, surface) = try commentedDiff(remote, modes: modes)
+    let (diff, surface) = try commentedDiff(remote)
+    let window = try XCTUnwrap(surface.textView.window)
     let layer = try XCTUnwrap(diff.comments)
     layer.surface(surface, didPressTrailingMarkOn: .source(2))
     let draft = try XCTUnwrap(layer.draft(.old, line: 2), "削除行「three」の下に開く")
@@ -254,7 +238,7 @@ extension EditorDiffTests {
       remote.writes,
       [.addThread(path: "a.txt", side: .old, line: 3, commit: remote.head, body: "消した行")])
 
-    modes.select(.side)
+    resize(window, width: Self.sideWidth)
     pumpMain(until: { diff.oldSurface != nil && layer.isSettled }, "並列の 2 面が揃う")
     layer.surface(try engine(diff.oldSurface), didPressTrailingMarkOn: .document(1))
     XCTAssertNotNil(layer.draft(.old, line: 1), "左の面の行は古い側の行")
@@ -356,35 +340,5 @@ extension EditorDiffTests {
     while !remote.held.isEmpty { remote.held.removeFirst()() }
     pumpMain(until: { layer.draft(.new, line: 1) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(remote.writes.count, 1)
-  }
-
-  /// 同じ PR の diff を 2 つのタブで開いても、片方のタブの返信が通って欄が空になる・失敗の文が出るのはそのタブだけで、
-  /// もう片方の書きかけは変わらない。
-  func testTwoTabsOfOnePullRequestKeepTheirOwnReplyDrafts() throws {
-    let remote = Remote()
-    remote.threads = [
-      GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
-        canResolve: true, canUnresolve: false,
-        comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
-    ]
-    let (first, _) = try commentedDiff(remote)
-    let (second, _) = try open(try XCTUnwrap(first.comments).state)
-    let mine = try XCTUnwrap(first.comments?.zone(thread: "T"))
-    let other = try XCTUnwrap(second.comments?.zone(thread: "T"))
-    pumpMain(until: { mine.surface != nil && other.surface != nil }, "両方のタブにスレッドが置かれる")
-    other.surface?.replaceText(of: other.field, with: "別のタブの書きかけ")
-
-    mine.surface?.replaceText(of: mine.field, with: "通る返信")
-    mine.zone(.pressed(PrCommentControl.add))
-    pumpMain(until: { mine.text.isEmpty }, "通れば欄が空になる")
-    XCTAssertEqual(other.text, "別のタブの書きかけ")
-
-    remote.failure = .unreachable
-    mine.surface?.replaceText(of: mine.field, with: "通らない返信")
-    mine.zone(.pressed(PrCommentControl.add))
-    pumpMain(until: { mine.failure != nil }, "失敗が届く")
-    XCTAssertNil(other.failure)
-    XCTAssertEqual(other.text, "別のタブの書きかけ")
   }
 }

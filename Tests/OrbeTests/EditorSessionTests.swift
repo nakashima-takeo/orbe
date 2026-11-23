@@ -5,13 +5,14 @@ import XCTest
 
 @testable import Orbe
 
-/// セッション——開く・同じファイルは焦点だけ・閉じると隣へ・未保存の有無・通知は 1 本・面を作れなければ開けない。
-/// 仮の文書は高々 1 つで、仮で開けば同じ位置で入れ替わり、未保存になった瞬間・普通に開き直すと普通に戻る。
-/// 面は本物を queries 無しで作る（色は要らない）。
+/// セッション——開く・同じファイルは焦点だけ・列は最近使った順で先頭が焦点・閉じると 1 つ前に使った文書へ・未保存の有無・
+/// 通知は 1 本・面を作れなければ開けない。仮の文書は高々 1 つで、仮で開けば前の仮が外れて先頭に入り、未保存になった瞬間・
+/// 普通に開き直すと普通に戻る。面は本物を queries 無しで作る（色は要らない）。
 ///
 /// 壊れると何が起きるか。同じファイルが 2 度開かれると undo と本文が 2 つに割れる。閉じたとき焦点が
-/// 消えた文書に残ると器が外した面を指す。未保存の変化が通知に載らないと u4 のファイルタブに印が出ない。
-/// 仮の文書が未保存のまま入れ替わると、編集が黙って消える。入れ替えが末尾へ動くと、見て回る間タブが跳ねる。
+/// 消えた文書に残ると器が外した面を指す。未保存の変化が通知に載らないと、未保存の印を出す側が追従できない。
+/// 仮の文書が未保存のまま入れ替わると、編集が黙って消える。列が使った順に並ばないと、開いているファイルの一覧で
+/// 1 つ前のファイルへ 2 打で戻れない。
 @MainActor
 final class EditorSessionTests: OrbeTestCase {
   private func file(_ name: String, _ text: String) throws -> URL {
@@ -36,7 +37,7 @@ final class EditorSessionTests: OrbeTestCase {
   }
 
   func testOpenActivateCloseAndNotify() throws {
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let a = try file("a.txt", "a")
     let b = try file("b.txt", "b")
 
@@ -59,11 +60,28 @@ final class EditorSessionTests: OrbeTestCase {
     XCTAssertNil(session.activeDocument)
   }
 
+  /// 列は最近使った順——開く・切り替えると先頭へ移り、今の文書を閉じると 1 つ前に使った文書（列の次）が今の文書になる。
+  func testDocumentsAreInMostRecentlyUsedOrder() throws {
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
+    let docA = try session.open(try file("a.txt", "a"), as: .pinned)
+    let docB = try session.open(try file("b.txt", "b"), as: .pinned)
+    let docC = try session.open(try file("c.txt", "c"), as: .pinned)
+    XCTAssertTrue(session.documents.elementsEqual([docC, docB, docA], by: ===), "開いた文書が先頭")
+
+    session.activate(docA)
+    XCTAssertTrue(session.documents.elementsEqual([docA, docC, docB], by: ===), "切り替えた文書が先頭")
+
+    session.close(docA)
+    XCTAssertTrue(session.activeDocument === docC, "1 つ前に使った文書が今の文書")
+    XCTAssertTrue(session.documents.elementsEqual([docC, docB], by: ===))
+  }
+
   /// テキスト面を作れない（Metal の装置が取れない）環境では、読めるファイルも開けない——読めないファイルと同じく
   /// エラーで返り、列・焦点・通知は変わらない。読めないファイルは面を作る前に読めないと返る。
   func testWithoutASurfaceNothingOpens() throws {
     let session = EditorSession(
-      surfaces: EditorSurfaces(registry: LanguageRegistry(queriesRoot: nil), make: { nil }))
+      surfaces: EditorSurfaces(registry: LanguageRegistry(queriesRoot: nil), make: { nil }),
+      defaultScreen: .files)
     let a = try file("a.txt", "a")
     let count = try notifications(session) {
       XCTAssertThrowsError(try session.open(a, as: .pinned)) {
@@ -80,7 +98,7 @@ final class EditorSessionTests: OrbeTestCase {
   }
 
   func testUnsavedChangesAreNotified() throws {
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let url = try file("c.txt", "hello")
     let document = try session.open(url, as: .pinned)
     var changes = 0
@@ -92,7 +110,7 @@ final class EditorSessionTests: OrbeTestCase {
     XCTAssertFalse(session.documentsToDiscard().isEmpty)
     XCTAssertEqual(changes, 1)
 
-    try session.saveActive()
+    try session.saveEdited()
     XCTAssertTrue(session.documentsToDiscard().isEmpty)
     XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "!hello")
     XCTAssertEqual(changes, 2)
@@ -101,7 +119,7 @@ final class EditorSessionTests: OrbeTestCase {
   /// 文書の識別は symlink を解いた実体——リンク経由と実体のパスで開いても同じ 1 文書で、保存
   /// （一時ファイルの rename）がリンクを通常ファイルに置き換えず実体へ届く。
   func testOpenResolvesSymlinksSoSavingReachesTheTarget() throws {
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let target = try file("real.txt", "OLD")
     let link = target.deletingLastPathComponent().appendingPathComponent("link.txt")
     try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
@@ -113,7 +131,7 @@ final class EditorSessionTests: OrbeTestCase {
     XCTAssertEqual(viaLink.url, target.resolvingSymlinksInPath())
 
     viaLink.surface.responder.perform(Selector(("insertText:")), with: "NEW ")
-    try session.saveActive()
+    try session.saveEdited()
     XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "NEW OLD", "実体へ書かれる")
     let attributes = try FileManager.default.attributesOfItem(atPath: link.path)
     XCTAssertEqual(
@@ -122,9 +140,10 @@ final class EditorSessionTests: OrbeTestCase {
 
   // MARK: - 仮の文書
 
-  /// 仮で開くと、今の仮の文書を同じ位置で入れ替える（通知は 1 本）。仮の文書が無ければ末尾に足す。普通の文書は残る。
-  func testAPreviewReplacesThePreviewInPlace() throws {
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+  /// 仮で新しく開くと、前の仮の文書を列から外し、新しい文書を先頭に入れる（通知は 1 本）。仮の文書が無くても先頭に入る。
+  /// 普通の文書は残る。
+  func testAPreviewReplacesThePreviewAtTheFront() throws {
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let a = try file("a.txt", "a")
     let b = try file("b.txt", "b")
     let c = try file("c.txt", "c")
@@ -136,19 +155,19 @@ final class EditorSessionTests: OrbeTestCase {
     let count = try notifications(session) { docB = try session.open(b, as: .preview) }
     XCTAssertEqual(count, 1, "閉じる＋開くを 1 本で")
     XCTAssertEqual(
-      session.documents.map(\.url.lastPathComponent), ["b.txt", "c.txt"], "仮の位置で入れ替わる")
+      session.documents.map(\.url.lastPathComponent), ["b.txt", "c.txt"], "前の仮が外れ、先頭に入る")
     XCTAssertTrue(session.preview === docB)
     XCTAssertTrue(session.activeDocument === docB)
 
     session.close(try XCTUnwrap(docB))
     XCTAssertNil(session.preview, "閉じれば仮無し")
     try session.open(a, as: .preview)
-    XCTAssertEqual(session.documents.map(\.url.lastPathComponent), ["c.txt", "a.txt"], "仮が無ければ末尾")
+    XCTAssertEqual(session.documents.map(\.url.lastPathComponent), ["a.txt", "c.txt"], "仮が無くても先頭")
   }
 
   /// 開いている文書を仮で開き直しても焦点が移るだけで、普通の文書は普通のまま。普通に開き直すと仮の文書は普通になる。
   func testReopeningKeepsPinnedDocumentsAndPinsAPreview() throws {
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let pinned = try session.open(try file("a.txt", "a"), as: .pinned)
     let preview = try session.open(try file("b.txt", "b"), as: .preview)
 
@@ -163,7 +182,7 @@ final class EditorSessionTests: OrbeTestCase {
 
   /// 仮の文書を固定する口は仮の文書だけに効き、仮でなければ通知もしない。
   func testPinOnlyPinsThePreview() throws {
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let pinned = try session.open(try file("a.txt", "a"), as: .pinned)
     let preview = try session.open(try file("b.txt", "b"), as: .preview)
     XCTAssertEqual(notifications(session) { session.pin(pinned) }, 0)
@@ -176,9 +195,9 @@ final class EditorSessionTests: OrbeTestCase {
   /// 仮の文書は未保存になった瞬間に普通になり（通知は 1 本）、保存して未保存でなくなっても仮に戻らない。未編集の仮の文書は
   /// 保存しても仮のまま。
   func testAPreviewIsPinnedTheMomentItIsEdited() throws {
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let saved = try session.open(try file("a.txt", "a"), as: .preview)
-    try session.saveActive()
+    try session.saveEdited()
     XCTAssertTrue(session.preview === saved, "保存では普通にならない")
 
     let count = notifications(session) {
@@ -186,7 +205,7 @@ final class EditorSessionTests: OrbeTestCase {
     }
     XCTAssertEqual(count, 1)
     XCTAssertNil(session.preview, "未保存になった瞬間に普通になる")
-    try session.saveActive()
+    try session.saveEdited()
     XCTAssertNil(session.preview, "保存しても仮に戻らない")
 
     try session.open(try file("b.txt", "b"), as: .preview)
@@ -195,7 +214,7 @@ final class EditorSessionTests: OrbeTestCase {
 
   /// 仮で開けないファイル（読めない・UTF-8 でない）は列も仮の文書も変えない。
   func testAPreviewThatCannotOpenKeepsThePreview() throws {
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let preview = try session.open(try file("a.txt", "a"), as: .preview)
     let binary = try file("bin", "")
     try Data([0xff, 0xfe, 0xc3]).write(to: binary)

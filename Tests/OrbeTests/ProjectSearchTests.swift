@@ -22,7 +22,7 @@ final class ProjectSearchTests: OrbeTestCase {
 
   func fixture(runner: GitRunner = .shared) throws -> Fixture {
     let repo = try TempGitRepo(name: "orbe-search")
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let search = ProjectSearch(root: repo.root, runner: runner)
     search.documents = { [weak session] in session?.documents ?? [] }
     return Fixture(repo: repo, session: session, search: search)
@@ -177,13 +177,41 @@ final class ProjectSearchTests: OrbeTestCase {
     XCTAssertEqual(f.search.phase, .done)
     XCTAssertTrue(f.search.results.isEmpty)
     XCTAssertTrue(holds(for: 0.3) { f.search.results.isEmpty }, "止めた検索の結果は後から届かない")
+  }
 
-    search(f.search, "needle")
-    f.search.setPattern("other")
+  /// 見出しのボタンと Esc は、2 秒を超えた検索の間だけ検索を止め（検索パネルは離れない）、それ以外は検索を止めずに検索
+  /// パネルを離れる。止めた後は離れる側に戻る。キーリピートでは何もしない。
+  func testDismissStopsOnlyASlowSearchAndOtherwiseLeavesThePanel() throws {
+    let f = try fixture()
+    try f.repo.write("disk.txt", "needle\n")
+    _ = try gate(f)
+    var slow: (@MainActor () -> Void)?
+    f.search.slowDelay.schedule = { _, fire in slow = fire }
+    var leaves = 0
+    f.search.onLeave = { leaves += 1 }
+
+    f.search.setPattern("needle")
     f.search.search()
-    f.search.escapeInResults()
-    XCTAssertEqual(f.search.phase, .done, "結果の列の Esc も止める")
-    XCTAssertTrue(f.search.results.isEmpty)
+    pumpMain(until: { GrepGate.isGrepRunning }, "git が走る")
+    XCTAssertFalse(f.search.stopsOnDismiss)
+    f.search.dismiss()
+    XCTAssertEqual(leaves, 1, "2 秒までは離れる")
+    XCTAssertEqual(f.search.phase, .searching, "走っている検索は止めない")
+
+    try XCTUnwrap(slow)()
+    XCTAssertTrue(f.search.stopsOnDismiss, "2 秒を超えた検索")
+    f.search.dismiss(isRepeat: true)
+    XCTAssertEqual(f.search.phase, .slow, "キーリピートでは止めない")
+    f.search.dismiss()
+    XCTAssertEqual(f.search.phase, .done, "2 秒を超えた検索は止める")
+    XCTAssertEqual(leaves, 1, "止めるときは離れない")
+    pumpMain(until: { !GrepGate.isGrepRunning }, "止めた git は終わる")
+
+    XCTAssertFalse(f.search.stopsOnDismiss)
+    f.search.dismiss(isRepeat: true)
+    XCTAssertEqual(leaves, 1, "キーリピートでは離れない")
+    f.search.dismiss()
+    XCTAssertEqual(leaves, 2, "止めた後は離れる")
   }
 
   /// 止めると、その検索で届いた結果は残り、git は止まる。エラーにはならない。
@@ -315,12 +343,6 @@ final class ProjectSearchTests: OrbeTestCase {
     f.search.setPattern("")
     XCTAssertEqual(f.search.phase, .idle)
     XCTAssertTrue(f.search.results.isEmpty)
-
-    search(f.search, "needle")
-    f.search.clear()
-    XCTAssertEqual(f.search.query.pattern, "", "ヘッダーのクリアは検索語と結果を消す")
-    XCTAssertTrue(f.search.results.isEmpty)
-    XCTAssertEqual(f.search.focusRequest, .field, "入力欄に焦点を戻す")
   }
 
   // MARK: - 開いている文書の版

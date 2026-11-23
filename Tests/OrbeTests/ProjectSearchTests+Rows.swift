@@ -4,9 +4,9 @@ import XCTest
 
 @testable import Orbe
 
-/// 結果の列の操作——↑↓ で一致へ動けば仮のタブで開き（見出しでは開かない）、押している間は開かず離した後に開く、← → で畳む・開く・
-/// 親へ・最初の一致へ、Enter は一致なら普通のタブで開いて本文へ（見出しならそのファイルの最後の一致）、⌘↓ / ⌘↑ で入力欄と
-/// 行き来、F4 / ⇧F4 は次・前の一致を仮のタブで開いて端で回り畳んだまとまりは開く。
+/// 結果の列の操作——↑↓ で一致へ動けば仮の文書として開き（見出しでは開かない）、押している間は開かず離した後に開く、← → で畳む・開く・
+/// 親へ・最初の一致へ、Enter は一致なら普通の文書として開いて本文へ（見出しならそのファイルの最後の一致）、⌘↓ / ⌘↑ で入力欄と
+/// 行き来、F4 / ⇧F4 は次・前の一致を仮の文書として開いて端で回り畳んだまとまりは開く。
 ///
 /// 壊れると何が起きるか。↑↓ でたどっても中身が見えない、押し続けると 1 件ごとにファイルを読んで選択の移動が遅れる。
 /// Enter の後に前の選択が遅れて開いて、Enter で開いたファイルを入れ替える。← → で選択が消える、畳んだまとまりの中へ
@@ -43,7 +43,7 @@ extension ProjectSearchTests {
     (0..<search.rowCount).map { search.row(at: $0).id }
   }
 
-  /// ↑↓ は選択を動かし、一致へ動けば仮のタブで開いて焦点に触らない。見出しへ動いた・端で動かなかったときは開かない。
+  /// ↑↓ は選択を動かし、一致へ動けば仮の文書として開いて焦点に触らない。見出しへ動いた・端で動かなかったときは開かない。
   /// 窓の外の押下はそのつどすぐ開く。
   func testArrowsOpenTheMatchTheyMoveToAsAPreview() throws {
     let f = try rowsFixture()
@@ -62,7 +62,7 @@ extension ProjectSearchTests {
     closeWindow()
     search.moveSelection(by: 1, isRepeat: false)
     XCTAssertEqual(opened().map(\.0), [match("a.txt", 0)], "窓の外の押下はすぐ開く")
-    XCTAssertEqual(opened().last?.1, .browse, "仮のタブで開いて焦点に触らない")
+    XCTAssertEqual(opened().last?.1, .browse, "仮の文書として開いて焦点に触らない")
     closeWindow()
     search.moveSelection(by: 10, isRepeat: false)
     XCTAssertEqual(search.selection, match("b.txt", 0), "端で止まる")
@@ -151,7 +151,7 @@ extension ProjectSearchTests {
 
     f.search.select(match("a.txt", 0))
     f.search.moveSelection(by: 1, isRepeat: true)
-    f.search.escapeInResults()
+    f.search.select(nil)
     f.search.navigation.keyDidRelease()
     f.closeWindow()
     XCTAssertEqual(f.opened().count, 1, "選択を外していれば開かない")
@@ -178,7 +178,7 @@ extension ProjectSearchTests {
     }
   }
 
-  /// → で開いた見出しから最初の一致へ動けば仮のタブで開く。畳んだ見出しを開くだけなら開かない。
+  /// → で開いた見出しから最初の一致へ動けば仮の文書として開く。畳んだ見出しを開くだけなら開かない。
   func testRightToTheFirstMatchOpensIt() throws {
     let f = try rowsFixture()
     let search = f.search
@@ -221,7 +221,7 @@ extension ProjectSearchTests {
     search.activateSelection()
 
     XCTAssertEqual(opened().map(\.0), [match("b.txt", 0), match("a.txt", 1)])
-    XCTAssertEqual(opened().map(\.1), [.commit, .commit], "Enter は普通のタブで開いて本文へ")
+    XCTAssertEqual(opened().map(\.1), [.commit, .commit], "Enter は普通の文書として開いて本文へ")
     XCTAssertEqual(search.selection, match("a.txt", 1))
   }
 
@@ -248,7 +248,7 @@ extension ProjectSearchTests {
     XCTAssertEqual(search.selection, match("a.txt", 1), "見出しの ⇧F4 は前のまとまりの最後の一致")
 
     XCTAssertEqual(opened().count, 5)
-    XCTAssertTrue(opened().allSatisfy { $0.1 == .step }, "F4 は仮のタブで開いて本文へ")
+    XCTAssertTrue(opened().allSatisfy { $0.1 == .step }, "F4 は仮の文書として開いて本文へ")
   }
 
   func testCommandDownEntersTheResultsAndCommandUpLeavesFromTheTop() throws {

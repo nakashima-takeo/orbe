@@ -312,6 +312,36 @@ final class RowListTests: OrbeTestCase {
     XCTAssertTrue(slots(list).allSatisfy { !$0.isSelected })
   }
 
+  /// 中ほどへ送ると、選択の行が列の高さの中ほどに来る（文書の端では範囲に収める）。大きさの無い列では、大きさが付いて
+  /// から送る。
+  func testCenteringPutsTheSelectionInTheMiddle() {
+    let hosted = host()
+    let list = hosted.list
+    hosted.rows.update(rowsVersion: 0, selection: 50, emoji: nil, wantsFocus: false)
+    hosted.rows.center(50)
+    XCTAssertEqual(list.visibleRect.midY, 50.5 * rowHeight, accuracy: 0.5, "中ほど")
+    hosted.rows.center(1)
+    XCTAssertEqual(list.visibleRect.minY, 0, "先頭の近くは上端に収める")
+
+    let source = Source()
+    let rows = RowList(source: source, rowHeight: rowHeight)
+    rows.update(rowsVersion: 0, selection: 50, emoji: nil, wantsFocus: false)
+    rows.center(50)
+    rows.frame = NSRect(x: 0, y: 0, width: 200, height: 100)
+    rows.tile()
+    XCTAssertEqual(rows.list.visibleRect.midY, 50.5 * rowHeight, accuracy: 0.5, "大きさが付いてから")
+  }
+
+  /// 空きを持たない列は、文書の高さが行の数ぶんだけになる（高さを行の数に合わせる浮く一覧）。
+  func testAListWithoutTrailingSpaceIsAsTallAsItsRows() {
+    let source = Source()
+    source.rowCount = 3
+    let rows = RowList(source: source, rowHeight: rowHeight, trailingSpace: false)
+    rows.frame = NSRect(x: 0, y: 0, width: 200, height: 100)
+    rows.update(rowsVersion: 0, selection: nil, emoji: nil, wantsFocus: false)
+    XCTAssertEqual(rows.list.frame.height, rowHeight * 3)
+  }
+
   // MARK: - 焦点
 
   /// 焦点の要求は列が窓の中で当てて源へ返し、焦点の出入りを源へ知らせる。

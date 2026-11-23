@@ -13,54 +13,29 @@ enum EditorGlyphs {
     let parts: (CGFloat) -> [(path: Path, opacity: Double)]
   }
 
-  /// レールの「ファイル」（24 系・stroke 1.5）。前面の書類と、後ろに沈む 2 枚目の縁（opacity .8）。
-  static let railFiles = Glyph(viewBox: 24, stroke: 1.5) { k in
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
-    var sheet = Path()
-    sheet.move(to: p(8, 5.5))
-    sheet.addLine(to: p(15, 5.5))
-    sheet.addLine(to: p(18.5, 9))
-    sheet.addArc(tangent1End: p(18.5, 19), tangent2End: p(7, 19), radius: k)
-    sheet.addArc(tangent1End: p(7, 19), tangent2End: p(7, 5.5), radius: k)
-    sheet.addArc(tangent1End: p(7, 5.5), tangent2End: p(15, 5.5), radius: k)
-    sheet.closeSubpath()
-    sheet.move(to: p(15, 5.5))
-    sheet.addLine(to: p(15, 9))
-    sheet.addLine(to: p(18.5, 9))
-    var behind = Path()
-    behind.move(to: p(5.5, 8.5))
-    behind.addArc(tangent1End: p(5.5, 20.5), tangent2End: p(15, 20.5), radius: k)
-    behind.addLine(to: p(15, 20.5))
-    return [(sheet, 1), (behind, 0.8)]
-  }
-
-  /// レールの「検索」（24 系・stroke 1.6）。
-  static let railSearch = Glyph(viewBox: 24, stroke: 1.6) { k in
-    var path = Path(ellipseIn: CGRect(x: 5.5 * k, y: 5.5 * k, width: 11 * k, height: 11 * k))
-    path.move(to: CGPoint(x: 15.5 * k, y: 15.5 * k))
-    path.addLine(to: CGPoint(x: 20 * k, y: 20 * k))
+  /// 上のバーの左の列の開閉 `M2.5 3.5h11v9h-11zM6 3.5v9`（stroke 1.4）。
+  static let sidebarToggle = Glyph(viewBox: 16, stroke: 1.4) { k in
+    var path = Path(CGRect(x: 2.5 * k, y: 3.5 * k, width: 11 * k, height: 9 * k))
+    path.move(to: CGPoint(x: 6 * k, y: 3.5 * k))
+    path.addLine(to: CGPoint(x: 6 * k, y: 12.5 * k))
     return [(path, 1)]
   }
 
-  /// レールの「ソース管理」（24 系・stroke 1.5）。
-  static let railGit = Glyph(viewBox: 24, stroke: 1.5) { k in
+  /// キーの印の ⌥ `M2.25 3.5H6l4.25 9h3.5M9.75 3.5h4`（stroke 1.45）。
+  static let optionKey = Glyph(viewBox: 16, stroke: 1.45) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
     var path = Path()
-    for (x, y) in [(7.5, 6.5), (7.5, 17.5), (16.5, 9.0)] as [(CGFloat, CGFloat)] {
-      path.addEllipse(in: CGRect(x: (x - 2) * k, y: (y - 2) * k, width: 4 * k, height: 4 * k))
-    }
-    path.move(to: p(7.5, 8.5))
-    path.addLine(to: p(7.5, 15.5))
-    path.move(to: p(16.5, 11))
-    path.addCurve(to: p(10.5, 15), control1: p(16.5, 14), control2: p(13.5, 14.5))
+    path.move(to: p(2.25, 3.5))
+    path.addLine(to: p(6, 3.5))
+    path.addLine(to: p(10.25, 12.5))
+    path.addLine(to: p(13.75, 12.5))
+    path.move(to: p(9.75, 3.5))
+    path.addLine(to: p(13.75, 3.5))
     return [(path, 1)]
   }
 
   /// 折りたたみのシェブロン `M6 4.5L10 8l-4 3.5`（stroke 1.3）。開いていると 90° 回す。
   static let chevron = Glyph(viewBox: 16, stroke: 1.3) { k in [(chevronPath(k), 1)] }
-
-  /// パンくずの区切り（同じ形で stroke 1.5）。
-  static let crumbChevron = Glyph(viewBox: 16, stroke: 1.5) { k in [(chevronPath(k), 1)] }
 
   private static func chevronPath(_ k: CGFloat) -> Path {
     var path = Path()
@@ -142,32 +117,6 @@ enum EditorGlyphs {
     path.addLine(to: CGPoint(x: 10.6 * k, y: 5.2 * k))
     return [(path, 1)]
   }
-
-  /// 停止: 円に四角（検索が 2 秒を超えると更新と入れ替わる）。
-  static let stop = Glyph(viewBox: 16, stroke: 1.2) { k in
-    var path = Path(ellipseIn: CGRect(x: 2.5 * k, y: 2.5 * k, width: 11 * k, height: 11 * k))
-    path.addRect(CGRect(x: 6 * k, y: 6 * k, width: 4 * k, height: 4 * k))
-    return [(path, 1)]
-  }
-
-  /// クリア: 斜線の入った円。
-  static let clear = Glyph(viewBox: 16, stroke: 1.2) { k in
-    var path = Path(ellipseIn: CGRect(x: 2.5 * k, y: 2.5 * k, width: 11 * k, height: 11 * k))
-    path.move(to: CGPoint(x: 4.2 * k, y: 4.2 * k))
-    path.addLine(to: CGPoint(x: 11.8 * k, y: 11.8 * k))
-    return [(path, 1)]
-  }
-
-  /// ファイルタブの ×（ブラウザ層の停止印と同じ 2 本の斜線）。
-  static let close = Glyph(viewBox: 16, stroke: 1.5) { k in
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
-    var path = Path()
-    path.move(to: p(4, 4))
-    path.addLine(to: p(12, 12))
-    path.move(to: p(12, 4))
-    path.addLine(to: p(4, 12))
-    return [(path, 1)]
-  }
 }
 
 extension EditorGlyphs {
@@ -207,6 +156,50 @@ extension EditorGlyphs {
     path.addLine(to: CGPoint(x: 8 * k, y: 10 * k))
     path.addLine(to: CGPoint(x: 12 * k, y: 6.5 * k))
     return [(path, 1)]
+  }
+
+  /// 閉じる × `m4 4 8 8M12 4l-8 8`（stroke 1.4）。
+  static let close = Glyph(viewBox: 16, stroke: 1.4) { k in
+    var path = Path()
+    path.move(to: CGPoint(x: 4 * k, y: 4 * k))
+    path.addLine(to: CGPoint(x: 12 * k, y: 12 * k))
+    path.move(to: CGPoint(x: 12 * k, y: 4 * k))
+    path.addLine(to: CGPoint(x: 4 * k, y: 12 * k))
+    return [(path, 1)]
+  }
+
+  /// キーの印の ↵ `M13 3.25v3.5a2 2 0 0 1-2 2H3.25M6.25 5.75l-3 3 3 3`（stroke 1.45）。
+  static let returnKey = Glyph(viewBox: 16, stroke: 1.45) { k in
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
+    var path = Path()
+    path.move(to: p(13, 3.25))
+    path.addLine(to: p(13, 6.75))
+    path.addArc(tangent1End: p(13, 8.75), tangent2End: p(11, 8.75), radius: 2 * k)
+    path.addLine(to: p(3.25, 8.75))
+    path.move(to: p(6.25, 5.75))
+    path.addLine(to: p(3.25, 8.75))
+    path.addLine(to: p(6.25, 11.75))
+    return [(path, 1)]
+  }
+
+  /// キーの印の → `M3 8h9M8.5 4.5 12 8l-3.5 3.5`（stroke 1.45）。← はその左右の反転。
+  static let arrowRight = Glyph(viewBox: 16, stroke: 1.45) { k in
+    [(arrowPath(k, flipped: false), 1)]
+  }
+  static let arrowLeft = Glyph(viewBox: 16, stroke: 1.45) { k in [(arrowPath(k, flipped: true), 1)]
+  }
+
+  private static func arrowPath(_ k: CGFloat, flipped: Bool) -> Path {
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+      CGPoint(x: (flipped ? 16 - x : x) * k, y: y * k)
+    }
+    var path = Path()
+    path.move(to: p(3, 8))
+    path.addLine(to: p(12, 8))
+    path.move(to: p(8.5, 4.5))
+    path.addLine(to: p(12, 8))
+    path.addLine(to: p(8.5, 11.5))
+    return path
   }
 
   /// ファイルを開く: 書類から右上へ抜ける矢印（stroke 1.2）。

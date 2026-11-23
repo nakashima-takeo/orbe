@@ -185,9 +185,9 @@ extension BranchPullRequestTests {
     pumpMain(until: { self.lookups.count == looked + 1 }, "push 先の追跡 ref が動いたら問い直す")
   }
 
-  /// 同じきっかけでは、worktree の今の PR と PR の diff タブが同じ PR を見ていても、中身の問い合わせは 1 回。パネルを隠して
-  /// PR の diff タブだけが見ていても、きっかけで中身を読み直す（ブランチの PR は問い直さない）。
-  func testATriggerReadsTheContentOnceAndTheTabAloneKeepsFollowing() throws {
+  /// 同じきっかけでは、worktree の今の PR と PR の diff が同じ PR を見ていても、中身の問い合わせは 1 回。worktree の今の PR が
+  /// 見るのをやめて PR の diff だけが見ていても、きっかけで中身を読み直す（ブランチの PR は問い直さない）。
+  func testATriggerReadsTheContentOnceAndThePullRequestDiffAloneKeepsFollowing() throws {
     let refs = try trackedBranch()
     repositories = ["origin": .github(me)]
     content = pullRequestContent(base: refs.main)
@@ -212,7 +212,7 @@ extension BranchPullRequestTests {
     pullRequest.endWatching()
     contentReads = 0
     try moveRemoteRef("refs/remotes/origin/feat", to: refs.main, watchedBy: refs.recorder)
-    pumpMain(until: { self.contentReads == 1 }, "PR の diff タブだけで読み直す")
+    pumpMain(until: { self.contentReads == 1 }, "PR の diff だけで読み直す")
     XCTAssertEqual(lookups.count, 2, "ブランチの PR は問い直さない")
   }
 
@@ -303,39 +303,27 @@ extension BranchPullRequestTests {
         + "testLeavingBeforeTheAnswerSkipsThePublishedCheck の確かめる時点も成り立たない")
   }
 
-  /// PR が無いブランチで、前の答えの「GitHub に在るか」を確かめている最中に読み直し、その答えが届いて先行の数を数え終わる
-  /// 前に見ている者が去れば、去った後に「GitHub に在るか」を問い合わせない。
-  func testLeavingWhileAReloadCountsSkipsThePublishedCheckEvenWithAnEarlierAnswer() {
-    // 既定のブランチの追跡 ref があると、先行の数を git で数える（答えを出すのは数え終わった後）。
-    repo.addOrigin()
-    XCTAssertTrue(repo.git(["remote", "set-head", "origin", "main"]).isSuccess)
+  /// 読み直しで PR が無いままなら答えは替えず、「GitHub に在るか」を問い合わせ直している間は前の値のまま（作成のボタンの
+  /// 姿が変わらない）。読み直す前に実行中だった問い合わせの結果は反映せずに問い合わせ直し、今の結果だけを反映する。
+  func testAReloadWithoutAPullRequestChecksThePublishedStateAgainKeepingTheAnswer() {
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     answers["feat"] = .gitHub(GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([]))
     holdsPublishedChecks = true
     let pullRequest = watch()
-    pumpMain(until: { self.publishedChecks.count == 1 }, "前提: 前の答えの在るかを確かめている")
-    holdsLookups = true
-    pullRequest.reload()
-    pumpMain(until: { self.held.count == 1 }, "前提: 読み直しの問い合わせの最中")
-
-    releaseLookups()
-    pullRequest.endWatching()
-    XCTAssertTrue(holds(for: 1) { self.publishedChecks.count == 1 }, "去った後に問い合わせない")
-  }
-
-  /// 読み直しで前と同じ値の答えが出たら、前の答えの「GitHub に在るか」の結果は入れず、今の答えの結果だけを入れる。
-  func testAnEarlierPublishedCheckDoesNotLandOnTheNextAnswer() {
-    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
-    answers["feat"] = .gitHub(GitHubBranchRef(repo: me, branch: "feat"), pullRequests: .success([]))
-    holdsPublishedChecks = true
-    let pullRequest = watch()
-    pumpMain(until: { self.heldChecks.count == 1 }, "前提: 前の答えの在るかを確かめている")
-    pullRequest.reload()
-    pumpMain(until: { self.heldChecks.count == 2 }, "前提: 同じ値の今の答えの在るかを確かめている")
-
+    pumpMain(until: { self.heldChecks.count == 1 }, "前提: 在るかを確かめている")
     heldChecks[0](.success(false))
-    XCTAssertEqual(published(pullRequest), .checking, "前の答えの結果は入れない")
+    XCTAssertEqual(published(pullRequest), .no, "前提: 未公開と分かる")
+
+    pullRequest.reload()
+    pumpMain(until: { self.heldChecks.count == 2 }, "読み直しで在るかを問い合わせ直す")
+    XCTAssertEqual(published(pullRequest), .no, "問い合わせ直している間は前の値のまま")
+    pullRequest.reload()
+    pumpMain(until: { self.lookups.count == 3 }, "前提: 問い合わせの最中にもう一度読み直した")
+
     heldChecks[1](.success(true))
+    XCTAssertEqual(published(pullRequest), .no, "読み直す前に実行中だった問い合わせの結果は反映しない")
+    pumpMain(until: { self.heldChecks.count == 3 }, "問い合わせ直す")
+    heldChecks[2](.success(true))
     XCTAssertEqual(published(pullRequest), .yes)
   }
 

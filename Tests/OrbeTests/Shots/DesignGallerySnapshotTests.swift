@@ -67,6 +67,7 @@ final class DesignGallerySnapshotTests: ShotTestCase {
     // git の子プロセスの完了（main へ dispatch）を待つ骨の fixture が揃わない。
     try renderEditorSnapshots(dir: dir)
     try renderEditorShellSnapshots(dir: dir)
+    try renderEditorShellOpenFilesSnapshots(dir: dir)
     try renderEditorSearchSnapshots(dir: dir)
     try renderEditorScmSnapshots(dir: dir)
     try renderEditorPullRequestSnapshots(dir: dir)
@@ -251,7 +252,7 @@ final class DesignGallerySnapshotTests: ShotTestCase {
 
     editor.editingIndex = nil
     editor.location = StatusRowModel.parts(
-      of: .pullRequest(number: 131, relative: "src/agent/StateHooks.swift"))
+      of: .pullRequest(number: 131, root: NSHomeDirectory() + "/dev/orbe"))
     try writeChromeBandPair(editor, size: size, name: "statusrow_pull_request", dir: dir)
   }
 

@@ -70,7 +70,8 @@ final class GroupFacesViewTests: OrbeTestCase {
 
   // MARK: - 透かし
 
-  /// 透かしはエディター面を隠さず濃さ 0 にし、端末面を見せる。first responder はエディターに残り、離せばそのままエディターに戻る。
+  /// 透かしはエディター面を隠さず、上のバーを残してその下を濃さ 0 にし、端末面をバーの下端から下だけ見せる（端末の大きさと
+  /// 位置は変えない）。first responder はエディターに残り、離せばそのままエディターに戻る。
   func testPeekMakesTheEditorInvisibleWithoutHidingIt() throws {
     let tab = laidOut(open: true)
     let window = hosted(tab)
@@ -81,12 +82,28 @@ final class GroupFacesViewTests: OrbeTestCase {
     view.show(.peek, animated: false)
     XCTAssertTrue(view.isEditorOpen, "透かしてもエディターは開いたまま")
     XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor, "エディター面は隠さない")
-    XCTAssertEqual(try XCTUnwrap(view.editor.superview).alphaValue, 0)
+    XCTAssertEqual(try XCTUnwrap(view.editor.superview).alphaValue, 1, "上のバーは残る")
+    XCTAssertEqual(view.editor.belowBar.alphaValue, 0, "バーより下は見えない")
+    XCTAssertTrue(view.editor.isPeeking, "バーの案内は押している間の姿")
     XCTAssertFalse(tab.terminal.isHiddenOrHasHiddenAncestor, "端末が見える")
+    let face = try XCTUnwrap(tab.terminal.superview)
+    XCTAssertEqual(
+      rect(of: face, in: view),
+      NSRect(
+        x: 0, y: Theme.Layout.editorBar, width: size.width,
+        height: size.height - Theme.Layout.editorBar),
+      "端末面はバーの下端から下だけ見せる")
+    XCTAssertEqual(
+      rect(of: tab.terminal, in: view), NSRect(origin: .zero, size: size), "端末の枠は器いっぱいのまま")
+    XCTAssertEqual(tab.surface.bounds.size, size, "端末の大きさは変えない")
     XCTAssertTrue(window.firstResponder === view.editor, "フォーカスは動かない")
 
     view.show(.editor, animated: false)
     XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor)
+    XCTAssertEqual(view.editor.belowBar.alphaValue, 1)
+    XCTAssertFalse(view.editor.isPeeking)
+    XCTAssertEqual(
+      rect(of: try XCTUnwrap(tab.terminal.superview), in: view), NSRect(origin: .zero, size: size))
     XCTAssertTrue(window.firstResponder === view.editor)
   }
 

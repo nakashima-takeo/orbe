@@ -33,7 +33,13 @@ extension DesignFlowSnapshotTests {
     let panel = scene.panel
     let control = panel.control
     return [
-      ("open", { panel.select(ScmRowID(section: .changes, path: "src/agent/StateHooks.swift")) }),
+      (
+        "open",
+        {
+          panel.click(ScmRowID(section: .changes, path: "src/agent/StateHooks.swift"))
+          pumpMain(until: { scene.pane.showsDiff(of: "src/agent/StateHooks.swift") }, "押した行の diff")
+        }
+      ),
       ("message", { control.message = "StateHooks: emit を畳む\n\n連続する知らせを 1 つにまとめ、\n描画の遅れを減らす。" }),
       (
         "collapsed",
@@ -150,7 +156,7 @@ private final class ScmPlainScene {
     tab = TerminalTab(cwd: directory.path, group: group)
     group.view.add(terminal: tab.terminal)
     group.view.show(terminal: tab.terminal)
-    group.view.editor.selectPanel(.sourceControl)
+    group.editor.selectScreen(.changes)
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1100, height: 640), styleMask: [.borderless],
       backing: .buffered, defer: false)

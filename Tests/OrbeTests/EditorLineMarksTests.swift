@@ -35,7 +35,8 @@ final class EditorLineMarksTests: OrbeTestCase {
     let url = try caseFile("marks-\(UUID().uuidString).swift", text)
     let session = EditorSession(
       surfaces: EditorSurfaces(
-        queriesRoot: Bundle(for: Self.self).bundleURL.deletingLastPathComponent()))
+        queriesRoot: Bundle(for: Self.self).bundleURL.deletingLastPathComponent()),
+      defaultScreen: .files)
     let document = try session.open(url, as: .pinned)
     let ground = Ground(frame: NSRect(origin: .zero, size: size))
     document.surface.view.frame = ground.bounds

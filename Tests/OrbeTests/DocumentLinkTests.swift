@@ -6,9 +6,10 @@ import XCTest
 @testable import Orbe
 
 /// 文書と根のサービスの結線（実 git・実 FSEvents・本物のテキスト面）: 外で書き換えられたファイルが開いている
-/// 文書へ反映され、未保存の文書は印が立って ⌘S が失敗し、baseline は文書に届く。
+/// 文書へ反映され、未保存の文書は印が立って ⌘S が失敗し、baseline と git の状態の字は文書に届く。
 ///
 /// 壊れると何が起きるか。エージェントが書き換えたファイルが古いまま見える。⌘S がエージェントの編集を黙って潰す。
+/// 開いているファイルの一覧の状態の字が、外の `git add` の後も古いまま残る。
 @MainActor
 final class DocumentLinkTests: OrbeTestCase {
   private var repo: TempGitRepo!
@@ -18,7 +19,7 @@ final class DocumentLinkTests: OrbeTestCase {
   }
 
   private func session() -> EditorSession {
-    EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
   }
 
   func testExternalWriteReplacesTheOpenDocument() throws {
@@ -29,9 +30,10 @@ final class DocumentLinkTests: OrbeTestCase {
 
     try repo.write("a.txt", "rewritten\n")
     pumpMain(until: { bodyText(document) == "rewritten\n" }, "監視で差し替わる")
+    pumpMain(until: { session.badge(of: document) == .modified }, "状態の字が付く")
     XCTAssertFalse(document.isDirty)
     XCTAssertFalse(document.isDiskChanged)
-    XCTAssertEqual(changes, 0, "未保存も印も変わらないので通知しない")
+    XCTAssertEqual(changes, 1, "未保存も印も変わらず、通知は状態の字の 1 本だけ")
     document.surface.responder.undoManager?.undo()
     XCTAssertEqual(bodyText(document), "one\n", "⌘Z で戻せる")
   }
@@ -45,12 +47,13 @@ final class DocumentLinkTests: OrbeTestCase {
 
     try repo.write("a.txt", "theirs\n")
     pumpMain(until: { document.isDiskChanged }, "未保存なら印が立つ")
+    pumpMain(until: { session.badge(of: document) == .modified }, "状態の字が付く")
     XCTAssertEqual(bodyText(document), "mine one\n")
-    XCTAssertEqual(changes, 1, "印の変化はセッションの通知に載る")
-    XCTAssertThrowsError(try session.saveActive())
+    XCTAssertEqual(changes, 2, "印の変化と状態の字の変化が、それぞれセッションの通知に載る")
+    XCTAssertThrowsError(try session.saveEdited())
     XCTAssertEqual(try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "theirs\n")
 
-    try session.saveActive(force: true)
+    try session.saveEdited(force: true)
     XCTAssertEqual(try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "mine one\n")
     XCTAssertFalse(document.isDiskChanged)
     pumpMain(

@@ -1,13 +1,15 @@
 import AppKit
 
-/// サイドバーと本体の境に置く 4pt の当たり。掴んだ瞬間に境が描かれている位置（表示幅。切り詰め中は記憶の
+/// 左の列と本体の境に置く 4pt の当たり。掴んだ瞬間に境が描かれている位置（表示幅。切り詰め中は記憶の
 /// 幅と違う）を起点に、ポインタの移動ぶんだけ幅を求める（境のどこを掴んでも引いた距離だけ動く）。
 ///
 /// カーソルは tracking area の `cursorUpdate` で出す。`.inVisibleRect` の tracking area は view の可視矩形に
 /// 自動で追随するので、生成時に 1 つ登録すれば pane の `layout()` が frame を置き直しても再登録が要らない
 /// （cursor rect は窓が再計算する契機に依るため、frame の移動後に古い矩形が残りうる）。
 final class SidebarResizeHandle: NSView {
-  /// ポインタが求めるサイドバーの幅。
+  /// 境が今描かれている位置（左の列の表示幅）。
+  var shownWidth: () -> CGFloat = { 0 }
+  /// ポインタが求める左の列の幅。
   var onDrag: ((CGFloat) -> Void)?
   /// 離した（幅を書き戻す）。
   var onRelease: (() -> Void)?
@@ -33,8 +35,7 @@ final class SidebarResizeHandle: NSView {
   }
 
   override func mouseDown(with event: NSEvent) {
-    guard let pane = superview as? EditorPaneView else { return }
-    grab = (x(in: event), pane.shownSidebarWidth)
+    grab = (x(in: event), shownWidth())
   }
 
   override func mouseDragged(with event: NSEvent) {

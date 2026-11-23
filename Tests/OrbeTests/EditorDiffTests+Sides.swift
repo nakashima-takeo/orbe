@@ -6,16 +6,16 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// diff の側の決まり方——新しい側の文書が替わったとき（並びが載るまで出さない・仮のタブとタブ行・未保存が下りたとき）、
-/// 両側とも無いパス、途中のシンボリックリンク、サブモジュール。壊れると、diff タブに並びの無い面が一瞬出る・未保存の文書を
-/// 使う仮のタブが黙って入れ替わる・消えたファイルの diff が古いまま残る・リンク先の別のファイルが出る・空の diff が理由
+/// diff の側の決まり方——新しい側の文書が替わったとき（並びが載るまで出さない・開いている文書の未保存・未保存が下りたとき）、
+/// 両側とも無いパス、途中のシンボリックリンク、サブモジュール。壊れると、diff に並びの無い面が一瞬出る・未保存の文書が
+/// 開いている文書の列に入らない・消えたファイルの diff が古いまま残る・リンク先の別のファイルが出る・空の diff が理由
 /// なしに出る・サブモジュールの行が「git から取れない」になる。
 extension EditorDiffTests {
   /// diff だけが持つファイルが消えて戻った直後は、新しい文書の行差分が届くまで本体に何も出さず、届けば出す。
   func testADiffOnlyDocumentThatComesBackShowsNothingUntilItsRowsArrive() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let contents = try Data(contentsOf: repo.url("a.txt"))
     try FileManager.default.removeItem(at: repo.url("a.txt"))
@@ -29,47 +29,33 @@ extension EditorDiffTests {
     waitRows(diff, "行差分が届く") { self.removedLines($0) == [1] }
   }
 
-  /// 未保存のファイルが外で消えて戻ると、それを新しい側に使うようになった仮の diff タブは普通のタブになり、未保存の印が
-  /// 出る。
-  func testAPreviewDiffIsPinnedWhenItSwitchesToAnUnsavedDocument() throws {
+  /// 未保存のファイルが外で消えて戻ると、diff はその未保存の文書を新しい側に使い、開いている文書は未保存のまま。ほかの
+  /// 変更（未追跡の b.txt）を残し、戻したときに変更が 1 件も無くなって diff が閉じないようにする。
+  func testADiffSwitchesToTheUnsavedDocumentWhenItsFileComesBack() throws {
+    try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
     let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "Z")
     let contents = try Data(contentsOf: repo.url("a.txt"))
     try FileManager.default.removeItem(at: repo.url("a.txt"))
-    let key = id("a.txt", .workingTree)
-    let diff = try tab.group.editor.openDiff(key, as: .preview)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     XCTAssertNil(diff.document, "前提: 消えたファイルの diff")
-    XCTAssertEqual(tab.group.editor.previewID, .diff(key), "前提: 仮のタブ")
 
     try contents.write(to: repo.url("a.txt"))
     pumpMain(until: { diff.document === document }, "戻ったファイルの未保存の文書を使う")
-    XCTAssertNil(tab.group.editor.previewID, "仮のタブは普通になる")
-    XCTAssertEqual(tab.group.view.editor.shell.tabs.map(\.isDirty), [true, true], "diff タブにも未保存の印")
-  }
-
-  /// 未保存の文書を使う diff を仮で開くと、今の仮のタブは残り、diff は末尾の普通のタブになる。
-  func testAnUnsavedDocumentsDiffOpensAsAPinnedTabAtTheEnd() throws {
-    try repo.write("b.txt", "b\n")
-    let (tab, _) = tab()
-    let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
-    document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "Z")
-    try tab.group.editor.open(repo.url("b.txt"), as: .preview)
-    let preview = try XCTUnwrap(tab.group.editor.previewID)
-    let key = id("a.txt", .workingTree)
-    try tab.group.editor.openDiff(key, as: .preview)
-    XCTAssertEqual(tab.group.editor.previewID, preview, "今の仮のタブは残る")
-    XCTAssertEqual(tab.group.editor.tabs.map(\.id).last, .diff(key), "末尾の普通のタブ")
+    XCTAssertEqual(tab.group.editor.documents.map(\.isDirty), [true], "未保存のまま")
   }
 
   /// 未追跡のファイルの作業ツリー diff を見せている間に、未保存のままファイルが消え、保存時の本文へ戻して未保存が下りると、
-  /// その時点で diff が今の作業ツリーの姿（両側とも無い）に追いつく。
+  /// その時点で diff が今の作業ツリーの姿（両側とも無い）に追いつく。ほかの変更（未追跡の b.txt）を残し、消したときに変更が
+  /// 1 件も無くなって diff が閉じないようにする。
   func testAnUntrackedFilesDiffCatchesUpWhenTheUnsavedMarkClearsLater() throws {
+    try repo.write("b.txt", "b\n")
     try repo.write("u.txt", "u\n")
     let (tab, _) = tab()
     let document = try tab.group.editor.open(repo.url("u.txt"), as: .pinned)
     document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "Z")
-    let diff = try tab.group.editor.openDiff(id("u.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("u.txt", .workingTree))
     waitRows(diff, "追加が出る") { $0.style(ofLine: 0) == DiffStyle.added }
     try FileManager.default.removeItem(at: repo.url("u.txt"))
     pumpMain(until: { diff.workingTree?.workingStale == true }, "前提: 消えたと知り、読み直しを保留した")
@@ -82,19 +68,20 @@ extension EditorDiffTests {
   }
 
   /// index にも作業ツリーにも無いパス・HEAD にも index にも無いパスの diff は、種類ごとの理由の一文を出す。開いた後で両側とも
-  /// 無くなったときも同じ。
+  /// 無くなったときも同じ。ほかの変更（未追跡の b.txt）を残し、消したときに変更が 1 件も無くなって diff が閉じないようにする。
   func testADiffOfAPathInNeitherSideSaysWhy() throws {
+    try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
     let pane = tab.group.view.editor
-    let working = try tab.group.editor.openDiff(id("nope.txt", .workingTree), as: .pinned)
+    let working = try tab.group.editor.openDiff(id("nope.txt", .workingTree))
     pumpMain(until: { working.content == .unavailable(.nowhere) }, "作業ツリー")
     pumpMain(until: { pane.faceContent == .notice(.editorDiffNowhereInWorkingTree) })
-    let staged = try tab.group.editor.openDiff(id("nope.txt", .staged), as: .pinned)
+    let staged = try tab.group.editor.openDiff(id("nope.txt", .staged))
     pumpMain(until: { staged.content == .unavailable(.nowhere) }, "ステージ済み")
     pumpMain(until: { pane.faceContent == .notice(.editorDiffNowhereStaged) })
 
     try repo.write("u.txt", "u\n")
-    let untracked = try tab.group.editor.openDiff(id("u.txt", .workingTree), as: .pinned)
+    let untracked = try tab.group.editor.openDiff(id("u.txt", .workingTree))
     waitRows(untracked, "追加が出る") { $0.style(ofLine: 0) == DiffStyle.added }
     try FileManager.default.removeItem(at: repo.url("u.txt"))
     pumpMain(until: { untracked.content == .unavailable(.nowhere) }, "開いた後で両側とも無くなった")
@@ -112,7 +99,7 @@ extension EditorDiffTests {
     try FileManager.default.removeItem(at: repo.url("dir"))
     try FileManager.default.createSymbolicLink(at: repo.url("dir"), withDestinationURL: outside)
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("dir/f.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("dir/f.txt", .workingTree))
     waitRows(diff, "全部の行が削除") { self.removedLines($0) == [0, 1] }
     XCTAssertNil(diff.document, "リンク先の文書を開かない")
   }
@@ -127,19 +114,19 @@ extension EditorDiffTests {
     let first = commit()
     try repo.write("sub/t.txt", "changed\n")
     let (tab, _) = tab()
-    let dirty = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
+    let dirty = try tab.group.editor.openDiff(id("sub", .workingTree))
     waitRows(dirty, "中身だけ変わった") { _ in
       self.text(dirty.newRevision) == "Subproject commit \(first)-dirty"
     }
     XCTAssertEqual(text(dirty.old), "Subproject commit \(first)")
-    tab.group.editor.close(.diff(id("sub", .workingTree)))
+    tab.group.editor.closeDiff(on: .changes)
 
     XCTAssertTrue(repo.git(["-C", "sub", "commit", "-qam", "inside"]).isSuccess)
     let second = commit()
     pumpMain(until: {
       dirty.files.status?.entries["sub"]?.unstagedSubmodule == .commit(dirty: false)
     })
-    let moved = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
+    let moved = try tab.group.editor.openDiff(id("sub", .workingTree))
     pumpMain(until: { self.text(moved.newRevision) == "Subproject commit \(second)" }, "中でコミットした")
     XCTAssertEqual(text(moved.old), "Subproject commit \(first)")
     XCTAssertEqual(removedLines(try engine(moved.newSurface).rows), [0], "1 行の差")
@@ -149,7 +136,7 @@ extension EditorDiffTests {
       "コミットが動き、中も変わった")
 
     XCTAssertTrue(repo.git(["add", "sub"]).isSuccess)
-    let staged = try tab.group.editor.openDiff(id("sub", .staged), as: .pinned)
+    let staged = try tab.group.editor.openDiff(id("sub", .staged))
     pumpMain(until: { self.text(staged.newRevision) == "Subproject commit \(second)" }, "ステージ済み")
     XCTAssertEqual(text(staged.old), "Subproject commit \(first)")
   }
@@ -170,7 +157,7 @@ extension EditorDiffTests {
         self.repo.git(["-C", path, "rev-parse", "HEAD"]).stdoutText.trimmingCharacters(
           in: .newlines)
       }
-      let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
+      let diff = try tab.group.editor.openDiff(id(path, .workingTree))
       let first = head()
       pumpMain(until: { self.text(diff.newRevision) == "Subproject commit \(first)" }, path)
       XCTAssertTrue(
@@ -196,7 +183,7 @@ extension EditorDiffTests {
     try FileManager.default.removeItem(at: repo.url("sub"))
     try repo.write("sub", "a file\nnow\n")
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("sub", .workingTree))
     waitRows(diff, "置き換え") { self.removedLines($0) == [0] }
     XCTAssertNotNil(diff.document, "新しい側はファイルの文書")
     XCTAssertEqual(text(diff.old), "Subproject commit \(first)")
@@ -223,7 +210,7 @@ extension EditorDiffTests {
     let inner = repo.git(["-C", "sub", "rev-parse", "HEAD"]).stdoutText.trimmingCharacters(
       in: .newlines)
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("sub", .workingTree))
     waitRows(diff, "ファイル → サブモジュールの置き換え") { _ in
       self.text(diff.newRevision) == "Subproject commit \(inner)"
     }
@@ -242,7 +229,7 @@ extension EditorDiffTests {
     pumpMain(
       until: { diff.revisionHunks.isEmpty && diff.oldSide.lines == 1 }, "中の HEAD が届くと 1 行どうし")
 
-    let staged = try tab.group.editor.openDiff(id("sub", .staged), as: .pinned)
+    let staged = try tab.group.editor.openDiff(id("sub", .staged))
     pumpMain(until: { staged.content == .ready && staged.newRevision != nil }, "ステージ済み")
     XCTAssertEqual(
       staged.revisionHunks, [LineHunk(old: 0..<4, new: 0..<1)], "ステージ済みも丸ごとの置き換え")
@@ -253,7 +240,7 @@ extension EditorDiffTests {
   func testDeletingAFileAgainAfterItsIndexChangedShowsTheNewIndexAsRemoved() throws {
     let (tab, _) = tab()
     try FileManager.default.removeItem(at: repo.url("a.txt"))
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
 
     try repo.write("a.txt", "x\n")
@@ -278,7 +265,7 @@ extension EditorDiffTests {
       if hidden { try setUpWithError() }
       let (tab, _) = tab()
       try FileManager.default.removeItem(at: repo.url("a.txt"))
-      let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+      let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
       waitRows(diff, "全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
       try repo.write("a.txt", "x\n")
       XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)

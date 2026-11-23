@@ -6,7 +6,7 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// diff の追従——index・HEAD・作業ツリーの姿・ファイルタブでの編集が変わっても、並びは今の本文と古い側に付き、面は今の
+/// diff の追従——index・HEAD・作業ツリーの姿・文書の本体での編集が変わっても、並びは今の本文と古い側に付き、面は今の
 /// 本文を描き、見えている行と焦点を保つ。
 extension EditorDiffTests {
   /// diff を開いたまま git add すれば作業ツリー diff は変化なしになり、外のツールが書けば追従する。並びの差し込みは古い側の
@@ -14,7 +14,7 @@ extension EditorDiffTests {
   func testAWorkingTreeDiffFollowsTheIndexAndExternalWrites() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     waitRows(diff, "ステージすれば作業ツリーの変更は無い") { $0.isEmpty && $0.spans.allSatisfy { $0.style == nil } }
@@ -24,21 +24,21 @@ extension EditorDiffTests {
     XCTAssertEqual(old.text.lineCount, 5, "古い側はステージした本文")
   }
 
-  /// ファイルタブで編集してから diff タブへ戻ると、戻ったその時から削除行は編集で動いた本文の行に付いていて（離れていた
+  /// Files の画面で文書を編集してから Changes の diff へ戻ると、戻ったその時から削除行は編集で動いた本文の行に付いていて（離れていた
   /// 間の古い並びを置かない）、編集は diff に出る。
   func testEditsInTheFileTabShowInTheDiffOnComingBack() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
     let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { $0.boundaries == [1] }
-    tab.group.editor.activate(document)
+    tab.group.editor.show(document)
     let responder = document.surface.responder
     responder.perform(#selector(NSResponder.moveToBeginningOfDocument(_:)), with: nil)
     responder.perform(Selector(("insertText:")), with: "zero\n")
     XCTAssertEqual(document.text.lineCount, 6, "前提: 先頭に 1 行足した")
 
-    tab.group.editor.activate(.diff(id("a.txt", .workingTree)))
+    tab.group.editor.selectScreen(.changes)
     let rows = try engine(diff.newSurface).rows
     XCTAssertEqual(rows.boundaries, [2], "削除行は 1 行下がった TWO の前")
     XCTAssertEqual(removedLines(rows), [1])
@@ -50,7 +50,7 @@ extension EditorDiffTests {
   func testTheRowsStayOnTheTextWhenItShrinksBeforeTheNewBaseArrives() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\nfive\nsix\nseven\n")
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let document = try XCTUnwrap(diff.document)
     document.baseline = "zero\n"
@@ -66,11 +66,13 @@ extension EditorDiffTests {
   }
 
   /// 作業ツリー diff は開いた後の作業ツリーの姿に追従する——ファイルを消せば全部の行が削除、戻せば文書との差分、UTF-8 で
-  /// ない中身になれば理由の一文。
+  /// ない中身になれば理由の一文。ほかの変更（未追跡の b.txt）を残し、戻したときに変更が 1 件も無くなって diff が閉じないように
+  /// する。
   func testAWorkingTreeDiffFollowsTheFileBeingRemovedRestoredAndMadeBinary() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { $0.boundaries == [1] }
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     waitRows(diff, "消せば全部が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
@@ -87,7 +89,7 @@ extension EditorDiffTests {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
     let pane = tab.group.view.editor
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let surface = try engine(diff.newSurface)
     try Data([0xFF, 0xFE, 0x00, 0x01]).write(to: repo.url("a.txt"))
@@ -104,16 +106,16 @@ extension EditorDiffTests {
     let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     let responder = document.surface.responder
     responder.perform(Selector(("insertText:")), with: "Z")
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     pumpMain(until: { diff.files.status?.entries["a.txt"]?.unstaged == .deleted }, "消えた")
     XCTAssertTrue(diff.document === document, "前提: 未保存の間は手放さない")
 
-    tab.group.editor.activate(document)
+    tab.group.editor.show(document)
     try XCTUnwrap(responder.undoManager).undo()
     pumpMain(until: { !document.isDirty }, "undo で未保存でなくなる")
-    tab.group.editor.activate(.diff(id("a.txt", .workingTree)))
+    tab.group.editor.selectScreen(.changes)
     pumpMain(until: { diff.document == nil }, "消えたファイルの diff になる")
   }
 
@@ -128,7 +130,7 @@ extension EditorDiffTests {
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "long.txt"]).isSuccess)
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("long.txt", .staged), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("long.txt", .staged))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let before = try engine(diff.newSurface)
     before.flush()
@@ -148,7 +150,7 @@ extension EditorDiffTests {
     XCTAssertEqual(after.viewport.top.line, top)
 
     let (other, _) = self.tab()
-    let fresh = try other.group.editor.openDiff(id("long.txt", .staged), as: .pinned)
+    let fresh = try other.group.editor.openDiff(id("long.txt", .staged))
     waitRows(fresh, "開き直した diff") { !$0.isEmpty }
     let freshSurface = try engine(fresh.newSurface)
     pumpMain(until: { freshSurface.viewport.top.line > 0 }, "面が大きさを持ち、最初の変更区間へ送られる")
@@ -169,11 +171,10 @@ extension EditorDiffTests {
     var kept = Array(lines[100...])
     try repo.write("head.txt", kept.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "head.txt"]).isSuccess)
-    let modes = EditorDiffModeState()
-    let (tab, _) = tab(modes: modes)
+    let (tab, window) = tab()
     for mode in [EditorDiff.Mode.inline, .side] {
-      modes.select(mode)
-      let diff = try tab.group.editor.openDiff(id("head.txt", .staged), as: .pinned)
+      resize(window, width: mode == .side ? Self.sideWidth : 900)
+      let diff = try tab.group.editor.openDiff(id("head.txt", .staged))
       pumpMain(until: { diff.placement == .placed }, "\(mode): 最初の変更区間へ送る")
       let before = try engine(diff.newSurface)
       before.flush()
@@ -193,7 +194,7 @@ extension EditorDiffTests {
       after.flush()
       XCTAssertLessThan(after.viewportLines.visible, 100, "前提: 削除行は見えている高さより長い")
       XCTAssertEqual(after.viewportLines.first, 0, "\(mode): 削除行の頭から見え続ける")
-      tab.group.editor.close(.diff(id("head.txt", .staged)))
+      tab.group.editor.closeDiff(on: .changes)
     }
   }
 
@@ -212,7 +213,7 @@ extension EditorDiffTests {
       XCTAssertTrue(self.repo.git(["add", "long.txt"]).isSuccess)
     }
     try stage(index)
-    let diff = try tab.group.editor.openDiff(id("long.txt", .staged), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("long.txt", .staged))
     pumpMain(until: { diff.placement == .placed && diff.newSurface != nil }, "最初の変更区間へ送る")
     struct Read {
       let top: RowPosition
@@ -270,13 +271,13 @@ extension EditorDiffTests {
       ("a\nb\nc\nd\ne\nf\ng\nh\n", "a\nb\nC\nd\nE\nf\ng\nh\n", "a\nX\nC\nd\nE\nf\nY\nY2\nh\n"),
       ("a\nb\nX\nY", "a\nb\nc", "a\nb"),
     ]
-    let (tab, _) = tab(modes: EditorDiffModeState(mode: .side))
+    let (tab, _) = tab(width: Self.sideWidth)
     for (index, (staged, working, written)) in cases.enumerated() {
       let path = "s\(index).txt"
       try repo.write(path, staged)
       XCTAssertTrue(repo.git(["add", path]).isSuccess)
       try repo.write(path, working)
-      let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
+      let diff = try tab.group.editor.openDiff(id(path, .workingTree))
       pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
       let document = try XCTUnwrap(diff.document)
       XCTAssertTrue(document.waitUntilCaughtUp())
@@ -298,8 +299,8 @@ extension EditorDiffTests {
   /// 並列のまま作業ツリーのファイルが消えて新しい側の面が替わっても、左右の面はスクロールを共にし続ける。
   func testSideBySideKeepsSharingTheScrollWhenTheFileIsRemoved() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let (tab, _) = tab(modes: EditorDiffModeState(mode: .side))
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let (tab, _) = tab(width: Self.sideWidth)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     pumpMain(until: { diff.document == nil && diff.oldSurface != nil }, "消えたファイルの並列")
@@ -310,9 +311,8 @@ extension EditorDiffTests {
   /// 移らない）。
   func testTheFocusStaysInTheDiffWhenTheLeftSurfaceIsRebuilt() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let modes = EditorDiffModeState(mode: .side)
-    let (tab, window) = tab(modes: modes)
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let (tab, window) = tab(width: Self.sideWidth)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     let left = try XCTUnwrap(diff.oldSurface).responder
     window.makeFirstResponder(left)
@@ -337,7 +337,7 @@ extension EditorDiffTests {
     try repo.write("big.txt", staged.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "big.txt"]).isSuccess)
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("big.txt", .staged), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("big.txt", .staged))
     let observer = try XCTUnwrap(diff.rootObserver)
 
     waitUntil(10) {

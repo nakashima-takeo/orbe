@@ -3,16 +3,20 @@ import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
-/// 連の永続状態とエディター——開いている文書と仮のタブはそのまま書き、復元した状態は器が初めて載るとき（`materialize`）に
-/// 消費して開き（仮のタブは仮のまま）、未消費のまま保存すれば同じ形で書き戻す。検索の問いは復元で入力欄に戻り（探さない）、
-/// 変えれば書き戻す。制御 API の `open_file` は普通のタブで開く。cd で連が畳まれるときは、文書を行き先へ移す（`absorb`）か
-/// 根を付け替える（`rekey`）。
+/// 連の永続状態とエディター——開いている文書と仮の文書はそのまま書き、復元した状態は器が初めて載るとき（`materialize`）に
+/// 消費して開き（仮の文書は仮のまま）、未消費のまま保存すれば同じ形で書き戻す。検索の問いは復元で入力欄に戻り（探さない）、
+/// 変えれば書き戻す。復元した連は選んでいた画面で開き、選んでいない連は根で決まる画面で開く。制御 API の `open_file` は
+/// 普通の文書として開く。cd で連が畳まれるときは、文書を行き先へ移す（`absorb`）か根を付け替える（`rekey`。前の根の diff は
+/// 残さない）。
 ///
 /// 壊れると何が起きるか。一度も見なかった連の文書が終了で失われる。復元で読めないファイルが復元を止める。再起動で
-/// 仮のタブが普通のタブとして積もる。エージェントが見せたファイルを人の次のクリックが黙って入れ替える。再起動で
+/// 仮の文書が普通の文書として積もる。エージェントが見せたファイルを人の次のクリックが黙って入れ替える。再起動で
 /// 連の検索語と切替が消える、復元のたびに根の全体を探す。cd で連を移ったタブの文書が消える、未保存の編集が黙って上書きされる、
-/// 移った文書が外の書き換えを見失って ⌘S がエージェントの編集を潰す。
+/// 移った文書が外の書き換えを見失って ⌘S がエージェントの編集を潰す。再起動で選んでいた画面が戻らない。diff が自動で開いた
+/// だけで Changes を選んだことになり、git 管理外へ cd しても Changes の空の本体で開く。cd した後も前の worktree の diff が
+/// 本体に出る。
 @MainActor
 final class TabGroupTests: OrbeTestCase {
   private func file(_ name: String) throws -> URL {
@@ -40,14 +44,14 @@ final class TabGroupTests: OrbeTestCase {
       ))
   }
 
-  /// `open_file` は普通のタブで開き、仮のタブで開いているファイルなら普通のタブに変える。
+  /// `open_file` は普通の文書として開き、仮の文書として開いているファイルなら普通の文書に変える。
   func testOpenFileOpensAPinnedTab() throws {
     let group = group()
     try group.openFile(try file("a.txt"))
     XCTAssertNil(group.editor.preview)
     let b = try group.editor.open(try file("b.txt"), as: .preview)
     try group.openFile(b.url)
-    XCTAssertNil(group.editor.preview, "仮のタブは普通に変わる")
+    XCTAssertNil(group.editor.preview, "仮の文書は普通に変わる")
   }
 
   func testRestoredStateIsKeptUntilMaterializationAndThenOpened() throws {
@@ -65,7 +69,7 @@ final class TabGroupTests: OrbeTestCase {
     group.materialize()
     XCTAssertEqual(group.editor.documents.map(\.url), [a], "読めないパスは黙って落ちる")
     XCTAssertEqual(group.editor.activeDocument?.url, a)
-    XCTAssertEqual(group.editor.preview?.url, a, "仮のタブは仮のまま戻る")
+    XCTAssertEqual(group.editor.preview?.url, a, "仮の文書は仮のまま戻る")
     XCTAssertEqual(changes, 1)
     XCTAssertEqual(
       group.groupState()?.editor,
@@ -94,7 +98,37 @@ final class TabGroupTests: OrbeTestCase {
       SearchQuery(pattern: "needle", matchCase: true, wholeWord: true))
   }
 
+  /// 復元した連は選んでいた画面で開く。画面を選んでいない連は、根が git の worktree の根なら Changes、そうでなければ Files で
+  /// 開く。
+  func testARestoredGroupOpensOnTheChosenScreenOrOnTheOneItsRootDecides() throws {
+    let root = GitWorktreeRoot.root(of: try TempGitRepo().root)
+    let surfaces = EditorSurfaces(queriesRoot: nil)
+    XCTAssertEqual(TabGroup(key: root, editorSurfaces: surfaces).editor.screen, .changes)
+    XCTAssertEqual(
+      TabGroup(key: TestScratch.caseDir.path, editorSurfaces: surfaces).editor.screen, .files)
+    let restored = TabGroup(key: root, state: EditorState(screen: .files), editorSurfaces: surfaces)
+    XCTAssertEqual(restored.editor.screen, .files)
+  }
+
   // MARK: - cd で連が畳まれる
+
+  /// Changes の diff が自動で開いただけの連は画面を選んだことにならない——最後のタブが git 管理外のフォルダへ cd して根が
+  /// 付け替わると、Files で開き、前の根の Changes の diff は残らない。
+  func testAGroupWhoseChangesDiffOnlyOpenedByItselfOpensOnFilesOutsideGit() throws {
+    try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "edited\n")
+    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    hostEditor(tab, width: 900)
+    let pane = tab.group.view.editor
+    pumpMain(until: { pane.diff != nil }, "前提: Changes の diff が自動で開く")
+    XCTAssertNil(tab.group.groupState(), "画面を選んでいないので、書くものが無い")
+
+    tab.group.rekey(TestScratch.caseDir.path)
+    XCTAssertEqual(tab.group.editor.screen, .files)
+    tab.group.editor.selectScreen(.changes)
+    XCTAssertNil(pane.diff, "前の根の diff は残らない")
+  }
 
   /// 連の最後のタブが行き先の無い根へ移ると、連ごとキーとエディター面の根が付け替わる（文書はそのまま）。
   func testRekeyMovesTheKeyAndTheEditorRoot() throws {
@@ -108,8 +142,9 @@ final class TabGroupTests: OrbeTestCase {
     XCTAssertTrue(group.editor.activeDocument === a)
   }
 
-  /// 畳まれる連の文書は行き先の列の末尾へ移り、行き先の焦点は保たれる。同じ実ファイルのタブは行き先の 1 枚にまとまる——元の
-  /// 文書だけが未保存なら元の文書がその位置に入り、行き先の焦点がその文書だったなら焦点も入れ替わる。元の連は空になる。
+  /// 畳まれる連の文書は行き先の列の末尾へ移り、行き先の焦点（列の先頭）は保たれる。同じ実ファイルの文書は行き先の 1 つに
+  /// まとまる——元の文書だけが未保存なら元の文書がその位置に入り、行き先の焦点がその文書だったなら焦点も入れ替わる。元の連は
+  /// 空になる。
   func testAbsorbAppendsDocumentsAndKeepsTheDestinationsActive() throws {
     let dest = group()
     let from = group()
@@ -124,9 +159,8 @@ final class TabGroupTests: OrbeTestCase {
 
     dest.absorb(from)
 
-    XCTAssertEqual(
-      dest.editor.tabs.map(\.id), [.document(a.url), .document(shared), .document(b.url)])
-    XCTAssertTrue(dest.editor.documents[1] === edited, "元だけが未保存なら元の文書が入る")
+    XCTAssertEqual(dest.editor.documents.map(\.url), [shared, a.url, b.url])
+    XCTAssertTrue(dest.editor.documents[0] === edited, "元だけが未保存なら元の文書が入る")
     XCTAssertTrue(dest.editor.activeDocument === edited, "行き先の焦点の位置を保ち、入れ替わった文書が焦点")
     XCTAssertTrue(from.editor.documents.isEmpty)
     XCTAssertEqual(changes, 1, "変化は 1 本の通知")
@@ -150,7 +184,7 @@ final class TabGroupTests: OrbeTestCase {
     XCTAssertTrue(dest.editor.documents[0] === mine)
   }
 
-  /// 行き先が空なら元の焦点を引き継ぐ。仮のタブは、行き先に仮が無ければ仮のまま移る。
+  /// 行き先が空なら元の焦点を引き継ぐ。仮の文書は、行き先に仮が無ければ仮のまま移る。
   func testAbsorbIntoAnEmptyGroupTakesTheActiveAndThePreview() throws {
     let dest = group()
     let from = group()
@@ -164,7 +198,7 @@ final class TabGroupTests: OrbeTestCase {
     XCTAssertTrue(dest.editor.preview === p)
   }
 
-  /// 行き先の仮のタブの文書が元の未保存の文書に替われば、仮でなくなる——次に仮で開いたファイルが入れ替えで黙って捨てない。
+  /// 行き先の仮の文書の文書が元の未保存の文書に替われば、仮でなくなる——次に仮で開いたファイルが入れ替えで黙って捨てない。
   func testAbsorbPinsTheTemporaryTabThatTakesOverAnUnsavedDocument() throws {
     let dest = group()
     let from = group()

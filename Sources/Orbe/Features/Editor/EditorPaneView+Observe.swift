@@ -30,10 +30,11 @@ extension EditorPaneView {
       } : nil
     document.onSelectionChange =
       on
-      ? { [weak self] in
+      ? { [weak self, unowned document] in
         guard let self else { return }
         search.selectionDidChange()
         occurrences.selectionDidChange()
+        searchPlacedSelectionDidChange(in: document)
       } : nil
     document.onTextChange =
       on

@@ -153,10 +153,6 @@ final class FileTreeTests: OrbeTestCase {
     tree.reveal(URL(fileURLWithPath: "/etc/hosts"))
     XCTAssertNil(tree.selected, "根の外は選択を外す")
 
-    tree.revealDirectory(repo.url("docs"))
-    XCTAssertTrue(tree.expanded.contains("docs"))
-    XCTAssertEqual(tree.selected, "docs")
-
     tree.collapseAll()
     XCTAssertEqual(names(tree), ["docs", "src", "a.txt"], "根は開いたまま全部畳む")
   }

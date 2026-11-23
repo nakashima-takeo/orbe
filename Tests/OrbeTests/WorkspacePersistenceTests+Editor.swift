@@ -7,7 +7,7 @@ import XCTest
 /// タブが読めなければ仮無しへ）、そして「フィールドを足して encode / decode を忘れる」を検出する全キーの往復。
 ///
 /// 壊れると何が起きるか。再起動で開いていたファイルが戻らない。1 つの連の editor の破損で全 workspace の復元が
-/// 消える。仮のタブの項目が壊れただけで開いていた文書が戻らない。新しいフィールドが片方だけに書かれて黙って落ちる。
+/// 消える。仮の文書の項目が壊れただけで開いていた文書が戻らない。新しいフィールドが片方だけに書かれて黙って落ちる。
 extension WorkspacePersistenceTests {
   func testGroupStateWritesTheRootAndTheEditor() throws {
     let enc = JSONEncoder()
@@ -45,7 +45,7 @@ extension WorkspacePersistenceTests {
     XCTAssertEqual(groups[0].editor, EditorState(documents: .init(open: ["/d/x"], active: "/d/x")))
     XCTAssertEqual(
       groups[1].editor, EditorState(documents: .init(open: ["/e/x"], active: "/e/x")),
-      "読めない仮のタブは仮無し（列とアクティブは残る）")
+      "読めない仮の文書は仮無し（列とアクティブは残る）")
     XCTAssertEqual(
       groups[3].editor, EditorState(documents: .init(open: ["/h/x"], active: "/h/x")),
       "知らないキーは読み飛ばす")
@@ -68,7 +68,7 @@ extension WorkspacePersistenceTests {
     let group = GroupState(
       root: "/w",
       editor: EditorState(
-        documents: .init(open: ["/w/a"], active: "/w/a", preview: "/w/a"),
+        documents: .init(open: ["/w/a"], active: "/w/a", preview: "/w/a"), screen: .pullRequest,
         search: SearchQuery(pattern: "p", matchCase: true, wholeWord: true, isRegex: true)))
     let data = try JSONEncoder().encode(group)
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

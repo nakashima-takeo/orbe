@@ -1,10 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// サイドバー: ソース管理パネル。上から、パネルヘッダー → 実行中の帯（0.3 秒を超えて走る操作があるときだけ）→
+/// 左の列: ソース管理パネル。上から、パネルヘッダー → 実行中の帯（0.3 秒を超えて走る操作があるときだけ）→
 /// 親「ソース管理」（見出し・メッセージ欄・コミットボタン・失敗の文・変更の列〔2 つの子の区分。AppKit〕）→ 境目 → グラフの枠
-/// （区切り線・見出し「グラフ」・グラフの列。AppKit）。git 管理外の根では、ヘッダーの下に理由の一文だけ。部分ごとに別の view
-/// にして、読む値が変わった部分だけを組み直す（status が届くたびに欄まで組み直さない）。根が変わると面は panel と列を組で
+/// （区切り線・見出し「グラフ」・グラフの列。AppKit）。git 管理外の根では、ヘッダーの下に「表示できません」の一言だけ
+/// （見出しと理由は本体が出す）。部分ごとに別の view にして、読む値が変わった部分だけを組み直す（status が届くたびに欄まで組み直さない）。根が変わると面は panel と列を組で
 /// 作り直すので、中身は panel で同一視する（そうしないと載せた列・欄の AppKit と言語の追従が前の根のまま残る）。
 struct ScmPanelView: View {
   let panel: ScmPanel
@@ -18,13 +18,7 @@ struct ScmPanelView: View {
     EditorSidebarPanel {
       EditorPanelHeader(title: l10n.string(.editorScmTitle)) { EmptyView() }
       if panel.isManaged == false {
-        Text(l10n.string(.editorScmNotManaged))
-          .font(Font.theme.editorScmNote)
-          .foregroundStyle(Color.theme.editorTertiary)
-          .fixedSize(horizontal: false, vertical: true)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 18)
-          .padding(.vertical, Theme.Space.step)
+        EditorSidebarNote(text: l10n.string(.editorUnavailable))
       } else {
         ScmBand(control: panel.control)
         ScmSplit(panel: panel, list: list, graphList: graphList, sidebar: sidebar)

@@ -1,10 +1,12 @@
 import Foundation
 
 /// PR の diff の出どころ——古い側は PR のマージベースのコミットの版（rename なら元のパス）、新しい側は PR の先頭のコミットの
-/// 版。両側とも読むだけ。diff を開いたときの PR の、PR ごとの状態を持ち続け、ブランチを切り替えても同じ PR の diff を出す。PR に push が
-/// あって両端が変わったら、新しい両端の版の本文を読み直す。両端が変わらない間（中身の読み直し・確認済みの切り替え）は、
-/// 読んだ本文で同じ答えを返し続ける。版の本文を読めなかったときだけは、PR ごとの状態が中身の読み直しを始めるたびに 1 回
-/// 読み直す（LFS の取得のような一時的な失敗から、再読込で戻れる。読み直す間は前の答えを返す）。
+/// 版。両側とも読むだけ。diff を開いたときの PR の、PR ごとの状態を持ち続ける。
+/// PR ごとの状態を見る（GitHub を読むきっかけになる）のは、pane が見始めてから見終わるまで（本体に出ていて、面が見えている
+/// 間）だけ——見ていない間は前の両端の本文のまま残り、見始めたときの読み直しで追いつく。PR に push があって両端が変わったら、
+/// 新しい両端の版の本文を読み直す。両端が変わらない間（中身の読み直し・確認済みの切り替え）は、読んだ本文で同じ答えを返し
+/// 続ける。版の本文を読めなかったときだけは、PR ごとの状態が中身の読み直しを始めるたびに 1 回読み直す（LFS の取得のような
+/// 一時的な失敗から、再読込で戻れる。読み直す間は前の答えを返す）。
 @MainActor
 final class EditorDiffPullRequest: EditorDiffSource {
   let id: EditorDiff.Key
@@ -21,15 +23,19 @@ final class EditorDiffPullRequest: EditorDiffSource {
     self.id = id
     self.state = state
     state.addObserver(self)
-    state.beginWatching()
   }
 
   deinit {
     let state = self.state
-    MainActor.assumeIsolated {
-      state.removeObserver(self)
-      state.endWatching()
-    }
+    MainActor.assumeIsolated { state.removeObserver(self) }
+  }
+
+  func beginWatching() {
+    state.beginWatching()
+  }
+
+  func endWatching() {
+    state.endWatching()
   }
 
   func resolve() -> EditorDiff.Resolution {

@@ -22,9 +22,10 @@ extension WindowController {
       self?.scheduleSave()
     }
     group.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
+    group.onLocationChange = { [weak self] in self?.refreshChrome() }
     group.view.configure(
       translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
-      sidebar: editorSidebar, diffModes: editorDiffModes)
+      sidebar: editorSidebar)
     group.view.editor.settings = { [weak self, weak group] in
       guard let self else { return EffectiveSettings(SettingsLayer()) }
       let workspace = workspaces.first { $0.tabs.contains { $0.group === group } }
@@ -34,9 +35,9 @@ extension WindowController {
   }
 
   /// cd で根が `key` に変わったタブの所属を付け替える。元の連に他のタブが残るなら、そのタブだけが行き先の連（無ければ
-  /// 新しい連）へ移る。元の連の最後のタブなら、行き先が無ければ連ごとキーを付け替え、あれば元のエディターのタブ
-  /// （文書と diff）を行き先へ移して連を畳む。エディターで見せているかは窓の状態なので変わらず、付け替えの後の照合が
-  /// 行き先の器へ写す。
+  /// 新しい連）へ移る。元の連の最後のタブなら、行き先が無ければ連ごとキーを付け替え、あれば元のエディターの開いている
+  /// 文書を行き先へ移して連を畳む（diff は移らない → `TabGroup.absorb`）。エディターで見せているかは窓の状態なので変わらず、
+  /// 付け替えの後の照合が行き先の器へ写す。
   func moveToGroup(_ tab: TerminalTab, key: String) {
     guard let ws = workspaces.first(where: { $0.tabs.contains { $0 === tab } }) else { return }
     let old = tab.group

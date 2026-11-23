@@ -262,7 +262,8 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
   // MARK: - chrome
 
-  /// 上段の現在地は見せているものに追従する——端末は cwd、エディターは worktree ルートの下の位置。
+  /// 上段の現在地は見せているものに追従する——端末は cwd、エディターは画面から導く（Files は worktree ルートの下の文書の位置、
+  /// Changes は根だけ）。
   func testLocationFollowsWhatIsShown() throws {
     let root = TestScratch.caseDir
       .appendingPathComponent("orbe-faces-\(UUID().uuidString)")
@@ -296,6 +297,11 @@ final class WindowControllerFacesTests: OrbeTestCase {
     wc.flushChrome()
     XCTAssertEqual(
       wc.statusModel.location, [.text(outside.resolvingSymlinksInPath().path)], "根の外の文書は絶対パス 1 本")
+
+    let group = try XCTUnwrap(wc.activeTab).group
+    MainActor.assumeIsolated { group.editor.selectScreen(.changes) }
+    wc.flushChrome()
+    XCTAssertEqual(wc.statusModel.location, [.dim(normalizedRoot)], "Changes の画面は根だけ")
   }
 
   /// 事実 → 表現の写し: `~` 短縮は純粋なパス片にかけてから区切りを足す（短縮が末尾の `/` を落とすため）。
@@ -311,13 +317,10 @@ final class WindowControllerFacesTests: OrbeTestCase {
       "根の外の文書だけ強く")
   }
 
-  /// 事実 → 表現の写し: PR の diff は `PR #N · ディレクトリ/ファイル名`。根の直下のファイルはディレクトリの断片を出さない。
-  func testPullRequestLocationPartsSplitTheDirectoryAndTheName() {
+  /// 事実 → 表現の写し: PR の画面は `PR #N`（強く）と根（弱く。`~` 短縮）。
+  func testPullRequestLocationPartsAreTheNumberAndTheRoot() {
     XCTAssertEqual(
-      StatusRowModel.parts(of: .pullRequest(number: 9, relative: "src/a/b.swift")),
-      [.accent("PR #9"), .dim(" · "), .dim("src/a/"), .text("b.swift")])
-    XCTAssertEqual(
-      StatusRowModel.parts(of: .pullRequest(number: 9, relative: "README.md")),
-      [.accent("PR #9"), .dim(" · "), .text("README.md")])
+      StatusRowModel.parts(of: .pullRequest(number: 9, root: NSHomeDirectory() + "/dev")),
+      [.accent("PR #9"), .dim(" · ~/dev")])
   }
 }

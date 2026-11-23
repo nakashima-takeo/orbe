@@ -87,6 +87,17 @@ struct ScmChanges {
     }
   }
 
+  /// 区分 `section` の、パス `path` のファイル（無ければ nil）。
+  func file(in section: ScmSection, path: String) -> File? {
+    index(in: section, path: path).map { files(in: section)[$0] }
+  }
+
+  /// 区分 `section` の列での、パス `path` のファイルの位置（無ければ nil）。列はパス順なので、二分探索で引く（列は数万件に
+  /// なりうる）。
+  func index(in section: ScmSection, path: String) -> Int? {
+    FileNameOrder.index(of: path, in: files(in: section), path: \.path)
+  }
+
   /// status から 2 区分を作る（裏で呼ぶ）。
   static func build(_ status: GitStatus) -> ScmChanges {
     var staged: [(FileNameOrder.PathKey, File)] = []
@@ -134,6 +145,27 @@ struct ScmChanges {
       if entry.isConflicted { return count + 1 }
       return count + (entry.staged == nil ? 0 : 1) + (entry.unstaged == nil ? 0 : 1)
     }
+  }
+}
+
+extension FileNameOrder {
+  /// パス順（`comparePaths`）に並んだ `items` のうち、パスが `path` の要素の位置（無ければ nil）。二分探索で引く。
+  static func index<Item>(of path: String, in items: [Item], path itemPath: (Item) -> String)
+    -> Int?
+  {
+    let key = PathKey(path)
+    func order(_ item: Item) -> ComparisonResult { comparePaths(PathKey(itemPath(item)), key) }
+    var low = 0
+    var high = items.count
+    while low < high {
+      let middle = (low + high) / 2
+      if order(items[middle]) == .orderedAscending { low = middle + 1 } else { high = middle }
+    }
+    while low < items.count, order(items[low]) == .orderedSame {
+      if itemPath(items[low]) == path { return low }
+      low += 1
+    }
+    return nil
   }
 }
 

@@ -19,7 +19,7 @@ final class EditorPaneViewTests: OrbeTestCase {
     let url = try caseFile("a.swift", "let a = 1\n")
     let document = try XCTUnwrap(try tab.group.editor.open(url, as: .pinned))
     XCTAssertTrue(pane.document === document, "セッションの変化が器へ写る")
-    XCTAssertTrue(document.surface.view.superview === pane)
+    XCTAssertTrue(document.surface.view.superview === pane.belowBar)
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect, "骨の右下の本体いっぱい")
     XCTAssertTrue(pane.focusTarget === document.surface.responder, "行き先はテキスト面")
     XCTAssertTrue(window.firstResponder === document.surface.responder, "配下にあった焦点は行き先へ移る")
@@ -52,7 +52,7 @@ final class EditorPaneViewTests: OrbeTestCase {
 
     tab.group.editor.activate(first)
     XCTAssertTrue(pane.document === first)
-    XCTAssertTrue(first.surface.view.superview === pane)
+    XCTAssertTrue(first.surface.view.superview === pane.belowBar)
     XCTAssertNil(second.surface.view.superview)
     XCTAssertEqual(bodyText(first), "Xone", "戻っても本文はその文書の面に残っている")
 

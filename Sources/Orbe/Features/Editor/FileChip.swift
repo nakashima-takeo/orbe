@@ -2,7 +2,7 @@ import Foundation
 import OrbeEditorCore
 import SwiftUI
 
-/// 種別 → 見た目（グリフ・色相）の唯一の決定点。ツリー・ファイルタブ・パンくずはこれしか知らないので、
+/// 種別 → 見た目（グリフ・色相）の唯一の決定点。ツリーと一覧の行はこれしか知らないので、
 /// 将来アイコンテーマへ差し替えるときはこの型の中身を変えるだけで済む。
 /// 言語は `SyntaxLanguage.detect`（15 言語）で決め、未知は拡張子の頭文字を大文字にした mono（拡張子が
 /// 無ければ `·`）。swift / md / json 以外の言語にも色相表から暫定で割り当てる。
@@ -67,17 +67,15 @@ extension FileChip.Hue {
   }
 }
 
-/// 種別チップ（角丸の単色文字 ＋ 色相 .16 の淡い地）。ツリー行・ファイルタブは 14（radius 3）、パンくずは
-/// 12（radius 2）。字はグリフの字数と寸法で決まる。
+/// ツリー行の種別チップ（14・radius 3。角丸の単色文字 ＋ 色相 .16 の淡い地）。字はグリフの字数と寸法で決まる。
 struct FileChipView: View {
   let chip: FileChip
-  var size: CGFloat = Theme.Layout.editorChip
   @Environment(\.colorScheme) private var scheme
 
   static let groundAlpha: Double = 0.16
 
   var body: some View {
-    let small = size < Theme.Layout.editorChip
+    let size = Theme.Layout.editorChip
     let color = chip.hue.map { Color(nsColor: $0.color) } ?? Color.theme.textPrimary
     let ground =
       chip.hue == nil ? EditorInk(scheme).fill(Self.groundAlpha) : color.opacity(Self.groundAlpha)
@@ -86,6 +84,6 @@ struct FileChipView: View {
       .foregroundStyle(color)
       .frame(width: size, height: size)
       .background(
-        RoundedRectangle(cornerRadius: small ? 2 : Theme.Radius.xs).fill(ground))
+        RoundedRectangle(cornerRadius: Theme.Radius.xs).fill(ground))
   }
 }

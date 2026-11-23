@@ -103,14 +103,14 @@ extension PrRowView {
       glyphs: .chrome(emoji: emoji))
   }
 
-  /// ファイルの行。変化の印は、追加は A、ほかは M（ソース管理と同じ 2 色の印に寄せる）。リストならディレクトリも出す。
+  /// ファイルの行（変化の印は `GitStatus.Badge.init(_:)` の PR の規則）。リストならディレクトリも出す。
   private static func file(
     _ path: String, change: GitHubPullRequestContent.Change, depth: Int, _ facts: Facts,
     _ emoji: NSFont?
   ) -> File {
     let viewed = facts.viewed > 0
     let chip = FileChip.resolve(URL(fileURLWithPath: (path as NSString).lastPathComponent))
-    let badge: GitStatus.Badge = change == .added ? .added : .modified
+    let badge = GitStatus.Badge(change)
     return File(
       check: viewed ? .on : .off, depth: depth, chip: chip,
       chipText: TextLine(

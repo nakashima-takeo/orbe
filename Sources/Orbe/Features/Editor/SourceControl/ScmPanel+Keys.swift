@@ -2,26 +2,80 @@ import Foundation
 
 /// 変更の列の選択・キー・押下（検索結果の列と同じ型。→ `ScmListSource`）。
 extension ScmPanel {
+  /// 変更の列の状態。git 管理外・親「ソース管理」を畳んでいる（欄と列が左の列に出ていない）なら無い。行があればある。
+  /// 無ければ、git 管理下かの判定の前・行が今の status からまだ出来ていない間はこれから来る、それ以外（変更なし）は無い。
+  var listState: EditorListState {
+    if isManaged == false || !isRepositoryOpen { return .none }
+    if !layout.items.isEmpty { return .rows }
+    return isManaged == nil || rowsArePending ? .coming : .none
+  }
+
+  /// 列の状態を観測し、`reported` から変わったら知らせる。状態を決める値（判定・親の開閉・行の組・status から行を作って
+  /// いるか〔`changesAreStale`・`buildJob`〕）はどれも観測するので、どの道で変わってもここが知らせる。
+  func observeListState(_ reported: EditorListState) {
+    withObservationTracking {
+      _ = listState
+    } onChange: { [weak self] in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        let state = self.listState
+        if state != reported { self.onListStateChange() }
+        self.observeListState(state)
+      }
+    }
+  }
+
   /// 行の開き方。
   struct Opening: Equatable {
-    let mode: EditorSession.OpenMode
     let focusesText: Bool
 
-    /// シングルクリック・キーで行へ動いた: 仮で開き、焦点は列のまま。
-    static let browse = Opening(mode: .preview, focusesText: false)
-    /// ダブルクリック・Enter: 普通に開いて本文へ。
-    static let commit = Opening(mode: .pinned, focusesText: true)
+    /// シングルクリック・キーで行へ動いた: 開き、焦点は列のまま。
+    static let browse = Opening(focusesText: false)
+    /// ダブルクリック・Enter: 開いて本文へ。
+    static let commit = Opening(focusesText: true)
   }
 
   /// 選んだファイル行を開く（見出し・選択なしは開かない）。
   func openSelection(_ opening: Opening) {
     navigation.drop()
-    guard let selection, let path = selection.path else { return }
-    let kind: EditorDiff.Kind = selection.section == .staged ? .staged : .workingTree
-    onOpenDiff(EditorDiff.Key(root: root, path: path, kind: kind), opening)
+    guard let selection, let key = diffKey(of: selection) else { return }
+    onOpenDiff(key, opening)
   }
 
-  /// ↑↓: 子の見出しとファイル行を順に渡る。未選択なら先頭。ファイル行へ動けば仮で開く（間引く）。
+  /// 行 `id` の diff（見出しは nil）。「ステージされている変更」はステージ済み diff、「変更」は作業ツリー diff。
+  func diffKey(of id: ScmRowID) -> EditorDiff.Key? {
+    guard let path = id.path else { return nil }
+    return EditorDiff.Key(
+      root: root, path: path, kind: id.section == .staged ? .staged : .workingTree)
+  }
+
+  /// diff `key` の行（作業ツリー diff は「変更」、ステージ済み diff は「ステージされている変更」の、そのパスの行）。
+  func rowID(of key: EditorDiff.Key) -> ScmRowID {
+    ScmRowID(section: key.kind == .staged ? .staged : .changes, path: key.path)
+  }
+
+  /// diff `key` の行のファイル（区分を畳んでいても引ける。行が無ければ nil）。
+  func file(of key: EditorDiff.Key) -> ScmChanges.File? {
+    changes.file(in: rowID(of: key).section, path: key.path)
+  }
+
+  /// 行 `id` の祖先（親「ソース管理」とその区分）を開き、行が組に在れば選ぶ。区分を開いた後の組み直しを待つ間と、status が
+  /// まだ届かない間は、行が組に無いので選ばない。選んだら true。
+  func reveal(_ id: ScmRowID) -> Bool {
+    setRepositoryOpen(true)
+    if !isOpen(id.section) { toggle(id.section) }
+    guard layout.index[id] != nil else { return false }
+    select(id)
+    return true
+  }
+
+  /// 本体に自動で開く行——選んでいるファイル行、無ければ先頭のファイル行（ファイル行が無ければ nil）。
+  var rowToOpen: ScmRowID? {
+    if let selection, selection.path != nil, layout.index[selection] != nil { return selection }
+    return layout.items.indices.lazy.compactMap(layout.id(at:)).first { $0.path != nil }
+  }
+
+  /// ↑↓: 子の見出しとファイル行を順に渡る。未選択なら先頭。ファイル行へ動けば diff を開く（間引く）。
   func moveSelection(by delta: Int, isRepeat: Bool, in layout: ScmLayout) {
     let rows = layout.items.indices
     guard !rows.isEmpty else { return }
@@ -47,7 +101,7 @@ extension ScmPanel {
     }
   }
 
-  /// →: 畳んだ見出しなら開き、開いた見出しなら最初のファイル行へ動いて仮で開く（間引く）。
+  /// →: 畳んだ見出しなら開き、開いた見出しなら最初のファイル行へ動いて diff を開く（間引く）。
   func moveRight(isRepeat: Bool, in layout: ScmLayout) {
     guard let selection, selection.path == nil else { return }
     if !isOpen(selection.section) {

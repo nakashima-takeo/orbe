@@ -5,7 +5,7 @@ import Foundation
 /// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`＋
 /// `L10nTable+Attention.swift`＋`L10nTable+WorktreePalette.swift`＋`L10nTable+ClosedAgents.swift`＋
 /// `L10nTable+Tasks.swift`＋`L10nTable+Automation.swift`＋`L10nTable+Secretary.swift`＋`L10nTable+Board.swift`＋
-/// `L10nTable+PullRequest.swift`＋`L10nTable+SourceControl.swift`）を `table` が結合する。
+/// `L10nTable+PullRequest.swift`＋`L10nTable+SourceControl.swift`＋`L10nTable+ItemList.swift`）を `table` が結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
     baseTable
@@ -19,6 +19,7 @@ enum L10n {
     .merging(secretaryTable) { a, _ in a }
     .merging(boardTable) { a, _ in a }
     .merging(pullRequestTable) { a, _ in a }
+    .merging(itemListTable) { a, _ in a }
     .merging(sourceControlTable) { a, _ in a }
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
@@ -148,16 +149,21 @@ enum L10n {
       "Add one of VS Code, Cursor, Windsurf, Zed, or Sublime to your PATH, or set a GUI editor in $VISUAL/$EDITOR."
     ),
 
-    // MARK: Editor 面（空状態）
+    // MARK: Editor 面（空・使えないときの表示）
     .editorEmptyLead: ("ファイルを開いて編集を開始", "Open a file to start editing"),
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
+    .editorUnavailable: ("表示できません", "Unavailable"),
+    .editorScmUnavailableTitle: ("変更を表示できません", "Can’t Show Changes"),
+    .editorScmNoChanges: ("変更なし", "No Changes"),
+    .editorScmNoChangesLead: ("作業ツリーは HEAD と同じです。", "The working tree matches HEAD."),
+    .editorPrNone: ("プルリクエストなし", "No Pull Request"),
+    .editorPrNoneLead: (
+      "このブランチのプルリクエストは、まだありません。", "This branch doesn’t have a pull request yet."
+    ),
+    .editorPrUnavailableTitle: ("プルリクエストを表示できません", "Can’t Show the Pull Request"),
 
     // MARK: Editor 面（diff）
-    .editorDiffWorkingTree: ("（作業ツリー）", "(Working Tree)"),
-    .editorDiffStaged: ("（ステージ済み）", "(Staged)"),
-    .editorDiffInline: ("インライン", "Inline"),
-    .editorDiffSide: ("並列", "Side by Side"),
     .editorDiffNotText: (
       "バイナリか UTF-8 でないファイルのため、差分を表示できません",
       "Can't show the diff: the file is binary or not UTF-8"
@@ -187,6 +193,14 @@ enum L10n {
       "Can't show the diff: the path is neither in HEAD nor in the index"
     ),
 
+    // MARK: Editor 面（骨: 上のバー）
+    .editorScreenChanges: ("Changes", "Changes"),
+    .editorScreenPullRequest: ("PR", "PR"),
+    .editorScreenFiles: ("Files", "Files"),
+    .editorBarHideSidebar: ("サイドバーを閉じる", "Hide Sidebar"),
+    .editorBarShowSidebar: ("サイドバーを開く", "Show Sidebar"),
+    .editorBarShowTerminal: ("端末を表示", "Show Terminal"),
+
     // MARK: Editor 面（骨: エクスプローラー）
     .editorExplorerTitle: ("エクスプローラー", "Explorer"),
     .editorNewFile: ("新規ファイル", "New File"),
@@ -195,15 +209,13 @@ enum L10n {
     .editorExpandAll: ("すべて展開", "Expand All"),
 
     // MARK: Editor 面（プロジェクト検索）
-    .editorRailSearch: ("検索 (⌘⇧F)", "Search (⌘⇧F)"),
     .editorSearchTitle: ("検索", "Search"),
     .editorSearchPlaceholder: ("検索", "Search"),
     .editorSearchMatchCase: ("大文字と小文字を区別 (⌥⌘C)", "Match Case (⌥⌘C)"),
     .editorSearchWholeWord: ("単語単位で検索 (⌥⌘W)", "Match Whole Word (⌥⌘W)"),
     .editorSearchRegex: ("正規表現を使用 (⌥⌘R)", "Use Regular Expression (⌥⌘R)"),
-    .editorSearchRefresh: ("更新", "Refresh"),
-    .editorSearchStop: ("停止", "Stop"),
-    .editorSearchClear: ("クリア", "Clear"),
+    .editorSearchBackToTree: ("ツリーに戻る", "Back to Tree"),
+    .editorSearchStop: ("止める", "Stop"),
     // 件数の文: %1$@ はファイル数の句、%2$@ は結果数の句（日英で語順が違う）。
     .editorSearchSummary: ("%1$@内に %2$@", "%2$@ in %1$@"),
     .editorSearchFilesOne: ("%lld ファイル", "%lld file"),

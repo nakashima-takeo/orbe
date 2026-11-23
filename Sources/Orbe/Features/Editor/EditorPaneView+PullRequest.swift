@@ -9,6 +9,12 @@ extension EditorPaneView {
 
   func wirePullRequest() {
     pullRequest.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
+    pullRequest.onPullRequestChange = { [weak self] in
+      self?.reconcileWithLists()
+      self?.refreshCurrentItem()
+      self?.onPullRequestChange()
+    }
+    pullRequest.onListStateChange = { [weak self] in self?.reconcileWithLists() }
     pullRequest.onFocusWillClose = { [weak self] in
       guard let self, focusIsInPullRequest else { return }
       reclaimSidebarFocus()
@@ -19,8 +25,8 @@ extension EditorPaneView {
     }
   }
 
-  /// PR のパネルが見えている（サイドバーが開いていて、PR のパネルを出している）。
-  var showsPullRequest: Bool { sidebar.isOpen && sidebar.panel == .pullRequest }
+  /// PR のパネルが見えている（左の列が開いていて、PR のパネルを出している）。
+  var showsPullRequest: Bool { sidebar.isOpen && shell.panel == .pullRequest }
 
   /// PR のパネルの中のキー——全体へのコメント欄の ⌘↵ はレビューの送信（送れなければ音で断る）。変換中なら確定してから送る。
   /// 押し続けたキーリピートは食って何もしない。扱ったら true。
@@ -37,9 +43,10 @@ extension EditorPaneView {
     }
   }
 
-  /// 焦点が PR のパネルの列か全体へのコメント欄にあるか。
+  /// 焦点が PR のパネルの列か全体へのコメント欄にあるか（列のために面が預かっている焦点を含む）。
   var focusIsInPullRequest: Bool {
     showsPullRequest && focusIsInSidebar
-      && (pullRequest.isListFocused || pullRequest.isReviewFieldFocused)
+      && (pullRequest.isListFocused || pullRequest.isReviewFieldFocused
+        || heldListFocus == .pullRequest)
   }
 }

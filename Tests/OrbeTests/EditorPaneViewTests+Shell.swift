@@ -13,7 +13,7 @@ import XCTest
 @MainActor
 final class EditorPaneViewShellTests: OrbeTestCase {
   /// 行内入力を続けて出すと前の入力は消えて新しい入力だけが出る。入力の終わりは入力の状態が落ちることで、
-  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・作成先を畳む・レールで閉じる・cd でも落ち、入力欄に
+  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・作成先を畳む・左の列を閉じる・cd でも落ち、入力欄に
   /// 居た焦点は面の行き先（文書のテキスト面）へ移る。
   func testInlineInputIsRecreatedPerRequestAndEndsWhenItsStateDrops() throws {
     let dir = TestScratch.caseDir
@@ -47,14 +47,14 @@ final class EditorPaneViewShellTests: OrbeTestCase {
         until: { window.firstResponder === document.surface.responder }, timeout: 5,
         "\(how): 入力欄に居た焦点は面の行き先へ")
     }
-    try endsWhenTheStateDrops("レールで閉じる") { pane.shell.selectPanel(.files) }
-    pane.shell.selectPanel(.files)
+    try endsWhenTheStateDrops("左の列を閉じる") { pane.toggleSidebar() }
+    pane.toggleSidebar()
     try endsWhenTheStateDrops("根を畳む") { pane.tree.isRootOpen = false }
     pane.tree.isRootOpen = true
     try endsWhenTheStateDrops("すべて折りたたむ") { pane.shell.collapseAll() }
     let sub = dir.appendingPathComponent("d")
     try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
-    pane.shell.revealDirectory(sub)
+    pane.tree.toggle("d")
     pane.shell.createFile()
     XCTAssertEqual(pane.tree.newEntry?.directory, "d", "前提: 挿し先は d")
     try endsWhenTheStateDrops("作成先のディレクトリを畳む") { pane.tree.toggle("d") }
@@ -63,9 +63,9 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     try endsWhenTheStateDrops("cd") { tab.group.rekey(GitWorktreeRoot.root(of: other.path)) }
   }
 
-  /// 骨の操作（新規ファイル・ツリーの行・ファイルタブ・パンくず・すべて折りたたむ・行内入力の確定）は pane に
-  /// 結線され、セッション・ツリー・焦点へ届く。閉包はどれも既定値持ちなので、結線が 1 本外れても
-  /// コンパイルは通り、操作が無反応のまま緑になる——それをここで固定する。
+  /// 骨の操作（上のバーの画面の切り替え・上のバーの左の列の開閉・新規ファイル・ツリーの行・開いている文書の切り替え・
+  /// すべて折りたたむ・行内入力の確定）は pane に結線され、セッション・ツリー・焦点へ届く。閉包はどれも既定値持ちなので、
+  /// 結線が 1 本外れてもコンパイルは通り、操作が無反応のまま緑になる——それをここで固定する。
   func testShellActionsReachTheSessionTreeAndFocus() throws {
     let dir = TestScratch.caseDir
     let sub = dir.appendingPathComponent("d")
@@ -83,21 +83,18 @@ final class EditorPaneViewShellTests: OrbeTestCase {
 
     pane.shell.open(a, .preview)
     XCTAssertEqual(pane.document?.url.lastPathComponent, "a.swift", "ツリーの行で開く")
-    XCTAssertTrue(tab.group.editor.preview === pane.document, "ツリーの行の 1 回目は仮のタブ")
+    XCTAssertTrue(tab.group.editor.preview === pane.document, "ツリーの行の 1 回目は仮の文書")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "焦点はテキスト面へ")
     pane.shell.open(a, .pinned)
-    XCTAssertNil(tab.group.editor.preview, "2 回目（ダブルクリック）で普通のタブ")
+    XCTAssertNil(tab.group.editor.preview, "2 回目（ダブルクリック）で普通の文書")
     pane.shell.open(b, .preview)
-    let preview = try XCTUnwrap(tab.group.editor.preview)
     window.makeFirstResponder(nil)
-    pane.shell.pin(.document(preview.url))
-    XCTAssertNil(tab.group.editor.preview, "ファイルタブのダブルクリックで普通のタブ")
-    pane.shell.activate(.document(a))
-    XCTAssertEqual(pane.document?.url.lastPathComponent, "a.swift", "ファイルタブで切り替える")
+    pane.activate(a)
+    XCTAssertEqual(pane.document?.url.lastPathComponent, "a.swift", "開いている文書を切り替える")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "切り替えても焦点はテキスト面へ")
 
-    pane.shell.revealDirectory(sub)
-    XCTAssertEqual(pane.tree.expanded, ["d"], "パンくずのディレクトリが開く")
+    pane.tree.toggle("d")
+    XCTAssertEqual(pane.tree.expanded, ["d"], "ツリーのディレクトリが開く")
     pane.shell.createFile()
     XCTAssertEqual(pane.tree.newEntry?.directory, "d", "選択したディレクトリに挿す")
     pane.tree.setNewName("x.swift")
@@ -106,9 +103,14 @@ final class EditorPaneViewShellTests: OrbeTestCase {
 
     pane.shell.collapseAll()
     XCTAssertTrue(pane.tree.expanded.isEmpty)
+
+    pane.shell.selectScreen(.changes)
+    XCTAssertEqual(tab.group.editor.screen, .changes, "上のバーの切り替えで画面を選ぶ")
+    pane.shell.toggleSidebar()
+    XCTAssertFalse(pane.sidebar.isOpen, "上のバーの左端で左の列を閉じる")
   }
 
-  /// 空状態でも骨（レール・サイドバー・タブ行）はクリックを自分で受け、本体だけが面自身に固定される。
+  /// 空状態でも骨（上のバー・左の列）はクリックを自分で受け、本体だけが面自身に固定される。
   func testEmptyStateFixesOnlyTheBodyToThePane() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
@@ -118,11 +120,10 @@ final class EditorPaneViewShellTests: OrbeTestCase {
       pane.hitTest(pane.convert(NSPoint(x: x, y: y), to: pane.superview))
     }
     XCTAssertTrue(hit(pane.bodyRect.midX, pane.bodyRect.midY) === pane, "本体は面自身")
-    let rail = try XCTUnwrap(hit(18, 18))
-    XCTAssertFalse(rail === pane, "レールは host が受ける")
-    XCTAssertTrue(rail.isDescendant(of: pane))
-    let tabs = try XCTUnwrap(hit(pane.bodyRect.midX, 14))
-    XCTAssertFalse(tabs === pane, "タブ行の帯は host が受ける")
+    let bar = try XCTUnwrap(hit(18, 18))
+    XCTAssertTrue(bar.isDescendant(of: pane.barHost), "上のバーは host が受ける")
+    let side = try XCTUnwrap(hit(60, 200))
+    XCTAssertTrue(side.isDescendant(of: pane.sideHost), "左の列は host が受ける")
   }
 
   /// ツリーとプロジェクト検索は pane が窓に付いて隠れていない間だけ根のサービスを握る——祖先（面の clip・連の器）が隠れても
@@ -176,7 +177,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertFalse(before.isLive, "古いツリーは離す")
   }
 
-  /// 骨の写しはセッションに追従し、文書をアクティブにするとツリーがその行を選択する。
+  /// 文書をアクティブにするとツリーがその行を選択する。
   func testShellMirrorsTheSessionAndRevealsTheActiveDocument() throws {
     let dir = TestScratch.caseDir
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
@@ -185,12 +186,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
 
     let a = try tab.group.editor.open(try caseFile("a.swift", "a"), as: .pinned)
     let b = try tab.group.editor.open(try caseFile("b.md", "b"), as: .pinned)
-    XCTAssertEqual(pane.shell.tabs.map(\.name), ["a.swift", "b.md"])
-    XCTAssertEqual(pane.shell.activeName, "b.md")
     XCTAssertEqual(pane.tree.selected, "b.md", "アクティブにした文書の行を選択表示する")
-
-    a.surface.responder.perform(Selector(("insertText:")), with: "Z")
-    XCTAssertEqual(pane.shell.tabs.map(\.isDirty), [true, false], "同一文書の未保存の変化も写る")
 
     try FileManager.default.createDirectory(
       at: dir.appendingPathComponent("docs"), withIntermediateDirectories: true)
@@ -199,11 +195,10 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     pane.shell.open(b.url, .preview)
     XCTAssertEqual(pane.tree.selected, "b.md", "既に焦点の文書の行を押しても選択はそこへ移る")
     pane.tree.toggle("docs")
-    pane.shell.activate(.document(b.url))
-    XCTAssertEqual(pane.tree.selected, "b.md", "既に焦点の文書のファイルタブでも同じ")
+    pane.activate(b.url)
+    XCTAssertEqual(pane.tree.selected, "b.md", "既に焦点の文書へ切り替えても同じ")
 
     tab.group.editor.close(b)
-    XCTAssertEqual(pane.shell.tabs.map(\.name), ["a.swift"])
     XCTAssertTrue(pane.document === a)
     XCTAssertEqual(pane.tree.selected, "a.swift")
   }

@@ -4,20 +4,22 @@ import XCTest
 
 @testable import Orbe
 
-/// エディター面に結んだ PR のパネル——レールで出したら、今の答えで行を組んでから、行があるときだけ列に焦点を入れる。列が
-/// 消える・パネルを隠す・cd で根が変わるとき、列にあった焦点は面の本文へ戻り、当てる列の無い焦点の要求は残らない。cd で
-/// 根が変わったら前の根の PR を見るのをやめる。ツリーかリストかをほかの面で選べば、この面の行も組み直し、言語を切り替え
+/// エディター面に結んだ PR のパネル——上のバーで PR の画面を出したら、今の答えで行を組んでから、行があるときだけ列に焦点を入れる
+/// （今の PR を追う段・中身を読む段と、読んでいる間の焦点は `+Reading`）。列が消える・パネルを隠す・cd で根が変わるとき、
+/// 列にあった焦点は面の本文へ戻り、当てる列の無い焦点の要求は残らない。cd で根が変わったら前の根の PR を見るのをやめる。ツリーかリストかをほかの面で選べば、この面の行も組み直し、言語を切り替え
 /// れば見えている行を読み直す。全体へのコメント欄の ↵ は改行、⌘↵ はその欄に焦点がある間だけレビューの送信。GitHub は、面を
 /// 作る前に登録した差し替えの出どころが答える。
 ///
-/// 壊れると何が起きるか: 新しい面や cd の後にレールで PR のパネルを出しても列に焦点が入らない。PR が無くなったのに残った
+/// 壊れると何が起きるか: 新しい面や cd の後に上のバーで PR の画面を出しても列に焦点が入らない。PR が無くなったのに残った
 /// 焦点の要求が、後で PR が現れた瞬間に本文や端末から焦点を奪う。PR がマージされた・ブランチを替えたときに焦点が窓へ落ち、
 /// 打鍵がどこにも届かない。cd の後も前の worktree の PR を GitHub に問い合わせ続ける。ほかの面でリストにしても、この面が
 /// ツリーのまま。言語を切り替えても、見えている見出しが前の言語のまま。全体へのコメント欄の ⌘↵ で送れない・変換中の字が
 /// 抜けた本文を送る・押し続けると何度も送る・欄の外の ⌘↵ でレビューを送る。↵ で改行できない。
 @MainActor
 final class PullRequestPaneTests: OrbeTestCase {
-  private struct Hosted {
+  struct Hosted {
+    /// 連を生かしておく（面は連を弱く持つ）。
+    let tab: TerminalTab
     let pane: EditorPaneView
     let window: NSWindow
     var list: NSView { pane.pullRequestList.list }
@@ -25,13 +27,20 @@ final class PullRequestPaneTests: OrbeTestCase {
 
   /// 根ごとの差し替えの出どころ。`open` が偽なら、ブランチに open の PR が無いと答える。レビューの送信は通し、届いた書き込みを
   /// `reviewWrites` に残す。
-  private final class FakeGitHub {
+  final class FakeGitHub {
     var open = true
     var reviewWrites: [GitHubReviewWrite] = []
     /// PR の先頭のコミット（ベースも同じ）。手元のコミットにすると diff の両端が求まる。
     var head = "h"
     /// ブランチの open の PR の番号（替えると、worktree の今の PR が別の PR になる）。
     var number = 9
+    /// PR の中身の読みを失敗させるか（答える時点の値で決まる）。
+    var contentFails = false
+    /// ブランチの PR の問い合わせと PR の中身の読みを、`release` まで答えずに留めるか。
+    var holdsLookups = false
+    var holdsContents = false
+    /// 留めている問い合わせと読み。
+    private(set) var held: [() -> Void] = []
     private let me = GitHubRepoName(nameWithOwner: "me/r")
 
     var source: PullRequestSource {
@@ -48,16 +57,26 @@ final class PullRequestPaneTests: OrbeTestCase {
       }
       return PullRequestSource(
         branchPullRequests: { [unowned self] _, branch, completion in
-          let pullRequest = GitHubBranchPR(
-            number: number, headRefName: "feat", state: "OPEN", baseRefName: "main",
-            headRepository: me, url: "https://github.com/me/r/pull/\(number)")
-          completion(
-            GitHubBranchPullRequests(
-              ledger: nil,
-              branches: [branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))]))
+          let answer = { [unowned self] in
+            let pullRequest = GitHubBranchPR(
+              number: number, headRefName: "feat", state: "OPEN", baseRefName: "main",
+              headRepository: me, url: "https://github.com/me/r/pull/\(number)")
+            completion(
+              GitHubBranchPullRequests(
+                ledger: nil,
+                branches: [
+                  branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))
+                ]))
+          }
+          if holdsLookups { held.append(answer) } else { answer() }
         },
         branchExists: { _, completion in completion(.success(true)) },
-        content: { id, completion in completion(.success(content(id.number))) },
+        content: { [unowned self] id, completion in
+          let answer = { [unowned self] in
+            completion(contentFails ? .failure(.reason("")) : .success(content(id.number)))
+          }
+          if holdsContents { held.append(answer) } else { answer() }
+        },
         setViewed: { _, _, _, _ in },
         review: { [head] _, completion in
           completion(
@@ -71,9 +90,16 @@ final class PullRequestPaneTests: OrbeTestCase {
           completion(GitHubReviewWriteResult(pendingReview: pending, failure: nil))
         })
     }
+
+    /// 留めた問い合わせと読みに答える。
+    func release() {
+      let answers = held
+      held = []
+      for answer in answers { answer() }
+    }
   }
 
-  private var gitHub: FakeGitHub!
+  var gitHub: FakeGitHub!
 
   override func setUpWithError() throws {
     gitHub = FakeGitHub()
@@ -81,7 +107,7 @@ final class PullRequestPaneTests: OrbeTestCase {
 
   /// ブランチ feat に居る一時リポジトリの根。面が作る PR のパネルが本物の gh を呼ばないよう、差し替えの出どころを先に
   /// 登録する。
-  private func registeredRoot() throws -> String {
+  func registeredRoot() throws -> String {
     let repo = try TempGitRepo()
     XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
     gitHub.head = repo.head()
@@ -90,9 +116,10 @@ final class PullRequestPaneTests: OrbeTestCase {
     return root
   }
 
-  /// 根 `root` の連の面だけを窓に載せ、本文に焦点を置く。
-  private func host(_ root: String) -> Hosted {
+  /// 根 `root` の連の面だけを Files の画面で窓に載せ、本文に焦点を置く。
+  func host(_ root: String) -> Hosted {
     let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
     let pane = tab.group.view.editor
     let window = OrbeWindowFake(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
@@ -100,25 +127,25 @@ final class PullRequestPaneTests: OrbeTestCase {
     window.contentView = pane
     pane.layoutSubtreeIfNeeded()
     holdUntilTestEnds(window)
-    addTeardownBlock { MainActor.assumeIsolated { pane.shell.selectPanel(.files) } }
+    addTeardownBlock { MainActor.assumeIsolated { pane.switchScreen(.files) } }
     window.makeFirstResponder(pane.focusTarget)
-    return Hosted(pane: pane, window: window)
+    return Hosted(tab: tab, pane: pane, window: window)
   }
 
   /// PR のパネルを出して、列に行が出るまで待つ。
-  private func shownWithRows(_ hosted: Hosted) {
-    hosted.pane.shell.selectPanel(.pullRequest)
+  func shownWithRows(_ hosted: Hosted) {
+    hosted.pane.switchScreen(.pullRequest)
     pumpMain(until: { !hosted.pane.pullRequest.layout.items.isEmpty }, "前提: 列に行が出る")
     pumpMain(until: { hosted.list.window != nil }, "前提: 列が窓に載る")
   }
 
-  /// PR を読んである根の新しい面でレールから出せば、列に焦点が入る。PR が無ければ焦点を求めない。
+  /// PR を読んである根の新しい面で上のバーから出せば、列に焦点が入る。PR が無ければ焦点を求めない。
   func testTheRailFocusesTheListOnlyWhenThereAreRows() throws {
     let root = try registeredRoot()
     shownWithRows(host(root))
 
     let other = host(root)
-    other.pane.shell.selectPanel(.pullRequest)
+    other.pane.switchScreen(.pullRequest)
     XCTAssertTrue(
       other.pane.pullRequest.focusRequest,
       "行が在れば、その場で列への焦点を求める。"
@@ -127,7 +154,7 @@ final class PullRequestPaneTests: OrbeTestCase {
 
     gitHub.open = false
     let empty = host(try registeredRoot())
-    empty.pane.shell.selectPanel(.pullRequest)
+    empty.pane.switchScreen(.pullRequest)
     XCTAssertFalse(empty.pane.pullRequest.focusRequest, "行が無ければ求めない")
   }
 
@@ -140,12 +167,13 @@ final class PullRequestPaneTests: OrbeTestCase {
   func testAFocusRequestForRowsThatGoAwayIsNotLeftBehind() throws {
     let hosted = host(try registeredRoot())
     shownWithRows(hosted)
-    hosted.pane.shell.selectPanel(.files)
+    hosted.pane.switchScreen(.files)
     pumpMain(until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "前提: 本文")
 
     gitHub.open = false
-    hosted.pane.shell.selectPanel(.pullRequest)
+    hosted.pane.pullRequest.refresh()
     pumpMain(until: { hosted.pane.pullRequest.layout.items.isEmpty }, "PR が無いと分かる")
+    hosted.pane.switchScreen(.pullRequest)
     XCTAssertFalse(hosted.pane.pullRequest.focusRequest, "当てる列の無い要求は捨てる")
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "本文のまま")
 
@@ -191,7 +219,7 @@ final class PullRequestPaneTests: OrbeTestCase {
       hosted.pane.pullRequest.refresh()
       pumpMain(until: { hosted.list.window != nil }, "前提: PR が戻る")
       try focus(area, in: hosted)
-      hosted.pane.shell.selectPanel(.files)
+      hosted.pane.switchScreen(.files)
       pumpMain(
         until: { hosted.window.firstResponder === hosted.pane.focusTarget },
         "\(area) にあった焦点は、隠したら本文へ")
@@ -211,7 +239,7 @@ final class PullRequestPaneTests: OrbeTestCase {
       try focus(area, in: hosted)
 
       let next = try registeredRoot()
-      hosted.pane.setRoot(next)
+      hosted.tab.group.rekey(next)
       XCTAssertFalse(previous.isWatched, "前の根の PR を見るのをやめる")
       pumpMain(until: { hosted.pane.pullRequest.state != nil }, "新しい根の PR を見る")
       XCTAssertEqual(hosted.pane.pullRequest.root, next)
@@ -273,7 +301,7 @@ final class PullRequestPaneTests: OrbeTestCase {
     return field
   }
 
-  private func messageField(in view: NSView) -> MessageTextView? {
+  func messageField(in view: NSView) -> MessageTextView? {
     (view as? MessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
   }
 

@@ -1,10 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// サイドバー: PR のパネル。上から、パネルヘッダー（再読込・GitHub で開く）→ 答えに応じた中身。PR があれば頭
+/// 左の列: PR のパネル。上から、パネルヘッダー（再読込・GitHub で開く）→ 答えに応じた中身。PR があれば頭
 /// （PR の印・題・番号・作者 · `head → base`・手元とのずれの帯）と失敗の文と列（説明・コミット・変更ファイル。AppKit）と
-/// 下端のレビューの送信の区画。PR が無ければ作成の入口（作成ボタンと下の 1 行）、出せなければ理由の一文だけ。根が変わると
-/// 面はパネルと列を組で作り直すので、中身はパネルで同一視する。
+/// 下端のレビューの送信の区画。PR が無い・表示できない・中身の最初の読みが失敗したときは短い一言だけ（見出しと理由、作成と
+/// 再読込のボタンは本体が出す）。根が変わると面はパネルと列を組で作り直すので、中身はパネルで同一視する。
 struct PrPanelView: View {
   let panel: PrPanel
   let list: RowList<PrListSource>
@@ -32,13 +32,13 @@ struct PrPanelView: View {
   @ViewBuilder private var content: some View {
     switch panel.pullRequest.answer {
     case .reading: EmptyView()
-    case .unavailable(let reason): PrNote(text: PrPanelText.unavailable(reason, l10n))
-    case .noPullRequest(let creation): PrCreation(panel: panel, creation: creation)
+    case .unavailable: EditorSidebarNote(text: l10n.string(.editorUnavailable))
+    case .noPullRequest: EditorSidebarNote(text: l10n.string(.editorPrNone))
     case .pullRequest(let state):
       if let content = state.content {
         PrHead(content: content, drift: panel.pullRequest.drift)
-        if let failure = failureText(state) {
-          PrNote(text: failure, color: Color.theme.danger)
+        if let failure = PrPanelText.failure(of: panel, state, l10n) {
+          PrNote(text: failure)
         }
         PrListHost(
           list: list, header: header, panel: panel, description: content.body,
@@ -57,28 +57,21 @@ struct PrPanelView: View {
         } else if let failure = state.reviewFailure {
           PrReviewReadFailure(failure: failure)
         }
-      } else if let failure = failureText(state) {
-        PrNote(text: failure, color: Color.theme.danger)
+      } else if PrPanelText.failure(of: panel, state, l10n) != nil {
+        EditorSidebarNote(text: l10n.string(.editorUnavailable))
       }
     }
   }
-
-  /// 失敗の文——PR の中身の読み直し・確認済みの書き込みの失敗か、PR を保ったまま今のブランチの PR を引き直せなかった理由。
-  private func failureText(_ state: PullRequestState) -> String? {
-    if let failure = state.failure { return PrPanelText.failure(failure, l10n) }
-    return panel.pullRequest.lookupFailure.map { PrPanelText.unavailable($0, l10n) }
-  }
 }
 
-/// 理由・失敗の一文（ソース管理パネルの git 管理外の一文と同じ字と並び）。
+/// PR があるときの失敗の一文（頭の下。danger）。
 private struct PrNote: View {
   let text: String
-  var color = Color.theme.editorTertiary
 
   var body: some View {
     Text(text)
       .font(Font.theme.editorScmNote)
-      .foregroundStyle(color)
+      .foregroundStyle(Color.theme.danger)
       .fixedSize(horizontal: false, vertical: true)
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 18)
@@ -173,55 +166,6 @@ private struct PrBand: View {
   }
 }
 
-/// PR が無いときの作成の入口（padding 2 12 8）: 「プルリクエストを作成」のボタン（高さ 26・radius 3・地 accent）と、
-/// その下の 1 行 `<ブランチ> → <既定のブランチ> · ↑N`（先行が 0 か分からなければ `· ↑N` を出さない）。ブランチが GitHub に
-/// 無いと確かめられた間は、ボタンを押せない姿にし、下に案内の文を出す。
-private struct PrCreation: View {
-  let panel: PrPanel
-  let creation: BranchPullRequest.Creation
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    let enabled = creation.published != .no
-    VStack(spacing: 6) {
-      HStack(spacing: Theme.Space.note) {
-        EditorGlyphView(
-          glyph: EditorGlyphs.createPullRequest, size: 13, color: Color.theme.tabActiveText)
-        Text(l10n.string(.editorPrCreate))
-          .font(Font.theme.editorScmButton)
-          .foregroundStyle(Color.theme.tabActiveText)
-      }
-      .frame(maxWidth: .infinity)
-      .frame(height: Theme.Layout.editorScmCommitButton)
-      .background(RoundedRectangle(cornerRadius: 3).fill(Color.theme.accentPrimary))
-      .opacity(enabled ? 1 : Theme.Opacity.disabled)
-      .contentShape(Rectangle())
-      .onTapGesture { if enabled { panel.createPullRequest() } }
-      Text(meta)
-        .font(Font.theme.editorPrCreateMeta)
-        .foregroundStyle(Color.theme.editorTertiary)
-        .lineLimit(1)
-        .truncationMode(.middle)
-        .frame(maxWidth: .infinity)
-      if !enabled {
-        Text(l10n.string(.editorPrPublishFirst))
-          .font(Font.theme.editorScmNote)
-          .foregroundStyle(Color.theme.editorTertiary)
-          .frame(maxWidth: .infinity)
-      }
-    }
-    .padding(.top, 2)
-    .padding(.horizontal, 12)
-    .padding(.bottom, Theme.Space.step)
-  }
-
-  private var meta: String {
-    let range = "\(creation.branch) → \(creation.defaultBranch)"
-    guard let ahead = creation.ahead, ahead > 0 else { return range }
-    return range + " · ↑\(ahead)"
-  }
-}
-
 /// PR のパネルの列を SwiftUI に載せ、列の頭（説明）を今の中身に合わせる。
 private struct PrListHost: NSViewRepresentable {
   let list: RowList<PrListSource>
@@ -270,6 +214,15 @@ enum PrPanelText {
     case .unverified: l10n.string(.editorPrUnverified)
     case .failed(let failure): text(failure, empty: .editorPrFailedRead, l10n.language)
     }
+  }
+
+  /// 失敗の文——PR の中身の読み直し・確認済みの書き込みの失敗か、PR を保ったまま今のブランチの PR を引き直せなかった理由。
+  @MainActor
+  static func failure(of panel: PrPanel, _ state: PullRequestState, _ l10n: LocalizationStore)
+    -> String?
+  {
+    if let failure = state.failure { return Self.failure(failure, l10n) }
+    return panel.pullRequest.lookupFailure.map { unavailable($0, l10n) }
   }
 
   static func failure(_ failure: PullRequestState.Failure, _ l10n: LocalizationStore) -> String {

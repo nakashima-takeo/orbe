@@ -78,9 +78,10 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
     let window = hostEditor(tab, width: 700)
     window.appearance = NSAppearance(named: .darkAqua)
     let veil = 128
-    let center = pane.bodyRect
-    let empty = try layer(
-      of: pane, until: { try $0.rgba(center.midX, center.midY)[3] == veil }, "空状態の地")
+    // 空状態の見出し・案内は本体の中央に出る（字の位置は言語とフォントで変わる）ので、空状態の地は本体の隅で測る。
+    let body = pane.bodyRect
+    let corner = NSPoint(x: body.minX + 20, y: body.maxY - 20)
+    let empty = try layer(of: pane, until: { try $0.rgba(corner.x, corner.y)[3] == veil }, "空状態の地")
     _ = empty
 
     let document = try tab.group.editor.open(try caseFile("a.txt", "abc\nabc\n"), as: .pinned)
@@ -119,7 +120,7 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
 
     tab.group.editor.close(document)
     let closed = try layer(
-      of: pane, until: { try $0.rgba(center.midX, center.midY)[3] == veil }, "閉じても地は 1 枚")
+      of: pane, until: { try $0.rgba(corner.x, corner.y)[3] == veil }, "閉じても地は 1 枚")
     _ = closed
   }
 }

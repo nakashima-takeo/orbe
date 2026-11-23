@@ -3,7 +3,10 @@ import Foundation
 /// エディター面の PR のパネルと PR の diff の文言分冊。本体 `L10n.table` が結合する。
 extension L10n {
   static let pullRequestTable: [L10nKey: (ja: String, en: String)] = [
-    .editorDiffPullRequest: ("（PR #%lld）", "(PR #%lld)"),
+    .editorPrNoFiles: ("変更ファイルなし", "No Files Changed"),
+    .editorPrNoFilesLead: (
+      "このプルリクエストで変更されたファイルはありません。", "This pull request doesn’t change any files."
+    ),
     .editorDiffNowherePullRequest: ("PR のどちらの側にもありません", "Not in either side of the PR"),
     .editorDiffPullRequestCommitsMissing: (
       "PR のコミットを取得できないため、差分を表示できません",
@@ -13,7 +16,6 @@ extension L10n {
       "ベースブランチと共通のコミットがないため、差分を表示できません",
       "Can’t show the diff because the PR shares no commits with its base branch"
     ),
-    .editorRailPullRequest: ("プルリクエスト", "Pull Request"),
     .editorPrTitle: ("プルリクエスト", "Pull Request"),
     .editorPrRefresh: ("再読込", "Refresh"),
     .editorPrOpenOnGitHub: ("GitHub で開く", "Open on GitHub"),
@@ -27,10 +29,11 @@ extension L10n {
     .editorPrCommits: ("コミット", "Commits"),
     .editorPrFiles: ("変更ファイル", "Files Changed"),
     .editorPrViewedCount: ("%lld/%lld 確認済み", "%lld/%lld viewed"),
+    .editorPrMarkViewed: ("確認済みにする", "Mark as viewed"),
+    .editorPrUnmarkViewed: ("確認済みを外す", "Unmark as viewed"),
     .editorPrTreeView: ("ツリー表示", "View as Tree"),
     .editorPrListView: ("リスト表示", "View as List"),
     .editorPrOlderCommitsHidden: ("古いコミット %lld 件は表示していません", "Older commits not shown: %lld"),
-    .editorPrMarkViewed: ("確認済みにする", "Viewed"),
     .editorPrCreate: ("プルリクエストを作成", "Create Pull Request"),
     .editorPrPublishFirst: ("先にブランチを公開してください", "Publish the branch first"),
     .editorPrNotDetached: ("ブランチにいません", "Not on a branch"),

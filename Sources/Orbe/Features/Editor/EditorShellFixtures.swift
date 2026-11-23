@@ -4,7 +4,7 @@
   import SwiftUI
 
   /// 骨込みのエディター面の gallery fixture。渡された置き場に実在のソース断片（このリポジトリのファイル）を
-  /// 写して git リポジトリにし、M / A / U を 1 つずつ作り、文書を 3 つ開く（1 つは未保存、1 つは仮のタブ）。展示データは作らない。
+  /// 写して git リポジトリにし、M / A / U を 1 つずつ作り、文書を 3 つ開く（1 つは未保存、1 つは仮の文書）。展示データは作らない。
   /// status は git の子プロセス後に、色とハンクは文書の裏の仕事の後に届くので、撮る側は `warmUp()` の後 `isReady`
   /// を待つ。プロジェクト検索はこのリポジトリを実際に探す（`search` の後 `isSearchDone` を待つ）。
   enum EditorShellFixtures {
@@ -54,9 +54,35 @@
           && group.editor.documents.allSatisfy { $0.waitUntilCaughtUp(timeout: 0) }
       }
 
+      /// 開いているファイルの一覧の姿のために文書を足す——shell.md（A）と notes.txt（U。打って未保存）を開き、未保存の
+      /// README（M）を外で書き換えて「ディスクが変わった」にし、仮の文書 tokens.json → FileTree.swift の順に使う。一覧は
+      /// FileTree・tokens.json・notes.txt・shell.md・README の順になる。撮る側は `isOpenFilesReady` を待つ。
+      func openMoreFiles() throws {
+        let session = group.editor
+        try session.open(directory.appendingPathComponent("docs/spec/editor/shell.md"), as: .pinned)
+        let notes = try session.open(directory.appendingPathComponent("notes.txt"), as: .pinned)
+        notes.surface.responder.perform(Selector(("insertText:")), with: "- ")
+        try "# outside\n".write(
+          to: directory.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        for name in ["tokens.json", "FileTree.swift"] {
+          if let document = session.documents.first(where: { $0.url.lastPathComponent == name }) {
+            session.activate(document.url)
+          }
+        }
+      }
+
+      /// 足した文書の印と状態の字が揃った。
+      var isOpenFilesReady: Bool {
+        let session = group.editor
+        let badges = session.documents.map { session.badge(of: $0) }
+        return session.documents.count == 5
+          && session.documents.contains { $0.isDiskChanged }
+          && badges.contains(.added) && badges.contains(.untracked) && badges.contains(.modified)
+      }
+
       /// 検索パネルを出し、問いで実際に検索する（開いている文書は保存前の中身、ほかは git grep）。
       func search(_ query: SearchQuery) {
-        pane.sidebar.show(.search)
+        pane.filesPanel = .search
         pane.projectSearch.restore(query)
         pane.projectSearch.search()
       }
@@ -104,6 +130,7 @@
       let tab = TerminalTab(cwd: dir.path, group: group)
       group.view.add(terminal: tab.terminal)
       group.view.show(terminal: tab.terminal)
+      group.editor.selectScreen(.files)
       let readmeDocument = try group.editor.open(readme, as: .pinned)
       readmeDocument.surface.responder.perform(Selector(("insertText:")), with: "# ")
       _ = try group.editor.open(dir.appendingPathComponent("docs/design/tokens.json"), as: .preview)

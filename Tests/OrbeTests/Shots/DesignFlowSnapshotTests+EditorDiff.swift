@@ -6,10 +6,10 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// diff のタブの flow（fixture は `EditorDiffFixtures`——本物のコード片の git リポジトリ。開くのは `open_diff` と同じセッション
-/// の口）。作業ツリー / ステージ済み × インライン / 並列 × dark / light、長い行を横に送った状態、削除の多い区間、表示できない
-/// 一文、新しいファイル・消したファイル（版が無い側は 0 行。見えている高さより長く消したファイルは削除行の頭から開く）、仮の
-/// diff タブ、未保存の印のある diff タブを撮る。
+/// diff の flow（fixture は `EditorDiffFixtures`——本物のコード片の git リポジトリ。開くのは `open_diff` と同じ連の口）。
+/// 作業ツリー / ステージ済み × インライン（窓の幅 1100）/ 並列（本体が並列の境の値になる幅）× dark / light、長い行を横に送った状態、削除の多い区間、表示できない一文、
+/// 新しいファイル・消したファイル（版が無い側は 0 行。見えている高さより長く消したファイルは削除行の頭から開く）、diff の
+/// 中で編集して未保存にした文書がタブ行に残ったまま別の diff へ移った姿を撮る。
 extension DesignFlowSnapshotTests {
   func testEditorDiff() throws {
     let stage = try DiffStage(queries: queriesRoot)
@@ -54,11 +54,11 @@ extension DesignFlowSnapshotTests {
           }
         ),
         (
-          "preview_and_dirty",
+          "dirty_then_other_diff",
           {
             stage.window.appearance = NSAppearance(named: .darkAqua)
             stage.select(.inline)
-            try stage.previewAndDirty()
+            try stage.dirtyThenOpenAnother()
           }
         ),
       ])
@@ -72,7 +72,6 @@ extension DesignFlowSnapshotTests {
 private final class DiffStage {
   let scene: EditorDiffFixtures.Scene
   let window: NSWindow
-  let modes = EditorDiffModeState()
   private var pane: EditorPaneView { scene.pane }
 
   init(queries: URL) throws {
@@ -85,7 +84,7 @@ private final class DiffStage {
     window.contentView = scene.pane
     scene.pane.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState())
     scene.pane.layoutSubtreeIfNeeded()
     let pane = scene.pane
     pumpMain(until: { pane.tree.status != nil }, "git の状態が届く")
@@ -96,18 +95,26 @@ private final class DiffStage {
     scene.cleanup()
   }
 
-  /// diff を開き、中身・並び・色が揃うまで待つ。
+  /// diff を `open_diff` と同じ連の口で開き（Changes の画面を選び、左の列でその行を選ぶ）、行の選択と、中身・並び・色が揃う
+  /// まで待つ。
   @discardableResult
-  func open(_ path: String, _ kind: EditorDiff.Kind, as mode: EditorSession.OpenMode = .pinned)
-    throws -> EditorDiff
-  {
-    let diff = try scene.group.editor.openDiff(scene.key(path, kind), as: mode)
+  func open(_ path: String, _ kind: EditorDiff.Kind) throws -> EditorDiff {
+    let key = scene.key(path, kind)
+    try scene.group.openDiff(key)
+    let pane = pane
+    pumpMain(until: { pane.scm.selection == pane.scm.rowID(of: key) }, "左の列でその行を選ぶ")
     settle()
-    return diff
+    return try XCTUnwrap(pane.diff)
   }
 
+  /// 窓の幅を、本体が見せ方 `mode` になる幅にする（並列なら本体がちょうど境の値、インラインなら 1100）。
   func select(_ mode: EditorDiff.Mode) {
-    modes.select(mode)
+    let width =
+      mode == .side
+      ? Theme.Layout.editorDiffSideWidth + Theme.Layout.editorSidebar + Theme.Stroke.hairline
+      : 1100
+    window.setContentSize(NSSize(width: width, height: window.frame.height))
+    scene.pane.layoutSubtreeIfNeeded()
     let pane = pane
     pumpMain(
       until: { pane.diff.map { pane.diffSurfaces($0).count == (mode == .side ? 2 : 1) } ?? true },
@@ -133,16 +140,12 @@ private final class DiffStage {
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
   }
 
-  /// ファイルタブで打って未保存にし、仮の diff タブを開いてから、未保存の印の付いた作業ツリー diff へ戻る。
-  func previewAndDirty() throws {
-    let editor = scene.group.editor
-    let document = try editor.open(
-      scene.directory.appendingPathComponent("Sources/HookBuffer.swift"), as: .pinned)
+  /// 作業ツリー diff の中で打って未保存にし、別の行の diff へ移る（未保存の文書はタブ行に未保存の印つきで残る）。
+  func dirtyThenOpenAnother() throws {
+    let diff = try open("Sources/HookBuffer.swift", .workingTree)
+    let document = try XCTUnwrap(diff.document)
     document.surface.responder.perform(Selector(("insertText:")), with: "// ")
-    editor.close(.diff(scene.key("Sources/Legacy.swift", .workingTree)))
-    try open("Sources/Legacy.swift", .workingTree, as: .preview)
-    editor.activate(.diff(scene.key("Sources/HookBuffer.swift", .workingTree)))
-    settle()
+    try open("Sources/Legacy.swift", .workingTree)
   }
 
   /// 手順ごとに本体を撮る（名前と置き場は他の flow と同じ）。

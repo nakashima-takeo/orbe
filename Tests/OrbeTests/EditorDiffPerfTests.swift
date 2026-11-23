@@ -66,7 +66,7 @@ final class EditorDiffPerfTests: OrbeTestCase {
   /// 配り先が戻るまでの main のスレッドの CPU 時間。1MB の Swift で、変更が数十か所の普通の diff と、編集の数が上限に近い
   /// diff を、インラインと並列で、変えていない行に字と Enter（行の数を変える）を打って測る。普通の diff は p99 1ms 以下、
   /// 上限に近い diff は記録する。プロセスで最初の 1 打鍵（入力の仕組みの初期化を含む）は数えないので、測る前に別の文書で
-  /// 打つ。開いた文書の最初の打鍵は、未保存への切り替わり（セッションの知らせからタブ行の組み直しまで）を 1 回だけ含み、
+  /// 打つ。開いた文書の最初の打鍵は、未保存への切り替わり（セッションの知らせから面の組み直しまで）を 1 回だけ含み、
   /// ほかの部分も 2 打鍵目以降の 2〜5 倍かかって 0.38〜3ms になる（2 打鍵目以降は普通の diff で 1ms 未満）ので、
   /// `diff keystroke-main` から外して（関門も、上限に近い diff の記録も、外した後の値で見る）参考に別に出す。
   func testTypingInAWorkingTreeDiff() throws {
@@ -111,18 +111,18 @@ final class EditorDiffPerfTests: OrbeTestCase {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let tab = TerminalTab.alone(
       cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: queries))
-    let window = mountEditor(tab, width: 1200, height: 800)
+    // 左の列を開いた窓で、本体の幅が並列の境の値より狭い（インライン）・広い（並列）。
+    let window = mountEditor(tab, width: mode == .side ? 1400 : 1200, height: 800)
     tab.group.view.editor.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
-      diffModes: EditorDiffModeState(mode: mode))
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState())
     let key = EditorDiff.Key(root: repo.root, path: "big.swift", kind: .workingTree)
     defer {
-      tab.group.editor.close(.diff(key))
+      tab.group.editor.closeDiff(on: .changes)
       window.orderOut(nil)
       window.contentView = nil
     }
-    let diff = try tab.group.editor.openDiff(key, as: .pinned)
+    let diff = try tab.group.editor.openDiff(key)
     pumpMain(
       until: { diff.content == .ready && diff.placement == .placed }, timeout: 60,
       "\(name): 並びが出る")

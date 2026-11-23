@@ -286,15 +286,6 @@ extension ProjectSearch {
     open(target, .commit)
   }
 
-  /// Esc: 検索中なら止める。そうでなければ選択を外す。
-  func escapeInResults() {
-    if isSearching {
-      stop()
-    } else {
-      select(nil)
-    }
-  }
-
   /// F4 / ⇧F4: 選択の次・前の一致を選んで仮で開き、テキスト面へ焦点を移す。畳まれたまとまりは開き、端では先頭・末尾へ
   /// 回る。結果が無ければ false。
   @discardableResult

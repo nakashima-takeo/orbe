@@ -2,7 +2,7 @@ import Foundation
 import OrbeEditorCore
 
 /// diff 1 つ——根の下の 1 つのパスの、古い側と新しい側と、その行差分。両側の本文は種類ごとの出どころ（`EditorDiffSource`）が
-/// 決める——作業ツリー: index の版 ↔ 文書（ファイルタブと同じ文書と面。開いていれば未保存を含む今の本文で、diff の中でも
+/// 決める——作業ツリー: index の版 ↔ 文書（Files の開いている文書と同じ文書と面。開いていれば未保存を含む今の本文で、diff の中でも
 /// 編集できる）／ステージ済み: HEAD の版（rename なら元のパス）↔ index の版／PR: PR のマージベースのコミットの版（rename
 /// なら元のパス）↔ PR の先頭のコミットの版。diff が持つのは、種類に依らない見せ方・面・並び・初めての位置決めと、版の本文
 /// から作る読むだけの文書。両側とも版の本文なら、どちらかが変わったときに 1 回、両側と並びを入れ替える——行差分をその場で
@@ -63,8 +63,6 @@ final class EditorDiff {
   var carried: Carried?
   /// PR の diff のコメントの層（ほかの種類の diff には無い）。
   let comments: PrCommentLayer?
-  /// コメントの書きかけがあるかが変わったかもしれない（セッションが仮のタブを普通のタブにするかを決め直す）。
-  var onDraftChange: (() -> Void)?
 
   init(
     id: Key, source: any EditorDiffSource, surfaces: EditorSurfaces,
@@ -81,7 +79,6 @@ final class EditorDiff {
       }
     }
     comments?.onRowsChange = { [weak self] in self?.applyRows() }
-    comments?.onDraftChange = { [weak self] in self?.onDraftChange?() }
   }
 
   /// 種類の出どころで開く。作業ツリー diff は `documents`（セッション）から新しい側の文書を引く。テキスト面を作れなければ
@@ -105,13 +102,16 @@ final class EditorDiff {
   /// 新しい側の文書（出どころが新しい側に文書を使っていなければ nil）。
   var document: EditorDocument? { source.document }
 
+  /// 主の入力欄（PR のコメントの返信・新しいコメントの欄）が居る面（無ければ nil）。
+  var primaryFieldSurface: (any TextSurface)? { comments?.primaryFieldSurface }
+
   /// 新しい側の面（作業ツリーなら文書の面、ほかは diff が持つ面。中身が見せられなければ nil）。
   var newSurface: (any TextSurface)? {
     guard content == .ready else { return nil }
     return document?.surface ?? newRevisionSurface
   }
 
-  /// 新しい側の文書が `previous` から替わった（出どころが知らせる）——前の文書をファイルタブの見え方に戻し、今の文書の
+  /// 新しい側の文書が `previous` から替わった（出どころが知らせる）——前の文書をコードの見え方に戻し、今の文書の
   /// ハンクを追う（見せていれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。新しい側で並びを置けるように
   /// なるまで、中身は「読み込み中」（本体に何も出さない。開くときと同じ）——文書が無くなって版の本文に替わるときも同じ。
   private func documentDidSwitch(from previous: EditorDocument?) {
@@ -125,11 +125,6 @@ final class EditorDiff {
   }
 
   // MARK: - 付け替え（cd で連が畳まれた）
-
-  /// 新しい側の文書を引く口を `documents`（引き取ったセッション）に結び直す。
-  func rebind(_ documents: Documents) {
-    source.rebind(documents)
-  }
 
   /// 新しい側を、同じ実体の文書 `next` にする（セッションが勝ち負けを決めた勝者。文書を持っていなければ、作業ツリーの
   /// 姿より未保存の `next` が先に立つ）。前の文書は手放さない（結線の後始末はセッションがまとめてする）。作り直しは
@@ -146,6 +141,10 @@ final class EditorDiff {
   func documentDirtyDidChange() {
     source.documentDirtyDidChange()
   }
+
+  /// 本体に出ていて面が見えている間の始まりと終わり（pane が対で呼ぶ。→ `EditorDiffSource.beginWatching`）。
+  func beginWatching() { source.beginWatching() }
+  func endWatching() { source.endWatching() }
 
   /// 積んだ作り直しを、見せていれば今行う。
   func settle() {
@@ -189,7 +188,7 @@ final class EditorDiff {
     if let document { restoreCode(document) }
   }
 
-  /// 文書の面をファイルタブの見え方に戻し、文書のハンクを追うのをやめる。
+  /// 文書の面をコードの見え方に戻し、文書のハンクを追うのをやめる。
   private func restoreCode(_ document: EditorDocument) {
     document.onHunksChange = nil
     SurfaceLook.code.apply(to: document.surface, document: document)

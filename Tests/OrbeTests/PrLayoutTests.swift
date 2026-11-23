@@ -24,6 +24,16 @@ final class PrLayoutTests: OrbeTestCase {
       files: files.map { .init(path: $0, change: .modified, isViewed: false) })
   }
 
+  /// 中身 `content` の行の組（変更ファイルの並びは、PR ごとの状態と同じく中身から作る）。
+  private func build(
+    _ content: GitHubPullRequestContent, asTree: Bool, closed: Set<PrSection>,
+    closedFolders: Set<String>
+  ) -> PrLayout {
+    PrLayout.build(
+      content, files: PrChangedFiles(content.files), asTree: asTree, closed: closed,
+      closedFolders: closedFolders)
+  }
+
   /// 行を「種類 字下げ パス」の字にする（フォルダは開閉も）。
   private func rows(_ layout: PrLayout) -> [String] {
     layout.items.compactMap {
@@ -46,7 +56,7 @@ final class PrLayoutTests: OrbeTestCase {
   /// ツリーはどの段でもフォルダが先・名前順で、フォルダは配下のすべてのファイル（孫を含む）を持つ。畳んだフォルダは
   /// 子の行を出さないが、配下のファイルは持ったまま。
   func testTheTreePutsFoldersFirstAndEachFolderHoldsAllItsFiles() throws {
-    let open = PrLayout.build(content(files: paths), asTree: true, closed: [], closedFolders: [])
+    let open = build(content(files: paths), asTree: true, closed: [], closedFolders: [])
     XCTAssertEqual(
       rows(open),
       [
@@ -59,7 +69,7 @@ final class PrLayoutTests: OrbeTestCase {
       descendants(of: "src", in: open), ["src/b.swift", "src/a/x.swift", "src/a/y.swift"])
     XCTAssertEqual(descendants(of: "src/a", in: open), ["src/a/x.swift", "src/a/y.swift"])
 
-    let closed = PrLayout.build(
+    let closed = build(
       content(files: paths), asTree: true, closed: [], closedFolders: ["src"])
     XCTAssertEqual(
       rows(closed),
@@ -70,7 +80,7 @@ final class PrLayoutTests: OrbeTestCase {
 
   /// リストはフォルダの行を持たず、すべてのファイルを字下げ無しにパス順（同じ階層ではファイルが先）で並べる。
   func testTheListIsFlatInPathOrder() {
-    let layout = PrLayout.build(content(files: paths), asTree: false, closed: [], closedFolders: [])
+    let layout = build(content(files: paths), asTree: false, closed: [], closedFolders: [])
     XCTAssertEqual(
       rows(layout),
       [
@@ -81,20 +91,20 @@ final class PrLayoutTests: OrbeTestCase {
 
   /// 総数が読めたコミットより多ければ、コミットの区分の先頭に欠けの行（数は差）を置く。同じなら置かない。
   func testHiddenCommitsAreAnnouncedFirst() {
-    let truncated = PrLayout.build(
+    let truncated = build(
       content(commitCount: 252, commits: 250), asTree: true, closed: [], closedFolders: [])
     XCTAssertEqual(truncated.items[0], .section(.commits, isOpen: true, count: 252))
     XCTAssertEqual(truncated.items[1], .olderCommits(2))
     XCTAssertEqual(truncated.id(at: 2), .commit("c0"))
 
-    let whole = PrLayout.build(
+    let whole = build(
       content(commitCount: 3, commits: 3), asTree: true, closed: [], closedFolders: [])
     XCTAssertEqual(whole.id(at: 1), .commit("c0"))
   }
 
   /// 畳んだ区分は見出しだけを出し、見出しの数は畳んでも変わらない。
   func testAClosedSectionShowsOnlyItsHeader() {
-    let layout = PrLayout.build(
+    let layout = build(
       content(files: paths, commitCount: 252, commits: 250), asTree: true,
       closed: [.commits, .files], closedFolders: [])
     XCTAssertEqual(

@@ -6,8 +6,8 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// 1 つのパスの作業ツリー diff とステージ済み diff を開いたまま、作業ツリー・index・見せ方を、種を決めた乱数の順で次々に
-/// 変える。手を当てて落ち着いた後、見せている diff の両側が、git と作業ツリーから読み直した本文と一致し、並び（`currentRows`。
+/// 1 つのパスの Changes の diff（作業ツリーかステージ済み）を開いたまま、作業ツリー・index・見せ方・出す画面（Files の文書との
+/// 行き来）・diff の種類を、種を決めた乱数の順で次々に変える。手を当てて落ち着いた後、見せている diff の両側が、git と作業ツリーから読み直した本文と一致し、並び（`currentRows`。
 /// インラインなら面の削除行と追加の行も）が、その両側の行差分（ファイルとサブモジュールの置き換えなら丸ごとの置き換え）と
 /// 一致する。落ち着く前の途中の並びは見ない——既知の、途中で前の並びを置いて落ちる経路は、個別のテスト
 /// （`testReplacingARestoredFileWithARepositoryReplacesTheRowsWholeVisibleOrHidden` ほか）が決まった手順で守る。
@@ -33,21 +33,22 @@ extension EditorDiffTests {
     var tabs: [TerminalTab] = []
     for seed in seeds {
       if !tabs.isEmpty { try setUpWithError() }
-      let tab = tab(modes: EditorDiffModeState())
+      let tab = tab()
       tabs.append(tab.0)
-      guard try runTransitions(seed: seed, steps: steps, in: tab.0) else { return }
+      guard try runTransitions(seed: seed, steps: steps, in: tab.0, window: tab.1) else { return }
     }
   }
 
   /// 種 `seed` で `steps` 手を当てる。食い違えば記録して false を返す。
-  private func runTransitions(seed: UInt64, steps: Int, in tab: TerminalTab) throws -> Bool {
-    let modes = tab.group.view.editor.diffModes
+  private func runTransitions(
+    seed: UInt64, steps: Int, in tab: TerminalTab, window: NSWindow
+  ) throws -> Bool {
     let session = tab.group.editor
     let pane = tab.group.view.editor
     try repo.write("other.txt", "other\n")
     let other = try session.open(repo.url("other.txt"), as: .pinned)
-    let working = try session.openDiff(id("a.txt", .workingTree), as: .pinned)
-    let staged = try session.openDiff(id("a.txt", .staged), as: .pinned)
+    try session.openDiff(id("a.txt", .workingTree))
+    session.selectScreen(.changes)
     var random = SplitMix(seed: seed)
     var log: [String] = []
 
@@ -67,13 +68,24 @@ extension EditorDiffTests {
           ("repository", { try self.placeRepository() }),
           ("conflict", { try self.conflict() }),
           (
-            shown === working ? "hide" : "show working",
+            shown == nil ? "show" : "hide",
+            { shown == nil ? session.selectScreen(.changes) : session.show(other) }
+          ),
+          (
+            "switch kind",
             {
-              session.activate(shown === working ? .document(other.url) : .diff(working.id))
+              let kind = session.changesDiff?.id.kind
+              try session.openDiff(self.id("a.txt", kind == .workingTree ? .staged : .workingTree))
+              session.selectScreen(.changes)
             }
           ),
-          ("show staged", { session.activate(.diff(staged.id)) }),
-          ("mode", { modes.select(modes.mode == .inline ? .side : .inline) }),
+          (
+            "mode",
+            {
+              let side = pane.fittingDiffMode == .inline
+              self.resize(window, width: side ? Self.sideWidth : 900)
+            }
+          ),
         ]
         let (name, op) = ops[random.next(below: ops.count)]
         log.append("\(step):\(name)")
@@ -82,7 +94,7 @@ extension EditorDiffTests {
         try op()
 
         let truth = try readTruth()
-        if let mismatch = settle(pane, truth: truth, working: working) {
+        if let mismatch = settle(pane, truth: truth) {
           XCTFail("種 \(seed) の手順 \(log.joined(separator: " ")) の後: \(mismatch)")
         }
       }
@@ -93,13 +105,10 @@ extension EditorDiffTests {
 
   /// 見せている diff が、手の後の git と作業ツリーの姿 `truth` に落ち着くまで main を回す。10 秒で落ち着かなければ、その
   /// 食い違い。
-  private func settle(
-    _ pane: EditorPaneView, truth: Truth, working: EditorDiff
-  ) -> String? {
+  private func settle(_ pane: EditorPaneView, truth: Truth) -> String? {
     var mismatch: String?
     waitUntil(10) {
-      mismatch = self.mismatch(
-        pane.diff, truth: truth, working: working, mode: pane.diffModes.mode)
+      mismatch = self.mismatch(pane.diff, truth: truth, mode: pane.fittingDiffMode)
       return mismatch == nil
     }
     return mismatch
@@ -169,11 +178,9 @@ extension EditorDiffTests {
 
   /// 見せている diff が今の両側に落ち着いていなければ、その食い違い（落ち着いていれば nil）。並列では面を見ず、並びだけを
   /// 見る。
-  private func mismatch(
-    _ shown: EditorDiff?, truth: Truth, working: EditorDiff, mode: EditorDiff.Mode
-  ) -> String? {
+  private func mismatch(_ shown: EditorDiff?, truth: Truth, mode: EditorDiff.Mode) -> String? {
     guard let shown else { return nil }
-    switch expectation(shown === working ? .workingTree : .staged, truth) {
+    switch expectation(shown.id.kind == .workingTree ? .workingTree : .staged, truth) {
     case .unavailable(let reason):
       return shown.content == .unavailable(reason) ? nil : "中身 \(shown.content)・期待 \(reason)"
     case .sides(let old, let new):

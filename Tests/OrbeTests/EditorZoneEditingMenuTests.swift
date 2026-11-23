@@ -13,6 +13,8 @@ import XCTest
 @MainActor
 final class EditorZoneEditingMenuTests: OrbeTestCase {
   private struct Scene {
+    /// 連を生かしておく（面は連を弱く持ち、連が終わると本体を返す）。
+    let tab: TerminalTab
     let window: NSWindow
     let document: EditorDocument
     let surface: MetalTextSurface
@@ -36,7 +38,7 @@ final class EditorZoneEditingMenuTests: OrbeTestCase {
     surface.textView.pasteboard = NSPasteboard(name: .init("orbe-test-\(UUID().uuidString)"))
     window.makeFirstResponder(surface.responder)
     surface.flush()
-    return Scene(window: window, document: document, surface: surface, thread: thread)
+    return Scene(tab: tab, window: window, document: document, surface: surface, thread: thread)
   }
 
   /// 編集メニューの key equivalent を押す。窓の view の階層は取らず（取ればメニューへ届かない）、メニューの項目が有効

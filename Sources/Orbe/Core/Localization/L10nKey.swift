@@ -582,16 +582,21 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorNotFoundTitle
   case editorNotFoundMessage
 
-  // MARK: - Editor 面（空状態）
+  // MARK: - Editor 面（空・使えないときの表示）
   case editorEmptyLead
   case editorEmptySearchProject
   case editorEmptyBackToTerminal
+  case editorUnavailable
+  case editorScmUnavailableTitle
+  case editorScmNoChanges
+  case editorScmNoChangesLead
+  case editorPrNone
+  case editorPrNoneLead
+  case editorPrNoFiles
+  case editorPrNoFilesLead
+  case editorPrUnavailableTitle
 
   // MARK: - Editor 面（diff）
-  case editorDiffWorkingTree
-  case editorDiffStaged
-  case editorDiffInline
-  case editorDiffSide
   case editorDiffNotText
   case editorDiffSymlink
   case editorDiffDirectory
@@ -600,13 +605,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorDiffFailed
   case editorDiffNowhereInWorkingTree
   case editorDiffNowhereStaged
-  case editorDiffPullRequest
   case editorDiffNowherePullRequest
   case editorDiffPullRequestCommitsMissing
   case editorDiffPullRequestUnrelated
 
   // MARK: - Editor 面（PR）
-  case editorRailPullRequest
   case editorPrTitle
   case editorPrRefresh
   case editorPrOpenOnGitHub
@@ -618,10 +621,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrCommits
   case editorPrFiles
   case editorPrViewedCount
+  case editorPrMarkViewed
+  case editorPrUnmarkViewed
   case editorPrTreeView
   case editorPrListView
   case editorPrOlderCommitsHidden
-  case editorPrMarkViewed
   case editorPrCreate
   case editorPrPublishFirst
   case editorPrNotDetached
@@ -667,6 +671,31 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrOutdatedThreads
   case editorPrCommentCount
 
+  // MARK: - Editor 面（骨: 上のバー）
+  case editorScreenChanges
+  case editorScreenPullRequest
+  case editorScreenFiles
+  case editorBarHideSidebar
+  case editorBarShowSidebar
+  case editorBarShowTerminal
+  case editorBarOpenFiles
+  case editorBarChangedFiles
+  case editorItemUnsaved
+  case editorItemDiskChanged
+
+  // MARK: - Editor 面（骨: 一覧の器）
+  case editorItemListSwitch
+  case editorItemListDetail
+  case editorItemListRun
+  case editorItemListBack
+  case editorItemListClose
+  case editorItemListOpen
+  case editorOpenFilesTitle
+  case editorOpenFilesCurrent
+  case editorOpenFilesPreview
+  case editorOpenFilesKeepOpen
+  case editorOpenFilesCloseFile
+
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle
   case editorNewFile
@@ -675,15 +704,13 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorExpandAll
 
   // MARK: - Editor 面（プロジェクト検索）
-  case editorRailSearch
   case editorSearchTitle
   case editorSearchPlaceholder
   case editorSearchMatchCase
   case editorSearchWholeWord
   case editorSearchRegex
-  case editorSearchRefresh
+  case editorSearchBackToTree
   case editorSearchStop
-  case editorSearchClear
   case editorSearchSummary
   case editorSearchFilesOne
   case editorSearchFilesOther
@@ -695,7 +722,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorSearchCouldNotStart
 
   // MARK: - Editor 面（ソース管理。L10nTable+SourceControl）
-  case editorRailSourceControl
   case editorScmTitle
   case editorScmStaged
   case editorScmChanges
@@ -1039,6 +1065,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutToggleEditorFace
   case helpShortcutPeekTerminal
   case helpShortcutSaveDocument
+  case helpShortcutToggleEditorSidebar
+  case helpShortcutToggleEditorItemList
   case helpShortcutFindInProject
   case helpShortcutScmCommit
   case helpShortcutScmCommitAndPush

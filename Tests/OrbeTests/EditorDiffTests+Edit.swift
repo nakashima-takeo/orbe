@@ -8,7 +8,7 @@ import XCTest
 
 /// diff の中の編集——作業ツリー diff の新しい側（インラインの本文・並列の右）で打った字は文書に入り、diff の行の並び（追加の
 /// 行・削除行・並列の詰め物）は編集に追従し、⌘S で保存できる。壊れると、diff で打った字が本文に入らない・並びが本文から
-/// ずれる・並列の左右の高さがずれる・変換中の字が消える・仮の diff タブが未保存のまま入れ替わる・diff で直した変更を保存
+/// ずれる・並列の左右の高さがずれる・変換中の字が消える・diff で打った未保存の文書が開いている文書の列に入らない・diff で直した変更を保存
 /// できない・プロジェクト検索の一致が diff で打った字からずれる。
 extension EditorDiffTests {
   private func type(_ text: String, at location: Int, on surface: MetalTextSurface) {
@@ -25,7 +25,7 @@ extension EditorDiffTests {
   func testTypingInAnInlineDiffEditsTheDocumentAndTheRowsFollow() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, window) = tab()
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { $0.boundaries == [1] }
     let document = try XCTUnwrap(diff.document)
     XCTAssertTrue(document.waitUntilCaughtUp())
@@ -47,8 +47,8 @@ extension EditorDiffTests {
   /// 並列の右で行を足し引きしても、左右の同じ行は同じ高さに揃い続ける（裏の結果を待つ前も後も）。
   func testTheRightSideOfASideBySideDiffIsEditedAndStaysAligned() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let (tab, window) = tab(modes: EditorDiffModeState(mode: .side))
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let (tab, window) = tab(width: Self.sideWidth)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     let document = try XCTUnwrap(diff.document)
     XCTAssertTrue(document.waitUntilCaughtUp())
@@ -78,8 +78,8 @@ extension EditorDiffTests {
   /// ない diff は、本文が変わるたびに今の行の数で並びを置き直す）。
   func testAddingLinesToAnUntrackedFileKeepsTheSideBySideAligned() throws {
     try repo.write("new.txt", "x\ny\n")
-    let (tab, window) = tab(modes: EditorDiffModeState(mode: .side))
-    let diff = try tab.group.editor.openDiff(id("new.txt", .workingTree), as: .pinned)
+    let (tab, window) = tab(width: Self.sideWidth)
+    let diff = try tab.group.editor.openDiff(id("new.txt", .workingTree))
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     let document = try XCTUnwrap(diff.document)
     let (left, right) = (try engine(diff.oldSurface), try engine(diff.newSurface))
@@ -101,9 +101,8 @@ extension EditorDiffTests {
   /// 切り替えても、変換は続き、確定した字が本文に入る。
   func testTheCompositionContinuesWhileTheRowsChangeUnderIt() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let modes = EditorDiffModeState()
-    let (tab, window) = tab(modes: modes)
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let (tab, window) = tab()
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { self.removedLines($0) == [1] }
     let document = try XCTUnwrap(diff.document)
     let surface = try engine(diff.newSurface)
@@ -116,7 +115,7 @@ extension EditorDiffTests {
 
     waitRows(diff, "変換中の行の元の行が削除行に出る") { self.removedLines($0) == [1, 2] }
     XCTAssertTrue(client.hasMarkedText(), "削除行が差し込まれても変換は続く")
-    modes.select(.side)
+    resize(window, width: Self.sideWidth)
     pumpMain(until: { diff.oldSurface != nil }, "並列")
     XCTAssertTrue(diff.newSurface === surface, "前提: 同じ面")
     XCTAssertTrue(client.hasMarkedText(), "見せ方を切り替えても変換は続く")
@@ -127,29 +126,58 @@ extension EditorDiffTests {
     XCTAssertEqual(string(document.text), "one\nTWO\nthree仮名\nfour\n")
   }
 
-  /// 仮の diff タブで打つと普通のタブになり（次に仮で開いたものとの入れ替えで未保存の本文が消えない）、未保存の印が出る。
-  func testEditingAPreviewDiffPinsIt() throws {
+  /// diff の中で打って未保存にすると、その文書が開いている文書の列へ普通の文書として入る（次の diff へ入れ替えても
+  /// 未保存の本文が消えない）。列が空なら今の文書になる。画面は変わらない。
+  func testEditingInADiffPutsTheDocumentIntoTheOpenDocuments() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    try repo.write("b.txt", "b\n")
     let (tab, window) = tab()
-    let key = id("a.txt", .workingTree)
-    let diff = try tab.group.editor.openDiff(key, as: .preview)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
-    XCTAssertEqual(tab.group.editor.previewID, .diff(key), "前提: 仮のタブ")
+    let document = try XCTUnwrap(diff.document)
+    XCTAssertTrue(tab.group.editor.documents.isEmpty, "前提: 列は空")
     let surface = try engine(diff.newSurface)
     window.makeFirstResponder(surface.responder)
 
     type("Z", at: 0, on: surface)
-    XCTAssertNil(tab.group.editor.previewID, "打てば普通のタブ")
-    XCTAssertEqual(tab.group.view.editor.shell.tabs.map(\.isDirty), [true], "diff タブに未保存の印")
+    XCTAssertEqual(tab.group.editor.documents.map(\.url), [document.url], "未保存になった文書が列に入る")
+    XCTAssertNil(tab.group.editor.previewURL, "普通の文書")
+    XCTAssertEqual(tab.group.editor.screen, .changes, "画面は変わらない")
+    XCTAssertEqual(tab.group.editor.documents.map(\.isDirty), [true], "列の文書が未保存")
+
+    try tab.group.editor.openDiff(id("b.txt", .workingTree))
+    XCTAssertEqual(tab.group.editor.documents.map(\.url), [document.url], "別の diff へ入れ替えても文書は残る")
+    XCTAssertTrue(document.isDirty)
   }
 
-  /// diff のタブで ⌘S を押すと文書を保存し、未保存の印が消える。ディスクが外で変わっていて未保存の編集があれば上書きの確認が
+  /// diff の中で未保存になった文書は、列の 2 番目（今の文書のすぐ次）に入る——今の文書は替わらず、直前に触った文書として
+  /// 開いているファイルの一覧の 2 行目に出る。
+  func testADocumentEditedInADiffEntersSecond() throws {
+    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    try repo.write("c.txt", "c\n")
+    try repo.write("d.txt", "d\n")
+    let (tab, window) = tab()
+    let c = try tab.group.editor.open(repo.url("c.txt"), as: .pinned)
+    let d = try tab.group.editor.open(repo.url("d.txt"), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
+    waitRows(diff, "変更が出る") { !$0.isEmpty }
+    let document = try XCTUnwrap(diff.document)
+    let surface = try engine(diff.newSurface)
+    window.makeFirstResponder(surface.responder)
+
+    type("Z", at: 0, on: surface)
+    XCTAssertTrue(
+      tab.group.editor.documents.elementsEqual([d, document, c], by: ===), "2 番目に入る")
+    XCTAssertTrue(tab.group.editor.activeDocument === d, "今の文書は替わらない")
+  }
+
+  /// diff の中で ⌘S を押すと文書を保存し、未保存の印が消える。ディスクが外で変わっていて未保存の編集があれば上書きの確認が
   /// 出て、上書きを選べば保存する。
-  func testSavingFromTheDiffTabWritesTheDocument() throws {
+  func testSavingFromTheDiffWritesTheDocument() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, window) = tab()
     let pane = tab.group.view.editor
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let document = try XCTUnwrap(diff.document)
     let surface = try engine(diff.newSurface)
@@ -158,7 +186,7 @@ extension EditorDiffTests {
     type("Z", at: 0, on: surface)
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("s")))
     XCTAssertFalse(document.isDirty)
-    XCTAssertEqual(pane.shell.tabs.map(\.isDirty), [false], "未保存の印が消える")
+    XCTAssertEqual(tab.group.editor.documents.map(\.isDirty), [false], "未保存が消える")
     XCTAssertEqual(
       try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "Zone\nTWO\nthree\nfour\n")
 
@@ -173,13 +201,13 @@ extension EditorDiffTests {
     XCTAssertFalse(document.isDirty)
   }
 
-  /// diff の中の編集は、プロジェクト検索の結果に出ているそのファイルの一致を編集に合わせてずらす（ファイルタブで編集した
-  /// ときと同じ配り先に届く）。
+  /// diff の中の編集は、プロジェクト検索の結果に出ているそのファイルの一致を編集に合わせてずらす（Files の画面で文書を編集
+  /// したときと同じ配り先に届く）。検索は Files の画面で行い、Changes の画面へ戻って diff の中で打つ。
   func testEditsInTheDiffShiftTheProjectSearchMatches() throws {
     try repo.write("a.txt", "one\nneedle\nthree\nfour\n")
     let (tab, window) = tab()
     let pane = tab.group.view.editor
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let search = pane.projectSearch
     pane.showProjectSearch(seed: nil)
@@ -189,6 +217,7 @@ extension EditorDiffTests {
     XCTAssertEqual(
       search.results["a.txt"]?.document?.ranges, [NSRange(location: 4, length: 6)],
       "前提: 開いている文書の結果")
+    tab.group.editor.selectScreen(.changes)
 
     let surface = try engine(diff.newSurface)
     window.makeFirstResponder(surface.responder)
@@ -203,7 +232,7 @@ extension EditorDiffTests {
     try repo.write("a.txt", "one\nneedle\nthree\nfour\n")
     let (tab, window) = tab()
     let pane = tab.group.view.editor
-    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let contents = try Data(contentsOf: repo.url("a.txt"))
     try FileManager.default.removeItem(at: repo.url("a.txt"))
@@ -216,6 +245,7 @@ extension EditorDiffTests {
     search.setPattern("needle")
     search.search()
     pumpMain(until: { search.phase == .done }, "検索が終わる")
+    tab.group.editor.selectScreen(.changes)
 
     let surface = try engine(diff.newSurface)
     window.makeFirstResponder(surface.responder)

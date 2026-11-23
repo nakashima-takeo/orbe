@@ -17,29 +17,8 @@ struct AppStateFile: Codable, Equatable {
   /// UI 言語（"ja"/"en"）。**nil = 未選択**（初回言語選択画面を出す・描画は OS 言語に追従）、
   /// 非 nil = 確定（その言語で起動し言語画面はスキップ）。設定パレットの言語行が書き替える。
   var preferredLanguage: String?
-  /// エディター面のサイドバーの幅・開閉・パネル（アプリ全体で 1 つ）。
+  /// エディター面のサイドバーの幅・開閉（アプリ全体で 1 つ）。
   var editorSidebar: EditorSidebarRecord?
-  /// diff の見せ方（アプリ全体で 1 つ）。
-  var editorDiffMode: EditorDiffModeRecord?
-}
-
-/// diff の見せ方の永続表現（`EditorDiff.Mode` の rawValue を 1 つの文字列で書く）。「あるが読めない」（文字列でない）は
-/// nil に読む——この 1 項目のために app-state 全体を落とさない（`EditorSidebarRecord` と同じ）。
-struct EditorDiffModeRecord: Codable, Equatable {
-  var mode: String?
-
-  init(mode: String?) {
-    self.mode = mode
-  }
-
-  init(from decoder: Decoder) throws {
-    mode = try? decoder.singleValueContainer().decode(String.self)
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var container = encoder.singleValueContainer()
-    try container.encode(mode)
-  }
 }
 
 /// エディター面のサイドバーの永続表現。「あるが読めない」（形が違う・値の型が違う）は全 field nil に読む——
@@ -47,20 +26,17 @@ struct EditorDiffModeRecord: Codable, Equatable {
 struct EditorSidebarRecord: Codable, Equatable {
   var width: Double?
   var isOpen: Bool?
-  /// 出しているパネル（`EditorSidebarState.Panel` の rawValue）。
-  var panel: String?
   /// ソース管理パネルのグラフの枠の高さ。
   var graphHeight: Double?
   /// PR のパネルの変更ファイルをツリーで見せるか。
   var pullRequestFilesAsTree: Bool?
 
   init(
-    width: Double? = nil, isOpen: Bool? = nil, panel: String? = nil, graphHeight: Double? = nil,
+    width: Double? = nil, isOpen: Bool? = nil, graphHeight: Double? = nil,
     pullRequestFilesAsTree: Bool? = nil
   ) {
     self.width = width
     self.isOpen = isOpen
-    self.panel = panel
     self.graphHeight = graphHeight
     self.pullRequestFilesAsTree = pullRequestFilesAsTree
   }
@@ -69,7 +45,6 @@ struct EditorSidebarRecord: Codable, Equatable {
     guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
     width = try? c.decodeIfPresent(Double.self, forKey: .width)
     isOpen = try? c.decodeIfPresent(Bool.self, forKey: .isOpen)
-    panel = try? c.decodeIfPresent(String.self, forKey: .panel)
     graphHeight = try? c.decodeIfPresent(Double.self, forKey: .graphHeight)
     pullRequestFilesAsTree = try? c.decodeIfPresent(Bool.self, forKey: .pullRequestFilesAsTree)
   }

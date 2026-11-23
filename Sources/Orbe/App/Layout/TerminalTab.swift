@@ -300,7 +300,7 @@ final class TerminalTab {
     case root(String)
     case file(root: String, relative: String)
     case absolute(String)
-    /// PR の diff（PR の番号と、根からの相対パス）。
-    case pullRequest(number: Int, relative: String)
+    /// PR の画面（worktree の今の PR の番号と根）。
+    case pullRequest(number: Int, root: String)
   }
 }

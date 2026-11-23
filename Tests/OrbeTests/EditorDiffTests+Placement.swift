@@ -20,12 +20,12 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
     try repo.write("middle.txt", (lines[..<100] + lines[118...]).joined(separator: "\n") + "\n")
     try repo.write("tail.txt", lines[..<190].joined(separator: "\n") + "\n")
-    let modes = EditorDiffModeState()
-    let (tab, _) = tab(modes: modes)
+    // 本体の上端の見出しの下に、文脈 1 行と削除 18 行が収まる高さ。
+    let (tab, window) = tab(height: 440)
     for mode in [EditorDiff.Mode.inline, .side] {
-      modes.select(mode)
+      resize(window, width: mode == .side ? Self.sideWidth : 900)
       for (path, boundary) in [("middle.txt", 100), ("tail.txt", 190)] {
-        let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
+        let diff = try tab.group.editor.openDiff(id(path, .workingTree))
         pumpMain(
           until: { diff.placement == .placed && diff.newSurface != nil },
           "\(mode) \(path): 最初の変更区間へ送る")
@@ -38,19 +38,19 @@ extension EditorDiffTests {
           Double(first), rows.unit(ofLine: boundary - 1), "\(mode) \(path): 上の文脈の行から")
         XCTAssertGreaterThanOrEqual(
           Double(first + visible), rows.unit(ofLine: boundary), "\(mode) \(path): 削除行の終わりまで見える")
-        tab.group.editor.close(.diff(id(path, .workingTree)))
+        tab.group.editor.closeDiff(on: .changes)
       }
     }
   }
 
-  /// 変更の無い状態で開いた diff は、後から変更が現れても見えている位置が動かない（ファイルタブと共有する面も動かない）。
+  /// 変更の無い状態で開いた diff は、後から変更が現れても見えている位置が動かない（開いている文書と共有する面も動かない）。
   func testADiffOpenedWithoutChangesDoesNotJumpWhenAChangeAppears() throws {
     var lines = (0..<300).map { "line \($0)" }
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
     let (tab, _) = tab()
-    let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree))
     pumpMain(until: { diff.placement == .placed }, "位置を決める")
     let surface = try engine(diff.newSurface)
     surface.flush()
@@ -63,7 +63,7 @@ extension EditorDiffTests {
   }
 
   /// 監視の知らせより先に開いた diff も、開いた時点の中身に追いついてから最初の変更へ送る——エージェントがファイルを書いた
-  /// 直後の作業ツリー diff（ファイルタブで開いている文書）も、`git add` の直後のステージ済み diff も。
+  /// 直後の作業ツリー diff（開いている文書）も、`git add` の直後のステージ済み diff も。
   func testADiffOpenedRightAfterAWriteRevealsTheWrittenChange() throws {
     var lines = (0..<300).map { "line \($0)" }
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
@@ -76,7 +76,7 @@ extension EditorDiffTests {
 
     lines[250] = "changed 250"
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
-    let working = try tab.group.editor.openDiff(id("long.txt", .workingTree), as: .pinned)
+    let working = try tab.group.editor.openDiff(id("long.txt", .workingTree))
     pumpMain(until: { working.placement == .placed }, "作業ツリー: 位置を決める")
     let surface = try engine(working.newSurface)
     surface.flush()
@@ -85,7 +85,7 @@ extension EditorDiffTests {
     lines[260] = "staged 260"
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "long.txt"]).isSuccess)
-    let staged = try tab.group.editor.openDiff(id("long.txt", .staged), as: .pinned)
+    let staged = try tab.group.editor.openDiff(id("long.txt", .staged))
     pumpMain(until: { staged.placement == .placed && staged.newSurface != nil }, "ステージ済み: 位置を決める")
     let stagedSurface = try engine(staged.newSurface)
     stagedSurface.flush()
@@ -120,7 +120,7 @@ extension EditorDiffTests {
     lines[250] = "changed 250"
     try repo.write("b.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
-    let diff = try tab.group.editor.openDiff(id("b.txt", .staged), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("b.txt", .staged))
     XCTAssertNil(files.status?.entries["b.txt"], "前提: status は rename をまだ知らない")
     pumpMain(
       until: {
@@ -137,8 +137,8 @@ extension EditorDiffTests {
     XCTAssertGreaterThan(surface.viewport.top.line, 200, "実際の変更へ送る")
   }
 
-  /// 初めて見せる前の色の待ちは、追いつく前に出る画面の配置では始めず、初めて位置を決めた画面の配置で始める（ファイル
-  /// タブで開いている文書の作業ツリー diff は、追いつく前から並びが出る）。
+  /// 初めて見せる前の色の待ちは、追いつく前に出る画面の配置では始めず、初めて位置を決めた画面の配置で始める（開いている
+  /// 文書の作業ツリー diff は、追いつく前から並びが出る）。
   func testTheFirstColorsWaitStartsOnlyAtTheFirstPlacedView() throws {
     var lines = (0..<300).map { "line \($0)" }
     try repo.write("w.txt", lines.joined(separator: "\n") + "\n")
@@ -151,7 +151,7 @@ extension EditorDiffTests {
     try repo.write("w.txt", lines.joined(separator: "\n") + "\n")
     pumpMain(until: { document.hunks.count == 1 && document.hunksAreCurrent }, "前提: ハンクが届く")
 
-    let diff = try tab.group.editor.openDiff(id("w.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("w.txt", .workingTree))
     tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(diff.content, .ready, "前提: 追いつく前から見せられる")
     XCTAssertNotEqual(diff.placement, .placed, "前提: まだ位置を決めていない")

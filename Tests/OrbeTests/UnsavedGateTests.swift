@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 未保存を捨てる前の確認の解決規則（1 か所）と、それを使う入口——ファイルタブの ×・人の操作で連の最後のタブを閉じる・
+/// 未保存を捨てる前の確認の解決規則（1 か所）と、それを使う入口——文書を閉じる・人の操作で連の最後のタブを閉じる・
 /// workspace を閉じる——が、未保存のときだけ sheet を出し、連の途中のタブ・シェル終了・制御 API では問わないこと。
 ///
 /// 壊れると何が起きるか。⌘W が未保存の編集を無言で捨てる。保存が外部変更で失敗したのにタブが消える。
@@ -18,7 +18,7 @@ final class UnsavedGateTests: OrbeTestCase {
   }
 
   private func session() -> EditorSession {
-    EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
   }
 
   func edit(_ document: EditorDocument, _ text: String = "x") {
@@ -166,22 +166,23 @@ final class UnsavedGateTests: OrbeTestCase {
     XCTAssertEqual(wc.unsavedDocuments().map(\.url.lastPathComponent).sorted(), ["a.txt", "b.txt"])
   }
 
-  // MARK: - 入口: ファイルタブの ×
+  // MARK: - 入口: 文書を閉じる
 
   func testFileTabCloseAsksOnlyWhenDirty() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
     let window = hostEditor(tab, width: 900)
     let pane = tab.group.view.editor
     try repo.write("b.txt", "b\n")
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     let b = try tab.group.editor.open(repo.url("b.txt"), as: .pinned)
 
-    pane.shell.requestClose(.document(b.url))
+    pane.requestClose(b.url)
     XCTAssertEqual(tab.group.editor.documents.count, 1, "未保存でなければそのまま閉じる")
     XCTAssertNil(window.attachedSheet)
 
     edit(a)
-    pane.shell.requestClose(.document(a.url))
+    pane.requestClose(a.url)
     XCTAssertEqual(tab.group.editor.documents.count, 1, "未保存なら確認")
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertFirstButtonReturn)
     XCTAssertTrue(tab.group.editor.documents.isEmpty, "保存して閉じる")
@@ -194,6 +195,7 @@ final class UnsavedGateTests: OrbeTestCase {
   /// 印が落ちる。上書きされるのは確認を出した文書——sheet の間に別の文書を開いて焦点が移っても変わらない。
   func testCommandSOverwritesOnlyTheDocumentThatWasConfirmed() throws {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    tab.group.editor.selectScreen(.files)
     let window = hostEditor(tab, width: 900)
     let pane = tab.group.view.editor
     let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
@@ -233,7 +235,7 @@ final class UnsavedGateTests: OrbeTestCase {
     XCTAssertEqual(
       session.documents.map(\.url.lastPathComponent), ["a.txt", "b.txt"], "読めないパスは落ちる")
     XCTAssertEqual(session.activeDocument?.url, repo.url("a.txt"))
-    XCTAssertEqual(session.preview?.url, repo.url("b.txt"), "仮のタブは仮のまま戻る")
+    XCTAssertEqual(session.preview?.url, repo.url("b.txt"), "仮の文書は仮のまま戻る")
     XCTAssertEqual(changes, 1, "通知は 1 本")
 
     let other = self.session()
@@ -241,10 +243,10 @@ final class UnsavedGateTests: OrbeTestCase {
       paths: [repo.url("b.txt").path], active: repo.root + "/gone.txt",
       preview: repo.root + "/missing.txt")
     XCTAssertEqual(other.activeDocument?.url, repo.url("b.txt"), "アクティブが落ちていれば先頭")
-    XCTAssertNil(other.preview, "仮のタブが落ちていれば仮無し")
+    XCTAssertNil(other.preview, "仮の文書が落ちていれば仮無し")
   }
 
-  /// materialize より先に `open_file` が開いた文書は、復元に焦点を奪われず、仮のタブにも下がらない。
+  /// materialize より先に `open_file` が開いた文書は、復元に焦点を奪われず、仮の文書にも下がらない。
   func testRestoreKeepsADocumentOpenedBeforeIt() throws {
     let session = session()
     try repo.write("b.txt", "b\n")
@@ -256,21 +258,5 @@ final class UnsavedGateTests: OrbeTestCase {
     XCTAssertEqual(session.documents.map(\.url.lastPathComponent), ["c.txt", "a.txt", "b.txt"])
     XCTAssertTrue(session.activeDocument === c, "先に居た焦点を保つ")
     XCTAssertNil(session.preview, "先に普通に開いていた文書は仮に下げない")
-  }
-
-  /// 復元する文書が未保存で、diff のタブが既に使っているなら、仮のタブではなく普通のタブで戻る——仮のタブのまま戻ると、
-  /// 次に仮で開いたファイルと入れ替わり、未保存のタブが確認なしにタブ行から消える。
-  func testRestoringAnUnsavedDocumentADiffUsesBringsItBackPinned() throws {
-    let session = session()
-    let a = try session.open(repo.url("a.txt"), as: .pinned)
-    edit(a)
-    try session.openDiff(
-      EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree), as: .pinned)
-    session.close(.document(a.url))
-    XCTAssertTrue(a.isDirty, "前提: diff のタブが未保存の文書を使い続ける")
-
-    session.restore(paths: [a.url.path], active: a.url.path, preview: a.url.path)
-    XCTAssertTrue(session.tab(.document(a.url))?.document === a, "同じ文書のファイルタブが戻る")
-    XCTAssertNil(session.preview, "普通のタブで戻る")
   }
 }
