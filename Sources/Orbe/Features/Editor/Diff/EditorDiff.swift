@@ -61,6 +61,8 @@ final class EditorDiff {
   var surfacesChanged = false
   /// 新しい側の版の面を作り直したとき、新しい面で先頭に置く所。
   var carried: Carried?
+  /// 頼まれた、まだ面へ送っていない見せる行（→ `show`）。
+  var lineToShow: SideLine?
   /// PR の diff のコメントの層（ほかの種類の diff には無い）。
   let comments: PrCommentLayer?
 
@@ -212,7 +214,9 @@ final class EditorDiff {
   /// 新しい側の面の見えている範囲が変わった（インラインでは古い側の見えている削除行を先に色付けする）。
   func viewportDidChange() {
     guard presented != nil, let surface = newSurface else { return }
-    if placement != .placed || carried != nil { placeFirstView(on: surface) }
+    if placement != .placed || carried != nil || lineToShow != nil {
+      placeFirstView(on: surface)
+    }
     sendVisibleRemovedLines(on: surface)
   }
 

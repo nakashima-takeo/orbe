@@ -109,6 +109,8 @@ final class PullRequestState {
   }
   /// `review` が変わるたびに進む（列が見えている行を描き直す合図）。
   private(set) var reviewVersion = 0
+  /// 最後に組んだ保留中のコメントの一覧（→ `PullRequestState+PendingComments`）。
+  @ObservationIgnored var pendingCommentsMade: PendingCommentsMade?
   /// レビューのやりとりの最後の読みの失敗。中身の失敗（`failure`）とは分けて持ち、次に読めたら消える。
   var reviewFailure: GitHubFailure?
   /// レビューの送信の、全体へのコメントの書きかけと選んだ種類（メモリだけで、パネルを隠しても残る）。

@@ -27,6 +27,8 @@ final class PrCommentLayer {
   var held: [String: PrCommentPlacement] = [:]
   /// 新しいコメントの欄（書きかけの通し番号の順。開いた順でもある）。
   var drafts: [PrCommentPlacement] = []
+  /// 開いた姿で作る、まだ絵の無いスレッドの id（→ `openThread`）。
+  var threadToOpen: String?
   /// 求めた（求めている）印を出せる行の、両端と結果。
   private var commentable: (ends: PullRequestState.DiffEnds, lines: GitDiffHunkLines?)?
   /// 最後に並びへ注記を渡した両端とその両側の本文、並列の古い側の面（インラインでは nil）。
@@ -84,6 +86,16 @@ final class PrCommentLayer {
 
   /// スレッド `id` の絵の差し込み（まだ置いていなければ nil）。
   func zone(thread id: String) -> PrCommentZone? { threads[id] }
+
+  /// スレッド `id` を開く——絵があれば開き、まだ無ければ、絵を作るときに開いた姿で作る（スレッドの絵は、レビューのやりとりと
+  /// diff の両端が揃ってから置かれる）。
+  func openThread(_ id: String) {
+    if let zone = threads[id] {
+      zone.isCollapsed = false
+    } else {
+      threadToOpen = id
+    }
+  }
 
   /// 側 `version` の行 `line`（0 始まり）に置いている新しいコメントの欄（行が現在の diff に無い欄を含む）。
   func draft(_ version: DiffRows.Version, line: Int) -> PrCommentZone? {

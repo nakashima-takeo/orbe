@@ -7,12 +7,15 @@ import Foundation
 extension PrCommentLayer {
   // MARK: - スレッド
 
-  /// スレッド `thread` の絵の差し込みを、返信の書きかけの本文で作る（書きかけのある欄は、解決済みでも開いて出す）。
+  /// スレッド `thread` の絵の差し込みを、返信の書きかけの本文で作る（書きかけのある欄と、開くよう頼まれたスレッドは、解決済み
+  /// でも開いて出す）。
   func makeZone(_ thread: GitHubPullRequestReview.Thread, line: Int) -> PrCommentZone {
     let zone = PrCommentZone(
       subject: .thread(thread), line: line, fieldID: "thread:\(thread.id)",
       text: state.commentDrafts.replies[thread.id]?.body ?? "")
-    zone.isCollapsed = thread.isResolved && !zone.hasText
+    let opening = threadToOpen == thread.id
+    if opening { threadToOpen = nil }
+    zone.isCollapsed = thread.isResolved && !zone.hasText && !opening
     zone.onPress = { [weak self] zone, control in self?.press(control, in: zone) }
     zone.onTextChange = { [weak self] zone in self?.replyDidChange(zone) }
     zone.onFieldFocus = { [weak self] zone, primary in
