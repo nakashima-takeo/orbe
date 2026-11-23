@@ -17,24 +17,26 @@ final class WorktreeCreateTimeoutTests: OrbeTestCase {
   func testTimedOutWorktreeCreationShowsDedicatedMessage() throws {
     let fixture = try GitHangFixture()
     try fixture.installHook("reference-transaction", body: fixture.waitingBody)
+    let clock = ManualClock()
 
     // CI は英語なので、`.en` だと既定ストアと文言が一致して写しの経路が測れない。
     let localization = LocalizationStore(language: .ja)
     let provider = WorktreePaletteDataProvider(
       cwd: fixture.root, model: WorktreePaletteModel(), localization: localization,
       // 作成先を fixture の中へ落とす（後始末に乗せる）。
-      worktreeTemplate: "{parent}/wt-{slug}", runner: GitRunner(idleTimeout: 0.6))
+      worktreeTemplate: "{parent}/wt-{slug}", runner: GitRunner(clock: clock.waits))
     provider.load()
     XCTAssertTrue(
       waitUntil(10) { provider.facts.repo != nil }, "前提: リポジトリを解決できていること")
 
     var resolution: WorktreeRepoFacts.DirectoryResolution?
-    let done = expectation(description: "prepareDirectory")
+    var done = false
     provider.facts.prepareDirectory(for: .newBranch(name: "issue/44", base: .defaultBranch)) {
       if case .resolved(let resolved) = $0 { resolution = resolved }
-      done.fulfill()
+      done = true
     }
-    wait(for: [done], timeout: 20)
+    XCTAssertTrue(fixture.pumpUntilHung(), "前提: worktree の作成が hook で止まっている")
+    fixture.expireIdleLimit(on: clock, until: { done })
 
     XCTAssertFalse(
       FileManager.default.fileExists(

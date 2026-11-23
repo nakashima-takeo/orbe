@@ -15,6 +15,7 @@ final class BackgroundProcess {
   static let drainGrace: TimeInterval = 1
 
   private let spec: Spec
+  private let clock: TimerClock
   private let queue = DispatchQueue(label: "dev.orbe.background.process")
   private let done = DispatchSemaphore(value: 0)
 
@@ -32,13 +33,16 @@ final class BackgroundProcess {
   private var stdoutEOF = false
   private var stderrEOF = false
 
-  private var startedAt = DispatchTime.now()
-  private var lastActivity = DispatchTime.now()
-  private var limitTimer: DispatchSourceTimer?
+  private var startedAt: TimerClock.Instant
+  private var lastActivity: TimerClock.Instant
+  private var cancelLimit: (@Sendable () -> Void)?
   private var sources: [DispatchSourceProtocol] = []
 
-  init(_ spec: Spec) {
+  init(_ spec: Spec, clock: TimerClock = .uptime) {
     self.spec = spec
+    self.clock = clock
+    startedAt = clock.now()
+    lastActivity = startedAt
     if case .lines(let maxLength, _) = spec.stdout { lines = LineSplitter(maxLength: maxLength) }
   }
 
@@ -128,13 +132,13 @@ final class BackgroundProcess {
 
     pid = child
     launched = true
-    startedAt = .now()
+    startedAt = clock.now()
     lastActivity = startedAt
     watchExit()
     read(out.read, isStdout: true)
     read(err.read, isStdout: false)
     if let input, let data = spec.stdin { write(data, to: input.write) }
-    armLimitTimer()
+    armLimit()
     return nil
   }
 
@@ -191,7 +195,7 @@ final class BackgroundProcess {
       while true {
         let count = Darwin.read(fd, &buffer, buffer.count)
         if count > 0 {
-          lastActivity = .now()
+          lastActivity = clock.now()
           receive(Data(buffer[0..<count]), isStdout: isStdout)
           continue
         }
@@ -278,51 +282,47 @@ final class BackgroundProcess {
 
   // MARK: - 上限と停止
 
-  private func armLimitTimer() {
-    let timer = DispatchSource.makeTimerSource(queue: queue)
-    timer.setEventHandler { [unowned self] in checkLimits() }
-    limitTimer = timer
-    timer.schedule(deadline: nextLimitDeadline())
-    timer.resume()
+  private func armLimit() {
+    cancelLimit = clock.schedule(nextLimitDeadline(), queue) { [unowned self] in checkLimits() }
   }
 
-  private func nextLimitDeadline() -> DispatchTime {
+  private func nextLimitDeadline() -> TimerClock.Instant {
     let elapsedDeadline = startedAt + spec.elapsedLimit
     return spec.idleLimit.map { min(elapsedDeadline, lastActivity + $0) } ?? elapsedDeadline
   }
 
   /// 期限で目覚めたら測り直す。出力が来ていれば無出力の期限は延びている。
   private func checkLimits() {
-    let now = DispatchTime.now()
+    let now = clock.now()
     if now >= startedAt + spec.elapsedLimit {
       terminate(.limited(.elapsed))
     } else if let idle = spec.idleLimit, now >= lastActivity + idle {
       terminate(.limited(.idle))
     } else {
-      limitTimer?.schedule(deadline: nextLimitDeadline())
+      armLimit()
     }
   }
 
   private func terminate(_ reason: Ending) {
     guard !finished, stopReason == nil else { return }
     stopReason = reason
-    limitTimer?.cancel()
+    cancelLimit?()
     killpg(pid, SIGTERM)
-    queue.asyncAfter(deadline: .now() + Self.killGrace) { [self] in
+    _ = clock.schedule(clock.now() + Self.killGrace, queue) { [self] in
       if !finished, !leaderExited { killpg(pid, SIGKILL) }
     }
   }
 
   private func noteLeaderExit() {
     leaderExited = true
-    limitTimer?.cancel()
+    cancelLimit?()
     // 背景に残った孫を片付ける。リーダーは未回収なので、pgid は他へ渡っていない。
     if stopReason == nil { killpg(pid, SIGTERM) }
     if stdoutEOF, stderrEOF {
       finish()
       return
     }
-    queue.asyncAfter(deadline: .now() + Self.drainGrace) { [self] in finish() }
+    _ = clock.schedule(clock.now() + Self.drainGrace, queue) { [self] in finish() }
   }
 
   private func finish() {

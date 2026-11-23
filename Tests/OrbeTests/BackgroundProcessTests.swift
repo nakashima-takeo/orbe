@@ -10,8 +10,16 @@ import XCTest
 /// 生き残る。正常に終わった実行が背景に残したプロセスが、Orbe を終えるまで積み上がる。出力の上限が効かず、暴走した出力で
 /// メモリを使い切る。無出力の上限を外した実行が、出力の無い間に切られるか、経過時間を過ぎても止まらない。
 final class BackgroundProcessTests: OrbeTestCase {
-  private func spec(
-    _ script: String, elapsed: TimeInterval = 30, idle: TimeInterval? = 30,
+  /// 上限と猶予を見るテストは、手で進める時計を渡した実行（`timed`）で駆動する。上限と猶予は、時計を進めたときにだけ来る。
+  let clock = ManualClock()
+  /// `timed` の実行へ渡す予約の時計。テストは、この渡し先の予約と時刻の読みだけを見る。
+  lazy var runTimers = clock.makeTimers()
+  /// 経過の上限の既定。
+  static let elapsedLimit: TimeInterval = 30
+  /// 黙った子を無出力の上限で切るテストの、無出力の上限。経過の上限の既定より短い。
+  static let idleLimit: TimeInterval = 10
+  func spec(
+    _ script: String, elapsed: TimeInterval = elapsedLimit, idle: TimeInterval? = 30,
     stdout: BackgroundProcess.Stdout = .collect(.init(limit: 1 << 20, overflowStops: true)),
     stderr: BackgroundProcess.Capture = .init(limit: 1 << 20, overflowStops: true),
     stdin: Data? = nil
@@ -22,22 +30,41 @@ final class BackgroundProcessTests: OrbeTestCase {
       stdin: stdin, elapsedLimit: elapsed, idleLimit: idle, stdout: stdout, stderr: stderr)
   }
 
-  /// 裏で走らせ、期限つきで受ける（返らない実装でテストプロセスを固めない）。
+  func timed(_ spec: BackgroundProcess.Spec) -> BackgroundProcess {
+    BackgroundProcess(spec, clock: runTimers.clock)
+  }
+
+  /// 裏で走らせた `run` の結果。main で届く。
+  final class Pending {
+    var outcome: BackgroundProcess.Outcome?
+  }
+
+  /// `run` は終わりまで返らないので、裏で走らせる（時計を進める間、テストのスレッドを止めさせない）。
+  func start(_ process: BackgroundProcess) -> Pending {
+    let pending = Pending()
+    DispatchQueue.global().async {
+      let outcome = process.run()
+      DispatchQueue.main.async { pending.outcome = outcome }
+    }
+    return pending
+  }
+
+  /// 裏で走らせた `run` の結果を、期限つきで受ける（返らない実装でテストプロセスを固めない）。
+  func outcome(
+    of pending: Pending, timeout: TimeInterval = 20, file: StaticString = #filePath,
+    line: UInt = #line
+  ) throws -> BackgroundProcess.Outcome {
+    pumpMain(
+      until: { pending.outcome != nil }, timeout: timeout, "run が返る", file: file, line: line)
+    return try XCTUnwrap(pending.outcome, file: file, line: line)
+  }
+
   private func run(
     _ process: BackgroundProcess, timeout: TimeInterval = 20
   ) throws -> (outcome: BackgroundProcess.Outcome, elapsed: TimeInterval) {
-    var result: BackgroundProcess.Outcome?
-    let done = expectation(description: "run")
     let started = Date()
-    DispatchQueue.global().async {
-      let outcome = process.run()
-      DispatchQueue.main.async {
-        result = outcome
-        done.fulfill()
-      }
-    }
-    wait(for: [done], timeout: timeout)
-    return (try XCTUnwrap(result), Date().timeIntervalSince(started))
+    let outcome = try outcome(of: start(process), timeout: timeout)
+    return (outcome, Date().timeIntervalSince(started))
   }
 
   private func run(_ spec: BackgroundProcess.Spec) throws -> (
@@ -50,21 +77,46 @@ final class BackgroundProcessTests: OrbeTestCase {
     String(bytes: captured.data, encoding: .utf8) ?? ""
   }
 
-  private var pidFile: String { TestScratch.caseDir.appendingPathComponent("pid").path }
+  func scratch(_ name: String) -> String {
+    TestScratch.caseDir.appendingPathComponent(name).path
+  }
+
+  private var pidFile: String { scratch("pid") }
+
+  /// 直前に背景へ回した子の pid を、`pidFile` に置く。書き終えてからリネームするので、現れた時点で中身を読める。
+  private var recordPID: String { "echo $! > '\(pidFile).tmp'; mv '\(pidFile).tmp' '\(pidFile)'" }
+
+  /// テストが子へ出す合図のファイルを作る。
+  func touch(_ path: String) {
+    FileManager.default.createFile(atPath: path, contents: nil)
+  }
+
+  private func awaitFile(
+    _ path: String, _ message: String, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    pumpMain(
+      until: { FileManager.default.fileExists(atPath: path) }, message, file: file, line: line)
+  }
+
+  private func pid(in path: String) throws -> pid_t {
+    let text = try String(contentsOfFile: path, encoding: .utf8)
+    return try XCTUnwrap(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+  }
+
+  private func isAlive(pidIn path: String) throws -> Bool {
+    kill(try pid(in: path), 0) == 0
+  }
 
   /// 書かれた pid のプロセスが消えるまで待つ（launchd の回収までの遅れを吸う）。
   private func isGone(pidIn path: String, within timeout: TimeInterval = 3) throws -> Bool {
-    let text = try String(contentsOfFile: path, encoding: .utf8)
-    let pid = try XCTUnwrap(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+    let pid = try pid(in: path)
     if sleepUntil(timeout, { kill(pid, 0) == -1 && errno == ESRCH }) { return true }
     kill(pid, SIGKILL)
     return false
   }
 
   private func killProcess(pidIn path: String) {
-    guard let text = try? String(contentsOfFile: path, encoding: .utf8),
-      let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
-    else { return }
+    guard let pid = try? pid(in: path) else { return }
     kill(pid, SIGKILL)
   }
 
@@ -118,43 +170,6 @@ final class BackgroundProcessTests: OrbeTestCase {
   }
 
   // MARK: - 上限
-
-  func testElapsedLimitStopsEvenWhileOutputFlows() throws {
-    let result = try run(spec("while :; do echo tick; sleep 0.1; done", elapsed: 0.5, idle: 5))
-
-    XCTAssertEqual(result.outcome.ending, .limited(.elapsed))
-    XCTAssertLessThan(result.elapsed, 5)
-  }
-
-  func testIdleLimitStopsSilentChild() throws {
-    let result = try run(spec("sleep 30", idle: 0.5))
-
-    XCTAssertEqual(result.outcome.ending, .limited(.idle))
-    XCTAssertLessThan(result.elapsed, 5)
-  }
-
-  /// 無出力の上限を外した実行は、黙っていても切らず、経過時間の上限で止まる。
-  func testWithoutIdleLimitSilentChildRunsUntilTheElapsedLimit() throws {
-    let result = try run(spec("sleep 30", elapsed: 1, idle: nil))
-
-    XCTAssertEqual(result.outcome.ending, .limited(.elapsed))
-    XCTAssertLessThan(result.elapsed, 5)
-  }
-
-  /// 出力が流れている間は、合計が無出力の上限を超えても切らない。
-  func testOutputKeepsIdleLimitAway() throws {
-    let result = try run(spec("for i in 1 2 3 4 5 6 7 8; do echo $i; sleep 0.1; done", idle: 0.5))
-
-    XCTAssertEqual(result.outcome.ending, .exited(0))
-  }
-
-  /// 標準エラーへの出力も、生きている印として数える。
-  func testStderrKeepsIdleLimitAway() throws {
-    let result = try run(
-      spec("for i in 1 2 3 4 5 6 7 8; do echo $i >&2; sleep 0.1; done", idle: 0.5))
-
-    XCTAssertEqual(result.outcome.ending, .exited(0))
-  }
 
   /// 貯める出力が上限を超えたら打ち切る。黙って捨てて走らせ続けると、切れた出力を完全なものとして読ませてしまう。
   func testStdoutOverflowStopsTheRun() throws {
@@ -217,13 +232,14 @@ final class BackgroundProcessTests: OrbeTestCase {
   // MARK: - 停止と片付け
 
   func testStopEndsTheRun() throws {
-    let process = BackgroundProcess(spec("sleep 30"))
-    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { process.stop() }
+    let ready = scratch("ready")
+    let process = BackgroundProcess(spec(": > '\(ready)'; exec sleep 30"))
+    let pending = start(process)
+    awaitFile(ready, "前提: 子が起動している")
 
-    let result = try run(process)
+    process.stop()
 
-    XCTAssertEqual(result.outcome.ending, .stopped)
-    XCTAssertLessThan(result.elapsed, 5)
+    XCTAssertEqual(try outcome(of: pending).ending, .stopped)
   }
 
   func testStopBeforeRunNeverLaunches() throws {
@@ -236,12 +252,16 @@ final class BackgroundProcessTests: OrbeTestCase {
 
   /// 止めると、子は SIGTERM を受けて後始末できる。GCD のワーカーから起こしても、そのスレッドのシグナルマスクを継がない。
   func testStoppedChildReceivesTerm() throws {
-    let marker = TestScratch.caseDir.appendingPathComponent("term").path
+    let marker = scratch("term")
+    let ready = scratch("ready")
     let process = BackgroundProcess(
-      spec("trap 'echo got > \(marker); exit 0' TERM; sleep 30 & wait"))
-    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { process.stop() }
+      spec("trap 'echo got > \(marker); exit 0' TERM; sleep 30 & : > '\(ready)'; wait"))
+    let pending = start(process)
+    awaitFile(ready, "前提: 子が SIGTERM の trap を設定している")
 
-    XCTAssertEqual(try run(process).outcome.ending, .stopped)
+    process.stop()
+
+    XCTAssertEqual(try outcome(of: pending).ending, .stopped)
     XCTAssertTrue(FileManager.default.fileExists(atPath: marker), "SIGKILL を待たずに trap が走る")
   }
 
@@ -255,20 +275,26 @@ final class BackgroundProcessTests: OrbeTestCase {
 
   /// SIGTERM を無視する子も、猶予の後に SIGKILL で止まる。
   func testChildIgnoringTermIsKilled() throws {
-    let process = BackgroundProcess(spec("trap '' TERM; sleep 30"))
-    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { process.stop() }
+    let ready = scratch("ready")
+    let process = timed(spec("trap '' TERM; : > '\(ready)'; sleep 30"))
+    let pending = start(process)
+    awaitFile(ready, "前提: 子が SIGTERM を無視している")
+    let limit = try awaitLimit(expected: Self.elapsedLimit)
 
-    let result = try run(process)
+    process.stop()
+    let grace = try awaitGrace(before: limit, "止めた後、上限より手前の期限で、SIGKILL までの猶予の予約が張られる")
+    clock.advance(to: grace.deadline)
 
-    XCTAssertEqual(result.outcome.ending, .stopped)
-    XCTAssertLessThan(result.elapsed, 6)
+    XCTAssertEqual(try outcome(of: pending).ending, .stopped)
   }
 
   /// 打ち切ると、グループにいる孫まで止まる。
   func testLimitStopsGrandchildren() throws {
-    let result = try run(spec("sleep 30 & echo $! > \(pidFile); wait", idle: 0.5))
+    let pending = start(timed(spec("sleep 30 & \(recordPID); wait", idle: Self.idleLimit)))
+    awaitFile(pidFile, "前提: 孫が起動している")
+    clock.advance(to: try awaitLimit(expected: Self.idleLimit).deadline)
 
-    XCTAssertEqual(result.outcome.ending, .limited(.idle))
+    XCTAssertEqual(try outcome(of: pending).ending, .limited(.idle))
     XCTAssertTrue(try isGone(pidIn: pidFile))
   }
 
@@ -280,25 +306,54 @@ final class BackgroundProcessTests: OrbeTestCase {
     XCTAssertTrue(try isGone(pidIn: pidFile))
   }
 
+  /// 孫が pipe を握ったまま子が終わる実行で、汲み出しの猶予の予約が張られるのを待つ。孫は、準備を終えた印を `ready` に置く。
+  /// 子は、テストの合図で終わる（子が終わると上限の予約は取り消されるので、その前に受け取るため）。
+  private func awaitDrainGrace(
+    ready: String, file: StaticString = #filePath, line: UInt = #line
+  ) throws -> ManualClock.Reservation {
+    awaitFile(ready, "前提: 孫が準備を終えている", file: file, line: line)
+    let limit = try awaitLimit(expected: Self.elapsedLimit, file: file, line: line)
+    touch(scratch("exit"))
+    return try awaitGrace(
+      before: limit, "子が終わった後、上限より手前の期限で、汲み出しの猶予の予約が張られる", file: file, line: line)
+  }
+
+  private var exitOnSignal: String {
+    "while [ ! -e '\(scratch("exit"))' ] && [ -d '\(TestScratch.caseDir.path)' ]; do sleep 0.05; done;"
+      + " exit 0"
+  }
+
   /// SIGTERM を無視して pipe を握る孫がいても、汲み出しの猶予で返り、孫は SIGKILL で止まる。
   func testGrandchildIgnoringTermAndHoldingPipeIsKilled() throws {
-    let result = try run(spec("(trap '' TERM; exec sleep 30) & echo $! > \(pidFile); exit 0"))
+    let ready = scratch("ready")
+    let pending = start(
+      timed(
+        spec("(trap '' TERM; : > '\(ready)'; exec sleep 30) & \(recordPID); \(exitOnSignal)")))
+    let drain = try awaitDrainGrace(ready: ready)
+    XCTAssertTrue(
+      try isAlive(pidIn: pidFile), "前提: 孫は SIGTERM を無視して、pipe を握ったまま生きている（EOF は来ていない）")
 
-    XCTAssertEqual(result.outcome.ending, .exited(0))
-    XCTAssertLessThan(result.elapsed, 6)
+    clock.advance(to: drain.deadline)
+
+    XCTAssertEqual(try outcome(of: pending).ending, .exited(0))
     XCTAssertTrue(try isGone(pidIn: pidFile))
   }
 
   /// グループから逃げた孫（setsid）が pipe を握っていても、EOF を無期限に待たずに返る。
   func testEscapedGrandchildHoldingPipeDoesNotBlockReturn() throws {
+    let ready = scratch("ready")
     let script =
-      #"/usr/bin/perl -e 'use POSIX; POSIX::setsid(); exec "sleep", "30";' & "#
-      + "echo $! > \(pidFile); exit 0"
-    let result = try run(spec(script))
+      #"/usr/bin/perl -e 'use POSIX; POSIX::setsid(); open(my $f, ">", $ARGV[0]); close($f); "#
+      + #"exec "sleep", "30";' "# + "'\(ready)' & \(recordPID); \(exitOnSignal)"
+    let pending = start(timed(spec(script)))
     defer { killProcess(pidIn: pidFile) }
+    let drain = try awaitDrainGrace(ready: ready)
 
-    XCTAssertEqual(result.outcome.ending, .exited(0))
-    XCTAssertLessThan(result.elapsed, 6)
+    clock.advance(to: drain.deadline)
+
+    XCTAssertEqual(try outcome(of: pending).ending, .exited(0))
+    XCTAssertTrue(
+      try isAlive(pidIn: pidFile), "前提: 逃げた孫が pipe を握っていて EOF は来ていない（猶予で返った）")
   }
 }
 

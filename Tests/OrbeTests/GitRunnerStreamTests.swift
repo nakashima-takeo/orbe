@@ -10,8 +10,9 @@ import XCTest
 /// 検索や根が消えた検索が「git が断った」と読まれる。止めても git が走り続ける。受け手が呼び出し側を掴んだまま残り、
 /// 検索のたびにメモリが増える。
 final class GitRunnerStreamTests: OrbeTestCase {
-  /// 本番の 120 秒は待てないので、無出力の打ち切りが短い runner で「流す実行には効かない」ことを見る。
-  private let runner = GitRunner(idleTimeout: 0.6)
+  /// 手で進める時計の上で、本番の無出力の上限を過ぎても「流しながら読む実行には効かない」ことを見る。
+  private let clock = ManualClock()
+  private lazy var runner = GitRunner(clock: clock.waits)
   private var fixture: GitHangFixture!
 
   override func setUpWithError() throws {
@@ -77,11 +78,18 @@ final class GitRunnerStreamTests: OrbeTestCase {
   }
 
   /// 無出力が打ち切りの上限を超えて続いても切らず、終われば「完了」で返る。
+  ///
+  /// 対になる場合が無い否定条件（流しながら読む実行は、いつも無出力では打ち切らない）なので、本番を一時的に変えると落ちることで
+  /// 裏づける。依っている前提: 流しながら読む実行の待ち手は期限なしで眠り、この runner の上で期限なしで眠るのは、この実行だけで
+  /// ある。その待ち手が、時刻を進めた後も眠ったままなら、実行は打ち切られていない。次のいずれかを変えたときは、本番を一時的に
+  /// 変えて落ちることを確かめ直す: 流しながら読む実行の待ち方（期限なしで眠らない形にする）、または `GitRunner` の待ち方。
   func testASilentRunIsNotCutAndCompletesWhenItEnds() throws {
     let recorder = Recorder()
     let handle = try streamHangingCommit(body: fixture.waitingBody, into: recorder)
     defer { handle.cancel() }
-    XCTAssertNil(recorder.awaitResult(timeout: 1.5), "無出力が上限（0.6 秒）を超えても切らない")
+    let run = try XCTUnwrap(clock.awaitSleeper(until: nil), "期限なしで眠る")
+    clock.advance(by: 86_400)
+    XCTAssertTrue(clock.isAsleep(run), "無出力が上限を超えても、待ち手は眠ったまま")
 
     fixture.release()
     let output = recorder.awaitResult(timeout: 20)
@@ -89,15 +97,17 @@ final class GitRunnerStreamTests: OrbeTestCase {
     XCTAssertEqual(output?.status, 0)
   }
 
-  /// 止めると SIGTERM で切り、孫が pipe を握っていても猶予の内に「止めた」で返る。何度止めてもよい。
+  /// 止めると SIGTERM で切り、孫が pipe を握っていても猶予で「止めた」として返る。何度止めてもよい。
   func testCancellingStopsTheRunAndReportsItWasCancelled() throws {
     let recorder = Recorder()
     let handle = try streamHangingCommit(body: fixture.pipeHoldingBody, into: recorder)
-    let started = Date()
     handle.cancel()
     handle.cancel()
+    let grace = try XCTUnwrap(
+      clock.awaitSleeper(where: { $0.deadline != nil })?.deadline, "止めた後、猶予の期限で EOF を待つ")
+    clock.advance(to: grace)
     let output = recorder.awaitResult(timeout: 10)
-    XCTAssertLessThan(Date().timeIntervalSince(started), 5, "止めたら猶予の内に返る")
+    XCTAssertTrue(fixture.grandchildIsAlive(), "前提: 孫が pipe を握っていて EOF は来ていない（猶予で返った）")
     XCTAssertEqual(output?.ending, .cancelled)
     XCTAssertEqual(output?.timedOut, false, "止めた実行を打ち切りと読ませない")
   }
