@@ -677,6 +677,21 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorBarHideTree
   case editorBarShowTree
   case editorBarShowTerminal
+  case editorBarOpenFiles
+  case editorItemUnsaved
+  case editorItemDiskChanged
+
+  // MARK: - Editor 面（骨: 一覧の器）
+  case editorItemListSwitch
+  case editorItemListDetail
+  case editorItemListRun
+  case editorItemListBack
+  case editorItemListClose
+  case editorOpenFilesTitle
+  case editorOpenFilesCurrent
+  case editorOpenFilesPreview
+  case editorOpenFilesKeepOpen
+  case editorOpenFilesCloseFile
 
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle
@@ -1049,6 +1064,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutPeekTerminal
   case helpShortcutSaveDocument
   case helpShortcutToggleEditorSidebar
+  case helpShortcutToggleEditorItemList
   case helpShortcutFindInProject
   case helpShortcutScmCommit
   case helpShortcutScmCommitAndPush

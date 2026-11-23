@@ -361,7 +361,7 @@ final class EditorDiffTests: OrbeTestCase {
     try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     tab.group.editor.selectScreen(.changes)
     let documents = try XCTUnwrap(tab.group.groupState()?.editor.documents)
-    XCTAssertEqual(documents.open, [repo.url("b.txt").path, repo.url("a.txt").path])
+    XCTAssertEqual(documents.open, [repo.url("a.txt").path, repo.url("b.txt").path])
     XCTAssertEqual(documents.active, repo.url("a.txt").path)
     XCTAssertEqual(tab.group.groupState()?.editor.screen, .changes)
     XCTAssertEqual(tab.group.editorLocation, .root(repo.root))

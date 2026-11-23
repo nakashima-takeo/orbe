@@ -87,3 +87,82 @@ extension DesignFlowSnapshotTests {
     }
   }
 }
+
+/// 開いているファイルの一覧の flow と gallery。一覧の器は面が窓に付いている間だけ開いているので（窓から外れると閉じる）、
+/// 面を付けた窓の中でそのまま描く。操作は製品と同じ入口（ボタンの閉包・行の列へのキーと押下・面の ⌘P）から入れる。
+extension ShotTestCase {
+  func openFilesScene(size: NSSize) throws -> EditorShellFixtures.Scene {
+    let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
+    let scene = try EditorShellFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
+    scene.warmUp(size: size)
+    pumpMain(until: { scene.isReady }, "git バッジが揃う")
+    try scene.openMoreFiles()
+    pumpMain(until: { scene.isOpenFilesReady }, "印と状態の字が揃う")
+    return scene
+  }
+
+  /// 面を付けた窓の中で、手順ごとに描いて `<name>_<NN>_<label>[_light].png` を書く。
+  func renderInPlace(
+    _ scene: EditorShellFixtures.Scene, name: String, dir: URL, appearances: [Bool],
+    steps: [(label: String, action: () -> Void)]
+  ) throws {
+    let pane = scene.pane
+    for (idx, step) in steps.enumerated() {
+      step.action()
+      for dark in appearances {
+        pane.window?.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        pane.layoutSubtreeIfNeeded()
+        let rep = try XCTUnwrap(pane.bitmapImageRepForCachingDisplay(in: pane.bounds))
+        pane.cacheDisplay(in: pane.bounds, to: rep)
+        let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+        let url = dir.appendingPathComponent(
+          String(format: "%@_%02d_%@%@.png", name, idx, step.label, dark ? "" : "_light"))
+        try data.write(to: url)
+        print("[shot] wrote \(url.path)")
+      }
+    }
+  }
+
+  /// 行の列へキーを 1 つ送る（`chars` は NSEvent の文字）。
+  func listKey(_ pane: EditorPaneView, _ chars: String) {
+    pane.itemList.list.list.keyDown(with: .key(chars, []))
+  }
+
+  static func arrow(_ key: NSEvent.SpecialKey) -> String { String(UnicodeScalar(key.rawValue)!) }
+
+  /// 行の列の行 `index` の × を押す。
+  func pressMark(_ pane: EditorPaneView, row index: Int) {
+    let list = pane.itemList.list.list
+    guard
+      let slot = list.subviews.compactMap({ $0 as? EditorItemListRowView }).first(where: {
+        $0.row == index && !$0.isHidden
+      }), let mark = slot.markRect
+    else { return XCTFail("行 \(index) が見えていない") }
+    list.mouseDown(with: slot.mouseEvent(.leftMouseDown, at: NSPoint(x: mark.midX, y: mark.midY)))
+  }
+}
+
+extension DesignFlowSnapshotTests {
+  /// ボタンを押す → ↓ → ↵ で切り替わる → ⌘P で開く → → で詳細 → ← → × で閉じる → esc。左の列を閉じた姿でも開く。
+  func testEditorShellOpenFiles() throws {
+    let size = NSSize(width: 1100, height: 640)
+    let scene = try openFilesScene(size: size)
+    defer { scene.cleanup() }
+    let pane = scene.pane
+    try renderInPlace(
+      scene, name: "editor_shell_open_files", dir: previewDir("flows"), appearances: [true],
+      steps: [
+        ("button", { pane.shell.toggleItemList() }),
+        ("down", { self.listKey(pane, Self.arrow(.downArrow)) }),
+        ("enter", { self.listKey(pane, "\r") }),
+        ("command_p", { _ = pane.performKeyEquivalent(with: .key("p")) }),
+        ("detail", { self.listKey(pane, Self.arrow(.rightArrow)) }),
+        ("back", { self.listKey(pane, Self.arrow(.leftArrow)) }),
+        ("close_row", { self.pressMark(pane, row: 4) }),
+        ("escape", { self.listKey(pane, "\u{1b}") }),
+        ("sidebar_closed", { pane.toggleSidebar() }),
+        ("sidebar_closed_open", { pane.shell.toggleItemList() }),
+      ])
+  }
+}

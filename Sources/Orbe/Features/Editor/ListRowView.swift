@@ -1,7 +1,7 @@
 import AppKit
 
-/// 行の列（`RowListView`）の行の view の基底。行の番号と選択（地は selectionFill。焦点の有無で色を変えない）とポインタの
-/// 位置を持ち、VoiceOver には行（AX の row）として何行目か・選択を渡す。中身は派生が `drawContent` で描き、中身の文字列（AX の
+/// 行の列（`RowListView`）の行の view の基底。行の番号と選択（地は selectionFill。焦点の有無で色を変えない。地の形は派生が
+/// `drawSelection` で決める——既定は行の全面）とポインタの位置を持ち、VoiceOver には行（AX の row）として何行目か・選択を渡す。中身は派生が `drawContent` で描き、中身の文字列（AX の
 /// ラベル）も派生が渡す。押下は列が受ける（行は素通し）——行の中に押せる部品を置く派生は、その位置を `control(at:)` で答える。
 class ListRowView: NSView {
   /// 描いている行の番号（列が枠を割り当てる）。
@@ -40,11 +40,14 @@ class ListRowView: NSView {
   override func draw(_ dirtyRect: NSRect) {
     guard let context = NSGraphicsContext.current?.cgContext else { return }
     let colors = RowColors.of(effectiveAppearance)
-    if isSelected {
-      context.setFillColor(colors.selection)
-      context.fill(bounds)
-    }
+    if isSelected { drawSelection(colors.selection, in: context) }
     drawContent(colors, in: context)
+  }
+
+  /// 選択の地を描く（既定は行の全面）。
+  func drawSelection(_ color: CGColor, in context: CGContext) {
+    context.setFillColor(color)
+    context.fill(bounds)
   }
 
   /// 中身を描く（選択の地の上に）。

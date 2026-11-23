@@ -126,8 +126,8 @@ extension EditorDiffTests {
     XCTAssertEqual(string(document.text), "one\nTWO\nthree仮名\nfour\n")
   }
 
-  /// diff の中で打って未保存にすると、その文書が開いている文書の列の末尾へ普通の文書として入り（次の diff へ入れ替えても
-  /// 未保存の本文が消えない）、タブ行に未保存の印が出る。画面は変わらない。
+  /// diff の中で打って未保存にすると、その文書が開いている文書の列へ普通の文書として入る（次の diff へ入れ替えても
+  /// 未保存の本文が消えない）。列が空なら今の文書になる。画面は変わらない。
   func testEditingInADiffPutsTheDocumentIntoTheOpenDocuments() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     try repo.write("b.txt", "b\n")
@@ -148,6 +148,27 @@ extension EditorDiffTests {
     try tab.group.editor.openDiff(id("b.txt", .workingTree))
     XCTAssertEqual(tab.group.editor.documents.map(\.url), [document.url], "別の diff へ入れ替えても文書は残る")
     XCTAssertTrue(document.isDirty)
+  }
+
+  /// diff の中で未保存になった文書は、列の 2 番目（今の文書のすぐ次）に入る——今の文書は替わらず、直前に触った文書として
+  /// 開いているファイルの一覧の 2 行目に出る。
+  func testADocumentEditedInADiffEntersSecond() throws {
+    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    try repo.write("c.txt", "c\n")
+    try repo.write("d.txt", "d\n")
+    let (tab, window) = tab()
+    let c = try tab.group.editor.open(repo.url("c.txt"), as: .pinned)
+    let d = try tab.group.editor.open(repo.url("d.txt"), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
+    waitRows(diff, "変更が出る") { !$0.isEmpty }
+    let document = try XCTUnwrap(diff.document)
+    let surface = try engine(diff.newSurface)
+    window.makeFirstResponder(surface.responder)
+
+    type("Z", at: 0, on: surface)
+    XCTAssertTrue(
+      tab.group.editor.documents.elementsEqual([d, document, c], by: ===), "2 番目に入る")
+    XCTAssertTrue(tab.group.editor.activeDocument === d, "今の文書は替わらない")
   }
 
   /// diff の中で ⌘S を押すと文書を保存し、未保存の印が消える。ディスクが外で変わっていて未保存の編集があれば上書きの確認が

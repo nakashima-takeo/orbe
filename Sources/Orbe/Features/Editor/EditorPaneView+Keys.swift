@@ -10,6 +10,10 @@ extension EditorPaneView {
     return responder === self || responder.isDescendant(of: self)
   }
 
+  /// フォーカスが本体にあるか——面の中にあって、左の列にも一覧の器にも無い。本体の面を置き換えるとき、この間だけ新しい
+  /// 行き先へフォーカスを移す。
+  var focusIsInBody: Bool { focusIsInside && !focusIsInSidebar && !focusIsInItemList }
+
   /// 焦点の行き先。文書の本体ならそのテキスト面、diff の本体なら見せている面（並列なら最後に焦点のあった側、既定は右）、
   /// 面が無ければ自分。
   var focusTarget: NSView {
@@ -38,7 +42,8 @@ extension EditorPaneView {
   }
 
   /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れた連の pane も窓に残るので、
-  /// 焦点が自分か配下に無いときは素通しする。エディターのキーは ⌘S（保存）と ⌘B（左の列の開閉）。検索パネル・ソース管理パネル・PR のパネルの中のキーは chrome キーより先に見る。
+  /// 焦点が自分か配下に無いときは素通しする。エディターのキーは ⌘S（保存）・⌘B（左の列の開閉）・⌘P（上のバーの今の項目の
+  /// ボタンを押すのと同じ。ボタンが出ていなければ何もしない）。検索パネル・ソース管理パネル・PR のパネルの中のキーは chrome キーより先に見る。
   /// chrome キーを走らせる前に焦点の文書の変換を確定する（⌘F の種の読み取りや焦点の移動の前に、変換の状態と IME の状態を
   /// 揃える。未確定の文字は既に本文にあるので、⌘S は見えている本文を保存する）。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -57,7 +62,11 @@ extension EditorPaneView {
       if let command = action.windowCommand { group?.requestWindowCommand(command) }
       return true
     case .editor:
-      if action == .toggleEditorSidebar { toggleSidebar() } else { saveEdited() }
+      switch action {
+      case .toggleEditorSidebar: toggleSidebar()
+      case .toggleEditorItemList: toggleItemList()
+      default: saveEdited()
+      }
       return true
     case .terminal:
       return true

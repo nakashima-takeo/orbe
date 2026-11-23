@@ -165,8 +165,8 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(textHasFocus(hosted), "ダブルクリックは本文へ")
   }
 
-  /// 一致のクリックは仮の文書として開き、次のクリックがそのタブを入れ替える（タブが増えない）。ダブルクリックは普通の文書にし、
-  /// 次のクリックは別の仮の文書として開く。
+  /// 一致のクリックは仮の文書として開き、次のクリックがその仮の文書を入れ替える（開いている文書が増えない）。ダブルクリックは
+  /// 普通の文書にし、次のクリックは別の仮の文書として列の先頭に開く。
   func testClickingMatchesBrowsesInOnePreviewTab() throws {
     let hosted = try host(["a.txt": "needle\n", "b.txt": "needle\n", "c.txt": "needle\n"])
     searchAll(hosted, "needle")
@@ -180,7 +180,7 @@ extension ProjectSearchPaneTests {
     hosted.search.doubleClick(RowID(path: "b.txt", match: 0))
     XCTAssertNil(editor.preview, "ダブルクリックで普通の文書")
     hosted.search.click(RowID(path: "c.txt", match: 0))
-    XCTAssertEqual(editor.documents.map(\.url.lastPathComponent), ["b.txt", "c.txt"])
+    XCTAssertEqual(editor.documents.map(\.url.lastPathComponent), ["c.txt", "b.txt"])
     XCTAssertTrue(editor.preview === hosted.pane.document)
   }
 

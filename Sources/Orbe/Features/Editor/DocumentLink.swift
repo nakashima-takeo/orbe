@@ -2,10 +2,11 @@ import Foundation
 import OrbeEditorCore
 
 /// 開いている文書 1 つと、その実体が属する根のサービスを結ぶ。文書と同寿命で、サービスを握る者であり
-/// 自分の 1 ファイルの index の版に関心を申告する観測者。外部変更の照合と baseline の受け渡しを担う。
+/// 自分の 1 ファイルの index の版に関心を申告する観測者。外部変更の照合と baseline の受け渡しと、文書の git の状態の字を
+/// 担う。
 ///
 /// 根は文書の実体のディレクトリから解く（連の根ではない——制御 API で外のファイルを開いても、その文書の
-/// baseline と外部変更は自分のリポジトリで見る）。baseline は index の版の本文で、その版に無い・読めない・取れない
+/// baseline と外部変更と状態の字は自分のリポジトリで見る）。baseline は index の版の本文で、その版に無い・読めない・取れない
 /// なら無し。
 @MainActor
 final class DocumentLink: RootFilesObserver {
@@ -15,6 +16,10 @@ final class DocumentLink: RootFilesObserver {
   private let path: String
   /// 文書の index の版（根の外なら nil）。
   private let index: RootFiles.Version?
+  /// 文書の git の状態の字（根の status から。根の外・git 管理外・変化なしは nil）。
+  private(set) var badge: GitStatus.Badge?
+  /// 状態の字が変わった。
+  var onBadgeChange: (() -> Void)?
 
   init(document: EditorDocument) {
     self.document = document
@@ -26,6 +31,7 @@ final class DocumentLink: RootFilesObserver {
     }
     files.addObserver(self, versions: Set(index.map { [$0] } ?? []))
     applyBaseline()
+    badge = readBadge()
   }
 
   deinit {
@@ -42,7 +48,16 @@ final class DocumentLink: RootFilesObserver {
     document.reconcileWithDisk()
   }
 
-  func rootFilesStatusDidChange(_ files: RootFiles) {}
+  private func readBadge() -> GitStatus.Badge? {
+    index.flatMap { files.status?.badge(of: $0.path) }
+  }
+
+  func rootFilesStatusDidChange(_ files: RootFiles) {
+    let next = readBadge()
+    guard next != badge else { return }
+    badge = next
+    onBadgeChange?()
+  }
 
   func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {
     guard version == index else { return }

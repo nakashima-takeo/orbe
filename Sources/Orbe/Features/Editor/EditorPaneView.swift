@@ -46,7 +46,7 @@ final class EditorPaneView: NSView {
   /// ツリーで最後に選択表示した Files の今の文書（替わったときだけツリーを追従させる）。
   private var revealedDocument: URL?
   /// 見ている（本体に出ていて、面が見えている）diff。
-  private var watchedDiff: EditorDiff?
+  var watchedDiff: EditorDiff?
   /// 開いた diff の行が左の列の一覧にまだ無い間の、その diff（行ができたら選択表示する）。
   var diffAwaitingRow: EditorDiff.Key?
   /// 焦点を預かっている一覧の画面（Changes・PR。行が出たら一覧へ渡す。→ `holdListFocus`）。
@@ -79,7 +79,15 @@ final class EditorPaneView: NSView {
   private(set) var pullRequest: PrPanel
   private(set) var pullRequestList: RowList<PrListSource>
   private(set) var pullRequestHeader = PrDescriptionHeader(frame: .zero)
-  /// F4 / ⇧F4・PR の画面のキー v と、結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
+  /// 一覧の器（今の項目のボタンに付いて浮く一覧）と、その地と下の案内の host。器の行の列と host は、開いている間だけ
+  /// バーより下の最前面に出す。
+  let itemList = EditorItemList()
+  let itemListHost: EditorItemListHost
+  /// Files の一覧を器に載せる側。
+  private(set) lazy var openFilesList = OpenFilesList(pane: self)
+  /// 上のバーの今の項目のボタンの枠（バーの座標＝面の座標。ボタンが出ていなければ nil）。一覧の矩形の入力。
+  var itemButtonFrame: CGRect?
+  /// F4 / ⇧F4・PR の画面のキー v と、結果の列・一覧の器の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// 左の列の幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
@@ -131,6 +139,10 @@ final class EditorPaneView: NSView {
       rootView: EditorFaceRoot(localization: localization, scm: scm, pullRequest: pullRequest))
     headerHost = DiffFileHeaderHost(
       rootView: DiffFileHeaderRoot(localization: localization, scm: scm))
+    itemListHost = EditorItemListHost(
+      rootView: EditorItemListRoot(
+        itemList: itemList, localization: localization, fontResolver: fontResolver,
+        translucency: ChromeTranslucency()))
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
@@ -148,6 +160,7 @@ final class EditorPaneView: NSView {
     wireProjectSearch()
     wireSourceControl()
     wirePullRequest()
+    wireItemList()
     observeSidebar()
     registerForDraggedTypes([.fileURL])
   }
@@ -192,6 +205,10 @@ final class EditorPaneView: NSView {
       localization: localization, fontResolver: fontResolver)
     faceHost.rootView = faceRoot(faceContent)
     headerHost.rootView = headerRoot(headerSubject)
+    itemListHost.rootView = EditorItemListRoot(
+      itemList: itemList, localization: localization, fontResolver: fontResolver,
+      translucency: translucency ?? ChromeTranslucency())
+    itemList.emoji = fontResolver.emojiFont
   }
 
   /// 焦点を明け渡した。一覧のための預かりはここで終わる。行内入力を預かっていたなら、行き先が決まった次のターンに、
@@ -208,7 +225,7 @@ final class EditorPaneView: NSView {
 
   /// セッションが変わった。左の列の中身を画面に合わせ、セッションが画面から導いた本体を見せ、Files の今の文書が替わって
   /// いればツリーの祖先を開いてそのファイルを選択する。本体が空のまま画面が替わったときも、器の中身は画面で決まるので
-  /// 置き直す。
+  /// 置き直す。上のバーの今の項目と、開いている一覧の中身も写し直す。
   func sessionDidChange() {
     guard let group else { return }
     syncPanel()
@@ -221,6 +238,7 @@ final class EditorPaneView: NSView {
       if let active { tree.reveal(active) }
     }
     reconcileWithLists()
+    refreshCurrentItem()
   }
 
   /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
@@ -266,6 +284,7 @@ final class EditorPaneView: NSView {
     updateLiveness()
     installRoots()
     if let url = group?.editor.activeURL { tree.reveal(url) }
+    refreshCurrentItem()
   }
 
   /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の
@@ -273,12 +292,12 @@ final class EditorPaneView: NSView {
   /// 配置を頼み、文書を初めて画面に出すときはその配置で、最初の描画に色が間に合うよう上限つきで待つ（→
   /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
   /// 文書の知らせは、本体で編集する文書へ結び直す（→ `bindEditedDocument`）。
-  /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が面の中（左の列を除く）にあれば新しい
-  /// 行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では
-  /// 「中にあった」ことが分からない）。左の列の焦点（検索結果・行内入力）は面を外しても残るので動かさない。
+  /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が本体にあれば新しい行き先へ移す——判定は
+  /// 前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では「中にあった」ことが
+  /// 分からない）。左の列の焦点（検索結果・行内入力）と一覧の器の焦点は面を外しても残るので動かさない。
   func show(_ next: EditorBody) {
     guard !Self.same(next, body) else { return }
-    let hadFocusInside = focusIsInside && !focusIsInSidebar
+    let hadFocusInside = focusIsInBody
     unbind(body)
     body = next
     switch next {
@@ -337,64 +356,5 @@ final class EditorPaneView: NSView {
       hideDiff(diff)
     case .empty: break
     }
-  }
-
-  // MARK: - 可視性（ツリー・プロジェクト検索・ソース管理パネル・PR のパネルが根のサービスを握る寿命）
-
-  override func viewDidMoveToWindow() {
-    super.viewDidMoveToWindow()
-    updateLiveness()
-    updateEventMonitor()
-  }
-
-  override func viewDidHide() {
-    super.viewDidHide()
-    updateLiveness()
-  }
-
-  override func viewDidUnhide() {
-    super.viewDidUnhide()
-    updateLiveness()
-  }
-
-  /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。ソース管理の一覧は、Changes の画面の間だけ行とグラフを組む。PR のパネルは、面が見えている間は
-  /// worktree の今の PR を追い、PR の画面の間だけ中身も読む。本体の PR の diff は、面が見えている間だけ PR ごとの状態を見る。本体の diff を整合させ、配置を
-  /// 頼み、見えるようになった本体を初めて見せる前の待ちをその配置で通す（隠れている間に配置が済んでいても、見えたときにもう
-  /// 一度配置して待つ）。
-  private func updateLiveness() {
-    let live = isFaceVisible
-    tree.isLive = live
-    projectSearch.isLive = live
-    scm.isLive = live
-    updatePanelsShown()
-    updateDiffWatching()
-    if live { group?.editor.prepareSurfaces() }
-    reconcileWithLists()
-    needsLayout = true
-  }
-
-  /// 面が画面に見えているか（窓に付き、隠れていない）。
-  var isFaceVisible: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
-
-  /// ソース管理の一覧が行を組むか（面が見えていて、画面が Changes）と、PR のパネルが worktree の今の PR を追うか（面が
-  /// 見えている間。上のバーの番号）と中身も読むか（面が見えていて、画面が PR）を写す。左の列を閉じていても同じ——Changes・
-  /// PR の画面で本体に自動で開く行を決めるのに一覧が要る。
-  func updatePanelsShown() {
-    let visible = isFaceVisible
-    let screen = group?.editor.screen
-    scm.isShown = visible && screen == .changes
-    if !visible { pullRequest.isShown = false }
-    pullRequest.isTracking = visible
-    pullRequest.isShown = visible && screen == .pullRequest
-  }
-
-  /// 本体の diff を、面が見えている間だけ見る（PR の diff はこの間だけ PR ごとの状態を見る）。替われば前の diff を見終わる。
-  private func updateDiffWatching() {
-    let next = isFaceVisible ? diff : nil
-    guard next !== watchedDiff else { return }
-    watchedDiff?.endWatching()
-    next?.beginWatching()
-    watchedDiff = next
   }
 }

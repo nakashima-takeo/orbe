@@ -5,13 +5,14 @@ import XCTest
 
 @testable import Orbe
 
-/// セッション——開く・同じファイルは焦点だけ・閉じると隣へ・未保存の有無・通知は 1 本・面を作れなければ開けない。
-/// 仮の文書は高々 1 つで、仮で開けば同じ位置で入れ替わり、未保存になった瞬間・普通に開き直すと普通に戻る。
-/// 面は本物を queries 無しで作る（色は要らない）。
+/// セッション——開く・同じファイルは焦点だけ・列は最近使った順で先頭が焦点・閉じると 1 つ前に使った文書へ・未保存の有無・
+/// 通知は 1 本・面を作れなければ開けない。仮の文書は高々 1 つで、仮で開けば前の仮が外れて先頭に入り、未保存になった瞬間・
+/// 普通に開き直すと普通に戻る。面は本物を queries 無しで作る（色は要らない）。
 ///
 /// 壊れると何が起きるか。同じファイルが 2 度開かれると undo と本文が 2 つに割れる。閉じたとき焦点が
 /// 消えた文書に残ると器が外した面を指す。未保存の変化が通知に載らないと、未保存の印を出す側が追従できない。
-/// 仮の文書が未保存のまま入れ替わると、編集が黙って消える。入れ替えが末尾へ動くと、見て回る間タブが跳ねる。
+/// 仮の文書が未保存のまま入れ替わると、編集が黙って消える。列が使った順に並ばないと、開いているファイルの一覧で
+/// 1 つ前のファイルへ 2 打で戻れない。
 @MainActor
 final class EditorSessionTests: OrbeTestCase {
   private func file(_ name: String, _ text: String) throws -> URL {
@@ -57,6 +58,22 @@ final class EditorSessionTests: OrbeTestCase {
     XCTAssertTrue(session.activeDocument === docB, "焦点の文書を閉じれば隣へ")
     session.close(docB)
     XCTAssertNil(session.activeDocument)
+  }
+
+  /// 列は最近使った順——開く・切り替えると先頭へ移り、今の文書を閉じると 1 つ前に使った文書（列の次）が今の文書になる。
+  func testDocumentsAreInMostRecentlyUsedOrder() throws {
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
+    let docA = try session.open(try file("a.txt", "a"), as: .pinned)
+    let docB = try session.open(try file("b.txt", "b"), as: .pinned)
+    let docC = try session.open(try file("c.txt", "c"), as: .pinned)
+    XCTAssertTrue(session.documents.elementsEqual([docC, docB, docA], by: ===), "開いた文書が先頭")
+
+    session.activate(docA)
+    XCTAssertTrue(session.documents.elementsEqual([docA, docC, docB], by: ===), "切り替えた文書が先頭")
+
+    session.close(docA)
+    XCTAssertTrue(session.activeDocument === docC, "1 つ前に使った文書が今の文書")
+    XCTAssertTrue(session.documents.elementsEqual([docC, docB], by: ===))
   }
 
   /// テキスト面を作れない（Metal の装置が取れない）環境では、読めるファイルも開けない——読めないファイルと同じく
@@ -123,8 +140,9 @@ final class EditorSessionTests: OrbeTestCase {
 
   // MARK: - 仮の文書
 
-  /// 仮で開くと、今の仮の文書を同じ位置で入れ替える（通知は 1 本）。仮の文書が無ければ末尾に足す。普通の文書は残る。
-  func testAPreviewReplacesThePreviewInPlace() throws {
+  /// 仮で新しく開くと、前の仮の文書を列から外し、新しい文書を先頭に入れる（通知は 1 本）。仮の文書が無くても先頭に入る。
+  /// 普通の文書は残る。
+  func testAPreviewReplacesThePreviewAtTheFront() throws {
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil), defaultScreen: .files)
     let a = try file("a.txt", "a")
     let b = try file("b.txt", "b")
@@ -137,14 +155,14 @@ final class EditorSessionTests: OrbeTestCase {
     let count = try notifications(session) { docB = try session.open(b, as: .preview) }
     XCTAssertEqual(count, 1, "閉じる＋開くを 1 本で")
     XCTAssertEqual(
-      session.documents.map(\.url.lastPathComponent), ["b.txt", "c.txt"], "仮の位置で入れ替わる")
+      session.documents.map(\.url.lastPathComponent), ["b.txt", "c.txt"], "前の仮が外れ、先頭に入る")
     XCTAssertTrue(session.preview === docB)
     XCTAssertTrue(session.activeDocument === docB)
 
     session.close(try XCTUnwrap(docB))
     XCTAssertNil(session.preview, "閉じれば仮無し")
     try session.open(a, as: .preview)
-    XCTAssertEqual(session.documents.map(\.url.lastPathComponent), ["c.txt", "a.txt"], "仮が無ければ末尾")
+    XCTAssertEqual(session.documents.map(\.url.lastPathComponent), ["a.txt", "c.txt"], "仮が無くても先頭")
   }
 
   /// 開いている文書を仮で開き直しても焦点が移るだけで、普通の文書は普通のまま。普通に開き直すと仮の文書は普通になる。

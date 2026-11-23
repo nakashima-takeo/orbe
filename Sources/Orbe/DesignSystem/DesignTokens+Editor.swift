@@ -125,6 +125,20 @@ extension Theme.Typography {
   static let editorDiffHeaderPath = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
   static let editorDiffHeaderName = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
   static let editorDiffHeaderBadge = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .semibold)
+  /// 上のバーの今の項目のボタン——親のパス（mono 12）と名前（mono 12 semibold）。
+  static let editorItemButtonPath = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  static let editorItemButtonName = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
+  /// 状態を示す札（「プレビュー」「現在」。sans 10.5）。
+  static let editorTag = NSFont.systemFont(ofSize: 10.5, weight: .regular)
+  /// 一覧の器——見出しの題（sans 10.5 semibold）と数（mono 10.5 medium）、ファイルの行の名前（sans 12.5 medium）と
+  /// ディレクトリ（mono 11）と状態の字（mono 10.5 semibold）、操作の行（sans 12.5）、下の案内（sans 11）。
+  static let editorItemListHeading = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+  static let editorItemListCount = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .medium)
+  static let editorItemListName = NSFont.systemFont(ofSize: 12.5, weight: .medium)
+  static let editorItemListDirectory = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+  static let editorItemListBadge = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .semibold)
+  static let editorItemListAction = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+  static let editorItemListHint = NSFont.systemFont(ofSize: 11, weight: .regular)
   static let editorSidebarNote = NSFont.systemFont(ofSize: 12, weight: .regular)
   /// コード本体（mono 12）。
   static let editorCode = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -209,6 +223,33 @@ extension Theme.Layout {
   static let editorTextButtonGlyph: CGFloat = 14
   static let editorTextButtonGap: CGFloat = 5
   static let editorTextButtonKeyGap: CGFloat = 11
+  /// 上のバーの今の項目のボタンの高さ・左右の余白・角丸・中の部品の間・末尾の ▾ の大きさ。
+  static let editorItemButton: CGFloat = 26
+  static let editorItemButtonPadX: CGFloat = 8
+  static let editorItemButtonRadius: CGFloat = 7
+  static let editorItemButtonGap: CGFloat = 6
+  static let editorItemButtonCaret: CGFloat = 14
+  /// 未保存・ディスクが変わったの丸。
+  static let editorItemDot: CGFloat = 7
+  /// 状態を示す札の左右の余白・上下の余白・角丸。
+  static let editorTagPadX: CGFloat = 6
+  static let editorTagPadY: CGFloat = 1
+  static let editorTagRadius: CGFloat = 4
+  /// 一覧の器——幅・行の高さ・内側の余白・角丸の選択の地・行の左右の余白と部品の間・操作の行の左右の余白・右の印の枠と × の
+  /// 大きさ・状態の字の列の幅・下の案内の高さ（上の空き 5・線 1・上下の余白 7 と 3・キーの札 18）と案内の間・器の下に残す余白。
+  static let editorItemListWidth: CGFloat = 420
+  static let editorItemListRow: CGFloat = 26
+  static let editorItemListPad: CGFloat = 5
+  static let editorItemListRowRadius: CGFloat = 6
+  static let editorItemListRowPadX: CGFloat = 8
+  static let editorItemListRowGap: CGFloat = 8
+  static let editorItemListActionPadX: CGFloat = 10
+  static let editorItemListMark: CGFloat = 16
+  static let editorItemListMarkGlyph: CGFloat = 10
+  static let editorItemListBadge: CGFloat = 12
+  static let editorItemListFooter: CGFloat = 34
+  static let editorItemListHintGap: CGFloat = 14
+  static let editorItemListBottom: CGFloat = 12
   static let editorPanelHeader: CGFloat = 28
   static let editorRow: CGFloat = 20
   /// ツリー行の種別チップ。
@@ -293,6 +334,15 @@ extension Theme.Opacity {
   /// 字のボタンの地（`surfaceInk` の α）——地つきの変種と素の姿のホバー、地つきの変種のホバー。
   static let editorTextButtonFill: Double = 0.08
   static let editorTextButtonFillHover: Double = 0.12
+  /// 今の項目のボタンの地・枠・一覧を開いている間の地（`surfaceInk` の α）。
+  static let editorItemButtonFill: Double = 0.06
+  static let editorItemButtonBorder: Double = 0.05
+  static let editorItemButtonOpen: Double = 0.11
+  /// 状態を示す札の枠（`surfaceInk` の α）。
+  static let editorTag: Double = 0.2
+  /// 一覧の器の行のホバーの地と、右の印の枠のホバーの地（塗りの α）。
+  static let editorItemListHover: Double = 0.045
+  static let editorItemListMarkHover: Double = 0.10
   /// diff の追加・削除の行の地の不透明度（構文色が地の上で読める濃さ）。
   static let editorDiffRow: CGFloat = 0.12
   /// diff の詰め物の行の地（塗りの α）と、並列の 2 面の境（hairline の α）。

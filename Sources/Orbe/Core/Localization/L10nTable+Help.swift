@@ -36,6 +36,9 @@ extension L10n {
     ),
     .helpShortcutSaveDocument: ("エディターのファイルを保存", "Save the editor file"),
     .helpShortcutToggleEditorSidebar: ("エディターのツリーを開く・閉じる", "Show or hide the editor tree"),
+    .helpShortcutToggleEditorItemList: (
+      "エディターのファイルの一覧を開く・閉じる", "Show or hide the editor's file list"
+    ),
     .helpShortcutFindInProject: ("プロジェクト全体を検索", "Search the whole project"),
     .helpShortcutScmCommit: ("ソース管理のメッセージでコミット", "Commit from the Source Control message"),
     .helpShortcutScmCommitAndPush: (
