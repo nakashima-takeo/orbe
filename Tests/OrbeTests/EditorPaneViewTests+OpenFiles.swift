@@ -234,11 +234,13 @@ final class EditorPaneViewOpenFilesTests: OrbeTestCase {
     XCTAssertFalse(hosted.pane.shell.isItemListOpen)
   }
 
-  /// 一覧の行に、その文書の git の状態の字が出て、外で `git add` すると、開いたままの一覧の字が替わる。
-  func testTheRowsShowTheGitBadge() throws {
-    let repo = try TempGitRepo()
+  /// 一覧の行に、その文書の属するリポジトリの git の状態の字が出る（タブの worktree の外のファイルでも出る）。Orbe の
+  /// 外でそのファイルを `git add` すると、開いたままの一覧の字が替わる。
+  func testTheRowsShowTheGitBadgeOfTheDocumentsOwnRepository() throws {
+    let home = try TempGitRepo(name: "orbe-open-files-home")
+    let repo = try TempGitRepo(name: "orbe-open-files-other")
     try repo.write("n.txt", "n\n")
-    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: home.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     hostEditor(tab, width: 1000, height: 600)
     try tab.group.editor.open(repo.url("n.txt"), as: .pinned)
     tab.group.editor.selectScreen(.files)
