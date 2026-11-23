@@ -2,9 +2,9 @@ import AppKit
 
 /// 行を並べる列（`RowList` の文書）。行は数万になりうるので、見えている行の数＋1 本の枠だけを持ち、行 r を枠
 /// r mod 本数 に割り当てて使い回す——送って描き直すのは新しく見えた行だけで、行の数が変わっても列の高さを変えるだけ
-/// （行ごとの仕事をしない）。行はどれも同じ高さ（`rowHeight`）。最後の行の下に行 1 つ分の空きを持つ——末尾まで送っても
-/// 最後の行が下端に付かない（VS Code の一覧と同じ）。空きは文書の内側なので、ホイール・つまみ・End のどれでも届き、
-/// 押しても行は無い。
+/// （行ごとの仕事をしない）。行はどれも同じ高さ（`rowHeight`）。既定では最後の行の下に行 1 つ分の空きを持つ——末尾まで
+/// 送っても最後の行が下端に付かない（VS Code の一覧と同じ）。空きは文書の内側なので、ホイール・つまみ・End のどれでも届き、
+/// 押しても行は無い。高さを行の数に合わせる列（浮く一覧）は空きを持たない（`trailingSpace`）。
 ///
 /// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は列が送るだけ。押すと焦点を取り
 /// （焦点を持たない源の列は取らない）、行の番号を源へ渡す——行の中の部品の上なら、行のクリックではなく部品の押下として渡す
@@ -21,6 +21,8 @@ import AppKit
 final class RowListView<Source: RowListSource>: NSView {
   let source: Source
   let rowHeight: CGFloat
+  /// 最後の行の下に行 1 つ分の空きを持つか。
+  let trailingSpace: Bool
   var emoji: NSFont?
   /// 描いている行の組（`reloadRows` で源から写す）。問いと操作はすべてこれで渡す。
   private var drawn: Source.Rows
@@ -48,9 +50,10 @@ final class RowListView<Source: RowListSource>: NSView {
     }
   }
 
-  init(source: Source, rowHeight: CGFloat) {
+  init(source: Source, rowHeight: CGFloat, trailingSpace: Bool) {
     self.source = source
     self.rowHeight = rowHeight
+    self.trailingSpace = trailingSpace
     drawn = source.rows
     super.init(frame: .zero)
     setAccessibilityElement(true)
@@ -95,9 +98,12 @@ final class RowListView<Source: RowListSource>: NSView {
   /// 行の高さの和（最後の行の下の空きと一時の空きを含まない）。
   private var rowsHeight: CGFloat { CGFloat(rowCount) * rowHeight }
 
-  /// 文書の高さ（頭・行・最後の行の下の 1 行分の空き・一時の空き）。
+  /// 頭・行・最後の行の下の空きの高さの和（一時の空きを含まない）。
+  private var contentHeight: CGFloat { headerHeight + rowsHeight + (trailingSpace ? rowHeight : 0) }
+
+  /// 文書の高さ（頭・行・最後の行の下の空き・一時の空き）。
   func resizeDocument() {
-    let height = headerHeight + rowsHeight + rowHeight + bottomSpace
+    let height = contentHeight + bottomSpace
     guard frame.height != height else { return }
     setFrameSize(NSSize(width: frame.width, height: height))
   }
@@ -168,7 +174,7 @@ final class RowListView<Source: RowListSource>: NSView {
       let offset = convert(NSPoint(x: 0, y: anchor.windowY), from: nil).y - visible.minY
       top = max(0, rect(ofRow: target).minY - offset)
     }
-    bottomSpace = max(0, top + visible.height - (headerHeight + rowsHeight + rowHeight))
+    bottomSpace = max(0, top + visible.height - contentHeight)
     resizeDocument()
     if visible.minY != top { scroll(NSPoint(x: 0, y: top)) }
     layoutRows()
@@ -217,7 +223,7 @@ final class RowListView<Source: RowListSource>: NSView {
   /// 減りうる）。
   private var shownCount: Int { min(rowCount, source.rowCount(in: drawn)) }
 
-  private func rect(ofRow row: Int) -> NSRect {
+  func rect(ofRow row: Int) -> NSRect {
     NSRect(
       x: 0, y: headerHeight + CGFloat(row) * rowHeight, width: bounds.width, height: rowHeight)
   }

@@ -113,12 +113,13 @@ final class RowList<Source: RowListSource>: NSScrollView {
   private var rowsVersion: Int?
   /// 最後に写した選択。選択が変わったときだけ、その行を見せる（行の番号がずれただけ・列が出ただけでは送らない）。
   private var selection: Source.Selection?
-  /// 大きさが決まる前に変わった選択。大きさの無い列で送ると、後で大きさが付いても送った位置が残るので、大きさが付いた
-  /// 最初の `tile` で見せる。
-  private var pendingReveal: Source.Selection?
+  /// 大きさが決まる前に見せると決めた選択と、中ほどへ送るか。大きさの無い列で送ると、後で大きさが付いても送った位置が
+  /// 残るので、大きさが付いた最初の `tile` で見せる。
+  private var pendingReveal: (selection: Source.Selection, centered: Bool)?
 
-  init(source: Source, rowHeight: CGFloat) {
-    list = RowListView(source: source, rowHeight: rowHeight)
+  /// `trailingSpace` が偽なら、最後の行の下に空きを持たない（高さを行の数に合わせる列）。
+  init(source: Source, rowHeight: CGFloat, trailingSpace: Bool = true) {
+    list = RowListView(source: source, rowHeight: rowHeight, trailingSpace: trailingSpace)
     super.init(frame: .zero)
     documentView = list
     drawsBackground = false
@@ -155,18 +156,27 @@ final class RowList<Source: RowListSource>: NSScrollView {
     if selection != self.selection {
       self.selection = selection
       pendingReveal = nil
-      if let selection, let row = list.selectedRow {
-        if contentSize.height > 0 {
-          list.scrollRowToVisible(row)
-        } else {
-          pendingReveal = selection
-        }
-      }
+      if let selection { reveal(selection, centered: false) }
     }
     if wantsFocus {
       // 焦点を移すと載せている SwiftUI の焦点も変わるので、この更新の外で当てる。
       DispatchQueue.main.async { [weak self] in self?.list.applyFocusRequest() }
     }
+  }
+
+  /// 選択 `selection` の行を、列の高さの中ほどへ送る（列に大きさが無ければ、大きさが付いたときに）。
+  func center(_ selection: Source.Selection) {
+    reveal(selection, centered: true)
+  }
+
+  private func reveal(_ selection: Source.Selection, centered: Bool) {
+    pendingReveal = nil
+    guard contentSize.height > 0 else {
+      pendingReveal = (selection, centered)
+      return
+    }
+    guard let row = list.row(of: selection) else { return }
+    if centered { list.scrollRowToCenter(row) } else { list.scrollRowToVisible(row) }
   }
 
   /// 最初の行の上に置く頭を `header` にする（nil なら外す）。頭はスクロールで行と一緒に動く。
@@ -188,8 +198,7 @@ final class RowList<Source: RowListSource>: NSScrollView {
     list.layoutRows()
     scrollbar.reflect(metrics)
     guard contentSize.height > 0, let pending = pendingReveal else { return }
-    pendingReveal = nil
-    if let row = list.row(of: pending) { list.scrollRowToVisible(row) }
+    reveal(pending.selection, centered: pending.centered)
   }
 
   override func reflectScrolledClipView(_ clipView: NSClipView) {
