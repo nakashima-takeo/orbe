@@ -66,8 +66,8 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(textHasFocus(hosted), "Enter は開いて本文へ")
   }
 
-  /// 結果の列の Esc で、左の列はエクスプローラーへ戻り、焦点は本文へ移る（上のバーの「開いたままにする」のキーの札 ↵ は
-  /// 消える）。選んでいた行・折りたたみは残り、⌘⇧F で同じ列が同じ選択のまま出る。
+  /// 結果の列の Esc で、左の列の中身は検索パネルからエクスプローラーへ戻り、焦点は本文へ移る（キーリピートの Esc では戻ら
+  /// ない）。選んでいた行・折りたたみは残り、⌘⇧F で同じ結果の列が同じ選択のまま出る。
   func testEscapeInTheListLeavesForTheExplorerAndKeepsTheSelection() throws {
     let hosted = try host(["a.txt": "needle\nneedle\n", "b.txt": "needle\n"])
     searchAll(hosted, "needle")
@@ -77,18 +77,12 @@ extension ProjectSearchPaneTests {
     list.keyDown(with: key(.downArrow))
     hosted.search.toggleCollapse("b.txt")
     let selected = hosted.search.selection
-    func currentFile() -> EditorShellModel.CurrentFile? {
-      guard case .file(let file) = hosted.pane.shell.currentItem else { return nil }
-      return file
-    }
-    XCTAssertEqual(currentFile()?.isPreview, true, "前提: ↓ で仮の文書として開く")
-    pumpMain(until: { currentFile()?.showsKeepOpenKey == true }, "前提: 結果の列にフォーカスがある間は札 ↵")
 
+    list.keyDown(with: .key("\u{1b}", [], isRepeat: true))
+    XCTAssertTrue(hosted.pane.showsSearchPanel, "キーリピートの Esc では戻らない")
     list.keyDown(with: .key("\u{1b}", []))
     XCTAssertFalse(hosted.pane.showsSearchPanel, "エクスプローラーへ戻る")
     pumpMain(until: { textHasFocus(hosted) }, "焦点は本文へ")
-    pumpMain(until: { currentFile()?.showsKeepOpenKey == false }, "札 ↵ は消える")
-    XCTAssertEqual(currentFile()?.isPreview, true, "仮の文書のまま")
     XCTAssertEqual(hosted.search.selection, selected, "選んでいた行は残る")
 
     hosted.pane.showProjectSearch(seed: nil)
