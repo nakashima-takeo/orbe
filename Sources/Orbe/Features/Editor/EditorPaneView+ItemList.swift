@@ -7,6 +7,12 @@ extension EditorPaneView {
     itemListHost.isHidden = true
     itemList.list.isHidden = true
     itemList.onOpen = { [weak self] in self?.itemListDidOpen() }
+    shell.toggleItemList = { [weak self] in self?.toggleItemList() }
+    shell.itemButtonFrameDidChange = { [weak self] frame in
+      guard let self, frame != itemButtonFrame else { return }
+      itemButtonFrame = frame
+      if itemList.isOpen { needsLayout = true }
+    }
     itemList.onClose = { [weak self] returnsFocus in
       self?.itemListDidClose(returnsFocus: returnsFocus)
     }
@@ -21,6 +27,7 @@ extension EditorPaneView {
 
   /// 器を出して置き、行の列へフォーカスを移す。
   private func itemListDidOpen() {
+    shell.isItemListOpen = true
     endListFocusHold()
     let views: [NSView] = [itemListHost, itemList.list]
     if !belowBar.subviews.suffix(2).elementsEqual(views, by: ===) {
@@ -40,6 +47,7 @@ extension EditorPaneView {
   /// first responder が替わる途中なので、行の列を隠すのは次のターンにする（フォーカスを持つ view を隠すと、AppKit が
   /// その場でフォーカスを動かし、移動が入れ子になる）。
   private func itemListDidClose(returnsFocus: Bool) {
+    shell.isItemListOpen = false
     if returnsFocus { focusEditor() }
     itemListHost.isHidden = true
     guard focusIsInItemList else {

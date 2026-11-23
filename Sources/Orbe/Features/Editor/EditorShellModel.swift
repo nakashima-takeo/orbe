@@ -31,10 +31,31 @@ final class EditorShellModel {
     }
   }
 
+  /// 上のバーの今の項目——今の項目のボタンが示す対象。Files の画面で今の文書があるとき、そのファイル。
+  enum CurrentItem: Equatable {
+    case file(CurrentFile)
+  }
+
+  /// 今の項目のファイルの写し（ボタンに出すもの）。
+  struct CurrentFile: Equatable {
+    let chip: FileChip
+    /// 親のパス（根の下なら根からの相対のディレクトリに `/` を付けたもの。根の直下なら空。根の外なら `~` で縮めた絶対の
+    /// ディレクトリ）。
+    let directory: String
+    let name: String
+    let isPreview: Bool
+    /// 印（無し・未保存・ディスクが変わった）。
+    let mark: EditorItemListRow.Mark
+  }
+
   /// 左の列に出している中身（pane が画面から決めて写す）。
   var panel = Panel.files
   /// 器が透かしている（上のバーの「⌥ 端末を表示」を押している間の姿にする）。
   var isPeeking = false
+  /// 今の項目（無ければボタンを出さない）。書くのは pane だけで、ボタンの表示・⌘P・一覧の器の開閉が同じ値を読む。
+  var currentItem: CurrentItem?
+  /// 一覧の器が開いている（ボタンを開いている間の姿にする）。
+  var isItemListOpen = false
 
   @ObservationIgnored var open: (URL, EditorSession.OpenMode) -> Void = { _, _ in }
   @ObservationIgnored var createFile: () -> Void = {}
@@ -44,6 +65,10 @@ final class EditorShellModel {
   @ObservationIgnored var selectScreen: (EditorScreen) -> Void = { _ in }
   /// 上のバーの左端で左の列を開閉した。
   @ObservationIgnored var toggleSidebar: () -> Void = {}
+  /// 上のバーの今の項目のボタンを押した。
+  @ObservationIgnored var toggleItemList: () -> Void = {}
+  /// 今の項目のボタンの枠（バーの座標）が変わった。pane の幾何の入力で、写しには書かない。
+  @ObservationIgnored var itemButtonFrameDidChange: (CGRect) -> Void = { _ in }
   /// 行内入力の入力欄が焦点を失った（その世代）。別の view へ移ったなら pane が取り消し、窓へ落ちたなら
   /// pane が預かる。
   @ObservationIgnored var inlineInputLostFocus: (Int) -> Void = { _ in }

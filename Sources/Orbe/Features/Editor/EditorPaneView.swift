@@ -83,6 +83,8 @@ final class EditorPaneView: NSView {
   /// バーより下の最前面に出す。
   let itemList = EditorItemList()
   let itemListHost: EditorItemListHost
+  /// Files の一覧を器に載せる側。
+  private(set) lazy var openFilesList = OpenFilesList(pane: self)
   /// 上のバーの今の項目のボタンの枠（バーの座標＝面の座標。ボタンが出ていなければ nil）。一覧の矩形の入力。
   var itemButtonFrame: CGRect?
   /// F4 / ⇧F4・PR の画面のキー v と、結果の列・一覧の器の外の押下を拾うイベントの監視（窓に付いている間だけ）。
@@ -223,7 +225,7 @@ final class EditorPaneView: NSView {
 
   /// セッションが変わった。左の列の中身を画面に合わせ、セッションが画面から導いた本体を見せ、Files の今の文書が替わって
   /// いればツリーの祖先を開いてそのファイルを選択する。本体が空のまま画面が替わったときも、器の中身は画面で決まるので
-  /// 置き直す。
+  /// 置き直す。上のバーの今の項目と、開いている一覧の中身も写し直す。
   func sessionDidChange() {
     guard let group else { return }
     syncPanel()
@@ -236,6 +238,7 @@ final class EditorPaneView: NSView {
       if let active { tree.reveal(active) }
     }
     reconcileWithLists()
+    refreshCurrentItem()
   }
 
   /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
@@ -281,6 +284,7 @@ final class EditorPaneView: NSView {
     updateLiveness()
     installRoots()
     if let url = group?.editor.activeURL { tree.reveal(url) }
+    refreshCurrentItem()
   }
 
   /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の

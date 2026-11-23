@@ -91,7 +91,7 @@ final class EditorItemListRowView: ListRowView {
   // MARK: - 寸法
 
   /// 右の印の枠（ファイルの行だけ）。
-  private var markRect: NSRect? {
+  var markRect: NSRect? {
     guard case .file = content else { return nil }
     let size = Theme.Layout.editorItemListMark
     let right =

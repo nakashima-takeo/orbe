@@ -2,9 +2,10 @@ import AppKit
 import SwiftUI
 
 /// 上のバー（高さ 36。下端の hairline を含む）の SwiftUI ルート。左から、左の列の開閉・画面の切り替え（Changes の件数・PR の
-/// 番号つき）、
-/// 右寄せで「⌥ 端末を表示」の案内。器の中の別 root なので環境は明示注入する。押してもフォーカスを取らない（host が
-/// first responder を受けない）。幅が足りなければ案内を出さず、開閉と切り替えを守る。
+/// 番号つき）・今の項目のボタン（今の項目があるとき。前に区切り線）、右寄せで「⌥ 端末を表示」の案内。器の中の別 root なので
+/// 環境は明示注入する。押してもフォーカスを取らない（host が first responder を受けない）。幅が足りなければ、「⌥ 端末を表示」
+/// → 親のパスの順に落とし、それでも足りなければ名前を省略する。開閉・切り替え・ボタンは落とさない。ボタンの枠は、閉包で
+/// pane へ知らせる（一覧の器の位置の入力）。
 struct EditorBarRoot: View {
   let shell: EditorShellModel
   /// 左の列の開閉の持ち主（pane と同じ 1 つ）。
@@ -18,33 +19,77 @@ struct EditorBarRoot: View {
   @Environment(\.colorScheme) private var scheme
 
   private static let hairlineAlpha = 0.07
+  private static let space = "editorBar"
 
   var body: some View {
     VStack(spacing: 0) {
       ViewThatFits(in: .horizontal) {
-        row(showsHint: true)
-        row(showsHint: false)
+        row(showsHint: true, showsPath: true, fitsName: true)
+        row(showsHint: false, showsPath: true, fitsName: true)
+        row(showsHint: false, showsPath: false, fitsName: true)
+        row(showsHint: false, showsPath: false, fitsName: false)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .frame(height: Theme.Layout.editorBar - Theme.Stroke.hairline)
       Rectangle().fill(EditorInk(scheme).hairline(Self.hairlineAlpha))
         .frame(height: Theme.Stroke.hairline)
     }
+    .coordinateSpace(.named(Self.space))
     .environment(\.localization, localization)
     .environment(\.chromeFontResolver, fontResolver)
   }
 
-  private func row(showsHint: Bool) -> some View {
+  private func row(showsHint: Bool, showsPath: Bool, fitsName: Bool) -> some View {
     HStack(spacing: 6) {
       EditorSidebarToggle(isOpen: sidebar.isOpen, action: shell.toggleSidebar)
       EditorScreenSwitch(
         selection: shell.panel.screen, changesCount: scm.count,
-        pullRequestNumber: pullRequest.state?.key.id.number, select: shell.selectScreen)
+        pullRequestNumber: pullRequest.state?.key.id.number, select: shell.selectScreen
+      )
+      .fixedSize()
+      if let item = shell.currentItem {
+        EditorBarSeparator()
+        currentItem(item, showsPath: showsPath, fitsName: fitsName)
+      }
       Spacer(minLength: 0)
       if showsHint { EditorPeekHint(isPeeking: shell.isPeeking) }
     }
     .padding(.leading, 8)
     .padding(.trailing, 12)
+  }
+
+  @ViewBuilder
+  private func currentItem(
+    _ item: EditorShellModel.CurrentItem, showsPath: Bool, fitsName: Bool
+  ) -> some View {
+    switch item {
+    case .file(let file):
+      EditorItemButton(
+        isOpen: shell.isItemListOpen, help: localization.string(.editorBarOpenFiles),
+        action: shell.toggleItemList
+      ) {
+        EditorCurrentFileLabel(file: file, showsPath: showsPath, fitsName: fitsName)
+      }
+      .onGeometryChange(for: CGRect.self) {
+        $0.frame(in: .named(Self.space))
+      } action: {
+        shell.itemButtonFrameDidChange($0)
+      }
+    }
+  }
+}
+
+/// 上のバーの区切り線（1×16・hairline .15・左右 6）。
+private struct EditorBarSeparator: View {
+  @Environment(\.colorScheme) private var scheme
+
+  private static let alpha = 0.15
+  private static let height: CGFloat = 16
+
+  var body: some View {
+    Rectangle().fill(EditorInk(scheme).hairline(Self.alpha))
+      .frame(width: Theme.Stroke.hairline, height: Self.height)
+      .padding(.horizontal, Theme.Space.note)
   }
 }
 
