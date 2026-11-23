@@ -113,11 +113,18 @@ extension Theme.Typography {
   /// 表示できない diff の理由の一文・ボードの空状態の一文（サンセリフ 13）。
   static let editorLead = NSFont.systemFont(ofSize: 13, weight: .regular)
   /// 本体の空・使えないときの表示——見出し（sans 14 medium）・案内の一文とショートカットの行（sans 12.5）・ボタン（sans 12.5
-  /// semibold）・キーの札（sans 10.5 semibold）。左の列の一言（sans 12）。
+  /// semibold）。左の列の一言（sans 12）。
   static let editorEmptyTitle = NSFont.systemFont(ofSize: 14, weight: .medium)
   static let editorEmptyText = NSFont.systemFont(ofSize: 12.5, weight: .regular)
   static let editorEmptyButton = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
-  static let editorEmptyKey = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+  /// キーの札の字（sans 10.5 semibold）。
+  static let editorKeyCap = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+  /// 字のボタンの字（sans 11.5）。
+  static let editorTextButton = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+  /// 差分のファイルの見出しのパス（mono 12。ファイル名は semibold）と状態の字（mono 10.5 semibold）。
+  static let editorDiffHeaderPath = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  static let editorDiffHeaderName = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
+  static let editorDiffHeaderBadge = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .semibold)
   static let editorSidebarNote = NSFont.systemFont(ofSize: 12, weight: .regular)
   /// コード本体（mono 12）。
   static let editorCode = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -190,6 +197,18 @@ extension Theme.Layout {
   static let editorBodyMinWidth: CGFloat = 160
   /// 左の列と本体の境（hairline）に置くドラッグの当たりの幅。
   static let editorSidebarHandle: CGFloat = 4
+  /// キーの札の高さと最小幅・左右の余白・角丸・中の印の大きさ。
+  static let editorKeyCap: CGFloat = 18
+  static let editorKeyCapPadX: CGFloat = 4
+  static let editorKeyCapRadius: CGFloat = 5
+  static let editorKeyCapGlyph: CGFloat = 12
+  /// 字のボタンの高さ・左右の余白・角丸・印の大きさ・印と字の間・字とキーの札の間。
+  static let editorTextButton: CGFloat = 22
+  static let editorTextButtonPadX: CGFloat = 7
+  static let editorTextButtonRadius: CGFloat = 6
+  static let editorTextButtonGlyph: CGFloat = 14
+  static let editorTextButtonGap: CGFloat = 5
+  static let editorTextButtonKeyGap: CGFloat = 11
   static let editorPanelHeader: CGFloat = 28
   static let editorRow: CGFloat = 20
   /// ツリー行の種別チップ。
@@ -202,6 +221,20 @@ extension Theme.Layout {
   static let editorDiffNumberTrailingInline: CGFloat = 6
   static let editorDiffNumberTrailingSide: CGFloat = 8
   static let editorDiffSign: CGFloat = 18
+  /// diff を並列で見せる本体の幅の下限（これ未満はインライン）。
+  static let editorDiffSideWidth: CGFloat = 1000
+  /// 差分のファイルの見出し。高さ（下端の hairline を含む）・部品の間・左の余白（Changes・PR）・右の余白・未保存の丸・
+  /// 状態の字の幅・区切り線の高さとその左右の空き・下の影が帯の下にはみ出す高さ。
+  static let editorDiffHeader: CGFloat = 32
+  static let editorDiffHeaderGap: CGFloat = 8
+  static let editorDiffHeaderLeading: CGFloat = 12
+  static let editorDiffHeaderLeadingPullRequest: CGFloat = 18
+  static let editorDiffHeaderTrailing: CGFloat = 12
+  static let editorDiffHeaderDot: CGFloat = 7
+  static let editorDiffHeaderBadge: CGFloat = 12
+  static let editorDiffHeaderDivider: CGFloat = 16
+  static let editorDiffHeaderDividerInset: CGFloat = 6
+  static let editorDiffHeaderShadow: CGFloat = 14
   /// 本体の右端の縦スクロールバー（印を載せる。VS Code の verticalScrollbarSize）。
   static let editorScrollbar: CGFloat = 14
   /// 本文の区画の下端の横スクロールバーの高さ（VS Code の horizontalScrollbarSize）。
@@ -255,11 +288,20 @@ extension Theme.Opacity {
   static let editorSunkLight: Double = 0.3
   static let editorFillLight: Double = 0.6
   static let editorHairlineLight: Double = 1.4
+  /// キーの札の地（`surfaceInk` の α）。
+  static let editorKeyCap: Double = 0.07
+  /// 字のボタンの地（`surfaceInk` の α）——地つきの変種と素の姿のホバー、地つきの変種のホバー。
+  static let editorTextButtonFill: Double = 0.08
+  static let editorTextButtonFillHover: Double = 0.12
   /// diff の追加・削除の行の地の不透明度（構文色が地の上で読める濃さ）。
   static let editorDiffRow: CGFloat = 0.12
   /// diff の詰め物の行の地（塗りの α）と、並列の 2 面の境（hairline の α）。
   static let editorDiffPad: Double = 0.02
   static let editorDiffDivider: Double = 0.07
+  /// 差分のファイルの見出しの地（`surfaceInk` の α）・下端の線と区切り線（hairline の α）。
+  static let editorDiffHeaderGround: Double = 0.035
+  static let editorDiffHeaderLine: Double = 0.07
+  static let editorDiffHeaderDivider: Double = 0.15
 }
 
 extension Theme.Motion {

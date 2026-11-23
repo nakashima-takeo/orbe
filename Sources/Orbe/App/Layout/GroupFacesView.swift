@@ -88,14 +88,14 @@ final class GroupFacesView: NSView {
     reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
   }
 
-  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態・diff の見せ方）をエディター面へ配る。
+  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）をエディター面へ配る。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
-    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState, diffModes: EditorDiffModeState
+    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
   ) {
     editor.configure(
       translucency: translucency, localization: localization, fontResolver: fontResolver,
-      sidebar: sidebar, diffModes: diffModes)
+      sidebar: sidebar)
   }
 
   // MARK: - 端末

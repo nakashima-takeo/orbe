@@ -586,6 +586,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorEmptyLead
   case editorEmptySearchProject
   case editorEmptyBackToTerminal
+  case editorUnsaved
   case editorUnavailable
   case editorScmUnavailableTitle
   case editorScmNoChanges
@@ -619,6 +620,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrCommits
   case editorPrFiles
   case editorPrViewedCount
+  case editorPrMarkViewed
+  case editorPrUnmarkViewed
   case editorPrTreeView
   case editorPrListView
   case editorPrOlderCommitsHidden

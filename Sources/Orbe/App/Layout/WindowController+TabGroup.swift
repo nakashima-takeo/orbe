@@ -25,7 +25,7 @@ extension WindowController {
     group.onLocationChange = { [weak self] in self?.refreshChrome() }
     group.view.configure(
       translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
-      sidebar: editorSidebar, diffModes: editorDiffModes)
+      sidebar: editorSidebar)
     group.view.editor.settings = { [weak self, weak group] in
       guard let self else { return EffectiveSettings(SettingsLayer()) }
       let workspace = workspaces.first { $0.tabs.contains { $0.group === group } }

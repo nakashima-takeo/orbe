@@ -111,11 +111,11 @@ final class EditorDiffPerfTests: OrbeTestCase {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let tab = TerminalTab.alone(
       cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: queries))
-    let window = mountEditor(tab, width: 1200, height: 800)
+    // 左の列を開いた窓で、本体の幅が並列の境の値より狭い（インライン）・広い（並列）。
+    let window = mountEditor(tab, width: mode == .side ? 1400 : 1200, height: 800)
     tab.group.view.editor.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
-      diffModes: EditorDiffModeState(mode: mode))
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState())
     let key = EditorDiff.Key(root: repo.root, path: "big.swift", kind: .workingTree)
     defer {
       tab.group.editor.closeDiff(on: .changes)

@@ -39,6 +39,8 @@ final class EditorPaneView: NSView {
   }
   let sideHost: NSHostingView<EditorSideRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
+  /// 差分のファイルの見出し（本体が diff の間だけ出す）。
+  let headerHost: DiffFileHeaderHost
   /// 本体（セッションが画面から導いた中身）。
   private(set) var body = EditorBody.empty
   /// ツリーで最後に選択表示した Files の今の文書（替わったときだけツリーを追従させる）。
@@ -49,10 +51,6 @@ final class EditorPaneView: NSView {
   var diffAwaitingRow: EditorDiff.Key?
   /// 焦点を預かっている一覧の画面（Changes・PR。行が出たら一覧へ渡す。→ `holdListFocus`）。
   var heldListFocus: EditorScreen?
-  /// diff の見せ方（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して見せ直す。
-  private(set) var diffModes = EditorDiffModeState() {
-    didSet { observeDiffModes() }
-  }
   /// 並列の diff で最後に焦点のあった側（焦点の行き先。既定は右）。
   var diffFocusesLeft = false
   /// 並列の diff の 2 面の境。
@@ -81,7 +79,7 @@ final class EditorPaneView: NSView {
   private(set) var pullRequest: PrPanel
   private(set) var pullRequestList: RowList<PrListSource>
   private(set) var pullRequestHeader = PrDescriptionHeader(frame: .zero)
-  /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
+  /// F4 / ⇧F4・PR の画面のキー v と、結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// 左の列の幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
@@ -131,6 +129,8 @@ final class EditorPaneView: NSView {
         localization: localization, fontResolver: fontResolver))
     faceHost = NSHostingView(
       rootView: EditorFaceRoot(localization: localization, scm: scm, pullRequest: pullRequest))
+    headerHost = DiffFileHeaderHost(
+      rootView: DiffFileHeaderRoot(localization: localization, scm: scm))
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
@@ -149,7 +149,6 @@ final class EditorPaneView: NSView {
     wireSourceControl()
     wirePullRequest()
     observeSidebar()
-    observeDiffModes()
     registerForDraggedTypes([.fileURL])
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
@@ -160,17 +159,16 @@ final class EditorPaneView: NSView {
 
   override var isFlipped: Bool { true }
 
-  /// 窓の環境（透過・言語・フォント割り当て・左の列の状態・diff の見せ方）を面へ配る。別 root は Environment を継承
-  /// しないので root を作り直す。
+  /// 窓の環境（透過・言語・フォント割り当て・左の列の状態）を面へ配る。別 root は Environment を継承しないので root を
+  /// 作り直す。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
-    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState, diffModes: EditorDiffModeState
+    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
   ) {
     self.translucency = translucency
     self.localization = localization
     self.fontResolver = fontResolver
     self.sidebar = sidebar
-    self.diffModes = diffModes
     installRoots()
     needsLayout = true
   }
@@ -193,6 +191,7 @@ final class EditorPaneView: NSView {
       pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
       localization: localization, fontResolver: fontResolver)
     faceHost.rootView = faceRoot(faceContent)
+    headerHost.rootView = headerRoot(headerSubject)
   }
 
   /// 焦点を明け渡した。一覧のための預かりはここで終わる。行内入力を預かっていたなら、行き先が決まった次のターンに、
@@ -215,6 +214,7 @@ final class EditorPaneView: NSView {
     syncPanel()
     show(group.editor.body)
     refreshNotice()
+    refreshHeader()
     let active = group.editor.activeURL
     if active != revealedDocument {
       revealedDocument = active
@@ -296,6 +296,7 @@ final class EditorPaneView: NSView {
     bindEditedDocument()
     pushFindGround()
     refreshNotice()
+    refreshHeader()
     needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)

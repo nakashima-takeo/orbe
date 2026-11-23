@@ -136,26 +136,17 @@ private struct EditorMessageButton: View {
   }
 }
 
-/// ショートカットの行: 案内（sans 12.5・textMuted）と、8 右にキーの札（高さ 18・最小幅 18・padding 0 4・radius 5・地 ink .07・
-/// sans 10.5 semibold・textSecondary）。
+/// ショートカットの行: 案内（sans 12.5・textMuted）と、8 右にキーの札。
 private struct EditorShortcutRow: View {
   let label: String
   let key: String
-
-  private static let keyAlpha = 0.07
 
   var body: some View {
     HStack(spacing: 8) {
       Text(label)
         .font(Font.theme.editorEmptyText)
         .foregroundStyle(Color.theme.textMuted)
-      Text(key)
-        .font(Font.theme.editorEmptyKey)
-        .foregroundStyle(Color.theme.textSecondary)
-        .padding(.horizontal, 4)
-        .frame(minWidth: 18, minHeight: 18)
-        .background(
-          RoundedRectangle(cornerRadius: 5).fill(Color.theme.surfaceInk.opacity(Self.keyAlpha)))
+      EditorKeyCap(content: .text(key))
     }
   }
 }

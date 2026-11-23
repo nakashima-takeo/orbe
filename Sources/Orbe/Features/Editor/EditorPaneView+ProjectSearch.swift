@@ -92,8 +92,8 @@ extension EditorPaneView {
     pushFindGround()
   }
 
-  /// アプリがイベントを配る手前で見る口（窓に付いている間だけ）。F4 / ⇧F4 を拾う——修飾の無いファンクションキーは key
-  /// equivalent として pane に届かずテキスト面の keyDown へ直行するので（テキスト面の契約は変えない）。結果の列の外を押したら、
+  /// アプリがイベントを配る手前で見る口（窓に付いている間だけ）。F4 / ⇧F4 と PR の画面のキー v を拾う——修飾の無いキーは
+  /// key equivalent として pane に届かずテキスト面の keyDown へ直行するので（テキスト面の契約は変えない）。結果の列の外を押したら、
   /// 待っている ↑↓ の開きを捨てる——人の注意が結果から移ったので、後から前の選択が開いて押したものを入れ替えない（焦点が
   /// 列に残る押下——上のバーのボタンなど——も含む）。
   func updateEventMonitor() {
@@ -111,7 +111,7 @@ extension EditorPaneView {
           if !press(event, isIn: pullRequestList) { pullRequest.navigation.drop() }
           return event
         }
-        return handleStepKey(event) ? nil : event
+        return handleStepKey(event) || handleViewedKey(event) ? nil : event
       }
     }
   }

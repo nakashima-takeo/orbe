@@ -223,9 +223,7 @@ extension EditorDiffTests {
     }
     let remote = Remote()
     remote.threads = [thread(3)]
-    let modes = EditorDiffModeState()
-    if side { modes.select(.side) }
-    let (diff, surface) = try commentedDiff(remote, modes: modes)
+    let (diff, surface) = try commentedDiff(remote, width: side ? Self.sideWidth : 900)
     let window = try XCTUnwrap(surface.textView.window)
     let zone = try XCTUnwrap(diff.comments?.zone(thread: "T"))
     pumpMain(until: { surface.rows.block(ofZone: ObjectIdentifier(zone)) != nil }, "スレッドが置かれる")
@@ -261,9 +259,7 @@ extension EditorDiffTests {
             createdAt: Date(), isPending: false)
         ])
     ]
-    let modes = EditorDiffModeState()
-    modes.select(.side)
-    let (diff, _) = try commentedDiff(remote, modes: modes) {
+    let (diff, _) = try commentedDiff(remote, width: Self.sideWidth) {
       try self.repo.write("a.txt", head.joined(separator: "\n") + "\n")
     }
     let zone = try XCTUnwrap(diff.comments?.zone(thread: "T"))

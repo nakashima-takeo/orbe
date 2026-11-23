@@ -87,6 +87,25 @@ struct ScmChanges {
     }
   }
 
+  /// 区分 `section` の、パス `path` のファイル（無ければ nil）。列はパス順なので、二分探索で引く（列は数万件になりうる）。
+  func file(in section: ScmSection, path: String) -> File? {
+    let files = files(in: section)
+    let key = FileNameOrder.PathKey(path)
+    let order = { (file: File) in FileNameOrder.comparePaths(FileNameOrder.PathKey(file.path), key)
+    }
+    var low = 0
+    var high = files.count
+    while low < high {
+      let middle = (low + high) / 2
+      if order(files[middle]) == .orderedAscending { low = middle + 1 } else { high = middle }
+    }
+    while low < files.count, order(files[low]) == .orderedSame {
+      if files[low].path == path { return files[low] }
+      low += 1
+    }
+    return nil
+  }
+
   /// status から 2 区分を作る（裏で呼ぶ）。
   static func build(_ status: GitStatus) -> ScmChanges {
     var staged: [(FileNameOrder.PathKey, File)] = []

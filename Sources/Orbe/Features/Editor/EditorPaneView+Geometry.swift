@@ -93,6 +93,14 @@ extension EditorPaneView {
       height: max(0, bounds.height - top))
   }
 
+  /// 本体のうち見出しの下の矩形（diff の面・文字だけの器を置く）。本体が diff でなければ本体の矩形そのもの。
+  var belowHeaderRect: NSRect {
+    let header = diff == nil ? 0 : min(Theme.Layout.editorDiffHeader, bodyRect.height)
+    let body = bodyRect
+    return NSRect(
+      x: body.minX, y: body.minY + header, width: body.width, height: body.height - header)
+  }
+
   /// 焦点の文書の面の右列（ミニマップ ＋ 縦スクロールバー）の幅。本体より広くはならない。文書が無ければ 0。
   var rightColumnWidth: CGFloat {
     min(bodyRect.width, document?.surface.rightColumnWidth ?? 0)
@@ -104,8 +112,8 @@ extension EditorPaneView {
     if searchBarTrailing?.constant != constant { searchBarTrailing?.constant = constant }
   }
 
-  /// 骨の view を重ねる——下から、バーの地・バーより下（その地・左の列・文字だけの器・境の当たり。本体の面と検索バーは後から
-  /// 足す）・上のバー。
+  /// 骨の view を重ねる——下から、バーの地・バーより下（その地・左の列・文字だけの器・見出し・境の当たり。本体の面は見出しの
+  /// 下に、検索バーは後から一番上に足す）・上のバー。
   func assembleViews() {
     for view in [barGround, belowGround, belowBar] {
       view.wantsLayer = true
@@ -114,7 +122,7 @@ extension EditorPaneView {
     addSubview(barGround)
     addSubview(belowBar)
     belowBar.addSubview(belowGround)
-    for host in [sideHost, faceHost, barHost] as [NSView] {
+    for host in [sideHost, faceHost, headerHost, barHost] as [NSView] {
       // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
       host.wantsLayer = true
       host.layer?.isOpaque = false
@@ -128,6 +136,8 @@ extension EditorPaneView {
   }
 
   override func layout() {
+    // 見せ方は面の枠を置く前に決める——並列とインラインで面の数が変わり、開いた直後に送る位置も見せ方で変わる。
+    fitDiffMode()
     // 面の大きさが右列の幅を決め、検索バーの制約はその幅から置く——制約は super.layout() が当てるので、その前に置く。
     document?.surface.view.frame = bodyRect
     if let diff { layoutDiff(diff) }
@@ -141,7 +151,12 @@ extension EditorPaneView {
     belowBar.frame = bounds
     belowGround.frame = NSRect(x: 0, y: bar, width: bounds.width, height: below)
     sideHost.frame = NSRect(x: 0, y: bar, width: min(sideWidth, bounds.width), height: below)
-    faceHost.frame = bodyRect
+    faceHost.frame = belowHeaderRect
+    // 見出しの host は、帯の下にはみ出す影の分だけ高い（影の範囲は押下を素通しする）。
+    headerHost.frame = NSRect(
+      x: bodyRect.minX, y: bodyRect.minY, width: bodyRect.width,
+      height: min(
+        Theme.Layout.editorDiffHeader + Theme.Layout.editorDiffHeaderShadow, bodyRect.height))
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない面に出すと本体の左 1pt を
     // 覆ってリサイズカーソルだけが出る。
     sidebarHandle.isHidden =
@@ -168,13 +183,13 @@ extension EditorPaneView {
     }
   }
 
-  /// 面を本体に載せる。境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なるので、テキスト面はその下。検索バーは後から
-  /// 足すので面の上。
+  /// 面を本体に載せる。境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なり、見出しの影は面の上端に掛かるので、テキスト
+  /// 面はどちらよりも下。検索バーは後から足すので面の上。
   func install(_ surface: any TextSurface) {
     surface.host = self
     let view = surface.view
     view.autoresizingMask = []
-    view.frame = bodyRect
-    belowBar.addSubview(view, positioned: .below, relativeTo: sidebarHandle)
+    view.frame = belowHeaderRect
+    belowBar.addSubview(view, positioned: .below, relativeTo: headerHost)
   }
 }

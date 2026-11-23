@@ -46,10 +46,15 @@ extension EditorDiff {
     }
   }
 
-  /// 見せ方（アプリ全体で 1 つ。→ `EditorDiffModeState`）。
-  enum Mode: String {
+  /// 見せ方。本体の幅で決まる（→ `init(bodyWidth:)`）。
+  enum Mode {
     case inline
     case side
+
+    /// 本体の幅 `bodyWidth` での見せ方——境の値（`Theme.Layout.editorDiffSideWidth`）以上なら並列、未満ならインライン。
+    init(bodyWidth: CGFloat) {
+      self = bodyWidth >= Theme.Layout.editorDiffSideWidth ? .side : .inline
+    }
   }
 
   /// 表示できない理由。

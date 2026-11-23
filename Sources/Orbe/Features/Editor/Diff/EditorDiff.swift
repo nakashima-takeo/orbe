@@ -102,6 +102,9 @@ final class EditorDiff {
   /// 新しい側の文書（出どころが新しい側に文書を使っていなければ nil）。
   var document: EditorDocument? { source.document }
 
+  /// 主の入力欄（PR のコメントの返信・新しいコメントの欄）が居る面（無ければ nil）。
+  var primaryFieldSurface: (any TextSurface)? { comments?.primaryFieldSurface }
+
   /// 新しい側の面（作業ツリーなら文書の面、ほかは diff が持つ面。中身が見せられなければ nil）。
   var newSurface: (any TextSurface)? {
     guard content == .ready else { return nil }

@@ -24,15 +24,25 @@ final class EditorDiffTests: OrbeTestCase {
 
   /// 根のタブを窓に載せる。タブ（連とセッション）は、製品で workspace が持つのと同じく、このテストがテストの終わりまで持つ——
   /// pane は連が生きている間だけ本体を見せるので、呼び手がタブを捨てても diff と文書の持ち主が残る。
-  func tab(modes: EditorDiffModeState? = nil) -> (TerminalTab, NSWindow) {
+  /// 窓の幅は `width`。左の列は開いているので、既定の 900 なら diff はインライン、`sideWidth` なら並列で出る。
+  func tab(width: CGFloat = 900, height: CGFloat = 400) -> (TerminalTab, NSWindow) {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostEditor(tab, width: 900)
+    let window = hostEditor(tab, width: width, height: height)
     tab.group.view.editor.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
-      diffModes: modes ?? EditorDiffModeState())
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState())
     addTeardownBlock { withExtendedLifetime(tab) {} }
     return (tab, window)
+  }
+
+  /// 左の列を既定の幅で開いて、本体の幅がちょうど並列の境の値になる窓の幅。
+  static let sideWidth =
+    Theme.Layout.editorDiffSideWidth + Theme.Layout.editorSidebar + Theme.Stroke.hairline
+
+  /// 窓の幅を `width` にして配置する（本体の幅が変わり、見せ方が決まり直す）。
+  func resize(_ window: NSWindow, width: CGFloat) {
+    window.setContentSize(NSSize(width: width, height: window.frame.height))
+    window.contentView?.layoutSubtreeIfNeeded()
   }
 
   func id(_ path: String, _ kind: EditorDiff.Kind) -> EditorDiff.Key {
@@ -175,8 +185,7 @@ final class EditorDiffTests: OrbeTestCase {
     try repo.write("n.txt", "aaa")
     XCTAssertTrue(repo.git(["add", "n.txt"]).isSuccess)
     XCTAssertTrue(repo.git(["rm", "-q", "a.txt"]).isSuccess)
-    let modes = EditorDiffModeState()
-    let (tab, _) = tab(modes: modes)
+    let (tab, window) = tab()
     let added = try tab.group.editor.openDiff(id("n.txt", .staged))
     waitRows(added, "+ aaa") { $0.style(ofLine: 0) == DiffStyle.added }
     XCTAssertEqual(removedLines(try engine(added.newSurface).rows), [], "− 空の行は出ない")
@@ -186,7 +195,7 @@ final class EditorDiffTests: OrbeTestCase {
 
     let reopened = try tab.group.editor.openDiff(id("n.txt", .staged))
     waitRows(reopened, "+ aaa") { $0.style(ofLine: 0) == DiffStyle.added }
-    modes.select(.side)
+    resize(window, width: Self.sideWidth)
     pumpMain(until: { reopened.oldSurface != nil }, "並列")
     let left = try engine(reopened.oldSurface)
     let pads = left.rows.contents.flatMap { content -> [InsertedLine] in
@@ -262,8 +271,7 @@ final class EditorDiffTests: OrbeTestCase {
     changed[120] = "changed 120"
     changed.insert(contentsOf: ["added a", "added b"], at: 150)
     try repo.write("long.txt", changed.joined(separator: "\n") + "\n")
-    let modes = EditorDiffModeState()
-    let (tab, _) = tab(modes: modes)
+    let (tab, window) = tab()
     let pane = tab.group.view.editor
     let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree))
     waitRows(diff, "インライン") { !$0.isEmpty }
@@ -272,7 +280,7 @@ final class EditorDiffTests: OrbeTestCase {
     let first = right.viewport.top
     XCTAssertGreaterThan(first.line, 0, "最初の変更区間へ送られている")
 
-    modes.select(.side)
+    resize(window, width: Self.sideWidth)
     pumpMain(until: { diff.oldSurface != nil && diffSurfaceCount(pane) == 2 }, "並列の 2 面")
     weak var closed: MetalTextSurface?
     try {
@@ -287,7 +295,7 @@ final class EditorDiffTests: OrbeTestCase {
       XCTAssertEqual(left.view.frame.maxX + 1, right.view.frame.minX, "境の線 1px を挟む")
     }()
 
-    modes.select(.inline)
+    resize(window, width: Self.sideWidth - 1)
     pumpMain(until: { diff.oldSurface == nil && closed == nil }, "古い側の面は閉じる")
     XCTAssertNil(right.partner, "共有が外れる")
     XCTAssertEqual(right.presentation, DiffStyle.inline)

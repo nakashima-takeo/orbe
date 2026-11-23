@@ -16,11 +16,7 @@ extension PrCommentLayer {
     zone.onPress = { [weak self] zone, control in self?.press(control, in: zone) }
     zone.onTextChange = { [weak self] zone in self?.replyDidChange(zone) }
     zone.onFieldFocus = { [weak self] zone, primary in
-      // 置けなくなった・削除されたスレッドは、書きかけを空にして焦点が外れたら手放す。
-      guard let self, !primary, !zone.hasText, case .thread(let thread) = zone.subject,
-        release(thread.id, zone)
-      else { return }
-      onRowsChange()
+      self?.fieldFocusDidChange(zone, primary: primary)
     }
     threads[thread.id] = zone
     return zone
@@ -35,7 +31,7 @@ extension PrCommentLayer {
 
   /// 行を追っているスレッド `id` の絵の差し込み `zone` を手放す（追っていなければ false）。削除されたスレッドは、絵の差し込みごと
   /// 手放す。
-  private func release(_ id: String, _ zone: PrCommentZone) -> Bool {
+  func release(_ id: String, _ zone: PrCommentZone) -> Bool {
     guard held.removeValue(forKey: id) != nil else { return false }
     if zone.notice == .deleted {
       threads[id] = nil
@@ -87,8 +83,7 @@ extension PrCommentLayer {
       state.writeComment(serial, path: path, body: zone.text, from: draft.origin)
     }
     zone.onFieldFocus = { [weak self] zone, primary in
-      guard let self, !primary, !zone.hasText, !zone.isWriting else { return }
-      closeDraft(zone)
+      self?.fieldFocusDidChange(zone, primary: primary)
     }
     return draft
   }

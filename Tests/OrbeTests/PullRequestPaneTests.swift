@@ -301,7 +301,7 @@ final class PullRequestPaneTests: OrbeTestCase {
     return field
   }
 
-  private func messageField(in view: NSView) -> MessageTextView? {
+  func messageField(in view: NSView) -> MessageTextView? {
     (view as? MessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
   }
 
