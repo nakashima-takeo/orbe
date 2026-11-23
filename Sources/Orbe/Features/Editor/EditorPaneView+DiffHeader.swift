@@ -41,7 +41,7 @@ extension EditorPaneView {
   /// PR の画面のキー v: 本体の PR の diff のファイルの確認済みを付け外しする（見出しの「確認済みにする」と同じ口）。修飾の無い
   /// 字のキーは key equivalent として pane に届かず、first responder の keyDown へ直行する（読むだけの面は黙って捨てる）ので、
   /// ここで拾う。働くのは、見出しに確認済みの部品が出ていて、焦点が字を打つ場に無いとき——diff の面（主が読むだけの場）・
-  /// pane 自身・PR のパネルの列。焦点が列にあり、列で選んでいるファイルが本体のファイルと違えば、その diff を待たずに開いて
+  /// pane 自身（一覧のために焦点を預かっている間を除く）・PR のパネルの列。焦点が列にあり、列で選んでいるファイルが本体のファイルと違えば、その diff を待たずに開いて
   /// から付け外しし、開けなければ音で断る。押し続けて届く繰り返しは、付け外しせずに捨てる。扱ったら true。
   func handleViewedKey(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
@@ -64,11 +64,12 @@ extension EditorPaneView {
     case list
   }
 
-  /// 焦点がキー v を受ける場所にあるか（字を打つ場——入力の文脈を持つ view——は外す）。
+  /// 焦点がキー v を受ける場所にあるか（字を打つ場——入力の文脈を持つ view——は外す）。面自身の焦点は、一覧のために
+  /// 預かっている間は左の列の焦点なので、受けない。
   private func viewedKeyPlace(_ diff: EditorDiff) -> ViewedKeyPlace? {
     guard let responder = window?.firstResponder as? NSView, responder.inputContext == nil
     else { return nil }
-    if responder === self { return .body }
+    if responder === self, !focusIsInSidebar { return .body }
     if diffSurfaces(diff).contains(where: { $0.responder === responder }) { return .body }
     if responder.isDescendant(of: pullRequestList) { return .list }
     return nil
