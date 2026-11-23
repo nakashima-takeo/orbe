@@ -23,9 +23,15 @@ final class GrepGate {
   private var held: Int32?
 
   /// `repo` の、除外ファイルを読む git を、この後から門で止める（設定を書くだけなので、既に走っているものには効かない）。
-  init(_ repo: TempGitRepo) throws {
+  convenience init(_ repo: TempGitRepo) throws {
+    try self.init(directory: repo.dir) { repo.git(["config", "core.excludesFile", $0]).isSuccess }
+  }
+
+  /// `directory` のリポジトリの、除外ファイルを読む git を、この後から門で止める。`configure` は FIFO のパスを受けて
+  /// `core.excludesFile` に書き、書けたら true を返す。
+  init(directory: URL, configure: (String) -> Bool) throws {
     fifo =
-      repo.dir.deletingLastPathComponent()
+      directory.deletingLastPathComponent()
       .appendingPathComponent("orbe-gate-\(UUID().uuidString)").path
     guard mkfifo(fifo, 0o600) == 0 else { throw POSIXError(.EIO) }
     watchdog = Process()
@@ -36,7 +42,7 @@ final class GrepGate {
       fifo,
     ]
     try watchdog.run()
-    XCTAssertTrue(repo.git(["config", "core.excludesFile", fifo]).isSuccess)
+    XCTAssertTrue(configure(fifo))
   }
 
   /// このテストプロセスが起こした git grep が生きているか。
