@@ -15,15 +15,20 @@ final class EditorEmptyViewTests: OrbeTestCase {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let scene = try PrFixtures.scene(.noFiles, queriesRoot: queriesRoot, in: TestScratch.caseDir)
     defer { scene.cleanup() }
-    scene.warmUp()
-    pumpMain(until: { scene.isReady }, "PR の中身が揃う")
     let pane = scene.pane
+    let window = holdUntilTestEnds(
+      OrbeWindowFake(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
+        backing: .buffered, defer: false))
+    window.contentView = pane
+    pane.layoutSubtreeIfNeeded()
+    pumpMain(until: { scene.isReady }, "PR の中身が揃う")
     pane.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.faceHost.rootView.content, .empty(.pullRequest), "前提: 本体は空")
     pumpMain(until: { (try? self.isBlank(pane.faceHost)) == false }, "本体に見出しと一文が出る")
   }
 
-  /// `view` が何も描かない（全画素が透明）。
+  /// `view` が何も描かない（全画素が透明）。本体の地が透明であることに依る（地を塗れば、文の有無を見分けられない）。
   private func isBlank(_ view: NSView) throws -> Bool {
     let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
     view.cacheDisplay(in: view.bounds, to: rep)
