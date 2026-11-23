@@ -59,6 +59,16 @@ extension ScmPanel {
     changes.file(in: rowID(of: key).section, path: key.path)
   }
 
+  /// 行 `id` の祖先（親「ソース管理」とその区分）を開き、行が組に在れば選ぶ。区分を開いた後の組み直しを待つ間と、status が
+  /// まだ届かない間は、行が組に無いので選ばない。選んだら true。
+  func reveal(_ id: ScmRowID) -> Bool {
+    setRepositoryOpen(true)
+    if !isOpen(id.section) { toggle(id.section) }
+    guard layout.index[id] != nil else { return false }
+    select(id)
+    return true
+  }
+
   /// 本体に自動で開く行——選んでいるファイル行、無ければ先頭のファイル行（ファイル行が無ければ nil）。
   var rowToOpen: ScmRowID? {
     if let selection, selection.path != nil, layout.index[selection] != nil { return selection }
