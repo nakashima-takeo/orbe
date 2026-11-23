@@ -14,7 +14,8 @@ extension PullRequestPaneTests {
   func testTheChangedFilesListOpensThePullRequestDiffAndShowsTheViewedFiles() throws {
     let hosted = host(try registeredRoot())
     shownWithRows(hosted)
-    pumpMain(until: { hosted.pane.diff != nil }, "前提: 本体に diff が自動で開く")
+    pumpMain(
+      until: { hosted.pane.diff?.id.path == "src/a.swift" }, "前提: 本体に列の先頭のファイルの diff が自動で開く")
     let state = try XCTUnwrap(hosted.pane.pullRequest.state)
     state.setViewed(true, paths: ["b.swift"])
     hosted.pane.toggleSidebar()
@@ -36,18 +37,18 @@ extension PullRequestPaneTests {
     XCTAssertEqual(file(2)?.isDimmed, false)
     XCTAssertEqual(itemList.selection, hosted.pane.diff.map { AnyHashable($0.id) })
 
+    // 左の列を閉じた知らせは main のキューで遅れて届き、届いたときにも一覧の中身を作り直す。その知らせを先に処理し終えてから、
+    // 確認済みの変化だけで行が替わることを見る。
+    nextTurn()
     state.setViewed(false, paths: ["b.swift"])
     pumpMain(until: { file(1)?.isDimmed == false }, "開いたままの一覧も替わる")
 
-    let other = hosted.pane.diff?.id.path == "b.swift" ? 2 : 1
-    let path = other == 1 ? "b.swift" : "src/a.swift"
     itemList.list.list.mouseDown(
       with: itemList.list.list.mouseEvent(
-        .leftMouseDown,
-        at: NSPoint(x: 40, y: (CGFloat(other) + 0.5) * Theme.Layout.editorItemListRow)))
-    XCTAssertEqual(hosted.pane.diff?.id.path, path)
+        .leftMouseDown, at: NSPoint(x: 40, y: 1.5 * Theme.Layout.editorItemListRow)))
+    XCTAssertEqual(hosted.pane.diff?.id.path, "b.swift")
     XCTAssertFalse(itemList.isOpen)
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "本文へ")
-    XCTAssertEqual(hosted.pane.pullRequest.selection, .file(path), "左の列の一覧でも選ばれる")
+    XCTAssertEqual(hosted.pane.pullRequest.selection, .file("b.swift"), "左の列の一覧でも選ばれる")
   }
 }
