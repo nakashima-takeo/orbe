@@ -3,10 +3,11 @@ import SwiftUI
 
 /// 上のバー（高さ 36。下端の hairline を含む）の SwiftUI ルート。左から、左の列の開閉・画面の切り替え（Changes の件数・PR の
 /// 番号つき）・今の項目のボタン（今の項目があるとき。前に区切り線。仮の文書なら後ろに「プレビュー」の札と「開いたままに
-/// する」）、右寄せで「⌥ 端末を表示」の案内。器の中の別 root なので環境は明示注入する。押してもフォーカスを取らない（host が
-/// first responder を受けない）。幅が足りなければ、「⌥ 端末を表示」→ 親のパスの順に落とし、それでも足りなければ名前を省略
-/// する。開閉・切り替え・ボタン・札・「開いたままにする」は落とさない。ボタンの枠は、閉包で pane へ知らせる（一覧の器の
-/// 位置の入力）。
+/// する」）・画面ごとの中ほどの部品、右寄せで「⌥ 端末を表示」の案内と画面ごとの右端の部品。器の中の別 root なので環境は
+/// 明示注入する。押してもフォーカスを取らない（host が first responder を受けない）。幅は `EditorBarLayout` が、部品の
+/// 名乗る譲る順（`EditorBarYield`）で配る——案内はまるごと落ち、今の項目のボタンは親のパス、その次に名前の全体を譲る。
+/// 開閉・切り替え・今の項目のボタン・札・「開いたままにする」は落とさない。画面ごとの部品は、画面ごとのファイル
+/// （`EditorBar+<画面>.swift`）に書く。ボタンの枠は、閉包で pane へ知らせる（一覧の器の位置の入力）。
 struct EditorBarRoot: View {
   let shell: EditorShellModel
   /// 左の列の開閉の持ち主（pane と同じ 1 つ）。
@@ -22,16 +23,28 @@ struct EditorBarRoot: View {
   @Environment(\.colorScheme) private var scheme
 
   private static let hairlineAlpha = 0.07
-  private static let space = "editorBar"
+  /// 部品の間隔。
+  static let spacing: CGFloat = 6
+  /// 部品の枠を測る座標空間（バーの座標＝面の座標）。
+  static let space = "editorBar"
 
   var body: some View {
     VStack(spacing: 0) {
-      ViewThatFits(in: .horizontal) {
-        row(showsHint: true, showsPath: true, fitsName: true)
-        row(showsHint: false, showsPath: true, fitsName: true)
-        row(showsHint: false, showsPath: false, fitsName: true)
-        row(showsHint: false, showsPath: false, fitsName: false)
+      EditorBarLayout(spacing: Self.spacing) {
+        EditorSidebarToggle(isOpen: sidebar.isOpen, action: shell.toggleSidebar)
+        EditorScreenSwitch(
+          selection: shell.panel.screen, changesCount: scm.count,
+          pullRequestNumber: pullRequest.state?.key.id.number, select: shell.selectScreen
+        )
+        .fixedSize()
+        if let item = shell.currentItem { currentItem(item) }
+        middle
+        EditorPeekHint(isPeeking: shell.isPeeking).editorBarPart(.trailing, drops: .hint)
+        trailing
       }
+      .clipped()
+      .padding(.leading, 8)
+      .padding(.trailing, 12)
       .frame(maxWidth: .infinity, alignment: .leading)
       .frame(height: Theme.Layout.editorBar - Theme.Stroke.hairline)
       Rectangle().fill(EditorInk(scheme).hairline(Self.hairlineAlpha))
@@ -42,34 +55,29 @@ struct EditorBarRoot: View {
     .environment(\.chromeFontResolver, fontResolver)
   }
 
-  private func row(showsHint: Bool, showsPath: Bool, fitsName: Bool) -> some View {
-    HStack(spacing: 6) {
-      EditorSidebarToggle(isOpen: sidebar.isOpen, action: shell.toggleSidebar)
-      EditorScreenSwitch(
-        selection: shell.panel.screen, changesCount: scm.count,
-        pullRequestNumber: pullRequest.state?.key.id.number, select: shell.selectScreen
-      )
-      .fixedSize()
-      if let item = shell.currentItem {
-        EditorBarSeparator()
-        currentItem(item, showsPath: showsPath, fitsName: fitsName)
-      }
-      Spacer(minLength: 0)
-      if showsHint { EditorPeekHint(isPeeking: shell.isPeeking) }
+  /// 今の画面の、今の項目の後ろに並ぶ部品。
+  @ViewBuilder private var middle: some View {
+    switch shell.panel.screen {
+    case .changes: changesMiddle
+    case .pullRequest: pullRequestMiddle
+    case .files: filesMiddle
     }
-    .padding(.leading, 8)
-    .padding(.trailing, 12)
+  }
+
+  /// 今の画面の、右端に並ぶ部品。
+  @ViewBuilder private var trailing: some View {
+    switch shell.panel.screen {
+    case .changes: changesTrailing
+    case .pullRequest: pullRequestTrailing
+    case .files: filesTrailing
+    }
   }
 
   @ViewBuilder
-  private func currentItem(
-    _ item: EditorShellModel.CurrentItem, showsPath: Bool, fitsName: Bool
-  ) -> some View {
+  private func currentItem(_ item: EditorShellModel.CurrentItem) -> some View {
     switch item {
     case .file(let file):
-      itemButton(help: .editorBarOpenFiles) {
-        EditorCurrentFileLabel(file: file, showsPath: showsPath, fitsName: fitsName)
-      }
+      itemButton(help: .editorBarOpenFiles) { EditorCurrentFileLabel(file: file) }
       if file.isPreview {
         EditorTag(text: localization.string(.editorOpenFilesPreview))
         EditorTextButton(
@@ -79,24 +87,29 @@ struct EditorBarRoot: View {
       }
     case .diff(let subject):
       itemButton(help: .editorBarChangedFiles) {
-        EditorCurrentDiffLabel(header: subject.header(scm: scm), fitsName: fitsName)
+        EditorCurrentDiffLabel(header: subject.header(scm: scm))
       }
     }
   }
 
-  /// 今の項目のボタン。枠は閉包で pane へ知らせる（一覧の器の位置の入力）。
+  /// 区切り線と今の項目のボタン（広い姿を `itemWide` で受け取る）。ボタンの枠は閉包で pane へ知らせる（一覧の器の位置の
+  /// 入力）。
   private func itemButton<Label: View>(
     help: L10nKey, @ViewBuilder label: @escaping () -> Label
   ) -> some View {
-    EditorItemButton(
-      isOpen: itemList.isOpen, help: localization.string(help),
-      action: shell.toggleItemList, label: label
-    )
-    .onGeometryChange(for: CGRect.self) {
-      $0.frame(in: .named(Self.space))
-    } action: {
-      shell.itemButtonFrameDidChange($0)
+    HStack(spacing: Self.spacing) {
+      EditorBarSeparator()
+      EditorItemButton(
+        isOpen: itemList.isOpen, help: localization.string(help),
+        action: shell.toggleItemList, label: label
+      )
+      .onGeometryChange(for: CGRect.self) {
+        $0.frame(in: .named(Self.space))
+      } action: {
+        shell.itemButtonFrameDidChange($0)
+      }
     }
+    .editorBarPart(grows: .itemWide)
   }
 }
 
