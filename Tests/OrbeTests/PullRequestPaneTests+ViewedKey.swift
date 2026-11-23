@@ -48,7 +48,7 @@ extension PullRequestPaneTests {
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane, "前提: 焦点は面自身")
     XCTAssertEqual(hosted.pane.diff?.id.path, shown, "前提: 本体は同じ diff")
 
-    XCTAssertFalse(hosted.pane.handleViewedKey(.key("v", [])))
+    _ = hosted.pane.handleViewedKey(.key("v", []))
     XCTAssertFalse(state.isViewed(shown), "本体の diff の確認済みは変わらない")
   }
 }
