@@ -180,7 +180,8 @@ final class EditorPaneViewOpenFilesTests: OrbeTestCase {
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane, "本体の行き先へ")
   }
 
-  /// 未保存の文書の × は確認を出し、キャンセルなら閉じない。確認の間も一覧は開いたまま。
+  /// 未保存の文書の × は確認を出し、キャンセルなら閉じない。「保存しない」なら閉じる。確認の間も、答えた後も、一覧は
+  /// 開いたままでフォーカスも一覧にある。
   func testClosingAnUnsavedFileAsks() throws {
     let hosted = try host(["a.txt", "b.txt"])
     let a = try XCTUnwrap(hosted.session.documents.last)
@@ -191,6 +192,15 @@ final class EditorPaneViewOpenFilesTests: OrbeTestCase {
     XCTAssertTrue(hosted.itemList.isOpen, "確認の間も一覧は開いたまま")
     hosted.window.endSheet(sheet, returnCode: .alertThirdButtonReturn)
     XCTAssertEqual(names(hosted), ["b.txt", "a.txt"], "キャンセルなら閉じない")
+    XCTAssertTrue(hosted.itemList.isOpen)
+    XCTAssertTrue(hosted.pane.focusIsInItemList)
+
+    try pressMark(hosted, row: 2)
+    let again = try XCTUnwrap(hosted.window.attachedSheet)
+    hosted.window.endSheet(again, returnCode: .alertSecondButtonReturn)
+    XCTAssertEqual(names(hosted), ["b.txt"], "「保存しない」なら閉じる")
+    XCTAssertTrue(hosted.itemList.isOpen, "閉じた後も一覧は開いたまま")
+    XCTAssertTrue(hosted.pane.focusIsInItemList)
   }
 
   /// → で選んでいる行の詳細に入る。仮の文書には「開いたままにする」と「ファイルを閉じる」が並び、↵ で実行すると一覧へ戻る。
