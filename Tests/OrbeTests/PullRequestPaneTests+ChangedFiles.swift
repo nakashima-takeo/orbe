@@ -92,7 +92,7 @@ extension PullRequestPaneTests {
       let index = (0..<rows.count).first(where: {
         if case .file(let file) = rows.row(at: $0) { file.name == name } else { false }
       })
-    else { return XCTFail("一覧に \(name) の行") }
+    else { return XCTFail("一覧に \(name) の行が無い") }
     itemList.list.list.mouseDown(
       with: itemList.list.list.mouseEvent(
         .leftMouseDown,
