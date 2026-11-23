@@ -16,7 +16,7 @@ struct PrReviewSection: View {
   var body: some View {
     let ink = EditorInk(scheme)
     VStack(alignment: .leading, spacing: Theme.Layout.editorPrReviewGap) {
-      if panel.outdatedThreadCount > 0 { outdated }
+      if state.outdatedThreadCount > 0 { outdated }
       HStack(spacing: Theme.Space.tick) {
         Text(l10n.string(.editorPrReview))
           .font(Font(Theme.Typography.editorPrReviewLabel))
@@ -32,9 +32,9 @@ struct PrReviewSection: View {
       }
       PrReviewMessageBox(
         panel: panel, state: state, placeholder: l10n.string(.editorPrReviewPlaceholder))
-      PrReviewEvents(panel: panel, selected: state.reviewDraft.event)
+      PrReviewEvents(state: state)
       PrReviewSubmit(panel: panel)
-      if let block = panel.submissionBlock {
+      if let block = state.submissionBlock {
         PrReviewNote(text: text(block), color: Color.theme.textMuted)
       } else if let failure = state.submissionFailure {
         PrReviewNote(
@@ -50,11 +50,11 @@ struct PrReviewSection: View {
   /// 「今の diff に出せないスレッド N 件」（字 11・muted、ホバーで text2）。押すと GitHub の PR を開く。
   private var outdated: some View {
     PrHoverText(
-      text: l10n.format(.editorPrOutdatedThreads, panel.outdatedThreadCount),
+      text: l10n.format(.editorPrOutdatedThreads, state.outdatedThreadCount),
       action: panel.openOnGitHub)
   }
 
-  private func text(_ block: PrPanel.SubmissionBlock) -> String {
+  private func text(_ block: PullRequestState.SubmissionBlock) -> String {
     switch block {
     case .loading: l10n.string(.editorPrReviewAwaitsLatest)
     case .stopped: l10n.string(.editorPrReviewStoppedAligning)
@@ -145,8 +145,7 @@ private struct PrReviewMessageBox: View {
 /// 承認 / コメント / 変更を依頼の 3 択（外枠 padding 2・角丸 4・間 2・地 sunk .28。各 等分・高さ 22・角丸 3・字 11。選択は
 /// chromeText の地に tabActiveText の 600、非選択は muted でホバー text2。選べない種類は押せない姿）。
 private struct PrReviewEvents: View {
-  let panel: PrPanel
-  let selected: GitHubReviewEvent
+  let state: PullRequestState
   @Environment(\.colorScheme) private var scheme
   @Environment(\.localization) private var l10n
 
@@ -163,8 +162,9 @@ private struct PrReviewEvents: View {
 
   private func segment(_ event: GitHubReviewEvent, _ key: L10nKey) -> some View {
     PrReviewSegment(
-      label: l10n.string(key), isSelected: selected == event, isEnabled: panel.canChoose(event)
-    ) { panel.chooseReviewEvent(event) }
+      label: l10n.string(key), isSelected: state.reviewDraft.event == event,
+      isEnabled: state.canChoose(event)
+    ) { state.chooseReviewEvent(event) }
   }
 }
 

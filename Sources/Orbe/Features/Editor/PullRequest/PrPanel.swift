@@ -268,16 +268,6 @@ final class PrPanel {
     return counted?.counts[path] ?? 0
   }
 
-  /// 今の diff に置けない未解決のスレッド（古い版の行に付いた・ファイル単位・rename の判定が GitHub と手元で食い違う
-  /// ファイルの古い側の行に付いた）の数。
-  var outdatedThreadCount: Int {
-    guard let state, let head = state.content?.headCommit else { return 0 }
-    let ends = state.diffEnds
-    return (state.threads(at: head) ?? []).count {
-      !$0.isResolved && state.canPlace($0, in: ends) == false
-    }
-  }
-
   // MARK: - 確認済み
 
   /// ファイル `path` の確認済みを切り替える。

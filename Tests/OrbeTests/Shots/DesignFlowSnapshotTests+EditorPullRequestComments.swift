@@ -142,7 +142,7 @@ private struct CommentSteps {
     pumpMain(until: { pane.diff.map { pane.diffSurfaces($0).count == 1 } ?? false }, "インラインになる")
     settle()
     scene.panel.state?.reviewDraft.body = "コメントの分岐を確かめました。"
-    scene.panel.chooseReviewEvent(.approve)
+    scene.panel.state?.chooseReviewEvent(.approve)
   }
 
   func submitReview() {

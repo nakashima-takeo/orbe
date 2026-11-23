@@ -13,9 +13,9 @@ extension PrPanelTests {
   func testSubmittingAReviewNeedsABodyUnlessApprovingAndKeepsTheDraftOnFailure() throws {
     let state = try reviewed()
     XCTAssertFalse(panel.canSubmitReview, "空のコメントは送れない")
-    panel.chooseReviewEvent(.requestChanges)
+    state.chooseReviewEvent(.requestChanges)
     XCTAssertFalse(panel.canSubmitReview, "空の変更の依頼は送れない")
-    panel.chooseReviewEvent(.approve)
+    state.chooseReviewEvent(.approve)
     XCTAssertTrue(panel.canSubmitReview, "承認は空でも送れる")
     state.reviewDraft.body = "見ました"
     panel.submitReview()
@@ -25,9 +25,9 @@ extension PrPanelTests {
 
     reviewFailure = .unreachable
     state.reviewDraft.body = "直してください"
-    panel.chooseReviewEvent(.requestChanges)
+    state.chooseReviewEvent(.requestChanges)
     panel.submitReview()
-    XCTAssertEqual(panel.state?.submissionFailure, .unreachable)
+    XCTAssertEqual(state.submissionFailure, .unreachable)
     XCTAssertEqual(
       state.reviewDraft, PullRequestState.ReviewDraft(body: "直してください", event: .requestChanges))
   }
@@ -44,12 +44,12 @@ extension PrPanelTests {
   /// 自分の PR では「承認」と「変更を依頼」を選べない。
   func testTheAuthorCannotApproveOrRequestChanges() throws {
     viewerIsAuthor = true
-    _ = try reviewed()
-    XCTAssertFalse(panel.canChoose(.approve))
-    XCTAssertFalse(panel.canChoose(.requestChanges))
-    XCTAssertTrue(panel.canChoose(.comment))
-    panel.chooseReviewEvent(.approve)
-    XCTAssertEqual(panel.state?.reviewDraft.event, .comment)
+    let state = try reviewed()
+    XCTAssertFalse(state.canChoose(.approve))
+    XCTAssertFalse(state.canChoose(.requestChanges))
+    XCTAssertTrue(state.canChoose(.comment))
+    state.chooseReviewEvent(.approve)
+    XCTAssertEqual(state.reviewDraft.event, .comment)
   }
 
   /// ファイルのコメント数は、今の diff に置けるスレッドのコメントの総数。置けないスレッドは件数だけを数える。
@@ -59,11 +59,11 @@ extension PrPanelTests {
       thread("T2", path: "README.md", line: nil, comments: 3),
       thread("T3", path: "src/b.swift", line: 1, comments: 1),
     ]
-    _ = try reviewed()
+    let state = try reviewed()
     XCTAssertEqual(panel.commentCount(of: "README.md"), 2)
     XCTAssertEqual(panel.commentCount(of: "src/b.swift"), 1)
     XCTAssertEqual(panel.commentCount(of: "src/a/x.swift"), 0)
-    XCTAssertEqual(panel.outdatedThreadCount, 1)
+    XCTAssertEqual(state.outdatedThreadCount, 1)
   }
 
   /// 空白と改行だけの全体へのコメントは空とみなす——「コメント」は送れず、「承認」は本文なしで送る。
@@ -71,7 +71,7 @@ extension PrPanelTests {
     let state = try reviewed()
     state.reviewDraft.body = " \n\t "
     XCTAssertFalse(panel.canSubmitReview)
-    panel.chooseReviewEvent(.approve)
+    state.chooseReviewEvent(.approve)
     XCTAssertTrue(panel.submitReview())
     XCTAssertEqual(reviewWrites, [.submit(.approve, body: "")])
   }
@@ -79,10 +79,10 @@ extension PrPanelTests {
   /// 中身とレビューのやりとりの先頭のコミットが違う間は送れず、その理由を出す（承認を、diff で見ていないコミットに付けない）。
   func testAReviewOfAnotherHeadCannotBeSubmitted() throws {
     reviewHead = String(repeating: "0", count: 40)
-    _ = try reviewed()
-    panel.chooseReviewEvent(.approve)
+    let state = try reviewed()
+    state.chooseReviewEvent(.approve)
     XCTAssertFalse(panel.canSubmitReview)
-    XCTAssertEqual(panel.submissionBlock, .stopped, "揃える読みでも食い違ったので、再読込を促す")
+    XCTAssertEqual(state.submissionBlock, .stopped, "揃える読みでも食い違ったので、再読込を促す")
     XCTAssertFalse(panel.submitReview())
     XCTAssertEqual(reviewWrites, [])
   }
@@ -97,8 +97,8 @@ extension PrPanelTests {
         guard state.review != nil, case .failed = state.bounds else { return false }
         return true
       }, "前提: diff の両端を求められない")
-    panel.chooseReviewEvent(.approve)
-    XCTAssertEqual(panel.submissionBlock, .noDiff)
+    state.chooseReviewEvent(.approve)
+    XCTAssertEqual(state.submissionBlock, .noDiff)
     XCTAssertFalse(panel.submitReview())
     XCTAssertEqual(reviewWrites, [])
   }
@@ -123,8 +123,8 @@ extension PrPanelTests {
       thread("T1", path: "README.md", line: nil, comments: 1),
       thread("T2", path: "README.md", line: nil, comments: 1, resolved: true),
     ]
-    _ = try reviewed()
-    XCTAssertEqual(panel.outdatedThreadCount, 1)
+    let state = try reviewed()
+    XCTAssertEqual(state.outdatedThreadCount, 1)
   }
 
   private func thread(
