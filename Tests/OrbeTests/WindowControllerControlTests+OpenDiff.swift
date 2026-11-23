@@ -44,10 +44,9 @@ extension WindowControllerControlTests {
       MainActor.assumeIsolated { tab.group.editor.changesDiff } === opened, "同じ diff は開き直さない")
   }
 
-  /// Changes の画面で左の列を開き、変更の列の行を待って焦点を預かっている間に `open_diff` が来ると、預かりは終わり、後から
-  /// 行が出ても列は焦点を取らない（壊れると、エージェントが開いた diff ではなく後から出た列に焦点が着き、人の ↑↓ が列の移動に
-  /// なる）。
-  func testOpenDiffWhileTheChangesListHoldsTheFocusEndsTheHold() throws {
+  /// Changes の画面で左の列を開き、変更の列の行が出るのを待って焦点を預かっている間に `open_diff` が来ると、焦点は、
+  /// 後から行が出た変更の列ではなく、開いた diff の本文に着く（壊れると、人の ↑↓ が変更の列の中で行を移り、別の diff を開く）。
+  func testOpenDiffWhileTheChangesListHoldsTheFocusPutsTheFocusOnTheDiff() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "changed\n")
     try repo.write("b.txt", "new\n")
@@ -57,23 +56,24 @@ extension WindowControllerControlTests {
     let tabId = try XCTUnwrap(wc.controlListTabs(workspaceId: nil).get()[0]["tabId"] as? Int)
     let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
     let pane = tab.group.view.editor
+    // 窓を作った直後の 1 周で、SwiftUI が窓の根へ焦点を置く。製品の制御 API はその後に届くので、先にその周を回す。
+    nextTurn()
     MainActor.assumeIsolated { tab.group.editor.selectScreen(.files) }
     wc.handleWindowCommand(.toggleEditorFace)
     XCTAssertTrue(MainActor.assumeIsolated { pane.sidebar.isOpen }, "前提: 左の列を開いている")
     pane.switchScreen(.changes)
+    XCTAssertTrue(MainActor.assumeIsolated { pane.scm.layout.items.isEmpty }, "前提: 列の行はまだ無い")
     XCTAssertEqual(pane.heldListFocus, .changes, "前提: 行を待って焦点を預かる")
 
     let result = wc.controlOpenDiff(tabId: tabId, path: "b.txt", kind: .workingTree)
     guard case .success = result else { return XCTFail("\(result)") }
-    XCTAssertNil(pane.heldListFocus, "open_diff で預かりが終わる")
     pumpMain(
       until: {
         MainActor.assumeIsolated { !pane.scm.layout.items.isEmpty && pane.diff?.content == .ready }
       }, "行と中身が出る")
     nextTurn()
-    let responder = try XCTUnwrap(wc.window.firstResponder as? NSView)
-    XCTAssertFalse(responder.isDescendant(of: pane.scmList.list), "後から出た列は焦点を取らない")
-    XCTAssertNil(MainActor.assumeIsolated { pane.scm.focusRequest }, "列へ焦点を求めない")
+    XCTAssertFalse(pane.focusTarget === pane, "前提: diff の本文の面がある")
+    XCTAssertTrue(wc.window.firstResponder === pane.focusTarget, "焦点は diff の本文に着く")
   }
 
   /// 根の下の階層にあるファイルは、親ごと消えていても、`/private` を含む綴りでも、根と根からの相対パスの diff になる。
