@@ -33,7 +33,8 @@ extension ProjectSearchPaneTests {
     hosted.window.makeFirstResponder(document.surface.responder)
     XCTAssertNil(pane.projectSearchSeed(), "入力欄で別の語を打った後も、検索が置いた選択は種にしない")
 
-    document.surface.selectedRange = NSRange(location: 9, length: 6)
-    pumpMain(until: { pane.projectSearchSeed() == "needle" }, "本文で選び直すと種になる")
+    document.surface.selectedRange = NSRange(location: 3, length: 0)
+    document.surface.selectedRange = NSRange(location: 0, length: 6)
+    XCTAssertEqual(pane.projectSearchSeed(), "Needle", "キャレットを動かしてから同じ字を選び直すと種になる")
   }
 }
