@@ -1,11 +1,11 @@
 import Foundation
 
 /// ソース管理パネルの面ごとの状態——根のサービスの観測（status・git の状態）・件数・2 区分の行・グラフ・HEAD が push 済みか・
-/// 親「ソース管理」・子の区分・グラフの枠の開閉・選択・パネルの中の焦点。worktree の事実（メッセージ・操作・失敗）は
+/// ステージ済みの行数・親「ソース管理」・子の区分・グラフの枠の開閉・選択・パネルの中の焦点。worktree の事実（メッセージ・操作・失敗）は
 /// `SourceControl` が持ち、ここは見せ方と観測だけ。
 ///
 /// 面が見えている間（`isLive`）は根のサービスを握って status を受け、件数（上のバーの Changes の添え字）を出す。行の組み立て・グラフ・
-/// HEAD の push 済みの読みは、Changes の画面を出している間（`isShown`。左の列を閉じていても）だけ行う——件数のために
+/// HEAD の push 済み・ステージ済みの行数の読み（→ `ScmPanel+Reads`）は、Changes の画面を出している間（`isShown`。左の列を閉じていても）だけ行う——件数のために
 /// 行を組ませず、ほかの画面のために git を起こさない。変更の列の行の組み立ては裏で 1 本ずつ済ませ、main は結果を差し替えて列に行の版を渡す
 /// だけ。グラフの列の行は高々数百行なので main で作る（→ `ScmRows`）。
 @MainActor @Observable
@@ -33,10 +33,13 @@ final class ScmPanel {
   private(set) var layout = ScmLayout.empty
   /// 変更の列の行の組が変わるたびに進む（列はこれを見て読み直す）。
   private(set) var rowsVersion = 0
-  private(set) var graph: GitCommitGraph?
-  private(set) var graphLayout = ScmGraphLayout.empty
-  /// グラフの列の行の組が変わるたびに進む。
-  private(set) var graphRowsVersion = 0
+  /// グラフと、その列の行の組と、行の組が変わるたびに進む版。変えるのは `ScmPanel+Reads` の読みだけ。
+  var graph: GitCommitGraph?
+  var graphLayout = ScmGraphLayout.empty
+  var graphRowsVersion = 0
+  /// ステージ済みの行数と、それを読んだ時点のステージ済みの中身の鍵（`ScmChanges.stagedKey`）。ステージ済みが空なら nil。
+  /// 変えるのは `ScmPanel+Reads` の読みだけ。
+  var stagedLines: (key: Int, counts: GitLineCounts)?
   /// 親「ソース管理」（メッセージ欄・ボタン・失敗の文と 2 つの子の区分）が開いている。変えるのは `setRepositoryOpen` だけ。
   private(set) var isRepositoryOpen = true
   /// グラフの枠が開いている。
@@ -84,16 +87,17 @@ final class ScmPanel {
   @ObservationIgnored var ownWrites = ScmOwnWrites()
   /// 手元の 2 区分が今の status から作ったものでない（status が届いてから、行を作る組み立てがまだ始まっていない）。
   private var changesAreStale = true
-  @ObservationIgnored private var graphLimit = ScmPanel.graphPage
-  @ObservationIgnored private var graphJob = Job()
-  @ObservationIgnored private var headJob = Job()
-  private var headPush: (commit: String, isPushed: Bool)?
+  @ObservationIgnored var graphLimit = ScmPanel.graphPage
+  @ObservationIgnored var graphJob = Job()
+  @ObservationIgnored var headJob = Job()
+  @ObservationIgnored var isReadingStagedLines = false
+  var headPush: (commit: String, isPushed: Bool)?
   /// remote 追跡 ref が動きうるきっかけの後、その後に始めた読みが終わるまで（前の値を有効なまま残すと、自分の push の
   /// 直後に amend・取り消しが押せる）。
-  private var headPushIsStale = false
+  var headPushIsStale = false
 
   /// 読み・組み立て 1 本の直列化。実行中に来た要求は「終わったらもう 1 回」に畳む。
-  private struct Job {
+  struct Job {
     var isRunning = false
     var again = false
   }
@@ -219,7 +223,8 @@ final class ScmPanel {
   /// 裏の結果を差し替え、待っている組み立てがあれば始める。選んでいた行が消えたら、同じ区分のその位置の行（無ければ
   /// 前の行）を選ぶ（開かない）。その区分が畳まれていれば見出しを選ぶ（畳んでから組が差し替わるまでの間に、古い組で
   /// その区分のファイル行を選んだとき）。置き換えた 2 区分と行の組は裏で手放す（数万行の解放を main に載せない。列が
-  /// 握る写しは列が裏で手放す）。行を組んだ（パネルを出している）なら、ブランチの変化をグラフの列へ写す。
+  /// 握る写しは列が裏で手放す）。行を組んだ（パネルを出している）なら、ブランチの変化をグラフの列へ写し、ステージ済みの
+  /// 中身が変わっていれば行数を読み直す。
   private func apply(
     branch: GitStatus.Branch?, count: Int, changes: ScmChanges?, layout: ScmLayout?,
     builtFrom: Int
@@ -237,6 +242,7 @@ final class ScmPanel {
       rowsVersion &+= 1
       DispatchQueue.global(qos: .utility).async { withExtendedLifetime(replaced) {} }
       updateGraphRows()
+      stagedDidChange()
     }
     onChangesDidApply(emptied)
     if buildJob.again {
@@ -258,91 +264,6 @@ final class ScmPanel {
       return
     }
     self.selection = layout.fileID(in: selection.section, at: old - oldRange.lowerBound)
-  }
-
-  // MARK: - グラフと HEAD
-
-  /// グラフと HEAD の push 済みを読み直す（パネルを出している間だけ）。`remoteRefsMayHaveMoved` なら、HEAD の push 済みは読み
-  /// 終わるまで分からないとする（パネルを出した・再読込・remote 追跡 ref の変化・自分のネット操作の終わり）。git 管理下と
-  /// 分かっていなければ（判定の前・管理外）、HEAD の push 済みを分からないにして返る（判定の後に管理下と分かれば、読みは
-  /// 判定が済んだ知らせで始まる）。
-  func readGraphAndHead(remoteRefsMayHaveMoved: Bool) {
-    guard isShown else { return }
-    guard liveFiles?.repo != nil else {
-      headPush = nil
-      return
-    }
-    readGraph()
-    readHead(remoteRefsMayHaveMoved: remoteRefsMayHaveMoved)
-  }
-
-  /// グラフをいつも先頭から今の件数で読む（続きを継ぎ足さない——読みの間に HEAD が動くと重複・欠落する）。読めなければ
-  /// 前の結果を保つ。
-  private func readGraph() {
-    guard isShown, let repo = liveFiles?.repo else { return }
-    if graphJob.isRunning {
-      graphJob.again = true
-      return
-    }
-    graphJob.isRunning = true
-    repo.commitGraph(limit: graphLimit) { [weak self] graph in
-      guard let self else { return }
-      graphJob.isRunning = false
-      if let graph, graph != self.graph {
-        self.graph = graph
-        if isShown { updateGraphRows() }
-      }
-      if graphJob.again {
-        graphJob.again = false
-        readGraph()
-      }
-    }
-  }
-
-  /// HEAD のコミットと push 済みか（どれかの remote 追跡ブランチから届くか）を組で読む（グラフの口を通らない）。グラフの
-  /// 50 件に HEAD が入る保証は無い（upstream が先に進んでいると上位を upstream が占める）ので、グラフの結果から拾わない。
-  ///
-  /// 分からないとした後は、その後に始めた読みが終わるまで分からないまま（走っている読みはきっかけより前を読んでいるかも
-  /// しれないので、終わったらもう 1 回読む）。
-  private func readHead(remoteRefsMayHaveMoved: Bool) {
-    guard isShown, let repo = liveFiles?.repo else { return }
-    if remoteRefsMayHaveMoved { headPushIsStale = true }
-    if headJob.isRunning {
-      headJob.again = true
-      return
-    }
-    headJob.isRunning = true
-    repo.headPush { [weak self] read in
-      guard let self else { return }
-      headJob.isRunning = false
-      headPush = read
-      if headJob.again {
-        headJob.again = false
-        readHead(remoteRefsMayHaveMoved: false)
-      } else {
-        headPushIsStale = false
-      }
-    }
-  }
-
-  /// グラフの列の行の組を今のブランチとグラフから作り、変わっていれば差し替えて列に読み直させる。
-  private func updateGraphRows() {
-    let next = ScmGraphLayout.build(branch: ScmBranch(branch), graph: graph)
-    guard next != graphLayout else { return }
-    graphLayout = next
-    graphRowsVersion &+= 1
-  }
-
-  /// 「さらに表示」: 件数を増やして頭から読み直す。
-  func showMoreCommits() {
-    graphLimit += Self.graphPage
-    readGraph()
-  }
-
-  /// 再読込: status を取り直し、グラフと HEAD の push 済みを読み直す。
-  func refresh() {
-    liveFiles?.requestStatusRefresh()
-    readGraphAndHead(remoteRefsMayHaveMoved: true)
   }
 
   // MARK: - 開閉

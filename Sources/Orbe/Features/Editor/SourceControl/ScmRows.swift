@@ -62,6 +62,9 @@ struct ScmChanges {
   let head: String?
   /// ステージ済みの区分が見せている index の版（rename は元パスも。→ `GitStatus.stagedVersions`）。
   let stagedVersions: [String: GitStatus.IndexVersion]
+  /// ステージ済みの中身の鍵——`head` と `stagedVersions` のハッシュ（ステージ済みの変更の追加・削除の行数は、この 2 つだけで
+  /// 決まる）。ステージ済みが空なら nil。数万件の辞書を main で比べないよう、組み立て（裏）で作る。
+  let stagedKey: Int?
 
   init(
     staged: [File], changes: [File], head: String?,
@@ -73,6 +76,14 @@ struct ScmChanges {
     self.stagedVersions = stagedVersions
     committable = changes.filter { !$0.isConflicted && $0.canStage }
     discardable = changes.filter(\.canDiscard)
+    if staged.isEmpty {
+      stagedKey = nil
+    } else {
+      var hasher = Hasher()
+      hasher.combine(head)
+      hasher.combine(stagedVersions)
+      stagedKey = hasher.finalize()
+    }
   }
 
   static let empty = ScmChanges(staged: [], changes: [], head: nil, stagedVersions: [:])
