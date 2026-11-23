@@ -129,4 +129,23 @@ extension SourceControlPaneTests {
     pumpMain(until: { !hosted.pane.itemList.isOpen }, "左の列を開くと閉じる")
     XCTAssertNil(hosted.pane.shell.currentItem)
   }
+
+  /// 左の列で畳んだ区分のファイルを一覧から選ぶと、左の列はその区分を開いて、そのファイルの行を選ぶ（本体の diff と左の列の
+  /// 選択が食い違わない）。
+  func testChoosingAFileOfACollapsedSectionOpensTheSectionAndSelectsTheRow() throws {
+    let hosted = try changedFilesHost()
+    hosted.scm.toggle(.changes)
+    pumpMain(
+      until: { hosted.scm.layout.index[ScmRowID(section: .changes, path: "b.txt")] == nil },
+      "前提: 区分「変更」を畳む")
+    closeSidebar(hosted)
+    hosted.pane.shell.toggleItemList()
+
+    click(hosted, row: 4)
+    XCTAssertEqual(hosted.pane.diff?.id.path, "b.txt")
+    XCTAssertTrue(hosted.scm.isOpen(.changes), "畳んだ区分を開く")
+    pumpMain(
+      until: { hosted.scm.selection == ScmRowID(section: .changes, path: "b.txt") },
+      "左の列でもそのファイルの行を選ぶ")
+  }
 }

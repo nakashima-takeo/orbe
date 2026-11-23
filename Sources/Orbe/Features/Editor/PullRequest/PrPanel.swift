@@ -184,6 +184,22 @@ final class PrPanel {
     selection = id
   }
 
+  /// 変更ファイル `path` の行の祖先（変更ファイルの区分と、ツリーならフォルダ）を開いて組み直し、行が組に在れば選ぶ（中身が
+  /// まだ無い・変更ファイルに無ければ選ばない）。選んだら true。
+  func reveal(file path: String) -> Bool {
+    for ancestor in PrLayout.ancestors(of: .file(path)) {
+      switch ancestor {
+      case .section(let section): closed.remove(section)
+      case .folder(let folder): closedFolders.remove(folder)
+      case .commit, .olderCommits, .file: break
+      }
+    }
+    rebuild()
+    guard layout.index[.file(path)] != nil else { return false }
+    selection = .file(path)
+    return true
+  }
+
   /// 列の状態。行があればある。無ければ、worktree の今の PR の答えを読んでいる・PR があってその中身を読んでいる間は
   /// これから来る、それ以外（PR が無い・表示できない・中身が無く読んでもいない）は無い。
   var listState: EditorListState {

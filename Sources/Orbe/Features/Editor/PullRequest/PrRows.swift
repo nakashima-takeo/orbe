@@ -88,7 +88,7 @@ struct PrLayout {
   }
 
   /// 選べる行 `id` の祖先（深い順に、フォルダ、変更ファイルの区分の見出し）。区分の見出しには無い。
-  private static func ancestors(of id: PrRowID) -> [PrRowID] {
+  static func ancestors(of id: PrRowID) -> [PrRowID] {
     switch id {
     case .file(let path), .folder(let path):
       var folders: [PrRowID] = []

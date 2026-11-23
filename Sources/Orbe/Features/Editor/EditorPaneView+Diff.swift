@@ -159,24 +159,15 @@ extension EditorPaneView {
     revealRow(of: key)
   }
 
-  /// diff `key` の行を左の列の一覧で選ぶ。一覧にまだ無ければ、行ができたときに選ぶ。
+  /// diff `key` の行を左の列の一覧で選ぶ（畳んだ区分・フォルダは開く）。一覧にまだ無ければ、行ができたときに選ぶ。
   private func revealRow(of key: EditorDiff.Key) {
-    diffAwaitingRow = nil
-    switch key.kind {
-    case .workingTree, .staged:
-      let id = scm.rowID(of: key)
-      guard scm.layout.index[id] != nil else {
-        diffAwaitingRow = key
-        return
+    let revealed =
+      switch key.kind {
+      case .workingTree, .staged: scm.reveal(scm.rowID(of: key))
+      case .pullRequest(let state):
+        pullRequest.state === state && pullRequest.reveal(file: key.path)
       }
-      scm.select(id)
-    case .pullRequest(let state):
-      guard pullRequest.state === state, pullRequest.layout.index[.file(key.path)] != nil else {
-        diffAwaitingRow = key
-        return
-      }
-      pullRequest.select(.file(key.path))
-    }
+    diffAwaitingRow = revealed ? nil : key
   }
 
   /// 一覧の行が揃ったら済ませる用事（本体の diff・一覧のための焦点の預かり）を、画面・面の可視性・一覧の行・worktree の

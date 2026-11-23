@@ -51,4 +51,41 @@ extension PullRequestPaneTests {
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "本文へ")
     XCTAssertEqual(hosted.pane.pullRequest.selection, .file("b.swift"), "左の列の一覧でも選ばれる")
   }
+
+  /// 左の列で閉じたフォルダの中のファイルを一覧から選ぶと、左の列はそのフォルダを開いて、そのファイルの行を選ぶ（本体の diff と
+  /// 左の列の選択が食い違わない）。
+  func testChoosingAFileInAClosedFolderOpensTheFolderAndSelectsTheRow() throws {
+    let hosted = host(try registeredRoot())
+    shownWithRows(hosted)
+    pumpMain(until: { hosted.pane.diff?.id.path == "src/a.swift" }, "前提: 本体に src/a.swift の diff")
+    let panel = hosted.pane.pullRequest
+    XCTAssertTrue(panel.asTree, "前提: ツリー表示")
+    hosted.pane.toggleSidebar()
+    pumpMain(until: { hosted.pane.shell.currentItem != nil }, "左の列を閉じるとボタンが出る")
+    choose("b.swift", hosted)
+    XCTAssertEqual(panel.selection, .file("b.swift"))
+    panel.toggleFolder("src")
+    XCTAssertNil(panel.layout.index[.file("src/a.swift")], "前提: フォルダ src を閉じる")
+
+    choose("a.swift", hosted)
+    XCTAssertEqual(hosted.pane.diff?.id.path, "src/a.swift")
+    XCTAssertFalse(panel.closedFolders.contains("src"), "閉じたフォルダを開く")
+    XCTAssertEqual(panel.selection, .file("src/a.swift"), "左の列でもそのファイルの行を選ぶ")
+  }
+
+  /// 上のバーの一覧を開き、名前 `name` のファイルの行を押す（製品の押下と同じ入口）。
+  private func choose(_ name: String, _ hosted: Hosted) {
+    hosted.pane.shell.toggleItemList()
+    let itemList = hosted.pane.itemList
+    guard let rows = itemList.content?.rows,
+      let index = (0..<rows.count).first(where: {
+        if case .file(let file) = rows.row(at: $0) { file.name == name } else { false }
+      })
+    else { return XCTFail("一覧に \(name) の行") }
+    itemList.list.list.mouseDown(
+      with: itemList.list.list.mouseEvent(
+        .leftMouseDown,
+        at: NSPoint(x: 40, y: (CGFloat(index) + 0.5) * Theme.Layout.editorItemListRow)))
+    XCTAssertEqual(hosted.pane.diff?.id.path.hasSuffix(name), true, "\(name) の diff が本体に出る")
+  }
 }

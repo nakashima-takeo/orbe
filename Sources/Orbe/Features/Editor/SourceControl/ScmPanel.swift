@@ -367,6 +367,16 @@ final class ScmPanel {
     selection = id
   }
 
+  /// 行 `id` の祖先（親「ソース管理」とその区分）を開き、行が組に在れば選ぶ。区分を開いた後の組み直しを待つ間と、status が
+  /// まだ届かない間は、行が組に無いので選ばない。選んだら true。
+  func reveal(_ id: ScmRowID) -> Bool {
+    setRepositoryOpen(true)
+    if collapsed.contains(id.section) { toggle(id.section) }
+    guard layout.index[id] != nil else { return false }
+    selection = id
+    return true
+  }
+
   // MARK: - 焦点
 
   func requestFocus(_ area: Area) {
