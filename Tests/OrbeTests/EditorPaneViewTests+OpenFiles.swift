@@ -276,4 +276,32 @@ final class EditorPaneViewOpenFilesTests: OrbeTestCase {
     XCTAssertFalse(hosted.pane.performKeyEquivalent(with: commandP), "面の外のフォーカスには効かない")
     XCTAssertFalse(hosted.itemList.isOpen)
   }
+
+  // MARK: - 仮の文書
+
+  /// 今の文書が仮の文書のとき、ボタンの値は仮（名前を斜体にし、「プレビュー」の札と「開いたままにする」を出す）。
+  /// 「開いたままにする」のキーの札 ↵ は、検索結果の列にフォーカスがある間だけ付き、本文や検索の入力欄にある間は付かない。
+  /// 押すと普通の文書になり、フォーカスは動かない。
+  func testAPreviewShowsKeepOpenWithTheReturnKeyOnlyFromTheSearchResults() throws {
+    let hosted = try host(["a.txt"])
+    let preview = TestScratch.caseDir.appendingPathComponent("p.txt")
+    try Data("needle".utf8).write(to: preview)
+    let document = try hosted.session.open(preview, as: .preview)
+    hosted.window.makeFirstResponder(document.surface.responder)
+    XCTAssertEqual(file(hosted)?.isPreview, true)
+    XCTAssertEqual(file(hosted)?.showsKeepOpenKey, false, "本文にフォーカスがある間は札なし")
+
+    hosted.pane.showProjectSearch(seed: nil)
+    pumpMain(until: { hosted.pane.projectSearch.focusedArea == .field }, "検索の入力欄へ")
+    XCTAssertEqual(file(hosted)?.showsKeepOpenKey, false, "検索の入力欄にフォーカスがある間は札なし")
+    hosted.window.makeFirstResponder(hosted.pane.searchResults.list)
+    pumpMain(until: { self.file(hosted)?.showsKeepOpenKey == true }, "検索結果の列にフォーカスがある間は札あり")
+    hosted.window.makeFirstResponder(document.surface.responder)
+    pumpMain(until: { self.file(hosted)?.showsKeepOpenKey == false }, "本文へ戻ると札なし")
+
+    hosted.pane.shell.keepOpen()
+    XCTAssertNil(hosted.session.preview, "普通の文書になる")
+    XCTAssertEqual(file(hosted)?.isPreview, false, "札とボタンが消える")
+    XCTAssertTrue(hosted.window.firstResponder === document.surface.responder, "フォーカスは動かない")
+  }
 }

@@ -39,7 +39,7 @@ struct EditorItemButton<Label: View>: View {
   }
 }
 
-/// 今のファイルのボタンの中身: 種別のチップ・親のパス（mono 12・muted）・名前（mono 12 semibold・primary）・
+/// 今のファイルのボタンの中身: 種別のチップ・親のパス（mono 12・muted）・名前（mono 12 semibold・primary。仮の文書は斜体）・
 /// 印の丸（未保存は primary、ディスクが変わったは caution）。`showsPath` が偽なら親のパスを落とす。`fitsName` が偽なら
 /// 名前を省略して縮める（上のバーが狭いとき）。
 struct EditorCurrentFileLabel: View {
@@ -59,6 +59,7 @@ struct EditorCurrentFileLabel: View {
       }
       Text(file.name)
         .font(Font.theme.editorItemButtonName)
+        .italic(file.isPreview)
         .foregroundStyle(Color.theme.textPrimary)
         .truncationMode(.middle)
         .fixedSize(horizontal: fitsName, vertical: false)
@@ -77,5 +78,26 @@ struct EditorCurrentFileLabel: View {
       (Color(nsColor: Theme.Color.editorCaution), l10n.string(.editorItemDiskChanged))
     case .none, .close: nil
     }
+  }
+}
+
+/// 状態を示す札（「プレビュー」。sans 10.5・secondary・1px の枠 `surfaceInk` .2・角丸 4・余白 1 6）。一覧の行の札と同じ形。
+struct EditorTag: View {
+  let text: String
+
+  var body: some View {
+    Text(text)
+      .font(Font.theme.editorTag)
+      .foregroundStyle(Color.theme.textSecondary)
+      .lineLimit(1)
+      .fixedSize()
+      .padding(.horizontal, Theme.Layout.editorTagPadX)
+      .padding(.vertical, Theme.Layout.editorTagPadY)
+      .overlay(
+        RoundedRectangle(cornerRadius: Theme.Layout.editorTagRadius)
+          .strokeBorder(
+            Color.theme.surfaceInk.opacity(Theme.Opacity.editorTag),
+            lineWidth: Theme.Stroke.hairline)
+      )
   }
 }

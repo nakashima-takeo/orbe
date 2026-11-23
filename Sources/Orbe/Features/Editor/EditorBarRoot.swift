@@ -2,10 +2,11 @@ import AppKit
 import SwiftUI
 
 /// 上のバー（高さ 36。下端の hairline を含む）の SwiftUI ルート。左から、左の列の開閉・画面の切り替え（Changes の件数・PR の
-/// 番号つき）・今の項目のボタン（今の項目があるとき。前に区切り線）、右寄せで「⌥ 端末を表示」の案内。器の中の別 root なので
-/// 環境は明示注入する。押してもフォーカスを取らない（host が first responder を受けない）。幅が足りなければ、「⌥ 端末を表示」
-/// → 親のパスの順に落とし、それでも足りなければ名前を省略する。開閉・切り替え・ボタンは落とさない。ボタンの枠は、閉包で
-/// pane へ知らせる（一覧の器の位置の入力）。
+/// 番号つき）・今の項目のボタン（今の項目があるとき。前に区切り線。仮の文書なら後ろに「プレビュー」の札と「開いたままに
+/// する」）、右寄せで「⌥ 端末を表示」の案内。器の中の別 root なので環境は明示注入する。押してもフォーカスを取らない（host が
+/// first responder を受けない）。幅が足りなければ、「⌥ 端末を表示」→ 親のパスの順に落とし、それでも足りなければ名前を省略
+/// する。開閉・切り替え・ボタン・札・「開いたままにする」は落とさない。ボタンの枠は、閉包で pane へ知らせる（一覧の器の
+/// 位置の入力）。
 struct EditorBarRoot: View {
   let shell: EditorShellModel
   /// 左の列の開閉の持ち主（pane と同じ 1 つ）。
@@ -74,6 +75,13 @@ struct EditorBarRoot: View {
         $0.frame(in: .named(Self.space))
       } action: {
         shell.itemButtonFrameDidChange($0)
+      }
+      if file.isPreview {
+        EditorTag(text: localization.string(.editorOpenFilesPreview))
+        EditorTextButton(
+          title: localization.string(.editorOpenFilesKeepOpen),
+          key: file.showsKeepOpenKey ? .glyph(EditorGlyphs.returnKey) : nil, style: .filled,
+          action: shell.keepOpen)
       }
     }
   }

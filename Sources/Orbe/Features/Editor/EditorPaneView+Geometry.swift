@@ -59,7 +59,8 @@ extension EditorPaneView {
   }
 
   /// 左の列の開閉・中身・PR のパネルのツリーかリストかが変わった。置き直し、エクスプローラーが隠れれば行内入力は終わり、
-  /// 検索パネルの見え隠れで一致の地を押し直し、画面で一覧が行を組むかを決め直し、PR のパネルの行を組み直す。この面の
+  /// 検索パネルの見え隠れで一致の地と今の項目（キーの札 ↵）を写し直し、画面で一覧が行を組むかを決め直し、PR のパネルの
+  /// 行を組み直す。この面の
   /// パネルにあった焦点（`held`）は、そのパネルが隠れたら面の行き先へ戻す。左の列を閉じたら、ソース管理パネルと PR の
   /// パネルは隠れたことにする（一覧は画面の間は行を組み続けるが、待っている開き・焦点の要求・欄の変換中の字は捨てる）。
   private func sidebarDidChange(held: EditorShellModel.Panel?) {
@@ -73,6 +74,7 @@ extension EditorPaneView {
     updatePanelsShown()
     pullRequest.rebuild()
     pushFindGround()
+    refreshCurrentItem()
   }
 
   /// 焦点を持っている左の列のパネル（検索パネル・ソース管理パネルの入力欄か列、PR のパネルの列か全体へのコメント欄）。

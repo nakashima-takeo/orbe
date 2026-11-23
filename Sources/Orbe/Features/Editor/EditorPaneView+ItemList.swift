@@ -8,6 +8,8 @@ extension EditorPaneView {
     itemList.list.isHidden = true
     itemList.onOpen = { [weak self] in self?.itemListDidOpen() }
     shell.toggleItemList = { [weak self] in self?.toggleItemList() }
+    shell.keepOpen = { [weak self] in self?.keepCurrentOpen() }
+    observeSearchFocus()
     shell.itemButtonFrameDidChange = { [weak self] frame in
       guard let self, frame != itemButtonFrame else { return }
       itemButtonFrame = frame

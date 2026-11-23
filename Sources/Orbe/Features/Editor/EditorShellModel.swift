@@ -46,6 +46,9 @@ final class EditorShellModel {
     let isPreview: Bool
     /// 印（無し・未保存・ディスクが変わった）。
     let mark: EditorItemListRow.Mark
+    /// 「開いたままにする」にキーの札 ↵ を付けるか（仮の文書で、検索結果の列にフォーカスがある間——↵ が普通の文書として
+    /// 開く操作になる、ただ 1 つの場所）。
+    let showsKeepOpenKey: Bool
   }
 
   /// 左の列に出している中身（pane が画面から決めて写す）。
@@ -67,6 +70,8 @@ final class EditorShellModel {
   @ObservationIgnored var toggleSidebar: () -> Void = {}
   /// 上のバーの今の項目のボタンを押した。
   @ObservationIgnored var toggleItemList: () -> Void = {}
+  /// 上のバーの「開いたままにする」を押した（今の仮の文書を普通の文書にする）。
+  @ObservationIgnored var keepOpen: () -> Void = {}
   /// 今の項目のボタンの枠（バーの座標）が変わった。pane の幾何の入力で、写しには書かない。
   @ObservationIgnored var itemButtonFrameDidChange: (CGRect) -> Void = { _ in }
   /// 行内入力の入力欄が焦点を失った（その世代）。別の view へ移ったなら pane が取り消し、窓へ落ちたなら

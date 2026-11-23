@@ -19,12 +19,31 @@ extension EditorPaneView {
     guard let session = group?.editor, session.screen == .files,
       let document = session.activeDocument
     else { return nil }
+    let isPreview = session.previewURL == document.url
     return .file(
       EditorShellModel.CurrentFile(
         chip: FileChip.resolve(document.url),
         directory: directory(of: document.url).isEmpty ? "" : directory(of: document.url) + "/",
-        name: document.url.lastPathComponent, isPreview: session.previewURL == document.url,
-        mark: mark(of: document)))
+        name: document.url.lastPathComponent, isPreview: isPreview, mark: mark(of: document),
+        showsKeepOpenKey: isPreview && showsSearchPanel && projectSearch.focusedArea == .results))
+  }
+
+  /// 検索結果の列のフォーカスの出入りを観測して、今の項目（キーの札 ↵ を出すか）を写し直す。
+  func observeSearchFocus() {
+    withObservationTracking {
+      _ = projectSearch.focusedArea
+    } onChange: { [weak self] in
+      DispatchQueue.main.async {
+        self?.refreshCurrentItem()
+        self?.observeSearchFocus()
+      }
+    }
+  }
+
+  /// 今の仮の文書を普通の文書にする（上のバーの「開いたままにする」。フォーカスは動かさない）。
+  func keepCurrentOpen() {
+    guard let session = group?.editor, let url = session.activeURL else { return }
+    session.pin(url)
   }
 
   /// 今の項目のボタンを押す（⌘P も同じ）。開いていれば閉じ、閉じていれば今の項目の種類の一覧で開く。今の項目が無ければ
