@@ -135,7 +135,7 @@ private struct EditorSidebarToggle: View {
     )
     .contentShape(Rectangle())
     .onTapGesture(perform: action)
-    .help(l10n.string(isOpen ? .editorBarHideTree : .editorBarShowTree))
+    .help(l10n.string(isOpen ? .editorBarHideSidebar : .editorBarShowSidebar))
   }
 }
 

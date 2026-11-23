@@ -197,8 +197,8 @@ enum L10n {
     .editorScreenChanges: ("Changes", "Changes"),
     .editorScreenPullRequest: ("PR", "PR"),
     .editorScreenFiles: ("Files", "Files"),
-    .editorBarHideTree: ("ツリーを閉じる", "Hide Tree"),
-    .editorBarShowTree: ("ツリーを開く", "Show Tree"),
+    .editorBarHideSidebar: ("サイドバーを閉じる", "Hide Sidebar"),
+    .editorBarShowSidebar: ("サイドバーを開く", "Show Sidebar"),
     .editorBarShowTerminal: ("端末を表示", "Show Terminal"),
 
     // MARK: Editor 面（骨: エクスプローラー）
