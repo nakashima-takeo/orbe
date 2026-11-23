@@ -114,7 +114,7 @@ extension ProjectSearchPaneTests {
     hosted.window.makeFirstResponder(nil)
     XCTAssertFalse(pane.handleStepKey(f4), "面の外（端末など）では奪わない")
     hosted.window.makeFirstResponder(pane.focusTarget)
-    hosted.search.clear()
+    hosted.search.setPattern("")
     XCTAssertFalse(pane.handleStepKey(f4), "結果が無ければ素通し")
   }
 
@@ -184,15 +184,54 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(editor.preview === hosted.pane.document)
   }
 
-  /// 焦点がパネルにあるままパネルを隠すと、焦点は本文へ戻る。
-  func testHidingThePanelReturnsItsFocusToTheText() throws {
+  // MARK: - 検索パネルを離れる
+
+  /// 入力欄の Esc（窓が配るキー）で、左の列はエクスプローラーへ戻り、焦点は本文へ移る。変換中の Esc（変換の取り消し）と
+  /// キーリピートの Esc では戻らない。
+  func testEscapeInTheFieldLeavesForTheExplorerButNotWhileComposingOrRepeating() throws {
     let hosted = try host(["a.txt": "needle\n"])
     _ = try open(hosted, "a.txt")
     searchAll(hosted, "needle")
-    pumpMain(until: { hosted.search.focusedArea == .field })
+    pumpMain(until: { hosted.search.focusedArea == .field }, "入力欄に焦点")
+    let field = try XCTUnwrap(hosted.window.firstResponder as? NSTextView)
+    let end = NSRange(location: field.string.utf16.count, length: 0)
+    field.setSelectedRange(end)
 
-    hosted.pane.filesPanel = .files
-    pumpMain(until: { textHasFocus(hosted) }, "本文へ戻る")
+    // 入力欄に変換中の字を置く（IME の打鍵と同じ口）。
+    field.setMarkedText("か", selectedRange: NSRange(location: 1, length: 0), replacementRange: end)
+    deliverKeyDown(.key("\u{1b}", []), to: hosted.window)
+    flush(hosted.window)
+    XCTAssertTrue(hosted.pane.showsSearchPanel, "変換中の Esc では戻らない")
+    field.setMarkedText("", selectedRange: NSRange(location: 0, length: 0), replacementRange: end)
+
+    deliverKeyDown(.key("\u{1b}", [], isRepeat: true), to: hosted.window)
+    flush(hosted.window)
+    XCTAssertTrue(hosted.pane.showsSearchPanel, "キーリピートの Esc では戻らない")
+
+    deliverKeyDown(.key("\u{1b}", []), to: hosted.window)
+    flush(hosted.window)
+    XCTAssertFalse(hosted.pane.showsSearchPanel, "エクスプローラーへ戻る")
+    XCTAssertEqual(hosted.tab.group.editor.screen, .files)
+    pumpMain(until: { textHasFocus(hosted) }, "焦点は本文へ")
+  }
+
+  /// 焦点が検索パネルの外（⌘F のバー）にあるまま、見出しの「ツリーに戻る」のボタンを押して検索パネルを離れても、焦点は
+  /// 動かない。
+  func testLeavingWithTheFocusOutsideThePanelKeepsTheFocus() throws {
+    let hosted = try host(["a.txt": "needle\n"])
+    _ = try open(hosted, "a.txt")
+    searchAll(hosted, "needle")
+    hosted.pane.showSearch()
+    let bar = try XCTUnwrap(hosted.pane.searchBar)
+    func barHasFocus() -> Bool {
+      (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true
+    }
+    pumpMain(until: barHasFocus, "前提: ⌘F のバーに焦点")
+
+    hosted.search.dismiss()
+    XCTAssertFalse(hosted.pane.showsSearchPanel)
+    pumpMain(until: { hosted.pane.searchResults.window == nil }, "検索パネルが窓から外れる")
+    XCTAssertTrue(barHasFocus(), "焦点は ⌘F のバーのまま")
   }
 
   /// 焦点を入れる要求はその場の 1 回きり——パネルが後で現れても、F4 で本文へ移した焦点を奪わない。

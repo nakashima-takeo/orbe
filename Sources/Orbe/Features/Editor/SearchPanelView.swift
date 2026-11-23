@@ -1,8 +1,8 @@
 import OrbeEditorCore
 import SwiftUI
 
-/// サイドバー: 検索パネル。上から、ヘッダー（題・更新／停止・クリア・すべて折りたたむ／すべて展開。検索中はその下端に
-/// 進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 結果の列 → 件数の文（パネルの下に固定）。状態は
+/// サイドバー: 検索パネル。上から、見出し（題・すべて折りたたむ／すべて展開・「ツリーに戻る」か「止める」。検索中はその
+/// 下端に進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 結果の列 → 件数の文（パネルの下に固定）。状態は
 /// `ProjectSearch` だけを読み、入力欄の焦点は SwiftUI の焦点を `focusedArea` へ写す（結果の列の焦点は列が自分で写す）。
 /// 部分ごとに別の view にして、読む値が変わった部分だけを組み直す（結果が届くたびに入力欄まで組み直さない）。
 struct SearchPanelView: View {
@@ -49,24 +49,33 @@ struct SearchPanelView: View {
   }
 }
 
-/// ヘッダー: 題と右端のツール（更新（2 秒を超えた検索では停止）・クリア・すべて折りたたむ／すべて展開）。検索中は下端に
-/// 進捗の細い線。
+/// 見出し 38: 題・伸びる余白・すべて折りたたむ／すべて展開・字のボタン（2 秒を超えた検索の間は「止める」、それ以外は
+/// 「ツリーに戻る」。キーの札 esc つき。押すと Esc と同じ `dismiss`）。検索中は下端に進捗の細い線。字のボタンは 2 つの字の
+/// 長い方の幅を確保して右へ寄せ、字が替わってもキーの札と、すべて折りたたむ／すべて展開のボタンを動かさない。幅が足りなければ
+/// キーの札を出さず、それでも足りなければ見出しの中身が右端から切れる。
 private struct SearchPanelHeader: View {
   let search: ProjectSearch
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    EditorPanelHeader(title: l10n.string(.editorSearchTitle)) {
-      if search.phase == .slow {
-        EditorIconButton(
-          glyph: EditorGlyphs.stop, help: l10n.string(.editorSearchStop), action: search.stop)
-      } else {
-        EditorIconButton(
-          glyph: EditorGlyphs.refresh, help: l10n.string(.editorSearchRefresh),
-          action: { search.search() })
-      }
-      EditorIconButton(
-        glyph: EditorGlyphs.clear, help: l10n.string(.editorSearchClear), action: search.clear)
+    ViewThatFits(in: .horizontal) {
+      row(showsKey: true)
+      row(showsKey: false)
+    }
+    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    .frame(height: Theme.Layout.editorSearchHeader)
+    .overlay(alignment: .bottom) {
+      if search.showsProgress { EditorProgressLine() }
+    }
+  }
+
+  private func row(showsKey: Bool) -> some View {
+    HStack(spacing: Theme.Layout.editorSearchHeaderGap) {
+      Text(l10n.string(.editorSearchTitle))
+        .font(Font.theme.editorSearchTitle)
+        .foregroundStyle(Color.theme.textPrimary)
+        .fixedSize()
+      Spacer(minLength: 0)
       if search.isAnyExpanded || search.results.isEmpty {
         EditorIconButton(
           glyph: EditorGlyphs.collapseAll, help: l10n.string(.editorCollapseAll),
@@ -76,9 +85,21 @@ private struct SearchPanelHeader: View {
           glyph: EditorGlyphs.expandAll, help: l10n.string(.editorExpandAll),
           action: search.toggleCollapseAll)
       }
+      dismissButton(showsKey: showsKey)
     }
-    .overlay(alignment: .bottom) {
-      if search.showsProgress { EditorProgressLine() }
+    .padding(.leading, Theme.Layout.editorSearchHeaderLeading)
+    .padding(.trailing, Theme.Layout.editorSearchHeaderTrailing)
+  }
+
+  private func dismissButton(showsKey: Bool) -> some View {
+    let key: EditorKeyCap.Content? = showsKey ? .text("esc") : nil
+    return ZStack(alignment: .trailing) {
+      EditorTextButton(title: l10n.string(.editorSearchBackToTree), key: key) {}.hidden()
+      EditorTextButton(title: l10n.string(.editorSearchStop), key: key) {}.hidden()
+      EditorTextButton(
+        title: l10n.string(search.stopsOnDismiss ? .editorSearchStop : .editorSearchBackToTree),
+        key: key
+      ) { search.dismiss() }
     }
   }
 }
@@ -110,8 +131,8 @@ private struct ProjectSearchField: View {
       .lineLimit(1)
       .focused(focus)
       .onSubmit { search.search() }
-      .onKeyPress(.escape) {
-        search.stop()
+      .onKeyPress(.escape, phases: [.down, .repeat]) { press in
+        search.dismiss(isRepeat: press.phase == .repeat)
         return .handled
       }
       SearchOption(

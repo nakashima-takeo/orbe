@@ -70,6 +70,8 @@ final class EditorPaneView: NSView {
   let projectSearch: ProjectSearch
   /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
   let searchResults: RowList<SearchResultsSource>
+  /// プロジェクト検索が一致を開いて本文に置いた選択。その文書の選択が動けば忘れる（→ `projectSearchSeed`）。
+  var searchPlacedSelection: SearchPlacedSelection?
   /// ソース管理パネルの状態（面ごと。根が変われば作り直す）。
   private(set) var scm: ScmPanel
   /// ソース管理の変更の列とグラフの列（検索結果の列と同じく、パネルが隠れている間も持つ）。

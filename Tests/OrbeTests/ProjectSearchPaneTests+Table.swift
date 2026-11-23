@@ -60,15 +60,37 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(hosted.search.collapsed.contains("a.txt"), "見出しの ← は畳む")
     pumpMain(until: { list.rowCount == 3 }, "畳んだ行は列から消える")
 
-    list.keyDown(with: .key("\u{1b}", []))
-    XCTAssertNil(hosted.search.selection, "Esc は選択を外す")
-    pumpMain(until: { list.selectedRow == nil })
-
-    list.keyDown(with: key(.downArrow))
     list.keyDown(with: key(.downArrow))
     list.keyDown(with: .key("\r", []))
     XCTAssertEqual(hosted.search.selection, RowID(path: "b.txt", match: 0), "見出しの Enter は最後の一致")
     XCTAssertTrue(textHasFocus(hosted), "Enter は開いて本文へ")
+  }
+
+  /// 結果の列の Esc で、左の列の中身は検索パネルからエクスプローラーへ戻り、焦点は本文へ移る（キーリピートの Esc では戻ら
+  /// ない）。選んでいた行・折りたたみは残り、⌘⇧F で同じ結果の列が同じ選択のまま出る。
+  func testEscapeInTheListLeavesForTheExplorerAndKeepsTheSelection() throws {
+    let hosted = try host(["a.txt": "needle\nneedle\n", "b.txt": "needle\n"])
+    searchAll(hosted, "needle")
+    let list = try list(hosted)
+    hosted.search.focusResults()
+    pumpMain(until: { hosted.window.firstResponder === list }, "列に焦点")
+    list.keyDown(with: key(.downArrow))
+    hosted.search.toggleCollapse("b.txt")
+    let selected = hosted.search.selection
+
+    list.keyDown(with: .key("\u{1b}", [], isRepeat: true))
+    XCTAssertTrue(hosted.pane.showsSearchPanel, "キーリピートの Esc では戻らない")
+    list.keyDown(with: .key("\u{1b}", []))
+    XCTAssertFalse(hosted.pane.showsSearchPanel, "エクスプローラーへ戻る")
+    pumpMain(until: { textHasFocus(hosted) }, "焦点は本文へ")
+    XCTAssertEqual(hosted.search.selection, selected, "選んでいた行は残る")
+
+    hosted.pane.showProjectSearch(seed: nil)
+    pumpMain(until: { hosted.pane.searchResults.window != nil }, "同じ列が出る")
+    XCTAssertTrue(hosted.pane.searchResults.list === list)
+    XCTAssertEqual(hosted.search.selection, selected)
+    XCTAssertEqual(hosted.search.collapsed, ["b.txt"], "折りたたみは残る")
+    XCTAssertEqual(hosted.search.query.pattern, "needle")
   }
 
   func testClickingARowSelectsAndOpensAndADoubleClickMovesTheFocusToTheText() throws {

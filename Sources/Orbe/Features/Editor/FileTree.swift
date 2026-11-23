@@ -74,6 +74,9 @@ final class FileTree: RootFilesObserver {
   /// 一覧のスクロール位置（送れる範囲に対する比。0 が先頭、1 が末尾）。画面を切り替えて・左の列を閉じて一覧の view が
   /// 作り直されても戻すために、ツリーが覚える。
   @ObservationIgnored var scrollFraction: CGFloat = 0
+  /// `scrollFraction` を覚えたときの選択。作り直した一覧は、今の選択がこれと違えば位置を戻さずに選択の行を見せる（隠れて
+  /// いる間に選択が替わると、祖先が開いて中身の長さも変わり、覚えた位置は当てにならない）。
+  @ObservationIgnored var scrolledSelection: String?
 
   /// 面が見えている間 true。立てると根のサービスを握って展開中を取り直し、下ろすと離す。
   var isLive = false {

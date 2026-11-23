@@ -162,6 +162,8 @@ extension Theme.Typography {
   static func editorChip(size: CGFloat) -> NSFont {
     NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
   }
+  /// 検索パネルの見出しの題（sans 12.5 semibold）。
+  static let editorSearchTitle = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
   /// 検索パネルの入力欄（mono 12）。
   static let editorSearchField = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
   /// 入力欄の右のオプション（Aa / ab / .*。sans 10）。
@@ -287,8 +289,12 @@ extension Theme.Layout {
   static let editorMinimapMaxWidth: CGFloat = 120
   /// 折りたたみのシェブロン。
   static let editorChevron: CGFloat = 16
-  /// 検索パネル。入力欄の高さ・オプションの角・結果の行の高さ（まとまりの見出しも一致も同じ）・一致の行の左の
-  /// 字下げ・件数バッジ（最小幅×高さ）・見出しのシェブロンの幅。
+  /// 検索パネル。見出しの高さ・左右の余白・部品の間、入力欄の高さ・オプションの角・結果の行の高さ（まとまりの見出しも一致も
+  /// 同じ）・一致の行の左の字下げ・件数バッジ（最小幅×高さ）・まとまりの見出しのシェブロンの幅。
+  static let editorSearchHeader: CGFloat = 38
+  static let editorSearchHeaderLeading: CGFloat = 12
+  static let editorSearchHeaderTrailing: CGFloat = 8
+  static let editorSearchHeaderGap: CGFloat = 6
   static let editorSearchField: CGFloat = 28
   static let editorSearchOption: CGFloat = 20
   static let editorSearchRow: CGFloat = 20

@@ -706,9 +706,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorSearchMatchCase
   case editorSearchWholeWord
   case editorSearchRegex
-  case editorSearchRefresh
+  case editorSearchBackToTree
   case editorSearchStop
-  case editorSearchClear
   case editorSearchSummary
   case editorSearchFilesOne
   case editorSearchFilesOther

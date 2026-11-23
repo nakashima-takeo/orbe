@@ -85,18 +85,25 @@ struct EditorPanelHeader<Tools: View>: View {
 }
 
 /// 左の列: エクスプローラー（ヘッダー・ルート行・ツリー）。ツリーのスクロール位置はツリーが覚え、画面を切り替えて・左の列を
-/// 閉じて作り直されても戻す。
+/// 閉じて・検索パネルから戻って作り直されても戻す。隠れている間に選択が替わっていれば、位置を戻す代わりに選択の行を見せる。
 struct ExplorerView: View {
   let shell: EditorShellModel
   let tree: FileTree
   /// 作り直した一覧を戻す位置（作られた時点でツリーが覚えていた位置。戻し終えたら nil）。中身が溢れるまで戻さずに待ち、その間の
   /// 位置の知らせで覚えた位置を書き換えない。
   @State private var pendingFraction: CGFloat?
+  /// 作り直した一覧で見せる選択の行（隠れている間に選択が替わったとき）。最初のレイアウトの後に 1 度だけ中ほどへ送って
+  /// 終える——行を宛先に送るので、中身が溢れるのを待たない（収まっていれば何も動かない）。
+  @State private var pendingReveal: String?
 
   init(shell: EditorShellModel, tree: FileTree) {
     self.shell = shell
     self.tree = tree
-    _pendingFraction = State(initialValue: tree.scrollFraction > 0 ? tree.scrollFraction : nil)
+    let selected = tree.selected
+    let reveals = selected != nil && selected != tree.scrolledSelection
+    _pendingReveal = State(initialValue: reveals ? selected : nil)
+    _pendingFraction = State(
+      initialValue: !reveals && tree.scrollFraction > 0 ? tree.scrollFraction : nil)
   }
   @Environment(\.localization) private var l10n
 
@@ -132,6 +139,11 @@ struct ExplorerView: View {
         .scrollIndicators(.never)
         .onScrollGeometryChange(for: ScrollGeometry.self, of: \.self) { _, geometry in
           let range = Self.range(geometry)
+          if let path = pendingReveal {
+            // 位置の戻しと同じく、レイアウトを終えてから送る。
+            pendingReveal = nil
+            Task { @MainActor in proxy.scrollTo(path, anchor: .center) }
+          }
           if let pending = pendingFraction {
             guard range > 0 else { return }
             // 作り直した一覧を、覚えた位置へ送る（比の anchor はつまみのドラッグと同じ送り方）。位置の知らせはレイアウトの
@@ -141,6 +153,7 @@ struct ExplorerView: View {
             return
           }
           tree.scrollFraction = range > 0 ? min(1, max(0, geometry.contentOffset.y / range)) : 0
+          tree.scrolledSelection = tree.selected
         }
         .sidebarScrollbar(proxy, contentID: Content.tree)
         // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
@@ -149,6 +162,7 @@ struct ExplorerView: View {
         }
         .onChange(of: tree.selected) { _, path in
           if let path { proxy.scrollTo(path) }
+          tree.scrolledSelection = path
         }
       }
     }

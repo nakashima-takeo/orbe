@@ -84,7 +84,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
     }
   }
 
-  private func hostTree() throws -> Tree {
+  /// `opening`（ツリーの根からの相対パス）を渡すと、そのファイルを作り、窓に載せる前に今の文書として開く。
+  private func hostTree(opening: String? = nil) throws -> Tree {
     // 作業ディレクトリそのものには、隔離のハーネスと本番が置くファイルが在り、ツリーの行になる。
     let dir = TestScratch.caseDir.appendingPathComponent("tree")
     for index in 0..<40 {
@@ -93,6 +94,11 @@ final class SidebarScrollbarTests: OrbeTestCase {
         withIntermediateDirectories: true)
     }
     let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    if let opening {
+      let file = dir.appendingPathComponent(opening)
+      try "x\n".write(to: file, atomically: true, encoding: .utf8)
+      _ = try tab.group.editor.open(file, as: .pinned)
+    }
     let window = hostEditor(tab, width: 900, height: 240)
     placeOffscreen(window)
     let scroll = try XCTUnwrap(scrollView(in: tab.group.view.editor.sideHost))
@@ -216,6 +222,70 @@ final class SidebarScrollbarTests: OrbeTestCase {
           return abs(scroll.documentVisibleRect.minY - 100) < 1
         }, "\(name): 作り直したツリーが前の位置に戻る")
     }
+  }
+
+  /// エクスプローラーが隠れている間に今の文書が替われば、作り直したツリーはその行を見せる。その後に送った位置は、今の文書が
+  /// 替わらないまま隠れて戻れば、そのまま戻る（選択の行を見せ直さない）。
+  /// ツリーを初めて出すとき、今の文書が在ればその行を見せ、無ければ先頭から出す。
+  func testTheFirstTreeShowsTheRowOfTheCurrentDocument() throws {
+    let tree = try hostTree(opening: "d38/f.txt")
+    XCTAssertEqual(tree.pane.tree.selected, "d38/f.txt", "前提: 今の文書の行が選ばれている")
+    pumpMain(
+      until: {
+        guard let row = tree.pane.tree.rows.firstIndex(where: { $0.id == "d38/f.txt" }) else {
+          return false
+        }
+        let top = CGFloat(row) * Theme.Layout.editorRow
+        let visible = tree.scroll.documentVisibleRect
+        return top >= visible.minY && top + Theme.Layout.editorRow <= visible.maxY
+      }, "初めて出したツリーが、今の文書の行を見せる")
+
+    let bare = try hostTree()
+    XCTAssertNil(bare.pane.tree.selected, "前提: 今の文書が無い")
+    // 行を見せる送りは、最初のレイアウトの後に main のキューへ積まれる。積まれていれば、ここで走り終える。
+    nextTurn()
+    XCTAssertEqual(bare.scroll.documentVisibleRect.minY, 0, "今の文書が無ければ先頭から出す")
+  }
+
+  func testTheRebuiltTreeShowsTheRowOfADocumentOpenedWhileItWasHidden() throws {
+    let tree = try hostTree()
+    let pane = tree.pane
+    let file = TestScratch.caseDir.appendingPathComponent("tree/d38/f.txt")
+    try "x\n".write(to: file, atomically: true, encoding: .utf8)
+    func rebuiltScroll() -> NSScrollView? {
+      guard let scroll = scrollView(in: pane.sideHost), scroll !== tree.scroll else { return nil }
+      return scroll
+    }
+
+    pane.filesPanel = .search
+    pumpMain(until: { self.scrollView(in: pane.sideHost) !== tree.scroll }, "ツリーが外れる")
+    _ = try tree.tab.group.editor.open(file, as: .pinned)
+    XCTAssertEqual(pane.tree.selected, "d38/f.txt", "前提: 隠れている間に選択が替わる")
+    pane.showExplorer()
+    pumpMain(
+      until: {
+        guard let scroll = rebuiltScroll(),
+          let row = pane.tree.rows.firstIndex(where: { $0.id == "d38/f.txt" })
+        else { return false }
+        let top = CGFloat(row) * Theme.Layout.editorRow
+        let visible = scroll.documentVisibleRect
+        return top >= visible.minY && top + Theme.Layout.editorRow <= visible.maxY
+      }, "作り直したツリーが、選択の行を見せる")
+    let revealed = try XCTUnwrap(rebuiltScroll())
+    let position: CGFloat = 20
+    revealed.contentView.scroll(to: NSPoint(x: 0, y: position))
+    revealed.reflectScrolledClipView(revealed.contentView)
+
+    pane.filesPanel = .search
+    pumpMain(until: { self.scrollView(in: pane.sideHost) !== revealed }, "ツリーが外れる")
+    pane.showExplorer()
+    pumpMain(
+      until: {
+        guard let scroll = self.scrollView(in: pane.sideHost), scroll !== revealed else {
+          return false
+        }
+        return abs(scroll.documentVisibleRect.minY - position) < 1
+      }, "選択が替わらなければ、前の位置に戻る")
   }
 
   /// 掴めるのは見えているつまみだけ——ポインタを乗せたつまみを押しても、下の行は選ばれない。
