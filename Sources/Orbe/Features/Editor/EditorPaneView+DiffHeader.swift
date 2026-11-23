@@ -1,13 +1,14 @@
 import AppKit
 
 /// 差分のファイルの見出し——本体が diff の間、本体の上端に置く帯。出すものは見出しの root が一覧の持ち主から導き、pane は
-/// 本体の diff の値（どの diff か・新しい側の文書が未保存か）を写して、押されたときの操作を受ける。
+/// 本体の diff の値（どの diff か・新しい側の文書の印）を写して、押されたときの操作を受ける。
 extension EditorPaneView {
   /// 見出しに写す本体の diff の値（本体が diff でなければ nil）。
   var headerSubject: DiffFileHeaderRoot.Subject? {
     guard let diff else { return nil }
     return DiffFileHeaderRoot.Subject(
-      key: diff.id, usesDocument: diff.document != nil, isDirty: diff.document?.isDirty == true)
+      key: diff.id, usesDocument: diff.document != nil,
+      mark: diff.document.map(EditorItemListRow.Mark.init) ?? .none)
   }
 
   /// 見出しの見え隠れと写しを本体に合わせる（写しが変わらなければ root を替えない）。

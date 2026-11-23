@@ -1,4 +1,5 @@
 import AppKit
+import OrbeEditorCore
 
 /// 一覧の器に載せる 1 行の値。行の view は 1 つで、3 種類を描き分ける。
 enum EditorItemListRow: Equatable {
@@ -32,6 +33,18 @@ enum EditorItemListRow: Equatable {
     case close
     case unsaved
     case diskChanged
+  }
+}
+
+extension EditorItemListRow.Mark {
+  /// 文書の印（「ディスクが変わった」が立っていれば、未保存かどうかに依らずその印）。上のバーの今のファイルのボタン・一覧の
+  /// 行・diff の見出しが、ここから導く。
+  @MainActor init(_ document: EditorDocument) {
+    if document.isDiskChanged {
+      self = .diskChanged
+    } else {
+      self = document.isDirty ? .unsaved : .none
+    }
   }
 }
 

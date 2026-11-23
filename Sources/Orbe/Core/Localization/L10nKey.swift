@@ -586,7 +586,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorEmptyLead
   case editorEmptySearchProject
   case editorEmptyBackToTerminal
-  case editorUnsaved
   case editorUnavailable
   case editorScmUnavailableTitle
   case editorScmNoChanges

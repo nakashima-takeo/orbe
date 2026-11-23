@@ -40,7 +40,8 @@ extension EditorPaneView {
       EditorShellModel.CurrentFile(
         chip: FileChip.resolve(document.url),
         directory: parent.isEmpty ? "" : parent + "/",
-        name: document.url.lastPathComponent, isPreview: isPreview, mark: mark(of: document),
+        name: document.url.lastPathComponent, isPreview: isPreview,
+        mark: EditorItemListRow.Mark(document),
         showsKeepOpenKey: isPreview && showsSearchPanel && projectSearch.focusedArea == .results))
   }
 
@@ -128,7 +129,7 @@ extension EditorPaneView {
     var tags: [String] = []
     if isCurrent { tags.append(L10n.string(.editorOpenFilesCurrent, language)) }
     if isPreview { tags.append(L10n.string(.editorOpenFilesPreview, language)) }
-    let state = mark(of: document)
+    let state = EditorItemListRow.Mark(document)
     return EditorItemListRow.File(
       chip: FileChip.resolve(document.url), name: document.url.lastPathComponent,
       isItalic: isPreview, directory: directory(of: document.url), tags: tags,
@@ -136,12 +137,6 @@ extension EditorPaneView {
       badge: group?.editor.badge(of: document),
       closeLabel: L10n.string(.editorItemListClose, language),
       markLabel: markLabel(state))
-  }
-
-  /// 文書の印（「ディスクが変わった」が立っていれば、未保存かどうかに依らずその印）。
-  private func mark(of document: EditorDocument) -> EditorItemListRow.Mark {
-    if document.isDiskChanged { return .diskChanged }
-    return document.isDirty ? .unsaved : .none
   }
 
   private func markLabel(_ mark: EditorItemListRow.Mark) -> String? {

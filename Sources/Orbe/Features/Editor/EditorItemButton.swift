@@ -40,13 +40,12 @@ struct EditorItemButton<Label: View>: View {
 }
 
 /// 今のファイルのボタンの中身: 種別のチップ・親のパス（mono 12・muted）・名前（mono 12 semibold・primary。仮の文書は斜体）・
-/// 印の丸（未保存は primary、ディスクが変わったは caution）。`showsPath` が偽なら親のパスを落とす。`fitsName` が偽なら
+/// 印の丸（未保存は primary、「ディスクが変わった」は caution）。`showsPath` が偽なら親のパスを落とす。`fitsName` が偽なら
 /// 名前を省略して縮める（上のバーが狭いとき）。
 struct EditorCurrentFileLabel: View {
   let file: EditorShellModel.CurrentFile
   let showsPath: Bool
   let fitsName: Bool
-  @Environment(\.localization) private var l10n
 
   var body: some View {
     HStack(spacing: Theme.Layout.editorItemButtonGap) {
@@ -63,26 +62,39 @@ struct EditorCurrentFileLabel: View {
         .foregroundStyle(Color.theme.textPrimary)
         .truncationMode(.middle)
         .fixedSize(horizontal: fitsName, vertical: false)
-      if let dot {
-        Circle().fill(dot.color)
-          .frame(width: Theme.Layout.editorItemDot, height: Theme.Layout.editorItemDot)
-          .help(dot.label)
-      }
-    }
-  }
-
-  private var dot: (color: Color, label: String)? {
-    switch file.mark {
-    case .unsaved: (Color.theme.textPrimary, l10n.string(.editorItemUnsaved))
-    case .diskChanged:
-      (Color(nsColor: Theme.Color.editorCaution), l10n.string(.editorItemDiskChanged))
-    case .none, .close: nil
+      if let dot = EditorMarkDot(file.mark, size: Theme.Layout.editorItemDot) { dot }
     }
   }
 }
 
+/// 文書の印の丸（未保存は primary、「ディスクが変わった」は caution）。印の意味をツールチップと VoiceOver に出す。上のバーの今の
+/// ファイルのボタンと diff の見出しが使う。
+struct EditorMarkDot: View {
+  private let isDiskChanged: Bool
+  private let size: CGFloat
+  @Environment(\.localization) private var l10n
+
+  /// 印 `mark` の丸（丸を出さない印なら nil）。
+  init?(_ mark: EditorItemListRow.Mark, size: CGFloat) {
+    switch mark {
+    case .unsaved: isDiskChanged = false
+    case .diskChanged: isDiskChanged = true
+    case .none, .close: return nil
+    }
+    self.size = size
+  }
+
+  var body: some View {
+    let label = l10n.string(isDiskChanged ? .editorItemDiskChanged : .editorItemUnsaved)
+    Circle().fill(isDiskChanged ? Color.theme.editorCaution : Color.theme.textPrimary)
+      .frame(width: size, height: size)
+      .help(label)
+      .accessibilityLabel(label)
+  }
+}
+
 /// 今の diff のボタンの中身: 状態の字（mono 10.5 semibold・色は左の列の行と同じ決まり。無ければ出さない）・ファイル名
-/// （mono 12 semibold・primary）。ディレクトリと未保存の丸は、すぐ下の差分の見出しに出ているので出さない。`fitsName` が偽
+/// （mono 12 semibold・primary）。ディレクトリと印の丸は、すぐ下の差分の見出しに出ているので出さない。`fitsName` が偽
 /// なら名前を省略して縮める（上のバーが狭いとき）。
 struct EditorCurrentDiffLabel: View {
   let header: DiffFileHeader

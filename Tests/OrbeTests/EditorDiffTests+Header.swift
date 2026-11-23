@@ -11,6 +11,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: Files の文書の上に見出しが出る・見出しが本文の先頭の行を覆う。消したファイルで「ファイルを開く」が
 /// 押せる。コメントの欄で打っている間に見出しを押すと、欄から焦点が外れて空の欄が閉じる。打って未保存になっても丸が出ない。
+/// 外のツールがファイルを書き換えても、見出しに「ディスクが変わった」の丸が出ない。
 /// 影の上を押しても本文に届かない。
 extension EditorDiffTests {
   // MARK: - 見出しの値
@@ -26,16 +27,16 @@ extension EditorDiffTests {
   }
 
   /// パスは最後の `/` でフォルダとファイル名に分かれ、Changes の状態の字と「ファイルを開く」を押せるかは、その区分の行が決める。
-  /// 行が無ければ状態の字を出さず、新しい側に文書を使っていれば押せる。未保存の丸は作業ツリー diff だけ。
+  /// 行が無ければ状態の字を出さず、新しい側に文書を使っていれば押せる。印の丸は作業ツリー diff だけ。
   func testTheChangesHeaderComesFromTheRow() {
     let header = DiffFileHeader(
       key("Sources/App/a.swift", .workingTree),
       facts: .changes(file("Sources/App/a.swift", .untracked, opens: true), usesDocument: true),
-      isDirty: true)
+      mark: .diskChanged)
     XCTAssertEqual(header.folder, "Sources/App/")
     XCTAssertEqual(header.name, "a.swift")
     XCTAssertEqual(header.badge, .untracked)
-    XCTAssertTrue(header.isDirty)
+    XCTAssertEqual(header.mark, .diskChanged)
     XCTAssertTrue(header.canOpenFile)
     XCTAssertNil(header.viewed, "Changes に確認済みは無い")
 
@@ -43,13 +44,13 @@ extension EditorDiffTests {
       key("gone.txt", .staged),
       facts: .changes(
         file("gone.txt", .modified, opens: false),
-        usesDocument: false), isDirty: true)
+        usesDocument: false), mark: .unsaved)
     XCTAssertEqual(removed.folder, "")
     XCTAssertFalse(removed.canOpenFile, "作業ツリーにファイルとして無ければ押せない")
-    XCTAssertFalse(removed.isDirty, "ステージ済み diff に未保存は無い")
+    XCTAssertEqual(removed.mark, .none, "ステージ済み diff に印は無い")
 
     let rowless = DiffFileHeader(
-      key("same.txt", .workingTree), facts: .changes(nil, usesDocument: true), isDirty: false)
+      key("same.txt", .workingTree), facts: .changes(nil, usesDocument: true), mark: .none)
     XCTAssertNil(rowless.badge)
     XCTAssertTrue(rowless.canOpenFile)
   }
@@ -58,15 +59,15 @@ extension EditorDiffTests {
   /// 部品を出さない。
   func testThePullRequestHeaderComesFromTheChangedFiles() {
     let pr = key("a.txt", .workingTree)
-    let added = DiffFileHeader(pr, facts: .pullRequest(.added, isViewed: true), isDirty: true)
+    let added = DiffFileHeader(pr, facts: .pullRequest(.added, isViewed: true), mark: .unsaved)
     XCTAssertEqual(added.badge, .added)
     XCTAssertEqual(added.viewed, true)
     XCTAssertTrue(added.canOpenFile)
-    let deleted = DiffFileHeader(pr, facts: .pullRequest(.deleted, isViewed: false), isDirty: false)
+    let deleted = DiffFileHeader(pr, facts: .pullRequest(.deleted, isViewed: false), mark: .none)
     XCTAssertEqual(deleted.badge, .modified)
     XCTAssertFalse(deleted.canOpenFile)
-    XCTAssertFalse(added.isDirty, "PR の diff に未保存は無い")
-    let unknown = DiffFileHeader(pr, facts: .pullRequest(nil, isViewed: false), isDirty: false)
+    XCTAssertEqual(added.mark, .none, "PR の diff に印は無い")
+    let unknown = DiffFileHeader(pr, facts: .pullRequest(nil, isViewed: false), mark: .none)
     XCTAssertNil(unknown.viewed)
     XCTAssertNil(unknown.badge)
   }
@@ -137,12 +138,38 @@ extension EditorDiffTests {
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let surface = try engine(diff.newSurface)
     window.makeFirstResponder(surface.responder)
-    XCTAssertEqual(pane.headerHost.rootView.subject?.isDirty, false)
+    XCTAssertEqual(pane.headerHost.rootView.subject?.mark, EditorItemListRow.Mark.none)
     surface.selectedRange = NSRange(location: 0, length: 0)
     surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "Z")
-    pumpMain(until: { pane.headerHost.rootView.subject?.isDirty == true }, "未保存の丸が出る")
+    pumpMain(until: { pane.headerHost.rootView.subject?.mark == .unsaved }, "未保存の丸が出る")
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("s")))
-    pumpMain(until: { pane.headerHost.rootView.subject?.isDirty == false }, "保存で消える")
+    pumpMain(
+      until: { pane.headerHost.rootView.subject?.mark == EditorItemListRow.Mark.none }, "保存で消える")
+  }
+
+  /// 未保存の文書のファイルを外のツールが書き換えると、見出しの丸は「ディスクが変わった」に替わる（未保存より優先）。上書きの
+  /// 保存で消える。
+  func testTheHeaderShowsTheDiskChangedDot() throws {
+    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    let (tab, window) = tab()
+    let pane = tab.group.view.editor
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree))
+    tab.group.editor.selectScreen(.changes)
+    waitRows(diff, "変更が出る") { !$0.isEmpty }
+    let surface = try engine(diff.newSurface)
+    let document = try XCTUnwrap(diff.document)
+    window.makeFirstResponder(surface.responder)
+    surface.selectedRange = NSRange(location: 0, length: 0)
+    surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "Z")
+    pumpMain(until: { pane.headerHost.rootView.subject?.mark == .unsaved }, "前提: 未保存の丸")
+
+    try repo.write("a.txt", "theirs\n")
+    document.reconcileWithDisk()
+    pumpMain(
+      until: { pane.headerHost.rootView.subject?.mark == .diskChanged }, "ディスクが変わったの丸に替わる")
+    try document.save(force: true)
+    pumpMain(
+      until: { pane.headerHost.rootView.subject?.mark == EditorItemListRow.Mark.none }, "上書きで消える")
   }
 
   /// 「ファイルを開く」は、そのファイルを普通の文書として Files の画面で開き、本文に焦点を移す。

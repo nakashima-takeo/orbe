@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// 差分のファイルの見出し（デザインの見本の `.fh`）の SwiftUI ルート。本体が diff の間、本体の上端に出る。左から、（PR だけ）
-/// 確認済みのチェック・パス（フォルダは頭から省く）・（未保存なら）未保存の丸・状態の字・区切り線・（PR だけ）「確認済みにする」
+/// 確認済みのチェック・パス（フォルダは頭から省く）・（新しい側の文書に印があれば）印の丸・状態の字・区切り線・（PR だけ）「確認済みにする」
 /// と札 v・「ファイルを開く」。出すものは、pane が写した `subject` と、一覧の持ち主（ソース管理パネルの状態・PR ごとの状態）を
 /// 読んで、`DiffFileHeader` が導く。器の中の別 root なので環境は明示注入する。
 struct DiffFileHeaderRoot: View {
@@ -11,8 +11,8 @@ struct DiffFileHeaderRoot: View {
     let key: EditorDiff.Key
     /// diff が新しい側に文書を使っている。
     let usesDocument: Bool
-    /// 新しい側の文書が未保存。
-    let isDirty: Bool
+    /// 新しい側の文書の印。
+    let mark: EditorItemListRow.Mark
   }
 
   let localization: LocalizationStore
@@ -39,7 +39,7 @@ extension DiffFileHeaderRoot.Subject {
   /// この diff のファイルの見出しの値。一覧の持ち主（Changes はソース管理パネルの状態 `scm`、PR は diff が持つ PR ごとの
   /// 状態）から読む。見出しと、上のバーの今のファイルのボタンが、同じ値を使う。
   @MainActor func header(scm: ScmPanel) -> DiffFileHeader {
-    DiffFileHeader(key, facts: facts(scm: scm), isDirty: isDirty)
+    DiffFileHeader(key, facts: facts(scm: scm), mark: mark)
   }
 
   @MainActor private func facts(scm: ScmPanel) -> DiffFileHeader.Facts {
@@ -79,12 +79,8 @@ private struct DiffFileHeaderBar: View {
         EditorViewedCheck(isOn: viewed, action: toggleViewed)
       }
       path
-      if header.isDirty {
-        Circle().fill(Color.theme.textPrimary)
-          .frame(width: Theme.Layout.editorDiffHeaderDot, height: Theme.Layout.editorDiffHeaderDot)
-          .padding(.leading, -2)
-          .help(l10n.string(.editorUnsaved))
-          .accessibilityLabel(l10n.string(.editorUnsaved))
+      if let dot = EditorMarkDot(header.mark, size: Theme.Layout.editorDiffHeaderDot) {
+        dot.padding(.leading, -2)
       }
       if let badge = header.badge {
         Text(badge.label)
@@ -201,11 +197,14 @@ extension EditorDiff.Kind {
 
 #if DEBUG
   enum DiffFileHeaderFixtures {
-    /// 見出しを、面の地（bgBase）の上に並べる——Changes の状態の字 M・A・U・C（未保存の丸あり・なし）、押せない
+    /// 見出しを、面の地（bgBase）の上に並べる——Changes の状態の字 M・A・U・C（未保存の丸・ディスクが変わったの丸・印なし）、押せない
     /// 「ファイルを開く」、狭い幅で頭から省いたパス、PR の確認済みの前と後。gallery が dark / light を撮る。
     @MainActor static func gallery() -> some View {
       VStack(alignment: .leading, spacing: 8) {
-        bar(changes("Sources/Orbe/Features/Editor/ChangesStream.swift", .modified), dirty: true)
+        bar(changes("Sources/Orbe/Features/Editor/ChangesStream.swift", .modified), mark: .unsaved)
+        bar(
+          changes("Sources/Orbe/Features/Editor/EditorSession.swift", .modified),
+          mark: .diskChanged)
         bar(changes("Sources/Orbe/Features/Editor/EditorOverlay.swift", .added))
         bar(changes("docs/spec/editor/faces.md", .untracked))
         bar(changes("Sources/Orbe/App/AppShell.swift", .conflicted))
@@ -249,10 +248,11 @@ extension EditorDiff.Kind {
     }
 
     @MainActor private static func bar(
-      _ subject: (EditorDiff.Key, DiffFileHeader.Facts), dirty: Bool = false, pr: Bool = false
+      _ subject: (EditorDiff.Key, DiffFileHeader.Facts), mark: EditorItemListRow.Mark = .none,
+      pr: Bool = false
     ) -> some View {
       DiffFileHeaderBar(
-        header: DiffFileHeader(subject.0, facts: subject.1, isDirty: dirty), isPullRequest: pr,
+        header: DiffFileHeader(subject.0, facts: subject.1, mark: mark), isPullRequest: pr,
         openFile: {}, toggleViewed: {}
       )
       .frame(height: Theme.Layout.editorDiffHeader + Theme.Layout.editorDiffHeaderShadow)
