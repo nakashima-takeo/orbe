@@ -20,6 +20,8 @@
       case notFetched
       /// open の PR #131 で、コミットの題とファイル名に絵文字がある。
       case emoji
+      /// open の PR #131 だが、変更ファイルが無い。
+      case noFiles
       /// worktree が既定のブランチ（main）に居る（GitHub に問い合わせない）。
       case defaultBranch
       /// open の PR が無い（作成の入口）。`published` はブランチが GitHub に在るか。
@@ -131,7 +133,7 @@
       let ref = GitHubBranchRef(repo: me, branch: branch)
       let found: GitHubBranchPullRequests.Branch
       switch answer {
-      case .pullRequest, .notFetched, .emoji:
+      case .pullRequest, .notFetched, .emoji, .noFiles:
         found = .gitHub(
           ref,
           pullRequests: .success([
@@ -146,7 +148,6 @@
       }
       let published: Bool
       if case .noPullRequest(let value) = answer { published = value } else { published = true }
-      let emoji: Bool = if case .emoji = answer { true } else { false }
       let viewed = Viewed()
       return PullRequestSource(
         branchPullRequests: { _, name, completion in
@@ -162,7 +163,7 @@
               content(
                 base: base, head: headCommit(answer, dir: dir),
                 commits: commits(since: base, in: dir),
-                viewed: viewed.paths, emoji: emoji)))
+                viewed: viewed.paths, answer: answer)))
         },
         setViewed: { value, paths, _, completion in
           if value { viewed.paths.formUnion(paths) } else { viewed.paths.subtract(paths) }
@@ -183,16 +184,23 @@
       var paths: Set<String> = ["src/agent/EmitBuffer.swift", "src/agent/HookRegistry.swift"]
     }
 
-    /// fixture の PR #131 の中身。`emoji` なら、コミットの題と README の名前に絵文字を混ぜる。
+    /// fixture の PR #131 の中身。答え方が `emoji` なら、コミットの題と README の名前に絵文字を混ぜ、`noFiles` なら、変更
+    /// ファイルを空にする。
     private static func content(
       base: String, head: String, commits: [GitHubPullRequestContent.Commit], viewed: Set<String>,
-      emoji: Bool
+      answer: Answer
     ) -> GitHubPullRequestContent {
-      let files: [(String, GitHubPullRequestContent.Change)] = [
-        ("src/agent/StateHooks.swift", .modified), ("src/agent/EmitBuffer.swift", .added),
-        ("src/agent/HookRegistry.swift", .modified),
-        (emoji ? "📝 README.md" : "README.md", .modified),
-      ]
+      let emoji: Bool = if case .emoji = answer { true } else { false }
+      let files: [(String, GitHubPullRequestContent.Change)] =
+        if case .noFiles = answer {
+          []
+        } else {
+          [
+            ("src/agent/StateHooks.swift", .modified), ("src/agent/EmitBuffer.swift", .added),
+            ("src/agent/HookRegistry.swift", .modified),
+            (emoji ? "📝 README.md" : "README.md", .modified),
+          ]
+        }
       return GitHubPullRequestContent(
         nodeID: "PR_131", number: 131, title: "StateHooks: emit(coalesce:) で renderer への通知を統一",
         url: "https://github.com/orbe/orbe/pull/131", isDraft: false, state: .open,

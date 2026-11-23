@@ -2,7 +2,8 @@ import SwiftUI
 
 /// 本体が空のときの、画面ごとの表示。出すものが無い・表示できないときは、中央に見出しと案内の一文と（あれば）ボタンか
 /// ショートカットの行を出し、出すものがまだ決まらない間（判定の前・読み込み中・diff が自動で開く前）は何も出さない。
-/// Files は文書を開いていないとき、Changes は git 管理外と変更なし、PR は worktree の今の PR の答えで決まる。
+/// Files は文書を開いていないとき、Changes は git 管理外と変更なし、PR は worktree の今の PR の答えと、PR の変更ファイルが
+/// 無いときで決まる。
 struct EditorEmptyView: View {
   let screen: EditorScreen
   let scm: ScmPanel
@@ -57,7 +58,12 @@ struct EditorEmptyView: View {
         title: l10n.string(.editorPrUnavailableTitle),
         lead: PrPanelText.unavailable(reason, l10n))
     case .pullRequest(let state):
-      if state.content == nil, let failure = PrPanelText.failure(of: pullRequest, state, l10n) {
+      if let content = state.content {
+        if content.files.isEmpty {
+          EditorMessage(
+            title: l10n.string(.editorPrNoFiles), lead: l10n.string(.editorPrNoFilesLead))
+        }
+      } else if let failure = PrPanelText.failure(of: pullRequest, state, l10n) {
         failed(failure)
       }
     }

@@ -592,6 +592,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorScmNoChangesLead
   case editorPrNone
   case editorPrNoneLead
+  case editorPrNoFiles
+  case editorPrNoFilesLead
   case editorPrUnavailableTitle
 
   // MARK: - Editor 面（diff）
