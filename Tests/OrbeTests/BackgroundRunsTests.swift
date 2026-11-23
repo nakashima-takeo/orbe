@@ -125,15 +125,31 @@ final class BackgroundRunsTests: OrbeTestCase {
   /// 枠から溢れた分は、走っている回が終わるまで始まらない。
   func testCommandsBeyondTheSlotsWait() throws {
     let runs = runs(commands: 2)
+    func file(_ name: String, _ index: Int) -> String {
+      TestScratch.caseDir.appendingPathComponent("\(name)-\(index)").path
+    }
+    func started(_ index: Int) -> Bool {
+      FileManager.default.fileExists(atPath: file("started", index))
+    }
+    func release(_ index: Int) {
+      FileManager.default.createFile(atPath: file("go", index), contents: nil)
+    }
     var results: [BackgroundRunResult] = []
     let done = expectation(description: "all")
     done.expectedFulfillmentCount = 3
-    for _ in 0..<3 {
-      _ = runs.run(command("sleep 0.5")) {
+    for index in 0..<3 {
+      let script =
+        ": > '\(file("started", index))'; while [ ! -e '\(file("go", index))' ]"
+        + " && [ -d '\(TestScratch.caseDir.path)' ]; do sleep 0.05; done"
+      _ = runs.run(command(script)) {
         results.append($0)
         done.fulfill()
       }
     }
+    pumpMain(until: { (0..<3).filter(started).count >= 2 }, "枠の数だけ始まる")
+    release(try XCTUnwrap((0..<3).first(where: started)))
+    pumpMain(until: { (0..<3).allSatisfy(started) }, "1 本が終わると、待っていた 1 本が始まる")
+    (0..<3).forEach(release)
     wait(for: [done], timeout: 20)
 
     let ordered = results.sorted { $0.startedAt < $1.startedAt }
@@ -175,13 +191,15 @@ final class BackgroundRunsTests: OrbeTestCase {
 
   func testStoppingARunningRunReturnsStopped() throws {
     let runs = runs()
+    let ready = TestScratch.caseDir.appendingPathComponent("ready").path
     var result: BackgroundRunResult?
     let done = expectation(description: "stopped")
-    let handle = runs.run(command("sleep 30")) {
+    let handle = runs.run(command(": > '\(ready)'; exec sleep 30")) {
       result = $0
       done.fulfill()
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { handle.stop() }
+    pumpMain(until: { FileManager.default.fileExists(atPath: ready) }, "前提: 子プロセスが起動している")
+    handle.stop()
 
     wait(for: [done], timeout: 10)
 
@@ -207,11 +225,11 @@ final class BackgroundRunsTests: OrbeTestCase {
     let started = Date()
     runs.stopAll()
     let elapsed = Date().timeIntervalSince(started)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
 
     XCTAssertLessThan(elapsed, BackgroundRuns.shutdownTimeout + 0.5)
+    // 全停止の後、走っていた回の後始末が、順番待ちの列から次を起動する処理を終えた時点は、外から見えない。
+    XCTAssertTrue(holds(for: 0.3) { !waitingCompleted }, "順番待ちの分は走らせない")
     XCTAssertTrue(kill(pid, 0) == -1 && errno == ESRCH, "孫まで止まっている")
-    XCTAssertFalse(waitingCompleted, "順番待ちの分は走らせない")
   }
 
   // MARK: - agent

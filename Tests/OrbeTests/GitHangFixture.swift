@@ -1,5 +1,6 @@
 import Foundation
 import OrbeTestSupport
+import XCTest
 
 @testable import Orbe
 
@@ -13,7 +14,7 @@ import OrbeTestSupport
 ///
 /// 実行体の形（シバンと priming のガード行）は `write(body:to:)` が決め、置いた実行体は返る時点で
 /// 初回 exec の Gatekeeper 評価を払い終えている。呼び手が持つのは本体（`*Body`）だけでよく、
-/// 短いアイドル上限で測るテストがその評価コストを踏まない。
+/// テストが時間を数える区間に、その評価コストが入らない。
 ///
 /// レイアウト（すべてテストの作業ディレクトリの下の 1 つのディレクトリに収まる）:
 /// ```
@@ -21,11 +22,14 @@ import OrbeTestSupport
 ///   repo/      … git リポジトリ（commit 1 本入り）
 ///   sentinel   … これが現れると待ちが解ける
 ///   started    … 待ちに入ったことの目印（テストは「本当にハングしている」状態から測れる）
+///   grandchild … セッションを離れた孫の pid（孫が離れ終えた後に現れる）
+///   tick-<n>   … `streamingBody` に n 行めを出力させる合図
 ///   wt/        … worktree の作成先
 /// ```
 final class GitHangFixture {
   /// fixture の根。
   let dir: URL
+  private var ticks = 0
 
   init() throws {
     dir = TestScratch.caseDir.appendingPathComponent("orbe-githang-\(UUID().uuidString)")
@@ -41,6 +45,8 @@ final class GitHangFixture {
   var sentinel: String { dir.appendingPathComponent("sentinel").path }
   /// 待ちに入ったことの目印。
   var started: String { dir.appendingPathComponent("started").path }
+  /// セッションを離れた孫の pid の目印。
+  var grandchild: String { dir.appendingPathComponent("grandchild").path }
   /// worktree の作成先（fixture の下なので後始末に乗る）。
   var worktreePath: String { dir.appendingPathComponent("wt").path }
 
@@ -69,29 +75,64 @@ final class GitHangFixture {
   /// だから普通の子孫は git と一緒に死に、pipe も閉じる。閉じないのは、グループを離れた
   /// プロセス——daemon 化する hook の子（gpg-agent・言語サーバ等）がまさにこれで、
   /// stdout/stderr を継いだまま残るので **EOF が二度と来ない**。
-  /// 「切ったのに返らない」を再現できるのはこの形だけ。
+  /// 「切ったのに返らない」を再現できるのはこの形だけ。孫が離れ終えてから待ちに入るので、`started` が現れた時点で、
+  /// 孫は pipe を握っている。
   var pipeHoldingBody: String {
     """
-    /usr/bin/perl -e 'use POSIX; POSIX::setsid(); exec "sleep", "10";' &
+    \(detachedGrandchild)
     \(waitingBody)
     """
   }
 
-  /// **セッションごと抜けた孫**を残したうえで、すぐ成功で終わる sh。
+  /// **セッションごと抜けた孫**を残したうえで、待ちが解けたら成功で終わる sh。
   ///
   /// git 自身は正常終了するのに孫が stdout/stderr を継いだままなので、EOF は二度と来ない。
   /// 「切ったのに返らない」（`pipeHoldingBody`）の対になる「**終わったのに返らない**」を作る。
   /// hook が `npm run dev &` のように背景へ 1 本投げるだけで起きる形で、setsid は不要だが、
-  /// テストを孫の寿命に依存させないためここでは明示的にセッションを抜けさせる。
-  static let daemonizingBody = """
-    /usr/bin/perl -e 'use POSIX; POSIX::setsid(); exec "sleep", "10";' &
+  /// テストを孫の寿命に依存させないためここでは明示的にセッションを抜けさせる。孫が離れ終えてから待ちに入り、`release()` で
+  /// 終わる（テストは、git が終わる前の待ち手を見てから、終わらせられる）。
+  var daemonizingBody: String {
+    """
+    \(detachedGrandchild)
+    \(waitingBody)
     exit 0
     """
+  }
 
-  /// 0.2 秒ごとに 5 回（合計 1.0 秒）出力し続ける sh。「無出力の時間」で測っていることの検証に使う。
-  static let streamingBody = """
-    for i in 1 2 3 4 5; do echo tick; sleep 0.2; done
+  /// セッションを離れた孫を残し、孫が離れ終えるまで待つ sh の断片。孫は、離れた後に自分の pid を `grandchild` へ置き
+  /// （書き終えてから名前を替えるので、現れた時点で中身が読める）、fixture のディレクトリが消える（テストの終わり）まで生きる。
+  /// 暴走保険の 60 秒は、待ちの本体と同じ。
+  private var detachedGrandchild: String {
     """
+    /usr/bin/perl -e '
+      use POSIX; POSIX::setsid();
+      my ($dir, $marker) = @ARGV;
+      open(my $f, ">", "$marker.tmp") or die; print $f "$$\\n"; close($f);
+      rename("$marker.tmp", $marker);
+      my $end = time + 60;
+      select(undef, undef, undef, 0.05) while -d $dir && time < $end;' "\(dir.path)" "\(grandchild)" &
+    end=$(( $(date +%s) + 60 ))
+    while [ ! -f "\(grandchild)" ] && [ -d "\(dir.path)" ] && [ "$(date +%s)" -lt "$end" ]; do
+      sleep 0.01
+    done
+    """
+  }
+
+  /// 合図（`tick()`）のたびに 1 行出力し、待ちが解けるまで止まる sh。「無出力の時間」で測っていることの検証に使う。
+  var streamingBody: String {
+    """
+    : > "\(started)"
+    n=1
+    end=$(( $(date +%s) + 60 ))
+    while [ ! -f "\(sentinel)" ] && [ -d "\(dir.path)" ] && [ "$(date +%s)" -lt "$end" ]; do
+      if [ -f "\(dir.path)/tick-$n" ]; then
+        echo tick
+        n=$((n + 1))
+      fi
+      sleep 0.05
+    done
+    """
+  }
 
   /// hook を置く（`pre-commit` / `post-checkout`）。
   func installHook(_ name: String, body: String) throws {
@@ -132,11 +173,9 @@ final class GitHangFixture {
   ///
   /// macOS は新規作成された実行体の**初回 exec** に評価を挟む——実測 150〜450 ms で変動し、
   /// **明確な上限は無い**。コストの大半は XProtect が中身を走査する CPU 時間で、新規 sh 20 本の
-  /// 初回 exec は並列にしても直列と同じ時間しかかからず、ファイルサイズにも比例する。よって
-  /// idleTimeout を延ばす対処では直せない。評価は inode 単位でシステム全体にキャッシュされるので、
-  /// ここで一度 exec しておけば以後 git が踏んでも走らない。
-  /// 払わないと、テストの短いアイドル上限（0.6 秒）がこの評価と競合して git が先に打ち切られ、
-  /// hang スクリプトが 1 行も動かないまま落ちる。
+  /// 初回 exec は並列にしても直列と同じ時間しかかからず、ファイルサイズにも比例する。評価は inode 単位で
+  /// システム全体にキャッシュされるので、ここで一度 exec しておけば以後 git が踏んでも走らない。
+  /// 置いた時点で払っておくので、テストが時間を数える区間（実時間の上限つきの待ちや見張り）に、この評価が入らない。
   ///
   /// priming 実行は `ORBE_GITHANG_PRIME` でガード行から即終了し本体に入らない（`started` を作らず・
   /// sentinel を待たず・孫を残さない）。この変数はテストプロセスの環境には入れず、ここで起こす子の
@@ -167,6 +206,87 @@ final class GitHangFixture {
   /// 待ちを解く。何度呼んでもよい。
   func release() {
     FileManager.default.createFile(atPath: sentinel, contents: Data())
+  }
+
+  /// `streamingBody` に、次の 1 行を出力させる。
+  func tick() {
+    ticks += 1
+    FileManager.default.createFile(
+      atPath: dir.appendingPathComponent("tick-\(ticks)").path, contents: Data())
+  }
+
+  /// セッションを離れた孫が生きているか（孫がまだ離れていなければ false）。
+  func grandchildIsAlive() -> Bool {
+    guard let text = try? String(contentsOfFile: grandchild, encoding: .utf8),
+      let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    else { return false }
+    return kill(pid, 0) == 0
+  }
+
+  /// `clock` を渡した `GitRunner` で止まった実行を、手で進める時計の上で、無出力の上限で切る。止まった git の待ち手が眠るのを
+  /// 待って、その期限まで進め、`settled` が成り立つまで待つ。上限の長さは、本番の定数を書き写さず、眠った期限から読む（眠ってから
+  /// 時刻は進めていないので、期限 − いま が上限）。
+  ///
+  /// git が止まる前に書いた出力（`Cloning into …` など）は、読みが遅れて、時計を進めた後に届くことがある。その場合
+  /// `GitRunner` は最後の出力の時刻を付け直して眠り直す。いまから上限ぶん先の期限で眠り直したら、もう一度進める（3 回まで）。
+  /// 上限より手前の期限（猶予）で眠っている待ち手は進めない（git の後始末を待たずに返らせないため）。
+  func expireIdleLimit(
+    on clock: ManualClock, until settled: () -> Bool, file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    expire(on: clock, until: { _ in settled() }, file: file, line: line)
+  }
+
+  /// `expireIdleLimit` と同じく切り、打ち切った後の猶予で眠る待ち手（上限より手前の期限）の期限を返す。手で進める時計と runner
+  /// を、この実行だけが使っている場合に限って使う。
+  func expireIdleLimitAwaitingGrace(
+    on clock: ManualClock, file: StaticString = #filePath, line: UInt = #line
+  ) -> WaitClock.Instant? {
+    var grace: WaitClock.Instant?
+    expire(
+      on: clock,
+      until: { limit in
+        grace = clock.asleep.compactMap(\.deadline).first { $0 - clock.now < limit - 0.001 }
+        return grace != nil
+      }, file: file, line: line)
+    return grace
+  }
+
+  /// 切って、`settled`（引数は、読んだ上限の長さ）が成り立つまで待つ。
+  private func expire(
+    on clock: ManualClock, until settled: (TimeInterval) -> Bool, file: StaticString,
+    line: UInt
+  ) {
+    guard clock.awaitSleeper(where: { $0.deadline != nil }) != nil,
+      var deadline = clock.asleep.compactMap(\.deadline).max()
+    else { return XCTFail("止まった git の待ち手が、期限つきで眠らない", file: file, line: line) }
+    let limit = deadline - clock.now
+    func resleeping(_ sleeper: ManualClock.Sleeper) -> Bool {
+      sleeper.deadline.map { abs(($0 - clock.now) - limit) < 0.001 } ?? false
+    }
+    for _ in 0..<3 {
+      XCTAssertGreaterThanOrEqual(
+        clock.advance(to: deadline), 1,
+        "無出力の上限の期限まで進めると、眠っている待ち手を、進めた呼び出しの中で起こす。"
+          + "進めた呼び出しが戻った時点で、まだ起こし終えていない形になったら、次のテストも、切らないことを確かめられなくなる: "
+          + "RootFilesWriteStopTests の、見ている手の書き込みにある「期限なしで眠った待ち手が、時刻を進めた後も眠ったまま」"
+          + "という確認と、"
+          + "GitRunnerTimeoutTests.testStreamingCommandIsNotStopped にある「最後の出力から数え直した期限で眠り直す」という確認",
+        file: file, line: line)
+      var again: ManualClock.Sleeper?
+      guard
+        waitUntil(
+          10,
+          {
+            again = clock.asleep.first(where: resleeping)
+            return settled(limit) || again != nil
+          })
+      else { return XCTFail("上限まで進めた後、終わりも眠り直しも来ない", file: file, line: line) }
+      if settled(limit) { return }
+      guard let next = again?.deadline else { return }
+      deadline = next
+    }
+    XCTFail("3 回進めても、遅れた出力で眠り直し続ける", file: file, line: line)
   }
 
   // MARK: - 準備

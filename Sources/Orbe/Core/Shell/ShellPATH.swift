@@ -53,6 +53,8 @@ final class ShellPATH {
   }
 
   private let probe: () -> String?
+  /// 同期の待ちと、その予算の引き算を通す時計。
+  private let clock: WaitClock
   private let condition = NSCondition()
   /// 検査を通ったログインシェル由来の PATH。**floor は決して入れない**（起動直後のたまたま早い
   /// 呼び出しが、degrade した値をセッション全体へ固定してしまう）。
@@ -63,8 +65,11 @@ final class ShellPATH {
   /// `.bounded` の待ちが残している予算。待った分だけ減る。
   private var syncWaitRemaining = ShellPATH.syncWaitBudget
 
-  init(probe: @escaping () -> String? = { ShellPATH.probeLoginShell() }) {
+  init(
+    probe: @escaping () -> String? = { ShellPATH.probeLoginShell() }, clock: WaitClock = .wall
+  ) {
     self.probe = probe
+    self.clock = clock
   }
 
   /// 背景で probe を 1 回だけ開始する。冪等。起動最初期に呼んで、同期待ちが要る窓を潰す。
@@ -99,15 +104,15 @@ final class ShellPATH {
     guard probing else { return loginPATH }
     switch wait {
     case .bounded:
-      let started = Date()
-      let deadline = started.addingTimeInterval(syncWaitRemaining)
-      while probing, Date() < deadline { condition.wait(until: deadline) }
-      syncWaitRemaining = max(0, syncWaitRemaining - Date().timeIntervalSince(started))
+      let started = clock.now()
+      let deadline = started + syncWaitRemaining
+      while probing, clock.now() < deadline { clock.sleep(on: condition, until: deadline) }
+      syncWaitRemaining = max(0, syncWaitRemaining - (clock.now() - started))
     case .settled:
       // probe 自身が `probeTimeout` で打ち切るので、着地待ちは有界。同じ上限をここにも置いて、
       // probe が戻らない実装事故に待ち手が巻き込まれないようにする。
-      let deadline = Date().addingTimeInterval(Self.probeTimeout)
-      while probing, Date() < deadline { condition.wait(until: deadline) }
+      let deadline = clock.now() + Self.probeTimeout
+      while probing, clock.now() < deadline { clock.sleep(on: condition, until: deadline) }
     }
     return loginPATH
   }
@@ -165,7 +170,7 @@ final class ShellPATH {
   /// 終了ステータスは見ない（対話シェルは rc のエラーで非 0 になりうるが PATH は正しく出ている）。
   static func probeLoginShell(
     shell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh",
-    timeout: TimeInterval = probeTimeout
+    clock: WaitClock = .wall
   ) -> String? {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: shell)
@@ -175,7 +180,7 @@ final class ShellPATH {
     proc.standardInput = FileHandle.nullDevice  // rc の入力待ちで固まらせない
     proc.standardError = FileHandle.nullDevice  // rc のノイズは捨てる
 
-    let state = ProbeState()
+    let state = ProbeState(clock: clock)
     pipe.fileHandleForReading.readabilityHandler = { handle in
       let data = handle.availableData
       if data.isEmpty {
@@ -193,7 +198,7 @@ final class ShellPATH {
     // 打ち切った後は EOF が来ないことがあるので、返る前に必ず読み手を外す（レーンも fd も残さない）。
     defer { pipe.fileHandleForReading.readabilityHandler = nil }
 
-    awaitProbe(proc, state: state, timeout: timeout)
+    awaitProbe(proc, state: state, clock: clock)
     // 不正バイトは U+FFFD へ落として読み進める。PATH と無関係な環境変数の 1 バイトで probe 全体を
     // 捨てると、失敗として検出できないまま floor に固定される。lint は「デコードの失敗を握り潰すな」と
     // 失敗しうる initializer を求めるが、ここで欲しいのは全か無かの成否ではなく、読めた分の PATH 行。
@@ -206,19 +211,19 @@ final class ShellPATH {
   /// シェルの終了と出力の汲み出しを待つ。**終わったことを決めるのはシェルの終了**であって EOF ではない
   /// ——EOF が来るかは pipe の書き込み端を握る第三者（rc が背景に残したプロセス）次第で、読み切りを
   /// 待つ形にすると、正しく取れた PATH を捨てて上限まで張り付く。終了後に残るのはバッファの汲み出し
-  /// だけなので `drainGrace` で有界にする。`timeout` は「シェルが終わらない」ケース専用の硬い上限。
-  private static func awaitProbe(_ proc: Process, state: ProbeState, timeout: TimeInterval) {
-    let deadline = Date().addingTimeInterval(timeout)
+  /// だけなので `drainGrace` で有界にする。`probeTimeout` は「シェルが終わらない」ケース専用の硬い上限。
+  private static func awaitProbe(_ proc: Process, state: ProbeState, clock: WaitClock) {
+    let deadline = clock.now() + probeTimeout
     while true {
       let progress = state.progress()
       if progress.finished { return }
       if let exitedAt = progress.exitedAt {
-        let drain = min(exitedAt.addingTimeInterval(drainGrace), deadline)
-        guard Date() < drain else { return }
+        let drain = min(exitedAt + drainGrace, deadline)
+        guard clock.now() < drain else { return }
         state.wait(until: drain)
         continue
       }
-      guard Date() < deadline else { break }
+      guard clock.now() < deadline else { break }
       state.wait(until: deadline)
     }
     // 上限に達した＝シェルが終わらない。SIGTERM で切り、集まった分を持って返る
@@ -232,9 +237,14 @@ final class ShellPATH {
   private final class ProbeState: @unchecked Sendable {
     private let lock = NSLock()
     private let changed = DispatchSemaphore(value: 0)
+    private let clock: WaitClock
     private var output = Data()
     private var eof = false
-    private var exitedAt: Date?
+    private var exitedAt: WaitClock.Instant?
+
+    init(clock: WaitClock) {
+      self.clock = clock
+    }
 
     func append(_ data: Data) { lock.withLock { output += data } }
 
@@ -244,18 +254,18 @@ final class ShellPATH {
     }
 
     func noteExit() {
-      lock.withLock { if exitedAt == nil { exitedAt = Date() } }
+      lock.withLock { if exitedAt == nil { exitedAt = clock.now() } }
       changed.signal()
     }
 
     /// 待ち手が 1 回の観測で見る状態。ばらばらに読むと組み合わせが食い違う。
-    func progress() -> (finished: Bool, exitedAt: Date?) {
+    func progress() -> (finished: Bool, exitedAt: WaitClock.Instant?) {
       lock.withLock { (eof && exitedAt != nil, exitedAt) }
     }
 
     /// 状態が変わるか期限が来るまで眠る。
-    func wait(until deadline: Date) {
-      _ = changed.wait(timeout: .now() + max(0, deadline.timeIntervalSinceNow))
+    func wait(until deadline: WaitClock.Instant) {
+      clock.sleep(on: changed, until: deadline)
     }
 
     func collected() -> Data { lock.withLock { output } }

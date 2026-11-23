@@ -16,7 +16,10 @@ final class GitRunner {
   /// 「1 バイトも出力が無いまま」この時間が過ぎたら打ち切る上限。経過時間ではなく無出力時間で
   /// 測るのは、巨大リポジトリの clone のような正当な長時間実行を切らないため——出力が流れている
   /// 間は延命し、何も起きていないときだけ切る。
-  private let idleTimeout: TimeInterval
+  private static let idleTimeout: TimeInterval = 120
+
+  /// 時刻の読みと、期限つきの待ちを通す時計。
+  private let clock: WaitClock
 
   /// EOF を待つ猶予。孫プロセス（hook が背景に残した子・`git remote-ext`・gpg）は pipe の
   /// 書き込み端を握ったまま git より長生きするため、EOF が来ないことがある。打ち切った後と、
@@ -25,9 +28,8 @@ final class GitRunner {
   /// 孫を残さない実行がこの猶予を消費することはない。
   private static let terminationGrace: TimeInterval = 2
 
-  /// テストだけが短い `idleTimeout` を渡す（本番の 120 秒を待つテストは書けないため）。
-  init(idleTimeout: TimeInterval = 120) {
-    self.idleTimeout = idleTimeout
+  init(clock: WaitClock = .wall) {
+    self.clock = clock
   }
 
   /// git を背景で実行し、結果をメインキューへ返す。
@@ -53,7 +55,7 @@ final class GitRunner {
     transform: @escaping (Output) -> Value, completion: @escaping (Value) -> Void
   ) {
     let state = RunState(
-      idleTimeout: handle.isAttended ? nil : idleTimeout,
+      clock: clock, idleTimeout: handle.isAttended ? nil : Self.idleTimeout,
       onStderrLine: onProgress.map { deliver in
         { line in DispatchQueue.main.async { deliver(line) } }
       })
@@ -70,7 +72,8 @@ final class GitRunner {
   /// 1 バイトも出力が無いまま `idleTimeout` が過ぎたら SIGTERM で打ち切り、`timedOut` を立てて返る。
   func runSync(_ args: [String], cwd: String, stdin: Data? = nil) -> Output {
     execute(
-      args, cwd: cwd, launch: Launch(stdin: stdin), state: RunState(idleTimeout: idleTimeout),
+      args, cwd: cwd, launch: Launch(stdin: stdin),
+      state: RunState(clock: clock, idleTimeout: Self.idleTimeout),
       handle: Handle())
   }
 
@@ -84,7 +87,7 @@ final class GitRunner {
     qualityOfService: QualityOfService = .default,
     onOutput: @escaping (Data) -> Void, completion: @escaping (Output) -> Void
   ) -> Handle {
-    let state = RunState(idleTimeout: nil, onStdout: onOutput)
+    let state = RunState(clock: clock, idleTimeout: nil, onStdout: onOutput)
     let handle = Handle(attended: true)
     queue.async {
       completion(
@@ -215,17 +218,17 @@ final class GitRunner {
       // 他人の寿命に縛られる。終了後に残るのはバッファの汲み出しだけなので猶予で有界にする。
       // ここは打ち切りではないので `terminate()` を通さず、集めた分を持って返る。
       if let exitedAt = progress.exitedAt {
-        let drain = exitedAt.addingTimeInterval(Self.terminationGrace)
-        guard Date() < drain else { return .completed }
+        let drain = exitedAt + Self.terminationGrace
+        guard clock.now() < drain else { return .completed }
         state.wait(until: drain)
         continue
       }
       guard let idleTimeout = state.idleTimeout else {
-        state.waitForChange()
+        state.wait(until: nil)
         continue
       }
-      let deadline = progress.lastActivity.addingTimeInterval(idleTimeout)
-      guard Date() < deadline else { break }
+      let deadline = progress.lastActivity + idleTimeout
+      guard clock.now() < deadline else { break }
       state.wait(until: deadline)  // 出力が来れば期限が延びるので、目覚めたら測り直す
     }
     let cancelled = state.progress().cancelled
@@ -235,8 +238,8 @@ final class GitRunner {
     // gpg-agent 等）だけで、そいつらは pipe を握ったまま残る。だから下の猶予が要る。
     process.terminate()
     // 握られたままなら EOF は二度と来ない。猶予だけ与え、来なければ集めた分を持って返る。
-    let grace = Date().addingTimeInterval(Self.terminationGrace)
-    while !state.progress().finished, Date() < grace { state.wait(until: grace) }
+    let grace = clock.now() + Self.terminationGrace
+    while !state.progress().finished, clock.now() < grace { state.wait(until: grace) }
     return cancelled ? .cancelled : .timedOut
   }
 
@@ -264,9 +267,9 @@ final class GitRunner {
     /// 終了かつ両 pipe が EOF。
     let finished: Bool
     /// 最後に出力があった時刻（アイドル期限の起点）。
-    let lastActivity: Date
+    let lastActivity: WaitClock.Instant
     /// 終了を観測した時刻。未終了なら nil。
-    let exitedAt: Date?
+    let exitedAt: WaitClock.Instant?
     /// 止められた（`Handle.cancel`）。
     let cancelled: Bool
   }
@@ -282,11 +285,12 @@ final class GitRunner {
   fileprivate final class RunState {
     private let lock = NSLock()
     private let changed = DispatchSemaphore(value: 0)
+    private let clock: WaitClock
     private var stdout = Data()
     private var stderr = Data()
     private var openPipes = 2
-    private var exitedAt: Date?
-    private var lastActivity = Date()
+    private var exitedAt: WaitClock.Instant?
+    private var lastActivity: WaitClock.Instant
     private var cancelled = false
     let idleTimeout: TimeInterval?
     private let streams: Bool
@@ -297,9 +301,11 @@ final class GitRunner {
     private var stderrRest = Data()
 
     init(
-      idleTimeout: TimeInterval?, onStdout: ((Data) -> Void)? = nil,
+      clock: WaitClock, idleTimeout: TimeInterval?, onStdout: ((Data) -> Void)? = nil,
       onStderrLine: ((String) -> Void)? = nil
     ) {
+      self.clock = clock
+      lastActivity = clock.now()
       self.idleTimeout = idleTimeout
       streams = onStdout != nil
       self.onStdout = onStdout
@@ -312,7 +318,7 @@ final class GitRunner {
     /// 読み手（pipe ごとに 1 本、到着順に直列）から呼ばれる。受け手はロックの外で呼ぶ。
     func append(_ data: Data, isStdout: Bool) {
       let forward = lock.withLock { () -> (() -> Void)? in
-        lastActivity = Date()
+        lastActivity = clock.now()
         guard isStdout else {
           stderr += data
           guard let onStderrLine else { return nil }
@@ -364,7 +370,7 @@ final class GitRunner {
     }
 
     func noteExit() {
-      lock.withLock { if exitedAt == nil { exitedAt = Date() } }
+      lock.withLock { if exitedAt == nil { exitedAt = clock.now() } }
       changed.signal()
     }
 
@@ -376,14 +382,9 @@ final class GitRunner {
       }
     }
 
-    /// 状態が変わるか期限が来るまで眠る。
-    func wait(until deadline: Date) {
-      _ = changed.wait(timeout: .now() + max(0, deadline.timeIntervalSinceNow))
-    }
-
-    /// 状態が変わるまで眠る（期限なし）。
-    func waitForChange() {
-      changed.wait()
+    /// 状態が変わるか期限（nil は期限なし）が来るまで眠る。
+    func wait(until deadline: WaitClock.Instant?) {
+      clock.sleep(on: changed, until: deadline)
     }
 
     func collected() -> (stdout: Data, stderr: Data) { lock.withLock { (stdout, stderr) } }
