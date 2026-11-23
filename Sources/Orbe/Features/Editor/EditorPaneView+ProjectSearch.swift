@@ -1,13 +1,21 @@
 import AppKit
 import OrbeEditorCore
 
-/// プロジェクト検索の結線——⌘⇧F で検索パネルを出す（Files の画面で）・種・結果を開いて一致を選び中央へ・パネルの中のキー
+/// プロジェクト検索の結線——⌘⇧F で検索パネルを出す（Files の画面で）・検索パネルを離れてエクスプローラーへ戻す・種・
+/// 結果を開いて一致を選び中央へ・パネルの中のキー
 /// （⌘↓ / ⌘↑・⌥⌘C / W / R）・F4 / ⇧F4。列の外の押下で待っている ↑↓ の開きを捨てる（ソース管理の列も同じ）。
 extension EditorPaneView {
   func wireProjectSearch() {
     projectSearch.documents = { [weak self] in self?.group?.editor.heldDocuments ?? [] }
     projectSearch.onOpen = { [weak self] id, opening in self?.openProjectMatch(id, opening) }
     projectSearch.onGroundChange = { [weak self] in self?.pushFindGround() }
+    projectSearch.onLeave = { [weak self] in self?.showExplorer() }
+  }
+
+  /// Files の左の列をエクスプローラーにする。一致の地とパネルにあった焦点の後始末は、左の列の中身が替わったときの 1 か所が
+  /// 行う（→ `syncPanel`）。
+  func showExplorer() {
+    filesPanel = .files
   }
 
   /// 検索パネルが見えている（左の列が開いていて、画面が Files で、左の列が検索）。

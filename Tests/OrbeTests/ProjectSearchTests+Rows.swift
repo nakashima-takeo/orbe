@@ -151,7 +151,7 @@ extension ProjectSearchTests {
 
     f.search.select(match("a.txt", 0))
     f.search.moveSelection(by: 1, isRepeat: true)
-    f.search.escapeInResults()
+    f.search.select(nil)
     f.search.navigation.keyDidRelease()
     f.closeWindow()
     XCTAssertEqual(f.opened().count, 1, "選択を外していれば開かない")

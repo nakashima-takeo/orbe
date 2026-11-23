@@ -195,6 +195,42 @@ extension ProjectSearchPaneTests {
     pumpMain(until: { textHasFocus(hosted) }, "本文へ戻る")
   }
 
+  // MARK: - 検索パネルを離れる
+
+  /// 入力欄の Esc（窓が配るキー）で、左の列はエクスプローラーへ戻り、焦点は本文へ移り、一致の地は消える。検索語と結果は
+  /// 残る。キーリピートの Esc では戻らない。
+  func testEscapeInTheFieldLeavesForTheExplorerAndHandsTheFocusToTheText() throws {
+    let hosted = try host(["a.txt": "needle\n"])
+    _ = try open(hosted, "a.txt")
+    searchAll(hosted, "needle")
+    pumpMain(until: { hosted.search.focusedArea == .field }, "入力欄に焦点")
+
+    deliverKeyDown(.key("\u{1b}", [], isRepeat: true), to: hosted.window)
+    flush(hosted.window)
+    XCTAssertTrue(hosted.pane.showsSearchPanel, "キーリピートの Esc では戻らない")
+
+    deliverKeyDown(.key("\u{1b}", []), to: hosted.window)
+    flush(hosted.window)
+    XCTAssertFalse(hosted.pane.showsSearchPanel, "エクスプローラーへ戻る")
+    XCTAssertEqual(hosted.tab.group.editor.screen, .files)
+    pumpMain(until: { textHasFocus(hosted) }, "焦点は本文へ")
+    XCTAssertEqual(pushedFindGround(hosted), [], "一致の地は消える")
+    XCTAssertEqual(hosted.search.query.pattern, "needle")
+    XCTAssertEqual(hosted.search.results.files.map(\.path), ["a.txt"], "結果は残る")
+  }
+
+  /// 焦点が本文にあるまま見出しのボタンで離れても、焦点は本文から動かない。
+  func testLeavingWithTheFocusInTheTextKeepsTheFocus() throws {
+    let hosted = try host(["a.txt": "needle\n"])
+    let document = try open(hosted, "a.txt")
+    searchAll(hosted, "needle")
+    hosted.window.makeFirstResponder(document.surface.responder)
+
+    hosted.search.dismiss()
+    XCTAssertFalse(hosted.pane.showsSearchPanel)
+    XCTAssertTrue(textHasFocus(hosted))
+  }
+
   /// 焦点を入れる要求はその場の 1 回きり——パネルが後で現れても、F4 で本文へ移した焦点を奪わない。
   ///
   /// 焦点を奪わないことは、パネルが窓に載ったのを待った時点で確かめる。前提は、パネルの中へ焦点を入れる経路が、どれも走る時点で

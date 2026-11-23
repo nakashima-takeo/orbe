@@ -3,7 +3,7 @@ import AppKit
 /// 検索結果の列の源——`ProjectSearch` の平らな行を行の列（`RowList`）へ渡し、列の操作を model の操作へ届ける。
 ///
 /// キー: ↑↓ は選択を動かして一致なら仮の文書として開き（押している間は開かず、離したら開く。→ `ProjectSearch+Open`）、← → は折りたたみと
-/// 親子の移動、Enter は普通の文書として開いてテキスト面へ、Esc は止めるか選択を外す。一致のシングルクリックは選んで仮の文書として
+/// 親子の移動、Enter は普通の文書として開いてテキスト面へ、Esc は見出しのボタンと同じ（→ `ProjectSearch.dismiss`）。一致のシングルクリックは選んで仮の文書として
 /// 開き（焦点は列に残る）、ダブルクリックは普通の文書として開いてテキスト面へ。
 final class SearchResultsSource: RowListSource {
   let search: ProjectSearch
@@ -44,7 +44,7 @@ final class SearchResultsSource: RowListSource {
     case .left: search.moveLeft()
     case .right: search.moveRight(isRepeat: key.isRepeat)
     case .enter: search.activateSelection()
-    case .escape: search.escapeInResults()
+    case .escape: search.dismiss(isRepeat: key.isRepeat)
     }
   }
 

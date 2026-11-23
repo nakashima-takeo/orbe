@@ -4,7 +4,7 @@ import os
 
 /// プロジェクト検索の状態（連ごと。pane が 1 つ持つ）——問い・検索の進み・結果・平らな行・選択・折りたたみ。規則（問いの
 /// 組み立て・行の中の一致・順序・上限）は Core、1 回の検索の裏の仕事は `ProjectSearchRun`。検索パネル（SwiftUI と結果の列）は
-/// これを読み、操作は閉包で pane へ戻る（開く・焦点）。
+/// これを読み、操作は閉包で pane へ戻る（開く・焦点・検索パネルを離れる）。
 ///
 /// 打鍵は 300ms 後に検索し、Enter・切替・更新は即時。どの検索でも前の結果は消さず、新しい結果が最初に届いたとき（または
 /// 検索が終わった・止めたとき）に差し替える（VS Code と同じ。切り替えるたびに列がちらつかない）。検索を始め直すたびに
@@ -19,7 +19,7 @@ final class ProjectSearch {
   enum Phase: Equatable {
     case idle
     case searching
-    /// 2 秒を超えた検索（ヘッダーの更新が停止に替わる）。
+    /// 2 秒を超えた検索（見出しのボタンと Esc が、検索パネルを離れる代わりに検索を止める）。
     case slow
     case done
   }
@@ -70,6 +70,8 @@ final class ProjectSearch {
   @ObservationIgnored var onGroundChange: () -> Void = {}
   /// 永続する問いが変わった。
   @ObservationIgnored var onQueryChange: () -> Void = {}
+  /// 検索パネルを離れる（pane が Files の左の列をエクスプローラーにする）。呼ぶのは `dismiss` だけ。
+  @ObservationIgnored var onLeave: () -> Void = {}
   @ObservationIgnored let runner: GitRunner
   @ObservationIgnored let typingDelay = EditorDelay()
   @ObservationIgnored let progressDelay = EditorDelay()
@@ -200,12 +202,26 @@ final class ProjectSearch {
     run.start()
   }
 
-  /// 検索を止める（停止・Esc）。この検索で届いた結果は残る（まだ 1 つも届いていなければ前の問いの結果を消す）。
+  /// 検索を止める。この検索で届いた結果は残る（まだ 1 つも届いていなければ前の問いの結果を消す）。
   func stop() {
     guard isSearching else { return }
     stopRun()
     settle(.done)
   }
+
+  /// 見出しのボタンと、入力欄・結果の列の Esc が呼ぶ。2 秒を超えた検索の間は止め、そうでなければ検索パネルを離れる（走って
+  /// いる検索は止めない）。キーリピートの Esc では何もしない——1 回の長押しで「止める」と「離れる」が続けて起きない。
+  func dismiss(isRepeat: Bool = false) {
+    guard !isRepeat else { return }
+    if stopsOnDismiss {
+      stop()
+    } else {
+      onLeave()
+    }
+  }
+
+  /// `dismiss` が検索を止めるか（見出しのボタンの字もこれで決まる）。
+  var stopsOnDismiss: Bool { phase == .slow }
 
   /// ヘッダーのクリア。検索語と結果を消す。
   func clear() {

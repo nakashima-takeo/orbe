@@ -110,8 +110,8 @@ private struct ProjectSearchField: View {
       .lineLimit(1)
       .focused(focus)
       .onSubmit { search.search() }
-      .onKeyPress(.escape) {
-        search.stop()
+      .onKeyPress(.escape, phases: [.down, .repeat]) { press in
+        search.dismiss(isRepeat: press.phase == .repeat)
         return .handled
       }
       SearchOption(
