@@ -10,7 +10,8 @@ import XCTest
 /// （パス・状態の字・未保存・「ファイルを開く」を押せるか・確認済み）は一覧の持ち主から導き、押すと左の列と同じ操作になる。
 ///
 /// 壊れると何が起きるか: Files の文書の上に見出しが出る・見出しが本文の先頭の行を覆う。消したファイルで「ファイルを開く」が
-/// 押せる。見出しの確認済みと左の列のチェックが食い違う。打って未保存になっても丸が出ない。影の上を押しても本文に届かない。
+/// 押せる。コメントの欄で打っている間に見出しを押すと、欄から焦点が外れて空の欄が閉じる。打って未保存になっても丸が出ない。
+/// 影の上を押しても本文に届かない。
 extension EditorDiffTests {
   // MARK: - 見出しの値
 
@@ -160,16 +161,29 @@ extension EditorDiffTests {
     pumpMain(until: { window.firstResponder === document.surface.responder }, "本文に焦点")
   }
 
-  /// 見出しの確認済みは、diff の PR ごとの状態へ書く——左の列のチェックと「N/M 確認済み」と同じ状態で、もう一度で外れる。
-  func testTheHeaderTogglesViewedInThePullRequestState() throws {
+  /// 新しいコメントの欄に焦点があるまま見出しのチェックを押すと、確認済みが付き、焦点は欄に残る（空の欄も閉じない）。
+  func testPressingTheHeaderCheckKeepsTheFocusInTheCommentField() throws {
     let (diff, tab) = try commentedTab(Remote())
     let pane = tab.group.view.editor
     guard case .pullRequest(let state) = diff.id.kind else { return XCTFail("前提: PR の diff") }
-    XCTAssertFalse(state.isViewed("a.txt"))
-    pane.toggleHeaderViewed()
-    XCTAssertTrue(state.isViewed("a.txt"))
-    XCTAssertEqual(state.viewedCount.viewed, 1)
-    pane.toggleHeaderViewed()
-    XCTAssertFalse(state.isViewed("a.txt"))
+    let window = try XCTUnwrap(pane.window)
+    placeOffscreen(window)
+    let surface = try engine(diff.newSurface)
+    window.makeFirstResponder(surface.responder)
+    let layer = try XCTUnwrap(diff.comments)
+    layer.surface(surface, didPressTrailingMarkOn: .document(1))
+    let draft = try XCTUnwrap(layer.draft(.new, line: 1))
+
+    let body = pane.bodyRect
+    try click(
+      pane,
+      at: NSPoint(
+        x: body.minX + Theme.Layout.editorDiffHeaderLeadingPullRequest
+          + Theme.Layout.editorPrCheckbox / 2,
+        y: body.minY + Theme.Layout.editorDiffHeader / 2))
+    pumpMain(until: { state.isViewed("a.txt") }, "確認済みが付く")
+    XCTAssertTrue(window.firstResponder === surface.responder, "焦点は面のまま")
+    XCTAssertEqual(surface.primary, .field(draft.field.id), "欄が主のまま")
+    XCTAssertIdentical(layer.draft(.new, line: 1), draft, "空の欄は閉じない")
   }
 }
