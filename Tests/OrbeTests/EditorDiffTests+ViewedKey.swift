@@ -47,8 +47,8 @@ extension EditorDiffTests {
     XCTAssertFalse(state.isViewed("a.txt"))
   }
 
-  /// Changes の diff・Files の文書・面の外では働かない。
-  func testVDoesNothingOutsideThePullRequestDiff() throws {
+  /// Changes の diff では働かない（v は本文に字として入る）。
+  func testVDoesNothingInAChangesDiff() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, window) = tab()
     let pane = tab.group.view.editor
@@ -56,8 +56,6 @@ extension EditorDiffTests {
     tab.group.editor.selectScreen(.changes)
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     window.makeFirstResponder(try XCTUnwrap(diff.newSurface).responder)
-    XCTAssertFalse(pane.handleViewedKey(viewedKey), "Changes の diff")
-    window.makeFirstResponder(nil)
-    XCTAssertFalse(pane.handleViewedKey(viewedKey), "面の外")
+    XCTAssertFalse(pane.handleViewedKey(viewedKey))
   }
 }
