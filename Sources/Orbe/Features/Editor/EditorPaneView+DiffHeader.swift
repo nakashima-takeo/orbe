@@ -37,4 +37,54 @@ extension EditorPaneView {
     let path = diff.id.path
     state.setViewed(!state.isViewed(path), paths: [path])
   }
+
+  /// PR の画面のキー v: 本体の PR の diff のファイルの確認済みを付け外しする（見出しの「確認済みにする」と同じ口）。修飾の無い
+  /// 字のキーは key equivalent として pane に届かず、first responder の keyDown へ直行する（読むだけの面は黙って捨てる）ので、
+  /// ここで拾う。働くのは、見出しに確認済みの部品が出ていて、焦点が字を打つ場に無いとき——diff の面（主が読むだけの場）・
+  /// pane 自身・PR のパネルの列。焦点が列にあり、列で選んでいるファイルが本体のファイルと違えば、その diff を待たずに開いて
+  /// から付け外しし、開けなければ音で断る。押し続けて届く繰り返しは、付け外しせずに捨てる。扱ったら true。
+  func handleViewedKey(_ event: NSEvent) -> Bool {
+    let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+    guard flags.isEmpty, event.charactersIgnoringModifiers == "v",
+      group?.editor.screen == .pullRequest, let diff, headerShowsViewed(diff),
+      let place = viewedKeyPlace(diff)
+    else { return false }
+    guard !event.isARepeat else { return true }
+    if place == .list, !alignBodyWithListSelection() {
+      NSSound.beep()
+      return true
+    }
+    toggleHeaderViewed()
+    return true
+  }
+
+  /// キー v を受ける焦点の場所。
+  private enum ViewedKeyPlace {
+    case body
+    case list
+  }
+
+  /// 焦点がキー v を受ける場所にあるか（字を打つ場——入力の文脈を持つ view——は外す）。
+  private func viewedKeyPlace(_ diff: EditorDiff) -> ViewedKeyPlace? {
+    guard let responder = window?.firstResponder as? NSView, responder.inputContext == nil
+    else { return nil }
+    if responder === self { return .body }
+    if diffSurfaces(diff).contains(where: { $0.responder === responder }) { return .body }
+    if responder.isDescendant(of: pullRequestList) { return .list }
+    return nil
+  }
+
+  /// 本体の diff の見出しに確認済みの部品が出ている（PR の diff で、そのファイルが PR ごとの状態の変更ファイルに在る）。
+  private func headerShowsViewed(_ diff: EditorDiff) -> Bool {
+    guard case .pullRequest(let state) = diff.id.kind else { return false }
+    return state.content?.files.contains { $0.path == diff.id.path } == true
+  }
+
+  /// PR のパネルの列で選んでいる行がファイルで、本体のファイルと違えば、その diff を待たずに開く。本体が列の選択に揃った
+  /// （選んでいるのがファイルでなければ、そのまま）なら true。
+  private func alignBodyWithListSelection() -> Bool {
+    guard case .file(let path)? = pullRequest.selection, diff?.id.path != path else { return true }
+    pullRequest.openSelection(.browse)
+    return diff?.id.path == path
+  }
 }

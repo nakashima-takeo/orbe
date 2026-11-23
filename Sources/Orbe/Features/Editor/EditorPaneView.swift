@@ -79,7 +79,7 @@ final class EditorPaneView: NSView {
   private(set) var pullRequest: PrPanel
   private(set) var pullRequestList: RowList<PrListSource>
   private(set) var pullRequestHeader = PrDescriptionHeader(frame: .zero)
-  /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
+  /// F4 / ⇧F4・PR の画面のキー v と、結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// 左の列の幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
