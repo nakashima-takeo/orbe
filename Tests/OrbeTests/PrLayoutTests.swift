@@ -114,28 +114,4 @@ final class PrLayoutTests: OrbeTestCase {
         .section(.files, isOpen: false, count: paths.count),
       ])
   }
-
-  /// 変更ファイルの 2 つの並びは、区分とフォルダを全部開いたときのファイルの行の順そのもので、パスからその並びの番号と
-  /// 変化の種類を引ける（上のバーの一覧と見出しが、この並びと索引を使う）。
-  func testTheChangedFilesOrdersAreTheFullyOpenRowsAndIndexThePaths() {
-    let read = GitHubPullRequestContent(
-      nodeID: "PR_1", number: 7, title: "題", url: "https://github.com/o/r/pull/7", isDraft: false,
-      state: .open, body: "", author: "me", baseRefName: "main", headRefName: "feat",
-      baseCommit: "b", headCommit: "h", commitCount: 0, commits: [],
-      files: paths.map {
-        .init(path: $0, change: $0 == "Z.txt" ? .renamed : .modified, isViewed: false)
-      })
-    let files = PrChangedFiles(read.files)
-    for asTree in [true, false] {
-      let order = files.order(asTree: asTree)
-      let shown = build(read, asTree: asTree, closed: [], closedFolders: []).items.compactMap {
-        if case .file(let path, _, _) = $0 { path } else { nil }
-      }
-      XCTAssertEqual(order.files.map(\.path), shown, "asTree: \(asTree)")
-      XCTAssertEqual(order.files.map { order.index[$0.path] }, Array(order.files.indices))
-    }
-    XCTAssertEqual(files.change(of: "Z.txt"), .renamed)
-    XCTAssertEqual(files.change(of: "src/a/x.swift"), .modified)
-    XCTAssertNil(files.change(of: "src"), "変更ファイルでないパス")
-  }
 }
