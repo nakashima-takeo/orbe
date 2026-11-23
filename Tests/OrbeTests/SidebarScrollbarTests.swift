@@ -218,6 +218,47 @@ final class SidebarScrollbarTests: OrbeTestCase {
     }
   }
 
+  /// エクスプローラーが隠れている間に今の文書が替われば、作り直したツリーはその行を見せる。その後に替わらずに隠れて戻れば、
+  /// 前の位置のまま。
+  func testTheRebuiltTreeShowsTheRowOfADocumentOpenedWhileItWasHidden() throws {
+    let tree = try hostTree()
+    let pane = tree.pane
+    let file = TestScratch.caseDir.appendingPathComponent("tree/d38/f.txt")
+    try "x\n".write(to: file, atomically: true, encoding: .utf8)
+    func rebuiltScroll() -> NSScrollView? {
+      guard let scroll = scrollView(in: pane.sideHost), scroll !== tree.scroll else { return nil }
+      return scroll
+    }
+
+    pane.filesPanel = .search
+    pumpMain(until: { self.scrollView(in: pane.sideHost) !== tree.scroll }, "ツリーが外れる")
+    _ = try tree.tab.group.editor.open(file, as: .pinned)
+    XCTAssertEqual(pane.tree.selected, "d38/f.txt", "前提: 隠れている間に選択が替わる")
+    pane.showExplorer()
+    pumpMain(
+      until: {
+        guard let scroll = rebuiltScroll(),
+          let row = pane.tree.rows.firstIndex(where: { $0.id == "d38/f.txt" })
+        else { return false }
+        let top = CGFloat(row) * Theme.Layout.editorRow
+        let visible = scroll.documentVisibleRect
+        return top >= visible.minY && top + Theme.Layout.editorRow <= visible.maxY
+      }, "作り直したツリーが、選択の行を見せる")
+    let revealed = try XCTUnwrap(rebuiltScroll())
+    let position = revealed.documentVisibleRect.minY
+
+    pane.filesPanel = .search
+    pumpMain(until: { self.scrollView(in: pane.sideHost) !== revealed }, "ツリーが外れる")
+    pane.showExplorer()
+    pumpMain(
+      until: {
+        guard let scroll = self.scrollView(in: pane.sideHost), scroll !== revealed else {
+          return false
+        }
+        return abs(scroll.documentVisibleRect.minY - position) < 1
+      }, "選択が替わらなければ、前の位置に戻る")
+  }
+
   /// 掴めるのは見えているつまみだけ——ポインタを乗せたつまみを押しても、下の行は選ばれない。
   func testPressingTheTreeThumbDoesNotSelectTheRowUnderIt() throws {
     let tree = try hostTree()
