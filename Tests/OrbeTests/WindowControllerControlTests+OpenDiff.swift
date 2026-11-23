@@ -5,7 +5,8 @@ import XCTest
 @testable import Orbe
 
 /// `open_diff` の実体——Files の画面からでも Changes にして diff を本体に出し、左の列でその行を選び、そのタブのエディターが
-/// 開き、焦点になる。パスは `open_file` と同じ解き方で根と相対パスになり、git 管理外は -32000、未知のタブは -32004。
+/// 開き、焦点になる。パスは `open_file` と同じ解き方で根と相対パスになり、git 管理外とタブの worktree の外は -32000、未知の
+/// タブは -32004。
 ///
 /// 重要: 実 NSWindow に接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 extension WindowControllerControlTests {
@@ -114,5 +115,28 @@ extension WindowControllerControlTests {
     } else {
       XCTFail("git 管理外は断る")
     }
+  }
+
+  /// タブの worktree と別の worktree のパスは断り、画面も diff も変えない（通すと、本体は別の worktree の diff なのに、左の列の
+  /// 選択と見出しはタブの worktree の同じパスの行から出る）。
+  func testOpenDiffRefusesAPathInAnotherWorktree() throws {
+    let repo = try TempGitRepo()
+    let other = try TempGitRepo()
+    try other.write("a.txt", "changed\n")
+    let wc = try restore(
+      activeWorkspace: 0,
+      [tabbed("main", tabs: [TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])])
+    let tabId = try XCTUnwrap(wc.controlListTabs(workspaceId: nil).get()[0]["tabId"] as? Int)
+    let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
+    MainActor.assumeIsolated { tab.group.editor.selectScreen(.files) }
+
+    let path = other.url("a.txt").path
+    guard
+      case .failure(let error) = wc.controlOpenDiff(tabId: tabId, path: path, kind: .workingTree)
+    else { return XCTFail("別の worktree は断る") }
+    XCTAssertEqual(error.code, -32000)
+    XCTAssertEqual(error.message, "not in the tab's worktree: \(path)")
+    XCTAssertNil(MainActor.assumeIsolated { tab.group.editor.changesDiff }, "diff は開かない")
+    XCTAssertEqual(MainActor.assumeIsolated { tab.group.editor.screen }, .files, "画面は変わらない")
   }
 }

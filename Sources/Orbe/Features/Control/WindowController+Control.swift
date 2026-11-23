@@ -164,7 +164,8 @@ extension WindowController: ControlTarget {
   }
 
   /// 指定タブの連のエディターで diff を開き、Changes の画面で見せる（open_diff）。`path` は `open_file` と同じ解き方で、それを含む worktree の根と根から
-  /// の相対パスにする（ファイル自体の symlink は解かない——diff は git の座標の上のもの）。開けたら `open_file` と同じく
+  /// の相対パスにする（ファイル自体の symlink は解かない——diff は git の座標の上のもの）。根がタブの連の根と違えば断る
+  /// （Changes の diff は連の根のもので、左の列の選択と見出しは連の根の一覧から引く）。開けたら `open_file` と同じく
   /// タブを選んでエディターで見せ、本体へ焦点を移す。
   func controlOpenDiff(tabId: Int, path: String, kind: EditorDiff.Kind) -> Result<Any, ControlError>
   {
@@ -179,6 +180,9 @@ extension WindowController: ControlTarget {
       directory == root || directory.hasPrefix(root + "/")
     else {
       return .failure(ControlError(code: -32000, message: "not in a git worktree: \(url.path)"))
+    }
+    guard root == tab.group.key else {
+      return .failure(ControlError(code: -32000, message: "not in the tab's worktree: \(url.path)"))
     }
     let relative = String((directory + "/" + url.lastPathComponent).dropFirst(root.count + 1))
     do {
