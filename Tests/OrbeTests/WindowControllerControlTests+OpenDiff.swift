@@ -43,6 +43,38 @@ extension WindowControllerControlTests {
       MainActor.assumeIsolated { tab.group.editor.changesDiff } === opened, "同じ diff は開き直さない")
   }
 
+  /// Changes の画面で左の列を開き、変更の列の行を待って焦点を預かっている間に `open_diff` が来ると、預かりは終わり、後から
+  /// 行が出ても列は焦点を取らない（壊れると、エージェントが開いた diff ではなく後から出た列に焦点が着き、人の ↑↓ が列の移動に
+  /// なる）。
+  func testOpenDiffWhileTheChangesListHoldsTheFocusEndsTheHold() throws {
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "changed\n")
+    try repo.write("b.txt", "new\n")
+    let wc = try restore(
+      activeWorkspace: 0,
+      [tabbed("main", tabs: [TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])])
+    let tabId = try XCTUnwrap(wc.controlListTabs(workspaceId: nil).get()[0]["tabId"] as? Int)
+    let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
+    let pane = tab.group.view.editor
+    MainActor.assumeIsolated { tab.group.editor.selectScreen(.files) }
+    wc.handleWindowCommand(.toggleEditorFace)
+    XCTAssertTrue(MainActor.assumeIsolated { pane.sidebar.isOpen }, "前提: 左の列を開いている")
+    pane.switchScreen(.changes)
+    XCTAssertEqual(pane.heldListFocus, .changes, "前提: 行を待って焦点を預かる")
+
+    let result = wc.controlOpenDiff(tabId: tabId, path: "b.txt", kind: .workingTree)
+    guard case .success = result else { return XCTFail("\(result)") }
+    XCTAssertNil(pane.heldListFocus, "open_diff で預かりが終わる")
+    pumpMain(
+      until: {
+        MainActor.assumeIsolated { !pane.scm.layout.items.isEmpty && pane.diff?.content == .ready }
+      }, "行と中身が出る")
+    nextTurn()
+    let responder = try XCTUnwrap(wc.window.firstResponder as? NSView)
+    XCTAssertFalse(responder.isDescendant(of: pane.scmList.list), "後から出た列は焦点を取らない")
+    XCTAssertNil(MainActor.assumeIsolated { pane.scm.focusRequest }, "列へ焦点を求めない")
+  }
+
   /// 根の下の階層にあるファイルは、親ごと消えていても、`/private` を含む綴りでも、根と根からの相対パスの diff になる。
   func testOpenDiffTakesAFileGoneWithItsParentDirectory() throws {
     let repo = try TempGitRepo()

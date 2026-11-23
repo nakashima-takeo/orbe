@@ -95,8 +95,7 @@ extension WindowController {
   func focusSelection() {
     switch presentation {
     case .terminal(let tab): window.makeFirstResponder(tab.surface)
-    case .editor(let tab), .peek(let tab):
-      window.makeFirstResponder(tab.group.view.editor.focusTarget)
+    case .editor(let tab), .peek(let tab): tab.group.view.editor.focusEditor()
     case .board: board.focus()
     case .empty: window.makeFirstResponder(nil)
     }
