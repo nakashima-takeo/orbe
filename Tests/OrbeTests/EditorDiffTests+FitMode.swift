@@ -5,19 +5,13 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// diff の見せ方は本体の幅で決まる——窓の幅・左の列の開閉のどちらで本体の幅が変わっても見せ方が替わり、PR のコメントの欄で
-/// 打っている最中に替わっても、欄は主のまま残る。
+/// diff の見せ方は本体の幅で決まる——窓の幅・左の列の開閉のどちらで本体の幅が変わっても見せ方が替わり、面が見えていない間に
+/// 幅が変わっても、見えたときの幅で決まる。PR のコメントの欄で打っている最中に替わっても、欄は主のまま残る。
 ///
-/// 壊れると何が起きるか: 広い窓でもインラインのまま・狭い窓でも並列のまま。⌘B で左の列を閉じただけで、古い側の行にあるスレッドの
-/// 返信の欄から焦点が外れて、続きの打鍵が捨てられる・開いただけの新しいコメントの欄が消える。
+/// 壊れると何が起きるか: 広い窓でもインラインのまま・狭い窓でも並列のまま。制御 API で開いた diff や、⌘E で閉じている間に
+/// 窓の幅が変わった diff が、幅に合わない見せ方で出る。⌘B で左の列を閉じただけで、古い側の行にあるスレッドの返信の欄から
+/// 焦点が外れて続きの打鍵が捨てられたり、開いただけの新しいコメントの欄が消えたりする。
 extension EditorDiffTests {
-  /// 本体の幅が境の値以上なら並列、未満ならインライン。
-  func testTheModeIsSideFromTheBoundaryWidth() {
-    let boundary = Theme.Layout.editorDiffSideWidth
-    XCTAssertEqual(EditorDiff.Mode(bodyWidth: boundary), .side)
-    XCTAssertEqual(EditorDiff.Mode(bodyWidth: boundary - 1), .inline)
-  }
-
   /// 左の列を閉じて本体が広がれば並列になり、開いて狭まればインラインに戻る。
   func testClosingTheSidebarWidensTheBodyIntoSideBySide() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
@@ -31,6 +25,24 @@ extension EditorDiffTests {
     pumpMain(until: { diff.presented == .side && pane.diffSurfaces(diff).count == 2 }, "並列")
     pane.sidebar.setOpen(true)
     pumpMain(until: { diff.presented == .inline && pane.diffSurfaces(diff).count == 1 }, "インライン")
+  }
+
+  /// 面が見えていない間に開いた diff と、見えていない間に本体の幅が変わった diff は、面が見えたときの本体の幅で見せ方が
+  /// 決まる（制御 API が、窓に載っていない連に diff を開く・⌘E で閉じている間に窓の幅が変わる）。
+  func testADiffShowsTheModeOfTheBodyOnceTheFaceIsVisible() throws {
+    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    addTeardownBlock { withExtendedLifetime(tab) {} }
+    try tab.group.openDiff(id("a.txt", .workingTree))
+    let window = hostEditor(tab, width: Self.sideWidth)
+    let pane = tab.group.view.editor
+    let diff = try XCTUnwrap(pane.diff)
+    pumpMain(until: { diff.presented == .side && pane.diffSurfaces(diff).count == 2 }, "窓に載って並列")
+
+    tab.group.view.show(.terminal, animated: false)
+    resize(window, width: 900)
+    tab.group.view.show(.editor, animated: false)
+    pumpMain(until: { diff.presented == .inline && pane.diffSurfaces(diff).count == 1 }, "見えてインライン")
   }
 
   /// インラインで、古い側の行のスレッドの返信の欄に打っている間に並列へ替わっても、欄は左の面で主のまま残り、窓の焦点も左の面に
