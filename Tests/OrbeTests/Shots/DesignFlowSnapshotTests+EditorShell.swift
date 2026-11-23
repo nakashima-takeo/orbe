@@ -101,12 +101,11 @@ extension ShotTestCase {
     return scene
   }
 
-  /// 面を付けた窓の中で、手順ごとに描いて `<name>_<NN>_<label>[_light].png` を書く。
+  /// 窓に付けた面 `pane` の中で、手順ごとに描いて `<name>_<NN>_<label>[_light].png` を書く。
   func renderInPlace(
-    _ scene: EditorShellFixtures.Scene, name: String, dir: URL, appearances: [Bool],
+    _ pane: EditorPaneView, name: String, dir: URL, appearances: [Bool],
     steps: [(label: String, action: () -> Void)]
   ) throws {
-    let pane = scene.pane
     for (idx, step) in steps.enumerated() {
       step.action()
       for dark in appearances {
@@ -151,7 +150,7 @@ extension DesignFlowSnapshotTests {
     defer { scene.cleanup() }
     let pane = scene.pane
     try renderInPlace(
-      scene, name: "editor_shell_open_files", dir: previewDir("flows"), appearances: [true],
+      pane, name: "editor_shell_open_files", dir: previewDir("flows"), appearances: [true],
       steps: [
         ("button", { pane.shell.toggleItemList() }),
         ("down", { self.listKey(pane, Self.arrow(.downArrow)) }),

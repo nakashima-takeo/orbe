@@ -11,6 +11,7 @@ extension EditorPaneView {
     pullRequest.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
     pullRequest.onPullRequestChange = { [weak self] in
       self?.reconcileWithLists()
+      self?.refreshCurrentItem()
       self?.onPullRequestChange()
     }
     pullRequest.onListStateChange = { [weak self] in self?.reconcileWithLists() }

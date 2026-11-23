@@ -33,7 +33,7 @@ extension DesignGallerySnapshotTests {
       }
     }
     try renderInPlace(
-      scene, name: "editor_shell_open_files", dir: dir, appearances: [true, false],
+      pane, name: "editor_shell_open_files", dir: dir, appearances: [true, false],
       steps: [
         ("list", { pane.shell.toggleItemList() }),
         ("detail_preview", { self.listKey(pane, Self.arrow(.rightArrow)) }),

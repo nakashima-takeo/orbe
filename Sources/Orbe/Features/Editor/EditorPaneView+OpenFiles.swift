@@ -4,21 +4,36 @@ import OrbeEditorCore
 /// 上のバーの今の項目と、Files の一覧の中身。今の項目の写しと一覧の行は、同じ材料（開いている文書・仮の文書か・未保存・
 /// ディスクが変わった・状態の字）から、ここで作る——ボタンと行で印を別々に導かない。
 extension EditorPaneView {
-  /// 今の項目を写し直す（値が変わらなければ書かない）。器が開いていれば新しい中身を渡し、今の項目が無くなれば器を閉じる。
-  /// セッションが変わったときと、根が替わったとき（親のパスは根からの相対）に呼ぶ。
+  /// 今の項目を写し直す（値が変わらなければ書かない）。器が開いていれば、載せる側から新しい中身を引いて渡す。今の項目が
+  /// 無くなったか種類が替わったら、器を閉じる。セッションが変わったとき・根が替わったとき（親のパスは根からの相対）・左の列の
+  /// 開閉が変わったとき・一覧の持ち主（ソース管理の 2 区分・PR ごとの状態）が変わったときに呼ぶ。
   func refreshCurrentItem() {
     let next = currentItemValue
     if shell.currentItem != next { shell.currentItem = next }
     guard itemList.isOpen else { return }
-    guard next != nil else { return itemList.close(.itemGone) }
-    if itemList.owner === openFilesList { itemList.contentDidChange(openFilesContent()) }
+    guard let owner = next.map(listOwner), itemList.owner === owner else {
+      return itemList.close(.itemGone)
+    }
+    itemList.contentDidChange(owner.itemListContent())
   }
 
-  /// 今の項目——画面が Files で、今の文書があるとき、そのファイル。
+  /// 今の項目の種類の一覧を載せる側。
+  private func listOwner(_ item: EditorShellModel.CurrentItem) -> EditorItemListOwner {
+    switch item {
+    case .file: openFilesList
+    case .diff: changedFilesList
+    }
+  }
+
+  /// 今の項目——画面が Files で、今の文書があるとき、そのファイル。画面が Changes か PR で、左の列を閉じていて、本体が
+  /// diff のとき、その diff。
   private var currentItemValue: EditorShellModel.CurrentItem? {
-    guard let session = group?.editor, session.screen == .files,
-      let document = session.activeDocument
-    else { return nil }
+    guard let session = group?.editor else { return nil }
+    guard session.screen == .files else {
+      guard !sidebar.isOpen, let subject = headerSubject else { return nil }
+      return .diff(subject)
+    }
+    guard let document = session.activeDocument else { return nil }
     let isPreview = session.previewURL == document.url
     return .file(
       EditorShellModel.CurrentFile(
@@ -50,10 +65,8 @@ extension EditorPaneView {
   /// 何もしない。
   func toggleItemList() {
     if itemList.isOpen { return itemList.close(.toggle) }
-    switch shell.currentItem {
-    case .file: itemList.open(openFilesList)
-    case nil: break
-    }
+    guard let item = shell.currentItem else { return }
+    itemList.open(listOwner(item))
   }
 
   // MARK: - Files の一覧の中身
