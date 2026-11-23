@@ -114,7 +114,7 @@ extension ProjectSearchPaneTests {
     hosted.window.makeFirstResponder(nil)
     XCTAssertFalse(pane.handleStepKey(f4), "面の外（端末など）では奪わない")
     hosted.window.makeFirstResponder(pane.focusTarget)
-    hosted.search.clear()
+    hosted.search.setPattern("")
     XCTAssertFalse(pane.handleStepKey(f4), "結果が無ければ素通し")
   }
 

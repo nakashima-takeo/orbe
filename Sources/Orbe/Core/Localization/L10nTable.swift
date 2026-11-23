@@ -215,9 +215,7 @@ enum L10n {
     .editorSearchMatchCase: ("大文字と小文字を区別 (⌥⌘C)", "Match Case (⌥⌘C)"),
     .editorSearchWholeWord: ("単語単位で検索 (⌥⌘W)", "Match Whole Word (⌥⌘W)"),
     .editorSearchRegex: ("正規表現を使用 (⌥⌘R)", "Use Regular Expression (⌥⌘R)"),
-    .editorSearchRefresh: ("更新", "Refresh"),
-    .editorSearchStop: ("停止", "Stop"),
-    .editorSearchClear: ("クリア", "Clear"),
+    .editorSearchStop: ("止める", "Stop"),
     // 件数の文: %1$@ はファイル数の句、%2$@ は結果数の句（日英で語順が違う）。
     .editorSearchSummary: ("%1$@内に %2$@", "%2$@ in %1$@"),
     .editorSearchFilesOne: ("%lld ファイル", "%lld file"),

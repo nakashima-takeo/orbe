@@ -117,21 +117,6 @@ enum EditorGlyphs {
     path.addLine(to: CGPoint(x: 10.6 * k, y: 5.2 * k))
     return [(path, 1)]
   }
-
-  /// 停止: 円に四角（検索が 2 秒を超えると更新と入れ替わる）。
-  static let stop = Glyph(viewBox: 16, stroke: 1.2) { k in
-    var path = Path(ellipseIn: CGRect(x: 2.5 * k, y: 2.5 * k, width: 11 * k, height: 11 * k))
-    path.addRect(CGRect(x: 6 * k, y: 6 * k, width: 4 * k, height: 4 * k))
-    return [(path, 1)]
-  }
-
-  /// クリア: 斜線の入った円。
-  static let clear = Glyph(viewBox: 16, stroke: 1.2) { k in
-    var path = Path(ellipseIn: CGRect(x: 2.5 * k, y: 2.5 * k, width: 11 * k, height: 11 * k))
-    path.move(to: CGPoint(x: 4.2 * k, y: 4.2 * k))
-    path.addLine(to: CGPoint(x: 11.8 * k, y: 11.8 * k))
-    return [(path, 1)]
-  }
 }
 
 extension EditorGlyphs {

@@ -1,7 +1,7 @@
 import OrbeEditorCore
 import SwiftUI
 
-/// サイドバー: 検索パネル。上から、ヘッダー（題・更新／停止・クリア・すべて折りたたむ／すべて展開。検索中はその下端に
+/// サイドバー: 検索パネル。上から、ヘッダー（題・すべて折りたたむ／すべて展開。検索中はその下端に
 /// 進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 結果の列 → 件数の文（パネルの下に固定）。状態は
 /// `ProjectSearch` だけを読み、入力欄の焦点は SwiftUI の焦点を `focusedArea` へ写す（結果の列の焦点は列が自分で写す）。
 /// 部分ごとに別の view にして、読む値が変わった部分だけを組み直す（結果が届くたびに入力欄まで組み直さない）。
@@ -49,7 +49,7 @@ struct SearchPanelView: View {
   }
 }
 
-/// ヘッダー: 題と右端のツール（更新（2 秒を超えた検索では停止）・クリア・すべて折りたたむ／すべて展開）。検索中は下端に
+/// ヘッダー: 題と右端のツール（すべて折りたたむ／すべて展開）。検索中は下端に
 /// 進捗の細い線。
 private struct SearchPanelHeader: View {
   let search: ProjectSearch
@@ -57,16 +57,6 @@ private struct SearchPanelHeader: View {
 
   var body: some View {
     EditorPanelHeader(title: l10n.string(.editorSearchTitle)) {
-      if search.phase == .slow {
-        EditorIconButton(
-          glyph: EditorGlyphs.stop, help: l10n.string(.editorSearchStop), action: search.stop)
-      } else {
-        EditorIconButton(
-          glyph: EditorGlyphs.refresh, help: l10n.string(.editorSearchRefresh),
-          action: { search.search() })
-      }
-      EditorIconButton(
-        glyph: EditorGlyphs.clear, help: l10n.string(.editorSearchClear), action: search.clear)
       if search.isAnyExpanded || search.results.isEmpty {
         EditorIconButton(
           glyph: EditorGlyphs.collapseAll, help: l10n.string(.editorCollapseAll),

@@ -6,7 +6,7 @@ import os
 /// 組み立て・行の中の一致・順序・上限）は Core、1 回の検索の裏の仕事は `ProjectSearchRun`。検索パネル（SwiftUI と結果の列）は
 /// これを読み、操作は閉包で pane へ戻る（開く・焦点・検索パネルを離れる）。
 ///
-/// 打鍵は 300ms 後に検索し、Enter・切替・更新は即時。どの検索でも前の結果は消さず、新しい結果が最初に届いたとき（または
+/// 打鍵は 300ms 後に検索し、Enter・切替は即時。どの検索でも前の結果は消さず、新しい結果が最初に届いたとき（または
 /// 検索が終わった・止めたとき）に差し替える（VS Code と同じ。切り替えるたびに列がちらつかない）。検索を始め直すたびに
 /// 世代を進め、古い世代の結果は捨てる。開いている文書は保存前の中身を探し、結果の鮮度を文書の版で持つ
 /// （→ `ProjectSearch+Documents`）。
@@ -158,7 +158,7 @@ final class ProjectSearch {
 
   // MARK: - 検索の実行
 
-  /// 今の問いで検索し直す（Enter・切替・更新・根の変化）。`typed` は打鍵の検索（進捗の線を遅らせる）。
+  /// 今の問いで検索し直す（Enter・切替・根の変化）。`typed` は打鍵の検索（進捗の線を遅らせる）。
   func search(typed: Bool = false) {
     typingDelay.cancel()
     stopRun()
@@ -222,12 +222,6 @@ final class ProjectSearch {
 
   /// `dismiss` が検索を止めるか（見出しのボタンの字もこれで決まる）。
   var stopsOnDismiss: Bool { phase == .slow }
-
-  /// ヘッダーのクリア。検索語と結果を消す。
-  func clear() {
-    setPattern("")
-    requestFocus(.field)
-  }
 
   /// 根が変わった（cd）。止めて結果を捨て、`searchNow` なら今の問いで検索し直す。
   func setRoot(_ root: String, searchNow: Bool) {
