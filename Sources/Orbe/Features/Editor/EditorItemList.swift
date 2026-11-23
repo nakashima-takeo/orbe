@@ -6,8 +6,8 @@ enum EditorItemListRow: Equatable {
   /// 見出しの行（選べない）。題・数・右端のキーの札。
   case heading(title: String, count: Int, key: String?)
   case file(File)
-  /// 操作の行。
-  case action(String)
+  /// 操作の行。題・右端のキーの札。選べない操作の行は、押せない姿で描く。
+  case action(String, key: String? = nil)
 
   struct File: Equatable {
     let chip: FileChip
