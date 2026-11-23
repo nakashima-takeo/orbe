@@ -252,4 +252,28 @@ final class EditorPaneViewOpenFilesTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "n.txt"]).isSuccess)
     pumpMain(until: { badge() == .added }, "開いたままの一覧の字が替わる")
   }
+
+  /// ⌘P はボタンを押すのと同じ（開く・閉じる。閉じた後は本文へ）。ボタンが出ていない画面では何もしない（キーは消費する）。
+  /// フォーカスが面の外（端末）にあれば受けない。端末はエディターのキーを ghostty へ素通しする。
+  func testCommandPTogglesTheListLikeTheButton() throws {
+    let hosted = try host()
+    let commandP = NSEvent.key("p")
+    XCTAssertEqual(Keybindings.chromeAction(for: commandP)?.owner, .editor)
+    XCTAssertTrue(hosted.pane.performKeyEquivalent(with: commandP))
+    XCTAssertTrue(hosted.itemList.isOpen)
+    XCTAssertTrue(hosted.pane.performKeyEquivalent(with: commandP), "一覧にフォーカスがあっても効く")
+    XCTAssertFalse(hosted.itemList.isOpen)
+    XCTAssertTrue(hosted.window.firstResponder === hosted.pane.document?.surface.responder)
+
+    hosted.pane.switchScreen(.changes)
+    XCTAssertTrue(hosted.pane.performKeyEquivalent(with: commandP), "ボタンが無くてもキーは消費する")
+    XCTAssertFalse(hosted.itemList.isOpen, "ボタンが出ていない画面では開かない")
+
+    hosted.pane.switchScreen(.files)
+    let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
+    hosted.tab.group.view.addSubview(outsider)
+    XCTAssertTrue(hosted.window.makeFirstResponder(outsider))
+    XCTAssertFalse(hosted.pane.performKeyEquivalent(with: commandP), "面の外のフォーカスには効かない")
+    XCTAssertFalse(hosted.itemList.isOpen)
+  }
 }
