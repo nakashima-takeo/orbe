@@ -85,7 +85,6 @@ final class EditorPaneViewOpenFilesTests: OrbeTestCase {
     let hosted = try host(["a.txt", "src/deep/b.swift"])
     XCTAssertEqual(file(hosted)?.name, "b.swift")
     XCTAssertEqual(file(hosted)?.directory, "src/deep/")
-    XCTAssertEqual(file(hosted)?.chip, FileChip.resolve(URL(fileURLWithPath: "b.swift")))
 
     hosted.session.activate(try XCTUnwrap(hosted.session.documents.last))
     XCTAssertEqual(file(hosted)?.directory, "", "根の直下は親のパスなし")

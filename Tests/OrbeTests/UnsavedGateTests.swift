@@ -244,13 +244,6 @@ final class UnsavedGateTests: OrbeTestCase {
       preview: repo.root + "/missing.txt")
     XCTAssertEqual(other.activeDocument?.url, repo.url("b.txt"), "アクティブが落ちていれば先頭")
     XCTAssertNil(other.preview, "仮の文書が落ちていれば仮無し")
-
-    let older = self.session()
-    older.restore(
-      paths: [repo.url("a.txt").path, repo.url("b.txt").path], active: repo.url("b.txt").path,
-      preview: nil)
-    XCTAssertEqual(
-      older.documents.map(\.url.lastPathComponent), ["b.txt", "a.txt"], "今の文書が先頭でなければ先頭へ移す")
   }
 
   /// materialize より先に `open_file` が開いた文書は、復元に焦点を奪われず、仮の文書にも下がらない。

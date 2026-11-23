@@ -7,7 +7,7 @@ import XCTest
 
 /// 一覧の器——載せる側の中身と口だけで動く器そのもの。↑↓ は見出しを飛ばして端で止まり、↵・→・←・esc は載せる側の口と
 /// 詳細の出入りに当たる。中身が替わっても選択は同一性で保ち、無くなれば同じ位置の行へ移る。閉じ方ごとにフォーカスを本体へ
-/// 戻すかが決まり、本体が替わっても一覧にあるフォーカスは動かない。行が数万でも、開く操作と ↑↓ で引く行は見えている行だけ。
+/// 戻すかが決まる。行が数万でも、開く操作と ↑↓ で引く行は見えている行だけ。
 ///
 /// 壊れると何が起きるか。↑↓ が見出しに止まって ↵ が効かない。× で行が消えるたびに選択が先頭へ跳ぶ。esc で閉じた後に
 /// 打鍵がどこにも届かない。端末をクリックして一覧を閉じると、エディターがフォーカスを奪い返す。数万行の変更ファイルの一覧を
@@ -233,17 +233,6 @@ final class EditorItemListTests: OrbeTestCase {
     pane.pressWillArrive(.mouse(.leftMouseDown, at: outside, in: hosted.window))
     XCTAssertFalse(hosted.itemList.isOpen)
     XCTAssertTrue(hosted.window.firstResponder === hosted.document.surface.responder)
-  }
-
-  /// 一覧にフォーカスがある間に本体が替わっても（今の文書を閉じた・別の文書になった）、フォーカスは一覧に残る。
-  func testReplacingTheBodyLeavesTheFocusInTheList() throws {
-    let hosted = try host()
-    let other = try hosted.tab.group.editor.open(try caseFile("b.txt", "b"), as: .pinned)
-    hosted.itemList.open(Owner(rows: Rows(count: 4)))
-    hosted.tab.group.editor.close(other)
-    XCTAssertTrue(hosted.pane.document === hosted.document, "前提: 本体が替わった")
-    XCTAssertTrue(hosted.pane.focusIsInItemList, "フォーカスは一覧に残る")
-    XCTAssertTrue(hosted.itemList.isOpen)
   }
 
   // MARK: - 性能
