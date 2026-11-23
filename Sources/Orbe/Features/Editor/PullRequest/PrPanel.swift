@@ -137,7 +137,9 @@ final class PrPanel {
     }
     layout =
       content.map {
-        PrLayout.build($0, asTree: key.asTree, closed: closed, closedFolders: closedFolders)
+        PrLayout.build(
+          $0, files: state?.changedFiles ?? .empty, asTree: key.asTree, closed: closed,
+          closedFolders: closedFolders)
       } ?? .empty
     builtVersion += 1
     guard let selection, layout.index[selection] == nil else { return }

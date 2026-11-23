@@ -1,5 +1,4 @@
 import Foundation
-import OrbeEditorCore
 
 /// Changes の変更ファイルの一覧の行の組——ソース管理パネルの状態の 2 区分（どちらもパス順）の写し。区分ごとに見出しの行
 /// （「ステージされている変更 N」「変更 N」）を置き、0 件の区分は見出しごと出さない。行の番号から、見出しの行か、どの区分の
@@ -68,22 +67,22 @@ struct ScmChangedFilesRows: EditorItemListRows {
   }
 }
 
-/// PR の変更ファイルの一覧の行の組——見出しの行（「変更ファイル N」）と、変更ファイルをリスト表示と同じ順に並べた列。行 0 が
-/// 見出し、行 i + 1 がファイル i。確認済みは作った時点の写しで、確認済みのファイルは名前を弱い色にする。同一性は、その行の
-/// PR の diff の識別（`EditorDiff.Key`）。
+/// PR の変更ファイルの一覧の行の組——見出しの行（「変更ファイル N」）と、変更ファイルを PR のパネルの今の表示（ツリーか
+/// リスト）の並びに置いた列。行 0 が見出し、行 i + 1 がファイル i。確認済みは作った時点の写しで、確認済みのファイルは名前を
+/// 弱い色にする。同一性は、その行の PR の diff の識別（`EditorDiff.Key`）。
 struct PrChangedFilesRows: EditorItemListRows {
   let root: String
   let state: PullRequestState
-  /// 変更ファイル（リスト表示と同じパス順）。
-  let files: [GitHubPullRequestContent.File]
+  /// 変更ファイルの並び（PR ごとの状態が持つ、ツリーかリストの並び）。
+  let order: PrChangedFiles.Order
   let viewed: PullRequestState.ViewedSnapshot
   let title: String
 
-  var count: Int { files.count + 1 }
+  var count: Int { order.files.count + 1 }
 
   func row(at index: Int) -> EditorItemListRow {
-    guard index > 0 else { return .heading(title: title, count: files.count, key: nil) }
-    let file = files[index - 1]
+    guard index > 0 else { return .heading(title: title, count: order.files.count, key: nil) }
+    let file = order.files[index - 1]
     return .file(
       .changed(
         file.path, root: root, badge: GitStatus.Badge(file.change),
@@ -92,14 +91,15 @@ struct PrChangedFilesRows: EditorItemListRows {
 
   func id(at index: Int) -> AnyHashable? {
     guard index > 0 else { return nil }
-    return EditorDiff.Key(root: root, path: files[index - 1].path, kind: .pullRequest(state))
+    return EditorDiff.Key(
+      root: root, path: order.files[index - 1].path, kind: .pullRequest(state))
   }
 
   func index(of id: AnyHashable) -> Int? {
     guard let key = id.base as? EditorDiff.Key, key.root == root,
       key.kind == .pullRequest(state)
     else { return nil }
-    return FileNameOrder.index(of: key.path, in: files, path: \.path).map { $0 + 1 }
+    return order.index[key.path].map { $0 + 1 }
   }
 }
 
@@ -123,8 +123,6 @@ extension EditorItemListRow.File {
 @MainActor
 final class ChangedFilesList: EditorItemListOwner {
   private unowned let pane: EditorPaneView
-  /// PR の変更ファイルを並べた列と、並べた元の中身（中身が読み直されるまで並べ直さない）。
-  private var ordered: (content: GitHubPullRequestContent, files: [GitHubPullRequestContent.File])?
 
   init(pane: EditorPaneView) {
     self.pane = pane
@@ -137,7 +135,9 @@ final class ChangedFilesList: EditorItemListOwner {
     let rows: any EditorItemListRows
     if let shown, case .pullRequest(let state) = shown.kind {
       rows = PrChangedFilesRows(
-        root: shown.root, state: state, files: order(state.content), viewed: state.viewedSnapshot,
+        root: shown.root, state: state,
+        order: state.changedFiles.order(asTree: pane.pullRequest.asTree),
+        viewed: state.viewedSnapshot,
         title: L10n.string(.editorPrFiles, language))
     } else {
       rows = ScmChangedFilesRows(
@@ -166,13 +166,4 @@ final class ChangedFilesList: EditorItemListOwner {
   }
 
   func itemListPress(_ id: AnyHashable) {}
-
-  /// PR の中身 `content` の変更ファイルを、リスト表示と同じ順に並べた列。
-  private func order(_ content: GitHubPullRequestContent?) -> [GitHubPullRequestContent.File] {
-    guard let content else { return [] }
-    if let ordered, ordered.content == content { return ordered.files }
-    let files = PrLayout.listOrder(content.files)
-    ordered = (content, files)
-    return files
-  }
 }

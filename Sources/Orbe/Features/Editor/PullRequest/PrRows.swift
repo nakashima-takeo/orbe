@@ -1,5 +1,4 @@
 import Foundation
-import OrbeEditorCore
 
 /// PR のパネルの列の区分。
 enum PrSection: Hashable {
@@ -113,11 +112,11 @@ struct PrLayout {
   }
 
   /// 中身 `content` の行を組む。コミットは古い順（GitHub の PR のコミットの並び）で、総数が読めた件数より多ければ、
-  /// 先頭に欠けの行を置く。変更ファイルは、ツリーならエクスプローラーと同じ並び（フォルダが先、名前順。1 つしか子の
-  /// 無いフォルダも畳まない）、リストならソース管理の行と同じパス順。
+  /// 先頭に欠けの行を置く。変更ファイルは `files`（その中身の変更ファイルの並び）の、ツリーかリストの並びで置く——ツリーなら
+  /// フォルダの行を挟み（1 つしか子の無いフォルダも畳まない）、リストなら字下げ無しに並べる。
   static func build(
-    _ content: GitHubPullRequestContent, asTree: Bool, closed: Set<PrSection>,
-    closedFolders: Set<String>
+    _ content: GitHubPullRequestContent, files: PrChangedFiles, asTree: Bool,
+    closed: Set<PrSection>, closedFolders: Set<String>
   ) -> PrLayout {
     var items: [Item] = []
     let commitsOpen = !closed.contains(.commits)
@@ -132,72 +131,44 @@ struct PrLayout {
     if filesOpen {
       items +=
         asTree
-        ? tree(content.files, closedFolders: closedFolders)
-        : list(content.files)
+        ? tree(files.tree.files, closedFolders: closedFolders)
+        : files.list.files.map { .file(path: $0.path, change: $0.change, depth: 0) }
     }
     return PrLayout(items: items)
   }
 
-  private static func list(_ files: [GitHubPullRequestContent.File]) -> [Item] {
-    listOrder(files).map { .file(path: $0.path, change: $0.change, depth: 0) }
-  }
-
-  /// リスト表示の並び——ソース管理の行と同じパス順（上のバーの変更ファイルの一覧も同じ順に並べる）。
-  static func listOrder(_ files: [GitHubPullRequestContent.File]) -> [GitHubPullRequestContent.File]
-  {
-    files.map { (FileNameOrder.PathKey($0.path), $0) }
-      .sorted { FileNameOrder.comparePaths($0.0, $1.0) == .orderedAscending }
-      .map(\.1)
-  }
-
-  /// フォルダの木の 1 段。
-  private final class Folder {
-    var folders: [String: Folder] = [:]
-    var files: [GitHubPullRequestContent.File] = []
-    /// 配下のすべてのファイルのパス。
-    var descendants: [String] = []
-  }
-
-  private static func tree(_ files: [GitHubPullRequestContent.File], closedFolders: Set<String>)
+  /// ツリーの並び `ordered` に、フォルダの行を挟む。フォルダの配下のファイルは並びの中で続くので、前のファイルとの共通の
+  /// フォルダより深いフォルダに入るたびに、その行を置く。閉じたフォルダの中の行は置かない。
+  private static func tree(_ ordered: [GitHubPullRequestContent.File], closedFolders: Set<String>)
     -> [Item]
   {
-    let root = Folder()
-    for file in files {
-      var folder = root
-      let parts = file.path.split(separator: "/").map(String.init)
-      for name in parts.dropLast() {
-        folder.descendants.append(file.path)
-        let next = folder.folders[name] ?? Folder()
-        folder.folders[name] = next
-        folder = next
-      }
-      folder.descendants.append(file.path)
-      folder.files.append(file)
-    }
     var items: [Item] = []
-    append(root, path: "", depth: 0, closedFolders: closedFolders, into: &items)
-    return items
-  }
-
-  private static func append(
-    _ folder: Folder, path: String, depth: Int, closedFolders: Set<String>, into items: inout [Item]
-  ) {
-    for name in folder.folders.keys.sorted(by: FileNameOrder.precedes) {
-      let child = folder.folders[name]!
-      let childPath = path.isEmpty ? name : path + "/" + name
-      let isOpen = !closedFolders.contains(childPath)
-      items.append(
-        .folder(path: childPath, depth: depth, isOpen: isOpen, files: child.descendants))
-      if isOpen {
-        append(child, path: childPath, depth: depth + 1, closedFolders: closedFolders, into: &items)
+    var stack: [String] = []
+    /// 閉じたフォルダの中にいる間の、その閉じたフォルダまでの段の数。
+    var hiddenFrom: Int?
+    for (offset, file) in ordered.enumerated() {
+      let folders = file.path.split(separator: "/").dropLast().map(String.init)
+      var common = 0
+      while common < min(stack.count, folders.count), stack[common] == folders[common] {
+        common += 1
+      }
+      stack.removeLast(stack.count - common)
+      if let hidden = hiddenFrom, stack.count < hidden { hiddenFrom = nil }
+      while stack.count < folders.count {
+        stack.append(folders[stack.count])
+        guard hiddenFrom == nil else { continue }
+        let path = stack.joined(separator: "/")
+        let isOpen = !closedFolders.contains(path)
+        items.append(
+          .folder(
+            path: path, depth: stack.count - 1, isOpen: isOpen,
+            files: ordered[offset...].prefix { $0.path.hasPrefix(path + "/") }.map(\.path)))
+        if !isOpen { hiddenFrom = stack.count }
+      }
+      if hiddenFrom == nil {
+        items.append(.file(path: file.path, change: file.change, depth: folders.count))
       }
     }
-    let ordered = folder.files.sorted {
-      FileNameOrder.precedes(
-        ($0.path as NSString).lastPathComponent, ($1.path as NSString).lastPathComponent)
-    }
-    for file in ordered {
-      items.append(.file(path: file.path, change: file.change, depth: depth))
-    }
+    return items
   }
 }

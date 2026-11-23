@@ -47,9 +47,8 @@ extension DiffFileHeaderRoot.Subject {
     case .workingTree, .staged:
       return .changes(scm.file(of: key), usesDocument: usesDocument)
     case .pullRequest(let state):
-      let path = key.path
       return .pullRequest(
-        state.content?.files.first { $0.path == path }?.change, isViewed: state.isViewed(path))
+        state.changedFiles.change(of: key.path), isViewed: state.isViewed(key.path))
     }
   }
 }

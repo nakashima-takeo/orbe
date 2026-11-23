@@ -82,8 +82,9 @@ final class PullRequestState {
     guard let self, let repo else { return done(nil) }
     done((repo, trackedRefs))
   }
-  /// 最後に読めた中身。
+  /// 最後に読めた中身と、その変更ファイルの並び・パスからの索引（中身を読んだときに作り直す）。
   private(set) var content: GitHubPullRequestContent?
+  private(set) var changedFiles = PrChangedFiles.empty
   var failure: Failure?
   private(set) var isReading = false
   private(set) var bounds = Bounds.none
@@ -336,6 +337,7 @@ final class PullRequestState {
 
   /// 読めた中身を入れる。確認済みは、その読み直しより後に出した書き込みで決まったパスでは上書きしない。
   private func apply(_ read: GitHubPullRequestContent, order: Int) {
+    if read.files != content?.files { changedFiles = PrChangedFiles(read.files) }
     content = read
     for file in read.files where (viewedOrder[file.path] ?? 0) < order {
       viewed[file.path] = file.isViewed
