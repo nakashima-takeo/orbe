@@ -36,7 +36,7 @@ extension PullRequestState {
     let known = Set(content.files.map(\.path))
     let targets = Set(paths.filter { known.contains($0) && isViewed($0) != value })
     guard !targets.isEmpty else { return }
-    failure = nil
+    viewedFailure = nil
     let order = issueOrder()
     for path in targets { pendingViewed[path] = PendingViewed(value: value, order: order) }
     writes.append(ViewedWrite(value: value, paths: targets, nodeID: content.nodeID, order: order))
@@ -61,7 +61,7 @@ extension PullRequestState {
         }
         if pendingViewed[path]?.order == next.order { pendingViewed[path] = nil }
       }
-      if let reason = result.failure { failure = .write(reason) }
+      if let reason = result.failure { viewedFailure = reason }
       notify()
       sendNextWrite()
     }

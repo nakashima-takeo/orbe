@@ -214,20 +214,20 @@ private final class ReviewWriteRun {
       ])
     gitHub.review = failing ? .failure(.unreachable) : .success(read)
     log.append("answerRead(\(failing ? "失敗" : read.headCommit))")
-    let before = (state.review, state.reviewFailure, state.failure)
+    let before = (state.review, state.reviewFailure, state.contentFailure)
     let current = issuedAt == writeAnswers
     readIssuedAt = nil
     answeringReadIssuedAt = issuedAt
     gitHub.answerReview()
     answeringReadIssuedAt = nil
-    if state.failure != before.2 {
+    if state.contentFailure != before.2 {
       violation = "レビューのやりとりの読みが、中身の失敗を変えた"
     } else if !current {
       if state.review != before.0 || state.reviewFailure != before.1 {
         violation = "書き込みの応答より前に出した読みを取り込んだ"
       }
     } else if failing {
-      if state.review != before.0 || state.reviewFailure != .unreachable {
+      if state.review != before.0 || state.reviewFailure?.reason != .unreachable {
         violation = "読み直しの失敗で、前に読めたものを残して失敗を持つ、にならない"
       }
     } else {
@@ -245,9 +245,10 @@ private final class ReviewWriteRun {
     log.append("answerContent(\(failing ? "失敗" : read.headCommit))")
     let before = state.content
     gitHub.answerContent()
-    if failing, state.content != before || state.failure != .read(.unreachable) {
+    if failing, state.content != before || state.contentFailure?.reason != .unreachable {
       violation = "中身の読みが失敗したのに、前に読めた中身を残したまま失敗を持っていない"
-    } else if !failing, state.content?.headCommit != read.headCommit || state.failure != nil {
+    } else if !failing, state.content?.headCommit != read.headCommit || state.contentFailure != nil
+    {
       violation = "中身が読めたのに、取り込まれていない、または前の失敗が消えていない"
     }
   }

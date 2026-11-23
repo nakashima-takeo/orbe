@@ -61,13 +61,6 @@ final class PullRequestState {
     }
   }
 
-  /// 中身の読みか確認済みの書き込みの、最後の失敗。次に中身が読めたときと、確認済みの書き込みを始めたときに消える
-  /// （読み直している間は前の失敗を残す）。
-  enum Failure: Equatable {
-    case read(GitHubFailure)
-    case write(GitHubFailure)
-  }
-
   let key: Key
   @ObservationIgnored let source: PullRequestSource
   /// git に問い合わせるリポジトリと、PR のコミットを取りに行く remote（PR が置かれたリポジトリを指す remote）と、PR の
@@ -85,7 +78,10 @@ final class PullRequestState {
   /// 最後に読めた中身と、その変更ファイルの並び・パスからの索引（中身を読んだときに作り直す）。
   private(set) var content: GitHubPullRequestContent?
   private(set) var changedFiles = PrChangedFiles.empty
-  var failure: Failure?
+  /// 中身の最後の読みの失敗。次に中身が読めたら消える（読み直している間は前の失敗を残す）。
+  var contentFailure: PrReadFailure<GitHubFailure>?
+  /// 最後の確認済みの書き込みの失敗。次の確認済みの書き込みを始めたら消える。
+  var viewedFailure: GitHubFailure?
   private(set) var isReading = false
   private(set) var bounds = Bounds.none
 
@@ -111,8 +107,8 @@ final class PullRequestState {
   private(set) var reviewVersion = 0
   /// 最後に組んだ保留中のコメントの一覧（→ `PullRequestState+PendingComments`）。
   @ObservationIgnored var pendingCommentsMade: PendingCommentsMade?
-  /// レビューのやりとりの最後の読みの失敗。中身の失敗（`failure`）とは分けて持ち、次に読めたら消える。
-  var reviewFailure: GitHubFailure?
+  /// レビューのやりとりの最後の読みの失敗。中身の読みの失敗とは分けて持ち、次に読めたら消える。
+  var reviewFailure: PrReadFailure<GitHubFailure>?
   /// レビューの送信の、全体へのコメントの書きかけと選んだ種類（メモリだけで、パネルを隠しても残る）。
   var reviewDraft = ReviewDraft()
   /// 最後のレビューの送信の失敗（次に送るときに消す）。
@@ -264,10 +260,10 @@ final class PullRequestState {
       case .success(let read):
         apply(read, order: order)
         contentOrder = order
-        failure = nil
+        contentFailure = nil
         // 中身が読めて追跡 ref が新しく分かったら、その値も覚える。
         if trackedRefs.contains(where: tracking.lacks) { tracking.record() }
-      case .failure(let reason): failure = .read(reason)
+      case .failure(let reason): contentFailure = PrReadFailure(reason, after: contentFailure)
       }
       if readAgain {
         readAgain = false

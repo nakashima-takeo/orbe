@@ -152,7 +152,7 @@ extension PullRequestState {
           reviewOrder = order
           reviewFailure = nil
           pendingReviewID = read.pendingReview?.id
-        case .failure(let reason): reviewFailure = reason
+        case .failure(let reason): reviewFailure = PrReadFailure(reason, after: reviewFailure)
         }
         finishReviewReadWaiters()
       }

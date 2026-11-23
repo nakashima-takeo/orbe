@@ -28,9 +28,9 @@ final class BranchPullRequest {
   private(set) var answer = Answer.reading
   /// 手元とのずれ（PR が無い・数え終わっていないなら nil）。
   private(set) var drift: Drift?
-  /// PR を保ったまま、今のブランチの PR を引き直せなかった理由（問い合わせの失敗・GitHub のどのリポジトリか確かめられ
-  /// ない）。次に答えを出したら消える。
-  private(set) var lookupFailure: Unavailable?
+  /// PR を保ったまま、今のブランチの PR を引き直せなかった失敗（理由は、問い合わせの失敗か、GitHub のどのリポジトリか
+  /// 確かめられない）。次に答えを出したら消える。
+  var lookupFailure: PrReadFailure<Unavailable>?
 
   @ObservationIgnored private var files: RootFiles?
   /// どの PR かだけを追う者と、中身も読む者の数。
@@ -313,7 +313,7 @@ final class BranchPullRequest {
       return
     }
     finish(nil, name)
-    if case .pullRequest = answer { lookupFailure = reason }
+    if case .pullRequest = answer { lookupFailure = PrReadFailure(reason, after: lookupFailure) }
   }
 
   /// 見ている者がいなくなったので、答えを出さずに読むのをやめる（積んだ読み直しも捨てる）。

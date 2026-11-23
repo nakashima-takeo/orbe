@@ -41,7 +41,8 @@ struct PrReviewSection: View {
           text: PrPanelText.writeFailure(failure, l10n.language), color: Color.theme.danger)
       }
       if let failure = state.reviewFailure {
-        PrReviewNote(text: PrPanelText.reviewReadFailure(failure, l10n), color: Color.theme.danger)
+        PrReviewNote(
+          text: PrPanelText.reviewReadFailure(failure.reason, l10n), color: Color.theme.danger)
       }
     }
     .prReviewArea(ink)

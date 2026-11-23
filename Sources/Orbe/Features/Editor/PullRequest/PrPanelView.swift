@@ -55,7 +55,7 @@ struct PrPanelView: View {
           PrReviewSection(panel: panel, state: state, review: review)
             .id(ObjectIdentifier(state))
         } else if let failure = state.reviewFailure {
-          PrReviewReadFailure(failure: failure)
+          PrReviewReadFailure(failure: failure.reason)
         }
       } else if PrPanelText.failure(of: panel, state, l10n) != nil {
         EditorSidebarNote(text: l10n.string(.editorUnavailable))
@@ -216,20 +216,25 @@ enum PrPanelText {
     }
   }
 
-  /// 失敗の文——PR の中身の読み直し・確認済みの書き込みの失敗か、PR を保ったまま今のブランチの PR を引き直せなかった理由。
+  /// 失敗の文——確認済みの書き込みの失敗、PR の中身の読み直しの失敗、PR を保ったまま今のブランチの PR を引き直せなかった
+  /// 理由の順に、最初にあるもの。
   @MainActor
   static func failure(of panel: PrPanel, _ state: PullRequestState, _ l10n: LocalizationStore)
     -> String?
   {
-    if let failure = state.failure { return Self.failure(failure, l10n) }
-    return panel.pullRequest.lookupFailure.map { unavailable($0, l10n) }
+    if let failure = state.viewedFailure { return viewedFailure(failure, l10n) }
+    if let failure = state.contentFailure { return contentFailure(failure.reason, l10n) }
+    return panel.pullRequest.lookupFailure.map { unavailable($0.reason, l10n) }
   }
 
-  static func failure(_ failure: PullRequestState.Failure, _ l10n: LocalizationStore) -> String {
-    switch failure {
-    case .read(let reason): text(reason, empty: .editorPrFailedRead, l10n.language)
-    case .write(let reason): text(reason, empty: .editorPrFailedWrite, l10n.language)
-    }
+  /// PR の中身の読みの失敗の文。
+  static func contentFailure(_ failure: GitHubFailure, _ l10n: LocalizationStore) -> String {
+    text(failure, empty: .editorPrFailedRead, l10n.language)
+  }
+
+  /// 確認済みの書き込みの失敗の文。
+  static func viewedFailure(_ failure: GitHubFailure, _ l10n: LocalizationStore) -> String {
+    text(failure, empty: .editorPrFailedWrite, l10n.language)
   }
 
   static func drift(_ drift: BranchPullRequest.Drift, _ l10n: LocalizationStore) -> String {

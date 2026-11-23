@@ -53,7 +53,7 @@ final class PullRequestStateTests: OrbeTestCase {
     gitHub.content = .failure(.unreachable)
     state.reload()
     XCTAssertEqual(state.content?.title, "題", "前の中身は残る")
-    XCTAssertEqual(state.failure, .read(.unreachable))
+    XCTAssertEqual(state.contentFailure?.reason, .unreachable)
   }
 
   /// 読んでいる間に来た読み直しは、終わった後に 1 回だけ読む。
@@ -85,7 +85,7 @@ final class PullRequestStateTests: OrbeTestCase {
     gitHub.finishWrite(written: ["a"], failure: .rateLimited)
     XCTAssertTrue(state.isViewed("a"), "通ったパスは残る")
     XCTAssertFalse(state.isViewed("b"), "通らなかったパスは元に戻る")
-    XCTAssertEqual(state.failure, .write(.rateLimited))
+    XCTAssertEqual(state.viewedFailure, .rateLimited)
   }
 
   /// 書き込みより前に出して後から届いた読み直しは、通ったチェックを外さない。書いている途中のパスも上書きしない。

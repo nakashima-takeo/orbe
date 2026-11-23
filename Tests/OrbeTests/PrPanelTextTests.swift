@@ -24,10 +24,10 @@ final class PrPanelTextTests: OrbeTestCase {
   /// gh が理由を返さなかった失敗は、読み込みと書き込みで決まった文が違う。理由があればその文。
   func testAnEmptyReasonSaysWhetherTheReadOrTheWriteFailed() {
     XCTAssertEqual(
-      PrPanelText.failure(.read(.reason("")), l10n), l10n.string(.editorPrFailedRead))
+      PrPanelText.contentFailure(.reason(""), l10n), l10n.string(.editorPrFailedRead))
     XCTAssertEqual(
-      PrPanelText.failure(.write(.reason("")), l10n), l10n.string(.editorPrFailedWrite))
-    XCTAssertEqual(PrPanelText.failure(.write(.reason("denied")), l10n), "denied")
+      PrPanelText.viewedFailure(.reason(""), l10n), l10n.string(.editorPrFailedWrite))
+    XCTAssertEqual(PrPanelText.viewedFailure(.reason("denied"), l10n), "denied")
   }
 
   /// レビューへの書き込みの時間切れでは、届いていたかもしれないことを告げる文が出て、ほかの書き込みの失敗の文と違う。
