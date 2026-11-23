@@ -59,7 +59,7 @@ struct EditorItemListContent {
   let hints: [EditorItemListHint]
 }
 
-/// 載せる側の口の答え——行を決めた・行の中の部品を押した後に、器を閉じるか、開いたままか、一覧へ戻るか。
+/// 載せる側の口の答え——行を決めた後に、器を閉じるか、開いたままか、一覧へ戻るか。
 enum EditorItemListOutcome {
   case close
   case stay
@@ -69,14 +69,14 @@ enum EditorItemListOutcome {
 /// 一覧の器が、載せる側へ問う口。
 @MainActor
 protocol EditorItemListOwner: AnyObject {
-  /// 今の一覧の中身（器が開くとき・詳細から戻るときに呼ぶ）。
+  /// 今の一覧の中身（器が開くとき・詳細から戻るとき・持ち主が変わったときに呼ぶ）。
   func itemListContent() -> EditorItemListContent
   /// 行 `id` の詳細の中身（詳細を持たない・行が無くなったなら nil）。
   func itemListDetail(of id: AnyHashable) -> EditorItemListContent?
   /// 行 `id` を決めた（↵・行のクリック）。
   func itemListCommit(_ id: AnyHashable) -> EditorItemListOutcome
-  /// 行 `id` の中の部品（×）を押した。
-  func itemListPress(_ id: AnyHashable) -> EditorItemListOutcome
+  /// 行 `id` の中の部品（×）を押した。器は開いたまま。
+  func itemListPress(_ id: AnyHashable)
 }
 
 /// 一覧の器——上のバーの今の項目のボタンに付いて浮く一覧の、開閉・今の中身・詳細に入っている行・選択と、キーと閉じ方を
@@ -153,18 +153,18 @@ final class EditorItemList {
     onClose(dismissal.returnsFocus)
   }
 
-  /// 持ち主が変わった。載せる側が作り直した一覧の中身 `next` へ替える。詳細に入っていれば詳細の中身を引き直し、作れなければ
-  /// 一覧へ戻る。選択は同一性で保ち、無くなれば同じ位置の選べる行へ移す。
-  func contentDidChange(_ next: EditorItemListContent) {
+  /// 持ち主が変わった。詳細に入っていれば詳細の中身を引き直し、作れなければ一覧へ戻る。一覧なら一覧の中身を引き直す。選択は
+  /// 同一性で保ち、無くなれば同じ位置の選べる行へ移す。
+  func contentDidChange() {
     guard isOpen, let owner else { return }
     guard let detail else {
-      show(next, keeping: selection)
+      show(owner.itemListContent(), keeping: selection)
       return
     }
     if let content = owner.itemListDetail(of: detail.id) {
       show(content, keeping: selection)
     } else {
-      back(to: next)
+      back(to: owner.itemListContent())
     }
   }
 
@@ -193,7 +193,7 @@ final class EditorItemList {
   /// 行 `id` の中の部品を押した。
   func press(_ id: AnyHashable) {
     guard isOpen, let owner else { return }
-    apply(owner.itemListPress(id))
+    owner.itemListPress(id)
   }
 
   /// VoiceOver が行 `id` を選んだ。

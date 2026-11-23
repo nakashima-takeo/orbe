@@ -156,7 +156,7 @@ final class ProjectSearchArrowPerfTests: OrbeTestCase {
       XCTAssertNotNil(editor.preview, "前提: 入れ替える仮の文書がある")
       replacing.append(click(index))
     }
-    XCTAssertEqual(editor.documents.count, 1, "入れ替えでタブは増えない")
+    XCTAssertEqual(editor.documents.count, 1, "入れ替えで開いている文書は増えない")
     reportPerf("1MB", "open by click (no preview to replace)", plain, digits: 1)
     reportPerf("1MB", "open by click (replacing the preview)", replacing, digits: 1)
   }

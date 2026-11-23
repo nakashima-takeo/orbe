@@ -4,7 +4,7 @@ import OrbeEditorCore
 /// 上のバーの今の項目と、Files の一覧の中身。今の項目の写しと一覧の行は、同じ材料（開いている文書・仮の文書か・未保存・
 /// ディスクが変わった・状態の字）から、ここで作る——ボタンと行で印を別々に導かない。
 extension EditorPaneView {
-  /// 今の項目を写し直す（値が変わらなければ書かない）。器が開いていれば、載せる側から新しい中身を引いて渡す。今の項目が
+  /// 今の項目を写し直す（値が変わらなければ書かない）。器が開いていれば、器に載せる側の中身を引き直させる。今の項目が
   /// 無くなったか種類が替わったら、器を閉じる。セッションが変わったとき・根が替わったとき（親のパスは根からの相対）・左の列の
   /// 開閉が変わったとき・一覧の持ち主（ソース管理の 2 区分・PR ごとの状態）が変わったときに呼ぶ。
   func refreshCurrentItem() {
@@ -14,7 +14,7 @@ extension EditorPaneView {
     guard let owner = next.map(listOwner), itemList.owner === owner else {
       return itemList.close(.itemGone)
     }
-    itemList.contentDidChange(owner.itemListContent())
+    itemList.contentDidChange()
   }
 
   /// 今の項目の種類の一覧を載せる側。
@@ -35,10 +35,11 @@ extension EditorPaneView {
     }
     guard let document = session.activeDocument else { return nil }
     let isPreview = session.previewURL == document.url
+    let parent = directory(of: document.url)
     return .file(
       EditorShellModel.CurrentFile(
         chip: FileChip.resolve(document.url),
-        directory: directory(of: document.url).isEmpty ? "" : directory(of: document.url) + "/",
+        directory: parent.isEmpty ? "" : parent + "/",
         name: document.url.lastPathComponent, isPreview: isPreview, mark: mark(of: document),
         showsKeepOpenKey: isPreview && showsSearchPanel && projectSearch.focusedArea == .results))
   }

@@ -11,6 +11,8 @@ struct EditorBarRoot: View {
   let shell: EditorShellModel
   /// 左の列の開閉の持ち主（pane と同じ 1 つ）。
   let sidebar: EditorSidebarState
+  /// 一覧の器（開閉の持ち主。開いている間は今の項目のボタンを開いている姿にする）。
+  let itemList: EditorItemList
   /// Changes の件数の持ち主。
   let scm: ScmPanel
   /// PR の番号の持ち主（worktree の今の PR）。
@@ -87,7 +89,7 @@ struct EditorBarRoot: View {
     help: L10nKey, @ViewBuilder label: @escaping () -> Label
   ) -> some View {
     EditorItemButton(
-      isOpen: shell.isItemListOpen, help: localization.string(help),
+      isOpen: itemList.isOpen, help: localization.string(help),
       action: shell.toggleItemList, label: label
     )
     .onGeometryChange(for: CGRect.self) {

@@ -46,8 +46,8 @@ extension EditorPaneView {
   func handleViewedKey(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
     guard flags.isEmpty, event.charactersIgnoringModifiers == "v",
-      group?.editor.screen == .pullRequest, let diff, headerShowsViewed(diff),
-      let place = viewedKeyPlace(diff)
+      group?.editor.screen == .pullRequest, let diff,
+      headerSubject?.header(scm: scm).viewed != nil, let place = viewedKeyPlace(diff)
     else { return false }
     guard !event.isARepeat else { return true }
     if place == .list, !alignBodyWithListSelection() {
@@ -72,12 +72,6 @@ extension EditorPaneView {
     if diffSurfaces(diff).contains(where: { $0.responder === responder }) { return .body }
     if responder.isDescendant(of: pullRequestList) { return .list }
     return nil
-  }
-
-  /// 本体の diff の見出しに確認済みの部品が出ている（PR の diff で、そのファイルが PR ごとの状態の変更ファイルに在る）。
-  private func headerShowsViewed(_ diff: EditorDiff) -> Bool {
-    guard case .pullRequest(let state) = diff.id.kind else { return false }
-    return state.content?.files.contains { $0.path == diff.id.path } == true
   }
 
   /// PR のパネルの列で選んでいる行がファイルで、本体のファイルと違えば、その diff を待たずに開く。本体が列の選択に揃った

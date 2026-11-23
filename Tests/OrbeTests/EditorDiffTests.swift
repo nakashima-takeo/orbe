@@ -309,7 +309,7 @@ final class EditorDiffTests: OrbeTestCase {
 
   // MARK: - 文書の持ち主
 
-  /// diff の中で編集して未保存にした文書は開いている文書の列に入る。そのタブを × で閉じると必ず確認が出て、「保存しない」
+  /// diff の中で編集して未保存にした文書は開いている文書の列に入る。その文書を閉じると必ず確認が出て、「保存しない」
   /// なら文書を捨て、Changes の diff は同じ対象で開き直して編集前の中身（ディスクの姿）に戻る。
   func testClosingAnUnsavedDocumentAsksAndDiscardingReopensTheDiff() throws {
     try repo.write("a.txt", "changed\n")

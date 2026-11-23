@@ -35,7 +35,7 @@ struct EditorFaceRoot: View {
   }
 }
 
-/// 本体の中央の一文（表示できない diff の理由）。空状態の一文と同じ字と色。
+/// 本体の中央の一文（表示できない diff の理由）。
 struct EditorNoticeView: View {
   let key: L10nKey
   @Environment(\.localization) private var l10n

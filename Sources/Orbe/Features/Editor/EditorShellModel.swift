@@ -1,8 +1,8 @@
 import Foundation
 
-/// 骨（上のバー・左の列）の写し。pane が所有し、左の列の中身を画面から決めて写す。SwiftUI はこの写しと、件数・番号・
-/// 開閉の持ち主だけを読み、`EditorSession` / `EditorDocument` を直接観測しない。操作は閉包で pane へ戻り、pane が連経由で
-/// セッションに書く。
+/// 骨（上のバー・左の列）の写し。pane が所有し、セッションと文書から導いて書く。SwiftUI は `EditorSession` /
+/// `EditorDocument` を直接観測せず、この写しか観測できる持ち主（ツリー・各パネルの状態・一覧の器・左の列の開閉）を読む。
+/// 操作は閉包で pane へ戻り、pane が連経由でセッションに書く。
 @MainActor @Observable
 final class EditorShellModel {
   /// 左の列の中身。画面と、Files の左の列がエクスプローラーか検索かで決まる。
@@ -59,8 +59,6 @@ final class EditorShellModel {
   var isPeeking = false
   /// 今の項目（無ければボタンを出さない）。書くのは pane だけで、ボタンの表示・⌘P・一覧の器の開閉が同じ値を読む。
   var currentItem: CurrentItem?
-  /// 一覧の器が開いている（ボタンを開いている間の姿にする）。
-  var isItemListOpen = false
 
   @ObservationIgnored var open: (URL, EditorSession.OpenMode) -> Void = { _, _ in }
   @ObservationIgnored var createFile: () -> Void = {}

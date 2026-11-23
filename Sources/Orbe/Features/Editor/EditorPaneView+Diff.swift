@@ -153,12 +153,10 @@ extension EditorPaneView {
 
   /// diff `key` を、その種類の画面の diff として開き、左の列でその行を選択表示する（行がまだ一覧に無ければ、行ができたとき
   /// に）。画面は選ばない。テキスト面を作れなければ `EditorSurfaceError.noMetalDevice` で失敗する。
-  @discardableResult
-  func openDiff(_ key: EditorDiff.Key) throws -> EditorDiff {
-    guard let group else { throw EditorSurfaceError.noMetalDevice }
-    let opened = try group.editor.openDiff(key)
+  func openDiff(_ key: EditorDiff.Key) throws {
+    guard let group else { return }
+    try group.editor.openDiff(key)
     revealRow(of: key)
-    return opened
   }
 
   /// diff `key` の行を左の列の一覧で選ぶ。一覧にまだ無ければ、行ができたときに選ぶ。
@@ -214,7 +212,7 @@ extension EditorPaneView {
     case .files: key = nil
     }
     guard let key else { return }
-    _ = try? openDiff(key)
+    try? openDiff(key)
   }
 
   /// worktree の今の PR の答えが出ている（読んでいる最中でない）。

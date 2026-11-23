@@ -137,8 +137,8 @@ extension EditorDiffTests {
     XCTAssertGreaterThan(surface.viewport.top.line, 200, "実際の変更へ送る")
   }
 
-  /// 初めて見せる前の色の待ちは、追いつく前に出る画面の配置では始めず、初めて位置を決めた画面の配置で始める（ファイル
-  /// タブで開いている文書の作業ツリー diff は、追いつく前から並びが出る）。
+  /// 初めて見せる前の色の待ちは、追いつく前に出る画面の配置では始めず、初めて位置を決めた画面の配置で始める（開いている
+  /// 文書の作業ツリー diff は、追いつく前から並びが出る）。
   func testTheFirstColorsWaitStartsOnlyAtTheFirstPlacedView() throws {
     var lines = (0..<300).map { "line \($0)" }
     try repo.write("w.txt", lines.joined(separator: "\n") + "\n")

@@ -165,7 +165,7 @@ final class ChangedFilesList: EditorItemListOwner {
     return .close
   }
 
-  func itemListPress(_ id: AnyHashable) -> EditorItemListOutcome { .stay }
+  func itemListPress(_ id: AnyHashable) {}
 
   /// PR の中身 `content` の変更ファイルを、リスト表示と同じ順に並べた列。
   private func order(_ content: GitHubPullRequestContent?) -> [GitHubPullRequestContent.File] {

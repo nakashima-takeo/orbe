@@ -3,16 +3,17 @@ import OrbeEditorCore
 import SwiftUI
 
 /// エディター面の AppKit 側の根。骨の幾何——上のバー、その下に左の列（開いているとき）｜本体——を `layout()` が解き、
-/// SwiftUI の root 2 枚（上のバー・左の列）と本体（セッションが画面から導いた中身——文書のテキスト面か diff の面。無ければ
-/// 文字だけの root）を frame で置く。バーより下（左の列・本体・境の当たり・ファイル内検索のバー）は 1 枚の view
-/// （`belowBar`）にまとめ、⌥ の透かしの濃さはそこへ掛かる。地は chrome と同じ veil を、バーの分とバーより下の分に分けて塗る。
+/// SwiftUI の root（上のバー・左の列・diff の見出し・本体に文字だけを出す器・一覧の器）と本体（セッションが画面から導いた
+/// 中身——文書のテキスト面か diff の面）を frame で置く。上のバーとその地のほかは 1 枚の view（`belowBar`）にまとめ、⌥ の
+/// 透かしの濃さはそこへ掛かる。地は chrome と同じ veil を、バーの分とバーより下の分に分けて塗る。
 ///
 /// 本体で編集する文書（文書の本体ならその文書、diff の本体なら新しい側の文書）の「変わった」（viewport・選択・本文）は
 /// pane が 1 つずつ受け、検索・出現の強調・diff・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。
 /// 一致の地は、ファイル内検索とプロジェクト検索の 2 つの出どころの和を pane が面へ押す（`pushFindGround`）。
 /// 俯瞰（ミニマップ・スクロールバーと印・影）は面が、押された強調の地から自分で描く。
 ///
-/// 骨の状態は写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれと件数・番号・開閉の持ち主だけを読む。
+/// 骨の状態は写し（`EditorShellModel`）と、観測できる持ち主（ツリー・各パネルの状態・一覧の器・左の列の開閉）に持ち、
+/// SwiftUI は `EditorSession` / `EditorDocument` を直接観測しない。
 /// セッションの変化は `sessionDidChange` 1 本で受け、左の列の中身 → 面の差し替え → ツリーの追従の順に進める。
 /// ツリー・プロジェクト検索・ソース管理パネルは面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
 ///
@@ -23,7 +24,7 @@ final class EditorPaneView: NSView {
   weak var group: TabGroup?
   /// worktree の今の PR が替わった・その PR の状態が変わった（連が上段の現在地を描き直させる）。
   var onPullRequestChange: () -> Void = {}
-  /// 骨の写し（左の列の中身と、骨の操作の閉包）。
+  /// 骨の写し（pane が書き SwiftUI が読む値と、骨の操作の閉包）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
   private(set) var tree: FileTree
@@ -131,7 +132,8 @@ final class EditorPaneView: NSView {
     self.pullRequestList = pullRequestList
     barHost = EditorBarHost(
       rootView: EditorBarRoot(
-        shell: shell, sidebar: sidebar, scm: scm, pullRequest: pullRequest.pullRequest,
+        shell: shell, sidebar: sidebar, itemList: itemList, scm: scm,
+        pullRequest: pullRequest.pullRequest,
         localization: localization, fontResolver: fontResolver))
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
@@ -200,7 +202,8 @@ final class EditorPaneView: NSView {
 
   private func installRoots() {
     barHost.rootView = EditorBarRoot(
-      shell: shell, sidebar: sidebar, scm: scm, pullRequest: pullRequest.pullRequest,
+      shell: shell, sidebar: sidebar, itemList: itemList, scm: scm,
+      pullRequest: pullRequest.pullRequest,
       localization: localization, fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,

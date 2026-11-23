@@ -8,7 +8,7 @@ protocol BranchPullRequestObserver: AnyObject {
 
 /// worktree の今の PR——今のブランチから出ている open の PR はどれか（無ければ作成の入口の材料、出せなければその理由）と、
 /// PR があるときの手元とのずれ。worktree の根（正準形）ごとに 1 つで、アプリが動いている間持つ。PR そのものの中身は PR
-/// ごとの状態（`PullRequestState`）が持つ——ブランチを切り替えても、開いている PR の diff はその PR を見続ける。
+/// ごとの状態（`PullRequestState`）が持つ。
 ///
 /// 見ている者は 2 段——どの PR かだけを追う者（`beginTracking`）と、PR の中身も読む者（`beginWatching`）。GitHub に
 /// 問い合わせるのは、どちらかがいる間だけ。PR ごとの状態を見る（中身・スレッド・両端を読む）のと、PR が無いときの作成の

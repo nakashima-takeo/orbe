@@ -178,7 +178,7 @@ extension EditorPaneView {
   /// させない——`EditorDocument.prepareToShow` は受け取りの途中で呼ばれると、待たないときも precondition で止まる（待てば
   /// 同じ文書の受け取りが入れ子になる）。
   func prepareBodyIfVisible() {
-    guard window != nil, !isHiddenOrHasHiddenAncestor else { return }
+    guard isFaceVisible else { return }
     switch body {
     case .document(let document): document.prepareToShow()
     case .diff(let diff): diff.prepareToShow()

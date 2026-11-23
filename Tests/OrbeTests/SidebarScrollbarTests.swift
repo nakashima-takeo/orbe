@@ -224,8 +224,6 @@ final class SidebarScrollbarTests: OrbeTestCase {
     }
   }
 
-  /// エクスプローラーが隠れている間に今の文書が替われば、作り直したツリーはその行を見せる。その後に送った位置は、今の文書が
-  /// 替わらないまま隠れて戻れば、そのまま戻る（選択の行を見せ直さない）。
   /// ツリーを初めて出すとき、今の文書が在ればその行を見せ、無ければ先頭から出す。
   func testTheFirstTreeShowsTheRowOfTheCurrentDocument() throws {
     let tree = try hostTree(opening: "d38/f.txt")
@@ -247,6 +245,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
     XCTAssertEqual(bare.scroll.documentVisibleRect.minY, 0, "今の文書が無ければ先頭から出す")
   }
 
+  /// エクスプローラーが隠れている間に今の文書が替われば、作り直したツリーはその行を見せる。その後に送った位置は、今の文書が
+  /// 替わらないまま隠れて戻れば、そのまま戻る（選択の行を見せ直さない）。
   func testTheRebuiltTreeShowsTheRowOfADocumentOpenedWhileItWasHidden() throws {
     let tree = try hostTree()
     let pane = tree.pane

@@ -124,7 +124,6 @@ final class EditorPaneViewOpenFilesTests: OrbeTestCase {
     let hosted = try host()
     hosted.pane.shell.toggleItemList()
     XCTAssertTrue(hosted.itemList.isOpen)
-    XCTAssertTrue(hosted.pane.shell.isItemListOpen, "ボタンは開いている姿")
     XCTAssertTrue(hosted.pane.focusIsInItemList)
     guard case .heading(_, let count, let key) = row(hosted, 0) else {
       return XCTFail("1 行目は見出し")
@@ -240,7 +239,6 @@ final class EditorPaneViewOpenFilesTests: OrbeTestCase {
     hosted.pane.toggleItemList()
     hosted.pane.switchScreen(.changes)
     XCTAssertFalse(hosted.itemList.isOpen)
-    XCTAssertFalse(hosted.pane.shell.isItemListOpen)
   }
 
   /// 一覧の行に、その文書の属するリポジトリの git の状態の字が出る（タブの worktree の外のファイルでも出る）。Orbe の

@@ -81,8 +81,7 @@ final class OpenFilesList: EditorItemListOwner {
   }
 
   /// 行の × は文書を閉じ（未保存なら確認が出る）、一覧は開いたまま。
-  func itemListPress(_ id: AnyHashable) -> EditorItemListOutcome {
+  func itemListPress(_ id: AnyHashable) {
     if let url = id.base as? URL { pane.requestClose(url) }
-    return .stay
   }
 }

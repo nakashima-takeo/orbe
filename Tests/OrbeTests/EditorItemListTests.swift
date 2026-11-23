@@ -69,9 +69,8 @@ final class EditorItemListTests: OrbeTestCase {
       return outcome
     }
 
-    func itemListPress(_ id: AnyHashable) -> EditorItemListOutcome {
+    func itemListPress(_ id: AnyHashable) {
       presses.append(id)
-      return .stay
     }
   }
 
@@ -177,10 +176,10 @@ final class EditorItemListTests: OrbeTestCase {
     XCTAssertEqual(hosted.itemList.selection, AnyHashable(4))
 
     owner.rows = Rows(count: 6, headings: [0, 4])
-    hosted.itemList.contentDidChange(owner.itemListContent())
+    hosted.itemList.contentDidChange()
     XCTAssertEqual(hosted.itemList.selection, AnyHashable(5), "無くなれば同じ位置の選べる行（下へ）")
     owner.rows = Rows(count: 5)
-    hosted.itemList.contentDidChange(owner.itemListContent())
+    hosted.itemList.contentDidChange()
     XCTAssertEqual(hosted.itemList.selection, AnyHashable(4), "下に無ければ上へ")
     hosted.pane.layoutSubtreeIfNeeded()
     XCTAssertEqual(
@@ -189,7 +188,7 @@ final class EditorItemListTests: OrbeTestCase {
     key(hosted, .right)
     XCTAssertNotNil(hosted.itemList.detail)
     owner.hasDetail = false
-    hosted.itemList.contentDidChange(owner.itemListContent())
+    hosted.itemList.contentDidChange()
     XCTAssertNil(hosted.itemList.detail, "詳細を作れなくなれば一覧へ戻る")
     XCTAssertEqual(hosted.itemList.selection, AnyHashable(4))
   }
