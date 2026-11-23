@@ -25,9 +25,9 @@ final class EditorDiffTests: OrbeTestCase {
   /// 根のタブを窓に載せる。タブ（連とセッション）は、製品で workspace が持つのと同じく、このテストがテストの終わりまで持つ——
   /// pane は連が生きている間だけ本体を見せるので、呼び手がタブを捨てても diff と文書の持ち主が残る。
   /// 窓の幅は `width`。左の列は開いているので、既定の 900 なら diff はインライン、`sideWidth` なら並列で出る。
-  func tab(width: CGFloat = 900) -> (TerminalTab, NSWindow) {
+  func tab(width: CGFloat = 900, height: CGFloat = 400) -> (TerminalTab, NSWindow) {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostEditor(tab, width: width)
+    let window = hostEditor(tab, width: width, height: height)
     tab.group.view.editor.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState())

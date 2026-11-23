@@ -14,6 +14,7 @@ extension EditorPaneView {
       guard let self, let diff, self.diff === diff else { return }
       installDiffSurfaces(diff)
       refreshNotice()
+      refreshHeader()
       needsLayout = true
     }
     diff.present(fittingDiffMode)
@@ -65,7 +66,7 @@ extension EditorPaneView {
     diffViews = views
     if surfaces.count == 2 {
       if diffDivider.superview !== belowBar {
-        belowBar.addSubview(diffDivider, positioned: .below, relativeTo: sidebarHandle)
+        belowBar.addSubview(diffDivider, positioned: .below, relativeTo: headerHost)
       }
     } else {
       diffDivider.removeFromSuperview()
@@ -84,9 +85,9 @@ extension EditorPaneView {
     }
   }
 
-  /// diff の面の矩形（並列なら左右に 1px の境を挟んで等分）。
+  /// diff の面の矩形——見出しの下（並列なら左右に 1px の境を挟んで等分）。
   func layoutDiff(_ diff: EditorDiff) {
-    let rect = bodyRect
+    let rect = belowHeaderRect
     let surfaces = diffSurfaces(diff)
     guard surfaces.count == 2 else {
       surfaces.first?.view.frame = rect

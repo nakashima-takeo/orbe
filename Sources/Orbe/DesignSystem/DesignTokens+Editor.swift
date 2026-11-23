@@ -121,6 +121,10 @@ extension Theme.Typography {
   static let editorKeyCap = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
   /// 字のボタンの字（sans 11.5）。
   static let editorTextButton = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+  /// 差分のファイルの見出しのパス（mono 12。ファイル名は semibold）と状態の字（mono 10.5 semibold）。
+  static let editorDiffHeaderPath = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  static let editorDiffHeaderName = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
+  static let editorDiffHeaderBadge = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .semibold)
   static let editorSidebarNote = NSFont.systemFont(ofSize: 12, weight: .regular)
   /// コード本体（mono 12）。
   static let editorCode = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -219,6 +223,18 @@ extension Theme.Layout {
   static let editorDiffSign: CGFloat = 18
   /// diff を並列で見せる本体の幅の下限（これ未満はインライン）。
   static let editorDiffSideWidth: CGFloat = 1000
+  /// 差分のファイルの見出し。高さ（下端の hairline を含む）・部品の間・左の余白（Changes・PR）・右の余白・未保存の丸・
+  /// 状態の字の幅・区切り線の高さとその左右の空き・下の影が帯の下にはみ出す高さ。
+  static let editorDiffHeader: CGFloat = 32
+  static let editorDiffHeaderGap: CGFloat = 8
+  static let editorDiffHeaderLeading: CGFloat = 12
+  static let editorDiffHeaderLeadingPullRequest: CGFloat = 18
+  static let editorDiffHeaderTrailing: CGFloat = 12
+  static let editorDiffHeaderDot: CGFloat = 7
+  static let editorDiffHeaderBadge: CGFloat = 12
+  static let editorDiffHeaderDivider: CGFloat = 16
+  static let editorDiffHeaderDividerInset: CGFloat = 6
+  static let editorDiffHeaderShadow: CGFloat = 14
   /// 本体の右端の縦スクロールバー（印を載せる。VS Code の verticalScrollbarSize）。
   static let editorScrollbar: CGFloat = 14
   /// 本文の区画の下端の横スクロールバーの高さ（VS Code の horizontalScrollbarSize）。
@@ -282,6 +298,10 @@ extension Theme.Opacity {
   /// diff の詰め物の行の地（塗りの α）と、並列の 2 面の境（hairline の α）。
   static let editorDiffPad: Double = 0.02
   static let editorDiffDivider: Double = 0.07
+  /// 差分のファイルの見出しの地（`surfaceInk` の α）・下端の線と区切り線（hairline の α）。
+  static let editorDiffHeaderGround: Double = 0.035
+  static let editorDiffHeaderLine: Double = 0.07
+  static let editorDiffHeaderDivider: Double = 0.15
 }
 
 extension Theme.Motion {

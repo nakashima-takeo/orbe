@@ -152,6 +152,7 @@ enum L10n {
     .editorEmptyLead: ("ファイルを開いて編集を開始", "Open a file to start editing"),
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
+    .editorUnsaved: ("未保存", "Unsaved"),
     .editorUnavailable: ("表示できません", "Unavailable"),
     .editorScmUnavailableTitle: ("変更を表示できません", "Can’t Show Changes"),
     .editorScmNoChanges: ("変更なし", "No Changes"),

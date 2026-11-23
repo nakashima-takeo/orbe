@@ -25,6 +25,8 @@ extension L10n {
     .editorPrCommits: ("コミット", "Commits"),
     .editorPrFiles: ("変更ファイル", "Files Changed"),
     .editorPrViewedCount: ("%lld/%lld 確認済み", "%lld/%lld viewed"),
+    .editorPrMarkViewed: ("確認済みにする", "Mark as viewed"),
+    .editorPrUnmarkViewed: ("確認済みを外す", "Unmark as viewed"),
     .editorPrTreeView: ("ツリー表示", "View as Tree"),
     .editorPrListView: ("リスト表示", "View as List"),
     .editorPrOlderCommitsHidden: ("古いコミット %lld 件は表示していません", "Older commits not shown: %lld"),

@@ -54,6 +54,11 @@ extension ScmPanel {
     ScmRowID(section: key.kind == .staged ? .staged : .changes, path: key.path)
   }
 
+  /// diff `key` の行のファイル（区分を畳んでいても引ける。行が無ければ nil）。
+  func file(of key: EditorDiff.Key) -> ScmChanges.File? {
+    changes.file(in: rowID(of: key).section, path: key.path)
+  }
+
   /// 本体に自動で開く行——選んでいるファイル行、無ければ先頭のファイル行（ファイル行が無ければ nil）。
   var rowToOpen: ScmRowID? {
     if let selection, selection.path != nil, layout.index[selection] != nil { return selection }

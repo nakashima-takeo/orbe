@@ -39,6 +39,8 @@ final class EditorPaneView: NSView {
   }
   let sideHost: NSHostingView<EditorSideRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
+  /// 差分のファイルの見出し（本体が diff の間だけ出す）。
+  let headerHost: DiffFileHeaderHost
   /// 本体（セッションが画面から導いた中身）。
   private(set) var body = EditorBody.empty
   /// ツリーで最後に選択表示した Files の今の文書（替わったときだけツリーを追従させる）。
@@ -127,6 +129,8 @@ final class EditorPaneView: NSView {
         localization: localization, fontResolver: fontResolver))
     faceHost = NSHostingView(
       rootView: EditorFaceRoot(localization: localization, scm: scm, pullRequest: pullRequest))
+    headerHost = DiffFileHeaderHost(
+      rootView: DiffFileHeaderRoot(localization: localization, scm: scm))
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
@@ -187,6 +191,7 @@ final class EditorPaneView: NSView {
       pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
       localization: localization, fontResolver: fontResolver)
     faceHost.rootView = faceRoot(faceContent)
+    headerHost.rootView = headerRoot(headerSubject)
   }
 
   /// 焦点を明け渡した。一覧のための預かりはここで終わる。行内入力を預かっていたなら、行き先が決まった次のターンに、
@@ -209,6 +214,7 @@ final class EditorPaneView: NSView {
     syncPanel()
     show(group.editor.body)
     refreshNotice()
+    refreshHeader()
     let active = group.editor.activeURL
     if active != revealedDocument {
       revealedDocument = active
@@ -290,6 +296,7 @@ final class EditorPaneView: NSView {
     bindEditedDocument()
     pushFindGround()
     refreshNotice()
+    refreshHeader()
     needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)

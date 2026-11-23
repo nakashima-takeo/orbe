@@ -20,7 +20,8 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
     try repo.write("middle.txt", (lines[..<100] + lines[118...]).joined(separator: "\n") + "\n")
     try repo.write("tail.txt", lines[..<190].joined(separator: "\n") + "\n")
-    let (tab, window) = tab()
+    // 本体の上端の見出しの下に、文脈 1 行と削除 18 行が収まる高さ。
+    let (tab, window) = tab(height: 440)
     for mode in [EditorDiff.Mode.inline, .side] {
       resize(window, width: mode == .side ? Self.sideWidth : 900)
       for (path, boundary) in [("middle.txt", 100), ("tail.txt", 190)] {
