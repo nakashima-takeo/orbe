@@ -218,8 +218,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
     }
   }
 
-  /// エクスプローラーが隠れている間に今の文書が替われば、作り直したツリーはその行を見せる。その後に替わらずに隠れて戻れば、
-  /// 前の位置のまま。
+  /// エクスプローラーが隠れている間に今の文書が替われば、作り直したツリーはその行を見せる。その後に送った位置は、今の文書が
+  /// 替わらないまま隠れて戻れば、そのまま戻る（選択の行を見せ直さない）。
   func testTheRebuiltTreeShowsTheRowOfADocumentOpenedWhileItWasHidden() throws {
     let tree = try hostTree()
     let pane = tree.pane
@@ -245,7 +245,9 @@ final class SidebarScrollbarTests: OrbeTestCase {
         return top >= visible.minY && top + Theme.Layout.editorRow <= visible.maxY
       }, "作り直したツリーが、選択の行を見せる")
     let revealed = try XCTUnwrap(rebuiltScroll())
-    let position = revealed.documentVisibleRect.minY
+    let position: CGFloat = 20
+    revealed.contentView.scroll(to: NSPoint(x: 0, y: position))
+    revealed.reflectScrolledClipView(revealed.contentView)
 
     pane.filesPanel = .search
     pumpMain(until: { self.scrollView(in: pane.sideHost) !== revealed }, "ツリーが外れる")
