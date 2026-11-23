@@ -58,7 +58,7 @@ extension EditorPaneView {
     bindEditedDocument()
     let surfaces = diffSurfaces(diff)
     let views = surfaces.map(\.view)
-    let hadFocus = focusIsInside && !focusIsInSidebar
+    let hadFocus = focusIsInBody
     for view in diffViews where !views.contains(where: { $0 === view }) {
       view.removeFromSuperview()
     }

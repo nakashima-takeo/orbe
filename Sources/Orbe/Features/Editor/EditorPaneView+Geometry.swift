@@ -164,6 +164,7 @@ extension EditorPaneView {
     sidebarHandle.frame = NSRect(
       x: sideWidth - Theme.Stroke.hairline - Theme.Layout.editorSidebarHandle / 2, y: bar,
       width: Theme.Layout.editorSidebarHandle, height: below)
+    layoutItemList()
     // 待ちは本体の面の枠を置き終えた後に通す——文書は見えている範囲が、diff は最初の位置が、枠で決まる。
     prepareBodyIfVisible()
   }

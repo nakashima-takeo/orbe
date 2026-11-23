@@ -10,6 +10,10 @@ extension EditorPaneView {
     return responder === self || responder.isDescendant(of: self)
   }
 
+  /// フォーカスが本体にあるか——面の中にあって、左の列にも一覧の器にも無い。本体の面を置き換えるとき、この間だけ新しい
+  /// 行き先へフォーカスを移す。
+  var focusIsInBody: Bool { focusIsInside && !focusIsInSidebar && !focusIsInItemList }
+
   /// 焦点の行き先。文書の本体ならそのテキスト面、diff の本体なら見せている面（並列なら最後に焦点のあった側、既定は右）、
   /// 面が無ければ自分。
   var focusTarget: NSView {

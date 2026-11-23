@@ -150,6 +150,7 @@ struct ThemeFonts {
   let editorDiffHeaderPath = Font(Theme.Typography.editorDiffHeaderPath as CTFont)
   let editorDiffHeaderName = Font(Theme.Typography.editorDiffHeaderName as CTFont)
   let editorDiffHeaderBadge = Font(Theme.Typography.editorDiffHeaderBadge as CTFont)
+  let editorItemListHint = Font(Theme.Typography.editorItemListHint as CTFont)
   let editorPanelTitle = Font(Theme.Typography.editorPanelTitle as CTFont)
   let editorRootLabel = Font(Theme.Typography.editorRootLabel as CTFont)
   let editorTreeRow = Font(Theme.Typography.editorTreeRow as CTFont)

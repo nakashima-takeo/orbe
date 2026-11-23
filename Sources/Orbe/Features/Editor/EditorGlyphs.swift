@@ -173,6 +173,50 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
+  /// 閉じる × `m4 4 8 8M12 4l-8 8`（stroke 1.4）。
+  static let close = Glyph(viewBox: 16, stroke: 1.4) { k in
+    var path = Path()
+    path.move(to: CGPoint(x: 4 * k, y: 4 * k))
+    path.addLine(to: CGPoint(x: 12 * k, y: 12 * k))
+    path.move(to: CGPoint(x: 12 * k, y: 4 * k))
+    path.addLine(to: CGPoint(x: 4 * k, y: 12 * k))
+    return [(path, 1)]
+  }
+
+  /// キーの印の ↵ `M13 3.25v3.5a2 2 0 0 1-2 2H3.25M6.25 5.75l-3 3 3 3`（stroke 1.45）。
+  static let returnKey = Glyph(viewBox: 16, stroke: 1.45) { k in
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
+    var path = Path()
+    path.move(to: p(13, 3.25))
+    path.addLine(to: p(13, 6.75))
+    path.addArc(tangent1End: p(13, 8.75), tangent2End: p(11, 8.75), radius: 2 * k)
+    path.addLine(to: p(3.25, 8.75))
+    path.move(to: p(6.25, 5.75))
+    path.addLine(to: p(3.25, 8.75))
+    path.addLine(to: p(6.25, 11.75))
+    return [(path, 1)]
+  }
+
+  /// キーの印の → `M3 8h9M8.5 4.5 12 8l-3.5 3.5`（stroke 1.45）。← はその左右の反転。
+  static let arrowRight = Glyph(viewBox: 16, stroke: 1.45) { k in
+    [(arrowPath(k, flipped: false), 1)]
+  }
+  static let arrowLeft = Glyph(viewBox: 16, stroke: 1.45) { k in [(arrowPath(k, flipped: true), 1)]
+  }
+
+  private static func arrowPath(_ k: CGFloat, flipped: Bool) -> Path {
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+      CGPoint(x: (flipped ? 16 - x : x) * k, y: y * k)
+    }
+    var path = Path()
+    path.move(to: p(3, 8))
+    path.addLine(to: p(12, 8))
+    path.move(to: p(8.5, 4.5))
+    path.addLine(to: p(12, 8))
+    path.addLine(to: p(8.5, 11.5))
+    return path
+  }
+
   /// ファイルを開く: 書類から右上へ抜ける矢印（stroke 1.2）。
   static let openFile = Glyph(viewBox: 16, stroke: 1.2) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
