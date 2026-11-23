@@ -34,13 +34,16 @@ extension EditorPaneView {
 
   /// ⌘⇧F の種——押した時点の焦点がテキスト面で、選択が 1 行以内の非空ならその文字列、⌘F のバーの入力欄ならその
   /// 検索語。焦点が既に検索パネルにあれば種なし（キャレットの語は使わない。VS Code の `seedWithNearestWord` の既定）。
+  /// 選択がプロジェクト検索の置いた選択のままでも種なし（結果を見て回った後の ⌘⇧F で、一致の字を検索語に入れて検索し直さない）。
   func projectSearchSeed() -> String? {
     guard let responder = window?.firstResponder as? NSView, !focusIsInSearchPanel else {
       return nil
     }
     if let document, responder === document.surface.responder {
       let selection = document.surface.selectedRange
-      guard selection.length > 0 else { return nil }
+      guard selection.length > 0,
+        searchPlacedSelection?.isSelection(selection, in: document) != true
+      else { return nil }
       let text = document.text.substring(selection)
       return text.contains(where: \.isNewline) ? nil : text
     }
@@ -93,6 +96,7 @@ extension EditorPaneView {
     layoutSubtreeIfNeeded()
     projectSearch.documentDidShow(document)
     if let range = projectSearch.ground(for: document).current {
+      searchPlacedSelection = SearchPlacedSelection(document: document, range: range)
       document.surface.selectedRange = range
       document.surface.reveal(range, policy: .center)
     }
@@ -122,6 +126,14 @@ extension EditorPaneView {
         return handleStepKey(event) || handleViewedKey(event) ? nil : event
       }
     }
+  }
+
+  /// 本文の選択が変わった。プロジェクト検索の置いた選択から動いていれば、置いた選択を忘れる。
+  func searchPlacedSelectionDidChange(in document: EditorDocument) {
+    guard let placed = searchPlacedSelection, placed.document === document,
+      !placed.isSelection(document.surface.selectedRange, in: document)
+    else { return }
+    searchPlacedSelection = nil
   }
 
   /// 窓の押下 `event` が配られる手前（監視から）。
@@ -173,5 +185,16 @@ extension EditorPaneView {
     default:
       return false
     }
+  }
+}
+
+/// プロジェクト検索が一致を開いて本文に置いた選択（文書と区間）。
+struct SearchPlacedSelection {
+  weak var document: EditorDocument?
+  let range: NSRange
+
+  /// `document` の選択 `range` が、この置いた選択のままか。
+  func isSelection(_ range: NSRange, in document: EditorDocument) -> Bool {
+    self.document === document && self.range == range
   }
 }
