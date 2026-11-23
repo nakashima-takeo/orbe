@@ -19,6 +19,21 @@ extension DesignGallerySnapshotTests {
       scene.view, size: NSSize(width: 360, height: 480), name: "editor_shell_narrow.png", dir: dir)
   }
 
+  /// 上のバーの部品の姿（`editor_bar_parts`）と、3 つの画面の姿の並びを幅 1100・820・600 で（`editor_bar_<画面>`）。
+  func renderEditorBarSnapshots(dir: URL) throws {
+    try writePNG(
+      EditorShellFixtures.barParts(), size: NSSize(width: 760, height: 200),
+      name: "editor_bar_parts.png", dir: dir)
+    let widths: [CGFloat] = [1100, 820, 600]
+    for (screen, name) in [
+      (EditorScreen.changes, "changes"), (.pullRequest, "pull_request"), (.files, "files"),
+    ] {
+      try writePNG(
+        EditorShellFixtures.bars(screen, widths: widths), size: NSSize(width: 1100, height: 148),
+        name: "editor_bar_\(name).png", dir: dir)
+    }
+  }
+
   /// 開いているファイルの一覧（今の文書・仮の文書・未保存・ディスクが変わった・状態の字あり／なしの行）と、その詳細（仮の
   /// 文書・普通の文書）、上のバーのボタン（仮の文書——キーの札 ↵ が無い姿（本文・検索の入力欄）とある姿（検索結果の列）・
   /// 未保存・ディスクが変わった）。

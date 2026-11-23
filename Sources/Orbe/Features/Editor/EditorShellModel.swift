@@ -74,6 +74,8 @@ final class EditorShellModel {
   @ObservationIgnored var keepOpen: () -> Void = {}
   /// 今の項目のボタンの枠（バーの座標）が変わった。pane の幾何の入力で、写しには書かない。
   @ObservationIgnored var itemButtonFrameDidChange: (CGRect) -> Void = { _ in }
+  /// 右端の主な操作のボタンの枠（バーの座標）が変わった。pane の外の押下の判定の入力で、写しには書かない。
+  @ObservationIgnored var actionButtonFrameDidChange: (CGRect) -> Void = { _ in }
   /// 行内入力の入力欄が焦点を失った（その世代）。別の view へ移ったなら pane が取り消し、窓へ落ちたなら
   /// pane が預かる。
   @ObservationIgnored var inlineInputLostFocus: (Int) -> Void = { _ in }

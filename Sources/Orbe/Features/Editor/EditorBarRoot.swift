@@ -20,37 +20,25 @@ struct EditorBarRoot: View {
   let pullRequest: BranchPullRequest
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
-  @Environment(\.colorScheme) private var scheme
-
-  private static let hairlineAlpha = 0.07
   /// 部品の間隔。
   static let spacing: CGFloat = 6
   /// 部品の枠を測る座標空間（バーの座標＝面の座標）。
   static let space = "editorBar"
 
   var body: some View {
-    VStack(spacing: 0) {
-      EditorBarLayout(spacing: Self.spacing) {
-        EditorSidebarToggle(isOpen: sidebar.isOpen, action: shell.toggleSidebar)
-        EditorScreenSwitch(
-          selection: shell.panel.screen, changesCount: scm.count,
-          pullRequestNumber: pullRequest.state?.key.id.number, select: shell.selectScreen
-        )
-        .fixedSize()
-        if let item = shell.currentItem { currentItem(item) }
-        middle
-        EditorPeekHint(isPeeking: shell.isPeeking).editorBarPart(.trailing, drops: .hint)
-        trailing
-      }
-      .clipped()
-      .padding(.leading, 8)
-      .padding(.trailing, 12)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .frame(height: Theme.Layout.editorBar - Theme.Stroke.hairline)
-      Rectangle().fill(EditorInk(scheme).hairline(Self.hairlineAlpha))
-        .frame(height: Theme.Stroke.hairline)
+    EditorBarRow {
+      EditorSidebarToggle(isOpen: sidebar.isOpen, action: shell.toggleSidebar)
+      EditorScreenSwitch(
+        selection: shell.panel.screen, changesCount: scm.count,
+        pullRequestNumber: pullRequest.state?.key.id.number, select: shell.selectScreen
+      )
+      .fixedSize()
+      if let item = shell.currentItem { currentItem(item) }
+      middle
+      EditorPeekHint(isPeeking: shell.isPeeking).editorBarPart(.trailing, drops: .hint)
+      trailing
     }
-    .coordinateSpace(.named(Self.space))
+    .environment(\.editorBarActionFrame, shell.actionButtonFrameDidChange)
     .environment(\.localization, localization)
     .environment(\.chromeFontResolver, fontResolver)
   }
@@ -113,49 +101,46 @@ struct EditorBarRoot: View {
   }
 }
 
-/// 上のバーの区切り線（1×16・hairline .15・左右 6）。
-private struct EditorBarSeparator: View {
+/// 上のバーの行の器——部品の行（`EditorBarLayout`。行の枠で切る）・左 8 右 12 の余白・高さ・下端の線。部品の枠を測る
+/// 座標空間（`EditorBarRoot.space`）を張る。
+struct EditorBarRow<Content: View>: View {
+  @ViewBuilder let content: () -> Content
   @Environment(\.colorScheme) private var scheme
 
-  private static let alpha = 0.15
-  private static let height: CGFloat = 16
+  private let hairlineAlpha = 0.07
 
   var body: some View {
-    Rectangle().fill(EditorInk(scheme).hairline(Self.alpha))
-      .frame(width: Theme.Stroke.hairline, height: Self.height)
-      .padding(.horizontal, Theme.Space.note)
+    VStack(spacing: 0) {
+      EditorBarLayout(spacing: EditorBarRoot.spacing) { content() }
+        .clipped()
+        .padding(.leading, 8)
+        .padding(.trailing, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Theme.Layout.editorBar - Theme.Stroke.hairline)
+      Rectangle().fill(EditorInk(scheme).hairline(hairlineAlpha))
+        .frame(height: Theme.Stroke.hairline)
+    }
+    .coordinateSpace(.named(EditorBarRoot.space))
   }
 }
 
-/// 左の列の開閉（26 角・radius 7）。開いている間は押された姿（地 ink .08・字 textPrimary）。
-private struct EditorSidebarToggle: View {
+/// 左の列の開閉（26 角のアイコンのボタン）。開いている間は押された姿。
+struct EditorSidebarToggle: View {
   let isOpen: Bool
   let action: () -> Void
   @Environment(\.localization) private var l10n
 
-  private static let pressedAlpha = 0.08
-  private let size: CGFloat = 26
-
   var body: some View {
-    EditorGlyphView(
-      glyph: EditorGlyphs.sidebarToggle, size: 14,
-      color: isOpen ? Color.theme.textPrimary : Color.theme.textSecondary
-    )
-    .frame(width: size, height: size)
-    .background(
-      RoundedRectangle(cornerRadius: 7)
-        .fill(isOpen ? Color.theme.surfaceInk.opacity(Self.pressedAlpha) : .clear)
-    )
-    .contentShape(Rectangle())
-    .onTapGesture(perform: action)
-    .help(l10n.string(isOpen ? .editorBarHideSidebar : .editorBarShowSidebar))
+    EditorBarIconButton(
+      glyph: EditorGlyphs.sidebarToggle, isPressed: isOpen,
+      help: l10n.string(isOpen ? .editorBarHideSidebar : .editorBarShowSidebar), action: action)
   }
 }
 
 /// 画面の切り替え: 溝（padding 2・gap 2・radius 9・地 sunk・内側の影）に `Changes <件数>`・`PR <#番号>`・`Files` の 3 項目
 /// （高さ 24・padding 0 11・radius 7）。選んでいる項目は地 ink .11 と上縁の明かり・下の影で浮かせ、件数・番号の字を accent にする。
 /// 件数は 0 なら出さない（1000 以上は「999+」）。番号は今のブランチに open の PR があるときだけ。
-private struct EditorScreenSwitch: View {
+struct EditorScreenSwitch: View {
   let selection: EditorScreen
   let changesCount: Int
   let pullRequestNumber: Int?
@@ -240,7 +225,7 @@ private struct EditorScreenItem: View {
 
 /// 右寄せの案内「⌥ 端末を表示」（gap 7・mono 11・textMuted）。⌥ はキーの札。押せない。⌥ で透かしている間は押している間の姿
 /// （字を textPrimary、札を地 accent・印 onAccent）。
-private struct EditorPeekHint: View {
+struct EditorPeekHint: View {
   let isPeeking: Bool
   @Environment(\.localization) private var l10n
 
