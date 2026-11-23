@@ -1,8 +1,8 @@
 import Foundation
 
-/// 保留中のコメントの一覧と、今の diff に置けないスレッド。どちらも最後に読めたレビューのやりとりと diff の両端から導く。
+/// 未送信のコメントの一覧と、今の diff に置けないスレッド。どちらも最後に読めたレビューのやりとりと diff の両端から導く。
 extension PullRequestState {
-  /// 保留中のコメント 1 件。
+  /// 未送信のコメント 1 件。
   struct PendingComment: Equatable {
     /// コメントの id。
     let id: String
@@ -16,14 +16,14 @@ extension PullRequestState {
     let isPlaceable: Bool
   }
 
-  /// 組んだ保留中のコメントの一覧と、組んだときのレビューのやりとりの版・diff の両端。
+  /// 組んだ未送信のコメントの一覧と、組んだときのレビューのやりとりの版・diff の両端。
   struct PendingCommentsMade {
     let version: Int
     let ends: DiffEnds?
     let comments: [PendingComment]
   }
 
-  /// 最後に読めたレビューのやりとりの、保留中のコメント。並びはパスの順 → 行の順（行を持たないものはそのファイルの最後）→
+  /// 最後に読めたレビューのやりとりの、未送信のコメント。並びはパスの順 → 行の順（行を持たないものはそのファイルの最後）→
   /// 書いた時刻の順。組み直すのは、レビューのやりとりか diff の両端が変わったときだけ（参照するたびにスレッドをたどらない）。
   var pendingComments: [PendingComment] {
     let ends = diffEnds

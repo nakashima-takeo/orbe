@@ -26,7 +26,7 @@ extension GitHubCLI {
     }
   }
 
-  /// レビューへの書き込み 1 つを、PR `nodeID` に送る。`pendingReview` は送る前に分かっている自分の保留中のレビュー。
+  /// レビューへの書き込み 1 つを、PR `nodeID` に送る。`pendingReview` は送る前に分かっている自分の未送信のレビュー。
   /// `reviewedCommit` は、利用者が見ていたレビューのやりとりを読んだ時点の PR の先頭のコミット。書き込みが何回の呼び出しに
   /// なるかは `GitHubReviewWriting` が決める。
   func writeReview(
@@ -46,9 +46,9 @@ extension GitHubCLI {
   }
 }
 
-/// レビューへの書き込み。どれも保留中のレビューに積む（解決と、その取り消しと、レビューの送信を除く）。
+/// レビューへの書き込み。どれも未送信のレビューに積む（解決と、その取り消しと、レビューの送信を除く）。
 enum GitHubReviewWrite: Equatable {
-  /// 行 `line` に新しいスレッドを付ける。`commit` は、行の番号を数えた diff の PR の先頭のコミット。保留中のレビューが
+  /// 行 `line` に新しいスレッドを付ける。`commit` は、行の番号を数えた diff の PR の先頭のコミット。未送信のレビューが
   /// 無ければ、作るレビューをこのコミットに結ぶ。在れば使わない（足すスレッドの入力にコミットの欄が無く、行は GitHub が
   /// 決めるコミットの diff の行として読まれる）。
   case addThread(path: String, side: GitHubDiffSide, line: Int, commit: String, body: String)
@@ -56,15 +56,15 @@ enum GitHubReviewWrite: Equatable {
   case reply(thread: String, body: String, resolve: Bool)
   /// スレッドを解決する（偽なら解決を取り消す）。
   case setResolved(thread: String, Bool)
-  /// レビューを送信する（保留中のコメントがあれば、まとめて公開する）。`body` が空なら全体へのコメントを付けない。
-  /// 保留中のレビューが無ければ、作って送るレビューを、レビューのやりとりを読んだ時点の先頭のコミットに結ぶ（承認を、
+  /// レビューを送信する（未送信のコメントがあれば、まとめて公開する）。`body` が空なら全体へのコメントを付けない。
+  /// 未送信のレビューが無ければ、作って送るレビューを、レビューのやりとりを読んだ時点の先頭のコミットに結ぶ（承認を、
   /// 利用者が見ていないコミットに付けない）。在れば、送信の入力にコミットの欄が無いので結ばない。
   case submit(GitHubReviewEvent, body: String)
 }
 
 /// レビューへの書き込みの結果。
 struct GitHubReviewWriteResult: Equatable {
-  /// 書き込みの後の自分の保留中のレビュー（分かった限り。送信が通れば nil）。
+  /// 書き込みの後の自分の未送信のレビュー（分かった限り。送信が通れば nil）。
   let pendingReview: String?
   /// 通らなかった呼び出しがあれば、その失敗の種類。失敗した呼び出しより後の呼び出しは送らない。
   let failure: GitHubFailure?
@@ -78,8 +78,8 @@ struct GitHubReviewWriteResult: Equatable {
   }
 }
 
-/// 書き込み 1 つを、GraphQL の mutation の呼び出しに分けて順に送る。保留中のレビューがあればその ID を名指しする。無いときの
-/// スレッドの追加は、レビューの作成と最初のスレッドを 1 回の呼び出しで送る（スレッドが通らなければ、空の保留中のレビューを
+/// 書き込み 1 つを、GraphQL の mutation の呼び出しに分けて順に送る。未送信のレビューがあればその ID を名指しする。無いときの
+/// スレッドの追加は、レビューの作成と最初のスレッドを 1 回の呼び出しで送る（スレッドが通らなければ、空の未送信のレビューを
 /// GitHub に残さない）。無いときの返信は、レビューを作ってから返信する。
 struct GitHubReviewWriting {
   let cli: GitHubCLI
@@ -134,7 +134,7 @@ struct GitHubReviewWriting {
     }
   }
 
-  /// 通れば、その後の保留中のレビュー。通らなければ `fallback`（送る前に分かっていたもの）。
+  /// 通れば、その後の未送信のレビュー。通らなければ `fallback`（送る前に分かっていたもの）。
   private func finish(
     _ sent: Result<String?, GitHubFailure>, else fallback: String?
   ) -> GitHubReviewWriteResult {
@@ -168,7 +168,7 @@ enum GitHubReviewMutation {
     let body: String
   }
 
-  /// 保留中のレビューを作り、レビューをコミット `commit`（利用者が見ていた先頭）に結ぶ（`thread` があれば、最初のスレッドも
+  /// 未送信のレビューを作り、レビューをコミット `commit`（利用者が見ていた先頭）に結ぶ（`thread` があれば、最初のスレッドも
   /// 1 回で付ける。スレッドの行は、そのコミットの diff の行として読まれる）。送信の `event` は渡さない（渡すと作った時点で
   /// 送信になる）。
   case createReview(pullRequest: String, commit: String, thread: Thread?)
@@ -176,7 +176,7 @@ enum GitHubReviewMutation {
   case reply(thread: String, review: String, body: String)
   case setResolved(thread: String, Bool)
   case submit(review: String, event: GitHubReviewEvent, body: String)
-  /// 保留中のレビューが無いときの送信（作って、すぐ送る）。レビューを `commit` に結ぶ。
+  /// 未送信のレビューが無いときの送信（作って、すぐ送る）。レビューを `commit` に結ぶ。
   case submitNew(pullRequest: String, commit: String, event: GitHubReviewEvent, body: String)
 
   /// どの mutation も同じ引数で、リクエストの本文は標準入力から読ませる。

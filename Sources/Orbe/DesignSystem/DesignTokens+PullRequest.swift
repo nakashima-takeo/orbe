@@ -43,7 +43,7 @@ extension Theme.Color {
   static let editorPrFieldFocus = accentPrimary.withAlphaComponent(0.55)
   static let editorPrFieldSelection = accentPrimary.withAlphaComponent(0.35)
   static let editorPrFieldSelectionInactive = accentPrimary.withAlphaComponent(0.18)
-  /// 保留中の札の枠（editorCaution の α .4）。
+  /// 未送信の札の枠（editorCaution の α .4）。
   static let editorPrPendingBorder = editorCaution.withAlphaComponent(0.4)
 
   /// `DesignTokens.swift` の private ヘルパは参照不可なので自前で持つ。外観ごとに色と α が違う色。
@@ -59,7 +59,7 @@ extension Theme.Color {
 
 extension Theme.Typography {
   /// スレッドの頭・コメントのメタの行・返信の行の下の失敗の文（sans 11）、頭の状態（mono 10.5）、アバターの頭文字（sans 10
-  /// semibold）、書いた人（sans 11 semibold）、保留中の札（sans 10）、本文（sans 12）とインラインコード・コードブロック（mono 12）、
+  /// semibold）、書いた人（sans 11 semibold）、未送信の札（sans 10）、本文（sans 12）とインラインコード・コードブロック（mono 12）、
   /// 返信の行のボタン（sans 11.5。「レビューに追加」は semibold）。
   static let editorPrThreadHead = NSFont.systemFont(ofSize: 11, weight: .regular)
   static let editorPrThreadStatus = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
@@ -76,7 +76,7 @@ extension Theme.Typography {
   /// 返信欄の字（sans 12）と、その 1 行の高さ（pt）。
   static let editorPrReplyField = NSFont.systemFont(ofSize: 12, weight: .regular)
   static let editorPrReplyFieldLine: CGFloat = 16
-  /// パネルの下端の区画: 「レビュー」と 3 択（sans 11）、保留中の件数とファイルの行のコメント数（mono 10.5）、送信ボタン
+  /// パネルの下端の区画: 「レビュー」と 3 択（sans 11）、未送信の件数とファイルの行のコメント数（mono 10.5）、送信ボタン
   /// （sans 12 semibold）とその「⌘↵」（mono 10.5）。
   static let editorPrReviewLabel = NSFont.systemFont(ofSize: 11, weight: .regular)
   static let editorPrReviewSelected = NSFont.systemFont(ofSize: 11, weight: .semibold)

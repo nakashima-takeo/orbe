@@ -14,7 +14,7 @@ import OrbeEditorCore
 @MainActor
 final class PrCommentLayer {
   let pullRequest: EditorDiffPullRequest
-  /// diff の根の worktree の今の PR（答えを読むだけで、見ている者にはならない——見ているのは PR のパネル）。保留中のレビューを
+  /// diff の根の worktree の今の PR（答えを読むだけで、見ている者にはならない——見ているのは PR のパネル）。未送信のレビューを
   /// 送れるのは、その PR を出すパネルだけ。
   private let current: BranchPullRequest
   /// 並びを置き直させる（スレッドの出入り・新しいコメントの欄の開閉・印を出せる行が分かった）。
@@ -71,7 +71,7 @@ final class PrCommentLayer {
     for zone in threads.values { zone.redraw() }
   }
 
-  /// この PR が、diff の根の worktree の今の PR で open か。そうでない間（ブランチの切り替え・マージ・クローズの後）は、保留中の
+  /// この PR が、diff の根の worktree の今の PR で open か。そうでない間（ブランチの切り替え・マージ・クローズの後）は、未送信の
   /// レビューに積む書き込み（新しいスレッド・返信）を断る——積んでも、Orbe から送る所が無い。
   var isCurrentPullRequest: Bool { current.state === state && state.content?.state == .open }
 

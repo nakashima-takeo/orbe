@@ -1,6 +1,6 @@
 import Foundation
 
-/// レビューの送信——全体へのコメントと種類（コメント / 承認 / 変更を依頼）を選んで、保留中のコメントとまとめて送る規則。
+/// レビューの送信——全体へのコメントと種類（コメント / 承認 / 変更を依頼）を選んで、未送信のコメントとまとめて送る規則。
 /// 書きかけと種類と送信の失敗はここが持ち（成功すれば書きかけを空に、種類を「コメント」に戻し、失敗すれば書きかけを残して
 /// 失敗を持つ）、送信の入口を出す面は、欄に見えている変換中の字（IME でまだ確定していない字）を渡して問うだけ。
 extension PullRequestState {
@@ -27,7 +27,7 @@ extension PullRequestState {
 
   /// 送れるか——diff の両端・中身・レビューのやりとりの版が揃っていて（`isReviewAligned`）、送信の最中でなく、選んだ種類を
   /// 選べ、「承認」でなければ全体へのコメント（書きかけに、欄の変換中の字 `composing` を足したもの。空白と改行だけなら空）か
-  /// 保留中のコメントがある。
+  /// 未送信のコメントがある。
   func canSubmitReview(composing: String) -> Bool {
     guard let review, isReviewAligned else { return false }
     let draft = reviewDraft

@@ -15,7 +15,7 @@ enum GitHubReviewEvent: String, Equatable {
   case requestChanges = "REQUEST_CHANGES"
 }
 
-/// PR のレビューのやりとり（GitHub 上の一時点のもの）——行に付いたスレッド、自分の保留中のレビュー。
+/// PR のレビューのやりとり（GitHub 上の一時点のもの）——行に付いたスレッド、自分の未送信のレビュー。
 struct GitHubPullRequestReview: Equatable {
   struct Comment: Equatable {
     let id: String
@@ -24,7 +24,7 @@ struct GitHubPullRequestReview: Equatable {
     /// 本文（書かれた Markdown のまま）。
     let body: String
     let createdAt: Date
-    /// 保留中のレビューのコメント（レビューを送信するまで他の人に見えない）。
+    /// 未送信のレビューのコメント（レビューを送信するまで他の人に見えない）。
     let isPending: Bool
   }
 
@@ -51,7 +51,7 @@ struct GitHubPullRequestReview: Equatable {
   let viewerIsAuthor: Bool
   /// 読んだ時点の PR の先頭のコミット。
   let headCommit: String
-  /// 自分の保留中のレビュー。無ければ nil。
+  /// 自分の未送信のレビュー。無ければ nil。
   let pendingReview: PendingReview?
   var threads: [Thread]
 }
@@ -67,7 +67,7 @@ enum GitHubReviewQuery {
     + "viewerCanReply comments(first:\(pageSize)){nodes{id author{login} body createdAt state}}} "
     + "pageInfo{hasNextPage endCursor}"
 
-  /// 1 ページ目。PR の先頭のコミット・自分が作者か・保留中のレビューと、スレッドの先頭のページ。GitHub は保留中の
+  /// 1 ページ目。PR の先頭のコミット・自分が作者か・未送信のレビューと、スレッドの先頭のページ。GitHub は未送信の
   /// レビューを書いた本人にしか返さないので、載るのは自分のもの（多くて 1 つ）だけとして、作者で絞らずに読む。
   static func firstPageArguments(_ id: GitHubItemID) -> [String] {
     arguments(
@@ -141,7 +141,7 @@ private struct NextPayload: Decodable { let repository: RepositoryNode<NextNode>
 
 private struct TotalCount: Decodable { let totalCount: Int }
 
-/// 保留中のレビュー（`reviews(states:[PENDING])` の 1 項目）。
+/// 未送信のレビュー（`reviews(states:[PENDING])` の 1 項目）。
 private struct PendingNode: Decodable {
   let id: String
   let comments: TotalCount

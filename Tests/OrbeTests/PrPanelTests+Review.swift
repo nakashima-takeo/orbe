@@ -3,12 +3,12 @@ import XCTest
 
 @testable import Orbe
 
-/// PR のパネルの下端の区画とファイルの行のコメント数。壊れると何が起きるか: 空のコメントを送信できる・行に書いた保留中の
+/// PR のパネルの下端の区画とファイルの行のコメント数。壊れると何が起きるか: 空のコメントを送信できる・行に書いた未送信の
 /// コメントを本文なしで送れない・自分の PR を承認できるように見える・失敗した送信で書きかけが消える・成功した後も書きかけと
 /// 選んだ種類が残る・古い版の行のスレッドをコメント数に数える・今の diff に出せないスレッドに気づけない・空白だけの
 /// レビューを公開できる・diff で見ていないコミットに承認が付く・解決済みの置けないスレッドが件数を埋める。
 extension PrPanelTests {
-  /// 「コメント」「変更を依頼」は本文も保留中のコメントも無ければ送れず、「承認」は空でも送れる。送信が成功すれば書きかけは空になり種類は
+  /// 「コメント」「変更を依頼」は本文も未送信のコメントも無ければ送れず、「承認」は空でも送れる。送信が成功すれば書きかけは空になり種類は
   /// 「コメント」に戻る。成功しなければ書きかけと種類が残り、失敗を保持する。
   func testSubmittingAReviewNeedsABodyUnlessApprovingAndKeepsTheDraftOnFailure() throws {
     let state = try reviewed()
@@ -32,7 +32,7 @@ extension PrPanelTests {
       state.reviewDraft, PullRequestState.ReviewDraft(body: "直してください", event: .requestChanges))
   }
 
-  /// 保留中のコメントがあれば、全体へのコメントが空でも「コメント」で送れる。
+  /// 未送信のコメントがあれば、全体へのコメントが空でも「コメント」で送れる。
   func testPendingCommentsCanBeSubmittedWithoutABody() throws {
     pendingComments = 2
     _ = try reviewed()

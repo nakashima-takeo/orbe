@@ -14,7 +14,7 @@ extension Theme.Color {
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
   /// 説明文の段——PR の説明（editorText と textMuted の間）。
   static let editorProse = editorDyn(light: 0x6d647f, dark: 0xa9a2b5)
-  /// 注意の黄——検索の一致の地・PR のパネルの手元とのずれと保留中の印。
+  /// 注意の黄——検索の一致の地・PR のパネルの手元とのずれと未送信の印。
   /// dark は conflict と偶然同値だが light が違い、git 競合でもない。
   static let editorCaution = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
   /// danger の地の上の字（大きい字のボタンの「破棄」）。

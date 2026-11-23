@@ -65,7 +65,7 @@ extension L10n {
     .editorPrFailedRead: ("GitHub から取得できませんでした", "Couldn’t fetch from GitHub"),
     .editorPrFailedWrite: ("GitHub に反映できませんでした", "Couldn’t update GitHub"),
     .editorPrThreadLine: ("行 %lld", "Line %lld"),
-    .editorPrThreadPending: ("保留中", "Pending"),
+    .editorPrThreadPending: ("未送信", "Pending"),
     .editorPrThreadResolved: ("解決済み", "Resolved"),
     .editorPrThreadResolve: ("解決", "Resolve"),
     .editorPrThreadUnresolve: ("解決を取り消す", "Unresolve"),
@@ -92,7 +92,7 @@ extension L10n {
       "GitHub didn’t respond. Check on GitHub whether it was applied"
     ),
     .editorPrReview: ("レビュー", "Review"),
-    .editorPrReviewPending: ("保留中のコメント %lld", "Pending comments: %lld"),
+    .editorPrReviewPending: ("未送信のコメント %lld", "Pending comments: %lld"),
     .editorPrReviewPlaceholder: ("全体へのコメント（任意）", "Overall comment (optional)"),
     .editorPrReviewApprove: ("承認", "Approve"),
     .editorPrReviewComment: ("コメント", "Comment"),

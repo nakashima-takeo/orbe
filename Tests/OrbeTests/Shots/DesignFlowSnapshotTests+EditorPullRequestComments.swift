@@ -9,7 +9,7 @@ import XCTest
 /// PR のコメントの flow（fixture は `PrFixtures` と `PrFixtureReview`——本物の git の場と、PR #131 とスレッドを答える
 /// 差し替えの出どころ）: PR の diff のスレッド（既定のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
 /// コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 左の列を閉じて並列 →
-/// 左の列を開き（インラインに戻る）、パネルの下端で全体へのコメントと「承認」を選ぶ → 送信の最中 → 送信の失敗 → 送信の後（保留中が 0）→ 書きかけの欄の行を書き換える
+/// 左の列を開き（インラインに戻る）、パネルの下端で全体へのコメントと「承認」を選ぶ → 送信の最中 → 送信の失敗 → 送信の後（未送信が 0）→ 書きかけの欄の行を書き換える
 /// push の後（欄が書きかけを残して送れない姿）。
 extension DesignFlowSnapshotTests {
   func testEditorPrComments() throws {
@@ -114,7 +114,7 @@ private struct CommentSteps {
     settle()
   }
 
-  /// 通る出どころでもう一度押す（保留中の返信が付き、欄が空になる）。
+  /// 通る出どころでもう一度押す（未送信の返信が付き、欄が空になる）。
   func reply() {
     scene.review.writes = .succeed
     zone("T_coalesce")?.zone(.pressed(PrCommentControl.add))

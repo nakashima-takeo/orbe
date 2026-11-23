@@ -6,7 +6,7 @@ import OrbeEditorCore
 ///
 /// 枠（半透明の地・枠線 1・影）・頭（枠線の内側に高さ 26 の帯と下縁 1。帯は上の 2 角だけ丸い。行と話題・状態の点・押せる
 /// 「解決」「折りたたむ」）・コメント（アバターの円と頭文字か
-/// OrbeGlyph・名前と時刻と保留中の札・幅で折り返す本文とインラインコードの地・関連コミット）・返信の入力欄と 2 つの
+/// OrbeGlyph・名前と時刻と未送信の札・幅で折り返す本文とインラインコードの地・関連コミット）・返信の入力欄と 2 つの
 /// ボタン。本文と関連コミットは選べる文。押せる場所はホバーで見た目を変え、押すと頭に「押した: …」を出す。入力欄は
 /// 行の数か空 ↔ 空でないが変わったときだけ描き直させる（打鍵ごとには描き直さない）。
 @MainActor
@@ -55,7 +55,7 @@ final class SampleThreadZone: SurfaceZone {
   /// 既定のサンプルスレッド（2 件のコメントと返信入力欄の初期文を持つ）。
   static func sample(line: Int, id: String) -> SampleThreadZone {
     SampleThreadZone(
-      line: "行 \(line)", topic: "coalesce の判定", status: "保留中",
+      line: "行 \(line)", topic: "coalesce の判定", status: "未送信",
       comments: [
         Comment(
           who: "you", avatar: .initials("yo"), when: "今", pending: true,

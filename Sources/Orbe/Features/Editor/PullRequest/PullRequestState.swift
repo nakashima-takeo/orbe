@@ -105,7 +105,7 @@ final class PullRequestState {
   }
   /// `review` が変わるたびに進む（列が見えている行を描き直す合図）。
   private(set) var reviewVersion = 0
-  /// 最後に組んだ保留中のコメントの一覧（→ `PullRequestState+PendingComments`）。
+  /// 最後に組んだ未送信のコメントの一覧（→ `PullRequestState+PendingComments`）。
   @ObservationIgnored var pendingCommentsMade: PendingCommentsMade?
   /// レビューのやりとりの最後の読みの失敗。中身の読みの失敗とは分けて持ち、次に読めたら消える。
   var reviewFailure: PrReadFailure<GitHubFailure>?
@@ -126,7 +126,7 @@ final class PullRequestState {
   @ObservationIgnored var reviewWrittenOrder = 0
   /// 次に届く新しい読みを待っている書き込みの続き。
   @ObservationIgnored var reviewReadWaiters: [() -> Void] = []
-  /// 書き込みが名指しする自分の保留中のレビュー（読みの答えと、書き込みの答えで分かったもの）。
+  /// 書き込みが名指しする自分の未送信のレビュー（読みの答えと、書き込みの答えで分かったもの）。
   @ObservationIgnored var pendingReviewID: String?
   /// 今の中身と、今のレビューのやりとりを読んだ問い合わせの通し番号（読みが通った時点で進む）。
   @ObservationIgnored private var contentOrder = 0

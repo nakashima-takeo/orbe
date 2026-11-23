@@ -88,7 +88,7 @@ private final class ReviewWriteRun {
   private var head = "h0"
   private var previousHead: String?
   private var pushes = 0
-  /// 次に送る書き込みが名指しすべき保留中のレビュー（最後に取り込んだ読みか、その後の書き込みの応答で分かったもの）。
+  /// 次に送る書き込みが名指しすべき未送信のレビュー（最後に取り込んだ読みか、その後の書き込みの応答で分かったもの）。
   private var pendingReview: String?
   /// 今の操作で届いた読みを出した時点の `writeAnswers`（読みの応答を返す操作の間だけ）。
   private var answeringReadIssuedAt: Int?
@@ -318,7 +318,7 @@ private final class ReviewWriteRun {
   }
 
   /// 操作の後の状態。読みは見ている者がいる間だけ出て、中身とレビューのやりとりはそれぞれ 1 本ずつ。答えが一貫している種では、
-  /// 読みが出尽くしたら先頭が揃っている。書き込みは 1 本ずつ受け付けた順に送られ、保留中のレビューと、受け付けた時点の先頭の
+  /// 読みが出尽くしたら先頭が揃っている。書き込みは 1 本ずつ受け付けた順に送られ、未送信のレビューと、受け付けた時点の先頭の
   /// コミットを正しく名指しする。走っている対象は、結果を返していない書き込みの対象。
   private func check() {
     guard violation == nil else { return }
@@ -357,7 +357,7 @@ private final class ReviewWriteRun {
     guard index == sent else { return nil }
     sent += 1
     guard sending.pendingReview == pendingReview else {
-      return "保留中のレビューを \(pendingReview ?? "無し") でなく \(sending.pendingReview ?? "無し") と名指しした"
+      return "未送信のレビューを \(pendingReview ?? "無し") でなく \(sending.pendingReview ?? "無し") と名指しした"
     }
     guard sending.reviewedCommit == accepted[index].reviewedCommit else {
       return "受け付けた時点の先頭 \(accepted[index].reviewedCommit) でなく \(sending.reviewedCommit) を添えた"
