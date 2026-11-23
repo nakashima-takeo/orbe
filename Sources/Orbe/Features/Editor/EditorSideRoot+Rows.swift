@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// ツリー行 20: 深さぶんのガイド、ディレクトリはシェブロン／ファイルは種別チップ、名前（色はバッジに従う）、
-/// 右端に git バッジ。ホバーは淡い塗り、選択は selectionFill。ファイル行は押すと仮の文書として開き、2 回目の押下
-/// （ダブルクリック）で普通の文書として開く——1 回目をダブルクリックの判定で待たせない。
+/// ツリー行 24: 深さぶんの字下げの線、ディレクトリはシェブロンと名前（mono・弱い色）／ファイルは種別チップと名前、右端に git
+/// の状態の字。選択の行は選択の地、ほかはホバーで淡い地（どちらも上下 1 を空けた角丸 6）。選択の行と祖先の行は字下げの線が
+/// accent。ファイル行は押すと仮の文書として開き、2 回目の押下（ダブルクリック）で普通の文書として開く——1 回目をダブル
+/// クリックの判定で待たせない。
 struct TreeRowView: View {
   let row: FileTree.Row
   let tree: FileTree
@@ -11,37 +12,47 @@ struct TreeRowView: View {
   @Environment(\.colorScheme) private var scheme
   @Environment(\.chromeFontResolver) private var fontResolver
 
-  private static let hoverFillAlpha = 0.045
-
   var body: some View {
     let ink = EditorInk(scheme)
-    let badge = row.badge
     HStack(spacing: 0) {
-      TreeGuides(depth: row.depth, ink: ink)
+      TreeGuides(depth: row.depth, accent: row.isOnSelectionPath, ink: ink)
       switch row.kind {
-      case .directory(let isExpanded): TreeChevron(open: isExpanded)
-      case .file: FileChipView(chip: FileChip.resolve(row.url))
+      case .directory(let isExpanded):
+        TreeChevron(open: isExpanded, size: Theme.Layout.editorTreeChevron)
+        Text(row.name)
+          .font(Font.theme.editorTreeFolder)
+          .foregroundStyle(Color.theme.textSecondary)
+          .lineLimit(1)
+          .truncationMode(.head)
+          .padding(.leading, Theme.Layout.editorTreeNameGap)
+      case .file:
+        FileChipView(chip: FileChip.resolve(row.url))
+          .padding(.trailing, Theme.Layout.editorTreeChipGap)
+        fontResolver.text(row.name, base: Theme.Typography.editorTreeRow)
+          .font(Font.theme.editorTreeRow)
+          .foregroundStyle(row.isSelected ? Color.theme.textPrimary : Color.theme.textSecondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
       case .input: EmptyView()
       }
-      fontResolver.text(row.name, base: Theme.Typography.editorTreeRow)
-        .font(Font.theme.editorTreeRow)
-        .foregroundStyle(badge?.color ?? Color.theme.editorText)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .padding(.leading, Theme.Space.note)
       Spacer(minLength: 0)
-      if let badge {
+      if let badge = row.badge {
         Text(badge.label)
-          .font(Font.theme.editorBadge)
+          .font(Font.theme.editorTreeBadge)
           .foregroundStyle(badge.color)
+          .frame(width: Theme.Layout.editorTreeBadge)
       }
     }
-    .padding(.leading, 10)
-    .padding(.trailing, Theme.Space.step)
+    .padding(.horizontal, Theme.Layout.editorTreeRowPadX)
     .frame(height: Theme.Layout.editorRow)
     .background(
-      row.isSelected
-        ? Color.theme.selectionFill : hovering ? ink.fill(Self.hoverFillAlpha) : .clear
+      RoundedRectangle(cornerRadius: Theme.Layout.editorTreeRowRadius)
+        .fill(
+          row.isSelected
+            ? Color.theme.selectionFill
+            : hovering ? ink.fill(Theme.Opacity.editorTreeHover) : .clear
+        )
+        .padding(.vertical, Theme.Layout.editorTreeRowGroundInset)
     )
     .contentShape(Rectangle())
     .onHover { hovering = $0 }
@@ -74,11 +85,13 @@ struct InlineInputRow: View {
 
   var body: some View {
     HStack(spacing: 0) {
-      TreeGuides(depth: row.depth, ink: EditorInk(scheme))
+      TreeGuides(depth: row.depth, accent: false, ink: EditorInk(scheme))
       if isDirectory {
-        TreeChevron(open: false)
+        TreeChevron(open: false, size: Theme.Layout.editorTreeChevron)
+          .padding(.trailing, Theme.Layout.editorTreeNameGap)
       } else {
         Color.clear.frame(width: Theme.Layout.editorChip, height: Theme.Layout.editorChip)
+          .padding(.trailing, Theme.Layout.editorTreeChipGap)
       }
       TextField("", text: Binding(get: { tree.newEntry?.name ?? "" }, set: tree.setNewName))
         .textFieldStyle(.plain)
@@ -87,7 +100,6 @@ struct InlineInputRow: View {
         .tint(Color.theme.accentPrimary)
         .lineLimit(1)
         .focused($focused)
-        .padding(.leading, Theme.Space.note)
         .onSubmit { tree.commitNew() }
         .onKeyPress(.escape) {
           tree.cancelNew(generation)
@@ -102,28 +114,24 @@ struct InlineInputRow: View {
           }
         }
     }
-    .padding(.leading, 10)
-    .padding(.trailing, Theme.Space.step)
+    .padding(.horizontal, Theme.Layout.editorTreeRowPadX)
     .frame(height: Theme.Layout.editorRow)
   }
 }
 
-/// 深さぶんのインデント線（幅 8 ＋ 右 1px hairline .08、右余白 8）。
+/// 深さぶんの字下げの線（1 段 14 の中央に 1px。`accent` なら accent の色、ほかは hairline .15）。
 struct TreeGuides: View {
   let depth: Int
+  let accent: Bool
   let ink: EditorInk
-
-  private static let hairlineAlpha = 0.08
 
   var body: some View {
     ForEach(0..<depth, id: \.self) { _ in
-      Color.clear
-        .frame(width: Theme.Space.step)
+      Rectangle()
+        .fill(accent ? Color.theme.accentPrimary : ink.hairline(Theme.Opacity.editorTreeGuide))
+        .frame(width: Theme.Stroke.hairline)
+        .frame(width: Theme.Layout.editorTreeGuide)
         .frame(maxHeight: .infinity)
-        .overlay(alignment: .trailing) {
-          Rectangle().fill(ink.hairline(Self.hairlineAlpha)).frame(width: Theme.Stroke.hairline)
-        }
-        .padding(.trailing, Theme.Space.step)
     }
   }
 }
@@ -145,7 +153,7 @@ extension GitStatus.Badge {
     }
   }
 
-  /// バッジと、その行の名前の色。M は git の変更、A / U は git の追加、競合は conflict。
+  /// 状態の字の色。M は git の変更、A / U は git の追加、競合は conflict。
   var color: Color {
     switch self {
     case .modified: return Color.theme.diffModified

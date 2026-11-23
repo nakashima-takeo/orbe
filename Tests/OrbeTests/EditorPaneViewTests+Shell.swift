@@ -13,7 +13,7 @@ import XCTest
 @MainActor
 final class EditorPaneViewShellTests: OrbeTestCase {
   /// 行内入力を続けて出すと前の入力は消えて新しい入力だけが出る。入力の終わりは入力の状態が落ちることで、
-  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・作成先を畳む・左の列を閉じる・cd でも落ち、入力欄に
+  /// Esc・焦点の移動だけでなく、すべて折りたたむ・作成先を畳む・左の列を閉じる・cd でも落ち、入力欄に
   /// 居た焦点は面の行き先（文書のテキスト面）へ移る。
   func testInlineInputIsRecreatedPerRequestAndEndsWhenItsStateDrops() throws {
     let dir = TestScratch.caseDir
@@ -49,8 +49,6 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     }
     try endsWhenTheStateDrops("左の列を閉じる") { pane.toggleSidebar() }
     pane.toggleSidebar()
-    try endsWhenTheStateDrops("根を畳む") { pane.tree.isRootOpen = false }
-    pane.tree.isRootOpen = true
     try endsWhenTheStateDrops("すべて折りたたむ") { pane.shell.collapseAll() }
     let sub = dir.appendingPathComponent("d")
     try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)

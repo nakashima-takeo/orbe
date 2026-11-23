@@ -697,7 +697,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorOpenFilesCloseFile
 
   // MARK: - Editor 面（骨: エクスプローラー）
-  case editorExplorerTitle
   case editorNewFile
   case editorNewFolder
   case editorCollapseAll

@@ -169,7 +169,7 @@ extension EditorPaneView {
     tree.cancelNew(generation)
   }
 
-  /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・作成先を畳む・
+  /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・作成先を畳む・
   /// 左の列を閉じる・cd）。
   func inlineInputDidEnd() {
     reclaimSidebarFocus()

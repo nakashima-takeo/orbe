@@ -202,7 +202,6 @@ enum L10n {
     .editorBarShowTerminal: ("端末を表示", "Show Terminal"),
 
     // MARK: Editor 面（骨: エクスプローラー）
-    .editorExplorerTitle: ("エクスプローラー", "Explorer"),
     .editorNewFile: ("新規ファイル", "New File"),
     .editorNewFolder: ("新規フォルダ", "New Folder"),
     .editorCollapseAll: ("すべて折りたたむ", "Collapse All"),

@@ -299,12 +299,12 @@ final class SidebarScrollbarTests: OrbeTestCase {
     XCTAssertNil(tree.pane.tree.selected, "つまみ")
   }
 
-  /// 帯のつまみの外を押せば、その行が選ばれる。
+  /// 帯のつまみの外を押せば、その行が選ばれる。押すのは帯のうち行の上に重なる所（一覧の右の内側 6 には行が無い）。
   func testPressingTheBandOutsideTheTreeThumbSelectsTheRow() throws {
     let tree = try hostTree()
     let position: CGFloat = 100
     let thumb = thumbFrame(tree, at: position)
-    let band = NSPoint(x: thumb.midX, y: thumb.minY - Theme.Layout.editorRow)
+    let band = NSPoint(x: thumb.minX + 2, y: thumb.minY - Theme.Layout.editorRow)
     hover(tree, band)
     move(tree, to: position)
     deliverClick(at: band, in: tree.window)

@@ -152,10 +152,10 @@ extension Theme.Typography {
   static let editorBarHint = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// パネルヘッダーの題（sans 11・tracking 0.5）。
   static let editorPanelTitle = NSFont.systemFont(ofSize: 11, weight: .regular)
-  /// エクスプローラーのルート行（sans 11 bold・tracking 0.8）。
-  static let editorRootLabel = NSFont.systemFont(ofSize: 11, weight: .bold)
-  /// ツリー行の名前（sans 12.5）。
+  /// ツリー行のファイルの名前（sans 12.5）・フォルダの名前（mono 11.5）・git の状態の字（mono 10.5 semibold）。
   static let editorTreeRow = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+  static let editorTreeFolder = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
+  static let editorTreeBadge = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .semibold)
   /// ツリー行の git バッジ（mono 11）。
   static let editorBadge = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// 種別チップのグリフ（mono bold。サイズはチップが決める）。
@@ -198,8 +198,6 @@ extension Theme.Typography {
   static let editorScmStop = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// パネルヘッダーの題の字間。
   static let trackingPanelTitle: CGFloat = 0.5
-  /// ルート行の字間。
-  static let trackingRootLabel: CGFloat = 0.8
 }
 
 extension Theme.Layout {
@@ -260,7 +258,20 @@ extension Theme.Layout {
   static let editorItemListHintGap: CGFloat = 14
   static let editorItemListBottom: CGFloat = 12
   static let editorPanelHeader: CGFloat = 28
-  static let editorRow: CGFloat = 20
+  /// エクスプローラー——ツリーの行の高さ・上の行の余白と欄の高さ・一覧の左右の内側・行の角丸と左右の余白・選択と開いている行の地
+  /// の上下の空き・字下げ 1 段の幅・シェブロン・フォルダの名前の左の空き・種別チップの右の空き・git の状態の字の列の幅。
+  static let editorRow: CGFloat = 24
+  static let editorTreeTopPad: CGFloat = 8
+  static let editorTreeField: CGFloat = 26
+  static let editorTreeInset: CGFloat = 6
+  static let editorTreeRowRadius: CGFloat = 6
+  static let editorTreeRowPadX: CGFloat = 8
+  static let editorTreeRowGroundInset: CGFloat = 1
+  static let editorTreeGuide: CGFloat = 14
+  static let editorTreeChevron: CGFloat = 14
+  static let editorTreeNameGap: CGFloat = 4
+  static let editorTreeChipGap: CGFloat = 6
+  static let editorTreeBadge: CGFloat = 12
   /// ツリー行の種別チップ。
   static let editorChip: CGFloat = 14
   /// 行番号ガター（右寄せの数字が収まる幅）と、その右の git の印の列。本文は 2 つの右端から始まる。
@@ -359,6 +370,9 @@ extension Theme.Opacity {
   /// 一覧の器の行のホバーの地と、右の印の枠のホバーの地（塗りの α）。
   static let editorItemListHover: Double = 0.045
   static let editorItemListMarkHover: Double = 0.10
+  /// ツリーの行のホバーの地（塗りの α）と、字下げの線（hairline の α）。
+  static let editorTreeHover: Double = 0.045
+  static let editorTreeGuide: Double = 0.15
   /// diff の追加・削除の行の地の不透明度（構文色が地の上で読める濃さ）。
   static let editorDiffRow: CGFloat = 0.12
   /// diff の詰め物の行の地（塗りの α）と、並列の 2 面の境（hairline の α）。

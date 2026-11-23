@@ -38,7 +38,6 @@ final class FileTreeTests: OrbeTestCase {
 
     tree.isLive = true
     XCTAssertEqual(names(tree), ["docs", "src", "a.txt"], "根だけ。ディレクトリが先、あとは名前順")
-    XCTAssertEqual(tree.rootName, (repo.root as NSString).lastPathComponent.uppercased())
 
     tree.toggle("src")
     XCTAssertEqual(names(tree), ["docs", "src", "  sub", "  main.swift", "a.txt"], "展開した階層だけ取る")

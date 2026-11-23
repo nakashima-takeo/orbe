@@ -11,22 +11,6 @@ import Foundation
 /// 展開集合は根からの相対パスの集合で、祖先について閉じている（畳めば配下も外れる）。永続しない。
 @MainActor @Observable
 final class FileTree: RootFilesObserver {
-  enum RowKind: Equatable {
-    case directory(isExpanded: Bool)
-    case file(badge: GitStatus.Badge?)
-    /// 新規作成の行内入力（ディレクトリならシェブロンの幅を空ける）。世代は `NewEntry.generation`。
-    case input(isDirectory: Bool, generation: Int)
-  }
-
-  struct Row: Identifiable, Equatable {
-    let id: String
-    let depth: Int
-    let name: String
-    let url: URL
-    let kind: RowKind
-    let isSelected: Bool
-  }
-
   /// 行内入力の状態。打ちかけの名前もここに持つ——view の寿命（容器が行を捨てて作り直す）に依らない。
   struct NewEntry: Equatable {
     /// 挿す先のディレクトリ（相対パス。根は空）。
@@ -40,12 +24,6 @@ final class FileTree: RootFilesObserver {
 
   /// 根（正規形）。
   let root: String
-  /// ルート行の題（根の basename を大文字）。
-  let rootName: String
-  /// 根を畳めば行内入力も終わる（入力行は根の配下にしか無い）。
-  var isRootOpen = true {
-    didSet { if !isRootOpen { newEntry = nil } }
-  }
   private(set) var expanded: Set<String> = []
   /// 相対ディレクトリ → 一覧。空文字が根。
   private(set) var entries: [String: [RootFiles.Entry]] = [:]
@@ -97,48 +75,6 @@ final class FileTree: RootFilesObserver {
 
   init(root: String) {
     self.root = root
-    rootName = (root as NSString).lastPathComponent.uppercased()
-  }
-
-  // MARK: - 行
-
-  /// 描画用の平坦化（深さ優先。閉じたディレクトリの配下は出ない）。
-  var rows: [Row] {
-    guard isRootOpen else { return [] }
-    var out: [Row] = []
-    append(directory: "", depth: 0, into: &out)
-    return out
-  }
-
-  /// 一覧は名前順（→ `RootFiles.entries`）。面ではディレクトリを先に並べる（VS Code の慣習）。
-  private static func directoriesFirst(_ list: [RootFiles.Entry]) -> [RootFiles.Entry] {
-    list.filter(\.isDirectory) + list.filter { !$0.isDirectory }
-  }
-
-  private func append(directory: String, depth: Int, into out: inout [Row]) {
-    if let newEntry, newEntry.directory == directory {
-      out.append(
-        Row(
-          id: Self.inputRowID(newEntry), depth: depth, name: "", url: url(of: directory),
-          kind: .input(isDirectory: newEntry.isDirectory, generation: newEntry.generation),
-          isSelected: false))
-    }
-    for entry in Self.directoriesFirst(entries[directory] ?? []) {
-      let path = Self.join(directory, entry.name)
-      if entry.isDirectory {
-        let isExpanded = expanded.contains(path)
-        out.append(
-          Row(
-            id: path, depth: depth, name: entry.name, url: entry.url,
-            kind: .directory(isExpanded: isExpanded), isSelected: selected == path))
-        if isExpanded { append(directory: path, depth: depth + 1, into: &out) }
-      } else {
-        out.append(
-          Row(
-            id: path, depth: depth, name: entry.name, url: entry.url,
-            kind: .file(badge: status?.badge(of: path)), isSelected: selected == path))
-      }
-    }
   }
 
   // MARK: - 開閉・選択
@@ -152,7 +88,7 @@ final class FileTree: RootFilesObserver {
     }
   }
 
-  /// 根は開いたまま、展開をすべて畳む。
+  /// 展開をすべて畳む。
   func collapseAll() {
     expanded = []
     entries = entries.filter { $0.key.isEmpty }
@@ -169,7 +105,6 @@ final class FileTree: RootFilesObserver {
   }
 
   private func revealPath(_ path: String, isDirectory: Bool) {
-    isRootOpen = true
     for ancestor in Self.ancestors(of: path) { expand(ancestor) }
     selection = Selection(path: path, isDirectory: isDirectory)
   }
@@ -203,7 +138,6 @@ final class FileTree: RootFilesObserver {
     } else {
       directory = ""
     }
-    isRootOpen = true
     for ancestor in Self.ancestors(of: directory) + [directory] { expand(ancestor) }
     newGeneration += 1
     newEntry = NewEntry(directory: directory, isDirectory: isDirectory, generation: newGeneration)
@@ -315,7 +249,7 @@ final class FileTree: RootFilesObserver {
 
   // MARK: - パス
 
-  private func url(of relativePath: String) -> URL {
+  func url(of relativePath: String) -> URL {
     let rootURL = URL(fileURLWithPath: root, isDirectory: true)
     return relativePath.isEmpty
       ? rootURL : rootURL.appendingPathComponent(relativePath, isDirectory: true)
@@ -330,17 +264,17 @@ final class FileTree: RootFilesObserver {
     return String(path.dropFirst(root.count + 1))
   }
 
-  private static func join(_ directory: String, _ name: String) -> String {
+  static func join(_ directory: String, _ name: String) -> String {
     directory.isEmpty ? name : directory + "/" + name
   }
 
-  private static func parent(of path: String) -> String {
+  static func parent(of path: String) -> String {
     guard let slash = path.lastIndex(of: "/") else { return "" }
     return String(path[..<slash])
   }
 
   /// 根を除く祖先（浅い順）。
-  private static func ancestors(of path: String) -> [String] {
+  static func ancestors(of path: String) -> [String] {
     var out: [String] = []
     var current = parent(of: path)
     while !current.isEmpty {

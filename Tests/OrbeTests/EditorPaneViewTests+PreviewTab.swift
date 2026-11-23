@@ -33,13 +33,13 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
     return Hosted(tab: tab, window: window)
   }
 
-  /// ツリーの `name` の行の中ほど（面の座標。パネルヘッダーと根の行の下）。
+  /// ツリーの `name` の行の中ほど（面の座標。上の行の下）。
   private func treeRow(_ hosted: Hosted, _ name: String) throws -> NSPoint {
     let index = try XCTUnwrap(hosted.pane.tree.rows.firstIndex { $0.name == name })
     return NSPoint(
       x: 80,
-      y: Theme.Layout.editorBar + Theme.Layout.editorPanelHeader
-        + Theme.Layout.editorRow * (CGFloat(index) + 1.5))
+      y: Theme.Layout.editorBar + Theme.Layout.editorTreeField + 2 * Theme.Layout.editorTreeTopPad
+        + Theme.Layout.editorRow * (CGFloat(index) + 0.5))
   }
 
   private func names(_ hosted: Hosted) -> [String] {
