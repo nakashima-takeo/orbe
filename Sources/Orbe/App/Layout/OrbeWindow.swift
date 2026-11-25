@@ -7,6 +7,10 @@ import AppKit
 /// 配られるため、ここで止めれば変換中のキーはどの handler にも届かない。テストが継承して振る舞いを差し替える境界なので
 /// final にしない。
 class OrbeWindow: NSWindow {
+  /// `makeFirstResponder(_:)` 成立後に実 first responder が変化したときの通知。
+  /// 再帰を防ぐため、受け手は見た目と復帰記憶の更新のみを行い `makeFirstResponder` を呼ばない。
+  var onFirstResponderChange: ((NSResponder?) -> Void)?
+
   /// 主窓の大きさとスタイルで作る。
   convenience init() {
     self.init(
@@ -21,6 +25,16 @@ class OrbeWindow: NSWindow {
   func bringToFront() {
     NSApp.activate(ignoringOtherApps: true)
     makeKeyAndOrderFront(nil)
+  }
+
+  @discardableResult
+  override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+    let previous = firstResponder
+    let changed = super.makeFirstResponder(responder)
+    if changed, firstResponder !== previous {
+      onFirstResponderChange?(firstResponder)
+    }
+    return changed
   }
 
   override func sendEvent(_ event: NSEvent) {

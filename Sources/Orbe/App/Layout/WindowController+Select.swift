@@ -32,6 +32,7 @@ extension WindowController {
     let switches = index != activeWorkspace
     let inPlace = !switches && current.selection == selection
     guard store.recordSelection(selection, inWorkspaceAt: index) else { return }
+    yieldBrowserToUnderlay(animated: inPlace)
     editorShownTab = inEditor ? current.selectedTab : nil
     renderSelection(animated: inPlace)
     guard switches else { return }
@@ -56,6 +57,7 @@ extension WindowController {
     if statusModel.editingIndex != nil { endTabRename() }
     if let tab = ws.selectedTab { store.recordMaterialization(of: tab, in: ws) }
     reconcileContent()
+    browserView.setPeekUnderlay(browserPeekUnderlay)
     if store.hasBoard(ws) { projectBoardWidgets() }
     // overlay 表示中は入力を奪わない（フォーカス復帰は dismiss 側が担う）。
     if model.overlay == .none { focusSelection() }
@@ -93,6 +95,10 @@ extension WindowController {
   /// ボードならボードの中の宛先、空なら無し（除去済みの surface に宙ぶらりんの first responder を残さない）。パレットの
   /// dismiss・workspace の切替・`focus_tab` が共有する。
   func focusSelection() {
+    if browserMode == .full || (browserMode == .sheet && browserWasFocused) {
+      browserView.focusBrowser()
+      return
+    }
     switch presentation {
     case .terminal(let tab): window.makeFirstResponder(tab.surface)
     case .editor(let tab), .peek(let tab): tab.group.view.editor.focusEditor()

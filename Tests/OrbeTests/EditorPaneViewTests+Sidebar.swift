@@ -186,24 +186,24 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     try assertSidebarContentFills(pane, width: 263)
   }
 
-  /// ⌘B はエディターにフォーカスがある間だけ左の列を開閉し、フォーカスが面の外にあれば素通しする。
-  func testCommandBTogglesTheSidebarOnlyWhileTheEditorHasTheFocus() throws {
+  /// ⌘⇧B はエディターにフォーカスがある間だけ左の列を開閉し、フォーカスが面の外にあれば素通しする。
+  func testCommandShiftBTogglesTheSidebarOnlyWhileTheEditorHasTheFocus() throws {
     let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
-    let commandB = NSEvent.key("b")
+    let commandShiftB = NSEvent.key("B", [.command, .shift])
 
     window.makeFirstResponder(pane)
-    XCTAssertTrue(pane.performKeyEquivalent(with: commandB))
+    XCTAssertTrue(pane.performKeyEquivalent(with: commandShiftB))
     XCTAssertFalse(pane.sidebar.isOpen, "閉じる")
-    XCTAssertTrue(pane.performKeyEquivalent(with: commandB))
+    XCTAssertTrue(pane.performKeyEquivalent(with: commandShiftB))
     XCTAssertTrue(pane.sidebar.isOpen, "開く")
 
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
     tab.group.view.addSubview(outsider)
     XCTAssertTrue(window.makeFirstResponder(outsider))
-    XCTAssertFalse(pane.performKeyEquivalent(with: commandB), "面の外のフォーカスには効かない")
+    XCTAssertFalse(pane.performKeyEquivalent(with: commandShiftB), "面の外のフォーカスには効かない")
     XCTAssertTrue(pane.sidebar.isOpen)
   }
 

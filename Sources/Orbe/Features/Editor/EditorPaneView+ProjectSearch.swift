@@ -138,6 +138,7 @@ extension EditorPaneView {
 
   /// 窓の押下 `event` が配られる手前（監視から）。
   func pressWillArrive(_ event: NSEvent) {
+    guard !isPeekingOverlay() else { return }
     if itemList.isOpen, !isPeeking, !pressIsOnItemList(event) { itemList.close(.outsidePress) }
     if !press(event, isIn: searchResults) { projectSearch.navigation.drop() }
     if !press(event, isIn: scmList) { scm.navigation.drop() }

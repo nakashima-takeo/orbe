@@ -31,6 +31,7 @@ extension WindowController {
       let workspace = workspaces.first { $0.tabs.contains { $0.group === group } }
       return settingsStore.effective(override: workspace?.settingsOverride)
     }
+    group.view.editor.isPeekingOverlay = { [weak self] in self?.browserPeeking ?? false }
     return group
   }
 

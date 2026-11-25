@@ -24,12 +24,13 @@ enum ChromeAction {
   case scrollToBottom  // スクロールバック末尾へジャンプ
   case toggleHelp  // ヘルプオーバーレイ（ショートカットチートシート）をトグル開閉
   case toggleEditorFace  // エディターを開く・閉じる
+  case toggleBrowser  // 内蔵ブラウザを開く・閉じる
   case saveDocument  // エディター焦点の文書を保存
   case toggleEditorSidebar  // エディターの左の列（ツリー）を開く・閉じる
   case toggleEditorItemList  // エディターの上のバーの今の項目の一覧を開く・閉じる
 }
 
-/// 面（surface・エディター pane）から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
+/// 面（surface・エディター pane・ブラウザ層）から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
 enum WindowCommand {
   case closeTab
   case showClosedAgentsPalette
@@ -45,6 +46,7 @@ enum WindowCommand {
   case showSettings
   case toggleHelp
   case toggleEditorFace
+  case toggleBrowser
   case findInProject
 }
 
@@ -68,6 +70,7 @@ extension ChromeAction {
     case .showSettings: return .showSettings
     case .toggleHelp: return .toggleHelp
     case .toggleEditorFace: return .toggleEditorFace
+    case .toggleBrowser: return .toggleBrowser
     case .findInProject: return .findInProject
     case .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
       .scrollToTop, .scrollToBottom, .saveDocument, .toggleEditorSidebar, .toggleEditorItemList:
@@ -89,7 +92,7 @@ extension ChromeAction {
     switch self {
     case .closeTab, .showClosedAgentsPalette, .nextTab, .prevTab, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showTaskPalette, .openEditor,
-      .rename, .showSettings, .toggleHelp, .toggleEditorFace, .findInProject:
+      .rename, .showSettings, .toggleHelp, .toggleEditorFace, .toggleBrowser, .findInProject:
       return .window
     case .increaseFontSize, .decreaseFontSize, .resetFontSize:
       return .terminal
@@ -109,7 +112,7 @@ extension WindowCommand {
     switch self {
     case .showClosedAgentsPalette, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showTaskPalette, .showSettings,
-      .toggleHelp:
+      .toggleHelp, .toggleBrowser:
       return true
     case .nextTab, .prevTab, .openEditor, .renameTab, .closeTab, .toggleEditorFace,
       .findInProject:
@@ -149,7 +152,8 @@ enum Keybindings {
     case "F": return .findInProject  // Cmd+Shift+F
     case "r": return .rename  // Cmd+R
     case "s": return .saveDocument  // Cmd+S
-    case "b": return .toggleEditorSidebar  // Cmd+B
+    case "b": return .toggleBrowser  // Cmd+B
+    case "B": return .toggleEditorSidebar  // Cmd+Shift+B
     case "p": return .toggleEditorItemList  // Cmd+P
     case "w": return .closeTab  // Cmd+W
     case "t": return .showWorktreePalette  // Cmd+T

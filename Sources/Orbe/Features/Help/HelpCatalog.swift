@@ -30,11 +30,12 @@ enum HelpCatalog {
         Row(key: "⌘H", label: .helpShortcutHelp, combo: ["cmd", "h"]),
         Row(key: "⌘,", label: .helpShortcutSettings, combo: ["cmd", ","]),
         Row(key: "⌘E", label: .helpShortcutToggleEditorFace, combo: ["cmd", "e"]),
+        Row(key: "⌘B", label: .helpShortcutToggleBrowser, combo: ["cmd", "b"]),
         // ⌥ だけの長押し。⌘⌘ と同じく画面に書けないジェスチャなので、ここに載せる。combo は ⌥ 単独（修飾のみの combo は
         // ⌘⌘ とこの 2 行）。
         Row(key: "⌥", label: .helpShortcutPeekTerminal, combo: ["opt"]),
         Row(key: "⌘S", label: .helpShortcutSaveDocument, combo: ["cmd", "s"]),
-        Row(key: "⌘B", label: .helpShortcutToggleEditorSidebar, combo: ["cmd", "b"]),
+        Row(key: "⌘⇧B", label: .helpShortcutToggleEditorSidebar, combo: ["cmd", "shift", "b"]),
         Row(key: "⌘P", label: .helpShortcutToggleEditorItemList, combo: ["cmd", "p"]),
         Row(key: "⌘⇧F", label: .helpShortcutFindInProject, combo: ["cmd", "shift", "f"]),
         Row(key: "↵", label: .helpShortcutScmCommit, combo: ["return"]),
