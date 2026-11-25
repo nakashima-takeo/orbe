@@ -143,6 +143,7 @@ let package = Package(
         .linkedFramework("CoreVideo"),
         .linkedFramework("Carbon"),
         .linkedFramework("JavaScriptCore"),
+        .linkedFramework("WebKit"),
         .linkedLibrary("stdc++"),
       ]
     ),

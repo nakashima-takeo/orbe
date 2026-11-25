@@ -1063,6 +1063,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutSettings
   case helpShortcutOpenEditor
   case helpShortcutToggleEditorFace
+  case helpShortcutToggleBrowser
   case helpShortcutPeekTerminal
   case helpShortcutSaveDocument
   case helpShortcutToggleEditorSidebar
@@ -1090,4 +1091,24 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutFontLarger
   case helpShortcutFontSmaller
   case helpShortcutFontReset
+
+  // MARK: - Browser（内蔵ブラウザ・L10nTable+Browser）
+  case browserBarBack
+  case browserBarForward
+  case browserBarReload
+  case browserBarStop
+  case browserBarURLPlaceholder
+  case browserBarSwitchToFull
+  case browserBarSwitchToSheet
+  case browserResizeTooltip
+  case browserSnapFull
+  case browserSnapClose
+  case browserPeekShowTerminal
+  case browserPeekShowEditor
+  case browserPeekShowBoard
+  case browserPeekShowWindow
+  case browserEmptyTitle
+  case browserEmptyLead
+  case browserEmptyShortcutClose
+  case browserEmptyShortcutReload
 }
