@@ -17,6 +17,7 @@ import XCTest
 ///
 /// P3: 絞り込んでいないツリーで、子のフォルダ 2,000 個（3 つに 1 つは中身がフォルダ 1 つだけ）のフォルダを開く 1 回と、面が
 /// 見え直したとき（⌘E で出し直す）の取り直し 1 回の main の時間。どちらも、行の組み立て（SwiftUI が描くときに読む）までを含む。
+/// 根は git の作業ツリー（先読みが走る根）で、根のサービスはほかの持ち手が握ったまま（見え直しで判定を待たない）。
 /// 連なりの先読みは裏で行うので、main の時間は先読みを入れる前の中央値 ＋ 2ms 以内に収める。入れる前の値は、同じ測定を
 /// macOS 27.2・負荷平均 約 40（並行のビルドあり）で、開く 17.4ms・取り直し 17.2ms（中央値）。
 @MainActor
@@ -34,18 +35,28 @@ final class FileTreePerfTests: OrbeTestCase {
       ProcessInfo.processInfo.environment["ORBE_EDITOR_PERF"] == "1", "ORBE_EDITOR_PERF=1 で走る")
   }
 
-  /// 根の下に `big`（子のフォルダ 2,000 個）を置いたツリー（見えている）。
+  /// ツリーの根のサービスの、ほかの持ち手。
+  private var service: RootFiles?
+
+  override func tearDownWithError() throws {
+    service = nil
+    try super.tearDownWithError()
+  }
+
+  /// git の作業ツリーの根の下に `big`（子のフォルダ 2,000 個）を置いたツリー（見えている）。
   private func bigTree() throws -> FileTree {
-    let root = TestScratch.caseDir.appendingPathComponent("tree")
-    let big = root.appendingPathComponent("big")
+    let repo = try TempGitRepo(name: "tree", initialCommit: false)
+    let big = repo.dir.appendingPathComponent("big")
     for index in 0..<Self.folders {
       var folder = big.appendingPathComponent(String(format: "f%04d", index))
       if index % 3 == 0 { folder.appendPathComponent("inner") }
       try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     }
-    let tree = FileTree(root: GitWorktreeRoot.normalizedPath(root.path))
+    service = RootFiles.shared(for: repo.root)
+    let tree = FileTree(root: repo.root)
     tree.isLive = true
     settle()
+    XCTAssertNotNil(service?.repo, "前提: 根は git の作業ツリー")
     return tree
   }
 
