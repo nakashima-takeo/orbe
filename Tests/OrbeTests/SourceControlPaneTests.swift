@@ -241,7 +241,7 @@ final class SourceControlPaneTests: OrbeTestCase {
 
   /// 欄の上限は既定の行の 10 行分の高さで、1 行が既定より高い文字（タイ文字）でも低くならない。
   func testTheMessageOfTallLinesStopsAtTheSameHeight() throws {
-    let field = MessageTextView(trailing: 5)
+    let field = MessageTextView(metrics: ScmMessageField.metrics)
     let line = try XCTUnwrap(field.layoutManager).defaultLineHeight(for: try XCTUnwrap(field.font))
     field.string = Array(repeating: "ปั้ญู", count: 12).joined(separator: "\n")
     XCTAssertEqual(

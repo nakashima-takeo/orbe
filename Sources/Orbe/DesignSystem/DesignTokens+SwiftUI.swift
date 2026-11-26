@@ -94,6 +94,7 @@ struct ThemeColors {
   let editorText = Color(nsColor: Theme.Color.editorText)
   let editorTertiary = Color(nsColor: Theme.Color.editorTertiary)
   let editorCaution = Color(nsColor: Theme.Color.editorCaution)
+  let editorOnDanger = Color(nsColor: Theme.Color.editorOnDanger)
   let editorBarGroove = Color(nsColor: Theme.Color.editorBarGroove)
   let editorBarInset = Color(nsColor: Theme.Color.editorBarInset)
   // git の変化の種類（エクスプローラーのバッジと名前）
@@ -145,6 +146,10 @@ struct ThemeFonts {
   let editorBarSwitch = Font(Theme.Typography.editorBarSwitch as CTFont)
   let editorBarCount = Font(Theme.Typography.editorBarCount as CTFont)
   let editorBarHint = Font(Theme.Typography.editorBarHint as CTFont)
+  let editorBarChip = Font(Theme.Typography.editorBarChip as CTFont)
+  let editorBarChipFilled = Font(Theme.Typography.editorBarChipFilled as CTFont)
+  let editorBarAction = Font(Theme.Typography.editorBarAction as CTFont)
+  let editorDockCard = Font(Theme.Typography.editorDockCard as CTFont)
   let editorKeyCap = Font(Theme.Typography.editorKeyCap as CTFont)
   let editorTextButton = Font(Theme.Typography.editorTextButton as CTFont)
   let editorDiffHeaderPath = Font(Theme.Typography.editorDiffHeaderPath as CTFont)

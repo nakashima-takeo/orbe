@@ -1,6 +1,7 @@
 import Foundation
 
-/// エディター面の上のバーの今の項目のボタンと、一覧の器（開いているファイルの一覧・変更ファイルの一覧）の文言分冊。本体 `L10n.table` が結合する。
+/// エディター面の上のバーの今の項目のボタンと、一覧の器（開いているファイルの一覧・変更ファイルの一覧）と、バーの右下の
+/// 置き場の札の文言分冊。本体 `L10n.table` が結合する。
 extension L10n {
   static let itemListTable: [L10nKey: (ja: String, en: String)] = [
     .editorBarOpenFiles: ("開いているファイルの一覧", "Open Files"),
@@ -18,5 +19,6 @@ extension L10n {
     .editorOpenFilesPreview: ("プレビュー", "Preview"),
     .editorOpenFilesKeepOpen: ("開いたままにする", "Keep Open"),
     .editorOpenFilesCloseFile: ("ファイルを閉じる", "Close File"),
+    .editorDockCardClose: ("閉じる", "Close"),
   ]
 }

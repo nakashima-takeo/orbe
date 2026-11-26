@@ -92,6 +92,17 @@ final class EditorPaneView: NSView {
   private(set) lazy var changedFilesList = ChangedFilesList(pane: self)
   /// 上のバーの今の項目のボタンの枠（バーの座標＝面の座標。ボタンが出ていなければ nil）。一覧の矩形の入力。
   var itemButtonFrame: CGRect?
+  /// ポップアップの器（上のバーの右端のボタンから、バーの右下に開く）と、ポップアップとその下に並ぶ札を置く host（バーより
+  /// 下の層）。
+  let popup = EditorPopup()
+  private(set) lazy var dockHost = EditorDockHost(rootView: dockRoot())
+  /// ポップアップを開く前のフォーカスの場所（閉じたら、きっかけが求めれば戻す）。
+  var popupReturn = FocusPlace.body
+  /// ポップアップが開いている間の、フォーカスの行き先の見張り。
+  var popupFocusWatch: EditorFocusWatch?
+  /// 上のバーの右端の主な操作のボタンの枠（ボタンの印ごと。バーの座標＝面の座標。今あるボタンの分だけ）。ポップアップの外の
+  /// 押下の判定の入力。
+  var actionButtonFrames: [UUID: CGRect] = [:]
   /// F4 / ⇧F4・PR の画面のキー v と、結果の列・一覧の器の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// 左の列の幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
@@ -105,7 +116,7 @@ final class EditorPaneView: NSView {
   /// 左の列と本体の境のドラッグの当たり。
   let sidebarHandle = SidebarResizeHandle()
   private(set) var localization = LocalizationStore(language: .systemDefault)
-  private var fontResolver = ChromeFontResolver()
+  private(set) var fontResolver = ChromeFontResolver()
   /// 面の workspace の実効設定（使う時点で読む。窓が連を作るときに配る）。
   var settings: () -> EffectiveSettings = { EffectiveSettings(SettingsLayer()) }
   /// 地の veil。設定パレットで不透明度を変えた直後も追従する（観測して再描画）。
@@ -167,6 +178,7 @@ final class EditorPaneView: NSView {
     wireSourceControl()
     wirePullRequest()
     wireItemList()
+    wireDock()
     observeSidebar()
     registerForDraggedTypes([.fileURL])
   }
@@ -215,6 +227,7 @@ final class EditorPaneView: NSView {
     itemListHost.rootView = EditorItemListRoot(
       itemList: itemList, localization: localization, fontResolver: fontResolver,
       translucency: translucency ?? ChromeTranslucency())
+    dockHost.rootView = dockRoot()
     itemList.emoji = fontResolver.emojiFont
   }
 
@@ -263,11 +276,13 @@ final class EditorPaneView: NSView {
     return nil
   }
 
-  /// 根が変わった（cd）。ツリーとソース管理パネルと PR のパネルを作り直し（前の根の PR は見るのをやめる）、握っていたなら
+  /// 根が変わった（cd）。ポップアップを閉じ（戻したフォーカスは、パネルが外れる前に本体へ移す決まりを通る）、ツリーと
+  /// ソース管理パネルと PR のパネルを作り直し（前の根の PR は見るのをやめる）、握っていたなら
   /// 握り直す（worktree の状態——メッセージ・操作・失敗——は worktree ごとに残るので、戻れば同じものが見える）。プロジェクト
   /// 検索は結果を捨て、この面の検索パネルが画面に見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
+    popup.close(.itemGone)
     tree.cancelNew()
     tree.isLive = false
     tree = FileTree(root: root)

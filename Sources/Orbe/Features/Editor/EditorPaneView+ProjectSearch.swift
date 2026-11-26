@@ -108,7 +108,8 @@ extension EditorPaneView {
   /// key equivalent として pane に届かずテキスト面の keyDown へ直行するので（テキスト面の契約は変えない）。結果の列の外を押したら、
   /// 待っている ↑↓ の開きを捨てる——人の注意が結果から移ったので、後から前の選択が開いて押したものを入れ替えない（焦点が
   /// 列に残る押下——上のバーのボタンなど——も含む）。一覧の器が開いていて、器と今の項目のボタンの外を押したら、器を閉じて
-  /// フォーカスを本体へ戻してから、押下をそのまま通す（押した先は今までどおり働く）。⌥ で透かしている間の押下では閉じない
+  /// フォーカスを本体へ戻してから、押下をそのまま通す（押した先は今までどおり働く）。ポップアップも同じで、置き場に並んでいる
+  /// 物と右端の主な操作のボタンの外を押したら閉じて、開く前の場所へフォーカスを戻す。⌥ で透かしている間の押下では閉じない
   /// （透かしている間のクリックはエディターに届かない）。
   func updateEventMonitor() {
     if window == nil {
@@ -139,6 +140,7 @@ extension EditorPaneView {
   /// 窓の押下 `event` が配られる手前（監視から）。
   func pressWillArrive(_ event: NSEvent) {
     if itemList.isOpen, !isPeeking, !pressIsOnItemList(event) { itemList.close(.outsidePress) }
+    if popup.isOpen, !isPeeking, !pressIsOnDock(event) { popup.close(.outsidePress) }
     if !press(event, isIn: searchResults) { projectSearch.navigation.drop() }
     if !press(event, isIn: scmList) { scm.navigation.drop() }
     if !press(event, isIn: pullRequestList) { pullRequest.navigation.drop() }

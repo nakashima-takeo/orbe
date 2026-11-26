@@ -55,6 +55,29 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
+  /// 上のバーの 3 つの画面の姿を、幅 1100 から 560 まで狭めていく。部品は譲る順のとおりに譲る——Changes は案内 →
+  /// コミットの添え書き → ブランチ名の省略 → ブランチ名の札、PR は案内 →「→ ベース」→ ブランチ名の省略 → PR の札、
+  /// Files は案内 → 検索の欄の幅 → 親のパス → 名前の省略。
+  func testEditorBarNarrowing() throws {
+    var width: CGFloat = 1100
+    let steps = [1100, 1000, 900, 800, 700, 640, 600, 560].map { next in
+      (label: "w\(next)", action: { width = CGFloat(next) })
+    }
+    try flow(
+      "editor_bar_narrowing", size: NSSize(width: 1100, height: 148),
+      render: {
+        VStack(alignment: .leading, spacing: 8) {
+          ForEach([EditorScreen.changes, .pullRequest, .files], id: \.self) { screen in
+            EditorShellFixtures.bar(screen).frame(width: width)
+          }
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.theme.bgBase)
+        .environment(\.localization, LocalizationStore(language: .ja))
+      }, steps: steps)
+  }
+
   /// 低い窓: 浅い文書から深い文書へ切り替えるとツリーがその行まで送り、新規入力の行も可視位置に生まれる。
   /// 撮り直しのたびに面を別の窓へ載せ替えると ScrollView の位置が戻るので、この flow だけは面を付けた窓の
   /// 中でそのまま描く（操作 → 描画の順は `flow` と同じ）。
@@ -143,6 +166,36 @@ extension ShotTestCase {
 }
 
 extension DesignFlowSnapshotTests {
+  /// 置き場のポップアップ（仮の中身）を本物の面で開閉する: 右端のボタンに当たる開閉で開く → 打つ → esc で閉じる → 開く →
+  /// ⌘P で一覧を開く（ポップアップは閉じる）→ esc → 開く → 地の外にメニューを並べる → ⌘↵ で閉じる。面を付けた窓の中で
+  /// 描く（窓から外れると閉じる）。
+  func testEditorDock() throws {
+    let size = NSSize(width: 1100, height: 640)
+    let scene = try openFilesScene(size: size)
+    defer { scene.cleanup() }
+    let pane = scene.pane
+    let owner = EditorShellFixtures.DockPopupOwner(popup: pane.popup)
+    try renderInPlace(
+      pane, name: "editor_dock", dir: previewDir("flows"), appearances: [true, false],
+      steps: [
+        ("open", { pane.popup.toggle(owner) }),
+        (
+          "typed",
+          {
+            owner.field.insertText(
+              "fix: 置き場の仮の中身", replacementRange: NSRange(location: NSNotFound, length: 0))
+          }
+        ),
+        ("escape", { owner.field.keyDown(with: .key("\u{1b}", [])) }),
+        ("reopen", { pane.popup.toggle(owner) }),
+        ("item_list", { _ = pane.performKeyEquivalent(with: .key("p")) }),
+        ("item_list_closed", { self.listKey(pane, "\u{1b}") }),
+        ("reopen_again", { pane.popup.toggle(owner) }),
+        ("menu", { owner.showsMenu = true }),
+        ("command_return", { _ = pane.performKeyEquivalent(with: .key("\r")) }),
+      ])
+  }
+
   /// ボタンを押す → ↓ → ↵ で切り替わる → ⌘P で開く → → で詳細 → ← → × で閉じる → esc。左の列を閉じた姿でも開く。
   func testEditorShellOpenFiles() throws {
     let size = NSSize(width: 1100, height: 640)
