@@ -63,7 +63,7 @@ final class FileTreeFilter {
   @ObservationIgnored private var isMatching = false
   /// 照合が走っている間に変わった、いちばん新しい字。
   @ObservationIgnored private var pendingText: String?
-  @ObservationIgnored private var wait: DispatchWorkItem?
+  @ObservationIgnored let waitDelay = EditorDelay()
 
   init(root: String) {
     self.root = URL(fileURLWithPath: root, isDirectory: true)
@@ -85,7 +85,7 @@ final class FileTreeFilter {
     text = next
     if isActive == next.isEmpty { isActive = !next.isEmpty }
     if !collapsed.isEmpty { collapsed = [] }
-    wait?.cancel()
+    waitDelay.cancel()
     guard !next.isEmpty else {
       result = nil
       isWaiting = false
@@ -93,12 +93,10 @@ final class FileTreeFilter {
     }
     if isStale, let files { relist(files) }
     match(next)
-    let wait = DispatchWorkItem { [weak self] in
+    waitDelay.run(after: Self.waitDelay) { [weak self] in
       guard let self, isActive, result?.text != text, !listFailed else { return }
       isWaiting = true
     }
-    self.wait = wait
-    DispatchQueue.main.asyncAfter(deadline: .now() + Self.waitDelay, execute: wait)
   }
 
   /// 連なりの先頭 `head` のフォルダの行を開閉する（選択は動かさない）。
@@ -215,7 +213,7 @@ final class FileTreeFilter {
   /// 届いた結果。今の字の結果であるときだけ受け取り、前と同じなら書かない。
   func receive(_ next: Result) {
     guard next.text == text else { return }
-    wait?.cancel()
+    waitDelay.cancel()
     if isWaiting { isWaiting = false }
     if next != result { result = next }
   }
