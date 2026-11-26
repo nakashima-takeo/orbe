@@ -5,14 +5,16 @@ import XCTest
 @testable import Orbe
 
 /// 面に載せたレビューのポップアップ——PR の一覧の ⌘↑ は、選んでいる行に依らずポップアップを開き、全体へのコメント欄に焦点を
-/// 入れ、送って閉じれば焦点は一覧へ戻る。開いたときの PR のまま知らせが届いても、失敗の札が出入りしても閉じず、PR が替われば
-/// 閉じる。書きかけは閉じても残り、開き直した欄はそこから始まる。
+/// 入れ、送って閉じれば焦点は一覧へ戻る。開いたときの PR のまま知らせが届いても、失敗の札が出入りしても閉じず、PR が替わるか
+/// open でなくなれば閉じる（open でない PR へは送れない）。書きかけは閉じても残り、開き直した欄はそこから始まる。欄の esc は
+/// 変換中でなければ閉じ、その後に押し続けて届いた esc は、戻った一覧に届かない。
 ///
 /// 壊れると何が起きるか: 一覧でファイルを見ながらマウスを使わずにレビューを書き始められない。先頭より下の行を選んでいると
 /// ⌘↑ が効かない。開いても欄に焦点が入らず、打鍵が一覧へ入る。送った後に焦点が本文へ移り、↑↓ で続けてファイルを見られない。
 /// 面を隠している間に PR が替わった後、チェックを付けるたびにポップアップが閉じて、変換中の字が確定する。失敗の札が出入り
-/// するたびに欄が作り直され、打った字と焦点が消える。閉じて開き直すと書きかけが消えている。esc で閉じられない。ブランチを
-/// 切り替えても前の PR のポップアップが開いたまま残り、前の PR の書きかけを次の PR に送る。
+/// するたびに欄が作り直され、打った字と焦点が消える。閉じて開き直すと書きかけが消えている。esc で閉じられない・変換を
+/// 取り消すつもりの esc でポップアップが閉じる・esc を押し続けると戻った一覧の選択が外れる。ブランチを切り替えても前の PR の
+/// ポップアップが開いたまま残り、前の PR の書きかけを次の PR に送る。マージ・クローズの後もポップアップが残り、⌘↵ で送れる。
 extension PullRequestPaneTests {
   /// 先頭でないファイルの行を選んだ一覧で ⌘↑ を押すと、レビューのポップアップが開き、全体へのコメント欄に焦点が入る。書いて
   /// ⌘↵ で送ると、焦点は一覧へ戻り、選択は開く前のまま。
@@ -108,7 +110,8 @@ extension PullRequestPaneTests {
   }
 
   /// 変換中の esc では閉じない。閉じても書きかけは残り（変換中の字は確定して入る）、開き直した全体へのコメント欄は新しい欄で、
-  /// 書きかけから始まる。欄の esc で閉じると、焦点は開く前に在った一覧へ戻り、押し続けて届いた esc は一覧の選択を外さない。
+  /// 書きかけから始まる。欄の esc で閉じると、焦点は開く前に在った一覧へ戻り、その後に押し続けて届いた esc は、押し続けでない
+  /// 打鍵が来るまで捨てる。
   func testAReopenedReviewStartsAFreshFieldFromTheDraftAndEscapeClosesIt() throws {
     let hosted = host(try registeredRoot())
     shownWithRows(hosted)
@@ -134,17 +137,15 @@ extension PullRequestPaneTests {
     XCTAssertEqual(second.string, "前のかきかけ", "書きかけから始まる")
     XCTAssertFalse(second.hasMarkedText())
 
-    let selection = try XCTUnwrap(hosted.pane.pullRequest.selection, "前提: 一覧の行を選んでいる")
     escape(false)
     XCTAssertFalse(review.isOpen, "esc で閉じる")
     pumpMain(until: { hosted.window.firstResponder === hosted.list }, "焦点は一覧へ戻る")
     XCTAssertEqual(state.reviewDraft.body, "前のかきかけ", "esc で閉じても書きかけは残る")
-    XCTAssertTrue(
-      hosted.pane.escapeRepeatIsSwallowed(.key("\u{1b}", [], isRepeat: true)),
-      "押し続けて届いた esc は、窓の監視が捨てる（窓の sendEvent で送るテストの経路は監視を通らない）")
-    XCTAssertEqual(hosted.pane.pullRequest.selection, selection, "選択は外れない")
-    escape(false)
-    XCTAssertNil(hosted.pane.pullRequest.selection, "前提: 一覧で押した esc は選択を外す")
+    // 押し続けた esc を捨てるのは窓のイベントの監視で、テストから窓へ送るキーはそこを通らないので、監視の判定を見る。
+    let repeated = NSEvent.key("\u{1b}", [], isRepeat: true)
+    XCTAssertTrue(hosted.pane.escapeRepeatIsSwallowed(repeated), "押し続けて届いた esc は捨てる")
+    XCTAssertFalse(hosted.pane.escapeRepeatIsSwallowed(.key("j", [])), "前提: 押し続けでない打鍵は届く")
+    XCTAssertFalse(hosted.pane.escapeRepeatIsSwallowed(repeated), "押し続けでない打鍵の後は捨てない")
   }
 
   /// 開いている間に PR が open でなくなる（マージされた）と、ポップアップは閉じ、開き直せず、送れない。

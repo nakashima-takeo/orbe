@@ -79,7 +79,7 @@ final class PullRequestPaneTests: OrbeTestCase {
           if holdsContents { held.append(answer) } else { answer() }
         },
         setViewed: { _, _, _, _ in },
-        review: { [head] _, completion in
+        review: { [unowned self] _, completion in
           completion(
             .success(
               GitHubPullRequestReview(
