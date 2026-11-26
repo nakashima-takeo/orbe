@@ -13,6 +13,8 @@ struct SearchPanelView: View {
 
   var body: some View {
     EditorSidebarPanel {
+      Diag509Mark(
+        "search body fieldFocused=\(fieldFocused) req=\(String(describing: search.focusRequest))")
       SearchPanelHeader(search: search)
       ProjectSearchField(search: search, focus: $fieldFocused)
       if let error = search.error {
@@ -27,7 +29,10 @@ struct SearchPanelView: View {
       SearchResultsList(search: search, results: results)
       SearchSummary(search: search)
     }
-    .onChange(of: fieldFocused) { _, focused in search.focusDidChange(.field, focused: focused) }
+    .onChange(of: fieldFocused) { old, focused in
+      Diag509.log("onChange fieldFocused \(old)->\(focused)")
+      search.focusDidChange(.field, focused: focused)
+    }
     .onChange(of: search.focusRequest) { _, _ in applyFocusRequest() }
     .onAppear(perform: applyFocusRequest)
     .onDisappear(perform: search.panelDidHide)
@@ -35,8 +40,13 @@ struct SearchPanelView: View {
 
   /// 入力欄への要求を当てる（結果の列への要求は列が当てる）。
   private func applyFocusRequest() {
+    Diag509.log(
+      "apply request=\(String(describing: search.focusRequest)) before=\(fieldFocused)")
     guard search.focusRequest == .field else { return }
     fieldFocused = true
+    Diag509.log("apply after set fieldFocused=\(fieldFocused)")
+    DispatchQueue.main.async { Diag509.log("apply next turn (main queue)") }
+    RunLoop.main.perform { Diag509.log("apply next turn (run loop)") }
     search.focusRequestDidApply()
   }
 

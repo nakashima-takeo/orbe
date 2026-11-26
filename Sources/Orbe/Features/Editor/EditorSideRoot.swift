@@ -29,10 +29,17 @@ struct EditorSideRoot: View {
     // GeometryReader は中身の最小幅に縛られず host の幅を取る——エクスプローラーのヘッダー（3 ボタン）より狭く切り詰め
     // られても root が中央寄せで左へずれない。溢れは右で、切り落とす。
     GeometryReader { _ in
+      Diag509Mark("side body panel=\(shell.panel) open=\(sidebar.isOpen)")
       if sidebar.isOpen {
         switch shell.panel {
-        case .files: ExplorerView(shell: shell, tree: tree)
-        case .search: SearchPanelView(search: search, results: searchResults)
+        case .files:
+          ExplorerView(shell: shell, tree: tree)
+            .onAppear { Diag509.log("explorer appear") }
+            .onDisappear { Diag509.log("explorer disappear") }
+        case .search:
+          SearchPanelView(search: search, results: searchResults)
+            .onAppear { Diag509.log("search panel appear (outer)") }
+            .onDisappear { Diag509.log("search panel disappear (outer)") }
         case .sourceControl:
           ScmPanelView(panel: scm, list: scmList, graphList: scmGraphList, sidebar: sidebar)
         case .pullRequest:
