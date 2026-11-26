@@ -10,8 +10,6 @@ struct EditorSideRoot: View {
   /// 検索結果の列（pane が持ち、パネルが隠れても捨てない）。
   let searchResults: RowList<SearchResultsSource>
   let scm: ScmPanel
-  /// コミットのポップアップの持ち主（ソース管理パネルの失敗の文の出し分けが、開いているかを読む）。
-  let commitPopup: ScmCommitPopup
   /// ソース管理の変更の列とグラフの列（検索結果の列と同じく pane が持つ）。
   let scmList: RowList<ScmListSource>
   let scmGraphList: RowList<ScmGraphSource>
@@ -33,9 +31,7 @@ struct EditorSideRoot: View {
         case .files: ExplorerView(shell: shell, tree: tree)
         case .search: SearchPanelView(search: search, results: searchResults)
         case .sourceControl:
-          ScmPanelView(
-            panel: scm, commitPopup: commitPopup, list: scmList, graphList: scmGraphList,
-            sidebar: sidebar)
+          ScmPanelView(panel: scm, list: scmList, graphList: scmGraphList, sidebar: sidebar)
         case .pullRequest:
           PrPanelView(panel: pullRequest, list: pullRequestList, header: pullRequestHeader)
         }

@@ -769,9 +769,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorScmDiscardTitleOne
   case editorScmDiscardTitleOther
   case editorScmDiscardMessage
+  case editorScmDiscardMessageWithTrash
   case editorScmDiscardToTrashOne
   case editorScmDiscardToTrashOther
   case editorScmDiscardConfirm
+  case editorScmFailureCard
   case editorScmFailureAuthentication
   case editorScmFailureHostKey
   case editorScmFailurePushRejected

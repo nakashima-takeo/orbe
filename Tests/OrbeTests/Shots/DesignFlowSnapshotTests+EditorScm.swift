@@ -5,9 +5,9 @@ import XCTest
 @testable import Orbe
 
 /// ソース管理パネルの flow（fixture は `ScmFixtures`——本物の git の場。状態は本物の操作が生む）:
-/// 初期状態（ステージ済み 1・変更 3・未 push 3 と origin 2 のグラフ、変更の行を選ぶ）→ 子の区分を畳む → 返らない
-/// pre-commit hook のコミットで実行中の帯 → 止める → upstream の無いブランチのプルの失敗の文 → 端末でコミットして変更なし（グラフだけ・同期 ↑N ↓M）→ push して先行も遅れも
-/// 無い（数の無い同期）→ upstream の無いブランチ（ブランチを公開）→ git 管理外。
+/// 初期状態（ステージ済み 1・変更 3・未 push 3 と origin 2 のグラフ、変更の行を選ぶ）→ 子の区分を畳む → 端末でコミットして
+/// 変更なし（「変更なし」の一言とグラフ・同期 ↑N ↓M）→ push して先行も遅れも無い（数の無い同期）→ upstream の無いブランチ
+/// （ブランチを公開）→ git 管理外。実行中の札・失敗の札・破棄の確認は、窓に付けた面の中で撮る `testEditorScmActions`。
 extension DesignFlowSnapshotTests {
   func testEditorScm() throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -22,7 +22,7 @@ extension DesignFlowSnapshotTests {
     try flow(
       "editor_scm", size: NSSize(width: 1100, height: 640), render: { shown },
       until: { panel.isHeadPushed != nil || panel.branch?.commit == nil },
-      steps: panelSteps(scene) + gitSteps(scene) + branchSteps(scene) + [
+      steps: panelSteps(scene) + branchSteps(scene) + [
         ("not_managed", { shown = AnyView(plain.view) })
       ])
   }
@@ -43,43 +43,6 @@ extension DesignFlowSnapshotTests {
         {
           panel.toggle(.staged)
           pumpMain(until: { panel.layout.items.count == 5 }, "畳んだ行の組")
-        }
-      ),
-    ]
-  }
-
-  /// 本物の git の操作で作る状態——実行中の帯と止める・失敗の文。
-  private func gitSteps(_ scene: ScmFixtures.Scene) -> [(label: String, action: () -> Void)] {
-    let panel = scene.panel
-    let control = panel.control
-    let git = scene.git
-    return [
-      (
-        "running",
-        {
-          panel.toggle(.staged)
-          try? Self.hangingHook(in: scene.directory)
-          control.message = "wip"
-          panel.commitSnapshot().commit()
-          pumpMain(until: { control.bandOperation != nil }, "帯が出る")
-        }
-      ),
-      (
-        "stopped",
-        {
-          control.bandOperation?.stop()
-          pumpMain(until: { control.operations.isEmpty }, "止めた")
-          try? FileManager.default.removeItem(
-            at: scene.directory.appendingPathComponent(".git/hooks/pre-commit"))
-        }
-      ),
-      (
-        "failure",
-        {
-          try? git(["branch", "--unset-upstream"])
-          pumpMain(until: { panel.branch?.upstream == nil }, "upstream が外れる")
-          control.pull()
-          pumpMain(until: { control.failure != nil }, "失敗の文")
         }
       ),
     ]
@@ -128,13 +91,6 @@ extension DesignFlowSnapshotTests {
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     try Data("plain\n".utf8).write(to: dir.appendingPathComponent("notes.txt"))
     return ScmPlainScene(directory: dir, queriesRoot: queriesRoot)
-  }
-
-  /// 返らない pre-commit hook（止めるまで待つ。60 秒で自分から抜ける）。
-  private static func hangingHook(in directory: URL) throws {
-    let hook = directory.appendingPathComponent(".git/hooks/pre-commit")
-    try Data("#!/bin/sh\nsleep 60\n".utf8).write(to: hook)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
   }
 }
 

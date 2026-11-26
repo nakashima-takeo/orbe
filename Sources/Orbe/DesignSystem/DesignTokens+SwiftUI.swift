@@ -97,6 +97,7 @@ struct ThemeColors {
   let editorOnDanger = Color(nsColor: Theme.Color.editorOnDanger)
   let editorBarGroove = Color(nsColor: Theme.Color.editorBarGroove)
   let editorBarInset = Color(nsColor: Theme.Color.editorBarInset)
+  let editorConfirmVeil = Color(nsColor: Theme.Color.editorConfirmVeil)
   // git の変化の種類（エクスプローラーのバッジと名前・コミットのボタンのステージ済みの行数）
   let diffAdded = Color(nsColor: Theme.Color.diffAdded)
   let diffRemoved = Color(nsColor: Theme.Color.diffRemoved)
@@ -151,6 +152,7 @@ struct ThemeFonts {
   let editorBarChipFilled = Font(Theme.Typography.editorBarChipFilled as CTFont)
   let editorBarAction = Font(Theme.Typography.editorBarAction as CTFont)
   let editorDockCard = Font(Theme.Typography.editorDockCard as CTFont)
+  let editorRunningProgress = Font(Theme.Typography.editorRunningProgress as CTFont)
   let editorSyncCount = Font(Theme.Typography.editorSyncCount as CTFont)
   let editorCommitPrompt = Font(Theme.Typography.editorCommitPrompt as CTFont)
   let editorKeyCap = Font(Theme.Typography.editorKeyCap as CTFont)
@@ -173,9 +175,6 @@ struct ThemeFonts {
   // エディター面のソース管理
   let editorScmSection = Font(Theme.Typography.editorScmSection as CTFont)
   let editorScmNote = Font(Theme.Typography.editorScmNote as CTFont)
-  let editorScmBandName = Font(Theme.Typography.editorScmBandName as CTFont)
-  let editorScmBandProgress = Font(Theme.Typography.editorScmBandProgress as CTFont)
-  let editorScmStop = Font(Theme.Typography.editorScmStop as CTFont)
   // エディター面の PR のパネル
   let editorPrTitle = Font(Theme.Typography.editorPrTitle as CTFont)
   let editorPrMeta = Font(Theme.Typography.editorPrMeta as CTFont)

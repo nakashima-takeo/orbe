@@ -57,19 +57,18 @@ extension EditorPaneView {
     }
   }
 
-  /// 破棄。戻すパスを含めば確認のシートを出し、確認した中身（見えていた行と行き先）をそのまま渡す（応答までに status が
-  /// 変わっても、根のサービスが呼んだ時点の index で選び直し、見えていた行き先と違えば断る）。ゴミ箱へ移すものだけなら
+  /// 破棄。戻すパスを含めば面の中の確認を出し、「破棄」で、確認した中身（見えていた行と行き先）をそのまま渡す（確定までに
+  /// status が変わっても、根のサービスが呼んだ時点の index で選び直し、見えていた行き先と違えば断る）。ゴミ箱へ移すものだけなら
   /// そのまま。
   func confirmDiscard(_ files: [ScmChanges.File]) {
     let scm = self.scm
     let content = ScmDiscardGate.content(files)
-    guard ScmDiscardGate.needsConfirmation(files), let window else {
+    guard ScmDiscardGate.needsConfirmation(files) else {
       scm.discard(content)
       return
     }
-    let alert = ScmDiscardGate.alert(files, language: localization.language)
-    alert.beginSheetModal(for: window) { response in
-      if ScmDiscardGate.shouldDiscard(response) { scm.discard(content) }
+    confirm.show(ScmDiscardGate.confirmation(files, language: localization.language)) {
+      scm.discard(content)
     }
   }
 

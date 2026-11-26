@@ -9,6 +9,8 @@ struct EditorDockRoot: View {
   let shell: EditorShellModel
   /// ポップアップの器（開閉と、載せる側の持ち主）。
   let popup: EditorPopup
+  /// コミットのポップアップの持ち主（Changes の札が、ソース管理の状態と、ポップアップが開いているかを読む）。
+  let commitPopup: ScmCommitPopup
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
   let translucency: ChromeTranslucency

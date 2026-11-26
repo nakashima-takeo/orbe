@@ -36,7 +36,10 @@ final class EditorPaneView: NSView {
   let belowGround = NSView()
   /// 器が透かしている（上のバーの「⌥ 端末を表示」を押している間の姿にする）。
   var isPeeking = false {
-    didSet { shell.isPeeking = isPeeking }
+    didSet {
+      shell.isPeeking = isPeeking
+      confirmHost.alphaValue = isPeeking ? 0 : 1
+    }
   }
   let sideHost: NSHostingView<EditorSideRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
@@ -101,6 +104,11 @@ final class EditorPaneView: NSView {
   var popupReturn = FocusPlace.body
   /// ポップアップが開いている間の、フォーカスの行き先の見張り。
   var popupFocusWatch: EditorFocusWatch?
+  /// 面の中の確認の器と、その host（面の最前面）。確認を出す前のフォーカスの場所と、出ている間のフォーカスの見張り。
+  let confirm = EditorConfirm()
+  private(set) lazy var confirmHost = EditorConfirmHost(confirm: confirm, root: confirmRoot())
+  var confirmReturn = FocusPlace.body
+  var confirmFocusWatch: EditorFocusWatch?
   /// 上のバーの右端の主な操作のボタンの枠（ボタンの印ごと。バーの座標＝面の座標。今あるボタンの分だけ）。ポップアップの外の
   /// 押下の判定の入力。
   var actionButtonFrames: [UUID: CGRect] = [:]
@@ -152,8 +160,7 @@ final class EditorPaneView: NSView {
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-        commitPopup: commitPopup, scmList: scmList, scmGraphList: scmGraphList,
-        pullRequest: pullRequest,
+        scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
         pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
     faceHost = NSHostingView(
@@ -183,6 +190,7 @@ final class EditorPaneView: NSView {
     wirePullRequest()
     wireItemList()
     wireDock()
+    wireConfirm()
     observeSidebar()
     registerForDraggedTypes([.fileURL])
   }
@@ -223,8 +231,7 @@ final class EditorPaneView: NSView {
       localization: localization, fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-      commitPopup: commitPopup, scmList: scmList, scmGraphList: scmGraphList,
-      pullRequest: pullRequest,
+      scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
       pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
       localization: localization, fontResolver: fontResolver)
     faceHost.rootView = faceRoot(faceContent)
@@ -233,6 +240,7 @@ final class EditorPaneView: NSView {
       itemList: itemList, localization: localization, fontResolver: fontResolver,
       translucency: translucency ?? ChromeTranslucency())
     dockHost.rootView = dockRoot()
+    confirmHost.root = confirmRoot()
     itemList.emoji = fontResolver.emojiFont
   }
 
@@ -281,12 +289,14 @@ final class EditorPaneView: NSView {
     return nil
   }
 
-  /// 根が変わった（cd）。ポップアップを閉じ（戻したフォーカスは、パネルが外れる前に本体へ移す決まりを通る）、ツリーと
-  /// ソース管理パネル（とコミットのポップアップの持ち主）と PR のパネルを作り直し（前の根の PR は見るのをやめる）、握っていたなら
-  /// 握り直す（worktree の状態——メッセージ・操作・失敗——は worktree ごとに残るので、戻れば同じものが見える）。プロジェクト
-  /// 検索は結果を捨て、この面の検索パネルが画面に見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
+  /// 根が変わった（cd）。面の中の確認をキャンセルで閉じ、ポップアップを閉じ（戻したフォーカスは、パネルが外れる前に本体へ
+  /// 移す決まりを通る）、ツリーとソース管理パネル（とコミットのポップアップの持ち主）と PR のパネルを作り直し（前の根の PR は
+  /// 見るのをやめる）、握っていたなら握り直す（worktree の状態——メッセージ・操作・失敗——は worktree ごとに残るので、戻れば
+  /// 同じものが見える）。プロジェクト検索は結果を捨て、この面の検索パネルが画面に見えていれば今の問いで検索し直す（裏の連の
+  /// cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
+    confirm.close(.itemGone)
     popup.close(.itemGone)
     tree.cancelNew()
     tree.isLive = false
