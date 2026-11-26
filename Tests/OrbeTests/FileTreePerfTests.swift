@@ -15,18 +15,16 @@ import XCTest
 /// 総入れ替えになる 2 つの結果を交互に受け取る）。1 万件は p95 33ms 以下、200 件は p95 16ms 以下。あわせて、材料（5 万件）を
 /// 持ったツリーで、欄への打鍵 1 回から次の runloop までの main の時間を記録する（照合は裏なので、一覧の大きさに比例しない）。
 ///
-/// P3: 絞り込んでいないツリーで、子のフォルダ 2,000 個（3 つに 1 つは中身がフォルダ 1 つだけ）のフォルダを開く 1 回と、面が
-/// 見え直したとき（⌘E で出し直す）の取り直し 1 回の main の時間。どちらも、行の組み立て（SwiftUI が描くときに読む）までを含む。
-/// 根は git の作業ツリー（先読みが走る根）で、根のサービスはほかの持ち手が握ったまま（見え直しで判定を待たない）。
-/// 連なりの先読みは裏で行うので、main の時間は先読みを入れる前の中央値 ＋ 2ms 以内に収める。入れる前の値は、同じ測定を
-/// macOS 27.2・負荷平均 約 40（並行のビルドあり）で、開く 17.4ms・取り直し 17.2ms（中央値）。
+/// P3: 連なりの先読みと連なりの行を足しても、絞り込んでいないツリーの main の時間が増えないこと。子のフォルダ 2,000 個（3 つに
+/// 1 つは中身がフォルダ 1 つだけ）のフォルダを開く 1 回と、面が見え直したとき（⌘E で出し直す）の取り直し 1 回の main の時間を、
+/// 行の組み立て（SwiftUI が描くときに読む）まで含めて計る。同じ 1 回の実行の中で、git の作業ツリーの根（先読みが走り、連なりの
+/// 行が出る）と、git の外の根（どちらも無い）を 1 回ずつ交互に計り、同じ回の 2 つの差（git の根 − git の外の根）の中央値は
+/// 2ms 以内。どちらの根も、根のサービスはほかの持ち手が握ったまま（見え直しで判定を待たない）。
 @MainActor
 final class FileTreePerfTests: OrbeTestCase {
   private static let folders = 2_000
   private static let rounds = 21
-  /// 先読みを入れる前の中央値（ms）と、それに許す増分。
-  private static let openBefore = 17.4
-  private static let relistBefore = 17.2
+  /// git の根に許す、git の外の根からの増分（ms）。
   private static let allowance = 2.0
 
   override func setUpWithError() throws {
@@ -36,28 +34,49 @@ final class FileTreePerfTests: OrbeTestCase {
   }
 
   /// ツリーの根のサービスの、ほかの持ち手。
-  private var service: RootFiles?
+  private var services: [RootFiles] = []
 
   override func tearDownWithError() throws {
-    service = nil
+    services = []
     try super.tearDownWithError()
   }
 
-  /// git の作業ツリーの根の下に `big`（子のフォルダ 2,000 個）を置いたツリー（見えている）。
-  private func bigTree() throws -> FileTree {
+  /// 根の下に `big`（子のフォルダ 2,000 個）を置いたツリー（見えている）を、git の作業ツリーの根と git の外の根で 1 つずつ。
+  private func bigTrees() throws -> (git: FileTree, plain: FileTree) {
     let repo = try TempGitRepo(name: "tree", initialCommit: false)
-    let big = repo.dir.appendingPathComponent("big")
-    for index in 0..<Self.folders {
-      var folder = big.appendingPathComponent(String(format: "f%04d", index))
-      if index % 3 == 0 { folder.appendPathComponent("inner") }
-      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let outside = TestScratch.caseDir.appendingPathComponent("plain-\(UUID().uuidString)")
+    var trees: [FileTree] = []
+    for dir in [repo.dir, outside] {
+      let big = dir.appendingPathComponent("big")
+      for index in 0..<Self.folders {
+        var folder = big.appendingPathComponent(String(format: "f%04d", index))
+        if index % 3 == 0 { folder.appendPathComponent("inner") }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+      }
+      let root = GitWorktreeRoot.normalizedPath(dir.path)
+      services.append(RootFiles.shared(for: root))
+      let tree = FileTree(root: root)
+      tree.isLive = true
+      trees.append(tree)
     }
-    service = RootFiles.shared(for: repo.root)
-    let tree = FileTree(root: repo.root)
-    tree.isLive = true
+    let (git, plain) = (trees[0], trees[1])
+    pumpMain(until: { self.services[0].repo != nil }, "前提: 片方の根は git の作業ツリー")
+    XCTAssertNil(services[1].repo, "前提: もう片方の根は git の外")
+    // git の根で `big` の子の連なりが先読みで出るまで待つ。以後の回は、開いた時点で覚えから連なりの行が出る。
+    git.toggle("big")
+    pumpMain(until: { self.chainRows(git) == Self.folders / 3 + 1 }, "前提: git の根では連なりの行が出る")
+    git.toggle("big")
+    plain.toggle("big")
     settle()
-    XCTAssertNotNil(service?.repo, "前提: 根は git の作業ツリー")
-    return tree
+    XCTAssertEqual(chainRows(plain), 0, "前提: git の外の根では連なりの行が出ない")
+    plain.toggle("big")
+    settle()
+    return (git, plain)
+  }
+
+  /// 連なりの行の数。
+  private func chainRows(_ tree: FileTree) -> Int {
+    tree.rows.filter { !$0.prefix.isEmpty }.count
   }
 
   /// 裏から届く仕事を捌き終えるまで main を回す（計る 1 回に、前の回の残りを混ぜない）。
@@ -159,39 +178,57 @@ final class FileTreePerfTests: OrbeTestCase {
   // MARK: - P3
 
   func testOpeningAFolderOfTwoThousandFolders() throws {
-    let tree = try bigTree()
-    var times: [Double] = []
-    for _ in 0..<Self.rounds {
-      times.append(
-        time {
-          tree.toggle("big")
-          _ = tree.rows
-        })
+    let trees = try bigTrees()
+    compare("open-2000-folders", trees) { tree in
+      let elapsed = time {
+        tree.toggle("big")
+        _ = tree.rows
+      }
       XCTAssertEqual(tree.rows.count, Self.folders + 1, "前提: 2,000 個の子が出る")
       settle()
       tree.toggle("big")
       settle()
+      return elapsed
     }
-    reportPerf("P3", "open-2000-folders", times, digits: 2)
-    XCTAssertLessThanOrEqual(median(times), Self.openBefore + Self.allowance)
   }
 
   func testRelistingOnShowWithTwoThousandFolders() throws {
-    let tree = try bigTree()
-    tree.toggle("big")
+    let trees = try bigTrees()
+    trees.git.toggle("big")
+    trees.plain.toggle("big")
     settle()
-    var times: [Double] = []
-    for _ in 0..<Self.rounds {
+    compare("relist-on-show-2000-folders", trees) { tree in
       tree.isLive = false
-      times.append(
-        time {
-          tree.isLive = true
-          _ = tree.rows
-        })
+      let elapsed = time {
+        tree.isLive = true
+        _ = tree.rows
+      }
       settle()
+      return elapsed
     }
-    reportPerf("P3", "relist-on-show-2000-folders", times, digits: 2)
-    XCTAssertLessThanOrEqual(median(times), Self.relistBefore + Self.allowance)
+  }
+
+  /// 2 つの根で `measure` を 1 回ずつ、先に計る根を回ごとに入れ替えて `rounds` 回計り、時間を出す。同じ回の 2 つの差（git の
+  /// 根 − git の外の根）の中央値が `allowance` 以内かを確かめる——隣り合って計った 2 つを比べ、実行の中の負荷の揺れを差から除く。
+  private func compare(
+    _ name: String, _ trees: (git: FileTree, plain: FileTree), _ measure: (FileTree) -> Double
+  ) {
+    var git: [Double] = []
+    var plain: [Double] = []
+    for round in 0..<Self.rounds {
+      if round % 2 == 0 {
+        git.append(measure(trees.git))
+        plain.append(measure(trees.plain))
+      } else {
+        plain.append(measure(trees.plain))
+        git.append(measure(trees.git))
+      }
+    }
+    let differences = zip(git, plain).map { $0 - $1 }
+    reportPerf("P3", name + "-git", git, digits: 2)
+    reportPerf("P3", name + "-plain", plain, digits: 2)
+    reportPerf("P3", name + "-difference", differences, digits: 2)
+    XCTAssertLessThanOrEqual(median(differences), Self.allowance, name)
   }
 
   private func median(_ times: [Double]) -> Double {
