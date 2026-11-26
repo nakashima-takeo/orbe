@@ -77,7 +77,11 @@ final class PullRequestState {
   }
   /// 最後に読めた中身と、その変更ファイルの並び・パスからの索引（中身を読んだときに作り直す）。
   private(set) var content: GitHubPullRequestContent?
-  private(set) var changedFiles = PrChangedFiles.empty
+  private(set) var changedFiles = PrChangedFiles.empty {
+    didSet { changedFilesVersion &+= 1 }
+  }
+  /// `changedFiles` が変わるたびに進む（未送信のコメントの一覧を組み直す合図）。
+  private(set) var changedFilesVersion = 0
   /// 中身の最後の読みの失敗。次に中身が読めたら消える（読み直している間は前の失敗を残す）。
   var contentFailure: PrReadFailure<GitHubFailure>?
   /// 最後の確認済みの書き込みの失敗。次の確認済みの書き込みを始めたら消える。

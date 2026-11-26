@@ -16,18 +16,23 @@ extension PullRequestState {
     let isPlaceable: Bool
   }
 
-  /// 組んだ未送信のコメントの一覧と、組んだときのレビューのやりとりの版・diff の両端。
+  /// 組んだ未送信のコメントの一覧と、組んだときのレビューのやりとりの版・変更ファイルの版・diff の両端（今の diff に置けるかを
+  /// 決める材料のすべて）。
   struct PendingCommentsMade {
-    let version: Int
+    let reviewVersion: Int
+    let filesVersion: Int
     let ends: DiffEnds?
     let comments: [PendingComment]
   }
 
   /// 最後に読めたレビューのやりとりの、未送信のコメント。並びはパスの順 → 行の順（行を持たないものはそのファイルの最後）→
-  /// 書いた時刻の順。組み直すのは、レビューのやりとりか diff の両端が変わったときだけ（参照するたびにスレッドをたどらない）。
+  /// 書いた時刻の順。組み直すのは、レビューのやりとり・変更ファイル（rename の判定）・diff の両端のどれかが変わったときだけ
+  /// （参照するたびにスレッドをたどらない）。
   var pendingComments: [PendingComment] {
     let ends = diffEnds
-    if let made = pendingCommentsMade, made.version == reviewVersion, made.ends == ends {
+    if let made = pendingCommentsMade, made.reviewVersion == reviewVersion,
+      made.filesVersion == changedFilesVersion, made.ends == ends
+    {
       return made.comments
     }
     let found = (review?.threads ?? []).flatMap { thread in
@@ -43,7 +48,8 @@ extension PullRequestState {
         body: comment.body, isPlaceable: canPlace(thread, in: ends) != false)
     }
     pendingCommentsMade = PendingCommentsMade(
-      version: reviewVersion, ends: ends, comments: comments)
+      reviewVersion: reviewVersion, filesVersion: changedFilesVersion, ends: ends,
+      comments: comments)
     return comments
   }
 
