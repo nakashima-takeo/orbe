@@ -8,9 +8,10 @@ import XCTest
 ///
 /// 壊れると何が起きるか。入力欄や選べる文字を押すテストが、押下の配送の中で離すイベントを待ち続け、テストの実行が止まる。
 /// 離すイベントが押した点から外れて届くと、SwiftUI のタップが成り立たず、クリックで動くはずの部品を押すテストが落ちる。
-/// 離すイベントがキューに残ると、後のテストの配送に紛れ込む。テストの条件（窓は key でなく、アプリは前面でない）で押下が
-/// 追跡ループに入るのは macOS 26 で、macOS 27 では入らないので、手元の macOS 27 で通っても、追跡ループに入る場合に戻る
-/// ことは確かめられない。
+/// 離すイベントがキューに残ると、後のテストの配送に紛れ込む。窓を並べてランループを回した後の押下は、macOS 26 では追跡
+/// ループに入り、macOS 27 では入らない。キューを経た離すイベントの座標は、macOS 26 では置き換わることがあり、macOS 27 では
+/// 保たれる。そのため、手元の macOS 27 で通っても、追跡ループに入る場合に押下の `sendEvent` が戻ることも、座標が置き換わる
+/// 場合に離すイベントが押した点で届くことも確かめられない（どちらも CI の macOS 26 で確かめる）。
 final class WindowMouseDeliveryTests: OrbeTestCase {
   /// 中身を、タイトルバーの無い窓に載せ、画面外へ並べる。
   private func shown(_ content: NSView) -> NSWindow {
@@ -58,6 +59,7 @@ final class WindowMouseDeliveryTests: OrbeTestCase {
       override func mouseUp(with event: NSEvent) { ups.append(event.locationInWindow) }
     }
     let recorder = Recorder(frame: NSRect(x: 0, y: 0, width: 240, height: 80))
+    // 窓は、キューを経た離すイベントの座標が置き換わって落ちたテスト（エディターの面）と同じ `OrbeWindowFake` にする。
     let window = OrbeWindowFake(
       contentRect: recorder.frame, styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = recorder

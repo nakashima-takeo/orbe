@@ -100,8 +100,8 @@ custom_rules:
     included: ".*/Tests/.*\\.swift"
     excluded:
       - ".*/Tests/OrbeTests/WindowMouseDelivery\\.swift"
-      # 押下の配送が戻ることが分かっている相手（追跡ループに入らない部品）へ押下だけ・ドラッグを送るファイルと、マウス以外の
-      # イベントを送るファイル。
+      # 押下だけ・ドラッグを、押下の配送が戻ることが分かっている相手（追跡ループに入らない部品）へ送るファイル、マウス以外の
+      # イベントを送るファイル、キューから取ったイベントをそのまま配るファイル。
       - ".*/Tests/OrbeTests/RowListTests\\+Guard\\.swift"
       - ".*/Tests/OrbeTests/SourceControlPaneTests\\+Anchor\\.swift"
       - ".*/Tests/OrbeTests/SidebarScrollbarTests\\.swift"
@@ -113,7 +113,7 @@ custom_rules:
     # `\s*` は swift format の折返しを許すため。
     regex: "\\bNSApp\\s*\\.\\s*sendEvent\\b|\\bNSApplication\\s*\\.\\s*shared\\s*\\.\\s*sendEvent\\b"
     match_kinds: [identifier]
-    message: "テストから NSApp.sendEvent を直に呼ばない。マウスの押して離すは deliverClick（Tests/OrbeTests/WindowMouseDelivery.swift）で届ける。押下の配送が戻ることが分かっている相手へ、それ以外の並び（押下だけ・ドラッグ）やマウス以外のイベントを送るファイルは、.swiftlint.yml の excluded に足す"
+    message: "テストから NSApp.sendEvent を直に呼ばない。マウスの押して離すは deliverClick（Tests/OrbeTests/WindowMouseDelivery.swift）で届ける。押下だけ・ドラッグを、押下の配送が戻ることが分かっている相手へ送るファイル、マウス以外のイベントを送るファイル、キューから取ったイベントをそのまま配るファイルは、.swiftlint.yml の excluded に足す"
     severity: error
 
   test_screen_isolation_exemption:
