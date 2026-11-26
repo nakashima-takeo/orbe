@@ -193,8 +193,9 @@ final class PrCommentLayer {
   }
 
   /// レビューのやりとりが、diff が見せている先頭と違う先頭を読んだ間（PR への push を読み、diff が新しい両端を見せるまで）は、
-  /// diff が見せている両端と本文 `current` で最後に置いたスレッドを、その行に残す（古い側の行のスレッドは、両端が PR の今の
-  /// 両端の間だけ）。ほかの返信の書きかけは、書きかけの欄の位置から行を追う。
+  /// 置き方がまだ分からない（揃える読みが走っている）スレッドを、diff が見せている両端と本文 `current` で最後に置いた行に
+  /// 残す（前の答えを保つ。古い側の行のスレッドは、両端が PR の今の両端の間だけ）。揃える読みをやめて置けないと決まった
+  /// スレッドと、ほかの返信の書きかけは、置かない（書きかけがあれば、書きかけの欄の位置から行を追う）。
   private func keepPlaced(
     _ current: Placed, isCurrent: Bool, language: Language, in notes: inout DiffRows.Notes
   ) {
@@ -203,7 +204,8 @@ final class PrCommentLayer {
     }
     for (id, zone) in ordered where held[id] == nil {
       guard let spot = lastPlaced[id], spot.ends == current.ends, spot.basis == current.shown,
-        isCurrent || spot.side == .new
+        isCurrent || spot.side == .new, case .thread(let thread) = zone.subject,
+        state.placement(of: thread, shown: current.ends) != .unplaceable
       else {
         _ = startHolding(id, zone)
         continue

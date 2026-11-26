@@ -6,7 +6,8 @@ extension PullRequestState {
   /// スレッドを diff に置けるか。「まだ分からない」は、読みが走っている間（両端を求めている・版を揃える読みを待っている）
   /// だけで、これ以上読まない間は置けないと答える。
   ///
-  /// 「まだ分からない」は、読む側ごとに次のように扱う（ここだけに書く）:
+  /// 「まだ分からない」の間は、前に決まった答えを保つ（コメントの層は前に置いた絵を残し、導いた値は前の答えを使う →
+  /// `Placements`）。前に決まった答えが無ければ、読む側ごとに次のように扱う（ここだけに書く）:
   /// - コメントの層: 置かない（決まるまで待つ。返信の書きかけがあれば行を追う欄に残す）。
   /// - ポップアップの未送信のコメントの一覧: 置けるとみなす（押せば diff を開き、置かれたら見せる）。
   /// - 今の diff に置けない未解決のスレッドの数: 数えない。
@@ -82,22 +83,54 @@ extension PullRequestState {
     let readsStopped: Bool
   }
 
-  /// 置き方から導いた値。材料（`PlacementInputs`）だけから作る。
+  /// 保つ置き方の答え——置けるか、と、それを決めた今の PR の diff の両端（求め終えていなければ nil）。
+  struct PlacementAnswer {
+    let placement: Placement
+    let ends: DiffEnds?
+  }
+
+  /// 置き方から導いた値。材料（`PlacementInputs`）と、前に作った値だけから作る。読みが走っている間（まだ分からない）は、
+  /// スレッドごとに前に決まった答えを保つ——コメントの層が前に置いた絵を残すのと同じく、読み直しの途中で一覧・数が
+  /// 揺れない。保つのは、スレッドを読んだ版と diff の版が揃っていたときに決まった答えだけで、古い側の行の答えは、それを
+  /// 決めた diff の両端が今の両端のときだけ（コメントの層も、両端が替わる間は古い側の行のスレッドを前の並びに置かない）。
+  /// 前に答えが無ければ、まだ分からないまま（一覧は置けるとみなし、数は数えない）。
   struct Placements {
     /// 最後に読めたレビューのやりとりの、未送信のコメント。並びはパスの順 → 行の順（行を持たないものはそのファイルの最後）→
     /// 書いた時刻の順。
     let pendingComments: [PendingComment]
-    /// 今の先頭で読んだスレッドのうち、今の diff に置けない未解決のスレッドの数。
+    /// 今の diff に置けない未解決のスレッドの数。
     let outdatedThreadCount: Int
-    /// ファイルごとの、今の先頭で読んだ、今の diff に置けるスレッドのコメントの総数。
+    /// ファイルごとの、今の diff に置けるスレッドのコメントの総数。
     let commentCounts: [String: Int]
+    /// スレッドごとの、版が揃っていたときに決まった答えと、それを決めた diff の両端（スレッドの id ごと。保つ答え）。
+    let answers: [String: PlacementAnswer]
 
-    static let empty = Placements(pendingComments: [], outdatedThreadCount: 0, commentCounts: [:])
+    static let empty = Placements(
+      pendingComments: [], outdatedThreadCount: 0, commentCounts: [:], answers: [:])
 
-    init(_ inputs: PlacementInputs) {
+    init(_ inputs: PlacementInputs, previous: Placements) {
       let threads = inputs.review?.threads ?? []
+      let aligned = inputs.head != nil && inputs.review?.headCommit == inputs.head
+      var current: DiffEnds?
+      if case .ready(let ends, isCurrent: true) = inputs.ends { current = ends }
+      var answers: [String: PlacementAnswer] = [:]
+      var placements: [String: Placement] = [:]
+      for thread in threads {
+        let answer = PullRequestState.placement(of: thread, in: inputs)
+        if answer != .unknown {
+          placements[thread.id] = answer
+          if aligned, inputs.ends != .failed {
+            answers[thread.id] = PlacementAnswer(placement: answer, ends: current)
+          }
+        } else if let kept = previous.answers[thread.id],
+          thread.side == .new || (current != nil && kept.ends == current)
+        {
+          placements[thread.id] = kept.placement
+          answers[thread.id] = kept
+        }
+      }
       let placement = { (thread: GitHubPullRequestReview.Thread) in
-        PullRequestState.placement(of: thread, in: inputs)
+        placements[thread.id] ?? .unknown
       }
       let found = threads.flatMap { thread in
         thread.comments.filter(\.isPending).map { (thread: thread, comment: $0) }
@@ -114,21 +147,23 @@ extension PullRequestState {
           line: thread.line,
           body: comment.body, isPlaceable: placement(thread) != .unplaceable)
       }
-      let current = inputs.review?.headCommit == inputs.head ? threads : []
-      outdatedThreadCount = current.count { !$0.isResolved && placement($0) == .unplaceable }
+      outdatedThreadCount = threads.count { !$0.isResolved && placement($0) == .unplaceable }
       var counts: [String: Int] = [:]
-      for thread in current where placement(thread) == .placeable {
+      for thread in threads where placement(thread) == .placeable {
         counts[thread.path, default: 0] += thread.comments.count
       }
       commentCounts = counts
+      self.answers = answers
     }
 
     private init(
-      pendingComments: [PendingComment], outdatedThreadCount: Int, commentCounts: [String: Int]
+      pendingComments: [PendingComment], outdatedThreadCount: Int, commentCounts: [String: Int],
+      answers: [String: PlacementAnswer]
     ) {
       self.pendingComments = pendingComments
       self.outdatedThreadCount = outdatedThreadCount
       self.commentCounts = commentCounts
+      self.answers = answers
     }
   }
 
@@ -165,7 +200,7 @@ extension PullRequestState {
     #else
       let inputs = placementInputs
     #endif
-    placementsMade = Placements(inputs)
+    placementsMade = Placements(inputs, previous: placementsMade)
   }
 
   /// 置き方から導いた値。

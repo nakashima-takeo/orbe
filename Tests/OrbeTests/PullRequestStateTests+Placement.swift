@@ -34,10 +34,10 @@ extension PullRequestStateTests {
         counts: ["a": 2]),
       Case(
         "読んだ版が違う", .ready(ends, isCurrent: true), readAt: "h0", placeable: ["N", "O"],
-        outdated: 0, counts: [:]),
+        outdated: 1, counts: [:]),
       Case(
         "揃える読みをやめた", .ready(ends, isCurrent: true), readAt: "h0", readsStopped: true,
-        placeable: [], outdated: 0, counts: [:]),
+        placeable: [], outdated: 3, counts: [:]),
     ]
     for item in cases {
       let review = GitHubPullRequestReview(
@@ -46,7 +46,7 @@ extension PullRequestStateTests {
       let placements = PullRequestState.Placements(
         PullRequestState.PlacementInputs(
           review: review, head: "h", ends: item.ends, files: .empty, readsStopped: item.readsStopped
-        ))
+        ), previous: .empty)
       XCTAssertEqual(
         placements.pendingComments.filter(\.isPlaceable).map(\.thread).sorted(), item.placeable,
         "\(item.name): 未送信のコメントの置けるか")
