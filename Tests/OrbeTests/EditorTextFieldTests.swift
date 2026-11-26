@@ -7,29 +7,32 @@ import XCTest
 
 /// 命令でフォーカスを入れる 1 行の入力欄（`EditorTextField`）——フォーカスの要求は、欄が窓に載った時点か、要求が来た時点で
 /// 欄自身が当てて消す。断られても要求は消え、後でフォーカスを奪わない。取り消し・やり直しで変わった欄の字は使う側の値にも
-/// 写り、使う側が中身を差し替えた後は、前の取り消しの履歴が残らない。入力欄の枠の、入力欄の外（虫眼鏡・余白）を押しても欄に
-/// 焦点が入り、焦点がある間に押しても打っている位置は動かない。
+/// 写り、使う側が中身を差し替えた後は、前の取り消しの履歴が残らない。入力欄の枠の中の、入力欄の外（縁・角・虫眼鏡・余白・
+/// 添え物の文）を押すと欄に焦点が入る。焦点がある間に押しても、焦点は欄に残り、打っている位置は動かない。
 ///
 /// 壊れると何が起きるか。⌘⇧F で検索の列が出ても、入力欄に焦点が入らず、打った字が本文に入る。焦点の切り替えを断られた
 /// 要求が残り、後で欄が出し直されたときに、打っている本文から焦点を奪う。⌘Z で欄の字だけが戻り、検索語や絞り込みの字と
 /// 食い違う。外から検索語を入れ直した後の ⌘Z で例外が上がる・検索語が壊れる。欄の虫眼鏡や縁を押しても焦点が入らない。
-/// 打っている途中に縁を押すと字が全選択されて、続けて打った字で検索語が消える。
+/// 打っている途中に縁を押すと、焦点が本文へ抜けたり、字が全選択されて、続けて打った字で検索語が消えたりする。
 @MainActor
 final class EditorTextFieldTests: OrbeTestCase {
-  /// 使う側の値（欄の字）と、欄への焦点の要求と、欄が要求を当てた回数。
+  /// 使う側の値（欄の字・欄に焦点があるか）と、欄への焦点の要求と、欄が要求を当てた回数。
   @Observable final class Probe {
     var text = ""
+    var focused = false
     var wantsFocus = false
     var applied = 0
   }
 
-  /// 入力欄の枠（`EditorFieldFrame`）に入れた欄。
+  /// 入力欄の枠（`EditorFieldFrame`）に入れた欄。3 つの欄（ツリーの絞り込み・検索の列・ファイル内検索）と同じく、焦点がある間は枠線を描き、右に添え物の文（件数の文の
+  /// 代わり）を置く。
   private struct Content: View {
     static let frameHeight: CGFloat = 26
+    static let accessoryWidth: CGFloat = 30
     let probe: Probe
 
     var body: some View {
-      EditorFieldFrame(height: Self.frameHeight, isFocused: false) {
+      EditorFieldFrame(height: Self.frameHeight, isFocused: probe.focused) {
         EditorTextField(
           text: probe.text, placeholder: "", font: .systemFont(ofSize: 12), placeholderColor: .gray,
           wantsFocus: probe.wantsFocus,
@@ -37,7 +40,9 @@ final class EditorTextFieldTests: OrbeTestCase {
             probe.wantsFocus = false
             probe.applied += 1
           },
-          onTextChange: { probe.text = $0 })
+          onTextChange: { probe.text = $0 }, onFocusChange: { probe.focused = $0 })
+      } accessory: {
+        Text("3/5").frame(width: Self.accessoryWidth)
       }
     }
   }
@@ -47,6 +52,15 @@ final class EditorTextFieldTests: OrbeTestCase {
     var lets = true
     override var acceptsFirstResponder: Bool { true }
     override func resignFirstResponder() -> Bool { lets }
+  }
+
+  /// 欄を載せた器の下地の view。欄の中身が受けなかった押下を受けて、焦点を受け手へ移す（エディターの面が、押下を受けて本体へ焦点を
+  /// 移すのと同じ）。
+  private final class Background: NSView {
+    weak var holder: Holder?
+    override func mouseDown(with event: NSEvent) {
+      if let holder { window?.makeFirstResponder(holder) }
+    }
   }
 
   private struct Hosted {
@@ -66,9 +80,10 @@ final class EditorTextFieldTests: OrbeTestCase {
       contentRect: NSRect(x: 0, y: 0, width: 300, height: 60), styleMask: [.borderless],
       backing: .buffered, defer: false)
     holdUntilTestEnds(window)
-    let root = NSView(frame: window.contentLayoutRect)
+    let root = Background(frame: window.contentLayoutRect)
     window.contentView = root
     let holder = Holder(frame: NSRect(x: 0, y: 0, width: 300, height: 30))
+    root.holder = holder
     root.addSubview(holder)
     let host = NSHostingView(rootView: Content(probe: probe))
     host.frame = NSRect(x: 0, y: 30, width: 300, height: 30)
@@ -170,7 +185,8 @@ final class EditorTextFieldTests: OrbeTestCase {
     XCTAssertFalse(back.undoManager?.canUndo == true, "差し替える前の履歴は残らない")
   }
 
-  /// 入力欄の枠の中の、入力欄の外の 2 点（虫眼鏡の中ほどと、入力欄の上の余白）。host の座標。
+  /// 入力欄の枠の中の、入力欄の外の点（host の座標）——押下の受け手が替わりうる所: 4 辺の縁（内側 0.75。焦点がある間は枠線の
+  /// 上）・角の丸みの内側・虫眼鏡・入力欄の上の余白・添え物の文。
   private func pointsOutsideTheInput(_ hosted: Hosted) throws -> [(String, NSPoint)] {
     func input(in view: NSView) -> NSTextField? {
       if let field = view as? NSTextField, field.isEditable { return field }
@@ -179,27 +195,50 @@ final class EditorTextFieldTests: OrbeTestCase {
     hosted.host.layoutSubtreeIfNeeded()
     let field = try XCTUnwrap(input(in: hosted.host))
     let rect = hosted.host.convert(field.bounds, from: field)
-    // 枠は host の縦の中ほどに置かれ、上の余白は枠の上端から入力欄の上端まで。
-    let frameTop = (hosted.host.bounds.height - Content.frameHeight) / 2
-    XCTAssertGreaterThan(rect.minY - frameTop, 2, "前提: 入力欄の上に余白がある")
+    // 枠は host の幅いっぱいで、縦の中ほどに置かれる。
+    let frame = NSRect(
+      x: 0, y: (hosted.host.bounds.height - Content.frameHeight) / 2,
+      width: hosted.host.bounds.width, height: Content.frameHeight)
+    XCTAssertGreaterThan(rect.minY - frame.minY, 2, "前提: 入力欄の上に余白がある")
+    let edge: CGFloat = 0.75
+    // 角の丸み（半径 7）の中心から 5.7 の所——形の内側で、枠線（幅 1.5）の上。
+    let corner: CGFloat = 3
     return [
+      ("上の縁", NSPoint(x: rect.midX, y: frame.minY + edge)),
+      ("下の縁", NSPoint(x: rect.midX, y: frame.maxY - edge)),
+      ("左の縁", NSPoint(x: frame.minX + edge, y: frame.midY)),
+      ("右の縁", NSPoint(x: frame.maxX - edge, y: frame.midY)),
+      ("左上の角", NSPoint(x: frame.minX + corner, y: frame.minY + corner)),
       (
         "虫眼鏡",
         NSPoint(
           x: rect.minX - Theme.Layout.editorFieldGap - Theme.Layout.editorFieldGlyph / 2,
           y: rect.midY)
       ),
-      ("上の余白", NSPoint(x: rect.midX, y: frameTop + 1)),
+      ("上の余白", NSPoint(x: rect.midX, y: frame.minY + 2)),
+      (
+        "添え物の文",
+        NSPoint(
+          x: frame.maxX - Theme.Layout.editorFieldPadTrailing - Content.accessoryWidth / 2,
+          y: frame.midY)
+      ),
     ]
   }
 
-  /// 入力欄の枠の、入力欄の外（虫眼鏡・上の余白）を押すと、欄に焦点が入る。
+  /// 入力欄の枠の中の、入力欄の外（縁・角・虫眼鏡・余白・添え物の文）を押すと、欄に焦点が入る。枠の外は押しても入らない。
   func testPressingTheFrameOutsideTheInputFocusesTheField() throws {
     let probe = Probe()
     let hosted = hosted(probe)
     placeOffscreen(hosted.window)
-    for (label, point) in try pointsOutsideTheInput(hosted) {
+    let points = try pointsOutsideTheInput(hosted)
+    let above = NSPoint(
+      x: points[0].1.x, y: (hosted.host.bounds.height - Content.frameHeight) / 2 - 1)
+    try click(hosted.host, at: above)
+    flush(hosted.window)
+    XCTAssertFalse(hosted.fieldHasFocus, "前提: 枠の外（上の縁の 1 つ外）を押しても焦点は入らない")
+    for (label, point) in points {
       hosted.window.makeFirstResponder(hosted.holder)
+      flush(hosted.window)
 
       try click(hosted.host, at: point)
       flush(hosted.window)
@@ -208,7 +247,8 @@ final class EditorTextFieldTests: OrbeTestCase {
     }
   }
 
-  /// 欄に焦点がある間に枠を押しても、打っている位置（キャレット）は動かない（押した直後に、焦点が入る場合と同じ時点で見る）。
+  /// 欄に焦点がある間（枠線が描かれている間）に枠の同じ点を押しても、焦点は欄に残り、打っている位置（キャレット）は動かない
+  /// （押した直後に、焦点が入る場合と同じ時点で見る）。
   func testPressingTheFrameWhileTheFieldHasTheFocusKeepsTheCaret() throws {
     let probe = Probe()
     let hosted = hosted(probe)
@@ -216,6 +256,8 @@ final class EditorTextFieldTests: OrbeTestCase {
     let points = try pointsOutsideTheInput(hosted)
     let editor = try focusField(hosted, probe)
     editor.insertText("abcdef", replacementRange: NSRange(location: 0, length: 0))
+    flush(hosted.window)
+    XCTAssertTrue(probe.focused, "前提: 枠線が描かれている")
     for (label, point) in points {
       editor.setSelectedRange(NSRange(location: 2, length: 0))
 
