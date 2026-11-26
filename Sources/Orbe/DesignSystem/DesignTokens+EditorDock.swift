@@ -31,7 +31,7 @@ extension Theme.Layout {
   static let editorCardCloseGlyph: CGFloat = 10
   static let editorCardCloseRadius: CGFloat = 4
   static let editorCardClosePad: CGFloat = 7
-  /// 実行中の札——左右の余白・部品の間・進捗の行の幅の上限。
+  /// 実行中の札——左右の余白・部品の間・進捗の列の幅（進捗の行がある間は字数に依らずこの幅。置き場が狭ければ縮む）。
   static let editorRunningPadLeading: CGFloat = 14
   static let editorRunningPadTrailing: CGFloat = 6
   static let editorRunningGap: CGFloat = 10
