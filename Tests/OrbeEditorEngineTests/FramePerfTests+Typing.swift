@@ -77,18 +77,18 @@ extension FramePerfTests {
     }
   }
 
-  /// 面 `opened` の文書の中ほどにキャレットを置き、打鍵の間隔 100ms と 33ms で `stroke` を流して関門（打鍵→present の
-  /// 中央値 12.5ms・p95 17ms、打鍵 1 回の main の仕事 p99 1ms）にかける。打鍵→present の中央値を、`label` に間隔を付けた
-  /// 名前（`1MB 100ms` など）ごとに返す。
+  /// 面 `opened` の文書の位置 `caret`（省けば中ほどの行の頭から 4 字）にキャレットを置き、打鍵の間隔 100ms と 33ms で
+  /// `stroke` を流して関門（打鍵→present の中央値 12.5ms・p95 17ms、打鍵 1 回の main の仕事 p99 1ms）にかける。
+  /// 打鍵→present の中央値を、`label` に間隔を付けた名前（`1MB 100ms` など）ごとに返す。
   func gateStrokes(
-    _ opened: Opened, scenario: String, label: String,
+    _ opened: Opened, scenario: String, label: String, caret: Int? = nil,
     stroke: @escaping @MainActor (MetalTextSurface, Int) -> Void
   ) -> [String: Double] {
     var medians: [String: Double] = [:]
     opened.surface.updateFocus(true)
     let middle = opened.document.text.lineCount / 2
     opened.surface.selectedRange = NSRange(
-      location: opened.document.text.lineStart(middle) + 4, length: 0)
+      location: caret ?? opened.document.text.lineStart(middle) + 4, length: 0)
     opened.surface.reveal(
       NSRange(location: opened.surface.caretLocation, length: 0), policy: .center)
     waitUntilIdle(opened.surface)

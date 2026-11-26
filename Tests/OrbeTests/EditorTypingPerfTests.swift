@@ -69,7 +69,8 @@ final class EditorTypingPerfTests: OrbeTestCase {
   }
 
   /// 日本語の Markdown（このリポジトリの spec）の打鍵 1 回の main の仕事——和文の行の途中と、和文の後ろに本体の字体に無い
-  /// 記号（`◌` と `▪`）がある行で打つ。関門と数え方は `testKeystrokeMainTime` と同じ。
+  /// 記号（`◌` と `▪`）がある行と、1 行が数千字の段落（折り返す）の途中で打つ。関門と数え方は `testKeystrokeMainTime` と
+  /// 同じ（打鍵のたびに、打った行の折り返しを計算し直す仕事を含む）。
   func testKeystrokeMainTimeInJapanese() throws {
     let warm = try openEditor("warm\n")
     warm.document.surface.responder.keyDown(with: .key("/", []))
@@ -80,6 +81,7 @@ final class EditorTypingPerfTests: OrbeTestCase {
     for (label, path, needle) in [
       ("japanese-markdown", "docs/spec/chrome/board.md", "。"),
       ("symbols-after-japanese", "docs/spec/palette/tasks.md", "▪ claude 入力待ち"),
+      ("long-japanese-paragraph", "docs/spec/editor/code.md", "を丸ごと置き換える"),
     ] {
       let text = try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
       let opened = try openEditor(text, extension: "md")
@@ -195,6 +197,44 @@ final class EditorTypingPerfTests: OrbeTestCase {
         digits: 2)
       XCTAssertLessThanOrEqual(
         p95(enter), limit, "\(expected) 本: git 管理下の Enter 1 回の main のスレッドの CPU 時間の p95")
+      opened.window.orderOut(nil)
+    }
+  }
+
+  /// 折り返した行にカーソルを置いた複数カーソルの打鍵 1 回の main の仕事——1 行が約 400 字の段落（どれも折り返す）に
+  /// `marker` を 1 行に 1 つ（1,000 本）と 10 個（1 万本）置き、⌘⇧L で作ったカーソルで打つ。打鍵のたびに、カーソルのある
+  /// 行の折り返しを全部計算し直す。関門は `testMultiCursorKeystrokeMainTime` と同じ（1,000 本で p95 16ms、1 万本で p95
+  /// 160ms 以下）。
+  func testMultiCursorKeystrokeMainTimeOnWrappedLines() throws {
+    let warm = try openEditor("warm\n")
+    warm.document.surface.responder.keyDown(with: .key("/", []))
+    warm.window.orderOut(nil)
+    for (expected, perLine, limit) in [(1000, 1, 16.0), (10_000, 10, 160.0)] {
+      let words = "wrapped words flow on to the next segment of the line "
+      let line = (0..<perLine).map { _ in words + "marker " }.joined()
+      let filler = String(repeating: words, count: max(1, (400 - line.count) / words.count))
+      let text = (0..<(expected / perLine)).map { "\($0) " + line + filler }.joined(separator: "\n")
+      let opened = try openEditor(text, extension: "md")
+      let document = opened.document
+      XCTAssertTrue(pumpUntilCaughtUp(document))
+      let surface = document.surface
+      opened.window.makeFirstResponder(surface.responder)
+      surface.selectedRange = (text as NSString).range(of: "marker")
+      surface.responder.perform(NSSelectorFromString("selectHighlights:"), with: nil)
+      let cursors = surface.cursorSelections.count
+      var cpu: [Double] = []
+      for key in String(repeating: "abc ", count: 8).map(String.init) {
+        let began = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+        surface.responder.keyDown(with: .key(key, []))
+        cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began) / 1e6)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+      }
+      reportPerf("wrapped cursors \(cursors)", "multi-cursor keystroke-main", cpu, digits: 2)
+      XCTAssertEqual(cursors, expected, "前提: カーソルの数")
+      let sorted = cpu.sorted()
+      XCTAssertLessThanOrEqual(
+        sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))], limit,
+        "\(expected) 本: 折り返した行の打鍵 1 回の main のスレッドの CPU 時間の p95")
       opened.window.orderOut(nil)
     }
   }
