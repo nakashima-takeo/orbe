@@ -188,13 +188,14 @@ final class MessageTextView: NSTextView {
     super.insertNewline(sender)
   }
 
-  /// esc。変換中でなく `onEscape` があれば、それを求める（変換中の esc は IME が取り、ここへは来ない）。
-  override func cancelOperation(_ sender: Any?) {
-    if let onEscape, !hasMarkedText() {
+  /// キーの命令。esc の命令（`cancelOperation:`）は、変換中でなく `onEscape` があれば、それを求める。ほかは、テキスト面の
+  /// 標準の処理のまま（テキスト面は esc の命令を処理しないので、次の responder へ渡る）。
+  override func doCommand(by selector: Selector) {
+    if selector == #selector(NSResponder.cancelOperation(_:)), let onEscape, !hasMarkedText() {
       onEscape()
       return
     }
-    super.cancelOperation(sender)
+    super.doCommand(by: selector)
   }
 
   /// ⌃↵。標準の行区切り（U+2028）はメッセージに見えない字を入れるので、改行にする。
