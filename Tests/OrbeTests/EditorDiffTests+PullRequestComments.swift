@@ -348,3 +348,14 @@ extension EditorDiffTests {
     XCTAssertEqual(remote.writes.count, 1)
   }
 }
+
+extension GitHubPullRequestContent {
+  /// 先頭のコミットだけを `head` に替えた中身（PR への push）。
+  func withHead(_ head: String) -> GitHubPullRequestContent {
+    GitHubPullRequestContent(
+      nodeID: nodeID, number: number, title: title, url: url, isDraft: isDraft, state: state,
+      body: body, author: author, baseRefName: baseRefName, headRefName: headRefName,
+      baseCommit: baseCommit, headCommit: head, commitCount: commitCount + 1, commits: commits,
+      files: files)
+  }
+}
