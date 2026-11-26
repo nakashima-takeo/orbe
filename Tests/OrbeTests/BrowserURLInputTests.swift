@@ -137,5 +137,16 @@ final class BrowserURLInputTests: OrbeTestCase {
       URL(string: "https://example.com/wiki/%E6%9D%B1%E4%BA%AC%E2%80%AE%0A?q=1#top"))
     let mixedDisplay = try XCTUnwrap(BrowserURLInput.display(mixed, isSecure: true))
     XCTAssertEqual(mixedDisplay.path, "/wiki/東京%E2%80%AE%0A?q=1#top")
+
+    // ホスト部にパーセントエンコード済みの Bidi 書式文字・制御文字を含む場合も再エンコードする。
+    let hostCases: [(url: String, expectedHost: String)] = [
+      ("https://ex%E2%80%AEample.com:8080/a", "ex%E2%80%AEample.com:8080"),
+      ("https://ex%0Aample.com/a", "ex%0Aample.com"),
+    ]
+    for (rawURL, expectedHost) in hostCases {
+      let displayed = try XCTUnwrap(BrowserURLInput.display(URL(string: rawURL), isSecure: true))
+      XCTAssertEqual(displayed.host, expectedHost, "\(rawURL) のホスト危険文字は再エンコードされる")
+      XCTAssertEqual(displayed.path, "/a")
+    }
   }
 }

@@ -127,14 +127,15 @@ extension BrowserLayerViewTests {
     XCTAssertEqual(frames120["reload"]?.minX ?? -1, leading + (button + gap) * 2, accuracy: 0.5)
     XCTAssertEqual(frames120["url"]?.width ?? -1, 0, accuracy: 0.5, "極狭幅では URL 欄は幅 0 に畳まれる")
 
-    // 2. 実 BrowserBarRoot の 120pt 配置でも URL 欄が左詰め位置を保つ。
+    // 2. 実 BrowserBarRoot の 120pt 配置でも URL 欄が幅 0・左詰め位置を保つ。
     let ultraHosted = hostBrowser()
     ultraHosted.browser.setMode(.full, animated: false)
     let barRect120 = try measureEditingURLField(in: ultraHosted, width: 120)
     let leftThreeEnd = leading + button * 3 + gap * 3
     XCTAssertEqual(
-      barRect120.midX, leftThreeEnd + Theme.Layout.browserURLPadLeading, accuracy: 0.5,
+      barRect120.minX, leftThreeEnd + Theme.Layout.browserURLPadLeading, accuracy: 0.5,
       "実 BrowserBarRoot の 120pt で左詰めを保つ")
+    XCTAssertEqual(barRect120.width, 0, accuracy: 0.5, "実 BrowserBarRoot の 120pt で URL 欄幅は 0")
 
     // 3. 全面めくり: 広幅（600pt）ではピル表示＋URL >= 120pt、狭幅（280pt）ではピル 0×0＋4 ボタン健全。
     let wide = measureToolbarLayout(width: 600, showsPeekPill: true)
@@ -153,6 +154,8 @@ extension BrowserLayerViewTests {
   /// IPv4・数値 IPv6・RTL 文字を含むホストにアラビア語／ヘブライ語の RTL パスを与えても、
   /// `BrowserBarRoot` の URL 表示ラベルはホストを左に固定したままパスをその右側へ描画する。
   func testDisplayLabelKeepsHostLeftAndRTLPathRightForNumericAndRTLHosts() throws {
+    /// `diffXRange` でホスト域とパス域を独立に分離するため、`hostA`/`hostB` および `pathA`/`pathB` は
+    /// `Theme.Typography.browserURL` での描画幅が一致する同一描画幅ペアにする必要がある。
     struct BidiCase {
       let hostA: String
       let hostB: String
@@ -184,6 +187,12 @@ extension BrowserLayerViewTests {
     ]
 
     for item in cases {
+      XCTAssertEqual(
+        browserURLTextWidth(item.hostA), browserURLTextWidth(item.hostB), accuracy: 0.5,
+        "\(item.label): 前提 host ペアの描画幅一致")
+      XCTAssertEqual(
+        browserURLTextWidth(item.pathA), browserURLTextWidth(item.pathB), accuracy: 0.5,
+        "\(item.label): 前提 path ペアの描画幅一致")
       let base = try renderBarSnapshot(
         displayURL: BrowserDisplayURL(
           host: item.hostA, path: item.pathA, isSecure: true,
@@ -206,6 +215,10 @@ extension BrowserLayerViewTests {
         hostRange.upperBound, pathRange.lowerBound + 2,
         "\(item.label): ホスト(\(hostRange))が左、パス(\(pathRange))が右に配置される")
     }
+  }
+
+  private func browserURLTextWidth(_ text: String) -> CGFloat {
+    NSAttributedString(string: text, attributes: [.font: Theme.Typography.browserURL]).size().width
   }
 
   private func renderBarSnapshot(
@@ -242,13 +255,12 @@ extension BrowserLayerViewTests {
     var minX = Int.max
     var maxX = -1
     for y in 0..<height {
-      let lRow = lBase.advanced(by: y * lhs.bytesPerRow).withMemoryRebound(
-        to: UInt32.self, capacity: width
-      ) { $0 }
-      let rRow = rBase.advanced(by: y * rhs.bytesPerRow).withMemoryRebound(
-        to: UInt32.self, capacity: width
-      ) { $0 }
-      for x in 0..<width where lRow[x] != rRow[x] {
+      let lRow = UnsafeRawPointer(lBase.advanced(by: y * lhs.bytesPerRow))
+      let rRow = UnsafeRawPointer(rBase.advanced(by: y * rhs.bytesPerRow))
+      for x in 0..<width
+      where lRow.loadUnaligned(fromByteOffset: x * 4, as: UInt32.self)
+        != rRow.loadUnaligned(fromByteOffset: x * 4, as: UInt32.self)
+      {
         if x < minX { minX = x }
         if x > maxX { maxX = x }
       }
@@ -269,7 +281,7 @@ extension BrowserLayerViewTests {
     hosted.stage.layoutSubtreeIfNeeded()
     flush(hosted.window)
     let field = try XCTUnwrap(firstTextField(in: hosted.browser.barHost))
-    return field.convert(field.bounds, to: hosted.browser.barHost)
+    return field.convert(field.alignmentRect(forFrame: field.bounds), to: hosted.browser.barHost)
   }
 
   private func firstTextField(in view: NSView) -> NSTextField? {
