@@ -187,7 +187,8 @@ private struct BrowserURLBar: View {
 
   @ViewBuilder private var displayLabel: some View {
     if let url = model.displayURL {
-      let hostText = Text("\u{2066}\(url.host)\u{2069}").foregroundStyle(Color.theme.textPrimary)
+      let hostText = Text(verbatim: "\u{2066}\(url.host)\u{2069}").foregroundStyle(
+        Color.theme.textPrimary)
       let isolatedPath = url.path.isEmpty ? "" : "\u{2066}\(url.path)\u{2069}"
       let pathText = Text(isolatedPath).foregroundStyle(Color.theme.textMuted)
       // 先頭 LRM と LRI/PDI で段落ベース方向を LTR 固定し、数値ホスト＋RTL 文字パスでもホスト左・パス右を保つ。
