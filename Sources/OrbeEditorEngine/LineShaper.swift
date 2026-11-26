@@ -41,6 +41,10 @@ struct ShapedLine {
 /// 同じ）。1 行で描くのは `limit` 単位まで（書記素の境で切る）で、残りは描かない。
 enum LineShaper {
   static let limit = 10_000
+  /// 行の字に付ける言語の属性の値（`zxx` は言語の中身を持たないことを表す）。これを付けた字を、Core Text は言語を
+  /// 持たない字として組む。付けないと、Core Text は言語（既定は利用者の環境の言語）で和文の約物を詰め、和文と英数字の
+  /// 間を空けるので、字の幅が前後の字で変わる。
+  static let language = "zxx"
   /// 描きうる先頭として読む単位の数（書記素の境を探すために、上限より余分に読む）。
   static let headLimit = limit + Grapheme.reach
 
@@ -157,6 +161,7 @@ enum LineShaper {
     }
     let attributes: [CFString: Any] = [
       kCTFontAttributeName: font,
+      kCTLanguageAttributeName: language,
       kCTParagraphStyleAttributeName: paragraphStyle(tabWidth: tabWidth),
     ]
     let attributed = CFAttributedStringCreateMutable(nil, 0)!

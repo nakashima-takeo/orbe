@@ -65,6 +65,7 @@ extension MetalTextView: NSDraggingSource {
     guard !frame.isNull else { return (.zero, NSImage()) }
     let attributes: [NSAttributedString.Key: Any] = [
       .font: config.font as NSFont, .foregroundColor: surface.textColor,
+      NSAttributedString.Key(kCTLanguageAttributeName as String): LineShaper.language,
     ]
     let baseline = config.baseline - config.ascent
     let image = NSImage(size: frame.size, flipped: true) { _ in
