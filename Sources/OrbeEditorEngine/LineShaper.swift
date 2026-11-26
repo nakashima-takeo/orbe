@@ -78,10 +78,22 @@ enum LineShaper {
 
   /// 描く単位の列（上限を書記素の境で切り、制御文字を記号に置き換えたもの）と、打ち切って描かない単位の数と、箱で
   /// 見せる書式文字（描く単位の位置 → 元の字）。箱の位置の単位は、並びに効かない U+FFFC に置き換える。
-  struct Displayed {
+  struct Displayed: Hashable {
     var units: ContiguousArray<UInt16>
     var omitted: Int
     var boxes: [Int: UInt16]
+
+    /// 描く単位の区間 `range` の段——区間の単位と、区間の中の箱（位置は区間の頭から）。打ち切った単位の数は、行の最後の段
+    /// （`last`）だけが持つ。
+    func segment(_ range: Range<Int>, last: Bool) -> Displayed {
+      guard range != 0..<units.count || !last else { return self }
+      var boxes: [Int: UInt16] = [:]
+      for (index, unit) in self.boxes where range.contains(index) {
+        boxes[index - range.lowerBound] = unit
+      }
+      return Displayed(
+        units: ContiguousArray(units[range]), omitted: last ? omitted : 0, boxes: boxes)
+    }
   }
 
   static func display(_ source: Source) -> Displayed {
@@ -124,7 +136,11 @@ enum LineShaper {
 
   /// 行を組む。`tabWidth` はタブの刻み（pt）。
   static func shape(_ source: Source, font: CTFont, tabWidth: CGFloat) -> ShapedLine {
-    let shown = display(source)
+    shape(display(source), font: font, tabWidth: tabWidth)
+  }
+
+  /// 描く単位の列（行か、折り返した行の段）を 1 行として組む。タブの位置は列の頭から数える。
+  static func shape(_ shown: Displayed, font: CTFont, tabWidth: CGFloat) -> ShapedLine {
     let ascii = isASCII(shown.units)
     let line = makeLine(
       shown.units, boxes: shown.boxes, font: font, tabWidth: tabWidth, ascii: ascii)
@@ -139,7 +155,7 @@ enum LineShaper {
   }
 
   /// どの単位も ASCII の字（U+0020…U+007E）かタブ。
-  private static func isASCII(_ units: ContiguousArray<UInt16>) -> Bool {
+  static func isASCII(_ units: ContiguousArray<UInt16>) -> Bool {
     units.allSatisfy { $0 == 0x09 || (0x20...0x7E).contains($0) }
   }
 
