@@ -24,7 +24,7 @@ final class ProjectSearch {
     case done
   }
 
-  /// パネルの中の焦点の置き場（SwiftUI の焦点を写したもの）。
+  /// パネルの中の焦点の置き場（入力欄と結果の列の first responder の出入りを写したもの）。
   enum Area: Equatable {
     case field
     case results
