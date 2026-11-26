@@ -96,23 +96,24 @@ custom_rules:
     severity: error
 
   test_mouse_delivery:
-    name: "テストのマウスの押して離すは deliverClick から"
+    name: "テストはアプリの配送の口（NSApp.sendEvent）を直に呼ばない"
     included: ".*/Tests/.*\\.swift"
     excluded:
       - ".*/Tests/OrbeTests/WindowMouseDelivery\\.swift"
-      # 押して離す以外の並び（押下だけ、ドラッグ）と、マウス以外のイベントを送るファイル。
+      # 押下の配送が戻ることが分かっている相手（追跡ループに入らない部品）へ押下だけ・ドラッグを送るファイルと、マウス以外の
+      # イベントを送るファイル。
       - ".*/Tests/OrbeTests/RowListTests\\+Guard\\.swift"
       - ".*/Tests/OrbeTests/SourceControlPaneTests\\+Anchor\\.swift"
       - ".*/Tests/OrbeTests/SidebarScrollbarTests\\.swift"
       - ".*/Tests/OrbeTests/OptionHoldMonitorTests\\.swift"
       - ".*/Tests/OrbeTests/OptionHoldDriver\\.swift"
       - ".*/Tests/OrbeTests/EditorPerfTestSupport\\.swift"
-    # 送るイベントの種類は呼び出しの綴りから読めないので、アプリの配送の口そのものを見る。押下と離すを順に送ると、押下で
-    # 追跡ループに入った部品（入力欄、選べる文字）の中で離すイベントを待ち続け、押下の `sendEvent` が戻らない。
+    # 押下で追跡ループに入る部品（入力欄、選べる文字）は、離すイベントがキューに来るまで押下の `sendEvent` から戻らない。
+    # 止まるかどうかは押す相手で決まり、呼び出しの綴りからは読めないので、アプリの配送の口そのものを見る。
     # `\s*` は swift format の折返しを許すため。
     regex: "\\bNSApp\\s*\\.\\s*sendEvent\\b|\\bNSApplication\\s*\\.\\s*shared\\s*\\.\\s*sendEvent\\b"
     match_kinds: [identifier]
-    message: "マウスの押して離すは deliverClick（Tests/OrbeTests/WindowMouseDelivery.swift）で届ける（離すイベントを先にキューへ入れる）"
+    message: "テストから NSApp.sendEvent を直に呼ばない。マウスの押して離すは deliverClick（Tests/OrbeTests/WindowMouseDelivery.swift）で届ける。押下の配送が戻ることが分かっている相手へ、それ以外の並び（押下だけ・ドラッグ）やマウス以外のイベントを送るファイルは、.swiftlint.yml の excluded に足す"
     severity: error
 
   test_screen_isolation_exemption:
