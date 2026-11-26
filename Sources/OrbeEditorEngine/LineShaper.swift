@@ -152,10 +152,10 @@ enum LineShaper {
       line, omitted: 0, boxes: [:], font: font, ascii: isMonospaced(font) && ascii)
   }
 
-  /// 行を組む。字の字体は、字ごとの字体の表（`GlyphFonts`）の字体——まず本体の字体でそのまま組み、組んだ結果の字体が
-  /// 表と違う範囲があれば（Core Text が前の字の代替フォントを引き継いだ）、同じ字体が続く範囲ごとに表の字体を渡して組み
-  /// 直す。渡した字体はその字を持つので、Core Text は代替を探さない。ASCII の字とタブだけの行は、本体の字体がどの ASCII の
-  /// 字も持つなら、本体の字体だけで組まれるので表と照らさない。
+  /// 行を組む。字の字体は字ごとの字体の表（`GlyphFonts`）から引き、同じ字体が続く範囲ごとに表の字体を渡して組む。渡した
+  /// 字体はその字を持つので、Core Text は代替を探さず、前の字の代替フォントを引き継がない。字体が 1 つに決まらない字は
+  /// 本体の字体のまま渡す。ASCII の字とタブだけの行は、本体の字体がどの ASCII の字も持つなら、表を引かずに本体の字体で
+  /// 組む。
   private static func makeLine(
     _ units: ContiguousArray<UInt16>, boxes: [Int: UInt16], font: CTFont, tabWidth: CGFloat,
     ascii: Bool
@@ -166,38 +166,17 @@ enum LineShaper {
         attributed, CFRange(location: index, length: 1), kCTRunDelegateAttributeName,
         boxDelegate(width: shape(boxLabel(unit), font: font).width, font: font))
     }
-    let line = CTLineCreateWithAttributedString(attributed)
-    guard !ascii || !GlyphFonts.coversASCII(font) else { return line }
-    let glyphs = GlyphFonts.glyphs(units, font: font)
-    guard !follows(line, glyphs) else { return line }
-    var start = 0
-    for end in 1...units.count where end == units.count || !glyphs.sameFont(start, end) {
-      defer { start = end }
-      guard let pinned = glyphs.font(at: start), pinned !== font else { continue }
-      CFAttributedStringSetAttribute(
-        attributed, CFRange(location: start, length: end - start), kCTFontAttributeName, pinned)
-    }
-    return CTLineCreateWithAttributedString(attributed)
-  }
-
-  /// 組んだ行 `line` のどの字も、表 `glyphs` の字体で組まれているか（字体が 1 つに決まらない字と、書式文字の箱は見ない）。
-  private static func follows(_ line: CTLine, _ glyphs: GlyphFonts.Glyphs) -> Bool {
-    for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
-      let attributes = CTRunGetAttributes(run)
-      guard
-        CFDictionaryGetValue(
-          attributes, Unmanaged.passUnretained(kCTRunDelegateAttributeName).toOpaque()) == nil
-      else { continue }
-      guard let font = GlyphFonts.font(of: run) else { continue }
-      let range = CTRunGetStringRange(run)
-      for index in range.location..<range.location + range.length
-      where index == range.location || !glyphs.sameFont(index - 1, index) {
-        if let expected = glyphs.font(at: index), expected !== font, !CFEqual(expected, font) {
-          return false
-        }
+    if !units.isEmpty, !ascii || !GlyphFonts.coversASCII(font) {
+      let glyphs = GlyphFonts.glyphs(units, font: font)
+      var start = 0
+      for end in 1...units.count where end == units.count || !glyphs.sameFont(start, end) {
+        defer { start = end }
+        guard let pinned = glyphs.font(at: start), pinned !== font else { continue }
+        CFAttributedStringSetAttribute(
+          attributed, CFRange(location: start, length: end - start), kCTFontAttributeName, pinned)
       }
     }
-    return true
+    return CTLineCreateWithAttributedString(attributed)
   }
 
   /// 単位の列 `units` に、本文の字の属性（字体 `font`・言語を持たない字として組む言語の属性・左から右の段落とタブの刻み
