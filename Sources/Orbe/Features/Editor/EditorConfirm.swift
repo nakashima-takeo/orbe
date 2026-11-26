@@ -51,7 +51,9 @@ final class EditorConfirm {
 
 /// 面の中の確認の host。面の最前面に面いっぱいの枠で置き、出ている間だけ見せる。フォーカスはこの view が持ち、esc で
 /// キャンセルし、ほかのキー（↵ を含む）とマウスの押下・スクロールは、ダイアログのボタンのほかは何もしない——幕の裏の
-/// 端末にもテキスト面にも届けない。幕とダイアログは中の SwiftUI（→ `EditorConfirmRoot`）が描く。
+/// 端末にもテキスト面にも届けない。幕とダイアログは中の SwiftUI（→ `EditorConfirmRoot`）が描く。出ている間は、
+/// アクセシビリティでは確認の名前（`EditorConfirmContent.label`）を持つモーダルのダイアログの要素で、子は中のダイアログの
+/// 題・本文・ボタン。
 final class EditorConfirmHost: NSView {
   let confirm: EditorConfirm
   private let hosting: EditorConfirmHosting
@@ -86,6 +88,15 @@ final class EditorConfirmHost: NSView {
   override func rightMouseDown(with event: NSEvent) {}
   override func otherMouseDown(with event: NSEvent) {}
   override func scrollWheel(with event: NSEvent) {}
+
+  override func isAccessibilityElement() -> Bool { confirm.isShown }
+  override func accessibilityRole() -> NSAccessibility.Role? { .group }
+  override func accessibilitySubrole() -> NSAccessibility.Subrole? { .dialog }
+  override func accessibilityRoleDescription() -> String? {
+    NSAccessibility.Role.window.description(with: .dialog)
+  }
+  override func accessibilityLabel() -> String? { confirm.content?.label }
+  override func isAccessibilityModal() -> Bool { true }
 }
 
 /// 確認の中身の host。押してもフォーカスを取らない（フォーカスは外側の host が持ち続ける）。扱わない押下は外側の host へ
@@ -153,9 +164,6 @@ struct EditorConfirmDialog: View {
       .padding(.horizontal, Theme.Layout.editorConfirmPadX)
       .padding(.bottom, Theme.Layout.editorConfirmPadBottom)
     }
-    .accessibilityElement(children: .contain)
-    .accessibilityLabel(content.label)
-    .accessibilityAddTraits(.isModal)
   }
 }
 
