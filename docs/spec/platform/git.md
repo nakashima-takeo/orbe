@@ -83,7 +83,7 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 
 fetch・pull・push（コミットを指定した fetch を除く）は進捗の行（git の語のまま。割合への換算や訳はしない）を届いた順に渡す。失敗は分類を持ち、分類できない失敗は「その他」（git の実質の理由）に倒す——誤分類より安全。
 
-- **前提は本体の git を起こす前に判定する**: merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の pull・push →「ブランチに居ない」、upstream の無いブランチの pull →「upstream が無い」、upstream も push 先の設定も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と、push 先の解決と remote の一覧と、止まった操作の管理エントリ。pull は止まった操作を先に見る——rebase の途中は HEAD が detached で upstream も無いので、逆の順では「ブランチに居ない」「upstream が無い」に化ける。
+- **前提は本体の git を起こす前に判定する**: merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の pull・push →「ブランチに居ない」、upstream の無いブランチの pull →「upstream が無い」、upstream の ref が手元に無い（リモートのブランチが消され、prune 付きの fetch で追跡の ref も消えた）ブランチの pull →「upstream がリモートに無い」、upstream も push 先の設定も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と、push 先の解決と remote の一覧と、止まった操作の管理エントリ。pull は止まった操作を先に見る——rebase の途中は HEAD が detached で upstream も無いので、逆の順では「ブランチに居ない」「upstream が無い」に化ける。
 - **push の拒否**は `--porcelain` の機械向けの行で読む——送れなかった ref がどれも `[rejected] (fetch first)`・`[rejected] (non-fast-forward)` なら「拒否された（先に取り込みが要る）」。それ以外の行があれば（サーバの hook・保護ブランチが拒んだ `[remote rejected]`・取り込んでも直らない `[rejected] (already exists)` など）「断られた」で、送れなかった ref とその要約（`(pre-receive hook declined)` 等）を理由の頭に置く——`--porcelain` では要約が機械向けの行へ移り、stderr には「送れなかった」としか残らないため。「断られた」はリモートと話せたことも示す（自動 fetch の止まりを解く → [editor/source-control](../editor/source-control.md)）。送れなかった ref の行が無い失敗は「その他」。
 - **競合**は「pull の前に無かった止まった操作が、後に在る」で読む（stderr の字面で読まない）。
 - **認証**（ssh の `Permission denied (publickey`、https の `Authentication failed`・`could not read Username`・`terminal prompts disabled`）と**ホスト鍵**（`Host key verification failed`）だけは stderr の字面で読む。git も ssh もそれを機械向けの形で出さない。

@@ -48,8 +48,9 @@ private struct ScmBranchChip: View {
 }
 
 /// 同期のボタン（地つきの札）。「同期」と、先行・遅れの数（上向きの矢印と先行の数、下向きの矢印と遅れの数。0 の側は出さない）、
-/// upstream が無ければ「ブランチを公開」。押すと同期（プル → プッシュ）か公開。ネット操作が走っている間は薄い姿で押せない。
-/// 説明と VoiceOver の名前は「同期 ↑2 ↓1」の形。
+/// upstream が無ければ「ブランチを公開」。押すと同期（プル → プッシュ）か公開。ネット操作が走っている間と、upstream の ref が
+/// 手元に無い間は薄い姿で押せない。説明と VoiceOver の名前は「同期 ↑2 ↓1」の形で、upstream の ref が無ければ「同期（upstream の
+/// origin/feat がリモートにありません）」。
 private struct ScmSyncButton: View {
   let state: ScmSyncState
   let sync: () -> Void
@@ -62,6 +63,7 @@ private struct ScmSyncButton: View {
       action: {
         switch state.action {
         case .sync: sync()
+        case .upstreamGone: break
         case .publish: publish()
         }
       },
@@ -70,6 +72,8 @@ private struct ScmSyncButton: View {
         case .sync(let divergence):
           Text(l10n.string(.editorScmSync))
           if let divergence { counts(divergence) }
+        case .upstreamGone:
+          Text(l10n.string(.editorScmSync))
         case .publish:
           Text(l10n.string(.editorScmPublish))
         }
@@ -82,6 +86,7 @@ private struct ScmSyncButton: View {
     switch state.action {
     case .sync(let divergence?): l10n.string(.editorScmSync) + " " + divergence.arrows
     case .sync(nil): l10n.string(.editorScmSync)
+    case .upstreamGone(let upstream): l10n.format(.editorScmSyncUpstreamGone, upstream)
     case .publish: l10n.string(.editorScmPublish)
     }
   }

@@ -34,6 +34,8 @@ enum ScmFailureText {
       L10n.format(.editorScmFailureInProgress, language, operation.name)
     case .detached: L10n.string(.editorScmFailureDetached, language)
     case .noUpstream: L10n.string(.editorScmFailureNoUpstream, language)
+    case .upstreamGone(let upstream):
+      L10n.format(.editorScmFailureUpstreamGone, language, upstream)
     case .noPushDestination: L10n.string(.editorScmFailureNoPushDestination, language)
     case .conflictsRemain: L10n.string(.editorScmFailureConflictsRemain, language)
     case .contentMismatch: L10n.string(.editorScmFailureContentMismatch, language)

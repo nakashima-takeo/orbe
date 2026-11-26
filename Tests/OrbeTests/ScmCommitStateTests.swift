@@ -43,7 +43,8 @@ final class ScmCommitStateTests: OrbeTestCase {
   }
 
   /// 同期のボタンは、upstream の在るブランチで同期（先行・遅れが分かり、和が 1 以上なら数つき）、コミットが在り upstream の
-  /// 無いブランチで公開。detached HEAD・初回コミットの前・ブランチが分からない間は出さない。ネット操作中は押せない。
+  /// 無いブランチで公開。upstream の ref が手元に無いブランチでは、同期の姿で押せない。detached HEAD・初回コミットの前・
+  /// ブランチが分からない間は出さない。ネット操作中は押せない。
   func testSyncAndPublishFollowTheBranch() {
     func sync(_ branch: GitStatus.Branch?, networking: Bool = false) -> ScmSyncState? {
       ScmSyncState(branch: branch, isNetworking: networking)
@@ -54,8 +55,9 @@ final class ScmCommitStateTests: OrbeTestCase {
     XCTAssertEqual(
       sync(branch(upstream: upstream(ahead: 2, behind: 0)), networking: true)?.isEnabled, false)
     XCTAssertEqual(sync(branch(upstream: upstream(ahead: 0, behind: 0)))?.action, .sync(nil))
-    let unknown = GitStatus.Upstream(name: "origin/feat", divergence: nil)
-    XCTAssertEqual(sync(branch(upstream: unknown))?.action, .sync(nil))
+    let gone = GitStatus.Upstream(name: "origin/feat", divergence: nil)
+    XCTAssertEqual(sync(branch(upstream: gone))?.action, .upstreamGone("origin/feat"))
+    XCTAssertEqual(sync(branch(upstream: gone))?.isEnabled, false)
     XCTAssertEqual(sync(branch())?.action, .publish)
     XCTAssertNil(sync(branch(name: nil)))
     XCTAssertNil(sync(branch(commit: nil)))

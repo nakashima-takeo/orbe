@@ -12,6 +12,9 @@ extension L10n {
     .editorScmStagedDetail: ("ステージ済み", "Staged"),
     .editorScmCommitWithStaged: ("コミット、ステージ済み %@", "Commit, staged %@"),
     .editorScmSync: ("同期", "Sync Changes"),
+    .editorScmSyncUpstreamGone: (
+      "同期（upstream の %@ がリモートにありません）", "Sync Changes (the upstream %@ isn't on the remote)"
+    ),
     .editorScmPublish: ("ブランチを公開", "Publish Branch"),
     .editorScmMoreActions: ("その他の操作", "More Actions"),
     .editorScmCommitActions: ("その他のコミット操作", "More Commit Actions"),
@@ -85,6 +88,10 @@ extension L10n {
     .editorScmFailureNoUpstream: (
       "このブランチには upstream がありません。先にブランチを公開してください。",
       "This branch has no upstream. Publish the branch first."
+    ),
+    .editorScmFailureUpstreamGone: (
+      "upstream の %@ がリモートにありません。端末で別のブランチに切り替えるか、upstream を設定し直してください。",
+      "The upstream %@ isn't on the remote. Switch to another branch or set a new upstream in the terminal."
     ),
     .editorScmFailureNoPushDestination: (
       "push 先の remote がありません。端末で remote を追加してください。",

@@ -258,8 +258,8 @@ struct ScmAutoFetchRules {
       talked = true
       integrated = false
     case .cancelled?, .notManaged?, .authentication?, .unknownHostKey?, .operationInProgress?,
-      .noUpstream?, .noPushDestination?, .detached?, .conflictsRemain?, .contentMismatch?,
-      .headPushed?, .shallowBoundary?, .reason?:
+      .noUpstream?, .upstreamGone?, .noPushDestination?, .detached?, .conflictsRemain?,
+      .contentMismatch?, .headPushed?, .shallowBoundary?, .reason?:
       talked = false
       integrated = false
     }
