@@ -107,18 +107,24 @@ extension PullRequestPaneTests {
     }
   }
 
-  /// 閉じても書きかけは残り（変換中の字は確定して入る）、開き直した全体へのコメント欄は新しい欄で、書きかけから始まる。
-  /// 欄の esc で閉じると、焦点は開く前に在った一覧へ戻る。
+  /// 変換中の esc では閉じない。閉じても書きかけは残り（変換中の字は確定して入る）、開き直した全体へのコメント欄は新しい欄で、
+  /// 書きかけから始まる。欄の esc で閉じると、焦点は開く前に在った一覧へ戻り、押し続けて届いた esc は一覧の選択を外さない。
   func testAReopenedReviewStartsAFreshFieldFromTheDraftAndEscapeClosesIt() throws {
     let hosted = host(try registeredRoot())
     shownWithRows(hosted)
     let first = try openReview(hosted)
     let review = hosted.pane.reviewPopup
     let state = try XCTUnwrap(hosted.pane.pullRequest.state)
+    let escape = { (isRepeat: Bool) in
+      self.deliverKeyDown(.key("\u{1b}", [], isRepeat: isRepeat), to: hosted.window)
+    }
     first.insertText("前の", replacementRange: NSRange(location: NSNotFound, length: 0))
     first.setMarkedText(
       "かきかけ", selectedRange: NSRange(location: 4, length: 0),
       replacementRange: NSRange(location: NSNotFound, length: 0))
+    escape(false)
+    XCTAssertTrue(review.isOpen, "変換中の esc では閉じない")
+    XCTAssertTrue(first.hasMarkedText(), "前提: 変換中のまま")
     review.toggle()
     XCTAssertFalse(review.isOpen, "前提: 「レビュー」のボタンを押したときと同じ口で閉じる")
     XCTAssertEqual(state.reviewDraft.body, "前のかきかけ", "変換中の字は確定して書きかけに入る")
@@ -128,9 +134,35 @@ extension PullRequestPaneTests {
     XCTAssertEqual(second.string, "前のかきかけ", "書きかけから始まる")
     XCTAssertFalse(second.hasMarkedText())
 
-    second.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
+    let selection = try XCTUnwrap(hosted.pane.pullRequest.selection, "前提: 一覧の行を選んでいる")
+    escape(false)
     XCTAssertFalse(review.isOpen, "esc で閉じる")
     pumpMain(until: { hosted.window.firstResponder === hosted.list }, "焦点は一覧へ戻る")
     XCTAssertEqual(state.reviewDraft.body, "前のかきかけ", "esc で閉じても書きかけは残る")
+    escape(true)
+    XCTAssertEqual(hosted.pane.pullRequest.selection, selection, "押し続けて届いた esc は選択を外さない")
+    escape(false)
+    XCTAssertNil(hosted.pane.pullRequest.selection, "前提: 一覧で押した esc は選択を外す")
+  }
+
+  /// 開いている間に PR が open でなくなる（マージされた）と、ポップアップは閉じ、開き直せず、送れない。
+  func testAReviewClosesAndCannotBeSentOnceThePullRequestIsNoLongerOpen() throws {
+    let hosted = host(try registeredRoot())
+    shownWithRows(hosted)
+    let field = try openReview(hosted)
+    let review = hosted.pane.reviewPopup
+    let state = try XCTUnwrap(hosted.pane.pullRequest.state)
+    field.insertText("見ました", replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertTrue(review.canSubmit, "前提: 送れる")
+
+    gitHub.state = .merged
+    state.reload()
+    pumpMain(until: { state.content?.state == .merged }, "前提: マージされたと読む")
+    XCTAssertFalse(review.isOpen, "閉じる")
+    review.requestOpen()
+    XCTAssertFalse(review.isOpen, "開き直せない")
+    XCTAssertFalse(state.canSubmitReview(composing: ""), "送れない")
+    XCTAssertFalse(state.submitReview { _ in }, "送信を受け付けない")
+    XCTAssertEqual(gitHub.reviewWrites, [])
   }
 }

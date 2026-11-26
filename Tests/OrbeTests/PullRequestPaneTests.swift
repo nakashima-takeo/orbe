@@ -34,8 +34,9 @@ final class PullRequestPaneTests: OrbeTestCase {
     var head = "h"
     /// ブランチの open の PR の番号（替えると、worktree の今の PR が別の PR になる）。
     var number = 9
-    /// PR の中身の読みを失敗させるか（答える時点の値で決まる）。
+    /// PR の中身の読みを失敗させるか・中身が答える PR の状態（答える時点の値で決まる）。
     var contentFails = false
+    var state = GitHubItemSummary.State.open
     /// ブランチの PR の問い合わせと PR の中身の読みを、`release` まで答えずに留めるか。
     var holdsLookups = false
     var holdsContents = false
@@ -45,10 +46,10 @@ final class PullRequestPaneTests: OrbeTestCase {
 
     var source: PullRequestSource {
       let ref = GitHubBranchRef(repo: me, branch: "feat")
-      let content = { [head] (number: Int) in
+      let content = { [unowned self] (number: Int) in
         GitHubPullRequestContent(
           nodeID: "PR_\(number)", number: number, title: "題",
-          url: "https://github.com/me/r/pull/\(number)", isDraft: false, state: .open, body: "",
+          url: "https://github.com/me/r/pull/\(number)", isDraft: false, state: state, body: "",
           author: "me", baseRefName: "main", headRefName: "feat", baseCommit: head,
           headCommit: head, commitCount: 0, commits: [],
           files: ["src/a.swift", "b.swift"].map {
