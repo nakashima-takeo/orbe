@@ -86,4 +86,56 @@ final class BrowserURLInputTests: OrbeTestCase {
       ipv6NoPort,
       BrowserDisplayURL(host: "[::1]", path: "", isSecure: false, raw: "http://[::1]/"))
   }
+
+  /// 日本語等の可読 UTF-8 パスは維持しつつ、表示反転・切り詰めを起こす Bidi 書式文字・制御文字・
+  /// 行/段落区切りを UTF-8 バイト単位で再パーセントエンコードする。
+  func testDisplayReEncodesBidiControlsAndLineSeparatorsWhileKeepingReadableUTF8() throws {
+    let readable = try XCTUnwrap(
+      BrowserURLInput.display(
+        URL(string: "https://ja.wikipedia.org/wiki/%E6%9D%B1%E4%BA%AC"), isSecure: true))
+    XCTAssertEqual(readable.host, "ja.wikipedia.org")
+    XCTAssertEqual(readable.path, "/wiki/東京")
+    XCTAssertTrue(readable.isSecure)
+
+    // Bidi 書式文字（RLM・LRM・RLO・ALM・LRI/RLI/FSI/PDI）を再パーセントエンコードする。
+    let bidiCases: [(encoded: String, label: String)] = [
+      ("%E2%80%8F", "RLM (U+200F)"),
+      ("%E2%80%8E", "LRM (U+200E)"),
+      ("%E2%80%AE", "RLO (U+202E)"),
+      ("%D8%9C", "ALM (U+061C)"),
+      ("%E2%81%A6", "LRI (U+2066)"),
+      ("%E2%81%A7", "RLI (U+2067)"),
+      ("%E2%81%A8", "FSI (U+2068)"),
+      ("%E2%81%A9", "PDI (U+2069)"),
+    ]
+    for (encoded, label) in bidiCases {
+      let url = try XCTUnwrap(URL(string: "https://192.0.2.1/a\(encoded)b"))
+      let displayed = try XCTUnwrap(BrowserURLInput.display(url, isSecure: true))
+      XCTAssertEqual(displayed.host, "192.0.2.1", label)
+      XCTAssertEqual(displayed.path, "/a\(encoded)b", "\(label) は再パーセントエンコードされる")
+    }
+
+    // 制御文字（NUL・LF・DEL・C1 制御文字）および行/段落区切り（U+2028・U+2029）を再エンコードする。
+    let controlCases: [(encoded: String, label: String)] = [
+      ("%00", "NUL (U+0000)"),
+      ("%0A", "LF (U+000A)"),
+      ("%7F", "DEL (U+007F)"),
+      ("%C2%85", "NEL C1 (U+0085)"),
+      ("%C2%9F", "APC C1 (U+009F)"),
+      ("%E2%80%A8", "Line Separator (U+2028)"),
+      ("%E2%80%A9", "Paragraph Separator (U+2029)"),
+    ]
+    for (encoded, label) in controlCases {
+      let url = try XCTUnwrap(URL(string: "https://example.com/p\(encoded)q"))
+      let displayed = try XCTUnwrap(BrowserURLInput.display(url, isSecure: false))
+      XCTAssertEqual(displayed.path, "/p\(encoded)q", "\(label) は再パーセントエンコードされる")
+      XCTAssertFalse(displayed.isSecure)
+    }
+
+    // 生の危険文字を含む文字列（パス・クエリ・フラグメント混在）でも可読部を残し危険文字だけ再エンコードする。
+    let mixed = try XCTUnwrap(
+      URL(string: "https://example.com/wiki/%E6%9D%B1%E4%BA%AC%E2%80%AE%0A?q=1#top"))
+    let mixedDisplay = try XCTUnwrap(BrowserURLInput.display(mixed, isSecure: true))
+    XCTAssertEqual(mixedDisplay.path, "/wiki/東京%E2%80%AE%0A?q=1#top")
+  }
 }

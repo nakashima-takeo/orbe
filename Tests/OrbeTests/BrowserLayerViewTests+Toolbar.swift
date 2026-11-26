@@ -150,6 +150,112 @@ extension BrowserLayerViewTests {
     XCTAssertLessThanOrEqual(tight["toggle"]?.maxX ?? 999, 280 - trailing + 0.5)
   }
 
+  /// IPv4・数値 IPv6・RTL 文字を含むホストにアラビア語／ヘブライ語の RTL パスを与えても、
+  /// `BrowserBarRoot` の URL 表示ラベルはホストを左に固定したままパスをその右側へ描画する。
+  func testDisplayLabelKeepsHostLeftAndRTLPathRightForNumericAndRTLHosts() throws {
+    struct BidiCase {
+      let hostA: String
+      let hostB: String
+      let pathA: String
+      let pathB: String
+      let label: String
+      var layoutDirection: LayoutDirection = .leftToRight
+    }
+    let cases = [
+      BidiCase(
+        hostA: "192.0.2.1", hostB: "888.8.8.8",
+        pathA: "/العربية/bank", pathB: "/مرحبااا/xxxx", label: "IPv4 + アラビア語パス"),
+      BidiCase(
+        hostA: "192.0.2.1:8080", hostB: "888.8.8.8:9999",
+        pathA: "/עברית/login", pathB: "/שלוםם/xxxxx", label: "ポート付き IPv4 + ヘブライ語パス"),
+      BidiCase(
+        hostA: "[2001:1234::1]:3000", hostB: "[8888:9999::8]:4444",
+        pathA: "/العربية/verify", pathB: "/مرحبااا/xxxxxx", label: "数値 IPv6 + アラビア語パス"),
+      BidiCase(
+        hostA: "[::1]", hostB: "[::8]",
+        pathA: "/עברית/account", pathB: "/שלוםם/xxxxxxx", label: "短縮数値 IPv6 + ヘブライ語パス"),
+      BidiCase(
+        hostA: "example.ببب", hostB: "example.تتت",
+        pathA: "/العربية/check", pathB: "/مرحبااا/xxxxx", label: "末尾 RTL ホスト + アラビア語パス"),
+      BidiCase(
+        hostA: "192.0.2.1", hostB: "888.8.8.8",
+        pathA: "/العربية/bank", pathB: "/مرحبااا/xxxx", label: "RTL 親環境 + IPv4 + アラビア語パス",
+        layoutDirection: .rightToLeft),
+    ]
+
+    for item in cases {
+      let base = try renderBarSnapshot(
+        displayURL: BrowserDisplayURL(
+          host: item.hostA, path: item.pathA, isSecure: true,
+          raw: "https://\(item.hostA)\(item.pathA)"),
+        layoutDirection: item.layoutDirection)
+      let altHost = try renderBarSnapshot(
+        displayURL: BrowserDisplayURL(
+          host: item.hostB, path: item.pathA, isSecure: true,
+          raw: "https://\(item.hostB)\(item.pathA)"),
+        layoutDirection: item.layoutDirection)
+      let altPath = try renderBarSnapshot(
+        displayURL: BrowserDisplayURL(
+          host: item.hostA, path: item.pathB, isSecure: true,
+          raw: "https://\(item.hostA)\(item.pathB)"),
+        layoutDirection: item.layoutDirection)
+
+      let hostRange = try XCTUnwrap(diffXRange(base, altHost), "\(item.label): ホスト描画域を検出")
+      let pathRange = try XCTUnwrap(diffXRange(base, altPath), "\(item.label): パス描画域を検出")
+      XCTAssertLessThanOrEqual(
+        hostRange.upperBound, pathRange.lowerBound + 2,
+        "\(item.label): ホスト(\(hostRange))が左、パス(\(pathRange))が右に配置される")
+    }
+  }
+
+  private func renderBarSnapshot(
+    displayURL: BrowserDisplayURL, layoutDirection: LayoutDirection = .leftToRight
+  ) throws -> NSBitmapImageRep {
+    let model = BrowserToolbarModel()
+    model.mode = .full
+    model.isInteractiveFocused = true
+    model.displayURL = displayURL
+    let width = 520
+    let height = Int(Theme.Layout.browserBar)
+    let host = NSHostingView(
+      rootView: BrowserBarRoot(
+        model: model, localization: LocalizationStore(language: .ja),
+        fontResolver: ChromeFontResolver()
+      )
+      .environment(\.layoutDirection, layoutDirection))
+    host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+    host.layoutSubtreeIfNeeded()
+    let rep = try XCTUnwrap(
+      NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
+        samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+        bytesPerRow: width * 4, bitsPerPixel: 32))
+    rep.size = host.bounds.size
+    host.cacheDisplay(in: host.bounds, to: rep)
+    return rep
+  }
+
+  private func diffXRange(_ lhs: NSBitmapImageRep, _ rhs: NSBitmapImageRep) -> ClosedRange<Int>? {
+    let width = min(lhs.pixelsWide, rhs.pixelsWide)
+    let height = min(lhs.pixelsHigh, rhs.pixelsHigh)
+    guard let lBase = lhs.bitmapData, let rBase = rhs.bitmapData else { return nil }
+    var minX = Int.max
+    var maxX = -1
+    for y in 0..<height {
+      let lRow = lBase.advanced(by: y * lhs.bytesPerRow).withMemoryRebound(
+        to: UInt32.self, capacity: width
+      ) { $0 }
+      let rRow = rBase.advanced(by: y * rhs.bytesPerRow).withMemoryRebound(
+        to: UInt32.self, capacity: width
+      ) { $0 }
+      for x in 0..<width where lRow[x] != rRow[x] {
+        if x < minX { minX = x }
+        if x > maxX { maxX = x }
+      }
+    }
+    return maxX >= minX ? minX...maxX : nil
+  }
+
   private func resizeHosted(_ hosted: Hosted, width: CGFloat) {
     let size = NSSize(width: width, height: 600)
     hosted.window.setFrame(NSRect(origin: .zero, size: size), display: false)
