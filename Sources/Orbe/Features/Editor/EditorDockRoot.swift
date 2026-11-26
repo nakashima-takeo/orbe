@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// 上のバーの右下の置き場の SwiftUI ルート。上から、ポップアップ（開いていれば、載せる側の中身）と、今の画面の札を右寄せで
-/// 縦に並べる（→ `EditorDockStack`）。札は、画面ごとのファイル（`EditorDock+<画面>.swift`）が、ここの描画の中で持ち主の値から
+/// 上のバーの右下の置き場の SwiftUI ルート。上から、ポップアップ（開いていれば、載せる側の中身。同一性は器の開いた回数）と、
+/// 今の画面の札を右寄せで縦に並べる（→ `EditorDockStack`）。札は、画面ごとのファイル（`EditorDock+<画面>.swift`）が、ここの描画の中で持ち主の値から
 /// 組む。器の中の別 root なので環境は明示注入する。影を描くために、置き場の枠の外側に `margin` の余白を取る。見えている物の
 /// 枠（`editorDockItem` を付けた物）は `framesDidChange` で host へ知らせる（host が押下を受ける範囲）。
 struct EditorDockRoot: View {
@@ -21,7 +21,7 @@ struct EditorDockRoot: View {
 
   var body: some View {
     EditorDockStack {
-      if popup.isOpen, let owner = popup.owner { owner.popupContent() }
+      if popup.isOpen, let owner = popup.owner { owner.popupContent().id(popup.openCount) }
     } cards: {
       switch shell.panel.screen {
       case .changes: changesCards

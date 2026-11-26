@@ -2,7 +2,9 @@ import AppKit
 import SwiftUI
 
 /// ポップアップの器が、載せる側へ問う口。中身（入力欄・ボタン・地の部品での包み方）・入力欄へのフォーカスの入れ方・
-/// ↵ と ⌘↵ の意味・書きかけの保管は、載せる側が持つ。
+/// ↵ と ⌘↵ の意味・書きかけの保管は、載せる側が持つ。中身の同一性は器が決める——開いている間は変わらず（置き場が描き
+/// 直されても、中身の view と状態は作り直されない）、開くたびに替わる（前に開いた中身を使い回さない）。載せる側は、中身に
+/// 自分で同一性（`.id`）を付けない。
 @MainActor
 protocol EditorPopupOwner: AnyObject {
   /// 中身の view（地の部品で包んだもの）。
@@ -20,6 +22,8 @@ protocol EditorPopupOwner: AnyObject {
 @MainActor @Observable
 final class EditorPopup {
   private(set) var isOpen = false
+  /// 開いた回数。置き場は、中身の同一性をこの値で決める（開くたびに、中身が最初に組まれるより前に、この値が進む）。
+  private(set) var openCount = 0
   @ObservationIgnored private(set) weak var owner: EditorPopupOwner?
   /// 開いた（pane が置き直し、開く前のフォーカスの場所を覚え、フォーカスの監視を始める）。載せる側へ知らせる前に呼ぶ。
   @ObservationIgnored var onOpen: () -> Void = {}
@@ -30,6 +34,7 @@ final class EditorPopup {
   func open(_ owner: EditorPopupOwner) {
     guard !isOpen else { return }
     self.owner = owner
+    openCount += 1
     isOpen = true
     onOpen()
     owner.popupDidOpen()
