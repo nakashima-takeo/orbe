@@ -192,7 +192,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
 
   /// 裏の fetch に譲って待つ人の操作は、待つ間も実行中の札に出て止められる。止めると裏の fetch の終わりを待たずに「止めた」で
   /// 終わり、係の人の数は 0 に戻る。
-  func testAHumanOperationWaitingForTheBackgroundFetchShowsTheBandAndStopsAtOnce() throws {
+  func testAHumanOperationWaitingForTheBackgroundFetchShowsTheRunningCardAndStopsAtOnce() throws {
     let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
     panel.control.fetch()
     XCTAssertEqual(autoFetch.rules.humans, 1)
@@ -252,7 +252,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
   /// 「push は走らない」は、裏の fetch が終わった時点で確かめる。待っていた操作を起こすかは、裏の fetch の終わりの処理の中で
   /// 同期に決まる、という前提に依る（取り下げた待ちを列から外さない形に壊すと、このテストが落ちることを確かめてある）。本番が
   /// 待っていた操作を起こす経路を変えたときは、確かめ直す。
-  func testTheWaitBeforeThePushStepShowsTheBandAndStopsAtOnce() throws {
+  func testTheWaitBeforeThePushStepShowsTheRunningCardAndStopsAtOnce() throws {
     let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch(advancing: "other")
     let repo = try XCTUnwrap(self.repo)
     try repo.write("a.txt", "edited\n")

@@ -89,7 +89,7 @@ final class SourceControlTests: OrbeTestCase {
 
   /// 返らない hook のコミットは 0.3 秒を超えると実行中の札に出て、その後ろのステージ（順番待ち）は札に出ない。止めると失敗に
   /// ならず、index.lock も残らない。
-  func testBandShowsTheRunningOperationAndStopLeavesNoLock() throws {
+  func testTheRunningCardShowsTheRunningOperationAndStopLeavesNoLock() throws {
     let hook = repo.dir.appendingPathComponent(".git/hooks/pre-commit")
     try Data("#!/bin/sh\nsleep 60\n".utf8).write(to: hook)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
