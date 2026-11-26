@@ -8,12 +8,12 @@ import XCTest
 /// フォーカスを入れる。コミットが通れば閉じてフォーカスは開く前の場所へ戻り（変更の列の行が無くなっていれば本体へ移り）、
 /// 最後のコミットの取り消しと、コミットの失敗では開いたまま。
 /// 閉じても失敗は消えない（赤い行に出していたコミットの操作の失敗も残る）。▾ のメニューは開くとフォーカスを行の列へ移し、
-/// 何も選ばずに始まり、esc はメニューだけを閉じて欄へ戻す。
+/// 何も選ばずに始まり、esc はメニューだけを閉じて欄へ戻す。欄の esc はポップアップを閉じる。
 ///
 /// 壊れると何が起きるか。列の途中の行で ⌘↑ を押しても開かない。コミットの後もポップアップが残る。フォーカスが窓へ落ちて
 /// キーがどこにも届かない。取り消した直後に書き直そうとすると閉じている。閉じると、hook の
 /// 失敗の理由やプルの失敗が消え、理由を見られない。▾ を開いた直後の ↵ で思わず amend する。メニューの esc でポップアップごと閉じて
-/// 打ちかけを見失う。
+/// 打ちかけを見失う。欄の esc でポップアップが閉じない。
 extension SourceControlPaneTests {
   /// 上向きの矢印のキーの字。
   private static let upArrow = String(UnicodeScalar(NSEvent.SpecialKey.upArrow.rawValue)!)
@@ -120,7 +120,7 @@ extension SourceControlPaneTests {
   }
 
   /// ▾ を開くとフォーカスはメニューの行の列へ移り、ポップアップは開いたまま。何も選ばずに始まるので、開いた直後の ↵ は何もしない
-  /// （amend を選べるときでも）。esc はメニューだけを閉じ、フォーカスはメッセージ欄へ戻る。
+  /// （amend を選べるときでも）。esc はメニューだけを閉じ、フォーカスはメッセージ欄へ戻る。欄の esc はポップアップを閉じる。
   func testTheMenuStartsWithNothingChosenAndEscapeClosesOnlyTheMenu() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "edited\n")
@@ -146,5 +146,9 @@ extension SourceControlPaneTests {
     pumpMain(until: { self.messageFieldHasFocus(hosted) }, "メッセージ欄へ戻る")
     nextTurn()
     XCTAssertTrue(popup.isOpen, "esc はメニューだけを閉じる")
+
+    deliverKeyDown(.key("\u{1b}", []), to: hosted.window)
+    nextTurn()
+    XCTAssertFalse(popup.isOpen, "欄の esc はポップアップを閉じる（「esc はメニューだけを閉じる」と同じ時点で確かめる対）")
   }
 }
