@@ -153,4 +153,24 @@ final class MetalLineMarksTests: EngineTestCase {
       XCTAssertTrue(isBlack(shot.rgb(x, y)), "右余白と印の列（バー以外）に数字の字は無い: x=\(x)")
     }
   }
+
+  /// 折り返した行では、行番号は 1 段目にだけ出て、git の印のバーは行の全部の段に出る。
+  func testAWrappedLineShowsItsNumberOnceAndItsMarkOnEverySegment() throws {
+    let long = (0..<200).map { "word\($0)" }.joined(separator: " ")
+    let opened = try open("a\n\(long)\nc\n", waitForColors: false)
+    mark("a\nchanged\nc\n", on: opened)
+    let segments = opened.surface.rows.segments(ofLine: 1)
+    XCTAssertGreaterThanOrEqual(segments, 3, "前提: 行 2 は折り返す")
+    let shot = try shoot(opened)
+    let digitsRight = shot.column - style.marks.gutterWidth - style.gutterTrailingInset
+    for segment in 0..<segments {
+      let y = rowMidY(2 + segment)
+      XCTAssertTrue(isBlue(shot.rgb(shot.barX, y)), "段 \(segment) の印のバー")
+      let ink = stride(from: digitsRight - 12, to: digitsRight, by: 0.5).contains { x in
+        stride(from: y - 4, through: y + 4, by: 0.5).contains { !isBlack(shot.rgb(x, $0)) }
+      }
+      XCTAssertEqual(ink, segment == 0, "段 \(segment) の行番号")
+    }
+    XCTAssertTrue(isBlack(shot.rgb(shot.barX, rowMidY(2 + segments))), "次の行には印が無い")
+  }
 }
