@@ -97,7 +97,8 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     _ = try inputField(pane, in: window)
     window.makeFirstResponder(nil)
     pumpMain(until: { window.firstResponder === window }, "前提: 焦点が窓へ落ちる")
-    pane.sideHost.layoutSubtreeIfNeeded()  // 保留中の SwiftUI 更新を走らせ、onChange(of: focused) を確定させる
+    // 保留中の SwiftUI 更新を走らせ、エクスプローラーの onChange(of: focus) を確定させる
+    pane.sideHost.layoutSubtreeIfNeeded()
     XCTAssertNotNil(pane.tree.newEntry, "窓へ落ちただけ（人の操作ではない）では取り消さない")
     XCTAssertTrue(window.firstResponder === pane, "入力は生かしたまま面が焦点を預かる")
 

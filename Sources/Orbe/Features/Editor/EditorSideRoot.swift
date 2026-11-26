@@ -26,8 +26,8 @@ struct EditorSideRoot: View {
   static let space = "editorSide"
 
   var body: some View {
-    // GeometryReader は中身の最小幅に縛られず host の幅を取る——エクスプローラーのヘッダー（3 ボタン）より狭く切り詰め
-    // られても root が中央寄せで左へずれない。溢れは右で、切り落とす。
+    // GeometryReader は中身の最小幅に縛られず host の幅を取る——エクスプローラーの上の行（絞り込みの欄と 3 つのツール）より
+    // 狭く切り詰められても root が中央寄せで左へずれない。溢れは右で、切り落とす。
     GeometryReader { _ in
       if sidebar.isOpen {
         switch shell.panel {

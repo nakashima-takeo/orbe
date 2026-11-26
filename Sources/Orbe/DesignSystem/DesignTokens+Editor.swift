@@ -160,7 +160,7 @@ extension Theme.Typography {
   static let editorTreeBadge = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .semibold)
   /// ツリーの絞り込みの欄（sans 12）。
   static let editorTreeFilter = NSFont.systemFont(ofSize: 12, weight: .regular)
-  /// ツリー行の git バッジ（mono 11）。
+  /// ソース管理・PR のパネルの行の git の字（mono 11）。
   static let editorBadge = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// 種別チップのグリフ（mono bold。サイズはチップが決める）。
   static func editorChip(size: CGFloat) -> NSFont {
@@ -376,10 +376,10 @@ extension Theme.Opacity {
   static let editorItemListMarkHover: Double = 0.10
   /// ツリーの行のホバーの地（塗りの α）と、字下げの線（hairline の α）。
   static let editorTreeHover: Double = 0.045
+  static let editorTreeGuide: Double = 0.15
   /// ツリーの開いている行の地と枠（`surfaceInk` の α）。
   static let editorTreeOpen: Double = 0.06
   static let editorTreeOpenBorder: Double = 0.05
-  static let editorTreeGuide: Double = 0.15
   /// diff の追加・削除の行の地の不透明度（構文色が地の上で読める濃さ）。
   static let editorDiffRow: CGFloat = 0.12
   /// diff の詰め物の行の地（塗りの α）と、並列の 2 面の境（hairline の α）。
