@@ -77,6 +77,8 @@ extension MetalTextSurface {
   /// 状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が位置を先・材料を後の順で 1 回で書く。
   private func commit(_ finished: Transaction) {
     guard let change = bodySite.change else { return }
+    // 見せる区間は、置き直した後の縦の並びの段で求める。
+    let rewrapped = settleWraps(change.content ?? currentContent)
     let span =
       finished.reveal == .none
       ? nil : finished.revealSite?.revealSpan(finished.revealing, rows: finished.revealingRows)
@@ -88,7 +90,6 @@ extension MetalTextSurface {
     let text = change.content?.text ?? currentContent?.text
     if change.remeasure, let content = change.content { pending.remeasure = content.version }
     let lineCount = text?.lineCount ?? 1
-    let rewrapped = settleWraps(change.content ?? currentContent)
     settleRows(finished, lineCount: lineCount, rewrapped: rewrapped)
     pending.limits = limits(lineCount: lineCount)
     if let p = position(after: finished, span: span) {
