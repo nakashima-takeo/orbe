@@ -5,8 +5,8 @@
   /// ソース管理パネルの gallery / flow の fixture。渡された置き場に本物の git の場を作る——bare の origin に 2 件、upstream を
   /// origin/main にしたブランチ `feature/agent-hooks` に未 push の 3 件、ステージ済みの追加 1 件（EmitBuffer.swift）と変更 3 件
   /// （StateHooks.swift・HookRegistry.swift・README.md）。面はソース管理のパネルを出して窓に載せる。status・グラフ・HEAD の
-  /// push 済みは git の子プロセス後に届くので、撮る側は `warmUp()` の後 `isReady` を待つ。実行中の帯・失敗・同期・公開・
-  /// 変更なしの状態は、撮る側が本物の git の操作で作る。ローカルの main も origin/main と同じコミットを指すので、グラフの
+  /// push 済みは git の子プロセス後に届くので、撮る側は `warmUp()` の後 `isReady` を待つ。実行中の札・失敗の札・破棄の確認・
+  /// 同期・公開・変更なしの状態は、撮る側が本物の git の操作で作る。ローカルの main も origin/main と同じコミットを指すので、グラフの
   /// 4 行目には札が 2 つ並ぶ（複数の札が並ぶ姿を撮る場を兼ねる）。
   enum ScmFixtures {
     static let branch = "feature/agent-hooks"
@@ -54,6 +54,48 @@
 
       /// 撮る view（pane をそのまま載せる）。
       var view: some View { ScmPane(pane: pane) }
+    }
+
+    /// 置き場の Changes の札——進捗の行つきの実行中の札（同期）・進捗の行の無い実行中の札（コミット）・失敗の札（同期の
+    /// 認証の失敗）を、幅 620 の置き場に並べる。下に本体の代わりの地を敷く。
+    @MainActor static func cards() -> some View {
+      let failure = SourceControl.Failure(kind: .sync, cause: .git(.authentication))
+      return EditorDockStack {
+        EmptyView()
+      } cards: {
+        ScmRunningCard(
+          kind: .sync, progress: "Writing objects: 62% (31/50), 18.42 KiB | 2.10 MiB/s", stop: {})
+        ScmRunningCard(kind: .commit, progress: nil, stop: {})
+        EditorFailureCard(text: ScmFailureText.card(failure, .ja) ?? "", dismiss: {})
+      }
+      .frame(width: Theme.Layout.editorDockWidth, height: 200)
+      .padding(EditorDockRoot.margin)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+      .background(Color.theme.bgBase)
+      .environment(\.localization, LocalizationStore(language: .ja))
+    }
+
+    /// 破棄の確認——1 件（題に名前）か、ゴミ箱へ移す行を含む 3 件（題と本文に件数）の確認を、本体の代わりの地の上に幕ごと描く。
+    @MainActor static func discardConfirmation(many: Bool) -> some View {
+      let file = { (path: String, trash: Bool) in
+        ScmChanges.File(
+          row: GitStatus.Row(path: path, originalPath: nil), badge: trash ? .untracked : .modified,
+          opensAsFile: true, discardMovesToTrash: trash)
+      }
+      let files =
+        many
+        ? [
+          file("src/agent/StateHooks.swift", false), file("README.md", false),
+          file("src/agent/EmitBuffer.swift", true),
+        ]
+        : [file("src/agent/StateHooks.swift", false)]
+      let confirm = EditorConfirm()
+      confirm.show(ScmDiscardGate.confirmation(files, language: .ja)) {}
+      return EditorConfirmRoot(
+        confirm: confirm, localization: LocalizationStore(language: .ja),
+        translucency: ChromeTranslucency()
+      )
+      .background(Color.theme.bgBase)
     }
 
     /// リポジトリは `place` の下に作る。git が失敗すれば投げる（→ `FixtureGit`）。
