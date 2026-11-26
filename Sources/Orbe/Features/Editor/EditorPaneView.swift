@@ -285,6 +285,9 @@ final class EditorPaneView: NSView {
     guard root != tree.root else { return }
     popup.close(.itemGone)
     tree.cancelNew()
+    // エクスプローラーは同じ欄のまま作り直したツリーへ替わり、欄の焦点を新しいツリーへ写さないので、作り直す前に焦点を面の
+    // 行き先へ移す。
+    if tree.explorerFocus == .filter { reclaimSidebarFocus() }
     tree.isLive = false
     tree = FileTree(root: root)
     wireTree()
