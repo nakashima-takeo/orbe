@@ -76,6 +76,10 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     wc.setBrowserMode(.full, animated: false)
     layout(wc)
     XCTAssertEqual(tab.surface.bounds.size, terminalSize, "全面切替で端末寸法が変わらない")
+    XCTAssertEqual(wc.browserSheetRatio, 0.72, accuracy: 0.001, "全面切替で比率が巻き戻らない")
+    wc.setBrowserMode(.sheet, animated: false)
+    XCTAssertEqual(wc.browserSheetRatio, 0.72, accuracy: 0.001, "右シート復帰後も設定比率を保つ")
+    wc.setBrowserMode(.full, animated: false)
 
     // URL 欄編集中は ⌘T が不活性で暴発せず、⌘B だけ編集を外因終了して閉じる。
     wc.browserView.beginURLEditing()
@@ -107,33 +111,52 @@ final class WindowControllerBrowserTests: OrbeTestCase {
 
   // MARK: - workspace 切替・overlay・背景タブ閉鎖での保持
 
-  /// workspace 切替・背景タブ閉鎖・overlay 往復でブラウザの開閉・比率・焦点記憶を保持する。
+  /// タブ・worktree・workspace 切替・背景タブ閉鎖・overlay 往復でブラウザの開閉・比率・表示ページ・焦点記憶を保持する。
   func testWorkspaceSwitchOverlayAndBackgroundClosePreserveBrowserAndFocus() throws {
+    let wt1 = try caseDir("wt1")
+    let wt2 = try caseDir("wt2")
     let window = OrbeWindowFake()
     let wc = try restore(
       [
         WorkspaceState(
-          name: "a", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain, Self.plain]),
+          name: "a", rootPath: wt1, activeTab: 0,
+          tabs: [
+            TabState(cwd: wt1, agent: nil, explicitTitle: nil),
+            TabState(cwd: wt2, agent: nil, explicitTitle: nil),
+          ]),
         WorkspaceState(name: "b", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain]),
       ], window: window)
     window.isKey = true
     let wsA = try XCTUnwrap(wc.workspaces.first { $0.name == "a" })
+    let wsAIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "a" })
     let wsBIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "b" })
-    let backgroundTab = wsA.tabs[1]
+    let pageURL = URL(string: "https://docs.orbe.dev/guide")!
 
     wc.setBrowserMode(.sheet, animated: false)
     wc.browserView.setSheetRatio(0.65)
+    loadPage(pageURL, in: wc)
     XCTAssertTrue(wc.browserView.focusIsInside, "前提: 右シートに焦点")
 
-    // 背景タブ閉鎖でも右シートとブラウザ焦点を保持する。
-    wc.closeTab(backgroundTab, origin: .controlAPI)
+    // 別 worktree タブへ切り替えても表示ページとシート比率を保持する。
+    wc.select(1)
     XCTAssertEqual(wc.browserMode, .sheet)
+    XCTAssertEqual(wc.browserView.webView?.url, pageURL)
+    XCTAssertEqual(wc.browserView.toolbar.displayURL?.host, "docs.orbe.dev")
+    wc.select(0)
+    wc.browserView.focusBrowser()
+
+    // 背景タブ閉鎖でも右シート・ページ・ブラウザ焦点を保持する。
+    wc.closeTab(wsA.tabs[1], origin: .controlAPI)
+    XCTAssertEqual(wc.browserMode, .sheet)
+    XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertTrue(wc.browserView.focusIsInside)
 
-    // ブラウザ焦点のまま workspace 切替しても右シート・比率・ブラウザ焦点を保持する。
+    // ブラウザ焦点のまま workspace 切替しても右シート・比率・ページ・ブラウザ焦点を保持する。
     wc.switchWorkspace(to: wsBIndex)
     XCTAssertEqual(wc.browserMode, .sheet)
     XCTAssertEqual(wc.browserSheetRatio, 0.65, accuracy: 0.001)
+    XCTAssertEqual(wc.browserView.webView?.url, pageURL)
+    XCTAssertEqual(wc.browserView.toolbar.displayURL?.path, "/guide")
     XCTAssertTrue(wc.browserView.focusIsInside, "右シート焦点記憶があればブラウザに焦点を保つ")
 
     // ヘルプ overlay を開いて閉じてもブラウザへ焦点が戻る。
@@ -141,22 +164,34 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     wc.window.makeFirstResponder(nil)
     wc.dismissHelp()
     nextTurn()
-    XCTAssertEqual(wc.browserMode, .sheet)
-    XCTAssertTrue(wc.browserView.focusIsInside, "overlay 閉鎖でブラウザへ焦点復帰")
+    XCTAssertTrue(wc.browserMode == .sheet && wc.browserView.focusIsInside, "overlay 閉鎖でブラウザへ焦点復帰")
 
-    // 下層の端末へ焦点を移してから workspace 切替すると、右シートは保ったまま切替先の端末へ焦点が移る。
-    let tabB = try XCTUnwrap(wc.activeTab)
-    wc.window.makeFirstResponder(tabB.surface)
-    XCTAssertFalse(wc.browserView.focusIsInside)
-    wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "a" }))
+    // 下層の端末へ焦点を移してから workspace 切替すると、右シートとページは保ったまま切替先の端末へ焦点が移る。
+    wc.window.makeFirstResponder(try XCTUnwrap(wc.activeTab).surface)
+    wc.switchWorkspace(to: wsAIndex)
     XCTAssertEqual(wc.browserMode, .sheet, "右シートは保持")
+    XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertTrue(wc.window.firstResponder === wsA.tabs[0].surface, "下層焦点だったなら切替先端末へ")
 
-    // 全面表示では常にブラウザと焦点を保持する。
+    // 全面表示では常にブラウザ・ページ・焦点を保持する。
     wc.setBrowserMode(.full, animated: false)
     wc.switchWorkspace(to: wsBIndex)
     XCTAssertEqual(wc.browserMode, .full)
+    XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertTrue(wc.browserView.focusIsInside)
+  }
+
+  private func caseDir(_ name: String) throws -> String {
+    let url = TestScratch.caseDir.appendingPathComponent(name)
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url.path
+  }
+
+  private func loadPage(_ url: URL, in wc: WindowController) {
+    var loaded = false
+    wc.browserView.onNavigationFinish = { loaded = true }
+    wc.browserView.loadHTMLString("<p>guide</p>", baseURL: url)
+    pumpMain(until: { loaded }, timeout: 5, "ブラウザページ読み込み完了")
   }
 
   // MARK: - 下層へ移る操作での Z=2 引き渡し
@@ -188,6 +223,31 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     XCTAssertEqual(wc.browserMode, .sheet)
     XCTAssertTrue(tab1.group.view.isEditorOpen)
     XCTAssertTrue(tab1.group.view.editor.focusIsInside)
+
+    // 下層エディター既開＋右シート＋ブラウザ焦点中の ⌘⇧F / open_file は、右シートを残して同期に焦点を譲る。
+    wc.browserView.focusBrowser()
+    XCTAssertTrue(wc.browserView.focusIsInside && wc.browserWasFocused, "前提: 右シートに焦点")
+    wc.handleWindowCommand(.findInProject)
+    XCTAssertEqual(wc.browserMode, .sheet, "右シートは閉じない")
+    XCTAssertFalse(wc.browserView.focusIsInside, "既開エディターへの ⌘⇧F で同期にブラウザから焦点を譲る")
+    XCTAssertFalse(wc.browserView.isBrowserFocused)
+    XCTAssertFalse(wc.browserWasFocused)
+    XCTAssertTrue(tab1.group.view.editor.showsSearchPanel, "検索パネルが開く")
+
+    wc.browserView.focusBrowser()
+    guard case .success = wc.controlOpenFile(tabId: tab1.id, path: file.path) else {
+      return XCTFail("open_file は success")
+    }
+    XCTAssertEqual(wc.browserMode, .sheet, "既開エディターへの open_file でも右シートは残す")
+    XCTAssertFalse(wc.browserView.focusIsInside, "既開エディターへの open_file でブラウザから焦点を譲る")
+    XCTAssertTrue(tab1.group.view.editor.focusIsInside)
+
+    // 全面ブラウザ表示中に、下層が既にエディターでも ⌘⇧F は全面を閉じて検索パネルを開く。
+    tab1.group.view.editor.showExplorer()
+    wc.setBrowserMode(.full, animated: false)
+    wc.handleWindowCommand(.findInProject)
+    XCTAssertEqual(wc.browserMode, .closed, "全面ブラウザ中の ⌘⇧F は全面を閉じる")
+    XCTAssertTrue(tab1.group.view.editor.showsSearchPanel, "全面閉鎖後に検索パネルが開く")
 
     // 全面ブラウザ表示中に、下層が既にエディターでも ⌘E は反転せず全面を閉じてエディターを開く。
     wc.setBrowserMode(.full, animated: false)
