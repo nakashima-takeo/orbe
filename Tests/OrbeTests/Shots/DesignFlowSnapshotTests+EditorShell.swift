@@ -175,7 +175,7 @@ extension DesignFlowSnapshotTests {
     let pane = scene.pane
     let owner = EditorShellFixtures.DockPopupOwner(popup: pane.popup)
     try renderInPlace(
-      pane, name: "editor_dock", dir: previewDir("flows"), appearances: [true],
+      pane, name: "editor_dock", dir: previewDir("flows"), appearances: [true, false],
       steps: [
         ("open", { pane.popup.toggle(owner) }),
         (
