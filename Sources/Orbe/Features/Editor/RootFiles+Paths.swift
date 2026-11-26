@@ -73,7 +73,8 @@ private struct PathCollector {
     if !DefaultExcludes.contains(path) { paths.append(path) }
   }
 
-  /// git の作業ツリーの根 `directory` を git に問い合わせる。どちらかの git が失敗したら何も足さずに false。
+  /// git の作業ツリーの根 `directory` を git に問い合わせる。skip-worktree のファイルは、ディスクに在るものだけを足す。どちらかの
+  /// git が失敗したら何も足さずに false。
   private mutating func askGit(_ directory: String) -> Bool {
     let cwd = absolute(directory)
     let listed = runner.runSync(GitFileList.listedArguments, cwd: cwd)
@@ -81,12 +82,21 @@ private struct PathCollector {
     let ignored = runner.runSync(GitFileList.ignoredArguments, cwd: cwd)
     guard ignored.ending == .completed, ignored.isSuccess else { return false }
     let read = GitFileList.parseListed(listed.stdout)
-    for path in read.files + GitFileList.parseIgnored(ignored.stdout) { add(join(directory, path)) }
+    let present = read.skipped.filter { isFile(join(directory, $0)) }
+    for path in read.files + present + GitFileList.parseIgnored(ignored.stdout) {
+      add(join(directory, path))
+    }
     for nested in read.nestedRoots where !DefaultExcludes.containsDirectory(join(directory, nested))
     {
       pending.append(join(directory, nested))
     }
     return true
+  }
+
+  /// `path` がディスクにフォルダ以外として在るか（symlink は辿らない）。
+  private func isFile(_ path: String) -> Bool {
+    var info = stat()
+    return lstat(absolute(path), &info) == 0 && info.st_mode & S_IFMT != S_IFDIR
   }
 
   /// `directory` の下をディスクで走査する。symlink は辿らず、`.git` はフォルダでもファイルでも数えず（ツリーの一覧と同じ

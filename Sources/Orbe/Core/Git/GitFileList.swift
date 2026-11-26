@@ -4,6 +4,7 @@ import Foundation
 /// パスはその根からの相対パスで返る。
 enum GitFileList {
   /// (a) 追跡しているファイル（`H` ほか。モードつき）・削除された追跡ファイル（`R`）・無視されていない未追跡のファイル（`?`）。
+  /// skip-worktree の追跡ファイル（`S`。sparse checkout の範囲外など）は、ディスクに無くても `R` にならない。
   static let listedArguments = [
     "ls-files", "-z", "-t", "-s", "-c", "-d", "-o", "--exclude-standard",
   ]
@@ -16,6 +17,8 @@ enum GitFileList {
   struct Listed: Equatable {
     /// 対象のファイル（追跡しているもののうち削除されていないものと、未追跡のもの。同じパスは 1 つ）。
     var files: [String] = []
+    /// skip-worktree の追跡ファイル。ディスクに在るかは出力から分からないので、呼び出し元が確かめる。
+    var skipped: [String] = []
     /// 入れ子の根（サブモジュールと、入れ子のリポジトリ。末尾の `/` は外す）。
     var nestedRoots: [String] = []
   }
@@ -26,6 +29,7 @@ enum GitFileList {
   /// 行（モード 160000）と、未追跡で末尾が `/` の行（入れ子のリポジトリ）は入れ子の根として返す。解析できない行は破棄する。
   static func parseListed(_ data: Data) -> Listed {
     var tracked: [String] = []
+    var skipped: [String] = []
     var untracked: [String] = []
     var deleted = Set<String>()
     var nested: [String] = []
@@ -49,6 +53,8 @@ enum GitFileList {
         deleted.insert(path)
       } else if fields[0] == submoduleMode {
         nested.append(path)
+      } else if tag == "S" {
+        skipped.append(path)
       } else {
         tracked.append(path)
       }
@@ -59,6 +65,7 @@ enum GitFileList {
       listed.files.append(path)
     }
     listed.files += untracked
+    listed.skipped = skipped
     listed.nestedRoots = Array(Set(nested)).sorted()
     return listed
   }
