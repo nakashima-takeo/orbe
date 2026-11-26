@@ -100,6 +100,22 @@ final class TextRopeTests: XCTestCase {
     assertMatches(rope, "")
   }
 
+  /// UTF-8 のバイト数は、塊をまたぐ本文でも置換の後でも、本文を UTF-8 にしたバイト数と同じ（ASCII 1・é 2・漢字 3・絵文字 4）。
+  func testUTF8LengthFollowsEdits() {
+    var reference = String(repeating: "a é 漢字 😀\n", count: 300)
+    var rope = TextRope(reference)
+    XCTAssertEqual(rope.utf8Length, reference.utf8.count)
+    let edits: [(NSRange, String)] = [
+      (NSRange(location: 10, length: 2_000), "字"), (NSRange(location: 0, length: 0), "😀😀"),
+      (NSRange(location: 4, length: 3), ""),
+    ]
+    for (range, replacement) in edits {
+      reference = (reference as NSString).replacingCharacters(in: range, with: replacement)
+      rope.replace(range, with: replacement)
+      XCTAssertEqual(rope.utf8Length, reference.utf8.count)
+    }
+  }
+
   /// 置換の中身は UTF-16 の単位のまま入る——サロゲートの対の片割れも化けずに残り、戻せば元の対になる。編集の絞り込みも
   /// 片割れを単位のまま運ぶ。
   func testReplacingWithUnitsKeepsALoneSurrogate() {
