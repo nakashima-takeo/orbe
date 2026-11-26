@@ -46,7 +46,9 @@ final class ScmListSource: RowListSource {
     case .left: panel.moveLeft()
     case .right: panel.moveRight(isRepeat: key.isRepeat, in: layout)
     case .enter: panel.activateSelection()
-    case .escape: panel.select(nil)
+    case .escape:
+      // 押し続けた esc は、ポップアップを閉じて戻った後の列の選択を外さない。
+      if !key.isRepeat { panel.select(nil) }
     }
   }
 
