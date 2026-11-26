@@ -19,20 +19,51 @@ enum BrowserURLInput {
     let raw = url.absoluteString
     guard let host = url.host, !host.isEmpty else {
       guard !raw.isEmpty else { return nil }
-      return BrowserDisplayURL(host: raw, path: "", isSecure: resolvedSecure, raw: raw)
+      return BrowserDisplayURL(
+        host: sanitizeForDisplay(raw), path: "", isSecure: resolvedSecure, raw: raw)
     }
     let displayHost = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
-    let formattedHost = url.port.map { "\(displayHost):\($0)" } ?? displayHost
-    var suffix = url.path == "/" ? "" : url.path
+    let formattedHost = sanitizeForDisplay(url.port.map { "\(displayHost):\($0)" } ?? displayHost)
+    var suffix = url.path == "/" ? "" : sanitizeForDisplay(url.path)
     if let query = url.query, !query.isEmpty {
-      suffix += "?\(query)"
+      suffix += "?\(sanitizeForDisplay(query))"
     }
     if let fragment = url.fragment, !fragment.isEmpty {
-      suffix += "#\(fragment)"
+      suffix += "#\(sanitizeForDisplay(fragment))"
     }
     return BrowserDisplayURL(
       host: formattedHost, path: suffix, isSecure: resolvedSecure, raw: raw)
   }
+
+  /// URL 表示の並び替えや切り詰めを引き起こす Bidi 書式文字・制御文字・行/段落区切りのみを
+  /// UTF-8 バイト単位で再パーセントエンコードし、日本語等の可読パスは維持する。
+  private static func sanitizeForDisplay(_ text: String) -> String {
+    guard text.unicodeScalars.contains(where: requiresDisplayPercentEncoding) else { return text }
+    var result = ""
+    result.reserveCapacity(text.utf8.count)
+    for scalar in text.unicodeScalars {
+      if requiresDisplayPercentEncoding(scalar) {
+        for byte in scalar.utf8 {
+          result.append("%")
+          result.append(hexDigits[Int(byte >> 4)])
+          result.append(hexDigits[Int(byte & 0x0F)])
+        }
+      } else {
+        result.unicodeScalars.append(scalar)
+      }
+    }
+    return result
+  }
+
+  private static func requiresDisplayPercentEncoding(_ scalar: Unicode.Scalar) -> Bool {
+    let v = scalar.value
+    return v <= 0x1F || (0x7F...0x9F).contains(v)
+      || v == 0x061C || v == 0x200E || v == 0x200F
+      || (0x2028...0x202E).contains(v)
+      || (0x2066...0x2069).contains(v)
+  }
+
+  private static let hexDigits: [Character] = Array("0123456789ABCDEF")
 
   /// 利用者が入力した文字列を HTTP(S) URL へ正規化する。
   /// 非 HTTP(S) スキームや空白を含む語句など URL にならない文字列は `nil` を返す。
