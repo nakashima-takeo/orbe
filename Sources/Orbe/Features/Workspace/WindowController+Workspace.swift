@@ -23,7 +23,7 @@ extension WindowController {
 
   /// アクティブ workspace を表示する（今の状態を描く。空ならシェルは起こさない）。workspace の切替（`switchWorkspace`）・
   /// 復元・閉じた後の MRU 繰上げが共有する。選ぶものを決めて別の workspace へ移る経路（`focus_tab`・`open_file`・
-  /// `open_diff`・自動化の知らせ）は `select(_:inWorkspaceAt:inEditor:)` を通る。
+  /// `open_diff`・自動化の知らせ）は `select(_:inWorkspaceAt:inEditor:closingBrowser:)` を通る。
   func activateCurrent() {
     store.recordWorkspaceUse(current)  // 前面へ出すこと自体が利用（空でも MRU を進める）
     renderSelection()

@@ -38,6 +38,8 @@ final class EditorPaneView: NSView {
   var isPeeking = false {
     didSet { shell.isPeeking = isPeeking }
   }
+  /// 上位層（Z=2 ブラウザ層）が `⌥` 透かし中か。真の間はローカル監視の押下副作用を抑止する。
+  var isPeekingOverlay: () -> Bool = { false }
   let sideHost: NSHostingView<EditorSideRoot>
   let faceHost: NSHostingView<EditorFaceRoot>
   /// 差分のファイルの見出し（本体が diff の間だけ出す）。

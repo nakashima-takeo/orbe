@@ -32,8 +32,10 @@ import SwiftUI
 
   /// 上段 chrome（ネイティブ SwiftUI `StatusRowView` の状態）。
   let statusModel: StatusRowModel
-  /// 端末の器（アクティブ workspace の全タブの view とボードの器を WindowController が出し入れする）。
+  /// 端末・エディター・ボードの器（`reconcileContent()` 専有）。
   let content: NSView
+  /// `content`（Z=0/Z=1）と `browser`（Z=2）を兄弟配置する単一 AppKit ステージ。
+  let stage: NSView
   /// アクティブ workspace の選択が空（タブが 0 でボードも無い）か。true のとき content の地は端末もボードも塗らないため、
   /// AppShell が baseFill（透過設定追従）で埋める（透過ウィンドウ越しにデスクトップが透けるのを防ぐ）。
   var contentIsEmpty = false
@@ -59,9 +61,10 @@ import SwiftUI
   /// 提示元（WindowController）が起動時に据える。nil＝アップデート面なし（テスト等）。
   var update: UpdateState?
 
-  init(statusModel: StatusRowModel, content: NSView) {
+  init(statusModel: StatusRowModel, content: NSView, browser: NSView? = nil) {
     self.statusModel = statusModel
     self.content = content
+    self.stage = AppStageView(content: content, browser: browser)
   }
 
   /// 現在の overlay の入力欄へ focus を再確定する（各モデルの focusToken を進め、描画後に `@FocusState` を
@@ -110,7 +113,7 @@ struct AppShell: View {
           .frame(height: Chrome.barHeight)
           // 実窓の信号機を読むのは製品の殻だけ（見本系は既定値で描く）。
           .background(TrafficLightsProbe(model: model.statusModel))
-        NSViewContainer(view: model.content)
+        NSViewContainer(view: model.stage)
           // 空のときのみ端末と同濃度の地で埋める（surface が無く BackgroundGlow も透過時は塗らないため）。
           // baseFill は effectiveOpacity 追従なので背景不透明度の設定変更にライブで従う。タブかボードが載れば
           // contentIsEmpty=false で clear に戻り二重 veil を避ける。
@@ -185,5 +188,31 @@ extension EnvironmentValues {
   var windowIsMain: Bool {
     get { self[WindowIsMainKey.self] }
     set { self[WindowIsMainKey.self] = newValue }
+  }
+}
+
+/// `content`（Z=0/Z=1）と `browser`（Z=2）を常にステージ全面で兄弟配置する固定コンテナ。
+/// `reconcileContent()` の subview 照合からブラウザ層を構造的に切り離す。
+private final class AppStageView: NSView {
+  private let content: NSView
+  private let browser: NSView?
+
+  init(content: NSView, browser: NSView?) {
+    self.content = content
+    self.browser = browser
+    super.init(frame: .zero)
+    content.autoresizingMask = [.width, .height]
+    addSubview(content)
+    if let browser {
+      browser.autoresizingMask = [.width, .height]
+      addSubview(browser)
+    }
+  }
+  required init?(coder: NSCoder) { fatalError("not supported") }
+
+  override func layout() {
+    super.layout()
+    if content.frame != bounds { content.frame = bounds }
+    if let browser, browser.frame != bounds { browser.frame = bounds }
   }
 }

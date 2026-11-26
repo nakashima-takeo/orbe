@@ -97,21 +97,22 @@ extension WindowController {
     showAutomation(id)
   }
 
-  /// その自動化を見ている——窓がキーで、パレットが無く、Home のボードでその自動化の行を選んでいる。一覧に行が見えているだけ
-  /// では入れない（選んでいるときだけ、詳細に回の結果がその場で現れる）。
+  /// その自動化を見ている——窓がキーで、パレットが無く、ブラウザが非めくりでボードを覆っておらず、Home のボードで
+  /// その自動化の行を選んでいる。一覧に行が見えているだけでは入れない（選んでいるときだけ、詳細に回の結果がその場で現れる）。
   func isViewingAutomation(_ id: Int) -> Bool {
-    guard window.isKeyWindow, model.overlay == .none, store.isHome(activeWorkspace),
-      current.selection == .board
+    guard window.isKeyWindow, model.overlay == .none, !browserCoversBoard,
+      store.isHome(activeWorkspace), current.selection == .board
     else { return false }
     return board.selects(automation: id)
   }
 
   /// Home のボードでその自動化を開く（ピル・通知のクリック）。差し替えてはならない画面の間は何もしない。行き先はボードそのもの
-  /// なので、ほかのパレットは閉じる。自動化が消えていれば欄を、自動化のウィジェットが無ければボードを開くだけ。
+  /// なので、ほかのパレットと開いているブラウザ（全面・右シートとも）は閉じる。自動化が消えていれば欄を、自動化のウィジェットが
+  /// 無ければボードを開くだけ。
   func showAutomation(_ id: Int) {
     guard !model.overlay.isModal, let home = store.homeIndex else { return }
     if model.overlay != .none { dismissPalette() }
-    select(.board, inWorkspaceAt: home)
+    select(.board, inWorkspaceAt: home, closingBrowser: true)
     board.open(automation: id)
   }
 }

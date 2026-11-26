@@ -13,6 +13,11 @@ final class WindowController: NSObject, NSWindowDelegate {
   let statusModel: StatusRowModel
   // パレット提示の拡張（WindowController+Palette）も握るため internal。
   let model: AppShellModel
+  /// ウィンドウ最上層（Z=2）の内蔵ブラウザ層。workspace 切替をまたいで状態を保持する。
+  let browserView: BrowserLayerView
+  var browserMode: BrowserMode = .closed
+  /// overlay・改名欄から戻す先がブラウザ層かを記憶する（見た目の焦点判定には使わない）。
+  var browserWasFocused = false
   /// SwiftUI ルート（`AppShell`）を載せる NSHostingView（overlay は `AppShell` の `.overlay` で compose）。
   private let hostingView: ChromeHostingView
   // ドメイン/セッション状態（workspaces/activeWorkspace）の所有者。配列の CRUD・index 演算は
@@ -50,10 +55,14 @@ final class WindowController: NSObject, NSWindowDelegate {
   // 復元時の programmatic な setFrame を windowDidResize の取り込みから除外するフラグ。
   var isApplyingRestoredSize = false
   /// エディターで見せているタブ。無ければエディターは閉じている。あるなら前面の workspace で選んでいるタブ（揃えるのは
-  /// `renderSelection` の冒頭）。書き手は選ぶ命令・エディターで見せる命令・⌘E だけで、保存しない。替われば ⌥ だけの長押しを
-  /// 打ち切る——透かしは見せていたエディターの下を見るもので、閉じた・別のタブへ移ったエディターには残さない。
+  /// `renderSelection` の冒頭）。書き手は選ぶ命令・エディターで見せる命令・⌘E だけで、保存しない。ブラウザが閉じている
+  /// （めくり対象がエディター側の）間だけ、替われば ⌥ だけの長押しを打ち切る。
   var editorShownTab: TerminalTab? {
-    didSet { if editorShownTab !== oldValue { optionHold.interrupt() } }
+    didSet {
+      if editorShownTab !== oldValue, browserMode == .closed {
+        optionHold.interrupt()
+      }
+    }
   }
   /// ⌥ だけの長押しの判定。成立しているかは入力の事実としてここだけが持つ（窓は複製しない）。
   let optionHold: OptionHoldMonitor
@@ -141,7 +150,9 @@ final class WindowController: NSObject, NSWindowDelegate {
     self.window = window
     let statusModel = StatusRowModel()
     self.statusModel = statusModel
-    let model = AppShellModel(statusModel: statusModel, content: NSView())
+    let browserView = BrowserLayerView(localization: localization, fontResolver: fontResolver)
+    self.browserView = browserView
+    let model = AppShellModel(statusModel: statusModel, content: NSView(), browser: browserView)
     self.model = model
     hostingView = ChromeHostingView(
       rootView: AppShell(
@@ -151,6 +162,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     optionHold = OptionHoldMonitor(window: window)
     super.init()
     wireOptionHold()
+    wireBrowser()
 
     // タイトルバーは表示しない。chrome（StatusRow）がその領域を占め、
     // 信号機ボタンだけがコンテンツ上に残る。
@@ -353,10 +365,12 @@ final class WindowController: NSObject, NSWindowDelegate {
     consumeVisibleTabDone()
     refreshChrome()
     syncWindowBlur()  // 可視後の初回適用（起動時 init は windowNumber 未確定で CGS ブラーが効かない）
+    syncBrowserFocusVisual()
   }
 
   func windowDidResignKey(_ notification: Notification) {
     optionHold.cancel()
+    browserView.windowDidResignKey()
   }
 
   // chrome の前面／退いた姿は key でなく main で決める（Orbe のメニューやダイアログが key の間も窓は前面）。

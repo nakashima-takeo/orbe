@@ -20,6 +20,7 @@ extension WindowController {
     case .showSettings: showSettingsPalette()
     case .toggleHelp: showHelp()
     case .toggleEditorFace: toggleEditorFace()
+    case .toggleBrowser: toggleBrowser()
     case .findInProject: findInProject()
     }
   }
@@ -51,6 +52,10 @@ extension WindowController {
       return true
     }
     guard model.overlay == .none, statusModel.editingIndex == nil else { return false }
+    if browserView.isEditingURL {
+      guard command == .toggleBrowser else { return false }
+      browserView.endURLEditingExternally()
+    }
     handleWindowCommand(command)
     return true
   }

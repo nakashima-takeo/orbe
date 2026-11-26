@@ -31,8 +31,9 @@ extension L10n {
     .helpShortcutSettings: ("設定を開く", "Open settings"),
     .helpShortcutOpenEditor: ("cwd を GUI エディタで開く", "Open cwd in GUI editor"),
     .helpShortcutToggleEditorFace: ("エディターとターミナルを切替", "Switch editor / terminal"),
+    .helpShortcutToggleBrowser: ("ブラウザを開く・閉じる", "Show or hide the browser"),
     .helpShortcutPeekTerminal: (
-      "押している間、エディターの下のターミナルを表示", "Hold to show the terminal under the editor"
+      "押している間、最上層の 1 枚をめくって下の層を表示", "Hold to peek beneath the top layer"
     ),
     .helpShortcutSaveDocument: ("エディターのファイルを保存", "Save the editor file"),
     .helpShortcutToggleEditorSidebar: ("エディターのサイドバーを開く・閉じる", "Show or hide the editor sidebar"),
@@ -52,7 +53,9 @@ extension L10n {
       "新しいタブ（worktree・ブランチを選んで開く）", "New tab (pick a worktree or branch)"
     ),
     .helpShortcutClosedAgents: ("閉じたエージェント", "Closed agents"),
-    .helpShortcutRenameTab: ("タブをリネーム", "Rename tab"),
+    .helpShortcutRenameTab: (
+      "タブをリネーム（ブラウザはページを再読込）", "Rename tab (reload page in browser)"
+    ),
     .helpShortcutNextTab: ("次のタブへ", "Next tab"),
     .helpShortcutPrevTab: ("前のタブへ", "Previous tab"),
     .helpShortcutCloseTab: ("タブを閉じる", "Close tab"),
