@@ -3,7 +3,8 @@ import SwiftUI
 
 /// 面に重ねる検索バー——端末のスクロールバック検索とエディターのファイル内検索が共有する。
 /// 検索そのものは呼ぶ側が持つ（端末は libghostty の search アクション、エディターは `EditorSearch`）。
-/// 本バーは needle 入力・件数表示・次/前ジャンプのトリガを呼ぶ側へ渡すだけ。
+/// 本バーは needle 入力・件数表示・次/前ジャンプのトリガを呼ぶ側へ渡すだけ。件数の出し方と更新の規則は状態の型
+/// （`SearchBarModel`）が持つ。
 ///
 /// 中身は `NSHostingView<SearchField>`（純 SwiftUI）＋ `SearchBarModel`。入力欄は SwiftUI の
 /// `TextField`。次へ＝`onSubmit`（IME 確定の Enter では発火しない）、前へ＝Shift+Return を
@@ -70,27 +71,13 @@ final class SearchBar: NSView {
     editor.selectAll(nil)
   }
 
-  /// ヒット件数表示を更新（selected/total は呼ぶ側が押す。端末は libghostty の通知由来で、負値は nil で渡る）。
-  /// `limited` は呼ぶ側が一致を上限で打ち切った（件数を「total+」と見せる）。
+  /// ヒット件数表示を更新する（→ `SearchBarModel.updateCount`）。
   func updateCount(selected: Int?, total: Int?, limited: Bool = false) {
-    model.matchLimited = false
-    if model.needle.isEmpty {
-      model.matchTotal = nil  // 未検索＝件数を出さない
-      model.matchSelected = nil
-      return
-    }
-    guard let total, total > 0 else {
-      model.matchTotal = 0  // 一致なし
-      model.matchSelected = nil
-      return
-    }
-    model.matchTotal = total
-    model.matchSelected = selected
-    model.matchLimited = limited
+    model.updateCount(selected: selected, total: total, limited: limited)
   }
 }
 
-/// SearchBar の入力・表示状態を保持する SwiftUI モデル。
+/// 検索バーの入力・表示状態と、件数の出し方・更新の規則を保持する SwiftUI モデル。
 @MainActor @Observable final class SearchBarModel {
   var needle = ""
   var focused = false {
@@ -117,6 +104,37 @@ final class SearchBar: NSView {
 
   /// focus かつ非空（＝入力中）のときだけ focus リングを出す（§5.5）。
   var typing: Bool { focused && !needle.isEmpty }
+
+  /// ヒット件数を更新する（selected/total は呼ぶ側が押す。端末は libghostty の通知由来で、負値は nil で渡る）。
+  /// `limited` は呼ぶ側が一致を上限で打ち切った（件数を「total+」と見せる）。検索語が空なら件数を出さず、total が無いか 0 なら
+  /// 一致なし。
+  func updateCount(selected: Int?, total: Int?, limited: Bool = false) {
+    matchLimited = false
+    if needle.isEmpty {
+      matchTotal = nil
+      matchSelected = nil
+      return
+    }
+    guard let total, total > 0 else {
+      matchTotal = 0
+      matchSelected = nil
+      return
+    }
+    matchTotal = total
+    matchSelected = selected
+    matchLimited = limited
+  }
+
+  /// 件数の文（未検索は nil＝非表示）。一致なし＝文言、`selected` があれば `n/total`、無ければ `?/total` か件数。
+  func countText(_ localization: LocalizationStore) -> String? {
+    guard let total = matchTotal else { return nil }
+    if total == 0 { return localization.string(.searchNoMatch) }
+    let shownTotal = matchLimited ? "\(total)+" : "\(total)"
+    if let selected = matchSelected { return "\(selected)/\(shownTotal)" }
+    if showsUnknownPosition { return "?/\(shownTotal)" }
+    if matchLimited { return shownTotal }
+    return localization.plural(total, one: .searchMatchesOne, other: .searchMatchesOther)
+  }
 }
 
 /// 検索バーの宣言的レイアウト（§5.5）。地は bg.sunken＋1px surface.1＋radius md。
@@ -133,17 +151,6 @@ struct SearchField: View {
   /// 現在言語（別 NSHostingView root のため SearchBar が実ホルダーを渡す。既定は OS 追従）。
   var localization = LocalizationStore(language: .systemDefault)
   @FocusState private var isFocused: Bool
-
-  /// ヒット件数の表示（未検索は nil＝非表示）。一致なし＝文言、`selected` があれば `n/total`、無ければ件数。
-  private var countText: String? {
-    guard let total = model.matchTotal else { return nil }
-    if total == 0 { return localization.string(.searchNoMatch) }
-    let shownTotal = model.matchLimited ? "\(total)+" : "\(total)"
-    if let selected = model.matchSelected { return "\(selected)/\(shownTotal)" }
-    if model.showsUnknownPosition { return "?/\(shownTotal)" }
-    if model.matchLimited { return shownTotal }
-    return localization.plural(total, one: .searchMatchesOne, other: .searchMatchesOther)
-  }
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: Theme.Space.step) {
@@ -173,7 +180,7 @@ struct SearchField: View {
         // 入力欄は残り幅を埋める flex。件数が出るとその自然幅ぶん入力欄が縮むだけで、コンテナ幅は一定。
         // focus は外枠リングが示すため下線は持たない。上下対称 padding が TextField を枠の縦中央へ載せる。
         .frame(maxWidth: .infinity)
-      if let countText {
+      if let countText = model.countText(localization) {
         Text(countText)
           .font(Font.theme.captionDigit)
           .foregroundStyle(model.countIsNoMatch ? Color.theme.danger : Color.theme.textMuted)
