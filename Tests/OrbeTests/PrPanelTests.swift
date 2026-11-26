@@ -33,6 +33,12 @@ final class PrPanelTests: OrbeTestCase {
   var threads: [GitHubPullRequestReview.Thread] = []
   var reviewWrites: [GitHubReviewWrite] = []
   var reviewFailure: GitHubFailure?
+  /// 真ならレビューへの書き込みの答えを返さずに `heldReviewWrites` に溜める（送信の最中を作る）。
+  var holdsReviewWrites = false
+  var heldReviewWrites: [() -> Void] = []
+  /// GitHub の読み（ブランチの PR の問い合わせ・中身・レビューのやりとり）の失敗と、確認済みの書き込みの失敗。
+  var readFailure: GitHubFailure?
+  var viewedFailure: GitHubFailure?
   /// PR の先頭のコミット（手元の feat の先頭。ベースも同じコミット）と、レビューのやりとりが答える先頭のコミット。
   var head = ""
   var reviewHead = ""
@@ -77,28 +83,36 @@ final class PrPanelTests: OrbeTestCase {
         let pullRequest = GitHubBranchPR(
           number: number, headRefName: "feat", state: "OPEN", baseRefName: "main",
           headRepository: me, url: "https://github.com/me/r/pull/\(number)")
+        let found: Result<[GitHubBranchPR], GitHubFailure> =
+          readFailure.map { .failure($0) } ?? .success(open ? [pullRequest] : [])
         completion(
           GitHubBranchPullRequests(
-            ledger: nil,
-            branches: [branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))]))
+            ledger: nil, branches: [branch: .gitHub(ref, pullRequests: found)]))
       },
       branchExists: { _, completion in completion(.success(true)) },
-      content: { [unowned self] _, completion in completion(.success(content)) },
+      content: { [unowned self] _, completion in
+        completion(readFailure.map { .failure($0) } ?? .success(content))
+      },
       setViewed: { [unowned self] viewed, paths, _, completion in
         writes.append((viewed, paths))
-        completion(GitHubViewedWrite(written: paths, failure: nil))
+        completion(
+          GitHubViewedWrite(written: viewedFailure == nil ? paths : [], failure: viewedFailure))
       },
       review: { [unowned self] _, completion in
         completion(
-          .success(
-            GitHubPullRequestReview(
-              viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
-              pendingReview: pendingComments > 0
-                ? .init(id: "R", commentCount: pendingComments) : nil, threads: threads)))
+          readFailure.map { .failure($0) }
+            ?? .success(
+              GitHubPullRequestReview(
+                viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
+                pendingReview: pendingComments > 0
+                  ? .init(id: "R", commentCount: pendingComments) : nil, threads: threads)))
       },
       writeReview: { [unowned self] write, _, pending, _, completion in
         reviewWrites.append(write)
-        completion(GitHubReviewWriteResult(pendingReview: pending, failure: reviewFailure))
+        let answer = { [unowned self] in
+          completion(GitHubReviewWriteResult(pendingReview: pending, failure: reviewFailure))
+        }
+        if holdsReviewWrites { heldReviewWrites.append(answer) } else { answer() }
       })
   }
 
