@@ -5,7 +5,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 日本語の本文のスクロールと打鍵の計測（`FramePerfTests` と同じ場で、`ORBE_EDITOR_PERF=1` のときだけ走る）。本文は、
-/// 日本語のコメントの多いコード、和文の後ろに本体の字体に無い記号（`※★◐` など）がある行が並ぶ文書、1 行が数千字の
+/// 日本語のコメントの多いコード、和文の後ろに本体の字体に無い記号（`※★◐` など）がある行が並ぶ文書、数千字の行を含む
 /// 日本語の Markdown。コードと Markdown はこのリポジトリのファイルを、行ごとに写しの番号を足して 200KB まで並べる（同じ
 /// 中身の行は組み直さないので、写しごとに中身を変える）。
 extension FramePerfTests {
@@ -22,7 +22,7 @@ extension FramePerfTests {
       label: "symbols-after-japanese", text: Self.symbolsAfterJapanese(bytes: 200_000))
   }
 
-  /// 1 行が数千字の日本語の Markdown。長い行は 1 行まるごと組むので、`testLongLines` と同じく、全部のコマの CPU の p99 は
+  /// 数千字の行を含む日本語の Markdown。長い行は 1 行まるごと組むので、`testLongLines` と同じく、全部のコマの CPU の p99 は
   /// 1 刻み未満だけを関門にし、描画スレッド自身が落とすコマは記録して示すだけ。
   func testLongJapaneseMarkdown() throws {
     _ = try measure(
@@ -54,7 +54,7 @@ extension FramePerfTests {
     return text
   }
 
-  /// 和文の後ろに本体の字体に無い記号が 1〜2 つある行（60〜100 字）を、`bytes` を超えるまで並べた文書。
+  /// 和文の後ろに本体の字体に無い記号が 1 行に平均 5〜6 個ある行（60〜130 字）を、`bytes` を超えるまで並べた文書。
   static func symbolsAfterJapanese(bytes: Int) -> String {
     let phrases = [
       "注意※ 行の型の地は行の全部の段に出る。", "設定★を変えると、", "状態◐の印が替わる（切替⇄）。",
