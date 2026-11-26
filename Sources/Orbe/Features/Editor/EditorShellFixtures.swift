@@ -150,8 +150,8 @@
   /// 上のバーの部品と、3 つの画面の姿の並び（見本の Main・PullRequest・Files の部品を、バーの行と共通の部品で組んだもの）。
   /// gallery が部品の姿と幅ごとの姿を、flow が幅を狭めていく並びを撮る。
   extension EditorShellFixtures {
-    /// 部品の姿——中ほどの札（素の姿・地つきの変種・押せない姿）・26 角のボタン（ふつう・押された姿）・右端のボタン（ふつう・
-    /// 開いている・押せない・添え書きつき・固定の添えつき）。
+    /// 部品の姿——中ほどの札（素の姿・地つきの変種・押せない姿・表示だけの札）・26 角のボタン（ふつう・押された姿）・右端の
+    /// ボタン（ふつう・開いている・押せない・添え書きつき・固定の添えつき）。
     @MainActor static func barParts() -> some View {
       VStack(alignment: .leading, spacing: 12) {
         HStack(spacing: 8) {
@@ -159,6 +159,15 @@
           syncChip(isEnabled: true)
           syncChip(isEnabled: false)
           pullRequestChip
+          EditorBarChip(
+            help: "ブランチ",
+            content: {
+              EditorGlyphView(
+                glyph: EditorGlyphs.branch, size: 12, color: Color.theme.textPrimary)
+              EditorReadableName("feat/editor-overlay", prefixLength: 3) { Text($0) }
+            }
+          )
+          .frame(width: 120)
         }
         HStack(spacing: 8) {
           EditorBarIconButton(glyph: EditorGlyphs.sidebarToggle, help: "ツリーを開く") {}

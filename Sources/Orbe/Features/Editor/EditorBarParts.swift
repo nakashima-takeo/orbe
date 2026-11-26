@@ -15,8 +15,9 @@ struct EditorBarSeparator: View {
 }
 
 /// 上のバーの中ほどの札（高さ 26・角丸 7）。素の姿は地なし・mono 12・左右 8・間 6、地つきの変種（同期）は地 ink .08・
-/// sans 12・左右 9・間 7。字は primary。押せない間は disabled に薄める。中身は載せる側が渡す。押してもフォーカスを求めない。
-/// ツールチップと VoiceOver の名前は `help`。
+/// sans 12・左右 9・間 7。字は primary。中身は載せる側が渡す。ツールチップと VoiceOver の名前は `help`。`action` を渡せば
+/// ボタンで、押せない間は disabled に薄める。押してもフォーカスを求めない。`action` を省けば表示だけの札で、ボタンの特性も
+/// 押下の働きも持たない。
 struct EditorBarChip<Content: View>: View {
   enum Style {
     case plain
@@ -26,10 +27,27 @@ struct EditorBarChip<Content: View>: View {
   var style = Style.plain
   var isEnabled = true
   let help: String
-  let action: () -> Void
+  var action: (() -> Void)?
   @ViewBuilder let content: () -> Content
 
   var body: some View {
+    if let action {
+      face
+        .contentShape(Rectangle())
+        .onTapGesture { if isEnabled { action() } }
+        .help(help)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(help)
+        .accessibilityAddTraits(.isButton)
+    } else {
+      face
+        .help(help)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(help)
+    }
+  }
+
+  private var face: some View {
     HStack(
       spacing: style == .filled
         ? Theme.Layout.editorBarChipFilledGap : Theme.Layout.editorBarChipGap
@@ -51,12 +69,6 @@ struct EditorBarChip<Content: View>: View {
             ? Color.theme.surfaceInk.opacity(Theme.Opacity.editorBarChipFill) : .clear)
     )
     .opacity(isEnabled ? 1 : Theme.Opacity.disabled)
-    .contentShape(Rectangle())
-    .onTapGesture { if isEnabled { action() } }
-    .help(help)
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(help)
-    .accessibilityAddTraits(.isButton)
   }
 }
 
@@ -91,13 +103,14 @@ struct EditorBarIconButton: View {
 /// 上のバーの右端の主な操作のボタン（コミット・レビュー）。高さ 26・角丸 7・間 7・左 11 右 6・地 accent .24・枠 accent .6・
 /// sans 12 semibold・字 primary・末尾の ▾ は accentBright。開いている間は地 accent .36。名前の後ろに、固定の添え（`badge`）と
 /// 譲る添え書き（`detail`。`actionDetail` で譲る）を置ける。左に 12 の余白（案内との間）を持つ。押せない間は disabled に
-/// 薄める。押してもフォーカスを求めない。ツールチップと VoiceOver の名前は `help`。枠は、上のバーの座標で
+/// 薄める。押してもフォーカスを求めない。ツールチップは `help`、VoiceOver の名前は `accessibilityName`（省けば `help`）。枠は、上のバーの座標で
 /// `editorBarActionFrame` へ知らせる（外の押下の判定の入力）。
 struct EditorBarActionButton<Badge: View, Detail: View>: View {
   let title: String
   var isOpen = false
   var isEnabled = true
   let help: String
+  var accessibilityName: String?
   let action: () -> Void
   @ViewBuilder let badge: () -> Badge
   @ViewBuilder let detail: () -> Detail
@@ -145,7 +158,7 @@ struct EditorBarActionButton<Badge: View, Detail: View>: View {
     .onTapGesture { if isEnabled { action() } }
     .help(help)
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(help)
+    .accessibilityLabel(accessibilityName ?? help)
     .accessibilityAddTraits(.isButton)
     .onGeometryChange(for: CGRect.self) {
       $0.frame(in: .named(EditorBarRoot.space))
@@ -158,10 +171,11 @@ struct EditorBarActionButton<Badge: View, Detail: View>: View {
 extension EditorBarActionButton where Badge == EmptyView, Detail == EmptyView {
   init(
     title: String, isOpen: Bool = false, isEnabled: Bool = true, help: String,
-    action: @escaping () -> Void
+    accessibilityName: String? = nil, action: @escaping () -> Void
   ) {
     self.init(
-      title: title, isOpen: isOpen, isEnabled: isEnabled, help: help, action: action,
+      title: title, isOpen: isOpen, isEnabled: isEnabled, help: help,
+      accessibilityName: accessibilityName, action: action,
       badge: { EmptyView() }, detail: { EmptyView() })
   }
 }
@@ -169,10 +183,12 @@ extension EditorBarActionButton where Badge == EmptyView, Detail == EmptyView {
 extension EditorBarActionButton where Badge == EmptyView {
   init(
     title: String, isOpen: Bool = false, isEnabled: Bool = true, help: String,
-    action: @escaping () -> Void, @ViewBuilder detail: @escaping () -> Detail
+    accessibilityName: String? = nil, action: @escaping () -> Void,
+    @ViewBuilder detail: @escaping () -> Detail
   ) {
     self.init(
-      title: title, isOpen: isOpen, isEnabled: isEnabled, help: help, action: action,
+      title: title, isOpen: isOpen, isEnabled: isEnabled, help: help,
+      accessibilityName: accessibilityName, action: action,
       badge: { EmptyView() }, detail: detail)
   }
 }
@@ -180,10 +196,12 @@ extension EditorBarActionButton where Badge == EmptyView {
 extension EditorBarActionButton where Detail == EmptyView {
   init(
     title: String, isOpen: Bool = false, isEnabled: Bool = true, help: String,
-    action: @escaping () -> Void, @ViewBuilder badge: @escaping () -> Badge
+    accessibilityName: String? = nil, action: @escaping () -> Void,
+    @ViewBuilder badge: @escaping () -> Badge
   ) {
     self.init(
-      title: title, isOpen: isOpen, isEnabled: isEnabled, help: help, action: action,
+      title: title, isOpen: isOpen, isEnabled: isEnabled, help: help,
+      accessibilityName: accessibilityName, action: action,
       badge: badge, detail: { EmptyView() })
   }
 }

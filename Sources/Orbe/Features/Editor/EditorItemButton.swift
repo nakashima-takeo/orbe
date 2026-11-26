@@ -79,22 +79,26 @@ struct EditorCurrentFileLabel: View {
   }
 }
 
-/// 幅が無ければ省略して縮む 1 行の名前。先頭の 1 字と「…」の幅（読める下限）より狭くならない——下限は、同じ描き方の見本
-/// （先頭の 1 字と「…」）を見えない形で置いて測る（`TruncatingSlot` と同じ測り方）。下限より狭い幅を渡されても下限の幅を
-/// 取り、はみ出した分は、置いた側の枠で切れる。
+/// 幅が無ければ省略して縮む 1 行の名前。先頭の `prefixLength` 字（既定は 1 字）と「…」の幅（読める下限）より狭くならない
+/// ——下限は、同じ描き方の見本（先頭の字と「…」）を見えない形で置いて測る（`TruncatingSlot` と同じ測り方）。下限より狭い幅を
+/// 渡されても下限の幅を取り、はみ出した分は、置いた側の枠で切れる。
 struct EditorReadableName<Content: View>: View {
   let text: String
+  let prefixLength: Int
   let render: (String) -> Content
 
-  init(_ text: String, @ViewBuilder render: @escaping (String) -> Content) {
+  init(
+    _ text: String, prefixLength: Int = 1, @ViewBuilder render: @escaping (String) -> Content
+  ) {
     self.text = text
+    self.prefixLength = prefixLength
     self.render = render
   }
 
   var body: some View {
     EditorReadableNameLayout {
       render(text).lineLimit(1)
-      render(String(text.prefix(1)) + "…").lineLimit(1).fixedSize().hidden()
+      render(String(text.prefix(prefixLength)) + "…").lineLimit(1).fixedSize().hidden()
     }
   }
 }
