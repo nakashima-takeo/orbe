@@ -154,8 +154,8 @@ enum LineShaper {
 
   /// 行を組む。字の字体は、字ごとの字体の表（`GlyphFonts`）の字体——まず本体の字体でそのまま組み、組んだ結果の字体が
   /// 表と違う範囲があれば（Core Text が前の字の代替フォントを引き継いだ）、同じ字体が続く範囲ごとに表の字体を渡して組み
-  /// 直す。渡した字体はその字を持つので、Core Text は代替を探さない。ASCII の字とタブだけの行は本体の字体で組まれるので
-  /// 表と照らさない。
+  /// 直す。渡した字体はその字を持つので、Core Text は代替を探さない。ASCII の字とタブだけの行は、本体の字体がどの ASCII の
+  /// 字も持つなら、本体の字体だけで組まれるので表と照らさない。
   private static func makeLine(
     _ units: ContiguousArray<UInt16>, boxes: [Int: UInt16], font: CTFont, tabWidth: CGFloat,
     ascii: Bool
@@ -167,7 +167,7 @@ enum LineShaper {
         boxDelegate(width: shape(boxLabel(unit), font: font).width, font: font))
     }
     let line = CTLineCreateWithAttributedString(attributed)
-    guard !ascii else { return line }
+    guard !ascii || !GlyphFonts.coversASCII(font) else { return line }
     let glyphs = GlyphFonts.glyphs(units, font: font)
     guard !follows(line, glyphs) else { return line }
     var start = 0

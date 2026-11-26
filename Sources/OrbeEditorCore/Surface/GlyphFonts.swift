@@ -42,6 +42,8 @@ public enum GlyphFonts {
   /// 変わらない値で、どのスレッドから使ってもよい。
   private struct Table: @unchecked Sendable {
     let font: CTFont
+    /// 本体の字体が、どの ASCII の字（U+0020…U+007E）も持つか。
+    let coversASCII: Bool
     var fonts: [CTFont]
     var pages = [UInt16](repeating: 0, count: 256)
     var storage = [UInt16](repeating: Slot.unknown, count: 256)
@@ -49,6 +51,9 @@ public enum GlyphFonts {
 
     init(font: CTFont) {
       self.font = font
+      var units = (0x20...0x7E).map { UniChar($0) }
+      var glyphs = [CGGlyph](repeating: 0, count: units.count)
+      coversASCII = CTFontGetGlyphsForCharacters(font, &units, &glyphs, units.count)
       fonts = [font]
     }
 
@@ -106,6 +111,12 @@ public enum GlyphFonts {
       for index in range { slots[index] = slot }
     }
     return Glyphs(slots: slots, fonts: fonts)
+  }
+
+  /// 本体の字体 `font` が、どの ASCII の字（U+0020…U+007E）も持つか。持つなら、ASCII の字だけの行は、Core Text がどの字も
+  /// 本体の字体で組むので、表の字体と同じになる。
+  public static func coversASCII(_ font: CTFont) -> Bool {
+    tables.withLockUnchecked { tables in tables[index(of: font, in: &tables)].coversASCII }
   }
 
   private static func index(of font: CTFont, in tables: inout [Table]) -> Int {
