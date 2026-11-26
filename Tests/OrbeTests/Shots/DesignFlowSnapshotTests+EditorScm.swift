@@ -5,10 +5,9 @@ import XCTest
 @testable import Orbe
 
 /// ソース管理パネルの flow（fixture は `ScmFixtures`——本物の git の場。状態は本物の操作が生む）:
-/// 初期状態（ステージ済み 1・変更 3・未 push 3 と origin 2 のグラフ、変更の行を選ぶ）→ 本文つきのメッセージで欄が
-/// 伸びる → 子の区分を畳む（欄が空で主の側が押せない）→ 返らない pre-commit hook の
-/// コミットで実行中の帯 → 止める → upstream の無いブランチのプルの失敗の文 → 端末でコミットして変更なし（グラフだけ・同期
-/// ↑N ↓M）→ push して先行も遅れも無い（主の側も ▾ も押せない）→ upstream の無いブランチ（ブランチを公開）→ git 管理外。
+/// 初期状態（ステージ済み 1・変更 3・未 push 3 と origin 2 のグラフ、変更の行を選ぶ）→ 子の区分を畳む → 返らない
+/// pre-commit hook のコミットで実行中の帯 → 止める → upstream の無いブランチのプルの失敗の文 → 端末でコミットして変更なし（グラフだけ・同期 ↑N ↓M）→ push して先行も遅れも
+/// 無い（数の無い同期）→ upstream の無いブランチ（ブランチを公開）→ git 管理外。
 extension DesignFlowSnapshotTests {
   func testEditorScm() throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -28,10 +27,9 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 初期状態・メッセージ欄が伸びる・子の区分を畳む。
+  /// 初期状態・子の区分を畳む（コミットのポップアップは、窓に付けた面の中で撮る `testEditorScmCommit`）。
   private func panelSteps(_ scene: ScmFixtures.Scene) -> [(label: String, action: () -> Void)] {
     let panel = scene.panel
-    let control = panel.control
     return [
       (
         "open",
@@ -40,11 +38,9 @@ extension DesignFlowSnapshotTests {
           pumpMain(until: { scene.pane.showsDiff(of: "src/agent/StateHooks.swift") }, "押した行の diff")
         }
       ),
-      ("message", { control.message = "StateHooks: emit を畳む\n\n連続する知らせを 1 つにまとめ、\n描画の遅れを減らす。" }),
       (
         "collapsed",
         {
-          control.message = ""
           panel.toggle(.staged)
           pumpMain(until: { panel.layout.items.count == 5 }, "畳んだ行の組")
         }
