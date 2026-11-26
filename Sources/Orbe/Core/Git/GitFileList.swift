@@ -13,10 +13,13 @@ enum GitFileList {
     "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory",
   ]
 
-  /// 入れ子の根（サブモジュール・入れ子のリポジトリ）で、2 回のコマンドの前に足す引数。そのリポジトリの設定の
-  /// `core.fsmonitor` が指すコマンドを起こさない——利用者が開いていないリポジトリの設定が、一覧を取るだけで走らせるコマンドを
-  /// 決めないため。この 2 回のコマンドが設定から起こすコマンドは、これだけ（filter・hook・pager は起こさない）。
-  static let nestedOptions = ["-c", "core.fsmonitor=false"]
+  /// 入れ子の根 `workTree`（サブモジュール・入れ子のリポジトリ）で、2 回のコマンドの前に足す引数。そのリポジトリの設定が、
+  /// 一覧を取るだけで走るコマンドと読みに行く場所を決めないため——設定の `core.fsmonitor` が指すコマンドを起こさず（この 2 回の
+  /// コマンドが設定から起こすコマンドは、これだけ。filter・hook・pager は起こさない）、作業ツリーは設定の `core.worktree` に
+  /// 依らずその根にする（入れ子の根は `.git` を持つフォルダなので、作業ツリーはその根）。
+  static func nestedOptions(workTree: String) -> [String] {
+    ["-c", "core.fsmonitor=false", "--work-tree", workTree]
+  }
 
   /// (a) の解析結果。
   struct Listed: Equatable {

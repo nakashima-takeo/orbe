@@ -77,7 +77,7 @@ private struct PathCollector {
   /// のファイルは、ディスクに在るものだけを足す。どちらかの git が失敗したら何も足さずに false。
   private mutating func askGit(_ directory: String) -> Bool {
     let cwd = absolute(directory)
-    let options = directory.isEmpty ? [] : GitFileList.nestedOptions
+    let options = directory.isEmpty ? [] : GitFileList.nestedOptions(workTree: cwd)
     let listed = runner.runSync(options + GitFileList.listedArguments, cwd: cwd)
     guard listed.ending == .completed, listed.isSuccess else { return false }
     let ignored = runner.runSync(options + GitFileList.ignoredArguments, cwd: cwd)
