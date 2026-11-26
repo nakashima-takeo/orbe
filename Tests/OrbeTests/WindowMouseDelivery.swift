@@ -7,9 +7,11 @@ extension OrbeTestCase {
   /// （2 ならダブルクリックの 2 回目）。イベントは今の時刻を持つ（SwiftUI のジェスチャーとホバーは時刻 0 のイベントを取りこぼす）。
   ///
   /// 離すイベントは、押下を送る前にキューへ入れる。文字を扱う部品（入力欄、選べる文字）は、押下を受けると、離すイベントが
-  /// キューに来るまで待つマウスの追跡ループに入ることがある。その場合、離すイベントを後から送ると、押下を送った
-  /// `sendEvent` が戻らない。追跡ループが取らずに残った離すイベントは、押下の後にキューから取り出して配る。テストが
-  /// 押して離すを `NSApp.sendEvent` で送るのは、この関数だけにする（`.swiftlint.yml` の `test_mouse_delivery`）。
+  /// キューに来るまで待つマウスの追跡ループに入る（テストの条件で、macOS 26 では入り、macOS 27 では入らない）。その場合、離すイベントを
+  /// 後から送ると、押下を送った `sendEvent` が戻らない。追跡ループが取らずにキューに残った離すイベントは、取り出して捨て、
+  /// 作った離すイベントそのものを配る。キューを経た離すイベントは AppKit が作り直したもので、macOS 26 では窓の座標が
+  /// 画面の座標に置き換わっていることがあり、画面外に並べた窓では押した点から大きく外れて、SwiftUI のタップが成り立たない。
+  /// テストが押して離すを `NSApp.sendEvent` で送るのは、この関数だけにする（`.swiftlint.yml` の `test_mouse_delivery`）。
   func deliverClick(
     at location: NSPoint, in window: NSWindow, clickCount: Int = 1,
     file: StaticString = #filePath, line: UInt = #line
@@ -25,12 +27,13 @@ extension OrbeTestCase {
         context: nil, eventNumber: 0, clickCount: clickCount,
         pressure: type == .leftMouseDown ? 1 : 0)!
     }
-    NSApp.postEvent(make(.leftMouseUp), atStart: false)
+    let up = make(.leftMouseUp)
+    NSApp.postEvent(up, atStart: false)
     NSApp.sendEvent(make(.leftMouseDown))
-    if let pending = NSApp.nextEvent(
-      matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
+    if NSApp.nextEvent(matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
+      != nil
     {
-      NSApp.sendEvent(pending)
+      NSApp.sendEvent(up)
     }
   }
 }
