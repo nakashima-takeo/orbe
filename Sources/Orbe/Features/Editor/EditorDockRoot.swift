@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// 上のバーの右下の置き場の SwiftUI ルート。上から、ポップアップ（開いていれば、載せる側の中身。同一性は器の開いた回数）と、
-/// 今の画面の札を右寄せで縦に並べる（→ `EditorDockStack`）。札は、画面ごとのファイル（`EditorDock+<画面>.swift`）が、ここの描画の中で持ち主の値から
+/// 今の画面の札を右寄せで縦に並べる（→ `EditorDockStack`）。札は、本体の上端の帯（`EditorShellModel.bodyBandHeight`）の
+/// 下から並べる。札は、画面ごとのファイル（`EditorDock+<画面>.swift`）が、ここの描画の中で持ち主の値から
 /// 組む。器の中の別 root なので環境は明示注入する。影を描くために、置き場の枠の外側に `margin` の余白を取る。見えている物の
 /// 枠（`editorDockItem` を付けた物）は `framesDidChange` で host へ知らせる（host が押下を受ける範囲）。
 struct EditorDockRoot: View {
@@ -22,7 +23,7 @@ struct EditorDockRoot: View {
   static let space = "editorDock"
 
   var body: some View {
-    EditorDockStack {
+    EditorDockStack(cardsTop: shell.bodyBandHeight) {
       if popup.isOpen, let owner = popup.owner { owner.popupContent().id(popup.openCount) }
     } cards: {
       switch shell.panel.screen {
@@ -41,14 +42,16 @@ struct EditorDockRoot: View {
 }
 
 /// 置き場の並び。上から、ポップアップ（幅 520。並びが狭ければ並びの幅）と、札（自分の幅と高さ）を、右寄せで間 6 で縦に
-/// 並べる。札は自分の高さを取り、ポップアップは残りの高さを上限に縮む。押下を受ける範囲は、並んでいる物の外枠ではなく、
-/// その中の見えている物が自分で知らせる枠（→ `editorDockItem`）。
+/// 並べる。札は、並びの上端から `cardsTop` より上には置かない（本体の上端の帯を覆わない）。札は自分の高さを取り、
+/// ポップアップは残りの高さを上限に縮む。押下を受ける範囲は、並んでいる物の外枠ではなく、その中の見えている物が自分で
+/// 知らせる枠（→ `editorDockItem`）。
 struct EditorDockStack<Popup: View, Cards: View>: View {
+  var cardsTop: CGFloat = 0
   @ViewBuilder let popup: () -> Popup
   @ViewBuilder let cards: () -> Cards
 
   var body: some View {
-    EditorDockLayout {
+    EditorDockLayout(cardsTop: cardsTop) {
       ForEach(subviews: popup()) { item in
         item.layoutValue(key: EditorDockPopupKey.self, value: true)
       }
@@ -58,8 +61,10 @@ struct EditorDockStack<Popup: View, Cards: View>: View {
 }
 
 /// 子のうち、ポップアップ（`EditorDockPopupKey` が真）は幅 520 か並びの幅の小さいほうで、高さは札の残りを上限に置き、札は
-/// 並びの幅を上限に自分の大きさで置く。どれも右寄せで、上から間 6 で並べる。
+/// 並びの幅を上限に自分の大きさで置く。どれも右寄せで、上から間 6 で並べる。札は、上端から `cardsTop` より上には置かない。
 private struct EditorDockLayout: Layout {
+  let cardsTop: CGFloat
+
   func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     proposal.replacingUnspecifiedDimensions()
   }
@@ -84,6 +89,7 @@ private struct EditorDockLayout: Layout {
         proposal: ProposedViewSize(width: width, height: height))
       y += height + gap
     }
+    y = max(y, bounds.minY + cardsTop)
     for (card, size) in zip(cards, cardSizes) {
       let width = min(size.width, bounds.width)
       card.place(

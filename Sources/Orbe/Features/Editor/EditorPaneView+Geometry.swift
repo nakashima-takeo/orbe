@@ -111,9 +111,14 @@ extension EditorPaneView {
       height: max(0, bounds.height - top - Theme.Layout.editorDockBottom))
   }
 
+  /// 本体の上端の帯（差分の見出し）の高さ。本体が diff でなければ 0。
+  var bodyBandHeight: CGFloat {
+    diff == nil ? 0 : min(Theme.Layout.editorDiffHeader, bodyRect.height)
+  }
+
   /// 本体のうち見出しの下の矩形（diff の面・文字だけの器を置く）。本体が diff でなければ本体の矩形そのもの。
   var belowHeaderRect: NSRect {
-    let header = diff == nil ? 0 : min(Theme.Layout.editorDiffHeader, bodyRect.height)
+    let header = bodyBandHeight
     let body = bodyRect
     return NSRect(
       x: body.minX, y: body.minY + header, width: body.width, height: body.height - header)
