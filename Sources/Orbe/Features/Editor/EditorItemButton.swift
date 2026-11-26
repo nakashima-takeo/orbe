@@ -102,12 +102,12 @@ struct EditorReadableName<Content: View>: View {
         render(String(text.prefix(prefixLength)) + "…" + String(text.suffix(prefixLength)))
           .lineLimit(1).fixedSize().hidden()
       }
-      render(floor).lineLimit(1).fixedSize()
+      render(readableFloor).lineLimit(1).fixedSize()
     }
   }
 
   /// 読める下限の姿（先頭の字と「…」。名前がほとんど縮まない長さなら、名前の全体）。
-  private var floor: String {
+  private var readableFloor: String {
     text.count > prefixLength + 1 ? String(text.prefix(prefixLength)) + "…" : text
   }
 }

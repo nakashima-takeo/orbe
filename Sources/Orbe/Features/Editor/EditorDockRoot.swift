@@ -134,7 +134,6 @@ final class EditorDockHost: NSHostingView<EditorDockRoot> {
   override var acceptsFirstResponder: Bool { false }
 
   override func hitTest(_ point: NSPoint) -> NSView? {
-    guard !isHidden else { return nil }
     let local = convert(point, from: superview)
     guard itemFrames.contains(where: { $0.contains(local) }) else { return nil }
     return super.hitTest(point)

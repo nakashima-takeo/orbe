@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 上のバーの部品が譲る順（先に譲るものから）。幅が足りなければ、後ろの段（大事な側）から幅を配り、前の段ほど先に譲る。
 /// どの画面の部品も、この 1 つの順から選ぶ。
-enum EditorBarYield: Int, CaseIterable, Comparable {
+enum EditorBarYield: CaseIterable {
   /// 「⌥ 端末を表示」。
   case hint
   /// ファイル内検索の欄の幅。
@@ -15,8 +15,6 @@ enum EditorBarYield: Int, CaseIterable, Comparable {
   case itemWide
   /// 中ほどの札まるごと。
   case chip
-
-  static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
 /// 上のバーの部品の宣言。名乗らない部品は、左寄せで、最小の幅のまま落とさない。

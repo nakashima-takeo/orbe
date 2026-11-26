@@ -49,8 +49,6 @@ final class MessageTextView: NSTextView {
   private let textLineHeight: CGFloat
   /// 1 行のときに欄の高さが `metrics.height` になる上下の余白。
   private let verticalInset: CGFloat
-  /// 字の属性（字体と、行の高さを決めていれば、その行の高さ）。
-  private let textAttributes: [NSAttributedString.Key: Any]
   /// 行の高さを決めた欄の行の組み方（2 つの組みの両方に当てる。組みは持ち主を弱く持つので、ここで持つ）。
   private let lineLayout: MessageLineLayout?
 
@@ -89,7 +87,6 @@ final class MessageTextView: NSTextView {
     } else {
       lineLayout = nil
     }
-    textAttributes = attributes
     super.init(frame: .zero, textContainer: container)
     font = metrics.font
     textColor = Theme.Color.textPrimary
@@ -106,7 +103,7 @@ final class MessageTextView: NSTextView {
     maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
     textContainerInset = NSSize(width: 0, height: verticalInset)
     defaultParagraphStyle = attributes[.paragraphStyle] as? NSParagraphStyle
-    typingAttributes = textAttributes.merging([.foregroundColor: Theme.Color.textPrimary]) { $1 }
+    typingAttributes = attributes.merging([.foregroundColor: Theme.Color.textPrimary]) { $1 }
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
