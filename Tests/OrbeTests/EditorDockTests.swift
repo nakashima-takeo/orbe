@@ -168,7 +168,8 @@ final class EditorDockTests: OrbeTestCase {
 
   // MARK: - 閉じるきっかけ
 
-  /// 画面を切り替える・根が変わる（cd）・面が隠れる（⌘E）・面が窓から外れると閉じ、どれも閉じる直前に中身へ知らせが届く。
+  /// 画面を切り替える・根が変わる（cd）・面が隠れる（⌘E）・面が窓から外れると閉じ、どれも、中身がまだ窓に居るうちに
+  /// 閉じる直前の知らせが届く。
   func testSwitchingScreensChangingTheRootOrHidingTheFaceClosesThePopup() throws {
     let hosted = try host()
     let owner = Owner()
@@ -193,6 +194,34 @@ final class EditorDockTests: OrbeTestCase {
     XCTAssertFalse(hosted.popup.isOpen, "面が窓から外れると閉じる")
 
     XCTAssertEqual(owner.dismissals, [.itemGone, .itemGone, .faceHidden, .faceHidden])
+    XCTAssertEqual(
+      owner.closings.map(\.inWindow), [true, true, true, true], "どの知らせの時点でも、中身は窓に居る")
+  }
+
+  /// 右端のボタンが消えたら、そのボタンの枠の上の押下でも閉じる。画面を替えて、現れたボタンの知らせが、消えたボタンの知らせより
+  /// 先に届いても、現れたボタンの上の押下では閉じない。
+  func testAPressWhereAGoneButtonWasClosesThePopup() throws {
+    let hosted = try host()
+    let pane = hosted.pane
+    let owner = Owner()
+    let commit = (id: UUID(), frame: CGRect(x: 760, y: 5, width: 80, height: 26))
+    let review = (id: UUID(), frame: CGRect(x: 660, y: 5, width: 80, height: 26))
+    func press(_ frame: CGRect) {
+      pane.pressWillArrive(
+        .mouse(
+          .leftMouseDown, at: pane.convert(NSPoint(x: frame.midX, y: frame.midY), to: nil),
+          in: hosted.window))
+    }
+    pane.shell.actionButtonFrameDidChange(commit.id, commit.frame)
+    pane.shell.actionButtonFrameDidChange(review.id, review.frame)
+    pane.shell.actionButtonFrameDidChange(commit.id, nil)
+
+    hosted.popup.toggle(owner)
+    press(review.frame)
+    XCTAssertTrue(hosted.popup.isOpen, "現れたボタンの上の押下では閉じない")
+    press(commit.frame)
+    XCTAssertFalse(hosted.popup.isOpen, "消えたボタンの枠の上の押下では閉じる")
+    XCTAssertEqual(owner.dismissals, [.outsidePress])
   }
 
   /// 置き場の外の押下は閉じて、フォーカスを開く前の場所（本体）へ戻す。置き場に並んでいる物と右端の主な操作のボタンの上の
@@ -331,24 +360,17 @@ final class EditorDockTests: OrbeTestCase {
     holdUntilTestEnds(window)
     placeOffscreen(window)
     host.layoutSubtreeIfNeeded()
-    func click(_ point: NSPoint) {
-      let location = host.convert(point, to: nil)
-      for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-        NSApp.sendEvent(
-          NSEvent.mouseEvent(
-            with: type, location: location, modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-            context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
-      }
+    func click(_ point: NSPoint) throws {
+      try self.click(host, at: point)
       flush(window)
     }
     // × は右上の角から余白 7 の内側に在る、20 角のボタン。
     let inset = Theme.Layout.editorCardClosePad + Theme.Layout.editorCardClose / 2
     let close = NSPoint(x: width - inset, y: host.isFlipped ? inset : host.bounds.maxY - inset)
 
-    click(NSPoint(x: 40, y: host.bounds.midY))
+    try click(NSPoint(x: 40, y: host.bounds.midY))
     XCTAssertEqual(dismissed.value, 0, "文の上の押下では呼ばれない")
-    click(close)
+    try click(close)
     XCTAssertEqual(dismissed.value, 1, "× で呼ばれる")
   }
 }
