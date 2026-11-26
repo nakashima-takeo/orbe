@@ -1,7 +1,21 @@
 import Foundation
 
-/// ツリーのパスの扱い（根からの相対パス。根は空）。
+/// ツリーのパスの扱い（根からの相対パス。根は空）と、一覧に在るフォルダの引き方。
 extension FileTree {
+  /// `path` が、親の一覧にフォルダとして在るか。
+  func isListedFolder(_ path: String) -> Bool {
+    let name = Self.name(of: path)
+    return entries[Self.parent(of: path)]?.contains { $0.isDirectory && $0.name == name } == true
+  }
+
+  /// 一覧を持つフォルダの一覧に在る、フォルダ全部。
+  var listedFolders: Set<String> {
+    Set(
+      entries.flatMap { directory, list in
+        list.filter(\.isDirectory).map { Self.join(directory, $0.name) }
+      })
+  }
+
   func url(of relativePath: String) -> URL {
     let rootURL = URL(fileURLWithPath: root, isDirectory: true)
     return relativePath.isEmpty

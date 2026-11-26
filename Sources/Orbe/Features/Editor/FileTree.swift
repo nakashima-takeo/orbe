@@ -12,8 +12,8 @@ import Foundation
 ///
 /// 子がフォルダ 1 つだけのフォルダの連なりは 1 行にまとめる（行の組み立ては `FileTree+Rows`）。連なりは「フォルダ → ただ 1 つの
 /// 子フォルダ」の覚え（`onlyChild`）から導く。覚えは、一覧を持つフォルダについては一覧から書き、開いていないフォルダについては
-/// 裏の先読み（`FileTreeLookahead`）が書く。覚えは調べ直した結果が届くまでの仮の姿で、一覧を新しく取ったフォルダの開いていない
-/// 子フォルダは、覚えの有無に依らず調べ直す。
+/// 根が git の作業ツリーのときだけ裏の先読み（`FileTreeLookahead`）が書く。覚えは調べ直した結果が届くまでの仮の姿で、一覧を
+/// 新しく取ったフォルダの開いていない子フォルダは、覚えの有無に依らず調べ直す（先読みしない根では覚えを消す）。
 @MainActor @Observable
 final class FileTree: RootFilesObserver {
   /// 行内入力の状態。打ちかけの名前もここに持つ——view の寿命（容器が行を捨てて作り直す）に依らない。
@@ -297,8 +297,14 @@ final class FileTree: RootFilesObserver {
   // MARK: - 先読み
 
   /// `paths`（開いていないフォルダ）の連なりを裏で調べさせる。届いた結果は、今も開いていないフォルダの分だけを覚えへ
-  /// 書く（開いたフォルダは一覧が正）。
+  /// 書く（開いたフォルダは一覧が正）。根が git の作業ツリーでなければ（判定の前も）調べず、その覚えを消す——調べ直せない
+  /// 覚えを古い形のまま残さない。
   private func requestLookahead(_ paths: Set<String>) {
+    guard files?.repo != nil else {
+      let stale = paths.filter { onlyChild[$0] != nil && !expanded.contains($0) }
+      if !stale.isEmpty { onlyChild = onlyChild.filter { !stale.contains($0.key) } }
+      return
+    }
     lookahead.request(paths) { [weak self] result in
       guard let self else { return }
       var memo = onlyChild
@@ -345,14 +351,10 @@ final class FileTree: RootFilesObserver {
     filterSawChange()
   }
 
+  /// git 管理下かの判定が済んだ。根が git の作業ツリーなら、一覧に在る開いていないフォルダを先読みへ頼む。
   func rootFilesDidResolve(_ files: RootFiles) {
+    if files.repo != nil { requestLookahead(listedFolders.subtracting(expanded)) }
     filterSawChange()
-  }
-
-  /// `path` が、親の一覧にフォルダとして在るか。
-  private func isListedFolder(_ path: String) -> Bool {
-    let name = Self.name(of: path)
-    return entries[Self.parent(of: path)]?.contains { $0.isDirectory && $0.name == name } == true
   }
 
   func rootFilesStatusDidChange(_ files: RootFiles) {
