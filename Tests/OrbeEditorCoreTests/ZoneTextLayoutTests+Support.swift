@@ -120,19 +120,25 @@ extension ZoneTextLayoutTests {
     return result
   }
 
-  /// 部分 `parts` を余白なしで（字体だけを付けて）組んだ組版——行を割れる位置の手本。`codes` は等幅の字体。
+  /// 部分 `parts` を余白なしで（字体と、製品と同じ言語の属性だけを付けて）組んだ組版——行を割れる位置の手本。`codes` は
+  /// 等幅の字体。
   func bareTypesetter(_ parts: [String], codes: [Int]) -> CTTypesetter {
     let attributed = NSMutableAttributedString()
     for (index, part) in parts.enumerated() {
       attributed.append(
-        NSAttributedString(string: part, attributes: [.font: codes.contains(index) ? mono : font]))
+        NSAttributedString(
+          string: part,
+          attributes: [
+            .font: codes.contains(index) ? mono : font,
+            .init(kCTLanguageAttributeName as String): TextLanguage.neutral,
+          ]))
     }
     return CTTypesetterCreateWithAttributedString(attributed)
   }
 
-  /// 組版 `typesetter`（文の長さ `count`）で、行の頭 `start` から組むと、どれかの幅で `end` で割れるか。Core Text は約物を
-  /// 詰めて字の幅より狭い幅にも行を収め、禁則のために字の幅より広い幅でだけその位置を選ぶこともあり、答えは幅について単調で
-  /// ないので、0 から残りの字の幅までを見る（まず字の幅の前後を細かく、無ければ全体を）。
+  /// 組版 `typesetter`（文の長さ `count`）で、行の頭 `start` から組むと、どれかの幅で `end` で割れるか。Core Text が行を
+  /// 収める幅は、組んだ行の幅と一致するとは限らない（行頭がタイ語の ำ の行は、行の幅より狭い幅にも収める）ので、0 から
+  /// 残りの字の幅までを見る（まず字の幅の前後を細かく、無ければ全体を）。
   func breaks(_ typesetter: CTTypesetter, count: Int, from start: Int, at end: Int) -> Bool {
     let width = { (end: Int) -> Double in
       let line = CTTypesetterCreateLine(typesetter, CFRange(location: start, length: end - start))
