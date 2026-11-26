@@ -30,6 +30,9 @@ final class MessageTextViewTests: OrbeTestCase {
     XCTAssertEqual(height(field), 70, accuracy: 0.5, "3 行")
     field.string = Array(repeating: "ปั้ญู", count: 3).joined(separator: "\n")
     XCTAssertEqual(height(field), 70, accuracy: 0.5, "字の高い 3 行")
+    field.frame.size.width = 300
+    field.sizeToFit()
+    XCTAssertEqual(field.frame.height, 70, accuracy: 0.5, "字の高い 3 行を表示したときの高さも、測った高さと同じ")
     field.string = Array(repeating: "a", count: 12).joined(separator: "\n")
     XCTAssertEqual(height(field), 210, accuracy: 0.5, "10 行で止まる")
 
