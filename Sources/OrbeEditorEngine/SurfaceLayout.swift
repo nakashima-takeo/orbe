@@ -158,7 +158,3 @@ struct GutterColumns: Equatable, Sendable {
   var ownInset: CGFloat { sign + marks + trailing }
   var otherInset: CGFloat { sign + marks + own + trailing }
 }
-
-extension MetalTextSurface {
-  var rightColumnWidth: CGFloat { surfaceLayout.rightColumnWidth }
-}
