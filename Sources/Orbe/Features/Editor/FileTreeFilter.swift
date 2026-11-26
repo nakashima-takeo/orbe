@@ -58,6 +58,8 @@ final class FileTreeFilter {
   @ObservationIgnored private var index: Index?
   @ObservationIgnored private var isListing = false
   @ObservationIgnored private var listAgain = false
+  /// 一覧を捨てるたびに進む番号。捨てる前に頼んだ取得の結果（一覧も失敗も）を受け取らないため。
+  @ObservationIgnored private var listGeneration = 0
   @ObservationIgnored private var isMatching = false
   /// 照合が走っている間に変わった、いちばん新しい字。
   @ObservationIgnored private var pendingText: String?
@@ -124,16 +126,19 @@ final class FileTreeFilter {
     isStale = true
   }
 
-  /// 一覧と「取れずにいる」フラグを捨てる。
+  /// 一覧と「取れずにいる」フラグを捨てる。取得中の一覧は、届いても受け取らない。
   func discardList() {
+    listGeneration += 1
+    listAgain = false
     index = nil
     isStale = true
     if listFailed { listFailed = false }
   }
 
   /// 一覧を取り直す（走っていれば「終わったらもう 1 回」）。取れたら今の字で照合し直す。取れなければ前の一覧を保ち、前の
-  /// 一覧も無ければ「取れずにいる」を立てる（次のきっかけでもう一度取る）。git 管理下かの判定の前なら「古い」フラグだけを立てる
-  /// ——ツリーは判定が済んだ知らせで取り直しを頼み直す。
+  /// 一覧も無ければ「取れずにいる」を立てる（次のきっかけでもう一度取る）。頼んだ後に一覧が捨てられていれば、結果は受け取らない
+  /// （捨てた後に頼まれた「もう 1 回」は走らせる）。git 管理下かの判定の前なら「古い」フラグだけを立てる——ツリーは判定が済んだ
+  /// 知らせで取り直しを頼み直す。
   func relist(_ files: RootFiles) {
     guard files.isResolved else { return markStale() }
     isStale = false
@@ -142,26 +147,36 @@ final class FileTreeFilter {
       return
     }
     isListing = true
+    let generation = listGeneration
     files.listFilterPaths { [weak self, weak files] list in
       guard let self else { return }
       isListing = false
-      switch list {
-      case .listed(let paths, let isTruncated):
-        let root = self.root
-        queue.async {
-          let index = Self.index(root: root, paths: paths, isTruncated: isTruncated)
-          DispatchQueue.main.async { [weak self] in self?.adopt(index) }
-        }
-      case .failed:
-        isStale = true
-        if index == nil {
-          listFailed = true
-          isWaiting = false
-        }
-      }
+      if generation == listGeneration { take(list, generation: generation) }
       if listAgain, let files {
         listAgain = false
         relist(files)
+      }
+    }
+  }
+
+  /// 世代 `generation` の取得の結果を受け取る。一覧ならインデックスを裏で作り、作り終えたときも一覧が捨てられていなければ
+  /// 差し替える。
+  private func take(_ list: RootFiles.PathList, generation: Int) {
+    switch list {
+    case .listed(let paths, let isTruncated):
+      let root = self.root
+      queue.async {
+        let index = Self.index(root: root, paths: paths, isTruncated: isTruncated)
+        DispatchQueue.main.async { [weak self] in
+          guard let self, generation == listGeneration else { return }
+          adopt(index)
+        }
+      }
+    case .failed:
+      isStale = true
+      if index == nil {
+        listFailed = true
+        isWaiting = false
       }
     }
   }
