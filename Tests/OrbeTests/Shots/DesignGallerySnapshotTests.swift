@@ -68,6 +68,7 @@ final class DesignGallerySnapshotTests: ShotTestCase {
     try renderEditorSnapshots(dir: dir)
     try renderEditorShellSnapshots(dir: dir)
     try renderEditorBarSnapshots(dir: dir)
+    try renderEditorDockSnapshots(dir: dir)
     try renderEditorShellOpenFilesSnapshots(dir: dir)
     try renderEditorSearchSnapshots(dir: dir)
     try renderEditorScmSnapshots(dir: dir)

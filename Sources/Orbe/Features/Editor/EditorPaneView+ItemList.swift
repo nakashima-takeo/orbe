@@ -27,8 +27,9 @@ extension EditorPaneView {
     return responder.isDescendant(of: itemList.list)
   }
 
-  /// 器を出して置き、行の列へフォーカスを移す。
+  /// 器を出して置き、行の列へフォーカスを移す。ポップアップが開いていれば閉じる（同時に 1 つだけ開く）。
   private func itemListDidOpen() {
+    popup.close(.otherOpened)
     endListFocusHold()
     let views: [NSView] = [itemListHost, itemList.list]
     if !belowBar.subviews.suffix(2).elementsEqual(views, by: ===) {

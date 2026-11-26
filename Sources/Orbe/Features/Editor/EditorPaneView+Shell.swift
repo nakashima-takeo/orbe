@@ -24,12 +24,30 @@ extension EditorPaneView {
     tree.onInputEnded = { [weak self] in self?.inlineInputDidEnd() }
   }
 
-  /// 上のバーで画面を選ぶ。選んだ後のフォーカスは、Changes・PR で左の列を開いていて、一覧の状態が「無い」でなければ
-  /// 面が預かって一覧へ渡し（→ `holdListFocus`）、それ以外は本体の行き先へ。一覧が既にフォーカスを持っていれば触らない。
+  /// フォーカスの場所——左の列の一覧か、本体。
+  enum FocusPlace {
+    case list
+    case body
+  }
+
+  /// 今のフォーカスの場所。ソース管理パネルか PR のパネルに在るか、一覧のために面が預かっていれば一覧、ほかは本体。
+  var focusPlace: FocusPlace {
+    focusIsInSourceControl || focusIsInPullRequest || heldListFocus != nil ? .list : .body
+  }
+
+  /// 上のバーで画面を選ぶ。選んだ後のフォーカスは、その画面の一覧へ（→ `returnFocus`）。
   func switchScreen(_ screen: EditorScreen) {
     guard let group else { return }
     group.editor.selectScreen(screen)
-    if sidebar.isOpen, screen != .files {
+    returnFocus(to: .list)
+  }
+
+  /// フォーカスを場所 `place` へ移す。一覧なら、Changes・PR で左の列を開いていて、今の画面の一覧の状態が「無い」でなければ
+  /// 面が預かって一覧へ渡し（→ `holdListFocus`）、一覧が既にフォーカスを持っていれば触らない。それ以外（一覧が無い・本体）
+  /// は本体の行き先へ。
+  func returnFocus(to place: FocusPlace) {
+    let screen = group?.editor.screen ?? .files
+    if place == .list, sidebar.isOpen, screen != .files {
       if listHasFocus(screen) { return }
       if listState(of: screen) != .none {
         holdListFocus(for: screen)

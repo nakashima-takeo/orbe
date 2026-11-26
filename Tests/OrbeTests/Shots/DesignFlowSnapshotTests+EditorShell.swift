@@ -166,6 +166,34 @@ extension ShotTestCase {
 }
 
 extension DesignFlowSnapshotTests {
+  /// 置き場のポップアップ（仮の中身）を本物の面で開閉する: 右端のボタンに当たる開閉で開く → 打つ → esc で閉じる → 開く →
+  /// ⌘P で一覧を開く（ポップアップは閉じる）→ esc → 開く → ⌘↵ で閉じる。面を付けた窓の中で描く（窓から外れると閉じる）。
+  func testEditorDock() throws {
+    let size = NSSize(width: 1100, height: 640)
+    let scene = try openFilesScene(size: size)
+    defer { scene.cleanup() }
+    let pane = scene.pane
+    let owner = EditorShellFixtures.DockPopupOwner(popup: pane.popup)
+    try renderInPlace(
+      pane, name: "editor_dock", dir: previewDir("flows"), appearances: [true],
+      steps: [
+        ("open", { pane.popup.toggle(owner) }),
+        (
+          "typed",
+          {
+            owner.field.insertText(
+              "fix: 置き場の仮の中身", replacementRange: NSRange(location: NSNotFound, length: 0))
+          }
+        ),
+        ("escape", { owner.field.cancelOperation(nil) }),
+        ("reopen", { pane.popup.toggle(owner) }),
+        ("item_list", { _ = pane.performKeyEquivalent(with: .key("p")) }),
+        ("item_list_closed", { self.listKey(pane, "\u{1b}") }),
+        ("reopen_again", { pane.popup.toggle(owner) }),
+        ("command_return", { _ = pane.performKeyEquivalent(with: .key("\r")) }),
+      ])
+  }
+
   /// ボタンを押す → ↓ → ↵ で切り替わる → ⌘P で開く → → で詳細 → ← → × で閉じる → esc。左の列を閉じた姿でも開く。
   func testEditorShellOpenFiles() throws {
     let size = NSSize(width: 1100, height: 640)

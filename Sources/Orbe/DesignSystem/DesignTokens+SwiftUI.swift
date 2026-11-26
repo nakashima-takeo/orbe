@@ -149,6 +149,7 @@ struct ThemeFonts {
   let editorBarChip = Font(Theme.Typography.editorBarChip as CTFont)
   let editorBarChipFilled = Font(Theme.Typography.editorBarChipFilled as CTFont)
   let editorBarAction = Font(Theme.Typography.editorBarAction as CTFont)
+  let editorDockCard = Font(Theme.Typography.editorDockCard as CTFont)
   let editorKeyCap = Font(Theme.Typography.editorKeyCap as CTFont)
   let editorTextButton = Font(Theme.Typography.editorTextButton as CTFont)
   let editorDiffHeaderPath = Font(Theme.Typography.editorDiffHeaderPath as CTFont)

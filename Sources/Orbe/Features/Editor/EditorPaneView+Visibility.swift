@@ -4,7 +4,10 @@ import AppKit
 extension EditorPaneView {
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    if window == nil { itemList.close(.faceHidden) }
+    if window == nil {
+      itemList.close(.faceHidden)
+      popup.close(.faceHidden)
+    }
     updateLiveness()
     updateEventMonitor()
   }
@@ -12,6 +15,7 @@ extension EditorPaneView {
   override func viewDidHide() {
     super.viewDidHide()
     itemList.close(.faceHidden)
+    popup.close(.faceHidden)
     updateLiveness()
   }
 
