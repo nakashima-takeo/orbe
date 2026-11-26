@@ -31,16 +31,26 @@ jobs:
       - uses: actions/checkout@v5
       - name: build (incl. tests)
         run: swift build --build-tests
-      - name: test
+      - name: diag509 testFindInProjectOpensTheEditorWithTheSearchFieldFocused x60
+        # 使い捨ての診断。落ちたテスト 1 本だけを、1 回ごとに別のプロセスで 60 回回し、落ちた回数を集計する。
         id: test
-        # 出力を行ごとに出し、テストが固まれば sample を残して失敗で終える（scripts/ci-test.sh）。
-        run: scripts/ci-test.sh "$RUNNER_TEMP/test-logs"
-      - name: test timing
-        # 見張りがテストを止めたとき（stalled）は、ログが途中で終わっているので集計しない。止まった場所は test のステップが出す。
-        if: ${{ !cancelled() && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') && steps.test.outputs.stalled != 'true' }}
+        timeout-minutes: 40
         run: |
-          set -o pipefail
-          python3 scripts/test-timing.py "$RUNNER_TEMP/test-logs/swift-test.log" | tee -a "$GITHUB_STEP_SUMMARY"
+          fails=0
+          for i in $(seq 1 60); do
+            echo "::group::diag509 run $i"
+            if scripts/ci-test.sh "$RUNNER_TEMP/test-logs/run-$i" \
+              --filter 'OrbeTests.FindInProjectTests/testFindInProjectOpensTheEditorWithTheSearchFieldFocused'; then
+              result=passed
+            else
+              result=failed
+              fails=$((fails + 1))
+            fi
+            echo "::endgroup::"
+            echo "DIAG509 run $i $result"
+          done
+          echo "DIAG509 summary failed=$fails/60"
+          [ "$fails" -eq 0 ]
       - name: upload test logs
         if: ${{ always() && steps.test.outcome != 'skipped' }}
         uses: actions/upload-artifact@v7
