@@ -5,15 +5,18 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// レビューのポップアップの未送信のコメントの行から、その場所へ移る——ポップアップが閉じ、そのファイルの PR の diff が本体に
-/// 出て、コメントの行が見える位置に来て、畳んだスレッドが開く。PR の中身とレビューのやりとりは差し替えの構造体が答える。
+/// レビューのポップアップの未送信のコメントの行から、その場所へ移る——ポップアップが閉じ、PR の一覧でそのファイルの行を選び、
+/// そのファイルの PR の diff が本体に出て焦点が本文へ移る。スレッドを置いたら、その行と押したコメントが見える位置に来て、
+/// 畳んだスレッドが開く。見せる頼みは、利用者が diff を操作したら捨てる。PR の中身とレビューのやりとりは差し替えの構造体が答える。
 ///
 /// 壊れると何が起きるか: 未送信のコメントの行を押しても、別のファイルの diff のままになる。diff の先頭（最初の変更区間）に出て、
 /// コメントの行を探し直すことになる。解決済みで畳んだスレッドが畳まれたままで、コメントが見えない。同じファイルの diff を
-/// 見ている間に押しても、その行へ動かない。
+/// 見ている間に押しても、その行へ動かない。押した後の打鍵が本文に入らない。長いスレッドの下の方の押したコメントが画面の外に
+/// 残る。読んでいる最中・返信を打っている最中に、後から置かれたスレッドへ画面が飛ぶ。
 extension EditorDiffTests {
-  /// ほかのファイルの diff を見ている間に、行 150 にある、解決済みで畳んだスレッドの未送信のコメントの行を押すと、ポップアップが
-  /// 閉じ、そのファイルの diff が出て行 150 が見え、スレッドが開く。続けて同じファイルの行 80 のコメントの行を押すと、行 80 へ動く。
+  /// ほかのファイルの diff を見ている間に、行 150 にある解決済みで畳んだスレッドについて、その未送信のコメントの行を押すと、ポップアップが
+  /// 閉じ、PR の一覧でそのファイルの行を選び、そのファイルの diff が出て焦点が本文へ移り、行 150 が見え、スレッドが開く。
+  /// 続けて同じファイルの、既に置いてある畳んだスレッド（行 80）のコメントの行を押すと、行 80 へ動き、そのスレッドが開く。
   func testPressingAPendingCommentRevealsItsLineAndOpensItsThread() throws {
     var lines = (1...200).map { "line \($0)" }
     try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
@@ -21,7 +24,7 @@ extension EditorDiffTests {
     let remote = Remote()
     remote.threads = [
       pendingThread("T_far", line: 150, resolved: true),
-      pendingThread("T_mid", line: 80, resolved: false),
+      pendingThread("T_mid", line: 80, resolved: true),
     ]
     let opened = try commentedTab(remote) {
       lines[2] = "THREE"
@@ -35,22 +38,31 @@ extension EditorDiffTests {
     XCTAssertEqual(pane.diff?.id.path, "b.txt", "前提: ほかのファイルの diff を見ている")
     let review = pane.reviewPopup
     pumpMain(until: { review.canOpen }, "前提: レビューを開ける")
+    // 一覧から開く（閉じると焦点は一覧へ戻る。その上で、行から移ると焦点が本文へ移ることを見る）。
+    let list = pane.pullRequestList.list
+    pumpMain(until: { list.window != nil }, "前提: PR の一覧が窓に載る")
+    pane.window?.makeFirstResponder(list)
     review.toggle()
     XCTAssertTrue(review.isOpen, "前提: ポップアップが開く")
 
     review.press(try XCTUnwrap(state.pendingComments.first { $0.thread == "T_far" }))
     XCTAssertFalse(review.isOpen, "ポップアップが閉じる")
+    XCTAssertEqual(pane.pullRequest.selection, .file("a.txt"), "PR の一覧でそのファイルの行を選ぶ")
     let diff = try XCTUnwrap(pane.diff)
     XCTAssertEqual(diff.id.path, "a.txt", "そのファイルの diff が出る")
+    pumpMain(until: { pane.window?.firstResponder === pane.focusTarget }, "焦点は本文へ移る")
     pumpMain(until: { diff.placement == .placed && diff.newSurface != nil }, "位置を決める")
     let surface = try engine(diff.newSurface)
-    XCTAssertTrue(shows(surface, line: 149), "行 150 が見える")
-    pumpMain(until: { diff.comments?.zone(thread: "T_far") != nil }, "スレッドが置かれる")
+    pumpMain(until: { self.shows(surface, line: 149) }, "行 150 が見える")
     XCTAssertEqual(diff.comments?.zone(thread: "T_far")?.isCollapsed, false, "畳んだスレッドが開く")
 
+    pumpMain(
+      until: { diff.comments?.zone(thread: "T_mid")?.isCollapsed == true },
+      "前提: 行 80 の畳んだスレッドを置いてある")
     review.press(try XCTUnwrap(state.pendingComments.first { $0.thread == "T_mid" }))
     XCTAssertTrue(pane.diff === diff, "前提: 同じ diff のまま")
-    XCTAssertTrue(shows(surface, line: 79), "同じファイルの diff でも行 80 へ動く")
+    pumpMain(until: { self.shows(surface, line: 79) }, "同じファイルの diff でも行 80 へ動く")
+    XCTAssertEqual(diff.comments?.zone(thread: "T_mid")?.isCollapsed, false, "置いてある畳んだスレッドが開く")
   }
 
   /// 古い側の行のコメントの行を押すと、古い版の行の位置へ移る。古い版の行 11〜110 の 100 行を新しい 50 行に置き換えた PR で、
@@ -80,19 +92,162 @@ extension EditorDiffTests {
     try press("T_context")
     XCTAssertTrue(pane.diff === diff, "前提: 同じ diff のまま")
     let inline = try engine(diff.newSurface)
-    XCTAssertTrue(shows(inline, line: 99), "インラインで新しい版の行 100 が見える")
+    pumpMain(until: { self.shows(inline, line: 99) }, "インラインで新しい版の行 100 が見える")
     pumpMain(until: { diff.comments?.zone(thread: "T_replaced") != nil }, "前提: スレッドが置かれる")
     try press("T_replaced")
     let zone = try XCTUnwrap(diff.comments?.zone(thread: "T_replaced"))
-    XCTAssertTrue(
-      shows(inline, zone: zone), "インラインで、差し込んだ削除行（古い版の行 60）の下のスレッドが見える")
+    pumpMain(
+      until: { self.shows(inline, zone: zone) }, "インラインで、差し込んだ削除行（古い版の行 60）の下のスレッドが見える")
 
     resize(try XCTUnwrap(pane.window), width: Self.sideWidth)
     pumpMain(until: { diff.oldSurface != nil }, "前提: 並列")
-    try press("T_replaced")
-    XCTAssertTrue(shows(try engine(diff.oldSurface), line: 59), "並列で左の面の行 60 が見える")
-    try press("T_context")
-    XCTAssertTrue(shows(try engine(diff.oldSurface), line: 149), "並列で左の面の行 150 が見える")
+    let left = try engine(diff.oldSurface)
+    for (thread, line) in [("T_replaced", 59), ("T_context", 149)] {
+      try engine(diff.newSurface).scroll(toFirstLine: 0)
+      XCTAssertFalse(shows(left, line: line), "前提: 左の面の行 \(line + 1) は見えていない")
+      try press(thread)
+      pumpMain(until: { self.shows(left, line: line) }, "並列で左の面の行 \(line + 1) が見える")
+    }
+  }
+
+  /// 見えている高さより長いスレッドの、最後の未送信のコメントの行を押すと、スレッドの本文を組み終えた後に、押したコメントが
+  /// 見える位置に来る——新しく開く diff でも、同じ diff を見ている間でも。
+  func testPressingTheLastCommentOfALongThreadRevealsThatComment() throws {
+    var lines = (1...200).map { "line \($0)" }
+    try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "long"]).isSuccess)
+    let remote = Remote()
+    let body = (1...4).map { "段落 \($0)" }.joined(separator: "\n\n")
+    remote.threads = [
+      GitHubPullRequestReview.Thread(
+        id: "T_long", path: "a.txt", side: .new, line: 100, isResolved: false, canReply: true,
+        canResolve: true, canUnresolve: false,
+        comments: (1...30).map {
+          .init(
+            id: "C\($0)", author: "you", body: body,
+            createdAt: Date(timeIntervalSince1970: Double($0)),
+            isPending: $0 == 30)
+        })
+    ]
+    let opened = try commentedTab(remote) {
+      lines[2] = "THREE"
+      try self.repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+      try self.repo.write("b.txt", "b\n")
+      XCTAssertTrue(self.repo.git(["add", "b.txt"]).isSuccess)
+    }
+    let pane = opened.tab.group.view.editor
+    let state = try XCTUnwrap(pane.pullRequest.state)
+    _ = try open(state, path: "b.txt", into: opened.tab)
+    let pending = try XCTUnwrap(state.pendingComments.first)
+    XCTAssertEqual(pending.id, "C30", "前提: 押すのは最後のコメント")
+
+    pane.reviewPopup.press(pending)
+    let diff = try XCTUnwrap(pane.diff)
+    XCTAssertEqual(diff.id.path, "a.txt", "前提: そのファイルの diff が出る")
+    pumpMain(until: { diff.placement == .placed && diff.newSurface != nil }, "前提: 位置を決める")
+    let surface = try engine(diff.newSurface)
+    pumpMain(until: { self.showsComment(surface, diff, "C30") }, "新しく開いた diff で、押したコメントが見える")
+
+    surface.scroll(toFirstLine: 0)
+    XCTAssertFalse(showsComment(surface, diff, "C30"), "前提: 押したコメントは見えていない")
+    pane.reviewPopup.press(pending)
+    XCTAssertTrue(pane.diff === diff, "前提: 同じ diff のまま")
+    pumpMain(until: { self.showsComment(surface, diff, "C30") }, "同じ diff でも、押したコメントが見える")
+  }
+
+  /// 未送信のコメントの行を押した後、そのスレッドがまだ置かれていない間（スレッドを読んだ版と diff の版が揃うのを待つ間）に、
+  /// 利用者が diff をスクロールするか打鍵したら、後からそのスレッドが置かれても画面を動かさない。操作が無ければ、置かれたときに
+  /// その行が見える位置へ動く。
+  func testAUserOperationBeforeTheThreadIsPlacedCancelsTheReveal() throws {
+    let lines = (1...200).map { "line \($0)" }
+    try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "long"]).isSuccess)
+    let remote = Remote()
+    let opened = try commentedTab(remote) {
+      var changed = lines
+      changed[2] = "THREE"
+      try self.repo.write("a.txt", changed.joined(separator: "\n") + "\n")
+    }
+    let diff = opened.diff
+    let pane = opened.tab.group.view.editor
+    let state = try XCTUnwrap(pane.pullRequest.state)
+    pumpMain(until: { diff.placement == .placed }, "前提: 位置を決める")
+    let surface = try engine(diff.newSurface)
+    let head = remote.head
+    let stale = String(repeating: "0", count: 40)
+    let operations = try userOperations(on: surface)
+    for (index, (name, operate)) in operations.enumerated() {
+      let id = "T\(index)"
+      let line = 120 + index * 20
+      // スレッドを読んだ版を diff の版からずらし、置けるかを「まだ分からない」にする（層は置かずに待つ）。
+      remote.head = stale
+      remote.threads.append(pendingThread(id, line: line))
+      state.reload()
+      pumpMain(
+        until: {
+          state.review?.headCommit == stale && state.pendingComments.contains { $0.thread == id }
+        }, "\(name): 前提: 置けるかの分からないスレッドを読む")
+      XCTAssertNil(diff.comments?.zone(thread: id), "\(name): 前提: まだ置かれていない")
+      surface.scroll(toFirstLine: 0)
+      pane.reviewPopup.press(try XCTUnwrap(state.pendingComments.first { $0.thread == id }))
+      try operate()
+
+      remote.head = head
+      state.reload()
+      pumpMain(
+        until: { diff.comments?.zone(thread: id).map { !$0.isTypesetting } ?? false },
+        "\(name): 前提: 版が揃ってスレッドが置かれ、本文を組み終える")
+      nextTurn()
+      if index == 0 {
+        XCTAssertTrue(shows(surface, line: line - 1), "\(name): 置かれたスレッドの行が見える")
+      } else {
+        XCTAssertFalse(shows(surface, line: line - 1), "\(name): 置かれたスレッドへ画面を動かさない")
+      }
+    }
+  }
+
+  /// 利用者の操作——無し・面のスクロール・面への打鍵。
+  private func userOperations(on surface: MetalTextSurface) throws -> [(String, () throws -> Void)]
+  {
+    let window = try XCTUnwrap(surface.view.window)
+    return [
+      ("操作なし", {}),
+      (
+        "スクロール",
+        {
+          let event = try XCTUnwrap(
+            CGEvent(
+              scrollWheelEvent2Source: SyntheticInput.source, units: .line, wheelCount: 1,
+              wheel1: -1, wheel2: 0, wheel3: 0))
+          surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
+        }
+      ),
+      (
+        "打鍵",
+        {
+          window.makeFirstResponder(surface.view)
+          let down = String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!)
+          self.deliverKeyDown(.key(down, []), to: window)
+        }
+      ),
+    ]
+  }
+
+  /// 面 `surface` に、diff `diff` のスレッドの中のコメント `comment` の全体が見えているか。
+  private func showsComment(_ surface: MetalTextSurface, _ diff: EditorDiff, _ comment: String)
+    -> Bool
+  {
+    guard let zone = diff.comments?.zone(thread: "T_long"), !zone.isTypesetting,
+      let span = zone.commentSpans[comment]
+    else { return false }
+    surface.flush()
+    guard let block = surface.rows.block(ofZone: ObjectIdentifier(zone)) else { return false }
+    let lineHeight = surface.rows.lineHeight
+    let (first, visible) = surface.viewportLines
+    let top = surface.rows.top(ofBlock: block) + span.lowerBound
+    let bottom = surface.rows.top(ofBlock: block) + span.upperBound
+    return top >= Double(first) * lineHeight - 0.5
+      && bottom <= Double(first + visible) * lineHeight + 0.5
   }
 
   /// 面 `surface` に、絵の差し込み `zone` の上端が見えているか。
