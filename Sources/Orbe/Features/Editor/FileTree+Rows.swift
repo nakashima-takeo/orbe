@@ -28,9 +28,49 @@ extension FileTree {
     let isOnSelectionPath: Bool
   }
 
+  /// `head` から覚えをたどった、連なりのいちばん深いフォルダ。
+  func deepest(from head: String) -> String {
+    var path = head
+    while let child = onlyChild[path] { path = Self.join(path, child) }
+    return path
+  }
+
+  /// 選択を含む行の同一性（選択が連なりの途中か、いちばん深いフォルダなら、その連なりの先頭）。選択が無ければ nil。
+  var selectedRowID: String? {
+    guard let selection else { return nil }
+    guard selection.isDirectory else { return selection.path }
+    var head = selection.path
+    while !head.isEmpty {
+      let parent = Self.parent(of: head)
+      guard !parent.isEmpty, onlyChild[parent] == Self.name(of: head) else { break }
+      head = parent
+    }
+    return head
+  }
+
+  /// 行の入力。絞り込んでいないときはディスクの一覧と覚えと展開集合、絞り込み中は届いた結果と、絞り込みの間に畳んだ集合。
+  private struct RowSource {
+    let children: [String: [RootFiles.Entry]]
+    let onlyChild: [String: String]
+    let isExpanded: (String) -> Bool
+    let newEntry: NewEntry?
+  }
+
   var rows: [Row] {
     var out: [Row] = []
-    append(directory: "", depth: 0, into: &out)
+    let source: RowSource
+    if let result = filter.shown {
+      let collapsed = filter.collapsed
+      source = RowSource(
+        children: result.children, onlyChild: result.onlyChild,
+        isExpanded: { !collapsed.contains($0) }, newEntry: nil)
+    } else {
+      let expanded = self.expanded
+      source = RowSource(
+        children: entries, onlyChild: onlyChild, isExpanded: expanded.contains,
+        newEntry: newEntry)
+    }
+    append(directory: "", depth: 0, source: source, into: &out)
     return out
   }
 
@@ -39,8 +79,10 @@ extension FileTree {
     list.filter(\.isDirectory) + list.filter { !$0.isDirectory }
   }
 
-  private func append(directory: String, depth: Int, into out: inout [Row]) {
-    if let newEntry, newEntry.directory == directory {
+  private func append(
+    directory: String, depth: Int, source: RowSource, into out: inout [Row]
+  ) {
+    if let newEntry = source.newEntry, newEntry.directory == directory {
       out.append(
         Row(
           id: Self.inputRowID(newEntry), depth: depth, name: "", prefix: "",
@@ -48,7 +90,7 @@ extension FileTree {
           kind: .input(isDirectory: newEntry.isDirectory, generation: newEntry.generation),
           isSelected: false, isOnSelectionPath: false))
     }
-    for entry in Self.directoriesFirst(entries[directory] ?? []) {
+    for entry in Self.directoriesFirst(source.children[directory] ?? []) {
       let path = Self.join(directory, entry.name)
       let onPath = isOnSelectionPath(path)
       guard entry.isDirectory else {
@@ -60,24 +102,24 @@ extension FileTree {
             isOnSelectionPath: onPath))
         continue
       }
-      let chain = chain(from: path)
+      let chain = chain(from: path, source)
       let deepest = chain[chain.count - 1]
-      let isExpanded = expanded.contains(deepest)
+      let isExpanded = source.isExpanded(deepest)
       out.append(
         Row(
           id: path, depth: depth, name: Self.name(of: deepest),
           prefix: chain.dropLast().map { Self.name(of: $0) + "/" }.joined(),
           url: url(of: deepest), kind: .directory(isExpanded: isExpanded),
           isSelected: selected.map(chain.contains) ?? false, isOnSelectionPath: onPath))
-      if isExpanded { append(directory: deepest, depth: depth + 1, into: &out) }
+      if isExpanded { append(directory: deepest, depth: depth + 1, source: source, into: &out) }
     }
   }
 
   /// `head` から覚えをたどった連なり（先頭からいちばん深いフォルダまで）。行内入力の挿し先で止める（入力行はその中身）。
-  private func chain(from head: String) -> [String] {
+  private func chain(from head: String, _ source: RowSource) -> [String] {
     var chain = [head]
     var path = head
-    while path != newEntry?.directory, let child = onlyChild[path] {
+    while path != source.newEntry?.directory, let child = source.onlyChild[path] {
       path = Self.join(path, child)
       chain.append(path)
     }

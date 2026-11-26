@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// 左の列: エクスプローラー（上の行・ツリー）。ツリーは根の直下の行から始まる。ツリーのスクロール位置はツリーが覚え、画面を
+/// 左の列: エクスプローラー（上の行・文の行・ツリー）。ツリーは根の直下の行から始まる。2 つの入力（絞り込みの欄・行内入力）の
+/// フォーカスは 1 つの値で持ち、変わるたびにツリーへ写す。ツリーのスクロール位置はツリーが覚え、画面を
 /// 切り替えて・左の列を閉じて・検索パネルから戻って作り直されても戻す。隠れている間に選択が替わっていれば、位置を戻す代わりに
 /// 選択の行を見せる。
 struct ExplorerView: View {
@@ -12,6 +13,7 @@ struct ExplorerView: View {
   /// 作り直した一覧で見せる選択の行の同一性（隠れている間に選択が替わったとき）。最初のレイアウトの後に 1 度だけ中ほどへ送って
   /// 終える——行を宛先に送るので、中身が溢れるのを待たない（収まっていれば何も動かない）。
   @State private var pendingReveal: String?
+  @FocusState private var focus: FileTree.ExplorerFocus?
 
   init(shell: EditorShellModel, tree: FileTree) {
     self.shell = shell
@@ -35,6 +37,7 @@ struct ExplorerView: View {
   var body: some View {
     EditorSidebarPanel {
       topRow
+      ExplorerFilterNotes(filter: tree.filter)
       ScrollViewReader { proxy in
         ScrollView(.vertical) {
           LazyVStack(spacing: 0) {
@@ -42,7 +45,7 @@ struct ExplorerView: View {
               if case .input(let isDirectory, let generation) = row.kind {
                 InlineInputRow(
                   row: row, isDirectory: isDirectory, generation: generation, tree: tree,
-                  shell: shell)
+                  shell: shell, focus: $focus)
               } else {
                 TreeRowView(row: row, tree: tree, shell: shell)
               }
@@ -81,14 +84,30 @@ struct ExplorerView: View {
           if let id = tree.selectedRowID { proxy.scrollTo(id) }
           tree.scrolledSelection = path
         }
+        // 絞り込みの結果が替わったら（字が替わった結果）一覧の先頭へ、絞り込みを解いたら選択を含む行を中ほどへ送る。
+        .onChange(of: tree.filter.shown?.text) { _, text in
+          guard text != nil else { return }
+          Task { @MainActor in proxy.scrollTo(Content.tree, anchor: .top) }
+        }
+        .onChange(of: tree.filter.isActive) { _, active in
+          guard !active, let id = tree.selectedRowID else { return }
+          Task { @MainActor in proxy.scrollTo(id, anchor: .center) }
+        }
       }
     }
+    .onChange(of: focus) { old, new in
+      tree.explorerFocus = new
+      if case .input(let generation) = old, new == nil { shell.inlineInputLostFocus(generation) }
+    }
+    .onDisappear { tree.explorerFocus = nil }
   }
 
-  /// 上の行: 左に絞り込みの欄の場所、右に 3 つのツール（新規ファイル／新規フォルダ／すべて折りたたむ）。
+  /// 上の行: 左に絞り込みの欄、右に 3 つのツール（新規ファイル／新規フォルダ／すべて折りたたむ）。結果を 0.3 秒より長く
+  /// 待っている間は、下端に進捗の細い線。
   private var topRow: some View {
     HStack(spacing: Theme.Space.hair) {
-      Spacer(minLength: 0)
+      ExplorerFilterField(tree: tree, shell: shell, focus: $focus)
+        .padding(.trailing, Theme.Layout.editorTreeFieldGap)
       EditorIconButton(
         glyph: EditorGlyphs.newFile, help: l10n.string(.editorNewFile), action: shell.createFile)
       EditorIconButton(
@@ -100,5 +119,74 @@ struct ExplorerView: View {
     }
     .frame(height: Theme.Layout.editorTreeField)
     .padding(Theme.Layout.editorTreeTopPad)
+    .overlay(alignment: .bottom) {
+      if tree.filter.isWaiting { EditorProgressLine() }
+    }
+  }
+}
+
+/// 絞り込みの欄（入力欄の枠の高さ 26）。字はツリーの状態に束ねる（view が作り直されても残る）。esc は、字があれば空にし
+/// （フォーカスは欄のまま）、空なら本体の行き先へフォーカスを移す。変換中の esc は変換の取り消し（入力が受ける）。
+private struct ExplorerFilterField: View {
+  let tree: FileTree
+  let shell: EditorShellModel
+  var focus: FocusState<FileTree.ExplorerFocus?>.Binding
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    EditorFieldFrame(height: Theme.Layout.editorTreeField, isFocused: focus.wrappedValue == .filter)
+    {
+      TextField(
+        "", text: Binding(get: { tree.filter.text }, set: tree.setFilterText),
+        prompt: Text(l10n.string(.editorFilterPlaceholder)).foregroundStyle(Color.theme.textMuted)
+      )
+      .textFieldStyle(.plain)
+      .font(Font.theme.editorTreeFilter)
+      .foregroundStyle(Color.theme.textPrimary)
+      .tint(Color.theme.accentPrimary)
+      .lineLimit(1)
+      .focused(focus, equals: .filter)
+      .onKeyPress(.escape) {
+        if tree.filter.isActive {
+          tree.setFilterText("")
+        } else {
+          shell.focusBody()
+        }
+        return .handled
+      }
+    }
+  }
+}
+
+/// 文の行（上の行のすぐ下。sans 11・弱い色）: 0 件・一致の打ち切り・一覧の打ち切り・一覧を取れずにいる。
+private struct ExplorerFilterNotes: View {
+  let filter: FileTreeFilter
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    let lines = self.lines
+    if !lines.isEmpty {
+      VStack(alignment: .leading, spacing: Theme.Space.hair) {
+        ForEach(lines, id: \.self) { line in
+          Text(l10n.string(line)).fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      .font(Font.theme.editorSearchNote)
+      .foregroundStyle(Color.theme.editorTertiary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, Theme.Space.beat)
+      .padding(.bottom, Theme.Space.step)
+    }
+  }
+
+  private var lines: [L10nKey] {
+    guard filter.isActive else { return [] }
+    if filter.listFailed { return [.editorFilterListFailed] }
+    guard let result = filter.shown else { return [] }
+    var lines: [L10nKey] = []
+    if result.matchCount == 0 { lines.append(.editorFilterNoMatches) }
+    if result.matchesTruncated { lines.append(.editorFilterTooManyMatches) }
+    if result.listTruncated { lines.append(.editorFilterTooManyFiles) }
+    return lines
   }
 }

@@ -124,17 +124,16 @@ struct TreeMarkButton: View {
   }
 }
 
-/// 新規作成の行内入力。現れたら first responder（窓か面が持っているとき）、Enter で作る、Esc で取り消す。
+/// 新規作成の行内入力。現れたら焦点を取り（窓か面が持っているとき）、Enter で作る、Esc で取り消す。
 /// 名前はツリーの状態に束ねる——容器が行を捨てて作り直しても打ちかけは残り、入力の終わりは view の寿命では
-/// なく状態が落ちること。焦点の喪失は pane に知らせ、別の view へ移ったときだけ取り消しになる。
+/// なく状態が落ちること。焦点はエクスプローラーが絞り込みの欄と 1 つの値で持ち、その出入りはエクスプローラーが扱う。
 struct InlineInputRow: View {
   let row: FileTree.Row
   let isDirectory: Bool
   let generation: Int
   let tree: FileTree
   let shell: EditorShellModel
-  @FocusState private var focused: Bool
-  @State private var didFocus = false
+  var focus: FocusState<FileTree.ExplorerFocus?>.Binding
   @Environment(\.colorScheme) private var scheme
 
   var body: some View {
@@ -153,18 +152,15 @@ struct InlineInputRow: View {
         .foregroundStyle(Color.theme.editorText)
         .tint(Color.theme.accentPrimary)
         .lineLimit(1)
-        .focused($focused)
+        .focused(focus, equals: .input(generation: generation))
         .onSubmit { tree.commitNew() }
         .onKeyPress(.escape) {
           tree.cancelNew(generation)
           return .handled
         }
-        .onAppear { if shell.inlineInputMayTakeFocus() { focused = true } }
-        .onChange(of: focused) { _, now in
-          if now {
-            didFocus = true
-          } else if didFocus {
-            shell.inlineInputLostFocus(generation)
+        .onAppear {
+          if shell.inlineInputMayTakeFocus() {
+            focus.wrappedValue = .input(generation: generation)
           }
         }
     }

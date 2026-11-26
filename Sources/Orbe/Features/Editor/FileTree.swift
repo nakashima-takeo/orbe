@@ -38,6 +38,25 @@ final class FileTree: RootFilesObserver {
   private(set) var openMarks: [String: EditorItemListRow.Mark] = [:]
   /// フォルダ（根からの相対）→ ただ 1 つの子フォルダの名前。中身がフォルダ 1 つだけでないフォルダは持たない。
   private(set) var onlyChild: [String: String] = [:]
+  /// エクスプローラーの中の入力のフォーカス（絞り込みの欄か、行内入力とその世代）。
+  enum ExplorerFocus: Hashable {
+    case filter
+    case input(generation: Int)
+  }
+
+  /// エクスプローラーの中の 2 つの入力のどちらがフォーカスを持つか（無ければ nil）。view が、フォーカスが変わるたびに写す
+  /// （片方からもう片方へ移るのも 1 回の変化として届く）。行内入力から絞り込みの欄へ移ったら、その入力を取り消す。欄に入ったら
+  /// 対象の一覧が無いか古ければ取り、欄から出て字が空なら一覧を捨てる。
+  var explorerFocus: ExplorerFocus? {
+    didSet { if explorerFocus != oldValue { explorerFocusDidChange(from: oldValue) } }
+  }
+  /// エクスプローラーが出ているか（面が見えていて、左の列が開いていて、Files の左の列がエクスプローラー）。面が書く。出し
+  /// 直したとき、絞り込み中で対象の一覧が古ければ取り直す。
+  var isExplorerShown = false {
+    didSet { if isExplorerShown, !oldValue { refreshFilterListIfStale() } }
+  }
+  /// 絞り込み（字・結果・絞り込みの間の開閉と、裏の仕事）。
+  @ObservationIgnored let filter: FileTreeFilter
   struct Selection: Equatable {
     let path: String
     let isDirectory: Bool
@@ -77,6 +96,9 @@ final class FileTree: RootFilesObserver {
         files.addObserver(self)
         reloadAll()
         if let status = files.status { self.status = status }
+        // 見えていなかった間の変化は、通知が届いていない。
+        filter.markStale()
+        refreshFilterListIfStale()
       } else {
         files?.removeObserver(self)
         files = nil
@@ -87,6 +109,7 @@ final class FileTree: RootFilesObserver {
   init(root: String) {
     self.root = root
     lookahead = FileTreeLookahead(root: root)
+    filter = FileTreeFilter(root: root)
   }
 
   // MARK: - 開閉・選択
@@ -95,6 +118,7 @@ final class FileTree: RootFilesObserver {
   /// 連なりが途中で切れていれば、取った一覧が正になる）、開いていれば先頭から配下ごと畳む（覚えは残す）。選択は、連なりの
   /// いちばん深いフォルダ。
   func toggle(_ head: String) {
+    if filter.shown != nil { return filter.toggle(head) }
     if expanded.contains(deepest(from: head)) {
       collapse(head)
     } else {
@@ -108,28 +132,9 @@ final class FileTree: RootFilesObserver {
     selection = Selection(path: deepest(from: head), isDirectory: true)
   }
 
-  /// `head` から覚えをたどった、連なりのいちばん深いフォルダ。
-  func deepest(from head: String) -> String {
-    var path = head
-    while let child = onlyChild[path] { path = Self.join(path, child) }
-    return path
-  }
-
-  /// 選択を含む行の同一性（選択が連なりの途中か、いちばん深いフォルダなら、その連なりの先頭）。選択が無ければ nil。
-  var selectedRowID: String? {
-    guard let selection else { return nil }
-    guard selection.isDirectory else { return selection.path }
-    var head = selection.path
-    while !head.isEmpty {
-      let parent = Self.parent(of: head)
-      guard !parent.isEmpty, onlyChild[parent] == Self.name(of: head) else { break }
-      head = parent
-    }
-    return head
-  }
-
   /// 展開をすべて畳む。
   func collapseAll() {
+    if filter.shown != nil { return filter.collapseAll() }
     expanded = []
     entries = entries.filter { $0.key.isEmpty }
     newEntry = nil
@@ -178,6 +183,7 @@ final class FileTree: RootFilesObserver {
   /// 行内入力を出す。挿す先は、選択がディレクトリならそこから覚えをたどったいちばん深いフォルダ、ファイルならその親、
   /// 無ければ根。
   func beginNew(isDirectory: Bool) {
+    setFilterText("")
     let directory: String
     if let selection {
       directory =
@@ -288,15 +294,6 @@ final class FileTree: RootFilesObserver {
     }
   }
 
-  /// `path` が、取り直した `directory` の一覧から消えたフォルダか、その配下か。
-  private static func isGone(_ path: String, under directory: String, present: Set<String>) -> Bool
-  {
-    let prefix = directory.isEmpty ? "" : directory + "/"
-    guard path.hasPrefix(prefix), path.count > prefix.count else { return false }
-    let child = prefix + (path.dropFirst(prefix.count).split(separator: "/").first ?? "")
-    return !present.contains(child)
-  }
-
   // MARK: - 先読み
 
   /// `paths`（開いていないフォルダ）の連なりを裏で調べさせる。届いた結果は、今も開いていないフォルダの分だけを覚えへ
@@ -345,6 +342,11 @@ final class FileTree: RootFilesObserver {
       }
       requestLookahead(lookaheads)
     }
+    filterSawChange()
+  }
+
+  func rootFilesDidResolve(_ files: RootFiles) {
+    filterSawChange()
   }
 
   /// `path` が、親の一覧にフォルダとして在るか。
@@ -358,4 +360,35 @@ final class FileTree: RootFilesObserver {
   }
 
   func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
+
+  // MARK: - 絞り込み
+
+  /// 絞り込みの字を置き換える（欄が書く）。空になり、欄にフォーカスも無ければ対象の一覧を捨てる。
+  func setFilterText(_ text: String) {
+    filter.setText(text, files: files)
+    if text.isEmpty, explorerFocus != .filter { filter.discardList() }
+  }
+
+  private func explorerFocusDidChange(from old: ExplorerFocus?) {
+    if case .input(let generation) = old, explorerFocus == .filter { cancelNew(generation) }
+    if explorerFocus == .filter {
+      if filter.isStale, let files { filter.relist(files) }
+    } else if old == .filter, !filter.isActive {
+      filter.discardList()
+    }
+  }
+
+  /// 根の下が変わった・git 管理下かの判定が済んだ。絞り込み中でエクスプローラーが出ていれば対象の一覧を取り直し、それ以外は
+  /// 「古い」の印だけを立てる。
+  private func filterSawChange() {
+    if filter.isActive, isExplorerShown, let files {
+      filter.relist(files)
+    } else {
+      filter.markStale()
+    }
+  }
+
+  private func refreshFilterListIfStale() {
+    if filter.isActive, isExplorerShown, filter.isStale, let files { filter.relist(files) }
+  }
 }

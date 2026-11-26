@@ -158,6 +158,7 @@ struct ThemeFonts {
   let editorTreeRow = Font(Theme.Typography.editorTreeRow as CTFont)
   let editorTreeFolder = Font(Theme.Typography.editorTreeFolder as CTFont)
   let editorTreeBadge = Font(Theme.Typography.editorTreeBadge as CTFont)
+  let editorTreeFilter = Font(Theme.Typography.editorTreeFilter as CTFont)
   let editorBadge = Font(Theme.Typography.editorBadge as CTFont)
   let editorSearchTitle = Font(Theme.Typography.editorSearchTitle as CTFont)
   let editorSearchField = Font(Theme.Typography.editorSearchField as CTFont)

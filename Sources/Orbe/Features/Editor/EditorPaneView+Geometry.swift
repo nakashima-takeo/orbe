@@ -77,10 +77,11 @@ extension EditorPaneView {
     refreshCurrentItem()
   }
 
-  /// 焦点を持っている左の列のパネル（検索パネル・ソース管理パネルの入力欄か列、PR のパネルの列か全体へのコメント欄）。
+  /// 焦点を持っている左の列のパネル（エクスプローラーの絞り込みの欄か行内入力、検索パネル・ソース管理パネルの入力欄か列、
+  /// PR のパネルの列か全体へのコメント欄）。
   var panelHoldingFocus: EditorShellModel.Panel? {
     switch shell.panel {
-    case .files: return nil
+    case .files: return tree.explorerFocus != nil ? .files : nil
     case .search: return focusIsInSearchPanel ? .search : nil
     case .sourceControl: return focusIsInSourceControl ? .sourceControl : nil
     case .pullRequest: return focusIsInPullRequest ? .pullRequest : nil

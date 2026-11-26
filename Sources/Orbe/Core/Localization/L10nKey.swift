@@ -701,6 +701,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorNewFolder
   case editorCollapseAll
   case editorExpandAll
+  case editorFilterPlaceholder
+  case editorFilterNoMatches
+  case editorFilterTooManyMatches
+  case editorFilterTooManyFiles
+  case editorFilterListFailed
 
   // MARK: - Editor 面（プロジェクト検索）
   case editorSearchTitle

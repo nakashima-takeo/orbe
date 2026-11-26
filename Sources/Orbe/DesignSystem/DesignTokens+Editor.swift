@@ -156,6 +156,8 @@ extension Theme.Typography {
   static let editorTreeRow = NSFont.systemFont(ofSize: 12.5, weight: .regular)
   static let editorTreeFolder = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
   static let editorTreeBadge = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .semibold)
+  /// ツリーの絞り込みの欄（sans 12）。
+  static let editorTreeFilter = NSFont.systemFont(ofSize: 12, weight: .regular)
   /// ツリー行の git バッジ（mono 11）。
   static let editorBadge = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// 種別チップのグリフ（mono bold。サイズはチップが決める）。
@@ -263,6 +265,8 @@ extension Theme.Layout {
   static let editorRow: CGFloat = 24
   static let editorTreeTopPad: CGFloat = 8
   static let editorTreeField: CGFloat = 26
+  /// 絞り込みの欄の右の空き（3 つのツールとの間）。
+  static let editorTreeFieldGap: CGFloat = 4
   static let editorTreeInset: CGFloat = 6
   static let editorTreeRowRadius: CGFloat = 6
   static let editorTreeRowPadX: CGFloat = 8

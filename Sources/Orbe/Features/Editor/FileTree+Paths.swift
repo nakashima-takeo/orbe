@@ -17,6 +17,14 @@ extension FileTree {
     return String(path.dropFirst(root.count + 1))
   }
 
+  /// `path` が、取り直した `directory` の一覧から消えたフォルダか、その配下か。
+  static func isGone(_ path: String, under directory: String, present: Set<String>) -> Bool {
+    let prefix = directory.isEmpty ? "" : directory + "/"
+    guard path.hasPrefix(prefix), path.count > prefix.count else { return false }
+    let child = prefix + (path.dropFirst(prefix.count).split(separator: "/").first ?? "")
+    return !present.contains(child)
+  }
+
   static func join(_ directory: String, _ name: String) -> String {
     directory.isEmpty ? name : directory + "/" + name
   }
