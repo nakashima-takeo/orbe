@@ -17,7 +17,7 @@ struct ScmMessageField: NSViewRepresentable {
   static let maxLines = 10
   /// 欄の寸法（sans 12・1 行のときの高さ 26・左右の余白は左 8・右 5）。
   static let metrics = MessageTextView.Metrics(
-    font: Theme.Typography.editorScmMessage, lineHeight: Theme.Layout.editorScmMessage,
+    font: Theme.Typography.editorScmMessage, height: Theme.Layout.editorScmMessage,
     leading: 8, trailing: 5)
 
   func makeCoordinator() -> Coordinator { Coordinator(self) }

@@ -5,7 +5,8 @@
   /// 上のバーの右下の置き場の仮の中身——入力欄 1 つとボタンを持つポップアップの中身（載せる側）と、失敗の札 2 枚。gallery が
   /// 置き場の姿を、flow が本物の面で開閉を撮る。
   extension EditorShellFixtures {
-    /// ポップアップの中身を載せる側。入力欄は「❯」の後ろの伸びるメッセージ欄で、esc で器に閉じるよう頼む。ボタンと ⌘↵ は
+    /// ポップアップの中身を載せる側。入力欄は「❯」の後ろの伸びるメッセージ欄（sans 12.5・行の高さ 20・1 行で高さ 30）で、
+    /// esc で器に閉じるよう頼む。ボタンと ⌘↵ は
     /// 「載せる側」のきっかけで閉じる。起きたこと（開いた回数・閉じる直前のきっかけ・扱った ⌘ つきのキー）を記録する。
     @MainActor final class DockPopupOwner: EditorPopupOwner {
       private weak var popup: EditorPopup?
@@ -15,7 +16,9 @@
       private(set) var closings: [EditorDismissal] = []
       private(set) var keys: [String] = []
       /// 入力欄（開閉をまたいで同じ欄を使う）。
-      let field = MessageTextView(metrics: ScmMessageField.metrics)
+      let field = MessageTextView(
+        metrics: .init(
+          font: .systemFont(ofSize: 12.5), height: 30, lineHeight: 20, leading: 0, trailing: 0))
       private let scroll = MessageScrollView()
       /// 入力欄へフォーカスを入れる頼み（欄が窓に載っていなければ、載ったときに当てる）。
       private var wantsFocus = false

@@ -12,12 +12,17 @@ final class MessageScrollView: NSScrollView {
 }
 
 /// メッセージ欄のテキスト面。空のときプレースホルダを描き、焦点の出入りを知らせる。`onCommit` があれば修飾の無い ↵ はそれを
-/// 求め、ほかの改行の命令（`onCommit` が無ければ ↵ も）は `\n` を入れる。字体・1 行のときの高さ・左右の余白は欄ごとに渡す。
+/// 求め、ほかの改行の命令（`onCommit` が無ければ ↵ も）は `\n` を入れる。字体・1 行のときの欄の高さ・行の高さ・左右の余白は
+/// 欄ごとに渡す。
 final class MessageTextView: NSTextView {
-  /// 欄の寸法——字体・1 行のときの高さ・字の左右の余白。
+  /// 欄の寸法。
   struct Metrics {
     var font: NSFont
-    var lineHeight: CGFloat
+    /// 1 行のときの欄の高さ（行の高さ ＋ 上下の余白）。
+    var height: CGFloat
+    /// 行の高さ（どの行も同じ。字は行の上下の中央）。nil なら字体の既定の行の高さ。
+    var lineHeight: CGFloat?
+    /// 字の左右の余白。
     var leading: CGFloat
     var trailing: CGFloat
   }
@@ -40,10 +45,12 @@ final class MessageTextView: NSTextView {
   /// 高さの問いだけに使う組み（同じ文字の系に足した 2 つ目のレイアウト。表示の組みに触れずに、問われた幅で組む）。
   private let measuring: NSTextContainer
   private let metrics: Metrics
-  /// 字の 1 行の高さ。
+  /// 行の高さ。
   private let textLineHeight: CGFloat
-  /// 1 行のときに欄の高さが `metrics.lineHeight` になる上下の余白。
+  /// 1 行のときに欄の高さが `metrics.height` になる上下の余白。
   private let verticalInset: CGFloat
+  /// 字の属性（字体・色と、行の高さを決めていれば、その行の高さと字の上下の位置）。
+  private let textAttributes: [NSAttributedString.Key: Any]
 
   /// 寸法 `metrics` の欄。
   init(metrics: Metrics) {
@@ -63,8 +70,19 @@ final class MessageTextView: NSTextView {
     self.storage = storage
     self.measuring = measuring
     self.metrics = metrics
-    textLineHeight = layout.defaultLineHeight(for: metrics.font)
-    verticalInset = (metrics.lineHeight - textLineHeight) / 2
+    let natural = layout.defaultLineHeight(for: metrics.font)
+    textLineHeight = metrics.lineHeight ?? natural
+    verticalInset = (metrics.height - textLineHeight) / 2
+    var attributes: [NSAttributedString.Key: Any] = [.font: metrics.font]
+    if let lineHeight = metrics.lineHeight {
+      let paragraph = NSMutableParagraphStyle()
+      paragraph.minimumLineHeight = lineHeight
+      paragraph.maximumLineHeight = lineHeight
+      attributes[.paragraphStyle] = paragraph
+      // 決めた行の高さの余りは行の上に付くので、字を余りの半分だけ上げて、行の上下の中央に置く。
+      attributes[.baselineOffset] = (lineHeight - natural) / 2
+    }
+    textAttributes = attributes
     super.init(frame: .zero, textContainer: container)
     font = metrics.font
     textColor = Theme.Color.textPrimary
@@ -80,7 +98,8 @@ final class MessageTextView: NSTextView {
     // 上限を開けないと、テキスト面は見えている枠より高くならず、10 行を越えた分へスクロールできない。
     maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
     textContainerInset = NSSize(width: 0, height: verticalInset)
-    typingAttributes = [.font: metrics.font, .foregroundColor: Theme.Color.textPrimary]
+    defaultParagraphStyle = attributes[.paragraphStyle] as? NSParagraphStyle
+    typingAttributes = textAttributes.merging([.foregroundColor: Theme.Color.textPrimary]) { $1 }
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
@@ -101,7 +120,7 @@ final class MessageTextView: NSTextView {
   /// 行の分まで（長い貼り付けでも、問いのたびに全文を組まない）。
   func fittingHeight(width: CGFloat, maxLines: Int) -> CGFloat {
     let limit = textLineHeight * CGFloat(maxLines)
-    guard let layout = measuring.layoutManager else { return metrics.lineHeight }
+    guard let layout = measuring.layoutManager else { return metrics.height }
     let size = NSSize(
       width: max(0, width - metrics.leading - metrics.trailing), height: .greatestFiniteMagnitude)
     if measuring.containerSize != size { measuring.containerSize = size }
@@ -131,9 +150,7 @@ final class MessageTextView: NSTextView {
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
     guard string.isEmpty, !hasMarkedText(), !placeholder.isEmpty else { return }
-    let attributes: [NSAttributedString.Key: Any] = [
-      .font: metrics.font, .foregroundColor: Theme.Color.editorTertiary,
-    ]
+    let attributes = textAttributes.merging([.foregroundColor: Theme.Color.editorTertiary]) { $1 }
     let origin = textContainerOrigin
     let line = NSAttributedString(string: placeholder, attributes: attributes)
     line.draw(
