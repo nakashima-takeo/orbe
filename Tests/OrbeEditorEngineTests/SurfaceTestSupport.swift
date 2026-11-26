@@ -22,8 +22,10 @@ extension EngineTestCase {
   }
 
   /// 窓に載せて描き終えた、帯とつまみが時間を掛けずに現れる（動きを減らす設定）面。
-  func hosted(_ text: String, size: CGSize = CGSize(width: 800, height: 400)) throws -> Opened {
-    let opened = try open(text, size: size)
+  func hosted(
+    _ text: String, size: CGSize = CGSize(width: 800, height: 400), wraps: Bool = true
+  ) throws -> Opened {
+    let opened = try open(text, size: size, wraps: wraps)
     _ = host(opened, size: size)
     opened.surface.inputScope { opened.surface.textView.overview.setReduceMotion(true) }
     _ = opened.surface.snapshot()

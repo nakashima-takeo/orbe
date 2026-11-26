@@ -36,7 +36,8 @@ extension EditingSite {
     let row = min(max(0, line), text.lineCount - 1)
     return PointerHit(
       area: .text, row: row,
-      offset: text.lineStart(row) + env.geometry.column(atX: point.x - origin.x, row: row))
+      offset: text.lineStart(row)
+        + env.geometry.column(atX: point.x - origin.x, row: row, segment: 0).column)
   }
 
   /// 点を含む書記素（→ `MetalTextSurface.character(at:)`）。入力欄では入力欄の矩形の中の字だけ。
@@ -48,7 +49,7 @@ extension EditingSite {
     let row = Int(((point.y - origin.y) / field.style.lineHeight).rounded(.down))
     guard (0..<text.lineCount).contains(row) else { return nil }
     let (source, start) = LineShaper.source(row: row, in: text)
-    let stops = lineStops.stops(source, tabWidth: tabWidth)
+    let stops = lineStops.stops(LineShaper.display(source), tabWidth: tabWidth)
     let x = point.x - origin.x
     guard x < stops.width, let glyph = stops.glyph(atX: x) else { return nil }
     return text.grapheme(containing: start + stops.offsets[glyph])
@@ -75,17 +76,38 @@ extension EditingSite {
     return top...max(top, bottom)
   }
 
-  /// 1 行の中の範囲の矩形（行の高さいっぱい）。未確定の行の未確定の中の端は `marked` で出す。
+  /// 1 行の中の範囲を、範囲の先頭の段の終わりで切った範囲（折り返さない行は、そのまま）。
+  func segmentRange(_ range: NSRange, row: Int, _ env: EditingEnvironment) -> NSRange {
+    guard let wrap = env.rows.wrap(ofLine: row) else { return range }
+    let start = env.text.lineStart(row)
+    let segment = wrap.segment(containing: range.location - start)
+    guard segment + 1 < wrap.segments else { return range }
+    let end = start + wrap.start(of: segment + 1)
+    return NSRange(
+      location: range.location, length: max(0, min(NSMaxRange(range), end) - range.location))
+  }
+
+  /// 1 行の 1 段の中の範囲の矩形（行の高さいっぱい）。空の範囲の段は付き `upstream` で決める。未確定の行の未確定の中の端は
+  /// `marked` で出す。
   func textRect(
-    _ range: NSRange, row: Int, _ env: EditingEnvironment, marked: MarkedLineGeometry?
+    _ range: NSRange, row: Int, _ env: EditingEnvironment, marked: MarkedLineGeometry?,
+    upstream: Bool = false
   ) -> NSRect {
     let start = env.text.lineStart(row)
     let onMarked = marked?.row == row ? marked : nil
-    let x0 =
-      onMarked?.x(of: range.location) ?? env.geometry.x(ofColumn: range.location - start, row: row)
+    let segment: Int
+    let x0: CGFloat
+    if let onMarked, let x = onMarked.x(of: range.location) {
+      (segment, x0) = (onMarked.segment, x)
+    } else {
+      (segment, x0) = env.geometry.place(
+        ofColumn: range.location - start, row: row, upstream: upstream && range.length == 0)
+    }
     let x1 =
       onMarked?.x(of: NSMaxRange(range))
-      ?? env.geometry.x(ofColumn: NSMaxRange(range) - start, row: row)
+      ?? env.geometry.place(
+        ofColumn: NSMaxRange(range) - start, row: row, upstream: range.length > 0 || upstream
+      ).x
     guard isBody else {
       let origin = fieldOrigin() ?? .zero
       return NSRect(
@@ -96,37 +118,56 @@ extension EditingSite {
     let config = surface.config
     return NSRect(
       x: surface.surfaceLayout.column + x0 - CGFloat(p.x),
-      y: config.topInset + CGFloat(surface.rows.y(ofLine: row) - p.y), width: x1 - x0,
-      height: config.lineHeight)
+      y: config.topInset + CGFloat(surface.rows.y(ofSegment: segment, line: row) - p.y),
+      width: x1 - x0, height: config.lineHeight)
+  }
+
+  /// 1 行の中の範囲の、段ごとの矩形（折り返さない行は 1 つ）。
+  func textRects(
+    _ range: NSRange, row: Int, _ env: EditingEnvironment, marked: MarkedLineGeometry?
+  ) -> [NSRect] {
+    var rects: [NSRect] = []
+    var location = range.location
+    let end = NSMaxRange(range)
+    repeat {
+      let piece = segmentRange(
+        NSRange(location: location, length: end - location), row: row, env)
+      rects.append(textRect(piece, row: row, env, marked: marked))
+      guard piece.length > 0 else { break }
+      location = NSMaxRange(piece)
+    } while location < end
+    return rects
   }
 
   /// 変換中の未確定の横位置（変換中でなければ nil）。
   var markedLine: MarkedLineGeometry? {
-    guard let composition = editor.composition, let text = currentContent?.text else { return nil }
-    return MarkedLineGeometry(composition, text: text, cache: lineStops, tabWidth: tabWidth)
+    guard let composition = editor.composition, let env = editingEnvironment() else { return nil }
+    return MarkedLineGeometry(
+      composition, text: env.text, rows: env.rows, cache: lineStops, tabWidth: tabWidth)
   }
 
   /// 点を含む未確定の字の位置（点が未確定の字の上でなければ nil）。
   func markedCharacter(at point: CGPoint) -> Int? {
-    guard let marked = markedLine, let text = currentContent?.text, row(at: point) == marked.row,
+    guard let marked = markedLine, let text = currentContent?.text,
+      let (row, segment) = row(at: point), row == marked.row, segment == marked.segment,
       let offset = marked.offset(containingX: lineX(of: point))
     else { return nil }
     return text.grapheme(containing: offset).location
   }
 
-  /// 点のある文の行（文の行の上でなければ nil）。
-  private func row(at point: CGPoint) -> Int? {
+  /// 点のある文の行と段（文の行の上でなければ nil）。
+  private func row(at point: CGPoint) -> (row: Int, segment: Int)? {
     guard isBody else {
       guard let origin = fieldOrigin() else { return nil }
-      return Int(((point.y - origin.y) / lineHeight).rounded(.down))
+      return (Int(((point.y - origin.y) / lineHeight).rounded(.down)), 0)
     }
     let config = surface.config
     guard point.y >= config.topInset,
       point.x >= surface.surfaceLayout.column,
-      case .line(let row) = surface.rows.item(
+      case .line(let row, let segment) = surface.rows.item(
         atY: Double(point.y - config.topInset) + surface.scrollPosition.y)
     else { return nil }
-    return row
+    return (row, segment)
   }
 
   /// 行頭からの点の x。
@@ -148,14 +189,24 @@ extension EditingSite {
       let from = rows.unit(of: positions.from, lineCount: text.lineCount)
       return from..<max(from, rows.unit(of: positions.to, lineCount: text.lineCount))
     }
-    let caret = NSRange(location: editor.state.cursors.primary.position, length: 0)
+    let primary = editor.state.cursors.primary
+    let caret = NSRange(location: primary.position, length: 0)
     let shown = range ?? caret
     let location = min(max(0, shown.location), text.length)
     let end = min(max(location, NSMaxRange(shown)), text.length)
     let lines = text.rows(of: NSRange(location: location, length: end - location))
     let rows = surface.rows
     guard let field else {
-      return rows.unit(ofLine: lines.lowerBound)..<(rows.unit(ofLine: lines.upperBound) + 1)
+      let upstream = range == nil && primary.upstream
+      let first = rows.segment(
+        containing: location - text.lineStart(lines.lowerBound), line: lines.lowerBound,
+        upstream: upstream)
+      let last = rows.segment(
+        containing: end - text.lineStart(lines.upperBound), line: lines.upperBound,
+        upstream: upstream || end > location)
+      return
+        (rows.unit(ofLine: lines.lowerBound) + Double(first))..<(rows.unit(
+          ofLine: lines.upperBound) + Double(last) + 1)
     }
     guard let zone, let block = rows.block(ofZone: zone) else { return nil }
     let unit = Double(surface.config.lineHeight)

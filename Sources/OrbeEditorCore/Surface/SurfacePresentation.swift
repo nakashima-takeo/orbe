@@ -28,12 +28,15 @@ public struct SurfacePresentation: Equatable {
   /// 行の右端の印の絵（nil なら印を出さない）。印を出せる行（`LineSpan`・`InsertedLine` の `allowsTrailingMark`）に
   /// ポインタが乗ると、その行の右端に出る。
   public var trailingMark: TrailingMark?
+  /// 文書の行を本文の区画の幅で折り返すか。折り返す面は横の範囲を持たない。とても大きい文書は、折り返す構成でも
+  /// 折り返さない（→ `TextSurface`）。
+  public var wraps: Bool
 
   public init(
     showsMinimap: Bool = true, numberColumns: Int = 1, numbersOwnLines: Bool = true,
     numberWidth: CGFloat? = nil,
     numberTrailing: CGFloat? = nil, signWidth: CGFloat = 0, showsMarks: Bool = true,
-    lineStyles: [LineStyle] = [], trailingMark: TrailingMark? = nil
+    lineStyles: [LineStyle] = [], trailingMark: TrailingMark? = nil, wraps: Bool = false
   ) {
     precondition(numberColumns == 1 || numberColumns == 2, "番号の列は 1 か 2")
     self.showsMinimap = showsMinimap
@@ -45,10 +48,11 @@ public struct SurfacePresentation: Equatable {
     self.showsMarks = showsMarks
     self.lineStyles = lineStyles
     self.trailingMark = trailingMark
+    self.wraps = wraps
   }
 
-  /// コードの面の構成。
-  public static var code: SurfacePresentation { SurfacePresentation() }
+  /// コードの面の構成（折り返す）。
+  public static var code: SurfacePresentation { SurfacePresentation(wraps: true) }
 }
 
 /// 行の型——行の見え方。色は名前つき（dynamic）の NSColor を渡し、外観は面が描くときに解く。面は型の意味（追加・削除・

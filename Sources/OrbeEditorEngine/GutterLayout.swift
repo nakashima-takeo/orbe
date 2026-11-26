@@ -4,7 +4,8 @@ import OrbeEditorCore
 /// 行番号の列と git の印の配置。番号は列ごとに右寄せで、字の見た目の中央（ascent と descent の中点）を行の縦の中央に
 /// 置く（文書の行の番号は文書の行ごと、2 列の面の左の列は区間のもう一方の番号と差し込んだ行の番号）。git の印は番号の列の
 /// 右の印の列に、追加・変更は行の高さのバー（続く同じ印の
-/// 行は 1 本に繋げ、差し込みの塊で区切る）、削除はその境（文書の行の上端か、本文の末尾の行の下端）に右向きの三角。
+/// 行は 1 本に繋げ、差し込みの塊で区切る。折り返した行は全部の段に掛かる）、削除はその境（文書の行の上端か、本文の末尾の
+/// 行の下端）に右向きの三角。
 extension FrameBuilder {
   /// 番号 `number` を、右端が行番号の列の右端から `inset`（pt）の所に来るよう置く。
   func drawNumber(_ number: Int, rowTop: Double, inset: CGFloat, font: UInt16, _ c: Context) {
@@ -70,7 +71,8 @@ extension FrameBuilder {
       let y =
         boundary < lineCount
         ? g.rows.y(ofLine: boundary, scale: g.scale)
-        : g.rows.y(ofLine: lineCount - 1, scale: g.scale) + g.lineHeight
+        : g.rows.y(
+          ofSegment: g.rows.segments(ofLine: lineCount - 1), line: lineCount - 1, scale: g.scale)
       let center = g.top + max(y.rounded(), size / 2) - g.scrollY
       shapes.append(
         ShapeInstance(

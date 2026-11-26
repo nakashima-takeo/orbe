@@ -172,7 +172,7 @@ extension SurfaceMouseTests {
   /// 左右の外（行番号の列の上・面の右の外）へ出ると横に送り、左はポインタの行の行頭、右は行末まで伸びる。
   func testDraggingSidewaysAutoscrollsHorizontally() throws {
     let long = String(repeating: "x", count: 400)
-    let opened = try open((0..<20).map { _ in long }.joined(separator: "\n"))
+    let opened = try open((0..<20).map { _ in long }.joined(separator: "\n"), wraps: false)
     _ = host(opened, size: CGSize(width: 400, height: 300))
     _ = opened.surface.snapshot()
     nextTurn()
@@ -197,7 +197,7 @@ extension SurfaceMouseTests {
   /// 全角の字数 × (1 + 外れた字数)) 字/秒 × 0.5）。左右の端で止まり、本文の上へ戻れば止まってポインタの位置まで選ぶ。
   func testSidewaysAutoscrollSpeedAndEdges() throws {
     let long = String(repeating: "x", count: 400)
-    let opened = try open((0..<20).map { _ in long }.joined(separator: "\n"))
+    let opened = try open((0..<20).map { _ in long }.joined(separator: "\n"), wraps: false)
     _ = host(opened, size: CGSize(width: 400, height: 300))
     _ = opened.surface.snapshot()
     nextTurn()

@@ -115,25 +115,31 @@ extension EditCommands {
       revealing: NSRange(location: edge, length: 0))
   }
 
-  /// カーソルを 1 行上下へ写したもの（VS Code の `MoveOperations.translateUp/Down`）。両端それぞれ、覚えた横位置（無ければ
-  /// 今の x）にいちばん近い位置へ移り、その x を覚える。行の外へは出ない。
+  /// カーソルを 1 段上下へ写したもの（VS Code の `MoveOperations.translateUp/Down`。単位は ↑↓ と同じ段）。両端それぞれ、
+  /// 覚えた横位置（無ければ今の x）にいちばん近い位置へ移り、その x を覚える。文書の外へは出ない。
   private static func translated(_ cursor: Cursor, by lines: Int, _ env: EditingEnvironment)
     -> Cursor
   {
     let text = env.text
-    func moved(_ offset: Int, desiredX: CGFloat?) -> (offset: Int, x: CGFloat?) {
-      let row = text.row(containing: offset)
-      let target = row + lines
-      guard target >= 0, target < text.lineCount else { return (offset, desiredX) }
-      let x =
-        desiredX ?? env.geometry.x(ofColumn: offset - text.lineStart(row), row: row)
-      return (text.lineStart(target) + env.geometry.column(atX: x, row: target), x)
+    /// 端 1 つ（付きを含む）を写したもの。
+    func moved(_ end: Cursor) -> Cursor {
+      let row = text.row(containing: end.position)
+      let place = env.geometry.place(
+        ofColumn: end.position - text.lineStart(row), row: row, upstream: end.upstream)
+      let target = stepped(from: (row, place.segment), by: lines, env.geometry)
+      guard target.row >= 0, target.row < text.lineCount else { return end }
+      let x = end.desiredX ?? place.x
+      let found = env.geometry.column(atX: x, row: target.row, segment: target.segment)
+      return Cursor(
+        text.lineStart(target.row) + found.column, desiredX: x, upstream: found.upstream)
     }
-    let anchor = moved(cursor.anchor, desiredX: cursor.anchorDesiredX)
-    let position = moved(cursor.position, desiredX: cursor.desiredX)
+    let anchor = moved(Cursor(cursor.anchor, desiredX: cursor.anchorDesiredX))
+    let position = moved(
+      Cursor(cursor.position, desiredX: cursor.desiredX, upstream: cursor.upstream))
     return Cursor(
-      selectionStart: NSRange(location: anchor.offset, length: 0), unit: .character,
-      position: position.offset, desiredX: position.x, anchorDesiredX: anchor.x)
+      selectionStart: NSRange(location: anchor.position, length: 0), unit: .character,
+      position: position.position, desiredX: position.desiredX, anchorDesiredX: anchor.desiredX,
+      upstream: position.upstream)
   }
 
   /// Esc。カーソルが複数なら主の 1 本（選択は保つ）、1 本で選択があれば動く端のキャレット。どちらでもなければ何もしない。

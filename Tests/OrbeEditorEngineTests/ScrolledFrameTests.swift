@@ -25,8 +25,8 @@ final class ScrolledFrameTests: EngineTestCase {
     return lines.joined(separator: "\n")
   }()
 
-  private func openMarked() throws -> Opened {
-    let opened = try open(Self.text, size: CGSize(width: 500, height: 300))
+  private func openMarked(wraps: Bool = true) throws -> Opened {
+    let opened = try open(Self.text, size: CGSize(width: 500, height: 300), wraps: wraps)
     opened.document.baseline = Self.baseline
     XCTAssertTrue(opened.document.waitUntilCaughtUp())
     XCTAssertFalse(opened.surface.drawn.marks.bars.isEmpty, "前提: 印が届いている")
@@ -64,7 +64,7 @@ final class ScrolledFrameTests: EngineTestCase {
 
   /// 横に送ると本文だけが動き、行番号の列（行番号と印）は動かない。
   func testHorizontalScrollMovesOnlyTheText() throws {
-    let opened = try openMarked()
+    let opened = try openMarked(wraps: false)
     let before = try shoot(opened)
     opened.surface.scroll(ScrollInput(timestamp: 0, delta: SIMD2(-3, 0), precise: false))
     XCTAssertEqual(

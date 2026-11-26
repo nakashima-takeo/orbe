@@ -96,7 +96,7 @@ extension SurfaceMouseTests {
     let long =
       (1...60).map { "line \($0) " + String(repeating: "x", count: 200) }
       .joined(separator: "\n") + "\n"
-    let opened = try open(long, size: CGSize(width: 600, height: 300))
+    let opened = try open(long, size: CGSize(width: 600, height: 300), wraps: false)
     _ = host(opened, size: CGSize(width: 600, height: 300))
     _ = opened.surface.snapshot()
     opened.surface.scroll(toX: 200)

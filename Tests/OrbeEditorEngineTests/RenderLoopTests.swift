@@ -89,7 +89,7 @@ final class RenderLoopTests: EngineTestCase {
 
   /// 見えている幅より長い行がある文書を開いても、最初に長さを測ったことによる横の範囲の変化ではつまみを出さない。
   func testOpeningADocumentWithALongLineDoesNotShowTheThumb() throws {
-    let opened = try open(String(repeating: "x", count: 400) + "\n" + text)
+    let opened = try open(String(repeating: "x", count: 400) + "\n" + text, wraps: false)
     let surface = opened.surface
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
     driver.bind(surface.id)

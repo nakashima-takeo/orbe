@@ -200,7 +200,11 @@ final class MouseSelection: NSObject {
     }
     drag = .text
     switch clicks {
-    case ...1: return (shift ? Self.extend(primary, to: hit, text) : Cursor(hit.offset), .minimal)
+    case ...1:
+      return (
+        shift ? Self.extend(primary, to: hit, text) : Cursor(hit.offset, upstream: hit.upstream),
+        .minimal
+      )
     case 2:
       return (
         shift
@@ -274,7 +278,7 @@ final class MouseSelection: NSObject {
       autoscroll(.above(surface.config.topInset - point.y))
     } else if point.y > view.bounds.height {
       autoscroll(.below(point.y - view.bounds.height))
-    } else if point.x < column || point.x > area.maxX {
+    } else if point.x < column || point.x > area.maxX, surface.rows.wraps == nil {
       let lineEnd = point.x > area.maxX
       guard site?.isBody == true else {
         stopAutoscroll()
@@ -345,7 +349,7 @@ final class MouseSelection: NSObject {
   /// 起点の範囲と単位を保って、当たった場所まで伸ばす。
   private static func extend(_ cursor: Cursor, to hit: PointerHit, _ text: TextRope) -> Cursor {
     switch cursor.unit {
-    case .character: return cursor.moved(to: hit.offset, extending: true)
+    case .character: return cursor.moved(to: hit.offset, extending: true, upstream: hit.upstream)
     case .word: return EditCommands.extendByWord(cursor, to: hit.offset, text)
     case .line: return EditCommands.extendByLine(cursor, toRow: hit.row, text)
     }

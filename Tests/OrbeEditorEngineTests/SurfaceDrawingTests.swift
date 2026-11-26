@@ -164,13 +164,14 @@ final class SurfaceDrawingTests: EngineTestCase {
     let box = ScrollBox()
     box.commit(
       ScrollBox.Commit(
-        limits: LimitsUpdate(lastTop: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+        limits: LimitsUpdate(
+          lastTop: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7, wraps: false),
         position: SIMD2(0, 50)))
     box.commit(
       ScrollBox.Commit(
         material: 7,
         limits: LimitsUpdate(
-          lastTop: 1999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+          lastTop: 1999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7, wraps: false),
         position: SIMD2(0, 300)))
     box.commit(ScrollBox.Commit(material: 8, position: SIMD2(0, 900)))
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50)

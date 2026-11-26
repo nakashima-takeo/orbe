@@ -58,7 +58,7 @@ final class SurfaceHighlightTests: EngineTestCase {
   /// 長い行を横に送った後も、一致の地は字に付いて動き、見えている窓の中の一致にだけ出る（一致の間には出ない）。
   func testGroundsOnALongLineFollowTheHorizontalScroll() throws {
     let line = String(repeating: "ab" + String(repeating: "x", count: 18), count: 30)
-    let opened = try open(line + "\n", name: "a.txt", style: style)
+    let opened = try open(line + "\n", name: "a.txt", style: style, wraps: false)
     _ = host(opened)
     opened.surface.setHighlights(
       (0..<30).map { NSRange(location: $0 * 20, length: 2) }, for: .findMatch)

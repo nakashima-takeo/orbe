@@ -134,17 +134,24 @@ extension MetalTextSurface {
     }
   }
 
-  /// 並びが `before` から今の並びに変わった——`before` で見えていた先頭の行（文書の行か、塊の中なら差し込んだ行。絵の
+  /// 並びが `before` から今の並びに変わった——`before` で見えていた先頭の所（文書の行の段か、塊の中なら差し込んだ行。絵の
   /// 差し込みか空きの上なら、その下の差し込んだ行か文書の行）が画面の同じ位置に残るよう、縦の位置を差の分だけずらす（まだ
   /// 出していない置く位置があればそれを、無ければ箱の位置をずらす）。塊の中の行は差し込んだ行だけを数えた段で引き当てる
-  /// ——読んでいる行と次の文書の行の間の絵の差し込みの高さが変わっても、読んでいる行が動かない。見えている高さが無いか、
-  /// 文書の先頭（位置 0）にいれば何もしない——先頭では、文書の先頭に置いた塊をそのまま見せる。
+  /// ——読んでいる行と次の文書の行の間の絵の差し込みの高さが変わっても、読んでいる行が動かない。文書の行の段は、段の頭の字を
+  /// 含む今の段で引き当てる——折り返しが変わっても、読んでいた字が動かない。見えている高さが無いか、文書の先頭（位置 0）に
+  /// いれば何もしない——先頭では、文書の先頭に置いた塊をそのまま見せる。
   func keepFirstVisibleLine(from before: RowLayout, lineCount: Int) {
     let (position, limits) = scrollState()
     let top = limits.clampedY(position)
     guard limits.viewport.y > 0, top > 0 else { return }
-    let row = before.lineRow(of: before.position(atY: top, lineCount: lineCount))
-    let dy = (rows.unit(ofLineRow: row) - before.unit(ofLineRow: row)) * rows.lineHeight
+    let first = before.position(atY: top, lineCount: lineCount)
+    let row = before.lineRow(of: first)
+    var now = rows.unit(ofLineRow: row)
+    if first.offset > 0, first.line < lineCount {
+      let head = before.wrap(ofLine: first.line)?.start(of: first.offset) ?? 0
+      now = rows.unit(ofLine: first.line) + Double(rows.segment(containing: head, line: first.line))
+    }
+    let dy = (now - before.unit(ofLineRow: row)) * rows.lineHeight
     guard dy != 0 else { return }
     if let placed = pending.position {
       pending.position = SIMD2(placed.x, placed.y + dy)

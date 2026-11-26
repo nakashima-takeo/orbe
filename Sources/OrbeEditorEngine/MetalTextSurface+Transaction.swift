@@ -88,7 +88,8 @@ extension MetalTextSurface {
     let text = change.content?.text ?? currentContent?.text
     if change.remeasure, let content = change.content { pending.remeasure = content.version }
     let lineCount = text?.lineCount ?? 1
-    settleRows(finished, lineCount: lineCount)
+    let rewrapped = settleWraps(change.content ?? currentContent)
+    settleRows(finished, lineCount: lineCount, rewrapped: rewrapped)
     pending.limits = limits(lineCount: lineCount)
     if let p = position(after: finished, span: span) {
       pending.position = p
@@ -199,10 +200,10 @@ extension MetalTextSurface {
     return palette
   }
 
-  /// 取引の中で変わった縦の並びを確定する——差し込みの高さが変わっていれば（位置を頼んだ取引でなければ）見えている
-  /// 先頭の行を同じ位置に保ち、変わった並びを材料への書き込みに積む。
-  private func settleRows(_ finished: Transaction, lineCount: Int) {
-    if let before = finished.anchor, finished.scrollTo == nil {
+  /// 取引の中で変わった縦の並びを確定する——差し込みの高さか、行ごとの折り返し（`rewrapped` は、折り返しを置き直したときの、置き直す前の並び）が
+  /// 変わっていれば（位置を頼んだ取引でなければ）見えている先頭の所を同じ位置に保ち、変わった並びを材料への書き込みに積む。
+  private func settleRows(_ finished: Transaction, lineCount: Int, rewrapped: RowLayout?) {
+    if let before = finished.anchor ?? rewrapped, finished.scrollTo == nil {
       pending.anchored = true
       keepFirstVisibleLine(from: before, lineCount: lineCount)
     }

@@ -85,7 +85,7 @@ extension FrameBuilder {
           color: c.palette.currentFindLine.packed, radius: 0, kind: 0))
     }
     guard let window, let carets = row.laid.carets else { return }
-    let visible = (row.start + window.lowerBound)..<(row.start + window.upperBound + 1)
+    let visible = (row.head + window.lowerBound)..<(row.head + window.upperBound + 1)
     let occurrence =
       c.focused ? c.palette.selectionOccurrence : c.palette.selectionOccurrenceInactive
     var layers: [([NSRange], FrameColor)] = [
@@ -93,11 +93,11 @@ extension FrameBuilder {
     ]
     layers.insert((highlights.find, c.palette.findMatch), at: highlights.crowded ? 0 : 2)
     layers.append((highlights.current, c.palette.currentFindMatch))
-    let originX = g.column - g.scrollX
+    let originX = c.originX
     for (ranges, ink) in layers {
       for range in Highlights.slice(ranges, visible) {
-        let from = max(range.location, row.start) - row.start
-        let to = min(NSMaxRange(range) - row.start, row.laid.length)
+        let from = max(range.location, row.head) - row.head
+        let to = min(NSMaxRange(range) - row.head, row.laid.length)
         guard to > from else { continue }
         for segment in carets.segments(from: from, to: to) {
           let left = (originX + Double(segment.lowerBound) * g.scale).rounded()

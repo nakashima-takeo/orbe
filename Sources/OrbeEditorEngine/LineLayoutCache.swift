@@ -58,18 +58,18 @@ struct LaidOutLine {
   }
 }
 
-/// 描画スレッドの行の組版のキャッシュ（面ごと）。2 段で引く。
+/// 描画スレッドの行の組版のキャッシュ（面ごと）。2 段で引く。組む単位は行の段（折り返さない行は行全体の 1 段）。
 ///
-/// - 前のコマで描いた行（写しの版と行 → 組んだ結果）: 定常のスクロールでは見えている行のほとんどがここで当たり、行の
-///   中身を写さず・ハッシュしない。本文の編集は変わった行だけを捨て、後ろの行をずらす。版かタブの桁が知らない形で
-///   変われば全部捨てる。
-/// - 行の中身とタブの桁を鍵にした結果（フォントはキャッシュごとに固定——本文は面のフォント、入力欄は入力欄のフォント）:
-///   編集をまたいでも同じ中身の行は組み直さない。行の数か、
-///   持つ単位（行の中身とグリフ）の数が上限を越えたら、古く使われたものから半分を捨てる——長い行ばかりの文書でも覚える
-///   量が行の長さに比例して膨らまない。
+/// - 前のコマで描いた段（写しの版と行と段 → 組んだ結果）: 定常のスクロールでは見えている段のほとんどがここで当たり、行の
+///   中身を写さず・ハッシュしない。本文の編集は変わった行の段だけを捨て、後ろの行をずらす。版かタブの桁か折り返しの幅が
+///   知らない形で変われば全部捨てる。
+/// - 描く単位の列（行か段の中身）とタブの桁を鍵にした結果（フォントはキャッシュごとに固定——本文は面のフォント、入力欄は
+///   入力欄のフォント）: 編集をまたいでも同じ中身の段は組み直さない。装備は行の中身で決まる（段の中身だけでは決まらない）
+///   ので、鍵にも結果にも入れず、引いた呼び手が置く。行の数か、持つ単位（行の中身とグリフ）の数が上限を越えたら、古く
+///   使われたものから半分を捨てる——長い行ばかりの文書でも覚える量が行の長さに比例して膨らまない。
 final class LineLayoutCache {
   private struct Key: Hashable {
-    let source: LineShaper.Source
+    let shown: LineShaper.Displayed
     let tabColumns: Int
   }
 
@@ -80,24 +80,31 @@ final class LineLayoutCache {
     var weight: Int
   }
 
+  /// 前のコマで描いた段の鍵——文書の行と、行の中の段。
+  struct Segment: Hashable {
+    var row: Int
+    var segment: Int
+  }
+
   static let capacity = 4096
   static let weightBudget = 2_000_000
 
   private var entries: [Key: Entry] = [:]
   private var clock: UInt64 = 0
-  /// 覚えている行の数と、持つ単位の数。
+  /// 覚えている段の数と、持つ単位の数。
   var count: Int { entries.count }
   private(set) var weight = 0
 
-  /// このコマで組版した（どちらの段にも無かった）行の数と、面を結んでからの合計。
+  /// このコマで組版した（どちらの段にも無かった）段の数と、面を結んでからの合計。
   private(set) var shapedInFrame = 0 {
     didSet { if shapedInFrame > oldValue { shapedTotal += shapedInFrame - oldValue } }
   }
   private(set) var shapedTotal = 0
-  private var drawnRows: [Int: LaidOutLine] = [:]
-  private var frameRows: [Int: LaidOutLine] = [:]
+  private var drawnRows: [Segment: LaidOutLine] = [:]
+  private var frameRows: [Segment: LaidOutLine] = [:]
   private var rowsVersion: Int?
   private var rowsTabColumns: Int?
+  private var rowsWrapWidth: Double?
   /// 全行で最も広い行の幅と、それを測った版とタブの桁。
   private struct Widest {
     let version: Int
@@ -117,7 +124,7 @@ final class LineLayoutCache {
     face = (font, tabWidth)
   }
 
-  /// 本文の編集を受け取る（前のコマで描いた行のうち、変わった行を捨てて後ろをずらす）。
+  /// 本文の編集を受け取る（前のコマで描いた段のうち、変わった行の段を捨てて後ろをずらす）。
   func receive(_ edits: [RowEdit]) {
     for edit in edits where !edit.rolesOnly {
       drawnRows = Self.shifted(drawnRows, by: edit)
@@ -125,13 +132,15 @@ final class LineLayoutCache {
     }
   }
 
-  /// コマを組み始める。前のコマの行が版 `version`・タブの桁 `tabColumns` のものでなければ全部捨てる。
-  func beginFrame(version: Int, tabColumns: Int) {
-    if rowsVersion != version || rowsTabColumns != tabColumns {
+  /// コマを組み始める。前のコマの段が版 `version`・タブの桁 `tabColumns`・折り返しの幅 `wrapWidth`（折り返さなければ nil）
+  /// のものでなければ全部捨てる。
+  func beginFrame(version: Int, tabColumns: Int, wrapWidth: Double? = nil) {
+    if rowsVersion != version || rowsTabColumns != tabColumns || rowsWrapWidth != wrapWidth {
       drawnRows.removeAll(keepingCapacity: true)
     }
     rowsVersion = version
     rowsTabColumns = tabColumns
+    rowsWrapWidth = wrapWidth
     frameRows.removeAll(keepingCapacity: true)
     shapedInFrame = 0
   }
@@ -149,51 +158,77 @@ final class LineLayoutCache {
     return width
   }
 
-  /// このコマで描く行 `row` の組んだ結果。前のコマで描いた行に無ければ、行の中身 `source` を読んで引く。`carets` なら
-  /// 位置と x の対応も持たせる。
+  /// このコマで描く行 `row` を、行全体を 1 段として組んだ結果。前のコマで描いた行に無ければ、行の中身 `source` を読んで
+  /// 引く。`carets` なら位置と x の対応も持たせる。
   func line(
     row: Int, source: () -> LineShaper.Source, tabColumns: Int, config: SurfaceConfig,
     fonts: FontRegistry, carets: Bool = false
   ) -> LaidOutLine {
-    var laid = drawnRows[row]
-    if laid == nil || (carets && laid?.carets == nil) {
-      laid = line(source(), tabColumns: tabColumns, config: config, fonts: fonts, carets: carets)
-    }
-    frameRows[row] = laid
-    return laid!
+    let key = Segment(row: row, segment: 0)
+    if let laid = drawn(key, carets: carets) { return keep(key, laid) }
+    return keep(
+      key, line(source(), tabColumns: tabColumns, config: config, fonts: fonts, carets: carets))
   }
 
-  /// コマを組み終えた。このコマで描いた行が、次のコマの「前のコマで描いた行」になる。
+  /// 前のコマで描いた段 `segment`（`carets` なら位置と x の対応を持つもの。無ければ nil）。
+  func drawn(_ segment: Segment, carets: Bool) -> LaidOutLine? {
+    guard let laid = drawnRows[segment], !carets || laid.carets != nil else { return nil }
+    return laid
+  }
+
+  /// 段 `segment` をこのコマで描く（次のコマの「前のコマで描いた段」になる）。
+  @discardableResult
+  func keep(_ segment: Segment, _ laid: LaidOutLine) -> LaidOutLine {
+    frameRows[segment] = laid
+    return laid
+  }
+
+  /// コマを組み終えた。このコマで描いた段が、次のコマの「前のコマで描いた段」になる。
   func endFrame() {
     swap(&drawnRows, &frameRows)
     frameRows.removeAll(keepingCapacity: true)
   }
 
-  /// 編集 `edit` の後の行へ写す（変わった行は捨て、後ろの行はずらす）。
-  static func shifted<Value>(_ rows: [Int: Value], by edit: RowEdit) -> [Int: Value] {
+  /// 編集 `edit` の後の行へ写す（変わった行の段は捨て、後ろの行はずらす）。
+  private static func shifted(_ rows: [Segment: LaidOutLine], by edit: RowEdit) -> [Segment:
+    LaidOutLine]
+  {
     let delta = edit.inserted - edit.rows.count
-    var result: [Int: Value] = [:]
-    for (row, value) in rows {
-      if row < edit.rows.lowerBound {
-        result[row] = value
-      } else if row >= edit.rows.upperBound {
-        result[row + delta] = value
+    var result: [Segment: LaidOutLine] = [:]
+    for (key, value) in rows {
+      if key.row < edit.rows.lowerBound {
+        result[key] = value
+      } else if key.row >= edit.rows.upperBound {
+        result[Segment(row: key.row + delta, segment: key.segment)] = value
       }
     }
     return result
   }
 
-  /// 行の中身 `source` の組んだ結果と装備の素。`carets` なら位置と x の対応も持たせる（覚えた結果に無ければ作って
-  /// 足す）。装備があれば、位置と x の対応は組んだときに作る。
+  /// 行の中身 `source` を行全体の 1 段として組んだ結果と装備の素。`carets` か装備があれば、位置と x の対応も持たせる。
   func line(
     _ source: LineShaper.Source, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry,
     carets: Bool = false
   ) -> LaidOutLine {
+    let decor = LineDecor(source)
+    var laid = line(
+      LineShaper.display(source), tabColumns: tabColumns, config: config, fonts: fonts,
+      carets: carets || decor.needsCarets)
+    laid.decor = decor
+    return laid
+  }
+
+  /// 描く単位の列 `shown`（行か段の中身）を組んだ結果（装備は空——呼び手が置く）。`carets` なら位置と x の対応も持たせる
+  /// （覚えた結果に無ければ作って足す）。
+  func line(
+    _ shown: LineShaper.Displayed, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry,
+    carets: Bool
+  ) -> LaidOutLine {
     clock += 1
-    let key = Key(source: source, tabColumns: tabColumns)
+    let key = Key(shown: shown, tabColumns: tabColumns)
     let font = face?.font ?? config.font
     let tabWidth = face?.tabWidth ?? config.tabWidth(columns: tabColumns)
-    let shape = { LineShaper.shape(source, font: font, tabWidth: tabWidth) }
+    let shape = { LineShaper.shape(shown, font: font, tabWidth: tabWidth) }
     if let index = entries.index(forKey: key) {
       entries.values[index].used = clock
       if carets, entries.values[index].line.carets == nil {
@@ -208,16 +243,15 @@ final class LineLayoutCache {
     shapedInFrame += 1
     let shaped = shape()
     var line = LaidOutLine(
-      shaped, length: source.length, fonts: fonts, decor: LineDecor(source))
-    if carets || line.decor.needsCarets { line.carets = shaped.carets }
+      shaped, length: shown.units.count + shown.omitted, fonts: fonts, decor: .empty)
+    if carets { line.carets = shaped.carets }
     if line.omitted > 0 {
       line.omittedMark = LaidOutLine.OmittedMark(
         LineShaper.shape(config.omittedLabel(line.omitted), font: font), fonts: fonts)
     }
     let entry = Entry(
       line: line, used: clock,
-      weight: source.head.count + line.glyphs.count + (line.carets?.count ?? 0)
-        + line.decor.weight)
+      weight: shown.units.count + line.glyphs.count + (line.carets?.count ?? 0))
     while !entries.isEmpty,
       entries.count >= Self.capacity || weight + entry.weight > Self.weightBudget
     {

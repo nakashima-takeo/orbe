@@ -22,10 +22,10 @@ struct ShapeInstance {
 
 /// 1 コマの中身を組み立てる（描画スレッドだけ。配列は面ごとに使い回す）。重ねる順は `Renderer.encode` が持つ。
 ///
-/// 行の位置は上端の余白 + 縦の並び（`RowLayout`。差し込みが無ければ行 × 行高）で、折り返さない。見えている行と差し込んだ
-/// 行だけその場で組版し（キャッシュする）、字の色は
-/// 行ごとに、横に見えている字の区間の役割を役割の並びから引いて決める（長い行でも行全体の役割は引かない）。スクロール量
-/// は装置の画素に揃える（字がにじまない）。
+/// 行の位置は上端の余白 + 縦の並び（`RowLayout`。差し込みも折り返しも無ければ行 × 行高）。折り返した行は段ごとに、main が
+/// 縦の並びに載せた段の始まりで分けて組み、続きの段は字下げの分だけ右に置く。見えている段と差し込んだ行だけその場で組版し
+/// （キャッシュする）、字の色は段ごとに、横に見えている字の区間の役割を役割の並びから引いて決める（長い行でも行全体の
+/// 役割は引かない）。スクロール量は装置の画素に揃える（字がにじまない）。
 final class FrameBuilder {
   private(set) var text: [[GlyphInstance]] = []
   private(set) var color: [[GlyphInstance]] = []
@@ -109,10 +109,13 @@ final class FrameBuilder {
       top + rows.y(ofLine: row, scale: scale).rounded() - scrollY
     }
 
-    /// 文書の行の下端の y（その行の下の差し込みは含めない）。
-    func rowBottom(_ row: Int) -> Double {
-      top + (rows.y(ofLine: row, scale: scale) + lineHeight).rounded() - scrollY
+    /// 文書の行の段 `segment` の上端の y（段の数を指せば、行の下端）。
+    func segmentTop(_ row: Int, _ segment: Int) -> Double {
+      top + rows.y(ofSegment: segment, line: row, scale: scale).rounded() - scrollY
     }
+
+    /// 文書の行の下端の y（最後の段の下端。その行の下の差し込みは含めない）。
+    func rowBottom(_ row: Int) -> Double { segmentTop(row, rows.segments(ofLine: row)) }
 
     /// 塊 `index`（絵の差し込み）の上端の y。
     func blockTop(_ index: Int) -> Double {
@@ -141,10 +144,25 @@ final class FrameBuilder {
     /// ⌘ を押している間の本文の上のポインタ（px）。焦点が無ければ nil。
     let linkPointer: SIMD2<Double>?
     /// 本文の行に重ねるもの（選択・キャレット・未確定の文字・落とす位置）の筆。
-    let pen: OverlayPen
+    var pen: OverlayPen
     let fonts: FontRegistry
     /// 行番号の列の中の配置。
     let gutter: GutterColumns
+    /// 続きの段の字下げ（px）。
+    var indent: Double = 0
+
+    /// 本文の行頭の x（px。横の送りを引き、続きの段では字下げを足したもの）。
+    var originX: Double { g.column - g.scrollX + indent }
+
+    /// 段の字下げ `indent`（pt）だけ右に描く文脈。
+    func indented(_ indent: Float) -> Context {
+      guard indent != 0 else { return self }
+      var context = self
+      let shift = Double(indent) * g.scale
+      context.indent += shift
+      context.pen.originX += shift
+      return context
+    }
   }
 
   /// 1 コマを組む元。
@@ -236,50 +254,10 @@ final class FrameBuilder {
     drawRows(source, content, cache: cache, c)
   }
 
-  /// 見えている行を組む（組版のキャッシュのコマはここで終える）。行頭はロープを 1 度辿って引き、前のコマで描いていない
-  /// 行だけ中身を読む。
-  func layRows(
-    _ rows: ClosedRange<Int>, _ source: Source, text: TextRope, cache: LineLayoutCache,
-    fonts: FontRegistry
-  ) -> [RowInFrame] {
-    var result: [RowInFrame] = []
-    result.reserveCapacity(rows.count)
-    let starts = text.lineStarts(rows.lowerBound..<(rows.upperBound + 1))
-    var overlays = CaretOverlays(
-      source.material.caret, drop: source.material.drop, caretVisible: source.caretVisible,
-      text: text, from: starts[0])
-    let highlights = source.material.highlights
-    let lastRow = text.lineCount - 1
-    for (index, row) in rows.enumerated() {
-      let start = starts[index]
-      let end = starts[index + 1]
-      let overlay = overlays.next(row: row, line: start..<end)
-      let highlighted = highlights.touches(start..<max(end, start + 1))
-      let laid = cache.line(
-        row: row,
-        source: { LineShaper.source(start: start, next: row < lastRow ? end : nil, in: text) },
-        tabColumns: source.material.tabColumns, config: source.config, fonts: fonts,
-        carets: overlay.needsCarets || highlighted)
-      result.append(RowInFrame(row: row, start: start, end: end, laid: laid, overlay: overlay))
-    }
-    cache.endFrame()
-    return result
-  }
-
   /// 本文が右にまだ続く（横に隠れている部分がある）か。
   static func clipsRight(_ source: Source) -> Bool {
     let maximum = source.limits.maximum.x
     return min(max(0, source.position.x), maximum) < maximum - 0.5 / Double(source.material.scale)
-  }
-
-  /// このコマで描く行 1 つ。
-  struct RowInFrame {
-    let row: Int
-    /// 行頭と次の行頭のオフセット。
-    let start: Int
-    let end: Int
-    let laid: LaidOutLine
-    let overlay: RowOverlays
   }
 
   /// 横に見えている字——グリフの番号の区間と、その字の行内の位置の範囲（見えている字が無ければ nil）。行番号の列の下に
@@ -291,7 +269,7 @@ final class FrameBuilder {
 
   func visibleGlyphs(_ line: LaidOutLine, _ c: Context) -> VisibleGlyphs {
     let g = c.g
-    let originX = g.column - g.scrollX
+    let originX = c.originX
     let leftmost = Float((g.column - originX) / g.scale - Double(c.config.cell) * 4)
     let rightmost = Float((g.textRight - originX) / g.scale)
     let from = Self.lowerBound(line.xs, leftmost)

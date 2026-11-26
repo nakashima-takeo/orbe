@@ -34,7 +34,8 @@ final class MetalTextSurfaceTests: EngineTestCase {
 
   /// 最小限で見せる——縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る。
   func testRevealMinimallyMovesOnlyAsFarAsNeeded() throws {
-    let opened = try open(lines(100, width: 300), size: CGSize(width: 800, height: 604))
+    let opened = try open(
+      lines(100, width: 300), size: CGSize(width: 800, height: 604), wraps: false)
     let text = opened.document.text
     let target = text.lineStart(10) + 280
     opened.surface.reveal(NSRange(location: target, length: 1), policy: .minimal)
@@ -157,10 +158,10 @@ final class MetalTextSurfaceTests: EngineTestCase {
   /// 本文が右にまだ続くか——描画スレッドが組んだ行で横の範囲が伸びたら、main の操作を待たずに続くと読める。右端まで
   /// 送れば続かない。
   func testClipsRightTellsWhetherTheTextContinuesToTheRight() throws {
-    let narrow = try open("short\n")
+    let narrow = try open("short\n", wraps: false)
     _ = narrow.surface.snapshot()
     XCTAssertFalse(narrow.surface.clipsRight, "短い行は続かない")
-    let wide = try open(String(repeating: "x", count: 300) + "\n")
+    let wide = try open(String(repeating: "x", count: 300) + "\n", wraps: false)
     _ = wide.surface.snapshot()
     // 「短い行は続かない」の対。同じ時点で、起きる場合を待たずに確かめる。
     XCTAssertTrue(wide.surface.clipsRight, "組んだ行で範囲が伸びれば続く")
@@ -171,7 +172,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
   /// 外部変更の差し替えで、右へ送った横の位置は保つ——最も長い行は新しい写しを描いたコマで測り直し、その範囲に収める。
   func testReplaceAllKeepsTheHorizontalPositionUntilRemeasured() throws {
     let wide = String(repeating: "x", count: 300) + "\n"
-    let opened = try open(wide)
+    let opened = try open(wide, wraps: false)
     _ = opened.surface.snapshot()
     opened.surface.reveal(NSRange(location: 250, length: 0), policy: .minimal)
     _ = opened.surface.snapshot()

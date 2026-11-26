@@ -86,7 +86,7 @@ final class SurfaceMinimapTests: EngineTestCase {
     let drop = { (edits: [RowEdit]) -> Set<Int> in
       RenderThread.shared.performAndWait { renderer in
         let cells = renderer.slot(id)!.minimapCells
-        cells.receive(edits)
+        cells.receive(edits, rows: RowLayout(lineHeight: 18))
         return cells.cached
       }
     }
@@ -146,22 +146,25 @@ final class SurfaceMinimapTests: EngineTestCase {
 
   /// ミニマップが動いた向きの先（同じ向きに 1〜2 倍動いた先まで）のまとまりのうち、覚えていないものを動く向きの近い方から
   /// 上限まで先に作る。
+  /// 折り返さない面の縦の並び（ミニマップの段は文書の行）。
+  private static let lines = RowLayout(lineHeight: 18)
+
   func testPrefetchBuildsTheChunksAheadInTheDirectionOfMotion() {
     let text = TextRope(String(repeating: "x\n", count: MinimapCells.lines * 40))
     let roles = RoleRuns(length: text.length)
     let down = MinimapCells()
     down.beginFrame(MinimapCells.Key(columns: 10, heads: 12, tabSize: 4))
-    for index in 0...4 { _ = down.chunk(index, text: text, roles: roles) }
-    down.prefetch(0..<300, motion: 128, text: text, roles: roles)
+    for index in 0...4 { _ = down.chunk(index, text: text, roles: roles, rows: Self.lines) }
+    down.prefetch(0..<300, motion: 128, text: text, roles: roles, rows: Self.lines)
     XCTAssertEqual(down.cached, Set(0...8), "描いた 0…4 の先の 5…8（2 倍動いた先まで）")
     let up = MinimapCells()
     up.beginFrame(MinimapCells.Key(columns: 10, heads: 12, tabSize: 4))
-    for index in 15...20 { _ = up.chunk(index, text: text, roles: roles) }
-    up.prefetch(1000..<1300, motion: -128, text: text, roles: roles)
+    for index in 15...20 { _ = up.chunk(index, text: text, roles: roles, rows: Self.lines) }
+    up.prefetch(1000..<1300, motion: -128, text: text, roles: roles, rows: Self.lines)
     XCTAssertEqual(up.cached, Set(11...20), "上へ動けば上の 14…11")
     let far = MinimapCells()
     far.beginFrame(MinimapCells.Key(columns: 10, heads: 12, tabSize: 4))
-    far.prefetch(0..<300, motion: 1000, text: text, roles: roles)
+    far.prefetch(0..<300, motion: 1000, text: text, roles: roles, rows: Self.lines)
     XCTAssertEqual(
       far.cached.count, MinimapCells.prefetchLimit, "大きく動いても作るのは上限まで")
     XCTAssertEqual(far.cached.min(), 1000 / MinimapCells.lines, "近い方から")

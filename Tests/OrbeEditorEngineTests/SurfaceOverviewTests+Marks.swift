@@ -98,7 +98,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     style.overview.minimapShadow = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
     let opened = try open(
       String(repeating: "x", count: 400) + String(repeating: "\n", count: 60),
-      size: CGSize(width: 800, height: 400), style: style)
+      size: CGSize(width: 800, height: 400), style: style, wraps: false)
     _ = opened.surface.snapshot()
     pumpMain(until: { opened.surface.clipsRight }, "前提: 長い行の長さを測った")
     let edge = opened.surface.surfaceLayout.minimap.minX
@@ -146,7 +146,8 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
   func testTheCaretMarkFollowsTheTextAfterAReplacement() throws {
     let lines = Array(repeating: "xxxxxxxx", count: 200)
     let opened = try open(
-      lines.joined(separator: "\n"), size: CGSize(width: 800, height: 400), style: style)
+      lines.joined(separator: "\n"), size: CGSize(width: 800, height: 400), style: style,
+      wraps: false)
     let surface = opened.surface
     let bar = surface.surfaceLayout.verticalScrollbar
     let caret = opened.document.text.lineStart(150)

@@ -144,6 +144,8 @@ struct CaretMaterial: Equatable, Sendable {
   var selections: [NSRange] = []
   /// キャレットのオフセット（昇順。描画は見えている行のものだけを二分探索で引く）。
   var carets: [Int] = []
+  /// 付きのあるキャレットのオフセット（昇順。折り返した行の段の境なら、上の段の終わりに描く）。
+  var upstream: [Int] = []
   /// 選択の無いカーソルの位置（昇順。ミニマップがその行を出す）。
   var collapsed: [Int] = []
   /// 点滅の起点（`CACurrentMediaTime`）。キャレットが動くたびに置き直し、表示から始める。

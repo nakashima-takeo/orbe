@@ -12,7 +12,7 @@ final class SurfaceOverviewTests: EngineTestCase {
   /// ミニマップの帯の外を押すとその行の上端が本文の中央に来て、横位置は動かない。押したままドラッグしても本文は動かない
   /// （帯を掴んだのではない）。
   func testPressingTheMinimapOutsideTheSliderCentersThatLine() throws {
-    let opened = try hosted(rows(2000, width: 400))
+    let opened = try hosted(rows(2000, width: 400), wraps: false)
     opened.surface.scroll(toX: 300)
     XCTAssertEqual(opened.surface.scrollPosition.x, 300, "前提: 横へ送った")
     let area = opened.surface.surfaceLayout.minimap
@@ -70,7 +70,7 @@ final class SurfaceOverviewTests: EngineTestCase {
   /// 横に続く本文があるときだけ横スクロールバーがあり、トラックを押すとつまみの中央がそこへ飛び、そのままドラッグで横に
   /// 動く（縦は動かない）。
   func testTheHorizontalScrollbarMovesSideways() throws {
-    let opened = try hosted(rows(10, width: 400))
+    let opened = try hosted(rows(10, width: 400), wraps: false)
     let bar = opened.surface.surfaceLayout.horizontalScrollbar
     XCTAssertGreaterThan(opened.surface.scrollState().limits.maximum.x, 0, "前提: 横に続く")
     let thumbCenter = { () throws -> CGFloat? in
@@ -89,7 +89,7 @@ final class SurfaceOverviewTests: EngineTestCase {
     XCTAssertEqual(try XCTUnwrap(thumbCenter()), 350, accuracy: 1, "そのままドラッグで付いてくる")
     XCTAssertEqual(opened.surface.scrollPosition.y, 0, "縦は動かない")
     try mouse(opened, .leftMouseUp, at: CGPoint(x: at.x + 50, y: at.y))
-    let short = try hosted(rows(40))
+    let short = try hosted(rows(40), wraps: false)
     let area = short.surface.surfaceLayout.horizontalScrollbar
     XCTAssertNil(
       short.surface.textView.overview.area(at: CGPoint(x: area.minX + 20, y: area.midY)),
@@ -99,7 +99,7 @@ final class SurfaceOverviewTests: EngineTestCase {
   /// 落とすドラッグは、本文に重なる下端の横スクロールバーの上でも帯の中なら自動でスクロールし、右列の上では送らず、右列
   /// から帯へ戻った最初の出来事は時刻を取るだけ（右列の上にいた時間ぶん跳ばない）。
   func testDropAutoscrollRunsOverTheHorizontalBarButNotOverTheRightColumn() throws {
-    let opened = try hosted(rows(400, width: 400))
+    let opened = try hosted(rows(400, width: 400), wraps: false)
     let view = opened.surface.textView
     let layout = opened.surface.surfaceLayout
     let board = NSPasteboard(name: NSPasteboard.Name("dev.orbe.test.\(UUID().uuidString)"))
@@ -137,7 +137,7 @@ final class SurfaceOverviewTests: EngineTestCase {
   /// 端を越えた位置（弾性で引っ張っている間）のコマでも、俯瞰（ミニマップの配置・帯・縦横のスクロールバーとつまみ・影）は
   /// 端の位置のコマと同じで、本文だけが動く——どのコマも俯瞰は同じコマの位置から出て、端を越える間は端を表す。
   func testTheOverviewStaysAtTheEdgeWhileTheTextIsPastIt() throws {
-    let opened = try hosted(String(rows(400, width: 400).dropLast()))
+    let opened = try hosted(String(rows(400, width: 400).dropLast()), wraps: false)
     let minimap = opened.surface.surfaceLayout.minimap
     opened.surface.inputScope {
       opened.surface.textView.overview.pointerMoved(
@@ -237,7 +237,7 @@ final class SurfaceOverviewTests: EngineTestCase {
   /// 届く。本文の上は面の view が当たる。ポインタの形とホバーは今までどおり面の view の見張り（俯瞰の上も覆う）が決める
   /// ——子 view は見張りを持たず、俯瞰の上の当たりは矢印の区画。
   func testTheOverviewIsPressedWithoutTakingTheFocus() throws {
-    let opened = try hosted(rows(400, width: 400))
+    let opened = try hosted(rows(400, width: 400), wraps: false)
     let view = opened.surface.textView
     let layout = opened.surface.surfaceLayout
     let hit = { (point: CGPoint) in view.hitTest(view.convert(point, to: view.superview)) }

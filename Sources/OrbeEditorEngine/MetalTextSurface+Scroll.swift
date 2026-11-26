@@ -168,7 +168,7 @@ extension MetalTextSurface {
     return LimitsUpdate(
       lastTop: rows.lastTop(lineCount: lineCount), lineHeight: Double(config.lineHeight),
       viewport: SIMD2(Double(text.width), Double(max(0, text.height - config.topInset))),
-      cell: Double(config.cell))
+      cell: Double(config.cell), wraps: rows.wraps != nil)
   }
 
   /// 今の区画の配置（出す前の写しの行の数で）。

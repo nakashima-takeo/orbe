@@ -146,12 +146,14 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 59)
   }
 
-  /// 縦に見えていても横に隠れている一致は、横だけ寄せて見せる（縦は動かない）。左端へ戻る一致では横も戻る。
+  /// 折り返さない構成の面で、縦に見えていても横に隠れている一致は、横だけ寄せて見せる（縦は動かない）。左端へ戻る一致では
+  /// 横も戻る。
   func testAMatchHiddenToTheRightIsRevealedByScrollingSideways() throws {
     let hosted = try host("x" + String(repeating: " ", count: 200) + "needle\nneedle\n")
     let pane = hosted.pane
     let document = hosted.document
     let surface = try engine(document)
+    surface.setPresentation(SurfacePresentation())
     // 横は描画スレッドが区間の行を組んで寄せる——撮影はその場で出してコマを組む。
     let x = { () -> Double in
       _ = surface.snapshot()

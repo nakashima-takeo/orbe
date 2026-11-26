@@ -19,23 +19,27 @@ struct Cursor: Equatable, Sendable {
   /// 動かない側の端の覚える横位置（VS Code の `selectionStartLeftoverVisibleColumns`）。⌥⌘↑↓で選択を上下の行へ写すときに
   /// 使う。伸ばす移動では保ち、畳む移動では動く端の横位置と同じになる。
   var anchorDesiredX: CGFloat?
+  /// 付き——動く端が折り返した行の段の境（上の段の終わりであり、下の段の頭でもある位置）にあるとき、上の段の終わりに描く。
+  /// ⌘→（段の終わりへ）と、↑↓・クリック・ドラッグで段の終わりより右に着いたときに付き、ほかの移動と編集で解ける。
+  var upstream: Bool
 
   init(
     selectionStart: NSRange, unit: SelectionUnit, position: Int, desiredX: CGFloat? = nil,
-    anchorDesiredX: CGFloat? = nil
+    anchorDesiredX: CGFloat? = nil, upstream: Bool = false
   ) {
     self.selectionStart = selectionStart
     self.unit = unit
     self.position = position
     self.desiredX = desiredX
     self.anchorDesiredX = anchorDesiredX
+    self.upstream = upstream
   }
 
   /// その位置の、選択の無いカーソル。
-  init(_ offset: Int, desiredX: CGFloat? = nil) {
+  init(_ offset: Int, desiredX: CGFloat? = nil, upstream: Bool = false) {
     self.init(
       selectionStart: NSRange(location: offset, length: 0), unit: .character, position: offset,
-      desiredX: desiredX, anchorDesiredX: desiredX)
+      desiredX: desiredX, anchorDesiredX: desiredX, upstream: upstream)
   }
 
   /// `range` を選んだカーソル（単位は文字）。`reversed` なら動く端は先頭。
@@ -64,12 +68,15 @@ struct Cursor: Equatable, Sendable {
   /// 選択か起点の範囲がある（VS Code の `hasSelection`。伸ばさない ←→ はその端へ畳む）。
   var hasSelection: Bool { selection.length > 0 || selectionStart.length > 0 }
 
-  /// 動く端を `offset` へ。`extending` なら起点の範囲と単位を保ち、そうでなければ全部をそこへ畳む。
-  func moved(to offset: Int, extending: Bool, desiredX: CGFloat? = nil) -> Cursor {
-    guard extending else { return Cursor(offset, desiredX: desiredX) }
+  /// 動く端を `offset`（付き `upstream`）へ。`extending` なら起点の範囲と単位を保ち、そうでなければ全部をそこへ畳む。
+  func moved(
+    to offset: Int, extending: Bool, desiredX: CGFloat? = nil, upstream: Bool = false
+  ) -> Cursor {
+    guard extending else { return Cursor(offset, desiredX: desiredX, upstream: upstream) }
     var cursor = self
     cursor.position = offset
     cursor.desiredX = desiredX
+    cursor.upstream = upstream
     return cursor
   }
 
@@ -80,7 +87,8 @@ struct Cursor: Equatable, Sendable {
     return Cursor(
       selectionStart: NSRange(
         location: start, length: clamp(NSMaxRange(selectionStart)) - start),
-      unit: unit, position: clamp(position), desiredX: desiredX, anchorDesiredX: anchorDesiredX)
+      unit: unit, position: clamp(position), desiredX: desiredX, anchorDesiredX: anchorDesiredX,
+      upstream: upstream)
   }
 
   /// 同じ選択か（動かない側の端と動く端が同じ。VS Code の `equalsSelection`）。

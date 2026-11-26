@@ -251,10 +251,14 @@ final class Renderer {
   }
 
   /// コマを組み始める。取引が頼んだ横の「見えるところまで」がまだなら、区間の行を組んで x を引き、横の位置を寄せる（位置か
-  /// 範囲が変わったら true）。区間の行はこのコマで描く行なので、組んだ結果はそのまま描くのに使う。
+  /// 範囲が変わったら true）。区間の行はこのコマで描く行なので、組んだ結果はそのまま描くのに使う。折り返す面は横の範囲を
+  /// 持たないので、横の位置を寄せない。
   func begin(_ slot: SurfaceSlot, _ material: FrameMaterial) -> Bool {
     guard let content = material.content else { return false }
-    slot.lines.beginFrame(version: content.version, tabColumns: material.tabColumns)
+    let wraps = material.rows.wraps
+    slot.lines.beginFrame(
+      version: content.version, tabColumns: material.tabColumns, wrapWidth: wraps?.width)
+    guard wraps == nil else { return false }
     guard let reveal = material.reveal, reveal.serial != slot.revealed else { return false }
     slot.revealed = reveal.serial
     let text = content.text
