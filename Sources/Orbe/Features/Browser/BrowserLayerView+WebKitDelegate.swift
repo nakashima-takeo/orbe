@@ -40,35 +40,50 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
   func webView(
     _ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!
   ) {
-    if let navigation, navigationMetadata.object(forKey: navigation)?.isSuperseded == true {
+    guard let navigation else {
+      syncNavigationState()
+      return
+    }
+    if navigationMetadata[navigation]?.isSuperseded == true {
       return
     }
     if var pending = pendingNavigation, pending.matches(navigation) {
       pending.didStartProvisional = true
       pending.allowsInternalBlankLoad = false
       pendingNavigation = pending
-    } else if let navigation {
-      if let previous = pendingNavigation, !previous.matches(navigation) {
-        markSuperseded(previous)
-      }
-      if navigationMetadata.object(forKey: navigation) == nil {
-        navigationMetadata.setObject(
-          NavigationMeta(requestedURL: webView.url, isLocalHTML: false),
-          forKey: navigation)
+    } else {
+      let existingMeta = navigationMetadata[navigation]
+      let requestedURL = existingMeta?.requestedURL ?? webView.url
+      let isLocalHTML = existingMeta?.isLocalHTML ?? false
+      let currentItem = webView.backForwardList.currentItem
+      if existingMeta == nil {
+        navigationMetadata[navigation] = NavigationMeta(
+          requestedURL: requestedURL, isLocalHTML: isLocalHTML,
+          initialBackForwardItem: currentItem,
+          initialBackForwardURL: currentItem?.url)
+      } else if !isLocalHTML, let requestedURL {
+        lastRequestedURL = requestedURL
       }
       pendingNavigation = PendingNavigation(
-        navigation: navigation, requestedURL: webView.url,
-        isLocalHTML: false, allowsInternalBlankLoad: false, didStartProvisional: true,
-        initialBackForwardItem: webView.backForwardList.currentItem)
+        navigation: navigation, requestedURL: requestedURL,
+        isLocalHTML: isLocalHTML, allowsInternalBlankLoad: false,
+        allowsSameDocumentCompletion: false, didStartProvisional: true,
+        initialBackForwardItem: currentItem)
     }
+    recordLatestURLIfCurrent(for: navigation, in: webView)
     syncNavigationState()
   }
 
+  func webView(
+    _ webView: WKWebView,
+    didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
+  ) {
+    guard let navigation else { return }
+    recordLatestURLIfCurrent(for: navigation, in: webView)
+  }
+
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-    let meta = navigation.flatMap { navigationMetadata.object(forKey: $0) }
-    if let navigation {
-      navigationMetadata.removeObject(forKey: navigation)
-    }
+    let meta = navigation.flatMap { navigationMetadata.removeValue(for: $0) }
     let isCurrentPending =
       pendingNavigation == nil || pendingNavigation?.matches(navigation) == true
     let wasLocalHTML: Bool
@@ -77,21 +92,65 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
       pendingNavigation = nil
     } else {
       wasLocalHTML = meta?.isLocalHTML ?? false
+      syncUnstartedPendingBackForwardItem(from: webView)
     }
 
+    // 後続遷移中は webView.url が未確定先を指し、loadHTMLString は backForwardList を更新しない。
+    // 非 BFCache 履歴移動の失敗後は currentItem が未到達先へ張り付くため、開始時点から更新された場合のみ採用する。
     let committedTargetURL: URL?
     if isCurrentPending {
       committedTargetURL = webView.url
     } else if wasLocalHTML {
       committedTargetURL = meta?.requestedURL
     } else {
-      committedTargetURL = webView.backForwardList.currentItem?.url
+      let currentItem = webView.backForwardList.currentItem
+      let updated = hasBackForwardItemUpdated(currentItem, since: meta)
+      committedTargetURL = updated ? currentItem?.url : (meta?.latestURL ?? currentItem?.url)
     }
 
+    applyCommittedTargetURL(
+      committedTargetURL, wasLocalHTML: wasLocalHTML,
+      isCurrentPending: isCurrentPending, in: webView)
+    syncToolbarStatus(from: webView)
+  }
+
+  private func recordLatestURLIfCurrent(for navigation: WKNavigation, in webView: WKWebView) {
+    guard pendingNavigation == nil || pendingNavigation?.matches(navigation) == true else { return }
+    guard let liveURL = webView.url else { return }
+    navigationMetadata.update(for: navigation) { meta in
+      guard !meta.isSuperseded else { return }
+      meta.latestURL = liveURL
+    }
+  }
+
+  private func syncUnstartedPendingBackForwardItem(from webView: WKWebView) {
+    guard var pending = pendingNavigation, !pending.didStartProvisional else { return }
+    let currentItem = webView.backForwardList.currentItem
+    pending.initialBackForwardItem = currentItem
+    pendingNavigation = pending
+    if let pendingNavigation = pending.navigation {
+      navigationMetadata.update(for: pendingNavigation) { meta in
+        meta.initialBackForwardItem = currentItem
+        meta.initialBackForwardURL = currentItem?.url
+      }
+    }
+  }
+
+  private func hasBackForwardItemUpdated(
+    _ currentItem: WKBackForwardListItem?, since meta: NavigationMeta?
+  ) -> Bool {
+    guard let currentItem else { return false }
+    return currentItem !== meta?.initialBackForwardItem
+      || currentItem.url != meta?.initialBackForwardURL
+  }
+
+  private func applyCommittedTargetURL(
+    _ committedTargetURL: URL?, wasLocalHTML: Bool, isCurrentPending: Bool, in webView: WKWebView
+  ) {
     if let url = committedTargetURL, url.scheme?.lowercased() != "about" {
       committedPage = CommittedPage(url: url, isLocalHTML: wasLocalHTML)
-      if isCurrentPending, !wasLocalHTML {
-        lastRequestedURL = url
+      if isCurrentPending {
+        lastRequestedURL = wasLocalHTML ? nil : url
       }
       applyToolbarURL(url, isSecure: Self.isSecure(url, in: webView))
     } else {
@@ -102,7 +161,6 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
       toolbar.rawURL = ""
       toolbar.displayURL = nil
     }
-    syncToolbarStatus(from: webView)
   }
 
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -119,7 +177,7 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     withError error: Error
   ) {
     if let navigation {
-      navigationMetadata.removeObject(forKey: navigation)
+      navigationMetadata.removeValue(for: navigation)
     }
     guard let pending = pendingNavigation, pending.matches(navigation) else {
       syncToolbarStatus(from: webView)
@@ -132,7 +190,7 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
     pendingNavigation = nil
-    navigationMetadata.removeAllObjects()
+    navigationMetadata.removeAll()
     restoreLastRequestedURLToCommitted()
     toolbar.isLoading = false
     toolbar.estimatedProgress = 0
@@ -157,10 +215,13 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
       lastRequestedURL = url
     }
     let initialItem = webView.backForwardList.currentItem
+    let allowsSameDocument = allowsSameDocumentLoadCompletion(to: url, in: webView)
     let navigation = webView.load(navigationAction.request)
     beginPendingNavigation(
-      navigation, requestedURL: url, isLocalHTML: false, allowsBlank: false,
-      initialBackForwardItem: initialItem)
+      PendingNavigation(
+        navigation: navigation, requestedURL: url,
+        allowsSameDocumentCompletion: allowsSameDocument,
+        initialBackForwardItem: initialItem))
     return nil
   }
 
@@ -208,6 +269,23 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     else { return false }
     return effectivePort(scheme: lhsScheme, port: lhs.port)
       == effectivePort(scheme: rhsScheme, port: rhs.port)
+  }
+
+  static func normalizedURLWithoutFragment(_ url: URL) -> URL? {
+    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
+      return nil
+    }
+    let scheme = components.scheme?.lowercased()
+    components.scheme = scheme
+    components.percentEncodedHost = components.percentEncodedHost?.lowercased()
+    if let scheme, let port = components.port, port == effectivePort(scheme: scheme, port: nil) {
+      components.port = nil
+    }
+    if components.percentEncodedPath.isEmpty {
+      components.percentEncodedPath = "/"
+    }
+    components.percentEncodedFragment = nil
+    return components.url
   }
 
   private func isSameOriginAsMainFrame(_ sourceOrigin: WKSecurityOrigin) -> Bool {

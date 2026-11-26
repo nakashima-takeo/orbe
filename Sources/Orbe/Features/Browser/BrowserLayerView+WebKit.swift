@@ -9,16 +9,66 @@ extension BrowserLayerView {
   }
 
   /// API 発行・暫定開始した `WKNavigation` の最小メタデータ。
-  /// 後続遷移へ差し替わった先行遷移が後から `didCommit` してもローカル HTML 判定と `baseURL` を復元する。
-  final class NavigationMeta {
+  /// 後続遷移へ差し替わった先行遷移が後から `didCommit` してもローカル HTML 判定や最新到達 URL を復元する。
+  struct NavigationMeta {
     let requestedURL: URL?
     let isLocalHTML: Bool
-    var isSuperseded: Bool
+    var isSuperseded = false
+    var latestURL: URL?
+    weak var initialBackForwardItem: WKBackForwardListItem?
+    var initialBackForwardURL: URL?
+  }
 
-    init(requestedURL: URL?, isLocalHTML: Bool, isSuperseded: Bool = false) {
-      self.requestedURL = requestedURL
-      self.isLocalHTML = isLocalHTML
-      self.isSuperseded = isSuperseded
+  private struct NavigationMetadataEntry {
+    weak var navigation: WKNavigation?
+    var meta: NavigationMeta
+  }
+
+  /// `WKNavigation` のオブジェクト同一性をキーに `NavigationMeta` を弱参照管理する薄いストア。
+  struct NavigationMetadataStore {
+    private var entries: [ObjectIdentifier: NavigationMetadataEntry] = [:]
+
+    subscript(_ navigation: WKNavigation) -> NavigationMeta? {
+      get {
+        guard let entry = entries[ObjectIdentifier(navigation)],
+          entry.navigation === navigation
+        else { return nil }
+        return entry.meta
+      }
+      set {
+        purgeReleased()
+        let key = ObjectIdentifier(navigation)
+        if let newValue {
+          entries[key] = NavigationMetadataEntry(navigation: navigation, meta: newValue)
+        } else if entries[key]?.navigation === navigation {
+          entries.removeValue(forKey: key)
+        }
+      }
+    }
+
+    mutating func update(for navigation: WKNavigation, _ body: (inout NavigationMeta) -> Void) {
+      purgeReleased()
+      let key = ObjectIdentifier(navigation)
+      guard var entry = entries[key], entry.navigation === navigation else { return }
+      body(&entry.meta)
+      entries[key] = entry
+    }
+
+    @discardableResult
+    mutating func removeValue(for navigation: WKNavigation) -> NavigationMeta? {
+      purgeReleased()
+      let key = ObjectIdentifier(navigation)
+      guard entries[key]?.navigation === navigation else { return nil }
+      return entries.removeValue(forKey: key)?.meta
+    }
+
+    mutating func removeAll() {
+      entries.removeAll()
+    }
+
+    private mutating func purgeReleased() {
+      guard entries.values.contains(where: { $0.navigation == nil }) else { return }
+      entries = entries.filter { $0.value.navigation != nil }
     }
   }
 
@@ -29,8 +79,27 @@ extension BrowserLayerView {
     let requestedURL: URL?
     let isLocalHTML: Bool
     var allowsInternalBlankLoad: Bool
+    let allowsSameDocumentCompletion: Bool
     var didStartProvisional: Bool
     weak var initialBackForwardItem: WKBackForwardListItem?
+
+    init(
+      navigation: WKNavigation?,
+      requestedURL: URL?,
+      isLocalHTML: Bool = false,
+      allowsInternalBlankLoad: Bool = false,
+      allowsSameDocumentCompletion: Bool = false,
+      didStartProvisional: Bool = false,
+      initialBackForwardItem: WKBackForwardListItem?
+    ) {
+      self.navigation = navigation
+      self.requestedURL = requestedURL
+      self.isLocalHTML = isLocalHTML
+      self.allowsInternalBlankLoad = allowsInternalBlankLoad
+      self.allowsSameDocumentCompletion = allowsSameDocumentCompletion
+      self.didStartProvisional = didStartProvisional
+      self.initialBackForwardItem = initialBackForwardItem
+    }
 
     func matches(_ other: WKNavigation?) -> Bool {
       guard let navigation, let other else { return false }
@@ -86,10 +155,13 @@ extension BrowserLayerView {
       applyToolbarURL(url, isSecure: false)
     }
     let initialItem = view.backForwardList.currentItem
+    let allowsSameDocument = allowsSameDocumentLoadCompletion(to: url, in: view)
     let navigation = view.load(URLRequest(url: url))
     beginPendingNavigation(
-      navigation, requestedURL: url, isLocalHTML: false, allowsBlank: false,
-      initialBackForwardItem: initialItem)
+      PendingNavigation(
+        navigation: navigation, requestedURL: url,
+        allowsSameDocumentCompletion: allowsSameDocument,
+        initialBackForwardItem: initialItem))
   }
 
   /// ローカル HTML を外部通信なしで読み込む（`visual-check`・テスト用）。
@@ -104,29 +176,36 @@ extension BrowserLayerView {
     let initialItem = view.backForwardList.currentItem
     let navigation = view.loadHTMLString(html, baseURL: baseURL)
     beginPendingNavigation(
-      navigation, requestedURL: baseURL ?? URL(string: "about:blank"),
-      isLocalHTML: true, allowsBlank: baseURL == nil,
-      initialBackForwardItem: initialItem)
+      PendingNavigation(
+        navigation: navigation, requestedURL: baseURL ?? URL(string: "about:blank"),
+        isLocalHTML: true, allowsInternalBlankLoad: baseURL == nil,
+        initialBackForwardItem: initialItem))
   }
 
   func goBack() {
     guard let webView else { return }
     let initialItem = webView.backForwardList.currentItem
     let targetURL = webView.backForwardList.backItem?.url
+    let allowsSameDocument = allowsSameDocumentHistoryCompletion(to: targetURL)
     let navigation = webView.goBack()
     beginPendingNavigation(
-      navigation, requestedURL: targetURL, isLocalHTML: false, allowsBlank: false,
-      initialBackForwardItem: initialItem)
+      PendingNavigation(
+        navigation: navigation, requestedURL: targetURL,
+        allowsSameDocumentCompletion: allowsSameDocument,
+        initialBackForwardItem: initialItem))
   }
 
   func goForward() {
     guard let webView else { return }
     let initialItem = webView.backForwardList.currentItem
     let targetURL = webView.backForwardList.forwardItem?.url
+    let allowsSameDocument = allowsSameDocumentHistoryCompletion(to: targetURL)
     let navigation = webView.goForward()
     beginPendingNavigation(
-      navigation, requestedURL: targetURL, isLocalHTML: false, allowsBlank: false,
-      initialBackForwardItem: initialItem)
+      PendingNavigation(
+        navigation: navigation, requestedURL: targetURL,
+        allowsSameDocumentCompletion: allowsSameDocument,
+        initialBackForwardItem: initialItem))
   }
 
   func reloadPage() {
@@ -142,9 +221,10 @@ extension BrowserLayerView {
     let initialItem = webView.backForwardList.currentItem
     if webView.url != nil, let navigation = webView.reload() {
       beginPendingNavigation(
-        navigation, requestedURL: webView.url ?? committedPage?.url,
-        isLocalHTML: committedPage?.isLocalHTML ?? false, allowsBlank: false,
-        initialBackForwardItem: initialItem)
+        PendingNavigation(
+          navigation: navigation, requestedURL: webView.url ?? committedPage?.url,
+          isLocalHTML: committedPage?.isLocalHTML ?? false,
+          initialBackForwardItem: initialItem))
     } else if let url = lastRequestedURL {
       load(url)
     }
@@ -159,33 +239,43 @@ extension BrowserLayerView {
     }
   }
 
-  func beginPendingNavigation(
-    _ navigation: WKNavigation?, requestedURL: URL?, isLocalHTML: Bool, allowsBlank: Bool,
-    initialBackForwardItem: WKBackForwardListItem?
-  ) {
-    guard let navigation else { return }
+  func beginPendingNavigation(_ pending: PendingNavigation) {
+    guard let navigation = pending.navigation else { return }
     if let previous = pendingNavigation, !previous.matches(navigation) {
       markSuperseded(previous)
     }
-    navigationMetadata.setObject(
-      NavigationMeta(requestedURL: requestedURL, isLocalHTML: isLocalHTML),
-      forKey: navigation)
-    pendingNavigation = PendingNavigation(
-      navigation: navigation, requestedURL: requestedURL,
-      isLocalHTML: isLocalHTML, allowsInternalBlankLoad: allowsBlank, didStartProvisional: false,
-      initialBackForwardItem: initialBackForwardItem)
+    navigationMetadata[navigation] = NavigationMeta(
+      requestedURL: pending.requestedURL, isLocalHTML: pending.isLocalHTML,
+      initialBackForwardItem: pending.initialBackForwardItem,
+      initialBackForwardURL: pending.initialBackForwardItem?.url)
+    pendingNavigation = pending
+  }
+
+  func allowsSameDocumentLoadCompletion(to url: URL?, in webView: WKWebView) -> Bool {
+    guard let committed = committedPage, !committed.isLocalHTML,
+      let url, url.fragment != nil,
+      let currentURL = webView.url ?? committedPage?.url,
+      let normalizedTarget = Self.normalizedURLWithoutFragment(url),
+      let normalizedCurrent = Self.normalizedURLWithoutFragment(currentURL)
+    else { return false }
+    return normalizedTarget == normalizedCurrent
+  }
+
+  private func allowsSameDocumentHistoryCompletion(to targetURL: URL?) -> Bool {
+    guard let targetURL, let committedURL = committedPage?.url else { return false }
+    return Self.isSameOrigin(targetURL, committedURL)
   }
 
   func markSuperseded(_ pending: PendingNavigation) {
     guard let navigation = pending.navigation else { return }
-    if let existing = navigationMetadata.object(forKey: navigation) {
-      existing.isSuperseded = true
+    if navigationMetadata[navigation] != nil {
+      navigationMetadata.update(for: navigation) { $0.isSuperseded = true }
     } else {
-      navigationMetadata.setObject(
-        NavigationMeta(
-          requestedURL: pending.requestedURL, isLocalHTML: pending.isLocalHTML,
-          isSuperseded: true),
-        forKey: navigation)
+      navigationMetadata[navigation] = NavigationMeta(
+        requestedURL: pending.requestedURL, isLocalHTML: pending.isLocalHTML,
+        isSuperseded: true,
+        initialBackForwardItem: pending.initialBackForwardItem,
+        initialBackForwardURL: pending.initialBackForwardItem?.url)
     }
   }
 
@@ -198,7 +288,7 @@ extension BrowserLayerView {
     guard let pending = pendingNavigation, !pending.didStartProvisional else { return }
     guard pending.requestedURL == nil || pending.requestedURL == url else { return }
     if let navigation = pending.navigation {
-      navigationMetadata.removeObject(forKey: navigation)
+      navigationMetadata.removeValue(for: navigation)
     }
     pendingNavigation = nil
     restoreLastRequestedURLToCommitted()
@@ -225,6 +315,7 @@ extension BrowserLayerView {
     if let pending = pendingNavigation,
       !pending.didStartProvisional,
       !pending.isLocalHTML,
+      pending.allowsSameDocumentCompletion,
       !webView.isLoading,
       let committed = committedPage,
       let currentItem = webView.backForwardList.currentItem,
@@ -234,7 +325,7 @@ extension BrowserLayerView {
       Self.isSameOrigin(liveURL, committed.url)
     {
       if let navigation = pending.navigation {
-        navigationMetadata.removeObject(forKey: navigation)
+        navigationMetadata.removeValue(for: navigation)
       }
       pendingNavigation = nil
       restoreLastRequestedURLToCommitted()

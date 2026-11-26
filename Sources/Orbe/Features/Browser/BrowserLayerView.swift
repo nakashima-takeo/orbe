@@ -40,7 +40,7 @@ final class BrowserLayerView: NSView {
   var committedURL: URL? { committedPage?.url }
   var lastRequestedURL: URL?
   var pendingNavigation: PendingNavigation?
-  let navigationMetadata = NSMapTable<WKNavigation, NavigationMeta>.weakToStrongObjects()
+  var navigationMetadata = NavigationMetadataStore()
   var isProvisionalNavigation: Bool { pendingNavigation != nil }
 
   /// 窓の key 状態とブラウザ内焦点から上位（`WindowController`）が与える真のブラウザ焦点状態。
