@@ -4,8 +4,9 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 字の見た目——面の本文と行番号が、同じ行を Core Text で同じ色空間に（font smoothing つきで）描いたものと、字のある画素で
-/// 最大 1 段（8bit）の差に収まる。ASCII・日本語・絵文字・代替フォント・結合文字の記号の字を、1x と 2x で見る。比べるのは
+/// 字の見た目——面の本文と行番号は、字のある画素で、同じ行を Core Text に描かせたものとの差が最大 1 段（8bit）に収まる。
+/// Core Text には、面と同じ属性（本文の字には、言語を持たない字の属性を付ける）・同じ色空間で、font smoothing つきで
+/// 描かせる。ASCII・日本語・絵文字・代替フォント・結合文字の記号の字を、1x と 2x で見る。比べるのは
 /// 不透明な地に描いた絵（透明な面は窓の合成で地と混ざるので、地を塗った画面外の絵で比べる）。字どうしのインクが重なる形
 /// （アラビア語のつながり・字に接する記号）は、重なる画素が数段ずれうるので見本に含めない。画面の色空間（Display P3）でも
 /// 描き、そこへ Core Text が直に描いたものと揃うことも見る。壊れると字が細る・太る・にじむ・位置が半画素ずれる・記号が
@@ -158,6 +159,7 @@ final class GlyphPixelTests: EngineTestCase {
       string: content.text.substring(NSRange(location: start, length: source.length)),
       attributes: [
         .init(kCTFontAttributeName as String): r.config.font,
+        .init(kCTLanguageAttributeName as String): TextLanguage.neutral,
         .init(kCTForegroundColorAttributeName as String): r.color(r.palette.text.color),
       ])
     for span in content.roles.roles(in: NSRange(location: start, length: source.length)) {

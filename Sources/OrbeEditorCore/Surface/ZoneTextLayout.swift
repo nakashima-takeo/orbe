@@ -325,7 +325,10 @@ public enum ZoneTextLayout {
         available = max(
           min(available - (lineWidth - limit), bareWidth), bareWidth * limit / lineWidth)
         var shorter = breakAt(available)
-        // Core Text は約物を詰めて、測った幅より少し広い行も幅に収める。収めた分だけ狭めて探す。
+        // 探す幅は、前に探した幅から、余白付きの今の行が幅を超えた分だけ狭める。ただし、今の行を余白なしで組んだ幅より
+        // 広くはしない。超えた分が、前に探した幅と、余白なしの今の行の幅との差以下なら、探す幅は余白なしの今の行の幅と
+        // 同じになり、Core Text は今の行と同じ所で割る。そのときは、割る所が今の行の終わりより前へ移るまで、探す幅を
+        // さらに狭める。
         var step = 1.0
         while shorter >= end, available > 0 {
           available -= step

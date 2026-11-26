@@ -5,7 +5,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 行の見せ方の規則。壊れると CRLF の行末に記号が出る、タブの幅がインデントの単位とずれる、制御文字が見えない（または行が
-/// 崩れる）、minified の 1 行が 1 コマの手間を行の長さに比例させる。
+/// 崩れる）、minified の 1 行が 1 コマの手間を行の長さに比例させる、和文の約物が詰まって字の幅が前後の字で変わる。
 final class LineShaperTests: XCTestCase {
   private let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular) as CTFont
 
@@ -186,6 +186,35 @@ final class LineShaperTests: XCTestCase {
     XCTAssertEqual(crossing.count, 2, "b と空白、ש ל は離れた 2 つの区間")
     XCTAssertEqual(map.segments(from: 0, to: 2).count, 1)
     XCTAssertEqual(map.segments(from: 0, to: 10).count, 1, "行全体は 1 つ")
+  }
+
+  /// 和文の約物を詰めず、和文と英数字の間も空けない——約物が続く所と、和文と英数字の境を含む行で、どの字の左端の x も、
+  /// 行頭からその字の手前までの字を 1 字ずつ単独で組んだ幅の和に等しい。利用者の優先言語に日本語も中国語も無い機械では、
+  /// 言語の属性が無くても約物を詰めないので、この検証が効くのは、優先言語に日本語か中国語がある機械で実行したときだけ。
+  func testPunctuationIsNotCompressedAndLatinIsNotSpacedFromCJK() {
+    let string = "（注）。「x」、漢字123円"
+    let shaped = LineShaper.shape(source(string), font: font, tabWidth: 0)
+    let stops = shaped.stops
+    var expected: CGFloat = 0
+    for (offset, character) in string.enumerated() {
+      let x = try? XCTUnwrap(stops.offsets.firstIndex(of: offset).map { stops.xs[$0] })
+      XCTAssertEqual(x ?? -1, expected, accuracy: 0.01, "\(character)（位置 \(offset)）の x")
+      expected += LineShaper.shape(String(character), font: font).width
+    }
+    XCTAssertEqual(shaped.width, expected, accuracy: 0.01, "行の幅")
+  }
+
+  /// 返信の欄の字（行の組版の規則）と、投稿されたコメントの字（絵の差し込みの字の組版）は、同じ字体で同じ文を組むと、
+  /// どの位置の x も等しい——約物が続く所でも、和文と英数字の境でも。壊れると、投稿したコメントの字の並びが、欄で書いて
+  /// いたときと変わる。上の検証と同じく、効くのは優先言語に日本語か中国語がある機械で実行したときだけ。
+  func testReplyFieldAndPostedCommentPlaceTheSameSentenceAlike() {
+    let string = "（注）。「x」、漢字123円"
+    let sans = NSFont.systemFont(ofSize: 12)
+    let field = LineShaper.shape(source(string), font: sans as CTFont, tabWidth: 0).carets
+    let posted = ZoneTextLayout.line([ZoneTextRun(string, font: sans, color: .black)])
+    for offset in 0...(string as NSString).length {
+      XCTAssertEqual(field.x(offset), posted.x(of: offset), accuracy: 0.01, "位置 \(offset) の x")
+    }
   }
 
   /// 1 行で描くのは 10000 単位まで（書記素の境で切る）。残りは描かず、その数を返す。行の中身は先頭しか読まない。

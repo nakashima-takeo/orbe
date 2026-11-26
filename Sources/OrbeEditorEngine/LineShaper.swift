@@ -157,6 +157,7 @@ enum LineShaper {
     }
     let attributes: [CFString: Any] = [
       kCTFontAttributeName: font,
+      kCTLanguageAttributeName: TextLanguage.neutral,
       kCTParagraphStyleAttributeName: paragraphStyle(tabWidth: tabWidth),
     ]
     let attributed = CFAttributedStringCreateMutable(nil, 0)!
