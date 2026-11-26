@@ -53,7 +53,7 @@ final class PullRequestStateTests: OrbeTestCase {
     gitHub.content = .failure(.unreachable)
     state.reload()
     XCTAssertEqual(state.content?.title, "題", "前の中身は残る")
-    XCTAssertEqual(state.contentFailure?.reason, .unreachable)
+    XCTAssertEqual(state.contentFailure, .unreachable)
   }
 
   /// 読んでいる間に来た読み直しは、終わった後に 1 回だけ読む。

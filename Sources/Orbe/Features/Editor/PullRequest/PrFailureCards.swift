@@ -21,8 +21,8 @@ struct PrFailureCard {
 /// PR があって中身が読めている間だけ（中身がまだ読めていない間の失敗は、本体の表示が出す）。
 @MainActor
 enum PrFailureCards {
-  /// 上から出す順の札——読めていない・確認済み・送信。読めていない札の文は、閉じていない読みの失敗のうち、中身・引き直し・
-  /// レビューのやりとりの順で最初のもので、× は 3 つ全部の知らせを閉じる。送信の札は、ポップアップが開いている間は出さない
+  /// 上から出す順の札——読めていない・確認済み・送信。読めていない札の文は、読みの失敗のうち、中身・引き直し・レビューの
+  /// やりとりの順で最初のもので、× は知らせを閉じる（→ `BranchPullRequest+ReadingFailure`）。送信の札は、ポップアップが開いている間は出さない
   /// （ポップアップの下端の帯に出す）。
   static func cards(
     of pullRequest: BranchPullRequest, reviewIsOpen: Bool, _ l10n: LocalizationStore
@@ -31,17 +31,15 @@ enum PrFailureCards {
     var cards: [PrFailureCard] = []
     if let text = readingText(pullRequest, state, l10n) {
       cards.append(
-        PrFailureCard(kind: .reading, text: text) { [weak pullRequest, weak state] in
-          state?.dismissReadFailures()
-          pullRequest?.dismissLookupFailure()
+        PrFailureCard(kind: .reading, text: text) { [weak pullRequest] in
+          pullRequest?.dismissReadingFailure()
         })
     }
     if let failure = state.viewedFailure {
       cards.append(
-        PrFailureCard(
-          kind: .viewed,
-          text: l10n.format(.editorPrViewedFailed, PrPanelText.viewedFailure(failure, l10n))
-        ) { [weak state] in state?.dismissViewedFailure() })
+        PrFailureCard(kind: .viewed, text: viewedText(failure, l10n)) { [weak state] in
+          state?.dismissViewedFailure()
+        })
     }
     if let failure = state.submissionFailure, !reviewIsOpen {
       cards.append(
@@ -55,16 +53,17 @@ enum PrFailureCards {
   private static func readingText(
     _ pullRequest: BranchPullRequest, _ state: PullRequestState, _ l10n: LocalizationStore
   ) -> String? {
-    if let failure = state.contentFailure, !failure.isDismissed {
-      return PrPanelText.contentFailure(failure.reason, l10n)
-    }
-    if let failure = pullRequest.lookupFailure, !failure.isDismissed {
-      return PrPanelText.unavailable(failure.reason, l10n)
-    }
-    if let failure = state.reviewFailure, !failure.isDismissed {
-      return PrPanelText.reviewReadFailure(failure.reason, l10n)
-    }
+    guard !pullRequest.isReadingFailureDismissed else { return nil }
+    if let failure = state.contentFailure { return PrPanelText.contentFailure(failure, l10n) }
+    if let failure = pullRequest.lookupFailure { return PrPanelText.unavailable(failure, l10n) }
+    if let failure = state.reviewFailure { return PrPanelText.reviewReadFailure(failure, l10n) }
     return nil
+  }
+
+  /// 確認済みの書き込みの失敗の文。時間切れは、反映されたかを GitHub で確かめるよう告げる（GitHub が受けていることがある）。
+  private static func viewedText(_ failure: GitHubFailure, _ l10n: LocalizationStore) -> String {
+    if failure == .timedOut { return l10n.string(.editorPrViewedTimedOut) }
+    return l10n.format(.editorPrViewedFailed, PrPanelText.viewedFailure(failure, l10n))
   }
 
   /// 送信の失敗の文。時間切れは、送ったレビューが反映されたかを GitHub で確かめるよう告げる。

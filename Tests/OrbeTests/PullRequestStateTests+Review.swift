@@ -135,7 +135,7 @@ extension PullRequestStateTests {
     gitHub.review = .success(review(head: "h3"))
     gitHub.answerReview()
     XCTAssertEqual(reads, before + 3, "揃える 2 本の後は読まない")
-    XCTAssertEqual(state.contentFailure?.reason, .unreachable)
+    XCTAssertEqual(state.contentFailure, .unreachable)
 
     gitHub.content = .success(content(head: "h3"))
     state.reload()

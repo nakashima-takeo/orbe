@@ -25,12 +25,14 @@ protocol BranchPullRequestObserver: AnyObject {
 final class BranchPullRequest {
   let root: String
   @ObservationIgnored let source: PullRequestSource
-  private(set) var answer = Answer.reading
+  private(set) var answer = Answer.reading { didSet { readingFailuresDidChange() } }
   /// 手元とのずれ（PR が無い・数え終わっていないなら nil）。
   private(set) var drift: Drift?
   /// PR を保ったまま、今のブランチの PR を引き直せなかった失敗（理由は、問い合わせの失敗か、GitHub のどのリポジトリか
   /// 確かめられない）。次に答えを出したら消える。
-  var lookupFailure: PrReadFailure<Unavailable>?
+  private(set) var lookupFailure: Unavailable? { didSet { readingFailuresDidChange() } }
+  /// 人が「GitHub から読めていない」知らせを閉じたときの PR の状態（→ `+ReadingFailure`）。
+  weak var readingFailureDismissedState: PullRequestState?
 
   @ObservationIgnored private var files: RootFiles?
   /// どの PR かだけを追う者と、中身も読む者の数。
@@ -313,7 +315,7 @@ final class BranchPullRequest {
       return
     }
     finish(nil, name)
-    if case .pullRequest = answer { lookupFailure = PrReadFailure(reason, after: lookupFailure) }
+    if case .pullRequest = answer { lookupFailure = reason }
   }
 
   /// 見ている者がいなくなったので、答えを出さずに読むのをやめる（積んだ読み直しも捨てる）。

@@ -115,13 +115,12 @@ final class PrReviewPopup: EditorPopupOwner {
     applyFocus()
   }
 
-  /// 閉じる直前。変換中の字を開いたときの PR の書きかけへ確定し、写していた字を空にし、送信の失敗を消す（開いている間は
-  /// 下端の帯に出していたので、閉じた後は札にも出さない）。
+  /// 閉じる直前。変換中の字を開いたときの PR の書きかけへ確定し、写していた字を空にする。送信の失敗は残し、閉じた後は
+  /// 上のバーの右下の札が出す。
   func popupWillClose(_ dismissal: EditorDismissal) {
     confirmComposition()
     composition = ""
     wantsFocus = false
-    openedState?.dismissSubmissionFailure()
     openedState = nil
   }
 

@@ -54,7 +54,7 @@ extension PullRequestState {
     case noDiff
   }
 
-  /// 送信の失敗を消す（失敗の知らせを閉じた・ポップアップを閉じた）。
+  /// 送信の失敗を消す（失敗の知らせを閉じた）。
   func dismissSubmissionFailure() {
     submissionFailure = nil
   }

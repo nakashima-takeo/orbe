@@ -114,6 +114,10 @@ extension L10n {
       "Can’t submit because the pull request diff can’t be shown. Refresh, or submit on GitHub"
     ),
     .editorPrViewedFailed: ("確認済みを反映できませんでした（%@）", "Couldn’t update Viewed (%@)"),
+    .editorPrViewedTimedOut: (
+      "確認済みの書き込みに GitHub の応答がありません。反映されたかは GitHub で確かめてください",
+      "GitHub didn’t respond to the Viewed update. Check on GitHub whether it went through."
+    ),
     .editorPrSubmitFailed: ("レビューを送信できませんでした（%@）", "Couldn’t submit the review (%@)"),
     .editorPrSubmitTimedOut: (
       "レビューの送信に GitHub の応答がありません。反映されたかは GitHub で確かめてください",

@@ -190,8 +190,8 @@ enum PrPanelText {
   static func failure(of panel: PrPanel, _ state: PullRequestState, _ l10n: LocalizationStore)
     -> String?
   {
-    if let failure = state.contentFailure { return contentFailure(failure.reason, l10n) }
-    return panel.pullRequest.lookupFailure.map { unavailable($0.reason, l10n) }
+    if let failure = state.contentFailure { return contentFailure(failure, l10n) }
+    return panel.pullRequest.lookupFailure.map { unavailable($0, l10n) }
   }
 
   /// PR の中身の読みの失敗の文。

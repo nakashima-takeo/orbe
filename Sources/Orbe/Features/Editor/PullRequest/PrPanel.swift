@@ -282,8 +282,7 @@ final class PrPanel {
 
   /// 再読込——読みの失敗の閉じた印を外し、今のブランチの PR を引き直し、PR があればその中身も読み直す。
   func refresh() {
-    pullRequest.clearLookupFailureDismissal()
-    state?.clearReadFailureDismissals()
+    pullRequest.clearReadingFailureDismissal()
     pullRequest.reload()
     state?.reload()
   }

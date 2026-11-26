@@ -83,8 +83,8 @@ final class PullRequestState {
   /// `changedFiles` が変わるたびに進む（未送信のコメントの一覧を組み直す合図）。
   private(set) var changedFilesVersion = 0
   /// 中身の最後の読みの失敗。次に中身が読めたら消える（読み直している間は前の失敗を残す）。
-  var contentFailure: PrReadFailure<GitHubFailure>?
-  /// 最後の確認済みの書き込みの失敗。次の確認済みの書き込みを始めたら消える。
+  var contentFailure: GitHubFailure?
+  /// 最後の確認済みの書き込みの失敗。失敗の知らせを閉じたとき・次の確認済みの書き込みを始めたときに消える。
   var viewedFailure: GitHubFailure?
   private(set) var isReading = false
   private(set) var bounds = Bounds.none
@@ -112,10 +112,10 @@ final class PullRequestState {
   /// 最後に組んだ未送信のコメントの一覧（→ `PullRequestState+PendingComments`）。
   @ObservationIgnored var pendingCommentsMade: PendingCommentsMade?
   /// レビューのやりとりの最後の読みの失敗。中身の読みの失敗とは分けて持ち、次に読めたら消える。
-  var reviewFailure: PrReadFailure<GitHubFailure>?
+  var reviewFailure: GitHubFailure?
   /// レビューの送信の、全体へのコメントの書きかけと選んだ種類（メモリだけで、パネルを隠しても残る）。
   var reviewDraft = ReviewDraft()
-  /// 最後のレビューの送信の失敗（次に送るときに消す）。
+  /// 最後のレビューの送信の失敗。失敗の知らせを閉じたとき・次に送るときに消える。
   var submissionFailure: GitHubFailure?
   /// スレッドへの返信の書きかけと、新しいコメントの書きかけ（→ `PullRequestState+CommentDrafts`）。
   @ObservationIgnored var commentDrafts = CommentDrafts()
@@ -267,7 +267,7 @@ final class PullRequestState {
         contentFailure = nil
         // 中身が読めて追跡 ref が新しく分かったら、その値も覚える。
         if trackedRefs.contains(where: tracking.lacks) { tracking.record() }
-      case .failure(let reason): contentFailure = PrReadFailure(reason, after: contentFailure)
+      case .failure(let reason): contentFailure = reason
       }
       if readAgain {
         readAgain = false

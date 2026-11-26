@@ -41,7 +41,7 @@ extension EditorBarRoot {
   /// 「レビュー」のボタンのツールチップ——押せない間にレビューのやりとりの読みの失敗があればその文、ほかは VoiceOver の名前。
   private func reviewHelp(count: Int) -> String {
     if !reviewPopup.canOpen, let failure = reviewPopup.state?.reviewFailure {
-      return PrPanelText.reviewReadFailure(failure.reason, localization)
+      return PrPanelText.reviewReadFailure(failure, localization)
     }
     return reviewName(count: count)
   }

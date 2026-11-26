@@ -26,7 +26,7 @@ extension BranchPullRequestTests {
     for (answer, reason) in failures {
       answers["feat"] = answer
       pullRequest.reload()
-      pumpMain(until: { pullRequest.lookupFailure?.reason == reason }, "\(reason) を理由に持つ")
+      pumpMain(until: { pullRequest.lookupFailure == reason }, "\(reason) を理由に持つ")
       XCTAssertEqual(pullRequest.answer, .pullRequest(state), "\(reason): PR を保つ")
       XCTAssertTrue(state.isWatched, "\(reason): PR の状態を見続ける")
     }
@@ -64,7 +64,7 @@ extension BranchPullRequestTests {
     holdsLookups = false
     releaseLookups()
     XCTAssertEqual(
-      pullRequest.lookupFailure?.reason, .failed(.rateLimited),
+      pullRequest.lookupFailure, .failed(.rateLimited),
       "失敗を返した直後に理由を持つ。これが待たずに成り立たなくなったら、"
         + "testAFailureArrivingAfterTheLastWatcherLeftHoldsNoReason の確かめる時点も成り立たない")
   }

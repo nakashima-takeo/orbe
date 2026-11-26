@@ -5,11 +5,12 @@ import XCTest
 
 /// PR の画面の失敗の札（`PrFailureCards`）——GitHub から読めていない札は 3 つの読みの失敗で 1 枚、× の後は人が再読込を頼むまで
 /// 出直さず、読めれば消える。確認済みの札は読みが通っても残り、× で消える。送信の失敗は、レビューのポップアップが開いていれば
-/// ポップアップの中だけに出て、閉じていれば札に出て、ポップアップを閉じると消える。
+/// ポップアップの中だけに出て、閉じていれば札に出る。ポップアップを閉じても消えない。
 ///
 /// 壊れると何が起きるか: ネットワークが切れると札が何枚も重なる。× で閉じた札が、前面に戻るたびの読み直しで出直す。再読込を
 /// 押して失敗しても札が出ない・読めるようになっても札が残る。確認済みを反映できなかった札が、次の読み直しで見る前に消える。
-/// 送信中に閉じたポップアップの送信の失敗に気づけない・ポップアップの中の帯と札に同じ失敗が二重に出る・閉じた後も失敗が残る。
+/// 送信中に閉じたポップアップの送信の失敗に気づけない・ポップアップの中の帯と札に同じ失敗が二重に出る・時間切れの後に
+/// ポップアップを閉じると警告が消え、同じレビューを警告なしに送り直せる。
 extension PrPanelTests {
   /// 今の札の種類（上から）。
   private func cardKinds(reviewIsOpen: Bool = false) -> [PrFailureCard.Kind] {
@@ -26,8 +27,8 @@ extension PrPanelTests {
     let state = panel.state
     pumpMain(
       until: {
-        state?.contentFailure?.reason == reason && state?.reviewFailure?.reason == reason
-          && self.panel.pullRequest.lookupFailure?.reason == .failed(reason)
+        state?.contentFailure == reason && state?.reviewFailure == reason
+          && self.panel.pullRequest.lookupFailure == .failed(reason)
       }, message)
   }
 
@@ -90,8 +91,8 @@ extension PrPanelTests {
   }
 
   /// ポップアップを開いたまま送信が失敗すると、ポップアップは開いたままで札は出ない。送信中に閉じたポップアップの送信が失敗すると
-  /// 札に出て、ポップアップを開くと札からは消える。どちらも、ポップアップを閉じると失敗は消える。
-  func testASubmissionFailureShowsInTheOpenPopupOrElseAsACardUntilThePopupCloses() throws {
+  /// 札に出て、ポップアップを開くと札からは消える。どちらも、ポップアップを閉じると札に戻る。
+  func testASubmissionFailureShowsInTheOpenPopupOrElseAsACard() throws {
     let state = try reviewed()
     let popup = EditorPopup()
     let review = PrReviewPopup(pullRequest: panel.pullRequest, popup: popup)
@@ -103,8 +104,9 @@ extension PrPanelTests {
     XCTAssertTrue(review.isOpen, "開いたまま")
     XCTAssertEqual(cardKinds(reviewIsOpen: review.isOpen), [], "開いている間は札に出さない")
     popup.close(.escape)
-    XCTAssertNil(state.submissionFailure, "閉じると消える")
-    XCTAssertEqual(cardKinds(reviewIsOpen: review.isOpen), [])
+    XCTAssertNotNil(state.submissionFailure, "閉じても消えない")
+    XCTAssertEqual(cardKinds(reviewIsOpen: review.isOpen), [.submission], "閉じると札に出る")
+    state.dismissSubmissionFailure()
 
     review.requestOpen()
     holdsReviewWrites = true
@@ -116,7 +118,6 @@ extension PrPanelTests {
     review.requestOpen()
     XCTAssertEqual(cardKinds(reviewIsOpen: review.isOpen), [], "開くと札からは消える")
     popup.close(.escape)
-    XCTAssertNil(state.submissionFailure, "閉じると消える")
-    XCTAssertEqual(cardKinds(reviewIsOpen: review.isOpen), [])
+    XCTAssertEqual(cardKinds(reviewIsOpen: review.isOpen), [.submission], "閉じると札に戻る")
   }
 }
