@@ -52,6 +52,8 @@ final class EditorPaneView: NSView {
   var diffAwaitingRow: EditorDiff.Key?
   /// 焦点を預かっている一覧の画面（Changes・PR。行が出たら一覧へ渡す。→ `holdListFocus`）。
   var heldListFocus: EditorScreen?
+  /// ツリーの × を押した後の押し続けの守り（→ `closeFromTree`）。
+  var treeMarkPressGuard: RowListPressGuard?
   /// 並列の diff で最後に焦点のあった側（焦点の行き先。既定は右）。
   var diffFocusesLeft = false
   /// 並列の diff の 2 面の境。
@@ -246,6 +248,7 @@ final class EditorPaneView: NSView {
     }
     reconcileWithLists()
     refreshCurrentItem()
+    refreshOpenMarks()
   }
 
   /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
@@ -292,6 +295,7 @@ final class EditorPaneView: NSView {
     installRoots()
     if let url = group?.editor.activeURL { tree.reveal(url) }
     refreshCurrentItem()
+    refreshOpenMarks()
   }
 
   /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の
