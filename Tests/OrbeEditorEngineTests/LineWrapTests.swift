@@ -101,13 +101,25 @@ final class LineWrapTests: XCTestCase {
           LineWrap.wrap(shown, metrics), "\(columns) 桁: \(line)")
       }
     }
-    let long = String(repeating: "x", count: LineShaper.headLimit + 50)
-    let metrics = metrics(columns: 40)
-    let old = LineWrap.wrap(LineShaper.display(LineShaper.source(long)), metrics)!
-    let shown = LineShaper.display(LineShaper.source(long + "abc"))
-    XCTAssertEqual(
-      LineWrap.wrap(shown, metrics, resuming: LineWrap.Resume(old: old, edited: long.utf16.count)),
-      LineWrap.wrap(shown, metrics), "打ち切った行の末尾で打つ")
+    // 打ち切った行の末尾の印の幅は、打ち切った単位の数の桁で変わる（桁の数 + 1 桁）。
+    let cell = cell
+    for columns in [40.0, 41] {
+      let marked = LineWrap.Metrics(
+        font: font, width: CGFloat(columns) * cell, tabWidth: 4 * cell
+      ) { CGFloat(String($0).count + 1) * cell }
+      for (omitted, edit) in [(50, "abc"), (1_000, ""), (99, "xx")] {
+        let long = String(repeating: "x", count: LineShaper.limit + omitted)
+        let old = LineWrap.wrap(LineShaper.display(LineShaper.source(long)), marked)!
+        // 打ち切った部分の 1 字を、`edit` に置き換える（印の桁が変わりうる）。
+        let at = LineShaper.limit + omitted / 2
+        var units = Array(long.utf16)
+        units.replaceSubrange(at..<at + 1, with: Array(edit.utf16))
+        let shown = LineShaper.display(LineShaper.source(String(decoding: units, as: UTF16.self)))
+        XCTAssertEqual(
+          LineWrap.wrap(shown, marked, resuming: LineWrap.Resume(old: old, edited: at)),
+          LineWrap.wrap(shown, marked), "\(columns) 桁・打ち切った \(omitted) 単位の中を編集する")
+      }
+    }
   }
 
   /// 段を独立した行として組んだ幅（字下げを含む）は、折り返しの幅に収まる——本文の字・記号・タブを含む行で。

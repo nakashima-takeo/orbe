@@ -138,10 +138,11 @@ enum LineWrap {
       if index > segment, x + w > limit {
         let cut = opportunity ?? index
         result.starts.append(Int32(cut))
-        // 読んだのは、幅を越えた字（書記素）まで。打ち切った行の末尾の印の幅で越えたら、行の終わりまで読んだ。
+        // 読んだのは、幅を越えた字（書記素）まで。打ち切った行の末尾の印で越えたら、印の幅は打ち切った単位の数で決まり、
+        // 行のどこを編集しても変わりうるので、行の終わり（打ち切った単位を含む）まで読んだ。
         var end = index + 1
         while end < count, advance(end, at: 0) == nil { end += 1 }
-        result.ends.append(Int32(isMark ? count + 1 : end))
+        result.ends.append(Int32(isMark ? count + shown.omitted : end))
         segment = cut
         index = cut
         x = 0
