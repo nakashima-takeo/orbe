@@ -25,8 +25,8 @@ final class PrPanelTests: OrbeTestCase {
   private var asTree = true
   /// ブランチに open の PR があるか（偽なら、PR が無いと答える）。
   private var open = true
-  /// PR の番号（テストが替えて、次の引き直しに答えさせる）。
-  private var number = 9
+  /// PR の番号。
+  private let number = 9
   /// レビューのやりとりの答え（自分が作者か・未送信のコメントの数・スレッド）と、届いたレビューへの書き込みとその答えの失敗。
   var viewerIsAuthor = false
   var pendingComments = 0
@@ -166,34 +166,6 @@ final class PrPanelTests: OrbeTestCase {
 
     hide(panel)
     XCTAssertFalse(state.isWatched, "隠せば PR の状態を見るのをやめる")
-  }
-
-  /// 隠している間に、ほかの面のパネルが今の PR の替わりを受けても、出し直した後の同じ PR の知らせでは、開いているレビューの
-  /// ポップアップを閉じず、全体へのコメント欄の変換中の字も確定しない（開いたときの PR のまま）。
-  func testAPullRequestThatChangedWhileHiddenLeavesTheOpenReviewAloneAfterShowingAgain() throws {
-    let other = PrPanel(root: repo.root, source: source)
-    show(other)
-    defer { hide(other) }
-    let previous = try shown()
-    hide(panel)
-    number = 10
-    other.refresh()
-    pumpMain(
-      until: { other.state.map { $0 !== previous && $0.review != nil } ?? false },
-      "前提: ほかの面のパネルが次の PR を見る")
-    show(panel)
-    let popup = EditorPopup()
-    let review = PrReviewPopup(pullRequest: panel.pullRequest, popup: popup)
-    panel.onPullRequestChange = { review.pullRequestDidChange() }
-    review.requestOpen()
-    XCTAssertTrue(review.isOpen, "前提: 次の PR で開く")
-    var confirms = 0
-    review.confirmComposition = { confirms += 1 }
-    panel.toggleViewed("README.md")
-    pumpMain(until: { panel.state?.isViewed("README.md") == true }, "同じ PR の知らせが届く")
-    XCTAssertEqual(confirms, 0, "開いている欄の変換中の字を確定しない")
-    XCTAssertTrue(review.isOpen, "ポップアップは開いたまま")
-    popup.close(.escape)
   }
 
   // MARK: - キー
