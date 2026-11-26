@@ -327,7 +327,10 @@ private struct BrowserURLTextField: NSViewRepresentable {
     func control(
       _ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector
     ) -> Bool {
-      if textView.hasMarkedText() { return false }
+      if textView.hasMarkedText() {
+        return commandSelector == #selector(NSResponder.insertNewline(_:))
+          || commandSelector == #selector(NSResponder.cancelOperation(_:))
+      }
       if commandSelector == #selector(NSResponder.insertNewline(_:)) {
         endedExplicitly = true
         if !onCommit(control.stringValue) {
