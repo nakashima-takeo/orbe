@@ -99,7 +99,7 @@ final class FindInProjectTests: OrbeTestCase {
     XCTAssertEqual(search.query.pattern, "previous", "複数行は種にしない")
   }
 
-  func testTheFindBarsNeedleSeedsTheSearch() throws {
+  func testTheFindFieldsNeedleSeedsTheSearch() throws {
     let hosted = try hostWithDocument("foo\n")
     let (tab, window) = (hosted.tab, hosted.window)
     let pane = tab.group.view.editor

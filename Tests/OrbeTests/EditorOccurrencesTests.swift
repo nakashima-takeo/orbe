@@ -285,7 +285,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
   }
 
   /// ファイル内検索が同じ文字列を探している間は、選択文字列の出現を出さない（検索の一致と二重にしない）。
-  func testSelectionOccurrencesStepAsideForTheFindBar() throws {
+  func testSelectionOccurrencesStepAsideForTheFindField() throws {
     let clock = Clock()
     let hosted = try host(" ab ab ab\n", clock: clock)
     let pane = hosted.pane

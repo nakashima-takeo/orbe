@@ -296,7 +296,7 @@ final class EditorSearchTests: OrbeTestCase {
   }
 
   /// 文書を切り替えると同じ needle で新しい文書に敷き直す（ジャンプしない）。文書が無くなれば欄は閉じる。
-  func testSwitchingDocumentsReappliesTheNeedleAndClosingTheLastDocumentClosesTheBar() throws {
+  func testSwitchingDocumentsReappliesTheNeedleAndClosingTheLastDocumentClosesTheField() throws {
     let hosted = try host("one two one\n")
     let pane = hosted.pane
     let seen = counts(pane)

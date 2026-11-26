@@ -14,7 +14,7 @@ import XCTest
 extension EditorSearchTests {
   /// ⌘F で出た欄は、種を全選択した姿で焦点が入る。欄が出ている間の ⌘F は、押すたびに種で needle を取り直して入力欄を
   /// 全選択する（選択は動かさない）。種が無い（改行をまたぐ選択・語の外）なら前の needle のまま全選択する。VS Code と同じ。
-  func testCommandFWhileTheBarIsShownReseedsAndSelectsTheField() throws {
+  func testCommandFWhileTheFieldIsShownReseedsAndSelectsTheField() throws {
     let hosted = try host("alpha beta\ngamma\nalpha\n")
     let pane = hosted.pane
     let document = hosted.document
@@ -101,7 +101,7 @@ extension EditorSearchTests {
 
   /// 本文の Esc は VS Code の順——ファイル内検索の欄が出ていれば閉じ、次にカーソルを主の 1 本に戻し（主の選択は残す）、次に
   /// 選択を解く。
-  func testEscapeInTheTextClosesTheBarBeforeCollapsingCursors() throws {
+  func testEscapeInTheTextClosesTheFieldBeforeCollapsingCursors() throws {
     let hosted = try host("one one one\n")
     let pane = hosted.pane
     let surface = hosted.document.surface

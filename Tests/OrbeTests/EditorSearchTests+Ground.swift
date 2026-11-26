@@ -130,7 +130,7 @@ extension EditorSearchTests {
   }
 
   /// 件数は欄に届く——一致なしは欄の件数が danger（赤）になり、一致が戻れば赤は消える。
-  func testNoMatchShowsInTheBarInDangerAndClearsWhenAMatchReturns() throws {
+  func testNoMatchShowsInTheFieldInDangerAndClearsWhenAMatchReturns() throws {
     let hosted = try host("foo bar\n")
     let pane = hosted.pane
     pane.showSearch()
