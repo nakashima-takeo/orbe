@@ -18,7 +18,7 @@ extension RootFiles {
   /// 絞り込みの対象の一覧を取る（`completion` は main で呼ぶ）。キューを根から始め、キューから取ったフォルダが git の作業ツリー
   /// の根か入れ子の根（`.git` を持つフォルダ）なら git に 2 回問い合わせ、そうでなければディスクを走査する。どちらも、入れ子の根
   /// （サブモジュール・入れ子のリポジトリ・走査していて `.git` を持つフォルダ）に出会ったら中へは入らずにキューへ足す。入れ子の
-  /// 根では、その `.git` を読まずに問い合わせる（`GitFileList.nestedOptions`）。根で git が失敗したら全体を「取れなかった」に
+  /// 根では、その `.git` の設定・index・オブジェクトを読まずに問い合わせる（`GitFileList.nestedOptions`）。根で git が失敗したら全体を「取れなかった」に
   /// する。入れ子の根で git が失敗したら、管理外として走査する。結果はキャッシュしない。git 管理下かの判定（`isResolved`）が
   /// 済んでから呼ぶ。
   func listFilterPaths(completion: @escaping @MainActor (PathList) -> Void) {
