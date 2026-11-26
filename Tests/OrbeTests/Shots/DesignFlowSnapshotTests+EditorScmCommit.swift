@@ -19,7 +19,7 @@ extension DesignFlowSnapshotTests {
     let popup = scene.pane.commitPopup
     pumpMain(until: { scene.isReady && panel.stagedLines != nil }, "行とステージ済みの行数が揃う")
     try renderInPlace(
-      scene.pane, name: "editor_scm_commit", dir: previewDir("flows"), appearances: [true],
+      scene.pane, name: "editor_scm_commit", dir: previewDir("flows"), appearances: [true, false],
       steps: [
         ("bar", {}),
         ("open", { popup.open() }),
