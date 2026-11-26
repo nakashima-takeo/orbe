@@ -214,8 +214,6 @@ private struct Builder {
   var kinds: [(kind: Kind, font: CTFont?)] = []
   /// 置き字の位置（組んだ文の位置）。
   var placeholders: Set<Int> = []
-  /// 包んだコードの字の範囲（組んだ文の位置。包みの制御字と置き字は含まない）。
-  var codes: [Range<Int>] = []
   /// 積み終えた元の文の位置。
   private(set) var next: Int
   /// 次に積む字より後ろで終わる見え方（字の見え方を前へたどる）。
@@ -260,7 +258,6 @@ private struct Builder {
       placeholders.insert(units.count)
       append(0xFFFC, original: start, owner: code, .placeholder(leading), codeFont)
     }
-    let head = units.count
     var open = OpenControls()
     for offset in range {
       style.advance(to: offset, in: styles)
@@ -271,7 +268,6 @@ private struct Builder {
         unit == source[offset] ? .text(style.index) : .control, font)
     }
     next = end
-    let tail = units.count
     for closer in open.closers {
       append(closer, original: end, owner: code, .control, codeFont)
     }
@@ -281,7 +277,6 @@ private struct Builder {
     }
     append(0x2069, original: end, owner: code, .control, codeFont)
     composed[end - self.range.lowerBound] = units.count
-    if head < tail { codes.append(head..<tail) }
   }
 
   /// 区切りの前で開いた字 `unit` を、区切りの頭に置く。
@@ -321,9 +316,11 @@ private struct Builder {
         value: $0.baseAddress!)
       return CTParagraphStyleCreate(&setting, 1)
     }
+    let whole = CFRange(location: 0, length: units.count)
     CFAttributedStringSetAttribute(
-      attributed, CFRange(location: 0, length: units.count), kCTParagraphStyleAttributeName,
-      paragraphStyle)
+      attributed, whole, kCTParagraphStyleAttributeName, paragraphStyle)
+    CFAttributedStringSetAttribute(
+      attributed, whole, kCTLanguageAttributeName, TextLanguage.neutral as CFString)
     var start = 0
     while start < kinds.count {
       var end = start + 1
@@ -346,14 +343,6 @@ private struct Builder {
       case .text: break
       }
       start = end
-    }
-    // コードの字は言語を持たない字として組む——Core Text は言語（既定は利用者の環境の言語）で和文の約物を詰め、括弧の
-    // 送りの片側を空ける。向きの逆なコードでは空きが余白の側に出て、余白が渡した幅より広く見える。包みの制御字と置き字
-    // には付けない（付けると、コードの外の隣の約物の詰め方が変わり、その字がコードの地にかぶる）。
-    for code in codes {
-      CFAttributedStringSetAttribute(
-        attributed, CFRange(location: code.lowerBound, length: code.count),
-        kCTLanguageAttributeName, "zxx" as CFString)
     }
     CFAttributedStringEndEditing(attributed)
     return attributed

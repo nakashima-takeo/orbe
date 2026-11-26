@@ -159,7 +159,7 @@ final class GlyphPixelTests: EngineTestCase {
       string: content.text.substring(NSRange(location: start, length: source.length)),
       attributes: [
         .init(kCTFontAttributeName as String): r.config.font,
-        .init(kCTLanguageAttributeName as String): LineShaper.language,
+        .init(kCTLanguageAttributeName as String): TextLanguage.neutral,
         .init(kCTForegroundColorAttributeName as String): r.color(r.palette.text.color),
       ])
     for span in content.roles.roles(in: NSRange(location: start, length: source.length)) {
