@@ -98,25 +98,6 @@ protocol EditorItemListOwner: AnyObject {
 /// 器を持つ pane が `onOpen` / `onClose` / `onResize` で受ける。
 @MainActor @Observable
 final class EditorItemList {
-  /// 閉じたきっかけ。本体の行き先へフォーカスを戻すかは、きっかけで決まる（その時点の first responder では決めない）。
-  enum Dismissal {
-    case escape
-    case toggle
-    case owner
-    case itemGone
-    case outsidePress
-    /// フォーカスが一覧の外へ移った（first responder が替わる途中に届くので、フォーカスを動かさない）。
-    case focusLeft
-    case faceHidden
-
-    var returnsFocus: Bool {
-      switch self {
-      case .escape, .toggle, .owner, .itemGone, .outsidePress: true
-      case .focusLeft, .faceHidden: false
-      }
-    }
-  }
-
   private(set) var isOpen = false
   /// 今の中身（一覧か詳細）。
   private(set) var content: EditorItemListContent?
@@ -157,7 +138,7 @@ final class EditorItemList {
 
   /// 閉じる口。先に閉じた状態にしてから知らせる（知らせの中でフォーカスが動き、行の列がフォーカスを失った知らせで
   /// ここへ戻っても何もしない）。
-  func close(_ dismissal: Dismissal) {
+  func close(_ dismissal: EditorDismissal) {
     guard isOpen else { return }
     isOpen = false
     owner = nil
