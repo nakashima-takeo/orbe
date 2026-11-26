@@ -1,8 +1,28 @@
 import AppKit
 import WebKit
 
-/// `BrowserLayerView` の WebKit 遅延生成・遷移・URL インライン編集・`WKNavigationDelegate` / `WKUIDelegate`。
-extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
+/// `BrowserLayerView` の WebKit 遅延生成・遷移操作・ナビゲーション状態同期・URL インライン編集。
+extension BrowserLayerView {
+  struct CommittedPage {
+    let url: URL
+    let isLocalHTML: Bool
+  }
+
+  /// 進行中ナビゲーションを `WKNavigation` 単位で追跡し、重複遷移の旧キャンセル通知や
+  /// `didStartProvisionalNavigation` 前の KVO 窓から状態と URL 欄を保護する。
+  struct PendingNavigation {
+    weak var navigation: WKNavigation?
+    let requestedURL: URL?
+    let isLocalHTML: Bool
+    var allowsInternalBlankLoad: Bool
+    var didStartProvisional: Bool
+
+    func matches(_ other: WKNavigation?) -> Bool {
+      guard let navigation, let other else { return false }
+      return navigation === other
+    }
+  }
+
   /// 初回表示時に 1 回だけ `WKWebView` を生成する。`BrowserDataStore.make()` で隔離する。
   @discardableResult
   func ensureWebView() -> WKWebView {
@@ -47,12 +67,11 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     hasNavigated = true
     emptyOverlay.isHidden = true
     lastRequestedURL = url
-    isLocalHTMLNavigation = false
-    allowingInternalBlankLoad = false
-    if committedURL == nil {
+    if committedPage == nil {
       applyToolbarURL(url, isSecure: false)
     }
-    view.load(URLRequest(url: url))
+    let navigation = view.load(URLRequest(url: url))
+    beginPendingNavigation(navigation, requestedURL: url, isLocalHTML: false, allowsBlank: false)
   }
 
   /// ローカル HTML を外部通信なしで読み込む（`visual-check`・テスト用）。
@@ -61,20 +80,47 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     hasNavigated = true
     emptyOverlay.isHidden = true
     lastRequestedURL = nil
-    isLocalHTMLNavigation = true
-    allowingInternalBlankLoad = (baseURL == nil)
-    if committedURL == nil, let baseURL {
+    if committedPage == nil, let baseURL {
       applyToolbarURL(baseURL, isSecure: false)
     }
-    view.loadHTMLString(html, baseURL: baseURL)
+    let navigation = view.loadHTMLString(html, baseURL: baseURL)
+    beginPendingNavigation(
+      navigation, requestedURL: baseURL ?? URL(string: "about:blank"),
+      isLocalHTML: true, allowsBlank: baseURL == nil)
+  }
+
+  func goBack() {
+    guard let webView else { return }
+    let targetURL = webView.backForwardList.backItem?.url
+    let navigation = webView.goBack()
+    beginPendingNavigation(
+      navigation, requestedURL: targetURL, isLocalHTML: false, allowsBlank: false)
+  }
+
+  func goForward() {
+    guard let webView else { return }
+    let targetURL = webView.backForwardList.forwardItem?.url
+    let navigation = webView.goForward()
+    beginPendingNavigation(
+      navigation, requestedURL: targetURL, isLocalHTML: false, allowsBlank: false)
   }
 
   func reloadPage() {
     guard hasNavigated, let webView else { return }
-    if webView.url == nil || webView.reload() == nil {
-      if let url = lastRequestedURL {
-        load(url)
-      }
+    if committedPage == nil, let url = lastRequestedURL {
+      load(url)
+      return
+    }
+    if let committed = committedPage, !committed.isLocalHTML, webView.url != committed.url {
+      load(committed.url)
+      return
+    }
+    if webView.url != nil, let navigation = webView.reload() {
+      beginPendingNavigation(
+        navigation, requestedURL: webView.url ?? committedPage?.url,
+        isLocalHTML: committedPage?.isLocalHTML ?? false, allowsBlank: false)
+    } else if let url = lastRequestedURL {
+      load(url)
     }
   }
 
@@ -87,35 +133,69 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     }
   }
 
-  private func applyToolbarURL(_ url: URL, isSecure: Bool) {
+  func beginPendingNavigation(
+    _ navigation: WKNavigation?, requestedURL: URL?, isLocalHTML: Bool, allowsBlank: Bool
+  ) {
+    guard let navigation else { return }
+    if let previous = pendingNavigation?.navigation, previous !== navigation {
+      supersededNavigations.add(previous)
+    }
+    pendingNavigation = PendingNavigation(
+      navigation: navigation, requestedURL: requestedURL,
+      isLocalHTML: isLocalHTML, allowsInternalBlankLoad: allowsBlank, didStartProvisional: false)
+  }
+
+  func restoreLastRequestedURLToCommitted() {
+    guard let committed = committedPage else { return }
+    lastRequestedURL = committed.isLocalHTML ? nil : committed.url
+  }
+
+  func clearUnstartedPendingNavigationIfMatching(_ url: URL?) {
+    guard let pending = pendingNavigation, !pending.didStartProvisional else { return }
+    guard pending.requestedURL == nil || pending.requestedURL == url else { return }
+    pendingNavigation = nil
+    restoreLastRequestedURLToCommitted()
+    syncNavigationState()
+  }
+
+  func applyToolbarURL(_ url: URL, isSecure: Bool) {
     toolbar.rawURL = url.absoluteString
     toolbar.displayURL = BrowserURLInput.display(url, isSecure: isSecure)
   }
 
-  private func syncNavigationState() {
+  func syncToolbarStatus(from webView: WKWebView) {
+    toolbar.canGoBack = webView.canGoBack
+    toolbar.canGoForward = webView.canGoForward
+    toolbar.isLoading = webView.isLoading
+    toolbar.estimatedProgress = webView.estimatedProgress
+  }
+
+  func syncNavigationState() {
     guard let webView else { return }
+    if let pending = pendingNavigation, !pending.didStartProvisional, !webView.isLoading {
+      pendingNavigation = nil
+      restoreLastRequestedURLToCommitted()
+    }
     if hasNavigated, !isProvisionalNavigation {
-      if let committed = committedURL {
+      if let committed = committedPage {
         if let liveURL = webView.url,
           liveURL.scheme?.lowercased() != "about",
-          Self.isSameOrigin(liveURL, committed)
+          webView.backForwardList.currentItem?.url == liveURL,
+          Self.isSameOrigin(liveURL, committed.url)
         {
-          committedURL = liveURL
-          if lastRequestedURL != nil {
+          committedPage = CommittedPage(url: liveURL, isLocalHTML: committed.isLocalHTML)
+          if !committed.isLocalHTML {
             lastRequestedURL = liveURL
           }
           applyToolbarURL(liveURL, isSecure: Self.isSecure(liveURL, in: webView))
         } else {
-          applyToolbarURL(committed, isSecure: Self.isSecure(committed, in: webView))
+          applyToolbarURL(committed.url, isSecure: Self.isSecure(committed.url, in: webView))
         }
       } else if let requested = lastRequestedURL {
         applyToolbarURL(requested, isSecure: false)
       }
     }
-    toolbar.canGoBack = webView.canGoBack
-    toolbar.canGoForward = webView.canGoForward
-    toolbar.isLoading = webView.isLoading
-    toolbar.estimatedProgress = webView.estimatedProgress
+    syncToolbarStatus(from: webView)
   }
 
   // MARK: - URL インライン編集
@@ -150,189 +230,5 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     guard toolbar.isEditingURL else { return }
     toolbar.isEditingURL = false
     toolbar.editingText = toolbar.rawURL
-  }
-
-  // MARK: - WKNavigationDelegate / WKUIDelegate
-
-  func webView(
-    _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-    decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
-  ) {
-    let isMainOrNew = navigationAction.targetFrame?.isMainFrame ?? true
-    let url = navigationAction.request.url
-    let scheme = url?.scheme?.lowercased()
-    if isMainOrNew {
-      if scheme == "http" || scheme == "https" {
-        decisionHandler(.allow)
-      } else if allowingInternalBlankLoad, url?.absoluteString == "about:blank" {
-        allowingInternalBlankLoad = false
-        decisionHandler(.allow)
-      } else {
-        decisionHandler(.cancel)
-      }
-    } else if let scheme, Self.allowedSubframeSchemes.contains(scheme) {
-      decisionHandler(.allow)
-    } else {
-      decisionHandler(.cancel)
-    }
-  }
-
-  func webView(
-    _ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!
-  ) {
-    isProvisionalNavigation = true
-    syncNavigationState()
-  }
-
-  func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-    isProvisionalNavigation = false
-    allowingInternalBlankLoad = false
-    let wasLocalHTML = isLocalHTMLNavigation
-    isLocalHTMLNavigation = false
-    if let url = webView.url, url.scheme?.lowercased() != "about" {
-      committedURL = url
-      if !wasLocalHTML {
-        lastRequestedURL = url
-      }
-      applyToolbarURL(url, isSecure: Self.isSecure(url, in: webView))
-    } else {
-      committedURL = nil
-      toolbar.rawURL = ""
-      toolbar.displayURL = nil
-    }
-    syncNavigationState()
-  }
-
-  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    syncNavigationState()
-    onNavigationFinish?()
-  }
-
-  func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-    isProvisionalNavigation = false
-    syncNavigationState()
-  }
-
-  func webView(
-    _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
-    withError error: Error
-  ) {
-    isProvisionalNavigation = false
-    allowingInternalBlankLoad = false
-    isLocalHTMLNavigation = false
-    if let committed = committedURL {
-      lastRequestedURL = committed
-    }
-    syncNavigationState()
-  }
-
-  func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-    isProvisionalNavigation = false
-    allowingInternalBlankLoad = false
-    isLocalHTMLNavigation = false
-    toolbar.isLoading = false
-    toolbar.estimatedProgress = 0
-    if let committed = committedURL {
-      applyToolbarURL(committed, isSecure: Self.isSecure(committed, in: webView))
-    } else if let requested = lastRequestedURL {
-      applyToolbarURL(requested, isSecure: false)
-    }
-  }
-
-  func webView(
-    _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
-    for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
-  ) -> WKWebView? {
-    guard navigationAction.targetFrame == nil,
-      Self.isValidHTTPNavigationURL(navigationAction.request.url),
-      navigationAction.sourceFrame.isMainFrame
-        || isSameOriginAsMainFrame(navigationAction.sourceFrame.securityOrigin)
-    else { return nil }
-    webView.load(navigationAction.request)
-    return nil
-  }
-
-  private static let allowedSubframeSchemes: Set<String> = [
-    "http", "https", "about", "data", "blob",
-  ]
-
-  private static func isSecure(_ url: URL, in webView: WKWebView) -> Bool {
-    url.scheme?.lowercased() == "https" && webView.hasOnlySecureContent
-  }
-
-  private static func isValidHTTPNavigationURL(_ url: URL?) -> Bool {
-    guard let url,
-      let scheme = url.scheme?.lowercased(),
-      scheme == "http" || scheme == "https",
-      let host = url.host, !host.isEmpty
-    else { return false }
-    return true
-  }
-
-  private static func effectivePort(scheme: String, port: Int?) -> Int? {
-    if let port, port > 0 { return port }
-    switch scheme {
-    case "http": return 80
-    case "https": return 443
-    default: return nil
-    }
-  }
-
-  private static func normalizedOriginHost(_ host: String) -> String {
-    let lower = host.lowercased()
-    if lower.hasPrefix("["), lower.hasSuffix("]"), lower.count >= 2 {
-      return String(lower.dropFirst().dropLast())
-    }
-    return lower
-  }
-
-  private static func isSameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
-    guard let lhsScheme = lhs.scheme?.lowercased(),
-      let rhsScheme = rhs.scheme?.lowercased(),
-      lhsScheme == rhsScheme,
-      let lhsHost = lhs.host, !lhsHost.isEmpty,
-      let rhsHost = rhs.host, !rhsHost.isEmpty,
-      normalizedOriginHost(lhsHost) == normalizedOriginHost(rhsHost)
-    else { return false }
-    return effectivePort(scheme: lhsScheme, port: lhs.port)
-      == effectivePort(scheme: rhsScheme, port: rhs.port)
-  }
-
-  private func isSameOriginAsMainFrame(_ sourceOrigin: WKSecurityOrigin) -> Bool {
-    guard let mainURL = committedURL ?? webView?.url,
-      let mainScheme = mainURL.scheme?.lowercased(),
-      mainScheme == "http" || mainScheme == "https",
-      let mainHost = mainURL.host, !mainHost.isEmpty
-    else { return false }
-    let sourceScheme = sourceOrigin.protocol.lowercased()
-    let sourceHost = sourceOrigin.host
-    guard !sourceScheme.isEmpty, !sourceHost.isEmpty,
-      sourceScheme == mainScheme,
-      Self.normalizedOriginHost(sourceHost) == Self.normalizedOriginHost(mainHost)
-    else { return false }
-    return Self.effectivePort(scheme: sourceScheme, port: sourceOrigin.port)
-      == Self.effectivePort(scheme: mainScheme, port: mainURL.port)
-  }
-
-  func webView(
-    _ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
-    initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void
-  ) {
-    completionHandler()
-  }
-
-  func webView(
-    _ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
-    initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void
-  ) {
-    completionHandler(false)
-  }
-
-  func webView(
-    _ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
-    defaultText: String?, initiatedByFrame frame: WKFrameInfo,
-    completionHandler: @escaping (String?) -> Void
-  ) {
-    completionHandler(nil)
   }
 }

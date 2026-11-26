@@ -36,11 +36,12 @@ final class BrowserLayerView: NSView {
   private(set) var isPeeking = false
   var sheetRatio: CGFloat = BrowserResizeSession.defaultRatio
   var hasNavigated = false
-  var committedURL: URL?
+  var committedPage: CommittedPage?
+  var committedURL: URL? { committedPage?.url }
   var lastRequestedURL: URL?
-  var isProvisionalNavigation = false
-  var isLocalHTMLNavigation = false
-  var allowingInternalBlankLoad = false
+  var pendingNavigation: PendingNavigation?
+  let supersededNavigations = NSHashTable<WKNavigation>.weakObjects()
+  var isProvisionalNavigation: Bool { pendingNavigation != nil }
 
   /// 窓の key 状態とブラウザ内焦点から上位（`WindowController`）が与える真のブラウザ焦点状態。
   private(set) var isBrowserFocused = false
@@ -161,13 +162,13 @@ final class BrowserLayerView: NSView {
     toolbar.onBack = { [weak self] in
       guard let self else { return }
       self.endURLEditingExternally()
-      self.webView?.goBack()
+      self.goBack()
       self.focusBrowser()
     }
     toolbar.onForward = { [weak self] in
       guard let self else { return }
       self.endURLEditingExternally()
-      self.webView?.goForward()
+      self.goForward()
       self.focusBrowser()
     }
     toolbar.onReloadOrStop = { [weak self] in
