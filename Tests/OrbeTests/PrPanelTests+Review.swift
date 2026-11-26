@@ -3,10 +3,11 @@ import XCTest
 
 @testable import Orbe
 
-/// レビューの送信の規則とファイルの行のコメント数。壊れると何が起きるか: 空のコメントを送信できる・行に書いた未送信の
-/// コメントを本文なしで送れない・自分の PR を承認できるように見える・失敗した送信で書きかけが消える・成功した後も書きかけと
-/// 選んだ種類が残る・古い版の行のスレッドをコメント数に数える・今の diff に出せないスレッドに気づけない・空白だけの
-/// レビューを公開できる・diff で見ていないコミットに承認が付く・解決済みの置けないスレッドが件数を埋める。
+/// レビューの送信の規則とファイルの行のコメント数と、未送信のコメントが今の diff に置けるか。壊れると何が起きるか: 空の
+/// コメントを送信できる・行に書いた未送信のコメントを本文なしで送れない・自分の PR を承認できるように見える・失敗した送信で
+/// 書きかけが消える・成功した後も書きかけと選んだ種類が残る・古い版の行のスレッドをコメント数に数える・今の diff に出せない
+/// スレッドに気づけない・空白だけのレビューを公開できる・diff で見ていないコミットに承認が付く・解決済みの置けないスレッドが
+/// 件数を埋める・GitHub の rename の判定が替わった後も、置けない未送信のコメントの行を押すと diff の別の行へ移る。
 extension PrPanelTests {
   /// 「コメント」「変更を依頼」は本文も未送信のコメントも無ければ送れず、「承認」は空でも送れる。送信が成功すれば書きかけは空になり種類は
   /// 「コメント」に戻る。成功しなければ書きかけと種類が残り、失敗を保持する。
@@ -127,15 +128,36 @@ extension PrPanelTests {
     XCTAssertEqual(state.outdatedThreadCount, 1)
   }
 
+  /// 先頭とベースが同じまま、GitHub が答える変更ファイルの rename の判定だけが替わる読み直しでも、未送信のコメントの古い側の行が
+  /// 今の diff に置けるかを、新しい判定で組み直す（手元の diff の両端は rename と見ないので、GitHub が rename と答えれば置けない）。
+  func testPendingCommentsFollowARenameJudgementThatChangesWithTheSameDiffEnds() throws {
+    threads = [thread("T1", path: "README.md", line: 1, comments: 1, side: .old, pending: true)]
+    let state = try reviewed()
+    let ends = state.diffEnds
+    XCTAssertEqual(state.pendingComments.map(\.isPlaceable), [true], "前提: GitHub も手元も rename と見ない")
+
+    // レビューのやりとりの答えが先に届き、中身の答えを待つ間にも未送信のコメントの一覧を読む。
+    renamed = ["README.md"]
+    holdsContents = true
+    state.reload()
+    pumpMain(until: { !self.heldContents.isEmpty }, "前提: 中身の答えを待つ")
+    XCTAssertEqual(state.pendingComments.map(\.isPlaceable), [true], "前提: 中身はまだ前の答え")
+    holdsContents = false
+    for answer in heldContents { answer() }
+    XCTAssertEqual(state.changedFiles.change(of: "README.md"), .renamed, "前提: 中身の答えが届く")
+    XCTAssertEqual(state.diffEnds, ends, "前提: diff の両端は同じ")
+    XCTAssertEqual(state.pendingComments.map(\.isPlaceable), [false])
+  }
+
   private func thread(
     _ id: String, path: String, line: Int?, comments: Int, resolved: Bool = false,
-    side: GitHubDiffSide = .new
+    side: GitHubDiffSide = .new, pending: Bool = false
   ) -> GitHubPullRequestReview.Thread {
     GitHubPullRequestReview.Thread(
       id: id, path: path, side: side, line: line, isResolved: resolved, canReply: true,
       canResolve: true, canUnresolve: false,
       comments: (0..<comments).map {
-        .init(id: "\(id)-\($0)", author: "me", body: "本文", createdAt: Date(), isPending: false)
+        .init(id: "\(id)-\($0)", author: "me", body: "本文", createdAt: Date(), isPending: pending)
       })
   }
 }

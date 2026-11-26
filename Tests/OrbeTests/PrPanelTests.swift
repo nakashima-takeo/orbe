@@ -39,6 +39,10 @@ final class PrPanelTests: OrbeTestCase {
   /// GitHub の読み（ブランチの PR の問い合わせ・中身・レビューのやりとり）の失敗と、確認済みの書き込みの失敗。
   var readFailure: GitHubFailure?
   var viewedFailure: GitHubFailure?
+  /// GitHub が rename と答える変更ファイル。真なら中身の読みの答えを `heldContents` に溜める。
+  var renamed: Set<String> = []
+  var holdsContents = false
+  var heldContents: [() -> Void] = []
   /// PR の先頭のコミット（手元の feat の先頭。ベースも同じコミット）と、レビューのやりとりが答える先頭のコミット。
   var head = ""
   var reviewHead = ""
@@ -91,7 +95,10 @@ final class PrPanelTests: OrbeTestCase {
       },
       branchExists: { _, completion in completion(.success(true)) },
       content: { [unowned self] _, completion in
-        completion(readFailure.map { .failure($0) } ?? .success(content))
+        let answer = { [unowned self] in
+          completion(readFailure.map { .failure($0) } ?? .success(content))
+        }
+        if holdsContents { heldContents.append(answer) } else { answer() }
       },
       setViewed: { [unowned self] viewed, paths, _, completion in
         writes.append((viewed, paths))
@@ -123,7 +130,11 @@ final class PrPanelTests: OrbeTestCase {
       headRefName: "feat",
       baseCommit: head, headCommit: head, commitCount: 2,
       commits: [.init(oid: "c1", headline: "一"), .init(oid: "c2", headline: "二")],
-      files: files.map { .init(path: $0, change: .modified, isViewed: $0 == "src/a/x.swift") })
+      files: files.map {
+        .init(
+          path: $0, change: renamed.contains($0) ? .renamed : .modified,
+          isViewed: $0 == "src/a/x.swift")
+      })
   }
 
   /// 変更ファイルを `next` にして読み直し、列の行が組み直されるまで待つ。
