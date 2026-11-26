@@ -73,8 +73,8 @@ final class LineWrapPerfTests: EngineTestCase {
   }
 
   /// 上限（UTF-8 のバイト数）の前後の大きさの文書で、窓の幅を変えた 1 回の main の仕事（取引の確定で全部の行を折り返し
-  /// 直す）。本文は日本語の Markdown（spec の写し。字の量あたりの手間がいちばん重い）と ASCII の Swift で、上限の半分・すぐ
-  /// 下・すぐ上の大きさ。すぐ上の文書は折り返さない。
+  /// 直す）。本文は日本語の Markdown（spec の写し。字の量あたりの手間がいちばん重い）と、ASCII の Swift と、書式文字（箱で
+  /// 見せる U+200E）が字の 3 つに 1 つを占める本文で、上限の半分・すぐ下・すぐ上の大きさ。すぐ上の文書は折り返さない。
   func testResizingDocumentsAroundTheLimit() throws {
     let limit = MetalTextSurface.wrapLimit
     let scenes = [
@@ -83,6 +83,11 @@ final class LineWrapPerfTests: EngineTestCase {
         try FramePerfTests.copies(of: "docs/spec/editor/code.md", bytes: limit * 2)
       ),
       ("ascii-swift", FramePerfTests.swiftSource(bytes: limit * 2)),
+      (
+        "format-characters",
+        String(
+          repeating: String(repeating: "ab\u{200E}", count: 30) + "\n", count: limit * 2 / 150)
+      ),
     ]
     for (label, source) in scenes {
       for bytes in [limit / 2, limit - 1_000, limit + 1_000] {

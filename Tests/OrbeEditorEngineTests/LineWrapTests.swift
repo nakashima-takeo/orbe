@@ -122,13 +122,14 @@ final class LineWrapTests: XCTestCase {
     }
   }
 
-  /// 段を独立した行として組んだ幅（字下げを含む）は、折り返しの幅に収まる——本文の字・記号・タブを含む行で。
+  /// 段を独立した行として組んだ幅（字下げを含む）は、折り返しの幅に収まる——本文の字・記号・タブ・書式文字の箱を含む行で。
   func testShapedSegmentsFitTheWidth() {
     let lines = [
       String(repeating: "日本語の文と English words が混ざる行。", count: 6),
       String(repeating: "※記号★と◐、全角の（括弧）と ① を含む。", count: 6),
       String(repeating: "\tタブ\tを\t含む\t行 ", count: 8),
       String(repeating: "longidentifier_", count: 20),
+      String(repeating: "abc\u{202E}def\u{200E} ", count: 12),
     ]
     for columns in [17.0, 40, 63.5] {
       let metrics = metrics(columns: columns)

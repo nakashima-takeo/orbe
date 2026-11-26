@@ -109,7 +109,7 @@ enum LineWrap {
       let unit = units[index]
       if unit == 0x09 { return tabAdvance(at: x, tab) }
       if !boxes.isEmpty, let label = boxes[index] {
-        return LineShaper.shape(LineShaper.boxLabel(label), font: metrics.font).width
+        return LineShaper.boxWidth(label, ascii: metrics.ascii)
       }
       guard let glyphs else { return metrics.ascii[Int(unit) - 0x20] }
       return glyphs.width(at: index)

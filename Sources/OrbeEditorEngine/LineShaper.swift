@@ -125,6 +125,18 @@ enum LineShaper {
   /// 書式文字の箱に描く中身。
   static func boxLabel(_ u: UInt16) -> String { String(format: "[U+%04X]", u) }
 
+  /// 書式文字 `u` の箱の幅——中身（`boxLabel`）の字の、ASCII の字の幅 `ascii`（`GlyphFonts.asciiWidths`）の和。組版と
+  /// 折り返しが同じ幅を引く。中身の文字列は作らない（書式文字の多い行で、箱ごとに文字列を作って組まない）。
+  static func boxWidth(_ u: UInt16, ascii: [CGFloat]) -> CGFloat {
+    func width(_ unit: UInt16) -> CGFloat { ascii[Int(unit) - 0x20] }
+    var sum = width(0x5B) + width(0x55) + width(0x2B) + width(0x5D)
+    for shift in [12, 8, 4, 0] {
+      let digit = (u >> UInt16(shift)) & 0xF
+      sum += width(digit < 10 ? 0x30 + digit : 0x41 + digit - 10)
+    }
+    return sum
+  }
+
   /// `limit` 以下で最も後ろの書記素の境（1 つの書記素が上限を越えるほど長ければ `limit`）。上限の位置の前後だけを見る
   /// （行頭から書記素を数えると、長い行を組むたびに 10000 字を歩く）。
   private static func graphemeCut(_ head: ContiguousArray<UInt16>) -> Int {
@@ -177,10 +189,11 @@ enum LineShaper {
     ascii: Bool
   ) -> CTLine {
     let attributed = attributed(units, font: font, tabWidth: tabWidth)
+    let widths = boxes.isEmpty ? [] : GlyphFonts.asciiWidths(font)
     for (index, unit) in boxes {
       CFAttributedStringSetAttribute(
         attributed, CFRange(location: index, length: 1), kCTRunDelegateAttributeName,
-        boxDelegate(width: shape(boxLabel(unit), font: font).width, font: font))
+        boxDelegate(width: boxWidth(unit, ascii: widths), font: font))
     }
     if !units.isEmpty, !ascii || !GlyphFonts.coversASCII(font) {
       let glyphs = GlyphFonts.glyphs(units, font: font)
