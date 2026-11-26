@@ -9,9 +9,10 @@ import XCTest
 /// いれば札に出る。ポップアップを閉じても消えず、札の × で消える。
 ///
 /// 壊れると何が起きるか: ネットワークが切れると札が何枚も重なる。× で閉じた札が、前面に戻るたびの読み直しや、別の読みの失敗で
-/// 出直す。再読込を押して失敗しても札が出ない。読めるようになった後の失敗で札が出ない。読めるようになっても札が残る。確認済みを
-/// 反映できなかった札が、次の読み直しで見る前に消える。送信中に閉じたポップアップの送信の失敗に気づけない。ポップアップの中の
-/// 帯と札に同じ失敗が二重に出る。時間切れの後にポップアップを閉じると警告が消え、同じレビューを警告なしに送り直せる。
+/// 出直す。読みが失敗したままの別の PR へ替わってから戻ると、前に閉じた印が残って札が出ない。再読込を押して失敗しても札が
+/// 出ない。読めるようになった後の失敗で札が出ない。読めるようになっても札が残る。確認済みを反映できなかった札が、次の読み直しで
+/// 見る前に消える。送信中に閉じたポップアップの送信の失敗に気づけない。ポップアップの中の帯と札に同じ失敗が二重に出る。
+/// 時間切れの後にポップアップを閉じると警告が消え、同じレビューを警告なしに送り直せる。
 extension PrPanelTests {
   /// 今の札の種類（上から）。
   private func cardKinds(reviewIsOpen: Bool = false) -> [PrFailureCard.Kind] {
@@ -90,6 +91,32 @@ extension PrPanelTests {
     state.reload()
     pumpMain(until: { state.reviewFailure != nil }, "前提: また読みが失敗する")
     XCTAssertEqual(cardKinds(), [.reading], "読めた後の失敗は、再読込を頼まなくても出る")
+  }
+
+  /// 閉じた印は、閉じたときの PR に結ぶ——読みが失敗したままの別の PR へ替わってから元の PR へ戻ると、読めていない札はまた
+  /// 出る（替わった先でも読めていないので、「どの読みも通った」では印が外れない）。
+  func testTheReadingCardComesBackAfterThePullRequestChangesAndReturns() throws {
+    let first = try reviewed()
+    reviewReadFailure = .unreachable
+    let switchTo = { (number: Int, message: String) in
+      self.number = number
+      self.panel.pullRequest.reload()
+      pumpMain(
+        until: {
+          self.panel.state.map { $0.key.id.number == number && $0.reviewFailure != nil } ?? false
+        }, message)
+    }
+    switchTo(10, "前提: 別の PR へ移り、その PR の読みも失敗する")
+    let second = try XCTUnwrap(panel.state)
+    switchTo(9, "前提: 元の PR へ戻り、読みが失敗する")
+    XCTAssertTrue(panel.state === first)
+    try XCTUnwrap(cards().first).dismiss()
+    XCTAssertEqual(cardKinds(), [], "前提: × で閉じる")
+
+    switchTo(10, "前提: 読みが失敗したままの別の PR へ移る")
+    XCTAssertTrue(panel.state === second)
+    switchTo(9, "前提: 元の PR へ戻る")
+    XCTAssertEqual(cardKinds(), [.reading], "元の PR へ戻ると、読めていない札はまた出る")
   }
 
   /// 確認済みの書き込みの失敗の札は、続く読みが通っても残り、× で消える。もう一度付け外しして通らなければ、また出る。

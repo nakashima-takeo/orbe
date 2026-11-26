@@ -25,8 +25,8 @@ final class PrPanelTests: OrbeTestCase {
   private var asTree = true
   /// ブランチに open の PR があるか（偽なら、PR が無いと答える）。
   private var open = true
-  /// PR の番号。
-  private let number = 9
+  /// PR の番号（テストが替えて、次の引き直しに答えさせる）。
+  var number = 9
   /// レビューのやりとりの答え（自分が作者か・未送信のコメントの数・スレッド）と、届いたレビューへの書き込みとその答えの失敗。
   var viewerIsAuthor = false
   var pendingComments = 0
