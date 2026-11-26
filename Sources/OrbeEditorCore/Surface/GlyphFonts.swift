@@ -2,33 +2,37 @@ import CoreText
 import Foundation
 import os
 
-/// 字（書記素）ごとの字体と幅の表。行の組版の規則（`LineShaper`）が、行の字の字体を前後の字に依らず決めるために引く。
+/// 字（書記素）ごとの字体と幅の表。テキスト面の行の組版と、絵の差し込みの字組み（`ZoneComposition`）が、字の字体を前後の
+/// 字に依らず決めるために引く。
 ///
-/// 字の字体は、その字だけを本体の字体で Core Text に組ませたときに選ばれる字体で、幅はその字だけを組んだ幅。Core Text は、
-/// 本体の字体に無い字を、直前の字の代替フォントがその字を持っていればそのフォントで続けて描く（和文の後ろの `※` は
-/// 和文の字体、行頭の `※` は Monaco）ので、行を組んだ結果の字体は場所で変わる。この表の字体は場所で変わらない。
+/// 字の字体は、その字だけを、組む字体（本文なら本文の字体、絵の差し込みの字なら見え方の字体。以下、本体の字体）で
+/// Core Text に組ませたときに選ばれる字体で、幅はその字だけを組んだ幅。Core Text は、本体の字体に無い字を、直前の字の
+/// 代替フォントがその字を持っていればそのフォントで続けて描く（和文の後ろの `※` は和文の字体、行頭の `※` は Monaco）ので、
+/// 行を組んだ結果の字体は場所で変わる。この表の字体は場所で変わらない。
 ///
-/// 本体の字体ごとにプロセスに 1 つ持ち、初めて出た字をその字だけ組んで覚え、測り直さない。描画スレッドと main の両方が
-/// 引くので鍵で守る。鍵は行 1 つを引く 1 回ごとに取り、表を読む・書く間だけ持つ——字を組んで測る間は持たないので、どちら
-/// のスレッドも、相手が字を組む時間のあいだ待たない。同じ字を 2 つのスレッドが同時に測っても答えは同じなので、後から
-/// 書いた方で上書きしてよい。
-enum GlyphFonts {
+/// 本体の字体ごとにプロセスに 1 つ持ち、初めて出た字をその字だけ組んで覚え、測り直さない。描画スレッド・main・絵の差し込みの
+/// 字を裏で組むスレッドが引くので鍵で守る。鍵は行 1 つを引く 1 回ごとに取り、表を読む・書く間だけ持つ——字を組んで測る間は
+/// 持たないので、どのスレッドも、ほかのスレッドが字を組む時間のあいだ待たない。同じ字を 2 つのスレッドが同時に測っても
+/// 答えは同じなので、後から書いた方で上書きしてよい。
+public enum GlyphFonts {
   /// 行の字の、単位ごとの字体と幅。書記素の続きの単位は、頭の単位と同じ字体で、幅 0。
-  struct Glyphs {
+  public struct Glyphs {
     fileprivate let entries: [Entry]
     fileprivate let fonts: [CTFont]
 
     /// 単位 `index` を含む字の字体（字の部分ごとに字体が分かれ、1 つに決まらない字は nil）。
-    func font(at index: Int) -> CTFont? {
+    public func font(at index: Int) -> CTFont? {
       let slot = entries[index].slot
       return slot >= Entry.firstFont ? fonts[Int(slot - Entry.firstFont)] : nil
     }
 
     /// 単位 `index` が頭の字の幅（続きの単位は 0）。
-    func width(at index: Int) -> CGFloat { CGFloat(entries[index].width) }
+    public func width(at index: Int) -> CGFloat { CGFloat(entries[index].width) }
 
     /// 単位 `index` と `other` の字が同じ字体か（どちらも 1 つに決まらない字なら真）。
-    func sameFont(_ index: Int, _ other: Int) -> Bool { entries[index].slot == entries[other].slot }
+    public func sameFont(_ index: Int, _ other: Int) -> Bool {
+      entries[index].slot == entries[other].slot
+    }
   }
 
   fileprivate struct Entry {
@@ -84,7 +88,7 @@ enum GlyphFonts {
   private static let tables = OSAllocatedUnfairLock<[Table]>(initialState: [])
 
   /// 本体の字体 `font` で、行の字 `units`（描く単位の列）を引く。初めて出た字は、その字だけを組んで覚える。
-  static func glyphs(_ units: ContiguousArray<UInt16>, font: CTFont) -> Glyphs {
+  public static func glyphs(_ units: ContiguousArray<UInt16>, font: CTFont) -> Glyphs {
     var unknown: [Range<Int>] = []
     var (entries, fonts) = tables.withLockUnchecked { tables in
       let table = index(of: font, in: &tables)
@@ -159,13 +163,26 @@ enum GlyphFonts {
   private static func measure(_ cluster: ContiguousArray<UInt16>, font: CTFont) -> (
     font: CTFont?, width: CGFloat
   ) {
+    let string = cluster.withUnsafeBufferPointer {
+      CFStringCreateWithCharacters(nil, $0.baseAddress, $0.count)!
+    }
+    let attributes: [CFString: Any] = [
+      kCTFontAttributeName: font, kCTLanguageAttributeName: TextLanguage.neutral,
+    ]
     let line = CTLineCreateWithAttributedString(
-      LineShaper.attributed(cluster, font: font, tabWidth: 0))
-    let fonts = (CTLineGetGlyphRuns(line) as? [CTRun] ?? []).compactMap(LineShaper.font(of:))
+      CFAttributedStringCreate(nil, string, attributes as CFDictionary))
+    let fonts = (CTLineGetGlyphRuns(line) as? [CTRun] ?? []).compactMap(font(of:))
     let single = fonts.first.flatMap { first in
       fonts.allSatisfy { CFEqual($0, first) } ? first : nil
     }
     return (single, CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)))
+  }
+
+  /// run を組んだフォント。
+  public static func font(of run: CTRun) -> CTFont? {
+    CFDictionaryGetValue(
+      CTRunGetAttributes(run), Unmanaged.passUnretained(kCTFontAttributeName).toOpaque()
+    ).map { Unmanaged<CTFont>.fromOpaque($0).takeUnretainedValue() }
   }
 
   /// 単位が単独の字——隣がどの単独の字でも、その隣と書記素を作らない字——か。単独の字とするのは、結合する記号・字を

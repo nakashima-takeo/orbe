@@ -188,7 +188,7 @@ enum LineShaper {
         CFDictionaryGetValue(
           attributes, Unmanaged.passUnretained(kCTRunDelegateAttributeName).toOpaque()) == nil
       else { continue }
-      guard let font = font(of: run) else { continue }
+      guard let font = GlyphFonts.font(of: run) else { continue }
       let range = CTRunGetStringRange(run)
       for index in range.location..<range.location + range.length
       where index == range.location || !glyphs.sameFont(index - 1, index) {
@@ -202,7 +202,7 @@ enum LineShaper {
 
   /// 単位の列 `units` に、本文の字の属性（字体 `font`・言語を持たない字として組む言語の属性・左から右の段落とタブの刻み
   /// `tabWidth`）を付けた文字列。
-  static func attributed(
+  private static func attributed(
     _ units: ContiguousArray<UInt16>, font: CTFont, tabWidth: CGFloat
   ) -> CFMutableAttributedString {
     let string = units.withUnsafeBufferPointer {
@@ -218,13 +218,6 @@ enum LineShaper {
     CFAttributedStringSetAttributes(
       attributed, CFRange(location: 0, length: units.count), attributes as CFDictionary, true)
     return attributed
-  }
-
-  /// run を組んだフォント。
-  static func font(of run: CTRun) -> CTFont? {
-    CFDictionaryGetValue(
-      CTRunGetAttributes(run), Unmanaged.passUnretained(kCTFontAttributeName).toOpaque()
-    ).map { Unmanaged<CTFont>.fromOpaque($0).takeUnretainedValue() }
   }
 
   /// 左から右の段落（タブの刻みがあれば、その刻みで空ける）。
@@ -288,7 +281,7 @@ extension ShapedLine {
       let count = CTRunGetGlyphCount(run)
       guard count > 0 else { continue }
       let attributes = CTRunGetAttributes(run)
-      guard let runFont = LineShaper.font(of: run) else { continue }
+      guard let runFont = GlyphFonts.font(of: run) else { continue }
       var glyphs = [CGGlyph](repeating: 0, count: count)
       var positions = [CGPoint](repeating: .zero, count: count)
       var indices = [CFIndex](repeating: 0, count: count)
