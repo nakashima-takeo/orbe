@@ -2,16 +2,9 @@ import Foundation
 
 /// プロジェクト検索のディスク側——git grep の引数と、`-z -n` の出力を流しながら行へ割る解析。根が git 管理下でも管理外でも
 /// 同じ 1 つの形（`--no-index --exclude-standard`）で探す: どこでも `.gitignore`（入れ子も）・`.git/info/exclude`・
-/// `core.excludesFile` が効き、バイナリ（`-I`）と既定の除外は外れ、サブモジュールと入れ子のリポジトリの中も探す。
+/// `core.excludesFile` が効き、バイナリ（`-I`）と既定の除外（`DefaultExcludes`）は外れ、サブモジュールと入れ子のリポジトリの中も探す。
 /// 出力の形に効く設定（`grep.*`・`color.*`）は引数で明示して、ユーザーの git 設定に形を変えさせない。
 enum GitGrep {
-  /// 既定の除外（VS Code の `search.exclude` と `files.exclude` の既定）。ディレクトリは配下ごと、ファイルは名前で。
-  static let excludedDirectories = [
-    "node_modules", "bower_components", ".git", ".svn", ".hg", ".jj",
-  ]
-  static let excludedFiles = [".DS_Store", "Thumbs.db"]
-  static let excludedExtensions = ["code-search"]
-
   /// grep だけに足す環境——UTF-8 のロケールが無いと PCRE2 の大小無視が ASCII に落ちる。
   static let environment = ["LC_ALL": "en_US.UTF-8"]
 
@@ -20,18 +13,9 @@ enum GitGrep {
       "grep", "--no-index", "--exclude-standard", "-z", "-n", "--no-column", "-I", "--no-color",
       "--no-full-name", "--no-textconv", "-P", "-e", pattern, "--", ".",
     ]
-      + excludedDirectories.map { ":(exclude,glob)**/\($0)/**" }
-      + excludedFiles.map { ":(exclude,glob)**/\($0)" }
-      + excludedExtensions.map { ":(exclude,glob)**/*.\($0)" }
-  }
-
-  /// 根からの相対パスが既定の除外に当たるか（開いている文書をメモリで探すかの判定。git に渡す除外と同じ規則）。
-  static func isExcluded(_ relativePath: String) -> Bool {
-    let components = relativePath.split(separator: "/").map(String.init)
-    guard let name = components.last else { return false }
-    return components.dropLast().contains(where: excludedDirectories.contains)
-      || excludedFiles.contains(name)
-      || excludedExtensions.contains((name as NSString).pathExtension)
+      + DefaultExcludes.directories.map { ":(exclude,glob)**/\($0)/**" }
+      + DefaultExcludes.files.map { ":(exclude,glob)**/\($0)" }
+      + DefaultExcludes.extensions.map { ":(exclude,glob)**/*.\($0)" }
   }
 
   /// 一致した 1 行。`number` は 1 始まり、`text` は改行を除いた行（`\r` は残る。1 行目の先頭の BOM は外す——開いた文書と

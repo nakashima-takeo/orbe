@@ -6,7 +6,7 @@ import XCTest
 
 /// 本物の git で、プロジェクト検索のディスク側が何を探すか——根が git 管理下でも管理外でも同じ形で、`.gitignore`（入れ子も）・
 /// `.git/info/exclude`・既定の除外・バイナリ・`.git` は出ず、入れ子のリポジトリの中は探し、パスは引用されずに読める。開いている
-/// 文書をメモリで探すかの判定（`isExcluded`）は git に渡す除外と同じ規則。大小無視はロケールの無い環境（Finder から起動した
+/// 文書をメモリで探すかの判定（`DefaultExcludes.contains`）は git に渡す除外と同じ規則。大小無視はロケールの無い環境（Finder から起動した
 /// アプリ）でも ASCII の外に効く。
 ///
 /// 壊れると何が起きるか。`node_modules` や無視したビルド成果物が結果を埋める。git 管理外の根では `.gitignore` が効かない。
@@ -71,8 +71,8 @@ extension GitGrepTests {
     let result = try grep(repo.root)
     XCTAssertEqual(result.paths, tree.found)
     XCTAssertEqual(result.output.status, 0)
-    for path in tree.defaultExcluded { XCTAssertTrue(GitGrep.isExcluded(path), path) }
-    for path in tree.found { XCTAssertFalse(GitGrep.isExcluded(path), path) }
+    for path in tree.defaultExcluded { XCTAssertTrue(DefaultExcludes.contains(path), path) }
+    for path in tree.found { XCTAssertFalse(DefaultExcludes.contains(path), path) }
   }
 
   /// git 管理外の根でも同じ形で探し、`.gitignore` と既定の除外が効く。

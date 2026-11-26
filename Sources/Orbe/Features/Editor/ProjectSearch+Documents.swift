@@ -26,7 +26,7 @@ extension ProjectSearch: RootFilesObserver {
     let path = GitWorktreeRoot.normalizedPath(document.url.path)
     guard path.hasPrefix(root + "/") else { return nil }
     let relative = String(path.dropFirst(root.count + 1))
-    return GitGrep.isExcluded(relative) ? nil : relative
+    return DefaultExcludes.contains(relative) ? nil : relative
   }
 
   func document(at path: String) -> EditorDocument? {

@@ -59,7 +59,7 @@ final class RootFiles {
   }
 
   let root: String
-  private let runner: GitRunner
+  let runner: GitRunner
   /// nil = 管理外（または解決前）。
   private(set) var repo: GitRepo?
   /// git 管理下かの判定が済んだか。
