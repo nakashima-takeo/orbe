@@ -34,12 +34,11 @@ extension MetalTextView: NSDraggingSource {
     beginDraggingSession(with: [item], event: event, source: self)
   }
 
-  /// 選択の見えている行の文字を、本文と同じ位置に描いた像と、その矩形（view の座標）。本文と同じ行の組版で組んだ行のうち、
-  /// 選択の中の字を描く。
+  /// 選択の見えている行の文字を、本文と同じ位置に描いた像と、その矩形（view の座標）。本文と同じ行の組版で組んだ行から、
+  /// 選択の中の字を描き、矩形はその行の、選択の地と同じ見た目の区間を囲む（右から左の字が混ざる行でも、選んだ字が矩形の
+  /// 中に入る）。行の中に選んだ字が無ければ、選択の端に幅 1 の矩形を置く。
   private func dragImage(_ selection: NSRange, _ text: TextRope) -> (NSRect, NSImage) {
-    guard let surface, let env = surface.bodySite.editingEnvironment() else {
-      return (.zero, NSImage())
-    }
+    guard let surface else { return (.zero, NSImage()) }
     let config = surface.config
     let p = surface.scrollPosition
     let column = surface.surfaceLayout.column
@@ -53,11 +52,13 @@ extension MetalTextView: NSDraggingSource {
       let (source, start) = LineShaper.source(row: row, in: text)
       let from = max(selection.location, start) - start
       let to = min(NSMaxRange(selection), NSMaxRange(text.contentRange(ofRow: row))) - start
-      let x0 = env.geometry.x(ofColumn: from, row: row)
-      let x1 = env.geometry.x(ofColumn: max(from, to), row: row)
       let origin = CGPoint(
         x: column - CGFloat(p.x), y: config.topInset + CGFloat(layout.y(ofLine: row) - p.y))
       let shaped = LineShaper.shape(source, font: config.font, tabWidth: surface.bodySite.tabWidth)
+      let carets = shaped.carets
+      let segments = carets.segments(from: from, to: to)
+      let x0 = segments.first?.lowerBound ?? carets.x(from)
+      let x1 = segments.last?.upperBound ?? x0
       pieces.append((shaped.runs.map { $0.selecting(from..<max(from, to)) }, origin))
       frame = frame.union(
         NSRect(
