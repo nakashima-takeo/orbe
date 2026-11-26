@@ -88,6 +88,33 @@ extension FileTreeTests {
     XCTAssertFalse(tree.filter.listFailed)
   }
 
+  /// 一覧を取れた後に git が一時的に失敗しても、前に取れた一覧での結果が残り（一致 0 件にも、取れなかったにもならない）、字を
+  /// 変えても前の一覧で照合する。git が直れば、次の変化で取り直して新しい結果になる。
+  func testAGitFailureAfterAListKeepsTheResultsOfThePreviousList() throws {
+    let tree = shownTree()
+    filter(tree, "md")
+    let before = names(tree)
+    XCTAssertEqual(before, ["docs", "  readme.md", "src/sub", "  deep.md"], "前提: 一覧を取れている")
+    let index = repo.root + "/.git/index"
+    let intact = try Data(contentsOf: URL(fileURLWithPath: index))
+    try Data("broken".utf8).write(to: URL(fileURLWithPath: index))
+
+    try repo.write("src/new.md", "n\n")
+    // 失敗した取り直しは見える結果を変えないので、終わったことは内部の「古い」の印（`isStale`）で待つ。
+    pumpMain(until: { tree.filter.isStale }, "変化で取り直し、git が失敗する")
+    XCTAssertEqual(names(tree), before, "前に取れた一覧での結果が残る")
+    XCTAssertFalse(tree.filter.listFailed, "取れなかったとは示さない")
+    filter(tree, "deep")
+    XCTAssertEqual(names(tree), ["src/sub", "  deep.md"], "字を変えても前の一覧で照合する")
+    XCTAssertFalse(tree.filter.listFailed)
+
+    try intact.write(to: URL(fileURLWithPath: index))
+    try repo.write("src/deeper.md", "d\n")
+    pumpMain(
+      until: { self.names(tree) == ["src", "  sub", "    deep.md", "  deeper.md"] },
+      "git が直れば、次の変化で取り直す")
+  }
+
   /// 合ったファイルが上限を越えれば上限で打ち切り、打ち切ったと添える。上限ちょうどなら打ち切らない。
   func testMatchesBeyondTheLimitAreCutAtTheLimit() {
     let root = URL(fileURLWithPath: repo.root)
