@@ -53,7 +53,9 @@ extension L10n {
       "新しいタブ（worktree・ブランチを選んで開く）", "New tab (pick a worktree or branch)"
     ),
     .helpShortcutClosedAgents: ("閉じたエージェント", "Closed agents"),
-    .helpShortcutRenameTab: ("タブをリネーム", "Rename tab"),
+    .helpShortcutRenameTab: (
+      "タブをリネーム（ブラウザはページを再読込）", "Rename tab (reload page in browser)"
+    ),
     .helpShortcutNextTab: ("次のタブへ", "Next tab"),
     .helpShortcutPrevTab: ("前のタブへ", "Previous tab"),
     .helpShortcutCloseTab: ("タブを閉じる", "Close tab"),

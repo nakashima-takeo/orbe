@@ -46,9 +46,43 @@ extension DesignFlowSnapshotTests {
 
     loadBrowserFixturePage(in: browser)
     try captureSheetFocusAndUnfocused(window: window, stage: stage, browser: browser, idx: &idx)
+    try captureNarrowSheetAndPeek(window: window, stage: stage, browser: browser, idx: &idx)
     try captureSheetDrag(window: window, stage: stage, browser: browser, idx: &idx)
     try captureFullAndPeek(
       window: window, stage: stage, faces: scene.group.view, browser: browser, idx: &idx)
+  }
+
+  /// 右シート最小幅（240pt）と狭幅ウィンドウでの全面 Peek で 4 つの主要ボタンが 1px も切れないことを撮る。
+  private func captureNarrowSheetAndPeek(
+    window: NSWindow, stage: NSView, browser: BrowserLayerView, idx: inout Int
+  ) throws {
+    let originalFrame = window.frame
+    window.appearance = NSAppearance(named: .darkAqua)
+
+    window.setFrame(NSRect(origin: .zero, size: NSSize(width: 800, height: 640)), display: false)
+    browser.setMode(.sheet, animated: false)
+    browser.setSheetRatio(BrowserResizeSession.minRatio)
+    browser.setFocused(true)
+    stage.layoutSubtreeIfNeeded()
+    XCTAssertEqual(
+      browser.sheetView.frame.width, BrowserResizeSession.closeThresholdWidth, accuracy: 0.5,
+      "800pt 窓・minRatio で右シート最小幅 240pt に収まる")
+    try writeBrowserShot(
+      stage: stage, browser: browser, captureWeb: true, idx: &idx, label: "sheet_narrow_240_dark")
+
+    window.setFrame(NSRect(origin: .zero, size: NSSize(width: 320, height: 640)), display: false)
+    browser.setMode(.full, animated: false)
+    browser.setPeekUnderlay(.editor)
+    browser.setPeeking(true, animated: false)
+    stage.layoutSubtreeIfNeeded()
+    try writeBrowserShot(
+      stage: stage, browser: browser, captureWeb: false, idx: &idx,
+      label: "full_peek_narrow_320_dark")
+    browser.setPeeking(false, animated: false)
+
+    window.setFrame(originalFrame, display: false)
+    browser.setSheetRatio(BrowserResizeSession.defaultRatio)
+    stage.layoutSubtreeIfNeeded()
   }
 
   private func captureSheetFocusAndUnfocused(

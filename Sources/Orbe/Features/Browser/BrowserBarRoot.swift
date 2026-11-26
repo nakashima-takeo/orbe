@@ -11,12 +11,9 @@ struct BrowserBarRoot: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      Color.clear
-        .frame(maxWidth: .infinity)
+      toolbarContent
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: Theme.Layout.browserBar - Theme.Stroke.hairline)
-        .overlay(alignment: .leading) {
-          toolbarRow
-        }
         .clipped()
 
       Rectangle()
@@ -27,30 +24,51 @@ struct BrowserBarRoot: View {
     .environment(\.chromeFontResolver, fontResolver)
   }
 
-  private var toolbarRow: some View {
+  @ViewBuilder private var toolbarContent: some View {
+    if model.mode == .full && model.isPeeking {
+      ViewThatFits(in: .horizontal) {
+        toolbarRow(showsPeekPill: true, urlPreferredMinWidth: Theme.Layout.browserURLPeekMinWidth)
+        toolbarRow(showsPeekPill: false, urlPreferredMinWidth: nil)
+      }
+    } else {
+      toolbarRow(showsPeekPill: false, urlPreferredMinWidth: nil)
+    }
+  }
+
+  private func toolbarRow(showsPeekPill: Bool, urlPreferredMinWidth: CGFloat?) -> some View {
     HStack(spacing: Theme.Layout.browserBarGap) {
       BrowserIconButton(
         glyph: BrowserGlyphs.back,
         isEnabled: model.canGoBack,
         isActive: false,
         tooltip: localization.string(.browserBarBack),
-        action: model.onBack)
+        action: model.onBack
+      )
+      .layoutPriority(1)
       BrowserIconButton(
         glyph: BrowserGlyphs.forward,
         isEnabled: model.canGoForward,
         isActive: false,
         tooltip: localization.string(.browserBarForward),
-        action: model.onForward)
+        action: model.onForward
+      )
+      .layoutPriority(1)
       BrowserIconButton(
         glyph: model.isLoading ? BrowserGlyphs.stop : BrowserGlyphs.reload,
         isEnabled: true,
         isActive: false,
         tooltip: localization.string(model.isLoading ? .browserBarStop : .browserBarReload),
-        action: model.onReloadOrStop)
-      BrowserURLBar(model: model, localization: localization)
-        .padding(.horizontal, Theme.Layout.browserURLMarginX)
-      if model.mode == .full && model.isPeeking {
+        action: model.onReloadOrStop
+      )
+      .layoutPriority(1)
+      BrowserURLBar(
+        model: model, localization: localization, preferredMinWidth: urlPreferredMinWidth
+      )
+      .padding(.horizontal, Theme.Layout.browserURLMarginX)
+      .layoutPriority(-1)
+      if showsPeekPill {
         BrowserFullPeekPill(underlay: model.peekUnderlay, localization: localization)
+          .layoutPriority(1)
       }
       BrowserIconButton(
         glyph: BrowserGlyphs.sheetToggle,
@@ -58,10 +76,13 @@ struct BrowserBarRoot: View {
         isActive: model.mode == .sheet,
         tooltip: localization.string(
           model.mode == .sheet ? .browserBarSwitchToFull : .browserBarSwitchToSheet),
-        action: model.onToggleFull)
+        action: model.onToggleFull
+      )
+      .layoutPriority(1)
     }
     .padding(.leading, Theme.Layout.browserBarLeading)
     .padding(.trailing, Theme.Layout.browserBarTrailing)
+    .frame(minWidth: 0, maxWidth: .infinity)
     .frame(height: Theme.Layout.browserBar - Theme.Stroke.hairline)
     .opacity(model.isInteractiveFocused ? 1 : Theme.Opacity.browserBarInactive)
     .animation(.easeOut(duration: Theme.Motion.quick), value: model.isInteractiveFocused)
@@ -116,6 +137,7 @@ private struct BrowserIconButton: View {
 private struct BrowserURLBar: View {
   @Bindable var model: BrowserToolbarModel
   let localization: LocalizationStore
+  let preferredMinWidth: CGFloat?
   @State private var isHovered = false
 
   var body: some View {
@@ -136,15 +158,19 @@ private struct BrowserURLBar: View {
           onCancel: model.onCancelURL,
           onBlur: model.onBlurURL
         )
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
       } else {
         displayLabel
-          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
       }
     }
     .padding(.leading, Theme.Layout.browserURLPadLeading)
     .padding(.trailing, Theme.Layout.browserURLPadTrailing)
-    .frame(minWidth: Theme.Layout.browserURLMinWidth, maxWidth: .infinity)
+    .frame(
+      minWidth: preferredMinWidth ?? 0,
+      idealWidth: preferredMinWidth,
+      maxWidth: .infinity
+    )
     .frame(height: Theme.Layout.browserURLHeight)
     .background(
       RoundedRectangle(cornerRadius: Theme.Layout.browserURLRadius)
@@ -181,8 +207,9 @@ private struct BrowserURLBar: View {
 
   @ViewBuilder private var displayLabel: some View {
     if let url = model.displayURL {
-      (Text(url.host).foregroundColor(Color.theme.textPrimary)
-        + Text(url.path).foregroundColor(Color.theme.textMuted))
+      let hostText = Text(url.host).foregroundStyle(Color.theme.textPrimary)
+      let pathText = Text(url.path).foregroundStyle(Color.theme.textMuted)
+      Text("\(hostText)\(pathText)")
         .font(Font.theme.browserURL)
         .lineLimit(1)
         .truncationMode(.tail)
@@ -302,8 +329,9 @@ private struct BrowserURLTextField: NSViewRepresentable {
     ) -> Bool {
       if textView.hasMarkedText() { return false }
       if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-        if onCommit(control.stringValue) {
-          endedExplicitly = true
+        endedExplicitly = true
+        if !onCommit(control.stringValue) {
+          endedExplicitly = false
         }
         return true
       }

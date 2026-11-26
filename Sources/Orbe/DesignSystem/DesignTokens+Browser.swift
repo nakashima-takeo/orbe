@@ -84,7 +84,9 @@ extension Theme.Layout {
   static let browserIconButtonRadius: CGFloat = 7
   static let browserIconSize: CGFloat = 14
   static let browserURLHeight: CGFloat = 26
-  static let browserURLMinWidth: CGFloat = 120
+  /// 全面 Peek ピルを表示し続けるために URL 欄へ確保する最小幅。
+  /// これを下回る狭幅ではピルを省略し、URL 欄は `minWidth: 0` で柔軟に縮小する。
+  static let browserURLPeekMinWidth: CGFloat = 120
   static let browserURLRadius: CGFloat = 7
   static let browserURLMarginX: CGFloat = 4
   static let browserURLPadLeading: CGFloat = 10
