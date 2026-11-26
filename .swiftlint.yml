@@ -95,6 +95,26 @@ custom_rules:
     message: "通常のテストは窓を並べず、アプリを前面にしない（キーの配送は deliverKeyDown。マウスの配送が要るテストだけ、placeOffscreen で画面外へ並べる）"
     severity: error
 
+  test_mouse_delivery:
+    name: "テストのマウスの押して離すは deliverClick から"
+    included: ".*/Tests/.*\\.swift"
+    excluded:
+      - ".*/Tests/OrbeTests/WindowMouseDelivery\\.swift"
+      # 押して離す以外の並び（押下だけ、ドラッグ）と、マウス以外のイベントを送るファイル。
+      - ".*/Tests/OrbeTests/RowListTests\\+Guard\\.swift"
+      - ".*/Tests/OrbeTests/SourceControlPaneTests\\+Anchor\\.swift"
+      - ".*/Tests/OrbeTests/SidebarScrollbarTests\\.swift"
+      - ".*/Tests/OrbeTests/OptionHoldMonitorTests\\.swift"
+      - ".*/Tests/OrbeTests/OptionHoldDriver\\.swift"
+      - ".*/Tests/OrbeTests/EditorPerfTestSupport\\.swift"
+    # 送るイベントの種類は呼び出しの綴りから読めないので、アプリの配送の口そのものを見る。押下と離すを順に送ると、押下で
+    # 追跡ループに入った部品（入力欄、選べる文字）の中で離すイベントを待ち続け、押下の `sendEvent` が戻らない。
+    # `\s*` は swift format の折返しを許すため。
+    regex: "\\bNSApp\\s*\\.\\s*sendEvent\\b|\\bNSApplication\\s*\\.\\s*shared\\s*\\.\\s*sendEvent\\b"
+    match_kinds: [identifier]
+    message: "マウスの押して離すは deliverClick（Tests/OrbeTests/WindowMouseDelivery.swift）で届ける（離すイベントを先にキューへ入れる）"
+    severity: error
+
   test_screen_isolation_exemption:
     name: "画面と前面の隔離から外れるのは、画面に出す道具だけ"
     included: ".*/Tests/.*\\.swift"
