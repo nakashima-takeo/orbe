@@ -72,13 +72,13 @@ public enum GlyphFonts {
     }
 
     mutating func slot(of font: CTFont) -> UInt16 {
-      let index =
-        fonts.firstIndex { $0 === font } ?? fonts.firstIndex { CFEqual($0, font) }
-        ?? {
-          fonts.append(font)
-          return fonts.count - 1
-        }()
-      return UInt16(index) + Slot.firstFont
+      if let index = fonts.firstIndex(where: { $0 === font })
+        ?? fonts.firstIndex(where: { CFEqual($0, font) })
+      {
+        return UInt16(index) + Slot.firstFont
+      }
+      fonts.append(font)
+      return UInt16(fonts.count - 1) + Slot.firstFont
     }
   }
 
@@ -92,10 +92,8 @@ public enum GlyphFonts {
       return (read(units, tables[table], unknown: &unknown), tables[table].fonts)
     }
     guard !unknown.isEmpty else { return Glyphs(slots: slots, fonts: fonts) }
-    var found: [ContiguousArray<UInt16>: CTFont?] = [:]
-    for range in unknown where found[ContiguousArray(units[range])] == nil {
-      found[ContiguousArray(units[range])] = fontAlone(ContiguousArray(units[range]), font: font)
-    }
+    let clusters = Set(unknown.map { ContiguousArray(units[$0]) })
+    let found = Dictionary(uniqueKeysWithValues: clusters.map { ($0, fontAlone($0, font: font)) })
     var assigned: [ContiguousArray<UInt16>: UInt16] = [:]
     fonts = tables.withLockUnchecked { tables in
       let table = index(of: font, in: &tables)
@@ -181,14 +179,14 @@ public enum GlyphFonts {
   }
 
   /// 単位が単独の字——隣がどの単独の字でも、その隣と書記素を作らない字——か。単独の字とするのは、結合する記号・字を
-  /// 合わせる記号・字母の組み合わせ・サロゲート・字の前に付く記号のどれも含まない区画の字。単位がどれも単独の字なら、
-  /// 単位 1 つが字 1 つになる。それ以外の単位を含む行は、書記素ごとに引く。
+  /// 合わせる記号・字母の組み合わせ・サロゲート・字の前に付く記号と、CR（後ろの LF と書記素を作る）のどれも含まない
+  /// 区画の字。単位がどれも単独の字なら、単位 1 つが字 1 つになる。それ以外の単位を含む行は、書記素ごとに引く。
   private static func isStandalone(_ unit: UInt16) -> Bool {
     switch unit {
-    case 0x0000...0x02FF, 0x0370...0x0482, 0x048A...0x058F, 0x1E00...0x1FFF, 0x2010...0x20CF,
-      0x2100...0x2BFF, 0x2E00...0x3029, 0x3030...0x3098, 0x309B...0x9FFF, 0xAC00...0xD7A3,
-      0xE000...0xFAFF, 0xFE10...0xFE1F, 0xFE30...0xFE6F, 0xFF00...0xFF9D, 0xFFA0...0xFFEF,
-      0xFFFC, 0xFFFD:
+    case 0x0000...0x000C, 0x000E...0x02FF, 0x0370...0x0482, 0x048A...0x058F, 0x1E00...0x1FFF,
+      0x2010...0x20CF, 0x2100...0x2BFF, 0x2E00...0x3029, 0x3030...0x3098, 0x309B...0x9FFF,
+      0xAC00...0xD7A3, 0xE000...0xFAFF, 0xFE10...0xFE1F, 0xFE30...0xFE6F, 0xFF00...0xFF9D,
+      0xFFA0...0xFFEF, 0xFFFC, 0xFFFD:
       return true
     default:
       return false
