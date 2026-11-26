@@ -30,9 +30,6 @@ final class ScmCommitPopup {
   @ObservationIgnored private var wantsFieldFocus = false
   /// 載っているメッセージ欄（ポップアップを開くたびに作り直される）。
   @ObservationIgnored weak var field: MessageTextView?
-  /// 開くたびに替える中身の同一性。閉じてすぐ開き直した（cd で持ち主が替わった）ときも、SwiftUI に前の欄を使い回させない
-  /// ——欄の取り消しの履歴は、開いている間だけのもの。
-  @ObservationIgnored private var openID = UUID()
   /// 閉じる途中（メニューを閉じても、フォーカスを欄へ戻さない——器が開く前の場所へ戻す）。
   @ObservationIgnored private var isClosing = false
   /// メニューの項目の文言の言語（面が配る。使う時点で読む）。
@@ -99,11 +96,10 @@ final class ScmCommitPopup {
 
 extension ScmCommitPopup: EditorPopupOwner {
   func popupContent() -> AnyView {
-    AnyView(ScmCommitPopupView(owner: self).id(openID))
+    AnyView(ScmCommitPopupView(owner: self))
   }
 
   func popupDidOpen() {
-    openID = UUID()
     focusField()
   }
 
