@@ -250,8 +250,9 @@ final class LineShaperTests: XCTestCase {
 
   /// 返信の欄の字（行の組版の規則）と、投稿されたコメントの字（絵の差し込みの字の組版）は、同じ字体で同じ文を組むと、
   /// どの位置の x も等しい——約物が続く所でも、和文と英数字の境でも、和文の後ろの、字体に無い記号でも。壊れると、投稿した
-  /// コメントの字の並びが、欄で書いていたときと変わる。`testPunctuationIsNotCompressedAndLatinIsNotSpacedFromCJK` と同じく、
-  /// 効くのは優先言語に日本語がある機械で実行したときだけ（約物が続く所と、和文と英数字の境の検証は、中国語でも効く）。
+  /// コメントの字の並びが、欄で書いていたときと変わる。約物が続く所と、和文と英数字の境の検証が効くのは、
+  /// `testPunctuationIsNotCompressedAndLatinIsNotSpacedFromCJK` と同じく、優先言語に日本語か中国語がある機械で実行した
+  /// ときだけ。和文の後ろの記号の検証は、優先言語が日本語・韓国語の機械では効き、英語・中国語の機械では効かない。
   func testReplyFieldAndPostedCommentPlaceTheSameSentenceAlike() {
     let string = "（注）。「x」、漢字123円※★"
     let sans = NSFont.systemFont(ofSize: 12)
