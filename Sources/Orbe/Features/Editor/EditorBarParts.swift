@@ -103,8 +103,8 @@ struct EditorBarIconButton: View {
 /// 上のバーの右端の主な操作のボタン（コミット・レビュー）。高さ 26・角丸 7・間 7・左 11 右 6・地 accent .24・枠 accent .6・
 /// sans 12 semibold・字 primary・末尾の ▾ は accentBright。開いている間は地 accent .36。名前の後ろに、固定の添え（`badge`）と
 /// 譲る添え書き（`detail`。`actionDetail` で譲る）を置ける。左に 12 の余白（案内との間）を持つ。押せない間は disabled に
-/// 薄める。押してもフォーカスを求めない。ツールチップは `help`、VoiceOver の名前は `accessibilityName`（省けば `help`）。枠は、上のバーの座標で
-/// `editorBarActionFrame` へ知らせる（外の押下の判定の入力）。
+/// 薄める。押してもフォーカスを求めない。ツールチップは `help`、VoiceOver の名前は `accessibilityName`（省けば `help`）。
+/// 枠は、上のバーの座標で `editorBarActionFrame` へ知らせ、消えたら nil を知らせる（外の押下の判定の入力）。
 struct EditorBarActionButton<Badge: View, Detail: View>: View {
   let title: String
   var isOpen = false
@@ -115,12 +115,20 @@ struct EditorBarActionButton<Badge: View, Detail: View>: View {
   @ViewBuilder let badge: () -> Badge
   @ViewBuilder let detail: () -> Detail
   @Environment(\.editorBarActionFrame) private var reportFrame
+  /// 枠を知らせるときの、このボタンの印。
+  @State private var frameID = UUID()
 
   var body: some View {
     ViewThatFits(in: .horizontal) {
       face(showsDetail: true)
       face(showsDetail: false)
     }
+    .onGeometryChange(for: CGRect.self) {
+      $0.frame(in: .named(EditorBarRoot.space))
+    } action: {
+      reportFrame(frameID, $0)
+    }
+    .onDisappear { reportFrame(frameID, nil) }
     .padding(.leading, Theme.Layout.editorBarActionLead)
     .editorBarPart(.trailing, grows: .actionDetail)
   }
@@ -160,11 +168,6 @@ struct EditorBarActionButton<Badge: View, Detail: View>: View {
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilityName ?? help)
     .accessibilityAddTraits(.isButton)
-    .onGeometryChange(for: CGRect.self) {
-      $0.frame(in: .named(EditorBarRoot.space))
-    } action: {
-      reportFrame($0)
-    }
   }
 }
 
@@ -207,12 +210,13 @@ extension EditorBarActionButton where Detail == EmptyView {
 }
 
 private struct EditorBarActionFrameKey: EnvironmentKey {
-  static let defaultValue: (CGRect) -> Void = { _ in }
+  static let defaultValue: (UUID, CGRect?) -> Void = { _, _ in }
 }
 
 extension EnvironmentValues {
-  /// 右端の主な操作のボタンの枠（上のバーの座標）を受け取る閉包。上のバーの根が pane への知らせを配る。
-  var editorBarActionFrame: (CGRect) -> Void {
+  /// 右端の主な操作のボタンの枠（上のバーの座標）を、ボタンごとの印と一緒に受け取る閉包。ボタンが消えたら枠は nil。上のバーの
+  /// 根が pane への知らせを配る。
+  var editorBarActionFrame: (UUID, CGRect?) -> Void {
     get { self[EditorBarActionFrameKey.self] }
     set { self[EditorBarActionFrameKey.self] = newValue }
   }

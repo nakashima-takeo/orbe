@@ -37,7 +37,7 @@ final class EditorBarRowTests: OrbeTestCase {
     let frames = Frames()
     let host = NSHostingView(
       rootView: EditorBarRow(content: content)
-        .environment(\.editorBarActionFrame) { frames.byName["action"] = $0 }
+        .environment(\.editorBarActionFrame) { _, frame in frames.byName["action"] = frame }
         .onPreferenceChange(ProbeFrames.self) { frames.byName.merge($0) { $1 } }
         .environment(\.localization, LocalizationStore(language: .ja)))
     let window = NSWindow(

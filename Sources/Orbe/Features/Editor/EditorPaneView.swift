@@ -100,8 +100,9 @@ final class EditorPaneView: NSView {
   var popupReturn = FocusPlace.body
   /// ポップアップが開いている間の、フォーカスの行き先の見張り。
   var popupFocusWatch: EditorFocusWatch?
-  /// 上のバーの右端の主な操作のボタンの枠（バーの座標＝面の座標）。ポップアップの外の押下の判定の入力。
-  var actionButtonFrame: CGRect?
+  /// 上のバーの右端の主な操作のボタンの枠（ボタンの印ごと。バーの座標＝面の座標。今あるボタンの分だけ）。ポップアップの外の
+  /// 押下の判定の入力。
+  var actionButtonFrames: [UUID: CGRect] = [:]
   /// F4 / ⇧F4・PR の画面のキー v と、結果の列・一覧の器の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// 左の列の幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。

@@ -202,7 +202,7 @@ final class EditorDockTests: OrbeTestCase {
     let pane = hosted.pane
     let owner = Owner()
     let button = CGRect(x: 760, y: 5, width: 80, height: 26)
-    pane.shell.actionButtonFrameDidChange(button)
+    pane.shell.actionButtonFrameDidChange(UUID(), button)
     openAndSettle(hosted, owner)
     func press(_ point: NSPoint) {
       pane.pressWillArrive(.mouse(.leftMouseDown, at: point, in: hosted.window))

@@ -8,7 +8,9 @@ extension EditorPaneView {
   func wireDock() {
     popup.onOpen = { [weak self] in self?.popupDidOpen() }
     popup.onClose = { [weak self] dismissal in self?.popupDidClose(dismissal) }
-    shell.actionButtonFrameDidChange = { [weak self] frame in self?.actionButtonFrame = frame }
+    shell.actionButtonFrameDidChange = { [weak self] id, frame in
+      self?.actionButtonFrames[id] = frame
+    }
   }
 
   /// 置き場の根。根へ渡す持ち主は、ここで足す。
@@ -39,7 +41,7 @@ extension EditorPaneView {
       return true
     }
     let point = convert(event.locationInWindow, from: nil)
-    return actionButtonFrame?.contains(point) == true
+    return actionButtonFrames.values.contains { $0.contains(point) }
   }
 
   /// 開いた。一覧の器が開いていれば閉じ、開く前のフォーカスの場所を覚え、一覧のためのフォーカスの預かりを終え、置き直して
