@@ -86,10 +86,9 @@ struct PrBarChip: View {
           HStack(spacing: Theme.Layout.editorBarChipGap) {
             number
             EditorReadableName(
-              content.headRefName, prefixLength: Theme.Layout.editorBarChipReadablePrefix
-            ) {
-              Text($0).truncationMode(.tail)
-            }
+              content.headRefName, prefixLength: Theme.Layout.editorBarChipReadablePrefix,
+              truncation: .tail
+            ) { Text($0) }
           }
         }
       })

@@ -106,7 +106,7 @@ final class PrReviewPopup: EditorPopupOwner {
 
   func popupContent() -> AnyView {
     guard let state = openedState else { return AnyView(EmptyView()) }
-    return AnyView(PrReviewPopupView(popup: self, state: state).id(ObjectIdentifier(state)))
+    return AnyView(PrReviewPopupView(popup: self, state: state))
   }
 
   func popupDidOpen() {
