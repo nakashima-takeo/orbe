@@ -204,6 +204,19 @@ final class LineShaperTests: XCTestCase {
     XCTAssertEqual(shaped.width, expected, accuracy: 0.01, "行の幅")
   }
 
+  /// 返信の欄の字（行の組版の規則）と、投稿されたコメントの字（絵の差し込みの字の組版）は、同じ字体で同じ文を組むと、
+  /// どの位置の x も等しい——約物が続く所でも、和文と英数字の境でも。壊れると、投稿したコメントの字の並びが、欄で書いて
+  /// いたときと変わる。上の検証と同じく、効くのは優先言語に日本語か中国語がある機械で実行したときだけ。
+  func testReplyFieldAndPostedCommentPlaceTheSameSentenceAlike() {
+    let string = "（注）。「x」、漢字123円"
+    let sans = NSFont.systemFont(ofSize: 12)
+    let field = LineShaper.shape(source(string), font: sans as CTFont, tabWidth: 0).carets
+    let posted = ZoneTextLayout.line([ZoneTextRun(string, font: sans, color: .black)])
+    for offset in 0...(string as NSString).length {
+      XCTAssertEqual(field.x(offset), posted.x(of: offset), accuracy: 0.01, "位置 \(offset) の x")
+    }
+  }
+
   /// 1 行で描くのは 10000 単位まで（書記素の境で切る）。残りは描かず、その数を返す。行の中身は先頭しか読まない。
   func testLongLinesStopAtTheLimitOnAGraphemeBoundary() {
     let long = String(repeating: "a", count: 9_999) + "👍🏽" + String(repeating: "b", count: 500_000)
