@@ -1,18 +1,22 @@
 import AppKit
 
-/// コミットボタンの姿と、押した・開いた時点の写しで中身を決めるコミット、範囲に数える自分の書き込み。
+/// コミットと ▾ の項目の可否と、押した・開いた時点の写しで中身を決めるコミット、範囲に数える自分の書き込み。
 extension ScmPanel {
-  /// コミットボタンと ▾ の姿（今の行と、欄に見えている字——変換中の字を含む——で）。
+  /// コミットと ▾ の項目の可否（今の行と、欄に見えている字——変換中の字を含む——で）。
   var commitState: ScmCommitState {
     ScmCommitState(
-      staged: changes.staged.count, changes: changes.changes.count,
-      committable: changes.committable.count, branch: branch,
+      staged: changes.staged.count, committable: changes.committable.count, branch: branch,
       messageIsBlank: (control.message + composition).allSatisfy(\.isWhitespace),
       isNetworking: control.isNetworking, isCommitting: control.isCommitting,
       isHeadPushed: isHeadPushed)
   }
 
-  /// 今の写し。押した（✓・ボタン・欄の ↵ / ⌘↵）・開いた（▾・…）時点に取り、可否も働きもこの写しで決める（見たものを
+  /// 同期のボタンの姿（status のブランチと、ネット操作が列に在るかで）。
+  var syncState: ScmSyncState? {
+    ScmSyncState(branch: branch, isNetworking: control.isNetworking)
+  }
+
+  /// 今の写し。押した（「コミット」・欄の ↵ / ⌘↵）・開いた（▾・…）時点に取り、可否も働きもこの写しで決める（見たものを
   /// コミットする）。開いている間も status は届いて行は外の書き込みに追いつくので、選んだ時点の行で組むと、開いている間の
   /// 外のコミットを見えていたものに数えてしまう。欄が変換中なら先に確定する——見えていた字がメッセージに入り、描いた姿
   /// （見えている字で決めた可否）と写しの可否が揃う。
@@ -21,8 +25,7 @@ extension ScmPanel {
     return ScmCommitSnapshot(panel: self, state: commitState, seen: ownWrites.content(changes))
   }
 
-  /// メッセージ欄のキー——↵ はコミット、⌘↵ はコミットしてプッシュ。押した時点の写しで押せなければ音で断る（ボタンが同期・
-  /// 公開でも、同期・公開は起こさない）。
+  /// メッセージ欄のキー——↵ はコミット、⌘↵ はコミットしてプッシュ。押した時点の写しで押せなければ音で断る。
   func commitFromMessage(andPush: Bool) {
     let snapshot = commitSnapshot()
     if andPush, snapshot.state.canCommitAndPush {

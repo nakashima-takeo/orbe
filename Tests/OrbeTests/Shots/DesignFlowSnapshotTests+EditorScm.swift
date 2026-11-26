@@ -103,7 +103,7 @@ extension DesignFlowSnapshotTests {
           try? git(["commit", "-qm", "README: 畳んでから渡す"])
           control.message = ""
           pumpMain(
-            until: { panel.changes.count == 0 && panel.commitState.primary != .commit },
+            until: { panel.changes.count == 0 && panel.syncState?.action != .sync(nil) },
             "変更なしで同期のボタン")
         }
       ),
@@ -112,7 +112,7 @@ extension DesignFlowSnapshotTests {
         {
           try? git(["push", "-q", "origin", "HEAD:main"])
           pumpMain(
-            until: { panel.commitState.primary == .commit && panel.isHeadPushed == true },
+            until: { panel.syncState?.action == .sync(nil) && panel.isHeadPushed == true },
             "先行も遅れも無い")
         }
       ),
@@ -120,7 +120,7 @@ extension DesignFlowSnapshotTests {
         "publish",
         {
           try? git(["switch", "-q", "-c", "feat/publish"])
-          pumpMain(until: { panel.commitState.primary == .publish }, "公開のボタン")
+          pumpMain(until: { panel.syncState?.action == .publish }, "公開のボタン")
         }
       ),
     ]

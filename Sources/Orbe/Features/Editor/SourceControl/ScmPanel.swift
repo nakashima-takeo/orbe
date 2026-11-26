@@ -1,7 +1,7 @@
 import Foundation
 
 /// ソース管理パネルの面ごとの状態——根のサービスの観測（status・git の状態）・件数・2 区分の行・グラフ・HEAD が push 済みか・
-/// ステージ済みの行数・親「ソース管理」・子の区分・グラフの枠の開閉・選択・パネルの中の焦点。worktree の事実（メッセージ・操作・失敗）は
+/// ステージ済みの行数・親「ソース管理」・子の区分・グラフの枠の開閉・選択・変更の列の焦点。worktree の事実（メッセージ・操作・失敗）は
 /// `SourceControl` が持ち、ここは見せ方と観測だけ。
 ///
 /// 面が見えている間（`isLive`）は根のサービスを握って status を受け、件数（上のバーの Changes の添え字）を出す。行の組み立て・グラフ・
@@ -10,12 +10,6 @@ import Foundation
 /// だけ。グラフの列の行は高々数百行なので main で作る（→ `ScmRows`）。
 @MainActor @Observable
 final class ScmPanel {
-  /// パネルの中の焦点の置き場。
-  enum Area: Equatable {
-    case message
-    case list
-  }
-
   /// グラフを読む件数の刻み。
   static let graphPage = 50
 
@@ -40,16 +34,18 @@ final class ScmPanel {
   /// ステージ済みの行数と、それを読んだ時点のステージ済みの中身の鍵（`ScmChanges.stagedKey`）。ステージ済みが空なら nil。
   /// 変えるのは `ScmPanel+Reads` の読みだけ。
   var stagedLines: (key: Int, counts: GitLineCounts)?
-  /// 親「ソース管理」（メッセージ欄・ボタン・失敗の文と 2 つの子の区分）が開いている。変えるのは `setRepositoryOpen` だけ。
+  /// 親「ソース管理」（失敗の文と 2 つの子の区分）が開いている。変えるのは `setRepositoryOpen` だけ。
   private(set) var isRepositoryOpen = true
   /// グラフの枠が開いている。
   var isGraphOpen = true
   private(set) var collapsed: Set<ScmSection> = []
   private(set) var selection: ScmRowID?
-  private(set) var focusedArea: Area?
-  /// 焦点を入れる要求。当てた後に残すと、パネルが次に現れたときに古い要求が焦点を奪う。当てずに隠れた要求も捨てる。
-  private(set) var focusRequest: Area?
-  /// 欄に見えている変換中の字（変換中でなければ空）。欄の見せ方なので、worktree のメッセージには確定するまで入れない。
+  /// 変更の列に焦点がある。
+  private(set) var isListFocused = false
+  /// 変更の列へ焦点を入れる要求。当てた後に残すと、列が次に現れたときに古い要求が焦点を奪う。当てずに隠れた要求も捨てる。
+  private(set) var wantsListFocus = false
+  /// コミットのメッセージ欄に見えている変換中の字（変換中でなければ空）。欄の見せ方なので、worktree のメッセージには確定する
+  /// まで入れない。
   var composition = ""
   /// HEAD が push 済みか（nil = 分からない——remote 追跡 ref が動きうるきっかけの後で読み直している・読めない・今の HEAD と
   /// 違うコミットを読んだ）。push 済みは HEAD のコミットと remote 追跡 ref だけで決まるので、それ以外（HEAD・ローカルの
@@ -71,7 +67,7 @@ final class ScmPanel {
   /// 欄の変換を確定する（載っている欄が登録する。欄が無い・変換中でなければ何もしない）。確定した字は、返る前に worktree
   /// のメッセージに入る。
   @ObservationIgnored var confirmComposition: () -> Void = {}
-  /// 親を畳む直前（欄と列がまだ窓に居るうち）。焦点がパネルの中にあれば、面の本文へ移す。
+  /// 親を畳む直前（列がまだ窓に居るうち）。焦点が列にあれば、面の本文へ移す。
   @ObservationIgnored var onRepositoryWillClose: () -> Void = {}
   /// 変更の列の状態（`listState`）が変わった（変わった後の main の回で知らせる）。
   @ObservationIgnored var onListStateChange: () -> Void = {}
@@ -268,7 +264,7 @@ final class ScmPanel {
 
   // MARK: - 開閉
 
-  /// 親「ソース管理」を開く・畳む。畳むときは、欄と列が窓から外れる前に焦点を本文へ移させる（外れてからでは AppKit が焦点を
+  /// 親「ソース管理」を開く・畳む。畳むときは、列が窓から外れる前に焦点を本文へ移させる（外れてからでは AppKit が焦点を
   /// 窓へ落とし、キーがどこにも届かない）。選択は残す。
   func setRepositoryOpen(_ open: Bool) {
     guard open != isRepositoryOpen else { return }
@@ -290,32 +286,29 @@ final class ScmPanel {
 
   // MARK: - 焦点
 
-  func requestFocus(_ area: Area) {
-    focusRequest = area
+  func requestListFocus() {
+    wantsListFocus = true
   }
 
-  func focusRequestDidApply() {
-    focusRequest = nil
+  func listFocusRequestDidApply() {
+    wantsListFocus = false
   }
 
-  /// 列へ焦点を入れる要求が残っていれば取り消す（欄への要求は残す）。
-  func cancelListFocusRequest() { if focusRequest == .list { focusRequest = nil } }
+  /// 列へ焦点を入れる要求が残っていれば取り消す。
+  func cancelListFocusRequest() {
+    if wantsListFocus { wantsListFocus = false }
+  }
 
-  /// 欄か列の焦点が入った・抜けた（抜けたほうが今の置き場のときだけ消す）。列から抜けたら待っている開きを捨てる。
-  func focusDidChange(_ area: Area, focused: Bool) {
-    if area == .list, !focused { navigation.drop() }
-    if focused {
-      focusedArea = area
-    } else if focusedArea == area {
-      focusedArea = nil
-    }
+  /// 列の焦点が入った・抜けた。抜けたら待っている開きを捨てる。
+  func listFocusDidChange(_ focused: Bool) {
+    if !focused { navigation.drop() }
+    isListFocused = focused
   }
 
   /// パネルが隠れた（隠れた view は焦点が抜けたことを知らせない）。
   func panelDidHide() {
     navigation.drop()
-    focusedArea = nil
-    focusRequest = nil
-    composition = ""
+    isListFocused = false
+    wantsListFocus = false
   }
 }

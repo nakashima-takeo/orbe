@@ -97,8 +97,9 @@ struct ThemeColors {
   let editorOnDanger = Color(nsColor: Theme.Color.editorOnDanger)
   let editorBarGroove = Color(nsColor: Theme.Color.editorBarGroove)
   let editorBarInset = Color(nsColor: Theme.Color.editorBarInset)
-  // git の変化の種類（エクスプローラーのバッジと名前）
+  // git の変化の種類（エクスプローラーのバッジと名前・コミットのボタンのステージ済みの行数）
   let diffAdded = Color(nsColor: Theme.Color.diffAdded)
+  let diffRemoved = Color(nsColor: Theme.Color.diffRemoved)
   let diffModified = Color(nsColor: Theme.Color.diffModified)
 }
 
@@ -150,6 +151,8 @@ struct ThemeFonts {
   let editorBarChipFilled = Font(Theme.Typography.editorBarChipFilled as CTFont)
   let editorBarAction = Font(Theme.Typography.editorBarAction as CTFont)
   let editorDockCard = Font(Theme.Typography.editorDockCard as CTFont)
+  let editorSyncCount = Font(Theme.Typography.editorSyncCount as CTFont)
+  let editorCommitPrompt = Font(Theme.Typography.editorCommitPrompt as CTFont)
   let editorKeyCap = Font(Theme.Typography.editorKeyCap as CTFont)
   let editorTextButton = Font(Theme.Typography.editorTextButton as CTFont)
   let editorDiffHeaderPath = Font(Theme.Typography.editorDiffHeaderPath as CTFont)
@@ -169,7 +172,6 @@ struct ThemeFonts {
   let editorSearchNote = Font(Theme.Typography.editorSearchNote as CTFont)
   // エディター面のソース管理
   let editorScmSection = Font(Theme.Typography.editorScmSection as CTFont)
-  let editorScmButton = Font(Theme.Typography.editorScmButton as CTFont)
   let editorScmNote = Font(Theme.Typography.editorScmNote as CTFont)
   let editorScmBandName = Font(Theme.Typography.editorScmBandName as CTFont)
   let editorScmBandProgress = Font(Theme.Typography.editorScmBandProgress as CTFont)

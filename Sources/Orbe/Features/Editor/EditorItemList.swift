@@ -117,6 +117,8 @@ final class EditorItemList {
   @ObservationIgnored var onClose: (Bool) -> Void = { _ in }
   /// 行の数が変わった（pane が器の高さを置き直す）。
   @ObservationIgnored var onResize: () -> Void = {}
+  /// 行の列へフォーカスを入れる要求（行の列が窓に載っていなければ、載った時点で当てる）。
+  @ObservationIgnored private(set) var wantsFocus = false
 
   /// 下の案内。
   var hints: [EditorItemListHint] { content?.hints ?? [] }
@@ -144,7 +146,19 @@ final class EditorItemList {
     owner = nil
     detail = nil
     selection = nil
+    wantsFocus = false
     onClose(dismissal.returnsFocus)
+  }
+
+  /// 行の列へフォーカスを入れる（行の列が窓に載っていなければ、載った時点で当てる）。器を SwiftUI の中に載せる持ち主が、
+  /// 開いた後に呼ぶ——行の列が窓に載る時点を、持ち主が決められないため。
+  func requestFocus() {
+    wantsFocus = true
+    list.list.applyFocusRequest()
+  }
+
+  func focusRequestDidApply() {
+    wantsFocus = false
   }
 
   /// 持ち主が変わった。詳細に入っていれば詳細の中身を引き直し、作れなければ一覧へ戻る。一覧なら一覧の中身を引き直す。選択は

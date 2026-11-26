@@ -35,9 +35,9 @@ final class EditorItemListSource: RowListSource {
     EditorItemListRowView.prepare(for: appearance)
   }
 
-  var wantsFocus: Bool { false }
+  var wantsFocus: Bool { itemList?.wantsFocus ?? false }
 
-  func focusRequestDidApply() {}
+  func focusRequestDidApply() { itemList?.focusRequestDidApply() }
 
   func focusDidChange(_ focused: Bool) {
     if !focused { itemList?.focusDidLeave() }
