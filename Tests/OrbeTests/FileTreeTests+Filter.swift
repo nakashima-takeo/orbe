@@ -40,8 +40,9 @@ extension FileTreeTests {
     XCTAssertEqual(tree.filter.shown?.matchCount, 0)
   }
 
-  /// 絞り込みの間のフォルダの開閉は絞り込みの中だけのもの——押すと畳めて選択は動かず、字を変えると全部開いた形に戻り、字を空に
-  /// すると絞り込む前の開閉に戻る。絞り込みの間に開いたファイルは、解いたツリーで祖先が開いて選択の行になる。
+  /// 絞り込みの間のフォルダの開閉は絞り込みの中だけのもの——押すと畳めて選択は動かず、字を変えると全部開いた形に戻り（新しい字の
+  /// 結果が届くまでは前の字の結果のまま）、すべて折りたたむも結果のフォルダだけを畳み、字を空にすると絞り込む前の開閉に戻る。
+  /// 絞り込みの間に開いたファイルは、解いたツリーで祖先が開いて選択の行になる。
   func testFolderTogglesWhileFilteringStayInsideTheFilter() throws {
     let tree = shownTree()
     tree.toggle("docs")
@@ -54,11 +55,17 @@ extension FileTreeTests {
     XCTAssertEqual(names(tree), ["docs", "src/sub", "  deep.md"], "押すと畳む")
     XCTAssertEqual(tree.selected, "a.txt", "選択は動かない")
 
+    tree.setFilterText("m")
+    XCTAssertEqual(
+      names(tree), ["docs", "  readme.md", "src/sub", "  deep.md"],
+      "新しい字の結果が届くまで、前の字の結果を全部開いた形で出したまま")
     filter(tree, "m")
     XCTAssertEqual(
       names(tree), ["docs", "  readme.md", "src", "  sub", "    deep.md", "  main.swift"],
       "字を変えると全部開いた形に戻る")
     tree.reveal(repo.url("src/sub/deep.md"))
+    tree.collapseAll()
+    XCTAssertEqual(names(tree), ["docs", "src"], "すべて折りたたむは、結果のフォルダだけを畳む")
 
     tree.setFilterText("")
     XCTAssertEqual(
