@@ -7,7 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 狭い窓で、右端の主な操作のボタン（コミット・レビュー）より先に中ほどの札が残り、ボタンが押せなく
 /// なる。今のファイルの親のパスが収まらないだけで「⌥ 端末を表示」まで消える。後から足した画面ごとの部品が、決めた順と違う順で
-/// 譲る。
+/// 譲る。中ほどの札が落ちて幅が空いても、先に譲っていた今の項目の名前が、狭い姿のまま戻らない。
 @MainActor
 final class EditorBarLayoutTests: OrbeTestCase {
   private static let spacing: CGFloat = 6

@@ -6,13 +6,15 @@ import XCTest
 @testable import Orbe
 
 /// 上のバーの行（`EditorBarRow`）に、実物の部品を置いたときの置き方——右寄せの部品は右端に詰まり、落とした部品は行の枠の外へ
-/// 出て押下も受けず、幅が変わっても部品は作り直されない。右端のボタンは、自分の枠と、消えたことを知らせる。今の項目の名前は、
-/// 読める下限より狭くならない。
+/// 出て押下も受けず、行の中に残った落とせる部品は、行のどこに在っても押下を受ける。幅が変わっても部品は作り直されない。
+/// 右端のボタンは、自分の枠と、消えたことを知らせる。名前は読める下限より狭くならず、下限の幅では先頭の字と「…」として
+/// 描かれる（末尾を省く名前も同じ）。
 ///
 /// 壊れると何が起きるか: 狭い窓で、右端の主な操作のボタンが落ちる・右端から離れる。落とした部品が行の中に描かれて、ほかの
-/// 部品と重なる。見えない札が、バーの右端の押下を受けて働く。窓の幅を変えるたびに、バーの入力欄（ファイル内検索の欄）が
-/// 作り直され、フォーカスと変換中の文字が消える。消えたボタンの枠が残り、そこを押してもポップアップが閉じない。名前が消える
-/// まで縮み、中ほどの札が消えた途端に名前が戻る。
+/// 部品と重なる。見えない札が、バーの右端の押下を受けて働く。行の右寄りに残った札が、押しても働かない。窓の幅を変えるたびに、
+/// バーの入力欄（ファイル内検索の欄）が作り直され、フォーカスと変換中の文字が消える。消えたボタンの枠が残り、そこを押しても
+/// ポップアップが閉じない。中ほどの札が出ているのに、今の項目の名前が消える・「…」だけになり、どのファイルか読めない。
+/// ブランチ名が、先頭の 4 字も読めない姿まで縮む。
 @MainActor
 final class EditorBarRowTests: OrbeTestCase {
   /// 部品の枠（`EditorBarRoot.space` の座標）の記録。
@@ -242,26 +244,48 @@ final class EditorBarRowTests: OrbeTestCase {
   func testAtTheFloorTheNameIsDrawnAsItsFirstCharacterAndAnEllipsis() throws {
     let font = Font.theme.editorItemButtonName
     let floor = width(Text("A…").font(font).fixedSize(), .infinity)
-    func drawn<V: View>(_ view: V) throws -> Data {
-      let host = NSHostingView(
-        rootView: view.frame(width: floor, height: Theme.Layout.editorBar, alignment: .leading))
-      host.frame = NSRect(x: 0, y: 0, width: floor, height: Theme.Layout.editorBar)
-      host.appearance = NSAppearance(named: .darkAqua)
-      let window = NSWindow(
-        contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-      window.contentView = host
-      holdUntilTestEnds(window)
-      host.layoutSubtreeIfNeeded()
-      let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-      host.cacheDisplay(in: host.bounds, to: rep)
-      return try XCTUnwrap(rep.tiffRepresentation)
-    }
-    let name = try drawn(EditorReadableName("AppShell.swift") { Text($0).font(font) })
-    let expected = try drawn(Text("A…").font(font).fixedSize())
+    let name = try drawn(EditorReadableName("AppShell.swift") { Text($0).font(font) }, width: floor)
+    let expected = try drawn(Text("A…").font(font).fixedSize(), width: floor)
 
     XCTAssertNotEqual(
-      expected, try drawn(Text("…").font(font).fixedSize()), "前提: 描いた姿で、字の違いが見分けられる")
+      expected, try drawn(Text("…").font(font).fixedSize(), width: floor),
+      "前提: 描いた姿で、字の違いが見分けられる")
     XCTAssertEqual(name, expected, "先頭の字と「…」")
+  }
+
+  /// 末尾を省く名前（ブランチ名）は、幅が在る間は、中ほどを省く名前とは違う姿に縮む。読める下限の幅では、先頭から渡した字数の字と
+  /// 「…」として描かれる。
+  func testATailTruncatedNameStopsAtItsReadableFloor() throws {
+    let font = Font.theme.editorBarChip
+    let branch = "feat/editor-overlay"
+    func name(_ truncation: EditorNameTruncation) -> some View {
+      EditorReadableName(branch, prefixLength: 4, truncation: truncation) { Text($0).font(font) }
+    }
+    let floor = width(Text("feat…").font(font).fixedSize(), .infinity)
+    let between = (floor + width(Text(branch).font(font).fixedSize(), .infinity)) / 2
+
+    XCTAssertNotEqual(
+      try drawn(name(.tail), width: between), try drawn(name(.middle), width: between),
+      "幅が在る間は、中ほどを省く名前とは違う姿")
+    XCTAssertEqual(
+      try drawn(name(.tail), width: floor),
+      try drawn(Text("feat…").font(font).fixedSize(), width: floor), "下限の幅では、先頭の 4 字と「…」")
+  }
+
+  /// `view` を、幅 `width`・バーの高さの枠に左寄せで描いた姿。
+  private func drawn<V: View>(_ view: V, width: CGFloat) throws -> Data {
+    let host = NSHostingView(
+      rootView: view.frame(width: width, height: Theme.Layout.editorBar, alignment: .leading))
+    host.frame = NSRect(x: 0, y: 0, width: width, height: Theme.Layout.editorBar)
+    host.appearance = NSAppearance(named: .darkAqua)
+    let window = NSWindow(
+      contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = host
+    holdUntilTestEnds(window)
+    host.layoutSubtreeIfNeeded()
+    let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    host.cacheDisplay(in: host.bounds, to: rep)
+    return try XCTUnwrap(rep.tiffRepresentation)
   }
 
   /// 下限の字数を渡せば、名前は先頭のその字数と「…」の幅より狭くならない。名前がその字数より短ければ、下限は名前の全体の幅。
