@@ -7,12 +7,12 @@ import XCTest
 /// コミットのポップアップの開閉（エディター面に結んだもの）——変更の列の ⌘↑ は、どの行を選んでいても開いてメッセージ欄へ
 /// フォーカスを入れる。コミットが通れば閉じてフォーカスは開く前の場所へ戻り（変更の列の行が無くなっていれば本体へ移り）、
 /// 最後のコミットの取り消しと、コミットの失敗では開いたまま。
-/// 閉じるとコミットの操作の失敗（赤い行）は消え、ほかの操作の失敗は残る。▾ のメニューは開くとフォーカスを行の列へ移し、
+/// 閉じても失敗は消えない（赤い行に出していたコミットの操作の失敗も残る）。▾ のメニューは開くとフォーカスを行の列へ移し、
 /// 何も選ばずに始まり、esc はメニューだけを閉じて欄へ戻す。
 ///
 /// 壊れると何が起きるか。列の途中の行で ⌘↑ を押しても開かない。コミットの後もポップアップが残る。フォーカスが窓へ落ちて
-/// キーがどこにも届かない。取り消した直後に書き直そうとすると閉じている。コミットの失敗の赤い行が、閉じても残って、開くたびに
-/// 出る。閉じると、プルの失敗まで消える。▾ を開いた直後の ↵ で思わず amend する。メニューの esc でポップアップごと閉じて
+/// キーがどこにも届かない。取り消した直後に書き直そうとすると閉じている。閉じると、hook の
+/// 失敗の理由やプルの失敗が消え、理由を見られない。▾ を開いた直後の ↵ で思わず amend する。メニューの esc でポップアップごと閉じて
 /// 打ちかけを見失う。
 extension SourceControlPaneTests {
   /// 上向きの矢印のキーの字。
@@ -90,9 +90,9 @@ extension SourceControlPaneTests {
     XCTAssertTrue(popup.isOpen, "取り消しでは閉じない")
   }
 
-  /// コミットが失敗しても開いたまま。閉じると、コミットの操作の失敗は消える（開き直しても赤い行は出ない）。ポップアップの
-  /// 外（置き場の失敗の札）に出す失敗（プルの失敗）は、閉じても残る。
-  func testClosingThePopupClearsOnlyTheFailureOfACommitOperation() throws {
+  /// コミットが失敗しても開いたまま。閉じても、コミットの操作の失敗は残る（閉じている間は置き場の失敗の札に出る）。ポップアップの
+  /// 外（置き場の失敗の札）に出す失敗（プルの失敗）も、閉じても残る。
+  func testClosingThePopupKeepsTheFailure() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "edited\n")
     let hook = repo.dir.appendingPathComponent(".git/hooks/pre-commit")
@@ -109,7 +109,7 @@ extension SourceControlPaneTests {
     XCTAssertEqual(control.failure?.kind, .commit)
     XCTAssertTrue(popup.isOpen, "失敗では閉じない")
     popup.toggle()
-    XCTAssertNil(control.failure, "閉じるとコミットの失敗は消える")
+    XCTAssertEqual(control.failure?.kind, .commit, "閉じてもコミットの失敗は残る")
 
     popup.open()
     hosted.scm.pull()

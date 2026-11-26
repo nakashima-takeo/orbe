@@ -7,7 +7,8 @@ import XCTest
 /// Changes の上のバーとコミットのポップアップの flow（fixture は `ScmFixtures`——本物の git の場。窓に付けた面の中で撮る）:
 /// バー（ブランチ名・同期 ↑N ↓M・コミットとステージ済みの行数）→ 開く（空の欄・押せない「コミット」）→ 打つ → 複数行 →
 /// ▾ のメニュー（↓ で「コミットしてプッシュ」を選ぶ）→ esc でメニューだけ閉じる → 失敗する pre-commit hook で赤い行 →
-/// 閉じて開き直す（赤い行は消えている）→ 狭い窓（添え書き → ブランチ名の省略 → ブランチ名の札の順に譲る）。
+/// 閉じる（失敗は置き場の失敗の札に出る）→ 開き直す（赤い行に戻る）→ 札の × で消して、狭い窓（添え書き → ブランチ名の
+/// 省略 → ブランチ名の札の順に譲る）。
 extension DesignFlowSnapshotTests {
   func testEditorScmCommit() throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -46,17 +47,13 @@ extension DesignFlowSnapshotTests {
             pumpMain(until: { control.failure != nil }, "赤い行")
           }
         ),
-        (
-          "reopened",
-          {
-            popup.close(.escape)
-            popup.open()
-          }
-        ),
+        ("closed", { popup.close(.escape) }),
+        ("reopened", { popup.open() }),
         (
           "narrow",
           {
             popup.close(.escape)
+            control.clearFailure()
             scene.pane.window?.setContentSize(NSSize(width: 640, height: 640))
           }
         ),
