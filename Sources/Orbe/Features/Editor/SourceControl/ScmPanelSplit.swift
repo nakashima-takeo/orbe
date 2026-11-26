@@ -1,9 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// パネルヘッダーの下を、親「ソース管理」とグラフの枠に割り振る。両方開いていれば、グラフの枠は持っている高さ（親に最低限を残す上限で
-/// 丸める）、親は残り。親を畳めばグラフの枠が残りを全部取り、グラフを畳めば見出しだけが下端に寄る（→ `ScmPanelSplit`）。
-/// 境目は両方開いているときだけ出し、引けばグラフの枠の高さを変える。
+/// パネルヘッダーの下を、親「ソース管理」とグラフの枠に割り振る。両方開いていれば、グラフの枠は持っている高さ（親に
+/// 最低限を残す上限で丸める）、親は残り。親を畳めばグラフの枠が残りを全部取り、グラフを畳めば見出しだけが下端に寄る
+/// （→ `ScmPanelSplit`）。境目は両方開いているときだけ出し、引けばグラフの枠の高さを変える。変更の列は、行が無く、これからも
+/// 来ない（git 管理下で、今の status から組んだ行の組が空）とき、上に「変更なし」の一言を置く。列は一言の下に置いたままに
+/// する——列にあるフォーカスを、変更が無くなった時点で窓へ落とさないため。
 struct ScmSplit: View {
   let panel: ScmPanel
   let list: RowList<ScmListSource>
@@ -13,6 +15,7 @@ struct ScmSplit: View {
   @State private var above = Theme.Layout.editorScmRow
   /// 境目を掴んだときのグラフの枠の高さ。
   @State private var grabbed: CGFloat?
+  @Environment(\.localization) private var l10n
 
   var body: some View {
     GeometryReader { proxy in
@@ -23,6 +26,9 @@ struct ScmSplit: View {
         ScmRepositoryHead(panel: panel)
           .onGeometryChange(for: CGFloat.self, of: \.size.height) { above = $0 }
         if panel.isRepositoryOpen {
+          if panel.listState == .none {
+            EditorSidebarNote(text: l10n.string(.editorScmNoChanges))
+          }
           ScmList(panel: panel, list: list)
         } else {
           Spacer(minLength: 0)
