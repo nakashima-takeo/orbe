@@ -13,14 +13,13 @@ extension PrCommentLayer {
     let zone = PrCommentZone(
       subject: .thread(thread), line: line, fieldID: "thread:\(thread.id)",
       text: state.commentDrafts.replies[thread.id]?.body ?? "")
-    let opening = threadToOpen == thread.id
-    if opening { threadToOpen = nil }
-    zone.isCollapsed = thread.isResolved && !zone.hasText && !opening
+    zone.isCollapsed = thread.isResolved && !zone.hasText && revealRequest?.thread != thread.id
     zone.onPress = { [weak self] zone, control in self?.press(control, in: zone) }
     zone.onTextChange = { [weak self] zone in self?.replyDidChange(zone) }
     zone.onFieldFocus = { [weak self] zone, primary in
       self?.fieldFocusDidChange(zone, primary: primary)
     }
+    zone.onTypeset = { [weak self] zone in self?.zoneDidTypeset(zone) }
     threads[thread.id] = zone
     return zone
   }

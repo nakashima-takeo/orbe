@@ -39,6 +39,8 @@ extension EditorPaneView {
     scm.isLive = live
     updatePanelsShown()
     updateDiffWatching()
+    // 隠れた面の diff は、見せるよう頼まれたスレッドを後から見せない（出し直したときに画面を動かさない）。
+    if !live { diff?.comments?.endReveal() }
     if live { group?.editor.prepareSurfaces() }
     reconcileWithLists()
     needsLayout = true

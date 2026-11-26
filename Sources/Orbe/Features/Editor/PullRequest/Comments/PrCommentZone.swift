@@ -81,6 +81,10 @@ final class PrCommentZone: SurfaceZone {
   private(set) var isFieldPrimary = false
   /// 最後に組んだ絵のリンクの行き先（コメントの id → 本文の層の中の通し番号 → URL）。
   private var links: [String: [Int: URL]] = [:]
+  /// 最後に組んだ開いた絵の、コメントごとの縦の範囲（コメントの id → 絵の座標の上端〜下端。畳んだ絵・欄なら空）。
+  private(set) var commentSpans: [String: Range<CGFloat>] = [:]
+  /// 本文を裏で組み終えて描き直した。
+  var onTypeset: (PrCommentZone) -> Void = { _ in }
   private let bodies = PrCommentBodies()
   /// 入力欄の行の数と、空か（字が無いか）と、空白と改行のほかの字が無いか（どれかが変わったときだけ描き直す）。
   private var fieldShape: FieldShape
@@ -111,7 +115,11 @@ final class PrCommentZone: SurfaceZone {
       guard let self else { return }
       onPress(self, .add)
     }
-    bodies.done = { [weak self] in self?.redraw() }
+    bodies.done = { [weak self] in
+      guard let self else { return }
+      redraw()
+      onTypeset(self)
+    }
   }
 
   /// スレッドの値を置き換える（中身が変われば描き直す）。
@@ -198,6 +206,7 @@ final class PrCommentZone: SurfaceZone {
         thread, bodies: bodies, field: field, state, width: width)
     }
     links = composed.links
+    commentSpans = composed.comments
     return composed.picture
   }
 }

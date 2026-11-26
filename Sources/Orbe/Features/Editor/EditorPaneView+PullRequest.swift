@@ -48,7 +48,7 @@ extension EditorPaneView {
   }
 
   /// 未送信のコメント `comment` の場所へ移る——そのパスの PR の diff を、左の列の行を Enter で開くのと同じ口で開き（行を
-  /// 選び、本文へ焦点を移す）、diff にその側と行を見せるよう頼み、コメントの層にそのスレッドを開くよう頼む。
+  /// 選び、本文へ焦点を移す）、コメントの層に、そのスレッドを開いて、置いたらその行と押したコメントを見せるよう頼む。
   private func reveal(_ comment: PullRequestState.PendingComment) {
     guard let key = pullRequest.diffKey(of: comment.path) else { return }
     if pullRequest.reveal(file: comment.path) {
@@ -57,9 +57,6 @@ extension EditorPaneView {
       openScmDiff(key, .commit)
     }
     guard let diff, diff.id == key else { return }
-    if let line = comment.line {
-      diff.show(EditorDiff.SideLine(version: comment.side == .old ? .old : .new, line: line - 1))
-    }
-    diff.comments?.openThread(comment.thread)
+    diff.comments?.requestReveal(thread: comment.thread, comment: comment.id)
   }
 }

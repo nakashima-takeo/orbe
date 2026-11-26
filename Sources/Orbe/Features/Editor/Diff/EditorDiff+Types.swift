@@ -96,8 +96,7 @@ extension EditorDiff {
     let switched: (EditorDocument?) -> Void
   }
 
-  /// 初めての位置決めの段階。開いた時点に追いついた最初の並びで 1 回だけ、最初の変更区間（見せる行を頼まれていれば、その行）
-  /// へ送る（以後の変化では送らない）。
+  /// 初めての位置決めの段階。開いた時点に追いついた最初の並びで 1 回だけ、最初の変更区間へ送る（以後の変化では送らない）。
   enum Placement {
     /// 開いた後の根のサービスの取り直しと、その後の状態から作った並びを待っている。
     case catchingUp
@@ -105,12 +104,6 @@ extension EditorDiff {
     case sizing
     /// 決めた。以後は作り直しで、見えていた所を引き継ぐだけ。
     case placed
-  }
-
-  /// 見せる行——側 `version` の版の行 `line`（0 始まり）。
-  struct SideLine: Equatable {
-    let version: DiffRows.Version
-    let line: Int
   }
 
   /// 作り直した新しい側の面で先頭に置く所。

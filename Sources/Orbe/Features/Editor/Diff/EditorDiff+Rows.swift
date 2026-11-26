@@ -40,6 +40,7 @@ extension EditorDiff {
       }
     }
     placeFirstView(on: surface)
+    revealRequestedThread()
     sendVisibleRemovedLines(on: surface)
   }
 
@@ -55,33 +56,23 @@ extension EditorDiff {
   }
 
   /// 面に初めて見せる位置へ送る——位置を決めた後に作り直した面なら前の面で先頭に見えていた所、まだなら、開いた時点に
-  /// 追いついた並びで 1 回だけ最初の変更区間（無ければ送らない）。見せる行を頼まれていれば、最初の変更区間の代わりに
-  /// （位置を決めた後なら、前の面で先頭に見えていた所を置いた上で）その行へ送る。どれも見えている高さで決まる位置なので、
-  /// 面がまだ大きさを持たない（本体に置いた直後の配置の前）なら送らず、大きさが決まって見えている範囲が変わったとき
-  /// （`viewportDidChange`）に送る。初めての位置を決めたら pane へ知らせる——中身も面も変わらず位置だけが決まったときも、
-  /// pane に配置を頼ませ、その配置で色を待たせる。
+  /// 追いついた並びで 1 回だけ最初の変更区間（無ければ送らない）。どちらも見えている高さで決まる位置なので、面がまだ大きさを
+  /// 持たない（本体に置いた直後の配置の前）なら送らず、大きさが決まって見えている範囲が変わったとき（`viewportDidChange`）に
+  /// 送る。初めての位置を決めたら pane へ知らせる——中身も面も変わらず位置だけが決まったときも、pane に配置を頼ませ、その
+  /// 配置で色を待たせる。
   func placeFirstView(on surface: any TextSurface) {
     switch placement {
     case .placed:
       guard surface.viewport.visibleLines > 0 else { return }
       carryTop(to: surface)
-      revealLineToShow(on: surface)
     case .catchingUp, .sizing:
       guard placement == .sizing || isCaughtUp else { return }
       placement = .sizing
       guard surface.viewport.visibleLines > 0 else { return }
       placement = .placed
-      if !revealLineToShow(on: surface) { revealFirstChange(on: surface) }
+      revealFirstChange(on: surface)
       onPresentationChange?()
     }
-  }
-
-  /// 側と行 `line` を見せる。初めての位置を決める前なら、決めるときに最初の変更区間の代わりにその行へ送り、決めた後なら
-  /// 今送る（見せていない・面がまだ大きさを持たないなら、見せて大きさが決まったときに送る）。
-  func show(_ line: SideLine) {
-    lineToShow = line
-    guard presented != nil, let surface = newSurface else { return }
-    placeFirstView(on: surface)
   }
 
   /// 並びが開いた時点に追いついている。条件は 3 つ——中身を見せられて並びがある、出どころが待つと答えておらず裏の行差分も
@@ -152,28 +143,5 @@ extension EditorDiff {
     surface.reveal(
       from: lines.lowerBound > 0 ? RowPosition(line: lines.lowerBound - 1) : .head(of: 0),
       to: RowPosition(line: lines.upperBound), policy: .center)
-  }
-
-  /// 頼まれた見せる行が見える位置へ送り、頼みを外す——行の上端から次の行の上端（行の下に置いたスレッドの絵を含む）までを、
-  /// 行を中央に置いて見せ、収まらなければ行を上端に置く。古い側の行は、並びの中の位置（インラインなら差し込んだ削除行、並列
-  /// なら左の面の行に揃う段）へ直す。行がその側の版の行の外なら、最後の行を見せる。並びがまだ無ければ送らずに頼みを残す。
-  /// 送ったときは true を返す。
-  @discardableResult
-  private func revealLineToShow(on surface: any TextSurface) -> Bool {
-    guard let target = lineToShow, let (hunks, newSide) = currentRows else { return false }
-    lineToShow = nil
-    let lines = target.version == .old ? oldSide.lines : newSide.lines
-    let line = min(target.line, max(0, lines - 1))
-    let side = presented == .side
-    let row = { (line: Int) -> LineRow in
-      switch target.version {
-      case .new: LineRow(line: line)
-      case .old: DiffRows.lineRow(of: DiffRows.Anchor(line: line, added: 0), hunks, side: side)
-      }
-    }
-    surface.reveal(
-      from: surface.position(ofLineRow: row(line)), to: surface.position(ofLineRow: row(line + 1)),
-      policy: .center)
-    return true
   }
 }

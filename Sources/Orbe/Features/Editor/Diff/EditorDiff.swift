@@ -61,8 +61,6 @@ final class EditorDiff {
   var surfacesChanged = false
   /// 新しい側の版の面を作り直したとき、新しい面で先頭に置く所。
   var carried: Carried?
-  /// 頼まれた、まだ面へ送っていない見せる行（→ `show`）。
-  var lineToShow: SideLine?
   /// PR の diff のコメントの層（ほかの種類の diff には無い）。
   let comments: PrCommentLayer?
 
@@ -81,6 +79,7 @@ final class EditorDiff {
       }
     }
     comments?.onRowsChange = { [weak self] in self?.applyRows() }
+    comments?.onRevealChange = { [weak self] in self?.revealRequestedThread() }
   }
 
   /// 種類の出どころで開く。作業ツリー diff は `documents`（セッション）から新しい側の文書を引く。テキスト面を作れなければ
@@ -214,9 +213,8 @@ final class EditorDiff {
   /// 新しい側の面の見えている範囲が変わった（インラインでは古い側の見えている削除行を先に色付けする）。
   func viewportDidChange() {
     guard presented != nil, let surface = newSurface else { return }
-    if placement != .placed || carried != nil || lineToShow != nil {
-      placeFirstView(on: surface)
-    }
+    if placement != .placed || carried != nil { placeFirstView(on: surface) }
+    revealRequestedThread()
     sendVisibleRemovedLines(on: surface)
   }
 
@@ -352,6 +350,7 @@ final class EditorDiff {
       (document?.surface ?? newRevisionSurface)?.rowSourceRolesDidChange(ranges)
     }
     revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
+    revision.onUserInput = { [weak self] in self?.userDidInput() }
     old = revision
     oldSide = DiffRows.Side(text == nil ? nil : revision.text)
   }
@@ -381,6 +380,7 @@ final class EditorDiff {
     newRevision?.detach()
     revision.onViewportChange = { [weak self] in self?.viewportDidChange() }
     revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
+    revision.onUserInput = { [weak self] in self?.userDidInput() }
     newRevision = revision
     newRevisionSide = DiffRows.Side(text == nil ? nil : revision.text)
     newRevisionSurface = surfaces.make()

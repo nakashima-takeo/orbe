@@ -27,8 +27,10 @@ final class PrCommentLayer {
   var held: [String: PrCommentPlacement] = [:]
   /// 新しいコメントの欄（書きかけの通し番号の順。開いた順でもある）。
   var drafts: [PrCommentPlacement] = []
-  /// 開いた姿で作る、まだ絵の無いスレッドの id（→ `openThread`）。
-  var threadToOpen: String?
+  /// 見せるよう頼まれたスレッドと押したコメント（→ `PrCommentLayer+Reveal`）。
+  var revealRequest: RevealRequest?
+  /// 見せるよう頼まれたスレッドの絵を置いた・本文を組み終えた（diff が見せる）。
+  var onRevealChange: () -> Void = {}
   /// 求めた（求めている）印を出せる行の、両端と結果。
   private var commentable: (ends: PullRequestState.DiffEnds, lines: GitDiffHunkLines?)?
   /// 最後に並びへ注記を渡した両端とその両側の本文、並列の古い側の面（インラインでは nil）。
@@ -87,16 +89,6 @@ final class PrCommentLayer {
   /// スレッド `id` の絵の差し込み（まだ置いていなければ nil）。
   func zone(thread id: String) -> PrCommentZone? { threads[id] }
 
-  /// スレッド `id` を開く——絵があれば開き、まだ無ければ、絵を作るときに開いた姿で作る（スレッドの絵は、レビューのやりとりと
-  /// diff の両端が揃ってから置かれる）。
-  func openThread(_ id: String) {
-    if let zone = threads[id] {
-      zone.isCollapsed = false
-    } else {
-      threadToOpen = id
-    }
-  }
-
   /// 側 `version` の行 `line`（0 始まり）に置いている新しいコメントの欄（行が現在の diff に無い欄を含む）。
   func draft(_ version: DiffRows.Version, line: Int) -> PrCommentZone? {
     drafts.first { $0.version == version && $0.line == line }?.zone
@@ -134,7 +126,9 @@ final class PrCommentLayer {
     // 新しい両端の本文を読み終えるまで）は、古い側の行のスレッドを前の並びに置かない（GitHub は古い側の行を今の
     // マージベースの diff の行として読む）。
     let isCurrent = state.diffEnds == ends
+    if !isCurrentPullRequest { endReveal() }
     if let read = state.threads(at: ends.head) {
+      settleRevealRequest(read, ends: ends)
       let ids = Set(read.map(\.id))
       for (id, zone) in threads where !ids.contains(id) { forget(id, zone) }
       // 同じ行（並びの同じ所）の差し込みは列の順に上から並ぶので、側を問わず最初のコメントの時刻の順に積み、行を追う欄は

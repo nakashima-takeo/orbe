@@ -25,10 +25,12 @@ enum PrCommentPicture {
     let language: Language
   }
 
-  /// 組んだ絵と、その絵のリンクの行き先（コメントの id → 本文の層の中の通し番号 → URL）。
+  /// 組んだ絵と、その絵のリンクの行き先（コメントの id → 本文の層の中の通し番号 → URL）と、開いたスレッドのコメントごとの
+  /// 縦の範囲（コメントの id → 絵の座標の上端〜下端）。
   struct Composed {
     let picture: ZonePicture
     let links: [String: [Int: URL]]
+    var comments: [String: Range<CGFloat>] = [:]
   }
 
   /// 頭の帯の敷き方。
@@ -73,9 +75,12 @@ enum PrCommentPicture {
     var y = frame.minY + 1
     header(thread, collapsed: false, in: frame, top: y, &canvas)
     y += Size.editorPrThreadHead + 1 + Size.editorPrThreadListPadY
+    var spans: [String: Range<CGFloat>] = [:]
     for (index, comment) in thread.comments.enumerated() {
       if index > 0 { y += Size.editorPrThreadCommentGap }
+      let top = y
       y += self.comment(comment, bodies[comment.id], in: frame, top: y, &canvas)
+      spans[comment.id] = top..<y
     }
     y += Size.editorPrThreadListPadY
     if thread.canReply {
@@ -86,7 +91,9 @@ enum PrCommentPicture {
     }
     y += notice(in: frame, top: y, &canvas)
     y += failure(in: frame, top: y, &canvas)
-    return canvas.finish(frame, bottom: y + 1, head: .top)
+    var composed = canvas.finish(frame, bottom: y + 1, head: .top)
+    composed.comments = spans
+    return composed
   }
 
   // MARK: - 畳んだスレッド

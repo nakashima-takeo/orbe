@@ -36,6 +36,7 @@ extension EditorPaneView {
   /// diff を本体から外す——面を外し、知らせを解き、見せるのをやめる（文書の面はコードの見え方に戻る）。
   func hideDiff(_ diff: EditorDiff) {
     diff.onPresentationChange = nil
+    diff.comments?.endReveal()
     observeDiff(diff, false)
     for view in diffViews { view.removeFromSuperview() }
     diffViews = []
