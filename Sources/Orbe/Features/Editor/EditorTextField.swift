@@ -3,8 +3,8 @@ import SwiftUI
 
 /// 1 行の入力欄（AppKit の `NSTextField`）。命令でフォーカスを入れる欄（検索の列の入力欄・上のバーのファイル内検索の欄）が使う。
 /// フォーカスの要求は、欄が窓に載った時点か、要求が来た時点に、欄が自分で first responder になって当てる。フォーカスの出入り・
-/// 打った字（変換中の字は確定するまで入れない）・↵・⇧↵・esc は閉包で使う側へ知らせる。Tab は何もしない。取り消しの履歴は
-/// 欄ごとに持つ。
+/// 字の変化（打鍵・貼り付け・取り消し・やり直し。変換中の字は確定するまで入れない）・↵・⇧↵・esc は閉包で使う側へ知らせる。
+/// Tab は何もしない。取り消しの履歴は欄ごとに持ち、中身を外から差し替えたら捨てる。
 struct EditorTextField: NSViewRepresentable {
   let text: String
   let placeholder: String
@@ -36,7 +36,9 @@ struct EditorTextField: NSViewRepresentable {
       string: placeholder, attributes: [.font: font, .foregroundColor: placeholderColor])
     field.setAccessibilityLabel(placeholder)
     if field.stringValue != text, (field.currentEditor() as? NSTextView)?.hasMarkedText() != true {
+      // 差し替えは取り消しの履歴に積まず、古い履歴も捨てる——古い履歴の範囲は今の中身と食い違う。
       field.stringValue = text
+      context.coordinator.undo.removeAllActions()
     }
     if wantsFocus { context.coordinator.scheduleFocusRequest() }
   }
@@ -47,6 +49,22 @@ struct EditorTextField: NSViewRepresentable {
     weak var field: Field?
     let undo = UndoManager()
     private var focusScheduled = false
+    private var undoObservers: [NSObjectProtocol] = []
+
+    override init() {
+      super.init()
+      // 取り消し・やり直しは、テキスト面の字の変化の知らせ（`textDidChange`）を通らないので、履歴の側の知らせで拾う。
+      let center = NotificationCenter.default
+      let report: @Sendable (Notification) -> Void = { [weak self] _ in
+        MainActor.assumeIsolated { self?.field?.reportText() }
+      }
+      undoObservers = [NSNotification.Name.NSUndoManagerDidUndoChange, .NSUndoManagerDidRedoChange]
+        .map { center.addObserver(forName: $0, object: undo, queue: nil, using: report) }
+    }
+
+    deinit {
+      undoObservers.forEach(NotificationCenter.default.removeObserver)
+    }
 
     /// 要求を、SwiftUI の更新を終えた後に当てる（更新の途中で first responder を替えると、フォーカスの出入りの知らせが更新の
     /// 中で観測できる値を書き換える）。
@@ -112,6 +130,11 @@ struct EditorTextField: NSViewRepresentable {
 
     override func textDidChange(_ notification: Notification) {
       super.textDidChange(notification)
+      reportText()
+    }
+
+    /// 編集中の字を使う側へ知らせる（変換中は知らせない）。
+    func reportText() {
       guard let editor = currentEditor() as? NSTextView, !editor.hasMarkedText() else { return }
       coordinator?.view?.onTextChange(editor.string)
     }
