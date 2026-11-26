@@ -159,11 +159,11 @@ final class MessageTextView: NSTextView {
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
     guard string.isEmpty, !hasMarkedText(), !placeholder.isEmpty else { return }
-    let attributes: [NSAttributedString.Key: Any] = [
+    let placeholderAttributes: [NSAttributedString.Key: Any] = [
       .font: metrics.font, .foregroundColor: Theme.Color.editorTertiary,
     ]
     let origin = textContainerOrigin
-    let line = NSAttributedString(string: placeholder, attributes: attributes)
+    let line = NSAttributedString(string: placeholder, attributes: placeholderAttributes)
     // 行の高さを決めた欄では、字を行の上下の中央に置く（字の在る行の組み方と同じ位置）。
     let top = lineLayout.map { $0.baseline - metrics.font.ascender } ?? 0
     line.draw(
