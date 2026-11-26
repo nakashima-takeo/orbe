@@ -204,11 +204,56 @@ final class LineShaperTests: XCTestCase {
     XCTAssertEqual(shaped.width, expected, accuracy: 0.01, "行の幅")
   }
 
+  /// 字の字体と幅は、前後の字に依らず、その字（書記素）だけを本文の字体で Core Text に組ませたときの字体と幅に等しい——
+  /// 本文の字体に無い記号は、行頭でも英数字・和文の後ろでも同じ字体と幅で、かな・漢字は、ハングルなどの後ろでも和文の字体で
+  /// 出る。結合文字・ZWJ の絵文字・タイ文字の書記素も同じ。壊れると、同じ字が場所によって全角の字形になったり小さい字形に
+  /// なったりする。
+  func testACharactersFontAndWidthDoNotDependOnThePrecedingCharacters() throws {
+    let characters = ["※", "★", "あ", "漢", "か\u{3099}", "👍🏽", "👨‍👩‍👧", "กำ"]
+    let preceding = ["", "a", "あ", "😀", "한", "ก"]
+    for character in characters {
+      let alone = try coreTextAlone(character)
+      for before in preceding {
+        let placed = try placed(character, after: before)
+        XCTAssertTrue(CFEqual(placed.font, alone.font), "「\(before)」の後ろの \(character) の字体")
+        XCTAssertEqual(
+          placed.width, alone.width, accuracy: 0.01, "「\(before)」の後ろの \(character) の幅")
+      }
+    }
+  }
+
+  /// 字 `character` だけを、本文の字体と、言語を持たない字の属性で Core Text に組ませたときの字体と幅。
+  private func coreTextAlone(_ character: String) throws -> (font: CTFont, width: CGFloat) {
+    let line = CTLineCreateWithAttributedString(
+      NSAttributedString(
+        string: character,
+        attributes: [
+          .init(kCTFontAttributeName as String): font,
+          .init(kCTLanguageAttributeName as String): TextLanguage.neutral,
+        ]))
+    let runs = try XCTUnwrap(CTLineGetGlyphRuns(line) as? [CTRun])
+    XCTAssertEqual(runs.count, 1, "前提: \(character) は 1 つの字体で組まれる")
+    let font = try XCTUnwrap(GlyphFonts.font(of: try XCTUnwrap(runs.first)))
+    return (font, CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)))
+  }
+
+  /// 行 `before + character` を組んだときの、`character` の字体と幅。
+  private func placed(_ character: String, after before: String) throws -> (
+    font: CTFont, width: CGFloat
+  ) {
+    let start = (before as NSString).length
+    let shaped = LineShaper.shape(source(before + character), font: font, tabWidth: 0)
+    let run = try XCTUnwrap(shaped.runs.first { $0.offsets.contains(start) })
+    let carets = shaped.carets
+    return (run.font, carets.x(start + (character as NSString).length) - carets.x(start))
+  }
+
   /// 返信の欄の字（行の組版の規則）と、投稿されたコメントの字（絵の差し込みの字の組版）は、同じ字体で同じ文を組むと、
-  /// どの位置の x も等しい——約物が続く所でも、和文と英数字の境でも。壊れると、投稿したコメントの字の並びが、欄で書いて
-  /// いたときと変わる。上の検証と同じく、効くのは優先言語に日本語か中国語がある機械で実行したときだけ。
+  /// どの位置の x も等しい——約物が続く所でも、和文と英数字の境でも、和文の後ろの、字体に無い記号でも。壊れると、投稿した
+  /// コメントの字の並びが、欄で書いていたときと変わる。`testPunctuationIsNotCompressedAndLatinIsNotSpacedFromCJK` と同じく、
+  /// 効くのは優先言語に日本語がある機械で実行したときだけ（約物が続く所と、和文と英数字の境の検証は、中国語でも効く）。
   func testReplyFieldAndPostedCommentPlaceTheSameSentenceAlike() {
-    let string = "（注）。「x」、漢字123円"
+    let string = "（注）。「x」、漢字123円※★"
     let sans = NSFont.systemFont(ofSize: 12)
     let field = LineShaper.shape(source(string), font: sans as CTFont, tabWidth: 0).carets
     let posted = ZoneTextLayout.line([ZoneTextRun(string, font: sans, color: .black)])
