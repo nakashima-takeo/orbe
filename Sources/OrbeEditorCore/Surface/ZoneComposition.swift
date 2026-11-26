@@ -301,8 +301,10 @@ private struct Builder {
     kinds.append((kind, font))
   }
 
-  /// 段落の向きを `rightToLeft` に決めた属性文字列。
+  /// 段落の向きを `rightToLeft` に決めた属性文字列。元の文の字は、字ごとの字体の表（`GlyphFonts`）の字体で組む——
+  /// 見え方の字体に無い字の字体が、前の字の代替フォントに引きずられない（テキスト面の行の組版と同じ決まり）。
   func attributed(rightToLeft: Bool) -> CFAttributedString {
+    let kinds = pinned(self.kinds)
     let string = units.withUnsafeBufferPointer {
       CFStringCreateWithCharacters(nil, $0.baseAddress, $0.count)!
     }
@@ -346,6 +348,27 @@ private struct Builder {
     }
     CFAttributedStringEndEditing(attributed)
     return attributed
+  }
+
+  /// `kinds` の元の文の字の字体を、同じ字体が続く範囲ごとに、表の字体に替えたもの（字体が 1 つに決まらない字は見え方の
+  /// 字体のまま）。
+  private func pinned(_ kinds: [(kind: Kind, font: CTFont?)]) -> [(kind: Kind, font: CTFont?)] {
+    var pinned = kinds
+    var start = 0
+    while start < kinds.count {
+      guard case .text = kinds[start].kind, let font = kinds[start].font else {
+        start += 1
+        continue
+      }
+      var end = start + 1
+      while end < kinds.count, case .text = kinds[end].kind, kinds[end].font == font { end += 1 }
+      let glyphs = GlyphFonts.glyphs(ContiguousArray(units[start..<end]), font: font)
+      for index in start..<end {
+        pinned[index].font = glyphs.font(at: index - start) ?? font
+      }
+      start = end
+    }
+    return pinned
   }
 
   /// 続く字を同じ属性でまとめられるか（置き字は 1 字ずつ）。
