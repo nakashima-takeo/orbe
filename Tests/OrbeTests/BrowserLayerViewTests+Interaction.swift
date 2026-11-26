@@ -254,9 +254,14 @@ extension BrowserLayerViewTests {
     XCTAssertEqual(finishCount, 1, "不正入力では遷移しない")
 
     XCTAssertTrue(window.makeFirstResponder(outsider))
-    let externalResponder = window.firstResponder
+    flush(window)
+    nextTurn()
     XCTAssertFalse(browser.isEditingURL, "不正入力 Enter 後の他所焦点移動でも blur で自動終了する")
-    XCTAssertTrue(window.firstResponder === externalResponder, "外因終了は他所の焦点を奪い返さない")
+    let responder = try XCTUnwrap(window.firstResponder as? NSView)
+    XCTAssertTrue(
+      responder === outsider || responder.isDescendant(of: outsider),
+      "外因終了は他所の焦点を奪い返さない")
+    XCTAssertFalse(browser.focusIsInside, "外因終了後にブラウザへ焦点が戻らない")
 
     // 3. 非変換中の Esc 取消と有効 URL の Enter 確定はどちらもブラウザ本体へ焦点を戻す。
     _ = try beginAndFocusURLField(in: hosted)

@@ -292,6 +292,8 @@ extension WindowControllerBrowserTests {
     XCTAssertFalse(wc.browserView.isEditingURL, "URL 編集状態も解除される")
     XCTAssertTrue(wc.store.isHome(wc.activeWorkspace))
     XCTAssertEqual(wc.current.selection, .board)
+    XCTAssertTrue(wc.boardView.focusIsInside, "showAutomation 後にボードへ焦点が移る")
+    XCTAssertFalse(wc.browserView.isBrowserFocused, "ブラウザの焦点見た目が外れる")
     XCTAssertTrue(wc.isViewingAutomation(id), "右シートが閉じたため詳細欄を閲覧中として扱う")
     wc.attentionStore.transient = nil
     let playedBefore = sound.played.count
@@ -304,6 +306,8 @@ extension WindowControllerBrowserTests {
     XCTAssertFalse(wc.isViewingAutomation(id), "前提: 右シートで詳細欄が覆われている")
     wc.showAutomation(id)
     XCTAssertEqual(wc.browserMode, .closed, "Home ボード上の右シートも showAutomation で閉じる")
+    XCTAssertTrue(wc.boardView.focusIsInside, "Home ボード上の inPlace 経路でもボードへ焦点が移る")
+    XCTAssertFalse(wc.browserView.isBrowserFocused, "ブラウザの焦点見た目が外れる")
     XCTAssertTrue(wc.isViewingAutomation(id))
 
     // 3. 全面ブラウザで未視認端末の done を覆っている状態で showAutomation → 全面を閉じつつ done は消費しない。
@@ -321,6 +325,9 @@ extension WindowControllerBrowserTests {
     wc.setBrowserMode(.sheet, animated: false)
     wc.select(.board, inWorkspaceAt: homeIndex)
     XCTAssertEqual(wc.browserMode, .sheet, "通常の select(.board) は右シートを維持する")
-    XCTAssertFalse(wc.isViewingAutomation(id), "右シートが残るため詳細欄は覆われたまま")
+    XCTAssertTrue(wc.browserCoversBoard, "右シートが残るためボードは覆われたまま")
+    XCTAssertTrue(wc.boardView.focusIsInside, "通常の select(.board) でボードへ焦点が移る")
+    XCTAssertFalse(wc.browserView.focusIsInside, "右シートに焦点が残らない")
+    XCTAssertFalse(wc.browserView.isBrowserFocused, "右シートの焦点見た目が外れる")
   }
 }
