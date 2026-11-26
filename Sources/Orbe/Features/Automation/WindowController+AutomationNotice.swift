@@ -112,9 +112,7 @@ extension WindowController {
   func showAutomation(_ id: Int) {
     guard !model.overlay.isModal, let home = store.homeIndex else { return }
     if model.overlay != .none { dismissPalette() }
-    let inPlace = activeWorkspace == home && current.selection == .board
-    closeBrowserForUnderlay(animated: inPlace)
-    select(.board, inWorkspaceAt: home)
+    select(.board, inWorkspaceAt: home, closingBrowser: true)
     board.open(automation: id)
   }
 }

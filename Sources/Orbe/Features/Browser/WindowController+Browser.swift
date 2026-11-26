@@ -42,23 +42,15 @@ extension WindowController {
   }
 
   /// 下層へ明示的に移る命令（`select`・`toggleEditorFace`）の共通前処理。
-  /// 焦点記憶を必ず下層へ譲り、全面ブラウザは閉じ、右シートは URL 編集だけを外因終了して残す。
+  /// 焦点記憶を必ず下層へ譲り、全面ブラウザは閉じる。`closingSheet` が真なら右シートも閉じ、
+  /// 偽なら右シートは URL 編集だけを外因終了して残す。
   /// 途中状態の誤消費を防ぐため `done` 消費と焦点復帰・非焦点見た目の更新は行わず、後続の `renderSelection` に委ねる。
-  func yieldBrowserToUnderlay(animated: Bool) {
+  func yieldBrowserToUnderlay(animated: Bool, closingSheet: Bool = false) {
     browserWasFocused = false
-    if browserMode == .full {
+    if browserMode == .full || (closingSheet && browserMode == .sheet) {
       applyBrowserMode(.closed, animated: animated)
     } else if browserMode == .sheet {
       browserView.endURLEditingExternally()
-    }
-  }
-
-  /// ボード詳細欄など下層全面の露出を要する遷移（`showAutomation`）の前処理。
-  /// 全面だけでなく右シートも閉じ、`done` 消費と焦点復帰は後続の `renderSelection` に委ねる。
-  func closeBrowserForUnderlay(animated: Bool) {
-    browserWasFocused = false
-    if browserMode.isOpen {
-      applyBrowserMode(.closed, animated: animated)
     }
   }
 

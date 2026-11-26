@@ -24,15 +24,19 @@ extension WindowController {
   }
 
   /// `index` の workspace で `selection` を選び（前面でなければ、その workspace へ移る）、1 回だけ描く。`inEditor` なら選んだ
-  /// タブをエディターで見せ、そうでなければエディターを閉じる（タブは端末で出る）。workspace・選択・エディターで見せるタブを
+  /// タブをエディターで見せ、そうでなければエディターを閉じる（タブは端末で出る）。`closingBrowser` なら開いているブラウザを
+  /// 右シートも含めて閉じる（既定は全面のみ閉じて右シートを残す）。workspace・選択・エディターで見せるタブを
   /// すべて書いてから描く——先に workspace の切替を描くと、移り先ではないタブが一瞬「見ているタブ」になり、その done が消える。
   /// 動きを付けるのは、同じ workspace で選択が替わらず見せ方だけが変わるときだけ。範囲外の index と、不変条件に反する選択は
   /// 何もしない。workspace を替えたら、実効設定を反映して保存を予約する。
-  func select(_ selection: Workspace.Selection, inWorkspaceAt index: Int, inEditor: Bool = false) {
+  func select(
+    _ selection: Workspace.Selection, inWorkspaceAt index: Int, inEditor: Bool = false,
+    closingBrowser: Bool = false
+  ) {
     let switches = index != activeWorkspace
     let inPlace = !switches && current.selection == selection
     guard store.recordSelection(selection, inWorkspaceAt: index) else { return }
-    yieldBrowserToUnderlay(animated: inPlace)
+    yieldBrowserToUnderlay(animated: inPlace, closingSheet: closingBrowser)
     editorShownTab = inEditor ? current.selectedTab : nil
     renderSelection(animated: inPlace)
     guard switches else { return }
