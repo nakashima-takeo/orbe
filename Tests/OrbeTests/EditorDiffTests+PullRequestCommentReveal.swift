@@ -37,6 +37,7 @@ extension EditorDiffTests {
     _ = try open(state, path: "b.txt", into: opened.tab)
     XCTAssertEqual(pane.diff?.id.path, "b.txt", "前提: ほかのファイルの diff を見ている")
     let review = pane.reviewPopup
+    review.onOpenURL = { XCTFail("置ける行ではブラウザを開かない: \($0)") }
     pumpMain(until: { review.canOpen }, "前提: レビューを開ける")
     // 一覧から開く（閉じると焦点は一覧へ戻る。その上で、行から移ると焦点が本文へ移ることを見る）。
     let list = pane.pullRequestList.list
@@ -61,7 +62,7 @@ extension EditorDiffTests {
       "前提: 行 80 の畳んだスレッドを置いてある")
     review.press(try XCTUnwrap(state.pendingComments.first { $0.thread == "T_mid" }))
     XCTAssertTrue(pane.diff === diff, "前提: 同じ diff のまま")
-    pumpMain(until: { self.shows(surface, line: 79) }, "同じファイルの diff でも行 80 へ動く")
+    XCTAssertTrue(shows(surface, line: 79), "置いてあるスレッドなら、押したその場で行 80 へ動く")
     XCTAssertEqual(diff.comments?.zone(thread: "T_mid")?.isCollapsed, false, "置いてある畳んだスレッドが開く")
   }
 
@@ -84,6 +85,7 @@ extension EditorDiffTests {
     let pane = opened.tab.group.view.editor
     let state = try XCTUnwrap(pane.pullRequest.state)
     let diff = opened.diff
+    pane.reviewPopup.onOpenURL = { XCTFail("置ける行ではブラウザを開かない: \($0)") }
     pumpMain(until: { diff.placement == .placed }, "前提: 位置を決める")
     let press = { (thread: String) in
       pane.reviewPopup.press(try XCTUnwrap(state.pendingComments.first { $0.thread == thread }))
@@ -96,8 +98,8 @@ extension EditorDiffTests {
     pumpMain(until: { diff.comments?.zone(thread: "T_replaced") != nil }, "前提: スレッドが置かれる")
     try press("T_replaced")
     let zone = try XCTUnwrap(diff.comments?.zone(thread: "T_replaced"))
-    pumpMain(
-      until: { self.shows(inline, zone: zone) }, "インラインで、差し込んだ削除行（古い版の行 60）の下のスレッドが見える")
+    XCTAssertTrue(
+      shows(inline, zone: zone), "置いてあるスレッドなら押したその場で、差し込んだ削除行（古い版の行 60）の下のスレッドが見える")
 
     resize(try XCTUnwrap(pane.window), width: Self.sideWidth)
     pumpMain(until: { diff.oldSurface != nil }, "前提: 並列")
@@ -106,7 +108,7 @@ extension EditorDiffTests {
       try engine(diff.newSurface).scroll(toFirstLine: 0)
       XCTAssertFalse(shows(left, line: line), "前提: 左の面の行 \(line + 1) は見えていない")
       try press(thread)
-      pumpMain(until: { self.shows(left, line: line) }, "並列で左の面の行 \(line + 1) が見える")
+      XCTAssertTrue(shows(left, line: line), "並列で左の面の行 \(line + 1) が見える")
     }
   }
 
@@ -137,6 +139,7 @@ extension EditorDiffTests {
     }
     let pane = opened.tab.group.view.editor
     let state = try XCTUnwrap(pane.pullRequest.state)
+    pane.reviewPopup.onOpenURL = { XCTFail("置ける行ではブラウザを開かない: \($0)") }
     _ = try open(state, path: "b.txt", into: opened.tab)
     let pending = try XCTUnwrap(state.pendingComments.first)
     XCTAssertEqual(pending.id, "C30", "前提: 押すのは最後のコメント")
@@ -152,12 +155,12 @@ extension EditorDiffTests {
     XCTAssertFalse(showsComment(surface, diff, "C30"), "前提: 押したコメントは見えていない")
     pane.reviewPopup.press(pending)
     XCTAssertTrue(pane.diff === diff, "前提: 同じ diff のまま")
-    pumpMain(until: { self.showsComment(surface, diff, "C30") }, "同じ diff でも、押したコメントが見える")
+    XCTAssertTrue(showsComment(surface, diff, "C30"), "同じ diff なら、押したその場で押したコメントが見える")
   }
 
-  /// 未送信のコメントの行を押した後、そのスレッドがまだ置かれていない間（スレッドを読んだ版と diff の版が揃うのを待つ間）に、
-  /// 利用者が diff をスクロールするか打鍵したら、後からそのスレッドが置かれても画面を動かさない。操作が無ければ、置かれたときに
-  /// その行が見える位置へ動く。
+  /// 未送信のコメントの行を押した後、そのスレッドがまだ置かれていない間（スレッドを読んだ版と diff の版を揃える読みの答えを
+  /// 待つ間）に、利用者が diff をスクロールするか、押下・打鍵するか、面が処理する ⌘ 付きのキーを押したら、後からそのスレッドが置かれても
+  /// 画面を動かさない。操作が無ければ、置かれたときにその行が見える位置へ動く。
   func testAUserOperationBeforeTheThreadIsPlacedCancelsTheReveal() throws {
     let lines = (1...200).map { "line \($0)" }
     try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
@@ -170,46 +173,56 @@ extension EditorDiffTests {
     }
     let diff = opened.diff
     let pane = opened.tab.group.view.editor
+    pane.reviewPopup.onOpenURL = { XCTFail("ブラウザを開かない: \($0)") }
     let state = try XCTUnwrap(pane.pullRequest.state)
     pumpMain(until: { diff.placement == .placed }, "前提: 位置を決める")
     let surface = try engine(diff.newSurface)
-    // 揃える読みをやめた後は行が置けない姿になり、押すと GitHub を開く——テストではブラウザを開かない。
-    pane.reviewPopup.onOpenURL = { _ in }
     let head = remote.head
     let stale = String(repeating: "0", count: 40)
-    let operations = try userOperations(on: surface)
-    for (index, (name, operate)) in operations.enumerated() {
+    let release = {
+      let answers = remote.heldReviews
+      remote.heldReviews = []
+      for answer in answers { answer() }
+    }
+    for (index, (name, operate)) in try userOperations(on: surface).enumerated() {
       let id = "T\(index)"
-      let line = 120 + index * 20
-      // スレッドを読んだ版を diff の版からずらし、置けるかを「まだ分からない」にする（層は置かずに待つ）。
+      let line = 100 + index * 20
+      // スレッドをずれた版で読ませ、揃える読み直しの答えを留める（置けるかが「まだ分からない」間、層は置かずに待つ）。
       remote.head = stale
       remote.threads.append(pendingThread(id, line: line))
+      remote.holdsReviews = true
       state.reload()
+      pumpMain(until: { !remote.heldReviews.isEmpty }, "\(name): 前提: 読みの答えを留める")
+      release()
       pumpMain(
-        until: {
-          state.review?.headCommit == stale && state.pendingComments.contains { $0.thread == id }
-        }, "\(name): 前提: 置けるかの分からないスレッドを読む")
+        until: { state.review?.headCommit == stale && !remote.heldReviews.isEmpty },
+        "\(name): 前提: ずれた版を読み、揃える読み直しの答えを留める")
       XCTAssertNil(diff.comments?.zone(thread: id), "\(name): 前提: まだ置かれていない")
       surface.scroll(toFirstLine: 0)
       pane.reviewPopup.press(try XCTUnwrap(state.pendingComments.first { $0.thread == id }))
       try operate()
 
       remote.head = head
-      state.reload()
+      remote.holdsReviews = false
+      release()
       pumpMain(
         until: { diff.comments?.zone(thread: id).map { !$0.isTypesetting } ?? false },
         "\(name): 前提: 版が揃ってスレッドが置かれ、本文を組み終える")
       nextTurn()
-      // この差し替えの出どころは、ずらした版を答え続けるので、版を揃える読みは揃わずにやめ、見せる頼みはそこで捨てる
-      // （これ以上読まない間は置けない）。操作が無くても、後から置かれたスレッドへ画面を動かさない。
-      XCTAssertFalse(shows(surface, line: line - 1), "\(name): 置かれたスレッドへ画面を動かさない")
+      if index == 0 {
+        XCTAssertTrue(shows(surface, line: line - 1), "\(name): 置かれたスレッドの行が見える")
+      } else {
+        XCTAssertFalse(shows(surface, line: line - 1), "\(name): 置かれたスレッドへ画面を動かさない")
+      }
     }
   }
 
-  /// 利用者の操作——無し・面のスクロール・面への打鍵。
+  /// 利用者の操作——無し・面のスクロール・面の押下・面への打鍵・面が処理する ⌘ 付きのキー（複数カーソルを下に足す）。
   private func userOperations(on surface: MetalTextSurface) throws -> [(String, () throws -> Void)]
   {
     let window = try XCTUnwrap(surface.view.window)
+    let view = surface.view
+    let down = String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!)
     return [
       ("操作なし", {}),
       (
@@ -219,15 +232,30 @@ extension EditorDiffTests {
             CGEvent(
               scrollWheelEvent2Source: SyntheticInput.source, units: .line, wheelCount: 1,
               wheel1: -1, wheel2: 0, wheel3: 0))
-          surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
+          view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
+        }
+      ),
+      (
+        "押下",
+        {
+          let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.minY + 20), to: nil)
+          view.mouseDown(with: .mouse(.leftMouseDown, at: point, in: window))
+          view.mouseUp(with: .mouse(.leftMouseUp, at: point, in: window))
         }
       ),
       (
         "打鍵",
         {
-          window.makeFirstResponder(surface.view)
-          let down = String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!)
+          window.makeFirstResponder(view)
           self.deliverKeyDown(.key(down, []), to: window)
+        }
+      ),
+      (
+        "⌘ 付きのキー",
+        {
+          window.makeFirstResponder(view)
+          XCTAssertTrue(
+            view.performKeyEquivalent(with: .key(down, [.command, .option])), "前提: 面が処理する")
         }
       ),
     ]

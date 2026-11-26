@@ -24,6 +24,9 @@ extension EditorDiffTests {
     /// 真なら書き込みの答えを返さずに `held` に溜める（書き込みの最中を作る）。
     var holds = false
     var held: [() -> Void] = []
+    /// 真ならレビューのやりとりの読みの答えを返さずに `heldReviews` に溜める（答えは返す時点の `head` と `threads` で作る）。
+    var holdsReviews = false
+    var heldReviews: [() -> Void] = []
   }
 
   /// PR の diff を開く。PR のコミットは `edit`（無ければ a.txt の行 3 を変える）で作り、GitHub はファイル `path` を `change`
@@ -80,11 +83,14 @@ extension EditorDiffTests {
         },
         setViewed: { _, _, _, _ in },
         review: { _, completion in
-          completion(
-            .success(
-              GitHubPullRequestReview(
-                viewerIsAuthor: false, headCommit: remote.head, pendingReview: nil,
-                threads: remote.threads)))
+          let answer = {
+            completion(
+              .success(
+                GitHubPullRequestReview(
+                  viewerIsAuthor: false, headCommit: remote.head, pendingReview: nil,
+                  threads: remote.threads)))
+          }
+          if remote.holdsReviews { remote.heldReviews.append(answer) } else { answer() }
         },
         writeReview: { write, _, pending, _, completion in
           remote.writes.append(write)
