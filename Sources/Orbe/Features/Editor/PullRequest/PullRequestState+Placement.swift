@@ -31,7 +31,7 @@ extension PullRequestState {
   /// 置き方の決まり。スレッド `thread` を、材料 `inputs`（スレッドを読んだレビューのやりとり・diff の版の先頭・両端の様子・
   /// GitHub が答えた変更ファイル・揃える読みをやめているか）の diff に置けるか。
   /// - 行を持たない（ファイル単位）・diff を表示できない → 置けない。
-  /// - スレッドを読んだ版と diff の版が違う・分からない → 揃える読みが走っていればまだ分からない（揃う読みを待つ）。揃える
+  /// - スレッドを読んだ版と diff の版が違う・分からない → 揃える読みをやめていなければまだ分からない（揃う読みを待つ）。揃える
   ///   読みをやめていれば（次に人が再読込するまで読まない）置けない（待っても揃わない）。
   /// - 新しい側の行 → 置ける。
   /// - 古い側の行 → 今の PR の両端を求め終えていれば、rename の判定が GitHub と手元で同じなら置け、違えば置けない（古い側の
@@ -118,8 +118,8 @@ extension PullRequestState {
   /// 置き方から導いた値。材料（`PlacementInputs`）と、前に作った値だけから作る。読みが走っている間（まだ分からない）は、
   /// スレッドごとに前に決まった答えを使える間（→ `kept`）はそれを使う——コメントの層が前に置いた絵を残すのと同じ決まりで、
   /// 読み直しの途中で一覧・数が揺れない。使えなければ、まだ分からないまま（一覧は置けるとみなし、数は数えない）。前に
-  /// 決まった答え（`answers`）は、スレッドを読んだ版と diff の版が揃い、今の PR の両端を求め終えていたときに決まったものだけを
-  /// 持ち、まだ分からない間は持ち越す（コメントの層は、diff が見せている両端について読む）。
+  /// 決まった答え（`answers`）は、今の PR の両端を求め終えていたときに決まったものだけを持ち、まだ分からない間は持ち越す
+  /// （コメントの層は、diff が見せている両端について読む）。
   struct Placements {
     /// 最後に読めたレビューのやりとりの、未送信のコメント。並びはパスの順 → 行の順（行を持たないものはそのファイルの最後）→
     /// 書いた時刻の順。
@@ -128,7 +128,7 @@ extension PullRequestState {
     let outdatedThreadCount: Int
     /// ファイルごとの、今の diff に置けるスレッドのコメントの総数。
     let commentCounts: [String: Int]
-    /// スレッドごとの、版が揃っていたときに決まった答えと、それを決めた diff の両端（スレッドの id ごと）。
+    /// スレッドごとの、前に決まった答えと、それを決めた diff の両端（スレッドの id ごと）。
     let answers: [String: PlacementAnswer]
 
     static let empty = Placements(
@@ -136,7 +136,6 @@ extension PullRequestState {
 
     init(_ inputs: PlacementInputs, previous: Placements) {
       let threads = inputs.review?.threads ?? []
-      let aligned = inputs.head != nil && inputs.review?.headCommit == inputs.head
       var current: DiffEnds?
       if case .ready(let ends, isCurrent: true) = inputs.ends { current = ends }
       var answers: [String: PlacementAnswer] = [:]
@@ -145,7 +144,7 @@ extension PullRequestState {
         let answer = PullRequestState.placement(of: thread, in: inputs)
         if answer != .unknown {
           placements[thread.id] = answer
-          if aligned, let current {
+          if let current {
             answers[thread.id] = PlacementAnswer(placement: answer, ends: current)
           }
         } else {
@@ -194,7 +193,7 @@ extension PullRequestState {
     }
   }
 
-  /// 置き方の材料。作り直すのは、ここで読む値（レビューのやりとり・中身と変更ファイル・diff の両端・読みが走っているか）が
+  /// 置き方の材料。作り直すのは、ここで読む値（レビューのやりとり・中身と変更ファイル・diff の両端・揃える読みの様子）が
   /// 変わった直後だけで、それぞれの `didSet` が `refreshPlacements` を呼ぶ（変更ファイルは中身の `didSet` が作る）。ここで
   /// 読む値を足したら、その値の `didSet` にも足す——足し忘れは、デバッグのビルドで導いた値を読むときに止まる
   /// （→ `placements`）。
