@@ -5,7 +5,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 行の見せ方の規則。壊れると CRLF の行末に記号が出る、タブの幅がインデントの単位とずれる、制御文字が見えない（または行が
-/// 崩れる）、minified の 1 行が 1 コマの手間を行の長さに比例させる。
+/// 崩れる）、minified の 1 行が 1 コマの手間を行の長さに比例させる、和文の約物が詰まって字の幅が前後の字で変わる。
 final class LineShaperTests: XCTestCase {
   private let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular) as CTFont
 
@@ -186,6 +186,22 @@ final class LineShaperTests: XCTestCase {
     XCTAssertEqual(crossing.count, 2, "b と空白、ש ל は離れた 2 つの区間")
     XCTAssertEqual(map.segments(from: 0, to: 2).count, 1)
     XCTAssertEqual(map.segments(from: 0, to: 10).count, 1, "行全体は 1 つ")
+  }
+
+  /// 字の幅は前後の字に依らない——約物が続く所でも、和文と英数字の境でも、字の x は、前にある字をそれぞれ 1 字だけで
+  /// 組んだ幅の和。利用者の環境の言語が日本語でない機械では、言語の属性が無くても約物を詰めないので、この確かめが効くのは
+  /// 日本語の環境で回したときだけ。
+  func testGlyphWidthsDoNotDependOnNeighboringCharacters() {
+    let string = "（注）。「x」、漢字123円"
+    let shaped = LineShaper.shape(source(string), font: font, tabWidth: 0)
+    let stops = shaped.stops
+    var expected: CGFloat = 0
+    for (offset, character) in string.enumerated() {
+      let x = try? XCTUnwrap(stops.offsets.firstIndex(of: offset).map { stops.xs[$0] })
+      XCTAssertEqual(x ?? -1, expected, accuracy: 0.01, "\(character)（位置 \(offset)）の x")
+      expected += LineShaper.shape(String(character), font: font).width
+    }
+    XCTAssertEqual(shaped.width, expected, accuracy: 0.01, "行の幅")
   }
 
   /// 1 行で描くのは 10000 単位まで（書記素の境で切る）。残りは描かず、その数を返す。行の中身は先頭しか読まない。
