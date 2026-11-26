@@ -35,7 +35,16 @@ extension BrowserLayerView {
       endURLEditingExternally()
       onWindowCommand?(.toggleBrowser)
       return true
-    case .toggleEditorFace, .findInProject, .nextTab, .prevTab, .openEditor:
+    case .nextTab, .prevTab:
+      if isEditingURL {
+        if event.specialKey == .leftArrow || event.specialKey == .rightArrow {
+          return super.performKeyEquivalent(with: event)
+        }
+        return true
+      }
+      if let command = action.windowCommand { onWindowCommand?(command) }
+      return true
+    case .toggleEditorFace, .findInProject, .openEditor:
       if isEditingURL { return true }
       if let command = action.windowCommand { onWindowCommand?(command) }
       return true
@@ -86,8 +95,7 @@ extension BrowserLayerView {
     resizeSession = nil
     snapBadge.kind = nil
     if cancelled {
-      sheetRatio = session.preservedRatio
-      onRatioChange?(sheetRatio)
+      sheetRatio = session.startRatio
       needsLayout = true
       layoutSubtreeIfNeeded()
       syncFocusAppearance()
@@ -96,17 +104,14 @@ extension BrowserLayerView {
     switch session.commit() {
     case .keepSheet(let ratio):
       sheetRatio = ratio
-      onRatioChange?(ratio)
       needsLayout = true
       layoutSubtreeIfNeeded()
       syncFocusAppearance()
     case .snapFull(let preserved):
       sheetRatio = preserved
-      onRatioChange?(preserved)
       requestModeChange(.full, animated: true)
     case .close(let preserved):
       sheetRatio = preserved
-      onRatioChange?(preserved)
       requestModeChange(.closed, animated: true)
     }
   }

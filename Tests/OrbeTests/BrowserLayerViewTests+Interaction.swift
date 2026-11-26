@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import OrbeTestSupport
 import WebKit
 import XCTest
@@ -27,12 +28,10 @@ extension BrowserLayerViewTests {
     let (window, browser) = (hosted.window, hosted.browser)
     let handle = browser.resizeHandle
     var requestedModes: [BrowserMode] = []
-    var ratios: [CGFloat] = []
     browser.onRequestModeChange = { mode, _ in
       requestedModes.append(mode)
       browser.setMode(mode, animated: false)
     }
-    browser.onRatioChange = { ratios.append($0) }
     browser.setMode(.sheet, animated: false)
 
     // 通常域ドラッグ: 1000pt の窓で x=400 → 幅 600pt (60%)。
@@ -42,7 +41,6 @@ extension BrowserLayerViewTests {
     handle.mouseDragged(with: mouse(.leftMouseDragged, x: 400, in: hosted))
     handle.mouseUp(with: mouse(.leftMouseUp, x: 400, in: hosted))
     XCTAssertEqual(browser.sheetRatio, 0.60, accuracy: 0.001)
-    XCTAssertEqual(ratios.last ?? 0, 0.60, accuracy: 0.001)
     XCTAssertTrue(NSCursor.current === NSCursor.arrow, "ドラッグ終了でカーソルが戻る")
 
     // 全面吸着域まで引いた途中で windowDidResignKey が来たら安全中断し、60%・右シートのまま戻る。
@@ -52,7 +50,7 @@ extension BrowserLayerViewTests {
     window.isKey = false
     XCTAssertEqual(browser.mode, .sheet, "異常離脱では全面確定しない")
     XCTAssertNil(browser.snapBadge.kind, "スナップバッジが消える")
-    XCTAssertEqual(browser.sheetRatio, 0.60, accuracy: 0.001, "直前の通常域比率を保つ")
+    XCTAssertEqual(browser.sheetRatio, 0.60, accuracy: 0.001, "開始前の確定比率を保つ")
     XCTAssertTrue(NSCursor.current === NSCursor.arrow, "異常離脱でもカーソルを pop する")
 
     // 右投げ閉じ → 閉じ要求かつ 60% 保持。
@@ -171,10 +169,11 @@ extension BrowserLayerViewTests {
     browser.setMode(.sheet, animated: false)
     let webView = try XCTUnwrap(browser.webView)
 
-    let page2 = try caseFile("page2.html", "<!doctype html><title>Page2</title><p>second</p>")
-    let page1 = try caseFile(
-      "page1.html",
-      "<!doctype html><a id='go' href='page2.html' target='_blank'>go</a>")
+    let server = try LocalLoopbackHTTPServer(routes: [
+      "/page1.html": "<!doctype html><a id='go' href='/page2.html' target='_blank'>go</a>",
+      "/page2.html": "<!doctype html><title>Page2</title><p>second</p>",
+    ])
+    defer { server.stop() }
 
     var finishCount = 0
     browser.onNavigationFinish = { finishCount += 1 }
@@ -198,12 +197,12 @@ extension BrowserLayerViewTests {
 
     // target="_blank"（新規ウィンドウ要求）は別窓を出さず同一 webView で開く。
     let beforePop = finishCount
-    webView.loadFileURL(page1, allowingReadAccessTo: TestScratch.caseDir)
+    browser.load(server.url(for: "/page1.html"))
     pumpMain(until: { finishCount > beforePop }, timeout: 5, "page1 読み込み完了")
     let beforeBlank = finishCount
     webView.evaluateJavaScript("document.getElementById('go').click()")
     pumpMain(until: { finishCount > beforeBlank }, timeout: 5, "target=_blank が同一面へ遷移する")
-    XCTAssertEqual(webView.url?.lastPathComponent, page2.lastPathComponent)
+    XCTAssertEqual(webView.url?.path, "/page2.html")
 
     // WebContent プロセス異常終了時は読込中フラグを解除し無限リロードしない。
     browser.toolbar.isLoading = true
@@ -211,5 +210,95 @@ extension BrowserLayerViewTests {
     browser.webViewWebContentProcessDidTerminate(webView)
     XCTAssertFalse(browser.toolbar.isLoading)
     XCTAssertEqual(browser.toolbar.estimatedProgress, 0)
+  }
+}
+
+/// 外部通信ゼロで `http://127.0.0.1:<port>` を提供するテスト用ループバック HTTP サーバー。
+private final class LocalLoopbackHTTPServer: @unchecked Sendable {
+  private let listenFD: Int32
+  private let routes: [String: String]
+  let port: UInt16
+
+  init(routes: [String: String]) throws {
+    self.routes = routes
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
+    guard fd >= 0 else { throw POSIXError(.EIO) }
+    var yes: Int32 = 1
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+
+    var addr = sockaddr_in()
+    addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    addr.sin_family = sa_family_t(AF_INET)
+    addr.sin_port = 0
+    addr.sin_addr = in_addr(s_addr: INADDR_LOOPBACK.bigEndian)
+
+    let bound = withUnsafePointer(to: &addr) {
+      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+      }
+    }
+    guard bound == 0, listen(fd, 8) == 0 else {
+      close(fd)
+      throw POSIXError(.EADDRINUSE)
+    }
+
+    var actual = sockaddr_in()
+    var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+    _ = withUnsafeMutablePointer(to: &actual) {
+      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        getsockname(fd, $0, &len)
+      }
+    }
+    self.listenFD = fd
+    self.port = UInt16(bigEndian: actual.sin_port)
+
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      self?.acceptLoop()
+    }
+  }
+
+  func url(for path: String) -> URL {
+    URL(string: "http://127.0.0.1:\(port)\(path)")!
+  }
+
+  func stop() {
+    shutdown(listenFD, SHUT_RDWR)
+    close(listenFD)
+  }
+
+  private func acceptLoop() {
+    while true {
+      let client = accept(listenFD, nil, nil)
+      if client < 0 { break }
+      handleClient(client)
+      close(client)
+    }
+  }
+
+  private func handleClient(_ fd: Int32) {
+    var buffer = [UInt8](repeating: 0, count: 4096)
+    let count = read(fd, &buffer, buffer.count)
+    guard count > 0, let request = String(bytes: buffer.prefix(count), encoding: .utf8) else {
+      return
+    }
+    let path =
+      request.split(separator: "\r\n").first?
+      .split(separator: " ").dropFirst().first.map(String.init) ?? "/"
+    let body = routes[path] ?? ""
+    let status = routes[path] != nil ? "200 OK" : "404 Not Found"
+    let payload = Data(body.utf8)
+    let header =
+      "HTTP/1.1 \(status)\r\nContent-Type: text/html; charset=utf-8\r\n"
+      + "Content-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
+    let response = Data(header.utf8) + payload
+    response.withUnsafeBytes { raw in
+      guard let base = raw.baseAddress else { return }
+      var written = 0
+      while written < response.count {
+        let n = write(fd, base.advanced(by: written), response.count - written)
+        if n <= 0 { break }
+        written += n
+      }
+    }
   }
 }

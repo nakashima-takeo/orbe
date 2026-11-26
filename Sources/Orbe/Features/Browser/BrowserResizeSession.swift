@@ -45,13 +45,13 @@ struct BrowserResizeSession: Equatable {
     case close(preservedRatio: CGFloat)
   }
 
-  /// 全面吸着・閉じプレビューに入っても壊さない、直近の通常域の比率。
-  private(set) var preservedRatio: CGFloat
+  /// ドラッグ開始時の確定比率。全面吸着・右投げ閉じ・ドラッグ中断時はこの比率を復元する。
+  let startRatio: CGFloat
   private(set) var current: PreviewState
 
   init(initialRatio: CGFloat, containerWidth: CGFloat) {
     let clamped = Self.clampRatio(initialRatio)
-    preservedRatio = clamped
+    startRatio = clamped
     current = .normal(
       width: Self.sheetWidth(ratio: clamped, containerWidth: containerWidth), ratio: clamped)
   }
@@ -60,7 +60,7 @@ struct BrowserResizeSession: Equatable {
   @discardableResult
   mutating func update(pointerX: CGFloat, containerWidth: CGFloat) -> PreviewState {
     guard containerWidth > 0 else {
-      current = .normal(width: 0, ratio: preservedRatio)
+      current = .normal(width: 0, ratio: startRatio)
       return current
     }
     let rawWidth = containerWidth - pointerX
@@ -72,7 +72,6 @@ struct BrowserResizeSession: Equatable {
       current = .snapClose(width: width)
     } else {
       let clamped = Self.clampRatio(ratio)
-      preservedRatio = clamped
       current = .normal(
         width: Self.sheetWidth(ratio: clamped, containerWidth: containerWidth), ratio: clamped)
     }
@@ -82,8 +81,8 @@ struct BrowserResizeSession: Equatable {
   /// ドラッグ離脱時の最終結果を返す。
   func commit() -> CommitResult {
     switch current {
-    case .snapFull: .snapFull(preservedRatio: preservedRatio)
-    case .snapClose: .close(preservedRatio: preservedRatio)
+    case .snapFull: .snapFull(preservedRatio: startRatio)
+    case .snapClose: .close(preservedRatio: startRatio)
     case .normal(_, let ratio): .keepSheet(ratio: ratio)
     }
   }

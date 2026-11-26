@@ -122,7 +122,6 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     let backgroundTab = wsA.tabs[1]
 
     wc.setBrowserMode(.sheet, animated: false)
-    wc.browserSheetRatio = 0.65
     wc.browserView.setSheetRatio(0.65)
     XCTAssertTrue(wc.browserView.focusIsInside, "前提: 右シートに焦点")
 

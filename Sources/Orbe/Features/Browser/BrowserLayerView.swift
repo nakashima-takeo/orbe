@@ -36,6 +36,11 @@ final class BrowserLayerView: NSView {
   private(set) var isPeeking = false
   var sheetRatio: CGFloat = BrowserResizeSession.defaultRatio
   var hasNavigated = false
+  var committedURL: URL?
+  var lastRequestedURL: URL?
+  var isProvisionalNavigation = false
+  var isLocalHTMLNavigation = false
+  var allowingInternalBlankLoad = false
 
   /// 窓の key 状態とブラウザ内焦点から上位（`WindowController`）が与える真のブラウザ焦点状態。
   private(set) var isBrowserFocused = false
@@ -43,19 +48,20 @@ final class BrowserLayerView: NSView {
   var resizeSession: BrowserResizeSession?
   var kvoObservations: [NSKeyValueObservation] = []
 
-  enum Fade { case sheet, belowBar }
+  enum Fade: Equatable {
+    case sheet(closingWidth: CGFloat? = nil)
+    case belowBar
+  }
   var fade: Fade?
   var isFading: Bool { fade != nil }
   var fadeGeneration = 0
   var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
 
   let localization: LocalizationStore
-  private let fontResolver: ChromeFontResolver
 
   /// ブラウザ層から上位への操作通知（一方向クロージャ）。
   var onWindowCommand: ((WindowCommand) -> Void)?
   var onRequestModeChange: ((BrowserMode, Bool) -> Void)?
-  var onRatioChange: ((CGFloat) -> Void)?
   var onNavigationFinish: (() -> Void)?
 
   override var isFlipped: Bool { true }
@@ -76,7 +82,6 @@ final class BrowserLayerView: NSView {
 
   init(localization: LocalizationStore, fontResolver: ChromeFontResolver) {
     self.localization = localization
-    self.fontResolver = fontResolver
     barHost = BrowserBarHost(
       rootView: BrowserBarRoot(
         model: toolbar, localization: localization, fontResolver: fontResolver))
@@ -228,9 +233,12 @@ final class BrowserLayerView: NSView {
   func setMode(_ next: BrowserMode, animated: Bool) {
     guard next != mode else { return }
     let previous = mode
+    let closingWidth: CGFloat? =
+      previous.isOpen && next == .closed && sheetView.frame.width > 0
+      ? sheetView.frame.width : nil
+    resizeHandle.cancelDragIfNeeded()
     mode = next
     toolbar.mode = next
-    resizeHandle.cancelDragIfNeeded()
     endURLEditingExternally()
     if next.isOpen {
       _ = ensureWebView()
@@ -240,7 +248,13 @@ final class BrowserLayerView: NSView {
       isSheetHovered = false
     }
     let fadeTarget: Fade? =
-      (previous == .closed && next.isOpen) || (previous.isOpen && next == .closed) ? .sheet : nil
+      if previous == .closed && next.isOpen {
+        .sheet()
+      } else if previous.isOpen && next == .closed {
+        .sheet(closingWidth: closingWidth)
+      } else {
+        nil
+      }
     runFade(fadeTarget, duration: Theme.Motion.base, animated: animated)
     needsLayout = true
     layoutSubtreeIfNeeded()
@@ -255,7 +269,7 @@ final class BrowserLayerView: NSView {
       resizeHandle.cancelDragIfNeeded()
       showArrowPointer()
     }
-    let fadeTarget: Fade? = mode == .full ? .belowBar : (mode == .sheet ? .sheet : nil)
+    let fadeTarget: Fade? = mode == .full ? .belowBar : (mode == .sheet ? .sheet() : nil)
     runFade(fadeTarget, duration: Theme.Motion.quick, animated: animated)
   }
 

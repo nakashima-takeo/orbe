@@ -74,5 +74,16 @@ final class BrowserURLInputTests: OrbeTestCase {
       BrowserDisplayURL(
         host: "localhost:5173", path: "/api?k=v#top", isSecure: false,
         raw: "http://localhost:5173/api?k=v#top"))
+
+    let ipv6WithPort = BrowserURLInput.display(URL(string: "http://[::1]:3000/app"))
+    XCTAssertEqual(
+      ipv6WithPort,
+      BrowserDisplayURL(
+        host: "[::1]:3000", path: "/app", isSecure: false, raw: "http://[::1]:3000/app"))
+
+    let ipv6NoPort = BrowserURLInput.display(URL(string: "http://[::1]/"))
+    XCTAssertEqual(
+      ipv6NoPort,
+      BrowserDisplayURL(host: "[::1]", path: "", isSecure: false, raw: "http://[::1]/"))
   }
 }

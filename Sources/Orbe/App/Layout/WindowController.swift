@@ -16,7 +16,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// ウィンドウ最上層（Z=2）の内蔵ブラウザ層。workspace 切替をまたいで状態を保持する。
   let browserView: BrowserLayerView
   var browserMode: BrowserMode = .closed
-  var browserSheetRatio: CGFloat = BrowserResizeSession.defaultRatio
+  var browserSheetRatio: CGFloat { browserView.sheetRatio }
   /// overlay・改名欄から戻す先がブラウザ層かを記憶する（見た目の焦点判定には使わない）。
   var browserWasFocused = false
   /// SwiftUI ルート（`AppShell`）を載せる NSHostingView（overlay は `AppShell` の `.overlay` で compose）。

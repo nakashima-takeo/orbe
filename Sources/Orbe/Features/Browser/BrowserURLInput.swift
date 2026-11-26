@@ -11,16 +11,18 @@ struct BrowserDisplayURL: Equatable {
 /// URL 欄の表示分解と入力正規化（純粋関数）。
 enum BrowserURLInput {
   /// URL をホスト部とパス部へ分解する。`about:blank` 等の空ページは `nil`。
-  static func display(_ url: URL?) -> BrowserDisplayURL? {
+  static func display(_ url: URL?, isSecure: Bool? = nil) -> BrowserDisplayURL? {
     guard let url else { return nil }
     let scheme = url.scheme?.lowercased()
     if scheme == "about" { return nil }
+    let resolvedSecure = isSecure ?? (scheme == "https")
     let raw = url.absoluteString
     guard let host = url.host, !host.isEmpty else {
       guard !raw.isEmpty else { return nil }
-      return BrowserDisplayURL(host: raw, path: "", isSecure: scheme == "https", raw: raw)
+      return BrowserDisplayURL(host: raw, path: "", isSecure: resolvedSecure, raw: raw)
     }
-    let formattedHost = url.port.map { "\(host):\($0)" } ?? host
+    let displayHost = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+    let formattedHost = url.port.map { "\(displayHost):\($0)" } ?? displayHost
     var suffix = url.path == "/" ? "" : url.path
     if let query = url.query, !query.isEmpty {
       suffix += "?\(query)"
@@ -29,7 +31,7 @@ enum BrowserURLInput {
       suffix += "#\(fragment)"
     }
     return BrowserDisplayURL(
-      host: formattedHost, path: suffix, isSecure: scheme == "https", raw: raw)
+      host: formattedHost, path: suffix, isSecure: resolvedSecure, raw: raw)
   }
 
   /// 利用者が入力した文字列を HTTP(S) URL へ正規化する。

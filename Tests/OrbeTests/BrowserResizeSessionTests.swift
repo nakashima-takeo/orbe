@@ -3,15 +3,15 @@ import XCTest
 
 @testable import Orbe
 
-/// 右シート左端ドラッグの幅追従・上下限クランプ・全面吸着・右投げ閉じ・直前通常域比率の記憶・
+/// 右シート左端ドラッグの幅追従・上下限クランプ・全面吸着・右投げ閉じ・ドラッグ開始前比率の記憶・
 /// 狭幅ウィンドウでの幅算出を守る。
 ///
 /// 壊れると何が起きるか。ドラッグで全面吸着や右投げ閉じができなくなる、閉じたり全面化したあとに
-/// 右シートへ戻すと直前の幅が失われて極端な幅になる、あるいは狭いウィンドウでシートが窓幅を超えて破綻する。
+/// 右シートへ戻すと開始前の幅が失われて極端な幅になる、あるいは狭いウィンドウでシートが窓幅を超えて破綻する。
 final class BrowserResizeSessionTests: OrbeTestCase {
   /// 通常域では上下限（28%〜84%）で追従し、全面吸着（86% 超）や右投げ閉じ（240pt 未満）へ入っても
-  /// 直前の通常域比率を保持したまま確定結果へ渡す。
-  func testDraggingTracksClampedRatioAndPreservesNormalRatioAcrossSnapZones() {
+  /// ドラッグ開始前の確定比率を保持したまま確定結果へ渡す。
+  func testDraggingTracksClampedRatioAndPreservesStartRatioAcrossSnapZones() {
     let width: CGFloat = 1000
     var session = BrowserResizeSession(
       initialRatio: BrowserResizeSession.defaultRatio, containerWidth: width)
@@ -21,28 +21,28 @@ final class BrowserResizeSessionTests: OrbeTestCase {
     XCTAssertEqual(normal.badgeKind, .percent(60))
     XCTAssertEqual(session.commit(), .keepSheet(ratio: 0.60))
 
-    // 上限 84%〜吸着閾値 86% の間は上限 84% に留め、まだ全面吸着しない。
+    // 上限 84%〜吸着閾値 86% の間は上限 84% に留め、まだ全面吸着しない。開始前比率も書き換えない。
     let capped = session.update(pointerX: 150, containerWidth: width)
     XCTAssertEqual(capped, .normal(width: 840, ratio: BrowserResizeSession.maxRatio))
-    XCTAssertEqual(session.preservedRatio, BrowserResizeSession.maxRatio)
+    XCTAssertEqual(session.startRatio, BrowserResizeSession.defaultRatio)
 
-    // 86% を超えると全面吸着し、直前の通常域比率を壊さない。
+    // 86% を超えると全面吸着し、ドラッグ開始前の確定比率をそのまま返す。
     let snapFull = session.update(pointerX: 130, containerWidth: width)
     XCTAssertEqual(snapFull, .snapFull(width: width))
     XCTAssertEqual(snapFull.badgeKind, .snapFull)
-    XCTAssertEqual(session.commit(), .snapFull(preservedRatio: BrowserResizeSession.maxRatio))
+    XCTAssertEqual(session.commit(), .snapFull(preservedRatio: BrowserResizeSession.defaultRatio))
 
-    // 通常域へ引き戻して 45% に合わせた後、右投げ閉じ域（240pt 未満）へ入っても 45% を保持する。
+    // 通常域の 45% を通過してから右投げ閉じ域（240pt 未満）へ入っても、開始前比率を保持する。
     _ = session.update(pointerX: 550, containerWidth: width)
     let snapClose = session.update(pointerX: 770, containerWidth: width)
     XCTAssertEqual(snapClose, .snapClose(width: 230))
     XCTAssertEqual(snapClose.badgeKind, .snapClose)
-    XCTAssertEqual(session.commit(), .close(preservedRatio: 0.45))
+    XCTAssertEqual(session.commit(), .close(preservedRatio: BrowserResizeSession.defaultRatio))
 
-    // 右端まで投げ切っても最小閉じプレビュー幅 120pt で床止めする。
+    // 右端まで投げ切っても最小閉じプレビュー幅 120pt で床止めし、開始前比率を保持する。
     let floorClose = session.update(pointerX: 980, containerWidth: width)
     XCTAssertEqual(floorClose, .snapClose(width: BrowserResizeSession.minClosePreviewWidth))
-    XCTAssertEqual(session.commit(), .close(preservedRatio: 0.45))
+    XCTAssertEqual(session.commit(), .close(preservedRatio: BrowserResizeSession.defaultRatio))
   }
 
   /// 狭幅ウィンドウでもシート幅は窓幅を超えず、ドラッグ時は 86% 超の全面吸着を 240pt 未満の閉じ判定より優先する。

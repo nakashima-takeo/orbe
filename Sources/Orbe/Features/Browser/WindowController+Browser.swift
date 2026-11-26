@@ -13,9 +13,6 @@ extension WindowController {
     browserView.onRequestModeChange = { [weak self] mode, animated in
       self?.setBrowserMode(mode, animated: animated)
     }
-    browserView.onRatioChange = { [weak self] ratio in
-      self?.browserSheetRatio = ratio
-    }
   }
 
   /// `⌘B`。フォーカス位置を問わず純粋トグルで開閉する（閉 → 右シート、右シート・全面 → 閉）。
@@ -62,14 +59,13 @@ extension WindowController {
     browserMode = next
     optionHold.interrupt()
     browserView.endURLEditingExternally()
-    browserView.setSheetRatio(browserSheetRatio)
     browserView.setMode(next, animated: animated)
   }
 
   /// `OrbeWindow.makeFirstResponder` 成功後の同期通知。
   /// ここでは `makeFirstResponder` を絶対に呼ばない（再帰・フォーカス競合の防止）。
   func firstResponderDidChange(_ responder: NSResponder?) {
-    if model.overlay == .none, statusModel.editingIndex == nil {
+    if model.overlay == .none {
       if browserView.focusIsInside {
         browserWasFocused = true
       } else if let view = responder as? NSView, view.isDescendant(of: model.content) {

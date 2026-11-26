@@ -54,9 +54,14 @@ extension BrowserLayerView {
     switch mode {
     case .full:
       return bounds.width
-    case .sheet, .closed:
+    case .sheet:
       if let preview = resizeSession?.current.previewWidth {
         return preview
+      }
+      return BrowserResizeSession.sheetWidth(ratio: sheetRatio, containerWidth: bounds.width)
+    case .closed:
+      if case .sheet(let closingWidth?) = fade {
+        return min(bounds.width, closingWidth)
       }
       return BrowserResizeSession.sheetWidth(ratio: sheetRatio, containerWidth: bounds.width)
     }
@@ -66,9 +71,8 @@ extension BrowserLayerView {
     fadeGeneration += 1
     let layer = target.flatMap(fadeLayer)
     let from = layer.map { $0.presentation()?.opacity ?? $0.opacity }
-    for kind in [Fade.sheet, .belowBar] {
-      fadeLayer(kind)?.removeAnimation(forKey: Self.fadeKey)
-    }
+    sheetView.layer?.removeAnimation(forKey: Self.fadeKey)
+    belowBar.layer?.removeAnimation(forKey: Self.fadeKey)
     guard animated, window != nil, !isHiddenOrHasHiddenAncestor, !reduceMotion,
       let target, let layer, let from
     else {
@@ -81,7 +85,12 @@ extension BrowserLayerView {
     let generation = fadeGeneration
     let animation = CABasicAnimation(keyPath: "opacity")
     animation.fromValue = from
-    animation.toValue = Float(target == .sheet ? sheetView.alphaValue : belowBar.alphaValue)
+    let toValue: Float =
+      switch target {
+      case .sheet: Float(sheetView.alphaValue)
+      case .belowBar: Float(belowBar.alphaValue)
+      }
+    animation.toValue = toValue
     animation.duration = duration
     let ease = Theme.Motion.easing
     animation.timingFunction = CAMediaTimingFunction(
