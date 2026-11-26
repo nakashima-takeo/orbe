@@ -91,7 +91,7 @@ extension SourceControlPaneTests {
   }
 
   /// コミットが失敗しても開いたまま。閉じると、コミットの操作の失敗は消える（開き直しても赤い行は出ない）。ポップアップの
-  /// 外（左の列）に出す失敗（プルの失敗）は、閉じても残る。
+  /// 外（置き場の失敗の札）に出す失敗（プルの失敗）は、閉じても残る。
   func testClosingThePopupClearsOnlyTheFailureOfACommitOperation() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "edited\n")
