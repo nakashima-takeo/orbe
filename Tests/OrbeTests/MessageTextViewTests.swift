@@ -6,7 +6,8 @@ import XCTest
 /// 行の高さを決めたメッセージ欄（`MessageTextView.Metrics.lineHeight`）の高さ。ポップアップの入力欄（コミット・レビュー）が使う。
 ///
 /// 壊れると何が起きるか: ポップアップの入力欄が、行を足すたびに、決めた行の高さと違う高さで伸びる。字の高い行（タイ文字）や、
-/// 打った行・書きかけを入れ直した行の一方だけ高さが変わり、欄が揺れる。10 行を越えても伸び続け、ポップアップの下に並ぶ失敗の札を押し出す。
+/// 打った行・書きかけを入れ直した行の一方だけ高さが変わり、欄が揺れる。⇧↵ の直後だけ欄が縮む。10 行を越えても伸び続け、
+/// ポップアップの下に並ぶ失敗の札を押し出す。
 @MainActor
 final class MessageTextViewTests: OrbeTestCase {
   /// 行の高さ 20・1 行のときの欄の高さ 30。
@@ -39,5 +40,16 @@ final class MessageTextViewTests: OrbeTestCase {
     field.string = ""
     field.insertText("a\nb\nc", replacementRange: NSRange(location: NSNotFound, length: 0))
     XCTAssertEqual(height(field), 70, accuracy: 0.5, "打った 3 行")
+  }
+
+  /// 末尾の改行の後の、字の無い行も、決めた行の高さ。
+  func testTheEmptyLineAfterATrailingNewlineHasTheLineHeight() {
+    let set = field()
+    set.string = "a\n"
+    XCTAssertEqual(height(set), 50, accuracy: 0.5, "入れ直した、末尾の改行の後の行")
+
+    let typed = field()
+    typed.insertText("a\n", replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertEqual(height(typed), 50, accuracy: 0.5, "打った、末尾の改行の後の行")
   }
 }
