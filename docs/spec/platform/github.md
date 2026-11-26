@@ -1,7 +1,7 @@
 ---
 title: GitHub の読み書き
 description: gh CLI で GitHub を読み書きする共通の規則。可否の事前判定・GitHub のリポジトリかの判定・remote の台帳とブランチの同一性・ブランチの PR の引き方・ブランチが GitHub に在るか・失敗の種類・PR の中身の読み方・確認済みの書き込み・レビューのやりとりの読み方と書き込み
-updated: 2026-11-22
+updated: 2026-11-26
 ---
 
 # GitHub の読み書き
