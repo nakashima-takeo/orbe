@@ -36,7 +36,7 @@ extension PullRequestStateTests {
         pendingReview: .init(id: "R", commentCount: 3), threads: threads)
       let placements = PullRequestState.Placements(
         PullRequestState.PlacementInputs(
-          review: review, head: "h", ends: item.ends, renamed: []))
+          review: review, head: "h", ends: item.ends, files: .empty, readsStopped: false))
       XCTAssertEqual(
         placements.pendingComments.filter(\.isPlaceable).map(\.thread).sorted(), item.placeable,
         "\(item.name): 未送信のコメントの置けるか")

@@ -173,6 +173,8 @@ extension EditorDiffTests {
     let state = try XCTUnwrap(pane.pullRequest.state)
     pumpMain(until: { diff.placement == .placed }, "前提: 位置を決める")
     let surface = try engine(diff.newSurface)
+    // 揃える読みをやめた後は行が置けない姿になり、押すと GitHub を開く——テストではブラウザを開かない。
+    pane.reviewPopup.onOpenURL = { _ in }
     let head = remote.head
     let stale = String(repeating: "0", count: 40)
     let operations = try userOperations(on: surface)
@@ -198,11 +200,9 @@ extension EditorDiffTests {
         until: { diff.comments?.zone(thread: id).map { !$0.isTypesetting } ?? false },
         "\(name): 前提: 版が揃ってスレッドが置かれ、本文を組み終える")
       nextTurn()
-      if index == 0 {
-        XCTAssertTrue(shows(surface, line: line - 1), "\(name): 置かれたスレッドの行が見える")
-      } else {
-        XCTAssertFalse(shows(surface, line: line - 1), "\(name): 置かれたスレッドへ画面を動かさない")
-      }
+      // この差し替えの出どころは、ずらした版を答え続けるので、版を揃える読みは揃わずにやめ、見せる頼みはそこで捨てる
+      // （これ以上読まない間は置けない）。操作が無くても、後から置かれたスレッドへ画面を動かさない。
+      XCTAssertFalse(shows(surface, line: line - 1), "\(name): 置かれたスレッドへ画面を動かさない")
     }
   }
 

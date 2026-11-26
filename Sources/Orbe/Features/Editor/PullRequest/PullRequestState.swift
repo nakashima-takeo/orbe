@@ -76,13 +76,18 @@ final class PullRequestState {
     done((repo, trackedRefs))
   }
   /// 最後に読めた中身と、その変更ファイルの並び・パスからの索引（中身を読んだときに作り直す）。
-  private(set) var content: GitHubPullRequestContent? { didSet { refreshPlacements() } }
+  private(set) var content: GitHubPullRequestContent? {
+    didSet {
+      if content?.files != oldValue?.files { changedFiles = PrChangedFiles(content?.files ?? []) }
+      refreshPlacements()
+    }
+  }
   private(set) var changedFiles = PrChangedFiles.empty
   /// 中身の最後の読みの失敗。次に中身が読めたら消える（読み直している間は前の失敗を残す）。
   var contentFailure: GitHubFailure?
   /// 最後の確認済みの書き込みの失敗。失敗の知らせを閉じたとき・次の確認済みの書き込みを始めたときに消える。
   var viewedFailure: GitHubFailure?
-  private(set) var isReading = false
+  private(set) var isReading = false { didSet { refreshPlacements() } }
   private(set) var bounds = Bounds.none { didSet { refreshPlacements() } }
 
   /// 確認済みの GitHub の値（パス → 値）と、その値を決めた問い合わせの通し番号。
@@ -117,7 +122,7 @@ final class PullRequestState {
   var reviewWriteTargets: Set<ReviewTarget> = []
   @ObservationIgnored var reviewWrites: [ReviewWrite] = []
   @ObservationIgnored var isSendingReviewWrite = false
-  @ObservationIgnored var isReadingReview = false
+  var isReadingReview = false { didSet { refreshPlacements() } }
   @ObservationIgnored var readReviewAgain = false
   /// 最後にレビューへの書き込みの答えが届いた時点の通し番号。これより前に出した読みの答えは入れない。
   @ObservationIgnored var reviewWrittenOrder = 0
@@ -133,7 +138,7 @@ final class PullRequestState {
   @ObservationIgnored var reviewAnsweredOrder = 0
   /// 先頭のコミットを揃える読み直し（→ `alignHeads`）。走っていれば、その読みを出す直前の通し番号と、揃え始めてから
   /// 読んだ先頭のコミット。
-  @ObservationIgnored private var alignment: (start: Int, seen: Set<String>)?
+  private var alignment: (start: Int, seen: Set<String>)? { didSet { refreshPlacements() } }
   /// 読み直しと書き込みに付ける、出した順の通し番号。
   @ObservationIgnored private var nextOrder = 0
 
@@ -327,7 +332,6 @@ final class PullRequestState {
 
   /// 読めた中身を入れる。確認済みは、その読み直しより後に出した書き込みで決まったパスでは上書きしない。
   private func apply(_ read: GitHubPullRequestContent, order: Int) {
-    if read.files != content?.files { changedFiles = PrChangedFiles(read.files) }
     content = read
     for file in read.files where (viewedOrder[file.path] ?? 0) < order {
       viewed[file.path] = file.isViewed

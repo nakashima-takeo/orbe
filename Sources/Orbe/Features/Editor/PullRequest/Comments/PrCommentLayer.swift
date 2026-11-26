@@ -132,9 +132,8 @@ final class PrCommentLayer {
     // 新しい両端の本文を読み終えるまで）は、古い側の行のスレッドを前の並びに置かない（GitHub は古い側の行を今の
     // マージベースの diff の行として読む）。
     let isCurrent = state.diffEnds == ends
-    if !isCurrentPullRequest { endReveal() }
+    settleRevealRequest(ends: ends)
     if let read = state.threads(at: ends.head) {
-      settleRevealRequest(read, ends: ends)
       let ids = Set(read.map(\.id))
       for (id, zone) in threads where !ids.contains(id) { forget(id, zone) }
       // 同じ行（並びの同じ所）の差し込みは列の順に上から並ぶので、側を問わず最初のコメントの時刻の順に積み、行を追う欄は

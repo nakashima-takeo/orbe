@@ -34,7 +34,15 @@ extension PullRequestState {
   /// ファイル `path` が rename かの判定が、GitHub（中身のファイルの列）と手元の diff の両端 `ends` で同じか。違えば、古い側の
   /// 行の対応が GitHub と手元で変わる。
   func agreesOnRename(of path: String, _ ends: DiffEnds) -> Bool {
-    (changedFiles.change(of: path) == .renamed) == (ends.renames[path] != nil)
+    Self.agreesOnRename(of: path, changedFiles, ends)
+  }
+
+  /// rename の判定の決まり（1 つ）——変更ファイル `files`（GitHub の答え）でファイル `path` が rename か、と、手元の diff の
+  /// 両端 `ends` で rename か、が同じ。置き方と、新しいコメントの印を古い側の行に出すかが、これを読む。
+  nonisolated static func agreesOnRename(
+    of path: String, _ files: PrChangedFiles, _ ends: DiffEnds
+  ) -> Bool {
+    (files.change(of: path) == .renamed) == (ends.renames[path] != nil)
   }
 
   /// 今の PR の diff の両端——求め終えていて、その先頭が中身の先頭と同じとき（求めている・求められない・中身が新しい先頭を

@@ -4,7 +4,8 @@ import OrbeEditorCore
 /// 見せるよう頼まれたスレッド——ポップアップの未送信のコメントの行を押したとき、その行とスレッドと押したコメントを見せる頼み。
 /// 頼みは、この層がそのスレッドの絵を置いて本文を組み終えた時点の見せ直しで終わり、その後に絵の高さが変わっても画面を
 /// 動かさない。ほかに終わるのは、利用者が diff の面を操作した（スクロール・押下・打鍵）・次の頼みが来た・スレッドを置けないと
-/// 決まった（→ `notes` の置き方）・この PR が worktree の今の open の PR でなくなった、とき。層は diff ごとなので、別の diff
+/// 決まった（これ以上読まない間を含む。→ `settleRevealRequest`）・この PR が worktree の今の open の PR でなくなった・面が
+/// 隠れた・diff を外した、とき。層は diff ごとなので、別の diff
 /// を開けば頼みも消える。
 extension PrCommentLayer {
   /// 頼み——スレッド `thread` の、コメント `comment`。`typesetting` は、見せた後に本文を組み終えるのを待っている。
@@ -68,14 +69,15 @@ extension PrCommentLayer {
     revealRequest = nil
   }
 
-  /// diff が見せている両端 `ends` の先頭で読んだスレッド `read` で、頼まれたスレッドが消えた・置けないと決まったなら、頼みを
-  /// 捨てる（まだ分からない間は残す）。
-  func settleRevealRequest(
-    _ read: [GitHubPullRequestReview.Thread], ends: PullRequestState.DiffEnds
-  ) {
+  /// diff が両端 `ends` を見せているときに、この PR が今の open の PR でなくなった・頼まれたスレッドが見せている先頭で読んだ
+  /// スレッドから消えた・置けないと決まった（これ以上読まない間を含む）なら、頼みを捨てる（まだ分からない間は残す）。
+  func settleRevealRequest(ends: PullRequestState.DiffEnds) {
     guard let request = revealRequest else { return }
-    guard let thread = read.first(where: { $0.id == request.thread }),
-      state.placement(of: thread, shown: ends) != .unplaceable
-    else { return endReveal() }
+    guard isCurrentPullRequest else { return endReveal() }
+    guard let thread = state.review?.threads.first(where: { $0.id == request.thread }) else {
+      if state.review?.headCommit == ends.head { endReveal() }
+      return
+    }
+    if state.placement(of: thread, shown: ends) == .unplaceable { endReveal() }
   }
 }
