@@ -125,10 +125,12 @@ enum LineShaper {
   /// 行を組む。`tabWidth` はタブの刻み（pt）。
   static func shape(_ source: Source, font: CTFont, tabWidth: CGFloat) -> ShapedLine {
     let shown = display(source)
-    let line = makeLine(shown.units, boxes: shown.boxes, font: font, tabWidth: tabWidth)
+    let ascii = isASCII(shown.units)
+    let line = makeLine(
+      shown.units, boxes: shown.boxes, font: font, tabWidth: tabWidth, ascii: ascii)
     return ShapedLine(
       line, omitted: shown.omitted, boxes: shown.boxes, font: font,
-      ascii: isMonospaced(font) && isASCII(shown.units))
+      ascii: isMonospaced(font) && ascii)
   }
 
   /// 等幅のフォント。
@@ -144,14 +146,65 @@ enum LineShaper {
   /// 文字列を 1 行として組む（打ち切った行の末尾の印・書式文字の箱の中身）。
   static func shape(_ string: String, font: CTFont) -> ShapedLine {
     let units = ContiguousArray(string.utf16)
-    let line = makeLine(units, boxes: [:], font: font, tabWidth: 0)
+    let ascii = isASCII(units)
+    let line = makeLine(units, boxes: [:], font: font, tabWidth: 0, ascii: ascii)
     return ShapedLine(
-      line, omitted: 0, boxes: [:], font: font, ascii: isMonospaced(font) && isASCII(units))
+      line, omitted: 0, boxes: [:], font: font, ascii: isMonospaced(font) && ascii)
   }
 
+  /// 行を組む。字の字体は、字ごとの字体と幅の表（`GlyphFonts`）の字体——まず本体の字体でそのまま組み、組んだ結果の字体が
+  /// 表と違う範囲があれば（Core Text が前の字の代替フォントを引き継いだ）、同じ字体が続く範囲ごとに表の字体を渡して組み
+  /// 直す。渡した字体はその字を持つので、Core Text は代替を探さない。ASCII の字とタブだけの行は本体の字体で組まれるので
+  /// 表と照らさない。
   private static func makeLine(
-    _ units: ContiguousArray<UInt16>, boxes: [Int: UInt16], font: CTFont, tabWidth: CGFloat
+    _ units: ContiguousArray<UInt16>, boxes: [Int: UInt16], font: CTFont, tabWidth: CGFloat,
+    ascii: Bool
   ) -> CTLine {
+    let attributed = attributed(units, font: font, tabWidth: tabWidth)
+    for (index, unit) in boxes {
+      CFAttributedStringSetAttribute(
+        attributed, CFRange(location: index, length: 1), kCTRunDelegateAttributeName,
+        boxDelegate(width: shape(boxLabel(unit), font: font).width, font: font))
+    }
+    let line = CTLineCreateWithAttributedString(attributed)
+    guard !ascii else { return line }
+    let glyphs = GlyphFonts.glyphs(units, font: font)
+    guard !follows(line, glyphs) else { return line }
+    var start = 0
+    for end in 1...units.count where end == units.count || !glyphs.sameFont(start, end) {
+      defer { start = end }
+      guard let pinned = glyphs.font(at: start), pinned !== font else { continue }
+      CFAttributedStringSetAttribute(
+        attributed, CFRange(location: start, length: end - start), kCTFontAttributeName, pinned)
+    }
+    return CTLineCreateWithAttributedString(attributed)
+  }
+
+  /// 組んだ行 `line` のどの字も、表 `glyphs` の字体で組まれているか（字体が 1 つに決まらない字と、書式文字の箱は見ない）。
+  private static func follows(_ line: CTLine, _ glyphs: GlyphFonts.Glyphs) -> Bool {
+    for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
+      let attributes = CTRunGetAttributes(run)
+      guard
+        CFDictionaryGetValue(
+          attributes, Unmanaged.passUnretained(kCTRunDelegateAttributeName).toOpaque()) == nil
+      else { continue }
+      guard let font = font(of: run) else { continue }
+      let range = CTRunGetStringRange(run)
+      for index in range.location..<range.location + range.length
+      where index == range.location || !glyphs.sameFont(index - 1, index) {
+        if let expected = glyphs.font(at: index), expected !== font, !CFEqual(expected, font) {
+          return false
+        }
+      }
+    }
+    return true
+  }
+
+  /// 単位の列 `units` に、本文の字の属性（字体 `font`・言語を持たない字として組む言語の属性・左から右の段落とタブの刻み
+  /// `tabWidth`）を付けた文字列。
+  static func attributed(
+    _ units: ContiguousArray<UInt16>, font: CTFont, tabWidth: CGFloat
+  ) -> CFMutableAttributedString {
     let string = units.withUnsafeBufferPointer {
       CFStringCreateWithCharacters(nil, $0.baseAddress, $0.count)!
     }
@@ -164,12 +217,14 @@ enum LineShaper {
     CFAttributedStringReplaceString(attributed, CFRange(location: 0, length: 0), string)
     CFAttributedStringSetAttributes(
       attributed, CFRange(location: 0, length: units.count), attributes as CFDictionary, true)
-    for (index, unit) in boxes {
-      CFAttributedStringSetAttribute(
-        attributed, CFRange(location: index, length: 1), kCTRunDelegateAttributeName,
-        boxDelegate(width: shape(boxLabel(unit), font: font).width, font: font))
-    }
-    return CTLineCreateWithAttributedString(attributed)
+    return attributed
+  }
+
+  /// run を組んだフォント。
+  static func font(of run: CTRun) -> CTFont? {
+    CFDictionaryGetValue(
+      CTRunGetAttributes(run), Unmanaged.passUnretained(kCTFontAttributeName).toOpaque()
+    ).map { Unmanaged<CTFont>.fromOpaque($0).takeUnretainedValue() }
   }
 
   /// 左から右の段落（タブの刻みがあれば、その刻みで空ける）。
@@ -233,11 +288,7 @@ extension ShapedLine {
       let count = CTRunGetGlyphCount(run)
       guard count > 0 else { continue }
       let attributes = CTRunGetAttributes(run)
-      guard
-        let value = CFDictionaryGetValue(
-          attributes, Unmanaged.passUnretained(kCTFontAttributeName).toOpaque())
-      else { continue }
-      let runFont = Unmanaged<CTFont>.fromOpaque(value).takeUnretainedValue()
+      guard let runFont = LineShaper.font(of: run) else { continue }
       var glyphs = [CGGlyph](repeating: 0, count: count)
       var positions = [CGPoint](repeating: .zero, count: count)
       var indices = [CFIndex](repeating: 0, count: count)
