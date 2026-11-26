@@ -24,11 +24,6 @@ extension PrPanel {
     return nil
   }
 
-  /// ⌘↑: レビューのポップアップを開くよう頼む（選択に依らない。開けるかは頼まれた側が決める）。
-  func requestReview() {
-    onRequestReview()
-  }
-
   /// ↑↓: 選べる行を順に渡る。未選択なら先頭の選べる行。ファイル行へ動けば diff を開く（間引く）。
   func moveSelection(by delta: Int, isRepeat: Bool, in layout: PrLayout) {
     let selectable = layout.items.indices.filter { layout.id(at: $0).isSelectable }

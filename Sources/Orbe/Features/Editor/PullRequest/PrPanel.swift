@@ -39,8 +39,6 @@ final class PrPanel {
   @ObservationIgnored var onViewAsTree: (Bool) -> Void = { _ in }
   /// URL をブラウザで開く。
   @ObservationIgnored var onOpenURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
-  /// レビューのポップアップを開くよう頼む（列の ⌘↑。面が結ぶ）。
-  @ObservationIgnored var onRequestReview: () -> Void = {}
   /// ファイルごとのコメントの数と、それを数えたレビューのやりとり。
   @ObservationIgnored private var counted: CommentCounts?
 

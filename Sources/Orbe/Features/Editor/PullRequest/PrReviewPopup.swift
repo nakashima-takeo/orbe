@@ -14,8 +14,6 @@ final class PrReviewPopup: EditorPopupOwner {
   private(set) var openedState: PullRequestState?
   /// 全体へのコメント欄の変換中の字。
   var composition = ""
-  /// 全体へのコメント欄の変換中の字を確定する（欄が結ぶ）。
-  @ObservationIgnored var confirmComposition: () -> Void = {}
   /// 未送信のコメントの行を押した（今の diff に置ける行。面が、その場所を開く）。
   @ObservationIgnored var onReveal: (PullRequestState.PendingComment) -> Void = { _ in }
   /// URL をブラウザで開く。
@@ -100,6 +98,11 @@ final class PrReviewPopup: EditorPopupOwner {
     guard wantsFocus, let field, let window = field.window else { return }
     wantsFocus = false
     window.makeFirstResponder(field)
+  }
+
+  /// 全体へのコメント欄の変換中の字を確定する。
+  func confirmComposition() {
+    field?.confirmComposition()
   }
 
   // MARK: - EditorPopupOwner

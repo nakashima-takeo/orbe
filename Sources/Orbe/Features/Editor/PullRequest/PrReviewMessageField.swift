@@ -40,7 +40,6 @@ struct PrReviewMessageField: NSViewRepresentable {
 
   func makeNSView(context: Context) -> NSScrollView {
     let text = MessageTextView(metrics: Self.metrics)
-    context.coordinator.text = text
     text.delegate = context.coordinator
     text.onComposition = { [weak coordinator = context.coordinator] composition in
       guard let popup = coordinator?.field.popup, popup.composition != composition else { return }
@@ -67,7 +66,6 @@ struct PrReviewMessageField: NSViewRepresentable {
     context.coordinator.field = self
     guard let text = scroll.documentView as? MessageTextView else { return }
     popup.field = text
-    popup.confirmComposition = { [weak text] in text?.confirmComposition() }
     text.isEditable = !state.isWritingReview(.submission)
     let body = state.reviewDraft.body
     if text.string != body, !text.hasMarkedText() {
@@ -88,7 +86,6 @@ struct PrReviewMessageField: NSViewRepresentable {
   @MainActor
   final class Coordinator: NSObject, NSTextViewDelegate {
     var field: PrReviewMessageField
-    weak var text: MessageTextView?
     private let undo = UndoManager()
 
     init(_ field: PrReviewMessageField) {

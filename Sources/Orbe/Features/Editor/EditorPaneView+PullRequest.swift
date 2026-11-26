@@ -24,7 +24,6 @@ extension EditorPaneView {
     pullRequest.onViewAsTree = { [weak self] asTree in
       self?.sidebar.setPullRequestFilesAsTree(asTree)
     }
-    pullRequest.onRequestReview = { [weak self] in self?.reviewPopup.requestOpen() }
     reviewPopup.onReveal = { [weak self] comment in self?.reveal(comment) }
   }
 
@@ -38,7 +37,7 @@ extension EditorPaneView {
     guard event.modifierFlags.intersection([.command, .option, .control, .shift]) == [.command],
       event.specialKey == .upArrow
     else { return false }
-    pullRequest.requestReview()
+    reviewPopup.requestOpen()
     return true
   }
 
