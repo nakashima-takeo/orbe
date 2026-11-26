@@ -64,6 +64,8 @@ final class EditorShellModel {
   @ObservationIgnored var createFile: () -> Void = {}
   @ObservationIgnored var createDirectory: () -> Void = {}
   @ObservationIgnored var collapseAll: () -> Void = {}
+  /// ツリーの開いている行の × で、文書を閉じる（未保存なら確認が出る）。
+  @ObservationIgnored var closeDocument: (URL) -> Void = { _ in }
   /// 上のバーで画面を選んだ。
   @ObservationIgnored var selectScreen: (EditorScreen) -> Void = { _ in }
   /// 上のバーの左端で左の列を開閉した。

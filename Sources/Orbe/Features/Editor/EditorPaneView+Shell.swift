@@ -8,6 +8,7 @@ extension EditorPaneView {
     shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
     shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
     shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
+    shell.closeDocument = { [weak self] url in self?.requestClose(url) }
     shell.selectScreen = { [weak self] screen in self?.switchScreen(screen) }
     shell.toggleSidebar = { [weak self] in self?.toggleSidebar() }
     shell.inlineInputLostFocus = { [weak self] generation in

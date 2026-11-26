@@ -31,12 +31,18 @@ struct TreeRowView: View {
           .padding(.trailing, Theme.Layout.editorTreeChipGap)
         fontResolver.text(row.name, base: Theme.Typography.editorTreeRow)
           .font(Font.theme.editorTreeRow)
-          .foregroundStyle(row.isSelected ? Color.theme.textPrimary : Color.theme.textSecondary)
+          .foregroundStyle(
+            row.isSelected || row.mark != nil ? Color.theme.textPrimary : Color.theme.textSecondary
+          )
           .lineLimit(1)
           .truncationMode(.tail)
       case .input: EmptyView()
       }
       Spacer(minLength: 0)
+      if let mark = row.mark {
+        TreeMarkButton(mark: mark) { shell.closeDocument(row.url) }
+          .padding(.trailing, Theme.Layout.editorTreeChipGap)
+      }
       if let badge = row.badge {
         Text(badge.label)
           .font(Font.theme.editorTreeBadge)
@@ -46,15 +52,7 @@ struct TreeRowView: View {
     }
     .padding(.horizontal, Theme.Layout.editorTreeRowPadX)
     .frame(height: Theme.Layout.editorRow)
-    .background(
-      RoundedRectangle(cornerRadius: Theme.Layout.editorTreeRowRadius)
-        .fill(
-          row.isSelected
-            ? Color.theme.selectionFill
-            : hovering ? ink.fill(Theme.Opacity.editorTreeHover) : .clear
-        )
-        .padding(.vertical, Theme.Layout.editorTreeRowGroundInset)
-    )
+    .background(ground(ink))
     .contentShape(Rectangle())
     .onHover { hovering = $0 }
     .onTapGesture {
@@ -68,6 +66,61 @@ struct TreeRowView: View {
       TapGesture(count: 2).onEnded {
         if case .file = row.kind { shell.open(row.url, .pinned) }
       })
+  }
+
+  /// 地: 選択の行は選択の地、開いている行は淡い地と枠、ほかはホバーで淡い地（どれも上下 1 を空けた角丸 6）。
+  private func ground(_ ink: EditorInk) -> some View {
+    let shape = RoundedRectangle(cornerRadius: Theme.Layout.editorTreeRowRadius)
+    let isOpen = row.mark != nil && !row.isSelected
+    let fill: Color =
+      row.isSelected
+      ? Color.theme.selectionFill
+      : isOpen
+        ? Color.theme.surfaceInk.opacity(Theme.Opacity.editorTreeOpen)
+        : hovering ? ink.fill(Theme.Opacity.editorTreeHover) : .clear
+    return shape.fill(fill)
+      .overlay {
+        if isOpen {
+          shape.strokeBorder(
+            Color.theme.surfaceInk.opacity(Theme.Opacity.editorTreeOpenBorder),
+            lineWidth: Theme.Stroke.hairline)
+        }
+      }
+      .padding(.vertical, Theme.Layout.editorTreeRowGroundInset)
+  }
+}
+
+/// 開いている行の印の枠 16。× か丸で、丸は枠にポインタがある間だけ × に替わる。× はホバーで枠に地が付く。押すと文書を閉じる
+/// （行の押下にはならない）。
+struct TreeMarkButton: View {
+  let mark: EditorItemListRow.Mark
+  let action: () -> Void
+  @State private var hovering = false
+  @Environment(\.colorScheme) private var scheme
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    let size = Theme.Layout.editorItemListMark
+    let shape = RoundedRectangle(cornerRadius: Theme.Radius.sm)
+    ZStack {
+      if mark == .close || hovering {
+        shape.fill(
+          hovering ? EditorInk(scheme).fill(Theme.Opacity.editorItemListMarkHover) : .clear)
+        EditorGlyphView(
+          glyph: EditorGlyphs.close, size: Theme.Layout.editorItemListMarkGlyph,
+          color: hovering ? Color.theme.textPrimary : Color.theme.textMuted)
+      } else {
+        EditorMarkDot(mark, size: Theme.Layout.editorItemDot)
+      }
+    }
+    .frame(width: size, height: size)
+    .contentShape(Rectangle())
+    .onHover { hovering = $0 }
+    .onTapGesture(perform: action)
+    .help(l10n.string(.editorItemListClose))
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(l10n.string(.editorItemListClose))
+    .accessibilityAddTraits(.isButton)
   }
 }
 
@@ -139,7 +192,13 @@ struct TreeGuides: View {
 
 extension FileTree.Row {
   var badge: GitStatus.Badge? {
-    if case .file(let badge) = kind { return badge }
+    if case .file(let badge, _) = kind { return badge }
+    return nil
+  }
+
+  /// 開いている文書の印（開いていなければ nil）。
+  var mark: EditorItemListRow.Mark? {
+    if case .file(_, let mark) = kind { return mark }
     return nil
   }
 }

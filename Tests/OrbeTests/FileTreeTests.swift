@@ -61,7 +61,7 @@ final class FileTreeTests: OrbeTestCase {
     tree.toggle("src")
     let badges = Dictionary(
       uniqueKeysWithValues: tree.rows.map { row -> (String, GitStatus.Badge?) in
-        if case .file(let badge) = row.kind { return (row.id, badge) }
+        if case .file(let badge, _) = row.kind { return (row.id, badge) }
         return (row.id, nil)
       })
     XCTAssertEqual(badges["a.txt"], .modified)

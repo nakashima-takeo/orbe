@@ -5,7 +5,8 @@ import Foundation
 extension FileTree {
   enum RowKind: Equatable {
     case directory(isExpanded: Bool)
-    case file(badge: GitStatus.Badge?)
+    /// `mark` は開いている文書の印（開いていなければ nil）。
+    case file(badge: GitStatus.Badge?, mark: EditorItemListRow.Mark?)
     /// 新規作成の行内入力（ディレクトリならシェブロンの幅を空ける）。世代は `NewEntry.generation`。
     case input(isDirectory: Bool, generation: Int)
   }
@@ -54,7 +55,8 @@ extension FileTree {
         out.append(
           Row(
             id: path, depth: depth, name: entry.name, prefix: "", url: entry.url,
-            kind: .file(badge: status?.badge(of: path)), isSelected: selected == path,
+            kind: .file(badge: status?.badge(of: path), mark: openMarks[path]),
+            isSelected: selected == path,
             isOnSelectionPath: onPath))
         continue
       }

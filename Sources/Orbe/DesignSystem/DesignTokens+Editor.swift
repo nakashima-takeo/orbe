@@ -372,6 +372,9 @@ extension Theme.Opacity {
   static let editorItemListMarkHover: Double = 0.10
   /// ツリーの行のホバーの地（塗りの α）と、字下げの線（hairline の α）。
   static let editorTreeHover: Double = 0.045
+  /// ツリーの開いている行の地と枠（`surfaceInk` の α）。
+  static let editorTreeOpen: Double = 0.06
+  static let editorTreeOpenBorder: Double = 0.05
   static let editorTreeGuide: Double = 0.15
   /// diff の追加・削除の行の地の不透明度（構文色が地の上で読める濃さ）。
   static let editorDiffRow: CGFloat = 0.12

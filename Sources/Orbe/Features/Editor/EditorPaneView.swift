@@ -246,6 +246,7 @@ final class EditorPaneView: NSView {
     }
     reconcileWithLists()
     refreshCurrentItem()
+    refreshOpenMarks()
   }
 
   /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
@@ -292,6 +293,7 @@ final class EditorPaneView: NSView {
     installRoots()
     if let url = group?.editor.activeURL { tree.reveal(url) }
     refreshCurrentItem()
+    refreshOpenMarks()
   }
 
   /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の

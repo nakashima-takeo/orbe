@@ -33,6 +33,9 @@ final class FileTree: RootFilesObserver {
   /// 相対ディレクトリ → 一覧。空文字が根。
   private(set) var entries: [String: [RootFiles.Entry]] = [:]
   private(set) var status: GitStatus?
+  /// 開いている文書（仮の文書を含む）の、根からの相対パス → 行の印（×・未保存の丸・ディスクが変わったときの丸）。面が
+  /// セッションから作って書く写し。
+  private(set) var openMarks: [String: EditorItemListRow.Mark] = [:]
   /// フォルダ（根からの相対）→ ただ 1 つの子フォルダの名前。中身がフォルダ 1 つだけでないフォルダは持たない。
   private(set) var onlyChild: [String: String] = [:]
   struct Selection: Equatable {
@@ -163,6 +166,11 @@ final class FileTree: RootFilesObserver {
     {
       self.newEntry = nil
     }
+  }
+
+  /// 開いている印の写しを置き換える（変わったときだけ書く）。
+  func setOpenMarks(_ marks: [String: EditorItemListRow.Mark]) {
+    if marks != openMarks { openMarks = marks }
   }
 
   // MARK: - 新規作成
