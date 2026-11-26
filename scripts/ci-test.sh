@@ -3,19 +3,23 @@
 #
 #   scripts/ci-test.sh <出力ディレクトリ> [swift test の引数...]
 #
-# - 出力: 疑似端末の下で走らせ（`script`）、テストの出力を行ごとに標準出力と <出力ディレクトリ>/swift-test.log へ出す。
-#   パイプの先では `swift test` が XCTest の出力を塊でため、テストが固まると最後の塊がログに出ない。テストの中の print
-#   （xctest の標準出力）は、疑似端末の下でも xctest の中でたまるので、`NSUnbufferedIO` で行ごとに出させる。
-# - 見張り: ログが STALL_SECONDS 秒伸びないか、開始から LIMIT_SECONDS 秒を超えたら、固まったとみなす。配下の xctest（無ければ
-#   配下のすべて）に `sample` をかけ、結果を標準出力と <出力ディレクトリ>/sample-<pid>.txt へ出し、配下を終わらせ、1 で終わる。
-#   見張るのも終わらせるのも、このスクリプトが起動したプロセスの配下だけ。
+# - 出力: テストの出力を、行ごとに標準出力と <出力ディレクトリ>/swift-test.log へ出す。パイプの先では `swift test` が出力を
+#   塊でため、テストが固まると最後の塊がログに出ないので、`NSUnbufferedIO` で行ごとに出させる。`$!` を `swift test` の pid に
+#   保つため、tee へはプロセス置換で渡す。疑似端末の下では走らせない（テストが起こす `zsh -i` が端末を取りに行って止まる）。
+# - 見張り: ログが STALL_SECONDS 秒伸びないか、開始から LIMIT_SECONDS 秒を超えたら、固まったとみなす。最後に始まったテストの
+#   行を出し、配下の xctest（無ければ配下のすべて）に `sample` をかけ、結果を標準出力と <出力ディレクトリ>/sample-<pid>.txt へ
+#   出し、配下を終わらせ、終了コード 1 で終わる。GitHub Actions の下では、ステップの出力 `stalled` を true にする。見張るのも
+#   終わらせるのも、このスクリプトが起動したプロセスの配下だけ。
 # - 終了コード: 固まらなければ `swift test` のもの。
+#
+# `-e` は付けない。`sample` や `kill` が失敗しても、配下を終わらせるところまで必ず進めるため。
 set -uo pipefail
 
 # 1 本のテストが出力なしで走る最長は、成功した CI で 24 秒台（main への push で走る長時間ファズ）。その 10 倍を超える長さ。
 STALL_SECONDS=300
-# ステップ全体の上限。ジョブの上限（60 分）からビルドの時間（成功した CI で 6 分前後）を引いた残りに収める。
-LIMIT_SECONDS=2700
+# このステップの所要は、成功した CI で 11〜12.4 分（main への push の長時間ファズを含む）。その 2 倍を超え、ビルドが長引いた
+# 実行（ビルド 15 分 40 秒）でもジョブの上限（60 分）より先に来る長さ。
+LIMIT_SECONDS=1800
 POLL_SECONDS=5
 
 out=$1
@@ -24,7 +28,7 @@ mkdir -p "$out"
 log="$out/swift-test.log"
 : >"$log"
 
-NSUnbufferedIO=YES script -q -F "$log" swift test --skip-build "$@" </dev/null &
+NSUnbufferedIO=YES swift test --skip-build "$@" </dev/null > >(tee "$log") 2>&1 &
 pid=$!
 
 descendants() {
@@ -47,11 +51,16 @@ while kill -0 "$pid" 2>/dev/null; do
     size=$current
     grown=$SECONDS
   fi
-  if ((SECONDS - grown < STALL_SECONDS && SECONDS - started < LIMIT_SECONDS)); then
+  if ((SECONDS - grown >= STALL_SECONDS)); then
+    echo "::error::テストの出力が $((SECONDS - grown)) 秒伸びない（開始から $((SECONDS - started)) 秒）。配下のプロセスに sample をかけて終わらせる。"
+  elif ((SECONDS - started >= LIMIT_SECONDS)); then
+    echo "::error::テストのステップが上限の $LIMIT_SECONDS 秒を超えた。配下のプロセスに sample をかけて終わらせる。"
+  else
     continue
   fi
 
-  echo "::error::テストの出力が $((SECONDS - grown)) 秒伸びない（開始から $((SECONDS - started)) 秒）。配下のプロセスに sample をかけて終わらせる。"
+  echo "最後に始まったテスト: $(grep "Test Case '.*' started" "$log" | tail -1)"
+  [ -n "${GITHUB_OUTPUT:-}" ] && echo "stalled=true" >>"$GITHUB_OUTPUT"
   all=$(descendants "$pid")
   targets=$(for p in $all; do
     [ "$(basename "$(ps -o comm= -p "$p")")" = xctest ] && echo "$p"
@@ -70,7 +79,9 @@ while kill -0 "$pid" 2>/dev/null; do
     kill -0 "$pid" 2>/dev/null || break
     sleep 1
   done
-  kill -KILL $(descendants "$pid") "$pid" 2>/dev/null
+  # SIGKILL は、sample の前に取った配下の一覧（`all`）にも送る。xctest が終わると、その子（別のプロセスグループで起こした
+  # ものなど）は配下から外れ、数え直しても見つからない。
+  kill -KILL $all $(descendants "$pid") "$pid" 2>/dev/null
   wait "$pid"
   exit 1
 done
