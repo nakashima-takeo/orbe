@@ -78,7 +78,7 @@ extension EditorPaneView {
     guard focusIsInSourceControl, scm.isListFocused else { return false }
     let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
     guard flags == [.command], event.specialKey == .upArrow else { return false }
-    popup.open(commitPopup)
+    commitPopup.open()
     return true
   }
 }

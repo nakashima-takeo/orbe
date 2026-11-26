@@ -109,18 +109,18 @@ extension SourceControl {
   private func pull(
     _ files: RootFiles, _ operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void
   ) {
-    network(.pull, of: operation, done) { finished in
+    network(.pull, of: operation, done) { [weak self] finished in
       files.pull(
-        onProgress: { [weak self] in self?.report($0, of: operation) }, completion: finished)
+        onProgress: { self?.report($0, of: operation) }, completion: finished)
     }
   }
 
   private func push(
     _ files: RootFiles, _ operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void
   ) {
-    network(.push, of: operation, done) { finished in
+    network(.push, of: operation, done) { [weak self] finished in
       files.push(
-        onProgress: { [weak self] in self?.report($0, of: operation) }, completion: finished)
+        onProgress: { self?.report($0, of: operation) }, completion: finished)
     }
   }
 

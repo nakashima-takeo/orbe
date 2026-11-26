@@ -82,10 +82,6 @@ final class EditorConfirmHost: NSView {
     if event.charactersIgnoringModifiers == "\u{1b}" { confirm.close(.escape) }
   }
 
-  override func cancelOperation(_ sender: Any?) {
-    confirm.close(.escape)
-  }
-
   override func mouseDown(with event: NSEvent) {}
   override func rightMouseDown(with event: NSEvent) {}
   override func otherMouseDown(with event: NSEvent) {}
