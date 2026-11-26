@@ -6,7 +6,7 @@ import XCTest
 @testable import Orbe
 
 /// ⌘⇧F——端末からでもエディターを開き（閉じていれば開く）、検索パネルの入力欄に焦点を入れる。開いたまま押し直しても焦点は
-/// 入力欄に残る。種は押した時点の焦点で決まる（本文の 1 行以内の選択・⌘F のバーの検索語。端末・検索パネル・キャレットだけ・
+/// 入力欄に残る。種は押した時点の焦点で決まる（本文の 1 行以内の選択・ファイル内検索の欄の検索語。端末・検索パネル・キャレットだけ・
 /// 複数行は種にしない）。
 ///
 /// 壊れると何が起きるか。端末で ⌘⇧F を押しても入力欄へ届かない。入力欄に打っている途中で押し直すと焦点が本文へ奪われる。
@@ -104,9 +104,9 @@ final class FindInProjectTests: OrbeTestCase {
     let (tab, window) = (hosted.tab, hosted.window)
     let pane = tab.group.view.editor
     pane.showSearch()
-    let bar = try XCTUnwrap(pane.searchBar)
-    bar.onNeedleChange?("oo")
-    pumpMain(until: { (window.firstResponder as? NSView)?.isDescendant(of: bar) == true })
+    let field = try XCTUnwrap(pane.findField.model)
+    field.onNeedleChange?("oo")
+    pumpMain(until: { (window.firstResponder as? NSView)?.isDescendant(of: pane.barHost) == true })
 
     hosted.findInProject()
     XCTAssertEqual(pane.projectSearch.query.pattern, "oo")

@@ -50,8 +50,8 @@ struct EditorNoticeView: View {
   }
 }
 
-/// pane の本体の種類——文書（文書の面）・diff（新しい側の面、並列なら左右 2 面）・空状態。本体の矩形・右列・焦点の行き先・
-/// 当たり・検索バーはこの種類で分かれる。
+/// pane の本体の種類——文書（文書の面）・diff（新しい側の面、並列なら左右 2 面）・空状態。本体の矩形・焦点の行き先・当たり・
+/// ファイル内検索の欄はこの種類で分かれる。
 enum EditorBody {
   case document(EditorDocument)
   case diff(EditorDiff)

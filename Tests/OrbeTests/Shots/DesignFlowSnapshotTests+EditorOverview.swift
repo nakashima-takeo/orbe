@@ -156,11 +156,11 @@ extension DesignFlowSnapshotTests {
         pane,
         [
           ("open", {}),
-          ("cmd_f", { pane.showSearch() }),  // 本文の右上（ミニマップの左）にバー。キャレットの語が種
+          ("cmd_f", { pane.showSearch() }),  // 上のバーの今のファイルのボタンの右に欄。キャレットの語が種
           (
             "typed",
             {  // needle → 全一致に地、現在の一致は不透明の地とその行の薄い地。ミニマップとスクロールバーの中央レーンにも出る
-              pane.searchBar?.needle = "starts"
+              pane.findField.model?.needle = "starts"
               pane.search.setNeedle("starts")
             }
           ),

@@ -310,13 +310,15 @@ extension Theme.Layout {
   static let editorMinimapMaxWidth: CGFloat = 120
   /// 折りたたみのシェブロン。
   static let editorChevron: CGFloat = 16
-  /// 検索パネル。見出しの高さ・左右の余白・部品の間、入力欄の高さ・オプションの角・結果の行の高さ（まとまりの見出しも一致も
-  /// 同じ）・一致の行の左の字下げ・件数バッジ（最小幅×高さ）・まとまりの見出しのシェブロンの幅。
+  /// 検索パネル。見出しの高さ・左右の余白・部品の間、入力欄の高さと下の余白・件数の文の上の余白・オプションの角・結果の
+  /// 行の高さ（見出しも一致も同じ）・一致の行の左の字下げ・件数バッジ（最小幅×高さ）・まとまりの見出しのシェブロンの幅。
   static let editorSearchHeader: CGFloat = 38
   static let editorSearchHeaderLeading: CGFloat = 12
   static let editorSearchHeaderTrailing: CGFloat = 8
   static let editorSearchHeaderGap: CGFloat = 6
   static let editorSearchField: CGFloat = 28
+  static let editorSearchFieldBottom: CGFloat = 6
+  static let editorSearchSummaryTop: CGFloat = 4
   static let editorSearchOption: CGFloat = 20
   static let editorSearchRow: CGFloat = 20
   static let editorSearchMatchIndent: CGFloat = 40

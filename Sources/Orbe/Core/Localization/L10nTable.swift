@@ -202,6 +202,7 @@ enum L10n {
     .editorBarHideSidebar: ("サイドバーを閉じる", "Hide Sidebar"),
     .editorBarShowSidebar: ("サイドバーを開く", "Show Sidebar"),
     .editorBarShowTerminal: ("端末を表示", "Show Terminal"),
+    .editorFindPlaceholder: ("ファイル内を検索", "Find in File"),
 
     // MARK: Editor 面（プロジェクト検索）
     .editorSearchTitle: ("検索", "Search"),

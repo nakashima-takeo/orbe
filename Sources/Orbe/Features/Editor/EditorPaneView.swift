@@ -62,11 +62,9 @@ final class EditorPaneView: NSView {
   var diffViews: [NSView] = []
   /// 知らせを結んでいる文書（本体で編集する文書を結んだもの——`bindEditedDocument`）。
   weak var boundDocument: EditorDocument?
-  /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
+  /// ファイル内検索の状態と、上のバーの欄の持ち主（pane ごと）。欄の状態は出している間だけある。
   let search = EditorSearch()
-  var searchBar: SearchBar?
-  /// 検索バーの右端の制約（右列の幅が本体の幅で変わるので `layout()` が置き直す）。
-  var searchBarTrailing: NSLayoutConstraint?
+  let findField = EditorFindField()
   /// 出現の強調の状態（pane ごと）。
   let occurrences = EditorOccurrences()
   /// プロジェクト検索の状態（pane ごと＝連ごと）。
@@ -146,7 +144,7 @@ final class EditorPaneView: NSView {
     barHost = EditorBarHost(
       rootView: EditorBarRoot(
         shell: shell, sidebar: sidebar, itemList: itemList, scm: scm,
-        pullRequest: pullRequest.pullRequest,
+        pullRequest: pullRequest.pullRequest, findField: findField,
         localization: localization, fontResolver: fontResolver))
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
@@ -167,7 +165,7 @@ final class EditorPaneView: NSView {
     layerContentsRedrawPolicy = .onSetNeedsDisplay
     assembleViews()
     search.onCountChange = { [weak self] selected, total, limited in
-      self?.searchBar?.updateCount(selected: selected, total: total, limited: limited)
+      self?.findField.model?.updateCount(selected: selected, total: total, limited: limited)
     }
     search.onMatchesChange = { [weak self] in self?.pushFindGround() }
     search.onNeedleChange = { [weak self] in self?.syncFindState() }
@@ -217,7 +215,7 @@ final class EditorPaneView: NSView {
   private func installRoots() {
     barHost.rootView = EditorBarRoot(
       shell: shell, sidebar: sidebar, itemList: itemList, scm: scm,
-      pullRequest: pullRequest.pullRequest,
+      pullRequest: pullRequest.pullRequest, findField: findField,
       localization: localization, fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
@@ -316,7 +314,7 @@ final class EditorPaneView: NSView {
   /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の
   /// 見え方をコードへ戻す）、新しい本体を載せる（文書の面にはコードの見え方を、diff には今の見せ方の見え方を載せる）。
   /// 配置を頼み、文書を初めて画面に出すときはその配置で、最初の描画に色が間に合うよう上限つきで待つ（→
-  /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
+  /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなれば欄は閉じる。
   /// 文書の知らせは、本体で編集する文書へ結び直す（→ `bindEditedDocument`）。
   /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が本体にあれば新しい行き先へ移す——判定は
   /// 前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では「中にあった」ことが
@@ -331,8 +329,8 @@ final class EditorPaneView: NSView {
       SurfaceLook.code.apply(to: document.surface, document: document)
       install(document.surface)
     case .diff(let diff):
-      closeSearch()
       showDiff(diff)
+      closeSearch()
     case .empty:
       closeSearch()
     }

@@ -1,11 +1,12 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// ファイル内検索の、バーの外に現れる結果——全一致の地と現在の一致の地（編集の間も字に付く）、選択から導く件数、閉じた後の
+/// ファイル内検索の、欄の外に現れる結果——全一致の地と現在の一致の地（編集の間も字に付く）、選択から導く件数、閉じた後の
 /// 開き直し、文書を汚さないこと。
 ///
 /// 壊れると何が起きるか。一致の地が出ず、選ばれた 1 つ以外どこに一致があるか分からない。現在の一致が他の一致と見分け
@@ -14,16 +15,16 @@ import XCTest
 extension EditorSearchTests {
   /// 全一致に地が敷かれる（現在でない一致も）。一致の無い行は地のまま。needle が変われば敷き直す。
   func testEveryMatchGetsAGroundAndTextWithoutAMatchDoesNot() throws {
-    let hosted = try host(Self.belowTheBar + "x a b y\nx a b y\nx c d y\n")
+    let hosted = try host("x a b y\nx a b y\nx c d y\n")
     let pane = hosted.pane
     pane.showSearch()
     catchUp(pane)
     pane.search.setNeedle("a b")
     catchUp(pane)
-    XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 6, length: 3))
-    let other = cellCenter(hosted, line: 6, column: 3)
-    let unmatched = cellCenter(hosted, line: 7, column: 3)
-    let ground = try PaneProbe(pane).rgb(other.x, y: cellCenter(hosted, line: 10, column: 3).y)
+    XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 2, length: 3))
+    let other = cellCenter(hosted, line: 2, column: 3)
+    let unmatched = cellCenter(hosted, line: 3, column: 3)
+    let ground = try PaneProbe(pane).rgb(other.x, y: cellCenter(hosted, line: 6, column: 3).y)
     let drawn = try probe(pane) { try !PaneProbe.same($0.rgb(other.x, y: other.y), ground) }
     XCTAssertTrue(
       PaneProbe.same(try drawn.rgb(unmatched.x, y: unmatched.y), ground), "一致の無い行は地のまま")
@@ -37,18 +38,18 @@ extension EditorSearchTests {
   /// 現在の一致（選択がちょうど一致）は他の一致と違う地で見分けられ、その行全体にも地が付く。選択が一致から外れると
   /// （本文のクリック）、その一致は他の一致と同じ地に戻り、行の地も消える。
   func testTheCurrentMatchStandsOutUntilTheSelectionLeavesIt() throws {
-    let hosted = try host(Self.belowTheBar + "x a b y\nx a b y\n")
+    let hosted = try host("x a b y\nx a b y\n")
     let pane = hosted.pane
     pane.showSearch()
     catchUp(pane)
     pane.search.setNeedle("a b")
     catchUp(pane)
     XCTAssertEqual(
-      hosted.document.surface.selectedRange, NSRange(location: 6, length: 3), "前提: 5 行目の一致が現在")
-    // 現在の一致（5 行目）と他の一致（6 行目）の組——一致の中の空白のセルと、行の右の空きのセル。
+      hosted.document.surface.selectedRange, NSRange(location: 2, length: 3), "前提: 1 行目の一致が現在")
+    // 現在の一致（1 行目）と他の一致（2 行目）の組——一致の中の空白のセルと、行の右の空きのセル。
     let pairs = [
-      (cellCenter(hosted, line: 5, column: 3), cellCenter(hosted, line: 6, column: 3)),
-      (cellCenter(hosted, line: 5, column: 12), cellCenter(hosted, line: 6, column: 12)),
+      (cellCenter(hosted, line: 1, column: 3), cellCenter(hosted, line: 2, column: 3)),
+      (cellCenter(hosted, line: 1, column: 12), cellCenter(hosted, line: 2, column: 12)),
     ]
     func alike(_ probe: PaneProbe) throws -> [Bool] {
       try pairs.map {
@@ -87,7 +88,7 @@ extension EditorSearchTests {
 
   /// 本文を編集してから一致を取り直すまでの間も、一致の地は編集に合わせてずれ、字から離れない。
   func testTheGroundFollowsAnEditBeforeTheMatchesAreRefreshed() throws {
-    let hosted = try host(Self.belowTheBar + "a b y\n")
+    let hosted = try host("a b y\n")
     let pane = hosted.pane
     let document = hosted.document
     pane.showSearch()
@@ -95,16 +96,16 @@ extension EditorSearchTests {
     pane.search.setNeedle("a b")
     catchUp(pane)
     pane.search.refreshDelay.schedule = { _, _ in }
-    document.surface.selectedRange = NSRange(location: 4, length: 0)
+    document.surface.selectedRange = NSRange(location: 0, length: 0)
     hosted.window.makeFirstResponder(document.surface.responder)
     for character in "zz" { document.surface.responder.keyDown(with: .key(String(character), [])) }
-    XCTAssertEqual(bodyText(document), Self.belowTheBar + "zza b y\n")
-    let moved = cellCenter(hosted, line: 5, column: 3)
-    let ground = try PaneProbe(pane).rgb(moved.x, y: cellCenter(hosted, line: 10, column: 3).y)
+    XCTAssertEqual(bodyText(document), "zza b y\n")
+    let moved = cellCenter(hosted, line: 1, column: 3)
+    let ground = try PaneProbe(pane).rgb(moved.x, y: cellCenter(hosted, line: 6, column: 3).y)
     _ = try probe(pane) { try !PaneProbe.same($0.rgb(moved.x, y: moved.y), ground) }
   }
 
-  /// 件数の位置は選択から導く——選択がちょうど一致ならその番号、一致でなければ位置は無い（バーは「?/N」）。本文を
+  /// 件数の位置は選択から導く——選択がちょうど一致ならその番号、一致でなければ位置は無い（欄は「?/N」）。本文を
   /// クリックして一致から外れても同じ。Enter はキャレットの先の一致へ進む。
   func testTheCountPositionFollowsTheSelection() throws {
     let hosted = try host("foo bar\nfoo baz\nFOO\n")
@@ -128,21 +129,30 @@ extension EditorSearchTests {
     XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 16, length: 3))
   }
 
-  /// 件数はバーに届く——一致なしはバーの件数が danger（赤）になり、一致が戻れば赤は消える。
+  /// 件数は欄に届く——一致なしは欄の件数が danger（赤）になり、一致が戻れば赤は消える。
   func testNoMatchShowsInTheBarInDangerAndClearsWhenAMatchReturns() throws {
     let hosted = try host("foo bar\n")
     let pane = hosted.pane
     pane.showSearch()
     catchUp(pane)
-    let bar = try XCTUnwrap(pane.searchBar)
+    let bar = try XCTUnwrap(pane.findField.model)
     func type(_ needle: String) {
       bar.needle = needle
       bar.onNeedleChange?(needle)
       catchUp(pane)
     }
-    /// バーの矩形の中に赤い画素があるか（字の縁の有無でなく、件数の字の色を領域で見る）。
+    pumpMain(until: { self.findFieldView(pane) != nil }, "欄が上のバーに出る")
+    let input = try XCTUnwrap(findFieldView(pane))
+    let inputFrame = pane.convert(input.bounds, from: input)
+    let lead =
+      Theme.Layout.editorFieldPadLeading + Theme.Layout.editorFieldGlyph
+      + Theme.Layout.editorFieldGap
+    /// 欄の矩形（入力の左端から欄の右端）の中に赤い画素があるか（字の縁の有無でなく、件数の字の色を領域で見る）。
     func barHasRed(_ probe: PaneProbe) throws -> Bool {
-      let frame = bar.frame.insetBy(dx: 4, dy: 4)
+      let frame = CGRect(
+        x: inputFrame.minX, y: pane.barHost.frame.minY,
+        width: Theme.Layout.editorBarFindWidth - lead, height: pane.barHost.frame.height
+      ).insetBy(dx: 0, dy: 4)
       return try stride(from: frame.minX, to: frame.maxX, by: 0.5).contains { x in
         try stride(from: frame.minY, to: frame.maxY, by: 0.5).contains { y in
           let c = try probe.rgb(x, y: y)
@@ -165,11 +175,11 @@ extension EditorSearchTests {
     catchUp(pane)
     pane.search.setNeedle("one")
     catchUp(pane)
-    try XCTUnwrap(pane.searchBar).onClose?()
+    try XCTUnwrap(pane.findField.model).onClose?()
 
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
     catchUp(pane)
-    let bar = try XCTUnwrap(pane.searchBar)
+    let bar = try XCTUnwrap(pane.findField.model)
     XCTAssertEqual(bar.needle, "one", "選択（閉じる前の一致）が種になる")
     XCTAssertEqual(pane.search.matches.count, 2)
     bar.onNeedleChange?("two")
