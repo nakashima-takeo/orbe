@@ -45,7 +45,7 @@ final class FileTree: RootFilesObserver {
   }
 
   /// エクスプローラーの中の 2 つの入力のどちらがフォーカスを持つか（無ければ nil）。view が、フォーカスが変わるたびに写す
-  /// （片方からもう片方へ移るのも 1 回の変化として届く）。行内入力から絞り込みの欄へ移ったら、その入力を取り消す。欄に入ったら
+  /// （行内入力から絞り込みの欄へ移るのは 1 回の変化として届く）。行内入力から絞り込みの欄へ移ったら、その入力を取り消す。欄に入ったら
   /// 対象の一覧が無いか古ければ取り、欄から出て字が空なら一覧を捨てる。
   var explorerFocus: ExplorerFocus? {
     didSet { if explorerFocus != oldValue { explorerFocusDidChange(from: oldValue) } }

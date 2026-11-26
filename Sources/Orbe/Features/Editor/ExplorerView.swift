@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// 左の列: エクスプローラー（上の行・文の行・ツリー）。ツリーは根の直下の行から始まる。2 つの入力（絞り込みの欄・行内入力）の
-/// フォーカスは 1 つの値で持ち、変わるたびにツリーへ写す。ツリーのスクロール位置はツリーが覚え、画面を
-/// 切り替えて・左の列を閉じて・検索パネルから戻って作り直されても戻す。隠れている間に選択が替わっていれば、位置を戻す代わりに
-/// 選択の行を見せる。
+/// フォーカスは、ツリーの 1 つの値（`explorerFocus`）へ写す——絞り込みの欄は欄の first responder の出入りから（押した時点で
+/// 届く）、行内入力は `focus` から（その後の SwiftUI の更新で届く）。行内入力から欄へ移ったときは、欄の分が先に値を替えるので、
+/// 行内入力の「抜けた」は値を戻さない。ツリーのスクロール位置はツリーが覚え、画面を切り替えて・左の列を閉じて・検索パネルから
+/// 戻って作り直されても戻す。隠れている間に選択が替わっていれば、位置を戻す代わりに選択の行を見せる。
 struct ExplorerView: View {
   let shell: EditorShellModel
   let tree: FileTree
@@ -13,6 +14,7 @@ struct ExplorerView: View {
   /// 作り直した一覧で見せる選択の行の同一性（隠れている間に選択が替わったとき）。最初のレイアウトの後に 1 度だけ中ほどへ送って
   /// 終える——行を宛先に送るので、中身が溢れるのを待たない（収まっていれば何も動かない）。
   @State private var pendingReveal: String?
+  /// 行内入力のフォーカス（`.input` だけを取る）。
   @FocusState private var focus: FileTree.ExplorerFocus?
 
   init(shell: EditorShellModel, tree: FileTree) {
@@ -96,8 +98,12 @@ struct ExplorerView: View {
       }
     }
     .onChange(of: focus) { old, new in
-      tree.explorerFocus = new
-      if case .input(let generation) = old, new == nil { shell.inlineInputLostFocus(generation) }
+      if let new {
+        tree.explorerFocus = new
+      } else if case .input(let generation) = old, tree.explorerFocus == old {
+        tree.explorerFocus = nil
+        shell.inlineInputLostFocus(generation)
+      }
     }
     .onDisappear { tree.explorerFocus = nil }
   }
@@ -106,7 +112,7 @@ struct ExplorerView: View {
   /// 待っている間は、下端に進捗の細い線。
   private var topRow: some View {
     HStack(spacing: Theme.Space.hair) {
-      ExplorerFilterField(tree: tree, shell: shell, focus: $focus)
+      ExplorerFilterField(tree: tree, shell: shell)
         .padding(.trailing, Theme.Layout.editorTreeFieldGap)
       EditorIconButton(
         glyph: EditorGlyphs.newFile, help: l10n.string(.editorNewFile), action: shell.createFile)
@@ -126,34 +132,35 @@ struct ExplorerView: View {
 }
 
 /// 絞り込みの欄（入力欄の枠の高さ 26）。字はツリーの状態に束ねる（view が作り直されても残る）。esc は、字があれば空にし
-/// （フォーカスは欄のまま）、空なら本体の行き先へフォーカスを移す。変換中の esc は変換の取り消し（入力が受ける）。
+/// （フォーカスは欄のまま）、空なら本体の行き先へフォーカスを移す（キーリピートの esc も同じ）。変換中の esc は変換の取り消し。
+/// ↵ は何もしない。フォーカスは押して入り、出入りをツリーの `explorerFocus` へ写す。
 private struct ExplorerFilterField: View {
   let tree: FileTree
   let shell: EditorShellModel
-  var focus: FocusState<FileTree.ExplorerFocus?>.Binding
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    EditorFieldFrame(height: Theme.Layout.editorTreeField, isFocused: focus.wrappedValue == .filter)
-    {
-      TextField(
-        "", text: Binding(get: { tree.filter.text }, set: tree.setFilterText),
-        prompt: Text(l10n.string(.editorFilterPlaceholder)).foregroundStyle(Color.theme.textMuted)
-      )
-      .textFieldStyle(.plain)
-      .font(Font.theme.editorTreeFilter)
-      .foregroundStyle(Color.theme.textPrimary)
-      .tint(Color.theme.accentPrimary)
-      .lineLimit(1)
-      .focused(focus, equals: .filter)
-      .onKeyPress(.escape) {
-        if tree.filter.isActive {
-          tree.setFilterText("")
-        } else {
-          shell.focusBody()
-        }
-        return .handled
-      }
+    EditorFieldFrame(
+      height: Theme.Layout.editorTreeField, isFocused: tree.explorerFocus == .filter
+    ) {
+      EditorTextField(
+        text: tree.filter.text, placeholder: l10n.string(.editorFilterPlaceholder),
+        font: Theme.Typography.editorTreeFilter, placeholderColor: Theme.Color.textMuted,
+        onTextChange: tree.setFilterText,
+        onFocusChange: { focused in
+          if focused {
+            tree.explorerFocus = .filter
+          } else if tree.explorerFocus == .filter {
+            tree.explorerFocus = nil
+          }
+        },
+        onEscape: { _ in
+          if tree.filter.isActive {
+            tree.setFilterText("")
+          } else {
+            shell.focusBody()
+          }
+        })
     }
   }
 }
