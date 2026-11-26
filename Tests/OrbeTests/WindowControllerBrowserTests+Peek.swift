@@ -127,6 +127,16 @@ extension WindowControllerBrowserTests {
     XCTAssertEqual(sound.played.count, playedBefore, "右シート表示中は done 音を鳴らさない")
     XCTAssertNil(wc.attentionStore.transient, "右シート表示中は done 知らせを出さない")
 
+    // 全面 → 単独 ⌘B 閉鎖でも端末が露出するので done が消費される。
+    wc.setBrowserMode(.full, animated: false)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
+    reportDone(wc, tab)
+    XCTAssertEqual(tab.agentState, "done", "前提: 全面中は再び done が残る")
+    wc.toggleBrowser()
+    XCTAssertEqual(wc.browserMode, .closed)
+    XCTAssertTrue(wc.visibleTab === tab)
+    XCTAssertEqual(tab.agentState, "idle", "単独 ⌘B 閉鎖で露出した端末の done を消費する")
+
     // 全面ブラウザ＋下層エディターで全面めくりしても端末は見えないため done は残る。
     wc.toggleEditorFace()
     wc.setBrowserMode(.full, animated: false)
@@ -162,12 +172,7 @@ extension WindowControllerBrowserTests {
     wc.toggleEditorFace()
     XCTAssertEqual(wc.browserMode, .closed)
     XCTAssertTrue(tabA.group.view.isEditorOpen)
-    XCTExpectFailure(
-      "バグ疑い: toggleEditorFace が editorShownTab 更新前に "
-        + "yieldBrowserToUnderlay → consumeVisibleTabDone を呼ぶため tabA の done が消える"
-    ) {
-      XCTAssertEqual(tabA.agentState, "done", "全面ブラウザ→エディター直行では端末が見えないので done が残る")
-    }
+    XCTAssertEqual(tabA.agentState, "done", "全面ブラウザ→エディター直行では端末が見えないので done が残る")
 
     // 経路 2: 全面ブラウザから別 workspace の tabC へ open_file。tabA も tabC も端末は見えない。
     wc.select(0)  // tabA を端末へ戻す
@@ -183,12 +188,7 @@ extension WindowControllerBrowserTests {
     XCTAssertEqual(wc.browserMode, .closed)
     XCTAssertTrue(wc.activeTab === tabC)
     XCTAssertTrue(tabC.group.view.isEditorOpen)
-    XCTExpectFailure(
-      "バグ疑い: showInEditor/select が選択・editorShownTab 更新前に "
-        + "yieldBrowserToUnderlay → consumeVisibleTabDone を呼ぶため done が消える"
-    ) {
-      XCTAssertEqual(tabA.agentState, "done", "移り先ではない tabA の done は消えない")
-      XCTAssertEqual(tabC.agentState, "done", "エディターで開いた tabC の done も消えない")
-    }
+    XCTAssertEqual(tabA.agentState, "done", "移り先ではない tabA の done は消えない")
+    XCTAssertEqual(tabC.agentState, "done", "エディターで開いた tabC の done も消えない")
   }
 }

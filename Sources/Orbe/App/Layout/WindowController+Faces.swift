@@ -127,7 +127,6 @@ extension WindowController {
     guard editorShownTab !== tab || needsYield, let index = store.workspaceIndex(of: tab) else {
       return
     }
-    yieldBrowserToUnderlay(animated: true)
     select(.tab(tab), inWorkspaceAt: index, inEditor: true)
   }
 

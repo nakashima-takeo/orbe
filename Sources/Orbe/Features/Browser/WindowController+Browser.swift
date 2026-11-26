@@ -23,42 +23,47 @@ extension WindowController {
     setBrowserMode(browserMode.isOpen ? .closed : .sheet, animated: true)
   }
 
-  /// Z=2 ブラウザ層のモード変更の単一入口。
-  /// `optionHold` を打ち切ってから `syncPeekState` で Z=1/Z=2 を同期し、全面解除等で露出した端末の `done` を消費する。
-  func setBrowserMode(_ next: BrowserMode, animated: Bool, restoreFocus: Bool = true) {
+  /// Z=2 ブラウザ層のモード変更の単一入口（単独操作用）。
+  /// `optionHold` を打ち切ってから `syncPeekState` で Z=1/Z=2 の透かしと露出端末の `done` 消費を同期する。
+  func setBrowserMode(_ next: BrowserMode, animated: Bool) {
     guard next != browserMode else { return }
     let previous = browserMode
+    applyBrowserMode(next, animated: animated)
+    syncPeekState(animated: animated)
+    if next.isOpen {
+      browserWasFocused = true
+      if model.overlay == .none {
+        browserView.focusBrowser()
+      }
+    } else if previous.isOpen {
+      browserWasFocused = false
+      if model.overlay == .none {
+        focusSelection()
+      }
+    }
+    syncBrowserFocusVisual()
+  }
+
+  /// 下層へ明示的に移る命令（`select`・`toggleEditorFace`）の共通前処理。
+  /// 焦点記憶を必ず下層へ譲り、全面ブラウザは閉じ、右シートは残して非焦点見た目へ更新する。
+  /// 途中状態の誤消費を防ぐため `done` 消費と焦点復帰は行わず、後続の `renderSelection` に委ねる。
+  func yieldBrowserToUnderlay(animated: Bool) {
+    browserWasFocused = false
+    if browserMode == .full {
+      applyBrowserMode(.closed, animated: animated)
+      syncBrowserFocusVisual()
+    } else if browserMode == .sheet {
+      browserView.endURLEditingExternally()
+      syncBrowserFocusVisual()
+    }
+  }
+
+  private func applyBrowserMode(_ next: BrowserMode, animated: Bool) {
     browserMode = next
     optionHold.interrupt()
     browserView.endURLEditingExternally()
     browserView.setSheetRatio(browserSheetRatio)
     browserView.setMode(next, animated: animated)
-    syncPeekState(animated: animated)
-    if next.isOpen {
-      browserWasFocused = true
-      if restoreFocus, model.overlay == .none {
-        browserView.focusBrowser()
-      }
-    } else if previous.isOpen {
-      browserWasFocused = false
-      if restoreFocus, model.overlay == .none {
-        focusSelection()
-      }
-    }
-    syncBrowserFocusVisual()
-    consumeVisibleTabDone()
-  }
-
-  /// 下層へ明示的に移る命令（`select`・`showInEditor`・`toggleEditorFace`）の共通前処理。
-  /// 焦点記憶を必ず下層へ譲り、全面ブラウザは閉じ、右シートは残して非焦点見た目へ更新する。
-  func yieldBrowserToUnderlay(animated: Bool) {
-    browserWasFocused = false
-    if browserMode == .full {
-      setBrowserMode(.closed, animated: animated, restoreFocus: false)
-    } else if browserMode == .sheet {
-      browserView.endURLEditingExternally()
-      syncBrowserFocusVisual()
-    }
   }
 
   /// `OrbeWindow.makeFirstResponder` 成功後の同期通知。
