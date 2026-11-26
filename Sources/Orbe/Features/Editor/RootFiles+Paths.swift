@@ -16,10 +16,11 @@ extension RootFiles {
   static let pathListLimit = 200_000
 
   /// 絞り込みの対象の一覧を取る（`completion` は main で呼ぶ）。キューを根から始め、キューから取ったフォルダが git の作業ツリー
-  /// の根なら git に 2 回問い合わせ、そうでなければディスクを走査する。どちらも、入れ子の根（サブモジュール・入れ子のリポジトリ・
-  /// 走査していて `.git` を持つフォルダ）に出会ったら中へは入らずにキューへ足す。根で git が失敗したら全体を「取れなかった」に
-  /// する。入れ子の根で git が失敗したら（壊れた `.git`）、根が git 管理下かの判定と同じ決まり（壊れた `.git` は管理外）で、
-  /// 管理外として走査する。結果はキャッシュしない。git 管理下かの判定（`isResolved`）が済んでから呼ぶ。
+  /// の根か入れ子の根（`.git` を持つフォルダ）なら git に 2 回問い合わせ、そうでなければディスクを走査する。どちらも、入れ子の根
+  /// （サブモジュール・入れ子のリポジトリ・走査していて `.git` を持つフォルダ）に出会ったら中へは入らずにキューへ足す。入れ子の
+  /// 根では、その `.git` を読まずに問い合わせる（`GitFileList.nestedOptions`）。根で git が失敗したら全体を「取れなかった」に
+  /// する。入れ子の根で git が失敗したら、管理外として走査する。結果はキャッシュしない。git 管理下かの判定（`isResolved`）が
+  /// 済んでから呼ぶ。
   func listFilterPaths(completion: @escaping @MainActor (PathList) -> Void) {
     let root = self.root
     let rootIsManaged = repo != nil
@@ -41,6 +42,8 @@ private struct PathCollector {
   private var paths: [String] = []
   /// 処理待ちのキュー（根からの相対のフォルダ。根は空）。
   private var pending: [String] = [""]
+  /// 入れ子の根で使う、空の使い捨ての git のディレクトリ（最初の入れ子の根で作り、この処理が終われば消える）。
+  private var emptyGitDirectory: GitFileList.EmptyGitDirectory?
 
   init(root: String, runner: GitRunner) {
     self.root = root
@@ -74,11 +77,17 @@ private struct PathCollector {
     if !DefaultExcludes.contains(path) { paths.append(path) }
   }
 
-  /// git の作業ツリーの根 `directory` を git に問い合わせる。入れ子の根では `GitFileList.nestedOptions` を足す。skip-worktree
-  /// のファイルは、ディスクに在るものだけを足す。どちらかの git が失敗したら何も足さずに false。
+  /// git の作業ツリーの根 `directory` を git に問い合わせる。入れ子の根では、空の使い捨ての git のディレクトリで問い合わせる
+  /// （`GitFileList.nestedOptions`）。skip-worktree のファイルは、ディスクに在るものだけを足す。どちらかの git が失敗したら
+  /// （入れ子の根で使い捨ての git のディレクトリを作れなかったときも）何も足さずに false。
   private mutating func askGit(_ directory: String) -> Bool {
     let cwd = absolute(directory)
-    let options = directory.isEmpty ? [] : GitFileList.nestedOptions(workTree: cwd)
+    var options: [String] = []
+    if !directory.isEmpty {
+      if emptyGitDirectory == nil { emptyGitDirectory = GitFileList.EmptyGitDirectory() }
+      guard let gitDir = emptyGitDirectory?.path else { return false }
+      options = GitFileList.nestedOptions(gitDir: gitDir, workTree: cwd)
+    }
     let listed = runner.runSync(options + GitFileList.listedArguments, cwd: cwd)
     guard listed.ending == .completed, listed.isSuccess else { return false }
     let ignored = runner.runSync(options + GitFileList.ignoredArguments, cwd: cwd)

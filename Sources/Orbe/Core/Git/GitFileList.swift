@@ -13,12 +13,39 @@ enum GitFileList {
     "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory",
   ]
 
-  /// 入れ子の根 `workTree`（サブモジュール・入れ子のリポジトリ）で、2 回のコマンドの前に足す引数。そのリポジトリの設定が、
-  /// 一覧を取るだけで走るコマンドと読みに行く場所を決めないため——設定の `core.fsmonitor` が指すコマンドを起こさず（この 2 回の
-  /// コマンドが設定から起こすコマンドは、これだけ。filter・hook・pager は起こさない）、作業ツリーは設定の `core.worktree` に
-  /// 依らずその根にする（入れ子の根は `.git` を持つフォルダなので、作業ツリーはその根）。
-  static func nestedOptions(workTree: String) -> [String] {
-    ["-c", "core.fsmonitor=false", "--work-tree", workTree]
+  /// 入れ子の根 `workTree`（根の下の、自分の `.git` を持つフォルダ。サブモジュールを含む）で、2 回のコマンドの前に足す引数。
+  /// git のディレクトリには、入れ子の `.git` ではなく空の使い捨ての git のディレクトリ `gitDir` を使う——入れ子のリポジトリの
+  /// 設定・index・オブジェクトを一切読まない（その設定が走らせるコマンドも、読みに行く場所も無い）。効くのは作業ツリーの上の
+  /// ファイルと `.gitignore` の規則と、利用者の全体の設定だけで、index が空なのでファイルはどれも未追跡として返る。利用者の全体の
+  /// 設定の `core.fsmonitor` も切る——使い捨ての git のディレクトリに監視を起こさない。
+  static func nestedOptions(gitDir: String, workTree: String) -> [String] {
+    ["-c", "core.fsmonitor=false", "--git-dir", gitDir, "--work-tree", workTree]
+  }
+
+  /// 空の、使い捨ての git のディレクトリ（`HEAD`・`objects`・`refs` だけ）。一時フォルダの下に作り、手放すと消す。
+  final class EmptyGitDirectory {
+    let path: String
+
+    /// 作れなければ nil。
+    init?() {
+      let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "orbe-empty-git-\(UUID().uuidString)", isDirectory: true)
+      do {
+        for name in ["objects", "refs"] {
+          try FileManager.default.createDirectory(
+            at: url.appendingPathComponent(name), withIntermediateDirectories: true)
+        }
+        try Data("ref: refs/heads/main\n".utf8).write(to: url.appendingPathComponent("HEAD"))
+      } catch {
+        try? FileManager.default.removeItem(at: url)
+        return nil
+      }
+      path = url.path
+    }
+
+    deinit {
+      try? FileManager.default.removeItem(atPath: path)
+    }
   }
 
   /// (a) の解析結果。
