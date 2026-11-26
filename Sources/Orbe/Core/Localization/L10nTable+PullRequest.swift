@@ -115,8 +115,8 @@ extension L10n {
     ),
     .editorPrViewedFailed: ("確認済みを反映できませんでした（%@）", "Couldn’t update Viewed (%@)"),
     .editorPrViewedTimedOut: (
-      "確認済みの書き込みに GitHub の応答がありません。反映されたかは GitHub で確かめてください",
-      "GitHub didn’t respond to the Viewed update. Check on GitHub whether it went through."
+      "確認済みの書き込みに GitHub の応答がありません。GitHub の今の値を読み直します",
+      "GitHub didn’t respond to the Viewed update. Reloading the current state from GitHub"
     ),
     .editorPrSubmitFailed: ("レビューを送信できませんでした（%@）", "Couldn’t submit the review (%@)"),
     .editorPrSubmitTimedOut: (

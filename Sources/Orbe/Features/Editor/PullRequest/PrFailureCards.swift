@@ -60,7 +60,8 @@ enum PrFailureCards {
     return nil
   }
 
-  /// 確認済みの書き込みの失敗の文。時間切れは、反映されたかを GitHub で確かめるよう告げる（GitHub が受けていることがある）。
+  /// 確認済みの書き込みの失敗の文。時間切れは、GitHub の今の値を読み直すことを告げる（GitHub が受けていることがあり、状態が
+  /// その場で中身を読み直す）。
   private static func viewedText(_ failure: GitHubFailure, _ l10n: LocalizationStore) -> String {
     if failure == .timedOut { return l10n.string(.editorPrViewedTimedOut) }
     return l10n.format(.editorPrViewedFailed, PrPanelText.viewedFailure(failure, l10n))

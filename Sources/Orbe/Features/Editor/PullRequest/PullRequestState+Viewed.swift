@@ -69,6 +69,8 @@ extension PullRequestState {
       if let reason = result.failure { viewedFailure = reason }
       notify()
       sendNextWrite()
+      // 時間切れは GitHub が受けていることがある。中身を読み直して、GitHub の今の値を出す（同じ値をもう一度書いても害は無い）。
+      if result.failure == .timedOut { reload() }
     }
   }
 }
