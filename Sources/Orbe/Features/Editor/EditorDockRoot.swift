@@ -9,6 +9,8 @@ struct EditorDockRoot: View {
   let shell: EditorShellModel
   /// ポップアップの器（開閉と、載せる側の持ち主）。
   let popup: EditorPopup
+  /// レビューのポップアップの持ち主（PR の画面の札が、worktree の今の PR とポップアップが開いているかを読む）。
+  let reviewPopup: PrReviewPopup
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
   let translucency: ChromeTranslucency

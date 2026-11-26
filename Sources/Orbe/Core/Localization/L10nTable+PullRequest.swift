@@ -113,6 +113,12 @@ extension L10n {
       "PR の diff を表示できないため、送信できません。再読込するか、GitHub で送信してください",
       "Can’t submit because the pull request diff can’t be shown. Refresh, or submit on GitHub"
     ),
+    .editorPrViewedFailed: ("確認済みを反映できませんでした（%@）", "Couldn’t update Viewed (%@)"),
+    .editorPrSubmitFailed: ("レビューを送信できませんでした（%@）", "Couldn’t submit the review (%@)"),
+    .editorPrSubmitTimedOut: (
+      "レビューの送信に GitHub の応答がありません。反映されたかは GitHub で確かめてください",
+      "GitHub didn’t respond to the review submission. Check on GitHub whether it went through."
+    ),
     .editorPrReviewReadFailed: (
       "レビューのコメントを読み込めません（%@）", "Couldn’t load review comments (%@)"
     ),

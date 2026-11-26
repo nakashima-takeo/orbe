@@ -81,6 +81,72 @@ extension DesignFlowSnapshotTests {
       appearances: [true, false], steps: [("no_diff", { Self.openReview(blocked, draft: "") })])
   }
 
+  /// PR の失敗の札（StateHooks.swift の diff を出し、左の列を閉じた姿）: 確認済みを反映できない → GitHub から読めていない
+  /// （中身とレビューのやりとりが同時に失敗しても 1 枚）→ 読めるようになった後、送信中に閉じたポップアップの送信の失敗 →
+  /// × で全部閉じる。
+  func testEditorPrFailureCards() throws {
+    try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
+    let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
+    let scene = try PrFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
+    defer { scene.cleanup() }
+    scene.warmUp(size: Self.size)
+    pumpMain(until: { scene.isReady }, "PR の中身と帯が揃う")
+    let pane = scene.pane
+    let panel = scene.panel
+    let state = try XCTUnwrap(panel.state)
+    try renderInPlace(
+      pane, name: "editor_pr_cards", dir: previewDir("flows"), appearances: [true, false],
+      steps: [
+        (
+          "viewed",
+          {
+            scene.openDiff()
+            pumpMain(until: { scene.isDiffReady }, "StateHooks.swift の diff が揃う")
+            pane.sidebar.setOpen(false)
+            scene.faults.viewed = .rateLimited
+            panel.toggleViewed(PrFixtureReview.path)
+            pumpMain(until: { state.viewedFailure != nil }, "確認済みの書き込みが失敗する")
+          }
+        ),
+        (
+          "reading",
+          {
+            scene.faults.content = .unreachable
+            scene.review.readFailure = .unreachable
+            panel.refresh()
+            pumpMain(
+              until: { state.contentFailure != nil && state.reviewFailure != nil }, "読みが失敗する")
+          }
+        ),
+        (
+          "submission",
+          {
+            scene.faults.content = nil
+            scene.review.readFailure = nil
+            panel.refresh()
+            pumpMain(
+              until: { state.contentFailure == nil && state.reviewFailure == nil }, "読めるようになる")
+            Self.openReview(scene, draft: "見ました。")
+            scene.review.writes = .hold
+            pane.reviewPopup.submit()
+            pane.reviewPopup.toggle()
+            scene.review.writes = .fail(.unreachable)
+            scene.review.release()
+            pumpMain(until: { state.submissionFailure != nil }, "閉じた後に送信が失敗する")
+          }
+        ),
+        (
+          "dismissed",
+          {
+            let cards = PrFailureCards.cards(
+              of: panel.pullRequest, reviewIsOpen: pane.reviewPopup.isOpen,
+              LocalizationStore(language: .ja))
+            for card in cards { card.dismiss() }
+          }
+        ),
+      ])
+  }
+
   /// 全体へのコメントを `draft` にして、レビューのポップアップを開く（開けるまで待つ）。
   @MainActor
   private static func openReview(_ scene: PrFixtures.Scene, draft: String) {

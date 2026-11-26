@@ -30,6 +30,11 @@ extension PullRequestState {
     return (files.filter { isViewed($0.path) }.count, files.count)
   }
 
+  /// 確認済みの書き込みの失敗を消す（失敗の知らせを閉じた）。
+  func dismissViewedFailure() {
+    viewedFailure = nil
+  }
+
   /// 変更ファイル `paths` の確認済みを `value` にする。変更ファイルに無いパスは書かない。
   func setViewed(_ value: Bool, paths: [String]) {
     guard let content else { return }

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// 左の列: PR のパネル。上から、パネルヘッダー（題）→ 答えに応じた中身。PR があれば頭
-/// （PR の印・題・番号・作者 · `head → base`・手元とのずれの帯）と失敗の文と列（説明・コミット・変更ファイル。AppKit）。
+/// （PR の印・題・番号・作者 · `head → base`・手元とのずれの帯）と列（説明・コミット・変更ファイル。AppKit）。
 /// PR が無い・表示できない・中身の最初の読みが失敗したときは短い一言だけ（見出しと理由、作成と
 /// 再読込のボタンは本体が出す）。根が変わると面はパネルと列を組で作り直すので、中身はパネルで同一視する。
 struct PrPanelView: View {
@@ -29,9 +29,6 @@ struct PrPanelView: View {
     case .pullRequest(let state):
       if let content = state.content {
         PrHead(content: content, drift: panel.pullRequest.drift)
-        if let failure = PrPanelText.failure(of: panel, state, l10n) {
-          PrNote(text: failure)
-        }
         PrListHost(
           list: list, header: header, panel: panel, description: content.body,
           descriptionTitle: l10n.string(.editorPrDescription), rowsVersion: panel.rowsVersion,
@@ -47,21 +44,6 @@ struct PrPanelView: View {
         EditorSidebarNote(text: l10n.string(.editorUnavailable))
       }
     }
-  }
-}
-
-/// PR があるときの失敗の一文（頭の下。danger）。
-private struct PrNote: View {
-  let text: String
-
-  var body: some View {
-    Text(text)
-      .font(Font.theme.editorScmNote)
-      .foregroundStyle(Color.theme.danger)
-      .fixedSize(horizontal: false, vertical: true)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.horizontal, 18)
-      .padding(.vertical, Theme.Space.step)
   }
 }
 
@@ -202,13 +184,12 @@ enum PrPanelText {
     }
   }
 
-  /// 失敗の文——確認済みの書き込みの失敗、PR の中身の読み直しの失敗、PR を保ったまま今のブランチの PR を引き直せなかった
-  /// 理由の順に、最初にあるもの。
+  /// PR の中身がまだ読めていない間の失敗の文——中身の読みの失敗か、PR を保ったまま今のブランチの PR を引き直せなかった理由
+  /// （閉じた印に依らない）。
   @MainActor
   static func failure(of panel: PrPanel, _ state: PullRequestState, _ l10n: LocalizationStore)
     -> String?
   {
-    if let failure = state.viewedFailure { return viewedFailure(failure, l10n) }
     if let failure = state.contentFailure { return contentFailure(failure.reason, l10n) }
     return panel.pullRequest.lookupFailure.map { unavailable($0.reason, l10n) }
   }

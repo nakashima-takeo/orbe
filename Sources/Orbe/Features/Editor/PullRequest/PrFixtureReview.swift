@@ -19,6 +19,8 @@
     var writes = Writes.succeed
     /// 見ている人が PR の作者か（自分の PR の姿を撮る）。
     var viewerIsAuthor = false
+    /// 読みに返す失敗（nil なら答える）。
+    var readFailure: GitHubFailure?
     /// PR の先頭のコミット（読むたびに問う。PR に push があると進む）。
     private let head: () -> String
     private var threads: [GitHubPullRequestReview.Thread]
