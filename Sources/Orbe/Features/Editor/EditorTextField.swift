@@ -2,9 +2,9 @@ import AppKit
 import SwiftUI
 
 /// 1 行の入力欄（AppKit の `NSTextField`）。命令でフォーカスを入れる欄（検索の列の入力欄・上のバーのファイル内検索の欄）が使う。
-/// フォーカスの要求は、欄が窓に載った時点か、要求が来た時点に、欄が自分で first responder になって当てる。フォーカスの出入り・
-/// 字の変化（打鍵・貼り付け・取り消し・やり直し。変換中の字は確定するまで入れない）・↵・⇧↵・esc は閉包で使う側へ知らせる。
-/// Tab は何もしない。取り消しの履歴は欄ごとに持ち、中身を外から差し替えたら捨てる。
+/// フォーカスの要求は、欄が窓に載った時点か、要求が来た時点に、欄が当てる——フォーカスが無ければ first responder になり、在れば
+/// 全選択する。フォーカスの出入り・字の変化（打鍵・貼り付け・取り消し・やり直し。変換中の字は確定するまで入れない）・↵・⇧↵・esc
+/// は閉包で使う側へ知らせる。Tab は何もしない。取り消しの履歴は欄ごとに持ち、中身を外から差し替えたら捨てる。
 struct EditorTextField: NSViewRepresentable {
   let text: String
   let placeholder: String
@@ -80,10 +80,13 @@ struct EditorTextField: NSViewRepresentable {
       }
     }
 
-    /// 要求があり、欄が窓に載っていれば、first responder になって要求を消す。窓に載っていなければ、載ったときに当てる。
+    /// 要求があり、欄が窓に載っていれば当てて、要求を消す——欄にフォーカスがあれば全選択し、無ければ first responder になる
+    /// （AppKit が全選択する）。窓に載っていなければ、載ったときに当てる。
     func applyFocusRequest() {
       guard let view, view.wantsFocus, let field, let window = field.window else { return }
-      if !window.makeFirstResponder(field) {
+      if let editor = field.currentEditor() {
+        editor.selectAll(nil)
+      } else if !window.makeFirstResponder(field) {
         NSLog("[editor] the text field could not become first responder")
       }
       view.requestDidApply()

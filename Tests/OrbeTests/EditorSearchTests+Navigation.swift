@@ -47,7 +47,8 @@ extension EditorSearchTests {
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
     catchUp(pane)
     XCTAssertEqual(pane.search.needle, "gamma", "種が無ければ前の needle")
-    XCTAssertEqual(field()?.selectedRange(), NSRange(location: 0, length: 5), "焦点のある入力欄も全選択")
+    pumpMain(
+      until: { field()?.selectedRange() == NSRange(location: 0, length: 5) }, "焦点のある入力欄も全選択")
   }
 
   /// Enter は選択の終わりから、⇧Enter は選択の先頭から次・前の一致へ（キャレットが一致の中ならその一致を飛ばす）。

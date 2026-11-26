@@ -19,7 +19,6 @@ extension EditorPaneView {
         field.needle = seed
       }
       findField.requestFocus()
-      selectFindNeedle()
       return
     }
     let field = findField.open()
@@ -45,12 +44,6 @@ extension EditorPaneView {
     }
     let seed = document.text.substring(selection)
     return seed.contains(where: \.isNewline) ? nil : seed
-  }
-
-  /// 欄にフォーカスがあれば検索語を全選択する（フォーカスがこれから入るなら、入るときに AppKit が全選択する）。
-  private func selectFindNeedle() {
-    guard findField.isFocused, let editor = window?.firstResponder as? NSTextView else { return }
-    editor.selectAll(nil)
   }
 
   /// 欄を閉じる。一致の地は消え、選択はそのまま残る。フォーカスが欄にあれば、欄を消す前にテキスト面へ移す（フォーカスを
