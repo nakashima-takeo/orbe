@@ -11,7 +11,7 @@ import XCTest
 /// 写すとバッジが毎回消えて戻る。消えたディレクトリを畳まないと無いものが展開されたまま残る。
 @MainActor
 final class FileTreeTests: OrbeTestCase {
-  private var repo: TempGitRepo!
+  var repo: TempGitRepo!
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
@@ -28,8 +28,9 @@ final class FileTreeTests: OrbeTestCase {
     return tree.commitNew()
   }
 
-  private func names(_ tree: FileTree) -> [String] {
-    tree.rows.map { String(repeating: "  ", count: $0.depth) + $0.name }
+  /// 行の名前（深さぶんの字下げと、連なりの名前の前の段を付けた形）。
+  func names(_ tree: FileTree) -> [String] {
+    tree.rows.map { String(repeating: "  ", count: $0.depth) + $0.prefix + $0.name }
   }
 
   func testLiveTreeListsTheRootAndExpandsDirectoriesLazily() {
@@ -242,7 +243,7 @@ final class FileTreeTests: OrbeTestCase {
 }
 
 extension FileTree.Row {
-  fileprivate var isInput: Bool {
+  var isInput: Bool {
     if case .input = kind { return true }
     return false
   }
