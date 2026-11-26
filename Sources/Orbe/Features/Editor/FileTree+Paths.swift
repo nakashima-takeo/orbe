@@ -20,9 +20,11 @@ extension FileTree {
   /// `path` が、取り直した `directory` の一覧から消えたフォルダか、その配下か。
   static func isGone(_ path: String, under directory: String, present: Set<String>) -> Bool {
     let prefix = directory.isEmpty ? "" : directory + "/"
-    guard path.hasPrefix(prefix), path.count > prefix.count else { return false }
-    let child = prefix + (path.dropFirst(prefix.count).split(separator: "/").first ?? "")
-    return !present.contains(child)
+    guard path.hasPrefix(prefix) else { return false }
+    let rest = path.utf8.dropFirst(prefix.utf8.count)
+    guard !rest.isEmpty else { return false }
+    let end = rest.firstIndex(of: UInt8(ascii: "/")) ?? rest.endIndex
+    return !present.contains(String(path[..<end]))
   }
 
   static func join(_ directory: String, _ name: String) -> String {

@@ -102,21 +102,26 @@ extension FileTree {
             isOnSelectionPath: onPath))
         continue
       }
+      // 連なりでないフォルダ（ほとんどの行）は、連なりの列を作らず、一覧の名前と URL をそのまま使う。
       let chain = chain(from: path, source)
-      let deepest = chain[chain.count - 1]
+      let deepest = chain.last ?? path
       let isExpanded = source.isExpanded(deepest)
       out.append(
         Row(
-          id: path, depth: depth, name: Self.name(of: deepest),
+          id: path, depth: depth, name: chain.isEmpty ? entry.name : Self.name(of: deepest),
           prefix: chain.dropLast().map { Self.name(of: $0) + "/" }.joined(),
-          url: url(of: deepest), kind: .directory(isExpanded: isExpanded),
-          isSelected: selected.map(chain.contains) ?? false, isOnSelectionPath: onPath))
+          url: chain.isEmpty ? entry.url : url(of: deepest),
+          kind: .directory(isExpanded: isExpanded),
+          isSelected: selected.map { chain.isEmpty ? $0 == path : chain.contains($0) } ?? false,
+          isOnSelectionPath: onPath))
       if isExpanded { append(directory: deepest, depth: depth + 1, source: source, into: &out) }
     }
   }
 
-  /// `head` から覚えをたどった連なり（先頭からいちばん深いフォルダまで）。行内入力の挿し先で止める（入力行はその中身）。
+  /// `head` から覚えをたどった連なり（先頭からいちばん深いフォルダまで）。連なりでなければ空。行内入力の挿し先で止める（入力行
+  /// はその中身）。
   private func chain(from head: String, _ source: RowSource) -> [String] {
+    guard head != source.newEntry?.directory, source.onlyChild[head] != nil else { return [] }
     var chain = [head]
     var path = head
     while path != source.newEntry?.directory, let child = source.onlyChild[path] {

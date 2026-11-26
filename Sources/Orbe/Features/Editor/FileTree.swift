@@ -285,7 +285,7 @@ final class FileTree: RootFilesObserver {
         memo[path] = nil
       }
       if memo != onlyChild { onlyChild = memo }
-      if isNew { lookaheads.formUnion(folders.filter { !expanded.contains($0) }) }
+      if isNew { lookaheads.formUnion(present.subtracting(expanded)) }
     } else if directory.isEmpty {
       entries[directory] = []
     } else {
