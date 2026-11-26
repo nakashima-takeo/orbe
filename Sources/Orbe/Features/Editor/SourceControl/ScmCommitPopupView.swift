@@ -56,6 +56,7 @@ struct ScmCommitPopupView: View {
         .padding(Theme.Layout.editorItemListPad)
     }
     .frame(width: Theme.Layout.editorCommitMenuWidth)
+    .editorDockItem()
   }
 
   /// 「コミット」（押した時点の写しで押せるときだけ）。
