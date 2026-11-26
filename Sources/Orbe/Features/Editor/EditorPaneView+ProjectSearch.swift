@@ -32,7 +32,7 @@ extension EditorPaneView {
     showsSearchPanel && focusIsInSidebar && projectSearch.focusedArea != nil
   }
 
-  /// ⌘⇧F の種——押した時点の焦点がテキスト面で、選択が 1 行以内の非空ならその文字列、⌘F のバーの入力欄ならその
+  /// ⌘⇧F の種——押した時点の焦点がテキスト面で、選択が 1 行以内の非空ならその文字列、ファイル内検索の欄ならその
   /// 検索語。焦点が既に検索パネルにあれば種なし（キャレットの語は使わない。VS Code の `seedWithNearestWord` の既定）。
   /// 選択がプロジェクト検索の置いた選択のままでも種なし（結果を見て回った後の ⌘⇧F で、一致の字を検索語に入れて検索し直さない）。
   func projectSearchSeed() -> String? {
@@ -47,7 +47,7 @@ extension EditorPaneView {
       let text = document.text.substring(selection)
       return text.contains(where: \.isNewline) ? nil : text
     }
-    if let searchBar, responder.isDescendant(of: searchBar), !search.needle.isEmpty {
+    if findField.isFocused, !search.needle.isEmpty {
       return search.needle
     }
     return nil

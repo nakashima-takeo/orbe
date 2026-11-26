@@ -10,9 +10,9 @@ import XCTest
 ///
 /// 壊れると何が起きるか。表示中に ⌘F を押しても検索語が今の選択に変わらず、入力欄を打ち直せない。キャレットが一致の中に
 /// あるとき ⇧Enter が同じ一致に留まる。検索語を消して打ち直すと、開いたときの位置でなく検索が選んだ位置から探す。本文で
-/// Esc を押してもバーが閉じない。
+/// Esc を押しても欄が閉じない。
 extension EditorSearchTests {
-  /// バーが出ている間の ⌘F は、押すたびに種で needle を取り直して入力欄を全選択する（選択は動かさない）。種が無い
+  /// 欄が出ている間の ⌘F は、押すたびに種で needle を取り直して入力欄を全選択する（選択は動かさない）。種が無い
   /// （改行をまたぐ選択・語の外）なら前の needle のまま全選択する。VS Code と同じ。
   func testCommandFWhileTheBarIsShownReseedsAndSelectsTheField() throws {
     let hosted = try host("alpha beta\ngamma\nalpha\n")
@@ -21,9 +21,11 @@ extension EditorSearchTests {
     document.surface.selectedRange = NSRange(location: 1, length: 0)
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
     catchUp(pane)
-    let bar = try XCTUnwrap(pane.searchBar)
+    let bar = try XCTUnwrap(pane.findField.model)
     func field() -> NSTextView? {
-      (hosted.window.firstResponder as? NSTextView).flatMap { $0.isDescendant(of: bar) ? $0 : nil }
+      (hosted.window.firstResponder as? NSTextView).flatMap {
+        $0.isDescendant(of: pane.barHost) ? $0 : nil
+      }
     }
     pumpMain(until: { field() != nil }, "入力欄に焦点")
 
@@ -36,7 +38,7 @@ extension EditorSearchTests {
       until: {
         bar.needle == "gamma" && field()?.selectedRange() == NSRange(location: 0, length: 5)
       },
-      "バーへ写り、全選択")
+      "欄へ写り、全選択")
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 12, length: 0), "選択は動かない")
 
     document.surface.selectedRange = NSRange(location: 2, length: 12)
@@ -95,7 +97,7 @@ extension EditorSearchTests {
       document.surface.selectedRange, NSRange(location: 7, length: 1), "本文で動かしたキャレットから")
   }
 
-  /// 本文の Esc は VS Code の順——検索バーが開いていれば閉じ、次にカーソルを主の 1 本に戻し（主の選択は残す）、次に
+  /// 本文の Esc は VS Code の順——ファイル内検索の欄が出ていれば閉じ、次にカーソルを主の 1 本に戻し（主の選択は残す）、次に
   /// 選択を解く。
   func testEscapeInTheTextClosesTheBarBeforeCollapsingCursors() throws {
     let hosted = try host("one one one\n")
@@ -113,7 +115,7 @@ extension EditorSearchTests {
         windowNumber: hosted.window.windowNumber, context: nil, characters: "\u{1b}",
         charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
     hosted.window.sendEvent(escape)
-    XCTAssertNil(pane.searchBar, "まずバーを閉じる")
+    XCTAssertNil(pane.findField.model, "まず欄を閉じる")
     XCTAssertTrue(hosted.window.firstResponder === surface.responder, "焦点は本文のまま")
     XCTAssertEqual(surface.cursorSelections.count, 3, "カーソルはそのまま")
     hosted.window.sendEvent(escape)
@@ -224,7 +226,7 @@ extension EditorSearchTests {
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 1, length: 0), "人の選択はそのまま")
   }
 
-  /// 検索バーを開いたまま文書を切り替えると、新しい文書の一致が届くまで件数は前のまま（「一致なし」を出さない）。その間に
+  /// ファイル内検索の欄を出したまま文書を切り替えると、新しい文書の一致が届くまで件数は前のまま（「一致なし」を出さない）。その間に
   /// 選択が動いても同じ。
   func testSwitchingDocumentsKeepsTheCountUntilTheNewMatchesArrive() throws {
     let hosted = try host("one two one\n")
@@ -242,7 +244,7 @@ extension EditorSearchTests {
     XCTAssertEqual(seen().last?.1, 1, "新しい文書の件数")
   }
 
-  /// 検索語を打った後、一致が届く前にバーを閉じれば、届いた一致は出さない（閉じた検索の地が戻らない）。
+  /// 検索語を打った後、一致が届く前に欄を閉じれば、届いた一致は出さない（閉じた検索の地が戻らない）。
   func testMatchesAnsweredAfterClosingDoNotShow() throws {
     let hosted = try host(" ab ab\n")
     let pane = hosted.pane

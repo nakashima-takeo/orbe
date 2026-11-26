@@ -42,7 +42,7 @@ extension TabGroupTests {
     let pane = tab.group.view.editor
 
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")), "⌘F は面が取る（端末へ届かない）")
-    XCTAssertNil(pane.searchBar, "空状態の ⌘F は何も起きない")
+    XCTAssertNil(pane.findField.model, "空状態の ⌘F は何も起きない")
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("+")), "⌘+ は消費")
     XCTAssertFalse(
       pane.performKeyEquivalent(
@@ -66,7 +66,7 @@ extension TabGroupTests {
     tab.surface.keyDown(with: .key("f"))
 
     XCTAssertNotNil(tab.surface.searchBar)
-    XCTAssertNil(tab.group.view.editor.searchBar)
+    XCTAssertNil(tab.group.view.editor.findField.model)
   }
 
   /// first responder が pane の配下に無ければ chrome キーを取らない（隠れた連の pane が横取りしない）。

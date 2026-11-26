@@ -678,6 +678,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorBarHideSidebar
   case editorBarShowSidebar
   case editorBarShowTerminal
+  case editorFindPlaceholder
   case editorBarOpenFiles
   case editorBarChangedFiles
   case editorItemUnsaved

@@ -1,11 +1,15 @@
 import AppKit
 
-/// エディター面の上のバーの共通の部品（中ほどの札・アイコンのボタン・右端の主な操作のボタン）のトークン。
+/// エディター面の上のバーの共通の部品（中ほどの札・アイコンのボタン・右端の主な操作のボタン）と、Files の画面のファイル内
+/// 検索の欄のトークン。
 extension Theme.Typography {
   /// 中ほどの札（mono 12）と、地つきの変種（同期。sans 12）。右端の主な操作のボタン（sans 12 semibold）。
   static let editorBarChip = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
   static let editorBarChipFilled = NSFont.systemFont(ofSize: 12, weight: .regular)
   static let editorBarAction = NSFont.systemFont(ofSize: 12, weight: .semibold)
+  /// ファイル内検索の欄の入力（mono 12）と件数（mono 11）。
+  static let editorBarFind = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  static let editorBarFindCount = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
 }
 
 extension Theme.Layout {
@@ -29,6 +33,11 @@ extension Theme.Layout {
   static let editorBarActionPadLeading: CGFloat = 11
   static let editorBarActionPadTrailing: CGFloat = 6
   static let editorBarActionLead: CGFloat = 12
+  /// ファイル内検索の欄——高さ・本来の幅・最小の幅（上のバーが狭いと、本来の幅からここまで縮む）・件数の右の余白。
+  static let editorBarFind: CGFloat = 26
+  static let editorBarFindWidth: CGFloat = 290
+  static let editorBarFindMinWidth: CGFloat = 180
+  static let editorBarFindCountTrailing: CGFloat = 6
 }
 
 extension Theme.Opacity {

@@ -210,9 +210,43 @@
       .environment(\.localization, LocalizationStore(language: .ja))
     }
 
+    /// Files の画面の上のバーの、ファイル内検索の欄の姿を上から並べる（幅 1100。左の列を開いた姿）——一致あり・仮の文書つき・
+    /// 一致なし・フォーカスなし・検索語が空。
+    @MainActor static func filesFindBars() -> some View {
+      VStack(alignment: .leading, spacing: 8) {
+        bar(.files, field: findModel("isEditorOpen", selected: 2, total: 3))
+        bar(
+          .files, file: previewFile, field: findModel("isEditorOpen", selected: nil, total: 3))
+        bar(.files, field: findModel("isEditorOpne", selected: nil, total: 0))
+        bar(.files, field: findModel("isEditorOpen", selected: 2, total: 3, focused: false))
+        bar(.files, field: findModel("", selected: nil, total: nil))
+      }
+      .frame(width: 1100)
+      .padding(.vertical, 8)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      .background(Color.theme.bgBase)
+      .environment(\.localization, LocalizationStore(language: .ja))
+    }
+
+    /// ファイル内検索の欄の状態（件数は面と同じく、位置が無ければ `?/全体`）。
+    @MainActor private static func findModel(
+      _ needle: String, selected: Int?, total: Int?, focused: Bool = true
+    ) -> SearchBarModel {
+      let model = SearchBarModel()
+      model.showsUnknownPosition = true
+      model.needle = needle
+      model.focused = focused
+      model.updateCount(selected: selected, total: total)
+      return model
+    }
+
     /// 画面 `screen` の姿の上のバー。Changes はブランチ名の札・同期・コミット、PR は PR の札・再読込・GitHub で開く・
-    /// レビュー、Files は今のファイルのボタン・ファイル内検索の欄。
-    @MainActor static func bar(_ screen: EditorScreen) -> some View {
+    /// レビュー、Files は今のファイルのボタン（仮の文書なら「プレビュー」の札と「開いたままにする」つき）・ファイル内検索の欄
+    /// （`field` を渡さなければ、一致ありでフォーカスのある姿）。
+    @MainActor static func bar(
+      _ screen: EditorScreen, file: EditorShellModel.CurrentFile = currentFile,
+      field: SearchBarModel? = nil
+    ) -> some View {
       EditorBarRow {
         EditorSidebarToggle(isOpen: true) {}
         EditorScreenSwitch(
@@ -240,14 +274,14 @@
             EditorBarSeparator()
             EditorItemButton(
               isOpen: false, help: "開いているファイルの一覧", action: {},
-              label: { EditorCurrentFileLabel(file: currentFile) })
+              label: { EditorCurrentFileLabel(file: file) })
           }
           .editorBarPart(grows: .itemWide)
-          HStack(spacing: EditorBarRoot.spacing) {
-            EditorBarSeparator()
-            BarFindField()
+          if file.isPreview {
+            EditorTag(text: "プレビュー")
+            EditorTextButton(title: "開いたままにする", style: .filled) {}
           }
-          .editorBarPart(grows: .findField)
+          EditorBarFindField(model: field ?? findModel("isEditorOpen", selected: 2, total: 3))
         }
         EditorPeekHint(isPeeking: false).editorBarPart(.trailing, drops: .hint)
         switch screen {
@@ -261,6 +295,11 @@
     private static let currentFile = EditorShellModel.CurrentFile(
       chip: FileChip.resolve(URL(fileURLWithPath: "/repo/App/Layout/AppShell.swift")),
       directory: "App/Layout/", name: "AppShell.swift", isPreview: false, mark: .unsaved,
+      showsKeepOpenKey: false)
+
+    private static let previewFile = EditorShellModel.CurrentFile(
+      chip: FileChip.resolve(URL(fileURLWithPath: "/repo/App/Layout/AppShell.swift")),
+      directory: "App/Layout/", name: "AppShell.swift", isPreview: true, mark: .none,
       showsKeepOpenKey: false)
 
     /// ブランチ名の札（広い姿は名前の全体、狭い姿は名前を省略）。
@@ -338,34 +377,6 @@
             Text("1").font(Font.theme.editorBarCount).foregroundStyle(Color.theme.stateWaiting)
           }
         })
-    }
-
-    /// ファイル内検索の欄に当たる、伸び縮みする入力欄（本来の幅 290・最小の幅 180）。
-    private struct BarFindField: View {
-      @State private var text = "isEditorOpen"
-
-      var body: some View {
-        HStack(spacing: 6) {
-          TextField("", text: $text)
-            .textFieldStyle(.plain)
-            .font(Font.theme.editorBarChip)
-            .foregroundStyle(Color.theme.textPrimary)
-          Text("2/3")
-            .font(Font.theme.editorBarHint)
-            .foregroundStyle(Color.theme.textMuted)
-            .padding(.trailing, 6)
-        }
-        .padding(.leading, 8)
-        .padding(.trailing, 3)
-        .frame(minWidth: 180, idealWidth: 290, maxWidth: 290)
-        .frame(height: 26)
-        .background(
-          RoundedRectangle(cornerRadius: 7).fill(Color.theme.surfaceInk.opacity(0.06))
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 7)
-            .strokeBorder(Color.theme.accentPrimary.opacity(0.55), lineWidth: 1.5))
-      }
     }
   }
 #endif

@@ -18,6 +18,8 @@ struct EditorBarRoot: View {
   let scm: ScmPanel
   /// PR の番号の持ち主（worktree の今の PR）。
   let pullRequest: BranchPullRequest
+  /// ファイル内検索の欄の持ち主（Files の中ほど）。
+  let findField: EditorFindField
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
   /// 部品の間隔。

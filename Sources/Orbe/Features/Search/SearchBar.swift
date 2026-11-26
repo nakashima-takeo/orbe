@@ -1,10 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// 面に重ねる検索バー——端末のスクロールバック検索とエディターのファイル内検索が共有する。
-/// 検索そのものは呼ぶ側が持つ（端末は libghostty の search アクション、エディターは `EditorSearch`）。
-/// 本バーは needle 入力・件数表示・次/前ジャンプのトリガを呼ぶ側へ渡すだけ。件数の出し方と更新の規則は状態の型
-/// （`SearchBarModel`）が持つ。
+/// 端末の面に重ねるスクロールバック検索のバー。検索そのものは呼ぶ側が持つ（libghostty の search アクション）。
+/// 本バーは needle 入力・件数表示・次/前ジャンプのトリガを呼ぶ側へ渡すだけ。状態の型（`SearchBarModel`）は、エディターの
+/// ファイル内検索の欄と共有する。
 ///
 /// 中身は `NSHostingView<SearchField>`（純 SwiftUI）＋ `SearchBarModel`。入力欄は SwiftUI の
 /// `TextField`。次へ＝`onSubmit`（IME 確定の Enter では発火しない）、前へ＝Shift+Return を
@@ -20,19 +19,6 @@ final class SearchBar: NSView {
   var onNext: (() -> Void)? { didSet { model.onNext = onNext } }
   var onPrev: (() -> Void)? { didSet { model.onPrev = onPrev } }
   var onClose: (() -> Void)? { didSet { model.onClose = onClose } }
-  /// 入力欄の焦点が変わった。
-  var onFocusChange: (() -> Void)? { didSet { model.onFocusChange = onFocusChange } }
-  /// 位置の無い件数を「?/total」と出す（エディター。現在の一致が無いときの VS Code の表示）。無ければ総数だけ。
-  var showsUnknownPosition: Bool {
-    get { model.showsUnknownPosition }
-    set { model.showsUnknownPosition = newValue }
-  }
-  /// 入力欄の文字列。描画後に置くと入力と同じく `onNeedleChange` が走る。初回描画前に置いた値では走らないので、
-  /// その時点の種は呼ぶ側が検索へ直接渡す（エディターが選択文字列を種にするとき）。
-  var needle: String {
-    get { model.needle }
-    set { model.needle = newValue }
-  }
 
   /// 背景透過・現在言語ホルダー（WindowController 所有）を root へ渡す。透過時は端末上でも veil 濃度を揃え、
   /// 現在言語はプレースホルダ・件数表示を選択言語で描き設定切替に一斉追従させる（別 NSHostingView root ゆえ明示注入）。
@@ -63,21 +49,14 @@ final class SearchBar: NSView {
     model.focusToken &+= 1
   }
 
-  /// 入力欄に焦点があれば文字列を全選択する（焦点がこれから入るなら、入るときに AppKit が全選択する）。
-  func selectNeedle() {
-    guard let editor = window?.firstResponder as? NSTextView, editor.isDescendant(of: self) else {
-      return
-    }
-    editor.selectAll(nil)
-  }
-
   /// ヒット件数表示を更新する（→ `SearchBarModel.updateCount`）。
   func updateCount(selected: Int?, total: Int?, limited: Bool = false) {
     model.updateCount(selected: selected, total: total, limited: limited)
   }
 }
 
-/// 検索バーの入力・表示状態と、件数の出し方・更新の規則を保持する SwiftUI モデル。
+/// 検索の欄の入力・表示状態を保持する SwiftUI モデル。端末の検索バー（`SearchBar`）とエディターのファイル内検索の欄
+/// （`EditorBarFindField`）が、件数の出し方と更新の規則を共有する。
 @MainActor @Observable final class SearchBarModel {
   var needle = ""
   var focused = false {
@@ -89,11 +68,11 @@ final class SearchBar: NSView {
   var matchSelected: Int?
   /// 総数が上限で打ち切られている（「total+」と出す）。
   var matchLimited = false
-  /// 位置が無いとき「?/total」と出す。
+  /// 位置が無いとき「?/total」と出す（エディターのファイル内検索。現在の一致が無いときの VS Code の表示）。無ければ総数だけ。
   var showsUnknownPosition = false
   /// 一致なし（danger 色）か。
   var countIsNoMatch: Bool { matchTotal == 0 }
-  /// facade の `focusField()` がインクリメントする focus トリガ。SwiftUI が監視して `@FocusState` を立てる。
+  /// focus トリガ（端末のバーの `focusField()` と、エディターの面が進める）。SwiftUI が監視して `@FocusState` を立てる。
   var focusToken = 0
 
   var onNeedleChange: ((String) -> Void)?
