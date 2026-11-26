@@ -1,5 +1,6 @@
 import AppKit
 import OrbeTestSupport
+import SwiftUI
 import WebKit
 import XCTest
 
@@ -136,18 +137,30 @@ final class BrowserLayerViewTests: OrbeTestCase {
 
   // MARK: - 開閉フェード
 
-  /// 閉じるフェード中に反転しても最終状態へ収束し、動きを減らす設定では即時切り替わる。
+  /// 開く途中で閉じへ反転しても置き換えられた動きの完了で途中非表示にならず、最後の閉じフェード完走後に
+  /// 非表示へ収束する。閉じる途中の反転と動きを減らす設定での即時切替も守る。
   func testClosingFadeAndMidFadeReversalFinishAtLatestTarget() {
     let hosted = hostBrowser(reduceMotion: false)
     let browser = hosted.browser
-    browser.setMode(.sheet, animated: false)
+
+    // 開→閉の途中反転: 古い開きフェードの完了通知（世代違い）で途中非表示にならない。
+    browser.setMode(.sheet, animated: true)
+    XCTAssertTrue(browser.isFading, "開く方向はフェードが始まる")
+    XCTAssertFalse(browser.sheetView.isHidden)
+    XCTAssertEqual(browser.sheetView.alphaValue, 1)
 
     browser.setMode(.closed, animated: true)
-    XCTAssertTrue(browser.isFading, "閉じる方向はフェードが始まる")
-    XCTAssertFalse(browser.sheetView.isHidden, "閉じる途中は見えている")
+    XCTAssertTrue(
+      holds(for: Theme.Motion.base / 6) { !browser.sheetView.isHidden },
+      "置き換えられた動きの完了では途中非表示にならない")
     XCTAssertEqual(browser.sheetView.alphaValue, 0)
 
-    // 閉じる途中で開き直しても、古い完了通知で閉じ戻らず開状態で落ち着く。
+    pumpMain(until: { !browser.isFading }, timeout: 2, "閉じフェードが完走する")
+    XCTAssertTrue(browser.sheetView.isHidden, "閉じフェード完走後に非表示になる")
+
+    // 閉→開の途中反転: 開状態で落ち着く。
+    browser.setMode(.sheet, animated: false)
+    browser.setMode(.closed, animated: true)
     browser.setMode(.sheet, animated: true)
     pumpMain(until: { !browser.isFading }, timeout: 2, "反転後の動きが終わる")
     XCTAssertFalse(browser.sheetView.isHidden)
@@ -157,6 +170,127 @@ final class BrowserLayerViewTests: OrbeTestCase {
     browser.setMode(.closed, animated: true)
     XCTAssertFalse(browser.isFading, "動きを減らす設定では即時")
     XCTAssertTrue(browser.sheetView.isHidden)
+  }
+
+  /// 全面表示や右投げ閉じプレビューからのアニメーション付き閉鎖フェード中は、閉鎖直前の幅を保ったまま
+  /// フェードアウトし（`sheetRatio` へ瞬間縮小・拡大しない）、完走後に非表示になる。
+  func testClosingFadePreservesPreCloseWidthFromFullAndRightThrow() {
+    let hosted = hostBrowser(reduceMotion: false)
+    let browser = hosted.browser
+    browser.onRequestModeChange = { mode, animated in
+      browser.setMode(mode, animated: animated)
+    }
+
+    // 全面（1000pt）からの閉鎖フェード中は全幅 1000pt のままフェードする。
+    browser.setMode(.full, animated: false)
+    hosted.stage.layoutSubtreeIfNeeded()
+    XCTAssertEqual(browser.sheetView.frame.width, stageSize.width, accuracy: 0.5)
+
+    browser.setMode(.closed, animated: true)
+    XCTAssertTrue(browser.isFading)
+    XCTAssertEqual(
+      browser.sheetView.frame.width, stageSize.width, accuracy: 0.5,
+      "全面からの閉鎖フェード中に右シート幅へ瞬間縮小しない")
+    pumpMain(until: { !browser.isFading }, timeout: 2, "全面閉鎖フェードが終わる")
+    XCTAssertTrue(browser.sheetView.isHidden)
+
+    // 右投げ閉じプレビュー（180pt）からの閉鎖フェード中は 180pt のままフェードし、次回開くと元の 60% へ戻る。
+    browser.setSheetRatio(0.60)
+    browser.setMode(.sheet, animated: false)
+    hosted.stage.layoutSubtreeIfNeeded()
+    let handle = browser.resizeHandle
+    let startPoint = browser.convert(NSPoint(x: browser.sheetView.frame.minX + 4, y: 200), to: nil)
+    let throwPoint = browser.convert(NSPoint(x: 820, y: 200), to: nil)
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: startPoint, in: hosted.window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: throwPoint, in: hosted.window))
+    XCTAssertEqual(browser.sheetView.frame.width, 180, accuracy: 0.5, "前提: 閉じプレビュー幅 180pt")
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: throwPoint, in: hosted.window))
+
+    XCTAssertTrue(browser.isFading)
+    XCTAssertEqual(
+      browser.sheetView.frame.width, 180, accuracy: 0.5,
+      "右投げ閉じフェード中に元の幅 600pt へ瞬間拡大しない")
+    pumpMain(until: { !browser.isFading }, timeout: 2, "右投げ閉じフェードが終わる")
+    XCTAssertTrue(browser.sheetView.isHidden)
+
+    browser.setMode(.sheet, animated: false)
+    XCTAssertEqual(browser.sheetView.frame.width, 600, accuracy: 0.5, "次回開くと開始前比率 60% へ戻る")
+  }
+
+  /// 右シート最小幅（240pt）でも 4 つの操作ボタンがツールバー領域内に収まり、全面 Peek の狭幅では
+  /// 案内ピルが先に省略されてボタンが切れない。
+  func testToolbarFitsAllActionButtonsAtMinimumSheetWidthAndDropsPeekPillWhenNarrow() throws {
+    let leftSpan =
+      Theme.Layout.browserBarLeading + Theme.Layout.browserIconButton * 3
+      + Theme.Layout.browserBarGap * 3
+    let rightSpan =
+      Theme.Layout.browserBarTrailing + Theme.Layout.browserIconButton + Theme.Layout.browserBarGap
+
+    // 1. 800pt 窓の最小右シート（240pt）で URL 欄が左右 4 ボタン領域を侵食せず収まる。
+    let sheetHosted = hostBrowser()
+    sheetHosted.browser.setMode(.sheet, animated: false)
+    sheetHosted.browser.setSheetRatio(BrowserResizeSession.minRatio)
+    let rect240 = try measureEditingURLField(in: sheetHosted, width: 800)
+    XCTAssertEqual(
+      sheetHosted.browser.sheetView.frame.width, BrowserResizeSession.closeThresholdWidth,
+      accuracy: 0.5)
+    XCTAssertGreaterThanOrEqual(rect240.minX, leftSpan, "240pt 右シートで左 3 ボタン側へはみ出さない")
+    XCTAssertLessThanOrEqual(
+      rect240.maxX, BrowserResizeSession.closeThresholdWidth - rightSpan,
+      "240pt 右シートで右端の全面切替ボタンを押し出さない")
+
+    // 短い URL での理想幅も 240pt を超えない（固定最小幅 120pt が戻れば 266pt になり落ちる）。
+    let compactModel = BrowserToolbarModel()
+    compactModel.mode = .sheet
+    compactModel.displayURL = BrowserDisplayURL(
+      host: "a", path: "", isSecure: false, raw: "http://a")
+    let compactIdeal = NSHostingView(
+      rootView: BrowserBarRoot(
+        model: compactModel, localization: sheetHosted.browser.localization,
+        fontResolver: ChromeFontResolver())
+    ).fittingSize.width
+    XCTAssertLessThanOrEqual(
+      compactIdeal, BrowserResizeSession.closeThresholdWidth,
+      "通常ツールバーは 240pt 以下の幅に収められる")
+
+    // 2. 全面 Peek: 広幅（600pt）では案内ピル分だけ右側余白が広がり、狭幅（320pt）ではピルを省略して収める。
+    let wideHosted = hostBrowser()
+    wideHosted.browser.setMode(.full, animated: false)
+    wideHosted.browser.setPeekUnderlay(.editor)
+    wideHosted.browser.setPeeking(true, animated: false)
+    let wideRect = try measureEditingURLField(in: wideHosted, width: 600)
+
+    let narrowHosted = hostBrowser()
+    narrowHosted.browser.setMode(.full, animated: false)
+    narrowHosted.browser.setPeekUnderlay(.editor)
+    narrowHosted.browser.setPeeking(true, animated: false)
+    let narrowRect = try measureEditingURLField(in: narrowHosted, width: 320)
+
+    XCTAssertGreaterThan(
+      (600 - wideRect.maxX) - (320 - narrowRect.maxX), 50,
+      "広幅（600pt）では案内ピルが並び、狭幅（320pt）では案内ピルが省略されて右側専有幅が大きく縮む")
+    XCTAssertGreaterThanOrEqual(narrowRect.minX, leftSpan, "320pt 全面 Peek で左 3 ボタン側へはみ出さない")
+    XCTAssertLessThanOrEqual(
+      narrowRect.maxX, 320 - rightSpan, "320pt 全面 Peek で右端の切替ボタンを押し出さない")
+  }
+
+  private func measureEditingURLField(in hosted: Hosted, width: CGFloat) throws -> NSRect {
+    let size = NSSize(width: width, height: 600)
+    hosted.window.setFrame(NSRect(origin: .zero, size: size), display: false)
+    hosted.stage.frame = NSRect(origin: .zero, size: size)
+    hosted.browser.beginURLEditing()
+    hosted.stage.layoutSubtreeIfNeeded()
+    flush(hosted.window)
+    let field = try XCTUnwrap(firstTextField(in: hosted.browser.barHost))
+    return field.convert(field.bounds, to: hosted.browser.barHost)
+  }
+
+  private func firstTextField(in view: NSView) -> NSTextField? {
+    if let field = view as? NSTextField { return field }
+    for subview in view.subviews {
+      if let found = firstTextField(in: subview) { return found }
+    }
+    return nil
   }
 
   /// 閉状態から動きつきで開くと右シート・全面ともフェードが始まり、完了後に不透明な表示状態へ落ち着く。
