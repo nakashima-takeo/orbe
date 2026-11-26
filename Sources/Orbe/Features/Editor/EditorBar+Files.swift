@@ -4,7 +4,11 @@ import SwiftUI
 extension EditorBarRoot {
   /// 今の項目の後ろに、左寄せで並ぶ部品——ファイル内検索の欄（出している間だけ）。
   @ViewBuilder var filesMiddle: some View {
-    if let model = findField.model { EditorBarFindField(model: model) }
+    if let model = findField.model {
+      EditorBarFindField(
+        model: model, wantsFocus: findField.focusRequested,
+        focusRequestDidApply: findField.focusRequestDidApply)
+    }
   }
 
   /// 右端に並ぶ部品。

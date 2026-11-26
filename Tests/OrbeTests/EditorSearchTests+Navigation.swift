@@ -12,8 +12,8 @@ import XCTest
 /// あるとき ⇧Enter が同じ一致に留まる。検索語を消して打ち直すと、開いたときの位置でなく検索が選んだ位置から探す。本文で
 /// Esc を押しても欄が閉じない。
 extension EditorSearchTests {
-  /// 欄が出ている間の ⌘F は、押すたびに種で needle を取り直して入力欄を全選択する（選択は動かさない）。種が無い
-  /// （改行をまたぐ選択・語の外）なら前の needle のまま全選択する。VS Code と同じ。
+  /// ⌘F で出た欄は、種を全選択した姿で焦点が入る。欄が出ている間の ⌘F は、押すたびに種で needle を取り直して入力欄を
+  /// 全選択する（選択は動かさない）。種が無い（改行をまたぐ選択・語の外）なら前の needle のまま全選択する。VS Code と同じ。
   func testCommandFWhileTheBarIsShownReseedsAndSelectsTheField() throws {
     let hosted = try host("alpha beta\ngamma\nalpha\n")
     let pane = hosted.pane
@@ -28,6 +28,7 @@ extension EditorSearchTests {
       }
     }
     pumpMain(until: { field() != nil }, "入力欄に焦点")
+    XCTAssertEqual(field()?.selectedRange(), NSRange(location: 0, length: 5), "出た欄の種も全選択")
 
     hosted.window.makeFirstResponder(document.surface.responder)
     document.surface.selectedRange = NSRange(location: 12, length: 0)
