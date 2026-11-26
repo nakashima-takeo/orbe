@@ -5,11 +5,12 @@ import XCTest
 @testable import Orbe
 
 /// エクスプローラーの絞り込みの欄を本物の入力欄（`EditorTextField`）で駆動する: 欄と行内入力の焦点の行き来、欄の esc、
-/// エクスプローラーが隠れたときの焦点の戻し、結果がファイルの増減に追従し、隠れていた間の増減には、出し直したときに追いつくこと。
+/// エクスプローラーが隠れたときと cd の時点の焦点の戻し、結果がファイルの増減に追従し、隠れていた間の増減には、出し直したときに追いつくこと。
 ///
 /// 壊れると何が起きるか。新規ファイルの入力の途中で欄を押すと、入力が残る・焦点が本文へ奪われて打鍵が本文に入る。欄から新規
 /// ファイルを押しても、入力行が出ない・打鍵が欄に入る。左の列を閉じた後も焦点が見えない欄に残り、打鍵と ⌘S が届かない。
 /// 絞り込んだまま足したファイルが、絞り込みを打ち直すまで出ない。日本語で絞り込む途中の esc で、変換を取り消すつもりが字ごと消える。
+/// 欄に打っている間に cd すると、焦点が、見えない古い欄に残り、左の列を閉じた後に打鍵が行き場を失う。
 @MainActor
 final class EditorPaneViewFilterTests: OrbeTestCase {
   private struct Hosted {
@@ -115,7 +116,22 @@ final class EditorPaneViewFilterTests: OrbeTestCase {
     XCTAssertTrue(focusIsInSidebar(hosted), "焦点は欄のまま")
 
     deliverKeyDown(escape(in: hosted.window), to: hosted.window)
-    pumpMain(until: { hosted.window.firstResponder === hosted.body }, "空の欄の esc で本文へ")
+    flush(hosted.window)
+    XCTAssertTrue(hosted.window.firstResponder === hosted.body, "空の欄の esc で本文へ")
+  }
+
+  /// 欄に焦点があるまま作業ディレクトリが替わる（cd）と、焦点は本体の焦点の行き先へ移る。
+  func testChangingTheRootWithTheFocusInTheFieldMovesTheFocusToTheBody() throws {
+    let hosted = try host()
+    placeOffscreen(hosted.window)
+    try pressField(hosted)
+    _ = try inputField(hosted.pane, in: hosted.window)
+    let other = TestScratch.caseDir.appendingPathComponent("other-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+
+    hosted.pane.setRoot(other.path)
+
+    XCTAssertTrue(hosted.window.firstResponder === hosted.body, "焦点は本体の焦点の行き先へ")
   }
 
   /// 欄に焦点があるまま、左の列を閉じる・画面を切り替える・検索パネルへ替えると、焦点は本体の焦点の行き先（Files なら開いている
