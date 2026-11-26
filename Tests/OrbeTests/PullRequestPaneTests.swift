@@ -358,7 +358,7 @@ final class PullRequestPaneTests: OrbeTestCase {
   }
 
   /// 全体へのコメント欄で変換中のまま worktree の今の PR が替わると、ポップアップが閉じ、変換中の字は前の PR の書きかけへ
-  /// 確定し、次の PR の書きかけは空のまま、焦点は欄から出る（窓へ落ちない）。
+  /// 確定し、次の PR の書きかけは空のまま、焦点は開く前に在った一覧へ戻る。
   func testSwitchingThePullRequestWhileComposingLeavesTheTextWithThePreviousOne() throws {
     let hosted = host(try registeredRoot())
     let field = try reviewField(hosted)
@@ -378,9 +378,7 @@ final class PullRequestPaneTests: OrbeTestCase {
     XCTAssertFalse(hosted.pane.reviewPopup.isOpen, "前の PR のポップアップは閉じる")
     XCTAssertEqual(hosted.pane.reviewPopup.composition, "")
     pumpMain(
-      until: {
-        !hosted.pane.focusIsInDock && hosted.window.firstResponder !== hosted.window
-      }, "焦点は欄から出る")
+      until: { hosted.window.firstResponder === hosted.list }, "焦点は開く前に在った一覧へ戻る")
   }
 
   /// ⌘↵ が送るのは、開いたレビューのポップアップに焦点がある間の 1 回だけ——送れない間と押し続けた繰り返しは食って送らず、
