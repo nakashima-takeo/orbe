@@ -40,9 +40,9 @@ private struct ScmBranchChip: View {
         EditorGlyphView(
           glyph: EditorGlyphs.branch, size: Theme.Layout.editorBranchGlyph,
           color: Color.theme.textPrimary)
-        EditorReadableName(label, prefixLength: Theme.Layout.editorBarChipReadablePrefix) {
-          Text($0)
-        }
+        EditorReadableName(
+          label, prefixLength: Theme.Layout.editorBarChipReadablePrefix, truncation: .tail
+        ) { Text($0) }
       })
   }
 }
