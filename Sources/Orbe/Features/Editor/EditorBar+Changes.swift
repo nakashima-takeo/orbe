@@ -40,7 +40,9 @@ private struct ScmBranchChip: View {
         EditorGlyphView(
           glyph: EditorGlyphs.branch, size: Theme.Layout.editorBranchGlyph,
           color: Color.theme.textPrimary)
-        EditorReadableName(label, prefixLength: 4) { Text($0) }
+        EditorReadableName(label, prefixLength: Theme.Layout.editorBarChipReadablePrefix) {
+          Text($0)
+        }
       })
   }
 }
@@ -104,7 +106,8 @@ private struct ScmSyncButton: View {
 
 /// 右端の「コミット」。git 管理下と分かっている間はいつも押せる。開いている姿は、コミットのポップアップが開いている間。
 /// ステージ済みの行数を読めていれば、譲る添え書き「ステージ済み +125 −3」（追加は `diff.added`、削除は `diff.removed`）を
-/// 付ける。ツールチップは「コミット」、VoiceOver の名前は行数を読めていれば「コミット、ステージ済み +125 −3」の形。
+/// 付ける（0 の側は出さず、両方 0 なら「ステージ済み」だけ）。ツールチップは「コミット」、VoiceOver の名前は行数を読めていれば
+/// 「コミット、ステージ済み +125 −3」の形（0 の側は同じく読まない）。
 private struct ScmCommitButton: View {
   let popup: ScmCommitPopup
   @Environment(\.localization) private var l10n
@@ -113,10 +116,7 @@ private struct ScmCommitButton: View {
     let counts = popup.panel.stagedLines?.counts
     EditorBarActionButton(
       title: l10n.string(.editorScmCommit), isOpen: popup.isOpen,
-      help: l10n.string(.editorScmCommit),
-      accessibilityName: counts.map {
-        l10n.format(.editorScmCommitWithStaged, "+\($0.added) −\($0.deleted)")
-      },
+      help: l10n.string(.editorScmCommit), accessibilityName: counts.map(accessibilityName),
       action: popup.toggle,
       detail: {
         if let counts {
@@ -125,12 +125,28 @@ private struct ScmCommitButton: View {
               .font(Font.theme.editorItemListHint)
               .foregroundStyle(Color.theme.textSecondary)
             HStack(spacing: Theme.Space.note) {
-              Text("+\(counts.added)").foregroundStyle(Color.theme.diffAdded)
-              Text("−\(counts.deleted)").foregroundStyle(Color.theme.diffRemoved)
+              if counts.added > 0 {
+                Text(Self.added(counts)).foregroundStyle(Color.theme.diffAdded)
+              }
+              if counts.deleted > 0 {
+                Text(Self.deleted(counts)).foregroundStyle(Color.theme.diffRemoved)
+              }
             }
             .font(Font.theme.editorBarCount)
           }
         }
       })
+  }
+
+  private static func added(_ counts: GitLineCounts) -> String { "+\(counts.added)" }
+  private static func deleted(_ counts: GitLineCounts) -> String { "−\(counts.deleted)" }
+
+  /// 「コミット、ステージ済み +125 −3」（0 の側は入れず、両方 0 なら「コミット、ステージ済み」）。
+  private func accessibilityName(_ counts: GitLineCounts) -> String {
+    let numbers = [
+      counts.added > 0 ? Self.added(counts) : nil, counts.deleted > 0 ? Self.deleted(counts) : nil,
+    ].compactMap { $0 }
+    return l10n.format(.editorScmCommitWithStaged, numbers.joined(separator: " "))
+      .trimmingCharacters(in: .whitespaces)
   }
 }
