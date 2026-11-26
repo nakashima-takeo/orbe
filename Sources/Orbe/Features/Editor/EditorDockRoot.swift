@@ -197,8 +197,9 @@ struct EditorCardGround<Content: View>: View {
   }
 }
 
-/// 失敗の札（失敗 1 つに 1 枚）。札の地に縁の線 danger .5。文は sans 12・行の高さ 1.55・danger で、幅の上限 620 で折り返し、
-/// 選べる。右上の × は `dismiss` を呼ぶだけで、失敗を消すか「知らせを閉じた」印を付けるかは、載せる側が決める。
+/// 失敗の札（失敗 1 つに 1 枚）。札の地に縁の線 danger .5。文は sans 12・行の高さ 1.55・danger で、選べる。札の幅は文に
+/// 合わせ（下の物の押下を要る幅だけ受け止める）、上限 620 で折り返す。文の右上の × は `dismiss` を呼ぶだけで、失敗を消すか
+/// 「知らせを閉じた」印を付けるかは、載せる側が決める。
 struct EditorFailureCard: View {
   let text: String
   let dismiss: () -> Void
@@ -219,7 +220,6 @@ struct EditorFailureCard: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.leading, Theme.Layout.editorCardPadX)
           .padding(.vertical, Theme.Layout.editorCardPadY)
-          .frame(maxWidth: .infinity, alignment: .leading)
         close
       }
     }

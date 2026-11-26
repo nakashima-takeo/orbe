@@ -47,9 +47,13 @@ extension EditorDockTests {
     let width: CGFloat = 400
     let dismissed = Record(0)
     let host = NSHostingView(
-      rootView: EditorFailureCard(text: "コミットに失敗しました。", dismiss: { dismissed.value += 1 })
-        .frame(width: width)
-        .environment(\.localization, LocalizationStore(language: .ja)))
+      rootView: EditorFailureCard(
+        text: "コミットに失敗しました: 競合が残っています。競合を解決し、そのファイルをステージしてからコミットしてください。",
+        dismiss: { dismissed.value += 1 }
+      )
+      // 札は文の幅に合わせるので、折り返す長さの文で、札を幅いっぱいにする（置き場と同じく右寄せ）。
+      .frame(width: width, alignment: .trailing)
+      .environment(\.localization, LocalizationStore(language: .ja)))
     host.frame.size = NSSize(width: width, height: host.fittingSize.height)
     let window = NSWindow(
       contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
