@@ -37,7 +37,8 @@ extension EditorSearchTests {
     XCTAssertEqual(pane.search.needle, "gamma", "キャレットの語で取り直す")
     pumpMain(
       until: {
-        bar.needle == "gamma" && field()?.selectedRange() == NSRange(location: 0, length: 5)
+        bar.needle == "gamma" && field()?.string == "gamma"
+          && field()?.selectedRange() == NSRange(location: 0, length: 5)
       },
       "欄へ写り、全選択")
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 12, length: 0), "選択は動かない")
