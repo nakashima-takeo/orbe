@@ -7,7 +7,8 @@ import XCTest
 /// 構造体が答え、git は一時リポジトリで実際に問う。
 ///
 /// 壊れると何が起きるか: 読み直しの失敗で前の中身が消える。押した直後の読み直しでチェックが外れる・2 回続けて押したのに
-/// 最初の値に戻る・書き込みの失敗でチェックが付いたまま残る。PR に push があっても diff が古い両端のまま、コミットが
+/// 最初の値に戻る・書き込みの失敗でチェックが付いたまま残る・時間切れの書き込みを GitHub が受けていたのに、人が再読込する
+/// までチェックが外れて見える。PR に push があっても diff が古い両端のまま、コミットが
 /// 手元に無いと diff が出ないまま止まる。
 @MainActor
 final class PullRequestStateTests: OrbeTestCase {
@@ -86,6 +87,20 @@ final class PullRequestStateTests: OrbeTestCase {
     XCTAssertTrue(state.isViewed("a"), "通ったパスは残る")
     XCTAssertFalse(state.isViewed("b"), "通らなかったパスは元に戻る")
     XCTAssertEqual(state.viewedFailure, .rateLimited)
+  }
+
+  /// 確認済みの書き込みが時間切れになると、GitHub が受けていることがあるので、中身を読み直して GitHub の今の値を表示する。
+  func testATimedOutViewedWriteShowsGitHubsValueByReadingAgain() {
+    let state = watchedState()
+    gitHub.content = .success(content())
+    state.reload()
+
+    state.setViewed(true, paths: ["a"])
+    gitHub.content = .success(content(viewed: ["a"]))
+    let reads = gitHub.contentReads
+    gitHub.finishWrite(written: [], failure: .timedOut)
+    XCTAssertEqual(gitHub.contentReads, reads + 1, "中身を読み直す")
+    XCTAssertTrue(state.isViewed("a"), "GitHub が受けていた値を表示する")
   }
 
   /// 書き込みより前に出して後から届いた読み直しは、通ったチェックを外さない。書いている途中のパスも上書きしない。
