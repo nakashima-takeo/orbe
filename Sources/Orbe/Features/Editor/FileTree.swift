@@ -297,10 +297,11 @@ final class FileTree: RootFilesObserver {
   // MARK: - 先読み
 
   /// `paths`（開いていないフォルダ）の連なりを裏で調べさせる。届いた結果は、今も開いていないフォルダの分だけを覚えへ
-  /// 書く（開いたフォルダは一覧が正）。根が git の作業ツリーでなければ（判定の前も）調べず、その覚えを消す——調べ直せない
-  /// 覚えを古い形のまま残さない。
+  /// 書く（開いたフォルダは一覧が正）。根が git の作業ツリーでなければ調べず、その覚えを消す——調べ直せない覚えを古い形の
+  /// まま残さない。git 管理下かの判定の前は何もしない（覚えはそのまま出し、判定が済んだときに扱い直す）。
   private func requestLookahead(_ paths: Set<String>) {
-    guard files?.repo != nil else {
+    guard let files, files.isResolved else { return }
+    guard files.repo != nil else {
       let stale = paths.filter { onlyChild[$0] != nil && !expanded.contains($0) }
       if !stale.isEmpty { onlyChild = onlyChild.filter { !stale.contains($0.key) } }
       return
@@ -351,9 +352,9 @@ final class FileTree: RootFilesObserver {
     filterSawChange()
   }
 
-  /// git 管理下かの判定が済んだ。根が git の作業ツリーなら、一覧に在る開いていないフォルダを先読みへ頼む。
+  /// git 管理下かの判定が済んだ。判定の前に先読みを頼めなかった分も含め、一覧に在る開いていないフォルダを全部扱い直す。
   func rootFilesDidResolve(_ files: RootFiles) {
-    if files.repo != nil { requestLookahead(listedFolders.subtracting(expanded)) }
+    requestLookahead(listedFolders.subtracting(expanded))
     filterSawChange()
   }
 
