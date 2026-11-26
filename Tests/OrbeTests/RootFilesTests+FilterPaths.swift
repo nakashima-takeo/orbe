@@ -91,8 +91,6 @@ extension RootFilesTests {
         ".gitignore", "broken/f.txt", "docs/readme.md", "inner/.gitignore", "inner/src.c",
         "x.log",
       ])
-    XCTExpectFailure("現状: 走査したフォルダに在る `.git` のファイル（git が失敗する入れ子の根）が一覧に入る") {
-      XCTAssertFalse(paths.contains("broken/.git"), "絞り込まないツリーと同じく `.git` は出ない")
-    }
+    XCTAssertFalse(paths.contains("broken/.git"), "絞り込まないツリーと同じく `.git` は出ない")
   }
 }

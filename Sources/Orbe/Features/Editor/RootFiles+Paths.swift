@@ -89,8 +89,8 @@ private struct PathCollector {
     return true
   }
 
-  /// `directory` の下をディスクで走査する。symlink は辿らず、既定の除外のフォルダと `.git` には入らず、`.git` を持つフォルダは
-  /// 入らずに入れ子の根としてキューへ足す。
+  /// `directory` の下をディスクで走査する。symlink は辿らず、`.git` はフォルダでもファイルでも数えず（ツリーの一覧と同じ
+  /// 判定）、既定の除外のフォルダには入らず、`.git` を持つフォルダは入らずに入れ子の根としてキューへ足す。
   private mutating func walk(_ directory: String) {
     var folders = [directory]
     while let folder = folders.popLast(), paths.count < RootFiles.pathListLimit {
@@ -99,7 +99,7 @@ private struct PathCollector {
         if !isDirectory {
           add(path)
         } else if DefaultExcludes.directories.contains(name) {
-          // 既定の除外のフォルダと `.git` には入らない。
+          // 既定の除外のフォルダには入らない（`.git` は `forEachChild` が渡さない）。
         } else if FileManager.default.fileExists(atPath: absolute(path) + "/.git") {
           pending.append(path)
         } else {
