@@ -5,11 +5,13 @@ import XCTest
 
 /// 根のサービスが答える、ツリーの絞り込みの対象の一覧（実 git）——無視されているフォルダの中と既定の除外を除き、単独で
 /// 無視されているファイルは含める。入れ子のリポジトリとサブモジュールの中にも同じ決まりを当て、git 管理外の根では既定の除外
-/// だけが効く。
+/// だけが効く。sparse checkout でディスクに無いファイルは含めない。入れ子のリポジトリの設定は、一覧を取るときに走るコマンドと
+/// 読みに行く場所を決めない。
 ///
 /// 壊れると何が起きるか。名前で絞り込んでも `.env` が見つからない。`node_modules` や無視したビルド成果物が結果を埋める。
 /// サブモジュールの中のファイルが出ない。競合中のファイルや消したファイルの行が、重なって・残って出る。git 管理外の根では
-/// 何も絞り込めない。
+/// 何も絞り込めない。sparse checkout の範囲外の、開けないファイルが結果に出る。根の下に置かれただけのリポジトリの設定の
+/// コマンドが、字を打つだけで利用者の権限で走る。入れ子のリポジトリの設定が指す、根の外のファイルが結果に出る。
 extension RootFilesTests {
   /// 判定が済むのを待ってから一覧を取り、返った一覧。
   private func filterPaths(of files: RootFiles) throws -> RootFiles.PathList {
@@ -86,11 +88,72 @@ extension RootFilesTests {
 
     guard case .listed(let paths, _) = list else { return XCTFail("取れた一覧が返る: \(list)") }
     XCTAssertEqual(
-      paths.filter { ($0 as NSString).lastPathComponent != ".git" }.sorted(),
+      paths.sorted(),
       [
         ".gitignore", "broken/f.txt", "docs/readme.md", "inner/.gitignore", "inner/src.c",
         "x.log",
       ])
     XCTAssertFalse(paths.contains("broken/.git"), "絞り込まないツリーと同じく `.git` は出ない")
+  }
+
+  /// skip-worktree のファイル（sparse checkout の範囲外など）は、ディスクに無ければ出ず、ディスクに在れば出る。
+  func testSkipWorktreeFilesAreListedOnlyWhileTheyAreOnDisk() throws {
+    try repo.write("kept/x.txt", "x\n")
+    try repo.write("hidden/y.txt", "y\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "two folders"]).isSuccess)
+    // sparse checkout の範囲外と同じ形（skip-worktree で、ディスクに無い）と、ディスクに在る skip-worktree のファイル。
+    XCTAssertTrue(
+      repo.git(["update-index", "--skip-worktree", "kept/x.txt", "hidden/y.txt"]).isSuccess)
+    try FileManager.default.removeItem(atPath: repo.root + "/hidden/y.txt")
+    XCTAssertEqual(
+      repo.git(["ls-files", "-t", "kept/x.txt", "hidden/y.txt"]).stdoutText,
+      "S hidden/y.txt\nS kept/x.txt\n", "前提: どちらも skip-worktree")
+
+    let list = try filterPaths(of: repo.files())
+
+    guard case .listed(let paths, _) = list else { return XCTFail("取れた一覧が返る: \(list)") }
+    XCTAssertEqual(paths.sorted(), ["a.txt", "kept/x.txt"])
+  }
+
+  /// 入れ子のリポジトリの設定の `core.fsmonitor` が指すコマンドは、一覧を取っても走らない。
+  func testListingDoesNotRunTheFsmonitorCommandOfANestedRepository() throws {
+    let marker = TestScratch.caseDir.appendingPathComponent("fsmonitor-ran-\(UUID().uuidString)")
+    let hook = TestScratch.caseDir.appendingPathComponent("fsmonitor-\(UUID().uuidString).sh")
+    try Data("#!/bin/sh\ntouch '\(marker.path)'\n".utf8).write(to: hook)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+    XCTAssertTrue(repo.git(["init", "-q", "vendor/lib"]).isSuccess)
+    try repo.write("vendor/lib/lib.c", "c\n")
+    XCTAssertTrue(repo.git(["-C", "vendor/lib", "add", "lib.c"]).isSuccess)
+    XCTAssertTrue(repo.git(["-C", "vendor/lib", "config", "core.fsmonitor", hook.path]).isSuccess)
+    _ = repo.git(["-C", "vendor/lib", "ls-files"])
+    XCTAssertTrue(
+      FileManager.default.fileExists(atPath: marker.path), "前提: 素の ls-files は、そのコマンドを走らせる")
+    try FileManager.default.removeItem(at: marker)
+
+    let list = try filterPaths(of: repo.files())
+
+    guard case .listed(let paths, _) = list else { return XCTFail("取れた一覧が返る: \(list)") }
+    XCTAssertTrue(paths.contains("vendor/lib/lib.c"), "前提: 入れ子のリポジトリの中を一覧に取った")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "設定のコマンドは走らない")
+  }
+
+  /// 入れ子のリポジトリの設定の `core.worktree` が根の外を指していても、一覧はその入れ子の根の下のファイルだけ。
+  func testANestedRepositorysWorktreeSettingDoesNotPullInFilesFromOutside() throws {
+    let outside = TestScratch.caseDir.appendingPathComponent(
+      "orbe-outside-\(UUID().uuidString)", isDirectory: true)
+    try repo.write("outside.txt", "o\n", in: outside.path)
+    XCTAssertTrue(repo.git(["init", "-q", "vendor/lib"]).isSuccess)
+    try repo.write("vendor/lib/lib.c", "c\n")
+    XCTAssertTrue(
+      repo.git(["-C", "vendor/lib", "config", "core.worktree", outside.path]).isSuccess)
+    XCTAssertTrue(
+      repo.git(["-C", "vendor/lib", "ls-files", "-o"]).stdoutText.contains("outside.txt"),
+      "前提: 素の ls-files は、設定の作業ツリー（根の外）を読む")
+
+    let list = try filterPaths(of: repo.files())
+
+    guard case .listed(let paths, _) = list else { return XCTFail("取れた一覧が返る: \(list)") }
+    XCTAssertEqual(paths.sorted(), ["a.txt", "vendor/lib/lib.c"])
   }
 }
