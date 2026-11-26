@@ -21,8 +21,10 @@ struct TreeRowView: View {
       switch row.kind {
       case .directory(let isExpanded):
         TreeChevron(open: isExpanded, size: Theme.Layout.editorTreeChevron)
-        (Text(row.prefix).foregroundStyle(Color.theme.textMuted)
-          + Text(row.name).foregroundStyle(Color.theme.textSecondary))
+        (fontResolver.text(row.prefix, base: Theme.Typography.editorTreeFolder)
+          .foregroundStyle(Color.theme.textMuted)
+          + fontResolver.text(row.name, base: Theme.Typography.editorTreeFolder)
+          .foregroundStyle(Color.theme.textSecondary))
           .font(Font.theme.editorTreeFolder)
           .lineLimit(1)
           .truncationMode(.head)
