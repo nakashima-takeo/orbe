@@ -59,46 +59,81 @@ final class EditorTypingPerfTests: OrbeTestCase {
       ("long-line", long),
     ] {
       let opened = try openEditor(text)
-      opened.document.baseline = text
-      XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
       let row = label == "long-line" ? 0 : opened.document.text.lineCount / 3
       let caret = label == "long-line" ? 9_990 : opened.document.text.lineStart(row + 5) + 4
-      opened.document.surface.selectedRange = NSRange(location: caret, length: 0)
-      opened.document.surface.reveal(NSRange(location: caret, length: 0), policy: .center)
-      var cpu: [Double] = []
-      var wall: [Double] = []
-      for character in String(repeating: "let value = compute(offset) ok ", count: 3) {
-        let began = (clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID), CACurrentMediaTime())
-        opened.document.surface.responder.keyDown(with: .key(String(character), []))
-        cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began.0) / 1e6)
-        wall.append((CACurrentMediaTime() - began.1) * 1000)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-      }
-      reportPerf(label, "keystroke-main (baseline あり)", cpu, digits: 3)
-      reportPerf(label, "keystroke-main-wall (参考)", wall, digits: 3)
-      let sorted = cpu.sorted()
-      XCTAssertLessThanOrEqual(
-        sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.99))], 1,
-        "\(label): 打鍵 1 回の main のスレッドの CPU 時間の p99")
-      let composing = try compose(into: opened)
-      reportPerf(
-        label, "composition-main 続き (baseline あり)", composing.continuing.cpu, digits: 3)
-      reportPerf(
-        label, "composition-main 始まり (baseline あり)", composing.starting.cpu, digits: 3)
-      reportPerf(
-        label, "composition-main-wall 続き (参考)", composing.continuing.wall, digits: 3)
-      reportPerf(
-        label, "composition-main-wall 始まり (参考)", composing.starting.wall, digits: 3)
-      XCTAssertLessThanOrEqual(
-        Self.p99(composing.continuing.cpu), 1,
-        "\(label): 変換の続きの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
-      if label != "long-line" {
-        XCTAssertLessThanOrEqual(
-          Self.p99(composing.starting.cpu), 1,
-          "\(label): 変換の始まりの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
-      }
-      opened.window.orderOut(nil)
+      try gateKeystrokes(
+        opened, baseline: text, label: label, caret: caret, gatesStart: label != "long-line")
     }
+  }
+
+  /// 日本語の Markdown（このリポジトリの spec）の打鍵 1 回の main の仕事——和文の行の途中と、和文の後ろに本体の字体に無い
+  /// 記号（`◌` と `▪`）がある行で打つ。関門と数え方は `testKeystrokeMainTime` と同じ。
+  func testKeystrokeMainTimeInJapanese() throws {
+    let warm = try openEditor("warm\n")
+    warm.document.surface.responder.keyDown(with: .key("/", []))
+    try compose(into: warm, count: 20)
+    warm.window.orderOut(nil)
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    for (label, path, needle) in [
+      ("japanese-markdown", "docs/spec/chrome/board.md", "。"),
+      ("symbols-after-japanese", "docs/spec/palette/tasks.md", "▪ claude 入力待ち"),
+    ] {
+      let text = try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+      let opened = try openEditor(text, extension: "md")
+      let units = opened.document.text
+      let from = needle == "。" ? units.lineStart(units.lineCount / 3) : 0
+      let found = (text as NSString).range(
+        of: needle, range: NSRange(location: from, length: (text as NSString).length - from))
+      XCTAssertNotEqual(found.location, NSNotFound, "\(label): 前提: 打つ所がある")
+      try gateKeystrokes(
+        opened, baseline: text, label: label, caret: found.location, gatesStart: true)
+    }
+  }
+
+  /// 文書 `opened` を git 管理下（baseline は `baseline`）にし、位置 `caret` で打鍵とライブ変換を流して、打鍵 1 回と変換の続きの
+  /// 呼び出し 1 回の main のスレッドの CPU 時間の p99 を関門（1ms 以下）にかける。`gatesStart` なら変換の始まりも関門に
+  /// かける。
+  private func gateKeystrokes(
+    _ opened: OpenedEditor, baseline: String, label: String, caret: Int, gatesStart: Bool
+  ) throws {
+    opened.document.baseline = baseline
+    XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
+    opened.document.surface.selectedRange = NSRange(location: caret, length: 0)
+    opened.document.surface.reveal(NSRange(location: caret, length: 0), policy: .center)
+    var cpu: [Double] = []
+    var wall: [Double] = []
+    for character in String(repeating: "let value = compute(offset) ok ", count: 3) {
+      let began = (clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID), CACurrentMediaTime())
+      opened.document.surface.responder.keyDown(with: .key(String(character), []))
+      cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began.0) / 1e6)
+      wall.append((CACurrentMediaTime() - began.1) * 1000)
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    reportPerf(label, "keystroke-main (baseline あり)", cpu, digits: 3)
+    reportPerf(label, "keystroke-main-wall (参考)", wall, digits: 3)
+    let sorted = cpu.sorted()
+    XCTAssertLessThanOrEqual(
+      sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.99))], 1,
+      "\(label): 打鍵 1 回の main のスレッドの CPU 時間の p99")
+    let composing = try compose(into: opened)
+    reportPerf(
+      label, "composition-main 続き (baseline あり)", composing.continuing.cpu, digits: 3)
+    reportPerf(
+      label, "composition-main 始まり (baseline あり)", composing.starting.cpu, digits: 3)
+    reportPerf(
+      label, "composition-main-wall 続き (参考)", composing.continuing.wall, digits: 3)
+    reportPerf(
+      label, "composition-main-wall 始まり (参考)", composing.starting.wall, digits: 3)
+    XCTAssertLessThanOrEqual(
+      Self.p99(composing.continuing.cpu), 1,
+      "\(label): 変換の続きの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
+    if gatesStart {
+      XCTAssertLessThanOrEqual(
+        Self.p99(composing.starting.cpu), 1,
+        "\(label): 変換の始まりの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
+    }
+    opened.window.orderOut(nil)
   }
 
   /// 複数カーソルの打鍵 1 回の main の仕事——1MB で ⌘F の一致（`offset`、約 1.2 万件）を出したまま、⌘⇧L で作った
