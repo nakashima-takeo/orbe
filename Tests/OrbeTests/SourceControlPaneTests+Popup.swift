@@ -5,11 +5,12 @@ import XCTest
 @testable import Orbe
 
 /// コミットのポップアップの開閉（エディター面に結んだもの）——変更の列の ⌘↑ は、どの行を選んでいても開いてメッセージ欄へ
-/// フォーカスを入れる。コミットが通れば閉じてフォーカスは開く前の場所へ戻り、最後のコミットの取り消しと失敗では開いたまま。
+/// フォーカスを入れる。コミットが通れば閉じてフォーカスは開く前の場所へ戻り（変更の列の行が無くなっていれば本体へ移り）、
+/// 最後のコミットの取り消しと、コミットの失敗では開いたまま。
 /// 閉じるとコミットの操作の失敗（赤い行）は消え、ほかの操作の失敗は残る。▾ のメニューは開くとフォーカスを行の列へ移し、
 /// 何も選ばずに始まり、esc はメニューだけを閉じて欄へ戻す。
 ///
-/// 壊れると何が起きるか。列の途中の行で ⌘↑ を押しても開かない。コミットの後もポップアップが残る・フォーカスが窓へ落ちて
+/// 壊れると何が起きるか。列の途中の行で ⌘↑ を押しても開かない。コミットの後もポップアップが残る。フォーカスが窓へ落ちて
 /// キーがどこにも届かない。取り消した直後に書き直そうとすると閉じている。コミットの失敗の赤い行が、閉じても残って、開くたびに
 /// 出る。閉じると、プルの失敗まで消える。▾ を開いた直後の ↵ で思わず amend する。メニューの esc でポップアップごと閉じて
 /// 打ちかけを見失う。
@@ -49,6 +50,25 @@ extension SourceControlPaneTests {
       "操作の列が空になった時点で閉じている（この時点で閉じないなら、testUndoingTheLastCommitKeepsThePopupOpen の「開いたまま」は、閉じる前を見ているだけになる）"
     )
     pumpMain(until: { hosted.window.firstResponder === list }, "フォーカスは変更の列へ戻る")
+  }
+
+  /// 変更の列から開いたポップアップで変更を全部コミットし、列の行が無くなれば、閉じた後のフォーカスは本体へ移る。
+  func testACommitThatEmptiesTheListMovesTheFocusToTheBody() throws {
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "edited\n")
+    let hosted = host(repo, showsPanel: false)
+    let pane = hosted.pane
+    pane.switchScreen(.changes)
+    pumpMain(until: { hosted.window.firstResponder === pane.scmList.list }, "前提: 変更の列にフォーカス")
+    pane.commitPopup.open()
+
+    let field = try type("subject", in: hosted)
+    field.keyDown(with: .key("\r", []))
+    pumpMain(until: { hosted.scm.control.operations.isEmpty }, timeout: 20, "コミット")
+    pumpMain(
+      until: {
+        hosted.scm.layout.items.isEmpty && hosted.window.firstResponder === pane.focusTarget
+      }, "列の行が無くなり、フォーカスは本体へ")
   }
 
   /// ▾ の「最後のコミットを取り消す」が通っても、ポップアップは開いたまま（続けて書き直せる）。
