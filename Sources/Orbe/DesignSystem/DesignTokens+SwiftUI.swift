@@ -94,6 +94,7 @@ struct ThemeColors {
   let editorText = Color(nsColor: Theme.Color.editorText)
   let editorTertiary = Color(nsColor: Theme.Color.editorTertiary)
   let editorCaution = Color(nsColor: Theme.Color.editorCaution)
+  let editorOnDanger = Color(nsColor: Theme.Color.editorOnDanger)
   let editorBarGroove = Color(nsColor: Theme.Color.editorBarGroove)
   let editorBarInset = Color(nsColor: Theme.Color.editorBarInset)
   // git の変化の種類（エクスプローラーのバッジと名前）

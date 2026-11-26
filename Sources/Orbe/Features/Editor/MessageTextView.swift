@@ -12,8 +12,16 @@ final class MessageScrollView: NSScrollView {
 }
 
 /// メッセージ欄のテキスト面。空のときプレースホルダを描き、焦点の出入りを知らせる。`onCommit` があれば修飾の無い ↵ はそれを
-/// 求め、ほかの改行の命令（`onCommit` が無ければ ↵ も）は `\n` を入れる。
+/// 求め、ほかの改行の命令（`onCommit` が無ければ ↵ も）は `\n` を入れる。字体・1 行のときの高さ・左右の余白は欄ごとに渡す。
 final class MessageTextView: NSTextView {
+  /// 欄の寸法——字体・1 行のときの高さ・字の左右の余白。
+  struct Metrics {
+    var font: NSFont
+    var lineHeight: CGFloat
+    var leading: CGFloat
+    var trailing: CGFloat
+  }
+
   var placeholder = "" {
     didSet { if placeholder != oldValue, string.isEmpty { needsDisplay = true } }
   }
@@ -23,20 +31,22 @@ final class MessageTextView: NSTextView {
   var onCommit: (() -> Void)?
   /// 変換中の字が変わった（変換が始まった・変わった・終わった。終われば空）。
   var onComposition: ((String) -> Void)?
+  /// 変換中でない esc を押した。無ければ esc は標準の命令のまま。
+  var onEscape: (() -> Void)?
   /// 解釈中の押下（`interpretKeyEvents` が同期に呼ぶ命令へ添える）。改行の命令は ↵ と ⇧↵ で同じなので、押下から読み分ける。
   private var interpreting: NSEvent?
   /// 手で組んだ文字の系の根（テキスト面はこれを持たないので、自分で持つ）。
-  private var storage: NSTextStorage?
+  private let storage: NSTextStorage
   /// 高さの問いだけに使う組み（同じ文字の系に足した 2 つ目のレイアウト。表示の組みに触れずに、問われた幅で組む）。
-  private var measuring: NSTextContainer?
+  private let measuring: NSTextContainer
+  private let metrics: Metrics
+  /// 字の 1 行の高さ。
+  private let textLineHeight: CGFloat
+  /// 1 行のときに欄の高さが `metrics.lineHeight` になる上下の余白。
+  private let verticalInset: CGFloat
 
-  private static let font = Theme.Typography.editorScmMessage
-  private static let leading: CGFloat = 8
-  /// 字の右の余白（欄ごとに指定する）。
-  private var trailing: CGFloat = 0
-
-  /// 字の右の余白を `trailing` にした欄（左は 8）。
-  convenience init(trailing: CGFloat) {
+  /// 寸法 `metrics` の欄。
+  init(metrics: Metrics) {
     let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
     container.widthTracksTextView = false
     container.lineFragmentPadding = 0
@@ -50,11 +60,13 @@ final class MessageTextView: NSTextView {
     measuringLayout.backgroundLayoutEnabled = false
     measuringLayout.addTextContainer(measuring)
     storage.addLayoutManager(measuringLayout)
-    self.init(frame: .zero, textContainer: container)
     self.storage = storage
     self.measuring = measuring
-    self.trailing = trailing
-    font = Self.font
+    self.metrics = metrics
+    textLineHeight = layout.defaultLineHeight(for: metrics.font)
+    verticalInset = (metrics.lineHeight - textLineHeight) / 2
+    super.init(frame: .zero, textContainer: container)
+    font = metrics.font
     textColor = Theme.Color.textPrimary
     insertionPointColor = Theme.Color.accentPrimary
     drawsBackground = false
@@ -67,44 +79,36 @@ final class MessageTextView: NSTextView {
     isHorizontallyResizable = false
     // 上限を開けないと、テキスト面は見えている枠より高くならず、10 行を越えた分へスクロールできない。
     maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
-    textContainerInset = NSSize(width: 0, height: Self.verticalInset)
-    typingAttributes = [.font: Self.font, .foregroundColor: Theme.Color.textPrimary]
+    textContainerInset = NSSize(width: 0, height: verticalInset)
+    typingAttributes = [.font: metrics.font, .foregroundColor: Theme.Color.textPrimary]
   }
+  required init?(coder: NSCoder) { fatalError("not supported") }
 
-  /// 1 行の高さ。
-  private static let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
-
-  /// 1 行のときに高さ 26 になる上下の余白。
-  private static let verticalInset = (Theme.Layout.editorScmMessage - lineHeight) / 2
-
-  /// 行の左右の余白（左 8・右は欄ごとの `trailing`。テキストコンテナの左右は同じ余白しか持てないので、左はコンテナの原点で
-  /// 動かす）。
+  /// 行の左右の余白（テキストコンテナの左右は同じ余白しか持てないので、左はコンテナの原点で動かす）。
   override var textContainerOrigin: NSPoint {
-    NSPoint(x: Self.leading, y: super.textContainerOrigin.y)
+    NSPoint(x: metrics.leading, y: super.textContainerOrigin.y)
   }
 
   /// 表示の組みの幅の持ち主はテキスト面の枠だけ（高さの問いは別の組みで答える）。
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)
     textContainer?.containerSize = NSSize(
-      width: max(0, newSize.width - Self.leading - trailing),
+      width: max(0, newSize.width - metrics.leading - metrics.trailing),
       height: CGFloat.greatestFiniteMagnitude)
   }
 
   /// 幅 `width` で中身が収まる高さ（`maxLines` 行まで）。表示の組みには触れず、問われた幅だけで決まる。組むのは `maxLines`
   /// 行の分まで（長い貼り付けでも、問いのたびに全文を組まない）。
   func fittingHeight(width: CGFloat, maxLines: Int) -> CGFloat {
-    let limit = Self.lineHeight * CGFloat(maxLines)
-    guard let measuring, let layout = measuring.layoutManager else {
-      return Theme.Layout.editorScmMessage
-    }
+    let limit = textLineHeight * CGFloat(maxLines)
+    guard let layout = measuring.layoutManager else { return metrics.lineHeight }
     let size = NSSize(
-      width: max(0, width - Self.leading - trailing), height: .greatestFiniteMagnitude)
+      width: max(0, width - metrics.leading - metrics.trailing), height: .greatestFiniteMagnitude)
     if measuring.containerSize != size { measuring.containerSize = size }
     layout.ensureLayout(
       forBoundingRect: NSRect(x: 0, y: 0, width: size.width, height: limit), in: measuring)
-    let used = max(layout.usedRect(for: measuring).height, Self.lineHeight)
-    return min(used, limit) + Self.verticalInset * 2
+    let used = max(layout.usedRect(for: measuring).height, textLineHeight)
+    return min(used, limit) + verticalInset * 2
   }
 
   override func viewDidMoveToWindow() {
@@ -128,14 +132,14 @@ final class MessageTextView: NSTextView {
     super.draw(dirtyRect)
     guard string.isEmpty, !hasMarkedText(), !placeholder.isEmpty else { return }
     let attributes: [NSAttributedString.Key: Any] = [
-      .font: Self.font, .foregroundColor: Theme.Color.editorTertiary,
+      .font: metrics.font, .foregroundColor: Theme.Color.editorTertiary,
     ]
     let origin = textContainerOrigin
     let line = NSAttributedString(string: placeholder, attributes: attributes)
     line.draw(
       with: NSRect(
-        x: origin.x, y: origin.y, width: max(0, bounds.width - origin.x - trailing),
-        height: Self.lineHeight),
+        x: origin.x, y: origin.y, width: max(0, bounds.width - origin.x - metrics.trailing),
+        height: textLineHeight),
       options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
   }
 
@@ -157,6 +161,15 @@ final class MessageTextView: NSTextView {
       return
     }
     super.insertNewline(sender)
+  }
+
+  /// esc。変換中でなく `onEscape` があれば、それを求める（変換中の esc は IME が取り、ここへは来ない）。
+  override func cancelOperation(_ sender: Any?) {
+    if let onEscape, !hasMarkedText() {
+      onEscape()
+      return
+    }
+    super.cancelOperation(sender)
   }
 
   /// ⌃↵。標準の行区切り（U+2028）はメッセージに見えない字を入れるので、改行にする。

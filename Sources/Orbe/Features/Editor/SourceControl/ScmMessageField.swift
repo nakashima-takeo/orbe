@@ -15,12 +15,15 @@ struct ScmMessageField: NSViewRepresentable {
 
   /// 伸びる上限の行数。
   static let maxLines = 10
+  /// 欄の寸法（sans 12・1 行のときの高さ 26・左右の余白は左 8・右 5）。
+  static let metrics = MessageTextView.Metrics(
+    font: Theme.Typography.editorScmMessage, lineHeight: Theme.Layout.editorScmMessage,
+    leading: 8, trailing: 5)
 
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
   func makeNSView(context: Context) -> NSScrollView {
-    // 左右の余白は左 8・右 5（padding 0 5 0 8）。
-    let text = MessageTextView(trailing: 5)
+    let text = MessageTextView(metrics: Self.metrics)
     context.coordinator.text = text
     text.delegate = context.coordinator
     text.onFocus = { [weak coordinator = context.coordinator] in coordinator?.focusDidChange($0) }

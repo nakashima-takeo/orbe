@@ -10,6 +10,9 @@ struct EditorEmptyView: View {
   let pullRequest: PrPanel
   @Environment(\.localization) private var l10n
 
+  /// 案内の一文とボタンの間。
+  private static let buttonTop: CGFloat = 12
+
   var body: some View {
     switch screen {
     case .files: files
@@ -47,9 +50,11 @@ struct EditorEmptyView: View {
         title: l10n.string(.editorPrNone),
         lead: l10n.string(published ? .editorPrNoneLead : .editorPrPublishFirst)
       ) {
-        EditorMessageButton(
-          title: l10n.string(.editorPrCreate), isPrimary: true, isEnabled: published,
-          action: pullRequest.createPullRequest)
+        EditorLargeButton(
+          title: l10n.string(.editorPrCreate), ground: .accent, isEnabled: published,
+          action: pullRequest.createPullRequest
+        )
+        .padding(.top, Self.buttonTop)
       }
     case .unavailable(.failed(let failure)):
       failed(PrPanelText.unavailable(.failed(failure), l10n))
@@ -72,9 +77,8 @@ struct EditorEmptyView: View {
   /// 読み込みの失敗——見出しと失敗の文に「再読込」を添える。
   private func failed(_ text: String) -> some View {
     EditorMessage(title: l10n.string(.editorPrUnavailableTitle), lead: text) {
-      EditorMessageButton(
-        title: l10n.string(.editorPrRefresh), isPrimary: false, isEnabled: true,
-        action: pullRequest.refresh)
+      EditorLargeButton(title: l10n.string(.editorPrRefresh), action: pullRequest.refresh)
+        .padding(.top, Self.buttonTop)
     }
   }
 }
@@ -109,36 +113,6 @@ private struct EditorMessage<Extra: View>: View {
 extension EditorMessage where Extra == EmptyView {
   init(title: String, lead: String? = nil) {
     self.init(title: title, lead: lead) { EmptyView() }
-  }
-}
-
-/// 案内のボタン（高さ 30・padding 0 14・radius 8・sans 12.5）。主のボタンは地 accent・字 onAccent の semibold、ほかは地 ink .08・
-/// 字 textPrimary。押せない間は design-system の disabled に薄める。押してもフォーカスを取らない。
-private struct EditorMessageButton: View {
-  let title: String
-  let isPrimary: Bool
-  let isEnabled: Bool
-  let action: () -> Void
-
-  private static let groundAlpha = 0.08
-
-  var body: some View {
-    Text(title)
-      .font(isPrimary ? Font.theme.editorEmptyButton : Font.theme.editorEmptyText)
-      .foregroundStyle(isPrimary ? Color.theme.onAccent : Color.theme.textPrimary)
-      .lineLimit(1)
-      .padding(.horizontal, 14)
-      .frame(height: 30)
-      .background(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(
-            isPrimary
-              ? Color.theme.accentPrimary : Color.theme.surfaceInk.opacity(Self.groundAlpha))
-      )
-      .opacity(isEnabled ? 1 : Theme.Opacity.disabled)
-      .contentShape(Rectangle())
-      .onTapGesture { if isEnabled { action() } }
-      .padding(.top, 12)
   }
 }
 
