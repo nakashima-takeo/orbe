@@ -5,8 +5,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 置き場の並び（`EditorDockStack`）と失敗の札（`EditorFailureCard`）——高さが足りないときの並びと、札の × の働き
-/// （壊れると何が起きるかは `EditorDockTests`）。
+/// 置き場の並び（`EditorDockStack`）と失敗の札（`EditorFailureCard`）——高さが足りないときの並び、札の幅と、札の × の働き。
+///
+/// 壊れると何が起きるか（`EditorDockTests` の説明に書いたことのほか）。短い失敗の札が置き場の幅いっぱいに広がり、札の左の
+/// 本体が押せなくなる。
 extension EditorDockTests {
   /// 置き場の高さが足りなければ、札は全部が置き場の中に見え、ポップアップは札の残りの高さに縮む。
   func testTheCardsStayWholeAndThePopupShrinksWhenTheDockIsShort() throws {
@@ -40,6 +42,33 @@ extension EditorDockTests {
     XCTAssertEqual(cards[1].minY, cards[0].maxY + gap, accuracy: 0.5)
     XCTAssertLessThanOrEqual(cards[1].maxY, height + 0.5, "札は全部が置き場の中")
     XCTAssertLessThan(popup.height, 400, "ポップアップが縮む")
+  }
+
+  /// 短い文の失敗の札は、文の幅だけを取って右に寄り、置き場が押下を受ける枠も、その幅だけ（札の左の空いた所は、下の
+  /// 本体へ通る）。
+  func testAShortFailureCardTakesOnlyTheWidthOfItsText() throws {
+    let width = Theme.Layout.editorDockWidth
+    let frames = Record<[CGRect]>([])
+    let host = NSHostingView(
+      rootView: EditorDockStack {
+      } cards: {
+        EditorFailureCard(text: "プッシュに失敗しました。", dismiss: {})
+      }
+      .frame(width: width, height: 200)
+      .coordinateSpace(.named(EditorDockRoot.space))
+      .onPreferenceChange(EditorDockFramesKey.self) { frames.value = $0 }
+      .environment(\.localization, LocalizationStore(language: .ja)))
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: width, height: 200), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = host
+    holdUntilTestEnds(window)
+    host.layoutSubtreeIfNeeded()
+    pumpMain(until: { frames.value.count == 1 }, "札の枠")
+
+    let card = frames.value[0]
+    XCTAssertLessThan(card.width, width / 2, "札は文の幅だけ")
+    XCTAssertEqual(card.maxX, width, accuracy: 0.5, "札は右に寄る")
   }
 
   /// 失敗の札の × を押すと、渡した処理が呼ばれる。文の上の押下では呼ばれない。

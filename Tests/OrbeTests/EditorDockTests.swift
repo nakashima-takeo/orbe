@@ -34,10 +34,16 @@ final class EditorDockTests: OrbeTestCase {
     /// 地の下に、地の外へ並べるメニュー（右寄せ・幅 `menuWidth`）を出すか。
     var showsMenu = false
     static let menuWidth: CGFloat = 250
+    /// 中身を組んだ回数。
+    private(set) var contentCalls = 0
+    /// 窓に載った中身の印（中身が作り直されるたびに、新しい印が増える）。
+    private(set) var contentStamps: [UUID] = []
 
     func popupContent() -> AnyView {
-      AnyView(
+      contentCalls += 1
+      return AnyView(
         VStack(alignment: .trailing, spacing: 6) {
+          Stamp { [weak self] in self?.contentStamps.append($0) }
           EditorPopupGround {
             HStack {
               Embedded(view: self.field).frame(width: 200, height: 26)
@@ -348,6 +354,16 @@ final class EditorDockTests: OrbeTestCase {
     press(beside)
     XCTAssertFalse(hosted.popup.isOpen, "メニューの横の押下は外の押下として閉じる")
     XCTAssertEqual(owner.dismissals, [.outsidePress])
+  }
+}
+
+/// 作られるたびに新しい印を持ち、窓に載ったときに知らせる。
+private struct Stamp: View {
+  let appeared: (UUID) -> Void
+  @State private var stamp = UUID()
+
+  var body: some View {
+    Color.clear.frame(width: 0, height: 0).onAppear { appeared(stamp) }
   }
 }
 
