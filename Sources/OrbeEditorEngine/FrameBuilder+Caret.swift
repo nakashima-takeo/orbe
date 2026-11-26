@@ -134,7 +134,7 @@ struct CaretOverlays {
 struct RowOverlays {
   /// 行（段）の中身の区間（改行と行末の `\r` を除く）。選択か変換中の文字が掛かる行だけ。
   var content: NSRange?
-  let selections: [NSRange]
+  var selections: [NSRange]
   var carets: [Int]
   /// キャレットのうち付きのあるもの（段の境なら上の段の終わりに描く。昇順）。
   var upstream: [Int] = []
@@ -150,25 +150,59 @@ struct RowOverlays {
     !selections.isEmpty || !carets.isEmpty || !marked.isEmpty || drop != nil
   }
 
-  /// 折り返した行の段——段の始まり `base` から、次の段の始まり `end`（最後の段なら nil）まで。キャレットは段の境なら付きの
-  /// ある方を上の段の終わりに、ほかを下の段の頭に置き、位置は段の頭から数え直す。
+  /// 折り返した行の段——段の始まり `base` から、次の段の始まり `end`（最後の段なら nil）まで。選択は段に掛かるものだけに
+  /// 切り（最後の段は改行を含む選択も）、キャレットは段の区間に掛かるものだけを引いて、段の境なら付きのある方を上の段の
+  /// 終わりに、ほかを下の段の頭に置き、位置は段の頭から数え直す——1 行に多くの選択とキャレットがあっても、段ごとに行の
+  /// 全部をなめない。
   func segment(base: Int, end: Int?) -> RowOverlays {
     guard base > 0 || end != nil else { return self }
     var result = self
+    if let content {
+      result.selections = Array(
+        Highlights.slice(
+          selections, (content.location + base)..<(end.map { content.location + $0 } ?? Int.max)))
+    }
     result.content = content.map { content in
       let upper = min(end ?? content.length, content.length)
       return NSRange(location: content.location + base, length: max(0, upper - base))
     }
+    let window = base...(end ?? Int.max)
+    let near = Self.slice(carets, window)
+    let raised = Self.slice(upstream, window)
     let holds = { (column: Int, upstream: Bool) -> Bool in
       guard column >= base, !(column == base && base > 0 && upstream) else { return false }
       guard let end else { return true }
       return column < end || (column == end && upstream)
     }
-    result.carets = carets.filter { holds($0, upstream.contains($0)) }.map { $0 - base }
-    result.upstream = upstream.filter { holds($0, true) }.map { $0 - base }
+    result.carets = near.filter { holds($0, Self.contains(raised, $0)) }.map { $0 - base }
+    result.upstream = raised.filter { holds($0, true) }.map { $0 - base }
     result.drop = drop.flatMap { holds($0, false) ? $0 - base : nil }
     result.extendsLineEnd = end == nil
     return result
+  }
+
+  /// 昇順の列 `items` のうち、`window` の中の値（二分探索）。
+  private static func slice(_ items: [Int], _ window: ClosedRange<Int>) -> ArraySlice<Int> {
+    var low = 0
+    var high = items.count
+    while low < high {
+      let mid = (low + high) / 2
+      if items[mid] < window.lowerBound { low = mid + 1 } else { high = mid }
+    }
+    var end = low
+    while end < items.count, items[end] <= window.upperBound { end += 1 }
+    return items[low..<end]
+  }
+
+  /// 昇順の列 `items` が `value` を持つか（二分探索）。
+  private static func contains(_ items: ArraySlice<Int>, _ value: Int) -> Bool {
+    var low = items.startIndex
+    var high = items.endIndex
+    while low < high {
+      let mid = (low + high) / 2
+      if items[mid] < value { low = mid + 1 } else { high = mid }
+    }
+    return low < items.endIndex && items[low] == value
   }
 }
 
