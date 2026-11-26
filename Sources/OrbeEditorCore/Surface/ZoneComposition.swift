@@ -301,7 +301,7 @@ private struct Builder {
     kinds.append((kind, font))
   }
 
-  /// 段落の向きを `rightToLeft` に決めた属性文字列。元の文の字は、字ごとの字体と幅の表（`GlyphFonts`）の字体で組む——
+  /// 段落の向きを `rightToLeft` に決めた属性文字列。元の文の字は、字ごとの字体の表（`GlyphFonts`）の字体で組む——
   /// 見え方の字体に無い字の字体が、前の字の代替フォントに引きずられない（テキスト面の行の組版と同じ決まり）。
   func attributed(rightToLeft: Bool) -> CFAttributedString {
     let kinds = pinned(self.kinds)
