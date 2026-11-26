@@ -38,6 +38,8 @@ final class PrPanelTests: OrbeTestCase {
   var heldReviewWrites: [() -> Void] = []
   /// GitHub の読み（ブランチの PR の問い合わせ・中身・レビューのやりとり）の失敗と、確認済みの書き込みの失敗。
   var readFailure: GitHubFailure?
+  /// レビューのやりとりの読みだけの失敗。
+  var reviewReadFailure: GitHubFailure?
   var viewedFailure: GitHubFailure?
   /// GitHub が rename と答える変更ファイル。真なら中身の読みの答えを `heldContents` に溜める。
   var renamed: Set<String> = []
@@ -107,7 +109,7 @@ final class PrPanelTests: OrbeTestCase {
       },
       review: { [unowned self] _, completion in
         completion(
-          readFailure.map { .failure($0) }
+          (readFailure ?? reviewReadFailure).map { .failure($0) }
             ?? .success(
               GitHubPullRequestReview(
                 viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,

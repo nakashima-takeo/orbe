@@ -3,14 +3,15 @@ import XCTest
 
 @testable import Orbe
 
-/// PR の画面の失敗の札（`PrFailureCards`）——GitHub から読めていない札は 3 つの読みの失敗で 1 枚、× の後は人が再読込を頼むまで
-/// 出直さず、読めれば消える。確認済みの札は読みが通っても残り、× で消える。送信の失敗は、レビューのポップアップが開いていれば
-/// ポップアップの中だけに出て、閉じていれば札に出る。ポップアップを閉じても消えない。
+/// PR の画面の失敗の札（`PrFailureCards`）——GitHub から読めていないときの札は 3 つの読みの失敗で 1 枚。× で閉じた印は札の単位で、
+/// どの読みも通るか、人が再読込を頼むまで残り、その間は自動の読み直しの失敗でも別の読みの初めての失敗でも出直さない。確認済みの
+/// 札は読みが通っても残り、× で消える。送信の失敗は、レビューのポップアップが開いていればポップアップの中だけに出て、閉じて
+/// いれば札に出る。ポップアップを閉じても消えず、札の × で消える。
 ///
-/// 壊れると何が起きるか: ネットワークが切れると札が何枚も重なる。× で閉じた札が、前面に戻るたびの読み直しで出直す。再読込を
-/// 押して失敗しても札が出ない・読めるようになっても札が残る。確認済みを反映できなかった札が、次の読み直しで見る前に消える。
-/// 送信中に閉じたポップアップの送信の失敗に気づけない・ポップアップの中の帯と札に同じ失敗が二重に出る・時間切れの後に
-/// ポップアップを閉じると警告が消え、同じレビューを警告なしに送り直せる。
+/// 壊れると何が起きるか: ネットワークが切れると札が何枚も重なる。× で閉じた札が、前面に戻るたびの読み直しや、別の読みの失敗で
+/// 出直す。再読込を押して失敗しても札が出ない。読めるようになった後の失敗で札が出ない。読めるようになっても札が残る。確認済みを
+/// 反映できなかった札が、次の読み直しで見る前に消える。送信中に閉じたポップアップの送信の失敗に気づけない。ポップアップの中の
+/// 帯と札に同じ失敗が二重に出る。時間切れの後にポップアップを閉じると警告が消え、同じレビューを警告なしに送り直せる。
 extension PrPanelTests {
   /// 今の札の種類（上から）。
   private func cardKinds(reviewIsOpen: Bool = false) -> [PrFailureCard.Kind] {
@@ -64,6 +65,33 @@ extension PrPanelTests {
     XCTAssertEqual(cardKinds(), [], "閉じていなくても消える")
   }
 
+  /// 閉じた印は札の単位——一部の読みだけが失敗しているときに閉じると、別の読みが後から初めて失敗しても出直さない。3 つの読みが
+  /// どれも失敗していない状態になれば印は外れ、次に読みが失敗すると、再読込を頼まなくても出る。
+  func testTheReadingCardStaysClosedUntilEveryReadSucceeds() throws {
+    let state = try reviewed()
+    reviewReadFailure = .unreachable
+    state.reload()
+    pumpMain(until: { state.reviewFailure != nil }, "前提: レビューのやりとりの読みだけが失敗する")
+    XCTAssertNil(state.contentFailure, "前提: 中身は読める")
+    try XCTUnwrap(cards().first).dismiss()
+    XCTAssertEqual(cardKinds(), [], "× で閉じる")
+
+    readFailure = .rateLimited
+    state.reload()
+    pumpMain(until: { state.contentFailure != nil }, "前提: 中身の読みが初めて失敗する")
+    XCTAssertEqual(cardKinds(), [], "別の読みが初めて失敗しても出直さない")
+
+    readFailure = nil
+    reviewReadFailure = nil
+    state.reload()
+    pumpMain(
+      until: { state.contentFailure == nil && state.reviewFailure == nil }, "前提: どの読みも通る")
+    reviewReadFailure = .unreachable
+    state.reload()
+    pumpMain(until: { state.reviewFailure != nil }, "前提: また読みが失敗する")
+    XCTAssertEqual(cardKinds(), [.reading], "読めた後の失敗は、再読込を頼まなくても出る")
+  }
+
   /// 確認済みの書き込みの失敗の札は、続く読みが通っても残り、× で消える。もう一度付け外しして通らなければ、また出る。
   func testAViewedFailureCardOutlivesReadsUntilItIsClosed() throws {
     let state = try reviewed()
@@ -106,7 +134,8 @@ extension PrPanelTests {
     popup.close(.escape)
     XCTAssertNotNil(state.submissionFailure, "閉じても消えない")
     XCTAssertEqual(cardKinds(reviewIsOpen: review.isOpen), [.submission], "閉じると札に出る")
-    state.dismissSubmissionFailure()
+    try XCTUnwrap(cards().first { $0.kind == .submission }).dismiss()
+    XCTAssertNil(state.submissionFailure, "× で消える")
 
     review.requestOpen()
     holdsReviewWrites = true
