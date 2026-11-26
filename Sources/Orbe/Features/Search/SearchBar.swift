@@ -72,7 +72,7 @@ final class SearchBar: NSView {
   var showsUnknownPosition = false
   /// 一致なし（danger 色）か。
   var countIsNoMatch: Bool { matchTotal == 0 }
-  /// focus トリガ（端末のバーの `focusField()` と、エディターの面が進める）。SwiftUI が監視して `@FocusState` を立てる。
+  /// 端末のバーの `focusField()` が進める focus トリガ。SwiftUI が監視して `@FocusState` を立てる。
   var focusToken = 0
 
   var onNeedleChange: ((String) -> Void)?

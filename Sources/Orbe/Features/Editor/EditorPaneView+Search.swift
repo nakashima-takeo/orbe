@@ -18,7 +18,7 @@ extension EditorPaneView {
         search.seed(seed)
         field.needle = seed
       }
-      field.focusToken &+= 1
+      findField.requestFocus()
       selectFindNeedle()
       return
     }
@@ -34,7 +34,7 @@ extension EditorPaneView {
       field.needle = seed
       search.seed(seed)
     }
-    field.focusToken &+= 1
+    findField.requestFocus()
   }
 
   /// 検索の種——1 行以内の非空の選択、選択が空ならキャレットの語。

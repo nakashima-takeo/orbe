@@ -3,18 +3,18 @@ import SwiftUI
 
 /// サイドバー: 検索パネル。上から、見出し（題・すべて折りたたむ／すべて展開・「ツリーに戻る」か「止める」。検索中はその
 /// 下端に進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 件数の文 → 結果の列。状態は
-/// `ProjectSearch` だけを読み、入力欄の焦点は SwiftUI の焦点を `focusedArea` へ写す（結果の列の焦点は列が自分で写す）。
+/// `ProjectSearch` だけを読み、入力欄の焦点は欄の first responder の出入りを `focusedArea` へ写す（結果の列の焦点は列が
+/// 自分で写す）。焦点の要求は、入力欄への分は欄が、結果の列への分は列が当てる。
 /// 部分ごとに別の view にして、読む値が変わった部分だけを組み直す（結果が届くたびに入力欄まで組み直さない）。
 struct SearchPanelView: View {
   let search: ProjectSearch
   let results: RowList<SearchResultsSource>
-  @FocusState private var fieldFocused: Bool
   @Environment(\.localization) private var l10n
 
   var body: some View {
     EditorSidebarPanel {
       SearchPanelHeader(search: search)
-      ProjectSearchField(search: search, focus: $fieldFocused)
+      ProjectSearchField(search: search)
       if let error = search.error {
         Text(message(for: error))
           .font(Font.theme.editorSearchNote)
@@ -27,17 +27,7 @@ struct SearchPanelView: View {
       SearchSummary(search: search)
       SearchResultsList(search: search, results: results)
     }
-    .onChange(of: fieldFocused) { _, focused in search.focusDidChange(.field, focused: focused) }
-    .onChange(of: search.focusRequest) { _, _ in applyFocusRequest() }
-    .onAppear(perform: applyFocusRequest)
     .onDisappear(perform: search.panelDidHide)
-  }
-
-  /// 入力欄への要求を当てる（結果の列への要求は列が当てる）。
-  private func applyFocusRequest() {
-    guard search.focusRequest == .field else { return }
-    fieldFocused = true
-    search.focusRequestDidApply()
   }
 
   private func message(for error: ProjectSearch.Failure) -> String {
@@ -105,29 +95,23 @@ private struct SearchPanelHeader: View {
 }
 
 /// 入力欄（入力欄の枠の高さ 28）: 虫眼鏡・入力（mono 12）・右の Aa / ab / .*。フォーカスがある間の枠は入力欄の枠が描く。
+/// ↵ と ⇧↵ は検索し直す。esc は見出しのボタンと同じ（キーリピートでは何もしない）。
 private struct ProjectSearchField: View {
   let search: ProjectSearch
-  var focus: FocusState<Bool>.Binding
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    EditorFieldFrame(height: Theme.Layout.editorSearchField, isFocused: focus.wrappedValue) {
-      TextField(
-        "", text: Binding(get: { search.query.pattern }, set: search.setPattern),
-        prompt: Text(l10n.string(.editorSearchPlaceholder)).foregroundStyle(
-          Color.theme.editorTertiary)
-      )
-      .textFieldStyle(.plain)
-      .font(Font.theme.editorSearchField)
-      .foregroundStyle(Color.theme.textPrimary)
-      .tint(Color.theme.accentPrimary)
-      .lineLimit(1)
-      .focused(focus)
-      .onSubmit { search.search() }
-      .onKeyPress(.escape, phases: [.down, .repeat]) { press in
-        search.dismiss(isRepeat: press.phase == .repeat)
-        return .handled
-      }
+    EditorFieldFrame(
+      height: Theme.Layout.editorSearchField, isFocused: search.focusedArea == .field
+    ) {
+      EditorTextField(
+        text: search.query.pattern, placeholder: l10n.string(.editorSearchPlaceholder),
+        font: Theme.Typography.editorSearchField, placeholderColor: Theme.Color.editorTertiary,
+        wantsFocus: search.focusRequest == .field, requestDidApply: search.focusRequestDidApply,
+        onTextChange: search.setPattern,
+        onFocusChange: { search.focusDidChange(.field, focused: $0) },
+        onReturn: { _ in search.search() },
+        onEscape: { search.dismiss(isRepeat: $0) })
     } accessory: {
       HStack(spacing: Theme.Layout.editorFieldGap) {
         SearchOption(
