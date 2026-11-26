@@ -111,7 +111,8 @@
       .environment(\.localization, LocalizationStore(language: .ja))
     }
 
-    /// 仮の中身の入力欄（中身の行の高さに合わせる。1 行で 26、10 行まで）。
+    /// 仮の中身の入力欄（中身の行の高さに合わせる。1 行で 30、10 行まで。渡された高さを上限にし、越える分は欄の中で
+    /// スクロールする）。
     private struct DockField: NSViewRepresentable {
       let scroll: NSScrollView
       let field: MessageTextView
@@ -124,9 +125,8 @@
         _ proposal: ProposedViewSize, nsView scroll: NSScrollView, context: Context
       ) -> CGSize? {
         let width = proposal.width ?? scroll.frame.width
-        return CGSize(
-          width: width,
-          height: field.fittingHeight(width: width, maxLines: ScmMessageField.maxLines))
+        let height = field.fittingHeight(width: width, maxLines: ScmMessageField.maxLines)
+        return CGSize(width: width, height: min(height, proposal.height ?? height))
       }
     }
   }
