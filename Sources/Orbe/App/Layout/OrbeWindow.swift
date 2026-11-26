@@ -23,6 +23,17 @@ class OrbeWindow: NSWindow {
     makeKeyAndOrderFront(nil)
   }
 
+  override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+    let accepted = super.makeFirstResponder(responder)
+    let name = responder.map { "\(type(of: $0))@\(ObjectIdentifier($0).hashValue)" } ?? "nil"
+    let view = responder as? NSView
+    Diag509.log(
+      "makeFirstResponder \(name) accepted=\(accepted) accepts=\(responder?.acceptsFirstResponder ?? false)"
+        + " inWindow=\(view.map { $0.window === self } ?? false)"
+        + " hidden=\(view?.isHiddenOrHasHiddenAncestor ?? false)")
+    return accepted
+  }
+
   override func sendEvent(_ event: NSEvent) {
     if event.type == .keyDown, let composing = IMEComposition.composingTextView(in: self) {
       composing.keyDown(with: event)

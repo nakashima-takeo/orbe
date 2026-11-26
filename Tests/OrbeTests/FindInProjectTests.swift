@@ -30,10 +30,46 @@ final class FindInProjectTests: OrbeTestCase {
     let tab = try XCTUnwrap(wc.activeTab)
     let pane = tab.group.view.editor
 
+    let responderWatch = wc.window.observe(\.firstResponder, options: [.new]) { window, _ in
+      let responder = window.firstResponder
+      Diag509.log(
+        "firstResponder -> \(responder.map { "\(type(of: $0))@\(ObjectIdentifier($0).hashValue)" } ?? "nil")"
+      )
+    }
+    defer { responderWatch.invalidate() }
+    Diag509.log("before findInProject key=\(wc.window.isKeyWindow) visible=\(wc.window.isVisible)")
     wc.handleWindowCommand(.findInProject)
+    Diag509.log("after findInProject panel=\(pane.shell.panel)")
     XCTAssertTrue(tab.group.view.isEditorOpen, "閉じていれば開く")
     XCTAssertTrue(pane.showsSearchPanel)
-    pumpMain(until: { searchFieldIsFocused(pane) }, "入力欄に焦点")
+    var last = ""
+    pumpMain(
+      until: {
+        func fields(_ view: NSView) -> [NSTextField] {
+          (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+        }
+        func describe(_ field: NSTextField) -> String {
+          let prompt = field.placeholderString ?? field.placeholderAttributedString?.string ?? ""
+          return "\(ObjectIdentifier(field).hashValue)/\(prompt)/window=\(field.window != nil)"
+            + "/hidden=\(field.isHiddenOrHasHiddenAncestor)/accepts=\(field.acceptsFirstResponder)"
+        }
+        let responder = wc.window.firstResponder
+        let state = [
+          "fr=\(responder.map { String(describing: type(of: $0)) } ?? "nil")",
+          "inSide=\(pane.focusIsInSidebar)",
+          "area=\(String(describing: pane.projectSearch.focusedArea))",
+          "req=\(String(describing: pane.projectSearch.focusRequest))",
+          "sideFields=\(fields(pane.sideHost).map(describe))",
+          "panel=\(pane.shell.panel)", "key=\(wc.window.isKeyWindow)",
+          "visible=\(wc.window.isVisible)",
+        ].joined(separator: " ")
+        if state != last {
+          Diag509.log("poll \(state)")
+          last = state
+        }
+        return searchFieldIsFocused(pane)
+      }, "入力欄に焦点")
+    Diag509.log("result \(searchFieldIsFocused(pane) ? "focused" : "timeout")")
   }
 
   func testFindInProjectWithoutTabsDoesNothing() throws {
