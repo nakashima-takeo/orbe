@@ -299,12 +299,17 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
   weak var target: BrowserLayerView?
   var decisions: [(url: URL?, policy: WKNavigationActionPolicy)] = []
   var provisionalStartCount = 0
+  var redirectCount = 0
   var commitCount = 0
   var failCount = 0
   var failProvisionalCount = 0
   var onBeforeDecidePolicy: ((WKNavigationAction) -> Void)?
+  var deferDecision: ((WKNavigationAction, @escaping @MainActor () -> Void) -> Bool)?
+  var onBeforeDidStartProvisional: ((WKNavigation) -> Void)?
+  var onDidStartProvisional: ((WKNavigation) -> Void)?
   var onBeforeDidCommit: ((WKNavigation) -> Void)?
   var onDidFail: (() -> Void)?
+  var onDidFailProvisional: ((WKNavigation) -> Void)?
 
   init(target: BrowserLayerView) {
     self.target = target
@@ -320,15 +325,35 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
       decisionHandler(.cancel)
       return
     }
-    target.webView(webView, decidePolicyFor: navigationAction) { policy in
-      self.decisions.append((url: url, policy: policy))
-      decisionHandler(policy)
+    let proceed: @MainActor () -> Void = {
+      target.webView(webView, decidePolicyFor: navigationAction) { policy in
+        self.decisions.append((url: url, policy: policy))
+        decisionHandler(policy)
+      }
     }
+    if deferDecision?(navigationAction, proceed) == true {
+      return
+    }
+    proceed()
   }
 
   func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+    if let navigation {
+      onBeforeDidStartProvisional?(navigation)
+    }
     provisionalStartCount += 1
     target?.webView(webView, didStartProvisionalNavigation: navigation)
+    if let navigation {
+      onDidStartProvisional?(navigation)
+    }
+  }
+
+  func webView(
+    _ webView: WKWebView,
+    didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
+  ) {
+    redirectCount += 1
+    target?.webView(webView, didReceiveServerRedirectForProvisionalNavigation: navigation)
   }
 
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
@@ -355,6 +380,9 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
   ) {
     failProvisionalCount += 1
     target?.webView(webView, didFailProvisionalNavigation: navigation, withError: error)
+    if let navigation {
+      onDidFailProvisional?(navigation)
+    }
   }
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {

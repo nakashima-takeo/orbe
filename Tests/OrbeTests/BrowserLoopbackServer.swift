@@ -127,15 +127,20 @@ final class LocalLoopbackHTTPServer: @unchecked Sendable {
   enum Route: Sendable {
     /// 200 OK で全本文を返して接続を閉じる通常応答。
     case html(String)
+    /// 302 Found リダイレクト応答（`Cache-Control: no-store` 付き）。
+    case redirect(String)
     /// リクエスト受理後に応答を返さず接続を保留する（暫定遷移の検証用）。
     case hang
     /// 200 OK ヘッダと先頭本文だけ送って残余を保留し、コミット済み・読込継続中を作る。
     case partial(String)
+    /// リクエストごとに順次応答を切り替え、末尾以降は最後の応答を返す。
+    case sequence([Route])
   }
 
   private let responses: [String: Route]
   private let heldLock = NSLock()
   private var heldClients: [Int32] = []
+  private var sequenceIndices: [String: Int] = [:]
   private var stopped = false
   private let listener: LoopbackListener
   let port: UInt16
@@ -214,7 +219,23 @@ final class LocalLoopbackHTTPServer: @unchecked Sendable {
     let path =
       request.split(separator: "\r\n").first?
       .split(separator: " ").dropFirst().first.map(String.init) ?? "/"
-    switch responses[path] {
+    let route = resolveRoute(for: path)
+    sendRoute(route, to: fd)
+  }
+
+  private func resolveRoute(for path: String) -> Route? {
+    guard let route = responses[path] else { return nil }
+    guard case .sequence(let steps) = route, !steps.isEmpty else { return route }
+    let index: Int = heldLock.withLock {
+      let current = sequenceIndices[path, default: 0]
+      sequenceIndices[path] = current + 1
+      return current
+    }
+    return steps[min(index, steps.count - 1)]
+  }
+
+  private func sendRoute(_ route: Route?, to fd: Int32) {
+    switch route {
     case .hang:
       holdOrClose(fd)
     case .partial(let body):
@@ -227,6 +248,14 @@ final class LocalLoopbackHTTPServer: @unchecked Sendable {
     case .html(let body):
       sendHTML(body, status: "200 OK", to: fd)
       Darwin.close(fd)
+    case .redirect(let location):
+      let header =
+        "HTTP/1.1 302 Found\r\nLocation: \(location)\r\n"
+        + "Cache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+      writeAll(Data(header.utf8), to: fd)
+      Darwin.close(fd)
+    case .sequence(let steps):
+      sendRoute(steps.first, to: fd)
     case nil:
       sendHTML("", status: "404 Not Found", to: fd)
       Darwin.close(fd)

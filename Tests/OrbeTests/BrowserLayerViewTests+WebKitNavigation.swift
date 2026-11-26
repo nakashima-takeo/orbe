@@ -321,21 +321,25 @@ extension BrowserLayerViewTests {
     pumpMain(until: { browser.toolbar.displayURL?.path == "/p1/s2#sec" }, timeout: 5, "#hash 反映")
 
     browser.goBack()
+    XCTAssertTrue(browser.isProvisionalNavigation, "同一文書 #hash goBack 直後から暫定遷移として追跡する")
     pumpMain(
       until: { !browser.isProvisionalNavigation && browser.toolbar.displayURL?.path == "/p1/s2" },
       timeout: 5, "同一文書 #hash からの goBack が pending を解放し URL 追従する")
     XCTAssertEqual(browser.committedURL?.path, "/p1/s2")
 
     browser.goBack()
+    XCTAssertTrue(browser.isProvisionalNavigation, "同一文書 pushState goBack 直後から暫定遷移として追跡する")
     pumpMain(
       until: { !browser.isProvisionalNavigation && browser.toolbar.displayURL?.path == "/p1" },
       timeout: 5, "同一文書 pushState からの goBack が pending を解放し URL 追従する")
     XCTAssertEqual(browser.committedURL, p1)
 
     browser.goForward()
+    XCTAssertTrue(browser.isProvisionalNavigation, "同一文書 goForward 直後から暫定遷移として追跡する")
     pumpMain(
       until: { !browser.isProvisionalNavigation && browser.toolbar.displayURL?.path == "/p1/s2" },
       timeout: 5, "同一文書 goForward が pending を解放し URL 追従する")
+    XCTAssertEqual(browser.committedURL?.path, "/p1/s2")
 
     // 2. 別文書間（/p1/s2 ⇄ /p2）の goBack / goForward で pending 解放と URL 追従を確認。
     let beforeP2 = finishCount
@@ -344,6 +348,7 @@ extension BrowserLayerViewTests {
 
     let beforeBack = finishCount
     browser.goBack()
+    XCTAssertTrue(browser.isProvisionalNavigation, "別文書 goBack 直後から暫定遷移として追跡する")
     pumpMain(
       until: { finishCount > beforeBack && !browser.isProvisionalNavigation },
       timeout: 5, "別文書 goBack が完了し pending を解放する")
@@ -352,6 +357,7 @@ extension BrowserLayerViewTests {
 
     let beforeForward = finishCount
     browser.goForward()
+    XCTAssertTrue(browser.isProvisionalNavigation, "別文書 goForward 直後から暫定遷移として追跡する")
     pumpMain(
       until: { finishCount > beforeForward && !browser.isProvisionalNavigation },
       timeout: 5, "別文書 goForward が完了し pending を解放する")

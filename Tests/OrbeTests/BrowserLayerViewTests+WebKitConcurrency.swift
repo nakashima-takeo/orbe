@@ -105,26 +105,24 @@ extension BrowserLayerViewTests {
     XCTAssertEqual(browser.toolbar.displayURL?.path, "/local")
     XCTAssertNil(browser.lastRequestedURL, "ローカル HTML の架空 baseURL を lastRequestedURL へ昇格しない")
 
-    // 2. baseURL nil ローカル HTML の先行コミット → 後続暫定中の時点で旧オリジン A をクリアする。
+    // 2. baseURL nil ローカル HTML の先行コミット＋後続失敗 → 旧オリジン A を消去しつつ後続要求 URL を保つ。
     let finishBeforeA2 = finishCount
     browser.load(urlA)
     pumpMain(until: { finishCount > finishBeforeA2 }, timeout: 5, "オリジン A 再完了")
-    let hanging = try HangingLoopbackServer()
-    defer { hanging.stop() }
-    let hangURL = URL(string: "http://127.0.0.1:\(hanging.port)/hang")!
-    let commitsBefore = spy.commitCount
-    var injected = false
-    spy.onBeforeDidCommit = { _ in
-      guard !injected else { return }
-      injected = true
-      browser.load(hangURL)
-    }
-    browser.loadHTMLString("<!doctype html><p>local-blank</p>", baseURL: nil)
-    pumpMain(until: { spy.commitCount > commitsBefore }, timeout: 5, "baseURL nil の先行コミット到着")
-    spy.onBeforeDidCommit = nil
-    XCTAssertTrue(browser.isProvisionalNavigation, "後続 hang は暫定進行中のまま")
-    XCTAssertNil(browser.committedURL, "baseURL nil の先行コミットで旧オリジン A を消去する")
-    XCTAssertNil(browser.toolbar.displayURL, "アドレスバーから旧オリジン A が消える")
+    let hangURL = try triggerSupersededCommit(
+      in: browser, spy: spy,
+      commitTrigger: {
+        browser.loadHTMLString("<!doctype html><p>local-blank</p>", baseURL: nil)
+      },
+      afterCommit: { expectedHang in
+        XCTAssertNil(browser.committedURL, "baseURL nil の先行コミットで旧オリジン A を消去する")
+        XCTAssertNil(browser.toolbar.displayURL, "アドレスバーから旧オリジン A が消える")
+        XCTAssertEqual(browser.lastRequestedURL, expectedHang, "後続遷移の lastRequestedURL を潰さない")
+      })
+    XCTAssertNil(browser.committedURL, "後続失敗後も旧オリジン A へ戻らない")
+    XCTAssertEqual(browser.lastRequestedURL, hangURL, "後続失敗後も失敗した要求 URL を保持する")
+    XCTAssertEqual(browser.toolbar.displayURL?.raw, hangURL.absoluteString)
+    XCTAssertEqual(browser.toolbar.displayURL?.isSecure, false)
   }
 
   /// `didStartProvisionalNavigation` 到着前に連続して API 遷移を重ねても、1 本目キャンセルに伴う
@@ -245,11 +243,13 @@ extension BrowserLayerViewTests {
 
   // MARK: - 競合テスト補助
 
-  private func triggerSupersededCommit(
+  @discardableResult
+  func triggerSupersededCommit(
     in browser: BrowserLayerView, spy: BrowserNavigationPolicySpy,
     commitTrigger: () -> Void,
+    afterCommit: ((URL) -> Void)? = nil,
     file: StaticString = #filePath, line: UInt = #line
-  ) throws {
+  ) throws -> URL {
     let hanging = try HangingLoopbackServer()
     defer { hanging.stop() }
     let hangURL = URL(string: "http://127.0.0.1:\(hanging.port)/trailing-hang")!
@@ -271,6 +271,7 @@ extension BrowserLayerViewTests {
     spy.onBeforeDidCommit = nil
     XCTAssertTrue(browser.isProvisionalNavigation, "先行コミット直後は後続 hang が暫定中", file: file, line: line)
     XCTAssertEqual(browser.lastRequestedURL, hangURL, file: file, line: line)
+    afterCommit?(hangURL)
     pumpMain(
       until: { spy.provisionalStartCount > startsBefore }, timeout: 5, "後続 hang の暫定開始",
       file: file, line: line)
@@ -279,9 +280,10 @@ extension BrowserLayerViewTests {
       until: { spy.failProvisionalCount > failBefore && !browser.isProvisionalNavigation },
       timeout: 5, "後続 hang の失敗完了", file: file, line: line)
     nextTurn(file: file, line: line)
+    return hangURL
   }
 
-  private func appendIframe(
+  func appendIframe(
     id: String, src: URL, in webView: WKWebView,
     file: StaticString = #filePath, line: UInt = #line
   ) {
@@ -298,7 +300,7 @@ extension BrowserLayerViewTests {
     pumpMain(until: { done }, timeout: 5, "iframe 読み込み完了 (\(id))", file: file, line: line)
   }
 
-  private func triggerCrossOriginIframeBlankClick(
+  func triggerCrossOriginIframeBlankClick(
     frameId: String, ack: String, in webView: WKWebView,
     file: StaticString = #filePath, line: UInt = #line
   ) {
@@ -317,7 +319,7 @@ extension BrowserLayerViewTests {
     pumpMain(until: { done }, timeout: 5, "iframe クリック応答 (\(ack))", file: file, line: line)
   }
 
-  private func evaluateString(
+  func evaluateString(
     _ expression: String, in webView: WKWebView,
     file: StaticString = #filePath, line: UInt = #line
   ) -> String? {
@@ -331,7 +333,7 @@ extension BrowserLayerViewTests {
     return resultValue
   }
 
-  private static func iframeClickPageHTML(target: String, ack: String) -> String {
+  static func iframeClickPageHTML(target: String, ack: String) -> String {
     """
     <!doctype html>
     <a id='go' href='\(target)' target='_blank'>go</a>
@@ -344,7 +346,7 @@ extension BrowserLayerViewTests {
     """
   }
 
-  private static let dynamicFrameHostHTML = """
+  static let dynamicFrameHostHTML = """
     <!doctype html>
     <p>origin-b</p>
     <script>
