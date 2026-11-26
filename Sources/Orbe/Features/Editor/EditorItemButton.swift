@@ -78,31 +78,50 @@ struct EditorCurrentFileLabel: View {
   }
 }
 
-/// 幅が無ければ縮む 1 行の名前。幅が在る間は中ほどを省き（先頭と末尾が残る）、先頭の `prefixLength` 字（既定は 1 字）と
-/// 末尾の同じ字数と「…」が入らない幅では、先頭の `prefixLength` 字と「…」（読める下限）にする。下限より狭い幅を渡されても
-/// 下限の幅を取り、はみ出した分は、置いた側の枠で切れる。名前がほとんど縮まない長さ（`prefixLength` ＋ 1 字以下）なら、
-/// 下限は名前の全体。どこを省くかはこの部品が決めるので、`render` は字体と色だけを付ける（省略の向きを付けない）。
+/// 名前の省き方。
+enum EditorNameTruncation {
+  /// 中ほどを省く（先頭と末尾が残る）。
+  case middle
+  /// 末尾を省く（先頭が残る）。
+  case tail
+}
+
+/// 幅が無ければ縮む 1 行の名前。幅が在る間は `truncation` の向きに省き（既定は中ほど）、省いた姿の見本が入らない幅では、
+/// 先頭の `prefixLength` 字（既定は 1 字）と「…」（読める下限）にする。見本は、中ほどを省くなら先頭の `prefixLength` 字と
+/// 末尾の同じ字数と「…」、末尾を省くなら読める下限。下限より狭い幅を渡されても下限の幅を取り、はみ出した分は、置いた側の
+/// 枠で切れる。名前がほとんど縮まない長さ（`prefixLength` ＋ 1 字以下）なら、下限は名前の全体。どこを省くかはこの部品が
+/// 決めるので、`render` は字体と色だけを付ける（省略の向きを付けない）。
 struct EditorReadableName<Content: View>: View {
   let text: String
   let prefixLength: Int
+  let truncation: EditorNameTruncation
   let render: (String) -> Content
 
   init(
-    _ text: String, prefixLength: Int = 1, @ViewBuilder render: @escaping (String) -> Content
+    _ text: String, prefixLength: Int = 1, truncation: EditorNameTruncation = .middle,
+    @ViewBuilder render: @escaping (String) -> Content
   ) {
     self.text = text
     self.prefixLength = prefixLength
+    self.truncation = truncation
     self.render = render
   }
 
   var body: some View {
     ViewThatFits(in: .horizontal) {
-      EditorMiddleTruncation {
-        render(text).lineLimit(1).truncationMode(.middle)
-        render(String(text.prefix(prefixLength)) + "…" + String(text.suffix(prefixLength)))
-          .lineLimit(1).fixedSize().hidden()
+      EditorTruncatedName {
+        render(text).lineLimit(1).truncationMode(truncation == .middle ? .middle : .tail)
+        render(sample).lineLimit(1).fixedSize().hidden()
       }
       render(readableFloor).lineLimit(1).fixedSize()
+    }
+  }
+
+  /// 省いた姿の見本（中ほどを省くなら先頭と末尾の字と「…」、末尾を省くなら読める下限）。
+  private var sample: String {
+    switch truncation {
+    case .middle: String(text.prefix(prefixLength)) + "…" + String(text.suffix(prefixLength))
+    case .tail: readableFloor
     }
   }
 
@@ -112,9 +131,9 @@ struct EditorReadableName<Content: View>: View {
   }
 }
 
-/// 子 [本体, 見本]。中ほどを省く本体が、先頭と末尾の字を残せる幅（見本の幅。本体の全幅が狭ければ全幅）を、自分の本来の
-/// 幅として名乗る（`ViewThatFits` が、それより狭い幅では下限の姿へ替える）。幅を渡されたら、本体がその幅で使う幅を取る。
-private struct EditorMiddleTruncation: Layout {
+/// 子 [本体, 見本]。省く本体が、見本の幅（本体の全幅が見本の幅より狭ければ、その全幅）を、自分の本来の幅として名乗る
+/// （`ViewThatFits` が、それより狭い幅では下限の姿へ替える）。幅を渡されたら、本体がその幅で使う幅を取る。
+private struct EditorTruncatedName: Layout {
   func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     guard let content = subviews.first else { return .zero }
     guard proposal.width == nil, subviews.count == 2 else { return content.sizeThatFits(proposal) }
