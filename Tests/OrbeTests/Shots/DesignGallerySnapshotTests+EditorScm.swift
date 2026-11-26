@@ -34,7 +34,7 @@ extension DesignGallerySnapshotTests {
       until: { scene.panel.count == 0 && scene.panel.changes.staged.isEmpty }, "変更が無くなる")
     try writePNG(
       scene.view, size: NSSize(width: 1100, height: 640), name: "editor_scm_empty.png", dir: dir,
-      until: { scene.panel.count == 0 })
+      until: { scene.panel.count == 0 && scene.panel.listState == .none })
 
     let plain = try ScmFixtures.unmanagedScene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
     defer { plain.cleanup() }
