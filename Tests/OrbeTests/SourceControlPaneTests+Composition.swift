@@ -14,7 +14,7 @@ import XCTest
 /// 欄でも「コミット」が押せる姿に残る。変換中にポップアップを閉じると、変換中の字が消える。
 extension SourceControlPaneTests {
   /// 欄に変換中の字を置く（IME の打鍵と同じ口）。
-  private func compose(_ text: String, in field: MessageTextView) {
+  func compose(_ text: String, in field: MessageTextView) {
     field.setMarkedText(
       text, selectedRange: NSRange(location: text.utf16.count, length: 0),
       replacementRange: NSRange(location: NSNotFound, length: 0))
