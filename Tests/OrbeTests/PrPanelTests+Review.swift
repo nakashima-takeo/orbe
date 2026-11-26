@@ -7,7 +7,8 @@ import XCTest
 /// コメントを送信できる・行に書いた未送信のコメントを本文なしで送れない・自分の PR を承認できるように見える・失敗した送信で
 /// 書きかけが消える・成功した後も書きかけと選んだ種類が残る・古い版の行のスレッドをコメント数に数える・今の diff に出せない
 /// スレッドに気づけない・空白だけのレビューを公開できる・diff で見ていないコミットに承認が付く・解決済みの置けないスレッドが
-/// 件数を埋める・GitHub の rename の判定が替わった後も、置けない未送信のコメントの行を押すと diff の別の行へ移る。
+/// 件数を埋める・GitHub の rename の判定が替わった後も、置けない未送信のコメントの行を押すと diff の別の行へ移る・diff を表示
+/// できない PR で、未送信のコメントの行が押せる姿のまま、押すと diff の置けない場所へ移ろうとする・コメント数と置けない数が誤る。
 extension PrPanelTests {
   /// 「コメント」「変更を依頼」は本文も未送信のコメントも無ければ送れず、「承認」は空でも送れる。送信が成功すれば書きかけは空になり種類は
   /// 「コメント」に戻る。成功しなければ書きかけと種類が残り、失敗を保持する。
@@ -102,6 +103,26 @@ extension PrPanelTests {
     XCTAssertEqual(state.submissionBlock, .noDiff)
     XCTAssertFalse(state.submitReview { _ in })
     XCTAssertEqual(reviewWrites, [])
+  }
+
+  /// diff の両端を求められない PR では、未送信のコメントの行はどれも置けない姿になり、未解決のスレッドはどれも置けないものとして数え、
+  /// ファイルの行にコメント数を出さない。
+  func testThreadsOfAPullRequestWithoutADiffAreUnplaceable() throws {
+    head = String(repeating: "1", count: 40)
+    reviewHead = head
+    threads = [
+      thread("T_new", path: "README.md", line: 2, comments: 1, pending: true),
+      thread("T_old", path: "README.md", line: 2, comments: 1, side: .old, pending: true),
+    ]
+    let state = try shown()
+    pumpMain(
+      until: {
+        guard state.review != nil, case .failed = state.bounds else { return false }
+        return true
+      }, "前提: diff の両端を求められない")
+    XCTAssertEqual(state.pendingComments.map(\.isPlaceable), [false, false])
+    XCTAssertEqual(state.outdatedThreadCount, 2)
+    XCTAssertEqual(panel.commentCount(of: "README.md"), 0)
   }
 
   /// レビューのやりとりが diff の両端より先に届いても、両端が揃えば、古い側の行のスレッドをファイルの行の数に入れて
