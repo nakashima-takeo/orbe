@@ -6,7 +6,7 @@ updated: 2026-11-26
 
 # レビューの送信
 
-PR の diff で積んだ未送信のコメント（返信・新しいスレッド → [pull-request-comments](pull-request-comments.md)）と全体へのコメントを、1 つのレビューとして GitHub へ送る場所。PR の画面の上のバーの右端の「レビュー」のボタンから、バーの右下にポップアップを開く（置き場の共通の決まり → [shell](shell.md#バーの右下の置き場)）。左の列を閉じていても、本文を読みながらでも、マウスなしでも送れるようにするため。送る規則（選べる種類・送れるか・送れない理由・送信）は PR ごとの状態が持ち（→ [pull-request](pull-request.md)）、同じ PR を出すどの面でも同じ答えになる。寸法と色は [design-system](../../design/design-system.md) §5 の PR review popup。
+PR の diff で積んだ未送信のコメント（返信・新しいスレッド → [pull-request-comments](pull-request-comments.md)）と全体へのコメントを、1 つのレビューとして GitHub へ送る場所。PR の画面の上のバーの右端の「レビュー」のボタンから、バーの右下にポップアップを開く（置き場の共通の決まり → [shell](shell.md#バーの右下の置き場)）。左の列を閉じていても、本文を読みながらでも送れ、PR の一覧に焦点がある間はマウスなしでも送れるようにするため。送る規則（選べる種類・送れるか・送れない理由・送信）は PR ごとの状態が持ち（→ [pull-request](pull-request.md)）、同じ PR を出すどの面でも同じ答えになる。寸法と色は [design-system](../../design/design-system.md) §5 の PR review popup。
 
 ## ボタン
 

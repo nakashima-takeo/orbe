@@ -190,7 +190,6 @@
       return revision("HEAD", in: dir)
     }
 
-    /// 差し替えの GitHub の確認済みのパス（EmitBuffer.swift と HookRegistry.swift が確認済みから始まる）。
     /// 差し替えの GitHub が返す失敗（nil なら通す）。
     final class Faults {
       /// 中身の読みに返す失敗。
@@ -199,6 +198,7 @@
       var viewed: GitHubFailure?
     }
 
+    /// 差し替えの GitHub の確認済みのパス（EmitBuffer.swift と HookRegistry.swift が確認済みから始まる）。
     private final class Viewed {
       var paths: Set<String> = ["src/agent/EmitBuffer.swift", "src/agent/HookRegistry.swift"]
     }

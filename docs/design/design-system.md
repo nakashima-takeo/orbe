@@ -200,7 +200,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `type.editorScmCommit` | 12 / regular / sans | グラフのコミットの題 |
 | `type.editorScmRef` / `editorScmBranch` | 9・11 / regular / mono | グラフの ref の札・ブランチの行 |
 | `type.editorScmMore` | 11.5 / regular / sans | グラフの「さらに表示」 |
-| `type.editorScmNote` | 11 / regular / sans | ソース管理の失敗の文・PR のパネルの頭の下の失敗の文 |
+| `type.editorScmNote` | 11 / regular / sans | ソース管理の失敗の文 |
 | `type.editorScmBandName` / `editorScmBandProgress` / `editorScmStop` | 12 sans・10.5 mono・11 sans | 実行中の帯の操作名・進捗の行・止める |
 | `type.editorPrTitle` / `editorPrDescription` | 13・11.5 / regular / sans | PR のパネルの頭の題（行高 1.4）・説明の本文（行高 1.6） |
 | `type.editorPrMeta` / `editorPrCount` | 10.5 / regular / mono | PR のパネルの作者と `head → base`・コミットの sha と「N/M 確認済み」と「済/全」 |
