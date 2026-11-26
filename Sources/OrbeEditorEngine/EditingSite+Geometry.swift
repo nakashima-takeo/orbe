@@ -149,7 +149,7 @@ extension EditingSite {
   /// 点を含む未確定の字の位置（点が未確定の字の上でなければ nil）。
   func markedCharacter(at point: CGPoint) -> Int? {
     guard let marked = markedLine, let text = currentContent?.text,
-      let (row, segment) = row(at: point), row == marked.row, segment == marked.segment,
+      let place = row(at: point), place.row == marked.row, place.segment == marked.segment,
       let offset = marked.offset(containingX: lineX(of: point))
     else { return nil }
     return text.grapheme(containing: offset).location

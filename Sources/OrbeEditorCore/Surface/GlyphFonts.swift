@@ -109,12 +109,14 @@ public enum GlyphFonts {
   /// 本体の字体 `font` で、行の字 `units`（描く単位の列）を引く。初めて出た字は、その字だけを組んで覚える。
   public static func glyphs(_ units: ContiguousArray<UInt16>, font: CTFont) -> Glyphs {
     var unknown: [Range<Int>] = []
-    var (read, fonts) = tables.withLockUnchecked { tables in
+    var lookup: Lookup
+    var fonts: [CTFont]
+    (lookup, fonts) = tables.withLockUnchecked { tables -> (Lookup, [CTFont]) in
       let table = index(of: font, in: &tables)
       return (read(units, tables[table], unknown: &unknown), tables[table].fonts)
     }
     guard !unknown.isEmpty else {
-      return Glyphs(slots: read.slots, fonts: fonts, widths: read.widths)
+      return Glyphs(slots: lookup.slots, fonts: fonts, widths: lookup.widths)
     }
     let clusters = Set(unknown.map { ContiguousArray(units[$0]) })
     let found = Dictionary(uniqueKeysWithValues: clusters.map { ($0, alone($0, font: font)) })
@@ -131,10 +133,10 @@ public enum GlyphFonts {
     }
     for range in unknown {
       let entry = assigned[ContiguousArray(units[range])]!
-      for index in range { read.slots[index] = entry.slot }
-      read.widths[range.lowerBound] = entry.width
+      for index in range { lookup.slots[index] = entry.slot }
+      lookup.widths[range.lowerBound] = entry.width
     }
-    return Glyphs(slots: read.slots, fonts: fonts, widths: read.widths)
+    return Glyphs(slots: lookup.slots, fonts: fonts, widths: lookup.widths)
   }
 
   /// 本体の字体 `font` での、ASCII の字（U+0020…U+007E）の幅（pt。`code − 0x20` 番目）。
@@ -159,10 +161,13 @@ public enum GlyphFonts {
     return tables.count - 1
   }
 
+  /// 表から引いた行の字の、単位ごとの字体の番号と幅。
+  private typealias Lookup = (slots: [UInt16], widths: [Float])
+
   /// 表 `table` から行の字を引く。表に無い字の範囲を `unknown` に足す（その字の単位は未知のまま）。
   private static func read(
     _ units: ContiguousArray<UInt16>, _ table: Table, unknown: inout [Range<Int>]
-  ) -> (slots: [UInt16], widths: [Float]) {
+  ) -> Lookup {
     var slots = [UInt16](repeating: Slot.unknown, count: units.count)
     var widths = [Float](repeating: .nan, count: units.count)
     if units.allSatisfy(isStandalone) {
