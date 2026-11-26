@@ -190,7 +190,7 @@ private struct EditorBarDroppable: ViewModifier {
         .allowsHitTesting(isPlaced)
         .onGeometryChange(for: Bool.self) { proxy in
           guard let row = proxy.bounds(of: .named(EditorBarLayout.space)) else { return true }
-          return row.intersects(proxy.frame(in: .named(EditorBarLayout.space)))
+          return row.intersects(CGRect(origin: .zero, size: proxy.size))
         } action: {
           isPlaced = $0
         }
