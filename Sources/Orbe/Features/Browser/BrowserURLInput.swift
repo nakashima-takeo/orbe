@@ -56,11 +56,14 @@ enum BrowserURLInput {
   }
 
   private static func requiresDisplayPercentEncoding(_ scalar: Unicode.Scalar) -> Bool {
-    let v = scalar.value
-    return v <= 0x1F || (0x7F...0x9F).contains(v)
-      || v == 0x061C || v == 0x200E || v == 0x200F
-      || (0x2028...0x202E).contains(v)
-      || (0x2066...0x2069).contains(v)
+    let properties = scalar.properties
+    if properties.isBidiControl { return true }
+    switch properties.generalCategory {
+    case .control, .lineSeparator, .paragraphSeparator:
+      return true
+    default:
+      return false
+    }
   }
 
   private static let hexDigits: [Character] = Array("0123456789ABCDEF")
