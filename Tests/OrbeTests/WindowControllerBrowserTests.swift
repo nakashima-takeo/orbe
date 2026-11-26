@@ -6,14 +6,16 @@ import XCTest
 
 /// ウィンドウ最上層（Z=2）の内蔵ブラウザ統合——`⌘B` の純粋トグル（タブ・0 タブ・ボード・URL 編集中ガード）、
 /// 端末寸法不変、workspace 切替・overlay 往復・背景タブ閉鎖での状態と焦点の保持、下層遷移命令での
-/// 全面閉鎖／右シート維持、および 3 層 `⌥` 単層めくり・`visibleTab`／`done` 通知制御を実窓で守る。
+/// 全面閉鎖／右シート維持、3 層 `⌥` 単層めくり、`visibleTab`／`done` 通知制御、Home ボード自動化通知の
+/// ブラウザ覆い判定とクリック時閉鎖、および URL 編集中フォーカス保護・タブ改名クリックを実窓で守る。
 ///
 /// 壊れると何が起きるか。ブラウザ開閉で端末の行桁が崩れて pty に SIGWINCH が飛ぶ。
-/// 0 タブやボード上で `⌘B` が効かなくなる。URL 欄編集中に `⌘T` 等が暴発する。
+/// 0 タブやボード上で `⌘B` が効かなくなる。URL 欄編集中に `⌘T` 等が暴発する、または背景操作・タブ改名欄の
+/// blur で入力中の URL やブラウザ焦点が奪われる。
 /// workspace 切替やパレット往復でブラウザが閉じたり焦点が背後の端末へ奪われたりする。
 /// 全面ブラウザ上の `⌘E` や `open_file` でブラウザが閉じずゴースト入力になる。
-/// 3 層並走時の `⌥` 長押しで下のエディターまで一緒に透ける、または全面ブラウザで覆われた端末の
-/// 完了通知（`done`）が届かない・見えた後に消えない。
+/// 3 層並走時の `⌥` 長押しで下のエディターまで一緒に透ける、全面ブラウザで覆われた端末の完了通知（`done`）が
+/// 届かない・見えた後に消えない、あるいは自動化通知をクリックしても右シートが残って詳細欄が隠れたままになる。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerBrowserTests: OrbeTestCase {
@@ -164,7 +166,8 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     wc.window.makeFirstResponder(nil)
     wc.dismissHelp()
     nextTurn()
-    XCTAssertTrue(wc.browserMode == .sheet && wc.browserView.focusIsInside, "overlay 閉鎖でブラウザへ焦点復帰")
+    XCTAssertEqual(wc.browserMode, .sheet, "overlay 閉鎖後も右シートを保つ")
+    XCTAssertTrue(wc.browserView.focusIsInside, "overlay 閉鎖でブラウザへ焦点復帰")
 
     // 下層の端末へ焦点を移してから workspace 切替すると、右シートとページは保ったまま切替先の端末へ焦点が移る。
     wc.window.makeFirstResponder(try XCTUnwrap(wc.activeTab).surface)
@@ -196,9 +199,8 @@ final class WindowControllerBrowserTests: OrbeTestCase {
 
   // MARK: - 下層へ移る操作での Z=2 引き渡し
 
-  /// 下層へ移る命令（タブ選択・`focus_tab`・`⌘E`・`open_file`・`⌘⇧F`）は、右シートを残して焦点を下層へ譲り、
-  /// 全面ブラウザは閉じて下層へ移る。全面時の `⌘E` はエディターが既開でも反転せず開いたまま下層へ渡す。
-  func testUnderlayCommandsYieldFullBrowserAndKeepSheet() throws {
+  /// 下層へ移る通常命令（タブ選択・`⌘E`・`⌘⇧F`・`open_file`）は、右シートを残したまま焦点を下層へ譲る。
+  func testUnderlayCommandsKeepSheetAndYieldFocus() throws {
     let window = OrbeWindowFake()
     let wc = try restore(
       [
@@ -206,7 +208,7 @@ final class WindowControllerBrowserTests: OrbeTestCase {
           name: "main", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain, Self.plain])
       ], window: window)
     window.isKey = true
-    let (tab0, tab1) = (wc.current.tabs[0], wc.current.tabs[1])
+    let tab1 = wc.current.tabs[1]
     let file = try caseFile("sample.txt", "hello")
 
     // 右シート表示中（ブラウザ焦点）にタブ切替 → 右シートは残り、選択先端末へ焦点が移る。
@@ -226,7 +228,8 @@ final class WindowControllerBrowserTests: OrbeTestCase {
 
     // 下層エディター既開＋右シート＋ブラウザ焦点中の ⌘⇧F / open_file は、右シートを残して同期に焦点を譲る。
     wc.browserView.focusBrowser()
-    XCTAssertTrue(wc.browserView.focusIsInside && wc.browserWasFocused, "前提: 右シートに焦点")
+    XCTAssertTrue(wc.browserView.focusIsInside, "前提: 右シートに焦点")
+    XCTAssertTrue(wc.browserWasFocused, "前提: ブラウザ焦点記憶が真")
     wc.handleWindowCommand(.findInProject)
     XCTAssertEqual(wc.browserMode, .sheet, "右シートは閉じない")
     XCTAssertFalse(wc.browserView.focusIsInside, "既開エディターへの ⌘⇧F で同期にブラウザから焦点を譲る")
@@ -241,6 +244,22 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     XCTAssertEqual(wc.browserMode, .sheet, "既開エディターへの open_file でも右シートは残す")
     XCTAssertFalse(wc.browserView.focusIsInside, "既開エディターへの open_file でブラウザから焦点を譲る")
     XCTAssertTrue(tab1.group.view.editor.focusIsInside)
+  }
+
+  /// 下層へ移る命令（`⌘⇧F`・`⌘E`・`open_file`・`focus_tab`）は全面ブラウザを閉じて下層へ移る。
+  /// 全面時の `⌘E` はエディターが既開でも反転せず開いたまま下層へ渡す。
+  func testUnderlayCommandsCloseFullBrowser() throws {
+    let window = OrbeWindowFake()
+    let wc = try restore(
+      [
+        WorkspaceState(
+          name: "main", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain, Self.plain])
+      ], window: window)
+    window.isKey = true
+    let (tab0, tab1) = (wc.current.tabs[0], wc.current.tabs[1])
+    let file = try caseFile("sample.txt", "hello")
+    wc.select(1)
+    wc.toggleEditorFace()
 
     // 全面ブラウザ表示中に、下層が既にエディターでも ⌘⇧F は全面を閉じて検索パネルを開く。
     tab1.group.view.editor.showExplorer()

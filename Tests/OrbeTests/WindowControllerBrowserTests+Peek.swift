@@ -4,8 +4,9 @@ import XCTest
 
 @testable import Orbe
 
-/// 3 層構成における `⌥` 単層めくり（最上層 1 枚のみめくる・下層エディター監視抑止・全面めくりピル下層判定）と、
-/// `visibleTab` および完了通知（`done`）の抑制・消費規則を実窓で守る。
+/// 3 層構成における `⌥` 単層めくり（最上層 1 枚のみめくる・下層エディター監視抑止・全面めくりピル下層判定）、
+/// `visibleTab`・完了通知（`done`）の抑制・消費規則、および Home ボード自動化通知のブラウザ覆い判定と
+/// 通知クリック時（`showAutomation`）のブラウザ閉鎖を実窓で守る。
 extension WindowControllerBrowserTests {
   // MARK: - ⌥ 単層めくり
 
@@ -257,77 +258,69 @@ extension WindowControllerBrowserTests {
     option.send([])
   }
 
-  // MARK: - URL 編集中フォーカス保護とタブ改名中の右シートクリック
-
-  /// URL 欄を本物の field editor で編集中に背景タブ閉鎖・workspace 切替が走っても入力中の URL を破棄せず、
-  /// タブ改名中に右シート（本体・URL 欄）へ焦点を移した直後の改名欄 blur でも焦点が下層へ奪い返されない。
+  /// 自動化通知クリック（`showAutomation`）は全面だけでなく右シートも閉じて Home ボード詳細欄を露出し、
+  /// 着地後の再通知を抑制する。一方、通常の `select(.board, ...)` による `yieldBrowserToUnderlay` は
+  /// 右シートを維持し、全面ブラウザ下の未視認端末の `done` は `showAutomation` でも誤消費しない。
   @MainActor
-  func testURLEditingSurvivesBackgroundFocusSelectionAndTabRenameClick() throws {
+  func testShowAutomationClosesSheetAndFullBrowserWithoutConsumingCoveredDone() throws {
     let window = OrbeWindowFake()
     let wc = try restore(
-      [
-        WorkspaceState(
-          name: "a", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain, Self.plain]),
-        WorkspaceState(name: "b", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain]),
-      ], window: window)
+      [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain])],
+      window: window)
+    let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     window.isKey = true
-    let wsA = try XCTUnwrap(wc.workspaces.first { $0.name == "a" })
-    let wsBIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "b" })
-    let bgTab = wsA.tabs[1]
+    let mainIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "main" })
+    let homeIndex = try XCTUnwrap(wc.store.homeIndex)
+    let mainTab = try XCTUnwrap(wc.workspaces[mainIndex].tabs.first)
+
+    let def = AutomationDefinition(
+      name: "定期確認", notify: .menuBar,
+      nodes: [
+        DesignSceneFixtures.agentNode(
+          "check", "確認", .scheduled(.every(1440)), instruction: "確認", deliver: .report)
+      ])
+    let id = try wc.automationStore.create(def, now: Date()).id
+    try wc.automationStore.record(
+      id, nodeKey: "check", trigger: .now, at: Date(),
+      outcome: DesignSceneFixtures.reported("結果 1 件"))
+
+    // 1. 右シート表示中（別 workspace の端末上・URL 編集中）に showAutomation → 右シートごと閉じてボード詳細を露出。
     wc.setBrowserMode(.sheet, animated: false)
-
-    // 1. URL 欄編集中に背景タブ閉鎖・workspace 切替が起きても field editor の焦点と入力内容を守る。
     wc.browserView.beginURLEditing()
-    flush(window)
-    pumpMain(
-      until: {
-        (window.firstResponder as? NSTextView)?.isDescendant(of: wc.browserView.barHost) == true
-      },
-      "URL 欄の field editor が焦点を取る")
-    let editor = try XCTUnwrap(window.firstResponder as? NSTextView)
-    editor.insertText("https://draft.example", replacementRange: NSRange(location: 0, length: 0))
+    wc.showAutomation(id)
+    XCTAssertEqual(wc.browserMode, .closed, "showAutomation は右シートも閉じる")
+    XCTAssertFalse(wc.browserView.isEditingURL, "URL 編集状態も解除される")
+    XCTAssertTrue(wc.store.isHome(wc.activeWorkspace))
+    XCTAssertEqual(wc.current.selection, .board)
+    XCTAssertTrue(wc.isViewingAutomation(id), "右シートが閉じたため詳細欄を閲覧中として扱う")
+    wc.attentionStore.transient = nil
+    let playedBefore = sound.played.count
+    wc.notifyAutomationRecorded(id, "check")
+    XCTAssertNil(wc.attentionStore.transient, "詳細欄露出後の同自動化通知は抑制される")
+    XCTAssertEqual(sound.played.count, playedBefore)
 
-    wc.closeTab(bgTab, origin: .controlAPI)
-    XCTAssertTrue(wc.browserView.isEditingURL, "背景タブ閉鎖で URL 編集を破棄しない")
-    XCTAssertTrue(window.firstResponder === editor)
-    XCTAssertEqual(editor.string, "https://draft.example")
+    // 2. 既に Home ボード選択中に右シートが開いていても showAutomation で閉じる（inPlace 経路）。
+    wc.setBrowserMode(.sheet, animated: false)
+    XCTAssertFalse(wc.isViewingAutomation(id), "前提: 右シートで詳細欄が覆われている")
+    wc.showAutomation(id)
+    XCTAssertEqual(wc.browserMode, .closed, "Home ボード上の右シートも showAutomation で閉じる")
+    XCTAssertTrue(wc.isViewingAutomation(id))
 
-    wc.switchWorkspace(to: wsBIndex)
-    XCTAssertTrue(wc.browserView.isEditingURL, "workspace 切替で URL 編集を破棄しない")
-    XCTAssertTrue(window.firstResponder === editor)
-    XCTAssertEqual(editor.string, "https://draft.example")
-    wc.browserView.cancelURLEditing()
+    // 3. 全面ブラウザで未視認端末の done を覆っている状態で showAutomation → 全面を閉じつつ done は消費しない。
+    wc.switchWorkspace(to: mainIndex)
+    wc.setBrowserMode(.full, animated: false)
+    reportDone(wc, mainTab)
+    XCTAssertEqual(mainTab.agentState, "done", "前提: 全面ブラウザ下の未視認端末に done が残る")
+    wc.showAutomation(id)
+    XCTAssertEqual(wc.browserMode, .closed, "showAutomation は全面ブラウザも閉じる")
+    XCTAssertTrue(wc.isViewingAutomation(id))
+    XCTAssertEqual(mainTab.agentState, "done", "showAutomation で未視認端末の done を誤消費しない")
 
-    // 2. 下層端末焦点からタブ改名を開始し、右シート本体へ焦点を移した直後の改名欄 blur でも焦点が戻らない。
-    let tabB = try XCTUnwrap(wc.activeTab)
-    window.makeFirstResponder(tabB.surface)
-    XCTAssertFalse(wc.browserWasFocused, "前提: 下層端末に焦点")
-    wc.beginTabRename()
-    XCTAssertNotNil(wc.statusModel.editingIndex, "前提: タブ改名中")
-    wc.browserView.focusBrowser()
-    wc.statusModel.onCancelRename()
-    XCTAssertTrue(wc.browserView.focusIsInside, "改名中クリック後の blur で下層端末へ奪い返されない")
-    XCTAssertTrue(wc.browserWasFocused)
-
-    // 3. 改名欄が焦点を取った状態で URL 欄へ焦点を移すと、本物の改名欄 blur 後も URL 編集と焦点が維持される。
-    window.makeFirstResponder(tabB.surface)
-    wc.beginTabRename()
-    flush(window)
-    pumpMain(
-      until: {
-        guard let responder = window.firstResponder as? NSTextView else { return false }
-        return !responder.isDescendant(of: wc.browserView.barHost)
-      }, "前提: タブ改名欄が焦点を取る")
-    wc.browserView.beginURLEditing()
-    flush(window)
-    pumpMain(
-      until: {
-        (window.firstResponder as? NSTextView)?.isDescendant(of: wc.browserView.barHost) == true
-      }, "改名中に URL 欄が焦点を取る")
-    let urlEditor = try XCTUnwrap(window.firstResponder as? NSTextView)
-    flush(window)
-    pumpMain(until: { wc.statusModel.editingIndex == nil }, "改名欄の blur でタブ改名が終了する")
-    XCTAssertTrue(wc.browserView.isEditingURL, "改名欄 blur で URL 編集が打ち切られない")
-    XCTAssertTrue(window.firstResponder === urlEditor)
+    // 4. 対比: 通常のボード遷移（yieldBrowserToUnderlay）は右シートを残す契約を崩さない。
+    wc.switchWorkspace(to: mainIndex)
+    wc.setBrowserMode(.sheet, animated: false)
+    wc.select(.board, inWorkspaceAt: homeIndex)
+    XCTAssertEqual(wc.browserMode, .sheet, "通常の select(.board) は右シートを維持する")
+    XCTAssertFalse(wc.isViewingAutomation(id), "右シートが残るため詳細欄は覆われたまま")
   }
 }
