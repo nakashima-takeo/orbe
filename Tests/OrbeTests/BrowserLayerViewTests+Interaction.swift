@@ -39,7 +39,7 @@ extension BrowserLayerViewTests {
       isARepeat: false, keyCode: keyCode)!
   }
 
-  private func beginAndFocusURLField(in hosted: Hosted) throws -> NSTextView {
+  func beginAndFocusURLField(in hosted: Hosted) throws -> NSTextView {
     hosted.browser.beginURLEditing()
     flush(hosted.window)
     pumpMain(
@@ -147,8 +147,18 @@ extension BrowserLayerViewTests {
     }
     XCTAssertEqual(commands, [.toggleEditorFace, .findInProject, .nextTab, .prevTab, .openEditor])
 
-    // URL 編集中は ⌘E/⌘R/⌘T/⌘⇧[/] を抑止し、⌘⇧←/→ は行頭・行末選択のため素通しし、⌘B だけ閉じる。
+    // ⌘↑ / ⌘↓ と未分類（⌘C）は Web ページへ素通しし、onWindowCommand を呼ばない。
     commands.removeAll()
+    for event in [
+      specialKey(.upArrow, keyCode: 126, flags: [.command], in: window),
+      specialKey(.downArrow, keyCode: 125, flags: [.command], in: window),
+      .key("c"),
+    ] {
+      XCTAssertFalse(browser.performKeyEquivalent(with: event))
+    }
+    XCTAssertTrue(commands.isEmpty, "⌘↑/⌘↓/⌘C は onWindowCommand を呼ばない")
+
+    // URL 編集中は ⌘E/⌘R/⌘T/⌘⇧[/] を抑止し、⌘⇧←/→ は素通ししつつ編集状態を維持し、⌘B だけ閉じる。
     browser.beginURLEditing()
     for event in [
       NSEvent.key("e"), .key("r"), .key("t"),
@@ -157,13 +167,16 @@ extension BrowserLayerViewTests {
       XCTAssertTrue(browser.performKeyEquivalent(with: event))
     }
     XCTAssertTrue(commands.isEmpty, "URL 編集中は ⌘E/⌘R/⌘T/⌘⇧[/] を発火しない")
-
-    let cmdShiftLeft = specialKey(.leftArrow, keyCode: 123, flags: [.command, .shift], in: window)
-    let cmdShiftRight = specialKey(
-      .rightArrow, keyCode: 124, flags: [.command, .shift], in: window)
-    XCTAssertFalse(browser.performKeyEquivalent(with: cmdShiftLeft), "URL 編集中の ⌘⇧← は素通しする")
-    XCTAssertFalse(browser.performKeyEquivalent(with: cmdShiftRight), "URL 編集中の ⌘⇧→ は素通しする")
+    XCTAssertFalse(
+      browser.performKeyEquivalent(
+        with: specialKey(.leftArrow, keyCode: 123, flags: [.command, .shift], in: window)),
+      "URL 編集中の ⌘⇧← は素通しする")
+    XCTAssertFalse(
+      browser.performKeyEquivalent(
+        with: specialKey(.rightArrow, keyCode: 124, flags: [.command, .shift], in: window)),
+      "URL 編集中の ⌘⇧→ は素通しする")
     XCTAssertTrue(commands.isEmpty, "⌘⇧←/→ でタブ切替を発火しない")
+    XCTAssertTrue(browser.isEditingURL, "抑止・素通しキーを受けても URL 編集状態を維持する")
 
     XCTAssertTrue(browser.performKeyEquivalent(with: .key("b")))
     XCTAssertFalse(browser.isEditingURL, "⌘B は URL 編集を外因終了する")
@@ -177,14 +190,14 @@ extension BrowserLayerViewTests {
     XCTAssertTrue(commands.isEmpty)
   }
 
-  private func markComposing(_ editor: NSTextView, _ text: String = "か") {
+  func markComposing(_ editor: NSTextView, _ text: String = "か") {
     editor.setMarkedText(
       text, selectedRange: NSRange(location: (text as NSString).length, length: 0),
       replacementRange: NSRange(location: NSNotFound, length: 0))
     XCTAssertTrue(editor.hasMarkedText(), "前提: IME 変換中")
   }
 
-  private func replaceAll(_ text: String, in editor: NSTextView) {
+  func replaceAll(_ text: String, in editor: NSTextView) {
     editor.insertText(
       text, replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
   }
@@ -192,8 +205,8 @@ extension BrowserLayerViewTests {
   // MARK: - 本物の BrowserURLTextField（NSTextField / Coordinator＋IME）経由の編集契約
 
   /// URL 欄編集開始で本物の field editor が焦点を取って全選択し、IME 変換中の Enter / Esc は保護する。
-  /// 不正入力の Enter は編集を継続し、有効 URL の Enter 確定と非変換中の Esc 取消はブラウザへ焦点を戻し、
-  /// ⌘⇧← は行頭選択として働き、他所への焦点移動（blur）は焦点を奪い返さず編集を閉じる。
+  /// 不正入力の Enter は編集欄に留まったうえで直後の他所焦点移動（blur）を焦点を奪い返さず終了でき、
+  /// 非変換中の Esc 取消と有効 URL の Enter 確定はブラウザへ焦点を戻し、⌘⇧← は行頭選択として働く。
   func testURLEditingViaRealTextFieldHandlesSelectionIMECommitCancelAndBlur() throws {
     let hosted = hostBrowser()
     let (window, browser) = (hosted.window, hosted.browser)
@@ -227,7 +240,7 @@ extension BrowserLayerViewTests {
     XCTAssertTrue(browser.isEditingURL, "IME 変換中の Esc で URL 編集を終了しない")
     editor.unmarkText()
 
-    // 2. 編集中に ⌘⇧← で行頭まで選択でき、不正入力の Enter は編集欄に留まり、非変換中 Esc は本体へ戻る。
+    // 2. ⌘⇧← で行頭選択でき、不正入力 Enter で編集欄に留まった直後に他所へ焦点を移しても blur で閉じる。
     let fullLength = (editor.string as NSString).length
     editor.setSelectedRange(NSRange(location: fullLength, length: 0))
     let cmdShiftLeft = specialKey(.leftArrow, keyCode: 123, flags: [.command, .shift], in: window)
@@ -240,11 +253,17 @@ extension BrowserLayerViewTests {
     XCTAssertTrue(browser.isEditingURL, "不正入力の Enter は編集欄に留まる")
     XCTAssertEqual(finishCount, 1, "不正入力では遷移しない")
 
+    XCTAssertTrue(window.makeFirstResponder(outsider))
+    let externalResponder = window.firstResponder
+    XCTAssertFalse(browser.isEditingURL, "不正入力 Enter 後の他所焦点移動でも blur で自動終了する")
+    XCTAssertTrue(window.firstResponder === externalResponder, "外因終了は他所の焦点を奪い返さない")
+
+    // 3. 非変換中の Esc 取消と有効 URL の Enter 確定はどちらもブラウザ本体へ焦点を戻す。
+    _ = try beginAndFocusURLField(in: hosted)
     deliverKeyDown(keyEvent("\u{1B}", keyCode: 53, in: window), to: window)
     XCTAssertFalse(browser.isEditingURL, "非変換中の Esc で編集を取り消す")
     XCTAssertTrue(window.firstResponder === browser.focusTarget, "明示取消はブラウザ本体へ焦点を戻す")
 
-    // 3. 有効 URL の Enter 確定で遷移してブラウザ本体へ戻り、他所への焦点移動（blur）では焦点を奪い返さない。
     let nextURL = server.url(for: "/next")
     replaceAll(nextURL.absoluteString, in: try beginAndFocusURLField(in: hosted))
     deliverKeyDown(keyEvent("\r", keyCode: 36, in: window), to: window)
@@ -252,11 +271,5 @@ extension BrowserLayerViewTests {
     XCTAssertTrue(window.firstResponder === browser.focusTarget, "明示確定はブラウザ本体へ焦点を戻す")
     pumpMain(until: { finishCount >= 2 }, timeout: 5, "確定先 URL の読み込み完了")
     XCTAssertEqual(browser.webView?.url, nextURL)
-
-    _ = try beginAndFocusURLField(in: hosted)
-    XCTAssertTrue(window.makeFirstResponder(outsider))
-    let externalResponder = window.firstResponder
-    XCTAssertFalse(browser.isEditingURL, "他所へ焦点を移すと controlTextDidEndEditing 経由で自動終了する")
-    XCTAssertTrue(window.firstResponder === externalResponder, "外因終了は他所の焦点を奪い返さない")
   }
 }
