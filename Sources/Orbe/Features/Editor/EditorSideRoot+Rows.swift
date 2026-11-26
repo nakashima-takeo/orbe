@@ -4,7 +4,8 @@ import SwiftUI
 /// 強い色で出し、幅が足りなければ頭から省く）／ファイルは種別チップと名前、右端に git
 /// の状態の字。選択の行は選択の地、ほかはホバーで淡い地（どちらも上下 1 を空けた角丸 6）。選択の行と祖先の行は字下げの線が
 /// accent。ファイル行は押すと仮の文書として開き、2 回目の押下（ダブルクリック）で普通の文書として開く——1 回目をダブル
-/// クリックの判定で待たせない。
+/// クリックの判定で待たせない。開いている行の印の枠は、行の押下の外に重ねる——× の押下を、行のダブルクリックの 1 回目に
+/// 数えさせない。
 struct TreeRowView: View {
   let row: FileTree.Row
   let tree: FileTree
@@ -39,8 +40,10 @@ struct TreeRowView: View {
       case .input: EmptyView()
       }
       Spacer(minLength: 0)
-      if let mark = row.mark {
-        TreeMarkButton(mark: mark) { shell.closeDocument(row.url) }
+      if row.mark != nil {
+        // 印の枠の場所（枠は行の押下の外に重ねる → 下の overlay）。
+        Color.clear
+          .frame(width: Theme.Layout.editorItemListMark)
           .padding(.trailing, Theme.Layout.editorTreeChipGap)
       }
       if let badge = row.badge {
@@ -65,7 +68,20 @@ struct TreeRowView: View {
     .simultaneousGesture(
       TapGesture(count: 2).onEnded {
         if case .file = row.kind { shell.open(row.url, .pinned) }
-      })
+      }
+    )
+    .overlay(alignment: .trailing) {
+      if let mark = row.mark {
+        TreeMarkButton(mark: mark) { frame in shell.closeDocument(row.url, frame) }
+          .padding(.trailing, markTrailing)
+      }
+    }
+  }
+
+  /// 印の枠の右の空き（行の右の余白・枠の右の空き・git の字の列）。
+  private var markTrailing: CGFloat {
+    Theme.Layout.editorTreeRowPadX + Theme.Layout.editorTreeChipGap
+      + (row.badge == nil ? 0 : Theme.Layout.editorTreeBadge)
   }
 
   /// 地: 選択の行は選択の地、開いている行は淡い地と枠、ほかはホバーで淡い地（どれも上下 1 を空けた角丸 6）。
@@ -90,12 +106,13 @@ struct TreeRowView: View {
   }
 }
 
-/// 開いている行の印の枠 16。× か丸で、丸は枠にポインタがある間だけ × に替わる。× はホバーで枠に地が付く。押すと文書を閉じる
-/// （行の押下にはならない）。
+/// 開いている行の印の枠 16。× か丸で、丸は枠にポインタがある間だけ × に替わる。× はホバーで枠に地が付く。押すと、枠（左の
+/// 列の host の座標）を添えて文書を閉じる（行の押下にはならない。続く押下の扱いは受け手が決める）。
 struct TreeMarkButton: View {
   let mark: EditorItemListRow.Mark
-  let action: () -> Void
+  let action: (CGRect) -> Void
   @State private var hovering = false
+  @State private var frame = CGRect.zero
   @Environment(\.colorScheme) private var scheme
   @Environment(\.localization) private var l10n
 
@@ -116,7 +133,12 @@ struct TreeMarkButton: View {
     .frame(width: size, height: size)
     .contentShape(Rectangle())
     .onHover { hovering = $0 }
-    .onTapGesture(perform: action)
+    .onGeometryChange(for: CGRect.self) {
+      $0.frame(in: .named(EditorSideRoot.space))
+    } action: {
+      frame = $0
+    }
+    .onTapGesture { action(frame) }
     .help(l10n.string(.editorItemListClose))
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(l10n.string(.editorItemListClose))

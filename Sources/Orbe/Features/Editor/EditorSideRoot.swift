@@ -22,6 +22,9 @@ struct EditorSideRoot: View {
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
 
+  /// host 全体の座標空間（左上が原点。host の座標と一致する）。中の部品が、自分の枠を面へ渡すときに使う。
+  static let space = "editorSide"
+
   var body: some View {
     // GeometryReader は中身の最小幅に縛られず host の幅を取る——エクスプローラーのヘッダー（3 ボタン）より狭く切り詰め
     // られても root が中央寄せで左へずれない。溢れは右で、切り落とす。
@@ -38,6 +41,7 @@ struct EditorSideRoot: View {
       }
     }
     .clipped()
+    .coordinateSpace(.named(Self.space))
     .environment(\.localization, localization)
     .environment(\.chromeFontResolver, fontResolver)
   }

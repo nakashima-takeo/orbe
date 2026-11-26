@@ -52,6 +52,8 @@ final class EditorPaneView: NSView {
   var diffAwaitingRow: EditorDiff.Key?
   /// 焦点を預かっている一覧の画面（Changes・PR。行が出たら一覧へ渡す。→ `holdListFocus`）。
   var heldListFocus: EditorScreen?
+  /// ツリーの × を押した後の押し続けの守り（→ `closeFromTree`）。
+  var treeMarkPressGuard: RowListPressGuard?
   /// 並列の diff で最後に焦点のあった側（焦点の行き先。既定は右）。
   var diffFocusesLeft = false
   /// 並列の diff の 2 面の境。

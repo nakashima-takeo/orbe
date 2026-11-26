@@ -64,8 +64,8 @@ final class EditorShellModel {
   @ObservationIgnored var createFile: () -> Void = {}
   @ObservationIgnored var createDirectory: () -> Void = {}
   @ObservationIgnored var collapseAll: () -> Void = {}
-  /// ツリーの開いている行の × で、文書を閉じる（未保存なら確認が出る）。
-  @ObservationIgnored var closeDocument: (URL) -> Void = { _ in }
+  /// ツリーの開いている行の × で、文書を閉じる（未保存なら確認が出る）。枠は押した × の枠（左の列の host の座標）。
+  @ObservationIgnored var closeDocument: (URL, CGRect) -> Void = { _, _ in }
   /// フォーカスを本体の行き先へ移す（空の絞り込みの欄の esc）。
   @ObservationIgnored var focusBody: () -> Void = {}
   /// 上のバーで画面を選んだ。
