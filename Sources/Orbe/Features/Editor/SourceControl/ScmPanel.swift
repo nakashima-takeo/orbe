@@ -34,7 +34,7 @@ final class ScmPanel {
   /// ステージ済みの行数と、それを読んだ時点のステージ済みの中身の鍵（`ScmChanges.stagedKey`）。ステージ済みが空なら nil。
   /// 変えるのは `ScmPanel+Reads` の読みだけ。
   var stagedLines: (key: Int, counts: GitLineCounts)?
-  /// 親「ソース管理」（失敗の文と 2 つの子の区分）が開いている。変えるのは `setRepositoryOpen` だけ。
+  /// 親「ソース管理」（2 つの子の区分か「変更なし」の一言）が開いている。変えるのは `setRepositoryOpen` だけ。
   private(set) var isRepositoryOpen = true
   /// グラフの枠が開いている。
   var isGraphOpen = true
