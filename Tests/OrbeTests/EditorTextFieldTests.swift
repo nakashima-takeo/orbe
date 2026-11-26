@@ -7,11 +7,13 @@ import XCTest
 
 /// 命令でフォーカスを入れる 1 行の入力欄（`EditorTextField`）——フォーカスの要求は、欄が窓に載った時点か、要求が来た時点で
 /// 欄自身が当てて消す。断られても要求は消え、後でフォーカスを奪わない。取り消し・やり直しで変わった欄の字は使う側の値にも
-/// 写り、使う側が中身を差し替えた後は、前の取り消しの履歴が残らない。
+/// 写り、使う側が中身を差し替えた後は、前の取り消しの履歴が残らない。入力欄の枠の、入力欄の外（虫眼鏡・余白）を押しても欄に
+/// 焦点が入り、焦点がある間に押しても打っている位置は動かない。
 ///
 /// 壊れると何が起きるか。⌘⇧F で検索の列が出ても、入力欄に焦点が入らず、打った字が本文に入る。焦点の切り替えを断られた
 /// 要求が残り、後で欄が出し直されたときに、打っている本文から焦点を奪う。⌘Z で欄の字だけが戻り、検索語や絞り込みの字と
-/// 食い違う。外から検索語を入れ直した後の ⌘Z で例外が上がる・検索語が壊れる。
+/// 食い違う。外から検索語を入れ直した後の ⌘Z で例外が上がる・検索語が壊れる。欄の虫眼鏡や縁を押しても焦点が入らない。
+/// 打っている途中に縁を押すと字が全選択されて、続けて打った字で検索語が消える。
 @MainActor
 final class EditorTextFieldTests: OrbeTestCase {
   /// 使う側の値（欄の字）と、欄への焦点の要求と、欄が要求を当てた回数。
@@ -21,18 +23,22 @@ final class EditorTextFieldTests: OrbeTestCase {
     var applied = 0
   }
 
+  /// 入力欄の枠（`EditorFieldFrame`）に入れた欄。
   private struct Content: View {
+    static let frameHeight: CGFloat = 26
     let probe: Probe
 
     var body: some View {
-      EditorTextField(
-        text: probe.text, placeholder: "", font: .systemFont(ofSize: 12), placeholderColor: .gray,
-        wantsFocus: probe.wantsFocus,
-        requestDidApply: {
-          probe.wantsFocus = false
-          probe.applied += 1
-        },
-        onTextChange: { probe.text = $0 })
+      EditorFieldFrame(height: Self.frameHeight, isFocused: false) {
+        EditorTextField(
+          text: probe.text, placeholder: "", font: .systemFont(ofSize: 12), placeholderColor: .gray,
+          wantsFocus: probe.wantsFocus,
+          requestDidApply: {
+            probe.wantsFocus = false
+            probe.applied += 1
+          },
+          onTextChange: { probe.text = $0 })
+      }
     }
   }
 
@@ -162,5 +168,63 @@ final class EditorTextFieldTests: OrbeTestCase {
 
     XCTAssertEqual(back.string, "x", "前提: 差し替えた中身")
     XCTAssertFalse(back.undoManager?.canUndo == true, "差し替える前の履歴は残らない")
+  }
+
+  /// 入力欄の枠の中の、入力欄の外の 2 点（虫眼鏡の中ほどと、入力欄の上の余白）。host の座標。
+  private func pointsOutsideTheInput(_ hosted: Hosted) throws -> [(String, NSPoint)] {
+    func input(in view: NSView) -> NSTextField? {
+      if let field = view as? NSTextField, field.isEditable { return field }
+      return view.subviews.lazy.compactMap(input(in:)).first
+    }
+    hosted.host.layoutSubtreeIfNeeded()
+    let field = try XCTUnwrap(input(in: hosted.host))
+    let rect = hosted.host.convert(field.bounds, from: field)
+    // 枠は host の縦の中ほどに置かれ、上の余白は枠の上端から入力欄の上端まで。
+    let frameTop = (hosted.host.bounds.height - Content.frameHeight) / 2
+    XCTAssertGreaterThan(rect.minY - frameTop, 2, "前提: 入力欄の上に余白がある")
+    return [
+      (
+        "虫眼鏡",
+        NSPoint(
+          x: rect.minX - Theme.Layout.editorFieldGap - Theme.Layout.editorFieldGlyph / 2,
+          y: rect.midY)
+      ),
+      ("上の余白", NSPoint(x: rect.midX, y: frameTop + 1)),
+    ]
+  }
+
+  /// 入力欄の枠の、入力欄の外（虫眼鏡・上の余白）を押すと、欄に焦点が入る。
+  func testPressingTheFrameOutsideTheInputFocusesTheField() throws {
+    let probe = Probe()
+    let hosted = hosted(probe)
+    placeOffscreen(hosted.window)
+    for (label, point) in try pointsOutsideTheInput(hosted) {
+      hosted.window.makeFirstResponder(hosted.holder)
+
+      try click(hosted.host, at: point)
+      flush(hosted.window)
+
+      XCTAssertTrue(hosted.fieldHasFocus, "\(label)を押すと欄に焦点が入る")
+    }
+  }
+
+  /// 欄に焦点がある間に枠を押しても、打っている位置（キャレット）は動かない（押した直後に、焦点が入る場合と同じ時点で見る）。
+  func testPressingTheFrameWhileTheFieldHasTheFocusKeepsTheCaret() throws {
+    let probe = Probe()
+    let hosted = hosted(probe)
+    placeOffscreen(hosted.window)
+    let points = try pointsOutsideTheInput(hosted)
+    let editor = try focusField(hosted, probe)
+    editor.insertText("abcdef", replacementRange: NSRange(location: 0, length: 0))
+    for (label, point) in points {
+      editor.setSelectedRange(NSRange(location: 2, length: 0))
+
+      try click(hosted.host, at: point)
+      flush(hosted.window)
+
+      XCTAssertTrue(hosted.window.firstResponder === editor, "\(label): 焦点は欄のまま")
+      XCTAssertEqual(
+        editor.selectedRange(), NSRange(location: 2, length: 0), "\(label): キャレットは動かない")
+    }
   }
 }
