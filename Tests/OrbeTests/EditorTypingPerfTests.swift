@@ -4,6 +4,7 @@ import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
 /// エディターの打鍵の main の仕事の計測。`ORBE_EDITOR_PERF=1` のときだけ走る——時間はマシンと環境で変わるので通常の
 /// テストでは見ない。release で `scripts/perf-editor.sh` が回し、各テストの説明にある目標と並べる。結果は `PERF` で
@@ -47,7 +48,8 @@ final class EditorTypingPerfTests: OrbeTestCase {
   /// 1 回と数え、同じく main のスレッドの CPU 時間で見る。変換の続き（2 回目以降と確定）は 3 つとも p99 1ms 以下。変換の
   /// 始まり（最初の呼び出し）は未確定の先頭の x を出すために行を 1 回組むので、普通の行（200KB・1MB）で p99 1ms 以下、
   /// 長い行は値を出すだけ。プロセスで最初の 1 打鍵と最初の変換（入力の仕組みの初期化を含む）は数えないので、測る文書を
-  /// 開く前に別の文書で打つ。
+  /// 開く前に別の文書で打つ。製品では、文書を開いた後と打鍵の後に、描画スレッドが見えている行を組んで描くので、打鍵の
+  /// 前と変換の前に、同じ描画スレッドの経路で見えている行を描かせる（窓は画面に出さず、画面外に描く）。
   func testKeystrokeMainTime() throws {
     let warm = try openEditor("warm\n")
     warm.document.surface.responder.keyDown(with: .key("/", []))
@@ -93,7 +95,7 @@ final class EditorTypingPerfTests: OrbeTestCase {
 
   /// 文書 `opened` を git 管理下（baseline は `baseline`）にし、位置 `caret` で打鍵とライブ変換を流して、打鍵 1 回と変換の続きの
   /// 呼び出し 1 回の main のスレッドの CPU 時間の p99 を関門（1ms 以下）にかける。`gatesStart` なら変換の始まりも関門に
-  /// かける。
+  /// かける。打鍵の前と変換の前に、見えている行を描画スレッドに描かせる。
   private func gateKeystrokes(
     _ opened: OpenedEditor, baseline: String, label: String, caret: Int, gatesStart: Bool
   ) throws {
@@ -101,6 +103,8 @@ final class EditorTypingPerfTests: OrbeTestCase {
     XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
     opened.document.surface.selectedRange = NSRange(location: caret, length: 0)
     opened.document.surface.reveal(NSRange(location: caret, length: 0), policy: .center)
+    let surface = try XCTUnwrap(opened.document.surface as? MetalTextSurface)
+    XCTAssertNotNil(surface.snapshot(), "\(label): 前提: 打鍵の前に見えている行を描ける")
     var cpu: [Double] = []
     var wall: [Double] = []
     for character in String(repeating: "let value = compute(offset) ok ", count: 3) {
@@ -116,6 +120,7 @@ final class EditorTypingPerfTests: OrbeTestCase {
     XCTAssertLessThanOrEqual(
       sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.99))], 1,
       "\(label): 打鍵 1 回の main のスレッドの CPU 時間の p99")
+    XCTAssertNotNil(surface.snapshot(), "\(label): 前提: 変換の前に見えている行を描ける")
     let composing = try compose(into: opened)
     reportPerf(
       label, "composition-main 続き (baseline あり)", composing.continuing.cpu, digits: 3)
