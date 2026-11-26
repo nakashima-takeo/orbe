@@ -729,9 +729,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorScmStaged
   case editorScmChanges
   case editorScmGraph
-  case editorScmPlaceholderBranch
   case editorScmPlaceholder
   case editorScmCommit
+  case editorScmStagedDetail
+  case editorScmCommitWithStaged
   case editorScmSync
   case editorScmPublish
   case editorScmMoreActions

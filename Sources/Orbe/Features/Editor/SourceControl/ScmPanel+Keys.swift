@@ -122,13 +122,6 @@ extension ScmPanel {
     }
   }
 
-  /// ⌘↑: 先頭の行（か未選択）ならメッセージ欄へ戻る（列が見えていれば、同じ親の中の欄も見えている）。
-  func returnToMessageIfAtTop() {
-    let top = layout.items.indices.first
-    guard selection.map({ layout.index[$0] == top }) ?? true else { return }
-    requestFocus(.message)
-  }
-
   // MARK: - 押下
 
   func click(_ row: Int, in layout: ScmLayout) {

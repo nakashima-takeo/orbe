@@ -196,6 +196,12 @@ final class SourceControl {
     observers.removeAll { $0.value == nil || $0.value === observer }
   }
 
+  /// 最後の失敗を消す（失敗の札の ×・コミットのポップアップを閉じたとき）。最後の失敗は人が起こした操作 1 回の結果なので、
+  /// 消せば同じ失敗は出ず、次に起きた失敗はまた出る。
+  func clearFailure() {
+    failure = nil
+  }
+
   // MARK: - 列（`SourceControl+Operations` が使う）
 
   /// 操作を列に載せる（最後の失敗はここで消える——次の操作を始めると消える）。列にある操作と重なる操作は載せず、断った

@@ -6,10 +6,11 @@ import SwiftUI
 /// 境目は両方開いているときだけ出し、引けばグラフの枠の高さを変える。
 struct ScmSplit: View {
   let panel: ScmPanel
+  let commitPopup: ScmCommitPopup
   let list: RowList<ScmListSource>
   let graphList: RowList<ScmGraphSource>
   let sidebar: EditorSidebarState
-  /// 親の中で列より上に出ているもの（見出し・欄・ボタン・失敗の文）の高さ。
+  /// 親の中で列より上に出ているもの（見出し・失敗の文）の高さ。
   @State private var above = Theme.Layout.editorScmRow
   /// 境目を掴んだときのグラフの枠の高さ。
   @State private var grabbed: CGFloat?
@@ -22,7 +23,9 @@ struct ScmSplit: View {
       VStack(spacing: 0) {
         VStack(spacing: 0) {
           ScmRepositoryHead(panel: panel)
-          if panel.isRepositoryOpen { ScmControls(panel: panel) }
+          if panel.isRepositoryOpen {
+            ScmFailureNote(panel: panel, isCommitPopupOpen: commitPopup.isOpen)
+          }
         }
         .onGeometryChange(for: CGFloat.self, of: \.size.height) { above = $0 }
         if panel.isRepositoryOpen {
@@ -106,7 +109,7 @@ private struct ScmList: View {
   var body: some View {
     RowListHost(
       list: list, rowsVersion: panel.rowsVersion, selection: panel.selection,
-      emoji: fontResolver.emojiFont, wantsFocus: panel.focusRequest == .list
+      emoji: fontResolver.emojiFont, wantsFocus: panel.wantsListFocus
     )
     .onChange(of: l10n.language, initial: true) { _, language in
       guard list.list.source.language != language else { return }

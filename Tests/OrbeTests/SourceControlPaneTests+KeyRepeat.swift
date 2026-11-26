@@ -21,7 +21,7 @@ extension SourceControlPaneTests {
     let field = try type("subject", in: hosted)
     pumpMain(
       until: {
-        scm.focusedArea == .message && scm.commitState.canCommit
+        self.messageFieldHasFocus(hosted) && scm.commitState.canCommit
           && scm.commitState.canCommitAndPush
       }, "前提: 欄に焦点があり、コミットもコミットしてプッシュもできる")
     let head = repo.head()

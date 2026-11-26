@@ -2,12 +2,12 @@ import AppKit
 
 /// 一覧の器の 1 行（見出し・ファイル・操作）を描く。文字は CoreText の行で持ち、中身が変わったときだけ組み直す。選択と
 /// ホバーの地は角丸。ファイルの行の右の印の枠は押せる部品（×）で、未保存・ディスクが変わったの丸は、枠をホバーしている
-/// 間だけ × に替わる。
+/// 間だけ × に替わる。選べない操作の行は、題とキーの札を design-system の押せない姿に薄める。
 final class EditorItemListRowView: ListRowView {
   private enum Content {
     case heading(title: TextLine, count: TextLine, key: TextLine?)
     case file(FileContent)
-    case action(TextLine)
+    case action(title: TextLine, key: TextLine?)
   }
 
   private struct FileContent {
@@ -64,8 +64,10 @@ final class EditorItemListRowView: ListRowView {
       setAccessibilityLabel(
         ([file.name, file.directory] + file.tags + [file.markLabel ?? ""])
           .filter { !$0.isEmpty }.joined(separator: ", "))
-    case .action(let title):
-      content = .action(TextLine(title, Theme.Typography.editorItemListAction))
+    case .action(let title, let key):
+      content = .action(
+        title: TextLine(title, Theme.Typography.editorItemListAction),
+        key: key.map { TextLine($0, Theme.Typography.editorKeyCap) })
       setAccessibilityLabel(title)
     }
     needsDisplay = true
@@ -142,11 +144,8 @@ final class EditorItemListRowView: ListRowView {
       drawHeading(title, count, key, colors, in: context)
     case .file(let file):
       draw(file, colors, item, in: context)
-    case .action(let title):
-      title.draw(
-        at: Theme.Layout.editorItemListActionPadX, top: top(title),
-        width: max(0, bounds.width - Theme.Layout.editorItemListActionPadX * 2), colors.primary,
-        context)
+    case .action(let title, let key):
+      drawAction(title, key, colors, in: context)
     case nil:
       break
     }
@@ -161,19 +160,43 @@ final class EditorItemListRowView: ListRowView {
     title.draw(at: x, top: top(title), colors.muted, context)
     x += snap(title.width, .up) + Theme.Space.note
     count.draw(at: x, top: top(count), colors.muted, context)
-    guard let key else { return }
+    if let key { drawKeyCap(key, right: Theme.Layout.editorItemListRowPadX, colors, in: context) }
+  }
+
+  /// 操作: 題（左右の余白 10）・右端にキーの札。題は札の手前で省く。
+  private func drawAction(
+    _ title: TextLine, _ key: TextLine?, _ colors: RowColors, in context: CGContext
+  ) {
+    let padX = Theme.Layout.editorItemListActionPadX
+    context.saveGState()
+    defer { context.restoreGState() }
+    if !isSelectable { context.setAlpha(Theme.Opacity.disabled) }
+    let capWidth =
+      key.map {
+        drawKeyCap($0, right: padX, colors, in: context) + Theme.Layout.editorItemListRowGap
+      } ?? 0
+    title.draw(
+      at: padX, top: top(title), width: max(0, bounds.width - padX * 2 - capWidth),
+      colors.primary, context)
+  }
+
+  /// キーの札を、行の右端から `right` の位置に右寄せで描き、札の幅を返す。
+  @discardableResult
+  private func drawKeyCap(
+    _ key: TextLine, right: CGFloat, _ colors: RowColors, in context: CGContext
+  ) -> CGFloat {
     let size = Theme.Layout.editorKeyCap
     let width = max(size, snap(key.width, .up) + Theme.Layout.editorKeyCapPadX * 2)
     let cap = NSRect(
-      x: bounds.width - Theme.Layout.editorItemListRowPadX - width,
-      y: snap((bounds.height - size) / 2),
-      width: width, height: size)
+      x: bounds.width - right - width, y: snap((bounds.height - size) / 2), width: width,
+      height: size)
     fill(
       cap, radius: Theme.Layout.editorKeyCapRadius, ItemListColors.of(effectiveAppearance).keyCap,
       in: context)
     key.draw(
       at: snap(cap.midX - key.width / 2), top: snap(cap.midY - key.height / 2), colors.secondary,
       context)
+    return width
   }
 
   /// ファイル: 種別のチップ・名前（先に幅を取る）・ディレクトリ（残りの幅で頭から省く）・札・右に印の枠と状態の字。

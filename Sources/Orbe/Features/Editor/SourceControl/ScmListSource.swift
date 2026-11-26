@@ -33,11 +33,11 @@ final class ScmListSource: RowListSource {
     ScmRowView.prepare(for: appearance)
   }
 
-  var wantsFocus: Bool { panel.focusRequest == .list }
+  var wantsFocus: Bool { panel.wantsListFocus }
 
-  func focusRequestDidApply() { panel.focusRequestDidApply() }
+  func focusRequestDidApply() { panel.listFocusRequestDidApply() }
 
-  func focusDidChange(_ focused: Bool) { panel.focusDidChange(.list, focused: focused) }
+  func focusDidChange(_ focused: Bool) { panel.listFocusDidChange(focused) }
 
   func perform(_ key: RowListKey, in layout: ScmLayout) {
     switch key.action {
