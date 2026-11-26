@@ -116,44 +116,114 @@ extension RootFilesTests {
     XCTAssertEqual(paths.sorted(), ["a.txt", "kept/x.txt"])
   }
 
-  /// 入れ子のリポジトリの設定の `core.fsmonitor` が指すコマンドは、一覧を取っても走らない。
-  func testListingDoesNotRunTheFsmonitorCommandOfANestedRepository() throws {
-    let marker = TestScratch.caseDir.appendingPathComponent("fsmonitor-ran-\(UUID().uuidString)")
-    let hook = TestScratch.caseDir.appendingPathComponent("fsmonitor-\(UUID().uuidString).sh")
-    try Data("#!/bin/sh\ntouch '\(marker.path)'\n".utf8).write(to: hook)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
-    XCTAssertTrue(repo.git(["init", "-q", "vendor/lib"]).isSuccess)
-    try repo.write("vendor/lib/lib.c", "c\n")
-    XCTAssertTrue(repo.git(["-C", "vendor/lib", "add", "lib.c"]).isSuccess)
-    XCTAssertTrue(repo.git(["-C", "vendor/lib", "config", "core.fsmonitor", hook.path]).isSuccess)
-    _ = repo.git(["-C", "vendor/lib", "ls-files"])
-    XCTAssertTrue(
-      FileManager.default.fileExists(atPath: marker.path), "前提: 素の ls-files は、そのコマンドを走らせる")
-    try FileManager.default.removeItem(at: marker)
-
-    let list = try filterPaths(of: repo.files())
-
-    guard case .listed(let paths, _) = list else { return XCTFail("取れた一覧が返る: \(list)") }
-    XCTAssertTrue(paths.contains("vendor/lib/lib.c"), "前提: 入れ子のリポジトリの中を一覧に取った")
-    XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "設定のコマンドは走らない")
+  /// 入れ子のリポジトリ `lib` を作り、`files` をディスクに置いて、`tracked` を commit する。
+  private func nestedRepository(_ lib: String, files: [String: String], tracked: [String]) throws {
+    XCTAssertTrue(repo.git(["init", "-q", "-b", "main", lib]).isSuccess)
+    for (path, text) in files { try repo.write(lib + "/" + path, text) }
+    let commit = ["-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "c"]
+    XCTAssertTrue(repo.git(["-C", lib, "add", "-f"] + tracked).isSuccess)
+    XCTAssertTrue(repo.git(["-C", lib] + commit).isSuccess)
   }
 
-  /// 入れ子のリポジトリの設定の `core.worktree` が根の外を指していても、一覧はその入れ子の根の下のファイルだけ。
-  func testANestedRepositorysWorktreeSettingDoesNotPullInFilesFromOutside() throws {
-    let outside = TestScratch.caseDir.appendingPathComponent(
-      "orbe-outside-\(UUID().uuidString)", isDirectory: true)
-    try repo.write("outside.txt", "o\n", in: outside.path)
-    XCTAssertTrue(repo.git(["init", "-q", "vendor/lib"]).isSuccess)
-    try repo.write("vendor/lib/lib.c", "c\n")
+  /// 使い捨てのディレクトリに目印のファイルを作るだけの、罠のコマンド（実行できるスクリプト）。目印のパスと、スクリプトのパス。
+  private func trapCommand() throws -> (marker: String, script: String) {
+    let marker = TestScratch.caseDir.appendingPathComponent("trap-ran-\(UUID().uuidString)").path
+    let script = TestScratch.caseDir.appendingPathComponent("trap-\(UUID().uuidString).sh").path
+    try Data("#!/bin/sh\ntouch '\(marker)'\nexit 1\n".utf8).write(to: URL(fileURLWithPath: script))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
+    return (marker, script)
+  }
+
+  /// 入れ子のリポジトリの `.git` が走らせるコマンド（設定の `core.fsmonitor`、partial clone の取得元へつなぐ `core.sshCommand`）
+  /// は、一覧を取っても走らない。
+  func testListingRunsNoCommandFromANestedRepositorysGitDirectory() throws {
+    // vendor/watched: 設定の core.fsmonitor が罠のコマンド。
+    let fsmonitor = try trapCommand()
+    try nestedRepository("vendor/watched", files: ["w.c": "w\n"], tracked: ["w.c"])
     XCTAssertTrue(
-      repo.git(["-C", "vendor/lib", "config", "core.worktree", outside.path]).isSuccess)
-    XCTAssertTrue(
-      repo.git(["-C", "vendor/lib", "ls-files", "-o"]).stdoutText.contains("outside.txt"),
-      "前提: 素の ls-files は、設定の作業ツリー（根の外）を読む")
+      repo.git(["-C", "vendor/watched", "config", "core.fsmonitor", fsmonitor.script]).isSuccess)
+    // vendor/lazy: sparse index の範囲外の tree が無く、partial clone の取得元へつなぐコマンドが罠のコマンド（取得元の名前は
+    // 解決できない宛先で、罠のコマンドが先に失敗して終わる）。
+    let ssh = try trapCommand()
+    try nestedRepository(
+      "vendor/lazy", files: ["big/a.txt": "a\n", "small/b.txt": "b\n"], tracked: ["big", "small"])
+    for args in [
+      ["sparse-checkout", "init", "--cone", "--sparse-index"], ["sparse-checkout", "set", "small"],
+    ] {
+      XCTAssertTrue(repo.git(["-C", "vendor/lazy"] + args).isSuccess, "\(args)")
+    }
+    let big = repo.git(["-C", "vendor/lazy", "rev-parse", "HEAD:big"]).stdoutText
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    try FileManager.default.removeItem(
+      atPath: repo.root + "/vendor/lazy/.git/objects/\(big.prefix(2))/\(big.dropFirst(2))")
+    for (key, value) in [
+      ("core.repositoryformatversion", "1"), ("extensions.partialClone", "origin"),
+      ("remote.origin.url", "ssh://example.invalid/x"), ("remote.origin.promisor", "true"),
+      ("core.sshCommand", ssh.script),
+    ] {
+      XCTAssertTrue(repo.git(["-C", "vendor/lazy", "config", key, value]).isSuccess, key)
+    }
+    for (lib, trap) in [("vendor/watched", fsmonitor), ("vendor/lazy", ssh)] {
+      _ = repo.git(["-C", lib, "ls-files"])
+      XCTAssertTrue(
+        FileManager.default.fileExists(atPath: trap.marker), "前提: 素の ls-files は、\(lib) の罠のコマンドを走らせる"
+      )
+      try FileManager.default.removeItem(atPath: trap.marker)
+    }
 
     let list = try filterPaths(of: repo.files())
 
     guard case .listed(let paths, _) = list else { return XCTFail("取れた一覧が返る: \(list)") }
-    XCTAssertEqual(paths.sorted(), ["a.txt", "vendor/lib/lib.c"])
+    XCTAssertTrue(
+      paths.contains("vendor/watched/w.c") && paths.contains("vendor/lazy/small/b.txt"),
+      "前提: 2 つの入れ子のリポジトリの中を一覧に取った: \(paths)")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: fsmonitor.marker), "core.fsmonitor は走らない")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: ssh.marker), "core.sshCommand は走らない")
+  }
+
+  /// 入れ子のリポジトリの `.git` の中身（index・`info/exclude`・設定、`.git` のファイルが指す根の外の git のディレクトリ）は、
+  /// 一覧を変えない——一覧はディスクの上のファイルと `.gitignore` の規則だけで決まる。
+  func testANestedRepositorysGitDirectoryDoesNotChangeTheList() throws {
+    let outside = TestScratch.caseDir.appendingPathComponent(
+      "orbe-outside-\(UUID().uuidString)", isDirectory: true)
+    try repo.write("excludes", "hidden/\n", in: outside.path)
+    // vendor/lib: index に、無視されたフォルダの中のファイルを無理に追跡させ、info/exclude と、設定の core.excludesFile（根の
+    // 外のファイル）で、ディスクの上のファイルを除く。
+    try nestedRepository(
+      "vendor/lib",
+      files: [
+        ".gitignore": "gen/\n", "lib.c": "c\n", "gen/forced.c": "f\n", "secret.txt": "s\n",
+        "hidden/x.txt": "x\n",
+      ],
+      tracked: [".gitignore", "lib.c", "gen/forced.c"])
+    try repo.write("vendor/lib/.git/info/exclude", "secret.txt\n")
+    XCTAssertTrue(
+      repo.git(["-C", "vendor/lib", "config", "core.excludesFile", outside.path + "/excludes"])
+        .isSuccess)
+    // vendor/linked: `.git` のファイルが、根の外の git のディレクトリ（info/exclude で hidden/ を除く）を指す。
+    XCTAssertTrue(repo.git(["init", "-q", outside.path + "/real"]).isSuccess)
+    try repo.write("real/.git/info/exclude", "hidden/\n", in: outside.path)
+    try repo.write("vendor/linked/hidden/y.txt", "y\n")
+    try repo.write("vendor/linked/.git", "gitdir: \(outside.path)/real/.git\n")
+    XCTAssertTrue(
+      repo.git(["-C", "vendor/lib", "ls-files", "-c"]).stdoutText.contains("gen/forced.c"),
+      "前提: 入れ子の index は、無視されたフォルダの中のファイルを追跡している")
+    XCTAssertEqual(
+      repo.git(["-C", "vendor/lib", "ls-files", "-o", "--exclude-standard"]).stdoutText, "",
+      "前提: 入れ子の info/exclude と設定の core.excludesFile は、secret.txt と hidden/ を除く")
+    XCTAssertEqual(
+      repo.git(["-C", "vendor/linked", "ls-files", "-o", "--exclude-standard"]).stdoutText, "",
+      "前提: `.git` のファイルが指す git のディレクトリの info/exclude は、hidden/ を除く")
+
+    let list = try filterPaths(of: repo.files())
+
+    guard case .listed(let paths, _) = list else { return XCTFail("取れた一覧が返る: \(list)") }
+    XCTAssertEqual(
+      paths.sorted(),
+      [
+        "a.txt", "vendor/lib/.gitignore", "vendor/lib/hidden/x.txt", "vendor/lib/lib.c",
+        "vendor/lib/secret.txt", "vendor/linked/hidden/y.txt",
+      ],
+      "一覧に、無視されたフォルダの中の追跡しているファイルは出ず、入れ子の .git の除外は効かない")
   }
 }
