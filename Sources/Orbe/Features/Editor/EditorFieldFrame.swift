@@ -25,9 +25,6 @@ struct EditorFieldFrame<Content: View, Accessory: View>: View {
     .padding(.leading, Theme.Layout.editorFieldPadLeading)
     .padding(.trailing, Theme.Layout.editorFieldPadTrailing)
     .frame(height: height)
-    .contentShape(shape)
-    .onTapGesture { focusTarget.focus() }
-    .environment(\.editorFieldFocusTarget, focusTarget)
     .background(shape.fill(Color.theme.surfaceInk.opacity(Theme.Opacity.editorFieldFill)))
     .overlay {
       if isFocused {
@@ -36,6 +33,11 @@ struct EditorFieldFrame<Content: View, Accessory: View>: View {
           lineWidth: Theme.Layout.editorFieldFocusStroke)
       }
     }
+    // 押下の受け手は、地・フォーカスの枠線・中身をすべて含むいちばん外側に 1 つ置く——フォーカスの有無で、縁の上の押下の
+    // 受け手が替わらない。
+    .contentShape(shape)
+    .onTapGesture { focusTarget.focus() }
+    .environment(\.editorFieldFocusTarget, focusTarget)
   }
 }
 
