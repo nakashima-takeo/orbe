@@ -25,7 +25,7 @@ extension EditorDockTests {
   }
 
   /// 開いている間に置き場が組み直されても、中身は作り直されず、フォーカスも残る。閉じてすぐ（置き場が描き直される前に）
-  /// 開き直しても、中身は新しくなる。
+  /// 開き直しても、中身は新しくなり、その欄にフォーカスが入って、ポップアップは開いたまま。
   func testThePopupContentLastsWhileOpenAndIsNewOnEachOpen() throws {
     let hosted = try host()
     let pane = hosted.pane
@@ -48,5 +48,8 @@ extension EditorDockTests {
     hosted.popup.open(owner)
     pumpMain(until: { owner.contentStamps.count == 2 }, "開き直した中身が窓に載る")
     XCTAssertNotEqual(owner.contentStamps[0], owner.contentStamps[1], "開き直した中身は新しい")
+    nextTurn()
+    XCTAssertTrue(hosted.window.firstResponder === owner.field, "開き直した中身の欄にフォーカス")
+    XCTAssertTrue(hosted.popup.isOpen, "開き直したポップアップは開いたまま")
   }
 }
