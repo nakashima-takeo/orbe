@@ -182,9 +182,8 @@ extension Theme.Typography {
   /// 件数・打ち切り・0 件・エラーの文（sans 11）。
   static let editorSearchNote = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// ソース管理。親・子の区分・グラフの枠の見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の名前
-  /// （sans 13）とディレクトリ（sans 11）・PR のパネルの全体へのコメント欄（sans 12。ソース管理の欄の寸法を受け継いだ
-  /// もの）・グラフのコミットの題（sans 12）・ref の札（mono 9）・ブランチの行（mono 11）・「さらに表示」（sans 11.5）・
-  /// 失敗の文（sans 11）。
+  /// （sans 13）とディレクトリ（sans 11）・PR のパネルの全体へのコメント欄（sans 12）・グラフのコミットの題（sans 12）・
+  /// ref の札（mono 9）・ブランチの行（mono 11）・「さらに表示」（sans 11.5）・PR のパネルの失敗の文（sans 11）。
   static let editorScmSection = NSFont.systemFont(ofSize: 11, weight: .bold)
   static let editorScmCount = NSFont.systemFont(ofSize: 9.5, weight: .regular)
   static let editorScmFile = NSFont.systemFont(ofSize: 13, weight: .regular)
