@@ -107,10 +107,13 @@ extension WindowController {
   }
 
   /// Home のボードでその自動化を開く（ピル・通知のクリック）。差し替えてはならない画面の間は何もしない。行き先はボードそのもの
-  /// なので、ほかのパレットは閉じる。自動化が消えていれば欄を、自動化のウィジェットが無ければボードを開くだけ。
+  /// なので、ほかのパレットと開いているブラウザ（全面・右シートとも）は閉じる。自動化が消えていれば欄を、自動化のウィジェットが
+  /// 無ければボードを開くだけ。
   func showAutomation(_ id: Int) {
     guard !model.overlay.isModal, let home = store.homeIndex else { return }
     if model.overlay != .none { dismissPalette() }
+    let inPlace = activeWorkspace == home && current.selection == .board
+    closeBrowserForUnderlay(animated: inPlace)
     select(.board, inWorkspaceAt: home)
     board.open(automation: id)
   }

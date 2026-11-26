@@ -76,9 +76,9 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     wc.setBrowserMode(.full, animated: false)
     layout(wc)
     XCTAssertEqual(tab.surface.bounds.size, terminalSize, "全面切替で端末寸法が変わらない")
-    XCTAssertEqual(wc.browserSheetRatio, 0.72, accuracy: 0.001, "全面切替で比率が巻き戻らない")
+    XCTAssertEqual(wc.browserView.sheetRatio, 0.72, accuracy: 0.001, "全面切替で比率が巻き戻らない")
     wc.setBrowserMode(.sheet, animated: false)
-    XCTAssertEqual(wc.browserSheetRatio, 0.72, accuracy: 0.001, "右シート復帰後も設定比率を保つ")
+    XCTAssertEqual(wc.browserView.sheetRatio, 0.72, accuracy: 0.001, "右シート復帰後も設定比率を保つ")
     wc.setBrowserMode(.full, animated: false)
 
     // URL 欄編集中は ⌘T が不活性で暴発せず、⌘B だけ編集を外因終了して閉じる。
@@ -154,7 +154,7 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     // ブラウザ焦点のまま workspace 切替しても右シート・比率・ページ・ブラウザ焦点を保持する。
     wc.switchWorkspace(to: wsBIndex)
     XCTAssertEqual(wc.browserMode, .sheet)
-    XCTAssertEqual(wc.browserSheetRatio, 0.65, accuracy: 0.001)
+    XCTAssertEqual(wc.browserView.sheetRatio, 0.65, accuracy: 0.001)
     XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertEqual(wc.browserView.toolbar.displayURL?.path, "/guide")
     XCTAssertTrue(wc.browserView.focusIsInside, "右シート焦点記憶があればブラウザに焦点を保つ")
