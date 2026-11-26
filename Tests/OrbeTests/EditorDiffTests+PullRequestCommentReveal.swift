@@ -217,6 +217,70 @@ extension EditorDiffTests {
     }
   }
 
+  /// 未送信のコメントの行を押した後、push の後の版で揃える前（スレッドがまだ置かれていない間）に、レビューへの書き込みが終わり、
+  /// その読み直しが push の前の版を読んでも、頼みを捨てない（その答えを中身の版と見比べるまでの一瞬を、揃える読みをやめたと
+  /// 見ない）。揃ってスレッドが置かれたら、その行が見える位置へ動く。
+  func testAWriteFinishingBeforeTheHeadsAreComparedKeepsTheReveal() throws {
+    var lines = (1...200).map { "line \($0)" }
+    try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "long"]).isSuccess)
+    let remote = Remote()
+    remote.threads = [pendingThread("T", line: 150)]
+    lines[2] = "THREE"
+    let opened = try commentedTab(remote) {
+      try self.repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+    }
+    let diff = opened.diff
+    let pane = opened.tab.group.view.editor
+    pane.reviewPopup.onOpenURL = { XCTFail("ブラウザを開かない: \($0)") }
+    let state = try XCTUnwrap(pane.pullRequest.state)
+    pumpMain(until: { diff.comments?.shownThreads["T"] != nil }, "前提: スレッドが置かれる")
+    let release = {
+      let answers = remote.heldReviews
+      remote.heldReviews = []
+      for answer in answers { answer() }
+    }
+
+    // push を読み、レビューのやりとりの答えを留める（diff は push の後の両端を見せ、スレッドはまだ分からないので置かない）。
+    lines[3] = "FOUR"
+    try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "push"]).isSuccess)
+    let pushed = repo.head()
+    remote.content = try XCTUnwrap(remote.content).withHead(pushed)
+    remote.holdsReviews = true
+    state.reload()
+    pumpMain(
+      until: {
+        diff.comments?.placed?.ends.head == pushed && !remote.heldReviews.isEmpty
+          && diff.comments?.isSettled == true
+      }, "前提: push の後の両端を見せ、レビューのやりとりの答えを留める")
+    XCTAssertNil(diff.comments?.shownThreads["T"], "前提: スレッドはまだ置かれていない")
+    let surface = try engine(diff.newSurface)
+    surface.scroll(toFirstLine: 0)
+    pane.reviewPopup.press(try XCTUnwrap(state.pendingComments.first { $0.thread == "T" }))
+
+    // 書き込みの前に出した読みの答えは使われず、書き込みの後の読み直しを留める。その答えは push の前の版を読む。
+    var written = false
+    XCTAssertTrue(
+      state.writeReview(.setResolved(thread: "T", true)) { _ in written = true }, "前提: 書き込みを受け付ける")
+    release()
+    pumpMain(until: { remote.heldReviews.count == 1 }, "前提: 書き込みの後の読み直しの答えを留める")
+    release()
+    pumpMain(
+      until: { written && !remote.heldReviews.isEmpty && diff.comments?.isSettled == true },
+      "前提: 書き込みが終わり、揃える読み直しの答えを留める")
+    XCTAssertNotNil(diff.comments?.revealRequest, "書き込みが終わっても、頼みは残る")
+
+    remote.head = pushed
+    remote.holdsReviews = false
+    release()
+    pumpMain(
+      until: { diff.comments?.zone(thread: "T").map { !$0.isTypesetting } ?? false },
+      "前提: 版が揃ってスレッドが置かれ、本文を組み終える")
+    nextTurn()
+    XCTAssertTrue(shows(try engine(diff.newSurface), line: 149), "置かれたスレッドの行が見える")
+  }
+
   /// 利用者の操作——無し・面のスクロール・面の押下・面への打鍵・面が処理する ⌘ 付きのキー（複数カーソルを下に足す）。
   private func userOperations(on surface: MetalTextSurface) throws -> [(String, () throws -> Void)]
   {
