@@ -29,8 +29,10 @@ final class PrCommentLayer {
   var drafts: [PrCommentPlacement] = []
   /// 見せるよう頼まれたスレッドと押したコメント（→ `PrCommentLayer+Reveal`）。
   var revealRequest: RevealRequest?
-  /// 見せるよう頼まれたスレッドの絵を置いた・本文を組み終えた（diff が見せる）。
+  /// 見せるよう頼まれた・頼まれたスレッドの、組み終えるのを待っていた絵の本文を組み終えた（diff が見せる）。
   var onRevealChange: () -> Void = {}
+  /// 最後に並びへ注記を渡した回に載せたスレッドの絵と、その側と行（スレッドの id ごと。行を追う絵は、その回の置き場）。
+  private(set) var shownThreads: [String: DiffRows.Zone] = [:]
   /// 求めた（求めている）印を出せる行の、両端と結果。
   private var commentable: (ends: PullRequestState.DiffEnds, lines: GitDiffHunkLines?)?
   /// 最後に並びへ注記を渡した両端とその両側の本文、並列の古い側の面（インラインでは nil）。
@@ -105,6 +107,10 @@ final class PrCommentLayer {
   func notes(shown: EditorDiff.SideTexts?) -> DiffRows.Notes {
     let notes = compose(shown: shown)
     placing = (notes.zones.compactMap { $0.zone as? PrCommentZone }, [])
+    shownThreads = Dictionary(
+      notes.zones.compactMap { placed in
+        (placed.zone as? PrCommentZone)?.threadID.map { ($0, placed) }
+      }, uniquingKeysWith: { first, _ in first })
     return notes
   }
 

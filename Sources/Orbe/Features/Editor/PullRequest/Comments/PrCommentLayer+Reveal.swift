@@ -1,4 +1,5 @@
 import Foundation
+import OrbeEditorCore
 
 /// 見せるよう頼まれたスレッド——ポップアップの未送信のコメントの行を押したとき、その行とスレッドと押したコメントを見せる頼み。
 /// 頼みは、この層がそのスレッドの絵を置いて本文を組み終えた時点の見せ直しで終わり、その後に絵の高さが変わっても画面を
@@ -13,9 +14,11 @@ extension PrCommentLayer {
     var typesetting = false
   }
 
-  /// diff が見せる所——置いたスレッドの絵・付いた側と行（0 始まり）・押したコメントの絵の中の縦の範囲（組んでいなければ nil）。
+  /// diff が見せる所——今の並びに載せたスレッドの絵とその面・付けた側と行（0 始まり。行を追う絵は、その回の置き場）・押した
+  /// コメントの絵の中の縦の範囲（組んでいなければ nil）。
   struct RevealTarget {
     let zone: PrCommentZone
+    let surface: any TextSurface
     let version: DiffRows.Version
     let line: Int
     let comment: Range<CGFloat>?
@@ -28,25 +31,22 @@ extension PrCommentLayer {
     onRevealChange()
   }
 
-  /// 頼まれたスレッドの絵を置いていて、見せる時なら、その所（本文を組み終えるのを待っている間は nil）。
-  func revealTarget() -> RevealTarget? {
+  /// 頼まれたスレッドの絵を今の並びに載せていて、見せる時なら、その所を返し、頼みの段を進める——本文を組んでいる最中なら、
+  /// 組み終えたときにもう一度だけ見せるのを待ち、そうでなければ頼みを終える（見せる前に進めるので、送った見えている範囲の
+  /// 知らせの中で同じ頼みをもう一度送らない）。載せていない・面が分からない・組み終えるのを待っている間は nil。
+  func takeRevealTarget() -> RevealTarget? {
     guard let request = revealRequest, !request.typesetting, isCurrentPullRequest,
-      let zone = threads[request.thread], zone.surface != nil,
-      case .thread(let thread) = zone.subject
+      let shown = shownThreads[request.thread], let zone = shown.zone as? PrCommentZone,
+      let surface = zone.surface
     else { return nil }
-    return RevealTarget(
-      zone: zone, version: thread.side == .old ? .old : .new, line: zone.line - 1,
-      comment: zone.commentSpans[request.comment])
-  }
-
-  /// diff が `zone` を見せた。本文を組んでいる最中なら、組み終えたときにもう一度だけ見せ、そうでなければ頼みを終える。
-  func didReveal(_ zone: PrCommentZone) {
-    guard revealRequest != nil else { return }
     if zone.isTypesetting {
       revealRequest?.typesetting = true
     } else {
       revealRequest = nil
     }
+    return RevealTarget(
+      zone: zone, surface: surface, version: shown.version, line: shown.line,
+      comment: zone.commentSpans[request.comment])
   }
 
   /// `zone` の本文を組み終えた。頼まれたスレッドの、組み終えるのを待っていた絵なら、もう一度見せさせる。

@@ -135,6 +135,12 @@ final class PrCommentZone: SurfaceZone {
   /// 入力欄の今の本文。
   var text: String { field.string }
 
+  /// スレッドの絵なら、そのスレッドの id。
+  var threadID: String? {
+    guard case .thread(let thread) = subject else { return nil }
+    return thread.id
+  }
+
   /// 新しいコメントの欄なら、その書きかけの通し番号。
   var draftSerial: Int? {
     guard case .draft(let serial) = subject else { return nil }
