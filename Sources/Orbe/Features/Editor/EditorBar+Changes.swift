@@ -23,14 +23,16 @@ extension EditorBarRoot {
   /// 右端に並ぶ部品——「コミット」（コミットのポップアップを開閉する。ステージ済みの行数を読めていれば、譲る添え書きに出す）。
   @ViewBuilder var changesTrailing: some View {
     if scm.isManaged == true {
-      ScmCommitButton(popup: commitPopup)
+      ScmCommitButton(
+        counts: commitPopup.panel.stagedLines?.counts, isOpen: commitPopup.isOpen,
+        toggle: commitPopup.toggle)
     }
   }
 }
 
 /// ブランチ名の札（表示だけ）。ブランチの印と名前（detached HEAD は短い sha）。名前は、幅が無ければ末尾を省略し、先頭の 4 字と
 /// 「…」より狭くならない。
-private struct ScmBranchChip: View {
+struct ScmBranchChip: View {
   let label: String
 
   var body: some View {
@@ -51,7 +53,7 @@ private struct ScmBranchChip: View {
 /// upstream が無ければ「ブランチを公開」。押すと同期（プル → プッシュ）か公開。ネット操作が走っている間と、upstream の ref が
 /// 手元に無い間は薄い姿で押せない。説明と VoiceOver の名前は「同期 ↑2 ↓1」の形で、upstream の ref が無ければ「同期（upstream の
 /// origin/feat がリモートにありません）」。
-private struct ScmSyncButton: View {
+struct ScmSyncButton: View {
   let state: ScmSyncState
   let sync: () -> Void
   let publish: () -> Void
@@ -109,20 +111,21 @@ private struct ScmSyncButton: View {
   }
 }
 
-/// 右端の「コミット」。git 管理下と分かっている間はいつも押せる。開いている姿は、コミットのポップアップが開いている間。
-/// ステージ済みの行数を読めていれば、譲る添え書き「ステージ済み +125 −3」（追加は `diff.added`、削除は `diff.removed`）を
+/// 右端の「コミット」。git 管理下と分かっている間はいつも押せる。開いている姿は、コミットのポップアップが開いている間
+/// （`isOpen`）。ステージ済みの行数 `counts` を読めていれば、譲る添え書き「ステージ済み +125 −3」（追加は `diff.added`、削除は `diff.removed`）を
 /// 付ける（0 の側は出さず、両方 0 なら「ステージ済み」だけ）。ツールチップは「コミット」、VoiceOver の名前は行数を読めていれば
 /// 「コミット、ステージ済み +125 −3」の形（0 の側は同じく読まない）。
-private struct ScmCommitButton: View {
-  let popup: ScmCommitPopup
+struct ScmCommitButton: View {
+  let counts: GitLineCounts?
+  let isOpen: Bool
+  let toggle: () -> Void
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    let counts = popup.panel.stagedLines?.counts
     EditorBarActionButton(
-      title: l10n.string(.editorScmCommit), isOpen: popup.isOpen,
+      title: l10n.string(.editorScmCommit), isOpen: isOpen,
       help: l10n.string(.editorScmCommit), accessibilityName: counts.map(accessibilityName),
-      action: popup.toggle,
+      action: toggle,
       detail: {
         if let counts {
           HStack(spacing: Theme.Space.note) {
