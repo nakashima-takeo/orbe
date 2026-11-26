@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 進みの細い線（VS Code のビューの上端の線。検索パネルの検索中・ソース管理の実行中の帯）——accent の短い帯が
+/// 進みの細い線（VS Code のビューの上端の線。検索パネルの検索中・ソース管理の実行中の札）——accent の短い帯が
 /// 左から右へ流れ続ける。帯の動きは Core Animation に任せる——SwiftUI の時刻で毎フレーム描くと、走っている間ずっと main が
 /// 毎フレームパネルを組み直し、結果の差し込みや打鍵を待たせる。
 struct EditorProgressLine: NSViewRepresentable {

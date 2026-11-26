@@ -61,13 +61,13 @@ extension DesignFlowSnapshotTests {
           try? Self.hangingHook(in: scene.directory)
           control.message = "wip"
           panel.commitSnapshot().commit()
-          pumpMain(until: { control.bandOperation != nil }, "帯が出る")
+          pumpMain(until: { control.cardOperation != nil }, "帯が出る")
         }
       ),
       (
         "stopped",
         {
-          control.bandOperation?.stop()
+          control.cardOperation?.stop()
           pumpMain(until: { control.operations.isEmpty }, "止めた")
           try? FileManager.default.removeItem(
             at: scene.directory.appendingPathComponent(".git/hooks/pre-commit"))

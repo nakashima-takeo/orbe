@@ -53,6 +53,7 @@ extension L10n {
     .editorScmDiscardToTrashOne: ("%lld 件はゴミ箱へ移します。", "%lld file goes to the Trash."),
     .editorScmDiscardToTrashOther: ("%lld 件はゴミ箱へ移します。", "%lld files go to the Trash."),
     .editorScmDiscardConfirm: ("破棄", "Discard"),
+    .editorScmFailureCard: ("%@　%@", "%@: %@"),
     .editorScmFailureAuthentication: (
       "認証できませんでした。端末で git の認証（ssh の鍵・資格情報）を設定してください。",
       "Authentication failed. Set up git authentication (ssh key or credentials) in the terminal."

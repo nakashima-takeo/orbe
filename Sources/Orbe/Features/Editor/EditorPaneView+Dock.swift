@@ -16,7 +16,8 @@ extension EditorPaneView {
   /// 置き場の根。根へ渡す持ち主は、ここで足す。
   func dockRoot() -> EditorDockRoot {
     EditorDockRoot(
-      shell: shell, popup: popup, localization: localization, fontResolver: fontResolver,
+      shell: shell, popup: popup, commitPopup: commitPopup, localization: localization,
+      fontResolver: fontResolver,
       translucency: translucency ?? ChromeTranslucency(),
       framesDidChange: { [weak self] frames in self?.dockHost.itemFrames = frames })
   }

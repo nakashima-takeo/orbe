@@ -152,8 +152,7 @@ final class EditorPaneView: NSView {
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-        commitPopup: commitPopup, scmList: scmList, scmGraphList: scmGraphList,
-        pullRequest: pullRequest,
+        scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
         pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
     faceHost = NSHostingView(
@@ -223,8 +222,7 @@ final class EditorPaneView: NSView {
       localization: localization, fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-      commitPopup: commitPopup, scmList: scmList, scmGraphList: scmGraphList,
-      pullRequest: pullRequest,
+      scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
       pullRequestList: pullRequestList, pullRequestHeader: pullRequestHeader, sidebar: sidebar,
       localization: localization, fontResolver: fontResolver)
     faceHost.rootView = faceRoot(faceContent)

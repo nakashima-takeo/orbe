@@ -281,11 +281,6 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// 実行中の帯の「止める」: 角の丸い四角（塗り）。
-  static let stopSquare = Glyph(viewBox: 10, stroke: 0, fills: true) { k in
-    [(Path(roundedRect: CGRect(x: k, y: k, width: 8 * k, height: 8 * k), cornerRadius: k), 1)]
-  }
-
   /// ブランチ（線描き。小さい寸法で使うので塗りの細部は持たない）。
   static let branch = Glyph(viewBox: 16, stroke: 1.5) { k in
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }

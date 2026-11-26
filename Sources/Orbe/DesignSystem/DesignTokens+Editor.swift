@@ -193,10 +193,6 @@ extension Theme.Typography {
   static let editorScmBranch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   static let editorScmMore = NSFont.systemFont(ofSize: 11.5, weight: .regular)
   static let editorScmNote = NSFont.systemFont(ofSize: 11, weight: .regular)
-  /// 実行中の帯の操作名（sans 12）・git の進捗の行（mono 10.5）・止める（sans 11）。
-  static let editorScmBandName = NSFont.systemFont(ofSize: 12, weight: .regular)
-  static let editorScmBandProgress = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
-  static let editorScmStop = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// パネルヘッダーの題の字間。
   static let trackingPanelTitle: CGFloat = 0.5
   /// ルート行の字間。
@@ -327,9 +323,6 @@ extension Theme.Layout {
   /// グラフの枠の高さ（見出し 22 を含む）の既定（見出し＋8 行）と下限（見出し＋3 行）。
   static let editorScmGraph: CGFloat = 198
   static let editorScmGraphMin: CGFloat = 88
-  /// 実行中の帯の高さと「止める」の高さ。
-  static let editorScmBand: CGFloat = 28
-  static let editorScmStop: CGFloat = 20
 }
 
 extension Theme.Opacity {

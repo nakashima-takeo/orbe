@@ -1,16 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// 帯の下を、親「ソース管理」とグラフの枠に割り振る。両方開いていれば、グラフの枠は持っている高さ（親に最低限を残す上限で
+/// パネルヘッダーの下を、親「ソース管理」とグラフの枠に割り振る。両方開いていれば、グラフの枠は持っている高さ（親に最低限を残す上限で
 /// 丸める）、親は残り。親を畳めばグラフの枠が残りを全部取り、グラフを畳めば見出しだけが下端に寄る（→ `ScmPanelSplit`）。
 /// 境目は両方開いているときだけ出し、引けばグラフの枠の高さを変える。
 struct ScmSplit: View {
   let panel: ScmPanel
-  let commitPopup: ScmCommitPopup
   let list: RowList<ScmListSource>
   let graphList: RowList<ScmGraphSource>
   let sidebar: EditorSidebarState
-  /// 親の中で列より上に出ているもの（見出し・失敗の文）の高さ。
+  /// 親の中で列より上に出ているもの（見出し）の高さ。
   @State private var above = Theme.Layout.editorScmRow
   /// 境目を掴んだときのグラフの枠の高さ。
   @State private var grabbed: CGFloat?
@@ -21,13 +20,8 @@ struct ScmSplit: View {
         total: proxy.size.height, above: above, stored: sidebar.graphHeight,
         isRepositoryOpen: panel.isRepositoryOpen, isGraphOpen: panel.isGraphOpen)
       VStack(spacing: 0) {
-        VStack(spacing: 0) {
-          ScmRepositoryHead(panel: panel)
-          if panel.isRepositoryOpen {
-            ScmFailureNote(panel: panel, isCommitPopupOpen: commitPopup.isOpen)
-          }
-        }
-        .onGeometryChange(for: CGFloat.self, of: \.size.height) { above = $0 }
+        ScmRepositoryHead(panel: panel)
+          .onGeometryChange(for: CGFloat.self, of: \.size.height) { above = $0 }
         if panel.isRepositoryOpen {
           ScmList(panel: panel, list: list)
         } else {
@@ -66,7 +60,7 @@ struct ScmSplit: View {
 
 /// 親「ソース管理」とグラフの枠の高さの割り振り（純関数）。
 struct ScmPanelSplit {
-  /// 帯の下の高さ。
+  /// パネルヘッダーの下の高さ。
   let total: CGFloat
   /// 親の中で列より上に出ているものの高さ。
   let above: CGFloat
