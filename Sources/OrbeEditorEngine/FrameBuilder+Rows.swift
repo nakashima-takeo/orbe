@@ -228,8 +228,8 @@ extension FrameBuilder {
         var laid = cache.drawn(key, carets: needsCarets)
         if laid == nil {
           if read == nil {
-            let line = LineShaper.source(start: start, next: row < lastRow ? end : nil, in: text)
-            read = (LineShaper.display(line), LineDecor(line))
+            read = cache.read(
+              LineShaper.source(start: start, next: row < lastRow ? end : nil, in: text))
           }
           let (shown, decor) = read!
           let range =

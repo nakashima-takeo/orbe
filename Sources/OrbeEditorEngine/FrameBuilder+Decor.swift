@@ -1,8 +1,9 @@
 import Foundation
 import OrbeEditorCore
 
-/// 行の装備の素——見せる空白の並び・URL の区間（どれも行内の UTF-16 の位置）。行の中身だけで決まるので、組版と一緒に
-/// 覚え、行の中身が変わらない限り作り直さない。規則は Core の純関数（`WhitespaceRuns`・`LinkDetector`）。
+/// 行の装備の素——見せる空白の並び・URL の区間（どれも行内の UTF-16 の位置）。行の中身だけで決まるので、組版の
+/// キャッシュが行の中身を鍵に覚え（`LineLayoutCache.read`）、行の中身が変わらない限り作り直さない。規則は Core の純関数
+/// （`WhitespaceRuns`・`LinkDetector`）。
 struct LineDecor: Sendable {
   var whitespace: [Range<Int>]
   var links: [NSRange]

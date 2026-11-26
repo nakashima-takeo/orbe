@@ -65,8 +65,12 @@ struct LaidOutLine {
 ///   知らない形で変われば全部捨てる。
 /// - 描く単位の列（行か段の中身）とタブの桁を鍵にした結果（フォントはキャッシュごとに固定——本文は面のフォント、入力欄は
 ///   入力欄のフォント）: 編集をまたいでも同じ中身の段は組み直さない。装備は行の中身で決まる（段の中身だけでは決まらない）
-///   ので、鍵にも結果にも入れず、引いた呼び手が置く。行の数か、持つ単位（行の中身とグリフ）の数が上限を越えたら、古く
-///   使われたものから半分を捨てる——長い行ばかりの文書でも覚える量が行の長さに比例して膨らまない。
+///   ので、鍵にも結果にも入れず、引いた呼び手が置く。
+///
+/// 段を組む前に読む行（行の中身 → 描く単位の列と装備の素）も、行の中身を鍵に覚える（→ `read`）——段の一部だけが前の
+/// コマに無い行・折り返しの幅が変わった行・差し込んだ行で、URL の検出と空白の走査を、コマごとに行全体で走らせない。どちらの
+/// 表も、数か、持つ単位（行の中身とグリフ）の数が上限を越えたら、古く使われたものから半分を捨てる——長い行ばかりの文書でも
+/// 覚える量が行の長さに比例して膨らまない。
 final class LineLayoutCache {
   private struct Key: Hashable {
     let shown: LineShaper.Displayed
@@ -86,10 +90,21 @@ final class LineLayoutCache {
     var segment: Int
   }
 
+  /// 読んだ行（→ `read`）。
+  private struct Read {
+    let shown: LineShaper.Displayed
+    let decor: LineDecor
+    var used: UInt64
+    /// 持つ単位の数（行の中身・描く単位の列・装備）。
+    let weight: Int
+  }
+
   static let capacity = 4096
   static let weightBudget = 2_000_000
 
   private var entries: [Key: Entry] = [:]
+  private var reads: [LineShaper.Source: Read] = [:]
+  private var readWeight = 0
   private var clock: UInt64 = 0
   /// 覚えている段の数と、持つ単位の数。
   var count: Int { entries.count }
@@ -210,12 +225,36 @@ final class LineLayoutCache {
     _ source: LineShaper.Source, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry,
     carets: Bool = false
   ) -> LaidOutLine {
-    let decor = LineDecor(source)
+    let found = read(source)
     var laid = line(
-      LineShaper.display(source), tabColumns: tabColumns, config: config, fonts: fonts,
-      carets: carets || decor.needsCarets)
-    laid.decor = decor
+      found.shown, tabColumns: tabColumns, config: config, fonts: fonts,
+      carets: carets || found.decor.needsCarets)
+    laid.decor = found.decor
     return laid
+  }
+
+  /// 行の中身 `source` の描く単位の列と装備の素。行の中身を鍵に覚え、同じ中身の行は作り直さない。
+  func read(_ source: LineShaper.Source) -> (shown: LineShaper.Displayed, decor: LineDecor) {
+    clock += 1
+    if let index = reads.index(forKey: source) {
+      reads.values[index].used = clock
+      return (reads.values[index].shown, reads.values[index].decor)
+    }
+    let shown = LineShaper.display(source)
+    let decor = LineDecor(source)
+    let entry = Read(
+      shown: shown, decor: decor, used: clock,
+      weight: source.head.count + shown.units.count + decor.weight)
+    while !reads.isEmpty,
+      reads.count >= Self.capacity || readWeight + entry.weight > Self.weightBudget
+    {
+      let cut = reads.values.map(\.used).sorted()[reads.count / 2]
+      reads = reads.filter { $0.value.used > cut }
+      readWeight = reads.values.reduce(0) { $0 + $1.weight }
+    }
+    reads[source] = entry
+    readWeight += entry.weight
+    return (shown, decor)
   }
 
   /// 描く単位の列 `shown`（行か段の中身）を組んだ結果（装備は空——呼び手が置く）。`carets` なら位置と x の対応も持たせる
