@@ -5,8 +5,8 @@ import Foundation
 extension FileTree {
   enum RowKind: Equatable {
     case directory(isExpanded: Bool)
-    /// `mark` は開いている文書の印（開いていなければ nil）。
-    case file(badge: GitStatus.Badge?, mark: EditorItemListRow.Mark?)
+    /// `url` はそのファイル（開く・閉じる・種別チップの宛先）。`mark` は開いている文書の印（開いていなければ nil）。
+    case file(url: URL, badge: GitStatus.Badge?, mark: EditorItemListRow.Mark?)
     /// 新規作成の行内入力（ディレクトリならシェブロンの幅を空ける）。世代は `NewEntry.generation`。
     case input(isDirectory: Bool, generation: Int)
   }
@@ -19,8 +19,6 @@ extension FileTree {
     let name: String
     /// 連なりの名前の前の段（`docs/spec/`。連なりでなければ空）。
     let prefix: String
-    /// フォルダの行は連なりのいちばん深いフォルダ（中身を出すフォルダ）、ファイルの行はそのファイル。
-    let url: URL
     let kind: RowKind
     /// 選択がこの行（連なりなら、そのどれか）。
     let isSelected: Bool
@@ -86,7 +84,6 @@ extension FileTree {
       out.append(
         Row(
           id: Self.inputRowID(newEntry), depth: depth, name: "", prefix: "",
-          url: url(of: directory),
           kind: .input(isDirectory: newEntry.isDirectory, generation: newEntry.generation),
           isSelected: false, isOnSelectionPath: false))
     }
@@ -96,13 +93,13 @@ extension FileTree {
       guard entry.isDirectory else {
         out.append(
           Row(
-            id: path, depth: depth, name: entry.name, prefix: "", url: entry.url,
-            kind: .file(badge: status?.badge(of: path), mark: openMarks[path]),
+            id: path, depth: depth, name: entry.name, prefix: "",
+            kind: .file(url: entry.url, badge: status?.badge(of: path), mark: openMarks[path]),
             isSelected: selected == path,
             isOnSelectionPath: onPath))
         continue
       }
-      // 連なりでないフォルダ（ほとんどの行）は、連なりの列を作らず、一覧の名前と URL をそのまま使う。
+      // 連なりでないフォルダ（ほとんどの行）は、連なりの列を作らず、一覧の名前をそのまま使う。
       let chain = chain(from: path, source)
       let deepest = chain.last ?? path
       let isExpanded = source.isExpanded(deepest)
@@ -110,7 +107,6 @@ extension FileTree {
         Row(
           id: path, depth: depth, name: chain.isEmpty ? entry.name : Self.name(of: deepest),
           prefix: chain.dropLast().map { Self.name(of: $0) + "/" }.joined(),
-          url: chain.isEmpty ? entry.url : url(of: deepest),
           kind: .directory(isExpanded: isExpanded),
           isSelected: selected.map { chain.isEmpty ? $0 == path : chain.contains($0) } ?? false,
           isOnSelectionPath: onPath))

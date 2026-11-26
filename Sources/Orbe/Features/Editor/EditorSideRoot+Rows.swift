@@ -29,8 +29,8 @@ struct TreeRowView: View {
           .lineLimit(1)
           .truncationMode(.head)
           .padding(.leading, Theme.Layout.editorTreeNameGap)
-      case .file:
-        FileChipView(chip: FileChip.resolve(row.url))
+      case .file(let url, _, _):
+        FileChipView(chip: FileChip.resolve(url))
           .padding(.trailing, Theme.Layout.editorTreeChipGap)
         fontResolver.text(row.name, base: Theme.Typography.editorTreeRow)
           .font(Font.theme.editorTreeRow)
@@ -63,18 +63,18 @@ struct TreeRowView: View {
     .onTapGesture {
       switch row.kind {
       case .directory: tree.toggle(row.id)
-      case .file: shell.open(row.url, .preview)
+      case .file(let url, _, _): shell.open(url, .preview)
       case .input: break
       }
     }
     .simultaneousGesture(
       TapGesture(count: 2).onEnded {
-        if case .file = row.kind { shell.open(row.url, .pinned) }
+        if case .file(let url, _, _) = row.kind { shell.open(url, .pinned) }
       }
     )
     .overlay(alignment: .trailing) {
-      if let mark = row.mark {
-        TreeMarkButton(mark: mark) { frame in shell.closeDocument(row.url, frame) }
+      if case .file(let url, _, let mark?) = row.kind {
+        TreeMarkButton(mark: mark) { frame in shell.closeDocument(url, frame) }
           .padding(.trailing, markTrailing)
       }
     }
@@ -212,13 +212,13 @@ struct TreeGuides: View {
 
 extension FileTree.Row {
   var badge: GitStatus.Badge? {
-    if case .file(let badge, _) = kind { return badge }
+    if case .file(_, let badge, _) = kind { return badge }
     return nil
   }
 
   /// 開いている文書の印（開いていなければ nil）。
   var mark: EditorItemListRow.Mark? {
-    if case .file(_, let mark) = kind { return mark }
+    if case .file(_, _, let mark) = kind { return mark }
     return nil
   }
 }
