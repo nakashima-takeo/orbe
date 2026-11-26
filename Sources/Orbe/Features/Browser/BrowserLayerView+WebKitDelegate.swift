@@ -7,19 +7,27 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
     decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
   ) {
+    let isMainFrame = navigationAction.targetFrame?.isMainFrame == true
     let isMainOrNew = navigationAction.targetFrame?.isMainFrame ?? true
     let url = navigationAction.request.url
     let scheme = url?.scheme?.lowercased()
     if isMainOrNew {
       if scheme == "http" || scheme == "https" {
         decisionHandler(.allow)
-      } else if pendingNavigation?.allowsInternalBlankLoad == true,
+      } else if isMainFrame,
+        navigationAction.navigationType == .other,
+        pendingNavigation?.allowsInternalBlankLoad == true,
         url?.absoluteString == "about:blank"
       {
-        pendingNavigation?.allowsInternalBlankLoad = false
         decisionHandler(.allow)
       } else {
-        clearUnstartedPendingNavigationIfMatching(url)
+        if isMainFrame,
+          navigationAction.navigationType == .other
+            || navigationAction.navigationType == .backForward
+            || navigationAction.navigationType == .reload
+        {
+          clearUnstartedPendingNavigationIfMatching(url)
+        }
         decisionHandler(.cancel)
       }
     } else if let scheme, Self.allowedSubframeSchemes.contains(scheme) {
@@ -32,38 +40,65 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
   func webView(
     _ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!
   ) {
-    if let navigation, supersededNavigations.contains(navigation) {
+    if let navigation, navigationMetadata.object(forKey: navigation)?.isSuperseded == true {
       return
     }
     if var pending = pendingNavigation, pending.matches(navigation) {
       pending.didStartProvisional = true
+      pending.allowsInternalBlankLoad = false
       pendingNavigation = pending
     } else if let navigation {
+      if let previous = pendingNavigation, !previous.matches(navigation) {
+        markSuperseded(previous)
+      }
+      if navigationMetadata.object(forKey: navigation) == nil {
+        navigationMetadata.setObject(
+          NavigationMeta(requestedURL: webView.url, isLocalHTML: false),
+          forKey: navigation)
+      }
       pendingNavigation = PendingNavigation(
         navigation: navigation, requestedURL: webView.url,
-        isLocalHTML: false, allowsInternalBlankLoad: false, didStartProvisional: true)
+        isLocalHTML: false, allowsInternalBlankLoad: false, didStartProvisional: true,
+        initialBackForwardItem: webView.backForwardList.currentItem)
     }
     syncNavigationState()
   }
 
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-    if let navigation, supersededNavigations.contains(navigation) {
-      return
+    let meta = navigation.flatMap { navigationMetadata.object(forKey: $0) }
+    if let navigation {
+      navigationMetadata.removeObject(forKey: navigation)
     }
-    if let pending = pendingNavigation, !pending.matches(navigation) {
-      return
+    let isCurrentPending =
+      pendingNavigation == nil || pendingNavigation?.matches(navigation) == true
+    let wasLocalHTML: Bool
+    if isCurrentPending {
+      wasLocalHTML = pendingNavigation?.isLocalHTML ?? meta?.isLocalHTML ?? false
+      pendingNavigation = nil
+    } else {
+      wasLocalHTML = meta?.isLocalHTML ?? false
     }
-    let wasLocalHTML = pendingNavigation?.isLocalHTML ?? false
-    pendingNavigation = nil
-    if let url = webView.url, url.scheme?.lowercased() != "about" {
+
+    let committedTargetURL: URL?
+    if isCurrentPending {
+      committedTargetURL = webView.url
+    } else if wasLocalHTML {
+      committedTargetURL = meta?.requestedURL
+    } else {
+      committedTargetURL = webView.backForwardList.currentItem?.url
+    }
+
+    if let url = committedTargetURL, url.scheme?.lowercased() != "about" {
       committedPage = CommittedPage(url: url, isLocalHTML: wasLocalHTML)
-      if !wasLocalHTML {
+      if isCurrentPending, !wasLocalHTML {
         lastRequestedURL = url
       }
       applyToolbarURL(url, isSecure: Self.isSecure(url, in: webView))
     } else {
       committedPage = nil
-      lastRequestedURL = nil
+      if isCurrentPending {
+        lastRequestedURL = nil
+      }
       toolbar.rawURL = ""
       toolbar.displayURL = nil
     }
@@ -84,7 +119,7 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     withError error: Error
   ) {
     if let navigation {
-      supersededNavigations.remove(navigation)
+      navigationMetadata.removeObject(forKey: navigation)
     }
     guard let pending = pendingNavigation, pending.matches(navigation) else {
       syncToolbarStatus(from: webView)
@@ -97,7 +132,7 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
     pendingNavigation = nil
-    supersededNavigations.removeAllObjects()
+    navigationMetadata.removeAllObjects()
     restoreLastRequestedURLToCommitted()
     toolbar.isLoading = false
     toolbar.estimatedProgress = 0
@@ -121,8 +156,11 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     if let url {
       lastRequestedURL = url
     }
+    let initialItem = webView.backForwardList.currentItem
     let navigation = webView.load(navigationAction.request)
-    beginPendingNavigation(navigation, requestedURL: url, isLocalHTML: false, allowsBlank: false)
+    beginPendingNavigation(
+      navigation, requestedURL: url, isLocalHTML: false, allowsBlank: false,
+      initialBackForwardItem: initialItem)
     return nil
   }
 

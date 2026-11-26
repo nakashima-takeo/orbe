@@ -8,6 +8,20 @@ extension BrowserLayerView {
     let isLocalHTML: Bool
   }
 
+  /// API 発行・暫定開始した `WKNavigation` の最小メタデータ。
+  /// 後続遷移へ差し替わった先行遷移が後から `didCommit` してもローカル HTML 判定と `baseURL` を復元する。
+  final class NavigationMeta {
+    let requestedURL: URL?
+    let isLocalHTML: Bool
+    var isSuperseded: Bool
+
+    init(requestedURL: URL?, isLocalHTML: Bool, isSuperseded: Bool = false) {
+      self.requestedURL = requestedURL
+      self.isLocalHTML = isLocalHTML
+      self.isSuperseded = isSuperseded
+    }
+  }
+
   /// 進行中ナビゲーションを `WKNavigation` 単位で追跡し、重複遷移の旧キャンセル通知や
   /// `didStartProvisionalNavigation` 前の KVO 窓から状態と URL 欄を保護する。
   struct PendingNavigation {
@@ -16,6 +30,7 @@ extension BrowserLayerView {
     let isLocalHTML: Bool
     var allowsInternalBlankLoad: Bool
     var didStartProvisional: Bool
+    weak var initialBackForwardItem: WKBackForwardListItem?
 
     func matches(_ other: WKNavigation?) -> Bool {
       guard let navigation, let other else { return false }
@@ -70,8 +85,11 @@ extension BrowserLayerView {
     if committedPage == nil {
       applyToolbarURL(url, isSecure: false)
     }
+    let initialItem = view.backForwardList.currentItem
     let navigation = view.load(URLRequest(url: url))
-    beginPendingNavigation(navigation, requestedURL: url, isLocalHTML: false, allowsBlank: false)
+    beginPendingNavigation(
+      navigation, requestedURL: url, isLocalHTML: false, allowsBlank: false,
+      initialBackForwardItem: initialItem)
   }
 
   /// ローカル HTML を外部通信なしで読み込む（`visual-check`・テスト用）。
@@ -83,26 +101,32 @@ extension BrowserLayerView {
     if committedPage == nil, let baseURL {
       applyToolbarURL(baseURL, isSecure: false)
     }
+    let initialItem = view.backForwardList.currentItem
     let navigation = view.loadHTMLString(html, baseURL: baseURL)
     beginPendingNavigation(
       navigation, requestedURL: baseURL ?? URL(string: "about:blank"),
-      isLocalHTML: true, allowsBlank: baseURL == nil)
+      isLocalHTML: true, allowsBlank: baseURL == nil,
+      initialBackForwardItem: initialItem)
   }
 
   func goBack() {
     guard let webView else { return }
+    let initialItem = webView.backForwardList.currentItem
     let targetURL = webView.backForwardList.backItem?.url
     let navigation = webView.goBack()
     beginPendingNavigation(
-      navigation, requestedURL: targetURL, isLocalHTML: false, allowsBlank: false)
+      navigation, requestedURL: targetURL, isLocalHTML: false, allowsBlank: false,
+      initialBackForwardItem: initialItem)
   }
 
   func goForward() {
     guard let webView else { return }
+    let initialItem = webView.backForwardList.currentItem
     let targetURL = webView.backForwardList.forwardItem?.url
     let navigation = webView.goForward()
     beginPendingNavigation(
-      navigation, requestedURL: targetURL, isLocalHTML: false, allowsBlank: false)
+      navigation, requestedURL: targetURL, isLocalHTML: false, allowsBlank: false,
+      initialBackForwardItem: initialItem)
   }
 
   func reloadPage() {
@@ -115,10 +139,12 @@ extension BrowserLayerView {
       load(committed.url)
       return
     }
+    let initialItem = webView.backForwardList.currentItem
     if webView.url != nil, let navigation = webView.reload() {
       beginPendingNavigation(
         navigation, requestedURL: webView.url ?? committedPage?.url,
-        isLocalHTML: committedPage?.isLocalHTML ?? false, allowsBlank: false)
+        isLocalHTML: committedPage?.isLocalHTML ?? false, allowsBlank: false,
+        initialBackForwardItem: initialItem)
     } else if let url = lastRequestedURL {
       load(url)
     }
@@ -134,15 +160,33 @@ extension BrowserLayerView {
   }
 
   func beginPendingNavigation(
-    _ navigation: WKNavigation?, requestedURL: URL?, isLocalHTML: Bool, allowsBlank: Bool
+    _ navigation: WKNavigation?, requestedURL: URL?, isLocalHTML: Bool, allowsBlank: Bool,
+    initialBackForwardItem: WKBackForwardListItem?
   ) {
     guard let navigation else { return }
-    if let previous = pendingNavigation?.navigation, previous !== navigation {
-      supersededNavigations.add(previous)
+    if let previous = pendingNavigation, !previous.matches(navigation) {
+      markSuperseded(previous)
     }
+    navigationMetadata.setObject(
+      NavigationMeta(requestedURL: requestedURL, isLocalHTML: isLocalHTML),
+      forKey: navigation)
     pendingNavigation = PendingNavigation(
       navigation: navigation, requestedURL: requestedURL,
-      isLocalHTML: isLocalHTML, allowsInternalBlankLoad: allowsBlank, didStartProvisional: false)
+      isLocalHTML: isLocalHTML, allowsInternalBlankLoad: allowsBlank, didStartProvisional: false,
+      initialBackForwardItem: initialBackForwardItem)
+  }
+
+  func markSuperseded(_ pending: PendingNavigation) {
+    guard let navigation = pending.navigation else { return }
+    if let existing = navigationMetadata.object(forKey: navigation) {
+      existing.isSuperseded = true
+    } else {
+      navigationMetadata.setObject(
+        NavigationMeta(
+          requestedURL: pending.requestedURL, isLocalHTML: pending.isLocalHTML,
+          isSuperseded: true),
+        forKey: navigation)
+    }
   }
 
   func restoreLastRequestedURLToCommitted() {
@@ -153,6 +197,9 @@ extension BrowserLayerView {
   func clearUnstartedPendingNavigationIfMatching(_ url: URL?) {
     guard let pending = pendingNavigation, !pending.didStartProvisional else { return }
     guard pending.requestedURL == nil || pending.requestedURL == url else { return }
+    if let navigation = pending.navigation {
+      navigationMetadata.removeObject(forKey: navigation)
+    }
     pendingNavigation = nil
     restoreLastRequestedURLToCommitted()
     syncNavigationState()
@@ -172,7 +219,23 @@ extension BrowserLayerView {
 
   func syncNavigationState() {
     guard let webView else { return }
-    if let pending = pendingNavigation, !pending.didStartProvisional, !webView.isLoading {
+    // 同一文書遷移（pushState の goBack / goForward や #hash 移動）は非 nil の WKNavigation を返しつつ
+    // didStartProvisionalNavigation・didCommit・didFinish を発火せず isLoading = false のみで完了する。
+    // 完了済みの同一文書遷移だけをここで回収し、連続 API 遷移キャンセル時の過渡的な isLoading == false 窓では消さない。
+    if let pending = pendingNavigation,
+      !pending.didStartProvisional,
+      !pending.isLocalHTML,
+      !webView.isLoading,
+      let committed = committedPage,
+      let currentItem = webView.backForwardList.currentItem,
+      currentItem !== pending.initialBackForwardItem,
+      let liveURL = webView.url,
+      currentItem.url == liveURL,
+      Self.isSameOrigin(liveURL, committed.url)
+    {
+      if let navigation = pending.navigation {
+        navigationMetadata.removeObject(forKey: navigation)
+      }
       pendingNavigation = nil
       restoreLastRequestedURLToCommitted()
     }
