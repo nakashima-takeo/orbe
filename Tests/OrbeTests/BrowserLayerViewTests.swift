@@ -62,7 +62,7 @@ final class BrowserLayerViewTests: OrbeTestCase {
     let hosted = hostBrowser()
     let browser = hosted.browser
     XCTAssertNil(browser.webView, "閉状態のままでは WKWebView を生成しない")
-    XCTAssertTrue(browser.isHidden)
+    XCTAssertTrue(browser.sheetView.isHidden)
 
     browser.setMode(.sheet, animated: false)
     let webView = try XCTUnwrap(browser.webView, "初回表示で生成される")
@@ -97,7 +97,7 @@ final class BrowserLayerViewTests: OrbeTestCase {
 
     browser.setMode(.closed, animated: true)
     XCTAssertTrue(browser.isFading, "前提: 閉じるフェード中")
-    XCTAssertFalse(browser.isHidden, "前提: 閉じる途中はまだ見えている")
+    XCTAssertFalse(browser.sheetView.isHidden, "前提: 閉じる途中はまだ見えている")
     XCTAssertTrue(stage.hitTest(sheetPoint) === underlay, "閉じるフェード中はシート領域も下層へ貫通する")
   }
 
@@ -115,7 +115,7 @@ final class BrowserLayerViewTests: OrbeTestCase {
     XCTAssertFalse(browser.leftVeilView.isHidden, "前提: 右シート＋焦点で左層ベール点灯")
 
     browser.setPeeking(true, animated: false)
-    XCTAssertFalse(browser.isHidden, "ビュー自体は隠さず不透明度で透過する")
+    XCTAssertFalse(browser.sheetView.isHiddenOrHasHiddenAncestor, "ビュー自体は隠さず不透明度で透過する")
     XCTAssertEqual(browser.sheetView.alphaValue, 0, "右シート透かしはシート全体を透明にする")
     XCTAssertFalse(browser.peekRailView.isHidden, "右端 2px レールが出る")
     XCTAssertTrue(browser.leftVeilView.isHidden, "透かし中は左層ベールを消す")
@@ -144,35 +144,51 @@ final class BrowserLayerViewTests: OrbeTestCase {
 
     browser.setMode(.closed, animated: true)
     XCTAssertTrue(browser.isFading, "閉じる方向はフェードが始まる")
-    XCTAssertFalse(browser.isHidden, "閉じる途中は見えている")
+    XCTAssertFalse(browser.sheetView.isHidden, "閉じる途中は見えている")
     XCTAssertEqual(browser.sheetView.alphaValue, 0)
 
     // 閉じる途中で開き直しても、古い完了通知で閉じ戻らず開状態で落ち着く。
     browser.setMode(.sheet, animated: true)
     pumpMain(until: { !browser.isFading }, timeout: 2, "反転後の動きが終わる")
-    XCTAssertFalse(browser.isHidden)
+    XCTAssertFalse(browser.sheetView.isHidden)
     XCTAssertEqual(browser.sheetView.alphaValue, 1)
 
     browser.reduceMotion = true
     browser.setMode(.closed, animated: true)
     XCTAssertFalse(browser.isFading, "動きを減らす設定では即時")
-    XCTAssertTrue(browser.isHidden)
+    XCTAssertTrue(browser.sheetView.isHidden)
   }
 
-  /// 閉状態から動きつきで開くとフェードが始まり、完了後に不透明な表示状態へ落ち着く。
+  /// 閉状態から動きつきで開くと右シート・全面ともフェードが始まり、完了後に不透明な表示状態へ落ち着く。
+  /// 祖先が隠れているときはフェードせず即時切り替わる。
   func testOpeningFromClosedStartsFadeWhenMotionEnabled() {
     let hosted = hostBrowser(reduceMotion: false)
-    let browser = hosted.browser
-    XCTAssertTrue(browser.isHidden, "前提: 閉状態では隠れている")
+    let (stage, underlay, browser) = (hosted.stage, hosted.underlay, hosted.browser)
+    XCTAssertTrue(browser.sheetView.isHidden, "前提: 閉状態ではシートが隠れている")
+    XCTAssertTrue(browser.leftVeilView.isHidden)
+    XCTAssertTrue(browser.peekRailView.isHidden)
+    XCTAssertTrue(stage.hitTest(NSPoint(x: 750, y: 300)) === underlay, "閉状態は下層へ貫通する")
 
-    XCTExpectFailure(
-      "バグ疑い: 閉状態で BrowserLayerView 自身が isHidden=true のため runFade の !isHiddenOrHasHiddenAncestor で開くフェードがスキップされる"
-    ) {
-      browser.setMode(.sheet, animated: true)
-      XCTAssertTrue(browser.isFading, "閉状態から動きつきで開くとフェードが始まる")
-    }
+    browser.setMode(.sheet, animated: true)
+    XCTAssertTrue(browser.isFading, "閉状態から動きつきで開くとフェードが始まる")
+    XCTAssertFalse(browser.sheetView.isHidden)
     pumpMain(until: { !browser.isFading }, timeout: 2, "フェードが終わる")
-    XCTAssertFalse(browser.isHidden)
+    XCTAssertFalse(browser.sheetView.isHidden)
     XCTAssertEqual(browser.sheetView.alphaValue, 1)
+
+    browser.setMode(.closed, animated: false)
+    XCTAssertTrue(browser.sheetView.isHidden)
+    browser.setMode(.full, animated: true)
+    XCTAssertTrue(browser.isFading, "閉状態から全面へ開くときもフェードが始まる")
+    pumpMain(until: { !browser.isFading }, timeout: 2, "全面フェードが終わる")
+    XCTAssertFalse(browser.sheetView.isHidden)
+    XCTAssertEqual(browser.sheetView.alphaValue, 1)
+
+    browser.setMode(.closed, animated: false)
+    stage.isHidden = true
+    browser.setMode(.sheet, animated: true)
+    XCTAssertFalse(browser.isFading, "祖先が隠れているときはフェードしない")
+    XCTAssertFalse(browser.sheetView.isHidden)
+    stage.isHidden = false
   }
 }

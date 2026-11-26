@@ -104,7 +104,7 @@ extension BrowserLayerView {
   }
 
   func applyPresentation() {
-    isHidden = mode == .closed && fade == nil
+    sheetView.isHidden = mode == .closed && fade == nil
     sheetView.alphaValue = (mode == .closed || (mode == .sheet && isPeeking)) ? 0 : 1
     belowBar.alphaValue = (mode == .full && isPeeking) ? 0 : 1
     let showSheetChrome = mode == .sheet && !isPeeking
