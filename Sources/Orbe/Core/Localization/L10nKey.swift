@@ -613,6 +613,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrTitle
   case editorPrRefresh
   case editorPrOpenOnGitHub
+  case editorPrBarChip
   case editorPrInSync
   case editorPrUnpushed
   case editorPrUnfetched

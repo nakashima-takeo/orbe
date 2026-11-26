@@ -144,7 +144,7 @@ final class EditorPaneView: NSView {
     barHost = EditorBarHost(
       rootView: EditorBarRoot(
         shell: shell, sidebar: sidebar, itemList: itemList, scm: scm,
-        pullRequest: pullRequest.pullRequest,
+        pullRequest: pullRequest.pullRequest, pullRequestPanel: pullRequest,
         localization: localization, fontResolver: fontResolver))
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
@@ -215,7 +215,7 @@ final class EditorPaneView: NSView {
   private func installRoots() {
     barHost.rootView = EditorBarRoot(
       shell: shell, sidebar: sidebar, itemList: itemList, scm: scm,
-      pullRequest: pullRequest.pullRequest,
+      pullRequest: pullRequest.pullRequest, pullRequestPanel: pullRequest,
       localization: localization, fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,

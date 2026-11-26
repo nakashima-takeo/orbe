@@ -19,6 +19,7 @@ extension L10n {
     .editorPrTitle: ("プルリクエスト", "Pull Request"),
     .editorPrRefresh: ("再読込", "Refresh"),
     .editorPrOpenOnGitHub: ("GitHub で開く", "Open on GitHub"),
+    .editorPrBarChip: ("プルリクエスト #%lld、%@ → %@", "Pull request #%lld, %@ → %@"),
     .editorPrInSync: ("この worktree でチェックアウト済み", "Checked out in this worktree"),
     .editorPrUnpushed: ("未 push のコミットが %lld 件あります", "Unpushed commits: %lld"),
     .editorPrUnfetched: ("PR に未取得のコミットが %lld 件あります", "Commits in the PR not fetched: %lld"),

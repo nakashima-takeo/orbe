@@ -23,6 +23,8 @@ extension Theme.Layout {
   static let editorPrViewToggle: CGFloat = 18
   static let editorPrBand: CGFloat = 24
   static let editorPrDescriptionLines = 3
+  /// 上のバーの PR の札の、ブランチ名の間の → の大きさ。
+  static let editorPrBarChipArrow: CGFloat = 12
 }
 
 /// PR のコメント（スレッド・コメント追加の印・パネル下端のレビュー区画）。半透明の面はエディター共通の換算

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 左の列: PR のパネル。上から、パネルヘッダー（再読込・GitHub で開く）→ 答えに応じた中身。PR があれば頭
+/// 左の列: PR のパネル。上から、パネルヘッダー（題）→ 答えに応じた中身。PR があれば頭
 /// （PR の印・題・番号・作者 · `head → base`・手元とのずれの帯）と失敗の文と列（説明・コミット・変更ファイル。AppKit）と
 /// 下端のレビューの送信の区画。PR が無い・表示できない・中身の最初の読みが失敗したときは短い一言だけ（見出しと理由、作成と
 /// 再読込のボタンは本体が出す）。根が変わると面はパネルと列を組で作り直すので、中身はパネルで同一視する。
@@ -14,15 +14,7 @@ struct PrPanelView: View {
 
   var body: some View {
     EditorSidebarPanel {
-      EditorPanelHeader(title: l10n.string(.editorPrTitle)) {
-        EditorIconButton(
-          glyph: EditorGlyphs.refresh, help: l10n.string(.editorPrRefresh), action: panel.refresh)
-        if panel.state?.content != nil {
-          EditorIconButton(
-            glyph: EditorGlyphs.openFile, help: l10n.string(.editorPrOpenOnGitHub),
-            action: panel.openOnGitHub)
-        }
-      }
+      EditorPanelHeader(title: l10n.string(.editorPrTitle)) { EmptyView() }
       content
     }
     .id(ObjectIdentifier(panel))
