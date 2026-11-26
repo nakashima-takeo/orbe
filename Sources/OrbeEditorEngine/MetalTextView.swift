@@ -107,6 +107,7 @@ final class MetalTextView: TextSurfaceInputView {
     if Self.submitKeys.contains(chord), let surface, let site = surface.primarySite,
       let field = site.field
     {
+      surface.userDidInput()
       guard !event.isARepeat else { return true }
       surface.input(keystroke: event.timestamp) {
         site.editor.finishComposition(.commit)
@@ -117,6 +118,7 @@ final class MetalTextView: TextSurfaceInputView {
     guard let selector = Self.multiCursorKeys[chord] else {
       return super.performKeyEquivalent(with: event)
     }
+    surface?.userDidInput()
     surface?.input(keystroke: event.timestamp) { _ = perform(selector, with: nil) }
     return true
   }

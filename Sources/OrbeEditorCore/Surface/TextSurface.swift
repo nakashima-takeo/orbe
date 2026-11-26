@@ -176,7 +176,9 @@ public protocol TextSurfaceDelegate: AnyObject {
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   /// `viewport` が変わった（スクロール・窓の高さ）。
   func surfaceDidChangeViewport(_ surface: any TextSurface)
-  /// 利用者が面を操作した（スクロール・押下・打鍵）。載せる側が頼んだ移動（区間を見せる・位置を置く）は含まない。
+  /// 利用者が面を操作した（スクロール・押下・打鍵）。数えるのは、面の view が受けたスクロールホイール・押下・`keyDown` と、
+  /// key equivalent の段で面が自分で処理する打鍵（入力欄の ⌘↵・複数カーソルのキー。キーリピートも）。面が処理せずに流す
+  /// キー（アプリのショートカット）と、載せる側が頼んだ移動（区間を見せる・位置を置く）は含まない。
   func surfaceDidReceiveUserInput(_ surface: any TextSurface)
   /// 選択が変わった——どれかのカーソルの選択か、続いている ⌘D の問いが変わった。
   func surfaceDidChangeSelection(_ surface: any TextSurface)
