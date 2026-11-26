@@ -34,27 +34,12 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     flush(window)
   }
 
-  /// 窓座標（原点は左下）の 1 点を実 NSEvent のマウスでクリックする。マウスは並んだ窓にしか届かないので、窓は
-  /// `placeOffscreen` で並べておく。離す方のイベントは先にキューへ入れておく——入力欄のテキストビューが押下を受けると、
-  /// 離すイベントがキューに来るまで待つマウスの追跡ループに入り、離すイベントを後から送ると、押下を送った `sendEvent` が
-  /// 戻ってこない。
-  func click(_ point: NSPoint, in window: NSWindow) {
-    guard window.isVisible else {
-      return XCTFail("マウスは並んだ窓にしか届かない。先に placeOffscreen で並べる")
-    }
-    let make = { (type: NSEvent.EventType) in
-      NSEvent.mouseEvent(
-        with: type, location: point, modifierFlags: [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
-    }
-    NSApp.postEvent(make(.leftMouseUp), atStart: false)
-    NSApp.sendEvent(make(.leftMouseDown))
-    if let pending = NSApp.nextEvent(
-      matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
-    {
-      NSApp.sendEvent(pending)
-    }
+  /// 窓座標（原点は左下）の 1 点を押して離し（→ `deliverClick`）、その後の SwiftUI の更新を走らせる（→ `flush`）。窓は
+  /// `placeOffscreen` で並べておく。
+  func click(
+    _ point: NSPoint, in window: NSWindow, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    deliverClick(at: point, in: window, file: file, line: line)
     flush(window)
   }
 

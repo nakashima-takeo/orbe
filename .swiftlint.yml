@@ -95,6 +95,27 @@ custom_rules:
     message: "通常のテストは窓を並べず、アプリを前面にしない（キーの配送は deliverKeyDown。マウスの配送が要るテストだけ、placeOffscreen で画面外へ並べる）"
     severity: error
 
+  test_mouse_delivery:
+    name: "テストはアプリの配送の口（NSApp.sendEvent）を直に呼ばない"
+    included: ".*/Tests/.*\\.swift"
+    excluded:
+      - ".*/Tests/OrbeTests/WindowMouseDelivery\\.swift"
+      # 押下だけ・ドラッグを、押下の配送が戻ることが分かっている相手（追跡ループに入らない部品）へ送るファイル、マウス以外の
+      # イベントを送るファイル、キューから取ったイベントをそのまま配るファイル。
+      - ".*/Tests/OrbeTests/RowListTests\\+Guard\\.swift"
+      - ".*/Tests/OrbeTests/SourceControlPaneTests\\+Anchor\\.swift"
+      - ".*/Tests/OrbeTests/SidebarScrollbarTests\\.swift"
+      - ".*/Tests/OrbeTests/OptionHoldMonitorTests\\.swift"
+      - ".*/Tests/OrbeTests/OptionHoldDriver\\.swift"
+      - ".*/Tests/OrbeTests/EditorPerfTestSupport\\.swift"
+    # 押下で追跡ループに入る部品（入力欄、選べる文字）は、離すイベントがキューに来るまで押下の `sendEvent` から戻らない。
+    # 止まるかどうかは押す相手で決まり、呼び出しの綴りからは読めないので、アプリの配送の口そのものを見る。
+    # `\s*` は swift format の折返しを許すため。
+    regex: "\\bNSApp\\s*\\.\\s*sendEvent\\b|\\bNSApplication\\s*\\.\\s*shared\\s*\\.\\s*sendEvent\\b"
+    match_kinds: [identifier]
+    message: "テストから NSApp.sendEvent を直に呼ばない。マウスの押して離すは deliverClick（Tests/OrbeTests/WindowMouseDelivery.swift）で届ける。押下だけ・ドラッグを、押下の配送が戻ることが分かっている相手へ送るファイル、マウス以外のイベントを送るファイル、キューから取ったイベントをそのまま配るファイルは、.swiftlint.yml の excluded に足す"
+    severity: error
+
   test_screen_isolation_exemption:
     name: "画面と前面の隔離から外れるのは、画面に出す道具だけ"
     included: ".*/Tests/.*\\.swift"

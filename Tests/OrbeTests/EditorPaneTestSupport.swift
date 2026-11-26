@@ -158,29 +158,26 @@ extension OrbeTestCase {
         height: geometry.sliderLength), to: nil)
   }
 
-  /// 面の座標の点を押して離す（窓は `placeOffscreen` で並べておくこと——`sendEvent` は並んでいない窓に配送しない）。
-  /// アプリの配送の口（`NSApp.sendEvent`）から送るので、ローカルのイベントの監視も本物と同じく見る。`count` は何回目の
+  /// 面の座標の点を押して離す（→ `deliverClick`。窓は `placeOffscreen` で並べておくこと）。`count` は何回目の
   /// 押下か（2 ならダブルクリックの 2 回目）。
   @MainActor
-  func click(_ pane: EditorPaneView, at point: NSPoint, count: Int = 1) throws {
-    let window = try XCTUnwrap(pane.window)
-    guard window.isVisible else {
-      return XCTFail("マウスは並んだ窓にしか届かない。先に placeOffscreen で並べる")
-    }
-    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-      NSApp.sendEvent(
-        timedMouse(type, at: pane.convert(point, to: nil), in: window, clickCount: count))
-    }
+  func click(
+    _ pane: EditorPaneView, at point: NSPoint, count: Int = 1,
+    file: StaticString = #filePath, line: UInt = #line
+  ) throws {
+    let window = try XCTUnwrap(pane.window, file: file, line: line)
+    deliverClick(
+      at: pane.convert(point, to: nil), in: window, clickCount: count, file: file, line: line)
   }
 
   /// 今の時刻を持つマウスのイベント（SwiftUI のジェスチャーとホバーは時刻 0 のイベントを取りこぼす）。
   private func timedMouse(
-    _ type: NSEvent.EventType, at location: NSPoint, in window: NSWindow?, clickCount: Int = 1
+    _ type: NSEvent.EventType, at location: NSPoint, in window: NSWindow?
   ) -> NSEvent {
     NSEvent.mouseEvent(
       with: type, location: location, modifierFlags: [],
       timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0,
-      context: nil, eventNumber: 0, clickCount: clickCount, pressure: 1)!
+      context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
   }
 
   /// 配下の最初の NSScrollView（SwiftUI の ScrollView の裏）。

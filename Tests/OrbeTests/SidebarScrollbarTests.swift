@@ -295,8 +295,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
     let point = NSPoint(x: thumb.midX, y: thumb.midY)
     hover(tree, point)
     move(tree, to: 100)
-    NSApp.sendEvent(tree.mouse(.leftMouseDown, point))
-    NSApp.sendEvent(tree.mouse(.leftMouseUp, point))
+    deliverClick(at: point, in: tree.window)
     XCTAssertNil(tree.pane.tree.selected, "つまみ")
   }
 
@@ -308,8 +307,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
     let band = NSPoint(x: thumb.midX, y: thumb.minY - Theme.Layout.editorRow)
     hover(tree, band)
     move(tree, to: position)
-    NSApp.sendEvent(tree.mouse(.leftMouseDown, band))
-    NSApp.sendEvent(tree.mouse(.leftMouseUp, band))
+    deliverClick(at: band, in: tree.window)
     let bandY = tree.scroll.convert(band, from: nil).y
     let row = tree.pane.tree.rows[Int((position + bandY) / Theme.Layout.editorRow)]
     XCTAssertEqual(
