@@ -49,6 +49,8 @@ final class MessageTextView: NSTextView {
   private let textLineHeight: CGFloat
   /// 1 行のときに欄の高さが `metrics.height` になる上下の余白。
   private let verticalInset: CGFloat
+  /// 欄の文の属性（字体・段落・色）。
+  private let attributes: [NSAttributedString.Key: Any]
   /// 行の高さを決めた欄の行の組み方（2 つの組みの両方に当てる。組みは持ち主を弱く持つので、ここで持つ）。
   private let lineLayout: MessageLineLayout?
 
@@ -73,7 +75,9 @@ final class MessageTextView: NSTextView {
     let natural = layout.defaultLineHeight(for: metrics.font)
     textLineHeight = metrics.lineHeight ?? natural
     verticalInset = (metrics.height - textLineHeight) / 2
-    var attributes: [NSAttributedString.Key: Any] = [.font: metrics.font]
+    var attributes: [NSAttributedString.Key: Any] = [
+      .font: metrics.font, .foregroundColor: Theme.Color.textPrimary,
+    ]
     if let lineHeight = metrics.lineHeight {
       // 字の無い行（空の欄・末尾の改行の後）の高さは段落の行の高さで決まる。字の在る行は組み方が決める。
       let paragraph = NSMutableParagraphStyle()
@@ -87,6 +91,7 @@ final class MessageTextView: NSTextView {
     } else {
       lineLayout = nil
     }
+    self.attributes = attributes
     super.init(frame: .zero, textContainer: container)
     font = metrics.font
     textColor = Theme.Color.textPrimary
@@ -103,7 +108,7 @@ final class MessageTextView: NSTextView {
     maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
     textContainerInset = NSSize(width: 0, height: verticalInset)
     defaultParagraphStyle = attributes[.paragraphStyle] as? NSParagraphStyle
-    typingAttributes = attributes.merging([.foregroundColor: Theme.Color.textPrimary]) { $1 }
+    typingAttributes = attributes
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
@@ -186,6 +191,17 @@ final class MessageTextView: NSTextView {
       return
     }
     super.insertNewline(sender)
+  }
+
+  /// 欄の文字列の全体。置き換えた文字列は欄の属性（`attributes`）をとる（テキスト面の既定では、置き換えた文字列は前の文字列の
+  /// 先頭の文字の属性を引き継ぐ。前の文字列が代わりの字体で組まれていると、その字体が残り、高さの問いと表示とで末尾の改行の
+  /// 後の行の高さが食い違う）。
+  override var string: String {
+    get { super.string }
+    set {
+      super.string = newValue
+      storage.setAttributes(attributes, range: NSRange(location: 0, length: storage.length))
+    }
   }
 
   /// キーの命令。esc の命令（`cancelOperation:`）は、変換中でなく `onEscape` があれば、それを求める。ほかは、テキスト面の
