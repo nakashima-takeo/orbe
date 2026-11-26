@@ -16,14 +16,14 @@ final class SurfaceWrapTests: EngineTestCase {
     (0..<40).map { "word\($0)" }.joined(separator: " ") + "\nshort\n"
   }
 
-  private func opened(_ text: String? = nil) throws -> Opened {
+  func opened(_ text: String? = nil) throws -> Opened {
     let opened = try open(text ?? sample, name: "a.txt", size: size)
     _ = host(opened, size: size)
     _ = opened.surface.snapshot()
     return opened
   }
 
-  private func wrap(_ opened: Opened, line: Int = 0) throws -> WrappedLine {
+  func wrap(_ opened: Opened, line: Int = 0) throws -> WrappedLine {
     try XCTUnwrap(opened.surface.rows.wrap(ofLine: line), "前提: 行 \(line) は折り返す")
   }
 
