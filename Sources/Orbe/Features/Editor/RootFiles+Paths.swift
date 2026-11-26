@@ -73,13 +73,14 @@ private struct PathCollector {
     if !DefaultExcludes.contains(path) { paths.append(path) }
   }
 
-  /// git の作業ツリーの根 `directory` を git に問い合わせる。skip-worktree のファイルは、ディスクに在るものだけを足す。どちらかの
-  /// git が失敗したら何も足さずに false。
+  /// git の作業ツリーの根 `directory` を git に問い合わせる。入れ子の根では `GitFileList.nestedOptions` を足す。skip-worktree
+  /// のファイルは、ディスクに在るものだけを足す。どちらかの git が失敗したら何も足さずに false。
   private mutating func askGit(_ directory: String) -> Bool {
     let cwd = absolute(directory)
-    let listed = runner.runSync(GitFileList.listedArguments, cwd: cwd)
+    let options = directory.isEmpty ? [] : GitFileList.nestedOptions
+    let listed = runner.runSync(options + GitFileList.listedArguments, cwd: cwd)
     guard listed.ending == .completed, listed.isSuccess else { return false }
-    let ignored = runner.runSync(GitFileList.ignoredArguments, cwd: cwd)
+    let ignored = runner.runSync(options + GitFileList.ignoredArguments, cwd: cwd)
     guard ignored.ending == .completed, ignored.isSuccess else { return false }
     let read = GitFileList.parseListed(listed.stdout)
     let present = read.skipped.filter { isFile(join(directory, $0)) }

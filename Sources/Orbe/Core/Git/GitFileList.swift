@@ -13,6 +13,11 @@ enum GitFileList {
     "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory",
   ]
 
+  /// 入れ子の根（サブモジュール・入れ子のリポジトリ）で、2 回のコマンドの前に足す引数。そのリポジトリの設定の
+  /// `core.fsmonitor` が指すコマンドを起こさない——利用者が開いていないリポジトリの設定が、一覧を取るだけで走らせるコマンドを
+  /// 決めないため。この 2 回のコマンドが設定から起こすコマンドは、これだけ（filter・hook・pager は起こさない）。
+  static let nestedOptions = ["-c", "core.fsmonitor=false"]
+
   /// (a) の解析結果。
   struct Listed: Equatable {
     /// 対象のファイル（追跡しているもののうち削除されていないものと、未追跡のもの。同じパスは 1 つ）。
