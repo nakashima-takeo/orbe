@@ -1,13 +1,30 @@
 import SwiftUI
 
-enum BrowserToolbarRole {
+private enum BrowserToolbarRole {
   case fixed
   case url
   case peekPill
 }
 
-struct BrowserToolbarRoleKey: LayoutValueKey {
+private struct BrowserToolbarRoleKey: LayoutValueKey {
   static let defaultValue: BrowserToolbarRole = .fixed
+}
+
+extension View {
+  /// ツールバーの URL 欄スロットとして登録する。
+  func browserToolbarURL() -> some View {
+    layoutValue(key: BrowserToolbarRoleKey.self, value: .url)
+  }
+
+  /// ツールバーの全面めくり案内ピルとして登録する。狭幅で幅 0 を提案された際に 0×0 へ畳む契約を内包する。
+  func browserToolbarPeekPill() -> some View {
+    frame(
+      minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
+      alignment: .leading
+    )
+    .clipped()
+    .layoutValue(key: BrowserToolbarRoleKey.self, value: .peekPill)
+  }
 }
 
 /// 戻る・進む・再読込・全面切替の 4 ボタンを左詰めで優先確保し、残余幅へ URL 欄を配る 1 パス配置。

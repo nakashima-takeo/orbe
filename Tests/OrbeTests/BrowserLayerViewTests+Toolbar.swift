@@ -132,9 +132,9 @@ extension BrowserLayerViewTests {
     ultraHosted.browser.setMode(.full, animated: false)
     let barRect120 = try measureEditingURLField(in: ultraHosted, width: 120)
     let leftThreeEnd = leading + button * 3 + gap * 3
-    let urlPadDiff = Theme.Layout.browserURLPadLeading - Theme.Layout.browserURLPadTrailing
-    XCTAssertGreaterThanOrEqual(
-      barRect120.minX, leftThreeEnd - urlPadDiff, "実 BrowserBarRoot の 120pt で左詰めを保つ")
+    XCTAssertEqual(
+      barRect120.midX, leftThreeEnd + Theme.Layout.browserURLPadLeading, accuracy: 0.5,
+      "実 BrowserBarRoot の 120pt で左詰めを保つ")
 
     // 3. 全面めくり: 広幅（600pt）ではピル表示＋URL >= 120pt、狭幅（280pt）ではピル 0×0＋4 ボタン健全。
     let wide = measureToolbarLayout(width: 600, showsPeekPill: true)
@@ -189,17 +189,12 @@ extension BrowserLayerViewTests {
       ToolbarLayoutProbe(id: "url", store: store)
         .frame(minWidth: 0, maxWidth: .infinity)
         .frame(height: Theme.Layout.browserURLHeight)
-        .layoutValue(key: BrowserToolbarRoleKey.self, value: .url)
+        .browserToolbarURL()
       if showsPeekPill {
         Color.clear
           .frame(width: 96, height: 20)
-          .frame(
-            minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
-            alignment: .leading
-          )
-          .clipped()
+          .browserToolbarPeekPill()
           .overlay { ToolbarLayoutProbe(id: "pill", store: store) }
-          .layoutValue(key: BrowserToolbarRoleKey.self, value: .peekPill)
       }
       ToolbarLayoutProbe(id: "toggle", store: store).frame(width: btn, height: btn)
     }

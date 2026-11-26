@@ -52,15 +52,10 @@ struct BrowserBarRoot: View {
         action: model.onReloadOrStop
       )
       BrowserURLBar(model: model, localization: localization)
-        .layoutValue(key: BrowserToolbarRoleKey.self, value: .url)
+        .browserToolbarURL()
       if model.mode == .full && model.isPeeking {
         BrowserFullPeekPill(underlay: model.peekUnderlay, localization: localization)
-          .frame(
-            minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
-            alignment: .leading
-          )
-          .clipped()
-          .layoutValue(key: BrowserToolbarRoleKey.self, value: .peekPill)
+          .browserToolbarPeekPill()
       }
       BrowserIconButton(
         glyph: BrowserGlyphs.sheetToggle,
@@ -155,7 +150,7 @@ private struct BrowserURLBar: View {
     }
     .padding(.leading, Theme.Layout.browserURLPadLeading)
     .padding(.trailing, Theme.Layout.browserURLPadTrailing)
-    .frame(minWidth: 0, maxWidth: .infinity)
+    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
     .frame(height: Theme.Layout.browserURLHeight)
     .background(
       RoundedRectangle(cornerRadius: Theme.Layout.browserURLRadius)
