@@ -71,7 +71,6 @@ struct EditorCurrentFileLabel: View {
       .font(Font.theme.editorItemButtonName)
       .italic(file.isPreview)
       .foregroundStyle(Color.theme.textPrimary)
-      .truncationMode(.middle)
   }
 
   @ViewBuilder private var dot: some View {
@@ -79,9 +78,10 @@ struct EditorCurrentFileLabel: View {
   }
 }
 
-/// 幅が無ければ省略して縮む 1 行の名前。先頭の `prefixLength` 字（既定は 1 字）と「…」の幅（読める下限）より狭くならない
-/// ——下限は、同じ描き方の見本（先頭の字と「…」）を見えない形で置いて測る（`TruncatingSlot` と同じ測り方）。下限より狭い幅を
-/// 渡されても下限の幅を取り、はみ出した分は、置いた側の枠で切れる。
+/// 幅が無ければ縮む 1 行の名前。幅が在る間は中ほどを省き（先頭と末尾が残る）、先頭の `prefixLength` 字（既定は 1 字）と
+/// 末尾の同じ字数と「…」が入らない幅では、先頭の `prefixLength` 字と「…」（読める下限）にする。下限より狭い幅を渡されても
+/// 下限の幅を取り、はみ出した分は、置いた側の枠で切れる。名前がほとんど縮まない長さ（`prefixLength` ＋ 1 字以下）なら、
+/// 下限は名前の全体。どこを省くかはこの部品が決めるので、`render` は字体と色だけを付ける（省略の向きを付けない）。
 struct EditorReadableName<Content: View>: View {
   let text: String
   let prefixLength: Int
@@ -96,36 +96,41 @@ struct EditorReadableName<Content: View>: View {
   }
 
   var body: some View {
-    EditorReadableNameLayout {
-      render(text).lineLimit(1)
-      render(String(text.prefix(prefixLength)) + "…").lineLimit(1).fixedSize().hidden()
+    ViewThatFits(in: .horizontal) {
+      EditorMiddleTruncation {
+        render(text).lineLimit(1).truncationMode(.middle)
+        render(String(text.prefix(prefixLength)) + "…" + String(text.suffix(prefixLength)))
+          .lineLimit(1).fixedSize().hidden()
+      }
+      render(floor).lineLimit(1).fixedSize()
     }
+  }
+
+  /// 読める下限の姿（先頭の字と「…」。名前がほとんど縮まない長さなら、名前の全体）。
+  private var floor: String {
+    text.count > prefixLength + 1 ? String(text.prefix(prefixLength)) + "…" : text
   }
 }
 
-/// 子 [本体, 見本]。幅は、本体が渡された幅で使う幅と、読める下限（本体の全幅と見本の幅の小さいほう）の大きいほう。
-private struct EditorReadableNameLayout: Layout {
+/// 子 [本体, 見本]。中ほどを省く本体が、先頭と末尾の字を残せる幅（見本の幅。本体の全幅が狭ければ全幅）を、自分の本来の
+/// 幅として名乗る（`ViewThatFits` が、それより狭い幅では下限の姿へ替える）。幅を渡されたら、本体がその幅で使う幅を取る。
+private struct EditorMiddleTruncation: Layout {
   func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     guard let content = subviews.first else { return .zero }
-    let fits = content.sizeThatFits(proposal)
-    return CGSize(width: max(fits.width, floor(subviews)), height: fits.height)
+    guard proposal.width == nil, subviews.count == 2 else { return content.sizeThatFits(proposal) }
+    let full = content.sizeThatFits(proposal)
+    return CGSize(
+      width: min(full.width, subviews[1].sizeThatFits(.unspecified).width), height: full.height)
   }
 
   func placeSubviews(
     in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
   ) {
-    let width = max(proposal.width ?? bounds.width, floor(subviews))
     for subview in subviews {
       subview.place(
         at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading,
-        proposal: ProposedViewSize(width: width, height: bounds.height))
+        proposal: ProposedViewSize(width: proposal.width ?? bounds.width, height: bounds.height))
     }
-  }
-
-  private func floor(_ subviews: Subviews) -> CGFloat {
-    guard subviews.count == 2 else { return 0 }
-    return min(
-      subviews[0].sizeThatFits(.unspecified).width, subviews[1].sizeThatFits(.unspecified).width)
   }
 }
 
@@ -172,7 +177,6 @@ struct EditorCurrentDiffLabel: View {
         Text(name)
           .font(Font.theme.editorItemButtonName)
           .foregroundStyle(Color.theme.textPrimary)
-          .truncationMode(.middle)
       }
     }
   }

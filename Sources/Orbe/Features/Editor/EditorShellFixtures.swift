@@ -270,7 +270,7 @@
           EditorGlyphView(glyph: EditorGlyphs.branch, size: 12, color: Color.theme.textPrimary)
           EditorReadableName(
             "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix
-          ) { Text($0).truncationMode(.middle) }
+          ) { Text($0) }
           EditorGlyphView(
             glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.textMuted)
         })
@@ -305,7 +305,7 @@
             .fixedSize()
             EditorReadableName(
               "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix
-            ) { Text($0).truncationMode(.middle) }
+            ) { Text($0) }
           }
           EditorGlyphView(
             glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.textMuted)
