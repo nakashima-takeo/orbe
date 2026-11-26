@@ -30,6 +30,12 @@ extension WindowController {
   /// 最上層のブラウザをめくっているか。
   var browserPeeking: Bool { optionHold.isHolding && peekTarget == .browser }
 
+  /// 全面ブラウザが非めくりで下層全面を覆っているか。
+  var browserCoversUnderlay: Bool { browserMode == .full && !browserPeeking }
+
+  /// ブラウザが非めくりでボードを覆っているか（右シートでも詳細欄が覆われるため非めくり時は常に真）。
+  var browserCoversBoard: Bool { browserMode.isOpen && !browserPeeking }
+
   /// 全面ブラウザの Peek ピルへ示す直下の層。
   var browserPeekUnderlay: BrowserPeekUnderlay {
     switch presentation {
@@ -78,7 +84,7 @@ extension WindowController {
   /// 覆っている間は nil。done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
   var visibleTab: TerminalTab? {
     guard window.isKeyWindow else { return nil }
-    if browserMode == .full, !browserPeeking { return nil }
+    if browserCoversUnderlay { return nil }
     switch presentation {
     case .terminal(let tab), .peek(let tab): return tab
     case .editor, .board, .empty: return nil

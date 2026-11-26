@@ -34,8 +34,6 @@ import SwiftUI
   let statusModel: StatusRowModel
   /// 端末・エディター・ボードの器（`reconcileContent()` 専有）。
   let content: NSView
-  /// ウィンドウ最上層（Z=2）のブラウザ層。nil のときは `content` のみ配置する（テスト等）。
-  let browser: NSView?
   /// `content`（Z=0/Z=1）と `browser`（Z=2）を兄弟配置する単一 AppKit ステージ。
   let stage: NSView
   /// アクティブ workspace の選択が空（タブが 0 でボードも無い）か。true のとき content の地は端末もボードも塗らないため、
@@ -66,7 +64,6 @@ import SwiftUI
   init(statusModel: StatusRowModel, content: NSView, browser: NSView? = nil) {
     self.statusModel = statusModel
     self.content = content
-    self.browser = browser
     self.stage = AppStageView(content: content, browser: browser)
   }
 

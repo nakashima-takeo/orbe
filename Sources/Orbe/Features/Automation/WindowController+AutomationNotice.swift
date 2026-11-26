@@ -97,11 +97,11 @@ extension WindowController {
     showAutomation(id)
   }
 
-  /// その自動化を見ている——窓がキーで、パレットが無く、Home のボードでその自動化の行を選んでいる。一覧に行が見えているだけ
-  /// では入れない（選んでいるときだけ、詳細に回の結果がその場で現れる）。
+  /// その自動化を見ている——窓がキーで、パレットが無く、ブラウザが非めくりでボードを覆っておらず、Home のボードで
+  /// その自動化の行を選んでいる。一覧に行が見えているだけでは入れない（選んでいるときだけ、詳細に回の結果がその場で現れる）。
   func isViewingAutomation(_ id: Int) -> Bool {
-    guard window.isKeyWindow, model.overlay == .none, store.isHome(activeWorkspace),
-      current.selection == .board
+    guard window.isKeyWindow, model.overlay == .none, !browserCoversBoard,
+      store.isHome(activeWorkspace), current.selection == .board
     else { return false }
     return board.selects(automation: id)
   }

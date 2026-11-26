@@ -96,7 +96,7 @@ extension WindowController {
   /// dismiss・workspace の切替・`focus_tab` が共有する。
   func focusSelection() {
     if browserMode == .full || (browserMode == .sheet && browserWasFocused) {
-      browserView.focusBrowser()
+      if !browserView.focusIsInside { browserView.focusBrowser() }
       return
     }
     switch presentation {
