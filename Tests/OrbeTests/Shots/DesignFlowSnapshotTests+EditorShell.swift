@@ -186,7 +186,7 @@ extension DesignFlowSnapshotTests {
               "fix: 置き場の仮の中身", replacementRange: NSRange(location: NSNotFound, length: 0))
           }
         ),
-        ("escape", { owner.field.cancelOperation(nil) }),
+        ("escape", { owner.field.keyDown(with: .key("\u{1b}", [])) }),
         ("reopen", { pane.popup.toggle(owner) }),
         ("item_list", { _ = pane.performKeyEquivalent(with: .key("p")) }),
         ("item_list_closed", { self.listKey(pane, "\u{1b}") }),
