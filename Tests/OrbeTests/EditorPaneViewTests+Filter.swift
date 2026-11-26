@@ -9,7 +9,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。新規ファイルの入力の途中で欄を押すと、入力が残る・焦点が本文へ奪われて打鍵が本文に入る。欄から新規
 /// ファイルを押しても、入力行が出ない・打鍵が欄に入る。左の列を閉じた後も焦点が見えない欄に残り、打鍵と ⌘S が届かない。
-/// 絞り込んだまま足したファイルが、絞り込みを打ち直すまで出ない。
+/// 絞り込んだまま足したファイルが、絞り込みを打ち直すまで出ない。日本語で絞り込む途中の esc で、変換を取り消すつもりが字ごと消える。
 @MainActor
 final class EditorPaneViewFilterTests: OrbeTestCase {
   private struct Hosted {
@@ -91,14 +91,24 @@ final class EditorPaneViewFilterTests: OrbeTestCase {
     XCTAssertEqual(hosted.tree.filter.text, "")
   }
 
-  /// 欄の esc は、字があれば字を消し（絞り込みが解け、焦点は欄のまま）、空なら本文へ焦点を移す。
+  /// 欄の esc は、字があれば字を消し（絞り込みが解け、焦点は欄のまま）、空なら本文へ焦点を移す。変換中の esc では、欄は
+  /// 絞り込みの字を消さず、変換中の字にも触れない（変換の取り消しは IME が行う）。
   func testEscapeInTheFieldClearsTheTextAndThenMovesTheFocusToTheBody() throws {
     let hosted = try host()
     placeOffscreen(hosted.window)
     try pressField(hosted)
-    try inputField(hosted.pane, in: hosted.window)
-      .insertText("read", replacementRange: NSRange(location: 0, length: 0))
+    let field = try inputField(hosted.pane, in: hosted.window)
+    field.insertText("read", replacementRange: NSRange(location: 0, length: 0))
 
+    // 欄に変換中の字を置く（IME の打鍵と同じ口）。
+    let end = NSRange(location: field.string.utf16.count, length: 0)
+    field.setMarkedText("か", selectedRange: NSRange(location: 1, length: 0), replacementRange: end)
+    deliverKeyDown(escape(in: hosted.window), to: hosted.window)
+    XCTAssertEqual(hosted.tree.filter.text, "read", "変換中の esc では絞り込みの字は消えない")
+    XCTAssertTrue(field.hasMarkedText(), "欄は変換中の字に触れない")
+    field.setMarkedText("", selectedRange: NSRange(location: 0, length: 0), replacementRange: end)
+
+    // 変換中の esc の確かめと対にするため、字が消えることも、esc を送った直後に確かめる（消えるのを待たない）。
     deliverKeyDown(escape(in: hosted.window), to: hosted.window)
     XCTAssertEqual(hosted.tree.filter.text, "", "字を消す")
     flush(hosted.window)
