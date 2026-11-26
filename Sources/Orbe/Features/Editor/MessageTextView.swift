@@ -49,8 +49,10 @@ final class MessageTextView: NSTextView {
   private let textLineHeight: CGFloat
   /// 1 行のときに欄の高さが `metrics.height` になる上下の余白。
   private let verticalInset: CGFloat
-  /// 字の属性（字体・色と、行の高さを決めていれば、その行の高さと字の上下の位置）。
+  /// 字の属性（字体と、行の高さを決めていれば、その行の高さ）。
   private let textAttributes: [NSAttributedString.Key: Any]
+  /// 行の高さを決めた欄の行の組み方（2 つの組みの両方に当てる。組みは持ち主を弱く持つので、ここで持つ）。
+  private let lineLayout: MessageLineLayout?
 
   /// 寸法 `metrics` の欄。
   init(metrics: Metrics) {
@@ -75,12 +77,17 @@ final class MessageTextView: NSTextView {
     verticalInset = (metrics.height - textLineHeight) / 2
     var attributes: [NSAttributedString.Key: Any] = [.font: metrics.font]
     if let lineHeight = metrics.lineHeight {
+      // 字の無い行（空の欄・末尾の改行の後）の高さは段落の行の高さで決まる。字の在る行は組み方が決める。
       let paragraph = NSMutableParagraphStyle()
       paragraph.minimumLineHeight = lineHeight
       paragraph.maximumLineHeight = lineHeight
       attributes[.paragraphStyle] = paragraph
-      // 決めた行の高さの余りは行の上に付くので、字を余りの半分だけ上げて、行の上下の中央に置く。
-      attributes[.baselineOffset] = (lineHeight - natural) / 2
+      let lineLayout = MessageLineLayout(lineHeight: lineHeight, font: metrics.font)
+      layout.delegate = lineLayout
+      measuringLayout.delegate = lineLayout
+      self.lineLayout = lineLayout
+    } else {
+      lineLayout = nil
     }
     textAttributes = attributes
     super.init(frame: .zero, textContainer: container)
@@ -150,13 +157,17 @@ final class MessageTextView: NSTextView {
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
     guard string.isEmpty, !hasMarkedText(), !placeholder.isEmpty else { return }
-    let attributes = textAttributes.merging([.foregroundColor: Theme.Color.editorTertiary]) { $1 }
+    let attributes: [NSAttributedString.Key: Any] = [
+      .font: metrics.font, .foregroundColor: Theme.Color.editorTertiary,
+    ]
     let origin = textContainerOrigin
     let line = NSAttributedString(string: placeholder, attributes: attributes)
+    // 行の高さを決めた欄では、字を行の上下の中央に置く（字の在る行の組み方と同じ位置）。
+    let top = lineLayout.map { $0.baseline - metrics.font.ascender } ?? 0
     line.draw(
       with: NSRect(
-        x: origin.x, y: origin.y, width: max(0, bounds.width - origin.x - metrics.trailing),
-        height: textLineHeight),
+        x: origin.x, y: origin.y + top, width: max(0, bounds.width - origin.x - metrics.trailing),
+        height: textLineHeight - top),
       options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
   }
 
@@ -237,5 +248,32 @@ final class MessageTextView: NSTextView {
   /// 幅の変化は SwiftUI の提案が変わるので、ここでは知らせない。
   private func contentHeightMayHaveChanged() {
     enclosingScrollView?.invalidateIntrinsicContentSize()
+  }
+}
+
+/// 行の高さを決めた欄の行の組み方。字の在るどの行の断片も決めた高さにし、主の字体の字（上端から下端まで）を行の上下の中央に
+/// 置く。段落の行の高さの上限は、代わりの字体の字（タイ文字など）が伸ばす行の高さを止めないので、断片をここで決める。
+private final class MessageLineLayout: NSObject, NSLayoutManagerDelegate {
+  let lineHeight: CGFloat
+  /// 行の上端から baseline までの距離。
+  let baseline: CGFloat
+
+  init(lineHeight: CGFloat, font: NSFont) {
+    self.lineHeight = lineHeight
+    baseline = (lineHeight - (font.ascender - font.descender)) / 2 + font.ascender
+  }
+
+  // swiftlint:disable:next function_parameter_count
+  func layoutManager(
+    _ layoutManager: NSLayoutManager,
+    shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>,
+    lineFragmentUsedRect: UnsafeMutablePointer<NSRect>,
+    baselineOffset: UnsafeMutablePointer<CGFloat>, in textContainer: NSTextContainer,
+    forGlyphRange glyphRange: NSRange
+  ) -> Bool {
+    lineFragmentRect.pointee.size.height = lineHeight
+    lineFragmentUsedRect.pointee.size.height = lineHeight
+    baselineOffset.pointee = baseline
+    return true
   }
 }

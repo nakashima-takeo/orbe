@@ -29,9 +29,7 @@ final class MessageTextViewTests: OrbeTestCase {
     field.string = ["a", "b", "c"].joined(separator: "\n")
     XCTAssertEqual(height(field), 70, accuracy: 0.5, "3 行")
     field.string = Array(repeating: "ปั้ญู", count: 3).joined(separator: "\n")
-    XCTExpectFailure("不具合の疑い: 字の高い行（タイ文字）は、決めた行の高さより 1 行ごとに約 0.8 高い") {
-      XCTAssertEqual(height(field), 70, accuracy: 0.5, "字の高い 3 行")
-    }
+    XCTAssertEqual(height(field), 70, accuracy: 0.5, "字の高い 3 行")
     field.string = Array(repeating: "a", count: 12).joined(separator: "\n")
     XCTAssertEqual(height(field), 210, accuracy: 0.5, "10 行で止まる")
 
