@@ -50,12 +50,15 @@ extension EditorPaneView {
   }
 
   /// 左の列の中身を、今の画面と Files の左の列の中身に合わせる（セッションの変化と、Files の左の列の中身の変化で呼ぶ）。
-  /// 画面が替われば、ポップアップを閉じる。
+  /// 画面が替われば、面の中の確認をキャンセルで閉じ、ポップアップを閉じる。
   func syncPanel() {
     let next = EditorShellModel.Panel(screen: group?.editor.screen ?? .files, files: filesPanel)
     guard next != shell.panel else { return }
     let held = panelHoldingFocus
-    if next.screen != shell.panel.screen { popup.close(.itemGone) }
+    if next.screen != shell.panel.screen {
+      confirm.close(.itemGone)
+      popup.close(.itemGone)
+    }
     shell.panel = next
     sidebarDidChange(held: held)
   }
@@ -128,7 +131,7 @@ extension EditorPaneView {
   }
 
   /// 骨の view を重ねる——下から、バーの地・バーより下（その地・左の列・文字だけの器・見出し・境の当たり・置き場。本体の面は
-  /// 見出しの下に、検索バーは後から一番上に足す）・上のバー。
+  /// 見出しの下に、検索バーは後から一番上に足す）・上のバー・面の中の確認（面いっぱい。出ている間だけ見せる）。
   func assembleViews() {
     for view in [barGround, belowGround, belowBar] {
       view.wantsLayer = true
@@ -150,6 +153,9 @@ extension EditorPaneView {
     dockHost.layer?.isOpaque = false
     dockHost.autoresizingMask = []
     belowBar.addSubview(dockHost)
+    confirmHost.autoresizingMask = []
+    confirmHost.isHidden = true
+    addSubview(confirmHost)
     diffDivider.wantsLayer = true
     diffDivider.autoresizingMask = []
   }
@@ -185,6 +191,7 @@ extension EditorPaneView {
       width: Theme.Layout.editorSidebarHandle, height: below)
     layoutDock()
     layoutItemList()
+    confirmHost.frame = bounds
     // 待ちは本体の面の枠を置き終えた後に通す——文書は見えている範囲が、diff は最初の位置が、枠で決まる。
     prepareBodyIfVisible()
   }

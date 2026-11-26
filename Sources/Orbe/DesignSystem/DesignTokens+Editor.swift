@@ -30,6 +30,8 @@ extension Theme.Color {
   /// 上のバーの画面の切り替えの溝の地と、溝・選んだ項目に落とす影の色（見本の `--sunk`・`--inset`）。
   static let editorBarGroove = editorDynAB(light: (0x3a3151, 0.05), dark: (0x08060c, 0.32))
   static let editorBarInset = editorDynAB(light: (0x3a3151, 0.14), dark: (0x000000, 0.4))
+  /// 面の中の確認の幕（見本の `.veil`）。
+  static let editorConfirmVeil = editorDynAB(light: (0x3a3151, 0.2), dark: (0x000000, 0.42))
   /// 種別チップの色相。チップの文字色と、その α .16 の地に使う。
   static let editorHueOrange = editorDyn(light: 0xbf5f2a, dark: 0xd98a5f)
   static let editorHueBlue = editorDyn(light: 0x3f6fd6, dark: 0x85adff)

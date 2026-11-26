@@ -55,20 +55,21 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertTrue(editor.documents.isEmpty, "diff は開いている文書の列に入らない")
   }
 
-  /// 未追跡だけの破棄は確かめずにゴミ箱へ移し、同じ位置で続けて押せるように次の行を留める。index の版へ戻す破棄は確認の
-  /// シートを出し、「破棄」を押すまで作業ツリーに触らない。
+  /// 未追跡だけの破棄は確かめずにゴミ箱へ移し、同じ位置で続けて押せるように次の行を留める。index の版へ戻す破棄は面の中の
+  /// 確認を出し、「破棄」を押すまで作業ツリーに触らない——↵ では確定せず、esc はキャンセル（破棄しない）。
   func testDiscardingTrackedChangesWaitsForTheConfirmation() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "edited\n")
     try repo.write("n.txt", "new\n")
     let hosted = host(repo)
+    let confirm = hosted.pane.confirm
     pumpMain(until: { hosted.scm.changes.changes.count == 2 }, "変更の行")
     let untracked = repo.dir.appendingPathComponent("n.txt").path
 
     XCTAssertNotNil(
       hosted.scm.press(try row(hosted, .changes, "n.txt"), .discard, in: hosted.scm.layout),
       "未追跡だけなら次の行を留める")
-    XCTAssertNil(hosted.window.attachedSheet, "未追跡だけなら確かめない")
+    XCTAssertFalse(confirm.isShown, "未追跡だけなら確かめない")
     pumpMain(
       until: {
         hosted.scm.control.operations.isEmpty && !FileManager.default.fileExists(atPath: untracked)
@@ -76,9 +77,17 @@ final class SourceControlPaneTests: OrbeTestCase {
       "ゴミ箱へ")
 
     hosted.scm.press(try row(hosted, .changes, "a.txt"), .discard, in: hosted.scm.layout)
-    let sheet = try XCTUnwrap(hosted.window.attachedSheet, "追跡中なら確かめる")
+    XCTAssertTrue(confirm.isShown, "追跡中なら確かめる")
+    let responder = try XCTUnwrap(hosted.window.firstResponder)
+    responder.keyDown(with: .key("\r", []))
+    XCTAssertTrue(confirm.isShown, "↵ では確定しない")
+    responder.keyDown(with: .key("\u{1b}", []))
+    XCTAssertFalse(confirm.isShown, "esc で閉じる")
+    XCTAssertTrue(hosted.scm.control.operations.isEmpty, "キャンセルでは捨て始めない")
+
+    hosted.scm.press(try row(hosted, .changes, "a.txt"), .discard, in: hosted.scm.layout)
     XCTAssertTrue(hosted.scm.control.operations.isEmpty, "確かめるまで捨て始めない")
-    hosted.window.endSheet(sheet, returnCode: .alertFirstButtonReturn)
+    confirm.confirm()
     pumpMain(
       until: { (try? String(contentsOf: repo.url("a.txt"), encoding: .utf8)) == "one\n" },
       "破棄を押すと index の版へ戻る")

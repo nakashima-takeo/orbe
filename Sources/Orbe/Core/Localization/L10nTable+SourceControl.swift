@@ -50,6 +50,7 @@ extension L10n {
       "作業ツリーを index の版に戻します。この操作は元に戻せません。",
       "The working tree goes back to the staged version. This can't be undone."
     ),
+    .editorScmDiscardMessageWithTrash: ("%@%@", "%@ %@"),
     .editorScmDiscardToTrashOne: ("%lld 件はゴミ箱へ移します。", "%lld file goes to the Trash."),
     .editorScmDiscardToTrashOther: ("%lld 件はゴミ箱へ移します。", "%lld files go to the Trash."),
     .editorScmDiscardConfirm: ("破棄", "Discard"),

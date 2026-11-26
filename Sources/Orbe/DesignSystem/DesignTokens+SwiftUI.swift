@@ -97,6 +97,7 @@ struct ThemeColors {
   let editorOnDanger = Color(nsColor: Theme.Color.editorOnDanger)
   let editorBarGroove = Color(nsColor: Theme.Color.editorBarGroove)
   let editorBarInset = Color(nsColor: Theme.Color.editorBarInset)
+  let editorConfirmVeil = Color(nsColor: Theme.Color.editorConfirmVeil)
   // git の変化の種類（エクスプローラーのバッジと名前・コミットのボタンのステージ済みの行数）
   let diffAdded = Color(nsColor: Theme.Color.diffAdded)
   let diffRemoved = Color(nsColor: Theme.Color.diffRemoved)
