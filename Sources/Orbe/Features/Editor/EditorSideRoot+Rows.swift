@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// ツリー行 24: 深さぶんの字下げの線、ディレクトリはシェブロンと名前（mono・弱い色）／ファイルは種別チップと名前、右端に git
+/// ツリー行 24: 深さぶんの字下げの線、ディレクトリはシェブロンと名前（mono。連なりは前の段を弱い色、最後の段をそれより
+/// 強い色で出し、幅が足りなければ頭から省く）／ファイルは種別チップと名前、右端に git
 /// の状態の字。選択の行は選択の地、ほかはホバーで淡い地（どちらも上下 1 を空けた角丸 6）。選択の行と祖先の行は字下げの線が
 /// accent。ファイル行は押すと仮の文書として開き、2 回目の押下（ダブルクリック）で普通の文書として開く——1 回目をダブル
 /// クリックの判定で待たせない。
@@ -19,9 +20,9 @@ struct TreeRowView: View {
       switch row.kind {
       case .directory(let isExpanded):
         TreeChevron(open: isExpanded, size: Theme.Layout.editorTreeChevron)
-        Text(row.name)
+        (Text(row.prefix).foregroundStyle(Color.theme.textMuted)
+          + Text(row.name).foregroundStyle(Color.theme.textSecondary))
           .font(Font.theme.editorTreeFolder)
-          .foregroundStyle(Color.theme.textSecondary)
           .lineLimit(1)
           .truncationMode(.head)
           .padding(.leading, Theme.Layout.editorTreeNameGap)

@@ -9,10 +9,16 @@ import XCTest
 ///
 /// P3: 絞り込んでいないツリーで、子のフォルダ 2,000 個（3 つに 1 つは中身がフォルダ 1 つだけ）のフォルダを開く 1 回と、面が
 /// 見え直したとき（⌘E で出し直す）の取り直し 1 回の main の時間。どちらも、行の組み立て（SwiftUI が描くときに読む）までを含む。
+/// 連なりの先読みは裏で行うので、main の時間は先読みを入れる前の中央値 ＋ 2ms 以内に収める。入れる前の値は、同じ測定を
+/// macOS 27.2・負荷平均 約 40（並行のビルドあり）で、開く 17.4ms・取り直し 17.2ms（中央値）。
 @MainActor
 final class FileTreePerfTests: OrbeTestCase {
   private static let folders = 2_000
   private static let rounds = 21
+  /// 先読みを入れる前の中央値（ms）と、それに許す増分。
+  private static let openBefore = 17.4
+  private static let relistBefore = 17.2
+  private static let allowance = 2.0
 
   override func setUpWithError() throws {
     try super.setUpWithError()
@@ -61,6 +67,7 @@ final class FileTreePerfTests: OrbeTestCase {
       settle()
     }
     reportPerf("P3", "open-2000-folders", times, digits: 2)
+    XCTAssertLessThanOrEqual(median(times), Self.openBefore + Self.allowance)
   }
 
   func testRelistingOnShowWithTwoThousandFolders() throws {
@@ -78,5 +85,10 @@ final class FileTreePerfTests: OrbeTestCase {
       settle()
     }
     reportPerf("P3", "relist-on-show-2000-folders", times, digits: 2)
+    XCTAssertLessThanOrEqual(median(times), Self.relistBefore + Self.allowance)
+  }
+
+  private func median(_ times: [Double]) -> Double {
+    times.sorted()[times.count / 2]
   }
 }

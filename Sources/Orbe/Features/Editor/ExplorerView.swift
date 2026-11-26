@@ -9,7 +9,7 @@ struct ExplorerView: View {
   /// 作り直した一覧を戻す位置（作られた時点でツリーが覚えていた位置。戻し終えたら nil）。中身が溢れるまで戻さずに待ち、その間の
   /// 位置の知らせで覚えた位置を書き換えない。
   @State private var pendingFraction: CGFloat?
-  /// 作り直した一覧で見せる選択の行（隠れている間に選択が替わったとき）。最初のレイアウトの後に 1 度だけ中ほどへ送って
+  /// 作り直した一覧で見せる選択の行の同一性（隠れている間に選択が替わったとき）。最初のレイアウトの後に 1 度だけ中ほどへ送って
   /// 終える——行を宛先に送るので、中身が溢れるのを待たない（収まっていれば何も動かない）。
   @State private var pendingReveal: String?
 
@@ -18,7 +18,7 @@ struct ExplorerView: View {
     self.tree = tree
     let selected = tree.selected
     let reveals = selected != nil && selected != tree.scrolledSelection
-    _pendingReveal = State(initialValue: reveals ? selected : nil)
+    _pendingReveal = State(initialValue: reveals ? tree.selectedRowID : nil)
     _pendingFraction = State(
       initialValue: !reveals && tree.scrollFraction > 0 ? tree.scrollFraction : nil)
   }
@@ -78,7 +78,7 @@ struct ExplorerView: View {
           if let entry = tree.newEntry { proxy.scrollTo(FileTree.inputRowID(entry)) }
         }
         .onChange(of: tree.selected) { _, path in
-          if let path { proxy.scrollTo(path) }
+          if let id = tree.selectedRowID { proxy.scrollTo(id) }
           tree.scrolledSelection = path
         }
       }

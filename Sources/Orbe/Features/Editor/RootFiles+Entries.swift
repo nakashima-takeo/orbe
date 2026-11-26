@@ -23,6 +23,44 @@ extension RootFiles {
     .sorted { FileNameOrder.precedes($0.name, $1.name) }
   }
 
+  /// フォルダ `directory` の中身（`.git` を除く）がフォルダ 1 つだけなら、その名前。読むのは多くて 2 件で、symlink は
+  /// フォルダと数えない（`entries(of:)` と同じ土俵）。読めなければ nil。裏で呼ぶ。
+  nonisolated static func onlyChildDirectory(of directory: URL) -> String? {
+    var only: String?
+    var isOnly = true
+    forEachChild(of: directory.path) { name, isDirectory in
+      if name == ".git" { return true }
+      guard only == nil, isDirectory else {
+        isOnly = false
+        return false
+      }
+      only = name
+      return true
+    }
+    return isOnly ? only : nil
+  }
+
+  /// フォルダ `path` の中身を 1 件ずつ、名前とフォルダか（symlink はフォルダと数えない）で `body` へ渡す。`body` が false を
+  /// 返したらそこで止める。UTF-8 として読めない名前は飛ばす。読めなければ何も渡さない。
+  nonisolated static func forEachChild(of path: String, _ body: (String, Bool) -> Bool) {
+    guard let stream = opendir(path) else { return }
+    defer { closedir(stream) }
+    while let entry = readdir(stream) {
+      let bytes = withUnsafeBytes(of: entry.pointee.d_name) { raw in Data(raw.prefix { $0 != 0 }) }
+      guard let name = String(bytes: bytes, encoding: .utf8), name != ".", name != ".." else {
+        continue
+      }
+      var type = entry.pointee.d_type
+      if type == UInt8(DT_UNKNOWN) {
+        // `d_type` を返さないファイルシステムでは、symlink を辿らずに種類を引く。
+        var info = stat()
+        guard lstat(path + "/" + name, &info) == 0 else { continue }
+        type = info.st_mode & S_IFMT == S_IFDIR ? UInt8(DT_DIR) : UInt8(DT_REG)
+      }
+      if !body(name, type == UInt8(DT_DIR)) { return }
+    }
+  }
+
   /// 空ファイルを作る。既に在れば失敗。中間ディレクトリは作らない。
   func createFile(at url: URL) throws {
     guard !Self.exists(url) else { throw Error.alreadyExists(url) }
