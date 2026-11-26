@@ -274,6 +274,7 @@ private struct CommentSteps {
     guard
       let comment = scene.panel.state?.pendingComments.first(where: { $0.thread == "T_coalesce" })
     else { return XCTFail("前提: 既定のスレッドの未送信のコメント") }
+    scene.pane.reviewPopup.onOpenURL = { XCTFail("置ける行ではブラウザを開かない: \($0)") }
     scene.pane.reviewPopup.press(comment)
     settle()
   }
