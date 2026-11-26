@@ -40,9 +40,13 @@ struct EditorBarSlot: Equatable {
 }
 
 /// 上のバーの行。部品は固定の子として並び、配った結果で子の同一性は変わらない。左寄せの部品と右寄せの部品の間には、
-/// 幅 0 の伸びる隙間を 1 つ置く（隣とは部品と同じ間隔で離れる）。落とした部品は行の枠の外に置き、行が枠で切る。
+/// 幅 0 の伸びる隙間を 1 つ置く（隣とは部品と同じ間隔で離れる）。落とした部品は行の枠の外に置き、行が枠で切る（押下も受けない。
+/// → `editorBarPart`）。
 struct EditorBarLayout: Layout {
   let spacing: CGFloat
+
+  /// 行の枠の座標空間（行を置く側が、このレイアウトに張る）。落としてよい部品は、この枠の中に居るかで押下を受けるかを決める。
+  static let space = "editorBarRow"
 
   struct Cache {
     var parts: [EditorBarPart]
@@ -163,12 +167,35 @@ private struct EditorBarPartKey: LayoutValueKey {
 }
 
 extension View {
-  /// 上のバーの部品の宣言（寄せる側・まるごと落としてよい段・最小より広い姿を受け取る段）。
+  /// 上のバーの部品の宣言（寄せる側・まるごと落としてよい段・最小より広い姿を受け取る段）。落としてよい部品は、行の枠の
+  /// 外に置かれている間、押下を受けない（行が枠で切るのは描画だけなので、枠の外でも host の中に残る部分が押下を受ける）。
   func editorBarPart(
     _ side: EditorBarPart.Side = .leading, drops: EditorBarYield? = nil,
     grows: EditorBarYield? = nil
   ) -> some View {
-    layoutValue(
-      key: EditorBarPartKey.self, value: EditorBarPart(side: side, drops: drops, grows: grows))
+    modifier(EditorBarDroppable(isDroppable: drops != nil))
+      .layoutValue(
+        key: EditorBarPartKey.self, value: EditorBarPart(side: side, drops: drops, grows: grows))
+  }
+}
+
+/// 落としてよい部品の押下を、行の枠（`EditorBarLayout.space`）の中に置かれている間だけ受ける。
+private struct EditorBarDroppable: ViewModifier {
+  let isDroppable: Bool
+  @State private var isPlaced = true
+
+  func body(content: Content) -> some View {
+    if isDroppable {
+      content
+        .allowsHitTesting(isPlaced)
+        .onGeometryChange(for: Bool.self) { proxy in
+          guard let row = proxy.bounds(of: .named(EditorBarLayout.space)) else { return true }
+          return row.intersects(proxy.frame(in: .named(EditorBarLayout.space)))
+        } action: {
+          isPlaced = $0
+        }
+    } else {
+      content
+    }
   }
 }

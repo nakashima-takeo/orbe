@@ -101,8 +101,8 @@ struct EditorBarRoot: View {
   }
 }
 
-/// 上のバーの行の器——部品の行（`EditorBarLayout`。行の枠で切る）・左 8 右 12 の余白・高さ・下端の線。部品の枠を測る
-/// 座標空間（`EditorBarRoot.space`）を張る。
+/// 上のバーの行の器——部品の行（`EditorBarLayout`。行の枠で切る）・左 8 右 12 の余白・高さ・下端の線。行の枠の座標空間
+/// （`EditorBarLayout.space`）と、部品の枠を測る座標空間（`EditorBarRoot.space`）を張る。
 struct EditorBarRow<Content: View>: View {
   @ViewBuilder let content: () -> Content
   @Environment(\.colorScheme) private var scheme
@@ -112,6 +112,7 @@ struct EditorBarRow<Content: View>: View {
   var body: some View {
     VStack(spacing: 0) {
       EditorBarLayout(spacing: EditorBarRoot.spacing) { content() }
+        .coordinateSpace(.named(EditorBarLayout.space))
         .clipped()
         .padding(.leading, 8)
         .padding(.trailing, 12)
