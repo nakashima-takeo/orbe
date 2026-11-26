@@ -13,7 +13,8 @@ final class LineWrapsTests: XCTestCase {
 
   /// 行ごとの段の数 `counts` の折り返し。
   private static func wraps(_ counts: [Int]) -> LineWraps {
-    LineWraps(width: 100, tabWidth: 28, lines: counts.map { $0 > 1 ? wrapped($0) : nil })
+    LineWraps(
+      width: 100, tabWidth: 28, version: 0, lines: counts.map { $0 > 1 ? wrapped($0) : nil })
   }
 
   private static func counts(_ wraps: LineWraps) -> [Int] {
@@ -93,16 +94,17 @@ final class LineWrapsTests: XCTestCase {
   }
 
   /// 面自身の編集は、掛かった行を折り返しを待つ行にし、計算し直す。段の数が変われば版が進む。
-  func testShiftUnwrapsTheEditedLines() {
+  func testShiftUnwrapsTheEditedLines() throws {
     let before = TextRope("a\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nc")
     var rows = RowLayout(lineHeight: 10)
     rows.setWraps(Self.wraps([1, 3, 1]))
     let version = rows.version
-    rows.shift([TextEdit(range: NSRange(location: 1, length: 0), replacement: "\nx")], in: before)
-    XCTAssertEqual(rows.unwrapped, [0..<2])
+    let unwrapped = try XCTUnwrap(
+      rows.shift(
+        [TextEdit(range: NSRange(location: 1, length: 0), replacement: "\nx")], in: before))
+    XCTAssertEqual(unwrapped.lines, [0..<2])
     XCTAssertEqual(rows.wraps?.lineCount, 4)
-    rows.rewrap { lines, _ in lines.map { $0 == 1 ? Self.wrapped(2) : nil } }
-    XCTAssertEqual(rows.unwrapped, [])
+    rows.rewrap(unwrapped, version: 1) { lines, _ in lines.map { $0 == 1 ? Self.wrapped(2) : nil } }
     XCTAssertEqual((0..<4).map(rows.segments(ofLine:)), [1, 2, 3, 1])
     XCTAssertNotEqual(rows.version, version)
   }

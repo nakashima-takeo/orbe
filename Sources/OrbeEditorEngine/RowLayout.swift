@@ -54,12 +54,6 @@ struct RowLayout: Sendable {
   private var settledNumberMax = 0
   /// 行ごとの折り返し（折り返さない面は nil）。
   private(set) var wraps: LineWraps?
-  /// 折り返しを待つ行（面自身の編集が掛かった行。編集の後の行の区間で、昇順。折り返していた行は 1 段の行に置き換えてある）
-  /// と、区間ごとの前の折り返しの手がかり（行の数を変えない、行 1 つの編集だけ）と、置き換えで行ごとの折り返しの木を
-  /// 変えたか。
-  private(set) var unwrapped: [Range<Int>] = []
-  private var resumes: [LineWrap.Resume?] = []
-  private var unwrapChanged = false
   /// 作り変えるたびに進む（並びから作るキャッシュの鍵）。
   private(set) var version = 0
 
@@ -247,10 +241,10 @@ struct RowLayout: Sendable {
   /// 始まり r も「行 r−1 の後」の境として同じに動く。値の変わった境か区間の始まりがあったときだけ版を進める——行の数を変えない
   /// 打鍵では何も動かないので、差し込みの多い並びでも列をなめず、書き換えもしない。
   ///
-  /// 折り返す面では、編集が掛かる行の折り返しを 1 段の行に置き換え、その行（編集の後の行）を折り返しを待つ行に積む——束を
-  /// 当てた後の本文で `rewrap` が計算し直す。
-  mutating func shift(_ edits: [TextEdit], in before: TextRope) {
-    guard !boundaries.isEmpty || !spans.isEmpty || wraps != nil, !edits.isEmpty else { return }
+  /// 折り返す面では、編集が掛かる行の折り返しを 1 段の行に置き換え、その行（編集の後の行）を折り返しを待つ行として返す——
+  /// 束を当てた後の本文で `rewrap` に渡して計算し直す。折り返さない面では nil。
+  mutating func shift(_ edits: [TextEdit], in before: TextRope) -> Unwrapped? {
+    guard !boundaries.isEmpty || !spans.isEmpty || wraps != nil, !edits.isEmpty else { return nil }
     let sorted = edits.sorted { $0.range.location < $1.range.location }
     // 編集の始まりと終わりの行を、本文を前から 1 度辿って引く（複数カーソルの打鍵で、編集ごとに木を引かない）。
     let ends = before.rows(
@@ -266,8 +260,8 @@ struct RowLayout: Sendable {
         start: edit.range.location, end: NSMaxRange(edit.range), rows: rows,
         delta: edit.replacement.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 } - (rows.count - 1))
     }
-    if wraps != nil { unwrap(changes, in: before) }
-    guard !boundaries.isEmpty || !spans.isEmpty else { return }
+    let unwrapped = wraps != nil ? unwrap(changes, in: before) : nil
+    guard !boundaries.isEmpty || !spans.isEmpty else { return unwrapped }
     let shift = LineShift(changes: changes, before: before)
     var moved = shift.apply(to: &boundaries)
     if shift.apply(to: &spans) {
@@ -275,6 +269,7 @@ struct RowLayout: Sendable {
       moved = true
     }
     if moved { version += 1 }
+    return unwrapped
   }
 
   // MARK: - 絵の差し込み
@@ -331,35 +326,40 @@ struct RowLayout: Sendable {
 
 /// 行ごとの折り返しを置く・面自身の編集に追従させる（→ `RowLayout.shift`）。
 extension RowLayout {
+  /// 折り返しを待つ行——面自身の編集が掛かった行（編集の後の行の区間で、昇順。折り返していた行は 1 段の行に置き換えて
+  /// ある）と、区間ごとの前の折り返しの手がかり（行の数を変えない、行 1 つの編集だけ）と、置き換えで行ごとの折り返しの
+  /// 木を変えたか。`shift` が返し、束を当てた後の本文で `rewrap` に渡す。
+  struct Unwrapped {
+    var lines: [Range<Int>] = []
+    var resumes: [LineWrap.Resume?] = []
+    var changed = false
+  }
+
   /// 行ごとの折り返しを置く（nil なら折り返さない）。
   mutating func setWraps(_ wraps: LineWraps?) {
     self.wraps = wraps
-    unwrapped = []
-    resumes = []
-    unwrapChanged = false
     version += 1
   }
 
-  /// 編集 `changes`（編集前の本文 `before` の座標。昇順）が掛かる行を 1 段の行に置き換え、折り返しを待つ行に積む。同じ行に
-  /// 掛かる編集は 1 つにまとめる。1 段の行だけに掛かり行の数を変えない編集（打鍵の多く）は、木を変えない。
-  mutating func unwrap(_ changes: [LineChange], in before: TextRope) {
-    guard var wraps else { return }
+  /// 編集 `changes`（編集前の本文 `before` の座標。昇順）が掛かる行を 1 段の行に置き換え、折り返しを待つ行として返す。同じ
+  /// 行に掛かる編集は 1 つにまとめる。1 段の行だけに掛かり行の数を変えない編集（打鍵の多く）は、木を変えない。本文と
+  /// 食い違う折り返しは捨てて nil を返す（取引の確定で全部を計算し直す）。
+  private mutating func unwrap(_ changes: [LineChange], in before: TextRope) -> Unwrapped? {
+    guard var wraps else { return nil }
     guard wraps.lineCount == before.lineCount else {
-      // 本文と食い違う折り返しは捨てる（取引の確定で全部を計算し直す）。
-      return setWraps(nil)
+      setWraps(nil)
+      return nil
     }
-    precondition(unwrapped.isEmpty, "折り返しを待つ行は、束を当てた後に計算し直してから次の束を受ける")
+    var unwrapped = Unwrapped()
     var shifted = 0
-    var after: [Range<Int>] = []
-    var resumes: [LineWrap.Resume?] = []
     var edits: [(lines: Range<Int>, with: [WrappedLine?])] = []
     for group in LineGroup.of(changes) {
       let lines = group.rows.lowerBound..<(group.rows.upperBound + 1)
       let count = lines.count + group.delta
-      after.append(lines.lowerBound + shifted..<lines.lowerBound + shifted + count)
+      unwrapped.lines.append(lines.lowerBound + shifted..<lines.lowerBound + shifted + count)
       shifted += group.delta
       let old = lines.count == 1 && group.delta == 0 ? wraps.wrap(ofLine: lines.lowerBound) : nil
-      resumes.append(
+      unwrapped.resumes.append(
         old.map {
           LineWrap.Resume(old: $0, edited: group.start - before.lineStart(lines.lowerBound))
         }
@@ -373,26 +373,25 @@ extension RowLayout {
     }
     wraps.replace(edits)
     self.wraps = wraps
-    unwrapped = after
-    self.resumes = resumes
-    unwrapChanged = !edits.isEmpty
+    unwrapped.changed = !edits.isEmpty
+    return unwrapped
   }
 
-  /// 折り返しを待つ行を `wrap`（連続する文書の行と、前の折り返しの手がかり → 行ごとの折り返し。1 段の行は nil）で計算し
-  /// 直す。行ごとの折り返しの木が変わっていれば（段の数が同じでも、段の始まりが動いていれば）版を進める——描画スレッドへ
-  /// 並びを渡し直す。
-  mutating func rewrap(_ wrap: (Range<Int>, LineWrap.Resume?) -> [WrappedLine?]) {
-    guard var wraps, !unwrapped.isEmpty else { return }
+  /// 折り返しを待つ行 `unwrapped` を `wrap`（連続する文書の行と、前の折り返しの手がかり → 行ごとの折り返し。1 段の行は
+  /// nil）で計算し直し、折り返しを本文の写しの版 `version` のものにする。行ごとの折り返しの木が変わっていれば（段の数が
+  /// 同じでも、段の始まりが動いていれば）版を進める——描画スレッドへ並びを渡し直す。
+  mutating func rewrap(
+    _ unwrapped: Unwrapped, version: Int, _ wrap: (Range<Int>, LineWrap.Resume?) -> [WrappedLine?]
+  ) {
+    guard var wraps else { return }
     var edits: [(lines: Range<Int>, with: [WrappedLine?])] = []
-    for (range, resume) in zip(unwrapped, resumes) {
+    for (range, resume) in zip(unwrapped.lines, unwrapped.resumes) {
       let lines = wrap(range, resume)
       if lines.contains(where: { $0 != nil }) { edits.append((range, lines)) }
     }
     wraps.replace(edits)
+    wraps.version = version
     self.wraps = wraps
-    if unwrapChanged || !edits.isEmpty { version += 1 }
-    unwrapped = []
-    resumes = []
-    unwrapChanged = false
+    if unwrapped.changed || !edits.isEmpty { self.version += 1 }
   }
 }

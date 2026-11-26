@@ -151,13 +151,13 @@ final class EditingSite {
   func deliver(_ batch: EditBatch) -> TextRope? {
     precondition(change != nil, "場の文の変化は取引の中でだけ渡す")
     guard let before = currentContent?.text else { return nil }
-    if isBody { surface.rows.shift(batch.edits, in: before) }
+    let unwrapped = isBody ? surface.rows.shift(batch.edits, in: before) : nil
     source.apply(batch.edits)
     guard let content = source.content else { return nil }
     change?.content = content
     change?.edited = true
     guard isBody else { return content.text }
-    surface.rewrapEdited(content)
+    if let unwrapped { surface.rewrapEdited(content, unwrapped) }
     // 束は後ろから当たる。後ろの編集は前の行を動かさないので、どの編集の行も束の前の文で数えられる。
     change?.rowEdits += batch.edits.reversed().map {
       RowEdit($0, in: before, version: content.version)

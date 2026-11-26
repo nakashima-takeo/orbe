@@ -46,11 +46,10 @@ extension MetalTextSurface {
       guard rows.wraps != nil else { return nil }
       let before = rows
       rows.setWraps(nil)
-      wrappedVersion = nil
       return before
     }
     if let current = rows.wraps, current.width == width, current.tabWidth == tabWidth,
-      current.lineCount == text.lineCount, wrappedVersion == content.version
+      current.lineCount == text.lineCount, current.version == content.version
     {
       return nil
     }
@@ -58,18 +57,19 @@ extension MetalTextSurface {
     let metrics = wrapMetrics(width: width, tabWidth: tabWidth)
     rows.setWraps(
       LineWraps(
-        width: width, tabWidth: tabWidth,
+        width: width, tabWidth: tabWidth, version: content.version,
         lines: LineWrap.wrap(rows: 0..<text.lineCount, in: text, metrics)))
-    wrappedVersion = content.version
     return before
   }
 
-  /// 面自身の編集の束を当てた後の写し `content` で、編集が掛かった行を折り返し直す。
-  func rewrapEdited(_ content: SurfaceContent) {
+  /// 面自身の編集の束を当てた後の写し `content` で、折り返しを待つ行 `unwrapped`（`RowLayout.shift` が返したもの）を
+  /// 折り返し直す。
+  func rewrapEdited(_ content: SurfaceContent, _ unwrapped: RowLayout.Unwrapped) {
     guard let wraps = rows.wraps else { return }
     let text = content.text
     let metrics = wrapMetrics(width: wraps.width, tabWidth: wraps.tabWidth)
-    rows.rewrap { LineWrap.wrap(rows: $0, in: text, metrics, resuming: $1) }
-    wrappedVersion = content.version
+    rows.rewrap(unwrapped, version: content.version) {
+      LineWrap.wrap(rows: $0, in: text, metrics, resuming: $1)
+    }
   }
 }

@@ -19,7 +19,9 @@ extension SurfaceMinimapTests {
       let starts = (1..<firstLineSegments).map { Int32($0 * 10) }
       let wrapped = WrappedLine(starts: starts, indent: 0, ends: starts)
       rows.setWraps(
-        LineWraps(width: 100, tabWidth: 28, lines: [wrapped] + Array(repeating: nil, count: 400)))
+        LineWraps(
+          width: 100, tabWidth: 28, version: 0, lines: [wrapped] + Array(repeating: nil, count: 400)
+        ))
       return rows
     }
     let drop = { (edits: [RowEdit], rows: RowLayout) -> Set<Int> in

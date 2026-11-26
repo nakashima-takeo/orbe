@@ -40,12 +40,15 @@ struct LineWraps: Sendable {
   /// 計算に使った折り返しの幅とタブの刻み（pt）。
   let width: Double
   let tabWidth: Double
+  /// 計算に使った本文の写しの版。
+  var version: Int
   private(set) var tree: SummaryTree<Element>
 
-  /// 行ごとの折り返し `lines`（1 段の行は nil）から組む。
-  init(width: Double, tabWidth: Double, lines: [WrappedLine?]) {
+  /// 本文の写しの版 `version` の、行ごとの折り返し `lines`（1 段の行は nil）から組む。
+  init(width: Double, tabWidth: Double, version: Int, lines: [WrappedLine?]) {
     self.width = width
     self.tabWidth = tabWidth
+    self.version = version
     tree = SummaryTree(Self.elements(lines))
   }
 
