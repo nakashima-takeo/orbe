@@ -1,13 +1,16 @@
+import AppKit
 import SwiftUI
 
 /// 1 行の入力欄の枠（デザインの見本の `.fl`・`.fnd`・`.sf`）。左から虫眼鏡・中身・右の添え物（件数やオプションのボタン）を
 /// 並べ、地 `surfaceInk` .055・角丸 7 を描き、フォーカスがある間は内側に `accent.primary` .55 の枠を足す。入力の view と、
-/// フォーカスの状態（`@FocusState` など）とキーの扱いは使う側が持ち、ここは形だけを持つ。
+/// フォーカスの状態とキーの扱いは使う側が持つ。枠の中のどこを押しても（虫眼鏡・余白・件数の文の上も）、中の入力欄に
+/// フォーカスを渡す（`EditorFieldFocusTarget`）——入力欄そのものと、添え物のボタンを押したときは、それぞれの働きのまま。
 struct EditorFieldFrame<Content: View, Accessory: View>: View {
   let height: CGFloat
   let isFocused: Bool
   @ViewBuilder let content: () -> Content
   @ViewBuilder let accessory: () -> Accessory
+  @State private var focusTarget = EditorFieldFocusTarget()
 
   var body: some View {
     let shape = RoundedRectangle(cornerRadius: Theme.Layout.editorFieldRadius)
@@ -22,6 +25,9 @@ struct EditorFieldFrame<Content: View, Accessory: View>: View {
     .padding(.leading, Theme.Layout.editorFieldPadLeading)
     .padding(.trailing, Theme.Layout.editorFieldPadTrailing)
     .frame(height: height)
+    .contentShape(shape)
+    .onTapGesture { focusTarget.focus() }
+    .environment(\.editorFieldFocusTarget, focusTarget)
     .background(shape.fill(Color.theme.surfaceInk.opacity(Theme.Opacity.editorFieldFill)))
     .overlay {
       if isFocused {
@@ -30,6 +36,31 @@ struct EditorFieldFrame<Content: View, Accessory: View>: View {
           lineWidth: Theme.Layout.editorFieldFocusStroke)
       }
     }
+  }
+}
+
+/// 入力欄の枠が押されたときに、枠の中の入力欄へフォーカスを渡す口。枠が持って環境で中身へ渡し、入力欄（`EditorTextField`）が
+/// 自分を載せる。
+@MainActor
+final class EditorFieldFocusTarget {
+  weak var field: NSTextField?
+
+  /// 中の入力欄にフォーカスが無ければ first responder にする（AppKit が全選択する）。在れば触らない（打っている位置を保つ）。
+  func focus() {
+    guard let field, field.currentEditor() == nil, let window = field.window else { return }
+    window.makeFirstResponder(field)
+  }
+}
+
+private struct EditorFieldFocusTargetKey: EnvironmentKey {
+  static let defaultValue: EditorFieldFocusTarget? = nil
+}
+
+extension EnvironmentValues {
+  /// 入力欄の枠が中身へ渡す、フォーカスを渡す口（枠の外では nil）。
+  var editorFieldFocusTarget: EditorFieldFocusTarget? {
+    get { self[EditorFieldFocusTargetKey.self] }
+    set { self[EditorFieldFocusTargetKey.self] = newValue }
   }
 }
 

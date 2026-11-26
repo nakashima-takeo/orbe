@@ -5,6 +5,7 @@ import SwiftUI
 /// 欄が使う。フォーカスの要求は、欄が窓に載った時点か、要求が来た時点に、欄が当てる——フォーカスが無ければ first responder に
 /// なり、在れば全選択する。フォーカスの出入り・字の変化（打鍵・貼り付け・取り消し・やり直し。変換中の字は確定するまで入れない）・
 /// ↵・⇧↵・esc は閉包で使う側へ知らせる。⇥・⇧⇥ は何もしない。取り消しの履歴は欄ごとに持ち、中身を外から差し替えたら捨てる。
+/// 入力欄の枠（`EditorFieldFrame`）の中に置けば、枠を押したときにフォーカスを受ける。
 struct EditorTextField: NSViewRepresentable {
   let text: String
   let placeholder: String
@@ -35,6 +36,7 @@ struct EditorTextField: NSViewRepresentable {
     field.placeholderAttributedString = NSAttributedString(
       string: placeholder, attributes: [.font: font, .foregroundColor: placeholderColor])
     field.setAccessibilityLabel(placeholder)
+    context.environment.editorFieldFocusTarget?.field = field
     if field.stringValue != text, (field.currentEditor() as? NSTextView)?.hasMarkedText() != true {
       // 差し替えは取り消しの履歴に積まず、古い履歴も捨てる——古い履歴の範囲は今の中身と食い違う。
       field.stringValue = text
