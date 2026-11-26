@@ -3,11 +3,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 行の高さを決めたメッセージ欄（`MessageTextView.Metrics.lineHeight`）の高さ。ポップアップの入力欄（コミット・レビュー）が使う。
+/// 行の高さを決めたメッセージ欄（`MessageTextView.Metrics.lineHeight`）の高さと、esc の知らせ。ポップアップの入力欄（コミット・
+/// レビュー）が使う。
 ///
 /// 壊れると何が起きるか: ポップアップの入力欄が、行を足すたびに、決めた行の高さと違う高さで伸びる。字の高い行（タイ文字）や、
 /// 打った行・書きかけを入れ直した行の一方だけ高さが変わり、欄が揺れる。⇧↵ の直後だけ欄が縮む。10 行を越えても伸び続け、
-/// ポップアップの下に並ぶ失敗の札を押し出す。
+/// ポップアップの下に並ぶ失敗の札を押し出す。esc でポップアップが閉じない。変換を取り消す esc で、ポップアップまで閉じる。
 @MainActor
 final class MessageTextViewTests: OrbeTestCase {
   /// 行の高さ 20・1 行のときの欄の高さ 30。
@@ -51,5 +52,31 @@ final class MessageTextViewTests: OrbeTestCase {
     let typed = field()
     typed.insertText("a\n", replacementRange: NSRange(location: NSNotFound, length: 0))
     XCTAssertEqual(height(typed), 50, accuracy: 0.5, "打った、末尾の改行の後の行")
+
+    let replaced = field()
+    replaced.string = "ปั้ญู"
+    replaced.string = "a\n"
+    XCTAssertEqual(height(replaced), 50, accuracy: 0.5, "字の高い文字列を入れた後に入れ直した、末尾の改行の後の行")
+    replaced.frame.size.width = 300
+    replaced.sizeToFit()
+    XCTAssertEqual(replaced.frame.height, 50, accuracy: 0.5, "表示したときの高さも、測った高さと同じ")
+  }
+
+  /// esc の知らせを持つ欄では、変換中でない esc の命令が知らせを呼ぶ。変換中の esc の命令では呼ばない。
+  func testEscapeIsReportedOnlyWhileNotComposing() {
+    let field = field()
+    var escapes = 0
+    field.onEscape = { escapes += 1 }
+    let escape = #selector(NSResponder.cancelOperation(_:))
+
+    field.doCommand(by: escape)
+    XCTAssertEqual(escapes, 1, "変換中でなければ呼ぶ")
+
+    field.setMarkedText(
+      "かん", selectedRange: NSRange(location: 2, length: 0),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertTrue(field.hasMarkedText(), "前提: 変換中")
+    field.doCommand(by: escape)
+    XCTAssertEqual(escapes, 1, "変換中は呼ばない")
   }
 }
