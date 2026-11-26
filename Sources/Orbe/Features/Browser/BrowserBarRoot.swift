@@ -11,7 +11,7 @@ struct BrowserBarRoot: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      toolbarContent
+      toolbarRow
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: Theme.Layout.browserBar - Theme.Stroke.hairline)
         .clipped()
@@ -24,19 +24,12 @@ struct BrowserBarRoot: View {
     .environment(\.chromeFontResolver, fontResolver)
   }
 
-  @ViewBuilder private var toolbarContent: some View {
-    if model.mode == .full && model.isPeeking {
-      ViewThatFits(in: .horizontal) {
-        toolbarRow(showsPeekPill: true, urlPreferredMinWidth: Theme.Layout.browserURLPeekMinWidth)
-        toolbarRow(showsPeekPill: false, urlPreferredMinWidth: nil)
-      }
-    } else {
-      toolbarRow(showsPeekPill: false, urlPreferredMinWidth: nil)
-    }
-  }
-
-  private func toolbarRow(showsPeekPill: Bool, urlPreferredMinWidth: CGFloat?) -> some View {
-    HStack(spacing: Theme.Layout.browserBarGap) {
+  private var toolbarRow: some View {
+    BrowserToolbarLayout(
+      spacing: Theme.Layout.browserBarGap,
+      urlMarginX: Theme.Layout.browserURLMarginX,
+      urlPeekMinWidth: Theme.Layout.browserURLPeekMinWidth
+    ) {
       BrowserIconButton(
         glyph: BrowserGlyphs.back,
         isEnabled: model.canGoBack,
@@ -44,7 +37,6 @@ struct BrowserBarRoot: View {
         tooltip: localization.string(.browserBarBack),
         action: model.onBack
       )
-      .layoutPriority(1)
       BrowserIconButton(
         glyph: BrowserGlyphs.forward,
         isEnabled: model.canGoForward,
@@ -52,7 +44,6 @@ struct BrowserBarRoot: View {
         tooltip: localization.string(.browserBarForward),
         action: model.onForward
       )
-      .layoutPriority(1)
       BrowserIconButton(
         glyph: model.isLoading ? BrowserGlyphs.stop : BrowserGlyphs.reload,
         isEnabled: true,
@@ -60,15 +51,16 @@ struct BrowserBarRoot: View {
         tooltip: localization.string(model.isLoading ? .browserBarStop : .browserBarReload),
         action: model.onReloadOrStop
       )
-      .layoutPriority(1)
-      BrowserURLBar(
-        model: model, localization: localization, preferredMinWidth: urlPreferredMinWidth
-      )
-      .padding(.horizontal, Theme.Layout.browserURLMarginX)
-      .layoutPriority(-1)
-      if showsPeekPill {
+      BrowserURLBar(model: model, localization: localization)
+        .layoutValue(key: BrowserToolbarRoleKey.self, value: .url)
+      if model.mode == .full && model.isPeeking {
         BrowserFullPeekPill(underlay: model.peekUnderlay, localization: localization)
-          .layoutPriority(1)
+          .frame(
+            minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
+            alignment: .leading
+          )
+          .clipped()
+          .layoutValue(key: BrowserToolbarRoleKey.self, value: .peekPill)
       }
       BrowserIconButton(
         glyph: BrowserGlyphs.sheetToggle,
@@ -78,11 +70,9 @@ struct BrowserBarRoot: View {
           model.mode == .sheet ? .browserBarSwitchToFull : .browserBarSwitchToSheet),
         action: model.onToggleFull
       )
-      .layoutPriority(1)
     }
     .padding(.leading, Theme.Layout.browserBarLeading)
     .padding(.trailing, Theme.Layout.browserBarTrailing)
-    .frame(minWidth: 0, maxWidth: .infinity)
     .frame(height: Theme.Layout.browserBar - Theme.Stroke.hairline)
     .opacity(model.isInteractiveFocused ? 1 : Theme.Opacity.browserBarInactive)
     .animation(.easeOut(duration: Theme.Motion.quick), value: model.isInteractiveFocused)
@@ -137,7 +127,6 @@ private struct BrowserIconButton: View {
 private struct BrowserURLBar: View {
   @Bindable var model: BrowserToolbarModel
   let localization: LocalizationStore
-  let preferredMinWidth: CGFloat?
   @State private var isHovered = false
 
   var body: some View {
@@ -166,11 +155,7 @@ private struct BrowserURLBar: View {
     }
     .padding(.leading, Theme.Layout.browserURLPadLeading)
     .padding(.trailing, Theme.Layout.browserURLPadTrailing)
-    .frame(
-      minWidth: preferredMinWidth ?? 0,
-      idealWidth: preferredMinWidth,
-      maxWidth: .infinity
-    )
+    .frame(minWidth: 0, maxWidth: .infinity)
     .frame(height: Theme.Layout.browserURLHeight)
     .background(
       RoundedRectangle(cornerRadius: Theme.Layout.browserURLRadius)
