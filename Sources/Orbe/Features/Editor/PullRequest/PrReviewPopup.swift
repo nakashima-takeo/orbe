@@ -33,7 +33,7 @@ final class PrReviewPopup: EditorPopupOwner {
   var state: PullRequestState? { pullRequest.state }
 
   /// 「レビュー」のボタンを出すか——open の PR があり、中身が読めている。
-  var isAvailable: Bool { state?.content?.state == .open }
+  var isAvailable: Bool { state?.isOpenPullRequest == true }
 
   /// 開けるか——ボタンを出していて、選べる種類が空でない（レビューのやりとりを読めるまでは、自分の PR かどうかが分からず、
   /// 種類を出すかを決められない）。バーのボタンの押せる姿と、一覧の ⌘↑ が読む。
@@ -88,10 +88,10 @@ final class PrReviewPopup: EditorPopupOwner {
     popup.close(.escape)
   }
 
-  /// worktree の今の PR が替わった・その PR の状態が変わった。開いたときの PR と違えば閉じる（変換中の字は、閉じる直前に
-  /// 開いたときの PR の書きかけへ確定する）。
+  /// worktree の今の PR が替わった・その PR の状態が変わった。開いたときの PR と違う・PR が open でなくなった（ボタンを
+  /// 出さなくなった）なら閉じる（変換中の字は、閉じる直前に開いたときの PR の書きかけへ確定する）。
   func pullRequestDidChange() {
-    guard isOpen, openedState !== state else { return }
+    guard isOpen, openedState !== state || !isAvailable else { return }
     popup.close(.itemGone)
   }
 

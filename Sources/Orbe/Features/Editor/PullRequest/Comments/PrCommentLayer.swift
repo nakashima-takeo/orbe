@@ -73,7 +73,7 @@ final class PrCommentLayer {
 
   /// この PR が、diff の根の worktree の今の PR で open か。そうでない間（ブランチの切り替え・マージ・クローズの後）は、未送信の
   /// レビューに積む書き込み（新しいスレッド・返信）を断る——積んでも、Orbe から送る所が無い。
-  var isCurrentPullRequest: Bool { current.state === state && state.content?.state == .open }
+  var isCurrentPullRequest: Bool { current.state === state && state.isOpenPullRequest }
 
   var state: PullRequestState { pullRequest.state }
   var path: String { pullRequest.id.path }

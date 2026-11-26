@@ -25,11 +25,14 @@ extension PullRequestState {
     reviewDraft.event = event
   }
 
-  /// 送れるか——diff の両端・中身・レビューのやりとりの版が揃っていて（`isReviewAligned`）、送信の最中でなく、選んだ種類を
+  /// 最後に読めた中身で、PR が open か（open でない PR へは、レビューを送らず、未送信のレビューにも積まない）。
+  var isOpenPullRequest: Bool { content?.state == .open }
+
+  /// 送れるか——PR が open で、diff の両端・中身・レビューのやりとりの版が揃っていて（`isReviewAligned`）、送信の最中でなく、選んだ種類を
   /// 選べ、「承認」でなければ全体へのコメント（書きかけに、欄の変換中の字 `composing` を足したもの。空白と改行だけなら空）か
   /// 未送信のコメントがある。
   func canSubmitReview(composing: String) -> Bool {
-    guard let review, isReviewAligned else { return false }
+    guard let review, isOpenPullRequest, isReviewAligned else { return false }
     let draft = reviewDraft
     guard canChoose(draft.event) else { return false }
     return draft.event == .approve
