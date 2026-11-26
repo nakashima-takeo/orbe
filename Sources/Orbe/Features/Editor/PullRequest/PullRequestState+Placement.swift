@@ -83,17 +83,43 @@ extension PullRequestState {
     let readsStopped: Bool
   }
 
-  /// 保つ置き方の答え——置けるか、と、それを決めた今の PR の diff の両端（求め終えていなければ nil）。
+  /// 保つ置き方の答え——置けるか、と、それを決めた今の PR の diff の両端。
   struct PlacementAnswer {
     let placement: Placement
-    let ends: DiffEnds?
+    let ends: DiffEnds
+  }
+
+  /// 前に決まった答えを、両端 `ends` の diff（`isCurrent` は、それが今の PR の両端か）のスレッド `thread` に使えるか——使える
+  /// なら、その答え。使えるのは、答えを決めたときの両端が `ends` と同じ間だけ（先頭が替われば行も変わりうる）で、古い側の行は、
+  /// さらに `ends` が今の PR の両端のときだけ（両端が替わる間は、古い側の行のスレッドを前の並びに置かない）。前の答えを保つか
+  /// どうかを決めるのは、ここ 1 か所——導いた値（今の両端について）も、コメントの層（diff が見せている両端について）も、これを
+  /// 読む。
+  nonisolated static func kept(
+    _ answer: PlacementAnswer?, for thread: GitHubPullRequestReview.Thread, at ends: DiffEnds,
+    isCurrent: Bool
+  ) -> Placement? {
+    guard let answer, answer.ends == ends, thread.side == .new || isCurrent else { return nil }
+    return answer.placement
+  }
+
+  /// diff が両端 `ends` を見せているとき、スレッド `thread` の絵を、前に置いた行に残すか（コメントの層が、スレッドを読んだ版と
+  /// diff の版が違う間に読む）。置き方が決まっていればそれに従い、まだ分からなければ、前に決まった答えを使えるときだけ残す。
+  func keepsPlacement(of thread: GitHubPullRequestReview.Thread, shown ends: DiffEnds) -> Bool {
+    switch placement(of: thread, shown: ends) {
+    case .placeable: true
+    case .unplaceable: false
+    case .unknown:
+      Self.kept(
+        placementsMade.answers[thread.id], for: thread, at: ends, isCurrent: diffEnds == ends)
+        == .placeable
+    }
   }
 
   /// 置き方から導いた値。材料（`PlacementInputs`）と、前に作った値だけから作る。読みが走っている間（まだ分からない）は、
-  /// スレッドごとに前に決まった答えを保つ——コメントの層が前に置いた絵を残すのと同じく、読み直しの途中で一覧・数が
-  /// 揺れない。保つのは、スレッドを読んだ版と diff の版が揃っていたときに決まった答えだけで、古い側の行の答えは、それを
-  /// 決めた diff の両端が今の両端のときだけ（コメントの層も、両端が替わる間は古い側の行のスレッドを前の並びに置かない）。
-  /// 前に答えが無ければ、まだ分からないまま（一覧は置けるとみなし、数は数えない）。
+  /// スレッドごとに前に決まった答えを使える間（→ `kept`）はそれを使う——コメントの層が前に置いた絵を残すのと同じ決まりで、
+  /// 読み直しの途中で一覧・数が揺れない。使えなければ、まだ分からないまま（一覧は置けるとみなし、数は数えない）。前に
+  /// 決まった答え（`answers`）は、スレッドを読んだ版と diff の版が揃い、今の PR の両端を求め終えていたときに決まったものだけを
+  /// 持ち、まだ分からない間は持ち越す（コメントの層は、diff が見せている両端について読む）。
   struct Placements {
     /// 最後に読めたレビューのやりとりの、未送信のコメント。並びはパスの順 → 行の順（行を持たないものはそのファイルの最後）→
     /// 書いた時刻の順。
@@ -102,7 +128,7 @@ extension PullRequestState {
     let outdatedThreadCount: Int
     /// ファイルごとの、今の diff に置けるスレッドのコメントの総数。
     let commentCounts: [String: Int]
-    /// スレッドごとの、版が揃っていたときに決まった答えと、それを決めた diff の両端（スレッドの id ごと。保つ答え）。
+    /// スレッドごとの、版が揃っていたときに決まった答えと、それを決めた diff の両端（スレッドの id ごと）。
     let answers: [String: PlacementAnswer]
 
     static let empty = Placements(
@@ -119,14 +145,15 @@ extension PullRequestState {
         let answer = PullRequestState.placement(of: thread, in: inputs)
         if answer != .unknown {
           placements[thread.id] = answer
-          if aligned, inputs.ends != .failed {
+          if aligned, let current {
             answers[thread.id] = PlacementAnswer(placement: answer, ends: current)
           }
-        } else if let kept = previous.answers[thread.id],
-          thread.side == .new || (current != nil && kept.ends == current)
-        {
-          placements[thread.id] = kept.placement
-          answers[thread.id] = kept
+        } else {
+          answers[thread.id] = previous.answers[thread.id]
+          if let current {
+            placements[thread.id] = PullRequestState.kept(
+              previous.answers[thread.id], for: thread, at: current, isCurrent: true)
+          }
         }
       }
       let placement = { (thread: GitHubPullRequestReview.Thread) in

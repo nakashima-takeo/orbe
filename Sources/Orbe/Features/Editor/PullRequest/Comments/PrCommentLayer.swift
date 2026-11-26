@@ -130,8 +130,7 @@ final class PrCommentLayer {
     adoptDrafts()
     // diff が見せている両端が PR の今の両端でない間（PR への push・ベースの付け替えを読んで、両端を求め直し、diff が
     // 新しい両端の本文を読み終えるまで）は、古い側の行のスレッドを前の並びに置かない（GitHub は古い側の行を今の
-    // マージベースの diff の行として読む）。
-    let isCurrent = state.diffEnds == ends
+    // マージベースの diff の行として読む）——置き方の決まりが答える（→ `PullRequestState.placement`・`kept`）。
     settleRevealRequest(ends: ends)
     if let read = state.threads(at: ends.head) {
       let ids = Set(read.map(\.id))
@@ -159,7 +158,7 @@ final class PrCommentLayer {
         place(zone, at: spot, in: &notes)
       }
     } else {
-      keepPlaced(current, isCurrent: isCurrent, language: language, in: &notes)
+      keepPlaced(current, language: language, in: &notes)
     }
     placeFollowing(current, commentable: markable, language: language, in: &notes)
     return notes
@@ -193,19 +192,18 @@ final class PrCommentLayer {
   }
 
   /// レビューのやりとりが、diff が見せている先頭と違う先頭を読んだ間（PR への push を読み、diff が新しい両端を見せるまで）は、
-  /// 置き方がまだ分からない（揃える読みが走っている）スレッドを、diff が見せている両端と本文 `current` で最後に置いた行に
-  /// 残す（前の答えを保つ。古い側の行のスレッドは、両端が PR の今の両端の間だけ）。揃える読みをやめて置けないと決まった
-  /// スレッドと、ほかの返信の書きかけは、置かない（書きかけがあれば、書きかけの欄の位置から行を追う）。
+  /// 残すと置き方が答えるスレッド（`PullRequestState.keepsPlacement`）を、diff が見せている本文 `current` で最後に置いた行に
+  /// 残す。ほかのスレッドと返信の書きかけは、置かない（書きかけがあれば、書きかけの欄の位置から行を追う）。
   private func keepPlaced(
-    _ current: Placed, isCurrent: Bool, language: Language, in notes: inout DiffRows.Notes
+    _ current: Placed, language: Language, in notes: inout DiffRows.Notes
   ) {
     let ordered = threads.sorted { a, b in
       (a.value.firstCommentTime, a.key) < (b.value.firstCommentTime, b.key)
     }
     for (id, zone) in ordered where held[id] == nil {
-      guard let spot = lastPlaced[id], spot.ends == current.ends, spot.basis == current.shown,
-        isCurrent || spot.side == .new, case .thread(let thread) = zone.subject,
-        state.placement(of: thread, shown: current.ends) != .unplaceable
+      guard let spot = lastPlaced[id], spot.basis == current.shown,
+        case .thread(let thread) = zone.subject,
+        state.keepsPlacement(of: thread, shown: current.ends)
       else {
         _ = startHolding(id, zone)
         continue
