@@ -62,6 +62,7 @@ extension EditorPaneView {
   /// フォーカスを持ったまま外れて窓へ落ちる前に、ここで移す。
   private func popupDidClose(_ dismissal: EditorDismissal) {
     popupFocusWatch = nil
+    if dismissal == .escape { swallowsEscapeRepeat = true }
     if dismissal.returnsFocus { returnFocus(to: popupReturn) }
     needsLayout = true
   }

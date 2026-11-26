@@ -139,8 +139,10 @@ extension PullRequestPaneTests {
     XCTAssertFalse(review.isOpen, "esc で閉じる")
     pumpMain(until: { hosted.window.firstResponder === hosted.list }, "焦点は一覧へ戻る")
     XCTAssertEqual(state.reviewDraft.body, "前のかきかけ", "esc で閉じても書きかけは残る")
-    escape(true)
-    XCTAssertEqual(hosted.pane.pullRequest.selection, selection, "押し続けて届いた esc は選択を外さない")
+    XCTAssertTrue(
+      hosted.pane.escapeRepeatIsSwallowed(.key("\u{1b}", [], isRepeat: true)),
+      "押し続けて届いた esc は、窓の監視が捨てる（窓の sendEvent で送るテストの経路は監視を通らない）")
+    XCTAssertEqual(hosted.pane.pullRequest.selection, selection, "選択は外れない")
     escape(false)
     XCTAssertNil(hosted.pane.pullRequest.selection, "前提: 一覧で押した esc は選択を外す")
   }

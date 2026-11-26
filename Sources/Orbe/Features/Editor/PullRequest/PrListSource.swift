@@ -46,9 +46,7 @@ final class PrListSource: RowListSource {
     case .left: panel.moveLeft(in: layout)
     case .right: panel.moveRight(isRepeat: key.isRepeat, in: layout)
     case .enter: panel.activateSelection()
-    case .escape:
-      // 押し続けた esc は、ポップアップを閉じて戻った後の一覧の選択を外さない。
-      if !key.isRepeat { panel.select(nil) }
+    case .escape: panel.select(nil)
     }
   }
 

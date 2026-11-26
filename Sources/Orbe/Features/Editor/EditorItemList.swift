@@ -114,7 +114,7 @@ final class EditorItemList {
   /// 開いた（pane が器を出して置き、行の列へフォーカスを移す）。
   @ObservationIgnored var onOpen: () -> Void = {}
   /// 閉じた（引数は本体の行き先へフォーカスを戻すか）。
-  @ObservationIgnored var onClose: (Bool) -> Void = { _ in }
+  @ObservationIgnored var onClose: (EditorDismissal) -> Void = { _ in }
   /// 行の数が変わった（pane が器の高さを置き直す）。
   @ObservationIgnored var onResize: () -> Void = {}
 
@@ -144,7 +144,7 @@ final class EditorItemList {
     owner = nil
     detail = nil
     selection = nil
-    onClose(dismissal.returnsFocus)
+    onClose(dismissal)
   }
 
   /// 持ち主が変わった。詳細に入っていれば詳細の中身を引き直し、作れなければ一覧へ戻る。一覧なら一覧の中身を引き直す。選択は

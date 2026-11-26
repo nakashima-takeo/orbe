@@ -124,6 +124,7 @@ extension EditorPaneView {
           pressWillArrive(event)
           return event
         }
+        if escapeRepeatIsSwallowed(event) { return nil }
         return handleStepKey(event) || handleViewedKey(event) ? nil : event
       }
     }

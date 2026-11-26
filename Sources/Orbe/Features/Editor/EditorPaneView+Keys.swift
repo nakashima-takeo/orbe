@@ -115,3 +115,18 @@ extension EditorPaneView {
     }
   }
 }
+
+extension EditorPaneView {
+  /// esc でポップアップか一覧の器を閉じた後、そのキーを押し続けて届く esc のキーリピートを、どこにも届けずに捨てる——閉じた
+  /// 後にフォーカスが戻った所（一覧・本文・欄）で、押し続けただけの esc が選択を外す・検索バーを閉じる・カーソルを 1 本に
+  /// 戻すことのないように。キーリピートでない打鍵が届けば、捨てるのをやめる（次の esc は、戻った所のふつうの esc）。捨てたら
+  /// true。
+  func escapeRepeatIsSwallowed(_ event: NSEvent) -> Bool {
+    guard swallowsEscapeRepeat else { return false }
+    guard event.isARepeat, event.charactersIgnoringModifiers == "\u{1b}" else {
+      if !event.isARepeat { swallowsEscapeRepeat = false }
+      return false
+    }
+    return true
+  }
+}
