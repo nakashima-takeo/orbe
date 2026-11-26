@@ -7,9 +7,9 @@
 #   塊でため、テストが固まると最後の塊がログに出ないので、`NSUnbufferedIO` で行ごとに出させる。`$!` を `swift test` の pid に
 #   保つため、tee へはプロセス置換で渡す。疑似端末の下では走らせない（テストが起こす `zsh -i` が端末を取りに行って止まる）。
 # - 見張り: ログが STALL_SECONDS 秒伸びないか、開始から LIMIT_SECONDS 秒を超えたら、固まったとみなす。最後に始まったテストの
-#   行を出し、配下の xctest（無ければ配下のすべて）に `sample` をかけ、結果を標準出力と <出力ディレクトリ>/sample-<pid>.txt へ
-#   出し、配下を終わらせ、終了コード 1 で終わる。GitHub Actions の下では、ステップの出力 `stalled` を true にする。見張るのも
-#   終わらせるのも、このスクリプトが起動したプロセスの配下だけ。
+#   名前を含む注釈を出し、配下の xctest（無ければ配下のすべて）に `sample` をかけ、結果を標準出力と
+#   <出力ディレクトリ>/sample-<pid>.txt へ出し、配下を終わらせ、終了コード 1 で終わる。GitHub Actions の下では、ステップの
+#   出力 `stalled` を true にする。見張るのも終わらせるのも、このスクリプトが起動したプロセスの配下だけ。
 # - 終了コード: 固まらなければ `swift test` のもの。
 #
 # `-e` は付けない。`sample` や `kill` が失敗しても、配下を終わらせるところまで必ず進めるため。
@@ -17,9 +17,9 @@ set -uo pipefail
 
 # 1 本のテストが出力なしで走る最長は、成功した CI で 24 秒台（main への push で走る長時間ファズ）。その 10 倍を超える長さ。
 STALL_SECONDS=300
-# このステップの所要は、成功した CI で 11〜12.4 分（main への push の長時間ファズを含む）。その 2 倍を超え、ビルドが長引いた
-# 実行（ビルド 15 分 40 秒）でもジョブの上限（60 分）より先に来る長さ。
-LIMIT_SECONDS=1800
+# このステップの所要は、成功した CI の直近 46 回で 642〜1210 秒（main への push の長時間ファズを含む）。上限は、その最長の
+# 約 2 倍で、ビルドが長引いた実行（ビルド 15 分 40 秒）でもジョブの上限（60 分）より先に来る長さ。
+LIMIT_SECONDS=2400
 POLL_SECONDS=5
 
 out=$1
@@ -52,14 +52,15 @@ while kill -0 "$pid" 2>/dev/null; do
     grown=$SECONDS
   fi
   if ((SECONDS - grown >= STALL_SECONDS)); then
-    echo "::error::テストの出力が $((SECONDS - grown)) 秒伸びない（開始から $((SECONDS - started)) 秒）。配下のプロセスに sample をかけて終わらせる。"
+    reason="テストの出力が $((SECONDS - grown)) 秒伸びない（開始から $((SECONDS - started)) 秒）"
   elif ((SECONDS - started >= LIMIT_SECONDS)); then
-    echo "::error::テストのステップが上限の $LIMIT_SECONDS 秒を超えた。配下のプロセスに sample をかけて終わらせる。"
+    reason="テストのステップが上限の $LIMIT_SECONDS 秒を超えた"
   else
     continue
   fi
 
-  echo "最後に始まったテスト: $(grep "Test Case '.*' started" "$log" | tail -1)"
+  last=$(grep -o "Test Case '[^']*' started" "$log" | tail -1 | sed -E "s/Test Case '(.*)' started/\1/")
+  echo "::error::${reason}。最後に始まったテスト: ${last:-無し}。配下のプロセスに sample をかけて終わらせる。"
   [ -n "${GITHUB_OUTPUT:-}" ] && echo "stalled=true" >>"$GITHUB_OUTPUT"
   all=$(descendants "$pid")
   targets=$(for p in $all; do
