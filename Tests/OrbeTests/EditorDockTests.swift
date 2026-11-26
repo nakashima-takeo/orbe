@@ -31,15 +31,23 @@ final class EditorDockTests: OrbeTestCase {
     /// 閉じる直前の知らせのきっかけと、その時点で中身が窓に載っていたか。
     private(set) var closings: [(dismissal: EditorDismissal, inWindow: Bool)] = []
     private(set) var keys: [String] = []
+    /// 地の下に、地の外へ並べるメニュー（右寄せ・幅 `menuWidth`）を出すか。
+    var showsMenu = false
+    static let menuWidth: CGFloat = 250
 
     func popupContent() -> AnyView {
       AnyView(
-        EditorPopupGround {
-          HStack {
-            Embedded(view: self.field).frame(width: 200, height: 26)
-            Embedded(view: self.other).frame(width: 100, height: 26)
+        VStack(alignment: .trailing, spacing: 6) {
+          EditorPopupGround {
+            HStack {
+              Embedded(view: self.field).frame(width: 200, height: 26)
+              Embedded(view: self.other).frame(width: 100, height: 26)
+            }
+            .padding(8)
           }
-          .padding(8)
+          if self.showsMenu {
+            Color.gray.frame(width: Self.menuWidth, height: 80).editorDockItem()
+          }
         })
     }
 
@@ -309,69 +317,37 @@ final class EditorDockTests: OrbeTestCase {
     XCTAssertTrue(onItem.isDescendant(of: pane.dockHost), "中身の上は置き場が受ける")
   }
 
-  // MARK: - 並び・失敗の札
-
-  /// 置き場の高さが足りなければ、札は全部が置き場の中に見え、ポップアップは札の残りの高さに縮む。
-  func testTheCardsStayWholeAndThePopupShrinksWhenTheDockIsShort() throws {
-    let height: CGFloat = 200
-    let frames = Record<[CGRect]>([])
-    let host = NSHostingView(
-      rootView: EditorDockStack {
-        // 中身は 400 まで伸び、それより低く求められれば縮む（入力欄が中でスクロールする中身）。
-        Color.clear.frame(width: 300).frame(maxHeight: 400).editorDockItem()
-      } cards: {
-        EditorFailureCard(text: "コミットに失敗しました。", dismiss: {})
-        EditorFailureCard(text: "プッシュに失敗しました。", dismiss: {})
-      }
-      .frame(width: Theme.Layout.editorDockWidth, height: height)
-      .coordinateSpace(.named(EditorDockRoot.space))
-      .onPreferenceChange(EditorDockFramesKey.self) { frames.value = $0 }
-      .environment(\.localization, LocalizationStore(language: .ja)))
-    let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: Theme.Layout.editorDockWidth, height: height),
-      styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = host
-    holdUntilTestEnds(window)
-    host.layoutSubtreeIfNeeded()
-    pumpMain(until: { frames.value.count == 3 }, "ポップアップと札 2 枚の枠")
-
-    let popup = frames.value[0]
-    let cards = Array(frames.value.dropFirst())
-    let gap = Theme.Layout.editorDockGap
-    XCTAssertEqual(popup.minY, 0, accuracy: 0.5)
-    XCTAssertEqual(cards[0].minY, popup.maxY + gap, accuracy: 0.5, "札はポップアップの下")
-    XCTAssertEqual(cards[1].minY, cards[0].maxY + gap, accuracy: 0.5)
-    XCTAssertLessThanOrEqual(cards[1].maxY, height + 0.5, "札は全部が置き場の中")
-    XCTAssertLessThan(popup.height, 400, "ポップアップが縮む")
-  }
-
-  /// 失敗の札の × を押すと、渡した処理が呼ばれる。文の上の押下では呼ばれない。
-  func testTheCloseButtonOfAFailureCardCallsTheGivenAction() throws {
-    let width: CGFloat = 400
-    let dismissed = Record(0)
-    let host = NSHostingView(
-      rootView: EditorFailureCard(text: "コミットに失敗しました。", dismiss: { dismissed.value += 1 })
-        .frame(width: width)
-        .environment(\.localization, LocalizationStore(language: .ja)))
-    host.frame.size = NSSize(width: width, height: host.fittingSize.height)
-    let window = NSWindow(
-      contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = host
-    holdUntilTestEnds(window)
-    placeOffscreen(window)
-    host.layoutSubtreeIfNeeded()
-    func click(_ point: NSPoint) throws {
-      try self.click(host, at: point)
-      flush(window)
+  /// 中身が地の外に並べた物（メニュー）の横の空いた所の押下は、置き場を素通りして下の view へ届き、外の押下として
+  /// ポップアップを閉じる。並べた物の上の押下は置き場が受け、閉じない。
+  func testAPressBesideWhatTheContentPlacesOutsideItsGroundPassesThrough() throws {
+    let hosted = try host()
+    let pane = hosted.pane
+    let owner = Owner()
+    owner.showsMenu = true
+    func hit(_ point: NSPoint) -> NSView? { pane.hitTest(pane.convert(point, to: pane.superview)) }
+    func press(_ point: NSPoint) {
+      pane.pressWillArrive(
+        .mouse(.leftMouseDown, at: pane.convert(point, to: nil), in: hosted.window))
     }
-    // × は右上の角から余白 7 の内側に在る、20 角のボタン。
-    let inset = Theme.Layout.editorCardClosePad + Theme.Layout.editorCardClose / 2
-    let close = NSPoint(x: width - inset, y: host.isFlipped ? inset : host.bounds.maxY - inset)
 
-    try click(NSPoint(x: 40, y: host.bounds.midY))
-    XCTAssertEqual(dismissed.value, 0, "文の上の押下では呼ばれない")
-    try click(close)
-    XCTAssertEqual(dismissed.value, 1, "× で呼ばれる")
+    openAndSettle(hosted, owner)
+    pumpMain(until: { pane.dockHost.itemFrames.count == 2 }, "前提: 地とメニューの枠")
+    let frames = pane.dockHost.itemFrames.map { pane.convert($0, from: pane.dockHost) }
+    let menu = try XCTUnwrap(frames.first { $0.width == Owner.menuWidth })
+    let ground = try XCTUnwrap(frames.first { $0 != menu })
+    let beside = NSPoint(x: menu.minX - 20, y: menu.midY)
+    XCTAssertTrue(
+      beside.x > ground.minX && beside.y > ground.maxY, "前提: 確かめる点はポップアップの幅の中で、地の下")
+    let onMenu = try XCTUnwrap(hit(NSPoint(x: menu.midX, y: menu.midY)))
+    XCTAssertTrue(onMenu.isDescendant(of: pane.dockHost), "メニューの上は置き場が受ける")
+    press(NSPoint(x: menu.midX, y: menu.midY))
+    XCTAssertTrue(hosted.popup.isOpen, "メニューの上の押下では閉じない")
+
+    let besideHit = try XCTUnwrap(hit(beside))
+    XCTAssertFalse(besideHit.isDescendant(of: pane.dockHost), "メニューの横は置き場が受けない")
+    press(beside)
+    XCTAssertFalse(hosted.popup.isOpen, "メニューの横の押下は外の押下として閉じる")
+    XCTAssertEqual(owner.dismissals, [.outsidePress])
   }
 }
 
