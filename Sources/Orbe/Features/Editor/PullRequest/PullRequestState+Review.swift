@@ -37,14 +37,6 @@ extension PullRequestState {
     (changedFiles.change(of: path) == .renamed) == (ends.renames[path] != nil)
   }
 
-  /// スレッド `thread` を、両端 `ends` の diff の行に置けるか——今の diff の行に付いていて、古い側の行なら rename の判定が
-  /// GitHub と手元で同じ。古い側の行のスレッドで両端が分からなければ、決められない（nil）。
-  func canPlace(_ thread: GitHubPullRequestReview.Thread, in ends: DiffEnds?) -> Bool? {
-    guard thread.line != nil else { return false }
-    guard thread.side == .old else { return true }
-    return ends.map { agreesOnRename(of: thread.path, $0) }
-  }
-
   /// 今の PR の diff の両端——求め終えていて、その先頭が中身の先頭と同じとき（求めている・求められない・中身が新しい先頭を
   /// 読んだ後で求め直す前は nil）。PR ごとの値で、開いている diff の有無と数に依らない。
   var diffEnds: DiffEnds? {

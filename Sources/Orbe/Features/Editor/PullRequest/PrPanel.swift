@@ -39,18 +39,6 @@ final class PrPanel {
   @ObservationIgnored var onViewAsTree: (Bool) -> Void = { _ in }
   /// URL をブラウザで開く。
   @ObservationIgnored var onOpenURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
-  /// ファイルごとのコメントの数と、それを数えたレビューのやりとり。
-  @ObservationIgnored private var counted: CommentCounts?
-
-  /// ファイルごとのコメントの数（PR の状態 `state`・そのレビューのやりとりの版 `version`・diff の両端 `ends`（分からなければ
-  /// 先頭のコミット `head`）で数えた）。
-  private struct CommentCounts {
-    let state: ObjectIdentifier
-    let version: Int
-    let head: String
-    let ends: PullRequestState.DiffEnds?
-    let counts: [String: Int]
-  }
   /// キーで行へ動いたときの開きの間引き。
   @ObservationIgnored let navigation = RowNavigationThrottle()
   /// 行の組の元（同じ元なら組み直さない）と、組み直した回数。
@@ -144,15 +132,14 @@ final class PrPanel {
     }
   }
 
-  /// 列が読み直す版——行の組・確認済み・レビューのやりとり・diff の両端が変わるたびに変わる（確認済みとコメントの数は行を
-  /// 組み直さず、見えている行を描き直す。コメントの数は diff の両端で置けるかが決まる）。
+  /// 列が読み直す版——行の組・確認済み・ファイルごとのコメントの数が変わるたびに変わる（確認済みとコメントの数は行を
+  /// 組み直さず、見えている行を描き直す）。
   var rowsVersion: Int {
     var hasher = Hasher()
     hasher.combine(builtVersion)
     hasher.combine(state.map(ObjectIdentifier.init))
     hasher.combine(state?.viewedVersion)
-    hasher.combine(state?.reviewVersion)
-    hasher.combine(state?.diffEnds)
+    hasher.combine(state?.placements.commentCounts)
     return hasher.finalize()
   }
 
@@ -236,23 +223,10 @@ final class PrPanel {
 
   // MARK: - コメント
 
-  /// ファイル `path` の、今の diff に置けるスレッド（`PullRequestState.canPlace`）のコメントの総数。レビューのやりとりか
-  /// diff の両端が変わったときだけ数え直す（3,000 件のファイルでも、見えている行を描くたびにスレッドを数えない）。
+  /// ファイル `path` の、今の diff に置けるスレッドのコメントの総数（PR ごとの状態の置き方から導いた値を読む。見えている行を
+  /// 描くたびにスレッドを数えない）。
   func commentCount(of path: String) -> Int {
-    guard let state, let head = state.content?.headCommit else { return 0 }
-    let id = ObjectIdentifier(state)
-    let ends = state.diffEnds
-    if counted?.state != id || counted?.version != state.reviewVersion || counted?.head != head
-      || counted?.ends != ends
-    {
-      var counts: [String: Int] = [:]
-      for thread in state.threads(at: head) ?? [] where state.canPlace(thread, in: ends) == true {
-        counts[thread.path, default: 0] += thread.comments.count
-      }
-      counted = CommentCounts(
-        state: id, version: state.reviewVersion, head: head, ends: ends, counts: counts)
-    }
-    return counted?.counts[path] ?? 0
+    state?.placements.commentCounts[path] ?? 0
   }
 
   // MARK: - 確認済み

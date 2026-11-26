@@ -106,7 +106,7 @@ final class PrCommentLayer {
 
   /// diff が見せている両側の本文 `shown` の並びに混ぜる注記。PR ごとの書きかけのうち層にまだ無いものを欄にし、スレッドの値と
   /// 書き込みの最中かを絵の差し込みへ写し、見せている両端の先頭のコミットで読んだスレッドのうち今の diff に置けるもの
-  /// （`PullRequestState.canPlace`）と、行を追う欄（新しいコメントの欄と、返信の書きかけを持ったまま置けなくなったスレッド）を
+  /// （`PullRequestState.placement` が置けると答えるもの）と、行を追う欄（新しいコメントの欄と、返信の書きかけを持ったまま置けなくなったスレッド）を
   /// 置く。行を導いた両端が見せている両端と違う欄は、欄の起点から今の版の行を導き始める。見せている本文が前に注記を渡した本文のままなら、そのときの
   /// 両端で置く（出どころが新しい両端の本文を読み終えても、diff がそれを見せるまでは前の両端）。両端が分からなければ何も
   /// 置かない。
@@ -144,9 +144,7 @@ final class PrCommentLayer {
           < (b.comments.first?.createdAt ?? .distantPast, b.id)
       }
       for thread in ordered {
-        guard state.canPlace(thread, in: ends) == true, isCurrent || thread.side == .new,
-          let line = thread.line
-        else {
+        guard state.placement(of: thread, shown: ends) == .placeable, let line = thread.line else {
           hold(thread)
           continue
         }

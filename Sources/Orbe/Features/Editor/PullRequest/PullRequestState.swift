@@ -76,18 +76,14 @@ final class PullRequestState {
     done((repo, trackedRefs))
   }
   /// 最後に読めた中身と、その変更ファイルの並び・パスからの索引（中身を読んだときに作り直す）。
-  private(set) var content: GitHubPullRequestContent?
-  private(set) var changedFiles = PrChangedFiles.empty {
-    didSet { changedFilesVersion &+= 1 }
-  }
-  /// `changedFiles` が変わるたびに進む（未送信のコメントの一覧を組み直す合図）。
-  private(set) var changedFilesVersion = 0
+  private(set) var content: GitHubPullRequestContent? { didSet { refreshPlacements() } }
+  private(set) var changedFiles = PrChangedFiles.empty
   /// 中身の最後の読みの失敗。次に中身が読めたら消える（読み直している間は前の失敗を残す）。
   var contentFailure: GitHubFailure?
   /// 最後の確認済みの書き込みの失敗。失敗の知らせを閉じたとき・次の確認済みの書き込みを始めたときに消える。
   var viewedFailure: GitHubFailure?
   private(set) var isReading = false
-  private(set) var bounds = Bounds.none
+  private(set) var bounds = Bounds.none { didSet { refreshPlacements() } }
 
   /// 確認済みの GitHub の値（パス → 値）と、その値を決めた問い合わせの通し番号。
   var viewed: [String: Bool] = [:] {
@@ -104,13 +100,10 @@ final class PullRequestState {
   @ObservationIgnored var isWriting = false
 
   /// 最後に読めたレビューのやりとり（→ `PullRequestState+Review`）。
-  var review: GitHubPullRequestReview? {
-    didSet { reviewVersion &+= 1 }
-  }
-  /// `review` が変わるたびに進む（列が見えている行を描き直す合図）。
-  private(set) var reviewVersion = 0
-  /// 最後に組んだ未送信のコメントの一覧（→ `PullRequestState+PendingComments`）。
-  @ObservationIgnored var pendingCommentsMade: PendingCommentsMade?
+  var review: GitHubPullRequestReview? { didSet { refreshPlacements() } }
+  /// 置き方から導いた値（→ `PullRequestState+Placement`）と、デバッグのビルドで、その材料が作り直す前に変わった印。
+  var placementsMade = Placements.empty
+  @ObservationIgnored var placementsAreStale = false
   /// レビューのやりとりの最後の読みの失敗。中身の読みの失敗とは分けて持ち、次に読めたら消える。
   var reviewFailure: GitHubFailure?
   /// レビューの送信の、全体へのコメントの書きかけと選んだ種類（メモリだけで、パネルを隠しても残る）。
