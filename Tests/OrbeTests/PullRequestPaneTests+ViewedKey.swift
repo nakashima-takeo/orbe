@@ -29,8 +29,7 @@ extension PullRequestPaneTests {
     XCTAssertFalse(state.isViewed(shown))
     XCTAssertTrue(hosted.window.firstResponder === hosted.list, "焦点は列のまま")
 
-    pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "前提: 全体へのコメント欄")
-    hosted.window.makeFirstResponder(try XCTUnwrap(messageField(in: hosted.pane)))
+    _ = try openReview(hosted)
     XCTAssertFalse(hosted.pane.handleViewedKey(.key("v", [])), "欄では字として入る")
     XCTAssertTrue(state.isViewed(selected))
   }

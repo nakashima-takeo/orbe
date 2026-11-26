@@ -94,7 +94,10 @@ extension L10n {
     ),
     .editorPrReview: ("レビュー", "Review"),
     .editorPrReviewPending: ("未送信のコメント %lld", "Pending comments: %lld"),
-    .editorPrReviewPlaceholder: ("全体へのコメント（任意）", "Overall comment (optional)"),
+    .editorPrReviewButtonPending: (
+      "レビュー、未送信のコメント %lld", "Review, pending comments: %lld"
+    ),
+    .editorPrReviewOverall: ("全体へのコメント", "Overall Comment"),
     .editorPrReviewApprove: ("承認", "Approve"),
     .editorPrReviewComment: ("コメント", "Comment"),
     .editorPrReviewRequestChanges: ("変更を依頼", "Request Changes"),

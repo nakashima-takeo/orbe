@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// PR のパネルの印。
+/// PR のパネル・上のバー・レビューのポップアップの印。
 extension EditorGlyphs {
   /// open の PR（stroke 1.4）。
   static let pullRequest = Glyph(viewBox: 16, stroke: 1.4) { k in
@@ -43,6 +43,18 @@ extension EditorGlyphs {
     path.move(to: CGPoint(x: points[0].0 * k, y: points[0].1 * k))
     for (x, y) in points.dropFirst() { path.addLine(to: CGPoint(x: x * k, y: y * k)) }
     path.closeSubpath()
+    return [(path, 1)]
+  }
+
+  /// 変更を依頼（`M8 2.5v5M5.5 5h5M5.5 11.5h5`。stroke 1.4）。
+  static let requestChanges = Glyph(viewBox: 16, stroke: 1.4) { k in
+    var path = Path()
+    for (from, to) in [((8, 2.5), (8, 7.5)), ((5.5, 5), (10.5, 5)), ((5.5, 11.5), (10.5, 11.5))]
+      as [((CGFloat, CGFloat), (CGFloat, CGFloat))]
+    {
+      path.move(to: CGPoint(x: from.0 * k, y: from.1 * k))
+      path.addLine(to: CGPoint(x: to.0 * k, y: to.1 * k))
+    }
     return [(path, 1)]
   }
 

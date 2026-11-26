@@ -20,6 +20,8 @@ struct EditorBarRoot: View {
   let pullRequest: BranchPullRequest
   /// PR の画面の面ごとの状態（PR の札・再読込・「GitHub で開く」が読む）。
   let pullRequestPanel: PrPanel
+  /// レビューのポップアップの持ち主（「レビュー」のボタンが読む）。
+  let reviewPopup: PrReviewPopup
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
   /// 部品の間隔。

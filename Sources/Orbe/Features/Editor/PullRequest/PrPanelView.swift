@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 /// 左の列: PR のパネル。上から、パネルヘッダー（題）→ 答えに応じた中身。PR があれば頭
-/// （PR の印・題・番号・作者 · `head → base`・手元とのずれの帯）と失敗の文と列（説明・コミット・変更ファイル。AppKit）と
-/// 下端のレビューの送信の区画。PR が無い・表示できない・中身の最初の読みが失敗したときは短い一言だけ（見出しと理由、作成と
+/// （PR の印・題・番号・作者 · `head → base`・手元とのずれの帯）と失敗の文と列（説明・コミット・変更ファイル。AppKit）。
+/// PR が無い・表示できない・中身の最初の読みが失敗したときは短い一言だけ（見出しと理由、作成と
 /// 再読込のボタンは本体が出す）。根が変わると面はパネルと列を組で作り直すので、中身はパネルで同一視する。
 struct PrPanelView: View {
   let panel: PrPanel
@@ -42,12 +42,6 @@ struct PrPanelView: View {
           guard list.list.source.language != language else { return }
           list.list.source.language = language
           list.list.reloadRows()
-        }
-        if let review = state.review {
-          PrReviewSection(panel: panel, state: state, review: review)
-            .id(ObjectIdentifier(state))
-        } else if let failure = state.reviewFailure {
-          PrReviewReadFailure(failure: failure.reason)
         }
       } else if PrPanelText.failure(of: panel, state, l10n) != nil {
         EditorSidebarNote(text: l10n.string(.editorUnavailable))

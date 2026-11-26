@@ -1,8 +1,7 @@
 import AppKit
 
 /// PR のパネルの面ごとの状態——worktree の今の PR（`BranchPullRequest`）を見ること、列の行の組、区分・フォルダ・説明の
-/// 開閉、選択、パネルの中の焦点（列と全体へのコメント欄。欄の変換中の字と、PR が替わったときの欄の後始末を含む）、
-/// ファイルごとのコメント数の覚え。PR の事実（どの PR か・中身・確認済み・両端）は 2 つの状態が持ち、ここは見せ方だけ。
+/// 開閉、選択、列の焦点、ファイルごとのコメント数の覚え。PR の事実（どの PR か・中身・確認済み・両端）は 2 つの状態が持ち、ここは見せ方だけ。
 ///
 /// 面が見えている間（`isTracking`）は worktree の今の PR がどの PR かを追い（上のバーの番号）、PR の画面を出している間
 /// （`isShown`。左の列を閉じていても）は PR の中身も読む——GitHub に問い合わせるのは、このどちらかの間だけ。列の行は、
@@ -26,16 +25,9 @@ final class PrPanel {
   private(set) var isListFocused = false
   /// 焦点を入れる要求（当てたら外す）。
   private(set) var focusRequest = false
-  /// 下端の区画の全体へのコメント欄に焦点がある。
-  var isReviewFieldFocused = false
-  /// 全体へのコメント欄の変換中の字（確定するまで書きかけに入れない。欄が写す）。
-  var reviewComposition = ""
 
-  /// 焦点を持てる所が消える直前（行の組が空になって列が消える・PR が替わって下端の区画を作り直す。まだ窓に居るうち）。
-  /// 焦点がパネルの列か全体へのコメント欄にあれば、面の本文へ移す。
+  /// 列が消える直前（行の組が空になる。まだ窓に居るうち）。焦点がパネルの列にあれば、面の本文へ移す。
   @ObservationIgnored var onFocusWillClose: () -> Void = {}
-  /// 下端の区画を作った PR の状態（替われば、区画を作り直す前に欄の後始末をする）。
-  @ObservationIgnored private var reviewedState: ObjectIdentifier?
   /// 行の diff を開く。
   @ObservationIgnored var onOpenDiff: (EditorDiff.Key, ScmPanel.Opening) -> Void = { _, _ in }
   /// worktree の今の PR が替わった・その PR の状態が変わった（行の組を組み直した後）。
@@ -47,8 +39,8 @@ final class PrPanel {
   @ObservationIgnored var onViewAsTree: (Bool) -> Void = { _ in }
   /// URL をブラウザで開く。
   @ObservationIgnored var onOpenURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
-  /// 全体へのコメント欄の変換中の字を確定する（欄が結ぶ）。
-  @ObservationIgnored var confirmReviewComposition: () -> Void = {}
+  /// レビューのポップアップを開くよう頼む（列の ⌘↑。面が結ぶ）。
+  @ObservationIgnored var onRequestReview: () -> Void = {}
   /// ファイルごとのコメントの数と、それを数えたレビューのやりとり。
   @ObservationIgnored private var counted: CommentCounts?
 
@@ -75,12 +67,11 @@ final class PrPanel {
   }
 
   /// 面が見えている間 true。立てると worktree の今の PR がどの PR かを追い始め、知らせを受ける。下ろすとやめる（先に
-  /// `isShown` を下ろす）。追っていない間は知らせを受けないので、追い始めるときに下端の区画を作る元の状態を覚え直す。
+  /// `isShown` を下ろす）。
   @ObservationIgnored var isTracking = false {
     didSet {
       guard isTracking != oldValue else { return }
       if isTracking {
-        reviewedState = state.map(ObjectIdentifier.init)
         pullRequest.addObserver(self)
         pullRequest.beginTracking()
         rebuild()
@@ -242,8 +233,6 @@ final class PrPanel {
   func panelDidHide() {
     navigation.drop()
     isListFocused = false
-    isReviewFieldFocused = false
-    reviewComposition = ""
     focusRequest = false
   }
 
@@ -317,22 +306,7 @@ final class PrPanel {
 /// worktree の今の PR が替わった・その PR の状態が変わったら、行の組を組み直す（中身が同じなら組み直さない）。
 extension PrPanel: BranchPullRequestObserver {
   func branchPullRequestDidChange(_ pullRequest: BranchPullRequest) {
-    reviewStateDidChange()
     rebuild()
     onPullRequestChange()
-  }
-
-  /// PR の状態が替わったら、下端の区画を作り直す前に、前の PR の欄の変換中の字を前の PR の書きかけへ確定し、写していた変換中の
-  /// 字を空にし、焦点が欄にあれば面の本文へ移す（作り直しで欄が窓から外れても、AppKit は焦点の抜けを知らせない）。
-  private func reviewStateDidChange() {
-    let next = state.map(ObjectIdentifier.init)
-    guard next != reviewedState else { return }
-    defer { reviewedState = next }
-    guard reviewedState != nil else { return }
-    confirmReviewComposition()
-    reviewComposition = ""
-    guard isReviewFieldFocused else { return }
-    onFocusWillClose()
-    isReviewFieldFocused = false
   }
 }

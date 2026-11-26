@@ -660,7 +660,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrWriteTimedOut
   case editorPrReview
   case editorPrReviewPending
-  case editorPrReviewPlaceholder
+  case editorPrReviewButtonPending
+  case editorPrReviewOverall
   case editorPrReviewApprove
   case editorPrReviewComment
   case editorPrReviewRequestChanges

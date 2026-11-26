@@ -82,6 +82,8 @@ final class EditorPaneView: NSView {
   private(set) var pullRequest: PrPanel
   private(set) var pullRequestList: RowList<PrListSource>
   private(set) var pullRequestHeader = PrDescriptionHeader(frame: .zero)
+  /// レビューのポップアップの持ち主（面ごと。根が変われば作り直す）。
+  private(set) var reviewPopup: PrReviewPopup
   /// 一覧の器（今の項目のボタンに付いて浮く一覧）と、その地と下の案内の host。器の行の列と host は、開いている間だけ
   /// バーより下の最前面に出す。
   let itemList = EditorItemList()
@@ -94,7 +96,7 @@ final class EditorPaneView: NSView {
   var itemButtonFrame: CGRect?
   /// ポップアップの器（上のバーの右端のボタンから、バーの右下に開く）と、ポップアップとその下に並ぶ札を置く host（バーより
   /// 下の層）。
-  let popup = EditorPopup()
+  let popup: EditorPopup
   private(set) lazy var dockHost = EditorDockHost(rootView: dockRoot())
   /// ポップアップを開く前のフォーカスの場所（閉じたら、きっかけが求めれば戻す）。
   var popupReturn = FocusPlace.body
@@ -141,11 +143,15 @@ final class EditorPaneView: NSView {
     self.pullRequest = pullRequest
     let pullRequestList = Self.pullRequestList(pullRequest)
     self.pullRequestList = pullRequestList
+    let popup = EditorPopup()
+    self.popup = popup
+    let reviewPopup = PrReviewPopup(pullRequest: pullRequest.pullRequest, popup: popup)
+    self.reviewPopup = reviewPopup
     barHost = EditorBarHost(
       rootView: EditorBarRoot(
         shell: shell, sidebar: sidebar, itemList: itemList, scm: scm,
         pullRequest: pullRequest.pullRequest, pullRequestPanel: pullRequest,
-        localization: localization, fontResolver: fontResolver))
+        reviewPopup: reviewPopup, localization: localization, fontResolver: fontResolver))
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
@@ -216,7 +222,7 @@ final class EditorPaneView: NSView {
     barHost.rootView = EditorBarRoot(
       shell: shell, sidebar: sidebar, itemList: itemList, scm: scm,
       pullRequest: pullRequest.pullRequest, pullRequestPanel: pullRequest,
-      localization: localization, fontResolver: fontResolver)
+      reviewPopup: reviewPopup, localization: localization, fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
       scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
@@ -277,7 +283,7 @@ final class EditorPaneView: NSView {
   }
 
   /// 根が変わった（cd）。ポップアップを閉じ（戻したフォーカスは、パネルが外れる前に本体へ移す決まりを通る）、ツリーと
-  /// ソース管理パネルと PR のパネルを作り直し（前の根の PR は見るのをやめる）、握っていたなら
+  /// ソース管理パネルと PR のパネルとレビューのポップアップの持ち主を作り直し（前の根の PR は見るのをやめる）、握っていたなら
   /// 握り直す（worktree の状態——メッセージ・操作・失敗——は worktree ごとに残るので、戻れば同じものが見える）。プロジェクト
   /// 検索は結果を捨て、この面の検索パネルが画面に見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
   func setRoot(_ root: String) {
@@ -301,6 +307,7 @@ final class EditorPaneView: NSView {
     pullRequest = PrPanel(root: root, source: .gh())
     pullRequestList = Self.pullRequestList(pullRequest)
     pullRequestHeader = PrDescriptionHeader(frame: .zero)
+    reviewPopup = PrReviewPopup(pullRequest: pullRequest.pullRequest, popup: popup)
     wirePullRequest()
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()

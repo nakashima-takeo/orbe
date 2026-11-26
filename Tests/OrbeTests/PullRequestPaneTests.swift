@@ -184,24 +184,22 @@ final class PullRequestPaneTests: OrbeTestCase {
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "現れても焦点を奪わない")
   }
 
-  /// 焦点を置くパネルの中の場所。
+  /// 焦点を置く場所——PR のパネルの列か、レビューのポップアップの全体へのコメント欄。
   private enum Area: CaseIterable {
     case list
     case reviewField
   }
 
-  /// 出したパネルの `area` に焦点を入れる。
+  /// `area` に焦点を入れる。
   private func focus(_ area: Area, in hosted: Hosted) throws {
     switch area {
     case .list: hosted.window.makeFirstResponder(hosted.list)
-    case .reviewField:
-      pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "前提: 全体へのコメント欄")
-      hosted.window.makeFirstResponder(try XCTUnwrap(messageField(in: hosted.pane)))
+    case .reviewField: _ = try openReview(hosted)
     }
   }
 
-  /// 列か全体へのコメント欄に焦点がある間に、パネルを出したまま PR が無くなる場合と、パネルを隠す場合のどちらでも、焦点は面の
-  /// 本文へ戻る（窓へ落ちない）。
+  /// 列かレビューのポップアップの全体へのコメント欄に焦点がある間に、パネルを出したまま PR が無くなる場合と、パネルを隠す
+  /// 場合のどちらでも、焦点は面の本文へ戻る（窓へ落ちない）。
   func testTheFocusInThePanelReturnsToTheBodyWhenThePanelGoesAwayOrHides() throws {
     for area in Area.allCases {
       gitHub.open = true
@@ -287,25 +285,33 @@ final class PullRequestPaneTests: OrbeTestCase {
 
   // MARK: - 全体へのコメント欄
 
-  /// PR のパネルを出して、全体へのコメント欄に焦点を入れる。
+  /// PR のパネルを出して、レビューのポップアップを開く（開くと全体へのコメント欄に焦点が入る）。
   private func reviewField(_ hosted: Hosted) throws -> MessageTextView {
     shownWithRows(hosted)
+    return try openReview(hosted)
+  }
+
+  /// レビューのポップアップを開き、全体へのコメント欄に焦点が入るのを待つ。
+  func openReview(_ hosted: Hosted) throws -> MessageTextView {
+    let review = hosted.pane.reviewPopup
+    pumpMain(
+      until: { review.canOpen && hosted.pane.pullRequest.state?.diffEnds != nil },
+      "前提: レビューを開けて、diff の両端が揃う")
+    review.requestOpen()
     pumpMain(
       until: {
-        self.messageField(in: hosted.pane) != nil
-          && hosted.pane.pullRequest.state?.diffEnds != nil
-      }, "前提: 全体へのコメント欄と diff の両端")
-    let field = try XCTUnwrap(messageField(in: hosted.pane))
-    hosted.window.makeFirstResponder(field)
-    XCTAssertTrue(hosted.pane.pullRequest.isReviewFieldFocused, "前提: 欄に焦点")
-    return field
+        self.messageField(in: hosted.pane.dockHost)
+          .map { hosted.window.firstResponder === $0 } ?? false
+      }, "前提: 開いたポップアップの欄に焦点")
+    return try XCTUnwrap(messageField(in: hosted.pane.dockHost))
   }
 
   func messageField(in view: NSView) -> MessageTextView? {
     (view as? MessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
   }
 
-  /// 欄の ↵ は改行で、⌘↵ は見えている字（変換中の字を含む）をそのまま全体へのコメントにして送り、通れば欄が空になる。
+  /// 欄の ↵ は改行で、⌘↵ は見えている字（変換中の字を含む）をそのまま全体へのコメントにして送り、通ればポップアップが
+  /// 閉じ、書きかけが空になる。
   func testCommandReturnInTheReviewFieldSendsTheVisibleText() throws {
     let hosted = host(try registeredRoot())
     let field = try reviewField(hosted)
@@ -319,7 +325,10 @@ final class PullRequestPaneTests: OrbeTestCase {
 
     XCTAssertTrue(hosted.pane.performKeyEquivalent(with: .key("\r")))
     XCTAssertEqual(gitHub.reviewWrites, [.submit(.comment, body: "見ました\nかくにん")])
-    pumpMain(until: { field.string.isEmpty }, "通れば欄が空になる")
+    let review = hosted.pane.reviewPopup
+    let state = try XCTUnwrap(hosted.pane.pullRequest.state)
+    pumpMain(
+      until: { !review.isOpen && state.reviewDraft.body.isEmpty }, "通ればポップアップが閉じ、書きかけが空になる")
   }
 
   /// 変換中の字だけがある欄でも送れる姿になり、変換を取り消せば送れない姿に戻る。IME が確定すれば字は書きかけへ移り、その後の
@@ -328,27 +337,28 @@ final class PullRequestPaneTests: OrbeTestCase {
     let hosted = host(try registeredRoot())
     let field = try reviewField(hosted)
     let panel = hosted.pane.pullRequest
+    let review = hosted.pane.reviewPopup
     let compose = { (text: String) in
       field.setMarkedText(
         text, selectedRange: NSRange(location: text.utf16.count, length: 0),
         replacementRange: NSRange(location: NSNotFound, length: 0))
     }
-    XCTAssertFalse(panel.canSubmitReview, "前提: 空の欄")
+    XCTAssertFalse(review.canSubmit, "前提: 空の欄")
 
     compose("けんとう")
-    XCTAssertTrue(panel.canSubmitReview)
+    XCTAssertTrue(review.canSubmit)
     compose("")
-    XCTAssertFalse(panel.canSubmitReview, "変換を取り消した")
+    XCTAssertFalse(review.canSubmit, "変換を取り消した")
 
     compose("けんとう")
     field.insertText("検討", replacementRange: NSRange(location: NSNotFound, length: 0))
     pumpMain(until: { panel.state?.reviewDraft.body == "検討" }, "IME の確定が書きかけへ入る")
     panel.state?.reviewDraft.body = ""
-    XCTAssertFalse(panel.canSubmitReview, "確定した後は、終わった変換の字のせいで送れる姿のままになることはない")
+    XCTAssertFalse(review.canSubmit, "確定した後は、終わった変換の字のせいで送れる姿のままになることはない")
   }
 
-  /// 全体へのコメント欄で変換中のまま worktree の今の PR が替わると、変換中の字は前の PR の書きかけへ確定し、次の PR の欄は
-  /// 空のまま、焦点は面の本文へ移る。
+  /// 全体へのコメント欄で変換中のまま worktree の今の PR が替わると、ポップアップが閉じ、変換中の字は前の PR の書きかけへ
+  /// 確定し、次の PR の書きかけは空のまま、焦点は欄から出る（窓へ落ちない）。
   func testSwitchingThePullRequestWhileComposingLeavesTheTextWithThePreviousOne() throws {
     let hosted = host(try registeredRoot())
     let field = try reviewField(hosted)
@@ -365,13 +375,16 @@ final class PullRequestPaneTests: OrbeTestCase {
       until: { panel.state.map { $0 !== previous && $0.review != nil } ?? false }, "次の PR を見る")
     XCTAssertEqual(previous.reviewDraft.body, "前のかきかけ")
     XCTAssertEqual(panel.state?.reviewDraft.body, "")
-    XCTAssertEqual(panel.reviewComposition, "")
+    XCTAssertFalse(hosted.pane.reviewPopup.isOpen, "前の PR のポップアップは閉じる")
+    XCTAssertEqual(hosted.pane.reviewPopup.composition, "")
     pumpMain(
-      until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "焦点は面の本文へ")
+      until: {
+        !hosted.pane.focusIsInDock && hosted.window.firstResponder !== hosted.window
+      }, "焦点は欄から出る")
   }
 
-  /// ⌘↵ が送るのは全体へのコメント欄に焦点がある間の 1 回だけ——送れない間と押し続けた繰り返しは食って送らず、焦点が欄の外
-  /// なら扱わない。
+  /// ⌘↵ が送るのは、開いたレビューのポップアップに焦点がある間の 1 回だけ——送れない間と押し続けた繰り返しは食って送らず、
+  /// 焦点がポップアップの外なら扱わない。
   func testCommandReturnSendsOnlyOnceAndOnlyFromTheReviewField() throws {
     let hosted = host(try registeredRoot())
     let field = try reviewField(hosted)

@@ -54,6 +54,11 @@ extension PullRequestState {
     case noDiff
   }
 
+  /// 送信の失敗を消す（失敗の知らせを閉じた・ポップアップを閉じた）。
+  func dismissSubmissionFailure() {
+    submissionFailure = nil
+  }
+
   /// 書きかけを送る（欄の変換中の字は、呼び出し側が先に確定しておく）。送れなければ何もせず false を返す（2 回押しても
   /// 送信は 1 回）。
   /// 受け付けたら前の送信の失敗を消し、終わったときに `completion` へ「成功したか」を 1 回返す。

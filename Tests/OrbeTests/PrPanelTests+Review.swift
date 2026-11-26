@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// PR のパネルの下端の区画とファイルの行のコメント数。壊れると何が起きるか: 空のコメントを送信できる・行に書いた未送信の
+/// レビューの送信の規則とファイルの行のコメント数。壊れると何が起きるか: 空のコメントを送信できる・行に書いた未送信の
 /// コメントを本文なしで送れない・自分の PR を承認できるように見える・失敗した送信で書きかけが消える・成功した後も書きかけと
 /// 選んだ種類が残る・古い版の行のスレッドをコメント数に数える・今の diff に出せないスレッドに気づけない・空白だけの
 /// レビューを公開できる・diff で見ていないコミットに承認が付く・解決済みの置けないスレッドが件数を埋める。
@@ -12,13 +12,13 @@ extension PrPanelTests {
   /// 「コメント」に戻る。成功しなければ書きかけと種類が残り、失敗を保持する。
   func testSubmittingAReviewNeedsABodyUnlessApprovingAndKeepsTheDraftOnFailure() throws {
     let state = try reviewed()
-    XCTAssertFalse(panel.canSubmitReview, "空のコメントは送れない")
+    XCTAssertFalse(state.canSubmitReview(composing: ""), "空のコメントは送れない")
     state.chooseReviewEvent(.requestChanges)
-    XCTAssertFalse(panel.canSubmitReview, "空の変更の依頼は送れない")
+    XCTAssertFalse(state.canSubmitReview(composing: ""), "空の変更の依頼は送れない")
     state.chooseReviewEvent(.approve)
-    XCTAssertTrue(panel.canSubmitReview, "承認は空でも送れる")
+    XCTAssertTrue(state.canSubmitReview(composing: ""), "承認は空でも送れる")
     state.reviewDraft.body = "見ました"
-    panel.submitReview()
+    state.submitReview { _ in }
     XCTAssertEqual(reviewWrites, [.submit(.approve, body: "見ました")])
     XCTAssertEqual(
       state.reviewDraft, PullRequestState.ReviewDraft(), "成功すれば書きかけを空にし、種類を「コメント」に戻す")
@@ -26,7 +26,7 @@ extension PrPanelTests {
     reviewFailure = .unreachable
     state.reviewDraft.body = "直してください"
     state.chooseReviewEvent(.requestChanges)
-    panel.submitReview()
+    state.submitReview { _ in }
     XCTAssertEqual(state.submissionFailure, .unreachable)
     XCTAssertEqual(
       state.reviewDraft, PullRequestState.ReviewDraft(body: "直してください", event: .requestChanges))
@@ -35,9 +35,9 @@ extension PrPanelTests {
   /// 未送信のコメントがあれば、全体へのコメントが空でも「コメント」で送れる。
   func testPendingCommentsCanBeSubmittedWithoutABody() throws {
     pendingComments = 2
-    _ = try reviewed()
-    XCTAssertTrue(panel.canSubmitReview)
-    panel.submitReview()
+    let state = try reviewed()
+    XCTAssertTrue(state.canSubmitReview(composing: ""))
+    state.submitReview { _ in }
     XCTAssertEqual(reviewWrites, [.submit(.comment, body: "")])
   }
 
@@ -70,9 +70,9 @@ extension PrPanelTests {
   func testABlankBodyCountsAsEmpty() throws {
     let state = try reviewed()
     state.reviewDraft.body = " \n\t "
-    XCTAssertFalse(panel.canSubmitReview)
+    XCTAssertFalse(state.canSubmitReview(composing: ""))
     state.chooseReviewEvent(.approve)
-    XCTAssertTrue(panel.submitReview())
+    XCTAssertTrue(state.submitReview { _ in })
     XCTAssertEqual(reviewWrites, [.submit(.approve, body: "")])
   }
 
@@ -81,9 +81,9 @@ extension PrPanelTests {
     reviewHead = String(repeating: "0", count: 40)
     let state = try reviewed()
     state.chooseReviewEvent(.approve)
-    XCTAssertFalse(panel.canSubmitReview)
+    XCTAssertFalse(state.canSubmitReview(composing: ""))
     XCTAssertEqual(state.submissionBlock, .stopped, "揃える読みでも食い違ったので、再読込を促す")
-    XCTAssertFalse(panel.submitReview())
+    XCTAssertFalse(state.submitReview { _ in })
     XCTAssertEqual(reviewWrites, [])
   }
 
@@ -99,7 +99,7 @@ extension PrPanelTests {
       }, "前提: diff の両端を求められない")
     state.chooseReviewEvent(.approve)
     XCTAssertEqual(state.submissionBlock, .noDiff)
-    XCTAssertFalse(panel.submitReview())
+    XCTAssertFalse(state.submitReview { _ in })
     XCTAssertEqual(reviewWrites, [])
   }
 
