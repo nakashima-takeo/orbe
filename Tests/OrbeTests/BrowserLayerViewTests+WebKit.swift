@@ -299,8 +299,11 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
   weak var target: BrowserLayerView?
   var decisions: [(url: URL?, policy: WKNavigationActionPolicy)] = []
   var provisionalStartCount = 0
+  var commitCount = 0
   var failCount = 0
   var failProvisionalCount = 0
+  var onBeforeDecidePolicy: ((WKNavigationAction) -> Void)?
+  var onBeforeDidCommit: ((WKNavigation) -> Void)?
   var onDidFail: (() -> Void)?
 
   init(target: BrowserLayerView) {
@@ -311,6 +314,7 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
     _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
     decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
   ) {
+    onBeforeDecidePolicy?(navigationAction)
     let url = navigationAction.request.url
     guard let target else {
       decisionHandler(.cancel)
@@ -328,6 +332,10 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
   }
 
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    if let navigation {
+      onBeforeDidCommit?(navigation)
+    }
+    commitCount += 1
     target?.webView(webView, didCommit: navigation)
   }
 

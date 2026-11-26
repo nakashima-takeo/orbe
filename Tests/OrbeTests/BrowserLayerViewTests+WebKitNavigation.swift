@@ -15,6 +15,9 @@ extension BrowserLayerViewTests {
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
     let webView = try XCTUnwrap(browser.webView)
+    let spy = BrowserNavigationPolicySpy(target: browser)
+    webView.navigationDelegate = spy
+    defer { webView.navigationDelegate = browser }
 
     let server = try LocalLoopbackHTTPServer(routes: ["/safe": "<!doctype html><p>safe</p>"])
     defer { server.stop() }
@@ -34,18 +37,25 @@ extension BrowserLayerViewTests {
     XCTAssertEqual(browser.toolbar.displayURL?.isSecure, false)
     XCTAssertFalse(browser.isProvisionalNavigation, "同一文書遷移後に pending へ停滞しない")
 
-    // 無応答ポートへの暫定遷移中は、webView.url が変わってもツールバーの URL・鍵アイコンを書き換えない。
+    // 無応答ポートへの暫定遷移中は、didStartProvisionalNavigation 到着後も URL・鍵アイコンを書き換えない。
+    let startsBefore = spy.provisionalStartCount
+    let failBefore = spy.failProvisionalCount
     let decoy = URL(string: "https://127.0.0.1:\(hanging.port)/login")!
     browser.load(decoy)
-    pumpMain(until: { browser.isProvisionalNavigation }, timeout: 5, "暫定ナビゲーション開始")
+    XCTAssertTrue(browser.isProvisionalNavigation, "load 直後から同期的に暫定遷移として追跡する")
+    pumpMain(until: { spy.provisionalStartCount > startsBefore }, timeout: 5, "暫定ナビゲーション開始")
     nextTurn()
+    XCTAssertTrue(browser.isProvisionalNavigation, "暫定開始後もコミット・失敗まで暫定状態を保つ")
     XCTAssertEqual(browser.toolbar.displayURL?.host, "127.0.0.1:\(server.port)")
     XCTAssertEqual(browser.toolbar.displayURL?.path, "/pushed?k=1")
     XCTAssertEqual(browser.toolbar.displayURL?.isSecure, false, "未確定の https:// で鍵を点灯しない")
 
     // 暫定遷移が失敗（接続閉鎖）しても元のコミット済み表示を保つ。
     hanging.stop()
-    pumpMain(until: { !browser.isProvisionalNavigation }, timeout: 5, "暫定遷移の失敗完了")
+    pumpMain(
+      until: { spy.failProvisionalCount > failBefore && !browser.isProvisionalNavigation },
+      timeout: 5, "暫定遷移の失敗完了")
+    nextTurn()
     XCTAssertEqual(browser.toolbar.displayURL?.host, "127.0.0.1:\(server.port)")
     XCTAssertEqual(browser.toolbar.displayURL?.path, "/pushed?k=1")
 
@@ -283,5 +293,99 @@ extension BrowserLayerViewTests {
     fresh.load(pageA)
     pumpMain(until: { freshFinish >= 1 }, timeout: 5, "異常終了後の後続遷移で正常復帰する")
     XCTAssertEqual(freshWebView.url, pageA)
+  }
+
+  /// `#hash` / `pushState` の同一文書 `goBack()` / `goForward()` と別文書間の履歴移動で
+  /// `isProvisionalNavigation` が解放され、コミット済み URL とアドレスバーが追従する。
+  func testHistoryNavigationReleasesPendingStateAcrossSameAndCrossDocumentSteps() throws {
+    let browser = hostBrowser().browser
+    browser.setMode(.sheet, animated: false)
+    let webView = try XCTUnwrap(browser.webView)
+
+    let server = try LocalLoopbackHTTPServer(routes: [
+      "/p1": "<!doctype html><h1 id='sec'>P1</h1>",
+      "/p2": "<!doctype html><p>P2</p>",
+    ])
+    defer { server.stop() }
+
+    var finishCount = 0
+    browser.onNavigationFinish = { finishCount += 1 }
+    let (p1, p2) = (server.url(for: "/p1"), server.url(for: "/p2"))
+    browser.load(p1)
+    pumpMain(until: { finishCount >= 1 }, timeout: 5, "p1 完了")
+
+    // 1. 同一文書履歴（/p1 → /p1/s2 → /p1/s2#sec）の goBack / goForward で pending 解放と URL 追従を確認。
+    webView.evaluateJavaScript("history.pushState({}, '', '/p1/s2')")
+    pumpMain(until: { browser.toolbar.displayURL?.path == "/p1/s2" }, timeout: 5, "pushState 反映")
+    webView.evaluateJavaScript("location.hash = '#sec'")
+    pumpMain(until: { browser.toolbar.displayURL?.path == "/p1/s2#sec" }, timeout: 5, "#hash 反映")
+
+    browser.goBack()
+    pumpMain(
+      until: { !browser.isProvisionalNavigation && browser.toolbar.displayURL?.path == "/p1/s2" },
+      timeout: 5, "同一文書 #hash からの goBack が pending を解放し URL 追従する")
+    XCTAssertEqual(browser.committedURL?.path, "/p1/s2")
+
+    browser.goBack()
+    pumpMain(
+      until: { !browser.isProvisionalNavigation && browser.toolbar.displayURL?.path == "/p1" },
+      timeout: 5, "同一文書 pushState からの goBack が pending を解放し URL 追従する")
+    XCTAssertEqual(browser.committedURL, p1)
+
+    browser.goForward()
+    pumpMain(
+      until: { !browser.isProvisionalNavigation && browser.toolbar.displayURL?.path == "/p1/s2" },
+      timeout: 5, "同一文書 goForward が pending を解放し URL 追従する")
+
+    // 2. 別文書間（/p1/s2 ⇄ /p2）の goBack / goForward で pending 解放と URL 追従を確認。
+    let beforeP2 = finishCount
+    browser.load(p2)
+    pumpMain(until: { finishCount > beforeP2 }, timeout: 5, "p2 完了")
+
+    let beforeBack = finishCount
+    browser.goBack()
+    pumpMain(
+      until: { finishCount > beforeBack && !browser.isProvisionalNavigation },
+      timeout: 5, "別文書 goBack が完了し pending を解放する")
+    XCTAssertEqual(browser.committedURL?.path, "/p1/s2")
+    XCTAssertEqual(browser.toolbar.displayURL?.path, "/p1/s2")
+
+    let beforeForward = finishCount
+    browser.goForward()
+    pumpMain(
+      until: { finishCount > beforeForward && !browser.isProvisionalNavigation },
+      timeout: 5, "別文書 goForward が完了し pending を解放する")
+    XCTAssertEqual(browser.committedURL, p2)
+    XCTAssertEqual(browser.toolbar.displayURL?.path, "/p2")
+  }
+
+  /// `browser.load` で非 HTTP(S) スキームがポリシー遮断されたとき、未開始 `pendingNavigation` を
+  /// 解放し `lastRequestedURL` とアドレスバーをコミット済みページへ復元する。
+  func testBlockedMainFrameLoadReleasesPendingAndRestoresLastRequestedURL() throws {
+    let browser = hostBrowser().browser
+    browser.setMode(.sheet, animated: false)
+    let webView = try XCTUnwrap(browser.webView)
+    let spy = BrowserNavigationPolicySpy(target: browser)
+    webView.navigationDelegate = spy
+    defer { webView.navigationDelegate = browser }
+
+    let server = try LocalLoopbackHTTPServer(routes: ["/p": "<!doctype html><p>ok</p>"])
+    defer { server.stop() }
+
+    var finishCount = 0
+    browser.onNavigationFinish = { finishCount += 1 }
+    let committed = server.url(for: "/p")
+    browser.load(committed)
+    pumpMain(until: { finishCount >= 1 }, timeout: 5, "初期ページ完了")
+
+    let decisionsBefore = spy.decisions.count
+    browser.load(URL(string: "orbe-blocked://launch")!)
+    pumpMain(until: { spy.decisions.count > decisionsBefore }, timeout: 5, "カスタムスキームのポリシー判定")
+    XCTAssertEqual(spy.decisions.last?.policy, .cancel)
+    nextTurn()
+    XCTAssertFalse(browser.isProvisionalNavigation, "ポリシー遮断後に暫定状態が残らない")
+    XCTAssertEqual(browser.lastRequestedURL, committed, "ポリシー遮断後に lastRequestedURL がコミット済みへ復元される")
+    XCTAssertEqual(browser.committedURL, committed)
+    XCTAssertEqual(browser.toolbar.displayURL?.path, "/p")
   }
 }
