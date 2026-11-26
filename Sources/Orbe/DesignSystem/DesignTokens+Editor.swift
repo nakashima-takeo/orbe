@@ -239,13 +239,6 @@ extension Theme.Layout {
   static let editorItemButtonCaret: CGFloat = 14
   /// 未保存・ディスクが変わったの丸。
   static let editorItemDot: CGFloat = 7
-  /// 入力欄の枠——角丸・左右の余白・中の部品の間・虫眼鏡の大きさ・フォーカスの枠の太さ。
-  static let editorFieldRadius: CGFloat = 7
-  static let editorFieldPadLeading: CGFloat = 8
-  static let editorFieldPadTrailing: CGFloat = 4
-  static let editorFieldGap: CGFloat = 6
-  static let editorFieldGlyph: CGFloat = 14
-  static let editorFieldFocusStroke: CGFloat = 1.5
   /// 状態を示す札の左右の余白・上下の余白・角丸。
   static let editorTagPadX: CGFloat = 6
   static let editorTagPadY: CGFloat = 1
@@ -376,9 +369,6 @@ extension Theme.Opacity {
   static let editorItemButtonOpen: Double = 0.11
   /// 状態を示す札の枠（`surfaceInk` の α）。
   static let editorTag: Double = 0.2
-  /// 入力欄の枠の地（`surfaceInk` の α）と、フォーカスがある間の枠（`accent.primary` の α）。
-  static let editorFieldFill: Double = 0.055
-  static let editorFieldFocus: Double = 0.55
   /// 一覧の器の行のホバーの地と、右の印の枠のホバーの地（塗りの α）。
   static let editorItemListHover: Double = 0.045
   static let editorItemListMarkHover: Double = 0.10
