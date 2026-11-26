@@ -51,12 +51,18 @@ final class EditorConfirm {
 
 /// 面の中の確認の host。面の最前面に面いっぱいの枠で置き、出ている間だけ見せる。フォーカスはこの view が持ち、esc で
 /// キャンセルし、ほかのキー（↵ を含む）とマウスの押下・スクロールは、ダイアログのボタンのほかは何もしない——幕の裏の
-/// 端末にもテキスト面にも届けない。幕とダイアログは中の SwiftUI（→ `EditorConfirmRoot`）が描く。出ている間は、
+/// 端末にもテキスト面にも届けない。幕とダイアログは中の SwiftUI（→ `EditorConfirmRoot`）が描く。
+///
+/// 出ている間、連打の 2 回目以降の押下（クリックの数が 2 以上。続けたかは OS がダブルクリックの間隔と距離で決める）は、
+/// 窓の段で捨てる——行の「破棄」を続けて押した 2 回目以降が、出たばかりの確認の「破棄」に当たらないように。ボタンの
+/// ジェスチャーは view の `mouseDown` より前に押下を受けるので、view の段では止められない。出ている間は、
 /// アクセシビリティでは確認の名前（`EditorConfirmContent.label`）を持つモーダルのダイアログの要素で、子は中のダイアログの
 /// 題・本文・ボタン。
 final class EditorConfirmHost: NSView {
   let confirm: EditorConfirm
   private let hosting: EditorConfirmHosting
+  /// 連打の 2 回目以降の押下を捨てる、窓の段の見張り（出ている間だけ）。
+  private var pressMonitor: Any?
 
   init(confirm: EditorConfirm, root: EditorConfirmRoot) {
     self.confirm = confirm
@@ -65,6 +71,31 @@ final class EditorConfirmHost: NSView {
     addSubview(hosting)
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
+
+  deinit {
+    MainActor.assumeIsolated { didClose() }
+  }
+
+  /// 出した。連打の 2 回目以降の押下を捨て始める。
+  func didShow() {
+    guard pressMonitor == nil else { return }
+    let filter: (NSEvent) -> NSEvent? = { [weak self] event in
+      MainActor.assumeIsolated { self?.drops(event) == true ? nil : event }
+    }
+    pressMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown, handler: filter)
+  }
+
+  /// 閉じた。押下を捨てるのをやめる。
+  func didClose() {
+    if let pressMonitor { NSEvent.removeMonitor(pressMonitor) }
+    pressMonitor = nil
+  }
+
+  /// この host の上に来た、連打の 2 回目以降の押下か。
+  private func drops(_ event: NSEvent) -> Bool {
+    guard let window, event.window === window, event.clickCount > 1 else { return false }
+    return bounds.contains(convert(event.locationInWindow, from: nil))
+  }
 
   /// 中身の root を差し替える（窓の環境が変わった）。
   var root: EditorConfirmRoot {

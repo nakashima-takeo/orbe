@@ -35,6 +35,7 @@ extension EditorPaneView {
     confirmReturn = place
     endListFocusHold()
     confirmHost.isHidden = false
+    confirmHost.didShow()
     needsLayout = true
     layoutSubtreeIfNeeded()
     window?.makeFirstResponder(confirmHost)
@@ -50,6 +51,7 @@ extension EditorPaneView {
   private func confirmDidClose(_ dismissal: EditorDismissal) {
     confirmFocusWatch = nil
     if dismissal.returnsFocus { returnFocus(to: confirmReturn) }
+    confirmHost.didClose()
     confirmHost.isHidden = true
     NSAccessibility.post(element: self, notification: .layoutChanged)
   }
