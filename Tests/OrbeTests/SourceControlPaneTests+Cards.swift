@@ -10,7 +10,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。プル・プッシュの失敗が画面に出ず、通ったと思い込む。× を押しても失敗の札が消えない。コミットを
 /// 始めた時点でポップアップが閉じ、返らない hook のコミットをポップアップの下で止められない。コミットの失敗が、ポップアップの
-/// 赤い行と失敗の札の両方に出る。ポップアップを閉じている間のコミットの失敗がどこにも出ない。
+/// 赤い行と失敗の札の両方に出る。ポップアップを閉じている間のコミットの失敗がどこにも出ない。本体が差分を見せている間、
+/// 札が差分の見出しの帯を覆い、帯の「ファイルを開く」が押せない。
 extension SourceControlPaneTests {
   /// 置き場に並ぶ物（ポップアップと札）の枠。置き場の座標で、上から並ぶ順。
   func dockItemFrames(_ hosted: Hosted) -> [CGRect] {
@@ -119,5 +120,42 @@ extension SourceControlPaneTests {
     XCTAssertEqual(dockItemFrames(hosted).count, 1, "開き直すと、置き場にはポップアップだけ")
     XCTAssertTrue(popup.isOpen)
     XCTAssertEqual(control.failure?.kind, .commit, "失敗は残る")
+  }
+
+  /// 本体が差分を見せている間、札は、本体の上端にある差分の見出しの帯の下から並び、帯の上の押下は札でなく帯へ届く。
+  /// 本体に帯が無い間は、札はバーのすぐ下から並び、同じ点の押下は札が受ける。
+  func testTheCardsStayBelowTheDiffHeaderOfTheBody() throws {
+    let repo = try TempGitRepo()
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["branch", "--unset-upstream"]).isSuccess)
+    let hosted = host(repo)
+    let pane = hosted.pane
+    let control = hosted.scm.control
+    pane.popup.close(.escape)
+    pumpMain(until: { hosted.scm.branch != nil && hosted.scm.branch?.upstream == nil }, "ブランチ")
+    control.pull()
+    pumpMain(until: { control.failure != nil }, "プルの失敗")
+    XCTAssertNil(pane.diff, "前提: 本体は差分でない")
+    func card() throws -> NSRect {
+      pane.convert(try XCTUnwrap(dockItemFrames(hosted).first, "失敗の札"), from: pane.dockHost)
+    }
+    func hit(_ point: NSPoint) -> NSView? { pane.hitTest(pane.convert(point, to: pane.superview)) }
+    // 帯が出たときに帯の中になり、帯が無い間は札の中に在る点（本体の上端から、帯の高さの半分）。
+    let point = NSPoint(
+      x: try card().midX, y: pane.bodyRect.minY + Theme.Layout.editorDiffHeader / 2)
+    XCTAssertTrue(try card().contains(point), "前提: 帯が無い間、札はバーのすぐ下から並ぶ")
+    XCTAssertTrue(hit(point)?.isDescendant(of: pane.dockHost) == true, "帯が無い間、その点は札が受ける")
+
+    try repo.write("a.txt", "edited\n")
+    pumpMain(until: { hosted.scm.changes.changes.count == 1 }, "変更の行")
+    hosted.scm.click(try row(hosted, .changes, "a.txt"), in: hosted.scm.layout)
+    pumpMain(until: { pane.diff != nil }, "本体が差分になる")
+    XCTAssertNotNil(control.failure, "前提: 失敗の札は出たまま")
+    // 帯は、本体の上端から editorDiffHeader の高さまで（header の host は、その下に影の分だけ伸びる）。
+    let bandBottom = pane.bodyRect.minY + Theme.Layout.editorDiffHeader
+    XCTAssertGreaterThanOrEqual(try card().minY, bandBottom - 0.5, "札は帯の下から並ぶ")
+    let onBand = try XCTUnwrap(hit(point))
+    XCTAssertFalse(onBand.isDescendant(of: pane.dockHost), "帯の上の押下は札が受けない")
+    XCTAssertTrue(onBand.isDescendant(of: pane.headerHost), "帯の上の押下は帯へ届く")
   }
 }
