@@ -158,16 +158,16 @@ extension OrbeTestCase {
         height: geometry.sliderLength), to: nil)
   }
 
-  /// 面の座標の点を押して離す（→ `deliverClick`。窓は `placeOffscreen` で並べておくこと）。`count` は何回目の
+  /// view（面など）の座標の点を押して離す（→ `deliverClick`。窓は `placeOffscreen` で並べておくこと）。`count` は何回目の
   /// 押下か（2 ならダブルクリックの 2 回目）。
   @MainActor
   func click(
-    _ pane: EditorPaneView, at point: NSPoint, count: Int = 1,
+    _ view: NSView, at point: NSPoint, count: Int = 1,
     file: StaticString = #filePath, line: UInt = #line
   ) throws {
-    let window = try XCTUnwrap(pane.window, file: file, line: line)
+    let window = try XCTUnwrap(view.window, file: file, line: line)
     deliverClick(
-      at: pane.convert(point, to: nil), in: window, clickCount: count, file: file, line: line)
+      at: view.convert(point, to: nil), in: window, clickCount: count, file: file, line: line)
   }
 
   /// 今の時刻を持つマウスのイベント（SwiftUI のジェスチャーとホバーは時刻 0 のイベントを取りこぼす）。

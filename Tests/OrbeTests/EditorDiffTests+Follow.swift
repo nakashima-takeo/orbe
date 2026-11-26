@@ -132,6 +132,7 @@ extension EditorDiffTests {
     let (tab, _) = tab()
     let diff = try tab.group.editor.openDiff(id("long.txt", .staged))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
+    pumpMain(until: { diff.placement == .placed }, "最初の変更区間へ送る")
     let before = try engine(diff.newSurface)
     before.flush()
     let top = before.viewport.top.line

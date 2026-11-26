@@ -275,6 +275,7 @@ final class EditorDiffTests: OrbeTestCase {
     let pane = tab.group.view.editor
     let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree))
     waitRows(diff, "インライン") { !$0.isEmpty }
+    pumpMain(until: { diff.placement == .placed }, "最初の変更区間へ送る")
     let right = try engine(diff.newSurface)
     right.flush()
     let first = right.viewport.top

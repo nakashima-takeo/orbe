@@ -238,7 +238,10 @@ private struct PrReviewMessageField: NSViewRepresentable {
 
   func makeNSView(context: Context) -> NSScrollView {
     // 左右の余白は 8（padding 0 8）。
-    let text = MessageTextView(trailing: 8)
+    let text = MessageTextView(
+      metrics: .init(
+        font: Theme.Typography.editorScmMessage, height: Theme.Layout.editorScmMessage,
+        leading: 8, trailing: 8))
     context.coordinator.text = text
     text.delegate = context.coordinator
     text.onFocus = { [weak coordinator = context.coordinator] in

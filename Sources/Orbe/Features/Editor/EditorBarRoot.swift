@@ -3,10 +3,11 @@ import SwiftUI
 
 /// 上のバー（高さ 36。下端の hairline を含む）の SwiftUI ルート。左から、左の列の開閉・画面の切り替え（Changes の件数・PR の
 /// 番号つき）・今の項目のボタン（今の項目があるとき。前に区切り線。仮の文書なら後ろに「プレビュー」の札と「開いたままに
-/// する」）、右寄せで「⌥ 端末を表示」の案内。器の中の別 root なので環境は明示注入する。押してもフォーカスを取らない（host が
-/// first responder を受けない）。幅が足りなければ、「⌥ 端末を表示」→ 親のパスの順に落とし、それでも足りなければ名前を省略
-/// する。開閉・切り替え・ボタン・札・「開いたままにする」は落とさない。ボタンの枠は、閉包で pane へ知らせる（一覧の器の
-/// 位置の入力）。
+/// する」）・画面ごとの中ほどの部品、右寄せで「⌥ 端末を表示」の案内と画面ごとの右端の部品。器の中の別 root なので環境は
+/// 明示注入する。押してもフォーカスを取らない（host が first responder を受けない）。幅は `EditorBarLayout` が、部品の
+/// 名乗る譲る順（`EditorBarYield`）で配る——案内はまるごと落ち、今の項目のボタンは親のパス、その次に名前の全体を譲る。
+/// 開閉・切り替え・今の項目のボタン・「プレビュー」の札・「開いたままにする」は落とさない。画面ごとの部品は、
+/// 画面ごとのファイル（`EditorBar+<画面>.swift`）に書く。ボタンの枠は、閉包で pane へ知らせる（一覧の器の位置の入力）。
 struct EditorBarRoot: View {
   let shell: EditorShellModel
   /// 左の列の開閉の持ち主（pane と同じ 1 つ）。
@@ -19,57 +20,52 @@ struct EditorBarRoot: View {
   let pullRequest: BranchPullRequest
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
-  @Environment(\.colorScheme) private var scheme
-
-  private static let hairlineAlpha = 0.07
-  private static let space = "editorBar"
+  /// 部品の間隔。
+  static let spacing: CGFloat = 6
+  /// 部品の枠を測る座標空間（バーの座標＝面の座標）。
+  static let space = "editorBar"
 
   var body: some View {
-    VStack(spacing: 0) {
-      ViewThatFits(in: .horizontal) {
-        row(showsHint: true, showsPath: true, fitsName: true)
-        row(showsHint: false, showsPath: true, fitsName: true)
-        row(showsHint: false, showsPath: false, fitsName: true)
-        row(showsHint: false, showsPath: false, fitsName: false)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .frame(height: Theme.Layout.editorBar - Theme.Stroke.hairline)
-      Rectangle().fill(EditorInk(scheme).hairline(Self.hairlineAlpha))
-        .frame(height: Theme.Stroke.hairline)
-    }
-    .coordinateSpace(.named(Self.space))
-    .environment(\.localization, localization)
-    .environment(\.chromeFontResolver, fontResolver)
-  }
-
-  private func row(showsHint: Bool, showsPath: Bool, fitsName: Bool) -> some View {
-    HStack(spacing: 6) {
+    EditorBarRow {
       EditorSidebarToggle(isOpen: sidebar.isOpen, action: shell.toggleSidebar)
       EditorScreenSwitch(
         selection: shell.panel.screen, changesCount: scm.count,
         pullRequestNumber: pullRequest.state?.key.id.number, select: shell.selectScreen
       )
       .fixedSize()
-      if let item = shell.currentItem {
-        EditorBarSeparator()
-        currentItem(item, showsPath: showsPath, fitsName: fitsName)
-      }
-      Spacer(minLength: 0)
-      if showsHint { EditorPeekHint(isPeeking: shell.isPeeking) }
+      if let item = shell.currentItem { currentItem(item) }
+      middle
+      EditorPeekHint(isPeeking: shell.isPeeking).editorBarPart(.trailing, drops: .hint)
+      trailing
     }
-    .padding(.leading, 8)
-    .padding(.trailing, 12)
+    .environment(\.editorBarActionFrame, shell.actionButtonFrameDidChange)
+    .environment(\.localization, localization)
+    .environment(\.chromeFontResolver, fontResolver)
+  }
+
+  /// 今の画面の、今の項目の後ろに並ぶ部品。
+  @ViewBuilder private var middle: some View {
+    switch shell.panel.screen {
+    case .changes: changesMiddle
+    case .pullRequest: pullRequestMiddle
+    case .files: filesMiddle
+    }
+  }
+
+  /// 今の画面の、右端に並ぶ部品。
+  @ViewBuilder private var trailing: some View {
+    switch shell.panel.screen {
+    case .changes: changesTrailing
+    case .pullRequest: pullRequestTrailing
+    case .files: filesTrailing
+    }
   }
 
   @ViewBuilder
-  private func currentItem(
-    _ item: EditorShellModel.CurrentItem, showsPath: Bool, fitsName: Bool
-  ) -> some View {
+  private func currentItem(_ item: EditorShellModel.CurrentItem) -> some View {
     switch item {
     case .file(let file):
-      itemButton(help: .editorBarOpenFiles) {
-        EditorCurrentFileLabel(file: file, showsPath: showsPath, fitsName: fitsName)
-      }
+      itemButton(help: .editorBarOpenFiles) { EditorCurrentFileLabel(file: file) }
       if file.isPreview {
         EditorTag(text: localization.string(.editorOpenFilesPreview))
         EditorTextButton(
@@ -79,70 +75,73 @@ struct EditorBarRoot: View {
       }
     case .diff(let subject):
       itemButton(help: .editorBarChangedFiles) {
-        EditorCurrentDiffLabel(header: subject.header(scm: scm), fitsName: fitsName)
+        EditorCurrentDiffLabel(header: subject.header(scm: scm))
       }
     }
   }
 
-  /// 今の項目のボタン。枠は閉包で pane へ知らせる（一覧の器の位置の入力）。
+  /// 区切り線と今の項目のボタン（広い姿を `itemWide` で受け取る）。ボタンの枠は閉包で pane へ知らせる（一覧の器の位置の
+  /// 入力）。
   private func itemButton<Label: View>(
     help: L10nKey, @ViewBuilder label: @escaping () -> Label
   ) -> some View {
-    EditorItemButton(
-      isOpen: itemList.isOpen, help: localization.string(help),
-      action: shell.toggleItemList, label: label
-    )
-    .onGeometryChange(for: CGRect.self) {
-      $0.frame(in: .named(Self.space))
-    } action: {
-      shell.itemButtonFrameDidChange($0)
+    HStack(spacing: Self.spacing) {
+      EditorBarSeparator()
+      EditorItemButton(
+        isOpen: itemList.isOpen, help: localization.string(help),
+        action: shell.toggleItemList, label: label
+      )
+      .onGeometryChange(for: CGRect.self) {
+        $0.frame(in: .named(Self.space))
+      } action: {
+        shell.itemButtonFrameDidChange($0)
+      }
     }
+    .editorBarPart(grows: .itemWide)
   }
 }
 
-/// 上のバーの区切り線（1×16・hairline .15・左右 6）。
-private struct EditorBarSeparator: View {
+/// 上のバーの行の器——部品の行（`EditorBarLayout`。行の枠で切る）・左 8 右 12 の余白・高さ・下端の線。行の枠の座標空間
+/// （`EditorBarLayout.space`）と、部品の枠を測る座標空間（`EditorBarRoot.space`）を張る。
+struct EditorBarRow<Content: View>: View {
+  @ViewBuilder let content: () -> Content
   @Environment(\.colorScheme) private var scheme
 
-  private static let alpha = 0.15
-  private static let height: CGFloat = 16
+  private let hairlineAlpha = 0.07
 
   var body: some View {
-    Rectangle().fill(EditorInk(scheme).hairline(Self.alpha))
-      .frame(width: Theme.Stroke.hairline, height: Self.height)
-      .padding(.horizontal, Theme.Space.note)
+    VStack(spacing: 0) {
+      EditorBarLayout(spacing: EditorBarRoot.spacing) { content() }
+        .coordinateSpace(.named(EditorBarLayout.space))
+        .clipped()
+        .padding(.leading, 8)
+        .padding(.trailing, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Theme.Layout.editorBar - Theme.Stroke.hairline)
+      Rectangle().fill(EditorInk(scheme).hairline(hairlineAlpha))
+        .frame(height: Theme.Stroke.hairline)
+    }
+    .coordinateSpace(.named(EditorBarRoot.space))
   }
 }
 
-/// 左の列の開閉（26 角・radius 7）。開いている間は押された姿（地 ink .08・字 textPrimary）。
-private struct EditorSidebarToggle: View {
+/// 左の列の開閉（26 角のアイコンのボタン）。開いている間は押された姿。
+struct EditorSidebarToggle: View {
   let isOpen: Bool
   let action: () -> Void
   @Environment(\.localization) private var l10n
 
-  private static let pressedAlpha = 0.08
-  private let size: CGFloat = 26
-
   var body: some View {
-    EditorGlyphView(
-      glyph: EditorGlyphs.sidebarToggle, size: 14,
-      color: isOpen ? Color.theme.textPrimary : Color.theme.textSecondary
-    )
-    .frame(width: size, height: size)
-    .background(
-      RoundedRectangle(cornerRadius: 7)
-        .fill(isOpen ? Color.theme.surfaceInk.opacity(Self.pressedAlpha) : .clear)
-    )
-    .contentShape(Rectangle())
-    .onTapGesture(perform: action)
-    .help(l10n.string(isOpen ? .editorBarHideSidebar : .editorBarShowSidebar))
+    EditorBarIconButton(
+      glyph: EditorGlyphs.sidebarToggle, isPressed: isOpen,
+      help: l10n.string(isOpen ? .editorBarHideSidebar : .editorBarShowSidebar), action: action)
   }
 }
 
 /// 画面の切り替え: 溝（padding 2・gap 2・radius 9・地 sunk・内側の影）に `Changes <件数>`・`PR <#番号>`・`Files` の 3 項目
 /// （高さ 24・padding 0 11・radius 7）。選んでいる項目は地 ink .11 と上縁の明かり・下の影で浮かせ、件数・番号の字を accent にする。
 /// 件数は 0 なら出さない（1000 以上は「999+」）。番号は今のブランチに open の PR があるときだけ。
-private struct EditorScreenSwitch: View {
+struct EditorScreenSwitch: View {
   let selection: EditorScreen
   let changesCount: Int
   let pullRequestNumber: Int?
@@ -227,7 +226,7 @@ private struct EditorScreenItem: View {
 
 /// 右寄せの案内「⌥ 端末を表示」（gap 7・mono 11・textMuted）。⌥ はキーの札。押せない。⌥ で透かしている間は押している間の姿
 /// （字を textPrimary、札を地 accent・印 onAccent）。
-private struct EditorPeekHint: View {
+struct EditorPeekHint: View {
   let isPeeking: Bool
   @Environment(\.localization) private var l10n
 

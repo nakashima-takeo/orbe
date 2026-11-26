@@ -1,0 +1,10 @@
+import SwiftUI
+
+/// Files の画面の、上のバーの部品。部品ごとに寄せる側と譲る順を名乗る（→ `editorBarPart`）。
+extension EditorBarRoot {
+  /// 今の項目の後ろに、左寄せで並ぶ部品。
+  @ViewBuilder var filesMiddle: some View {}
+
+  /// 右端に並ぶ部品。
+  @ViewBuilder var filesTrailing: some View {}
+}

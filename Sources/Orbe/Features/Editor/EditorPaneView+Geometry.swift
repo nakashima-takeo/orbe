@@ -50,10 +50,12 @@ extension EditorPaneView {
   }
 
   /// 左の列の中身を、今の画面と Files の左の列の中身に合わせる（セッションの変化と、Files の左の列の中身の変化で呼ぶ）。
+  /// 画面が替われば、ポップアップを閉じる。
   func syncPanel() {
     let next = EditorShellModel.Panel(screen: group?.editor.screen ?? .files, files: filesPanel)
     guard next != shell.panel else { return }
     let held = panelHoldingFocus
+    if next.screen != shell.panel.screen { popup.close(.itemGone) }
     shell.panel = next
     sidebarDidChange(held: held)
   }
@@ -96,6 +98,17 @@ extension EditorPaneView {
       height: max(0, bounds.height - top))
   }
 
+  /// 置き場の矩形——右端は面の右端から 12、上端はバーの下端から 6、幅は失敗の札の最大幅（面が狭ければ面の幅 − 24）、
+  /// 高さはバーより下いっぱいから下の余白を引いた高さ。
+  var dockRect: NSRect {
+    let trailing = Theme.Layout.editorDockTrailing
+    let width = max(0, min(Theme.Layout.editorDockWidth, bounds.width - trailing * 2))
+    let top = Theme.Layout.editorBar + Theme.Layout.editorDockTop
+    return NSRect(
+      x: bounds.width - trailing - width, y: top, width: width,
+      height: max(0, bounds.height - top - Theme.Layout.editorDockBottom))
+  }
+
   /// 本体のうち見出しの下の矩形（diff の面・文字だけの器を置く）。本体が diff でなければ本体の矩形そのもの。
   var belowHeaderRect: NSRect {
     let header = diff == nil ? 0 : min(Theme.Layout.editorDiffHeader, bodyRect.height)
@@ -115,8 +128,8 @@ extension EditorPaneView {
     if searchBarTrailing?.constant != constant { searchBarTrailing?.constant = constant }
   }
 
-  /// 骨の view を重ねる——下から、バーの地・バーより下（その地・左の列・文字だけの器・見出し・境の当たり。本体の面は見出しの
-  /// 下に、検索バーは後から一番上に足す）・上のバー。
+  /// 骨の view を重ねる——下から、バーの地・バーより下（その地・左の列・文字だけの器・見出し・境の当たり・置き場。本体の面は
+  /// 見出しの下に、検索バーは後から一番上に足す）・上のバー。
   func assembleViews() {
     for view in [barGround, belowGround, belowBar] {
       view.wantsLayer = true
@@ -134,6 +147,10 @@ extension EditorPaneView {
     }
     sidebarHandle.autoresizingMask = []
     belowBar.addSubview(sidebarHandle)
+    dockHost.wantsLayer = true
+    dockHost.layer?.isOpaque = false
+    dockHost.autoresizingMask = []
+    belowBar.addSubview(dockHost)
     diffDivider.wantsLayer = true
     diffDivider.autoresizingMask = []
   }
@@ -167,6 +184,7 @@ extension EditorPaneView {
     sidebarHandle.frame = NSRect(
       x: sideWidth - Theme.Stroke.hairline - Theme.Layout.editorSidebarHandle / 2, y: bar,
       width: Theme.Layout.editorSidebarHandle, height: below)
+    layoutDock()
     layoutItemList()
     // 待ちは本体の面の枠を置き終えた後に通す——文書は見えている範囲が、diff は最初の位置が、枠で決まる。
     prepareBodyIfVisible()

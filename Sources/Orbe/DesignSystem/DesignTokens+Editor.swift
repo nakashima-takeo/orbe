@@ -17,6 +17,8 @@ extension Theme.Color {
   /// 注意の黄——検索の一致の地・PR のパネルの手元とのずれと保留中の印。
   /// dark は conflict と偶然同値だが light が違い、git 競合でもない。
   static let editorCaution = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
+  /// danger の地の上の字（大きい字のボタンの「破棄」）。
+  static let editorOnDanger = editorDyn(light: 0xffffff, dark: 0xffffff)
   /// git の変化の種類の色（追加＝青・削除＝オレンジ・変更＝黄）。赤と緑を見分けにくい人でも区別できるよう、成否の
   /// success / danger（端末の緑・赤）とは別に持つ。diffModified は editorCaution と値だけ同じ独立トークン。
   static let diffAdded = editorDyn(light: 0x0969da, dark: 0x5ea8ff)
@@ -225,6 +227,10 @@ extension Theme.Layout {
   static let editorTextButtonGlyph: CGFloat = 14
   static let editorTextButtonGap: CGFloat = 5
   static let editorTextButtonKeyGap: CGFloat = 11
+  /// 大きい字のボタンの高さ・角丸・左右の余白。
+  static let editorLargeButton: CGFloat = 30
+  static let editorLargeButtonRadius: CGFloat = 8
+  static let editorLargeButtonPadX: CGFloat = 14
   /// 上のバーの今の項目のボタンの高さ・左右の余白・角丸・中の部品の間・末尾の ▾ の大きさ。
   static let editorItemButton: CGFloat = 26
   static let editorItemButtonPadX: CGFloat = 8
@@ -362,6 +368,8 @@ extension Theme.Opacity {
   /// 字のボタンの地（`surfaceInk` の α）——地つきの変種と素の姿のホバー、地つきの変種のホバー。
   static let editorTextButtonFill: Double = 0.08
   static let editorTextButtonFillHover: Double = 0.12
+  /// 色の付いた地の大きい字のボタンの、キーの札の地（黒の α）。
+  static let editorLargeButtonKeyCap: Double = 0.16
   /// 今の項目のボタンの地・枠・一覧を開いている間の地（`surfaceInk` の α）。
   static let editorItemButtonFill: Double = 0.06
   static let editorItemButtonBorder: Double = 0.05

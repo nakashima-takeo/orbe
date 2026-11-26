@@ -19,6 +19,52 @@ extension DesignGallerySnapshotTests {
       scene.view, size: NSSize(width: 360, height: 480), name: "editor_shell_narrow.png", dir: dir)
   }
 
+  /// 上のバーの部品の姿（`editor_bar_parts`）と、3 つの画面の姿の並びを幅 1100・820・600 で（`editor_bar_<画面>`）。
+  func renderEditorBarSnapshots(dir: URL) throws {
+    try writePNG(
+      EditorShellFixtures.barParts(), size: NSSize(width: 900, height: 200),
+      name: "editor_bar_parts.png", dir: dir)
+    let widths: [CGFloat] = [1100, 820, 600]
+    for (screen, name) in [
+      (EditorScreen.changes, "changes"), (.pullRequest, "pull_request"), (.files, "files"),
+    ] {
+      try writePNG(
+        EditorShellFixtures.bars(screen, widths: widths), size: NSSize(width: 1100, height: 148),
+        name: "editor_bar_\(name).png", dir: dir)
+    }
+  }
+
+  /// 上のバーの右下の置き場——ポップアップだけ（`editor_dock_popup`）・ポップアップと失敗の札 2 枚（`editor_dock_cards`）・
+  /// 色つきの縁（`editor_dock_tinted`）・札だけ（`editor_dock_cards_only`）・高さが足りず、ポップアップが縮む姿
+  /// （`editor_dock_short`。中身は 10 行）・中身が地の外にメニューを並べた姿（`editor_dock_menu`）。
+  func renderEditorDockSnapshots(dir: URL) throws {
+    let size = NSSize(width: 760, height: 420)
+    let plain = EditorShellFixtures.DockPopupOwner(popup: nil)
+    try writePNG(
+      EditorShellFixtures.dock(owner: plain, cards: false, height: 300), size: size,
+      name: "editor_dock_popup.png", dir: dir)
+    try writePNG(
+      EditorShellFixtures.dock(owner: plain, cards: true, height: 300), size: size,
+      name: "editor_dock_cards.png", dir: dir)
+    let tinted = EditorShellFixtures.DockPopupOwner(popup: nil, tint: Color.theme.success)
+    try writePNG(
+      EditorShellFixtures.dock(owner: tinted, cards: false, height: 300), size: size,
+      name: "editor_dock_tinted.png", dir: dir)
+    try writePNG(
+      EditorShellFixtures.dock(owner: nil, cards: true, height: 300), size: size,
+      name: "editor_dock_cards_only.png", dir: dir)
+    let menu = EditorShellFixtures.DockPopupOwner(popup: nil)
+    menu.showsMenu = true
+    try writePNG(
+      EditorShellFixtures.dock(owner: menu, cards: true, height: 300), size: size,
+      name: "editor_dock_menu.png", dir: dir)
+    let long = EditorShellFixtures.DockPopupOwner(popup: nil)
+    long.field.string = (1...10).map { "行 \($0)" }.joined(separator: "\n")
+    try writePNG(
+      EditorShellFixtures.dock(owner: long, cards: true, height: 220), size: size,
+      name: "editor_dock_short.png", dir: dir)
+  }
+
   /// 開いているファイルの一覧（今の文書・仮の文書・未保存・ディスクが変わった・状態の字あり／なしの行）と、その詳細（仮の
   /// 文書・普通の文書）、上のバーのボタン（仮の文書——キーの札 ↵ が無い姿（本文・検索の入力欄）とある姿（検索結果の列）・
   /// 未保存・ディスクが変わった）。

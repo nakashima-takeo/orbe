@@ -147,4 +147,225 @@
       func updateNSView(_ view: EditorPaneView, context: Context) {}
     }
   }
+  /// 上のバーの部品と、3 つの画面の姿の並び（見本の Main・PullRequest・Files の部品を、バーの行と共通の部品で組んだもの）。
+  /// gallery が部品の姿と幅ごとの姿を、flow が幅を狭めていく並びを撮る。
+  extension EditorShellFixtures {
+    /// 部品の姿——中ほどの札（素の姿・地つきの変種・押せない姿・表示だけの札）・26 角のボタン（ふつう・押された姿）・右端の
+    /// ボタン（ふつう・開いている・押せない・添え書きつき・固定の添えつき）。
+    @MainActor static func barParts() -> some View {
+      VStack(alignment: .leading, spacing: 12) {
+        HStack(spacing: 8) {
+          branchChip
+          syncChip(isEnabled: true)
+          syncChip(isEnabled: false)
+          pullRequestChip
+          EditorBarChip(
+            help: "ブランチ",
+            content: {
+              EditorGlyphView(
+                glyph: EditorGlyphs.branch, size: 12, color: Color.theme.textPrimary)
+              EditorReadableName(
+                "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix,
+                truncation: .tail
+              ) { Text($0) }
+            }
+          )
+          .frame(width: 120)
+        }
+        HStack(spacing: 8) {
+          EditorBarIconButton(glyph: EditorGlyphs.sidebarToggle, help: "ツリーを開く") {}
+          EditorBarIconButton(
+            glyph: EditorGlyphs.sidebarToggle, isPressed: true, help: "ツリーを閉じる"
+          ) {}
+          EditorBarIconButton(glyph: EditorGlyphs.refresh, help: "再読込") {}
+          EditorBarIconButton(glyph: EditorGlyphs.openFile, help: "GitHub で開く") {}
+        }
+        HStack(spacing: 8) {
+          commitButton(isOpen: false)
+          commitButton(isOpen: true)
+          EditorBarActionButton(
+            title: "コミット", isEnabled: false, help: "ステージ済みの変更がありません", action: {})
+        }
+        HStack(spacing: 8) {
+          reviewButton(isOpen: false)
+          reviewButton(isOpen: true)
+        }
+      }
+      .padding(16)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      .background(Color.theme.bgBase)
+      .environment(\.localization, LocalizationStore(language: .ja))
+    }
+
+    /// 画面 `screen` の姿の上のバーを、幅 `widths` ごとに上から並べる（左の列を開いた姿）。
+    @MainActor static func bars(_ screen: EditorScreen, widths: [CGFloat]) -> some View {
+      VStack(alignment: .leading, spacing: 8) {
+        ForEach(widths, id: \.self) { width in
+          bar(screen).frame(width: width)
+        }
+      }
+      .padding(.vertical, 8)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      .background(Color.theme.bgBase)
+      .environment(\.localization, LocalizationStore(language: .ja))
+    }
+
+    /// 画面 `screen` の姿の上のバー。Changes はブランチ名の札・同期・コミット、PR は PR の札・再読込・GitHub で開く・
+    /// レビュー、Files は今のファイルのボタン・ファイル内検索の欄。
+    @MainActor static func bar(_ screen: EditorScreen) -> some View {
+      EditorBarRow {
+        EditorSidebarToggle(isOpen: true) {}
+        EditorScreenSwitch(
+          selection: screen, changesCount: 6, pullRequestNumber: 214, select: { _ in }
+        )
+        .fixedSize()
+        switch screen {
+        case .changes:
+          HStack(spacing: EditorBarRoot.spacing) {
+            EditorBarSeparator()
+            branchChip
+          }
+          .editorBarPart(drops: .chip, grows: .chipWide)
+          syncChip(isEnabled: true)
+        case .pullRequest:
+          HStack(spacing: EditorBarRoot.spacing) {
+            EditorBarSeparator()
+            pullRequestChip
+          }
+          .editorBarPart(drops: .chip, grows: .chipWide)
+          EditorBarIconButton(glyph: EditorGlyphs.refresh, help: "再読込") {}
+          EditorBarIconButton(glyph: EditorGlyphs.openFile, help: "GitHub で開く") {}
+        case .files:
+          HStack(spacing: EditorBarRoot.spacing) {
+            EditorBarSeparator()
+            EditorItemButton(
+              isOpen: false, help: "開いているファイルの一覧", action: {},
+              label: { EditorCurrentFileLabel(file: currentFile) })
+          }
+          .editorBarPart(grows: .itemWide)
+          HStack(spacing: EditorBarRoot.spacing) {
+            EditorBarSeparator()
+            BarFindField()
+          }
+          .editorBarPart(grows: .findField)
+        }
+        EditorPeekHint(isPeeking: false).editorBarPart(.trailing, drops: .hint)
+        switch screen {
+        case .changes: commitButton(isOpen: false)
+        case .pullRequest: reviewButton(isOpen: false)
+        case .files: EmptyView()
+        }
+      }
+    }
+
+    private static let currentFile = EditorShellModel.CurrentFile(
+      chip: FileChip.resolve(URL(fileURLWithPath: "/repo/App/Layout/AppShell.swift")),
+      directory: "App/Layout/", name: "AppShell.swift", isPreview: false, mark: .unsaved,
+      showsKeepOpenKey: false)
+
+    /// ブランチ名の札（広い姿は名前の全体、狭い姿は名前を省略）。
+    @MainActor private static var branchChip: some View {
+      EditorBarChip(
+        help: "ブランチを選ぶ", action: {},
+        content: {
+          EditorGlyphView(glyph: EditorGlyphs.branch, size: 12, color: Color.theme.textPrimary)
+          EditorReadableName(
+            "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix,
+            truncation: .tail
+          ) { Text($0) }
+          EditorGlyphView(
+            glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.textMuted)
+        })
+    }
+
+    @MainActor private static func syncChip(isEnabled: Bool) -> some View {
+      EditorBarChip(
+        style: .filled, isEnabled: isEnabled, help: "同期 ↑2 ↓1", action: {},
+        content: {
+          Text("同期")
+          Text("↑2 ↓1")
+            .font(Font.theme.editorBarCount)
+            .foregroundStyle(Color.theme.textSecondary)
+        }
+      )
+      .fixedSize()
+    }
+
+    /// PR の札（広い姿は「→ ベース」つき、次に名前の全体、狭い姿は名前を省略）。
+    @MainActor private static var pullRequestChip: some View {
+      EditorBarChip(
+        help: "プルリクエストを選ぶ", action: {},
+        content: {
+          Text("#214").foregroundStyle(Color.theme.textMuted)
+          ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Layout.editorBarChipGap) {
+              Text("feat/editor-overlay")
+              EditorGlyphView(
+                glyph: EditorGlyphs.arrowRight, size: 12, color: Color.theme.textMuted)
+              Text("main").foregroundStyle(Color.theme.textMuted)
+            }
+            .fixedSize()
+            EditorReadableName(
+              "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix,
+              truncation: .tail
+            ) { Text($0) }
+          }
+          EditorGlyphView(
+            glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.textMuted)
+        })
+    }
+
+    @MainActor private static func commitButton(isOpen: Bool) -> some View {
+      EditorBarActionButton(
+        title: "コミット", isOpen: isOpen, help: "コミット", action: {},
+        detail: {
+          HStack(spacing: 6) {
+            Text("ステージ済み")
+            Text("+125 −3").font(Font.theme.editorBarCount)
+          }
+          .font(Font.theme.editorItemListHint)
+          .foregroundStyle(Color.theme.textSecondary)
+        })
+    }
+
+    @MainActor private static func reviewButton(isOpen: Bool) -> some View {
+      EditorBarActionButton(
+        title: "レビュー", isOpen: isOpen, help: "レビュー、未送信のコメント 1", action: {},
+        badge: {
+          HStack(spacing: 3) {
+            EditorGlyphView(
+              glyph: EditorGlyphs.comment, size: 12, color: Color.theme.stateWaiting)
+            Text("1").font(Font.theme.editorBarCount).foregroundStyle(Color.theme.stateWaiting)
+          }
+        })
+    }
+
+    /// ファイル内検索の欄に当たる、伸び縮みする入力欄（本来の幅 290・最小の幅 180）。
+    private struct BarFindField: View {
+      @State private var text = "isEditorOpen"
+
+      var body: some View {
+        HStack(spacing: 6) {
+          TextField("", text: $text)
+            .textFieldStyle(.plain)
+            .font(Font.theme.editorBarChip)
+            .foregroundStyle(Color.theme.textPrimary)
+          Text("2/3")
+            .font(Font.theme.editorBarHint)
+            .foregroundStyle(Color.theme.textMuted)
+            .padding(.trailing, 6)
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 3)
+        .frame(minWidth: 180, idealWidth: 290, maxWidth: 290)
+        .frame(height: 26)
+        .background(
+          RoundedRectangle(cornerRadius: 7).fill(Color.theme.surfaceInk.opacity(0.06))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 7)
+            .strokeBorder(Color.theme.accentPrimary.opacity(0.55), lineWidth: 1.5))
+      }
+    }
+  }
 #endif
