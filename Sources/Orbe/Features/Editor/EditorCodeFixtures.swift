@@ -52,7 +52,7 @@
 
       """
 
-    /// タブでインデントした断片（Go）。タブの幅と長い行の横スクロールを flow が撮る。
+    /// タブでインデントした断片（Go）。タブの幅と、長い行の続きの段が行頭のタブの幅だけ字下げされる姿を flow が撮る。
     static let tabbed = """
       package main
 
@@ -61,7 +61,7 @@
       func main() {
       \tfor i := 0; i < 3; i++ {
       \t\tif i%2 == 0 {
-      \t\t\tfmt.Println("even", i, "https://go.dev/doc/effective_go#for", "keeps the line past the pane edge")
+      \t\t\tfmt.Println("even", i, "https://go.dev/doc/effective_go#for", "continues on the next segment")
 
       \t\t\tcontinue
       \t\t}
