@@ -188,10 +188,10 @@ final class LineShaperTests: XCTestCase {
     XCTAssertEqual(map.segments(from: 0, to: 10).count, 1, "行全体は 1 つ")
   }
 
-  /// 約物が続く所でも、和文と英数字の境でも、字の幅は前後の字に依らない——字の x は、前にある字をそれぞれ 1 字だけで
-  /// 組んだ幅の和。利用者の環境の言語が日本語でない機械では、言語の属性が無くても約物を詰めないので、この確かめが効くのは
-  /// 日本語の環境で回したときだけ。
-  func testGlyphWidthsDoNotDependOnNeighboringCharacters() {
+  /// 和文の約物を詰めず、和文と英数字の間も空けない——約物が続く所と、和文と英数字の境を含む行で、どの字の左端の x も、
+  /// 行頭からその字の手前までの字を 1 字ずつ単独で組んだ幅の和に等しい。利用者の優先言語に日本語も中国語も無い機械では、
+  /// 言語の属性が無くても約物を詰めないので、この検証が効くのは、優先言語に日本語か中国語がある機械で実行したときだけ。
+  func testPunctuationIsNotCompressedAndLatinIsNotSpacedFromCJK() {
     let string = "（注）。「x」、漢字123円"
     let shaped = LineShaper.shape(source(string), font: font, tabWidth: 0)
     let stops = shaped.stops
