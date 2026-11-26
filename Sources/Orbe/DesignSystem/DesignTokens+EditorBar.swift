@@ -16,6 +16,8 @@ extension Theme.Layout {
   static let editorBarChipGap: CGFloat = 6
   static let editorBarChipFilledPadX: CGFloat = 9
   static let editorBarChipFilledGap: CGFloat = 7
+  /// 中ほどの札の名前（ブランチ名）の読める下限の字数（先頭のこの字数と「…」より狭くならない）。
+  static let editorBarChipReadablePrefix = 4
   /// アイコンのボタン（26 角）——大きさ・角丸・印の大きさ。
   static let editorBarIconButton: CGFloat = 26
   static let editorBarIconButtonRadius: CGFloat = 7

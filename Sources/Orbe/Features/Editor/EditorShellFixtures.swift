@@ -164,7 +164,9 @@
             content: {
               EditorGlyphView(
                 glyph: EditorGlyphs.branch, size: 12, color: Color.theme.textPrimary)
-              EditorReadableName("feat/editor-overlay", prefixLength: 3) { Text($0) }
+              EditorReadableName(
+                "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix
+              ) { Text($0) }
             }
           )
           .frame(width: 120)
@@ -266,7 +268,9 @@
         help: "ブランチを選ぶ", action: {},
         content: {
           EditorGlyphView(glyph: EditorGlyphs.branch, size: 12, color: Color.theme.textPrimary)
-          EditorReadableName("feat/editor-overlay") { Text($0).truncationMode(.middle) }
+          EditorReadableName(
+            "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix
+          ) { Text($0).truncationMode(.middle) }
           EditorGlyphView(
             glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.textMuted)
         })
@@ -299,7 +303,9 @@
               Text("main").foregroundStyle(Color.theme.textMuted)
             }
             .fixedSize()
-            EditorReadableName("feat/editor-overlay") { Text($0).truncationMode(.middle) }
+            EditorReadableName(
+              "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix
+            ) { Text($0).truncationMode(.middle) }
           }
           EditorGlyphView(
             glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.textMuted)
