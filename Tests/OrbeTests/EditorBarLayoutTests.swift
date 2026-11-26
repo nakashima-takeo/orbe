@@ -67,4 +67,19 @@ final class EditorBarLayoutTests: OrbeTestCase {
     ]
     XCTAssertEqual(widths(wideChip, 200), [26, nil, 100], "中ほどの札が収まらなくても、案内は出る")
   }
+
+  /// 中ほどの札まるごとが落ちると、空いた幅で、先に譲っていた今の項目の名前（幅に合わせて伸び縮みする）が広い姿に戻る。
+  func testWhenTheChipDropsTheNameThatYieldedEarlierWidensAgain() {
+    let parts = [
+      Part(declaration: EditorBarPart(), faces: [26]),
+      // 名前は 40 から 400 まで、1 ずつ伸び縮みする。
+      Part(
+        declaration: EditorBarPart(grows: .itemWide),
+        faces: Array(stride(from: 40, through: 400, by: 1))),
+      Part(declaration: EditorBarPart(drops: .chip), faces: [60]),
+    ]
+    // 開閉・名前の最小の幅・札と、間隔の和は 144。
+    XCTAssertEqual(widths(parts, 144), [26, 40, 60], "札が入れば、名前は最小の幅")
+    XCTAssertEqual(widths(parts, 143), [26, 105, nil], "札が落ちれば、札と間隔の分だけ名前が広がる")
+  }
 }

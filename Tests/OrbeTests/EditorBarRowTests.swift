@@ -149,6 +149,7 @@ final class EditorBarRowTests: OrbeTestCase {
 
     hosted.width(narrow)
     XCTAssertGreaterThanOrEqual(hosted["chip"].minX, narrow - 12, "前提: 札は行の枠の外")
+    XCTAssertLessThan(hosted["chip"].minX, narrow - 3, "前提: 押す点は、落とした札の上")
     try pressTheTrailingEdge()
     XCTAssertEqual(presses.count, 0, "落とした札は押下を受けない")
 
@@ -161,6 +162,39 @@ final class EditorBarRowTests: OrbeTestCase {
     hosted.width(narrow)
     try pressTheTrailingEdge()
     XCTAssertEqual(presses.count, 1, "また落ちれば押下を受けない")
+  }
+
+  /// 行の右半分に残った札も、押下を受ける。
+  func testAChipKeptInTheRightHalfOfTheRowTakesPresses() throws {
+    let chipPresses = Presses()
+    let syncPresses = Presses()
+    let hosted = host {
+      Color.clear.frame(width: 500)
+      EditorBarChip(
+        help: "ブランチを選ぶ", action: { chipPresses.count += 1 }, content: { Text("main") }
+      )
+      .fixedSize()
+      .probe("chip")
+      .editorBarPart(drops: .chip)
+      EditorBarChip(help: "同期", action: { syncPresses.count += 1 }, content: { Text("同期") })
+        .fixedSize()
+        .probe("sync")
+    }
+    let window = try XCTUnwrap(hosted.host.window)
+    placeOffscreen(window)
+    let width: CGFloat = 900
+    hosted.width(width)
+    func press(_ frame: CGRect) throws {
+      try click(hosted.host, at: NSPoint(x: frame.midX, y: frame.midY))
+      flush(window)
+    }
+
+    let chip = hosted["chip"]
+    XCTAssertGreaterThan(chip.minX, width / 2, "前提: 札は行の右半分")
+    try press(hosted["sync"])
+    XCTAssertEqual(syncPresses.count, 1, "前提: 行の右半分の、落とさない札には押下が届く")
+    try press(chip)
+    XCTAssertEqual(chipPresses.count, 1, "行の右半分に残った、落とせる札も押せる")
   }
 
   /// 右端のボタンは、ボタンごとの印で自分の枠を知らせ、消えたら枠が無いことを知らせる——画面を替えてボタンが入れ替われば、
@@ -202,6 +236,32 @@ final class EditorBarRowTests: OrbeTestCase {
 
     XCTAssertEqual(width(name, 0), floor, accuracy: 0.5, "下限より狭い幅では、下限の幅")
     XCTAssertEqual(width(name, full), full, accuracy: 0.5, "収まれば全体")
+  }
+
+  /// 読める下限の幅では、名前は先頭の字と「…」として描かれる（中ほどを省いて「…」だけになることはない）。
+  func testAtTheFloorTheNameIsDrawnAsItsFirstCharacterAndAnEllipsis() throws {
+    let font = Font.theme.editorItemButtonName
+    let floor = width(Text("A…").font(font).fixedSize(), .infinity)
+    func drawn<V: View>(_ view: V) throws -> Data {
+      let host = NSHostingView(
+        rootView: view.frame(width: floor, height: Theme.Layout.editorBar, alignment: .leading))
+      host.frame = NSRect(x: 0, y: 0, width: floor, height: Theme.Layout.editorBar)
+      host.appearance = NSAppearance(named: .darkAqua)
+      let window = NSWindow(
+        contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+      window.contentView = host
+      holdUntilTestEnds(window)
+      host.layoutSubtreeIfNeeded()
+      let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+      host.cacheDisplay(in: host.bounds, to: rep)
+      return try XCTUnwrap(rep.tiffRepresentation)
+    }
+    let name = try drawn(EditorReadableName("AppShell.swift") { Text($0).font(font) })
+    let expected = try drawn(Text("A…").font(font).fixedSize())
+
+    XCTAssertNotEqual(
+      expected, try drawn(Text("…").font(font).fixedSize()), "前提: 描いた姿で、字の違いが見分けられる")
+    XCTAssertEqual(name, expected, "先頭の字と「…」")
   }
 
   /// 下限の字数を渡せば、名前は先頭のその字数と「…」の幅より狭くならない。名前がその字数より短ければ、下限は名前の全体の幅。
