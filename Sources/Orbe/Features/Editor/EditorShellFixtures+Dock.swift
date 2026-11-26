@@ -6,22 +6,24 @@
   /// 置き場の姿を、flow が本物の面で開閉を撮る。
   extension EditorShellFixtures {
     /// ポップアップの中身を載せる側。入力欄は「❯」の後ろの伸びるメッセージ欄（sans 12.5・行の高さ 20・1 行で高さ 30）で、
-    /// esc で器に閉じるよう頼む。ボタンと ⌘↵ は
-    /// 「載せる側」のきっかけで閉じる。起きたこと（開いた回数・閉じる直前のきっかけ・扱った ⌘ つきのキー）を記録する。
-    @MainActor final class DockPopupOwner: EditorPopupOwner {
-      private weak var popup: EditorPopup?
+    /// esc で器に閉じるよう頼む。ボタンと ⌘↵ は「載せる側」のきっかけで閉じる。`showsMenu` が真なら、地の下に、地の外に
+    /// 並べるメニュー（右寄せ・幅 250）を出す。起きたこと（開いた回数・閉じる直前のきっかけ・扱った ⌘ つきのキー）を記録する。
+    @MainActor @Observable final class DockPopupOwner: EditorPopupOwner {
+      @ObservationIgnored private weak var popup: EditorPopup?
       /// 地の部品に渡す色（縁・上側・外の光）。
       var tint: Color?
-      private(set) var openCount = 0
-      private(set) var closings: [EditorDismissal] = []
-      private(set) var keys: [String] = []
+      /// 地の外に並べるメニューを出すか。
+      var showsMenu = false
+      @ObservationIgnored private(set) var openCount = 0
+      @ObservationIgnored private(set) var closings: [EditorDismissal] = []
+      @ObservationIgnored private(set) var keys: [String] = []
       /// 入力欄（開閉をまたいで同じ欄を使う）。
-      let field = MessageTextView(
+      @ObservationIgnored let field = MessageTextView(
         metrics: .init(
           font: .systemFont(ofSize: 12.5), height: 30, lineHeight: 20, leading: 0, trailing: 0))
-      private let scroll = MessageScrollView()
+      @ObservationIgnored private let scroll = MessageScrollView()
       /// 入力欄へフォーカスを入れる頼み（欄が窓に載っていなければ、載ったときに当てる）。
-      private var wantsFocus = false
+      @ObservationIgnored private var wantsFocus = false
 
       init(popup: EditorPopup?, tint: Color? = nil) {
         self.popup = popup
@@ -43,20 +45,41 @@
         let field = field
         let commit: () -> Void = { [weak self] in self?.popup?.close(.owner) }
         return AnyView(
-          EditorPopupGround(tint: tint) {
-            HStack(alignment: .top, spacing: 9) {
-              Text("❯")
-                .font(Font.theme.editorBarAction)
-                .foregroundStyle(Color.theme.accentBright)
-                .frame(height: Theme.Layout.editorLargeButton)
-              DockField(scroll: scroll, field: field)
-              EditorLargeButton(
-                title: "コミット", key: .glyph(EditorGlyphs.returnKey), ground: .accent,
-                action: commit)
+          VStack(alignment: .trailing, spacing: Theme.Layout.editorDockGap) {
+            EditorPopupGround(tint: tint) {
+              HStack(alignment: .top, spacing: 9) {
+                Text("❯")
+                  .font(Font.theme.editorBarAction)
+                  .foregroundStyle(Color.theme.accentBright)
+                  .frame(height: Theme.Layout.editorLargeButton)
+                DockField(scroll: scroll, field: field)
+                EditorLargeButton(
+                  title: "コミット", key: .glyph(EditorGlyphs.returnKey), ground: .accent,
+                  action: commit)
+              }
+              .padding(.leading, 14)
+              .padding([.top, .bottom, .trailing], 8)
             }
-            .padding(.leading, 14)
-            .padding([.top, .bottom, .trailing], 8)
+            if showsMenu { menu }
           })
+      }
+
+      /// 地の外に並べるメニュー（一覧の地 `GlassPanel` を使い、置き場の見えている物として枠を知らせる）。
+      private var menu: some View {
+        GlassPanel(level: .popup, cornerRadius: Theme.Layout.editorCardRadius) {
+          VStack(alignment: .leading, spacing: 0) {
+            ForEach(["コミット (amend)", "コミットしてプッシュ", "最後のコミットを取り消す"], id: \.self) { title in
+              Text(title)
+                .font(Font.theme.editorEmptyText)
+                .foregroundStyle(Color.theme.textPrimary)
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+            }
+          }
+          .padding(5)
+        }
+        .frame(width: 250)
+        .editorDockItem()
       }
 
       func popupDidOpen() {

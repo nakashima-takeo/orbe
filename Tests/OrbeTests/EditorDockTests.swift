@@ -318,7 +318,7 @@ final class EditorDockTests: OrbeTestCase {
     let host = NSHostingView(
       rootView: EditorDockStack {
         // 中身は 400 まで伸び、それより低く求められれば縮む（入力欄が中でスクロールする中身）。
-        Color.clear.frame(width: 300).frame(maxHeight: 400)
+        Color.clear.frame(width: 300).frame(maxHeight: 400).editorDockItem()
       } cards: {
         EditorFailureCard(text: "コミットに失敗しました。", dismiss: {})
         EditorFailureCard(text: "プッシュに失敗しました。", dismiss: {})

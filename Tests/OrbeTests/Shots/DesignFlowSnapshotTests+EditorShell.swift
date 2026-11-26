@@ -167,7 +167,8 @@ extension ShotTestCase {
 
 extension DesignFlowSnapshotTests {
   /// 置き場のポップアップ（仮の中身）を本物の面で開閉する: 右端のボタンに当たる開閉で開く → 打つ → esc で閉じる → 開く →
-  /// ⌘P で一覧を開く（ポップアップは閉じる）→ esc → 開く → ⌘↵ で閉じる。面を付けた窓の中で描く（窓から外れると閉じる）。
+  /// ⌘P で一覧を開く（ポップアップは閉じる）→ esc → 開く → 地の外にメニューを並べる → ⌘↵ で閉じる。面を付けた窓の中で
+  /// 描く（窓から外れると閉じる）。
   func testEditorDock() throws {
     let size = NSSize(width: 1100, height: 640)
     let scene = try openFilesScene(size: size)
@@ -190,6 +191,7 @@ extension DesignFlowSnapshotTests {
         ("item_list", { _ = pane.performKeyEquivalent(with: .key("p")) }),
         ("item_list_closed", { self.listKey(pane, "\u{1b}") }),
         ("reopen_again", { pane.popup.toggle(owner) }),
+        ("menu", { owner.showsMenu = true }),
         ("command_return", { _ = pane.performKeyEquivalent(with: .key("\r")) }),
       ])
   }

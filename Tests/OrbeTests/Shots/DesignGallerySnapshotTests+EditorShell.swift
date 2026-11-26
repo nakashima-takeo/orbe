@@ -36,7 +36,7 @@ extension DesignGallerySnapshotTests {
 
   /// 上のバーの右下の置き場——ポップアップだけ（`editor_dock_popup`）・ポップアップと失敗の札 2 枚（`editor_dock_cards`）・
   /// 色つきの縁（`editor_dock_tinted`）・札だけ（`editor_dock_cards_only`）・高さが足りず、ポップアップが縮む姿
-  /// （`editor_dock_short`。中身は 10 行）。
+  /// （`editor_dock_short`。中身は 10 行）・中身が地の外にメニューを並べた姿（`editor_dock_menu`）。
   func renderEditorDockSnapshots(dir: URL) throws {
     let size = NSSize(width: 760, height: 420)
     let plain = EditorShellFixtures.DockPopupOwner(popup: nil)
@@ -53,6 +53,11 @@ extension DesignGallerySnapshotTests {
     try writePNG(
       EditorShellFixtures.dock(owner: nil, cards: true, height: 300), size: size,
       name: "editor_dock_cards_only.png", dir: dir)
+    let menu = EditorShellFixtures.DockPopupOwner(popup: nil)
+    menu.showsMenu = true
+    try writePNG(
+      EditorShellFixtures.dock(owner: menu, cards: true, height: 300), size: size,
+      name: "editor_dock_menu.png", dir: dir)
     let long = EditorShellFixtures.DockPopupOwner(popup: nil)
     long.field.string = (1...10).map { "行 \($0)" }.joined(separator: "\n")
     try writePNG(

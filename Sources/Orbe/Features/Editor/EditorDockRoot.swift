@@ -3,8 +3,8 @@ import SwiftUI
 
 /// 上のバーの右下の置き場の SwiftUI ルート。上から、ポップアップ（開いていれば、載せる側の中身）と、今の画面の札を右寄せで
 /// 縦に並べる（→ `EditorDockStack`）。札は、画面ごとのファイル（`EditorDock+<画面>.swift`）が、ここの描画の中で持ち主の値から
-/// 組む。器の中の別 root なので環境は明示注入する。影を描くために、置き場の枠の外側に `margin` の余白を取る。並んでいる物の
-/// 枠は `framesDidChange` で host へ知らせる（host が押下を受ける範囲）。
+/// 組む。器の中の別 root なので環境は明示注入する。影を描くために、置き場の枠の外側に `margin` の余白を取る。見えている物の
+/// 枠（`editorDockItem` を付けた物）は `framesDidChange` で host へ知らせる（host が押下を受ける範囲）。
 struct EditorDockRoot: View {
   let shell: EditorShellModel
   /// ポップアップの器（開閉と、載せる側の持ち主）。
@@ -39,8 +39,8 @@ struct EditorDockRoot: View {
 }
 
 /// 置き場の並び。上から、ポップアップ（幅 520。並びが狭ければ並びの幅）と、札（自分の幅と高さ）を、右寄せで間 6 で縦に
-/// 並べる。札は自分の高さを取り、ポップアップは残りの高さを上限に縮む。並んでいる物は、それぞれの枠を
-/// `EditorDockRoot.space` の座標で知らせる。
+/// 並べる。札は自分の高さを取り、ポップアップは残りの高さを上限に縮む。押下を受ける範囲は、並んでいる物の外枠ではなく、
+/// その中の見えている物が自分で知らせる枠（→ `editorDockItem`）。
 struct EditorDockStack<Popup: View, Cards: View>: View {
   @ViewBuilder let popup: () -> Popup
   @ViewBuilder let cards: () -> Cards
@@ -48,9 +48,9 @@ struct EditorDockStack<Popup: View, Cards: View>: View {
   var body: some View {
     EditorDockLayout {
       ForEach(subviews: popup()) { item in
-        item.modifier(EditorDockFrame()).layoutValue(key: EditorDockPopupKey.self, value: true)
+        item.layoutValue(key: EditorDockPopupKey.self, value: true)
       }
-      ForEach(subviews: cards()) { item in item.modifier(EditorDockFrame()) }
+      cards()
     }
   }
 }
@@ -96,7 +96,7 @@ private struct EditorDockPopupKey: LayoutValueKey {
   static let defaultValue = false
 }
 
-/// 並んでいる物の枠（`EditorDockRoot.space` の座標）。
+/// 置き場の見えている物の枠（`EditorDockRoot.space` の座標）。
 struct EditorDockFramesKey: PreferenceKey {
   static let defaultValue: [CGRect] = []
 
@@ -105,7 +105,16 @@ struct EditorDockFramesKey: PreferenceKey {
   }
 }
 
-/// 並んでいる物の枠を知らせる。
+extension View {
+  /// 置き場の見えている物として、自分の枠を置き場の host へ知らせる（host は、この枠の中の押下だけを受ける）。地の部品
+  /// （`EditorPopupGround`・`EditorCardGround`）は自分で付ける。地の部品を使わずに置き場へ並べる物（中身が地の外に
+  /// 並べるメニューなど）は、その物に付ける。
+  func editorDockItem() -> some View {
+    modifier(EditorDockFrame())
+  }
+}
+
+/// 置き場の見えている物の枠を知らせる。
 private struct EditorDockFrame: ViewModifier {
   func body(content: Content) -> some View {
     content.background(
@@ -133,7 +142,8 @@ final class EditorDockHost: NSHostingView<EditorDockRoot> {
 }
 
 /// ポップアップの地——popup の段のガラス・角丸 14・影。色 `tint` を渡すと、縁の線（色 .5）・上端から 132 までの縦の
-/// グラデーション（色 .17 → 0）・外の光（色 .13・広がり 44）が付く。中身は渡された幅いっぱいに置く。
+/// グラデーション（色 .17 → 0）・外の光（色 .13・広がり 44）が付く。中身は渡された幅いっぱいに置く。自分の枠を、置き場の
+/// 見えている物として知らせる。
 struct EditorPopupGround<Content: View>: View {
   var tint: Color?
   @ViewBuilder let content: () -> Content
@@ -161,11 +171,14 @@ struct EditorPopupGround<Content: View>: View {
     }
     .shadow(
       color: tint?.opacity(Theme.Opacity.editorPopupTintGlow) ?? .clear,
-      radius: tint == nil ? 0 : Theme.Layout.editorPopupGlow)
+      radius: tint == nil ? 0 : Theme.Layout.editorPopupGlow
+    )
+    .editorDockItem()
   }
 }
 
-/// 札の地——popup の段のガラス・角丸 10・最小の高さ 34。`border` を渡すと縁の線が付く。
+/// 札の地——popup の段のガラス・角丸 10・最小の高さ 34。`border` を渡すと縁の線が付く。自分の枠を、置き場の見えている物と
+/// して知らせる。
 struct EditorCardGround<Content: View>: View {
   var border: Color?
   @ViewBuilder let content: () -> Content
@@ -180,6 +193,7 @@ struct EditorCardGround<Content: View>: View {
           .strokeBorder(border, lineWidth: Theme.Stroke.hairline)
       }
     }
+    .editorDockItem()
   }
 }
 
