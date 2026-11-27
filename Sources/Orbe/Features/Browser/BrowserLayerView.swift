@@ -59,7 +59,6 @@ final class BrowserLayerView: NSView {
   /// 右シート（既定: 閉）と全面（既定: 開）で独立に記憶するサイドバー開閉状態（メモリ保持のみ）。
   var sheetSidebarOpen = false
   var fullSidebarOpen = true
-  var popoverState: BrowserPopoverState?
   var lastLayoutWasSidebarOverlay = false
 
   /// 窓の key 状態とブラウザ内焦点から上位（`WindowController`）が与える真のブラウザ焦点状態。
@@ -68,7 +67,7 @@ final class BrowserLayerView: NSView {
   var resizeSession: BrowserResizeSession?
 
   enum Fade: Equatable {
-    case sheet(closingWidth: CGFloat? = nil)
+    case sheet(closingWidth: CGFloat? = nil, closingSidebarOpen: Bool = false)
     case belowBar
   }
   var fade: Fade?
@@ -86,7 +85,10 @@ final class BrowserLayerView: NSView {
   override var isFlipped: Bool { true }
   override var acceptsFirstResponder: Bool { true }
   var isEditingURL: Bool { toolbar.isEditingURL }
+  var popoverState: BrowserPopoverState? { popoverModel.state }
   var isPopoverOpen: Bool { popoverState != nil }
+  /// ブラウザ層が窓レベルのショートカットを単一降下ゲート経由で引き取る条件。
+  var ownsKeyRouting: Bool { mode.isOpen && (focusIsInside || isEditingURL) }
 
   var isSidebarOpen: Bool {
     switch mode {
@@ -96,9 +98,28 @@ final class BrowserLayerView: NSView {
     }
   }
 
+  /// 閉鎖フェード中は閉鎖直前のサイドバー開閉状態を凍結し、フェード開始時の横ジャンプを防ぐ。
+  var effectiveSidebarOpen: Bool {
+    switch mode {
+    case .sheet: sheetSidebarOpen
+    case .full: fullSidebarOpen
+    case .closed:
+      if case .sheet(_, let closingSidebarOpen) = fade {
+        closingSidebarOpen
+      } else {
+        false
+      }
+    }
+  }
+
   var isSidebarOverlay: Bool {
     let width = currentSheetWidth()
     return isSidebarOpen && width > 0 && width < Theme.Layout.browserSidebarInlineThreshold
+  }
+
+  var effectiveSidebarOverlay: Bool {
+    let width = currentSheetWidth()
+    return effectiveSidebarOpen && width > 0 && width < Theme.Layout.browserSidebarInlineThreshold
   }
 
   var isEditingNewTabURL: Bool {
@@ -281,6 +302,7 @@ final class BrowserLayerView: NSView {
   func setMode(_ next: BrowserMode, animated: Bool) {
     guard next != mode else { return }
     let previous = mode
+    let wasSidebarOpen = isSidebarOpen
     let wasNarrowOverlay = isSidebarOverlay
     let closingWidth: CGFloat? =
       previous.isOpen && next == .closed && sheetView.frame.width > 0
@@ -288,11 +310,14 @@ final class BrowserLayerView: NSView {
     resizeHandle.cancelDragIfNeeded()
     closePopover()
     if !next.isOpen && wasNarrowOverlay {
-      sheetSidebarOpen = false
+      switch previous {
+      case .sheet: sheetSidebarOpen = false
+      case .full: fullSidebarOpen = false
+      case .closed: break
+      }
     }
     mode = next
     toolbar.mode = next
-    toolbar.isSidebarOpen = isSidebarOpen
     endURLEditingExternally()
     if !next.isOpen {
       isPeeking = false
@@ -304,7 +329,7 @@ final class BrowserLayerView: NSView {
       if previous == .closed && next.isOpen {
         .sheet()
       } else if previous.isOpen && next == .closed {
-        .sheet(closingWidth: closingWidth)
+        .sheet(closingWidth: closingWidth, closingSidebarOpen: wasSidebarOpen)
       } else {
         nil
       }

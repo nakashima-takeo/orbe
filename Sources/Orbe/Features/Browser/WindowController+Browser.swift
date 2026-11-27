@@ -29,6 +29,17 @@ extension WindowController {
     window.onFirstResponderChange = { [weak self] responder in
       self?.firstResponderDidChange(responder)
     }
+    window.keyViewContainmentBoundary = { [weak self] in
+      guard let self, self.model.overlay == .none else { return nil }
+      guard self.browserMode == .full || self.browserView.ownsKeyRouting else { return nil }
+      if self.browserView.isPopoverOpen { return self.browserView.popoverHost }
+      if let webView = self.browserView.webView, self.browserView.hasNavigated,
+        !self.browserView.isEditingAnyURL, !self.browserView.isSidebarOverlay
+      {
+        return webView
+      }
+      return self.browserView
+    }
     browserView.onWindowCommand = { [weak self] command in
       self?.handleWindowCommand(command)
     }

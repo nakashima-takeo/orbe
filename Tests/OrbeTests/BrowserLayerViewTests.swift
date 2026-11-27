@@ -49,6 +49,24 @@ final class BrowserLayerViewTests: OrbeTestCase {
     return Hosted(window: window, stage: stage, underlay: underlay, browser: browser)
   }
 
+  /// 窓座標（原点は左下）の 1 点を実 NSEvent のマウス押下・離上でクリック配送する（事前に `placeOffscreen` が必要）。
+  func clickWindowPoint(_ point: NSPoint, in window: NSWindow) {
+    let make = { (type: NSEvent.EventType) in
+      NSEvent.mouseEvent(
+        with: type, location: point, modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
+    }
+    NSApp.postEvent(make(.leftMouseUp), atStart: false)
+    NSApp.sendEvent(make(.leftMouseDown))
+    if let pending = NSApp.nextEvent(
+      matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
+    {
+      NSApp.sendEvent(pending)
+    }
+    flush(window)
+  }
+
   // MARK: - 遅延生成と隔離
 
   /// 閉状態およびタブ 0 枚の空画面では `WKWebView` を作らず、遷移要求で初めて遅延生成する。
@@ -101,8 +119,9 @@ final class BrowserLayerViewTests: OrbeTestCase {
       "新タブ画面はブラウザ層配下が受ける")
 
     window.makeFirstResponder(nil)
-    browser.handleNewTabBackgroundTap()
-    XCTAssertTrue(window.firstResponder === browser, "新タブ画面余白タップでブラウザ層が焦点を取る")
+    placeOffscreen(window)
+    clickWindowPoint(NSPoint(x: 960, y: 40), in: window)
+    XCTAssertTrue(window.firstResponder === browser, "新タブ画面余白の実クリックでブラウザ層が焦点を取る")
 
     browser.setPeeking(true, animated: false)
     XCTAssertTrue(stage.hitTest(leftPoint) === browser, "透かし中は左半分もブラウザ層が吸収する")

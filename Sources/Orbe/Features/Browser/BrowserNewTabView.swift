@@ -32,24 +32,24 @@ struct BrowserNewTabView: View {
 
   var body: some View {
     GeometryReader { proxy in
-      ZStack {
-        Color.theme.bgBase
-          .contentShape(Rectangle())
-          .onTapGesture(perform: actions.onTapBackground)
-
-        ScrollView(.vertical, showsIndicators: false) {
-          VStack(spacing: Theme.Space.phrase) {
-            brandHeader
-            urlInputBox
-            quickAccessSection
-            recentlyClosedSection
-          }
-          .padding(.horizontal, Theme.Space.span)
-          .padding(.vertical, Theme.Space.phrase)
-          .frame(maxWidth: .infinity)
-          .frame(minHeight: proxy.size.height, alignment: .center)
+      ScrollView(.vertical) {
+        VStack(spacing: Theme.Space.phrase) {
+          brandHeader
+          urlInputBox
+          quickAccessSection
+          recentlyClosedSection
         }
+        .padding(.horizontal, Theme.Space.span)
+        .padding(.vertical, Theme.Space.phrase)
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: proxy.size.height, alignment: .center)
+        .background(
+          Color.theme.bgBase
+            .contentShape(Rectangle())
+            .onTapGesture(perform: actions.onTapBackground)
+        )
       }
+      .scrollIndicators(.never)
       .frame(width: proxy.size.width, height: proxy.size.height)
     }
     .background(Color.theme.bgBase)

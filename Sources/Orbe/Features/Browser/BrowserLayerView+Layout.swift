@@ -69,7 +69,7 @@ extension BrowserLayerView {
 
   private func layoutBelowBarSubtree() {
     let sidebarLayout = BrowserSidebarLayout.compute(
-      belowBounds: belowBar.bounds, isSidebarOpen: isSidebarOpen)
+      belowBounds: belowBar.bounds, isSidebarOpen: effectiveSidebarOpen)
     contentView.frame = sidebarLayout.contentFrame
     webView?.frame = contentView.bounds
     newTabHost.frame = contentView.bounds
@@ -89,13 +89,13 @@ extension BrowserLayerView {
     popoverHost.frame = belowBar.bounds
     popoverHost.isHidden = !isPopoverOpen
 
-    if !lastLayoutWasSidebarOverlay && sidebarLayout.isOverlay {
+    if mode.isOpen && !lastLayoutWasSidebarOverlay && sidebarLayout.isOverlay {
       DispatchQueue.main.async { [weak self] in
         guard let self, self.isSidebarOverlay else { return }
         self.reclaimFocusToSelfIfInside(self.contentView)
       }
     }
-    lastLayoutWasSidebarOverlay = sidebarLayout.isOverlay
+    lastLayoutWasSidebarOverlay = mode.isOpen && sidebarLayout.isOverlay
     syncSidebarShadow(isOverlay: sidebarLayout.isOverlay)
   }
 
@@ -121,7 +121,7 @@ extension BrowserLayerView {
       }
       return BrowserResizeSession.sheetWidth(ratio: sheetRatio, containerWidth: bounds.width)
     case .closed:
-      if case .sheet(let closingWidth?) = fade {
+      if case .sheet(let closingWidth?, _) = fade {
         return min(bounds.width, closingWidth)
       }
       return BrowserResizeSession.sheetWidth(ratio: sheetRatio, containerWidth: bounds.width)
@@ -161,6 +161,7 @@ extension BrowserLayerView {
       guard let self, generation == fadeGeneration else { return }
       fade = nil
       applyPresentation()
+      needsLayout = true
     }
     layer.add(animation, forKey: Self.fadeKey)
     CATransaction.commit()
@@ -185,6 +186,7 @@ extension BrowserLayerView {
     peekRailView.alphaValue = showPeekRail ? 1 : 0
     newTabHost.isHidden = hasNavigated
     popoverHost.isHidden = !isPopoverOpen
+    toolbar.isSidebarOpen = effectiveSidebarOpen
     syncFocusAppearance()
   }
 
@@ -217,7 +219,7 @@ extension BrowserLayerView {
       sheetView.layer?.shadowOpacity = showShadow ? shadow.opacity : 0
       webView?.underPageBackgroundColor = Theme.Color.bgBase
     }
-    syncSidebarShadow(isOverlay: isSidebarOverlay)
+    syncSidebarShadow(isOverlay: effectiveSidebarOverlay)
   }
 
   private func syncSidebarShadow(isOverlay: Bool) {

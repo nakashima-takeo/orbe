@@ -22,30 +22,16 @@ extension BrowserLayerView {
 
   override func keyDown(with event: NSEvent) {
     if isPlainEscape(event) {
-      if isPopoverOpen {
-        closePopover()
-        focusBrowser()
-        return
-      }
-      if isSidebarOverlay && !isEditingAnyURL {
-        closeSidebarOverlay(focusingBrowser: true)
-      }
+      dismissOverlayOnEscape()
     }
   }
 
   override func cancelOperation(_ sender: Any?) {
-    if isPopoverOpen {
-      closePopover()
-      focusBrowser()
-      return
-    }
-    if isSidebarOverlay && !isEditingAnyURL {
-      closeSidebarOverlay(focusingBrowser: true)
-    }
+    dismissOverlayOnEscape()
   }
 
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    guard mode.isOpen, focusIsInside || isEditingURL else {
+    guard ownsKeyRouting else {
       return super.performKeyEquivalent(with: event)
     }
     if let composing = IMEComposition.composingTextView(in: window),
@@ -98,6 +84,12 @@ extension BrowserLayerView {
   }
 
   private func handleEscapeKeyEquivalent(_ event: NSEvent) -> Bool {
+    if dismissOverlayOnEscape() { return true }
+    return super.performKeyEquivalent(with: event)
+  }
+
+  @discardableResult
+  private func dismissOverlayOnEscape() -> Bool {
     if isPopoverOpen {
       closePopover()
       focusBrowser()
@@ -111,7 +103,7 @@ extension BrowserLayerView {
       cancelURLEditing()
       return true
     }
-    return super.performKeyEquivalent(with: event)
+    return false
   }
 
   private func handleBrowserKeyAction(_ action: BrowserKeyAction) {

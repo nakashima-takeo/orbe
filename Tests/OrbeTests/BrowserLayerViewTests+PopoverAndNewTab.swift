@@ -248,12 +248,23 @@ extension BrowserLayerViewTests {
     browser.newTabActions.onSelectQuickAccess(favTabId)
     XCTAssertNotNil(session.store.tab(id: emptyPinned.id), "PINNED の空タブは掃除対象外")
 
-    // 背景余白タップでポップオーバーと URL 編集を閉じて focusBrowser() する。
+    // 背景余白の実クリックでポップオーバー閉鎖・URL 編集終了・focusBrowser() が機能する。
+    placeOffscreen(window)
     browser.openNewTab()
     browser.openPopover(.profile)
-    browser.newTabActions.onTapBackground()
-    XCTAssertFalse(browser.isPopoverOpen)
+    flush(window)
+    clickWindowPoint(NSPoint(x: 960, y: 40), in: window)
+    XCTAssertFalse(browser.isPopoverOpen, "ポップオーバー外側の実クリックで閉じる")
     XCTAssertTrue(window.firstResponder === browser)
+
+    browser.beginURLEditing()
+    flush(window)
+    pumpMain(
+      until: { (window.firstResponder as? NSTextView)?.isDescendant(of: browser.barHost) == true },
+      "前提: URL 欄編集中")
+    clickWindowPoint(NSPoint(x: 960, y: 40), in: window)
+    XCTAssertFalse(browser.isEditingURL, "新タブ画面余白の実クリックで URL 編集が終わる")
+    XCTAssertTrue(window.firstResponder === browser, "新タブ画面余白の実クリックでブラウザ層へ焦点が移る")
   }
 
   // MARK: - BrowserInlineTextField の常駐再フォーカスと IME 保護

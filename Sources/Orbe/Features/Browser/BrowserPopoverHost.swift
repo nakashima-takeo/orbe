@@ -14,7 +14,6 @@ enum BrowserPopoverState: Equatable {
   var state: BrowserPopoverState?
   var onBeforeFormUnmount: () -> Void = {}
   var onDismiss: () -> Void = {}
-  var onUpdateState: (BrowserPopoverState) -> Void = { _ in }
 }
 
 /// `belowBar` 全面を覆うポップオーバーオーバーレイ。
@@ -87,7 +86,7 @@ struct BrowserPopoverOverlayRoot: View {
           onBeforeFormUnmount: model.onBeforeFormUnmount,
           onRequestDeleteConfirm: { id in
             model.onBeforeFormUnmount()
-            model.onUpdateState(.editSpace(id, confirmingDelete: true))
+            model.state = .editSpace(id, confirmingDelete: true)
           },
           onDismiss: model.onDismiss)
       }

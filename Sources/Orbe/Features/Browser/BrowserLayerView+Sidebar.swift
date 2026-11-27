@@ -82,15 +82,11 @@ extension BrowserLayerView {
       self.closePopover()
       self.focusBrowser()
     }
-    popoverModel.onUpdateState = { [weak self] next in
-      guard let self else { return }
-      self.popoverState = next
-      self.popoverModel.state = next
-    }
 
     newTabActions.canFocusInput = { [weak self] in
       guard let self else { return false }
-      return self.mode.isOpen && !self.hasNavigated && !self.isPopoverOpen && !self.isSidebarOverlay
+      return self.mode.isOpen && !self.hasNavigated && !self.isPopoverOpen
+        && !self.isSidebarOverlay && !self.isEditingURL
     }
     newTabActions.onCommitURL = { [weak self] text in self?.commitNewTabURL(text) ?? false }
     newTabActions.onCancelInput = { [weak self] in self?.cancelNewTabURL() }
@@ -123,7 +119,7 @@ extension BrowserLayerView {
     setSidebarOpen(!isSidebarOpen)
   }
 
-  func setSidebarOpen(_ open: Bool) {
+  func setSidebarOpen(_ open: Bool, focusingBrowser: Bool = true) {
     guard mode.isOpen else { return }
     prepareForToolbarAction(endingURLEditing: false)
     guard open != isSidebarOpen else { return }
@@ -141,26 +137,14 @@ extension BrowserLayerView {
     }
     needsLayout = true
     layoutSubtreeIfNeeded()
-    if !open && !isEditingURL {
+    if focusingBrowser && !isEditingAnyURL {
       focusBrowser()
     }
   }
 
   func closeSidebarOverlay(focusingBrowser: Bool) {
     guard isSidebarOverlay else { return }
-    closePopover()
-    reclaimFocusToSelfIfInside(sidebarContainer)
-    switch mode {
-    case .sheet: sheetSidebarOpen = false
-    case .full: fullSidebarOpen = false
-    case .closed: break
-    }
-    toolbar.isSidebarOpen = isSidebarOpen
-    needsLayout = true
-    layoutSubtreeIfNeeded()
-    if focusingBrowser && !isEditingURL {
-      focusBrowser()
-    }
+    setSidebarOpen(false, focusingBrowser: focusingBrowser)
   }
 
   // MARK: - ビュー内ポップオーバー
@@ -176,10 +160,10 @@ extension BrowserLayerView {
 
   func openPopover(_ next: BrowserPopoverState) {
     guard mode.isOpen else { return }
+    reclaimFocusToSelfIfInside(barHost)
     endURLEditingExternally()
     reclaimFocusToSelfIfInside(contentView)
     reclaimFocusToSelfIfInside(popoverHost)
-    popoverState = next
     popoverModel.state = next
     popoverHost.isHidden = false
     needsLayout = true
@@ -190,7 +174,6 @@ extension BrowserLayerView {
   func closePopover() {
     guard popoverState != nil else { return }
     reclaimFocusToSelfIfInside(popoverHost)
-    popoverState = nil
     popoverModel.state = nil
     popoverHost.isHidden = true
   }
@@ -199,33 +182,52 @@ extension BrowserLayerView {
 
   func openNewTab() {
     guard mode.isOpen else { return }
+    let wasEditing = isEditingAnyURL
     closePopover()
+    reclaimFocusToSelfIfInside(barHost)
     endURLEditingExternally()
     if isSidebarOverlay {
       closeSidebarOverlay(focusingBrowser: false)
     }
-    guard session.openTab(section: .today, url: nil, activate: true) != nil else { return }
+    guard session.openTab(section: .today, url: nil, activate: true) != nil else {
+      if wasEditing { focusBrowser() }
+      return
+    }
     newTabModel.inputText = ""
     newTabModel.focusToken = max(1, newTabModel.focusToken &+ 1)
   }
 
-  /// `⌘W` 専用: `TODAY` タブのみ閉じ、`PINNED` / `Favorites`・タブ 0 枚時は無動作。
+  /// `⌘W` 専用: `TODAY` タブのみ閉じ、`PINNED` / `Favorites`・タブ 0 枚時は編集も焦点も変えない真の無動作。
   func closeActiveTodayTab() {
     guard mode.isOpen else { return }
-    closePopover()
-    endURLEditingExternally()
     guard let tab = session.store.activeTab, tab.section == .today else { return }
+    closePopover()
+    reclaimFocusToSelfIfInside(barHost)
+    reclaimFocusToSelfIfInside(newTabHost)
+    endURLEditingExternally()
     _ = session.closeTab(tab.id, recordClosed: true)
     focusBrowser()
   }
 
+  /// `⌘⇧T` 専用: 復元可能な履歴が無ければ編集も焦点も変えない真の無動作。
+  /// 復元成功時は新タブ画面の一覧クリックと同様に未遷移 `TODAY` 空タブを自動掃除する。
   func reopenClosedTabFromShortcut() {
     guard mode.isOpen else { return }
+    guard session.store.nextReopenableClosedTab() != nil else { return }
+    let wasEditing = isEditingAnyURL
     closePopover()
+    reclaimFocusToSelfIfInside(barHost)
+    reclaimFocusToSelfIfInside(newTabHost)
     endURLEditingExternally()
-    if session.reopenClosedTab() != nil {
-      focusBrowser()
+    let emptyTabId = reusableEmptyTodayTabId(excluding: nil)
+    guard session.reopenClosedTab() != nil else {
+      if wasEditing { focusBrowser() }
+      return
     }
+    if let emptyTabId {
+      _ = session.closeTab(emptyTabId, recordClosed: false)
+    }
+    focusBrowser()
   }
 
   func selectTabFromSidebar(_ tabId: UUID) {
@@ -241,21 +243,25 @@ extension BrowserLayerView {
   func closeTabFromSidebar(_ tabId: UUID) {
     closePopover()
     _ = session.closeTab(tabId, recordClosed: true)
+    focusBrowser()
   }
 
   func handleTabMenuAction(_ action: BrowserContextMenu.TabAction, tabId: UUID) {
     closePopover()
     BrowserContextMenu.execute(action, tabId: tabId, on: session)
+    focusBrowser()
   }
 
   func clearTodayTabsFromSidebar(in spaceId: UUID) {
     closePopover()
     _ = session.clearTodayTabs(in: spaceId)
+    focusBrowser()
   }
 
   func selectSpaceFromSidebar(_ selection: BrowserActiveSpaceSelection) {
     closePopover()
     _ = session.selectSpace(selection)
+    focusBrowser()
   }
 
   func commitNewTabURL(_ text: String) -> Bool {

@@ -55,13 +55,25 @@ struct BrowserInlineTextField: NSViewRepresentable {
     if tokenChanged {
       coordinator.lastFocusToken = focusToken
       if focusToken > 0 {
-        if nsView.stringValue != text { nsView.stringValue = text }
+        if !isEditingNow && nsView.stringValue != text {
+          nsView.stringValue = text
+        }
+        let requestedToken = focusToken
         let selectAll = selectAllOnFocus
         DispatchQueue.main.async {
-          guard coordinator.canFocus(),
+          guard coordinator.lastFocusToken == requestedToken,
+            coordinator.canFocus(),
             let window = nsView.window,
             !nsView.isHiddenOrHasHiddenAncestor
           else { return }
+          let editingNow =
+            window.firstResponder != nil && window.firstResponder === nsView.currentEditor()
+          if editingNow {
+            if selectAll {
+              (window.firstResponder as? NSTextView)?.selectAll(nil)
+            }
+            return
+          }
           if window.makeFirstResponder(nsView), selectAll {
             (window.firstResponder as? NSTextView)?.selectAll(nil)
           }
@@ -134,6 +146,11 @@ struct BrowserInlineTextField: NSViewRepresentable {
       if textView.hasMarkedText() {
         return commandSelector == #selector(NSResponder.insertNewline(_:))
           || commandSelector == #selector(NSResponder.cancelOperation(_:))
+      }
+      if commandSelector == #selector(NSResponder.insertTab(_:))
+        || commandSelector == #selector(NSResponder.insertBacktab(_:))
+      {
+        return true
       }
       if commandSelector == #selector(NSResponder.insertNewline(_:)) {
         endedExplicitly = true

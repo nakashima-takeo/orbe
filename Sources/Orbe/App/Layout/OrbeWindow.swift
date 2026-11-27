@@ -11,6 +11,10 @@ class OrbeWindow: NSWindow {
   /// 再帰を防ぐため、受け手は見た目と復帰記憶の更新のみを行い `makeFirstResponder` を呼ばない。
   var onFirstResponderChange: ((NSResponder?) -> Void)?
 
+  /// キービュー循環（`Tab` / `Shift+Tab`）を封じ込める境界ビューを返す。
+  /// 非 `nil` の間は、その境界の外側へ抜けるキービュー遷移を抑止する。
+  var keyViewContainmentBoundary: (() -> NSView?)?
+
   /// 主窓の大きさとスタイルで作る。
   convenience init() {
     self.init(
@@ -35,6 +39,46 @@ class OrbeWindow: NSWindow {
       onFirstResponderChange?(firstResponder)
     }
     return changed
+  }
+
+  override func selectKeyView(following view: NSView) {
+    guard allowKeyViewTransition(from: view, following: true) else { return }
+    super.selectKeyView(following: view)
+  }
+
+  override func selectKeyView(preceding view: NSView) {
+    guard allowKeyViewTransition(from: view, following: false) else { return }
+    super.selectKeyView(preceding: view)
+  }
+
+  override func selectNextKeyView(_ sender: Any?) {
+    let origin = (sender as? NSView) ?? (firstResponder as? NSView)
+    guard allowKeyViewTransition(from: origin, following: true) else { return }
+    super.selectNextKeyView(sender)
+  }
+
+  override func selectPreviousKeyView(_ sender: Any?) {
+    let origin = (sender as? NSView) ?? (firstResponder as? NSView)
+    guard allowKeyViewTransition(from: origin, following: false) else { return }
+    super.selectPreviousKeyView(sender)
+  }
+
+  private func allowKeyViewTransition(from origin: NSView?, following: Bool) -> Bool {
+    guard let boundary = keyViewContainmentBoundary?() else { return true }
+    guard let origin else { return false }
+    let start: NSView
+    if let textView = origin as? NSTextView, textView.isFieldEditor,
+      let host = textView.delegate as? NSView
+    {
+      start = host
+    } else {
+      start = origin
+    }
+    let candidate = following ? start.nextValidKeyView : start.previousValidKeyView
+    guard let candidate else { return false }
+    guard candidate === boundary || candidate.isDescendant(of: boundary) else { return false }
+    if start !== boundary && candidate === boundary { return false }
+    return true
   }
 
   override func sendEvent(_ event: NSEvent) {
