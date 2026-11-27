@@ -125,4 +125,44 @@ extension RowLayout {
       return row + delta + 1
     }
   }
+
+  /// 折り返しを待つ行——面自身の編集が掛かった行（編集の後の行の区間で、昇順。折り返していた行は 1 段の行に置き換えて
+  /// ある）と、区間ごとの前の折り返しの手がかり（行の数を変えない、行 1 つの編集だけ）と、置き換えで行ごとの折り返しの
+  /// 木を変えたか。`shift` が返し、束を当てた後の本文で `rewrap` に渡す。
+  struct Unwrapped {
+    var lines: [Range<Int>] = []
+    var resumes: [LineWrap.Resume?] = []
+    var changed = false
+  }
+
+  /// `unwrap` の読むだけの半分——編集のまとまりごとに、折り返しを待つ行と前の折り返しの手がかりを `unwrapped` に足し、
+  /// 1 段の行に置き換える区間を `edits` に足す。行 1 つで行の数を変えない編集は、その行の折り返しの有無で決める（木を
+  /// 1 度だけ引く）。
+  func planUnwrap(
+    _ changes: [LineChange], in before: TextRope, into unwrapped: inout Unwrapped,
+    _ edits: inout [(lines: Range<Int>, with: [WrappedLine?])]
+  ) {
+    guard let wraps else { return }
+    var shifted = 0
+    for group in LineGroup.of(changes) {
+      let lines = group.rows.lowerBound..<(group.rows.upperBound + 1)
+      let count = lines.count + group.delta
+      unwrapped.lines.append(lines.lowerBound + shifted..<lines.lowerBound + shifted + count)
+      shifted += group.delta
+      let single = lines.count == 1 && group.delta == 0
+      let old = single ? wraps.wrap(ofLine: lines.lowerBound) : nil
+      unwrapped.resumes.append(
+        old.map {
+          LineWrap.Resume(old: $0, edited: group.start - before.lineStart(lines.lowerBound))
+        }
+      )
+      let plain =
+        group.delta == 0
+        && (single
+          ? old == nil
+          : wraps.segments(before: lines.upperBound) - wraps.segments(before: lines.lowerBound)
+            == lines.count)
+      if !plain { edits.append((lines, [WrappedLine?](repeating: nil, count: count))) }
+    }
+  }
 }

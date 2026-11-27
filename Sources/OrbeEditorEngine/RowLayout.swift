@@ -326,15 +326,6 @@ struct RowLayout: Sendable {
 
 /// 行ごとの折り返しを置く・面自身の編集に追従させる（→ `RowLayout.shift`）。
 extension RowLayout {
-  /// 折り返しを待つ行——面自身の編集が掛かった行（編集の後の行の区間で、昇順。折り返していた行は 1 段の行に置き換えて
-  /// ある）と、区間ごとの前の折り返しの手がかり（行の数を変えない、行 1 つの編集だけ）と、置き換えで行ごとの折り返しの
-  /// 木を変えたか。`shift` が返し、束を当てた後の本文で `rewrap` に渡す。
-  struct Unwrapped {
-    var lines: [Range<Int>] = []
-    var resumes: [LineWrap.Resume?] = []
-    var changed = false
-  }
-
   /// 行ごとの折り返しを置く（nil なら折り返さない）。
   mutating func setWraps(_ wraps: LineWraps?) {
     self.wraps = wraps
@@ -343,36 +334,18 @@ extension RowLayout {
 
   /// 編集 `changes`（編集前の本文 `before` の座標。昇順）が掛かる行を 1 段の行に置き換え、折り返しを待つ行として返す。同じ
   /// 行に掛かる編集は 1 つにまとめる。1 段の行だけに掛かり行の数を変えない編集（打鍵の多く）は、木を変えない。本文と
-  /// 食い違う折り返しは捨てて nil を返す（取引の確定で全部を計算し直す）。
+  /// 食い違う折り返しは捨てて nil を返す（取引の確定で全部を計算し直す）。木は持ち場で書き換える——手元に写しを持つと、
+  /// 木の経路を写し直す。
   private mutating func unwrap(_ changes: [LineChange], in before: TextRope) -> Unwrapped? {
-    guard var wraps else { return nil }
-    guard wraps.lineCount == before.lineCount else {
+    guard let lineCount = wraps?.lineCount else { return nil }
+    guard lineCount == before.lineCount else {
       setWraps(nil)
       return nil
     }
     var unwrapped = Unwrapped()
-    var shifted = 0
     var edits: [(lines: Range<Int>, with: [WrappedLine?])] = []
-    for group in LineGroup.of(changes) {
-      let lines = group.rows.lowerBound..<(group.rows.upperBound + 1)
-      let count = lines.count + group.delta
-      unwrapped.lines.append(lines.lowerBound + shifted..<lines.lowerBound + shifted + count)
-      shifted += group.delta
-      let old = lines.count == 1 && group.delta == 0 ? wraps.wrap(ofLine: lines.lowerBound) : nil
-      unwrapped.resumes.append(
-        old.map {
-          LineWrap.Resume(old: $0, edited: group.start - before.lineStart(lines.lowerBound))
-        }
-      )
-      let plain =
-        wraps.segments(before: lines.upperBound) - wraps.segments(before: lines.lowerBound)
-        == lines.count
-      if group.delta != 0 || !plain {
-        edits.append((lines, [WrappedLine?](repeating: nil, count: count)))
-      }
-    }
-    wraps.replace(edits)
-    self.wraps = wraps
+    planUnwrap(changes, in: before, into: &unwrapped, &edits)
+    wraps?.replace(edits)
     unwrapped.changed = !edits.isEmpty
     return unwrapped
   }
@@ -383,15 +356,14 @@ extension RowLayout {
   mutating func rewrap(
     _ unwrapped: Unwrapped, version: Int, _ wrap: (Range<Int>, LineWrap.Resume?) -> [WrappedLine?]
   ) {
-    guard var wraps else { return }
+    guard wraps != nil else { return }
     var edits: [(lines: Range<Int>, with: [WrappedLine?])] = []
     for (range, resume) in zip(unwrapped.lines, unwrapped.resumes) {
       let lines = wrap(range, resume)
       if lines.contains(where: { $0 != nil }) { edits.append((range, lines)) }
     }
-    wraps.replace(edits)
-    wraps.version = version
-    self.wraps = wraps
+    wraps?.replace(edits)
+    wraps?.version = version
     if unwrapped.changed || !edits.isEmpty { self.version += 1 }
   }
 }
