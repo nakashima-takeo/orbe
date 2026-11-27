@@ -135,14 +135,14 @@ extension PullRequestStateTests {
     gitHub.review = .success(review(head: "h3"))
     gitHub.answerReview()
     XCTAssertEqual(reads, before + 3, "揃える 2 本の後は読まない")
-    XCTAssertEqual(state.failure, .read(.unreachable))
+    XCTAssertEqual(state.contentFailure, .unreachable)
 
     gitHub.content = .success(content(head: "h3"))
     state.reload()
     gitHub.answerReview()
     XCTAssertEqual(state.content?.headCommit, "h3")
     XCTAssertEqual(state.review?.headCommit, "h3")
-    XCTAssertNil(state.failure)
+    XCTAssertNil(state.contentFailure)
   }
 
   /// 中身とレビューのやりとりの問い合わせにすぐ答えが返っても、push の後の読み直しで中身とレビューのやりとりが同じ先頭を

@@ -34,13 +34,17 @@ final class ScmCommitPopup {
   @ObservationIgnored private var isClosing = false
   /// メニューの項目の文言の言語（面が配る。使う時点で読む）。
   @ObservationIgnored var language: () -> Language = { .systemDefault }
+  /// ▾ のメニューを閉じた。閉じたきっかけを面へ渡す（esc で閉じたなら、面が押し続けた esc を捨て始める）。
+  @ObservationIgnored var menuDidClose: (EditorDismissal) -> Void = { _ in }
 
   init(panel: ScmPanel, popup: EditorPopup) {
     self.panel = panel
     self.popup = popup
     panel.control.addObserver(self)
-    menu.onClose = { [weak self] returnsFocus in
-      guard let self, returnsFocus, !isClosing else { return }
+    menu.onClose = { [weak self] dismissal in
+      guard let self else { return }
+      menuDidClose(dismissal)
+      guard dismissal.returnsFocus, !isClosing else { return }
       focusField()
     }
   }

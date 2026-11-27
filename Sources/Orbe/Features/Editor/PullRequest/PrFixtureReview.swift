@@ -2,10 +2,11 @@
   import Foundation
 
   /// PR のパネルと PR の diff の gallery / flow の、差し替えの GitHub のレビューのやりとり。StateHooks.swift の新しい側の行 12
-  /// （you の保留中のコメントと、もう 1 人の返信）のスレッドに、古い側の行の Markdown 入りのスレッド・解決済みのスレッド・
+  /// （you の未送信のコメントと、もう 1 人の返信）のスレッドに、古い側の行の Markdown 入りのスレッド・解決済みのスレッド・
   /// 今の diff に置けないスレッド・README.md のスレッドを足した姿を答える。書き込みは GitHub と同じく次の読みに出る
-  /// （返信・解決・新しいスレッドは保留中のレビューに積み、送信で公開する）。`writes` で、書き込みの答えを返さない（書き込みの
-  /// 最中を撮る）・失敗を返す、に替えられる。返さずにおいた答えは `release` でその時の答え方で返す。
+  /// （返信・解決・新しいスレッドは未送信のレビューに積み、送信で公開する）。`writes` で、書き込みの答えを返さない（書き込みの
+  /// 最中を撮る）・失敗を返す、に替えられる。返さずにおいた答えは `release` でその時の答え方で返す。`viewerIsAuthor` で、自分の
+  /// PR の答えに替えられる。
   final class PrFixtureReview {
     enum Writes {
       case succeed
@@ -16,6 +17,10 @@
     }
 
     var writes = Writes.succeed
+    /// 見ている人が PR の作者か（自分の PR の姿を撮る）。
+    var viewerIsAuthor = false
+    /// 読みに返す失敗（nil なら答える）。
+    var readFailure: GitHubFailure?
     /// PR の先頭のコミット（読むたびに問う。PR に push があると進む）。
     private let head: () -> String
     private var threads: [GitHubPullRequestReview.Thread]
@@ -98,7 +103,7 @@
 
     func read() -> GitHubPullRequestReview {
       GitHubPullRequestReview(
-        viewerIsAuthor: false, headCommit: head(),
+        viewerIsAuthor: viewerIsAuthor, headCommit: head(),
         pendingReview: pendingID.map {
           .init(id: $0, commentCount: threads.flatMap(\.comments).count(where: \.isPending))
         }, threads: threads)

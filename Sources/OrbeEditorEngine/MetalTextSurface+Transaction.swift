@@ -24,6 +24,8 @@ struct Transaction {
   var revealSite: EditingSite?
   /// 見せる縦の範囲を縦の並びの中の位置で頼んだ（本文の場。`revealing` は横の寄せだけに使う）。
   var revealingRows: (from: RowPosition, to: RowPosition)?
+  /// 見せる縦の範囲を、絵の差し込みの中の範囲で頼んだ（本文の場。`revealing` は横の寄せだけに使う）。
+  var revealingZone: ZoneSpan?
   /// 見せ方の前に置くスクロールの位置（スクロールだけのキー・ドラッグの自動スクロール）。
   var scrollTo: SIMD2<Double>?
   /// 取引を起こした打鍵の出来事の時刻（打鍵→画面の遅れを、本文と同じ書き込みで材料へ添える）。
@@ -85,7 +87,8 @@ extension MetalTextSurface {
       finished.reveal == .none
       ? nil
       : finished.revealSite?.revealSpan(
-        finished.revealing, upstream: finished.revealingUpstream, rows: finished.revealingRows)
+        finished.revealing, upstream: finished.revealingUpstream, rows: finished.revealingRows,
+        zone: finished.revealingZone)
     bodySite.change = nil
     editor.noteTransaction(
       from: change.cursors, edited: change.edited, restored: change.restoresCursors)
@@ -230,4 +233,11 @@ extension MetalTextSurface {
   func inputMethodCoordinatesDidChange() {
     primarySite?.inputMethodCoordinatesDidChange()
   }
+}
+
+/// 絵の差し込み `zone` の中の縦の範囲（絵の座標、pt）。
+struct ZoneSpan {
+  let zone: ObjectIdentifier
+  let top: CGFloat
+  let bottom: CGFloat
 }

@@ -613,6 +613,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrTitle
   case editorPrRefresh
   case editorPrOpenOnGitHub
+  case editorPrBarChip
   case editorPrInSync
   case editorPrUnpushed
   case editorPrUnfetched
@@ -659,7 +660,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrWriteTimedOut
   case editorPrReview
   case editorPrReviewPending
-  case editorPrReviewPlaceholder
+  case editorPrReviewButtonPending
+  case editorPrReviewOverall
   case editorPrReviewApprove
   case editorPrReviewComment
   case editorPrReviewRequestChanges
@@ -668,6 +670,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorPrReviewStoppedAligning
   case editorPrReviewNoDiff
   case editorPrReviewReadFailed
+  case editorPrViewedFailed
+  case editorPrViewedTimedOut
+  case editorPrSubmitFailed
+  case editorPrSubmitTimedOut
   case editorPrOutdatedThreads
   case editorPrCommentCount
 

@@ -44,6 +44,7 @@ extension BranchPullRequest: SourceControlObserver {
 /// 分かったら、その値も覚える。
 extension BranchPullRequest: PullRequestStateObserver {
   func pullRequestStateDidChange(_ state: PullRequestState) {
+    readingFailuresDidChange()
     countDrift()
     notify()
     if let base = self.state?.baseTrackingRef, tracking.lacks(base) { tracking.record() }

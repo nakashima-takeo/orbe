@@ -4,9 +4,9 @@ import XCTest
 
 @testable import Orbe
 
-/// PR のパネルの gallery。fixture は本物の git の場と、PR #131 を答える差し替えの出どころで、
-/// StateHooks.swift を選んだ姿と、その PR の diff のスレッドと下端のレビューの送信の区画、
-/// PR が無いとき・表示できないとき（gh が認証されていない）・問い合わせが失敗したときの本体と左の列を dark / light で撮る。
+/// PR のパネルの gallery。fixture は本物の git の場と、PR #131 を答える差し替えの出どころで、StateHooks.swift を選んだ姿
+/// （幅 1100 と、上のバーが PR の札を譲る幅 760）、その PR の diff のスレッド、PR が無いとき・表示できないとき（gh が認証
+/// されていない）・問い合わせが失敗したときの本体と左の列を dark / light で撮る。
 extension DesignGallerySnapshotTests {
   func renderEditorPullRequestSnapshots(dir: URL) throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -18,6 +18,9 @@ extension DesignGallerySnapshotTests {
     scene.panel.click(.file("src/agent/StateHooks.swift"))
     try writePNG(
       scene.view, size: size, name: "editor_pr.png", dir: dir,
+      until: { scene.isReady && scene.pane.showsDiff(of: "src/agent/StateHooks.swift") })
+    try writePNG(
+      scene.view, size: NSSize(width: 760, height: 480), name: "editor_pr_narrow.png", dir: dir,
       until: { scene.isReady && scene.pane.showsDiff(of: "src/agent/StateHooks.swift") })
     scene.openDiff()
     pumpMain(until: { scene.isDiffReady }, "PR の diff とスレッドが揃う")

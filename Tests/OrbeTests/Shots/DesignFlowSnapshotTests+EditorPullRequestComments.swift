@@ -7,10 +7,16 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// PR のコメントの flow（fixture は `PrFixtures` と `PrFixtureReview`——本物の git の場と、PR #131 とスレッドを答える
-/// 差し替えの出どころ）: PR の diff のスレッド（既定のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
-/// コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 左の列を閉じて並列 →
-/// 左の列を開き（インラインに戻る）、パネルの下端で全体へのコメントと「承認」を選ぶ → 送信の最中 → 送信の失敗 → 送信の後（保留中が 0）→ 書きかけの欄の行を書き換える
-/// push の後（欄が書きかけを残して送れない姿）。
+/// 差し替えの出どころ）。3 つに分けて撮る。
+/// - `editor_pr_comments`（dark）: PR の diff のスレッド（既定のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
+///   コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 左の列を閉じて並列。
+/// - `editor_pr_review`（面を付けた窓の中で dark と light。窓から外れるとポップアップは閉じる）: 左の列を開き（インラインに
+///   戻る）、レビューのポップアップを開いて全体へのコメントを書く → 「承認」を選ぶ → 「変更を依頼」を選ぶ → 未送信のコメントの
+///   行を押す（ポップアップが閉じ、畳んだスレッドが開いてその行が見える）→ 開き直して「承認」で送信の最中 → 送信の失敗（下端の
+///   赤い帯）→ 送信が通る（ポップアップが閉じ、未送信が 0）。
+/// - `editor_pr_comments_after`（dark）: 書きかけの欄の行を書き換える push の後（欄が書きかけを残して送れない姿）。
+///
+/// 自分の PR のポップアップ（種類が無い）と、diff の両端を求められない PR の送れない理由は `testEditorPrReview`。
 extension DesignFlowSnapshotTests {
   func testEditorPrComments() throws {
     try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
@@ -32,12 +38,125 @@ extension DesignFlowSnapshotTests {
         ("replied", steps.reply),
         ("collapsed", steps.collapse),
         ("side", steps.side),
-        ("review_draft", steps.draftReview),
-        ("review_submitting", steps.submitReview),
-        ("review_failed", steps.failReview),
-        ("review_sent", steps.sendReview),
-        ("line_gone", steps.rewriteDraftLine),
       ])
+    // flow は面を、dark に固定した撮影用の器へ載せ替えて撮るので、窓の外観で撮り分ける前に、面を素の窓へ戻す。
+    scene.warmUp(size: Self.size)
+    try renderInPlace(
+      scene.pane, name: "editor_pr_review", dir: previewDir("flows"), appearances: [true, false],
+      steps: [
+        ("open", steps.openReview),
+        ("approve", { steps.choose(.approve) }),
+        ("changes", { steps.choose(.requestChanges) }),
+        ("reveal", steps.revealPending),
+        ("submitting", steps.submitReview),
+        ("failed", steps.failReview),
+        ("sent", steps.sendReview),
+      ])
+    try flow(
+      "editor_pr_comments_after", size: Self.size, render: { scene.view },
+      until: { scene.isReady && scene.isDiffReady },
+      steps: [
+        ("line_gone", steps.rewriteDraftLine)
+      ])
+  }
+
+  /// レビューのポップアップの、人の PR の flow に出ない姿: 自分の PR（種類が無く、返信をまとめて送るだけ）と、diff の両端を
+  /// 求められない PR（下端の帯に送れない理由）。
+  func testEditorPrReview() throws {
+    try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
+    let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
+    let own = try PrFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
+    defer { own.cleanup() }
+    own.review.viewerIsAuthor = true
+    own.warmUp(size: Self.size)
+    pumpMain(until: { own.isReady }, "PR の中身と帯が揃う")
+    try renderInPlace(
+      own.pane, name: "editor_pr_review_own", dir: previewDir("flows"), appearances: [true, false],
+      steps: [("open", { Self.openReview(own, draft: "指摘いただいた点に対応しました。") })])
+    let blocked = try PrFixtures.scene(
+      .notFetched, queriesRoot: queriesRoot, in: TestScratch.caseDir)
+    defer { blocked.cleanup() }
+    blocked.warmUp(size: Self.size)
+    pumpMain(until: { blocked.isReady }, "PR の中身が揃う")
+    try renderInPlace(
+      blocked.pane, name: "editor_pr_review_blocked", dir: previewDir("flows"),
+      appearances: [true, false], steps: [("no_diff", { Self.openReview(blocked, draft: "") })])
+  }
+
+  /// PR の失敗の札（StateHooks.swift の diff を出し、左の列を閉じた姿）: 確認済みを反映できない → GitHub から読めていない
+  /// （中身とレビューのやりとりが同時に失敗しても 1 枚）→ 読めるようになった後、送信中に閉じたポップアップの送信の失敗 →
+  /// × で全部閉じる。
+  func testEditorPrFailureCards() throws {
+    try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
+    let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
+    let scene = try PrFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
+    defer { scene.cleanup() }
+    scene.warmUp(size: Self.size)
+    pumpMain(until: { scene.isReady }, "PR の中身と帯が揃う")
+    let pane = scene.pane
+    let panel = scene.panel
+    let state = try XCTUnwrap(panel.state)
+    try renderInPlace(
+      pane, name: "editor_pr_cards", dir: previewDir("flows"), appearances: [true, false],
+      steps: [
+        (
+          "viewed",
+          {
+            scene.openDiff()
+            pumpMain(until: { scene.isDiffReady }, "StateHooks.swift の diff が揃う")
+            pane.sidebar.setOpen(false)
+            scene.faults.viewed = .rateLimited
+            panel.toggleViewed(PrFixtureReview.path)
+            pumpMain(until: { state.viewedFailure != nil }, "確認済みの書き込みが失敗する")
+          }
+        ),
+        (
+          "reading",
+          {
+            scene.faults.content = .unreachable
+            scene.review.readFailure = .unreachable
+            panel.refresh()
+            pumpMain(
+              until: { state.contentFailure != nil && state.reviewFailure != nil }, "読みが失敗する")
+          }
+        ),
+        (
+          "submission",
+          {
+            scene.faults.content = nil
+            scene.review.readFailure = nil
+            panel.refresh()
+            pumpMain(
+              until: { state.contentFailure == nil && state.reviewFailure == nil }, "読めるようになる")
+            Self.openReview(scene, draft: "見ました。")
+            scene.review.writes = .hold
+            pane.reviewPopup.submit()
+            pane.reviewPopup.toggle()
+            scene.review.writes = .fail(.unreachable)
+            scene.review.release()
+            pumpMain(until: { state.submissionFailure != nil }, "閉じた後に送信が失敗する")
+          }
+        ),
+        (
+          "dismissed",
+          {
+            let cards = PrFailureCards.cards(
+              of: panel.pullRequest, reviewIsOpen: pane.reviewPopup.isOpen,
+              LocalizationStore(language: .ja))
+            for card in cards { card.dismiss() }
+          }
+        ),
+      ])
+  }
+
+  /// 全体へのコメントを `draft` にして、レビューのポップアップを開く（開けるまで待つ）。
+  @MainActor
+  private static func openReview(_ scene: PrFixtures.Scene, draft: String) {
+    let review = scene.pane.reviewPopup
+    pumpMain(until: { review.canOpen }, "レビューのやりとりが届く")
+    scene.panel.state?.reviewDraft.body = draft
+    review.toggle()
+    pumpMain(until: { review.isOpen }, "ポップアップが開く")
   }
 
   private static let size = NSSize(width: 1100, height: 760)
@@ -114,7 +233,7 @@ private struct CommentSteps {
     settle()
   }
 
-  /// 通る出どころでもう一度押す（保留中の返信が付き、欄が空になる）。
+  /// 通る出どころでもう一度押す（未送信の返信が付き、欄が空になる）。
   func reply() {
     scene.review.writes = .succeed
     zone("T_coalesce")?.zone(.pressed(PrCommentControl.add))
@@ -135,19 +254,39 @@ private struct CommentSteps {
     settle()
   }
 
-  /// 左の列を開き（インラインに戻る）、パネルの下端で全体へのコメントと「承認」を選ぶ。
-  func draftReview() {
+  /// 左の列を開き（インラインに戻る）、全体へのコメントを書いて、レビューのポップアップを開く。
+  func openReview() {
     scene.pane.sidebar.setOpen(true)
     let pane = scene.pane
     pumpMain(until: { pane.diff.map { pane.diffSurfaces($0).count == 1 } ?? false }, "インラインになる")
     settle()
     scene.panel.state?.reviewDraft.body = "コメントの分岐を確かめました。"
-    scene.panel.chooseReviewEvent(.approve)
+    pane.reviewPopup.toggle()
+    pumpMain(until: { pane.reviewPopup.isOpen }, "ポップアップが開く")
   }
 
+  func choose(_ event: GitHubReviewEvent) {
+    scene.panel.state?.chooseReviewEvent(event)
+  }
+
+  /// 未送信のコメントの行（既定のスレッドの行 12。畳んである）を押す。
+  func revealPending() {
+    guard
+      let comment = scene.panel.state?.pendingComments.first(where: { $0.thread == "T_coalesce" })
+    else { return XCTFail("前提: 既定のスレッドの未送信のコメント") }
+    scene.pane.reviewPopup.onOpenURL = { XCTFail("置ける行ではブラウザを開かない: \($0)") }
+    scene.pane.reviewPopup.press(comment)
+    settle()
+  }
+
+  /// 開き直して「承認」を選び、書き込みの答えを返さない出どころで送る。
   func submitReview() {
+    let review = scene.pane.reviewPopup
+    review.toggle()
+    pumpMain(until: { review.isOpen }, "ポップアップが開く")
+    choose(.approve)
     scene.review.writes = .hold
-    scene.panel.submitReview()
+    review.submit()
   }
 
   func failReview() {
@@ -176,8 +315,8 @@ private struct CommentSteps {
 
   func sendReview() {
     scene.review.writes = .succeed
-    scene.panel.submitReview()
-    let panel = scene.panel
-    pumpMain(until: { panel.state?.reviewDraft.body.isEmpty == true }, "送信が通る")
+    let review = scene.pane.reviewPopup
+    review.submit()
+    pumpMain(until: { !review.isOpen }, "送信が通り、ポップアップが閉じる")
   }
 }

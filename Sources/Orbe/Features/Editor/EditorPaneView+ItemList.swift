@@ -15,9 +15,7 @@ extension EditorPaneView {
       itemButtonFrame = frame
       if itemList.isOpen { needsLayout = true }
     }
-    itemList.onClose = { [weak self] returnsFocus in
-      self?.itemListDidClose(returnsFocus: returnsFocus)
-    }
+    itemList.onClose = { [weak self] dismissal in self?.itemListDidClose(dismissal) }
     itemList.onResize = { [weak self] in self?.needsLayout = true }
   }
 
@@ -48,8 +46,9 @@ extension EditorPaneView {
   /// 器を隠す。フォーカスを戻すきっかけなら、隠す前に本体の行き先へ移す。フォーカスが一覧の外へ移って閉じたときは、
   /// first responder が替わる途中なので、行の列を隠すのは次のターンにする（フォーカスを持つ view を隠すと、AppKit が
   /// その場でフォーカスを動かし、移動が入れ子になる）。
-  private func itemListDidClose(returnsFocus: Bool) {
-    if returnsFocus { focusEditor() }
+  private func itemListDidClose(_ dismissal: EditorDismissal) {
+    containerDidClose(dismissal)
+    if dismissal.returnsFocus { focusEditor() }
     itemListHost.isHidden = true
     guard focusIsInItemList else {
       itemList.list.isHidden = true

@@ -23,9 +23,12 @@ extension Theme.Layout {
   static let editorPrViewToggle: CGFloat = 18
   static let editorPrBand: CGFloat = 24
   static let editorPrDescriptionLines = 3
+  /// 上のバーの印（PR の札のブランチ名の間の →・「レビュー」のボタンの吹き出し）の大きさと、ボタンの印と数の間。
+  static let editorPrBarGlyph: CGFloat = 12
+  static let editorPrBarCountGap: CGFloat = 3
 }
 
-/// PR のコメント（スレッド・コメント追加の印・パネル下端のレビュー区画）。半透明の面はエディター共通の換算
+/// PR のコメント（スレッド・コメント追加の印）とレビューのポップアップ。半透明の面はエディター共通の換算
 /// （`EditorStyle.sunk` / `fill` / `hairline`）に揃える。
 extension Theme.Color {
   /// スレッドのある diff の行の地（accent の α .14）。
@@ -43,7 +46,7 @@ extension Theme.Color {
   static let editorPrFieldFocus = accentPrimary.withAlphaComponent(0.55)
   static let editorPrFieldSelection = accentPrimary.withAlphaComponent(0.35)
   static let editorPrFieldSelectionInactive = accentPrimary.withAlphaComponent(0.18)
-  /// 保留中の札の枠（editorCaution の α .4）。
+  /// 未送信の札の枠（editorCaution の α .4）。
   static let editorPrPendingBorder = editorCaution.withAlphaComponent(0.4)
 
   /// `DesignTokens.swift` の private ヘルパは参照不可なので自前で持つ。外観ごとに色と α が違う色。
@@ -59,7 +62,7 @@ extension Theme.Color {
 
 extension Theme.Typography {
   /// スレッドの頭・コメントのメタの行・返信の行の下の失敗の文（sans 11）、頭の状態（mono 10.5）、アバターの頭文字（sans 10
-  /// semibold）、書いた人（sans 11 semibold）、保留中の札（sans 10）、本文（sans 12）とインラインコード・コードブロック（mono 12）、
+  /// semibold）、書いた人（sans 11 semibold）、未送信の札（sans 10）、本文（sans 12）とインラインコード・コードブロック（mono 12）、
   /// 返信の行のボタン（sans 11.5。「レビューに追加」は semibold）。
   static let editorPrThreadHead = NSFont.systemFont(ofSize: 11, weight: .regular)
   static let editorPrThreadStatus = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
@@ -76,11 +79,15 @@ extension Theme.Typography {
   /// 返信欄の字（sans 12）と、その 1 行の高さ（pt）。
   static let editorPrReplyField = NSFont.systemFont(ofSize: 12, weight: .regular)
   static let editorPrReplyFieldLine: CGFloat = 16
-  /// パネルの下端の区画: 「レビュー」と 3 択（sans 11）、保留中の件数とファイルの行のコメント数（mono 10.5）、送信ボタン
-  /// （sans 12 semibold）とその「⌘↵」（mono 10.5）。
-  static let editorPrReviewLabel = NSFont.systemFont(ofSize: 11, weight: .regular)
-  static let editorPrReviewSelected = NSFont.systemFont(ofSize: 11, weight: .semibold)
-  static let editorPrReviewSubmit = NSFont.systemFont(ofSize: 12, weight: .semibold)
+  /// レビューのポップアップ: 区分の見出し（sans 10.5 semibold）、全体へのコメント欄（sans 12.5。
+  /// 1 行の高さ 20）、未送信のコメントの行（sans 12）とその場所の札（mono 11.5）、種類（sans 12。選んだ種類は semibold）。
+  static let editorPrPopupHeading = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+  static let editorPrPopupField = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+  static let editorPrPopupFieldLine: CGFloat = 20
+  static let editorPrPopupRow = NSFont.systemFont(ofSize: 12, weight: .regular)
+  static let editorPrPopupRef = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
+  static let editorPrPopupEvent = NSFont.systemFont(ofSize: 12, weight: .regular)
+  static let editorPrPopupEventSelected = NSFont.systemFont(ofSize: 12, weight: .semibold)
 }
 
 extension Theme.Layout {
@@ -121,12 +128,49 @@ extension Theme.Layout {
   static let editorPrMark: CGFloat = 18
   static let editorPrMarkInset: CGFloat = 8
   static let editorPrMarkGlyph: CGFloat = 11
-  /// パネルの下端の区画（余白 10 12 12・段の間 8）、3 択（外枠の余白 2・各 22）、送信ボタン 26。
-  static let editorPrReviewPadTop: CGFloat = 10
-  static let editorPrReviewPadX: CGFloat = 12
-  static let editorPrReviewPadBottom: CGFloat = 12
-  static let editorPrReviewGap: CGFloat = 8
-  static let editorPrReviewSegment: CGFloat = 22
-  static let editorPrReviewSegmentPad: CGFloat = 2
-  static let editorPrReviewControl: CGFloat = 26
+  /// レビューのポップアップ: 区分（余白 12 12 0・段の間 6・見出しの左右 2）、全体へのコメント欄（1 行のときの高さ 30——行の
+  /// 高さ 20 と上下 5）とその箱（余白 5 12——欄の上下 5 と合わせて 10・角丸 9）、
+  /// 未送信のコメントの行（高さ 26・間 10・左右の余白 8・角丸 6・見せる行の数 6）とその場所の札（左右の余白 6・角丸 4）、
+  /// 下端（余白 12・上の空き 12・間 10）、種類（高さ 30・左 9 右 11・角丸 8・間 6・印 13）、下端の帯（余白 9 14 10）。
+  static let editorPrPopupPad: CGFloat = 12
+  static let editorPrPopupSectionGap: CGFloat = 6
+  static let editorPrPopupHeadingPadX: CGFloat = 2
+  static let editorPrPopupFieldPadX: CGFloat = 12
+  static let editorPrPopupFieldPadY: CGFloat = 5
+  static let editorPrPopupFieldHeight: CGFloat = 30
+  static let editorPrPopupFieldRadius: CGFloat = 9
+  static let editorPrPopupRow: CGFloat = 26
+  static let editorPrPopupRowGap: CGFloat = 10
+  static let editorPrPopupRowPadX: CGFloat = 8
+  static let editorPrPopupRowRadius: CGFloat = 6
+  static let editorPrPopupRows = 6
+  static let editorPrPopupRefPadX: CGFloat = 6
+  static let editorPrPopupRefRadius: CGFloat = 4
+  static let editorPrPopupFooterGap: CGFloat = 10
+  static let editorPrPopupEvent: CGFloat = 30
+  static let editorPrPopupEventPadLeading: CGFloat = 9
+  static let editorPrPopupEventPadTrailing: CGFloat = 11
+  static let editorPrPopupEventRadius: CGFloat = 8
+  static let editorPrPopupEventGap: CGFloat = 6
+  static let editorPrPopupEventGlyph: CGFloat = 13
+  static let editorPrPopupBandPadX: CGFloat = 14
+  static let editorPrPopupBandPadTop: CGFloat = 9
+  static let editorPrPopupBandPadBottom: CGFloat = 10
+}
+
+extension Theme.Opacity {
+  /// レビューのポップアップ: 全体へのコメント欄の地（`surfaceInk` の α）と、欄・種類の枠（`surfaceInk` の α）、選んだ種類の
+  /// 地と枠（中立は `surfaceInk`、承認は success、変更を依頼は stateWaiting の α）、場所の札の地（accent の α）、下端の帯の地と
+  /// 上の線（帯の色の α）。
+  static let editorPrPopupField: Double = 0.05
+  static let editorPrPopupLine: Double = 0.15
+  static let editorPrPopupEventOn: Double = 0.1
+  static let editorPrPopupEventOnBorder: Double = 0.3
+  static let editorPrPopupApproveOn: Double = 0.16
+  static let editorPrPopupApproveOnBorder: Double = 0.65
+  static let editorPrPopupChangesOn: Double = 0.14
+  static let editorPrPopupChangesOnBorder: Double = 0.6
+  static let editorPrPopupRef: Double = 0.2
+  static let editorPrPopupBand: Double = 0.1
+  static let editorPrPopupBandLine: Double = 0.3
 }

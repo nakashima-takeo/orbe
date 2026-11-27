@@ -108,7 +108,7 @@ extension PrCommentPicture {
     return max(size, y - top)
   }
 
-  /// メタの行: 書いた人（11 semibold）・時刻（11 tertiary）・保留中の札（字 10・枠 1・角丸 3）。
+  /// メタの行: 書いた人（11 semibold）・時刻（11 tertiary）・未送信の札（字 10・枠 1・角丸 3）。
   private static func meta(
     _ comment: GitHubPullRequestReview.Comment, at origin: CGPoint, height: CGFloat,
     _ canvas: inout PrCommentCanvas

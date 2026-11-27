@@ -128,7 +128,10 @@ enum EditorGlyphs {
 }
 
 extension EditorGlyphs {
-  /// チェックボックスのレ点（`M3 8.5l3.2 3L13 4.5`。stroke 2.2）。
+  /// 承認: レ点（`M3 8.5l3.2 3L13 4.5`。stroke 1.3）。
+  static let check = Glyph(viewBox: 16, stroke: 1.3) { k in [(checkPath(k), 1)] }
+
+  /// チェックボックスのレ点（同じ形で stroke 2.2）。
   static let checkboxCheck = Glyph(viewBox: 16, stroke: 2.2) { k in [(checkPath(k), 1)] }
 
   /// PR の頭の帯のレ点（同じ形で stroke 1.6）。

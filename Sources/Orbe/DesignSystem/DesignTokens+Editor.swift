@@ -14,7 +14,7 @@ extension Theme.Color {
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
   /// 説明文の段——PR の説明（editorText と textMuted の間）。
   static let editorProse = editorDyn(light: 0x6d647f, dark: 0xa9a2b5)
-  /// 注意の黄——検索の一致の地・PR のパネルの手元とのずれと保留中の印。
+  /// 注意の黄——検索の一致の地・PR のパネルの手元とのずれと未送信の印。
   /// dark は conflict と偶然同値だが light が違い、git 競合でもない。
   static let editorCaution = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
   /// danger の地の上の字（大きい字のボタンの「破棄」）。
@@ -184,18 +184,16 @@ extension Theme.Typography {
   /// 件数・打ち切り・0 件・エラーの文（sans 11）。
   static let editorSearchNote = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// ソース管理。親・子の区分・グラフの枠の見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の名前
-  /// （sans 13）とディレクトリ（sans 11）・PR のパネルの全体へのコメント欄（sans 12）・グラフのコミットの題（sans 12）・
-  /// ref の札（mono 9）・ブランチの行（mono 11）・「さらに表示」（sans 11.5）・PR のパネルの失敗の文（sans 11）。
+  /// （sans 13）とディレクトリ（sans 11）・グラフのコミットの題（sans 12）・ref の札（mono 9）・ブランチの行（mono 11）・
+  /// 「さらに表示」（sans 11.5）。
   static let editorScmSection = NSFont.systemFont(ofSize: 11, weight: .bold)
   static let editorScmCount = NSFont.systemFont(ofSize: 9.5, weight: .regular)
   static let editorScmFile = NSFont.systemFont(ofSize: 13, weight: .regular)
   static let editorScmDirectory = NSFont.systemFont(ofSize: 11, weight: .regular)
-  static let editorScmMessage = NSFont.systemFont(ofSize: 12, weight: .regular)
   static let editorScmCommit = NSFont.systemFont(ofSize: 12, weight: .regular)
   static let editorScmRef = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
   static let editorScmBranch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   static let editorScmMore = NSFont.systemFont(ofSize: 11.5, weight: .regular)
-  static let editorScmNote = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// パネルヘッダーの題の字間。
   static let trackingPanelTitle: CGFloat = 0.5
 }
@@ -324,15 +322,13 @@ extension Theme.Layout {
   /// 進みの細い線（検索中・ソース管理の実行中）。
   static let editorProgressLine: CGFloat = 2
   /// ソース管理。行（見出し・ファイル・コミット・さらに表示）の高さ・種別チップ・行の中のボタンとその印・見出しの
-  /// ツールの角とその間（親の見出しのツールも子の見出しの一括操作も）・PR のパネルの全体へのコメント欄の 1 行の高さ・
-  /// ref の札の高さ・コミットの点・点の列の幅。
+  /// ツールの角とその間（親の見出しのツールも子の見出しの一括操作も）・ref の札の高さ・コミットの点・点の列の幅。
   static let editorScmRow: CGFloat = 22
   static let editorScmChip: CGFloat = 16
   static let editorScmRowButton: CGFloat = 18
   static let editorScmGlyph: CGFloat = 13
   static let editorScmTool: CGFloat = 20
   static let editorScmToolGap: CGFloat = 1
-  static let editorScmMessage: CGFloat = 26
   static let editorScmRef: CGFloat = 15
   static let editorScmDot: CGFloat = 7
   static let editorScmDotColumn: CGFloat = 16

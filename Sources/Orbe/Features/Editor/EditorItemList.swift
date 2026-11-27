@@ -120,7 +120,7 @@ final class EditorItemList {
   /// 開いた（pane が器を出して置き、行の列へフォーカスを移す）。
   @ObservationIgnored var onOpen: () -> Void = {}
   /// 閉じた（引数は本体の行き先へフォーカスを戻すか）。
-  @ObservationIgnored var onClose: (Bool) -> Void = { _ in }
+  @ObservationIgnored var onClose: (EditorDismissal) -> Void = { _ in }
   /// 行の数が変わった（pane が器の高さを置き直す）。
   @ObservationIgnored var onResize: () -> Void = {}
   /// 行の列へフォーカスを入れる要求（行の列が窓に載っていなければ、載った時点で当てる）。
@@ -153,7 +153,7 @@ final class EditorItemList {
     detail = nil
     selection = nil
     wantsFocus = false
-    onClose(dismissal.returnsFocus)
+    onClose(dismissal)
   }
 
   /// 行の列へフォーカスを入れる（行の列が窓に載っていなければ、載った時点で当てる）。器を SwiftUI の中に載せる持ち主が、

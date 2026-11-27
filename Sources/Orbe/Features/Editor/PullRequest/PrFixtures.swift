@@ -37,15 +37,18 @@
       let directory: URL
       /// 差し替えの GitHub のレビューのやりとり（書き込みの答え方を変えられる）。
       let review: PrFixtureReview
+      /// 差し替えの GitHub が中身の読みと確認済みの書き込みに返す失敗（失敗の札を撮る）。
+      let faults: Faults
       var group: TabGroup { tab.group }
       var pane: EditorPaneView { group.view.editor }
       var panel: PrPanel { pane.pullRequest }
       private var warmWindow: NSWindow?
 
-      init(tab: TerminalTab, directory: URL, review: PrFixtureReview) {
+      init(tab: TerminalTab, directory: URL, review: PrFixtureReview, faults: Faults) {
         self.tab = tab
         self.directory = directory
         self.review = review
+        self.faults = faults
       }
 
       func cleanup() {
@@ -109,8 +112,9 @@
       if case .defaultBranch = answer { try FixtureGit(directory: dir)(["switch", "-q", "main"]) }
       let root = GitWorktreeRoot.root(of: dir.path)
       let review = PrFixtureReview(head: { headCommit(answer, dir: dir) })
+      let faults = Faults()
       _ = BranchPullRequest.shared(
-        for: root, source: source(answer, base: base, dir: dir, review: review))
+        for: root, source: source(answer, base: base, dir: dir, review: review, faults: faults))
       let group = TabGroup(
         key: root, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
       var settings = SettingsLayer()
@@ -120,7 +124,7 @@
       group.view.add(terminal: tab.terminal)
       group.view.show(terminal: tab.terminal)
       group.editor.selectScreen(.pullRequest)
-      return Scene(tab: tab, directory: dir, review: review)
+      return Scene(tab: tab, directory: dir, review: review, faults: faults)
     }
 
     private static let me = GitHubRepoName(nameWithOwner: "orbe/orbe")
@@ -128,7 +132,7 @@
     /// 差し替えの出どころ。確認済みの書き込みは覚えておき、読み直しの答えに載せる（GitHub と同じく、書いた値が次の読み直しに
     /// 出る）。レビューのやりとりは `review` が答える。
     private static func source(
-      _ answer: Answer, base: String, dir: URL, review: PrFixtureReview
+      _ answer: Answer, base: String, dir: URL, review: PrFixtureReview, faults: Faults
     ) -> PullRequestSource {
       let ref = GitHubBranchRef(repo: me, branch: branch)
       let found: GitHubBranchPullRequests.Branch
@@ -158,6 +162,7 @@
         },
         branchExists: { _, completion in completion(.success(published)) },
         content: { _, completion in
+          if let failure = faults.content { return completion(.failure(failure)) }
           completion(
             .success(
               content(
@@ -166,10 +171,16 @@
                 viewed: viewed.paths, answer: answer)))
         },
         setViewed: { value, paths, _, completion in
+          if let failure = faults.viewed {
+            return completion(GitHubViewedWrite(written: [], failure: failure))
+          }
           if value { viewed.paths.formUnion(paths) } else { viewed.paths.subtract(paths) }
           completion(GitHubViewedWrite(written: paths, failure: nil))
         },
-        review: { _, completion in completion(.success(review.read())) },
+        review: { _, completion in
+          if let failure = review.readFailure { return completion(.failure(failure)) }
+          completion(.success(review.read()))
+        },
         writeReview: { write, _, _, _, completion in review.write(write, completion: completion) })
     }
 
@@ -177,6 +188,14 @@
     private static func headCommit(_ answer: Answer, dir: URL) -> String {
       if case .notFetched = answer { return String(repeating: "0", count: 40) }
       return revision("HEAD", in: dir)
+    }
+
+    /// 差し替えの GitHub が返す失敗（nil なら通す）。
+    final class Faults {
+      /// 中身の読みに返す失敗。
+      var content: GitHubFailure?
+      /// 確認済みの書き込みに返す失敗。
+      var viewed: GitHubFailure?
     }
 
     /// 差し替えの GitHub の確認済みのパス（EmitBuffer.swift と HookRegistry.swift が確認済みから始まる）。

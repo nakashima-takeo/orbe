@@ -30,13 +30,18 @@ extension PullRequestState {
     return (files.filter { isViewed($0.path) }.count, files.count)
   }
 
+  /// 確認済みの書き込みの失敗を消す（失敗の知らせを閉じた）。
+  func dismissViewedFailure() {
+    viewedFailure = nil
+  }
+
   /// 変更ファイル `paths` の確認済みを `value` にする。変更ファイルに無いパスは書かない。
   func setViewed(_ value: Bool, paths: [String]) {
     guard let content else { return }
     let known = Set(content.files.map(\.path))
     let targets = Set(paths.filter { known.contains($0) && isViewed($0) != value })
     guard !targets.isEmpty else { return }
-    failure = nil
+    viewedFailure = nil
     let order = issueOrder()
     for path in targets { pendingViewed[path] = PendingViewed(value: value, order: order) }
     writes.append(ViewedWrite(value: value, paths: targets, nodeID: content.nodeID, order: order))
@@ -61,9 +66,11 @@ extension PullRequestState {
         }
         if pendingViewed[path]?.order == next.order { pendingViewed[path] = nil }
       }
-      if let reason = result.failure { failure = .write(reason) }
+      if let reason = result.failure { viewedFailure = reason }
       notify()
       sendNextWrite()
+      // 時間切れは GitHub が受けていることがある。中身を読み直して、GitHub の今の値を出す（同じ値をもう一度書いても害は無い）。
+      if result.failure == .timedOut { reload() }
     }
   }
 }

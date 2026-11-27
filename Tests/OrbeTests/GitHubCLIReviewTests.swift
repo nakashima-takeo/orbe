@@ -7,7 +7,7 @@ import XCTest
 /// を置いて本物の子プロセスで測る。
 ///
 /// 壊れると何が起きるか: スレッドが 100 件で切れる。読んでいる間の push で古いスレッドと新しいスレッドが混ざる。本文が argv に
-/// 出る・`@` で始まる本文がファイルの中身に化ける・長い本文が切れる。保留中のレビューが無いときのスレッドの追加で、空の保留中の
+/// 出る・`@` で始まる本文がファイルの中身に化ける・長い本文が切れる。未送信のレビューが無いときのスレッドの追加で、空の未送信の
 /// レビューが GitHub に残る。書き込みが読みと同じ短い上限で打ち切られ、届いたか分からない書き込みが増える。
 final class GitHubCLIReviewTests: OrbeTestCase {
   private var dir: URL!
@@ -136,7 +136,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     return result
   }
 
-  /// 100 件を超えるスレッドは続きのページを最後まで読み、自分が作者か・保留中のレビューとそのコメントの数も揃う。
+  /// 100 件を超えるスレッドは続きのページを最後まで読み、自分が作者か・未送信のレビューとそのコメントの数も揃う。
   /// ファイル単位のスレッドと、行が null（古い版に付いた）のスレッドは行を持たない。
   func testEveryThreadPageIsReadWithThePendingReview() throws {
     let first = (0..<100).map { thread("T\($0)") }
@@ -240,7 +240,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     XCTAssertEqual(try call(5).variables["event"] as? String, "REQUEST_CHANGES")
   }
 
-  /// 解決と解決の取り消しはスレッドだけを名指しし、保留中のレビューを変えない。全体へのコメントが空の送信は本文を送らない。
+  /// 解決と解決の取り消しはスレッドだけを名指しし、未送信のレビューを変えない。全体へのコメントが空の送信は本文を送らない。
   func testResolvingNamesTheThreadAndAnEmptySubmissionSendsNoBody() throws {
     XCTAssertEqual(
       write(.setResolved(thread: "T1", true), pendingReview: "R1"),
@@ -250,7 +250,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
       GitHubReviewWriteResult(pendingReview: nil, failure: nil))
     XCTAssertEqual(
       write(.submit(.approve, body: ""), pendingReview: "R1"),
-      GitHubReviewWriteResult(pendingReview: nil, failure: nil), "送信が通れば保留中は無くなる")
+      GitHubReviewWriteResult(pendingReview: nil, failure: nil), "送信が通れば未送信は無くなる")
 
     XCTAssertEqual(calls(), ["resolve", "unresolve", "submit"])
     XCTAssertEqual(try call(1).variables["thread"] as? String, "T1")
@@ -260,7 +260,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
       "本文の変数を宣言もしない")
   }
 
-  /// 保留中のレビューが無いときのスレッドの追加は、レビューの作成と最初のスレッドを 1 回で送る。無いときの返信は、利用者が
+  /// 未送信のレビューが無いときのスレッドの追加は、レビューの作成と最初のスレッドを 1 回で送る。無いときの返信は、利用者が
   /// 見ていた先頭のコミットに結んで作ってから返信し、在るときは作らない。無いときの送信は、作ってすぐ送る 1 回で、利用者が
   /// 見ていた先頭のコミットに結ぶ。在るときの送信は結ばない。
   func testAMissingPendingReviewIsCreatedInTheFewestCalls() throws {
@@ -305,7 +305,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
   }
 
   /// 「解決して返信」は返信 → 解決の順で、返信が通らなければ解決を送らない。解決だけが通らなければ、返信が通ったことを返す。
-  /// 作った保留中のレビューは、返信が通らなくても返す。
+  /// 作った未送信のレビューは、返信が通らなくても返す。
   func testReplyThenResolveStopsAtAFailedReply() throws {
     XCTAssertEqual(
       write(.reply(thread: "T1", body: "b", resolve: true), pendingReview: "R1")?.failure, nil)

@@ -178,7 +178,6 @@ struct ThemeFonts {
   let editorSearchNote = Font(Theme.Typography.editorSearchNote as CTFont)
   // エディター面のソース管理
   let editorScmSection = Font(Theme.Typography.editorScmSection as CTFont)
-  let editorScmNote = Font(Theme.Typography.editorScmNote as CTFont)
   // エディター面の PR のパネル
   let editorPrTitle = Font(Theme.Typography.editorPrTitle as CTFont)
   let editorPrMeta = Font(Theme.Typography.editorPrMeta as CTFont)
