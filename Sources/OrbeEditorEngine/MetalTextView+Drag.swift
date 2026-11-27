@@ -34,49 +34,31 @@ extension MetalTextView: NSDraggingSource {
     beginDraggingSession(with: [item], event: event, source: self)
   }
 
-  /// 選択の見えている行の文字を、本文と同じ位置に描いた像と、その矩形（view の座標）。本文と同じ行の組版で組んだ行から、
-  /// 選択の中の字を描き、矩形はその行の、選択の地と同じ見た目の区間を囲む（右から左の字が混ざる行でも、選んだ字が矩形の
-  /// 中に入る）。行の中に選んだ字が無ければ、選択の端に幅 1 の矩形を置く。
+  /// 選択の見えている行の文字を、本文と同じ位置に描いた像と、その矩形（view の座標）。本文と同じ行の組版で組んだ行（折り
+  /// 返した行は段）から、選択の中の字を描き、矩形はその行の、選択の地と同じ見た目の区間を囲む（右から左の字が混ざる行でも、
+  /// 選んだ字が矩形の中に入る）。行の中に選んだ字が無ければ、選択の端に幅 1 の矩形を置く。
   private func dragImage(_ selection: NSRange, _ text: TextRope) -> (NSRect, NSImage) {
     guard let surface else { return (.zero, NSImage()) }
     let config = surface.config
     let p = surface.scrollPosition
-    let column = surface.surfaceLayout.column
     let layout = surface.rows
     let top = max(0, layout.line(atY: p.y))
     let bottom = layout.line(atY: p.y + Double(bounds.height))
     let rows = text.rows(of: selection).clamped(to: top...max(top, bottom))
-    var pieces: [(runs: [ShapedLine.Run], origin: CGPoint)] = []
-    var frame = NSRect.null
-    for row in rows {
-      let (source, start) = LineShaper.source(row: row, in: text)
-      let from = max(selection.location, start) - start
-      let to = min(NSMaxRange(selection), NSMaxRange(text.contentRange(ofRow: row))) - start
-      let origin = CGPoint(
-        x: column - CGFloat(p.x), y: config.topInset + CGFloat(layout.y(ofLine: row) - p.y))
-      let shaped = LineShaper.shape(source, font: config.font, tabWidth: surface.bodySite.tabWidth)
-      let carets = shaped.carets
-      let segments = carets.segments(from: from, to: to)
-      let x0 = segments.first?.lowerBound ?? carets.x(from)
-      let x1 = segments.last?.upperBound ?? x0
-      pieces.append((shaped.runs.map { $0.selecting(from..<max(from, to)) }, origin))
-      frame = frame.union(
-        NSRect(
-          origin: CGPoint(x: origin.x + x0, y: origin.y),
-          size: CGSize(width: max(1, x1 - x0), height: config.lineHeight)))
-    }
+    let pieces = rows.flatMap { dragPieces(selection, row: $0, text, surface) }
+    let frame = pieces.reduce(NSRect.null) { $0.union($1.rect) }
     guard !frame.isNull else { return (.zero, NSImage()) }
     let color = surface.textColor.cgColor
     let image = NSImage(size: frame.size, flipped: true) { _ in
       guard let context = NSGraphicsContext.current?.cgContext else { return false }
       context.setFillColor(color)
       context.textMatrix = .identity
-      for (runs, origin) in pieces {
+      for piece in pieces {
         context.saveGState()
         context.translateBy(
-          x: origin.x - frame.minX, y: origin.y - frame.minY + config.baseline)
+          x: piece.origin.x - frame.minX, y: piece.origin.y - frame.minY + config.baseline)
         context.scaleBy(x: 1, y: -1)
-        for run in runs {
+        for run in piece.runs {
           let positions = zip(run.xs, run.ys).map { CGPoint(x: $0, y: $1) }
           CTFontDrawGlyphs(run.font, run.glyphs, positions, run.glyphs.count, context)
         }
@@ -85,6 +67,53 @@ extension MetalTextView: NSDraggingSource {
       return true
     }
     return (frame, image)
+  }
+
+  /// 像の切れ端——選択の中の字と、段の左上と、選択の地と同じ見た目の区間を囲む矩形。
+  private struct DragPiece {
+    let runs: [ShapedLine.Run]
+    let origin: CGPoint
+    let rect: NSRect
+  }
+
+  /// 行 `row` の、見えている段ごとの像の切れ端。
+  private func dragPieces(
+    _ selection: NSRange, row: Int, _ text: TextRope, _ surface: MetalTextSurface
+  ) -> [DragPiece] {
+    let config = surface.config
+    let p = surface.scrollPosition
+    let layout = surface.rows
+    let (source, start) = LineShaper.source(row: row, in: text)
+    let lineFrom = max(selection.location, start) - start
+    let lineTo = min(NSMaxRange(selection), NSMaxRange(text.contentRange(ofRow: row))) - start
+    let shown = LineShaper.display(source)
+    let wrap = layout.wrap(ofLine: row)
+    let first = wrap?.segment(containing: lineFrom) ?? 0
+    let last = wrap?.segment(containing: lineTo, upstream: lineTo > lineFrom) ?? 0
+    return (first...max(first, last)).compactMap { segment in
+      let top = layout.y(ofSegment: segment, line: row) - p.y
+      guard top + Double(config.lineHeight) > 0, top < Double(bounds.height) else { return nil }
+      let base = wrap?.start(of: segment) ?? 0
+      let end = segment < (wrap?.segments ?? 1) - 1 ? wrap?.start(of: segment + 1) : nil
+      let from = max(lineFrom, base) - base
+      let to = min(lineTo, end ?? lineTo) - base
+      let origin = CGPoint(
+        x: surface.surfaceLayout.column - CGFloat(p.x)
+          + (segment > 0 ? CGFloat(wrap?.indent ?? 0) : 0),
+        y: config.topInset + CGFloat(top))
+      let shaped = LineShaper.shape(
+        shown.segment(base..<(end ?? shown.units.count), last: end == nil), font: config.font,
+        tabWidth: surface.bodySite.tabWidth)
+      let carets = shaped.carets
+      let segments = carets.segments(from: from, to: to)
+      let x0 = segments.first?.lowerBound ?? carets.x(from)
+      let x1 = segments.last?.upperBound ?? x0
+      return DragPiece(
+        runs: shaped.runs.map { $0.selecting(from..<max(from, to)) }, origin: origin,
+        rect: NSRect(
+          origin: CGPoint(x: origin.x + x0, y: origin.y),
+          size: CGSize(width: max(1, x1 - x0), height: config.lineHeight)))
+    }
   }
 
   // MARK: - 受ける

@@ -67,7 +67,7 @@ final class SurfaceSlot {
   func receive(_ material: FrameMaterial) {
     scroll.taken(material: material.revision)
     lines.receive(material.rowEdits)
-    minimapCells.receive(material.rowEdits)
+    minimapCells.receive(material.rowEdits, rows: material.rows)
     rulerRows.receive(material.rowEdits)
     keystrokes += material.keystrokes
   }
@@ -103,7 +103,8 @@ extension SurfaceSlot {
     guard minimapMotion != 0, let content = material.content, let placement = minimapPlacement
     else { return }
     minimapCells.prefetch(
-      placement.lines, motion: minimapMotion, text: content.text, roles: content.roles)
+      placement.lines, motion: minimapMotion, text: content.text, roles: content.roles,
+      rows: material.rows)
   }
 }
 

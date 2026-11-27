@@ -1,7 +1,7 @@
 import Foundation
 
 /// 本文の写し（UTF-16）。本文を 1KB 程度の塊に分けて要約付きの B 木（`SummaryTree`）に載せ、塊ごとに UTF-16 の長さと
-/// 改行の数を束ねる。行とオフセットの変換・部分の取り出し・置換は文書の大きさに依らない（O(log n + k)）。値として写すのは
+/// UTF-8 のバイト数と改行の数を束ねる。行とオフセットの変換・部分の取り出し・置換は文書の大きさに依らない（O(log n + k)）。値として写すのは
 /// O(1) で、写しは変わらないので、裏のスレッドがロックも複製も無しで読める。
 ///
 /// 行は `\n` だけで割る。CRLF の `\r` は行の中身に残り、単独の `\r`・U+2028・U+2029 は行を割らない（tree-sitter・行差分と
@@ -11,45 +11,6 @@ public struct TextRope: Sendable {
   static let maximumChunk = 1024
   static let minimumChunk = 512
 
-  public struct Summary: TreeSummary {
-    public var utf16: Int
-    public var newlines: Int
-
-    public static let zero = Summary(utf16: 0, newlines: 0)
-
-    public static func + (lhs: Summary, rhs: Summary) -> Summary {
-      Summary(utf16: lhs.utf16 + rhs.utf16, newlines: lhs.newlines + rhs.newlines)
-    }
-  }
-
-  struct Chunk: TreeElement {
-    let units: ContiguousArray<UInt16>
-    /// 塊の中の `\n` の位置（昇順）。行とオフセットの変換で塊を読み直さない。
-    let newlines: ContiguousArray<UInt16>
-    let summary: Summary
-
-    init(_ units: ContiguousArray<UInt16>) {
-      self.units = units
-      var newlines = ContiguousArray<UInt16>()
-      for (position, unit) in units.enumerated() where unit == 0x0A {
-        newlines.append(UInt16(position))
-      }
-      self.newlines = newlines
-      summary = Summary(utf16: units.count, newlines: newlines.count)
-    }
-
-    /// 塊の中で `local` より前にある `\n` の数。
-    func newlines(before local: Int) -> Int {
-      var low = 0
-      var high = newlines.count
-      while low < high {
-        let mid = (low + high) / 2
-        if Int(newlines[mid]) < local { low = mid + 1 } else { high = mid }
-      }
-      return low
-    }
-  }
-
   private var chunks: SummaryTree<Chunk>
 
   public init(_ string: String = "") {
@@ -58,6 +19,9 @@ public struct TextRope: Sendable {
 
   /// 本文の UTF-16 長。
   public var length: Int { chunks.summary.utf16 }
+
+  /// 本文を UTF-8 にしたときのバイト数（サロゲートは片割れごとに 2 バイトで数える——対なら 4 バイト）。
+  public var utf8Length: Int { chunks.summary.utf8 }
 
   /// 行の数（本文が改行で終わるときの末尾の空行を含む）。
   public var lineCount: Int { chunks.summary.newlines + 1 }

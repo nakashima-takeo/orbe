@@ -45,9 +45,9 @@ final class EditorTypingPerfTests: OrbeTestCase {
   /// 戻るまでの main のスレッドの CPU 時間。p99 1ms 以下（200KB・1MB、git 管理下、1 万字近い長い行の行末）。壁時計の
   /// 時間は参考に出すだけにする（利用者が感じる遅れは打鍵→present の関門が見る）。描くのは描画スレッド。ライブ変換は、
   /// IME の呼び出し 1 回と、IME がその直後に読み返す未確定の範囲・未確定と選択の矩形・未確定の上の点の下の字を合わせて
-  /// 1 回と数え、同じく main のスレッドの CPU 時間で見る。変換の続き（2 回目以降と確定）は 3 つとも p99 1ms 以下。変換の
-  /// 始まり（最初の呼び出し）は未確定の先頭の x を出すために行を 1 回組むので、普通の行（200KB・1MB）で p99 1ms 以下、
-  /// 長い行は値を出すだけ。プロセスで最初の 1 打鍵と最初の変換（入力の仕組みの初期化を含む）は数えないので、測る文書を
+  /// 1 回と数え、同じく main のスレッドの CPU 時間で見る。変換の続き（2 回目以降と確定）と変換の始まり（最初の呼び出し。
+  /// 未確定の先頭の x を出すために、未確定の先頭を含む段の頭から先頭までを組む——折り返す面では長い行でも段の長さまで）は、
+  /// どれも p99 1ms 以下。プロセスで最初の 1 打鍵と最初の変換（入力の仕組みの初期化を含む）は数えないので、測る文書を
   /// 開く前に別の文書で打つ。製品では、文書を開いた後と打鍵の後に、描画スレッドが見えている行を組んで描くので、打鍵の
   /// 前と変換の前に、同じ描画スレッドの経路で見えている行を描かせる（窓は画面に出さず、画面外に描く）。
   func testKeystrokeMainTime() throws {
@@ -63,13 +63,13 @@ final class EditorTypingPerfTests: OrbeTestCase {
       let opened = try openEditor(text)
       let row = label == "long-line" ? 0 : opened.document.text.lineCount / 3
       let caret = label == "long-line" ? 9_990 : opened.document.text.lineStart(row + 5) + 4
-      try gateKeystrokes(
-        opened, baseline: text, label: label, caret: caret, gatesStart: label != "long-line")
+      try gateKeystrokes(opened, baseline: text, label: label, caret: caret)
     }
   }
 
   /// 日本語の Markdown（このリポジトリの spec）の打鍵 1 回の main の仕事——和文の行の途中と、和文の後ろに本体の字体に無い
-  /// 記号（`◌` と `▪`）がある行で打つ。関門と数え方は `testKeystrokeMainTime` と同じ。
+  /// 記号（`◌` と `▪`）がある行と、1 行が数千字の段落（折り返す）の途中で打つ。関門と数え方は `testKeystrokeMainTime` と
+  /// 同じ（打鍵のたびに、打った行の折り返しを計算し直す仕事を含む）。
   func testKeystrokeMainTimeInJapanese() throws {
     let warm = try openEditor("warm\n")
     warm.document.surface.responder.keyDown(with: .key("/", []))
@@ -80,6 +80,7 @@ final class EditorTypingPerfTests: OrbeTestCase {
     for (label, path, needle) in [
       ("japanese-markdown", "docs/spec/chrome/board.md", "。"),
       ("symbols-after-japanese", "docs/spec/palette/tasks.md", "▪ claude 入力待ち"),
+      ("long-japanese-paragraph", "docs/spec/editor/code.md", "を丸ごと置き換える"),
     ] {
       let text = try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
       let opened = try openEditor(text, extension: "md")
@@ -88,16 +89,15 @@ final class EditorTypingPerfTests: OrbeTestCase {
       let found = (text as NSString).range(
         of: needle, range: NSRange(location: from, length: (text as NSString).length - from))
       XCTAssertNotEqual(found.location, NSNotFound, "\(label): 前提: 打つ所がある")
-      try gateKeystrokes(
-        opened, baseline: text, label: label, caret: found.location, gatesStart: true)
+      try gateKeystrokes(opened, baseline: text, label: label, caret: found.location)
     }
   }
 
-  /// 文書 `opened` を git 管理下（baseline は `baseline`）にし、位置 `caret` で打鍵とライブ変換を流して、打鍵 1 回と変換の続きの
-  /// 呼び出し 1 回の main のスレッドの CPU 時間の p99 を関門（1ms 以下）にかける。`gatesStart` なら変換の始まりも関門に
-  /// かける。打鍵の前と変換の前に、見えている行を描画スレッドに描かせる。
+  /// 文書 `opened` を git 管理下（baseline は `baseline`）にし、位置 `caret` で打鍵とライブ変換を流して、打鍵 1 回と変換の
+  /// 始まりと続きの呼び出し 1 回の main のスレッドの CPU 時間の p99 を関門（1ms 以下）にかける。打鍵の前と変換の前に、
+  /// 見えている行を描画スレッドに描かせる。
   private func gateKeystrokes(
-    _ opened: OpenedEditor, baseline: String, label: String, caret: Int, gatesStart: Bool
+    _ opened: OpenedEditor, baseline: String, label: String, caret: Int
   ) throws {
     opened.document.baseline = baseline
     XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
@@ -133,11 +133,9 @@ final class EditorTypingPerfTests: OrbeTestCase {
     XCTAssertLessThanOrEqual(
       Self.p99(composing.continuing.cpu), 1,
       "\(label): 変換の続きの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
-    if gatesStart {
-      XCTAssertLessThanOrEqual(
-        Self.p99(composing.starting.cpu), 1,
-        "\(label): 変換の始まりの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
-    }
+    XCTAssertLessThanOrEqual(
+      Self.p99(composing.starting.cpu), 1,
+      "\(label): 変換の始まりの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
     opened.window.orderOut(nil)
   }
 
@@ -195,6 +193,45 @@ final class EditorTypingPerfTests: OrbeTestCase {
         digits: 2)
       XCTAssertLessThanOrEqual(
         p95(enter), limit, "\(expected) 本: git 管理下の Enter 1 回の main のスレッドの CPU 時間の p95")
+      opened.window.orderOut(nil)
+    }
+  }
+
+  /// 折り返した行にカーソルを置いた複数カーソルの打鍵 1 回の main の仕事——1 行が約 400 字の段落（どれも折り返す）に
+  /// `marker` を 1 行に 1 つ（1,000 本）と 10 個（1 万本）置き、⌘⇧L で作ったカーソルで打つ。打鍵のたびに、カーソルのある
+  /// 行の折り返しを全部計算し直す。関門は `testMultiCursorKeystrokeMainTime` と同じ（1,000 本で p95 16ms、1 万本で p95
+  /// 160ms 以下）。
+  func testMultiCursorKeystrokeMainTimeOnWrappedLines() throws {
+    let warm = try openEditor("warm\n")
+    warm.document.surface.responder.keyDown(with: .key("/", []))
+    warm.window.orderOut(nil)
+    for (expected, perLine, limit) in [(1000, 1, 16.0), (10_000, 10, 160.0)] {
+      let words = "wrapped words flow on to the next segment of the line "
+      let line = (0..<perLine).map { _ in words + "marker " }.joined()
+      let filler = String(repeating: words, count: max(1, (400 - line.count) / words.count))
+      let text = (0..<(expected / perLine)).map { "\($0) " + line + filler }.joined(separator: "\n")
+      let opened = try openEditor(text, extension: "md")
+      let document = opened.document
+      XCTAssertTrue(pumpUntilCaughtUp(document))
+      let surface = document.surface
+      XCTAssertNotNil(try XCTUnwrap(surface as? MetalTextSurface).rows.wraps, "前提: 本文は折り返す")
+      opened.window.makeFirstResponder(surface.responder)
+      surface.selectedRange = (text as NSString).range(of: "marker")
+      surface.responder.perform(NSSelectorFromString("selectHighlights:"), with: nil)
+      let cursors = surface.cursorSelections.count
+      var cpu: [Double] = []
+      for key in String(repeating: "abc ", count: 8).map(String.init) {
+        let began = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+        surface.responder.keyDown(with: .key(key, []))
+        cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began) / 1e6)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+      }
+      reportPerf("wrapped cursors \(cursors)", "multi-cursor keystroke-main", cpu, digits: 2)
+      XCTAssertEqual(cursors, expected, "前提: カーソルの数")
+      let sorted = cpu.sorted()
+      XCTAssertLessThanOrEqual(
+        sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))], limit,
+        "\(expected) 本: 折り返した行の打鍵 1 回の main のスレッドの CPU 時間の p95")
       opened.window.orderOut(nil)
     }
   }

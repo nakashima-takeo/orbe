@@ -1,13 +1,14 @@
 import Foundation
 import OrbeEditorCore
 
-/// 面の縦の並び——文書の行と、行の境ごとの差し込みの塊（差し込んだ行の列か、絵の差し込みか、相手と同じ高さの空き）。
-/// 行 ↔ y の式はここにだけあり、描画・スクロールの範囲・面のスクロール操作・当たり・IME の矩形・ドラッグ・俯瞰がどれも
-/// これを呼ぶ。
+/// 面の縦の並び——文書の行と、行の境ごとの差し込みの塊（差し込んだ行の列か、絵の差し込みか、相手と同じ高さの空き）と、
+/// 折り返す面の行ごとの折り返し（`LineWraps`）。行 ↔ y の式はここにだけあり、描画・スクロールの範囲・面のスクロール
+/// 操作・当たり・IME の矩形・ドラッグ・俯瞰がどれもこれを呼ぶ。
 ///
-/// 文書の行 `r` の上端は `r × 行高 + （r より上の塊の高さの合計）`。塊は境の昇順に並び、高さの累積を持つので、行 ↔ y は
-/// 塊の数の対数で引ける。差し込みが無ければどの式も `行 × 行高` と同じ浮動小数の計算になる（差し込みの無い面の位置と
-/// 画素は変わらない）。
+/// 文書の行は 1 つ以上の段からなり（折り返さない行は 1 段）、段の高さは行高。文書の行 `r` の上端は
+/// `（r より上の段の数）× 行高 + （r より上の塊の高さの合計）`。塊は境の昇順に並び、高さの累積を持つので、行 ↔ y は
+/// 塊の数の対数（と折り返しの木の深さ）で引ける。差し込みも折り返しも無ければどの式も `行 × 行高` と同じ浮動小数の計算に
+/// なる（差し込みの無い、折り返さない面の位置と画素は変わらない）。
 ///
 /// 文書の行の区間の見え方（行の型と、2 列の面の左の列の「もう一方の番号」）も並びと一緒に持ち、差し込みの境と同じ規則で
 /// 面自身の編集に追従させる。
@@ -26,9 +27,9 @@ struct RowLayout: Sendable {
     case gap(ObjectIdentifier)
   }
 
-  /// 縦の位置にあるもの——文書の行か、塊。
+  /// 縦の位置にあるもの——文書の行（とその中の段）か、塊。
   enum Item: Equatable {
-    case line(Int)
+    case line(Int, segment: Int)
     case block(Int)
   }
 
@@ -51,6 +52,8 @@ struct RowLayout: Sendable {
   /// 差し込んだ行が指す出どころの行の番号と、最後の区間より前の区間の行のもう一方の番号の、最も大きいもの（無ければ 0）。最後の区間は
   /// 行数で決まるので、問われたときに足す（→ `otherNumberMax`）。
   private var settledNumberMax = 0
+  /// 行ごとの折り返し（折り返さない面は nil）。
+  private(set) var wraps: LineWraps?
   /// 作り変えるたびに進む（並びから作るキャッシュの鍵）。
   private(set) var version = 0
 
@@ -106,29 +109,43 @@ struct RowLayout: Sendable {
   /// 境が `line` 以下の塊の数（文書の行 `line` より上にある塊の数）。
   func blocks(above line: Int) -> Int { Self.count(boundaries, atOrBelow: line) }
 
+  /// 文書の行 `line` より上の段の数（折り返しが無ければ行の数）。
+  func segments(before line: Int) -> Int { wraps?.segments(before: line) ?? line }
+
+  /// 文書の行 `line` の段の数。
+  func segments(ofLine line: Int) -> Int { wraps?.wrap(ofLine: line)?.segments ?? 1 }
+
+  /// 文書の行 `line` の折り返し（1 段の行なら nil）。
+  func wrap(ofLine line: Int) -> WrappedLine? { wraps?.wrap(ofLine: line) }
+
   /// 文書の行 `line` の上端。
   func y(ofLine line: Int, scale: Double = 1) -> Double {
-    Double(line) * (lineHeight * scale) + prefix[blocks(above: line)] * scale
+    Double(segments(before: line)) * (lineHeight * scale) + prefix[blocks(above: line)] * scale
+  }
+
+  /// 文書の行 `line` の段 `segment` の上端。
+  func y(ofSegment segment: Int, line: Int, scale: Double = 1) -> Double {
+    y(ofLine: line, scale: scale) + Double(segment) * (lineHeight * scale)
   }
 
   /// 塊 `index` の上端。
   func top(ofBlock index: Int, scale: Double = 1) -> Double {
-    Double(boundaries[index]) * (lineHeight * scale) + prefix[index] * scale
+    Double(segments(before: boundaries[index])) * (lineHeight * scale) + prefix[index] * scale
   }
 
   /// 文書の行 `line` の上端（表示の単位——行高を 1 とする縦の位置）。
   func unit(ofLine line: Int) -> Double {
-    Double(line) + prefix[blocks(above: line)] / lineHeight
+    Double(segments(before: line)) + prefix[blocks(above: line)] / lineHeight
   }
 
   /// 塊 `index` の上端（表示の単位）。
   func unit(ofBlock index: Int) -> Double {
-    Double(boundaries[index]) + prefix[index] / lineHeight
+    Double(segments(before: boundaries[index])) + prefix[index] / lineHeight
   }
 
-  /// y にある項目。文書の行は範囲に収めない——先頭より上は負の行、最後の項目より下は行数以上の行。項目の上端のわずかに
-  /// 上は、その項目とみなす——項目の上端に置いた y が、行と y の間の丸め（表示の単位との行き来・端数の高さの累積）で
-  /// 上の項目に化けない。y から項目・行・位置を引く道はどれもここを通る。
+  /// y にある項目。文書の行は範囲に収めない——先頭より上は負の行、最後の項目より下は行数以上の行（どちらも段 0）。項目と
+  /// 段の上端のわずかに上は、その項目・段とみなす——上端に置いた y が、行と y の間の丸め（表示の単位との行き来・端数の
+  /// 高さの累積）で上の項目に化けない。y から項目・行・位置を引く道はどれもここを通る。
   func item(atY y: Double, scale: Double = 1) -> Item {
     let y = y + lineHeight * scale * Self.slack
     var low = 0
@@ -140,13 +157,16 @@ struct RowLayout: Sendable {
     if low > 0, y < top(ofBlock: low - 1, scale: scale) + heights[low - 1] * scale {
       return .block(low - 1)
     }
-    return .line(Int(((y - prefix[low] * scale) / (lineHeight * scale)).rounded(.down)))
+    let segment = Int(((y - prefix[low] * scale) / (lineHeight * scale)).rounded(.down))
+    guard let wraps else { return .line(segment, segment: 0) }
+    let found = wraps.line(atSegment: segment)
+    return .line(found.line, segment: found.segment)
   }
 
   /// y にある文書の行。塊の上なら次の文書の行（最終行の後の塊なら行数）。範囲に収めない。
   func line(atY y: Double, scale: Double = 1) -> Int {
     switch item(atY: y, scale: scale) {
-    case .line(let line): line
+    case .line(let line, _): line
     case .block(let index): boundaries[index]
     }
   }
@@ -156,7 +176,7 @@ struct RowLayout: Sendable {
     let first = max(0, line(atY: from, scale: scale))
     let last: Int
     switch item(atY: to, scale: scale) {
-    case .line(let line): last = min(lineCount - 1, line)
+    case .line(let line, _): last = min(lineCount - 1, line)
     case .block(let index): last = min(lineCount - 1, boundaries[index] - 1)
     }
     return first <= last ? first...last : nil
@@ -181,19 +201,20 @@ struct RowLayout: Sendable {
 
   // MARK: - 縦の端
 
-  /// 最後の項目の上端——縦のスクロールの端。最終行の後に塊があれば、その下端から 1 行の高さ上（差し込んだ行なら最後の
-  /// 行の上端。絵の差し込みなら、その下端の 1 行が画面の最上段に来る所で、行より高い絵の差し込みの下側まで送れる）。
+  /// 最後の項目の上端——縦のスクロールの端。最終行の後に塊が無ければ最終行の最後の段の上端。塊があれば、その下端から 1 行の
+  /// 高さ上（差し込んだ行なら最後の行の上端。絵の差し込みなら、その下端の 1 行が画面の最上段に来る所で、行より高い絵の
+  /// 差し込みの下側まで送れる）。
   func lastTop(lineCount: Int) -> Double {
     guard let index = trailingBlock(lineCount: lineCount) else {
-      return y(ofLine: lineCount - 1)
+      return y(ofSegment: segments(ofLine: lineCount - 1) - 1, line: lineCount - 1)
     }
     return top(ofBlock: index) + max(0, heights[index] - lineHeight)
   }
 
-  /// 最後の項目の上端（表示の単位。差し込みが無ければ最終行）。
+  /// 最後の項目の上端（表示の単位。差し込みが無ければ最終行の最後の段）。
   func lastUnit(lineCount: Int) -> Double {
     guard let index = trailingBlock(lineCount: lineCount) else {
-      return unit(ofLine: lineCount - 1)
+      return unit(ofLine: lineCount - 1) + Double(segments(ofLine: lineCount - 1) - 1)
     }
     return unit(ofBlock: index) + max(0, heights[index] - lineHeight) / lineHeight
   }
@@ -203,53 +224,13 @@ struct RowLayout: Sendable {
 
   /// 全体の高さ（最後の項目の下端）。
   func totalHeight(lineCount: Int) -> Double {
-    Double(lineCount) * lineHeight + prefix[prefix.count - 1]
+    Double(segments(before: lineCount)) * lineHeight + prefix[prefix.count - 1]
   }
 
   /// 最終行の後の最後の塊（無ければ nil）。
   private func trailingBlock(lineCount: Int) -> Int? {
     guard let last = boundaries.last, last >= lineCount else { return nil }
     return boundaries.count - 1
-  }
-
-  // MARK: - 縦の並びの中の位置
-
-  /// 縦の位置 `y` にある所を、縦の並びの中の位置で（段の粒度。`lineCount` 行の文書）。文書の行の中ならその行の段 0（範囲に
-  /// 収める）、塊の中なら塊の下の文書の行（最終行の後の塊なら行数）と、その上端からの負の段。段の境のわずかに上は境の段と
-  /// みなす（`item(atY:)` と同じ許容）。
-  func position(atY y: Double, lineCount: Int) -> RowPosition {
-    switch item(atY: y) {
-    case .line(let line):
-      return RowPosition(line: min(max(0, line), max(0, lineCount - 1)))
-    case .block(let index):
-      let line = boundaries[index]
-      let offset = (y / lineHeight + Self.slack - unit(ofLine: line)).rounded(.down)
-      return RowPosition(line: line, offset: Int(offset))
-    }
-  }
-
-  /// 位置の上端（表示の単位。`lineCount` 行の文書）。行は `0...lineCount` に収め、差し込みの中を指す負の段は、その差し込みの
-  /// 頭で止める。
-  func unit(of position: RowPosition, lineCount: Int) -> Double {
-    let line = min(max(0, position.line), lineCount)
-    let top = unit(ofLine: line)
-    guard position.offset < 0 else { return top + Double(position.offset) }
-    let inserted = (prefix[blocks(above: line)] - prefix[blocks(above: line - 1)]) / lineHeight
-    return top + max(Double(position.offset), -inserted)
-  }
-
-  // MARK: - 見えている範囲
-
-  /// 縦の位置 `y`（端を越えていれば端に収めたもの）で先頭に見えている所（表示の単位）——文書の行の中なら隠れている割合を
-  /// 0…1 に収める（`lineCount` 行の文書）。
-  func firstUnit(atY position: Double, lineCount: Int) -> Double {
-    switch item(atY: position) {
-    case .line(let raw):
-      let line = min(raw, max(0, lineCount - 1))
-      return unit(ofLine: line) + min(max((position - y(ofLine: line)) / lineHeight, 0), 1)
-    case .block(let index):
-      return unit(ofBlock: index) + (position - top(ofBlock: index)) / lineHeight
-    }
   }
 
   // MARK: - 面自身の編集
@@ -259,16 +240,28 @@ struct RowLayout: Sendable {
   /// 編集では消した区間の始まりの行の後へ寄り、付き先より前の編集の行の増減だけずれる。境 0（文書の先頭）は動かない。区間の
   /// 始まり r も「行 r−1 の後」の境として同じに動く。値の変わった境か区間の始まりがあったときだけ版を進める——行の数を変えない
   /// 打鍵では何も動かないので、差し込みの多い並びでも列をなめず、書き換えもしない。
-  mutating func shift(_ edits: [TextEdit], in before: TextRope) {
-    guard !boundaries.isEmpty || !spans.isEmpty, !edits.isEmpty else { return }
-    let changes = edits.map { edit in
-      let start = edit.range.location
-      let end = NSMaxRange(edit.range)
-      let removed = before.row(containing: end) - before.row(containing: start)
+  ///
+  /// 折り返す面では、編集が掛かる行の折り返しを 1 段の行に置き換え、その行（編集の後の行）を折り返しを待つ行として返す——
+  /// 束を当てた後の本文で `rewrap` に渡して計算し直す。折り返さない面では nil。
+  mutating func shift(_ edits: [TextEdit], in before: TextRope) -> Unwrapped? {
+    guard !boundaries.isEmpty || !spans.isEmpty || wraps != nil, !edits.isEmpty else { return nil }
+    let sorted = edits.sorted { $0.range.location < $1.range.location }
+    // 編集の始まりと終わりの行を、本文を前から 1 度辿って引く（複数カーソルの打鍵で、編集ごとに木を引かない）。
+    let ends = before.rows(
+      ofAscending: sorted.flatMap { edit in
+        [
+          NSRange(location: edit.range.location, length: 0),
+          NSRange(location: NSMaxRange(edit.range), length: 0),
+        ]
+      })
+    let changes = sorted.enumerated().map { index, edit in
+      let rows = ends[2 * index].lowerBound...ends[2 * index + 1].lowerBound
       return LineChange(
-        start: start, end: end,
-        delta: edit.replacement.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 } - removed)
-    }.sorted { $0.start < $1.start }
+        start: edit.range.location, end: NSMaxRange(edit.range), rows: rows,
+        delta: edit.replacement.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 } - (rows.count - 1))
+    }
+    let unwrapped = wraps != nil ? unwrap(changes, in: before) : nil
+    guard !boundaries.isEmpty || !spans.isEmpty else { return unwrapped }
     let shift = LineShift(changes: changes, before: before)
     var moved = shift.apply(to: &boundaries)
     if shift.apply(to: &spans) {
@@ -276,54 +269,7 @@ struct RowLayout: Sendable {
       moved = true
     }
     if moved { version += 1 }
-  }
-
-  /// 昇順の列 `lines` の中で `line` 以下のものの数。
-  static func count(_ lines: [Int], atOrBelow line: Int) -> Int {
-    count(lines.count, atOrBelow: line) { lines[$0] }
-  }
-
-  /// 昇順の `count` 個の値（`lineAt` で引く）の中で `line` 以下のものの数。
-  static func count(_ count: Int, atOrBelow line: Int, _ lineAt: (Int) -> Int) -> Int {
-    var low = 0
-    var high = count
-    while low < high {
-      let mid = (low + high) / 2
-      if lineAt(mid) <= line { low = mid + 1 } else { high = mid }
-    }
-    return low
-  }
-
-  /// 境 `boundary`（≥ 1）の付き先——行 boundary−1 の中身の終わり（改行の手前。CRLF なら CR の手前）。
-  static func anchor(of boundary: Int, in text: TextRope) -> Int {
-    guard boundary < text.lineCount else { return text.length }
-    let newline = text.lineStart(boundary) - 1
-    guard newline > 0, text.units(in: NSRange(location: newline - 1, length: 1)).first == 0x0D
-    else { return newline }
-    return newline - 1
-  }
-
-  // MARK: - 行の右端の印
-
-  /// y にある、印を出せる行（`lineCount` 行の文書。出せない行なら nil）。
-  func trailingMarkSpot(atY y: Double, lineCount: Int) -> TrailingMarkSpot? {
-    guard hasTrailingMarks else { return nil }
-    switch item(atY: y) {
-    case .line(let line):
-      guard (0..<lineCount).contains(line), let span = span(containing: line),
-        spans[span].allowsTrailingMark
-      else { return nil }
-      return TrailingMarkSpot(
-        row: .document(line), line: .document(line), top: self.y(ofLine: line))
-    case .block(let index):
-      guard case .lines(let lines) = contents[index], !lines.isEmpty else { return nil }
-      let top = top(ofBlock: index)
-      let offset = min(max(0, Int(((y - top) / lineHeight).rounded(.down))), lines.count - 1)
-      guard lines[offset].allowsTrailingMark, let source = lines[offset].line else { return nil }
-      return TrailingMarkSpot(
-        row: .inserted(block: index, line: offset), line: .source(source),
-        top: top + Double(offset) * lineHeight)
-    }
+    return unwrapped
   }
 
   // MARK: - 絵の差し込み
@@ -378,15 +324,46 @@ struct RowLayout: Sendable {
   }
 }
 
-/// 行の右端の印を描く行——文書の行か、塊 `block` の中の `line` 行目の差し込んだ行。
-enum TrailingMarkRow: Equatable, Sendable {
-  case document(Int)
-  case inserted(block: Int, line: Int)
-}
+/// 行ごとの折り返しを置く・面自身の編集に追従させる（→ `RowLayout.shift`）。
+extension RowLayout {
+  /// 行ごとの折り返しを置く（nil なら折り返さない）。
+  mutating func setWraps(_ wraps: LineWraps?) {
+    self.wraps = wraps
+    version += 1
+  }
 
-/// 印を出せる行 1 つ——描く行・押下で知らせる行・行の上端（pt）。
-struct TrailingMarkSpot {
-  var row: TrailingMarkRow
-  var line: TrailingMarkLine
-  var top: Double
+  /// 編集 `changes`（編集前の本文 `before` の座標。昇順）が掛かる行を 1 段の行に置き換え、折り返しを待つ行として返す。同じ
+  /// 行に掛かる編集は 1 つにまとめる。1 段の行だけに掛かり行の数を変えない編集（打鍵の多く）は、木を変えない。本文と
+  /// 食い違う折り返しは捨てて nil を返す（取引の確定で全部を計算し直す）。木は持ち場で書き換える——手元に写しを持つと、
+  /// 木の経路を写し直す。
+  private mutating func unwrap(_ changes: [LineChange], in before: TextRope) -> Unwrapped? {
+    guard let lineCount = wraps?.lineCount else { return nil }
+    guard lineCount == before.lineCount else {
+      setWraps(nil)
+      return nil
+    }
+    var unwrapped = Unwrapped()
+    var edits: [(lines: Range<Int>, with: [WrappedLine?])] = []
+    planUnwrap(changes, in: before, into: &unwrapped, &edits)
+    wraps?.replace(edits)
+    unwrapped.changed = !edits.isEmpty
+    return unwrapped
+  }
+
+  /// 折り返しを待つ行 `unwrapped` を `wrap`（連続する文書の行と、前の折り返しの手がかり → 行ごとの折り返し。1 段の行は
+  /// nil）で計算し直し、折り返しを本文の写しの版 `version` のものにする。行ごとの折り返しの木が変わっていれば（段の数が
+  /// 同じでも、段の始まりが動いていれば）版を進める——描画スレッドへ並びを渡し直す。
+  mutating func rewrap(
+    _ unwrapped: Unwrapped, version: Int, _ wrap: (Range<Int>, LineWrap.Resume?) -> [WrappedLine?]
+  ) {
+    guard wraps != nil else { return }
+    var edits: [(lines: Range<Int>, with: [WrappedLine?])] = []
+    for (range, resume) in zip(unwrapped.lines, unwrapped.resumes) {
+      let lines = wrap(range, resume)
+      if lines.contains(where: { $0 != nil }) { edits.append((range, lines)) }
+    }
+    wraps?.replace(edits)
+    wraps?.version = version
+    if unwrapped.changed || !edits.isEmpty { self.version += 1 }
+  }
 }

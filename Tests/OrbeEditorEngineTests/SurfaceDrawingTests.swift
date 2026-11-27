@@ -46,6 +46,53 @@ final class SurfaceDrawingTests: EngineTestCase {
     XCTAssertEqual(rgb(pixel(unfocused, x: inside.x, y: inside.y)), inactive, "焦点が無ければ弱い色")
   }
 
+  /// 折り返した行の段をまたぐ選択は、段ごとの字の区間に塗り、改行の分の半角 1 字は最後の段にだけ伸びる。
+  func testASelectionAcrossSegmentsIsDrawnOnEachAndReachesPastTheNewlineOnlyOnTheLast() throws {
+    let opened = try open((0..<40).map { "word\($0)" }.joined(separator: " ") + "\nnext\n")
+    _ = host(opened, size: CGSize(width: 420, height: 300))
+    let wrap = try XCTUnwrap(opened.surface.rows.wrap(ofLine: 0), "前提: 行 0 は折り返す")
+    let last = wrap.segments - 1
+    let end = NSMaxRange(opened.document.text.contentRange(ofRow: 0))
+    let from = wrap.start(of: 1) - 2
+    opened.surface.updateFocus(true)
+    opened.surface.selectedRange = NSRange(
+      location: from, length: opened.document.text.lineStart(1) - from)
+    let image = try XCTUnwrap(opened.surface.snapshot())
+    func ground(_ segment: Int, _ column: CGFloat) -> [Int] {
+      let at = probe(opened, row: segment, column: column)
+      return pixel(image, x: at.x, y: at.y)
+    }
+    XCTAssertEqual(rgb(ground(0, CGFloat(from) + 0.5)), selection, "1 段目の選んだ字")
+    XCTAssertEqual(ground(0, CGFloat(wrap.start(of: 1)) + 0.5)[3], 0, "1 段目の終わりの先は伸ばさない")
+    XCTAssertEqual(rgb(ground(1, 0.5)), selection, "2 段目の選んだ字")
+    let tail = CGFloat(end - wrap.start(of: last))
+    XCTAssertEqual(rgb(ground(last, tail + 0.5)), selection, "最後の段は改行の分の半角 1 字")
+    XCTAssertEqual(ground(last, tail + 1.5)[3], 0)
+  }
+
+  /// 折り返した行の段の境のキャレットは、付きがあれば上の段の終わりに、無ければ下の段の頭に描く。
+  func testACaretOnASegmentBoundaryIsDrawnWhereItsAffinityPoints() throws {
+    let opened = try open((0..<40).map { "word\($0)" }.joined(separator: " ") + "\n")
+    _ = host(opened, size: CGSize(width: 420, height: 300))
+    let boundary = try XCTUnwrap(opened.surface.rows.wrap(ofLine: 0), "前提: 行 0 は折り返す").start(of: 1)
+    opened.surface.updateFocus(true)
+    let dy = opened.surface.config.lineHeight / 2
+    let end = probe(opened, row: 0, column: CGFloat(boundary), dy: dy)
+    let head = probe(opened, row: 1, column: 0, dy: dy)
+    let white = [255, 255, 255, 255]
+    for upstream in [true, false] {
+      opened.surface.inputScope {
+        opened.surface.editor.select(
+          CursorList(Cursor(boundary, upstream: upstream)), reveal: .none)
+      }
+      let image = try XCTUnwrap(opened.surface.snapshot())
+      XCTAssertEqual(
+        pixel(image, x: end.x + 1, y: end.y) == white, upstream, "上の段の終わり（付き: \(upstream)）")
+      XCTAssertEqual(
+        pixel(image, x: head.x + 1, y: head.y) == white, !upstream, "下の段の頭（付き: \(upstream)）")
+    }
+  }
+
   func testCaretIsDrawnOnlyWhileFocused() throws {
     let opened = try open("abc def\n")
     _ = host(opened, size: CGSize(width: 400, height: 80))
@@ -164,13 +211,14 @@ final class SurfaceDrawingTests: EngineTestCase {
     let box = ScrollBox()
     box.commit(
       ScrollBox.Commit(
-        limits: LimitsUpdate(lastTop: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+        limits: LimitsUpdate(
+          lastTop: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7, wraps: false),
         position: SIMD2(0, 50)))
     box.commit(
       ScrollBox.Commit(
         material: 7,
         limits: LimitsUpdate(
-          lastTop: 1999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+          lastTop: 1999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7, wraps: false),
         position: SIMD2(0, 300)))
     box.commit(ScrollBox.Commit(material: 8, position: SIMD2(0, 900)))
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50)
@@ -229,5 +277,28 @@ final class SurfaceDrawingTests: EngineTestCase {
     surface.flush()
     waitUntilPaused()
     XCTAssertEqual(shaped { surface.editor.perform(.tab) }, 3, "字下げした 3 行だけ")
+  }
+
+  /// 幅を変えて段を組み直すコマでも、行の中身が同じなら、行を読み直さない（描く単位の列と装備の素は、行の中身で覚えた
+  /// ものを使う——URL を探す走査を、幅を変えるたびに見えている行の全部で繰り返さない）。
+  func testResizingDoesNotReadTheLinesAgain() throws {
+    let text = (0..<20).map {
+      "row \($0) https://example.com/\($0) " + String(repeating: "word ", count: 30)
+    }.joined(separator: "\n")
+    let opened = try open(text, name: "a.txt")
+    _ = host(opened, size: CGSize(width: 600, height: 400))
+    let surface = opened.surface
+    func reads() -> Int {
+      let id = surface.id
+      return RenderThread.shared.performAndWait { $0.slot(id)?.lines.readTotal ?? -1 }
+    }
+    _ = surface.snapshot()
+    let before = reads()
+    let starts = surface.rows.wrap(ofLine: 0)?.starts
+    XCTAssertGreaterThan(before, 0, "前提: 見えている行を読んだ")
+    surface.viewStateDidChange(size: CGSize(width: 450, height: 400), scale: 2, visible: false)
+    _ = surface.snapshot()
+    XCTAssertNotEqual(surface.rows.wrap(ofLine: 0)?.starts, starts, "前提: 段が変わった")
+    XCTAssertEqual(reads(), before, "幅を変えても読み直さない")
   }
 }

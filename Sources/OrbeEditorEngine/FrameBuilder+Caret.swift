@@ -40,6 +40,8 @@ struct CaretOverlays {
   /// 点滅で見えているコマのキャレット（昇順）と、まだ描いていない最初のキャレット。
   private let carets: [Int]
   private var caretNext = 0
+  /// 付きのあるキャレット（昇順）。
+  private let upstream: [Int]
   private let lastRow: Int
   private let marked: MarkedMaterial?
   /// まだ下の行に掛かりうる最初の未確定の範囲。
@@ -53,6 +55,7 @@ struct CaretOverlays {
     selections = SelectionCursor(caret.selections, from: start)
     carets = caretVisible && caret.focused ? caret.carets : []
     caretNext = Self.firstIndex(in: carets) { $0 >= start }
+    upstream = caret.upstream
     lastRow = text.lineCount - 1
     marked = caret.marked
     if let ranges = marked?.ranges {
@@ -65,12 +68,21 @@ struct CaretOverlays {
   mutating func next(row: Int, line: Range<Int>) -> RowOverlays {
     let selected = selections.remaining ? Array(selections.next(in: line)) : []
     let marked = markedRanges(onRow: row)
+    let carets = carets(onRow: row, line: line)
     return RowOverlays(
       content: selected.isEmpty && marked.isEmpty ? nil : text.contentRange(ofRow: row),
       selections: selected,
-      carets: carets(onRow: row, line: line),
+      carets: carets,
+      upstream: upstream.isEmpty
+        ? [] : carets.filter { Self.contains(upstream, $0 + line.lowerBound) },
       marked: marked, appearance: self.marked?.appearance ?? MarkedAppearance(),
       drop: drop?.row == row ? drop.map { $0.offset - line.lowerBound } : nil)
+  }
+
+  /// 昇順の列 `items` が `value` を持つか。
+  private static func contains(_ items: [Int], _ value: Int) -> Bool {
+    let index = firstIndex(in: items) { $0 >= value }
+    return index < items.count && items[index] == value
   }
 
   /// 昇順の列で `isAfter` が初めて真になる位置（無ければ件数）。
@@ -118,20 +130,79 @@ struct CaretOverlays {
   }
 }
 
-/// 1 行に重ねるもの。キャレットと落とす位置は行の中の位置。
+/// 1 行（折り返した行では 1 段）に重ねるもの。キャレットと落とす位置は行（段）の中の位置。
 struct RowOverlays {
-  /// 行の中身の区間（改行と行末の `\r` を除く）。選択か変換中の文字が掛かる行だけ。
-  let content: NSRange?
-  let selections: [NSRange]
-  let carets: [Int]
+  /// 行（段）の中身の区間（改行と行末の `\r` を除く）。選択か変換中の文字が掛かる行だけ。
+  var content: NSRange?
+  var selections: [NSRange]
+  var carets: [Int]
+  /// キャレットのうち付きのあるもの（段の境なら上の段の終わりに描く。昇順）。
+  var upstream: [Int] = []
   /// 行に掛かる未確定の範囲と、その見た目（文節の範囲は未確定の先頭から）。
   let marked: [NSRange]
   let appearance: MarkedAppearance
-  let drop: Int?
+  var drop: Int?
+  /// 改行を含む選択を右端から伸ばすか（行の最後の段だけ）。
+  var extendsLineEnd = true
 
   /// 位置と x の対応（組版の `CaretMap`）が要るか。
   var needsCarets: Bool {
     !selections.isEmpty || !carets.isEmpty || !marked.isEmpty || drop != nil
+  }
+
+  /// 折り返した行の段——段の始まり `base` から、次の段の始まり `end`（最後の段なら nil）まで。選択は段に掛かるものだけに
+  /// 切り（最後の段は改行を含む選択も）、キャレットは段の区間に掛かるものだけを引いて、段の境なら付きのある方を上の段の
+  /// 終わりに、ほかを下の段の頭に置き、位置は段の頭から数え直す——1 行に多くの選択とキャレットがあっても、段ごとに行の
+  /// 全部をなめない。
+  func segment(base: Int, end: Int?) -> RowOverlays {
+    guard base > 0 || end != nil else { return self }
+    var result = self
+    if let content {
+      result.selections = Array(
+        Highlights.slice(
+          selections, (content.location + base)..<(end.map { content.location + $0 } ?? Int.max)))
+    }
+    result.content = content.map { content in
+      let upper = min(end ?? content.length, content.length)
+      return NSRange(location: content.location + base, length: max(0, upper - base))
+    }
+    let window = base...(end ?? Int.max)
+    let near = Self.slice(carets, window)
+    let raised = Self.slice(upstream, window)
+    let holds = { (column: Int, upstream: Bool) -> Bool in
+      guard column >= base, !(column == base && base > 0 && upstream) else { return false }
+      guard let end else { return true }
+      return column < end || (column == end && upstream)
+    }
+    result.carets = near.filter { holds($0, Self.contains(raised, $0)) }.map { $0 - base }
+    result.upstream = raised.filter { holds($0, true) }.map { $0 - base }
+    result.drop = drop.flatMap { holds($0, false) ? $0 - base : nil }
+    result.extendsLineEnd = end == nil
+    return result
+  }
+
+  /// 昇順の列 `items` のうち、`window` の中の値（二分探索）。
+  private static func slice(_ items: [Int], _ window: ClosedRange<Int>) -> ArraySlice<Int> {
+    var low = 0
+    var high = items.count
+    while low < high {
+      let mid = (low + high) / 2
+      if items[mid] < window.lowerBound { low = mid + 1 } else { high = mid }
+    }
+    var end = low
+    while end < items.count, items[end] <= window.upperBound { end += 1 }
+    return items[low..<end]
+  }
+
+  /// 昇順の列 `items` が `value` を持つか（二分探索）。
+  private static func contains(_ items: ArraySlice<Int>, _ value: Int) -> Bool {
+    var low = items.startIndex
+    var high = items.endIndex
+    while low < high {
+      let mid = (low + high) / 2
+      if items[mid] < value { low = mid + 1 } else { high = mid }
+    }
+    return low < items.endIndex && items[low] == value
   }
 }
 
@@ -178,7 +249,9 @@ extension OverlayShapes {
   ) {
     if let content = overlay.content {
       for selection in overlay.selections {
-        drawSelection(selection, line, content: content, rowTop: rowTop, pen)
+        drawSelection(
+          selection, line, content: content, rowTop: rowTop, extendsLineEnd: overlay.extendsLineEnd,
+          pen)
       }
       for range in overlay.marked {
         drawMarked((range, overlay.appearance), line, content: content, rowTop: rowTop, pen)
@@ -188,16 +261,20 @@ extension OverlayShapes {
     if let column = overlay.drop { drawDropIndicator(at: column, line, rowTop: rowTop, pen) }
   }
 
-  /// 選択と行の交わりを行の高さいっぱいの矩形で塗る。`content` は行の中身の区間（改行と行末の `\r` を除く）。右から左の
-  /// 字を挟めば、論理の選択を見た目の区間ごとに分けて塗る。選択が行の改行を含めば、行の右端から半角 1 字ぶん伸ばす。
+  /// 選択と行の交わりを行の高さいっぱいの矩形で塗る。`content` は行（段）の中身の区間（改行と行末の `\r` を除く）。右から
+  /// 左の字を挟めば、論理の選択を見た目の区間ごとに分けて塗る。選択が行の改行を含めば、`extendsLineEnd`（行の最後の段）
+  /// なら行の右端から半角 1 字ぶん伸ばす。
   mutating func drawSelection(
-    _ selection: NSRange, _ line: LaidOutLine, content: NSRange, rowTop: Double, _ pen: OverlayPen
+    _ selection: NSRange, _ line: LaidOutLine, content: NSRange, rowTop: Double,
+    extendsLineEnd: Bool = true, _ pen: OverlayPen
   ) {
     guard let carets = line.carets else { return }
     let from = selection.location - content.location
     let to = NSMaxRange(selection) - content.location
     var segments = carets.segments(from: from, to: min(to, content.length))
-    if to > content.length { segments.append(line.width...(line.width + CGFloat(pen.cell))) }
+    if to > content.length, extendsLineEnd {
+      segments.append(line.width...(line.width + CGFloat(pen.cell)))
+    }
     let bottom = rowTop + pen.lineHeight.rounded()
     let ink = pen.focused ? pen.selection : pen.inactiveSelection
     var painted: ClosedRange<Double>?

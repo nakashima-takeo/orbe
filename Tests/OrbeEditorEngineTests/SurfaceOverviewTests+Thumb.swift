@@ -18,7 +18,7 @@ final class SurfaceThumbTests: EngineTestCase {
   /// つまみはスクロールの状態が変わると現れる——縦の位置に限らず、面の高さと幅・改行（行数）・横スクロールでも。行の中の
   /// 打鍵では出ない。
   func testTheThumbShowsWhenTheScrollStateChanges() throws {
-    let opened = try hosted(String(repeating: "x", count: 400) + "\n" + rows(1000))
+    let opened = try hosted(String(repeating: "x", count: 400) + "\n" + rows(1000), wraps: false)
     let surface = opened.surface
     // 撮るコマの時刻。つまみの濃さはコマの時刻の前後で決まるので、進める向きにだけ変える。
     var now = CACurrentMediaTime()
@@ -115,7 +115,7 @@ final class SurfaceThumbTests: EngineTestCase {
 
   /// 横に続く本文があるときだけ、本文の区画の下端に横のつまみが出て、その位置が横の位置を表す。
   func testTheHorizontalThumbShowsOnlyWhileTheTextContinuesSideways() throws {
-    let opened = try hosted(rows(10, width: 400))
+    let opened = try hosted(rows(10, width: 400), wraps: false)
     let bar = opened.surface.surfaceLayout.horizontalScrollbar
     let hover = { (opened: Opened) in
       opened.surface.inputScope {
@@ -131,7 +131,7 @@ final class SurfaceThumbTests: EngineTestCase {
     XCTAssertEqual(end.rgb(bar.minX + 5, bar.midY), [0, 0, 0])
     XCTAssertNotEqual(end.rgb(bar.maxX - 5, bar.midY), [0, 0, 0], "右端まで送れば右端に出る")
 
-    let narrow = try hosted(rows(10))
+    let narrow = try hosted(rows(10), wraps: false)
     hover(narrow)
     let shot = try pixelShot(narrow)
     for x in stride(from: bar.minX + 2, to: bar.maxX, by: 20) {

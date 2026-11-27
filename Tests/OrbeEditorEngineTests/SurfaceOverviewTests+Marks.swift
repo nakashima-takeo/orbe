@@ -98,7 +98,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     style.overview.minimapShadow = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
     let opened = try open(
       String(repeating: "x", count: 400) + String(repeating: "\n", count: 60),
-      size: CGSize(width: 800, height: 400), style: style)
+      size: CGSize(width: 800, height: 400), style: style, wraps: false)
     _ = opened.surface.snapshot()
     pumpMain(until: { opened.surface.clipsRight }, "前提: 長い行の長さを測った")
     let edge = opened.surface.surfaceLayout.minimap.minX
@@ -146,7 +146,8 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
   func testTheCaretMarkFollowsTheTextAfterAReplacement() throws {
     let lines = Array(repeating: "xxxxxxxx", count: 200)
     let opened = try open(
-      lines.joined(separator: "\n"), size: CGSize(width: 800, height: 400), style: style)
+      lines.joined(separator: "\n"), size: CGSize(width: 800, height: 400), style: style,
+      wraps: false)
     let surface = opened.surface
     let bar = surface.surfaceLayout.verticalScrollbar
     let caret = opened.document.text.lineStart(150)
@@ -264,5 +265,31 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     XCTAssertEqual(shot.rgb(bar.minX + 0.75, 100), [0, 0, 0], "縁は 1 デバイス px")
     XCTAssertEqual(shot.rgb(bar.midX, 0.25), [255, 0, 255], "上端の縁")
     XCTAssertEqual(shot.rgb(bar.midX, 0.75), [0, 0, 0])
+  }
+
+  /// 折り返した行の後ろの段にある検索の一致は、スクロールバーの、その段の高さに出る（文書の行の頭の高さではない）。
+  func testARulerMarkOnAWrappedLineSitsAtItsSegment() throws {
+    let line = (0..<600).map { "w\($0)" }.joined(separator: " ")
+    let opened = try open(
+      line + "\n", size: CGSize(width: 800, height: 400), style: style, waitForColors: false)
+    let rows = opened.surface.rows
+    let segments = rows.segments(ofLine: 0)
+    let match = (line as NSString).range(of: "w500")
+    let segment = rows.segment(containing: match.location, line: 0)
+    XCTAssertGreaterThan(segment, segments / 2, "前提: 後ろの段")
+    opened.surface.setHighlights([match], for: .findMatch)
+    let shot = try pixelShot(opened)
+    let bar = opened.surface.surfaceLayout.verticalScrollbar
+    let ruler = OverviewRuler(
+      contentLines: CGFloat(rows.contentLines(lineCount: opened.document.text.lineCount)),
+      visibleLines: opened.surface.viewportLines.visible, height: bar.height, scale: 2)
+    let lane = OverviewRuler.lane(.center, width: bar.width, scale: 2)
+    let at = { (span: OverviewRuler.Span) -> [Int] in
+      shot.rgb(
+        bar.minX + CGFloat(2 * lane.x + lane.width) / 4, bar.minY + CGFloat(span.y1 + span.y2) / 4)
+    }
+    let unit = CGFloat(segment)
+    XCTAssertEqual(at(ruler.spans([unit..<unit + 1])[0]), [255, 0, 0], "一致の段の高さ")
+    XCTAssertEqual(at(ruler.spans([0..<1])[0]), [0, 0, 0], "文書の行の頭の高さには無い")
   }
 }

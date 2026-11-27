@@ -26,7 +26,7 @@ extension SurfaceInputMethodTests {
   /// 変換中に本文が横だけに動いても知らせる——描画スレッドがキャレットへ横に寄せたとき（main の取引の後に動く）と、
   /// 横のホイール。どちらも先頭の行も行数も変えない。
   func testHorizontalOnlyScrollingWhileComposingMovesTheCandidateWindow() throws {
-    let opened = try open(String(repeating: "x", count: 300) + "\n")
+    let opened = try open(String(repeating: "x", count: 300) + "\n", wraps: false)
     _ = host(opened, size: CGSize(width: 400, height: 120))
     let context = fakeInputMethod(opened)
     opened.surface.selectedRange = NSRange(location: 300, length: 0)

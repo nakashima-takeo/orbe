@@ -84,10 +84,12 @@ class EngineTestCase: XCTestCase {
     let surface: MetalTextSurface
   }
 
-  /// `text` を `name` のファイルとして開き、面を結んで `size` の大きさを与える（窓には載せない）。
+  /// `text` を `name` のファイルとして開き、面を結んで `size` の大きさを与える（窓には載せない）。`wraps` が false なら、
+  /// 折り返さない構成（横にスクロールする面）にする。
   func open(
     _ text: String, name: String = "a.swift", size: CGSize = CGSize(width: 800, height: 600),
-    scale: CGFloat = 2, style: TextSurfaceStyle? = nil, waitForColors: Bool = true
+    scale: CGFloat = 2, style: TextSurfaceStyle? = nil, waitForColors: Bool = true,
+    wraps: Bool = true
   ) throws -> Opened {
     let url = TestScratch.caseDir.appendingPathComponent(UUID().uuidString).appendingPathComponent(
       name)
@@ -99,6 +101,7 @@ class EngineTestCase: XCTestCase {
       url: url, contents: try EditorDocument.read(url), surface: surface,
       registry: Self.registry)
     surface.view.appearance = NSAppearance(named: .darkAqua)
+    if !wraps { surface.setPresentation(SurfacePresentation()) }
     surface.viewStateDidChange(size: size, scale: scale, visible: false)
     if waitForColors { XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30)) }
     return Opened(document: document, surface: surface)

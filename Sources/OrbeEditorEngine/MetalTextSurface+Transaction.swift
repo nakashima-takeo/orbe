@@ -17,8 +17,10 @@ struct Transaction {
   /// 取引の中で頼まれた、材料のほかの欄（見え方・焦点・大きさ・絵の差し込み）の書き込み。
   var writes: [@Sendable (inout FrameMaterial) -> Void] = []
   var reveal = Reveal.none
-  /// 見せる区間（nil なら見せ方を頼んだ場の主のキャレット）と、見せ方を頼んだ場。
+  /// 見せる区間（nil なら見せ方を頼んだ場の主のキャレット）とその付き（空の区間が折り返した行の段の境なら、上の段の
+  /// 終わりを見せる）と、見せ方を頼んだ場。
   var revealing: NSRange?
+  var revealingUpstream = false
   var revealSite: EditingSite?
   /// 見せる縦の範囲を縦の並びの中の位置で頼んだ（本文の場。`revealing` は横の寄せだけに使う）。
   var revealingRows: (from: RowPosition, to: RowPosition)?
@@ -79,11 +81,14 @@ extension MetalTextSurface {
   /// 状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が位置を先・材料を後の順で 1 回で書く。
   private func commit(_ finished: Transaction) {
     guard let change = bodySite.change else { return }
+    // 見せる区間は、置き直した後の縦の並びの段で求める。
+    let rewrapped = settleWraps(change.content ?? currentContent)
     let span =
       finished.reveal == .none
       ? nil
       : finished.revealSite?.revealSpan(
-        finished.revealing, rows: finished.revealingRows, zone: finished.revealingZone)
+        finished.revealing, upstream: finished.revealingUpstream, rows: finished.revealingRows,
+        zone: finished.revealingZone)
     bodySite.change = nil
     editor.noteTransaction(
       from: change.cursors, edited: change.edited, restored: change.restoresCursors)
@@ -92,7 +97,7 @@ extension MetalTextSurface {
     let text = change.content?.text ?? currentContent?.text
     if change.remeasure, let content = change.content { pending.remeasure = content.version }
     let lineCount = text?.lineCount ?? 1
-    settleRows(finished, lineCount: lineCount)
+    settleRows(finished, lineCount: lineCount, rewrapped: rewrapped)
     pending.limits = limits(lineCount: lineCount)
     if let p = position(after: finished, span: span) {
       pending.position = p
@@ -203,10 +208,10 @@ extension MetalTextSurface {
     return palette
   }
 
-  /// 取引の中で変わった縦の並びを確定する——差し込みの高さが変わっていれば（位置を頼んだ取引でなければ）見えている
-  /// 先頭の行を同じ位置に保ち、変わった並びを材料への書き込みに積む。
-  private func settleRows(_ finished: Transaction, lineCount: Int) {
-    if let before = finished.anchor, finished.scrollTo == nil {
+  /// 取引の中で変わった縦の並びを確定する——差し込みの高さか、行ごとの折り返し（`rewrapped` は、折り返しを置き直したときの、置き直す前の並び）が
+  /// 変わっていれば（位置を頼んだ取引でなければ）見えている先頭の所を同じ位置に保ち、変わった並びを材料への書き込みに積む。
+  private func settleRows(_ finished: Transaction, lineCount: Int, rewrapped: RowLayout?) {
+    if let before = finished.anchor ?? rewrapped, finished.scrollTo == nil {
       pending.anchored = true
       keepFirstVisibleLine(from: before, lineCount: lineCount)
     }

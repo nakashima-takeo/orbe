@@ -298,7 +298,7 @@ final class SurfaceEditingTests: EngineTestCase {
   /// 打鍵の後の横の「見えるところまで」は、行を組む描画スレッドが解く——main は論理の位置だけを材料に添え、描画スレッドが
   /// キャレットの行を組んで横へ寄せる。
   func testTypingRevealsTheCaretHorizontallyOnTheRenderThread() throws {
-    let opened = try open(String(repeating: "x", count: 300) + "\n")
+    let opened = try open(String(repeating: "x", count: 300) + "\n", wraps: false)
     _ = host(opened, size: CGSize(width: 400, height: 120))
     opened.surface.selectedRange = NSRange(location: 300, length: 0)
     type(opened, "y")
@@ -312,7 +312,7 @@ final class SurfaceEditingTests: EngineTestCase {
   /// 描画スレッドは頼まれた横の「見えるところまで」を 1 度だけ解く——寄せた後に人が横へ戻せば、次のコマも戻したまま
   /// （同じ頼みで寄せ直さない）。次の打鍵はまた寄せる。
   func testTheHorizontalRevealIsSolvedOnce() throws {
-    let opened = try open(String(repeating: "x", count: 300) + "\n")
+    let opened = try open(String(repeating: "x", count: 300) + "\n", wraps: false)
     _ = host(opened, size: CGSize(width: 400, height: 120))
     opened.surface.selectedRange = NSRange(location: 300, length: 0)
     type(opened, "y")

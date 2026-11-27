@@ -1,8 +1,9 @@
 import Foundation
 import OrbeEditorCore
 
-/// 行の装備の素——見せる空白の並び・URL の区間（どれも行内の UTF-16 の位置）。行の中身だけで決まるので、組版と一緒に
-/// 覚え、行の中身が変わらない限り作り直さない。規則は Core の純関数（`WhitespaceRuns`・`LinkDetector`）。
+/// 行の装備の素——見せる空白の並び・URL の区間（どれも行内の UTF-16 の位置）。行の中身だけで決まるので、組版の
+/// キャッシュが行の中身を鍵に覚え（`LineLayoutCache.read`）、行の中身が変わらない限り作り直さない。規則は Core の純関数
+/// （`WhitespaceRuns`・`LinkDetector`）。
 struct LineDecor: Sendable {
   var whitespace: [Range<Int>]
   var links: [NSRange]
@@ -15,6 +16,31 @@ struct LineDecor: Sendable {
     links =
       LinkDetector.mayContainLinks(line)
       ? LinkDetector.links(in: String(decoding: line, as: UTF16.self)).map(\.range) : []
+  }
+
+  init(whitespace: [Range<Int>], links: [NSRange]) {
+    self.whitespace = whitespace
+    self.links = links
+  }
+
+  /// 装備の無い行。
+  static let empty = LineDecor(whitespace: [], links: [])
+
+  /// 行の段 `range`（行の中の位置の区間）の装備——位置は段の頭から。空白の並びは段の中に切り、URL は切らずに位置だけ
+  /// ずらす（段をまたぐ URL の下線は、段ごとに字の縁で切れる）。
+  func segment(_ range: Range<Int>) -> LineDecor {
+    guard
+      range.lowerBound > 0 || whitespace.last.map({ $0.upperBound > range.upperBound }) == true
+        || links.contains(where: { NSMaxRange($0) > range.upperBound })
+    else { return self }
+    let base = range.lowerBound
+    return LineDecor(
+      whitespace: whitespace.compactMap { run in
+        let clipped = run.clamped(to: range)
+        return clipped.isEmpty ? nil : (clipped.lowerBound - base)..<(clipped.upperBound - base)
+      },
+      links: links.filter { NSMaxRange($0) > range.lowerBound && $0.location < range.upperBound }
+        .map { NSRange(location: $0.location - base, length: $0.length) })
   }
 
   /// 字の位置の x が要る（丸点・下線のどちらかがある）。
@@ -31,7 +57,7 @@ extension FrameBuilder {
   func drawWhitespace(_ line: LaidOutLine, rowTop: Double, window: ClosedRange<Int>?, _ c: Context)
   {
     let g = c.g
-    let originX = g.column - g.scrollX
+    let originX = c.originX
     let s = g.scale
     guard let carets = line.carets, let window else { return }
     let diameter = Double(c.config.decorations.whitespaceDiameter) * s
@@ -52,35 +78,52 @@ extension FrameBuilder {
     }
   }
 
-  /// ⌘ を押したポインタの下の URL に下線を引く（文書の行 1 つ）。
+  /// ⌘ を押したポインタの下の URL（行 `row` の中の位置。行の段のどれかの字の上にポインタがあれば、その URL）。
+  func hoveredLink(in rows: [RowInFrame], row: Int, _ c: Context) -> NSRange? {
+    guard let pointer = c.linkPointer else { return nil }
+    let g = c.g
+    for item in rows where item.row == row {
+      let top = g.segmentTop(item.row, item.segment)
+      guard pointer.y >= top, pointer.y < top + g.lineHeight, let carets = item.laid.carets else {
+        continue
+      }
+      let originX = c.indented(item.indent).originX
+      for link in item.laid.decor.links {
+        let left = originX + Double(carets.x(link.location)) * g.scale
+        let right = originX + Double(carets.x(NSMaxRange(link))) * g.scale
+        if pointer.x >= left, pointer.x < right {
+          return NSRange(location: link.location + item.base, length: link.length)
+        }
+      }
+    }
+    return nil
+  }
+
+  /// URL `link`（行の中の位置）の、段 `row` に掛かる部分に下線を引く。
   func drawLinkUnderline(
-    _ row: RowInFrame, rowTop: Double, window: ClosedRange<Int>?, _ c: Context
+    _ row: RowInFrame, link: NSRange, rowTop: Double, window: ClosedRange<Int>?, _ c: Context
   ) {
     let line = row.laid
     let g = c.g
-    let originX = g.column - g.scrollX
+    let originX = c.originX
     let s = g.scale
-    guard let carets = line.carets, let window, let pointer = c.linkPointer,
-      pointer.y >= rowTop, pointer.y < rowTop + g.lineHeight
+    let local = NSRange(location: link.location - row.base, length: link.length)
+    guard let carets = line.carets, let window, NSMaxRange(local) > window.lowerBound,
+      local.location <= window.upperBound, NSMaxRange(local) > 0, local.location < line.length
     else { return }
     let baseline = rowTop + (Double(c.config.baseline) * s).rounded()
     let top = (baseline + Double(c.config.decorations.linkUnderlineOffset) * s).rounded()
     let thickness = max(
       1, (Double(c.config.decorations.linkUnderlineThickness) * s).rounded())
-    for link in line.decor.links
-    where NSMaxRange(link) > window.lowerBound && link.location <= window.upperBound {
-      let left = originX + Double(carets.x(link.location)) * s
-      let right = originX + Double(carets.x(NSMaxRange(link))) * s
-      guard pointer.x >= left, pointer.x < right else { continue }
-      let role = c.roles.roles(in: NSRange(location: row.start + link.location, length: 1))
-        .first?.role
-      decorShapes.append(
-        ShapeInstance(
-          rect: SIMD4(
-            Float(left.rounded()), Float(top), Float(right.rounded() - left.rounded()),
-            Float(thickness)),
-          color: c.palette.ink(role).color.packed, radius: 0, kind: 0))
-      return
-    }
+    let left = originX + Double(carets.x(local.location)) * s
+    let right = originX + Double(carets.x(NSMaxRange(local))) * s
+    let role = c.roles.roles(in: NSRange(location: row.start + link.location, length: 1))
+      .first?.role
+    decorShapes.append(
+      ShapeInstance(
+        rect: SIMD4(
+          Float(left.rounded()), Float(top), Float(right.rounded() - left.rounded()),
+          Float(thickness)),
+        color: c.palette.ink(role).color.packed, radius: 0, kind: 0))
   }
 }

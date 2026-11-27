@@ -23,10 +23,10 @@ extension FramePerfTests {
     }
   }
 
-  /// 10000 字を越える行が並ぶ文書に、一致が多数ある（行ごとに 1000 件近く）。
+  /// 10000 字を越える行が並ぶ文書に、一致が多数ある（行ごとに 1000 件近く）。折り返さない面で。
   func testLongLinesWithManyMatches() throws {
     _ = try measure(
-      label: "long-lines overview", text: Self.longLines(count: 300, length: 12_000),
+      label: "long-lines overview", text: Self.longLines(count: 300, length: 12_000), wraps: false,
       frameLimit: HeadlessDriver.period * 1000, gatesLateCommits: false
     ) { Self.decorate($0, needle: "item") }
   }

@@ -7,7 +7,7 @@ import XCTest
 
 /// 行の装備の flow（fixture は gallery と同じ `EditorCodeFixtures`）。印が git の状態と編集に追従する過程——
 /// 開く（3 種の印）→ 行頭に 1 行挿す（追加の印が増える）→ `git add`（印が消える）→ 作業ツリーを書き戻す
-/// （index との差が戻り、印が戻る）——と、タブで書かれた文書（タブの幅）・横スクロール後の点を撮る。
+/// （index との差が戻り、印が戻る）——と、タブで書かれた文書（タブの幅と、長い行の続きの段の字下げ）を撮る。
 extension DesignFlowSnapshotTests {
   func testEditorDecor() throws {
     let scene = try codeScene()
@@ -15,21 +15,14 @@ extension DesignFlowSnapshotTests {
     let go = try scene.group.editor.open(
       scene.directory.appendingPathComponent("main.go"), as: .pinned)
     let pane = scene.pane
-    let surface = try engine(go)
     pumpMain(
       until: { scene.isReady && go.baseline != nil && go.waitUntilCaughtUp(timeout: 0) },
       "index 版が届き、裏の仕事が追いつく")
     try hostedFlow(
       "editor_decor", scene,
       steps: [
-        ("tabs", {}),  // タブ 1 段 = 検出した単位（4 桁）
-        (
-          "scrolled_right",
-          {  // 8 行目の長い行で 20 桁ぶん右へ → 点が付いてくる（印は行番号の列にあって動かない）
-            surface.scroll(toX: 20 * surface.config.cell)
-            self.settleFades(pane)
-          }
-        ),
+        // タブ 1 つ = 検出した単位（4 桁）。8 行目の長い行は折り返し、続きの段は行頭のタブの幅だけ字下げする（行番号は 1 段目だけ）
+        ("tabs", {}),
         (
           "translucent",
           {  // 透過設定: 地は本体ごと 1 層の veil（行番号の列も同じ濃度）。本文は列の下をくぐらない

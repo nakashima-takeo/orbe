@@ -11,8 +11,9 @@ enum PointerArea {
 struct PointerHit {
   var area: PointerArea
   var row: Int
-  /// いちばん近い書記素の境（最終行より下なら本文の終わり）。
+  /// いちばん近い書記素の境（最終行より下なら本文の終わり）と、その付き（折り返した行の段の終わりより右）。
   var offset: Int
+  var upstream = false
   /// 文書の行の上か（差し込みの上は、次の文書の行に当たるが文書の行の上ではない）。
   var onLine = true
 }
@@ -40,13 +41,14 @@ extension MetalTextSurface {
       }
       return PointerHit(area: area, row: line, offset: text.lineStart(line), onLine: false)
     }
-    guard case .line(let line) = item, line < text.lineCount else {
+    guard case .line(let line, let segment) = item, line < text.lineCount else {
       return PointerHit(area: area, row: text.lineCount - 1, offset: text.length)
     }
     let row = max(0, line)
     let x = CGFloat(Double(point.x - column) + p.x)
+    let found = env.geometry.column(atX: x, row: row, segment: line < 0 ? 0 : segment)
     return PointerHit(
-      area: area, row: row, offset: text.lineStart(row) + env.geometry.column(atX: x, row: row))
+      area: area, row: row, offset: text.lineStart(row) + found.column, upstream: found.upstream)
   }
 
   /// 点を含む書記素。点が文書の行の字の上でなければ（行番号の列・行末より右・字の無い行・差し込み・最終行より下の空き
@@ -54,17 +56,20 @@ extension MetalTextSurface {
   /// （省けば今の位置）。
   func character(at point: CGPoint, position: SIMD2<Double>? = nil) -> NSRange? {
     guard let text = currentContent?.text else { return nil }
+    let geometry = ShapedLineGeometry(
+      text: text, cache: lineStops, tabWidth: bodySite.tabWidth, rows: rows)
     let p = position ?? scrollPosition
     let column = surfaceLayout.column
     let y = Double(point.y - config.topInset) + p.y
     guard point.x >= column, point.y >= config.topInset,
-      case .line(let row) = rows.item(atY: y), (0..<text.lineCount).contains(row)
+      case .line(let row, let segment) = rows.item(atY: y), (0..<text.lineCount).contains(row)
     else { return nil }
-    let x = CGFloat(Double(point.x - column) + p.x)
-    let (source, start) = LineShaper.source(row: row, in: text)
-    let stops = lineStops.stops(source, tabWidth: config.tabWidth(columns: indentation.unit))
-    guard x < stops.width, let glyph = stops.glyph(atX: x) else { return nil }
-    return text.grapheme(containing: start + stops.offsets[glyph])
+    let piece = geometry.stops(segment, row: row)
+    let x = CGFloat(Double(point.x - column) + p.x) - piece.indent
+    guard x >= 0, x < piece.stops.width, let glyph = piece.stops.glyph(atX: x) else {
+      return nil
+    }
+    return text.grapheme(containing: piece.lineStart + piece.base + piece.stops.offsets[glyph])
   }
 
   /// 点の下の字が URL の中なら、その URL。

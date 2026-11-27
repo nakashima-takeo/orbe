@@ -22,13 +22,21 @@ extension FramePerfTests {
       label: "symbols-after-japanese", text: Self.symbolsAfterJapanese(bytes: 200_000))
   }
 
-  /// 数千字の行を含む日本語の Markdown。長い行は 1 行まるごと組むので、`testLongLines` と同じく、全部のコマの CPU の p99 は
-  /// 1 刻み未満だけを関門にし、描画スレッド自身が落とすコマは記録して示すだけ。
+  /// 数千字の行を含む日本語の Markdown を、折り返さない面で（差分の面と、上限を越えた文書の場面）。長い行は 1 行まるごと
+  /// 組むので、`testLongLines` と同じく、全部のコマの CPU の p99 は 1 刻み未満だけを関門にし、描画スレッド自身が落とす
+  /// コマは記録して示すだけ。
   func testLongJapaneseMarkdown() throws {
     _ = try measure(
       label: "long-japanese-markdown",
-      text: Self.copies(of: "docs/design/design-system.md", bytes: 200_000),
+      text: Self.copies(of: "docs/design/design-system.md", bytes: 200_000), wraps: false,
       frameLimit: HeadlessDriver.period * 1000, gatesLateCommits: false)
+  }
+
+  /// 同じ日本語の Markdown を、折り返す面で。組むのは見えている段だけなので、関門は ASCII の Swift と同じ。
+  func testLongJapaneseMarkdownWrapped() throws {
+    _ = try measure(
+      label: "long-japanese-markdown wrapped",
+      text: Self.copies(of: "docs/design/design-system.md", bytes: 200_000))
   }
 
   /// 和文の後ろに本体の字体に無い記号がある行の途中で打つ。関門は `testTyping` と同じ（打鍵→present の中央値 12.5ms・

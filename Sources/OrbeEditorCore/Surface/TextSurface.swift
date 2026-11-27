@@ -122,7 +122,9 @@ public protocol TextSurface: AnyObject {
   func focus(_ field: ZoneTextField)
 
   /// 表示の構成を置く。差し込みのある面でミニマップを出すのは呼び手の誤り。番号の列・記号の列・印の列で本文の区画の幅が
-  /// 変われば、絵の差し込みに新しい幅で絵を問い直す。
+  /// 変われば、絵の差し込みに新しい幅で絵を問い直す。折り返す構成の面は、本文の UTF-8 のバイト数が上限以下の間だけ、文書の行を
+  /// 本文の区画の幅で段に折り返す（上限を超えた本文は折り返さず、横にスクロールする）。折り返しが変わっても、見えていた
+  /// 先頭の段の頭の字は画面の同じ位置に残る。
   func setPresentation(_ presentation: SurfacePresentation)
 
   /// 本文を編集できるか（既定は true）。false の面では、打鍵・削除・IME の変換・カット・ペースト・落とす・
@@ -209,9 +211,9 @@ public enum TextHighlightKind: Sendable {
   case currentFindMatch
 }
 
-/// 見えている範囲を本文の言葉で表したもの。`top` は先頭に見えている所（縦の並びの中の位置。文書の行の中なら段 0、差し込みの
-/// 中なら、その下の文書の行と差し込みの中の段——段の粒度で、差し込みの中でも 1 段越えれば変わる）、`visibleLines` は見えて
-/// いる高さに入る行数（小数）。文書の構文が見えている行を先に解き、diff が位置を引き継ぐのに使う。
+/// 見えている範囲を本文の言葉で表したもの。`top` は先頭に見えている所（縦の並びの中の位置。文書の行の中ならその行の中の段
+/// ——折り返さない行は段 0、差し込みの中なら、その下の文書の行と差し込みの中の段——段の粒度で、差し込みの中でも 1 段越えれば
+/// 変わる）、`visibleLines` は見えている高さに入る段の数（小数）。文書の構文が見えている行を先に解き、diff が位置を引き継ぐのに使う。
 public struct TextViewport: Equatable, Sendable {
   public var top: RowPosition
   public var visibleLines: CGFloat

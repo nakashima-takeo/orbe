@@ -25,8 +25,9 @@ extension MouseSelection {
     frame(now: CACurrentMediaTime())
   }
 
-  /// 前のコマからの経過時間ぶんスクロールし、上なら見えている上端の行の行頭、下なら見えている下端の行のポインタの桁（最終行が
-  /// 見えればその行末）、横ならポインタの行（左は行頭、右は行末）まで伸ばす。スクロールと選択は 1 つの取引で置く。
+  /// 前のコマからの経過時間ぶんスクロールし、上なら見えている上端の段の頭（折り返さない行では行頭）、下なら見えている下端の
+  /// 行のポインタの桁（最終行の最後の段が見えればその行末）、横ならポインタの行（左は行頭、右は行末）まで伸ばす。スクロールと
+  /// 選択は 1 つの取引で置く。
   func frame(now: CFTimeInterval) {
     guard let edge, let surface, let view else { return }
     defer { lastFrame = now }
@@ -72,8 +73,8 @@ extension MouseSelection {
       lineEnd = false
     case .below:
       target = CGPoint(x: point.x, y: view.bounds.height - 0.5)
-      let lastRow = (site?.currentContent?.text.lineCount ?? 1) - 1
-      lineEnd = (site?.hit(target, position: p)?.row ?? lastRow) < lastRow ? nil : true
+      let hit = site?.hit(target, position: p)
+      lineEnd = Self.isLastSegment(hit, site?.currentContent?.text, surface.rows) ? true : nil
     case .left:
       target = point
       lineEnd = false
@@ -86,5 +87,31 @@ extension MouseSelection {
         extend(to: target, position: p, lineEnd: lineEnd, reveal: .none)
       }
     }
+  }
+
+  /// 当たり `hit` が、最終行の最後の段か（当たりが無いか、本文が無ければ真）。
+  static func isLastSegment(_ hit: PointerHit?, _ text: TextRope?, _ rows: RowLayout) -> Bool {
+    guard let hit, let text else { return true }
+    guard hit.row >= text.lineCount - 1 else { return false }
+    let column = hit.offset - text.lineStart(hit.row)
+    return rows.segment(containing: column, line: hit.row, upstream: hit.upstream)
+      == rows.segments(ofLine: hit.row) - 1
+  }
+
+  /// 当たり `hit` を、その行の行末（`lineEnd`）か、その段の頭（折り返さない行では行頭）にしたもの。
+  static func edge(of hit: PointerHit, lineEnd: Bool, _ text: TextRope, _ rows: RowLayout)
+    -> PointerHit
+  {
+    var result = hit
+    let content = text.contentRange(ofRow: hit.row)
+    if lineEnd {
+      result.offset = NSMaxRange(content)
+    } else {
+      let segment = rows.segment(
+        containing: hit.offset - content.location, line: hit.row, upstream: hit.upstream)
+      result.offset = content.location + (rows.wrap(ofLine: hit.row)?.start(of: segment) ?? 0)
+    }
+    result.upstream = false
+    return result
   }
 }

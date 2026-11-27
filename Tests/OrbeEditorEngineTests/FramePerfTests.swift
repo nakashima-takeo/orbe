@@ -45,10 +45,11 @@ final class FramePerfTests: EngineTestCase {
     XCTAssertLessThanOrEqual(large, small * 2, "1MB の 1 コマの CPU の中央値は 200KB の 2 倍以内")
   }
 
-  /// 10000 字を越える行が並ぶ文書（minified の JSON・source map のような）。
+  /// 10000 字を越える行が並ぶ文書（minified の JSON・source map のような）を、折り返さない面で（差分の面と、上限を越えた
+  /// 文書の場面）。
   func testLongLines() throws {
     _ = try measure(
-      label: "long-lines", text: Self.longLines(count: 300, length: 12_000),
+      label: "long-lines", text: Self.longLines(count: 300, length: 12_000), wraps: false,
       frameLimit: HeadlessDriver.period * 1000, gatesLateCommits: false)
   }
 
@@ -73,14 +74,14 @@ final class FramePerfTests: EngineTestCase {
     XCTAssertEqual(totals.lateCommits, 0, "描画スレッドは刻みに間に合う")
   }
 
-  /// ドラッグとはじき、端への引っ張りを、main への負荷の有り無しで回して関門にかける。`frameLimit` は全部のコマの CPU の
-  /// p99 の上限（ms。行を組版しなかったコマは常に 2ms）、`gatesLateCommits` は描画スレッド自身が落とすコマ 0 を関門に
-  /// するか。負荷なしのドラッグとはじきの 1 コマの CPU の中央値（ms）を返す。
+  /// ドラッグとはじき、端への引っ張りを、main への負荷の有り無しで回して関門にかける。`wraps` は面を折り返す構成で開くか、
+  /// `frameLimit` は全部のコマの CPU の p99 の上限（ms。行を組版しなかったコマは常に 2ms）、`gatesLateCommits` は描画
+  /// スレッド自身が落とすコマ 0 を関門にするか。負荷なしのドラッグとはじきの 1 コマの CPU の中央値（ms）を返す。
   func measure(
-    label: String, text: String, frameLimit: Double = 2, gatesLateCommits: Bool = true,
-    prepare: (Opened) -> Void = { _ in }
+    label: String, text: String, wraps: Bool = true, frameLimit: Double = 2,
+    gatesLateCommits: Bool = true, prepare: (Opened) -> Void = { _ in }
   ) throws -> Double {
-    let opened = try attach(text)
+    let opened = try attach(text, wraps: wraps)
     prepare(opened)
     waitUntilIdle(opened.surface)
     let surface = opened.surface
@@ -115,8 +116,10 @@ final class FramePerfTests: EngineTestCase {
     return median
   }
 
-  func attach(_ text: String, holdsPresents: Bool = false) throws -> Opened {
-    let opened = try open(text, size: CGSize(width: 800, height: 600), waitForColors: true)
+  /// 本文 `text` を開いて描画スレッドに結ぶ。`wraps` は面を折り返す構成で開くか。
+  func attach(_ text: String, holdsPresents: Bool = false, wraps: Bool = true) throws -> Opened {
+    let opened = try open(
+      text, size: CGSize(width: 800, height: 600), waitForColors: true, wraps: wraps)
     opened.surface.viewStateDidChange(
       size: CGSize(width: 800, height: 600), scale: 2, visible: true)
     driver.bind(opened.surface.id, holdsPresents: holdsPresents)

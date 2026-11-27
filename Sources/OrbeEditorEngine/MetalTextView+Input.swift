@@ -69,8 +69,8 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     ]
   }
 
-  /// 範囲の 1 行目の矩形（スクリーン座標）。範囲は 1 行目の中身の終わりで切り、文の外なら末尾の幅 0。変換中の未確定の
-  /// 中は `MarkedLineGeometry` で答える（長い行でも打鍵ごとに行を組まない）。
+  /// 範囲の 1 行目の矩形（スクリーン座標）。範囲は 1 行目の中身の終わり（折り返した行では、範囲の先頭の段の終わり）で
+  /// 切り、文の外なら末尾の幅 0。変換中の未確定の中は `MarkedLineGeometry` で答える（長い行でも打鍵ごとに行を組まない）。
   func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
     guard let site, let env = site.editingEnvironment(), let window else { return .zero }
     let text = env.text
@@ -79,10 +79,15 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let row = text.row(containing: location)
     let end = min(
       max(location, location + max(0, range.length)), NSMaxRange(text.contentRange(ofRow: row)))
-    let clipped = NSRange(location: location, length: max(0, end - location))
+    let marked = site.markedLine
+    let clipped = site.segmentRange(
+      NSRange(location: location, length: max(0, end - location)), row: row, env)
     actualRange?.pointee = clipped
+    let upstream =
+      clipped.length == 0 && site.editor.state.cursors.primary.upstream(at: clipped.location)
     return window.convertToScreen(
-      convert(site.textRect(clipped, row: row, env, marked: site.markedLine), to: nil))
+      convert(
+        site.textRect(clipped, row: row, env, marked: marked, upstream: upstream), to: nil))
   }
 
   /// 点を含む字の位置（主の場の文の座標。主の場の字の上でなければ NSNotFound——行末より右・字の無い行・文の
@@ -131,8 +136,8 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let row = text.row(containing: cluster.location)
     let start = text.lineStart(row)
     let x = site.lineX(of: local)
-    let ends = [cluster.location, NSMaxRange(cluster)].map {
-      env.geometry.x(ofColumn: $0 - start, row: row)
+    let ends = [(cluster.location, false), (NSMaxRange(cluster), true)].map {
+      env.geometry.place(ofColumn: $0.0 - start, row: row, upstream: $0.1).x
     }
     let (x0, x1) = (ends.min() ?? 0, ends.max() ?? 0)
     return x1 > x0 ? min(max((x - x0) / (x1 - x0), 0), 1) : 0
@@ -148,14 +153,19 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let first = min(max(rows.lowerBound, visible.lowerBound), rows.upperBound)
     let last = max(min(rows.upperBound, visible.upperBound), first)
     let marked = site.markedLine
+    let upstream =
+      selection.length == 0 && site.editor.state.cursors.primary.upstream(at: selection.location)
     var union = NSRect.null
     for row in first...last {
       let content = text.contentRange(ofRow: row)
       let start = max(selection.location, text.lineStart(row))
       let end = min(NSMaxRange(selection), NSMaxRange(content))
-      union = union.union(
-        site.textRect(
-          NSRange(location: start, length: max(0, end - start)), row: row, env, marked: marked))
+      for rect in site.textRects(
+        NSRange(location: start, length: max(0, end - start)), row: row, env, marked: marked,
+        upstream: upstream)
+      {
+        union = union.union(rect)
+      }
     }
     let shown = union.intersection(site.textArea)
     return window.convertToScreen(convert(shown.isNull ? union : shown, to: nil))

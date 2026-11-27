@@ -36,12 +36,15 @@ struct LimitsUpdate: Equatable, Sendable {
   var lineHeight: Double
   var viewport: SIMD2<Double>
   var cell: Double
+  /// 行を折り返している（横の範囲を持たない）。
+  var wraps: Bool
 
   func apply(to limits: inout ScrollPhysics.Limits) {
     limits.lastTop = lastTop
     limits.lineHeight = lineHeight
     limits.viewport = viewport
     limits.cell = cell
+    limits.wraps = wraps
   }
 }
 

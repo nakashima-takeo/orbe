@@ -56,11 +56,12 @@ enum Editing {
     _ text: TextRope, indentation: Indentation = .fallback, lineBreak: LineBreak = .lf,
     pageLines: Int = 10, killBuffer: String = ""
   ) -> EditingEnvironment {
-    EditingEnvironment(
+    let rows = RowLayout(lineHeight: 18)
+    return EditingEnvironment(
       text: text,
       geometry: ShapedLineGeometry(
-        text: text, cache: cache, tabWidth: CGFloat(indentation.unit) * cell),
-      pageLines: pageLines, rows: RowLayout(lineHeight: 18), indentation: indentation,
+        text: text, cache: cache, tabWidth: CGFloat(indentation.unit) * cell, rows: rows),
+      pageLines: pageLines, rows: rows, indentation: indentation,
       lineBreak: lineBreak, killBuffer: killBuffer)
   }
 

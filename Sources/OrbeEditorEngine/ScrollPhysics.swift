@@ -79,13 +79,15 @@ struct ScrollPhysics: Sendable {
     var longestLine: Double = 0
     /// 1 桁の幅。
     var cell: Double = 7
+    /// 行を折り返している（横の範囲を持たない）。
+    var wraps = false
     /// スクロールを共にする面の範囲の端（共にしていなければ 0）。範囲の端はこれより手前にならない。
     var shared = SIMD2<Double>(0, 0)
 
     /// この面の本文が決める範囲の端。
     var own: SIMD2<Double> {
       SIMD2(
-        max(0, longestLine + ScrollPhysics.trailingColumns * cell - viewport.x),
+        wraps ? 0 : max(0, longestLine + ScrollPhysics.trailingColumns * cell - viewport.x),
         max(0, lastTop))
     }
 

@@ -95,7 +95,7 @@ extension EditCommands {
     return (SearchQuestion(needle: text.substring(word), rule: rule), word)
   }
 
-  /// ⌥⌘↑・⌥⌘↓。各カーソルの後ろに、選択の両端をそれぞれの覚えた横位置で 1 行上（下）へ写したカーソルを足す。先頭行の上・
+  /// ⌥⌘↑・⌥⌘↓。各カーソルの後ろに、選択の両端をそれぞれの覚えた横位置で 1 段上（下）へ写したカーソルを足す。先頭行の上・
   /// 最終行の下へは写さない（元と同じになり、まとまる）。いちばん上（下）のカーソルが見えるところまで最小限。
   static func insertCursor(below: Bool, _ state: EditState, _ env: EditingEnvironment)
     -> CommandResult
@@ -108,32 +108,44 @@ extension EditCommands {
     }
     guard var cursors = CursorList(added) else { return CommandResult(state: state) }
     cursors.normalize()
-    let positions = cursors.all.map(\.position)
-    let edge = (below ? positions.max() : positions.min()) ?? cursors.primary.position
+    let all = cursors.all
+    let edge =
+      (below
+        ? all.max { $0.position < $1.position } : all.min { $0.position < $1.position })
+      ?? cursors.primary
     return CommandResult(
       state: EditState(cursors: cursors, mark: state.mark),
-      revealing: NSRange(location: edge, length: 0))
+      revealing: NSRange(location: edge.position, length: 0), revealingUpstream: edge.upstream)
   }
 
-  /// カーソルを 1 行上下へ写したもの（VS Code の `MoveOperations.translateUp/Down`）。両端それぞれ、覚えた横位置（無ければ
-  /// 今の x）にいちばん近い位置へ移り、その x を覚える。行の外へは出ない。
+  /// カーソルを 1 段上下へ写したもの（VS Code の `MoveOperations.translateUp/Down`。単位は ↑↓ と同じ段）。両端それぞれ、
+  /// 覚えた横位置（無ければ今の x）にいちばん近い位置へ移り、その x を覚える。文書の外へは出ない。
   private static func translated(_ cursor: Cursor, by lines: Int, _ env: EditingEnvironment)
     -> Cursor
   {
     let text = env.text
-    func moved(_ offset: Int, desiredX: CGFloat?) -> (offset: Int, x: CGFloat?) {
-      let row = text.row(containing: offset)
-      let target = row + lines
-      guard target >= 0, target < text.lineCount else { return (offset, desiredX) }
-      let x =
-        desiredX ?? env.geometry.x(ofColumn: offset - text.lineStart(row), row: row)
-      return (text.lineStart(target) + env.geometry.column(atX: x, row: target), x)
+    /// 端 1 つ（付きを含む）を写したもの。
+    func moved(_ end: Cursor) -> Cursor {
+      let row = text.row(containing: end.position)
+      let place = env.geometry.place(
+        ofColumn: end.position - text.lineStart(row), row: row, upstream: end.upstream)
+      let target = stepped(from: (row, place.segment), by: lines, env.rows)
+      guard target.row >= 0, target.row < text.lineCount else { return end }
+      let x = end.desiredX ?? place.x
+      let found = env.geometry.column(atX: x, row: target.row, segment: target.segment)
+      return Cursor(
+        text.lineStart(target.row) + found.column, desiredX: x, upstream: found.upstream)
     }
-    let anchor = moved(cursor.anchor, desiredX: cursor.anchorDesiredX)
-    let position = moved(cursor.position, desiredX: cursor.desiredX)
+    let anchor = moved(
+      Cursor(
+        cursor.anchor, desiredX: cursor.anchorDesiredX,
+        upstream: cursor.upstream(at: cursor.anchor)))
+    let position = moved(
+      Cursor(cursor.position, desiredX: cursor.desiredX, upstream: cursor.upstream))
     return Cursor(
-      selectionStart: NSRange(location: anchor.offset, length: 0), unit: .character,
-      position: position.offset, desiredX: position.x, anchorDesiredX: anchor.x)
+      selectionStart: NSRange(location: anchor.position, length: 0), unit: .character,
+      position: position.position, desiredX: position.desiredX, anchorDesiredX: anchor.desiredX,
+      upstream: position.upstream)
   }
 
   /// Esc。カーソルが複数なら主の 1 本（選択は保つ）、1 本で選択があれば動く端のキャレット。どちらでもなければ何もしない。
@@ -144,6 +156,8 @@ extension EditCommands {
     }
     guard primary.hasSelection else { return CommandResult(state: state, reveal: .none) }
     return CommandResult(
-      state: EditState(cursors: CursorList(Cursor(primary.position)), mark: state.mark))
+      state: EditState(
+        cursors: CursorList(Cursor(primary.position, upstream: primary.upstream)), mark: state.mark)
+    )
   }
 }

@@ -171,7 +171,9 @@ extension MetalTextView {
     let inside =
       selection.length > 0 && hit.offset >= selection.location
       && hit.offset <= NSMaxRange(selection)
-    if !inside { site.editor.select(CursorList(Cursor(hit.offset)), reveal: .none) }
+    if !inside {
+      site.editor.select(CursorList(Cursor(hit.offset, upstream: hit.upstream)), reveal: .none)
+    }
   }
 
   /// AppKit が開く直前に足す項目のうち、AutoFill を取り除く（Writing Tools はメニューに足させない。サービスは残す）。

@@ -30,10 +30,16 @@ extension EditCommands {
     let collapses = cursor.hasSelection && !extending
     switch movement {
     case .left:
-      if collapses { return Cursor(cursor.selection.location) }
+      if collapses {
+        let start = cursor.selection.location
+        return Cursor(start, upstream: cursor.upstream(at: start))
+      }
       return cursor.moved(to: text.previousBoundary(before: cursor.position), extending: extending)
     case .right:
-      if collapses { return Cursor(NSMaxRange(cursor.selection)) }
+      if collapses {
+        let end = NSMaxRange(cursor.selection)
+        return Cursor(end, upstream: cursor.upstream(at: end))
+      }
       return cursor.moved(to: text.nextBoundary(after: cursor.position), extending: extending)
     case .up, .pageUp:
       return vertical(cursor, by: movement == .up ? -1 : -env.pageLines, extending: extending, env)
@@ -45,11 +51,10 @@ extension EditCommands {
     case .wordRight:
       return cursor.moved(to: wordRight(from: cursor.position, text), extending: extending)
     case .home:
-      let row = text.row(containing: cursor.position)
-      let first = firstNonWhitespace(ofRow: row, text) ?? text.lineStart(row)
-      let target = cursor.position == first ? text.lineStart(row) : first
-      return cursor.moved(to: target, extending: extending)
-    case .end, .lineEnd:
+      return home(cursor, extending: extending, env)
+    case .end:
+      return end(cursor, extending: extending, env)
+    case .lineEnd:
       let row = text.row(containing: cursor.position)
       return cursor.moved(to: NSMaxRange(text.contentRange(ofRow: row)), extending: extending)
     case .lineStart:
@@ -66,36 +71,98 @@ extension EditCommands {
     }
   }
 
-  /// ↑↓とページ送り（VS Code の `MoveOperations.vertical`）。横位置は覚えた x（無ければ今の位置の x）で、先頭の行より上は
-  /// 文書の先頭、最終行より下は文書の末尾。選択があって伸ばさないなら、↑は始まり・↓は終わりから動く。↑↓は文書の行を 1 つ、
-  /// ページ送りは縦の並びでページの高さだけ離れた所の文書の行（差し込みの上なら、進む向きの先の文書の行）へ。
+  /// ⌘←——最初の非空白と 1 列目を行き来する。折り返した行の続きの段では段の頭へ動き、段の頭に居れば文書の行の端へ進む。
+  private static func home(_ cursor: Cursor, extending: Bool, _ env: EditingEnvironment) -> Cursor {
+    let text = env.text
+    let row = text.row(containing: cursor.position)
+    let start = text.lineStart(row)
+    if let wrap = env.rows.wrap(ofLine: row) {
+      let segment = wrap.segment(containing: cursor.position - start, upstream: cursor.upstream)
+      let head = start + wrap.start(of: segment)
+      if segment > 0, cursor.position != head {
+        return cursor.moved(to: head, extending: extending)
+      }
+    }
+    let first = firstNonWhitespace(ofRow: row, text) ?? start
+    let target = cursor.position == first ? start : first
+    return cursor.moved(to: target, extending: extending)
+  }
+
+  /// ⌘→——行末へ。折り返した行の最後でない段では段の終わり（付き）へ動き、段の終わりに居れば文書の行末へ進む。
+  private static func end(_ cursor: Cursor, extending: Bool, _ env: EditingEnvironment) -> Cursor {
+    let text = env.text
+    let row = text.row(containing: cursor.position)
+    let start = text.lineStart(row)
+    if let wrap = env.rows.wrap(ofLine: row) {
+      let segment = wrap.segment(containing: cursor.position - start, upstream: cursor.upstream)
+      let boundary = segment + 1 < wrap.segments ? start + wrap.start(of: segment + 1) : nil
+      if let boundary, cursor.position != boundary {
+        return cursor.moved(to: boundary, extending: extending, upstream: true)
+      }
+    }
+    return cursor.moved(to: NSMaxRange(text.contentRange(ofRow: row)), extending: extending)
+  }
+
+  /// ↑↓とページ送り（VS Code の `MoveOperations.vertical`）。横位置は覚えた x（無ければ今の位置の x。行の左端から）で、先頭の
+  /// 段より上は文書の先頭、最後の段より下は文書の末尾。選択があって伸ばさないなら、↑は始まり・↓は終わりから動く。↑↓は段を
+  /// 1 つ（折り返さない行は 1 行が 1 段）、ページ送りは縦の並びでページの高さだけ離れた所の段（差し込みの上なら、進む向きの
+  /// 先の段）へ。着いた所が段の終わりより右なら、付きを持つ。
   private static func vertical(
     _ cursor: Cursor, by lines: Int, extending: Bool, _ env: EditingEnvironment
   ) -> Cursor {
     let text = env.text
+    let collapses = cursor.hasSelection && !extending
     let from =
-      cursor.hasSelection && !extending
+      collapses
       ? (lines < 0 ? cursor.selection.location : NSMaxRange(cursor.selection)) : cursor.position
     let row = text.row(containing: from)
-    let x = cursor.desiredX ?? env.geometry.x(ofColumn: from - text.lineStart(row), row: row)
-    let target = abs(lines) > 1 ? paged(from: row, by: lines, env.rows) : row + lines
-    if target < 0 {
+    let place = env.geometry.place(
+      ofColumn: from - text.lineStart(row), row: row, upstream: cursor.upstream(at: from))
+    let x = cursor.desiredX ?? place.x
+    let target =
+      abs(lines) > 1
+      ? paged(from: (row, place.segment), by: lines, env.rows)
+      : stepped(from: (row, place.segment), by: lines, env.rows)
+    if target.row < 0 {
       return cursor.moved(to: 0, extending: extending, desiredX: from == 0 ? nil : x)
     }
-    if target >= text.lineCount {
+    if target.row >= text.lineCount {
       let atEnd = from == text.length
       return cursor.moved(to: text.length, extending: extending, desiredX: atEnd ? nil : x)
     }
-    let column = env.geometry.column(atX: x, row: target)
-    return cursor.moved(to: text.lineStart(target) + column, extending: extending, desiredX: x)
+    let found = env.geometry.column(atX: x, row: target.row, segment: target.segment)
+    return cursor.moved(
+      to: text.lineStart(target.row) + found.column, extending: extending, desiredX: x,
+      upstream: found.upstream)
   }
 
-  /// 文書の行 `row` から縦の並びで `lines` 行の高さだけ離れた所の文書の行。差し込みの上なら進む向きの先の文書の行
-  /// （ページより高い塊を飛び越える）。
-  private static func paged(from row: Int, by lines: Int, _ rows: RowLayout) -> Int {
-    switch rows.item(atY: rows.y(ofLine: row) + Double(lines) * rows.lineHeight) {
-    case .line(let line): line
-    case .block(let index): lines < 0 ? rows.boundaries[index] - 1 : rows.boundaries[index]
+  /// 文書の行 `from.row` の段 `from.segment` から `lines`（1 か −1）段離れた段。文書の外は、その外の行の段 0。
+  static func stepped(
+    from: (row: Int, segment: Int), by lines: Int, _ rows: RowLayout
+  ) -> (row: Int, segment: Int) {
+    if lines < 0 {
+      guard from.segment == 0 else { return (from.row, from.segment - 1) }
+      let row = from.row - 1
+      return (row, row >= 0 ? rows.segments(ofLine: row) - 1 : 0)
+    }
+    guard from.segment + 1 >= rows.segments(ofLine: from.row) else {
+      return (from.row, from.segment + 1)
+    }
+    return (from.row + 1, 0)
+  }
+
+  /// 文書の行 `from.row` の段 `from.segment` から縦の並びで `lines` 段の高さだけ離れた所の段。差し込みの上なら進む向きの先の
+  /// 段（ページより高い塊を飛び越える）。
+  private static func paged(
+    from: (row: Int, segment: Int), by lines: Int, _ rows: RowLayout
+  ) -> (row: Int, segment: Int) {
+    let y = rows.y(ofSegment: from.segment, line: from.row) + Double(lines) * rows.lineHeight
+    switch rows.item(atY: y) {
+    case .line(let line, let segment): return (line, segment)
+    case .block(let index):
+      guard lines < 0 else { return (rows.boundaries[index], 0) }
+      let line = rows.boundaries[index] - 1
+      return (line, line >= 0 ? rows.segments(ofLine: line) - 1 : 0)
     }
   }
 
@@ -212,9 +279,11 @@ extension EditCommands {
     return nil
   }
 
-  /// 語の単位のまま動く端を `offset` へ伸ばす（VS Code の `WordOperations.word` の選択中）——語の内側なら語の端へ揃え、
-  /// 起点の範囲の中なら起点の範囲を保つ。
-  static func extendByWord(_ cursor: Cursor, to offset: Int, _ text: TextRope) -> Cursor {
+  /// 語の単位のまま動く端を `offset`（付き `upstream`）へ伸ばす（VS Code の `WordOperations.word` の選択中）——語の内側なら
+  /// 語の端へ揃え、起点の範囲の中なら起点の範囲を保つ。付きは、動く端が `offset` に着いたときだけ持つ。
+  static func extendByWord(
+    _ cursor: Cursor, to offset: Int, upstream: Bool = false, _ text: TextRope
+  ) -> Cursor {
     let row = text.row(containing: offset)
     let line = LineWindow(row: row, around: offset - text.lineStart(row), text)
     let column = line.local(offset - text.lineStart(row))
@@ -238,7 +307,7 @@ extension EditCommands {
       target = NSMaxRange(bounds)
       if contains(target) { target = start.location }
     }
-    return cursor.moved(to: target, extending: true)
+    return cursor.moved(to: target, extending: true, upstream: upstream && target == offset)
   }
 
   /// 行の単位のまま動く端を行 `row` へ伸ばす（VS Code の `cursorMoveCommands.line` の選択中）——起点の行より上ならその行頭、

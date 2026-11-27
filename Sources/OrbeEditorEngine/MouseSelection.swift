@@ -6,8 +6,7 @@ import simd
 /// マウスの選択の状態機械——クリックの回数で単位（文字・語・行・全体）を決め、その後のドラッグと ⇧クリックは起点の範囲と
 /// 単位を保って伸ばす（VS Code の `SelectionStartKind`）。4 回以上のクリックの全体はドラッグで縮めない。行番号の列は行の
 /// 単位。ドラッグが本文の上下左右の外へ出ると、ポインタが止まっていても VS Code の速さの式で自動スクロールし、選択が伸び
-/// 続ける（刻みは view の display link）。外へ出たときに伸ばす先は VS Code と同じ——上は見えている上端の行の行頭、下は
-/// 下端の行のポインタの桁（最終行が見えればその行末）、左はポインタの行の行頭、右は行末。⌘だけのクリックが URL に当たれば、
+/// 続ける（刻みは view の display link。外へ出たときに伸ばす先は仕様の docs/spec/editor/code.md の **マウス**）。⌘だけのクリックが URL に当たれば、
 /// 離したときに開く（動けば開かない。その間は選択が伸びない）。選択の字の上の 1 回のクリック（⇧・⌘ なし）は本文のドラッグ
 /// の候補で、押した位置から 4pt を越えて動かせば文字のドラッグが始まり（時間の待ちは置かない）、越えずに離せばその位置に
 /// キャレットを置く。
@@ -34,8 +33,8 @@ final class MouseSelection: NSObject {
     case text
     case numbers
     case link(URL, NSPoint)
-    /// 選択の字の上を押した（本文のドラッグの候補）。離したらキャレットを置く位置と、押した位置（窓の座標）。
-    case candidate(Int, NSPoint)
+    /// 選択の字の上を押した（本文のドラッグの候補）。離したらキャレットを置く位置とその付きと、押した位置（窓の座標）。
+    case candidate(Int, upstream: Bool, NSPoint)
     /// 絵の差し込みの選べる文を選んでいる。
     case zoneText
     /// 押せる場所を押している。
@@ -165,7 +164,7 @@ final class MouseSelection: NSObject {
       selection.length > 0, hit.offset >= selection.location, hit.offset <= NSMaxRange(selection),
       site.character(at: point) != nil
     {
-      drag = .candidate(hit.offset, event.locationInWindow)
+      drag = .candidate(hit.offset, upstream: hit.upstream, event.locationInWindow)
       return
     }
     version = site.currentContent?.version
@@ -200,11 +199,15 @@ final class MouseSelection: NSObject {
     }
     drag = .text
     switch clicks {
-    case ...1: return (shift ? Self.extend(primary, to: hit, text) : Cursor(hit.offset), .minimal)
+    case ...1:
+      return (
+        shift ? Self.extend(primary, to: hit, text) : Cursor(hit.offset, upstream: hit.upstream),
+        .minimal
+      )
     case 2:
       return (
         shift
-          ? EditCommands.extendByWord(primary, to: hit.offset, text)
+          ? EditCommands.extendByWord(primary, to: hit.offset, upstream: hit.upstream, text)
           : EditCommands.wordSelection(at: hit.offset, text), .minimal
       )
     case 3:
@@ -243,14 +246,16 @@ final class MouseSelection: NSObject {
   /// 他のカーソルと動かす 1 本を合わせて置く（重なればまとまる）。
   private func place(reveal: Reveal) {
     guard let site, let moving, let list = CursorList(others + [moving]) else { return }
-    site.editor.select(list, reveal: reveal, of: NSRange(location: moving.position, length: 0))
+    site.editor.select(
+      list, reveal: reveal, of: NSRange(location: moving.position, length: 0),
+      upstream: moving.upstream)
   }
 
   func mouseDragged(_ event: NSEvent, in view: NSView) {
     guard let drag, let surface else { return }
     switch drag {
     case .link, .trailingMark: return
-    case .candidate(_, let down):
+    case .candidate(_, _, let down):
       guard Self.moved(event, from: down) > Self.clickSlop else { return }
       self.drag = nil
       surface.textView.beginTextDrag(with: event)
@@ -274,7 +279,7 @@ final class MouseSelection: NSObject {
       autoscroll(.above(surface.config.topInset - point.y))
     } else if point.y > view.bounds.height {
       autoscroll(.below(point.y - view.bounds.height))
-    } else if point.x < column || point.x > area.maxX {
+    } else if point.x < column || point.x > area.maxX, surface.rows.wraps == nil {
       let lineEnd = point.x > area.maxX
       guard site?.isBody == true else {
         stopAutoscroll()
@@ -308,8 +313,8 @@ final class MouseSelection: NSObject {
   func mouseUp(_ event: NSEvent, in view: NSView) {
     stopAutoscroll()
     defer { drag = nil }
-    if case .candidate(let offset, _) = drag {
-      site?.editor.select(CursorList(Cursor(offset)), reveal: .minimal)
+    if case .candidate(let offset, let upstream, _) = drag {
+      site?.editor.select(CursorList(Cursor(offset, upstream: upstream)), reveal: .minimal)
       return
     }
     if releasePress(at: view.convert(event.locationInWindow, from: nil)) { return }
@@ -345,13 +350,14 @@ final class MouseSelection: NSObject {
   /// 起点の範囲と単位を保って、当たった場所まで伸ばす。
   private static func extend(_ cursor: Cursor, to hit: PointerHit, _ text: TextRope) -> Cursor {
     switch cursor.unit {
-    case .character: return cursor.moved(to: hit.offset, extending: true)
-    case .word: return EditCommands.extendByWord(cursor, to: hit.offset, text)
+    case .character: return cursor.moved(to: hit.offset, extending: true, upstream: hit.upstream)
+    case .word:
+      return EditCommands.extendByWord(cursor, to: hit.offset, upstream: hit.upstream, text)
     case .line: return EditCommands.extendByLine(cursor, toRow: hit.row, text)
     }
   }
 
-  /// 点の下まで伸ばす。`lineEnd` を与えれば、点の行の行末（true）か行頭（false）まで。
+  /// 点の下まで伸ばす。`lineEnd` を与えれば、点の行の行末（true）か、点の段の頭（false。折り返さない行では行頭）まで。
   func extend(
     to point: CGPoint, position: SIMD2<Double>? = nil, lineEnd: Bool? = nil, reveal: Reveal
   ) {
@@ -360,10 +366,7 @@ final class MouseSelection: NSObject {
     else { return }
     guard content.version == version else { return cancel() }
     let text = content.text
-    if let lineEnd {
-      let content = text.contentRange(ofRow: hit.row)
-      hit.offset = lineEnd ? NSMaxRange(content) : content.location
-    }
+    if let lineEnd { hit = Self.edge(of: hit, lineEnd: lineEnd, text, site.surface.rows) }
     if case .numbers = drag {
       self.moving = EditCommands.extendByLine(moving, toRow: hit.row, text)
     } else {

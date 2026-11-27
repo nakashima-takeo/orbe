@@ -59,6 +59,8 @@ final class MetalTextSurface: TextSurface {
   private var highlights = Highlights()
   /// 縦の並び（main の最新。取引の中で置き・ずらし・測り直し、出すときに材料へ書く）。
   var rows: RowLayout
+  /// 本文の字体の ASCII の字の幅（折り返しの寸法）。
+  private(set) lazy var asciiWidths = GlyphFonts.asciiWidths(config.font)
   /// 差し込んだ行の出どころと、行の右端の印の押下の受け手（どちらも並びと一緒に置く）。
   weak var rowSource: (any SurfaceRowSource)?
   weak var trailingMarkTarget: (any SurfaceTrailingMarkTarget)?

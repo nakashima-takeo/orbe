@@ -77,16 +77,17 @@ final class EditingSite {
   // MARK: - 取引と文
 
   /// 取引の中で `body` を行う（→ `MetalTextSurface.transact`）。`reveal` は取引の後の見せ方（`range` は見せる区間、nil なら
-  /// 主のキャレット。後から頼んだものが勝つ）、`remeasure` は最も長い行の測り直し（本文の場）。
+  /// 主のキャレット。`upstream` は空の区間の付き。後から頼んだものが勝つ）、`remeasure` は最も長い行の測り直し（本文の場）。
   func transact(
-    reveal: Reveal = .none, of range: NSRange? = nil, scrollTo: SIMD2<Double>? = nil,
-    remeasure: Bool = false, _ body: () -> Void = {}
+    reveal: Reveal = .none, of range: NSRange? = nil, upstream: Bool = false,
+    scrollTo: SIMD2<Double>? = nil, remeasure: Bool = false, _ body: () -> Void = {}
   ) {
     surface.transact(scrollTo: scrollTo) {
       touch()
       if reveal != .none {
         surface.transaction?.reveal = reveal
         surface.transaction?.revealing = range
+        surface.transaction?.revealingUpstream = upstream
         surface.transaction?.revealingRows = nil
         surface.transaction?.revealingZone = nil
         surface.transaction?.revealSite = self
@@ -127,20 +128,23 @@ final class EditingSite {
   /// 編集の規則が読む環境。入力欄はページ送りが 1 行で、縦の並びに差し込みは無い。
   func editingEnvironment() -> EditingEnvironment? {
     guard let text = currentContent?.text else { return nil }
-    let geometry = ShapedLineGeometry(text: text, cache: lineStops, tabWidth: tabWidth)
     guard let field else {
       let config = surface.config
       let lines = Int(
         (Double(surface.size.height - config.topInset) / Double(config.lineHeight)).rounded(.down))
+      let rows = surface.rows
       return EditingEnvironment(
-        text: text, geometry: geometry, pageLines: max(1, lines - 2), rows: surface.rows,
-        indentation: surface.indentation, lineBreak: surface.lineBreak,
-        killBuffer: KillBuffer.contents)
+        text: text,
+        geometry: ShapedLineGeometry(text: text, cache: lineStops, tabWidth: tabWidth, rows: rows),
+        pageLines: max(1, lines - 2), rows: rows, indentation: surface.indentation,
+        lineBreak: surface.lineBreak, killBuffer: KillBuffer.contents)
     }
+    let rows = RowLayout(lineHeight: Double(field.style.lineHeight))
     return EditingEnvironment(
-      text: text, geometry: geometry, pageLines: 1,
-      rows: RowLayout(lineHeight: Double(field.style.lineHeight)), indentation: .fallback,
-      lineBreak: .lf, killBuffer: KillBuffer.contents)
+      text: text,
+      geometry: ShapedLineGeometry(text: text, cache: lineStops, tabWidth: tabWidth, rows: rows),
+      pageLines: 1, rows: rows, indentation: .fallback, lineBreak: .lf,
+      killBuffer: KillBuffer.contents)
   }
 
   /// 編集の束を 1 回で文の出どころへ渡し、戻ったら写しを引く（取引の中だけ）。束を当てた後の文を返す（結ばれていなければ
@@ -149,12 +153,13 @@ final class EditingSite {
   func deliver(_ batch: EditBatch) -> TextRope? {
     precondition(change != nil, "場の文の変化は取引の中でだけ渡す")
     guard let before = currentContent?.text else { return nil }
-    if isBody { surface.rows.shift(batch.edits, in: before) }
+    let unwrapped = isBody ? surface.rows.shift(batch.edits, in: before) : nil
     source.apply(batch.edits)
     guard let content = source.content else { return nil }
     change?.content = content
     change?.edited = true
     guard isBody else { return content.text }
+    if let unwrapped { surface.rewrapEdited(content, unwrapped) }
     // 束は後ろから当たる。後ろの編集は前の行を動かさないので、どの編集の行も束の前の文で数えられる。
     change?.rowEdits += batch.edits.reversed().map {
       RowEdit($0, in: before, version: content.version)
@@ -185,7 +190,8 @@ final class EditingSite {
     let collapsed = all.filter { $0.selection.length == 0 }.map(\.position).sorted()
     guard let composition = editor.composition else {
       return CaretMaterial(
-        selections: selections, carets: all.map(\.position).sorted(), collapsed: collapsed,
+        selections: selections, carets: all.map(\.position).sorted(),
+        upstream: all.filter(\.upstream).map(\.position).sorted(), collapsed: collapsed,
         epoch: CACurrentMediaTime(), focused: focused, blinks: blinks)
     }
     let attention = composition.selection

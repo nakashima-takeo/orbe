@@ -63,7 +63,7 @@ enum EditCommand: Equatable, Sendable {
   case addNextOccurrence
   /// ⌘⇧L——全出現を選ぶ（VS Code の `selectHighlights`）。
   case selectAllOccurrences
-  /// ⌥⌘↑・⌥⌘↓——各カーソルの 1 行上・下に同じ形のカーソルを足す（VS Code の `insertCursorAbove` / `Below`）。
+  /// ⌥⌘↑・⌥⌘↓——各カーソルの 1 段上・下に同じ形のカーソルを足す（VS Code の `insertCursorAbove` / `Below`）。
   case insertCursor(below: Bool)
   /// Esc——カーソルが複数なら主の 1 本に戻し（選択は保つ）、1 本で選択があれば動く端のキャレットにする（VS Code の
   /// `removeSecondaryCursors` と `cancelSelection`）。
@@ -105,9 +105,9 @@ enum Reveal: Equatable, Sendable {
 struct EditingEnvironment {
   let text: TextRope
   let geometry: any LineGeometry
-  /// ページ送りの行の数（VS Code の `pageSize`——見えている行の数 − 2、1 以上）。
+  /// ページ送りの段の数（VS Code の `pageSize`——見えている段の数 − 2、1 以上）。
   let pageLines: Int
-  /// 面の縦の並び（ページ送りはキャレットの行から縦にページの高さだけ離れた所の文書の行へ動く）。
+  /// 面の縦の並び（ページ送りはキャレットの段から縦にページの高さだけ離れた所の段へ動く）。
   let rows: RowLayout
   let indentation: Indentation
   let lineBreak: LineBreak
@@ -120,8 +120,9 @@ struct CommandResult {
   var edits = EditBatch.empty
   var undo = UndoKind.other
   var reveal = Reveal.minimal
-  /// 見せる区間（束の後の本文の座標。nil なら主のキャレット）。
+  /// 見せる区間（束の後の本文の座標。nil なら主のキャレット）とその付き（空の区間が段の境なら、上の段の終わりを見せる）。
   var revealing: NSRange?
+  var revealingUpstream = false
   /// キルバッファへ入れる文字列（入れないなら nil）。
   var kill: String?
 }
@@ -164,8 +165,10 @@ enum EditCommands {
     case .deleteWordBackward: return delete(state, env) { deleteWordLeftRange($0, env.text) }
     case .deleteWordForward: return delete(state, env) { deleteWordRightRange($0, env.text) }
     case .deleteSelection: return delete(state, env) { $0.selection }
-    case .deleteToLineStart: return delete(state, env) { lineStartRange($0, env.text) }
-    case .deleteToLineEnd: return delete(state, env) { lineEndRange($0, env.text) }
+    case .deleteToLineStart:
+      return delete(state, env) { lineStartRange($0, env.text, rows: env.rows) }
+    case .deleteToLineEnd:
+      return delete(state, env) { lineEndRange($0, env.text, rows: env.rows) }
     case .kill(let forward): return kill(forward: forward, state, env)
     case .yank: return replaceSelections(with: env.killBuffer, undo: .other, state, env)
     case .transpose: return transpose(state, env)

@@ -28,8 +28,8 @@ final class RowLayoutTests: XCTestCase {
       XCTAssertEqual(rows.y(ofLine: row, scale: 2), Double(row) * (lineHeight * 2))
       XCTAssertEqual(rows.unit(ofLine: row), Double(row))
     }
-    XCTAssertEqual(rows.item(atY: 18 * 4.5), .line(4))
-    XCTAssertEqual(rows.item(atY: -3), .line(-1), "上の外は負の行")
+    XCTAssertEqual(rows.item(atY: 18 * 4.5), .line(4, segment: 0))
+    XCTAssertEqual(rows.item(atY: -3), .line(-1, segment: 0), "上の外は負の行")
     XCTAssertEqual(rows.lastTop(lineCount: 100), 99 * lineHeight)
     XCTAssertEqual(rows.contentLines(lineCount: 100), 100)
     XCTAssertEqual(rows.totalHeight(lineCount: 100), 100 * lineHeight)
@@ -45,7 +45,7 @@ final class RowLayoutTests: XCTestCase {
     XCTAssertEqual(rows.y(ofLine: 5), 5 * 18 + 36 + 30)
     XCTAssertEqual(rows.unit(ofLine: 5), 5 + 66.0 / 18)
     XCTAssertEqual(rows.item(atY: 2 * 18 + 10), .block(0))
-    XCTAssertEqual(rows.item(atY: 2 * 18 + 36), .line(2))
+    XCTAssertEqual(rows.item(atY: 2 * 18 + 36), .line(2, segment: 0))
     XCTAssertEqual(rows.item(atY: rows.top(ofBlock: 1) + 29), .block(1))
     XCTAssertEqual(rows.line(atY: rows.top(ofBlock: 1) + 29), 5, "塊の上は次の文書の行")
     XCTAssertEqual(rows.lines(from: 2 * 18 + 5, to: 2 * 18 + 40, lineCount: 10), 2...2)
@@ -127,7 +127,8 @@ final class RowLayoutTests: XCTestCase {
     XCTAssertEqual(rows.contentLines(lineCount: 10), 10 + 66.0 / 18 + 1)
     XCTAssertEqual(rows.totalHeight(lineCount: 10), 10 * 18 + 36 + 30 + 18)
     XCTAssertEqual(rows.item(atY: rows.lastTop(lineCount: 10) + 1), .block(2))
-    XCTAssertEqual(rows.item(atY: rows.totalHeight(lineCount: 10)), .line(10), "最後の項目より下")
+    XCTAssertEqual(
+      rows.item(atY: rows.totalHeight(lineCount: 10)), .line(10, segment: 0), "最後の項目より下")
   }
 
   /// 最終行の後の絵の差し込みが行より高ければ、端はその下端の 1 行が最上段に来る所——絵の差し込みの下側まで送れる。

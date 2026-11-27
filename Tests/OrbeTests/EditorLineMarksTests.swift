@@ -88,14 +88,15 @@ final class EditorLineMarksTests: OrbeTestCase {
     pumpMain(until: { (try? condition()) ?? false }, timeout: 5, "描かれる", file: file, line: line)
   }
 
-  /// 横にスクロールしても本文の装備は行に付いてくる。長い行で横スクロールが起き、印は行番号の列にあるので無事な
-  /// 一方、点だけが置き去りになる壊れ方を守る。
+  /// 横にスクロールしても本文の装備は行に付いてくる（折り返さない構成の面で）。長い行で横スクロールが起き、印は行番号の
+  /// 列にあるので無事な一方、点だけが置き去りになる壊れ方を守る。
   func testDecorationsFollowHorizontalScrolling() throws {
     let long = String(repeating: "x", count: 100) + "  " + String(repeating: "x", count: 100)
     let hosted = try host("a\n  b  c \(long)\n")
     let ground = hosted.ground
     let document = hosted.document
     let surface = try engine(document)
+    surface.setPresentation(SurfacePresentation())
     let dot = bodyX + 3.5 * cell
     waitDrawn { !self.isBlack(try self.rgb(ground, dot, self.rowMidY(2))) }
 
