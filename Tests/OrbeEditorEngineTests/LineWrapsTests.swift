@@ -107,5 +107,20 @@ final class LineWrapsTests: XCTestCase {
     rows.rewrap(unwrapped, version: 1) { lines, _ in lines.map { $0 == 1 ? Self.wrapped(2) : nil } }
     XCTAssertEqual((0..<4).map(rows.segments(ofLine:)), [1, 2, 3, 1])
     XCTAssertNotEqual(rows.version, version)
+    XCTAssertEqual(rows.wraps?.version, 1, "折り返しは計算した本文の版を持つ")
+  }
+
+  /// 折り返していた行が、行の数を変えない編集で 1 段に戻れば、その行の折り返しは外れ、版が進む。
+  func testAWrappedLineThatAnEditFitsOnOneSegmentLosesItsWrap() throws {
+    let before = TextRope("a\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nc")
+    var rows = RowLayout(lineHeight: 10)
+    rows.setWraps(Self.wraps([1, 3, 1]))
+    let version = rows.version
+    let unwrapped = try XCTUnwrap(
+      rows.shift([TextEdit(range: NSRange(location: 3, length: 20), replacement: "")], in: before))
+    rows.rewrap(unwrapped, version: 1) { lines, _ in lines.map { _ in nil } }
+    XCTAssertEqual((0..<3).map(rows.segments(ofLine:)), [1, 1, 1])
+    XCTAssertNil(rows.wrap(ofLine: 1), "1 段に戻った行は折り返さない")
+    XCTAssertNotEqual(rows.version, version, "段が変われば版が進む")
   }
 }
