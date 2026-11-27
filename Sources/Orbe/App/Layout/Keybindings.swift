@@ -50,7 +50,52 @@ enum WindowCommand {
   case findInProject
 }
 
+/// ブラウザ層（Z=2）に焦点がある間のブラウザ固有キー操作。
+enum BrowserKeyAction: Equatable {
+  case newTab
+  case closeTab
+  case reload
+  case reopenClosedTab
+  case toggleSidebar
+}
+
+/// ブラウザ層（Z=2）に焦点がある間の `ChromeAction` 振り分け分類。
+enum BrowserKeyRouting: Equatable {
+  case browser(BrowserKeyAction)
+  case window(WindowCommand)
+  case block
+  case passthrough
+}
+
 extension ChromeAction {
+  /// ブラウザ焦点時の単一キー振り分け（default 無しの網羅 switch）。
+  var browserRouting: BrowserKeyRouting {
+    switch self {
+    case .showWorktreePalette: return .browser(.newTab)
+    case .closeTab: return .browser(.closeTab)
+    case .rename: return .browser(.reload)
+    case .showClosedAgentsPalette: return .browser(.reopenClosedTab)
+    case .saveDocument: return .browser(.toggleSidebar)
+    case .toggleBrowser: return .window(.toggleBrowser)
+    case .toggleEditorFace: return .window(.toggleEditorFace)
+    case .findInProject: return .window(.findInProject)
+    case .openEditor: return .window(.openEditor)
+    case .nextTab: return .window(.nextTab)
+    case .prevTab: return .window(.prevTab)
+    case .switchWorkspace: return .window(.switchWorkspace)
+    case .launchDefaultAgent: return .window(.launchDefaultAgent)
+    case .showAgentPalette: return .window(.showAgentPalette)
+    case .showTaskPalette: return .window(.showTaskPalette)
+    case .showSettings: return .window(.showSettings)
+    case .toggleHelp: return .window(.toggleHelp)
+    case .increaseFontSize, .decreaseFontSize, .resetFontSize,
+      .toggleEditorSidebar, .toggleEditorItemList, .find:
+      return .block
+    case .scrollToTop, .scrollToBottom:
+      return .passthrough
+    }
+  }
+
   /// WindowController へ届く window コマンドへの写像。surface ローカル操作は nil。
   /// 面の経路（`SurfaceView.perform`・`EditorPaneView.performKeyEquivalent`）と window レベル経路
   /// （`ChromeHostingView`）が共有する単一ソース mapping（網羅 switch）。

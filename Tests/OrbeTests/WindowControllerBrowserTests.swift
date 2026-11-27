@@ -191,8 +191,8 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     XCTAssertTrue(wc.browserView.focusIsInside)
   }
 
-  /// ローカルスペース表示中は workspace 切替に追従して切替先 workspace の中身へ切り替わり、
-  /// 元の workspace へ戻すと元のローカルページへ復帰する。
+  /// ローカルスペース表示中は workspace 切替に追従して切替先 workspace の中身と現在 workspace 名へ切り替わり、
+  /// アクティブ workspace 改名のみ即時同期し（背景改名では上書きしない）、元の workspace へ戻すと復帰する。
   @MainActor
   func testLocalSpaceFollowsWorkspaceSwitch() throws {
     let window = OrbeWindowFake()
@@ -208,15 +208,24 @@ final class WindowControllerBrowserTests: OrbeTestCase {
 
     wc.setBrowserMode(.full, animated: false)
     XCTAssertEqual(wc.browserSession.store.activeSpaceSelection, .local, "初回選択はローカルスペース")
+    XCTAssertEqual(wc.browserSession.store.currentWorkspaceName, "a", "起動時に現在 WS 名を同期")
     loadPage(localPageURL, in: wc)
     XCTAssertEqual(wc.browserView.webView?.url, localPageURL)
 
     wc.switchWorkspace(to: wsBIndex)
+    XCTAssertEqual(wc.browserSession.store.currentWorkspaceName, "b", "WS 切替で現在 WS 名を同期")
     XCTAssertNil(wc.browserView.webView, "wsB のローカルスペースは空画面へ切り替わる")
     XCTAssertNil(wc.browserView.toolbar.displayURL)
     XCTAssertTrue(wc.browserView.focusIsInside, "全面表示の焦点は維持する")
 
+    wc.renameWorkspace(wsBIndex, to: "beta")
+    XCTAssertEqual(wc.browserSession.store.currentWorkspaceName, "beta", "アクティブ WS 改名を即時同期")
+    wc.renameWorkspace(wsAIndex, to: "alpha")
+    XCTAssertEqual(
+      wc.browserSession.store.currentWorkspaceName, "beta", "背景 WS 改名では現在 WS 名を上書きしない")
+
     wc.switchWorkspace(to: wsAIndex)
+    XCTAssertEqual(wc.browserSession.store.currentWorkspaceName, "alpha", "復帰先に改名後 WS 名を同期")
     XCTAssertEqual(wc.browserView.webView?.url, localPageURL, "wsA へ戻すと wsA のローカルページへ復帰する")
   }
 

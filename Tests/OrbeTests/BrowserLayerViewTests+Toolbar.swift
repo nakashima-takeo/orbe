@@ -7,19 +7,19 @@ import XCTest
 
 /// ブラウザツールバーの単一ツリー配置（`BrowserToolbarLayout`）と URL 入力欄アイデンティティを守る。
 /// 全面めくり・幅変更で URL 欄編集（文字列・IME・field editor 焦点）が破棄されないこと、
-/// 最小右シート幅・極狭閉じプレビュー幅で 4 ボタンが左クリップされず、幅不足の全面めくりで
+/// 最小右シート幅・極狭閉じプレビュー幅で 5 ボタンが左クリップされず、幅不足の全面めくりで
 /// 案内ピルだけが 0×0 に畳まれることを検証する。
 extension BrowserLayerViewTests {
-  /// 右シート最小幅（240pt）でも 4 つの操作ボタンがツールバー領域内に収まり、全面 Peek の狭幅では
+  /// 右シート最小幅（240pt）でも 5 つの操作ボタンがツールバー領域内に収まり、全面 Peek の狭幅では
   /// 案内ピルが先に省略されてボタンが切れない。
   func testToolbarFitsAllActionButtonsAtMinimumSheetWidthAndDropsPeekPillWhenNarrow() throws {
     let leftSpan =
-      Theme.Layout.browserBarLeading + Theme.Layout.browserIconButton * 3
-      + Theme.Layout.browserBarGap * 3
+      Theme.Layout.browserBarLeading + Theme.Layout.browserIconButton * 4
+      + Theme.Layout.browserBarGap * 4
     let rightSpan =
       Theme.Layout.browserBarTrailing + Theme.Layout.browserIconButton + Theme.Layout.browserBarGap
 
-    // 1. 800pt 窓の最小右シート（240pt）で URL 欄が左右 4 ボタン領域を侵食せず収まる。
+    // 1. 800pt 窓の最小右シート（240pt）で URL 欄が左右 5 ボタン領域を侵食せず収まる。
     let sheetHosted = hostBrowser()
     sheetHosted.browser.setMode(.sheet, animated: false)
     sheetHosted.browser.setSheetRatio(BrowserResizeSession.minRatio)
@@ -27,7 +27,7 @@ extension BrowserLayerViewTests {
     XCTAssertEqual(
       sheetHosted.browser.sheetView.frame.width, BrowserResizeSession.closeThresholdWidth,
       accuracy: 0.5)
-    XCTAssertGreaterThanOrEqual(rect240.minX, leftSpan, "240pt 右シートで左 3 ボタン側へはみ出さない")
+    XCTAssertGreaterThanOrEqual(rect240.minX, leftSpan, "240pt 右シートで左 4 ボタン側へはみ出さない")
     XCTAssertLessThanOrEqual(
       rect240.maxX, BrowserResizeSession.closeThresholdWidth - rightSpan,
       "240pt 右シートで右端の全面切替ボタンを押し出さない")
@@ -62,7 +62,7 @@ extension BrowserLayerViewTests {
     XCTAssertGreaterThan(
       (600 - wideRect.maxX) - (320 - narrowRect.maxX), 50,
       "広幅（600pt）では案内ピルが並び、狭幅（320pt）では案内ピルが省略されて右側専有幅が大きく縮む")
-    XCTAssertGreaterThanOrEqual(narrowRect.minX, leftSpan, "320pt 全面 Peek で左 3 ボタン側へはみ出さない")
+    XCTAssertGreaterThanOrEqual(narrowRect.minX, leftSpan, "320pt 全面 Peek で左 4 ボタン側へはみ出さない")
     XCTAssertLessThanOrEqual(
       narrowRect.maxX, 320 - rightSpan, "320pt 全面 Peek で右端の切替ボタンを押し出さない")
   }
@@ -110,41 +110,43 @@ extension BrowserLayerViewTests {
     assertIntact("全面 Peek 解除")
   }
 
-  /// 極狭幅（`120pt` 閉じプレビュー等 `146pt` 未満）で `BrowserToolbarLayout` と実 `BrowserBarRoot` を
-  /// 配置しても左端「戻る」ボタンが `x >= bounds.minX` で左クリップされず、幅不足の全面めくりでは
-  /// Peek ピルが 0×0 に畳まれ URL 欄・4 ボタンが壊れない。
+  /// 極狭幅（`120pt` 閉じプレビュー等 `176pt` 未満）で `BrowserToolbarLayout` と実 `BrowserBarRoot` を
+  /// 配置しても左端サイドバーボタンが `x >= bounds.minX` で左クリップされず、幅不足の全面めくりでは
+  /// Peek ピルが 0×0 に畳まれ URL 欄・5 ボタンが壊れない。
   func testToolbarLayoutAlignsLeadingAtUltraNarrowWidthAndCollapsesPeekPillToZero() throws {
     let leading = Theme.Layout.browserBarLeading
     let trailing = Theme.Layout.browserBarTrailing
     let button = Theme.Layout.browserIconButton
     let gap = Theme.Layout.browserBarGap
 
-    // 1. 極狭幅 120pt（閉じプレビュー最小幅）: 戻るボタンが左クリップされず左詰めに収まる。
+    // 1. 極狭幅 120pt（閉じプレビュー最小幅）: 左端ボタンが左クリップされず左詰めに収まる。
     let frames120 = measureToolbarLayout(width: 120, showsPeekPill: false)
-    XCTAssertEqual(frames120["back"]?.minX ?? -1, leading, accuracy: 0.5, "120pt で戻るボタンが左クリップされない")
-    XCTAssertEqual(frames120["back"]?.width ?? 0, button, accuracy: 0.5)
-    XCTAssertEqual(frames120["forward"]?.minX ?? -1, leading + button + gap, accuracy: 0.5)
-    XCTAssertEqual(frames120["reload"]?.minX ?? -1, leading + (button + gap) * 2, accuracy: 0.5)
+    XCTAssertEqual(
+      frames120["sidebar"]?.minX ?? -1, leading, accuracy: 0.5, "120pt でサイドバーボタンが左クリップされない")
+    XCTAssertEqual(frames120["sidebar"]?.width ?? 0, button, accuracy: 0.5)
+    XCTAssertEqual(frames120["back"]?.minX ?? -1, leading + button + gap, accuracy: 0.5)
+    XCTAssertEqual(frames120["forward"]?.minX ?? -1, leading + (button + gap) * 2, accuracy: 0.5)
+    XCTAssertEqual(frames120["reload"]?.minX ?? -1, leading + (button + gap) * 3, accuracy: 0.5)
     XCTAssertEqual(frames120["url"]?.width ?? -1, 0, accuracy: 0.5, "極狭幅では URL 欄は幅 0 に畳まれる")
 
     // 2. 実 BrowserBarRoot の 120pt 配置でも URL 欄が幅 0・左詰め位置を保つ。
     let ultraHosted = hostBrowser()
     ultraHosted.browser.setMode(.full, animated: false)
     let barRect120 = try measureEditingURLField(in: ultraHosted, width: 120)
-    let leftThreeEnd = leading + button * 3 + gap * 3
+    let leftFourEnd = leading + button * 4 + gap * 4
     XCTAssertEqual(
-      barRect120.minX, leftThreeEnd + Theme.Layout.browserURLPadLeading, accuracy: 0.5,
+      barRect120.minX, leftFourEnd + Theme.Layout.browserURLPadLeading, accuracy: 0.5,
       "実 BrowserBarRoot の 120pt で左詰めを保つ")
     XCTAssertEqual(barRect120.width, 0, accuracy: 0.5, "実 BrowserBarRoot の 120pt で URL 欄幅は 0")
 
-    // 3. 全面めくり: 広幅（600pt）ではピル表示＋URL >= 120pt、狭幅（280pt）ではピル 0×0＋4 ボタン健全。
+    // 3. 全面めくり: 広幅（600pt）ではピル表示＋URL >= 120pt、狭幅（280pt）ではピル 0×0＋5 ボタン健全。
     let wide = measureToolbarLayout(width: 600, showsPeekPill: true)
     XCTAssertEqual(wide["pill"]?.width ?? 0, 96, accuracy: 0.5, "広幅では Peek ピルが理想幅で並ぶ")
     XCTAssertGreaterThanOrEqual(wide["url"]?.width ?? 0, Theme.Layout.browserURLPeekMinWidth)
     XCTAssertLessThanOrEqual(wide["toggle"]?.maxX ?? 999, 600 - trailing + 0.5)
 
     let tight = measureToolbarLayout(width: 280, showsPeekPill: true)
-    XCTAssertEqual(tight["back"]?.minX ?? -1, leading, accuracy: 0.5)
+    XCTAssertEqual(tight["sidebar"]?.minX ?? -1, leading, accuracy: 0.5)
     XCTAssertEqual(tight["pill"]?.size, .zero, "幅不足の全面めくりでは Peek ピルを 0×0 に畳む")
     XCTAssertGreaterThan(tight["url"]?.width ?? 0, 100, "ピル省略後の残余幅を URL 欄へ配分する")
     XCTAssertEqual(tight["toggle"]?.width ?? 0, button, accuracy: 0.5)
@@ -301,6 +303,7 @@ extension BrowserLayerViewTests {
       urlMarginX: Theme.Layout.browserURLMarginX,
       urlPeekMinWidth: Theme.Layout.browserURLPeekMinWidth
     ) {
+      ToolbarLayoutProbe(id: "sidebar", store: store).frame(width: btn, height: btn)
       ToolbarLayoutProbe(id: "back", store: store).frame(width: btn, height: btn)
       ToolbarLayoutProbe(id: "forward", store: store).frame(width: btn, height: btn)
       ToolbarLayoutProbe(id: "reload", store: store).frame(width: btn, height: btn)

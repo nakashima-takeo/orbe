@@ -28,7 +28,7 @@ extension BrowserLayerViewTests {
     let webView = try XCTUnwrap(browser.webView)
     pumpMain(until: { finishCount >= 1 }, timeout: 5, "ローカル HTML の読み込み完了")
     XCTAssertTrue(browser.hasNavigated)
-    XCTAssertTrue(browser.emptyOverlay.isHidden)
+    XCTAssertTrue(browser.newTabHost.isHidden)
     XCTAssertTrue(browser.focusTarget === webView, "遷移後の焦点宛先は WKWebView")
     XCTAssertEqual(browser.toolbar.displayURL?.host, "docs.orbe.dev")
     XCTAssertEqual(browser.toolbar.displayURL?.isSecure, true)

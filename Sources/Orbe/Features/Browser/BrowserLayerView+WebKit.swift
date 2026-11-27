@@ -3,14 +3,16 @@ import WebKit
 
 /// `BrowserLayerView` のアクティブ `BrowserTabRuntime` マウント・ツールバー投影・遷移委譲・URL インライン編集。
 extension BrowserLayerView {
-  /// アクティブタブの実行体を `belowBar` へ差し替え、空画面・ツールバー・焦点を同期する。
+  /// アクティブタブの実行体を `contentView` へ差し替え、新タブ画面・ツールバー・焦点を同期する。
   func mountRuntime(_ next: BrowserTabRuntime?) {
     let nextSpaceId = session.store.activeSpace?.id
     let nextTabId = session.store.activeTab?.id
     if mountedRuntime === next && displayedSpaceId == nextSpaceId && displayedTabId == nextTabId {
-      emptyOverlay.isHidden = next?.hasNavigated ?? false
+      newTabHost.isHidden = next?.hasNavigated ?? false
       syncToolbar(from: next)
-      if let next, next.hasNavigated, mode.isOpen, !isEditingURL, window?.firstResponder === self {
+      if let next, next.hasNavigated, mode.isOpen, !isEditingURL,
+        !isPopoverOpen, !isSidebarOverlay, window?.firstResponder === self
+      {
         focusBrowser()
       }
       return
@@ -27,15 +29,19 @@ extension BrowserLayerView {
     displayedTabId = nextTabId
     clearWebSnapshot()
     if let next {
-      if next.webView.superview !== belowBar {
+      if next.webView.superview !== contentView {
         next.applyAppearance(effectiveAppearance)
-        next.webView.frame = belowBar.bounds
+        next.webView.frame = contentView.bounds
         next.webView.autoresizingMask = [.width, .height]
-        belowBar.addSubview(next.webView, positioned: .above, relativeTo: belowGround)
+        contentView.addSubview(next.webView, positioned: .below, relativeTo: newTabHost)
       }
-      emptyOverlay.isHidden = next.hasNavigated
+      newTabHost.isHidden = next.hasNavigated
+      if !next.hasNavigated {
+        newTabModel.inputText = ""
+      }
     } else {
-      emptyOverlay.isHidden = false
+      newTabHost.isHidden = false
+      newTabModel.inputText = ""
     }
     syncToolbar(from: next)
     if mode.isOpen && wasFocused {
@@ -97,9 +103,10 @@ extension BrowserLayerView {
   // MARK: - URL インライン編集
 
   func beginURLEditing() {
+    prepareForToolbarAction(endingURLEditing: false)
     toolbar.editingText = toolbar.rawURL
     toolbar.isEditingURL = true
-    toolbar.editSessionToken &+= 1
+    toolbar.editSessionToken = max(1, toolbar.editSessionToken &+ 1)
   }
 
   /// 明示確定（Enter）。有効な URL なら遷移して編集を閉じ `focusTarget` へ戻す。無効なら編集欄に留まる。

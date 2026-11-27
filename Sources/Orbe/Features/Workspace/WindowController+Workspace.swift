@@ -47,7 +47,12 @@ extension WindowController {
 
   func renameWorkspace(_ index: Int, to name: String) {
     guard store.renameWorkspace(index, to: name) else { return }
-    if index == activeWorkspace { refreshChrome() }
+    if index == activeWorkspace {
+      MainActor.assumeIsolated {
+        browserSession.syncCurrentWorkspace(current.id, name: current.name)
+      }
+      refreshChrome()
+    }
     scheduleSave()
   }
 

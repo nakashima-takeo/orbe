@@ -27,9 +27,9 @@ extension View {
   }
 }
 
-/// 戻る・進む・再読込・全面切替の 4 ボタンを左詰めで優先確保し、残余幅へ URL 欄を配る 1 パス配置。
+/// サイドバー開閉・戻る・進む・再読込・全面切替の 5 ボタンを左詰めで優先確保し、残余幅へ URL 欄を配る 1 パス配置。
 /// 全面めくり案内ピルは URL 欄へ `urlPeekMinWidth` 以上を確保できる幅でのみ表示し、狭幅では 0×0 に畳むことで
-/// 単一ビューツリーを保ち `BrowserURLTextField` の構造的アイデンティティを壊さない。
+/// 単一ビューツリーを保ち `BrowserInlineTextField` の構造的アイデンティティを壊さない。
 struct BrowserToolbarLayout: Layout {
   let spacing: CGFloat
   let urlMarginX: CGFloat

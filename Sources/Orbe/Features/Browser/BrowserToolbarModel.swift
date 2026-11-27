@@ -3,6 +3,7 @@ import Foundation
 /// 36px ブラウザツールバーの観測モデル。`BrowserLayerView` が書き、SwiftUI `BrowserBarRoot` が読む。
 @Observable final class BrowserToolbarModel {
   var mode: BrowserMode = .closed
+  var isSidebarOpen = false
   var displayURL: BrowserDisplayURL?
   var rawURL = ""
   var canGoBack = false
@@ -18,6 +19,7 @@ import Foundation
   /// インライン URL 編集の開始ごとに進めるトークン。入力欄のフォーカス＋全選択を 1 回だけ起動する。
   var editSessionToken = 0
 
+  var onToggleSidebar: () -> Void = {}
   var onBack: () -> Void = {}
   var onForward: () -> Void = {}
   var onReloadOrStop: () -> Void = {}

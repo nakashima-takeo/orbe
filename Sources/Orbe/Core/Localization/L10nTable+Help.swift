@@ -35,7 +35,10 @@ extension L10n {
     .helpShortcutPeekTerminal: (
       "押している間、最上層の 1 枚をめくって下の層を表示", "Hold to peek beneath the top layer"
     ),
-    .helpShortcutSaveDocument: ("エディターのファイルを保存", "Save the editor file"),
+    .helpShortcutSaveDocument: (
+      "エディターのファイルを保存（ブラウザはサイドバー開閉）",
+      "Save editor file (toggle sidebar in browser)"
+    ),
     .helpShortcutToggleEditorSidebar: ("エディターのサイドバーを開く・閉じる", "Show or hide the editor sidebar"),
     .helpShortcutToggleEditorItemList: (
       "エディターのファイルの一覧を開く・閉じる", "Show or hide the editor's file list"
@@ -50,15 +53,22 @@ extension L10n {
       "ワークスペースを切り替え・作成", "Switch / create workspace"
     ),
     .helpShortcutNewTab: (
-      "新しいタブ（worktree・ブランチを選んで開く）", "New tab (pick a worktree or branch)"
+      "新しいタブ（端末は worktree 選択・ブラウザは新タブ）",
+      "New tab (pick worktree in terminal, new tab in browser)"
     ),
-    .helpShortcutClosedAgents: ("閉じたエージェント", "Closed agents"),
+    .helpShortcutClosedAgents: (
+      "閉じたエージェント（ブラウザは閉じたタブを復元）",
+      "Closed agents (reopen closed tab in browser)"
+    ),
     .helpShortcutRenameTab: (
       "タブをリネーム（ブラウザはページを再読込）", "Rename tab (reload page in browser)"
     ),
     .helpShortcutNextTab: ("次のタブへ", "Next tab"),
     .helpShortcutPrevTab: ("前のタブへ", "Previous tab"),
-    .helpShortcutCloseTab: ("タブを閉じる", "Close tab"),
+    .helpShortcutCloseTab: (
+      "タブを閉じる（ブラウザは TODAY タブを閉じる）",
+      "Close tab (TODAY tab in browser)"
+    ),
     .helpShortcutLaunchDefaultAgent: ("デフォルトエージェントを起動", "Launch default agent"),
     .helpShortcutAgentPalette: ("エージェント起動パレット", "Agent launch palette"),
     .helpShortcutTasks: ("タスク", "Tasks"),

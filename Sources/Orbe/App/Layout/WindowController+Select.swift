@@ -61,7 +61,9 @@ extension WindowController {
     if statusModel.editingIndex != nil { endTabRename() }
     if let tab = ws.selectedTab { store.recordMaterialization(of: tab, in: ws) }
     reconcileContent()
-    MainActor.assumeIsolated { browserSession.syncCurrentWorkspace(ws.id) }
+    MainActor.assumeIsolated {
+      browserSession.syncCurrentWorkspace(ws.id, name: ws.name)
+    }
     browserView.setPeekUnderlay(browserPeekUnderlay)
     if store.hasBoard(ws) { projectBoardWidgets() }
     // overlay 表示中は入力を奪わない（フォーカス復帰は dismiss 側が担う）。

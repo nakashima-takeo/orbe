@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// 36px ブラウザツールバー（下端 hairline 1pt を含む）。
-/// 左から 戻る・進む・再読込/停止・URL 欄（クリックでインライン編集）・全面 Peek ピル・全面⇄右シート切替。
+/// 左から サイドバー開閉・戻る・進む・再読込/停止・URL 欄（クリックでインライン編集）・全面 Peek ピル・全面⇄右シート切替。
 /// 背景（`barGround`）は `BrowserLayerView` が常に 100% 不透明で塗り、非フォーカス時は子要素だけを 0.68 へ落ち着かせる。
 struct BrowserBarRoot: View {
   @Bindable var model: BrowserToolbarModel
@@ -30,6 +30,13 @@ struct BrowserBarRoot: View {
       urlMarginX: Theme.Layout.browserURLMarginX,
       urlPeekMinWidth: Theme.Layout.browserURLPeekMinWidth
     ) {
+      BrowserIconButton(
+        glyph: BrowserGlyphs.sidebar,
+        isEnabled: true,
+        isActive: model.isSidebarOpen,
+        tooltip: localization.string(.browserBarToggleSidebar),
+        action: model.onToggleSidebar
+      )
       BrowserIconButton(
         glyph: BrowserGlyphs.back,
         isEnabled: model.canGoBack,
@@ -117,7 +124,7 @@ private struct BrowserIconButton: View {
   }
 }
 
-/// URL 欄。通常時は HTTPS 鍵＋ホスト/パス 2 トーン表示、クリックで `NSTextField` インライン編集へ切り替える。
+/// URL 欄。通常時は HTTPS 鍵＋ホスト/パス 2 トーン表示、クリックで `BrowserInlineTextField` インライン編集へ切り替える。
 /// 底面に読込進捗バーを重ねる。
 private struct BrowserURLBar: View {
   @Bindable var model: BrowserToolbarModel
@@ -133,11 +140,13 @@ private struct BrowserURLBar: View {
           color: Color.theme.textMuted)
       }
       if model.isEditingURL {
-        BrowserURLTextField(
+        BrowserInlineTextField(
           text: $model.editingText,
           placeholder: localization.string(.browserBarURLPlaceholder),
-          sessionToken: model.editSessionToken,
-          isEditing: { model.isEditingURL },
+          font: Theme.Typography.browserURL,
+          focusToken: model.editSessionToken,
+          selectAllOnFocus: true,
+          canFocus: { model.isEditingURL },
           onCommit: model.onCommitURL,
           onCancel: model.onCancelURL,
           onBlur: model.onBlurURL
@@ -224,116 +233,6 @@ private struct BrowserFullPeekPill: View {
         .lineLimit(1)
     }
     .fixedSize()
-  }
-}
-
-/// インライン URL 入力欄（標準 `NSTextField` 経路）。
-/// 日本語変換中（`hasMarkedText()`）は Enter / Esc で編集を終了せず IME に委ねる。
-private struct BrowserURLTextField: NSViewRepresentable {
-  @Binding var text: String
-  let placeholder: String
-  let sessionToken: Int
-  let isEditing: () -> Bool
-  let onCommit: (String) -> Bool
-  let onCancel: () -> Void
-  let onBlur: () -> Void
-
-  func makeNSView(context: Context) -> NSTextField {
-    let field = NSTextField(string: text)
-    field.font = Theme.Typography.browserURL
-    field.textColor = Theme.Color.textPrimary
-    field.isBordered = false
-    field.drawsBackground = false
-    field.focusRingType = .none
-    field.usesSingleLineMode = true
-    field.lineBreakMode = .byClipping
-    field.cell?.isScrollable = true
-    field.placeholderString = placeholder
-    field.delegate = context.coordinator
-    return field
-  }
-
-  func updateNSView(_ nsView: NSTextField, context: Context) {
-    let coordinator = context.coordinator
-    coordinator.onTextChange = { text = $0 }
-    coordinator.isEditing = isEditing
-    coordinator.onCommit = onCommit
-    coordinator.onCancel = onCancel
-    coordinator.onBlur = onBlur
-    nsView.placeholderString = placeholder
-    if coordinator.lastSessionToken != sessionToken {
-      coordinator.lastSessionToken = sessionToken
-      coordinator.endedExplicitly = false
-      nsView.stringValue = text
-      DispatchQueue.main.async {
-        guard coordinator.isEditing(), let window = nsView.window else { return }
-        if window.makeFirstResponder(nsView) {
-          (window.firstResponder as? NSTextView)?.selectAll(nil)
-        }
-      }
-    }
-  }
-
-  func makeCoordinator() -> Coordinator {
-    Coordinator(
-      onTextChange: { text = $0 }, isEditing: isEditing,
-      onCommit: onCommit, onCancel: onCancel, onBlur: onBlur)
-  }
-
-  final class Coordinator: NSObject, NSTextFieldDelegate {
-    var onTextChange: (String) -> Void
-    var isEditing: () -> Bool
-    var onCommit: (String) -> Bool
-    var onCancel: () -> Void
-    var onBlur: () -> Void
-    var lastSessionToken = Int.min
-    var endedExplicitly = false
-
-    init(
-      onTextChange: @escaping (String) -> Void,
-      isEditing: @escaping () -> Bool,
-      onCommit: @escaping (String) -> Bool,
-      onCancel: @escaping () -> Void,
-      onBlur: @escaping () -> Void
-    ) {
-      self.onTextChange = onTextChange
-      self.isEditing = isEditing
-      self.onCommit = onCommit
-      self.onCancel = onCancel
-      self.onBlur = onBlur
-    }
-
-    func controlTextDidChange(_ obj: Notification) {
-      guard let field = obj.object as? NSTextField else { return }
-      onTextChange(field.stringValue)
-    }
-
-    func control(
-      _ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector
-    ) -> Bool {
-      if textView.hasMarkedText() {
-        return commandSelector == #selector(NSResponder.insertNewline(_:))
-          || commandSelector == #selector(NSResponder.cancelOperation(_:))
-      }
-      if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-        endedExplicitly = true
-        if !onCommit(control.stringValue) {
-          endedExplicitly = false
-        }
-        return true
-      }
-      if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-        endedExplicitly = true
-        onCancel()
-        return true
-      }
-      return false
-    }
-
-    func controlTextDidEndEditing(_ obj: Notification) {
-      guard !endedExplicitly else { return }
-      onBlur()
-    }
   }
 }
 

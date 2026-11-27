@@ -73,7 +73,7 @@ final class BrowserLayerViewTests: OrbeTestCase {
 
     browser.setMode(.sheet, animated: false)
     XCTAssertNil(browser.webView, "タブ 0 枚の空画面では WKWebView を生成しない")
-    XCTAssertFalse(browser.emptyOverlay.isHidden)
+    XCTAssertFalse(browser.newTabHost.isHidden)
 
     browser.loadHTMLString("<p>lazy</p>", baseURL: URL(string: "https://docs.orbe.dev/lazy"))
     let webView = try XCTUnwrap(browser.webView, "遷移要求で初めて遅延生成される")
@@ -82,9 +82,9 @@ final class BrowserLayerViewTests: OrbeTestCase {
 
   // MARK: - hitTest 貫通と透かし吸収
 
-  /// 右シート左半分と閉じフェード中は下層へ貫通し、シート内空画面クリックは焦点を取る。
-  /// 透かし中は左半分を含め全領域をブラウザ層自身が吸収する。
-  func testHitTestPassesThroughLeftHalfAndClosingFadeAndAbsorbsWhilePeeking() {
+  /// 右シート左半分と閉じフェード中は下層へ貫通し、シート内新タブ画面はブラウザ層配下が受けて
+  /// 余白タップで焦点を取る。透かし中は左半分を含め全領域をブラウザ層自身が吸収する。
+  func testHitTestPassesThroughLeftHalfAndClosingFadeAndAbsorbsWhilePeeking() throws {
     let hosted = hostBrowser(reduceMotion: false)
     let (window, stage, underlay, browser) = (
       hosted.window, hosted.stage, hosted.underlay, hosted.browser
@@ -95,11 +95,14 @@ final class BrowserLayerViewTests: OrbeTestCase {
     let leftPoint = NSPoint(x: 100, y: 300)
     let sheetPoint = NSPoint(x: 750, y: 300)
     XCTAssertTrue(stage.hitTest(leftPoint) === underlay, "右シート左半分は下層へ貫通する")
-    XCTAssertTrue(stage.hitTest(sheetPoint) === browser, "空画面はブラウザ層自身が受ける")
+    let sheetHit = try XCTUnwrap(stage.hitTest(sheetPoint))
+    XCTAssertTrue(
+      sheetHit === browser || sheetHit.isDescendant(of: browser),
+      "新タブ画面はブラウザ層配下が受ける")
 
     window.makeFirstResponder(nil)
-    browser.mouseDown(with: .mouse(.leftMouseDown, at: sheetPoint, in: window))
-    XCTAssertTrue(window.firstResponder === browser, "空画面クリックでブラウザ層が焦点を取る")
+    browser.handleNewTabBackgroundTap()
+    XCTAssertTrue(window.firstResponder === browser, "新タブ画面余白タップでブラウザ層が焦点を取る")
 
     browser.setPeeking(true, animated: false)
     XCTAssertTrue(stage.hitTest(leftPoint) === browser, "透かし中は左半分もブラウザ層が吸収する")

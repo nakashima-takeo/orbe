@@ -134,7 +134,7 @@ final class BrowserSessionTests: OrbeTestCase {
   // MARK: - 遅延 materialize・タブ切替・閉鎖中掃除
 
   /// 閉鎖中・非アクティブタブ・`url == nil` では `WKWebView` を作らず、開放時のアクティブ表示で初めて生成する。
-  /// タブ切替では旧 `WKWebView` が `belowBar` から外れつつ JS 状態を保ち、再選択で同一実体が戻る。
+  /// タブ切替では旧 `WKWebView` が `contentView` から外れつつ JS 状態を保ち、再選択で同一実体が戻る。
   /// 閉鎖中のタブ閉鎖でも破棄済み `WKWebView` とツールバー残像を即座に外す。
   func testLazyMaterializationTabSwitchPreservationAndClosedCleanup() throws {
     let server = try LocalLoopbackHTTPServer(routes: [
@@ -171,19 +171,19 @@ final class BrowserSessionTests: OrbeTestCase {
     pumpMain(until: { finishes >= 1 }, timeout: 5, "tabA 読み込み完了")
     XCTAssertEqual(try evalJSString("(window.__keep = 'alive')", in: webViewA), "alive")
 
-    // tabB へ切り替えると webViewA は belowBar から外れつつ runtimes で状態を維持する。
+    // tabB へ切り替えると webViewA は contentView から外れつつ runtimes で状態を維持する。
     let beforeB = finishes
     XCTAssertTrue(session.selectTab(tabB.id))
     let webViewB = try XCTUnwrap(browser.webView)
     XCTAssertFalse(webViewA === webViewB)
     XCTAssertNil(webViewA.superview, "非アクティブへ移った旧 WKWebView は表示ツリーから外す")
-    XCTAssertTrue(webViewB.superview === browser.belowBar)
+    XCTAssertTrue(webViewB.superview === browser.contentView)
     pumpMain(until: { finishes > beforeB }, timeout: 5, "tabB 読み込み完了")
 
     // tabA へ戻すと同一 WKWebView が再マウントされ JS 状態が保たれる。
     XCTAssertTrue(session.selectTab(tabA.id))
     XCTAssertTrue(browser.webView === webViewA, "既存ランタイムの同一 WKWebView が再マウントされる")
-    XCTAssertTrue(webViewA.superview === browser.belowBar)
+    XCTAssertTrue(webViewA.superview === browser.contentView)
     XCTAssertEqual(try evalJSString("window.__keep", in: webViewA), "alive")
 
     // 閉鎖中に tabA を閉じても破棄済み WKWebView 参照とツールバー残像を残さない。

@@ -234,9 +234,17 @@ extension BrowserStore {
     }
   }
 
-  /// 現在のコンテキストで復元可能な最新の閉じたタブを元スペースの `TODAY` 末尾へ復元し選択する。
-  func reopenClosedTab(now: Date = Date()) -> BrowserStoreCommitResult<BrowserTab?> {
-    guard let entry = nextReopenableClosedTab() else { return noopResult(nil) }
+  /// 現在のコンテキストで復元可能な閉じたタブ（`id` 指定時はその 1 件、省略時は最新 1 件）を元スペースの `TODAY` 末尾へ復元し選択する。
+  func reopenClosedTab(id: Int64? = nil, now: Date = Date()) -> BrowserStoreCommitResult<
+    BrowserTab?
+  > {
+    let target: BrowserClosedTab? =
+      if let id {
+        reopenableClosedTabs().first { $0.id == id }
+      } else {
+        nextReopenableClosedTab()
+      }
+    guard let entry = target else { return noopResult(nil) }
     guard let space = space(id: entry.originalSpaceId),
       let nextSelection = Self.selection(for: space, currentWorkspaceId: currentWorkspaceId)
     else { return .failed }
