@@ -15,10 +15,11 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = browser }
+    defer { webView.navigationDelegate = runtime }
 
     let serverA = try LocalLoopbackHTTPServer(routes: [
       "/page-a": "<!doctype html><p>origin-a</p>",
@@ -82,10 +83,11 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = browser }
+    defer { webView.navigationDelegate = runtime }
 
     let serverA = try LocalLoopbackHTTPServer(routes: ["/page-a": "<!doctype html><p>a</p>"])
     defer { serverA.stop() }
@@ -132,10 +134,11 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = browser }
+    defer { webView.navigationDelegate = runtime }
 
     let server = try LocalLoopbackHTTPServer(responses: [
       "/page-a": .html("<!doctype html><p>a</p>"),
@@ -185,10 +188,11 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = browser }
+    defer { webView.navigationDelegate = runtime }
 
     var finishCount = 0
     browser.onNavigationFinish = { finishCount += 1 }

@@ -1,8 +1,8 @@
 import AppKit
 import WebKit
 
-/// `BrowserLayerView` の `WKNavigationDelegate` / `WKUIDelegate` と遷移・オリジン検証。
-extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
+/// `BrowserTabRuntime` の `WKNavigationDelegate` / `WKUIDelegate` と遷移・オリジン検証。
+extension BrowserTabRuntime: WKNavigationDelegate, WKUIDelegate {
   func webView(
     _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
     decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
@@ -40,6 +40,7 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
   func webView(
     _ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!
   ) {
+    guard !isInvalidated else { return }
     guard let navigation else {
       syncNavigationState()
       return
@@ -78,11 +79,12 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     _ webView: WKWebView,
     didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
   ) {
-    guard let navigation else { return }
+    guard !isInvalidated, let navigation else { return }
     recordLatestURLIfCurrent(for: navigation, in: webView)
   }
 
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    guard !isInvalidated else { return }
     let meta = navigation.flatMap { navigationMetadata.removeValue(for: $0) }
     let isCurrentPending =
       pendingNavigation == nil || pendingNavigation?.matches(navigation) == true
@@ -111,7 +113,8 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     applyCommittedTargetURL(
       committedTargetURL, wasLocalHTML: wasLocalHTML,
       isCurrentPending: isCurrentPending, in: webView)
-    syncToolbarStatus(from: webView)
+    syncWebViewStatus()
+    notifyStateChange()
   }
 
   private func recordLatestURLIfCurrent(for navigation: WKNavigation, in webView: WKWebView) {
@@ -147,28 +150,47 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
   private func applyCommittedTargetURL(
     _ committedTargetURL: URL?, wasLocalHTML: Bool, isCurrentPending: Bool, in webView: WKWebView
   ) {
+    let previousCommittedURL = committedPage?.url
     if let url = committedTargetURL, url.scheme?.lowercased() != "about" {
       committedPage = CommittedPage(url: url, isLocalHTML: wasLocalHTML)
       if isCurrentPending {
         lastRequestedURL = wasLocalHTML ? nil : url
       }
-      applyToolbarURL(url, isSecure: Self.isSecure(url, in: webView))
+      applyURLState(url, isSecure: Self.isSecure(url, in: webView))
+      if !wasLocalHTML, BrowserURLInput.isValidHTTPNavigationURL(url) {
+        let liveTitle = (webView.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextTitle: String?
+        if url != previousCommittedURL {
+          title = liveTitle
+          nextTitle = liveTitle
+        } else if !liveTitle.isEmpty {
+          title = liveTitle
+          nextTitle = liveTitle
+        } else {
+          nextTitle = nil
+        }
+        onCommittedNavigation?(url, nextTitle)
+      }
     } else {
       committedPage = nil
       if isCurrentPending {
         lastRequestedURL = nil
       }
-      toolbar.rawURL = ""
-      toolbar.displayURL = nil
+      rawURL = ""
+      displayURL = nil
+      title = ""
     }
+    syncTitleFromWebView()
   }
 
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    guard !isInvalidated else { return }
     syncNavigationState()
     onNavigationFinish?()
   }
 
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    guard !isInvalidated else { return }
     syncNavigationState()
   }
 
@@ -176,11 +198,13 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
     _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
     withError error: Error
   ) {
+    guard !isInvalidated else { return }
     if let navigation {
       navigationMetadata.removeValue(for: navigation)
     }
     guard let pending = pendingNavigation, pending.matches(navigation) else {
-      syncToolbarStatus(from: webView)
+      syncWebViewStatus()
+      notifyStateChange()
       return
     }
     pendingNavigation = nil
@@ -189,24 +213,27 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
   }
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    guard !isInvalidated else { return }
     pendingNavigation = nil
     navigationMetadata.removeAll()
     restoreLastRequestedURLToCommitted()
-    toolbar.isLoading = false
-    toolbar.estimatedProgress = 0
+    isLoading = false
+    estimatedProgress = 0
     if let committed = committedPage {
-      applyToolbarURL(committed.url, isSecure: Self.isSecure(committed.url, in: webView))
+      applyURLState(committed.url, isSecure: Self.isSecure(committed.url, in: webView))
     } else if let requested = lastRequestedURL {
-      applyToolbarURL(requested, isSecure: false)
+      applyURLState(requested, isSecure: false)
     }
+    notifyStateChange()
   }
 
   func webView(
     _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
     for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
   ) -> WKWebView? {
-    guard navigationAction.targetFrame == nil,
-      Self.isValidHTTPNavigationURL(navigationAction.request.url),
+    guard !isInvalidated,
+      navigationAction.targetFrame == nil,
+      BrowserURLInput.isValidHTTPNavigationURL(navigationAction.request.url),
       navigationAction.sourceFrame.isMainFrame
         || isSameOriginAsMainFrame(navigationAction.sourceFrame.securityOrigin)
     else { return nil }
@@ -231,15 +258,6 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
 
   static func isSecure(_ url: URL, in webView: WKWebView) -> Bool {
     url.scheme?.lowercased() == "https" && webView.hasOnlySecureContent
-  }
-
-  static func isValidHTTPNavigationURL(_ url: URL?) -> Bool {
-    guard let url,
-      let scheme = url.scheme?.lowercased(),
-      scheme == "http" || scheme == "https",
-      let host = url.host, !host.isEmpty
-    else { return false }
-    return true
   }
 
   static func effectivePort(scheme: String, port: Int?) -> Int? {
@@ -289,7 +307,7 @@ extension BrowserLayerView: WKNavigationDelegate, WKUIDelegate {
   }
 
   private func isSameOriginAsMainFrame(_ sourceOrigin: WKSecurityOrigin) -> Bool {
-    guard let mainURL = committedURL ?? webView?.url,
+    guard let mainURL = committedURL ?? webView.url,
       let mainScheme = mainURL.scheme?.lowercased(),
       mainScheme == "http" || mainScheme == "https",
       let mainHost = mainURL.host, !mainHost.isEmpty
