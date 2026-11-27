@@ -65,11 +65,12 @@ final class BrowserSession {
   static func inMemory(
     language: Language = .systemDefault,
     workspaceId: UUID = UUID(),
+    workspaceName: String = "",
     now: @escaping () -> Date = Date.init
   ) -> BrowserSession {
     let store = BrowserStore.inMemory(language: language, now: now())
     let session = BrowserSession(store: store, now: now)
-    session.start(initialWorkspaceId: workspaceId)
+    session.start(initialWorkspaceId: workspaceId, workspaceName: workspaceName)
     return session
   }
 
@@ -78,15 +79,16 @@ final class BrowserSession {
   /// 起動順序を固定する単一入口:
   /// 1. 起動時 12h 自動整理（保護無し）→ 2. 開始ゲート解放と初回 workspace 同期 →
   /// 3. 削除キュー再試行 → 4. 壁時計タイマー開始。
-  func start(initialWorkspaceId: UUID) {
+  func start(initialWorkspaceId: UUID, workspaceName: String = "") {
     guard !isStarted else {
-      syncCurrentWorkspace(initialWorkspaceId)
+      syncCurrentWorkspace(initialWorkspaceId, name: workspaceName)
       return
     }
     if let removed = store.pruneExpiredTodayTabs(now: now(), protectedTabId: nil).value {
       invalidateRuntimes(removed)
     }
     isStarted = true
+    store.currentWorkspaceName = workspaceName
     _ = store.setCurrentWorkspace(initialWorkspaceId, now: now())
     syncVisibilityAndDisplay(touchingLeavingTab: false)
     drainPendingStoreRemovals()
@@ -97,9 +99,13 @@ final class BrowserSession {
     cleaner.stop()
   }
 
-  /// `renderSelection()` から呼ばれる冪等な workspace 同期。`start` 完了前および ID 不変時は無操作。
-  func syncCurrentWorkspace(_ workspaceId: UUID) {
-    guard isStarted, store.currentWorkspaceId != workspaceId else { return }
+  /// `renderSelection()`・`renameWorkspace()` から呼ばれる冪等な workspace 同期。`start` 完了前は無操作。
+  func syncCurrentWorkspace(_ workspaceId: UUID, name: String? = nil) {
+    guard isStarted else { return }
+    if let name, store.currentWorkspaceName != name {
+      store.currentWorkspaceName = name
+    }
+    guard store.currentWorkspaceId != workspaceId else { return }
     _ = store.setCurrentWorkspace(workspaceId, now: now())
     syncVisibilityAndDisplay()
   }

@@ -52,9 +52,8 @@ extension WindowController {
       return true
     }
     guard model.overlay == .none, statusModel.editingIndex == nil else { return false }
-    if browserView.isEditingURL {
-      guard command == .toggleBrowser else { return false }
-      browserView.endURLEditingExternally()
+    if browserView.mode.isOpen && (browserView.focusIsInside || browserView.isEditingURL) {
+      return false
     }
     handleWindowCommand(command)
     return true

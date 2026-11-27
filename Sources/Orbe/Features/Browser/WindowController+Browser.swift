@@ -11,7 +11,9 @@ extension WindowController {
   }
 
   func startBrowserSession() {
-    MainActor.assumeIsolated { browserSession.start(initialWorkspaceId: current.id) }
+    MainActor.assumeIsolated {
+      browserSession.start(initialWorkspaceId: current.id, workspaceName: current.name)
+    }
   }
 
   func stopBrowserSession() {

@@ -19,6 +19,8 @@ import Observation
   private(set) var pendingStoreRemovals: [BrowserPendingStoreRemoval]
   /// 現在のアクティブ workspace ID（ランタイム同期値。永続化しない）。
   var currentWorkspaceId: UUID?
+  /// 現在のアクティブ workspace 表示名（ランタイム同期値。永続化しない）。
+  var currentWorkspaceName = ""
 
   private var database: BrowserDatabase?
   private(set) var unavailableReason: String?
@@ -135,13 +137,34 @@ import Observation
     return space.profileId
   }
 
-  /// 現在のコンテキストで復元可能な最新の閉じたタブ（生存自由スペースまたは現在 workspace のローカルスペース由来）。
-  func nextReopenableClosedTab() -> BrowserClosedTab? {
+  func displayName(for space: BrowserSpace, fallbackLocalName: String) -> String {
+    switch space.kind {
+    case .free:
+      return space.name
+    case .local:
+      if space.workspaceId == currentWorkspaceId {
+        let trimmed = currentWorkspaceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+      }
+      let stored = space.name.trimmingCharacters(in: .whitespacesAndNewlines)
+      return stored.isEmpty ? fallbackLocalName : stored
+    }
+  }
+
+  /// 現在のコンテキストで復元可能な閉じたタブ一覧（最新順。生存自由スペースまたは現在 workspace のローカルスペース由来）。
+  func reopenableClosedTabs(limit: Int? = nil) -> [BrowserClosedTab] {
     let freeIds = Set(spaces.filter { $0.kind == .free }.map(\.id))
     let localId = currentLocalSpace?.id
-    return closedTabs.first { entry in
+    let visible = closedTabs.filter { entry in
       freeIds.contains(entry.originalSpaceId) || entry.originalSpaceId == localId
     }
+    guard let limit else { return visible }
+    return Array(visible.prefix(max(0, limit)))
+  }
+
+  /// 現在のコンテキストで復元可能な最新の閉じたタブ（生存自由スペースまたは現在 workspace のローカルスペース由来）。
+  func nextReopenableClosedTab() -> BrowserClosedTab? {
+    reopenableClosedTabs(limit: 1).first
   }
 
   /// 全スペースの `TODAY` タブのうち保護対象を除いた最も早い整理予定時刻を返す。

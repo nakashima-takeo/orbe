@@ -150,8 +150,8 @@ extension BrowserSession {
   }
 
   @discardableResult
-  func reopenClosedTab() -> BrowserTab? {
-    guard let restored = store.reopenClosedTab(now: now()).value ?? nil else { return nil }
+  func reopenClosedTab(id: Int64? = nil) -> BrowserTab? {
+    guard let restored = store.reopenClosedTab(id: id, now: now()).value ?? nil else { return nil }
     syncVisibilityAndDisplay()
     return restored
   }
