@@ -19,53 +19,49 @@ struct BrowserProfilePopover: View {
   @State private var draftMCPAllowed = false
   @State private var nameFocusToken = 0
   @State private var reassignProfileId: UUID?
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   private var store: BrowserStore { session.store }
 
   var body: some View {
-    BrowserPopoverScrollCard {
-      VStack(alignment: .leading, spacing: 0) {
-        switch screen {
-        case .main:
-          mainScreen
-        case .form(let editingId):
-          BrowserProfileFormSection(
-            editingId: editingId,
-            canDelete: editingId != nil && store.profiles.count > 1,
-            draftName: $draftName,
-            draftColor: $draftColor,
-            draftMCPAllowed: $draftMCPAllowed,
-            nameFocusToken: nameFocusToken,
+    VStack(alignment: .leading, spacing: 0) {
+      switch screen {
+      case .main:
+        mainScreen
+      case .form(let editingId):
+        BrowserProfileFormSection(
+          editingId: editingId,
+          canDelete: editingId != nil && store.profiles.count > 1,
+          draftName: $draftName,
+          draftColor: $draftColor,
+          draftMCPAllowed: $draftMCPAllowed,
+          nameFocusToken: nameFocusToken,
+          localization: localization,
+          onBack: { switchScreen(.main) },
+          onSave: { saveForm(editingId: editingId) },
+          onCancelEsc: onDismiss,
+          onRequestDelete: { id in openDeleteConfirm(targetId: id) })
+      case .confirmDelete(let targetId):
+        if let target = store.profile(id: targetId) {
+          BrowserProfileDeleteSection(
+            target: target,
+            candidates: store.profiles.filter { $0.id != targetId },
+            hasReferencingSpaces: store.spaces.contains { $0.profileId == targetId },
+            reassignProfileId: $reassignProfileId,
             localization: localization,
-            onBack: { switchScreen(.main) },
-            onSave: { saveForm(editingId: editingId) },
-            onCancelEsc: {
-              onBeforeFormUnmount()
-              onDismiss()
-            },
-            onRequestDelete: { id in openDeleteConfirm(targetId: id) })
-        case .confirmDelete(let targetId):
-          if let target = store.profile(id: targetId) {
-            BrowserProfileDeleteSection(
-              target: target,
-              candidates: store.profiles.filter { $0.id != targetId },
-              hasReferencingSpaces: store.spaces.contains { $0.profileId == targetId },
-              reassignProfileId: $reassignProfileId,
-              localization: localization,
-              onBack: { openForm(editing: target) },
-              onCancel: { switchScreen(.main) },
-              onDelete: { fallbackId in
-                if session.deleteProfile(targetId, reassigningTo: fallbackId) {
-                  switchScreen(.main)
-                }
-              })
-          } else {
-            mainScreen
-          }
+            onBack: { openForm(editing: target) },
+            onCancel: { switchScreen(.main) },
+            onDelete: { fallbackId in
+              if session.deleteProfile(targetId, reassigningTo: fallbackId) {
+                switchScreen(.main)
+              }
+            })
+        } else {
+          mainScreen
         }
       }
-      .padding(Theme.Space.note)
     }
+    .padding(Theme.Space.note)
   }
 
   @ViewBuilder
@@ -123,10 +119,13 @@ struct BrowserProfilePopover: View {
           width: Theme.Layout.browserSidebarPopoverDot,
           height: Theme.Layout.browserSidebarPopoverDot)
       VStack(alignment: .leading, spacing: 2) {
-        Text(localization.format(.browserProfileHeading, profile.name))
-          .font(Font.theme.browserPopoverTitle)
-          .foregroundStyle(Color.theme.textPrimary)
-          .lineLimit(1)
+        fontResolver.text(
+          localization.format(.browserProfileHeading, profile.name),
+          base: Theme.Typography.browserPopoverTitle
+        )
+        .font(Font.theme.browserPopoverTitle)
+        .foregroundStyle(Color.theme.textPrimary)
+        .lineLimit(1)
         Text(localization.string(.browserProfileCookieNote))
           .font(Font.theme.browserSidebarProfilePill)
           .foregroundStyle(Color.theme.textMuted)
@@ -163,8 +162,22 @@ struct BrowserProfilePopover: View {
   }
 
   private func openDeleteConfirm(targetId: UUID) {
-    reassignProfileId = store.profiles.first(where: { $0.id != targetId })?.id
+    let target = store.profile(id: targetId)
+    let candidates = store.profiles.filter { $0.id != targetId }
+    reassignProfileId = Self.defaultReassignProfileId(for: target, candidates: candidates)
     switchScreen(.confirmDelete(targetId: targetId))
+  }
+
+  /// 非公開プロファイルの削除時は fail-open を避け、他に非公開候補があればそれを既定付け替え先とする。
+  static func defaultReassignProfileId(
+    for target: BrowserProfile?, candidates: [BrowserProfile]
+  ) -> UUID? {
+    if target?.mcpAllowed == false,
+      let privateCandidate = candidates.first(where: { !$0.mcpAllowed })
+    {
+      return privateCandidate.id
+    }
+    return candidates.first?.id
   }
 
   private func saveForm(editingId: UUID?) -> Bool {
@@ -177,12 +190,9 @@ struct BrowserProfilePopover: View {
       else { return false }
     } else {
       guard
-        let created = session.createProfile(
-          name: trimmed, color: draftColor, mcpAllowed: draftMCPAllowed)
+        session.createProfile(
+          name: trimmed, color: draftColor, mcpAllowed: draftMCPAllowed) != nil
       else { return false }
-      if let spaceId = store.activeSpace?.id {
-        _ = session.setSpaceProfile(spaceId, profileId: created.id)
-      }
     }
     switchScreen(.main)
     return true
@@ -244,6 +254,7 @@ private struct BrowserProfileListRow: View {
   let onEdit: () -> Void
   @State private var isHovered = false
   @State private var isEditHovered = false
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     HStack(spacing: Theme.Space.step) {
@@ -251,7 +262,7 @@ private struct BrowserProfileListRow: View {
         Circle()
           .fill(profile.color.themeColor)
           .frame(width: Theme.Layout.browserSidebarDot, height: Theme.Layout.browserSidebarDot)
-        Text(profile.name)
+        fontResolver.text(profile.name, base: Theme.Typography.browserSidebarTab)
           .font(Font.theme.browserSidebarTab)
           .foregroundStyle(
             isSelected || isHovered ? Color.theme.textPrimary : Color.theme.textSecondary

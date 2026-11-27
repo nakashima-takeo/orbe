@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 extension BrowserProfileColor {
@@ -13,63 +14,13 @@ extension BrowserProfileColor {
   }
 }
 
-/// タブ・閉じたタブの表示タイトル・短縮ラベル・モノグラム 1 文字・チップ配色を決定論的に導く。
-enum BrowserTabDisplay {
-  static func title(url: URL?, title: String, fallback: String) -> String {
-    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !trimmed.isEmpty { return trimmed }
-    if let host = BrowserURLInput.display(url)?.host, !host.isEmpty { return host }
-    return fallback
-  }
-
-  static func shortLabel(url: URL?, title: String, fallback: String) -> String {
-    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !trimmed.isEmpty { return trimmed }
-    return strippedHost(for: url) ?? fallback
-  }
-
-  static func monogram(url: URL?, title: String) -> String? {
-    if let host = strippedHost(for: url), let first = host.first {
-      return String(first).uppercased()
-    }
-    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.first.map { String($0).uppercased() }
-  }
-
-  static func localBadgeLetter(workspaceName: String) -> String {
-    let trimmed = workspaceName.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.first.map { String($0).uppercased() } ?? "O"
-  }
-
-  /// プロセス再起動をまたいでも同じ色になるよう FNV-1a でホストから決定論的に色を選ぶ。
-  static func chipTint(url: URL?, title: String) -> Color? {
-    let seed = strippedHost(for: url) ?? title.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !seed.isEmpty else { return nil }
-    var hash: UInt64 = 14_695_981_039_346_656_037
-    for byte in seed.lowercased().utf8 {
-      hash ^= UInt64(byte)
-      hash &*= 1_099_511_628_211
-    }
-    let colors: [Color?] = [
-      nil, Color.theme.browserProfileBlue, Color.theme.browserProfileTeal,
-      Color.theme.browserProfilePurple, Color.theme.browserProfileAmber,
-      Color.theme.browserProfilePink, Color.theme.browserProfileGreen,
-    ]
-    return colors[Int(hash % UInt64(colors.count))]
-  }
-
-  private static func strippedHost(for url: URL?) -> String? {
-    guard let rawHost = url?.host?.lowercased(), !rawHost.isEmpty else { return nil }
-    return rawHost.hasPrefix("www.") && rawHost.count > 4 ? String(rawHost.dropFirst(4)) : rawHost
-  }
-}
-
 /// 外部通信なしでホスト名から決定論的に描くモノグラムチップ。
 struct BrowserFaviconChip: View {
   let url: URL?
   let title: String
   var size: CGFloat = Theme.Layout.browserSidebarChip
-  var font: Font = Font.theme.browserSidebarChip
+  var nsFont: NSFont = Theme.Typography.browserSidebarChip
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     let tint = BrowserTabDisplay.chipTint(url: url, title: title)
@@ -79,7 +30,9 @@ struct BrowserFaviconChip: View {
           tint?.opacity(Theme.Opacity.browserSidebarChipFill)
             ?? Color.theme.surfaceInk.opacity(0.10))
       if let letter = BrowserTabDisplay.monogram(url: url, title: title) {
-        Text(letter).font(font).foregroundStyle(tint ?? Color.theme.textPrimary)
+        fontResolver.text(letter, base: nsFont)
+          .font(Font(nsFont as CTFont))
+          .foregroundStyle(tint ?? Color.theme.textPrimary)
       } else {
         BrowserGlyphView(
           glyph: BrowserGlyphs.spaceGlobe, size: size * 0.65, color: Color.theme.textMuted)
@@ -93,13 +46,17 @@ struct BrowserFaviconChip: View {
 struct BrowserLocalBadgeView: View {
   let workspaceName: String
   var size: CGFloat = Theme.Layout.browserSidebarLocalBadge
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     ZStack {
       RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.browserLocalBadge)
-      Text(BrowserTabDisplay.localBadgeLetter(workspaceName: workspaceName))
-        .font(Font.theme.browserLocalBadge)
-        .foregroundStyle(Color.theme.browserLocalBadgeInk)
+      fontResolver.text(
+        BrowserTabDisplay.localBadgeLetter(workspaceName: workspaceName),
+        base: Theme.Typography.browserLocalBadge
+      )
+      .font(Font.theme.browserLocalBadge)
+      .foregroundStyle(Color.theme.browserLocalBadgeInk)
     }
     .frame(width: size, height: size)
   }
@@ -113,6 +70,7 @@ struct BrowserFavoriteTile: View {
   let onSelect: () -> Void
   let onMenuAction: (BrowserContextMenu.TabAction) -> Void
   @State private var isHovered = false
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     let fallback = localization.string(.browserNewTabTitle)
@@ -121,8 +79,8 @@ struct BrowserFavoriteTile: View {
     VStack(spacing: 3) {
       BrowserFaviconChip(
         url: tab.url, title: tab.title,
-        size: Theme.Layout.browserSidebarFavChip, font: Font.theme.browserSidebarFavChip)
-      Text(label)
+        size: Theme.Layout.browserSidebarFavChip, nsFont: Theme.Typography.browserSidebarFavChip)
+      fontResolver.text(label, base: Theme.Typography.browserSidebarFavLabel)
         .font(Font.theme.browserSidebarFavLabel)
         .foregroundStyle(isActive ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
@@ -174,6 +132,7 @@ struct BrowserSidebarTabRow: View {
   let onMenuAction: (BrowserContextMenu.TabAction) -> Void
   @State private var isHovered = false
   @State private var isCloseHovered = false
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     let title = BrowserTabDisplay.title(
@@ -183,7 +142,7 @@ struct BrowserSidebarTabRow: View {
     HStack(spacing: Theme.Space.step) {
       HStack(spacing: Theme.Space.step) {
         BrowserFaviconChip(url: tab.url, title: tab.title)
-        Text(title)
+        fontResolver.text(title, base: Theme.Typography.browserSidebarTab)
           .font(Font.theme.browserSidebarTab)
           .foregroundStyle(textColor)
           .lineLimit(1)
@@ -307,20 +266,21 @@ struct BrowserFreeSpaceButton: View {
   }
 }
 
-/// 下端スペース切替バー右端のローカルスペースボタン（最大幅 112pt、将来の LIVE 件数ピル用スロット付き）。
+/// 下端スペース切替バー右端のローカルスペースボタン（最大幅 112pt）。
 struct BrowserLocalSpaceButton: View {
   let workspaceName: String
   let isActive: Bool
   let localization: LocalizationStore
   let onSelect: () -> Void
   @State private var isHovered = false
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     let textColor = isActive || isHovered ? Color.theme.textPrimary : Color.theme.textSecondary
     HStack(spacing: Theme.Space.note) {
       BrowserLocalBadgeView(
         workspaceName: workspaceName, size: Theme.Layout.browserSidebarSwitcherLocalBadge)
-      Text(workspaceName)
+      fontResolver.text(workspaceName, base: Theme.Typography.browserSwitcherLocal)
         .font(Font.theme.browserSwitcherLocal)
         .foregroundStyle(textColor)
         .lineLimit(1)

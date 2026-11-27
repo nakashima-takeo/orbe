@@ -153,8 +153,7 @@ final class BrowserLayerView: NSView {
     self.sheetRatio = CGFloat(resolvedSession.store.sheetRatio)
     self.localization = localization
     barHost = BrowserBarHost(
-      rootView: BrowserBarRoot(
-        model: toolbar, localization: localization, fontResolver: fontResolver))
+      rootView: BrowserBarRoot(model: toolbar, localization: localization))
     newTabHost = BrowserNewTabHost(
       rootView: BrowserNewTabView(
         model: newTabModel, session: resolvedSession, localization: localization,

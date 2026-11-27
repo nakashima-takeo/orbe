@@ -112,10 +112,16 @@ struct BrowserProfileDeleteSection: View {
   let onBack: () -> Void
   let onCancel: () -> Void
   let onDelete: (UUID) -> Void
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
+    let defaultFallbackId = BrowserProfilePopover.defaultReassignProfileId(
+      for: target, candidates: candidates)
     let resolvedFallback =
-      candidates.first(where: { $0.id == reassignProfileId })?.id ?? candidates.first?.id
+      candidates.first(where: { $0.id == reassignProfileId })
+      ?? candidates.first(where: { $0.id == defaultFallbackId })
+    let exposesPrivateSpaces =
+      hasReferencingSpaces && !target.mcpAllowed && resolvedFallback?.mcpAllowed == true
 
     VStack(alignment: .leading, spacing: Theme.Space.step) {
       BrowserPopoverSubHeader(
@@ -126,14 +132,25 @@ struct BrowserProfileDeleteSection: View {
       .padding(.horizontal, Theme.Space.note)
       .padding(.vertical, Theme.Space.tick)
 
-      Text(localization.format(.browserProfileDeleteMessage, target.name))
-        .font(Font.theme.browserSidebarAction)
-        .foregroundStyle(Color.theme.textSecondary)
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.horizontal, Theme.Space.note)
+      fontResolver.text(
+        localization.format(.browserProfileDeleteMessage, target.name),
+        base: Theme.Typography.browserSidebarAction
+      )
+      .font(Font.theme.browserSidebarAction)
+      .foregroundStyle(Color.theme.textSecondary)
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(.horizontal, Theme.Space.note)
 
       if hasReferencingSpaces, !candidates.isEmpty {
-        reassignPicker(selectedId: resolvedFallback)
+        reassignPicker(selectedId: resolvedFallback?.id)
+          .padding(.horizontal, Theme.Space.note)
+      }
+
+      if exposesPrivateSpaces {
+        Text(localization.string(.browserProfileReassignMCPExposeWarning))
+          .font(Font.theme.browserSidebarProfilePill)
+          .foregroundStyle(Color.theme.conflict)
+          .fixedSize(horizontal: false, vertical: true)
           .padding(.horizontal, Theme.Space.note)
       }
 
@@ -148,7 +165,7 @@ struct BrowserProfileDeleteSection: View {
           style: .danger,
           isEnabled: resolvedFallback != nil,
           action: {
-            if let fallback = resolvedFallback { onDelete(fallback) }
+            if let fallback = resolvedFallback { onDelete(fallback.id) }
           })
       }
       .padding(.horizontal, Theme.Space.note)
@@ -163,28 +180,11 @@ struct BrowserProfileDeleteSection: View {
         .font(Font.theme.browserPopoverSection)
         .foregroundStyle(Color.theme.textMuted)
       ForEach(candidates) { candidate in
-        let selected = candidate.id == selectedId
-        HStack(spacing: Theme.Space.step) {
-          Circle()
-            .fill(candidate.color.themeColor)
-            .frame(width: Theme.Layout.browserSidebarDot, height: Theme.Layout.browserSidebarDot)
-          Text(candidate.name)
-            .font(Font.theme.browserSidebarTab)
-            .foregroundStyle(Color.theme.textPrimary)
-            .lineLimit(1)
-          Spacer(minLength: 0)
-          if selected {
-            BrowserGlyphView(glyph: BrowserGlyphs.check, size: 12, color: Color.theme.accentBright)
-          }
-        }
-        .padding(.horizontal, Theme.Space.step)
-        .frame(height: 28)
-        .background(
-          RoundedRectangle(cornerRadius: Theme.Radius.row)
-            .fill(selected ? Color.theme.selectionFill : Color.theme.surfaceInk.opacity(0.04))
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { reassignProfileId = candidate.id }
+        BrowserPopoverProfileOptionRow(
+          profile: candidate,
+          isSelected: candidate.id == selectedId,
+          usePrimaryTextWhenUnselected: true,
+          action: { reassignProfileId = candidate.id })
       }
     }
   }

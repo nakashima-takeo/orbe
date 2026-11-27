@@ -39,8 +39,7 @@ extension BrowserLayerViewTests {
       host: "a", path: "", isSecure: false, raw: "http://a")
     let compactIdeal = NSHostingView(
       rootView: BrowserBarRoot(
-        model: compactModel, localization: sheetHosted.browser.localization,
-        fontResolver: ChromeFontResolver())
+        model: compactModel, localization: sheetHosted.browser.localization)
     ).fittingSize.width
     XCTAssertLessThanOrEqual(
       compactIdeal, BrowserResizeSession.closeThresholdWidth,
@@ -233,11 +232,8 @@ extension BrowserLayerViewTests {
     let width = 520
     let height = Int(Theme.Layout.browserBar)
     let host = NSHostingView(
-      rootView: BrowserBarRoot(
-        model: model, localization: LocalizationStore(language: .ja),
-        fontResolver: ChromeFontResolver()
-      )
-      .environment(\.layoutDirection, layoutDirection))
+      rootView: BrowserBarRoot(model: model, localization: LocalizationStore(language: .ja))
+        .environment(\.layoutDirection, layoutDirection))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
     host.layoutSubtreeIfNeeded()
     let rep = try XCTUnwrap(

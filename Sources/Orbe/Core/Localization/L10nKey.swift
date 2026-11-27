@@ -1149,6 +1149,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case browserProfileDeleteTitle
   case browserProfileDeleteMessage
   case browserProfileReassignLabel
+  case browserProfileReassignMCPExposeWarning
   case browserSpaceCreateTitle
   case browserSpaceEditTitle
   case browserSpaceNameLabel
@@ -1157,7 +1158,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case browserSpaceProfileLabel
   case browserSpaceDeleteAction
   case browserSpaceDeleteTitle
-  case browserSpaceDeleteMessage
+  case browserSpaceDeleteMessageOne
+  case browserSpaceDeleteMessageOther
   case browserActionSave
   case browserActionCreate
   case browserActionCancel

@@ -72,6 +72,10 @@ extension L10n {
       "Delete \"%@\"? Cookies and storage for this profile will be removed."
     ),
     .browserProfileReassignLabel: ("付け替え先プロファイル", "Reassign spaces to"),
+    .browserProfileReassignMCPExposeWarning: (
+      "非公開プロファイルのスペースが MCP 公開プロファイルへ移行します。",
+      "Spaces from this private profile will become readable via MCP."
+    ),
     .browserSpaceCreateTitle: ("新しいスペース", "New Space"),
     .browserSpaceEditTitle: ("スペースを編集", "Edit Space"),
     .browserSpaceNameLabel: ("名前", "Name"),
@@ -80,9 +84,13 @@ extension L10n {
     .browserSpaceProfileLabel: ("プロファイル", "Profile"),
     .browserSpaceDeleteAction: ("スペースを削除…", "Delete space…"),
     .browserSpaceDeleteTitle: ("スペースを削除", "Delete Space"),
-    .browserSpaceDeleteMessage: (
+    .browserSpaceDeleteMessageOne: (
       "「%@」と配下の %lld 件のタブを削除します。",
-      "Delete \"%@\" and its %lld tab(s)?"
+      "Delete \"%@\" and its %lld tab?"
+    ),
+    .browserSpaceDeleteMessageOther: (
+      "「%@」と配下の %lld 件のタブを削除します。",
+      "Delete \"%@\" and its %lld tabs?"
     ),
     .browserActionSave: ("保存", "Save"),
     .browserActionCreate: ("作成", "Create"),

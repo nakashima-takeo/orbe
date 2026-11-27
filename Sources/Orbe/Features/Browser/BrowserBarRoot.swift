@@ -7,7 +7,6 @@ import SwiftUI
 struct BrowserBarRoot: View {
   @Bindable var model: BrowserToolbarModel
   let localization: LocalizationStore
-  let fontResolver: ChromeFontResolver
 
   var body: some View {
     VStack(spacing: 0) {
@@ -21,7 +20,6 @@ struct BrowserBarRoot: View {
         .frame(height: Theme.Stroke.hairline)
     }
     .environment(\.localization, localization)
-    .environment(\.chromeFontResolver, fontResolver)
   }
 
   private var toolbarRow: some View {

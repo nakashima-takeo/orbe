@@ -3,7 +3,7 @@ import SwiftUI
 
 /// `BrowserLayerView.belowBar` 内に 1 つだけ表示されるビュー内ポップオーバーの状態。
 /// `NSPopover` / `NSAlert` を使わず、`ScreenIsolation` と `visual-check` を構造上守る。
-enum BrowserPopoverState: Equatable {
+enum BrowserPopoverState: Equatable, Hashable {
   case profile
   case createSpace
   case editSpace(UUID, confirmingDelete: Bool)
@@ -24,15 +24,45 @@ struct BrowserPopoverOverlayRoot: View {
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
 
+  private struct Placement {
+    let alignment: Alignment
+    let inset: CGFloat
+    let width: CGFloat
+    let maxHeight: CGFloat
+    let topPadding: CGFloat
+    let bottomPadding: CGFloat
+
+    init(for state: BrowserPopoverState, in container: CGSize) {
+      inset = Theme.Layout.browserPopoverInset
+      let maxWidth = max(0, container.width - inset * 2)
+      switch state {
+      case .profile:
+        alignment = .topLeading
+        width = min(Theme.Layout.browserPopoverProfileWidth, maxWidth)
+        topPadding = Theme.Layout.browserPopoverHeaderY
+        bottomPadding = 0
+        maxHeight = max(0, container.height - topPadding - inset)
+      case .createSpace, .editSpace:
+        alignment = .bottomLeading
+        width = min(Theme.Layout.browserPopoverSpaceWidth, maxWidth)
+        topPadding = 0
+        bottomPadding = Theme.Layout.browserPopoverBottomOffset
+        maxHeight = max(0, container.height - bottomPadding - inset)
+      }
+    }
+  }
+
   var body: some View {
     GeometryReader { proxy in
-      ZStack(alignment: alignment(for: model.state)) {
+      let placement = model.state.map { Placement(for: $0, in: proxy.size) }
+      ZStack(alignment: placement?.alignment ?? .topLeading) {
         Color.clear
           .contentShape(Rectangle())
           .onTapGesture { model.onDismiss() }
 
-        if let state = model.state {
-          popoverCard(for: state, in: proxy.size)
+        if let state = model.state, let placement {
+          popoverCard(for: state, placement: placement)
+            .id(state)
         }
       }
       .frame(width: proxy.size.width, height: proxy.size.height)
@@ -41,69 +71,55 @@ struct BrowserPopoverOverlayRoot: View {
     .environment(\.chromeFontResolver, fontResolver)
   }
 
-  private func alignment(for state: BrowserPopoverState?) -> Alignment {
-    switch state {
-    case .profile, nil: .topLeading
-    case .createSpace, .editSpace: .bottomLeading
-    }
-  }
-
   @ViewBuilder
-  private func popoverCard(for state: BrowserPopoverState, in container: CGSize) -> some View {
-    let inset = Theme.Layout.browserPopoverInset
+  private func popoverCard(for state: BrowserPopoverState, placement: Placement) -> some View {
     switch state {
     case .profile:
-      let width = min(
-        Theme.Layout.browserPopoverProfileWidth, max(120, container.width - inset * 2))
-      let maxH = max(120, container.height - Theme.Layout.browserPopoverHeaderY - inset)
-      cardPanel(width: width, maxHeight: maxH) {
+      cardPanel(placement: placement) {
         BrowserProfilePopover(
           session: session, localization: localization,
           onBeforeFormUnmount: model.onBeforeFormUnmount, onDismiss: model.onDismiss)
       }
-      .padding(.leading, inset)
-      .padding(.top, Theme.Layout.browserPopoverHeaderY)
 
     case .createSpace:
-      let width = min(Theme.Layout.browserPopoverSpaceWidth, max(120, container.width - inset * 2))
-      let maxH = max(120, container.height - Theme.Layout.browserPopoverBottomOffset - inset)
-      cardPanel(width: width, maxHeight: maxH) {
+      cardPanel(placement: placement) {
         BrowserSpacePopover(
           mode: .create, session: session, localization: localization,
-          onBeforeFormUnmount: model.onBeforeFormUnmount, onRequestDeleteConfirm: { _ in },
           onDismiss: model.onDismiss)
       }
-      .padding(.leading, inset)
-      .padding(.bottom, Theme.Layout.browserPopoverBottomOffset)
 
     case .editSpace(let spaceId, let confirmingDelete):
-      let width = min(Theme.Layout.browserPopoverSpaceWidth, max(120, container.width - inset * 2))
-      let maxH = max(120, container.height - Theme.Layout.browserPopoverBottomOffset - inset)
-      cardPanel(width: width, maxHeight: maxH) {
+      cardPanel(placement: placement) {
         BrowserSpacePopover(
           mode: .edit(spaceId: spaceId, confirmingDelete: confirmingDelete),
           session: session, localization: localization,
-          onBeforeFormUnmount: model.onBeforeFormUnmount,
           onRequestDeleteConfirm: { id in
             model.onBeforeFormUnmount()
             model.state = .editSpace(id, confirmingDelete: true)
           },
           onDismiss: model.onDismiss)
       }
-      .padding(.leading, inset)
-      .padding(.bottom, Theme.Layout.browserPopoverBottomOffset)
     }
   }
 
+  /// 単一ツリーの `ScrollView` を `BrowserMaxHeightLayout` 直下へ置き、
+  /// 高さ境界跨ぎでのフォーム破棄・IME 消失を防ぎつつ自然高さフィットと狭小スクロールを両立する。
   private func cardPanel<Content: View>(
-    width: CGFloat, maxHeight: CGFloat, @ViewBuilder content: @escaping () -> Content
+    placement: Placement, @ViewBuilder content: @escaping () -> Content
   ) -> some View {
     GlassPanel(level: .popup, cornerRadius: Theme.Layout.browserPopoverRadius) {
-      BrowserMaxHeightLayout(maxHeight: maxHeight) {
-        content()
+      BrowserMaxHeightLayout(maxHeight: placement.maxHeight) {
+        ScrollView(.vertical) {
+          content()
+        }
+        .scrollIndicators(.never)
+        .scrollBounceBehavior(.basedOnSize)
       }
-      .frame(width: width)
+      .frame(width: placement.width)
     }
+    .padding(.leading, placement.inset)
+    .padding(.top, placement.topPadding)
+    .padding(.bottom, placement.bottomPadding)
   }
 }
 
@@ -129,17 +145,43 @@ private struct BrowserMaxHeightLayout: Layout {
   }
 }
 
-/// 内容が収まる高さでは自然高さへぴったり合わせ、狭小高さでのみ縦スクロールへ切り替える。
-struct BrowserPopoverScrollCard<Content: View>: View {
-  @ViewBuilder let content: () -> Content
+/// プロファイル選択・付け替え候補の共通行（識別色ドット・名前・MCP 非公開鍵アイコン・選択チェック）。
+struct BrowserPopoverProfileOptionRow: View {
+  let profile: BrowserProfile
+  let isSelected: Bool
+  var usePrimaryTextWhenUnselected = false
+  let action: () -> Void
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
-    ViewThatFits(in: .vertical) {
-      content()
-      ScrollView(.vertical, showsIndicators: false) {
-        content()
+    HStack(spacing: Theme.Space.step) {
+      Circle()
+        .fill(profile.color.themeColor)
+        .frame(width: Theme.Layout.browserSidebarDot, height: Theme.Layout.browserSidebarDot)
+      fontResolver.text(profile.name, base: Theme.Typography.browserSidebarTab)
+        .font(Font.theme.browserSidebarTab)
+        .foregroundStyle(
+          isSelected || usePrimaryTextWhenUnselected
+            ? Color.theme.textPrimary : Color.theme.textSecondary
+        )
+        .lineLimit(1)
+        .truncationMode(.tail)
+      if !profile.mcpAllowed {
+        BrowserGlyphView(glyph: BrowserGlyphs.lock, size: 10, color: Color.theme.textMuted)
+      }
+      Spacer(minLength: 0)
+      if isSelected {
+        BrowserGlyphView(glyph: BrowserGlyphs.check, size: 12, color: Color.theme.accentBright)
       }
     }
+    .padding(.horizontal, Theme.Space.step)
+    .frame(height: 28)
+    .background(
+      RoundedRectangle(cornerRadius: Theme.Radius.row)
+        .fill(isSelected ? Color.theme.selectionFill : Color.theme.surfaceInk.opacity(0.04))
+    )
+    .contentShape(Rectangle())
+    .onTapGesture(perform: action)
   }
 }
 

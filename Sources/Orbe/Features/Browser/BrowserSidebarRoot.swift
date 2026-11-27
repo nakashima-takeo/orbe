@@ -30,7 +30,6 @@ struct BrowserSidebarRoot: View {
     VStack(spacing: 0) {
       if let activeSpace {
         header(space: activeSpace)
-        topSlot(space: activeSpace, activeTabId: activeTabId)
         tabList(space: activeSpace, activeTabId: activeTabId)
       } else {
         Spacer(minLength: 0)
@@ -59,12 +58,11 @@ struct BrowserSidebarRoot: View {
           color: Color.theme.textPrimary)
       }
 
-      Text(spaceName)
+      fontResolver.text(spaceName, base: Theme.Typography.browserSidebarSpaceTitle)
         .font(Font.theme.browserSidebarSpaceTitle)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
         .truncationMode(.tail)
-        .layoutPriority(1)
 
       if space.kind == .local {
         Text(localization.string(.browserSidebarLocalTag))
@@ -122,64 +120,57 @@ struct BrowserSidebarRoot: View {
     }
   }
 
-  // MARK: - スクロール領域（PINNED / TODAY / + 新しいタブ）
+  // MARK: - スクロール領域（最上部スロット / PINNED / TODAY / + 新しいタブ）
 
   private func tabList(space: BrowserSpace, activeTabId: UUID?) -> some View {
     let pinned = store.tabs(in: space.id, section: .pinned)
     let today = store.tabs(in: space.id, section: .today)
 
-    return ScrollView(.vertical, showsIndicators: false) {
-      VStack(spacing: 1) {
-        if !pinned.isEmpty {
-          sectionHeader(
-            title: localization.string(.browserSidebarSectionPinned),
-            trailing: { EmptyView() })
-          ForEach(pinned) { tab in
-            BrowserSidebarTabRow(
-              tab: tab,
-              spaceKind: space.kind,
-              isActive: tab.id == activeTabId,
-              showsCloseOnHover: false,
-              localization: localization,
-              onSelect: { actions.onSelectTab(tab.id) },
-              onClose: { actions.onCloseTab(tab.id) },
-              onMenuAction: { actions.onTabMenuAction($0, tab.id) })
+    return ScrollView(.vertical) {
+      VStack(spacing: 0) {
+        topSlot(space: space, activeTabId: activeTabId)
+        VStack(spacing: 1) {
+          if !pinned.isEmpty {
+            sectionHeader(
+              title: localization.string(.browserSidebarSectionPinned), trailing: { EmptyView() })
+            ForEach(pinned) { tab in
+              tabRow(tab, spaceKind: space.kind, activeTabId: activeTabId, showsClose: false)
+            }
           }
+          sectionHeader(
+            title: localization.string(.browserSidebarSectionToday),
+            topPadding: pinned.isEmpty ? Theme.Space.note : 10,
+            trailing: {
+              BrowserClearTodayButton(
+                title: localization.string(.browserSidebarClearToday),
+                tooltip: localization.string(.browserSidebarClearTodayTooltip),
+                isEnabled: !today.isEmpty,
+                action: { actions.onClearToday(space.id) })
+            })
+          ForEach(today) { tab in
+            tabRow(tab, spaceKind: space.kind, activeTabId: activeTabId, showsClose: true)
+          }
+          BrowserNewTabSidebarRow(
+            title: localization.string(.browserSidebarNewTab), action: actions.onOpenNewTab
+          )
+          .padding(.top, Theme.Space.tick)
         }
-
-        sectionHeader(
-          title: localization.string(.browserSidebarSectionToday),
-          topPadding: pinned.isEmpty ? Theme.Space.note : 10,
-          trailing: {
-            BrowserClearTodayButton(
-              title: localization.string(.browserSidebarClearToday),
-              tooltip: localization.string(.browserSidebarClearTodayTooltip),
-              isEnabled: !today.isEmpty,
-              action: { actions.onClearToday(space.id) })
-          })
-
-        ForEach(today) { tab in
-          BrowserSidebarTabRow(
-            tab: tab,
-            spaceKind: space.kind,
-            isActive: tab.id == activeTabId,
-            showsCloseOnHover: true,
-            localization: localization,
-            onSelect: { actions.onSelectTab(tab.id) },
-            onClose: { actions.onCloseTab(tab.id) },
-            onMenuAction: { actions.onTabMenuAction($0, tab.id) })
-        }
-
-        BrowserNewTabSidebarRow(
-          title: localization.string(.browserSidebarNewTab),
-          action: actions.onOpenNewTab
-        )
-        .padding(.top, Theme.Space.tick)
+        .padding(.horizontal, Theme.Space.step)
+        .padding(.bottom, Theme.Space.step)
       }
-      .padding(.horizontal, Theme.Space.step)
-      .padding(.bottom, Theme.Space.step)
     }
+    .scrollIndicators(.never)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private func tabRow(
+    _ tab: BrowserTab, spaceKind: BrowserSpaceKind, activeTabId: UUID?, showsClose: Bool
+  ) -> some View {
+    BrowserSidebarTabRow(
+      tab: tab, spaceKind: spaceKind, isActive: tab.id == activeTabId,
+      showsCloseOnHover: showsClose, localization: localization,
+      onSelect: { actions.onSelectTab(tab.id) }, onClose: { actions.onCloseTab(tab.id) },
+      onMenuAction: { actions.onTabMenuAction($0, tab.id) })
   }
 
   private func sectionHeader<Trailing: View>(
@@ -223,7 +214,7 @@ struct BrowserSidebarRoot: View {
         .frame(height: Theme.Stroke.hairline)
 
       HStack(spacing: Theme.Space.tick) {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
           HStack(spacing: Theme.Space.tick) {
             ForEach(freeSpaces) { space in
               BrowserFreeSpaceButton(
@@ -240,6 +231,7 @@ struct BrowserSidebarRoot: View {
               action: actions.onOpenCreateSpace)
           }
         }
+        .scrollIndicators(.never)
         .frame(maxWidth: .infinity, alignment: .leading)
 
         Rectangle()
@@ -268,13 +260,14 @@ private struct BrowserProfilePillButton: View {
   let tooltip: String
   let action: () -> Void
   @State private var isHovered = false
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     HStack(spacing: 5) {
       Circle()
         .fill(profile.color.themeColor)
         .frame(width: Theme.Layout.browserSidebarDot, height: Theme.Layout.browserSidebarDot)
-      Text(profile.name)
+      fontResolver.text(profile.name, base: Theme.Typography.browserSidebarProfilePill)
         .font(Font.theme.browserSidebarProfilePill)
         .foregroundStyle(isHovered ? Color.theme.textPrimary : Color.theme.textSecondary)
         .lineLimit(1)

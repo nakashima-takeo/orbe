@@ -47,7 +47,7 @@ enum BrowserURLInput {
 
   /// URL 表示の並び替えや切り詰めを引き起こす Bidi 書式文字・制御文字・行/段落区切りのみを
   /// UTF-8 バイト単位で再パーセントエンコードし、日本語等の可読パスは維持する。
-  private static func sanitizeForDisplay(_ text: String) -> String {
+  static func sanitizeForDisplay(_ text: String) -> String {
     guard text.unicodeScalars.contains(where: requiresDisplayPercentEncoding) else { return text }
     var result = ""
     result.reserveCapacity(text.utf8.count)

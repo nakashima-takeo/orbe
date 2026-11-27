@@ -81,7 +81,7 @@ struct BrowserNewTabView: View {
               .fill(profile.color.themeColor)
               .frame(width: Theme.Layout.browserSidebarDot, height: Theme.Layout.browserSidebarDot)
           }
-          Text(spaceName)
+          fontResolver.text(spaceName, base: Theme.Typography.browserSidebarAction)
             .font(Font.theme.browserSidebarAction)
             .foregroundStyle(Color.theme.textPrimary)
             .lineLimit(1)
@@ -90,7 +90,7 @@ struct BrowserNewTabView: View {
             Text("·")
               .font(Font.theme.browserSidebarProfilePill)
               .foregroundStyle(Color.theme.textMuted)
-            Text(profile.name)
+            fontResolver.text(profile.name, base: Theme.Typography.browserSidebarProfilePill)
               .font(Font.theme.browserSidebarProfilePill)
               .foregroundStyle(Color.theme.textMuted)
               .lineLimit(1)
@@ -228,6 +228,7 @@ private struct BrowserNewTabQuickTile: View {
   let localization: LocalizationStore
   let action: () -> Void
   @State private var isHovered = false
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     let fallback = localization.string(.browserNewTabTitle)
@@ -239,8 +240,8 @@ private struct BrowserNewTabQuickTile: View {
         url: tab.url,
         title: tab.title,
         size: Theme.Layout.browserNewTabTileChip,
-        font: Font.theme.browserSidebarFavChip)
-      Text(label)
+        nsFont: Theme.Typography.browserSidebarFavChip)
+      fontResolver.text(label, base: Theme.Typography.browserNewTabTile)
         .font(Font.theme.browserNewTabTile)
         .foregroundStyle(isHovered ? Color.theme.textPrimary : Color.theme.textSecondary)
         .lineLimit(1)
@@ -275,20 +276,21 @@ private struct BrowserRecentlyClosedRow: View {
   let fallbackTitle: String
   let action: () -> Void
   @State private var isHovered = false
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     let title = BrowserTabDisplay.title(url: item.url, title: item.title, fallback: fallbackTitle)
 
     HStack(spacing: 9) {
       BrowserFaviconChip(url: item.url, title: item.title)
-      Text(title)
+      fontResolver.text(title, base: Theme.Typography.browserSidebarTab)
         .font(Font.theme.browserSidebarTab)
         .foregroundStyle(isHovered ? Color.theme.textPrimary : Color.theme.textSecondary)
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: Theme.Space.tick)
       if let originSpaceName {
-        Text(originSpaceName)
+        fontResolver.text(originSpaceName, base: Theme.Typography.browserSidebarMeta)
           .font(Font.theme.browserSidebarMeta)
           .foregroundStyle(Color.theme.textMuted)
           .padding(.horizontal, 5)
