@@ -13,9 +13,8 @@ extension EditorStyle {
     /// 0〜9 の数字。
     private let digits: [String]
     private let separator: String
-    /// 桁区切りの間の桁の数（いちばん下の組と、それより上の組）と、桁区切りを入れる整数の最小の桁の数。
+    /// 桁区切りの間の桁の数と、桁区切りを入れる整数の最小の桁の数（区切らない地域は `Int.max`）。
     private let group: Int
-    private let upperGroup: Int
     private let groupedFrom: Int
     private let decimal: String
 
@@ -27,17 +26,32 @@ extension EditorStyle {
       let marker = template.range(of: "%@") ?? template.endIndex..<template.endIndex
       prefix = String(template[..<marker.lowerBound])
       suffix = String(template[marker.upperBound...])
+      let format = Self.positionalFormat(locale)
+      digits = (0...9).map { format.string(from: $0 as NSNumber) ?? String($0) }
+      separator = format.groupingSeparator ?? ""
+      group = max(1, format.groupingSize)
+      let first = Int(pow(10, Double(group)))
+      groupedFrom =
+        format.groupingSize <= 0
+        ? .max
+        : format.string(from: first as NSNumber)?.contains(separator) == true
+          ? group + 1 : group + 2
+      decimal = format.decimalSeparator ?? "."
+    }
+
+    /// 地域 `locale` の数の書式。数字を位取りで書かない数字体系（漢数字など。桁区切りと小数点の字を持たない）なら、
+    /// Foundation の数の書式と同じく、数字体系をラテン数字に替えた地域の書式。
+    private static func positionalFormat(_ locale: Locale) -> NumberFormatter {
       let format = NumberFormatter()
       format.locale = locale
       format.numberStyle = .decimal
-      digits = (0...9).map { format.string(from: $0 as NSNumber) ?? String($0) }
-      separator = format.groupingSeparator
-      group = max(1, format.groupingSize)
-      upperGroup = format.secondaryGroupingSize > 0 ? format.secondaryGroupingSize : group
-      let first = Int(pow(10, Double(group)))
-      groupedFrom =
-        format.string(from: first as NSNumber)?.contains(separator) == true ? group + 1 : group + 2
-      decimal = format.decimalSeparator
+      guard format.groupingSeparator == nil else { return format }
+      var latin = Locale.Components(locale: locale)
+      latin.numberingSystem = "latn"
+      let positional = NumberFormatter()
+      positional.locale = Locale(components: latin)
+      positional.numberStyle = .decimal
+      return positional
     }
 
     func callAsFunction(_ count: Int) -> String {
@@ -57,15 +71,14 @@ extension EditorStyle {
       return prefix + value + suffix
     }
 
-    /// 0 以上の整数 `value` を、地域の数字と桁区切りで書く。
+    /// 0 以上の整数 `value` を、地域の数字と桁区切りで書く。印に出る整数は 4 桁まで（en は 3 桁まで。1 兆字未満の行）なので、
+    /// 桁区切りは同じ桁の数ごとに入れる（上の組の桁の数が違う地域の区切り方は、6 桁以上でだけ違う）。
     private func integer(_ value: Int) -> String {
       let places = String(value).utf8.map { Int($0) - 0x30 }
       var result = ""
       for (index, digit) in places.enumerated() {
         let below = places.count - index
-        if index > 0, places.count >= groupedFrom, below >= group,
-          (below - group) % upperGroup == 0
-        {
+        if index > 0, places.count >= groupedFrom, below % group == 0 {
           result += separator
         }
         result += digits[digit]
