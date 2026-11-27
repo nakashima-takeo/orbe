@@ -71,8 +71,9 @@ extension EditorStyle {
       return prefix + value + suffix
     }
 
-    /// 0 以上の整数 `value` を、地域の数字と桁区切りで書く。印に出る整数は 4 桁まで（en は 3 桁まで。1 兆字未満の行）なので、
-    /// 桁区切りは同じ桁の数ごとに入れる（上の組の桁の数が違う地域の区切り方は、6 桁以上でだけ違う）。
+    /// 0 以上の整数 `value` を、地域の数字と桁区切りで書く。印に出る整数は、打ち切った字が 1 兆字未満なら 4 桁まで（en は
+    /// 3 桁まで）なので、桁区切りは同じ桁の数ごとに入れる（いちばん下の組より上で桁の数を変える地域——インドの 2 桁ごとなど——
+    /// の区切り方とは、6 桁以上でだけ違う）。
     private func integer(_ value: Int) -> String {
       let places = String(value).utf8.map { Int($0) - 0x30 }
       var result = ""

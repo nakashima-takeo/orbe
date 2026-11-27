@@ -89,7 +89,7 @@ extension MouseSelection {
     }
   }
 
-  /// 当たり `hit` が、最終行の最後の段か（当たりか本文が無ければ真）。
+  /// 当たり `hit` が、最終行の最後の段か（当たりが無いか、本文が無ければ真）。
   static func isLastSegment(_ hit: PointerHit?, _ text: TextRope?, _ rows: RowLayout) -> Bool {
     guard let hit, let text else { return true }
     guard hit.row >= text.lineCount - 1 else { return false }
