@@ -277,4 +277,43 @@ extension BrowserLayerViewTests {
     pumpMain(until: { finishCount >= 2 }, timeout: 5, "確定先 URL の読み込み完了")
     XCTAssertEqual(browser.webView?.url, nextURL)
   }
+
+  /// 空スペース間・空タブ間（いずれも `mountedRuntime == nil`）の切替でも URL 編集が外因終了され、
+  /// 下層に焦点がある場合は切替で焦点を奪い返さない。
+  func testEmptyTabAndEmptySpaceSwitchEndsURLEditingExternally() throws {
+    let hosted = hostBrowser()
+    let (window, browser) = (hosted.window, hosted.browser)
+    let session = browser.session
+    let freeSpaces = session.store.freeSpaces
+    XCTAssertGreaterThanOrEqual(freeSpaces.count, 2, "前提: 自由スペースが 2 件以上ある")
+    let spaceA = freeSpaces[0]
+    let spaceB = freeSpaces[1]
+
+    XCTAssertTrue(session.selectSpace(.free(spaceA.id)))
+    browser.setMode(.sheet, animated: false)
+    XCTAssertNil(browser.mountedRuntime)
+
+    // 1. 空スペース A → 空スペース B の切替で URL 編集が外因終了される。
+    _ = try beginAndFocusURLField(in: hosted)
+    XCTAssertTrue(browser.isEditingURL)
+    XCTAssertTrue(session.selectSpace(.free(spaceB.id)))
+    XCTAssertFalse(browser.isEditingURL, "空スペース間の切替で URL 編集が外因終了される")
+    XCTAssertEqual(browser.displayedSpaceId, spaceB.id)
+
+    // 2. 同一スペース内の空タブ 1 → 空タブ 2 の切替でも URL 編集が外因終了される。
+    let emptyTab1 = try XCTUnwrap(session.openTab(in: spaceB.id, url: nil, activate: true))
+    let emptyTab2 = try XCTUnwrap(session.openTab(in: spaceB.id, url: nil, activate: false))
+    XCTAssertNil(browser.mountedRuntime)
+    _ = try beginAndFocusURLField(in: hosted)
+    XCTAssertTrue(session.selectTab(emptyTab2.id))
+    XCTAssertFalse(browser.isEditingURL, "空タブ間の切替で URL 編集が外因終了される")
+    XCTAssertEqual(browser.displayedTabId, emptyTab2.id)
+
+    // 3. 焦点がブラウザ外にある間の空タブ切替では焦点を奪い返さない。
+    let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 80, height: 24))
+    hosted.underlay.addSubview(outsider)
+    XCTAssertTrue(window.makeFirstResponder(outsider))
+    XCTAssertTrue(session.selectTab(emptyTab1.id))
+    XCTAssertFalse(browser.focusIsInside, "ブラウザ外焦点のまま空タブを切り替えても焦点を奪わない")
+  }
 }

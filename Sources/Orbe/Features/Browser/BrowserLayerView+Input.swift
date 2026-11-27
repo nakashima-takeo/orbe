@@ -104,6 +104,7 @@ extension BrowserLayerView {
     switch session.commit() {
     case .keepSheet(let ratio):
       sheetRatio = ratio
+      self.session.commitSheetRatio(Double(ratio))
       needsLayout = true
       layoutSubtreeIfNeeded()
       syncFocusAppearance()

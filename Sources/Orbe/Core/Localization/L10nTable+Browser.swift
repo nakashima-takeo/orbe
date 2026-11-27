@@ -27,5 +27,8 @@ extension L10n {
     ),
     .browserEmptyShortcutClose: ("ブラウザを閉じる", "Close browser"),
     .browserEmptyShortcutReload: ("ページを再読込", "Reload page"),
+    .browserDefaultSpacePersonal: ("個人", "Personal"),
+    .browserDefaultSpaceWork: ("仕事", "Work"),
+    .browserDefaultSpaceResearch: ("調査", "Research"),
   ]
 }

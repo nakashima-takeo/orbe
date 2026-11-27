@@ -2,6 +2,22 @@ import AppKit
 
 /// ウィンドウ単一の内蔵ブラウザ層（Z=2）の配線・開閉・モード切替・フォーカス同期。
 extension WindowController {
+  static func makeBrowserSession(language: Language) -> BrowserSession {
+    MainActor.assumeIsolated {
+      let store = BrowserStore(
+        opening: BrowserPersistence.open(language: language), language: language)
+      return BrowserSession(store: store)
+    }
+  }
+
+  func startBrowserSession() {
+    MainActor.assumeIsolated { browserSession.start(initialWorkspaceId: current.id) }
+  }
+
+  func stopBrowserSession() {
+    MainActor.assumeIsolated { browserSession.stop() }
+  }
+
   /// `BrowserLayerView` と `OrbeWindow` のフォーカス監視を配線する。
   func wireBrowser() {
     window.onFirstResponderChange = { [weak self] responder in

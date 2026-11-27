@@ -10,8 +10,9 @@ import WebKit
 /// 不透明地は `barGround`（36pt ツールバー部）と `belowGround`（バーより下）へ分離し、
 /// `sheetView` 自身は背景色を持たず左落ち影だけを担う（全面 `⌥` めくりで `belowBar.alphaValue = 0` にした際、
 /// 不透明な 36pt バーだけを残して下層を露出させるため）。
-/// `WKWebView` は初回表示まで遅延生成し、生成時は `BrowserDataStore.make()` で隔離する。
+/// アクティブタブ 1 枚の `BrowserTabRuntime` のみを弱参照でマウントし、強参照所有は `BrowserSession` に一本化する。
 final class BrowserLayerView: NSView {
+  let session: BrowserSession
   let toolbar = BrowserToolbarModel()
   let snapBadge = BrowserSnapBadgeModel()
 
@@ -30,24 +31,24 @@ final class BrowserLayerView: NSView {
   /// `visual-check` 撮影中のみ `belowBar` へ一時配置する `WKWebView.takeSnapshot` 合成面。
   var snapshotOverlay: NSImageView?
 
-  /// 初回表示時に遅延生成される `WKWebView`。閉じたままの間は nil。
-  var webView: WKWebView?
+  /// 現在マウント中のアクティブタブ実行体（弱参照。強参照は `session.runtimes` が所有）。
+  weak var mountedRuntime: BrowserTabRuntime?
+  var displayedSpaceId: UUID?
+  var displayedTabId: UUID?
+  var webView: WKWebView? { mountedRuntime?.webView }
+  var hasNavigated: Bool { mountedRuntime?.hasNavigated ?? false }
+  var committedURL: URL? { mountedRuntime?.committedURL }
+  var lastRequestedURL: URL? { mountedRuntime?.lastRequestedURL }
+  var isProvisionalNavigation: Bool { mountedRuntime?.isProvisionalNavigation ?? false }
+
   private(set) var mode: BrowserMode = .closed
   private(set) var isPeeking = false
-  var sheetRatio: CGFloat = BrowserResizeSession.defaultRatio
-  var hasNavigated = false
-  var committedPage: CommittedPage?
-  var committedURL: URL? { committedPage?.url }
-  var lastRequestedURL: URL?
-  var pendingNavigation: PendingNavigation?
-  var navigationMetadata = NavigationMetadataStore()
-  var isProvisionalNavigation: Bool { pendingNavigation != nil }
+  var sheetRatio: CGFloat
 
   /// 窓の key 状態とブラウザ内焦点から上位（`WindowController`）が与える真のブラウザ焦点状態。
   private(set) var isBrowserFocused = false
   var isSheetHovered = false
   var resizeSession: BrowserResizeSession?
-  var kvoObservations: [NSKeyValueObservation] = []
 
   enum Fade: Equatable {
     case sheet(closingWidth: CGFloat? = nil)
@@ -75,13 +76,20 @@ final class BrowserLayerView: NSView {
     return responder === self || responder.isDescendant(of: self)
   }
 
-  /// ブラウザ内の焦点の宛先（遷移済みなら `webView`、初期空状態なら自分自身）。
+  /// ブラウザ内の焦点の宛先（遷移済みならマウント中 `webView`、空画面なら自分自身）。
   var focusTarget: NSView {
-    if hasNavigated, let webView { return webView }
+    if let runtime = mountedRuntime, runtime.hasNavigated { return runtime.webView }
     return self
   }
 
-  init(localization: LocalizationStore, fontResolver: ChromeFontResolver) {
+  init(
+    session: BrowserSession? = nil,
+    localization: LocalizationStore,
+    fontResolver: ChromeFontResolver
+  ) {
+    let resolvedSession = session ?? BrowserSession.inMemory(language: localization.language)
+    self.session = resolvedSession
+    self.sheetRatio = CGFloat(resolvedSession.store.sheetRatio)
     self.localization = localization
     barHost = BrowserBarHost(
       rootView: BrowserBarRoot(
@@ -94,7 +102,9 @@ final class BrowserLayerView: NSView {
     clipsToBounds = true
     assembleViews()
     wireCallbacks()
+    wireSession()
     observeLocalization()
+    mountRuntime(resolvedSession.activeRuntime)
     applyPresentation()
     NSWorkspace.shared.notificationCenter.addObserver(
       self, selector: #selector(accessibilityDisplayOptionsDidChange),
@@ -190,6 +200,15 @@ final class BrowserLayerView: NSView {
     toolbar.onBlurURL = { [weak self] in self?.endURLEditingExternally() }
   }
 
+  private func wireSession() {
+    session.onActiveDisplayChange = { [weak self] runtime in
+      self?.mountRuntime(runtime)
+    }
+    session.onActiveNavigationFinish = { [weak self] in
+      self?.onNavigationFinish?()
+    }
+  }
+
   private func observeLocalization() {
     resizeHandle.toolTip = localization.string(.browserResizeTooltip)
     withObservationTracking {
@@ -241,13 +260,12 @@ final class BrowserLayerView: NSView {
     mode = next
     toolbar.mode = next
     endURLEditingExternally()
-    if next.isOpen {
-      _ = ensureWebView()
-    } else {
+    if !next.isOpen {
       isPeeking = false
       toolbar.isPeeking = false
       isSheetHovered = false
     }
+    session.setBrowserOpen(next.isOpen)
     let fadeTarget: Fade? =
       if previous == .closed && next.isOpen {
         .sheet()

@@ -1111,4 +1111,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case browserEmptyLead
   case browserEmptyShortcutClose
   case browserEmptyShortcutReload
+  case browserDefaultSpacePersonal
+  case browserDefaultSpaceWork
+  case browserDefaultSpaceResearch
 }

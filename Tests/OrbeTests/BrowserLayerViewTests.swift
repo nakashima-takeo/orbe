@@ -51,13 +51,20 @@ final class BrowserLayerViewTests: OrbeTestCase {
 
   // MARK: - 遅延生成と隔離
 
-  /// 初回表示まで `WKWebView` を作らず、隔離環境では `identifier` の有無に依らず非永続ストアだけを返す。
+  /// 閉状態およびタブ 0 枚の空画面では `WKWebView` を作らず、遷移要求で初めて遅延生成する。
+  /// 隔離環境ではプロファイル UUID ごとに独立した非永続ストアを共有し、永続ストアへ触れない。
   func testWebViewIsCreatedLazilyWithNonPersistentStoreInIsolatedEnvironment() throws {
     XCTAssertTrue(StateDir.isIsolated, "前提: テストプロセスは隔離環境")
-    XCTAssertFalse(BrowserDataStore.make().isPersistent, "既定呼び出しは非永続ストア")
-    XCTAssertFalse(
-      BrowserDataStore.make(isolated: true, identifier: UUID()).isPersistent,
-      "隔離時は identifier 指定でも非永続ストアを優先する")
+    let registry = BrowserDataStoreRegistry()
+    let profileA = UUID()
+    let profileB = UUID()
+    let storeA1 = registry.store(for: profileA)
+    let storeA2 = registry.store(for: profileA)
+    let storeB = registry.store(for: profileB)
+    XCTAssertFalse(storeA1.isPersistent, "隔離環境では非永続ストアを返す")
+    XCTAssertFalse(storeB.isPersistent, "別プロファイルも非永続ストアを返す")
+    XCTAssertTrue(storeA1 === storeA2, "同一プロファイルは同じ非永続ストアを共有する")
+    XCTAssertFalse(storeA1 === storeB, "異なるプロファイルは別の非永続ストアへ分離する")
 
     let hosted = hostBrowser()
     let browser = hosted.browser
@@ -65,7 +72,11 @@ final class BrowserLayerViewTests: OrbeTestCase {
     XCTAssertTrue(browser.sheetView.isHidden)
 
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView, "初回表示で生成される")
+    XCTAssertNil(browser.webView, "タブ 0 枚の空画面では WKWebView を生成しない")
+    XCTAssertFalse(browser.emptyOverlay.isHidden)
+
+    browser.loadHTMLString("<p>lazy</p>", baseURL: URL(string: "https://docs.orbe.dev/lazy"))
+    let webView = try XCTUnwrap(browser.webView, "遷移要求で初めて遅延生成される")
     XCTAssertFalse(webView.configuration.websiteDataStore.isPersistent, "非永続ストアを使う")
   }
 

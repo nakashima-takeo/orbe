@@ -15,7 +15,6 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
 
     let server = try LocalLoopbackHTTPServer(routes: [
       "/page1.html": "<!doctype html><a id='go' href='/page2.html' target='_blank'>go</a>",
@@ -26,6 +25,7 @@ extension BrowserLayerViewTests {
     var finishCount = 0
     browser.onNavigationFinish = { finishCount += 1 }
     browser.loadHTMLString("<p>local</p>", baseURL: URL(string: "https://docs.orbe.dev/guide"))
+    let webView = try XCTUnwrap(browser.webView)
     pumpMain(until: { finishCount >= 1 }, timeout: 5, "ローカル HTML の読み込み完了")
     XCTAssertTrue(browser.hasNavigated)
     XCTAssertTrue(browser.emptyOverlay.isHidden)
@@ -60,13 +60,14 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
+    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
+    let webView = runtime.webView
     XCTAssertFalse(
       webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically,
       "スクリプト自動ポップアップは WebKit 設定で抑止する")
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = browser }
+    defer { webView.navigationDelegate = runtime }
 
     let crossServer = try LocalLoopbackHTTPServer(routes: [
       "/cross": Self.crossOriginFrameHTML,
@@ -214,7 +215,8 @@ extension BrowserLayerViewTests {
     _ url: URL, in browser: BrowserLayerView, _ label: String,
     file: StaticString = #filePath, line: UInt = #line
   ) throws {
-    let webView = try XCTUnwrap(browser.webView, file: file, line: line)
+    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime(), file: file, line: line)
+    let webView = runtime.webView
     var sawLoading = false
     let observation = webView.observe(\.isLoading, options: [.new]) { _, change in
       if change.newValue == true { sawLoading = true }
@@ -292,11 +294,11 @@ extension BrowserLayerViewTests {
   }
 }
 
-/// 本番 `BrowserLayerView` の `WKNavigationDelegate` 判定を丸ごと転送しつつ、
+/// 本番 `BrowserTabRuntime` の `WKNavigationDelegate` 判定を丸ごと転送しつつ、
 /// テストから `.cancel` 返却値と暫定開始・失敗イベントの到達を観測する薄いラッパー。
 @MainActor
 final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
-  weak var target: BrowserLayerView?
+  weak var target: BrowserTabRuntime?
   var decisions: [(url: URL?, policy: WKNavigationActionPolicy)] = []
   var provisionalStartCount = 0
   var redirectCount = 0
@@ -311,7 +313,7 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
   var onDidFail: (() -> Void)?
   var onDidFailProvisional: ((WKNavigation) -> Void)?
 
-  init(target: BrowserLayerView) {
+  init(target: BrowserTabRuntime) {
     self.target = target
   }
 

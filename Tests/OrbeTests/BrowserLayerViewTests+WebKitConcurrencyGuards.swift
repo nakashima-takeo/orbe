@@ -11,6 +11,7 @@ import XCTest
 extension BrowserLayerViewTests {
   private struct ConcurrencyHarness {
     let browser: BrowserLayerView
+    let runtime: BrowserTabRuntime
     let webView: WKWebView
     let spy: BrowserNavigationPolicySpy
   }
@@ -35,7 +36,7 @@ extension BrowserLayerViewTests {
   /// アドレスバー・`isSameOriginAsMainFrame`・`reloadPage()` は未到達 A へ乖離せず B を保つ。
   func testSupersededReloadAfterFailedNonBFCacheHistoryNavigationKeepsDisplayedOrigin() throws {
     let harness = try makeConcurrencyHarness()
-    defer { harness.webView.navigationDelegate = harness.browser }
+    defer { harness.webView.navigationDelegate = harness.runtime }
 
     let serverA1 = try LocalLoopbackHTTPServer(responses: [
       "/page-a": .partial("<!doctype html><p>origin-a</p>")
@@ -102,7 +103,7 @@ extension BrowserLayerViewTests {
     throws
   {
     let harness = try makeConcurrencyHarness()
-    defer { harness.webView.navigationDelegate = harness.browser }
+    defer { harness.webView.navigationDelegate = harness.runtime }
 
     let serverA = try LocalLoopbackHTTPServer(responses: [
       "/page-a": .partial("<!doctype html><p>origin-a</p>")
@@ -141,7 +142,7 @@ extension BrowserLayerViewTests {
   /// `isProvisionalNavigation == true` と本命の `lastRequestedURL` が復元される。
   func testCanceledWebContentNavigationDoesNotSupersedeUnstartedAPINavigation() throws {
     let harness = try makeConcurrencyHarness()
-    defer { harness.webView.navigationDelegate = harness.browser }
+    defer { harness.webView.navigationDelegate = harness.runtime }
 
     let originServer = try LocalLoopbackHTTPServer(responses: [
       "/origin": .html("<!doctype html><a id='go' href='/link-hang'>go</a>"),
@@ -205,7 +206,7 @@ extension BrowserLayerViewTests {
   /// 誤消去されない。対として正当な同一文書 `#hash` `load` は完了時に回収される。
   func testSameDocumentNavigationDoesNotEraseTrailingUnrelatedPendingLoad() throws {
     let harness = try makeConcurrencyHarness()
-    defer { harness.webView.navigationDelegate = harness.browser }
+    defer { harness.webView.navigationDelegate = harness.runtime }
 
     let server = try LocalLoopbackHTTPServer(responses: [
       "/p1": .html("<!doctype html><h1 id='sec'>P1</h1>"),
@@ -263,7 +264,7 @@ extension BrowserLayerViewTests {
   /// `location.hash` が起きても、`target` の `pendingNavigation` と `lastRequestedURL` が誤消去されない。
   func testInPageScriptStateChangesInUnstartedWindowPreservePendingLoad() throws {
     let harness = try makeConcurrencyHarness()
-    defer { harness.webView.navigationDelegate = harness.browser }
+    defer { harness.webView.navigationDelegate = harness.runtime }
 
     let server = try LocalLoopbackHTTPServer(responses: [
       "/p1": .html("<!doctype html><h1 id='sec'>P1</h1>"),
@@ -311,10 +312,11 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    return ConcurrencyHarness(browser: browser, webView: webView, spy: spy)
+    return ConcurrencyHarness(browser: browser, runtime: runtime, webView: webView, spy: spy)
   }
 
   private func prepareFailedNonBFCacheGoBack(

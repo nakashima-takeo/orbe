@@ -81,12 +81,16 @@ extension WindowController {
   }
 
   private func performCloseWorkspace(_ index: Int, origin: TabCloseOrigin) {
+    guard workspaces.indices.contains(index) else { return }
+    let removedId = workspaces[index].id
     switch store.closeWorkspace(index, origin: origin) {
     case .invalid:
       return
     case .activeChanged:
+      MainActor.assumeIsolated { browserSession.removeLocalSpace(for: removedId) }
       activateCurrent()  // MRU 繰上げ先が0タブならボードか空表示（シェルは起こさない）
     case .backgroundChanged:
+      MainActor.assumeIsolated { browserSession.removeLocalSpace(for: removedId) }
       refreshChrome()  // 背景 workspace の畳み込みでも chrome 横断 rollup を同期する
     }
     reloadPalette()  // パレット表示中の外因変異（shell exit 等）でも表示を実状態へ追従させる

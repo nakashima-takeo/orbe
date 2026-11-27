@@ -11,13 +11,11 @@ extension BrowserLayerViewTests {
   /// コミット済みページ上での異オリジン無応答先への暫定遷移中および失敗後は元の URL と鍵表示を維持し、
   /// 同一オリジンの `history.pushState` は反映する。初回未到達 `https://` 失敗時は鍵アイコンを点灯しない。
   func testProvisionalNavigationProtectsAddressBarAndSecureLock() throws {
-    let hosted = hostBrowser()
-    let browser = hosted.browser
-    browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let (browser, runtime) = try makeSheetBrowserWithRuntime()
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = browser }
+    defer { webView.navigationDelegate = runtime }
 
     let server = try LocalLoopbackHTTPServer(routes: ["/safe": "<!doctype html><p>safe</p>"])
     defer { server.stop() }
@@ -73,13 +71,11 @@ extension BrowserLayerViewTests {
   /// 同一オリジンの無応答エンドポイントへの暫定遷移では `didStartProvisionalNavigation` 前の KVO 窓から
   /// 失敗完了まで `committedURL`・アドレスバー・鍵表示を上書きせず元ページを保つ。
   func testSameOriginProvisionalNavigationProtectsCommittedURLAndTracksHashChange() throws {
-    let hosted = hostBrowser()
-    let browser = hosted.browser
-    browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let (browser, runtime) = try makeSheetBrowserWithRuntime()
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = browser }
+    defer { webView.navigationDelegate = runtime }
 
     let server = try LocalLoopbackHTTPServer(responses: [
       "/page-a": .html("<!doctype html><h1 id='sec'>Page A</h1>"),
@@ -130,13 +126,11 @@ extension BrowserLayerViewTests {
   /// 読込中ページや暫定遷移中に別遷移を重ねた際、旧遷移のキャンセル通知（`didFail` / `didFailProvisionalNavigation`）
   /// で新遷移の暫定保護・`lastRequestedURL`・`allowsInternalBlankLoad` が壊されない。
   func testOverlappingNavigationsPreserveNewPendingStateAndBlankBaseHTML() throws {
-    let hosted = hostBrowser()
-    let browser = hosted.browser
-    browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let (browser, runtime) = try makeSheetBrowserWithRuntime()
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = browser }
+    defer { webView.navigationDelegate = runtime }
 
     let server = try LocalLoopbackHTTPServer(responses: [
       "/stream": .partial("<!doctype html><html><body><p>streaming</p>"),
@@ -221,6 +215,13 @@ extension BrowserLayerViewTests {
     XCTAssertNil(browser.lastRequestedURL, "失敗時に架空のローカル baseURL を lastRequestedURL へ昇格しない")
   }
 
+  private func makeSheetBrowserWithRuntime() throws -> (BrowserLayerView, BrowserTabRuntime) {
+    let browser = hostBrowser().browser
+    browser.setMode(.sheet, animated: false)
+    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
+    return (browser, runtime)
+  }
+
   /// WebContent 異常終了時はリモート／ローカル HTML 暫定中・初回未確定 `https://` 要求のいずれも
   /// 暫定状態と読込表示をリセットして URL・鍵保護・`lastRequestedURL` を整え、再読込や後続遷移で復帰できる。
   func testWebContentProcessTerminationResetsStateProtectsURLAndRecovers() throws {
@@ -229,23 +230,24 @@ extension BrowserLayerViewTests {
       "/hang": .hang,
     ])
     defer { server.stop() }
+    let pageA = server.url(for: "/page-a")
 
     // 1. リモートコミット済み /page-a 上で /hang 暫定遷移中に異常終了 → 状態復元し reloadPage で /page-a へ復帰。
-    let remote = hostBrowser().browser
-    remote.setMode(.sheet, animated: false)
-    let remoteWebView = try XCTUnwrap(remote.webView)
+    let (remote, remoteRuntime) = try makeSheetBrowserWithRuntime()
     var remoteFinish = 0
     remote.onNavigationFinish = { remoteFinish += 1 }
-    let pageA = server.url(for: "/page-a")
     remote.load(pageA)
     pumpMain(until: { remoteFinish >= 1 }, timeout: 5, "page-a 完了")
 
     remote.load(server.url(for: "/hang"))
     XCTAssertTrue(remote.isProvisionalNavigation, "前提: /hang 暫定中")
-    remote.toolbar.isLoading = true
-    remote.toolbar.estimatedProgress = 0.6
-    remote.webViewWebContentProcessDidTerminate(remoteWebView)
+    remoteRuntime.isLoading = true
+    remoteRuntime.estimatedProgress = 0.6
+    remote.syncToolbar(from: remoteRuntime)
+    remoteRuntime.webViewWebContentProcessDidTerminate(remoteRuntime.webView)
     XCTAssertFalse(remote.isProvisionalNavigation)
+    XCTAssertFalse(remoteRuntime.isLoading)
+    XCTAssertEqual(remoteRuntime.estimatedProgress, 0)
     XCTAssertFalse(remote.toolbar.isLoading)
     XCTAssertEqual(remote.toolbar.estimatedProgress, 0)
     XCTAssertEqual(remote.toolbar.displayURL?.path, "/page-a")
@@ -254,18 +256,16 @@ extension BrowserLayerViewTests {
     let beforeReload = remoteFinish
     remote.reloadPage()
     pumpMain(until: { remoteFinish > beforeReload }, timeout: 5, "異常終了後に reloadPage で /page-a へ復帰")
-    XCTAssertEqual(remoteWebView.url, pageA)
+    XCTAssertEqual(remoteRuntime.webView.url, pageA)
 
     // 2. ローカル HTML コミット済み上で /hang 暫定遷移中に異常終了 → lastRequestedURL を nil に戻し表示維持。
-    let local = hostBrowser().browser
-    local.setMode(.sheet, animated: false)
-    let localWebView = try XCTUnwrap(local.webView)
+    let (local, localRuntime) = try makeSheetBrowserWithRuntime()
     var localFinish = 0
     local.onNavigationFinish = { localFinish += 1 }
     local.loadHTMLString("<p>local</p>", baseURL: URL(string: "https://docs.orbe.dev/guide"))
     pumpMain(until: { localFinish >= 1 }, timeout: 5, "ローカル HTML 完了")
     local.load(server.url(for: "/hang"))
-    local.webViewWebContentProcessDidTerminate(localWebView)
+    localRuntime.webViewWebContentProcessDidTerminate(localRuntime.webView)
     XCTAssertFalse(local.isProvisionalNavigation)
     XCTAssertNil(local.lastRequestedURL, "ローカル HTML コミット時は暫定先も架空 baseURL も残さない")
     XCTAssertEqual(local.toolbar.displayURL?.host, "docs.orbe.dev")
@@ -273,18 +273,19 @@ extension BrowserLayerViewTests {
     // 3. 初回未確定 https:// 要求状態で異常終了 → 鍵非点灯で要求 URL を維持し、後続遷移で復帰できる。
     let hanging = try HangingLoopbackServer()
     defer { hanging.stop() }
-    let fresh = hostBrowser().browser
-    fresh.setMode(.sheet, animated: false)
-    let freshWebView = try XCTUnwrap(fresh.webView)
+    let (fresh, freshRuntime) = try makeSheetBrowserWithRuntime()
     var freshFinish = 0
     fresh.onNavigationFinish = { freshFinish += 1 }
     let secureTarget = URL(string: "https://127.0.0.1:\(hanging.port)/secure")!
     fresh.load(secureTarget)
-    fresh.toolbar.isLoading = true
-    fresh.toolbar.estimatedProgress = 0.4
-    fresh.toolbar.displayURL = nil
-    fresh.webViewWebContentProcessDidTerminate(freshWebView)
+    freshRuntime.isLoading = true
+    freshRuntime.estimatedProgress = 0.4
+    freshRuntime.displayURL = nil
+    fresh.syncToolbar(from: freshRuntime)
+    freshRuntime.webViewWebContentProcessDidTerminate(freshRuntime.webView)
     XCTAssertFalse(fresh.isProvisionalNavigation)
+    XCTAssertFalse(freshRuntime.isLoading)
+    XCTAssertEqual(freshRuntime.estimatedProgress, 0)
     XCTAssertFalse(fresh.toolbar.isLoading)
     XCTAssertEqual(fresh.toolbar.estimatedProgress, 0)
     XCTAssertEqual(fresh.toolbar.displayURL?.raw, secureTarget.absoluteString)
@@ -292,7 +293,7 @@ extension BrowserLayerViewTests {
 
     fresh.load(pageA)
     pumpMain(until: { freshFinish >= 1 }, timeout: 5, "異常終了後の後続遷移で正常復帰する")
-    XCTAssertEqual(freshWebView.url, pageA)
+    XCTAssertEqual(freshRuntime.webView.url, pageA)
   }
 
   /// `#hash` / `pushState` の同一文書 `goBack()` / `goForward()` と別文書間の履歴移動で
@@ -300,7 +301,7 @@ extension BrowserLayerViewTests {
   func testHistoryNavigationReleasesPendingStateAcrossSameAndCrossDocumentSteps() throws {
     let browser = hostBrowser().browser
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
+    let webView = try XCTUnwrap(browser.session.ensureActiveRuntime()).webView
 
     let server = try LocalLoopbackHTTPServer(routes: [
       "/p1": "<!doctype html><h1 id='sec'>P1</h1>",
@@ -368,12 +369,11 @@ extension BrowserLayerViewTests {
   /// `browser.load` で非 HTTP(S) スキームがポリシー遮断されたとき、未開始 `pendingNavigation` を
   /// 解放し `lastRequestedURL` とアドレスバーをコミット済みページへ復元する。
   func testBlockedMainFrameLoadReleasesPendingAndRestoresLastRequestedURL() throws {
-    let browser = hostBrowser().browser
-    browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView)
-    let spy = BrowserNavigationPolicySpy(target: browser)
+    let (browser, runtime) = try makeSheetBrowserWithRuntime()
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = browser }
+    defer { webView.navigationDelegate = runtime }
 
     let server = try LocalLoopbackHTTPServer(routes: ["/p": "<!doctype html><p>ok</p>"])
     defer { server.stop() }
