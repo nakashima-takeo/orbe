@@ -5,9 +5,10 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 行の折り返しの時間の計測（main の CPU 時間）。`ORBE_EDITOR_PERF=1` のときだけ走る（時間はマシンで変わる）。release で
-/// `scripts/perf-editor-frames.sh` が回し、`PERF-WRAP` の行を出す。関門: 1 万字の行 1 本の折り返し 0.2ms 以下、上限（UTF-8 のバイト数）の前後の文書で幅を
-/// 変えた 1 回の main の仕事（全部の行の折り返しを含む）16ms 以下、字ごとの字体と幅の表が空のときに、字の種類が 1,000 前後の
-/// 日本語の Markdown の全部の行を折り返す 50ms 以下。
+/// `scripts/perf-editor-frames.sh` が回し、`PERF-WRAP` の行を出す。関門: 1 万字の行 1 本の折り返し 0.2ms 以下、上限
+/// （UTF-8 のバイト数）の前後の文書で幅を変えた 1 回の main の仕事（全部の行の折り返しを含む）16ms 以下（書式文字の密度を
+/// 上限に置いた本文は 33ms 以下）、字ごとの字体と幅の表が空のときに、字の種類が 1,000 前後の日本語の Markdown の全部の行を
+/// 折り返す 50ms 以下。
 @MainActor
 final class LineWrapPerfTests: EngineTestCase {
   private let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular) as CTFont
@@ -75,6 +76,8 @@ final class LineWrapPerfTests: EngineTestCase {
   /// 上限（UTF-8 のバイト数）の前後の大きさの文書で、窓の幅を変えた 1 回の main の仕事（取引の確定で全部の行を折り返し
   /// 直す）。本文は日本語の Markdown（spec の写し。字の量あたりの手間がいちばん重い）と、ASCII の Swift と、書式文字（箱で
   /// 見せる U+200E）が字の 3 つに 1 つを占める本文で、上限の半分・すぐ下・すぐ上の大きさ。すぐ上の文書は折り返さない。
+  /// 関門は 16ms。書式文字の本文だけは 33ms（2 コマ）——書式文字の密度を上限に置いた場面で、守るのは、箱の幅を箱ごとに
+  /// Core Text で組んで引く作りへ戻らないこと（戻れば上限のすぐ下で約 40ms かかる）。
   func testResizingDocumentsAroundTheLimit() throws {
     let limit = MetalTextSurface.wrapLimit
     let scenes = [
@@ -108,7 +111,9 @@ final class LineWrapPerfTests: EngineTestCase {
           "PERF-WRAP resize", label, "bytes", text.utf8.count, "units", text.utf16.count,
           "wraps", surface.rows.wraps != nil, "cpu-ms p50", String(format: "%.2f", median), "max",
           String(format: "%.2f", times.dropFirst().max() ?? 0))
-        XCTAssertLessThanOrEqual(median, 16, "\(label) \(bytes) バイト: 幅を変えた 1 回の main の仕事")
+        XCTAssertLessThanOrEqual(
+          median, label == "format-characters" ? 33 : 16,
+          "\(label) \(bytes) バイト: 幅を変えた 1 回の main の仕事")
       }
     }
   }
