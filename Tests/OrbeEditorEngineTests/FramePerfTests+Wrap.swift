@@ -20,6 +20,7 @@ extension FramePerfTests {
     let opened = try attach(Self.paragraphs(length: 5_000, bytes: 200_000))
     let text = opened.document.text
     let row = text.lineCount / 2
+    XCTAssertNotNil(opened.surface.rows.wrap(ofLine: row), "前提: 打つ行は折り返す")
     _ = gateStrokes(
       opened, scenario: "typing", label: "wrapped-paragraph",
       caret: text.lineStart(row) + text.contentRange(ofRow: row).length / 2, stroke: Self.type)

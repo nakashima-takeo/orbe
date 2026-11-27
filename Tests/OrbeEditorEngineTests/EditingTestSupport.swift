@@ -54,9 +54,10 @@ enum Editing {
 
   static func environment(
     _ text: TextRope, indentation: Indentation = .fallback, lineBreak: LineBreak = .lf,
-    pageLines: Int = 10, killBuffer: String = "", rows: RowLayout = RowLayout(lineHeight: 18)
+    pageLines: Int = 10, killBuffer: String = ""
   ) -> EditingEnvironment {
-    EditingEnvironment(
+    let rows = RowLayout(lineHeight: 18)
+    return EditingEnvironment(
       text: text,
       geometry: ShapedLineGeometry(
         text: text, cache: cache, tabWidth: CGFloat(indentation.unit) * cell, rows: rows),

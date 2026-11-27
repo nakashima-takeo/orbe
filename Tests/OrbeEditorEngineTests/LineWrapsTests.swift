@@ -60,7 +60,6 @@ final class LineWrapsTests: XCTestCase {
     XCTAssertEqual(many.segmentCount, reference.reduce(0, +))
   }
 
-  /// 折り返した行の段は表示の単位の 1 段で、行の上端・段の上端・y にある段・位置が段の単位になる。
   /// 置き換えの列をまとめて当てると、区間ごとに後ろから当てたのと同じ木になる——区間が多いときの組み直しも、少ないときの
   /// 区間ごとの置き換えも。
   func testReplacingManyRangesAtOnceMatchesReplacingThemOneByOne() {
@@ -80,6 +79,7 @@ final class LineWrapsTests: XCTestCase {
     }
   }
 
+  /// 折り返した行の段は表示の単位の 1 段で、行の上端・段の上端・y にある段・位置が段の単位になる。
   func testRowLayoutCountsSegments() {
     var rows = RowLayout(lineHeight: 10)
     rows.setWraps(Self.wraps([1, 3, 1]))

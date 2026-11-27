@@ -33,7 +33,7 @@ extension SurfaceMinimapTests {
     }
     XCTAssertEqual(drop([], layout(firstLineSegments: 2)), [0, 1, 2, 3, 4], "前提: 描いたチャンク")
     XCTAssertEqual(
-      drop([RowEdit(rows: 70..<71, inserted: 1, version: 1)], layout(firstLineSegments: 2)),
+      drop([RowEdit(rows: 63..<64, inserted: 1, version: 1)], layout(firstLineSegments: 2)),
       [0, 2, 3, 4], "段の位置が変わらない打鍵の行のチャンク")
     XCTAssertEqual(
       drop([RowEdit(rows: 0..<1, inserted: 1, version: 2)], layout(firstLineSegments: 3)), [],

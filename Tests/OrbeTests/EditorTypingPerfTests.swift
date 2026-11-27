@@ -216,6 +216,7 @@ final class EditorTypingPerfTests: OrbeTestCase {
       let document = opened.document
       XCTAssertTrue(pumpUntilCaughtUp(document))
       let surface = document.surface
+      XCTAssertNotNil(try XCTUnwrap(surface as? MetalTextSurface).rows.wraps, "前提: 本文は折り返す")
       opened.window.makeFirstResponder(surface.responder)
       surface.selectedRange = (text as NSString).range(of: "marker")
       surface.responder.perform(NSSelectorFromString("selectHighlights:"), with: nil)
