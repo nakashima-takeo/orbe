@@ -114,8 +114,10 @@ extension BrowserLayerViewTests {
 
   // MARK: - キー分類と URL 編集中ガード
 
-  /// ブラウザ焦点中は安全遷移系のみ上位転送し、⌘R は再読込、⌘W・端末/エディター専用・⌘F は無動作消費する。
-  /// URL 編集中は ⌘B 以外の遷移・再読込・⌘⇧[/] を抑止しつつ ⌘⇧←/→ のテキスト選択は素通しし、焦点外は素通しする。
+  /// ブラウザ焦点中は安全遷移系のみ上位転送し、⌘T/⌘W/⌘R/⌘⇧T/⌘S はブラウザ操作として実行、
+  /// 端末ズーム・エディター専用・⌘F は無動作消費する。
+  /// URL 編集中は ⌘R・遷移系・⌘⇧[/] を抑止しつつ ⌘S（サイドバー開閉）・⌘⇧←/→ のテキスト選択を維持し、
+  /// ⌘T / ⌘B は編集終了のうえブラウザ操作として実行し、焦点外は素通しする。
   func testPerformKeyEquivalentClassifiesChromeKeysAndGuardsURLEditing() {
     let hosted = hostBrowser()
     let (window, browser) = (hosted.window, hosted.browser)
@@ -124,49 +126,63 @@ extension BrowserLayerViewTests {
     browser.setMode(.sheet, animated: false)
     browser.focusBrowser()
 
-    // 背後誤爆防止: ⌘W・端末ズーム・エディター専用・⌘F は消費して上位へ流さない。
+    // 背後誤爆防止: 端末ズーム・エディター専用・⌘F は消費して上位へ流さない。
     let blocked: [NSEvent] = [
-      .key("w"), .key("+"), .key("-"), .key("0"),
-      .key("s"), .key("B", [.command, .shift]), .key("p"), .key("f"),
+      .key("+"), .key("-"), .key("0"),
+      .key("B", [.command, .shift]), .key("p"), .key("f"),
     ]
-    for event in blocked {
-      XCTAssertTrue(browser.performKeyEquivalent(with: event))
-    }
+    for event in blocked { XCTAssertTrue(browser.performKeyEquivalent(with: event)) }
     XCTAssertTrue(commands.isEmpty, "遮断キーは onWindowCommand を呼ばない")
 
-    // ⌘R はタブリネームではなくページ再読込として消費する。
-    XCTAssertTrue(browser.performKeyEquivalent(with: .key("r")))
-    XCTAssertTrue(commands.isEmpty, "⌘R で renameTab を発火しない")
+    // ⌘T / ⌘W / ⌘R / ⌘⇧T / ⌘S はブラウザ固有操作として消費し、onWindowCommand を呼ばない。
+    XCTAssertFalse(browser.isSidebarOpen, "前提: 右シート既定はサイドバー閉")
+    XCTAssertTrue(browser.performKeyEquivalent(with: .key("s")))
+    XCTAssertTrue(browser.isSidebarOpen, "⌘S でサイドバーが開く")
+    XCTAssertTrue(browser.performKeyEquivalent(with: .key("s")))
+    XCTAssertFalse(browser.isSidebarOpen, "再度 ⌘S でサイドバーが閉じる")
+    XCTAssertTrue(browser.performKeyEquivalent(with: .key("t")))
+    XCTAssertEqual(browser.session.store.tabs.count, 1, "⌘T で新しい TODAY タブを作る")
+    XCTAssertTrue(browser.performKeyEquivalent(with: .key("w")))
+    XCTAssertEqual(browser.session.store.tabs.count, 0, "⌘W で TODAY タブを閉じる")
+    XCTAssertTrue(browser.performKeyEquivalent(with: .key("w")), "タブ 0 枚でも ⌘W は無動作消費")
+    XCTAssertTrue(browser.performKeyEquivalent(with: .key("r")), "⌘R はページ再読込として消費")
+    XCTAssertTrue(
+      browser.performKeyEquivalent(with: .key("T", [.command, .shift])),
+      "⌘⇧T は閉じたタブ復元として消費")
+    XCTAssertTrue(commands.isEmpty, "ブラウザ固有 5 キーは onWindowCommand を呼ばない")
 
-    // 安全遷移系は上位へ転送する。
+    // 安全遷移系は上位へ転送し、⌘↑/⌘↓/⌘C は素通しする。
     for event in [
       NSEvent.key("e"), .key("F", [.command, .shift]), .key("}", [.command, .shift]),
       .key("{", [.command, .shift]), .key("E", [.command, .shift]),
-    ] {
-      XCTAssertTrue(browser.performKeyEquivalent(with: event))
-    }
+    ] { XCTAssertTrue(browser.performKeyEquivalent(with: event)) }
     XCTAssertEqual(commands, [.toggleEditorFace, .findInProject, .nextTab, .prevTab, .openEditor])
-
-    // ⌘↑ / ⌘↓ と未分類（⌘C）は Web ページへ素通しし、onWindowCommand を呼ばない。
     commands.removeAll()
     for event in [
       specialKey(.upArrow, keyCode: 126, flags: [.command], in: window),
       specialKey(.downArrow, keyCode: 125, flags: [.command], in: window),
       .key("c"),
-    ] {
-      XCTAssertFalse(browser.performKeyEquivalent(with: event))
-    }
+    ] { XCTAssertFalse(browser.performKeyEquivalent(with: event)) }
     XCTAssertTrue(commands.isEmpty, "⌘↑/⌘↓/⌘C は onWindowCommand を呼ばない")
 
-    // URL 編集中は ⌘E/⌘R/⌘T/⌘⇧[/] を抑止し、⌘⇧←/→ は素通ししつつ編集状態を維持し、⌘B だけ閉じる。
+    assertURLEditingAndUnfocusedKeyGuards(browser: browser, window: window)
+  }
+
+  private func assertURLEditingAndUnfocusedKeyGuards(
+    browser: BrowserLayerView, window: NSWindow
+  ) {
+    var commands: [WindowCommand] = []
+    browser.onWindowCommand = { commands.append($0) }
     browser.beginURLEditing()
     for event in [
-      NSEvent.key("e"), .key("r"), .key("t"),
+      NSEvent.key("e"), .key("r"),
       .key("}", [.command, .shift]), .key("{", [.command, .shift]),
-    ] {
-      XCTAssertTrue(browser.performKeyEquivalent(with: event))
-    }
-    XCTAssertTrue(commands.isEmpty, "URL 編集中は ⌘E/⌘R/⌘T/⌘⇧[/] を発火しない")
+    ] { XCTAssertTrue(browser.performKeyEquivalent(with: event)) }
+    XCTAssertTrue(commands.isEmpty, "URL 編集中は ⌘E/⌘R/⌘⇧[/] を発火しない")
+    XCTAssertTrue(browser.performKeyEquivalent(with: .key("s")))
+    XCTAssertTrue(browser.isSidebarOpen, "URL 編集中も ⌘S でサイドバーを開閉できる")
+    XCTAssertTrue(browser.isEditingURL, "⌘S でツールバー URL 編集を維持する")
+    XCTAssertTrue(browser.performKeyEquivalent(with: .key("s")))
     XCTAssertFalse(
       browser.performKeyEquivalent(
         with: specialKey(.leftArrow, keyCode: 123, flags: [.command, .shift], in: window)),
@@ -178,11 +194,16 @@ extension BrowserLayerViewTests {
     XCTAssertTrue(commands.isEmpty, "⌘⇧←/→ でタブ切替を発火しない")
     XCTAssertTrue(browser.isEditingURL, "抑止・素通しキーを受けても URL 編集状態を維持する")
 
+    XCTAssertTrue(browser.performKeyEquivalent(with: .key("t")))
+    XCTAssertFalse(browser.isEditingURL, "URL 編集中の ⌘T は編集を終了して新タブを作る")
+    XCTAssertEqual(browser.session.store.tabs.count, 1)
+    XCTAssertTrue(commands.isEmpty)
+
+    browser.beginURLEditing()
     XCTAssertTrue(browser.performKeyEquivalent(with: .key("b")))
     XCTAssertFalse(browser.isEditingURL, "⌘B は URL 編集を外因終了する")
     XCTAssertEqual(commands, [.toggleBrowser])
 
-    // 焦点がブラウザの外にあるときは素通しする。
     commands.removeAll()
     window.makeFirstResponder(nil)
     XCTAssertFalse(browser.performKeyEquivalent(with: .key("w")))
