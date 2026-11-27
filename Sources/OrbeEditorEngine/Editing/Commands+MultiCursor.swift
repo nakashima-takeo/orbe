@@ -136,7 +136,10 @@ extension EditCommands {
       return Cursor(
         text.lineStart(target.row) + found.column, desiredX: x, upstream: found.upstream)
     }
-    let anchor = moved(Cursor(cursor.anchor, desiredX: cursor.anchorDesiredX))
+    let anchor = moved(
+      Cursor(
+        cursor.anchor, desiredX: cursor.anchorDesiredX,
+        upstream: cursor.upstream(at: cursor.anchor)))
     let position = moved(
       Cursor(cursor.position, desiredX: cursor.desiredX, upstream: cursor.upstream))
     return Cursor(
@@ -153,6 +156,8 @@ extension EditCommands {
     }
     guard primary.hasSelection else { return CommandResult(state: state, reveal: .none) }
     return CommandResult(
-      state: EditState(cursors: CursorList(Cursor(primary.position)), mark: state.mark))
+      state: EditState(
+        cursors: CursorList(Cursor(primary.position, upstream: primary.upstream)), mark: state.mark)
+    )
   }
 }
