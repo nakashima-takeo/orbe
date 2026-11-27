@@ -10,7 +10,7 @@ import OrbeEditorCore
 /// 変化を伴うので、本文の変化では頼まない）。語の出現はキャレットの明示的な移動から 50ms 後に
 /// 出て（VS Code と同じ）、打鍵・本文の変更で消え、キャレットが出ている範囲の中を動く間は取り直さない。
 /// 「明示的な移動」は、同じ runloop の中に本文の変更を伴わない選択の変化とする（打鍵は本文の変更と選択の変化が同じ
-/// runloop に来る。エンジンの契約に変化の理由は無い）。焦点がテキスト面と検索バーの外へ出ると語の出現は消え、テキスト面へ
+/// runloop に来る。エンジンの契約に変化の理由は無い）。焦点がテキスト面とファイル内検索の欄の外へ出ると語の出現は消え、テキスト面へ
 /// 戻るとキャレットを動かさなくても出直す。
 @MainActor
 final class EditorOccurrences {
@@ -22,7 +22,7 @@ final class EditorOccurrences {
   private var selectionRequest: AnalysisRequest?
   private var wordRequest: AnalysisRequest?
   private(set) var wordOccurrences: [NSRange] = []
-  /// 検索バーの検索語（バーが開いている間。閉じていれば nil）と、入力欄に焦点があるか。
+  /// ファイル内検索の検索語（欄が出ている間。閉じていれば nil）と、欄に焦点があるか。
   private var findNeedle: String?
   private var findFieldFocused = false
   /// テキスト面に焦点があるか。
@@ -66,7 +66,7 @@ final class EditorOccurrences {
     clearWord()
   }
 
-  /// 焦点が変わった。`surfaceFocused` はテキスト面に焦点があるか、`insideFace` は焦点がテキスト面か検索バーにあるか。
+  /// 焦点が変わった。`surfaceFocused` はテキスト面に焦点があるか、`insideFace` は焦点がテキスト面かファイル内検索の欄にあるか。
   func focusDidChange(surfaceFocused: Bool, insideFace: Bool) {
     self.surfaceFocused = surfaceFocused
     if surfaceFocused {
@@ -76,7 +76,7 @@ final class EditorOccurrences {
     }
   }
 
-  /// 検索バーの状態が変わった（開閉・検索語・入力欄の焦点）。
+  /// ファイル内検索の欄の状態が変わった（開閉・検索語・欄の焦点）。
   func findStateDidChange(needle: String?, fieldFocused: Bool) {
     findNeedle = needle
     findFieldFocused = fieldFocused

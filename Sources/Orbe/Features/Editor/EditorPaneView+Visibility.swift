@@ -55,7 +55,8 @@ extension EditorPaneView {
   var isFaceVisible: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
 
   /// ソース管理の一覧が行を組むか（面が見えていて、画面が Changes）と、PR のパネルが worktree の今の PR を追うか（面が
-  /// 見えている間。上のバーの番号）と中身も読むか（面が見えていて、画面が PR）を写す。左の列を閉じていても同じ——Changes・
+  /// 見えている間。上のバーの番号）と中身も読むか（面が見えていて、画面が PR）と、エクスプローラーが出ているか（面が見えて
+  /// いて、左の列が開いていて、Files の左の列がエクスプローラー）を写す。左の列を閉じていても同じ——Changes・
   /// PR の画面で本体に自動で開く行を決めるのに一覧が要る。
   func updatePanelsShown() {
     let visible = isFaceVisible
@@ -64,6 +65,7 @@ extension EditorPaneView {
     if !visible { pullRequest.isShown = false }
     pullRequest.isTracking = visible
     pullRequest.isShown = visible && screen == .pullRequest
+    tree.isExplorerShown = visible && sidebar.isOpen && shell.panel == .files
   }
 
   /// 本体の diff を、面が見えている間だけ見る（PR の diff はこの間だけ PR ごとの状態を見る）。替われば前の diff を見終わる。

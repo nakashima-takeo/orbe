@@ -106,6 +106,14 @@ enum EditorGlyphs {
     return parts
   }
 
+  /// 虫眼鏡: 円 (7, 7) r4 と `m10 10 3.5 3.5`（stroke 1.4）。
+  static let magnifier = Glyph(viewBox: 16, stroke: 1.4) { k in
+    var path = Path(ellipseIn: CGRect(x: 3 * k, y: 3 * k, width: 8 * k, height: 8 * k))
+    path.move(to: CGPoint(x: 10 * k, y: 10 * k))
+    path.addLine(to: CGPoint(x: 13.5 * k, y: 13.5 * k))
+    return [(path, 1)]
+  }
+
   /// 更新: 開いた円弧と矢じり（`M13 8a5 5 0 1 1-1.7-3.75` `M13 2.8v2.4h-2.4`）。
   static let refresh = Glyph(viewBox: 16, stroke: 1.2) { k in
     var path = Path()

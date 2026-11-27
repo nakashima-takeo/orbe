@@ -46,6 +46,12 @@ extension EditorItemListRow.Mark {
       self = document.isDirty ? .unsaved : .none
     }
   }
+
+  /// 閉じられる行の印——文書の印に「印が無ければ ×」を足したもの。⌘P の一覧の行と、ツリーの開いている文書の行が使う。
+  @MainActor static func closable(_ document: EditorDocument) -> Self {
+    let mark = Self(document)
+    return mark == .none ? .close : mark
+  }
 }
 
 /// 一覧の中身の行の組。行の列は見えている行の番号でだけ問うので、持ち主の配列を写して持ち、番号から計算で答える。同一性から

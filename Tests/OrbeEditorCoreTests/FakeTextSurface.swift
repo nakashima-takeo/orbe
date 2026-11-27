@@ -16,7 +16,6 @@ final class FakeTextSurface: TextSurface {
   weak var host: TextSurfaceHost?
   /// 見えている範囲（本文の言葉）。テストが置く。
   var viewport = TextViewport.empty
-  var rightColumnWidth: CGFloat = 0
   var selectedRange = NSRange(location: 0, length: 0) {
     didSet { delegate?.surfaceDidChangeSelection(self) }
   }

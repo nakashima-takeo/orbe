@@ -5,7 +5,8 @@ import Foundation
 /// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`＋
 /// `L10nTable+Attention.swift`＋`L10nTable+WorktreePalette.swift`＋`L10nTable+ClosedAgents.swift`＋
 /// `L10nTable+Tasks.swift`＋`L10nTable+Automation.swift`＋`L10nTable+Secretary.swift`＋`L10nTable+Board.swift`＋
-/// `L10nTable+PullRequest.swift`＋`L10nTable+SourceControl.swift`＋`L10nTable+ItemList.swift`）を `table` が結合する。
+/// `L10nTable+PullRequest.swift`＋`L10nTable+SourceControl.swift`＋`L10nTable+ItemList.swift`＋
+/// `L10nTable+Explorer.swift`）を `table` が結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
     baseTable
@@ -21,6 +22,7 @@ enum L10n {
     .merging(pullRequestTable) { a, _ in a }
     .merging(itemListTable) { a, _ in a }
     .merging(sourceControlTable) { a, _ in a }
+    .merging(explorerTable) { a, _ in a }
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
     // MARK: Menu
@@ -200,13 +202,7 @@ enum L10n {
     .editorBarHideSidebar: ("サイドバーを閉じる", "Hide Sidebar"),
     .editorBarShowSidebar: ("サイドバーを開く", "Show Sidebar"),
     .editorBarShowTerminal: ("端末を表示", "Show Terminal"),
-
-    // MARK: Editor 面（骨: エクスプローラー）
-    .editorExplorerTitle: ("エクスプローラー", "Explorer"),
-    .editorNewFile: ("新規ファイル", "New File"),
-    .editorNewFolder: ("新規フォルダ", "New Folder"),
-    .editorCollapseAll: ("すべて折りたたむ", "Collapse All"),
-    .editorExpandAll: ("すべて展開", "Expand All"),
+    .editorFindPlaceholder: ("ファイル内を検索", "Find in File"),
 
     // MARK: Editor 面（プロジェクト検索）
     .editorSearchTitle: ("検索", "Search"),

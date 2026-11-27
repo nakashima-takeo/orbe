@@ -19,7 +19,9 @@ extension DesignGallerySnapshotTests {
       scene.view, size: NSSize(width: 360, height: 480), name: "editor_shell_narrow.png", dir: dir)
   }
 
-  /// 上のバーの部品の姿（`editor_bar_parts`）と、3 つの画面の姿の並びを幅 1100・820・600 で（`editor_bar_<画面>`）。
+  /// 上のバーの部品の姿（`editor_bar_parts`）と、3 つの画面の姿の並びを幅 1100・820・600 で（`editor_bar_<画面>`）。Files の
+  /// 画面のファイル内検索の欄の姿（一致あり・仮の文書つき・一致なし・フォーカスなし・検索語が空）を幅 1100 で
+  /// （`editor_bar_files_find`）。
   func renderEditorBarSnapshots(dir: URL) throws {
     try writePNG(
       EditorShellFixtures.barParts(), size: NSSize(width: 900, height: 240),
@@ -32,6 +34,9 @@ extension DesignGallerySnapshotTests {
         EditorShellFixtures.bars(screen, widths: widths), size: NSSize(width: 1100, height: 148),
         name: "editor_bar_\(name).png", dir: dir)
     }
+    try writePNG(
+      EditorShellFixtures.filesFindBars(), size: NSSize(width: 1100, height: 236),
+      name: "editor_bar_files_find.png", dir: dir)
   }
 
   /// 上のバーの右下の置き場——ポップアップだけ（`editor_dock_popup`）・ポップアップと失敗の札 2 枚（`editor_dock_cards`）・

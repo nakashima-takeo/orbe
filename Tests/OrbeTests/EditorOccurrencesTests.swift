@@ -6,7 +6,7 @@ import XCTest
 @testable import Orbe
 
 /// 出現の強調——キャレットの語の出現（50ms 後・打鍵で消え次の移動で出直す・焦点で出入り）と、選択文字列の他の出現
-/// （選択の変化で即時・検索バーと重ならない）。どちらも強調の地として面へ押し、本文に地として出る（俯瞰の印は面が同じ
+/// （選択の変化で即時・ファイル内検索と重ならない）。どちらも強調の地として面へ押し、本文に地として出る（俯瞰の印は面が同じ
 /// 地から描く）。時間は差し替えた時計で進め、出現を探す裏の仕事は追いつくのを待つ。
 ///
 /// 壊れると何が起きるか。打鍵のたびに語の地が点滅する。キャレットを動かしても出ない、端末へ移っても残る。選択の出現が
@@ -135,7 +135,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertEqual(occurrences.wordOccurrences.count, 1, "明示的な移動で出直す（fxoo は別の語）")
   }
 
-  /// 焦点が本文と検索バーの外へ出ると消え、戻るとキャレットを動かさなくても出直す。検索バーへ移っても消えない。
+  /// 焦点が本文とファイル内検索の欄の外へ出ると消え、戻るとキャレットを動かさなくても出直す。欄へ移っても消えない。
   func testFocusLeavingTheFaceClearsAndReturningBringsThemBack() throws {
     let clock = Clock()
     let hosted = try host(" foo foo\n", clock: clock)
@@ -146,11 +146,12 @@ final class EditorOccurrencesTests: OrbeTestCase {
 
     pane.showSearch()
     catchUp(hosted.document)
-    let bar = try XCTUnwrap(pane.searchBar)
+    XCTAssertNotNil(pane.findField.model)
     pumpMain(
-      until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true }, "バーへ")
+      until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: pane.barHost) == true },
+      "欄へ")
     nextTurn()
-    XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "検索バーへ移っても消えない")
+    XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "ファイル内検索の欄へ移っても消えない")
     pane.closeSearch()
     catchUp(hosted.document)
 
@@ -161,7 +162,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertTrue(
       pane.occurrences.wordOccurrences.isEmpty,
       "語の出現は、面の外へ出れば、焦点が移った後の main のキューの仕事で消える。これが待たずに成り立たなくなれば、このテストと "
-        + "testFocusLeavingFromTheFindBarClears が、検索バーにいる間は残ることを確かめる時点も成り立たない")
+        + "testFocusLeavingFromTheFindFieldClears が、ファイル内検索の欄にいる間は残ることを確かめる時点も成り立たない")
     clock.word = nil
     hosted.window.makeFirstResponder(hosted.document.surface.responder)
     pumpMain(until: { clock.word != nil }, "戻れば取りに行く")
@@ -169,8 +170,8 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "キャレットを動かさなくても出直す")
   }
 
-  /// 検索バーから本文と検索バーの外へ焦点が移っても消える（テキスト面の焦点は変わらない経路）。
-  func testFocusLeavingFromTheFindBarClears() throws {
+  /// ファイル内検索の欄から、本文と欄の外へ焦点が移っても消える（テキスト面の焦点は変わらない経路）。
+  func testFocusLeavingFromTheFindFieldClears() throws {
     let clock = Clock()
     let hosted = try host(" foo foo\n", clock: clock)
     let pane = hosted.pane
@@ -178,16 +179,17 @@ final class EditorOccurrencesTests: OrbeTestCase {
     try XCTUnwrap(clock.word)()
     pane.showSearch()
     catchUp(hosted.document)
-    let bar = try XCTUnwrap(pane.searchBar)
+    XCTAssertNotNil(pane.findField.model)
     pumpMain(
-      until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true }, "バーへ")
+      until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: pane.barHost) == true },
+      "欄へ")
     nextTurn()
-    XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "前提: バーにいる間は残る")
+    XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "前提: 欄にいる間は残る")
     let outside = NSTextField(frame: .zero)
     hosted.tab.group.view.addSubview(outside)
     hosted.window.makeFirstResponder(outside)
-    pumpMain(until: { pane.occurrences.wordOccurrences.isEmpty }, "バーから外へ出れば消える")
-    XCTAssertNotNil(pane.searchBar, "バーは開いたまま")
+    pumpMain(until: { pane.occurrences.wordOccurrences.isEmpty }, "欄から外へ出れば消える")
+    XCTAssertNotNil(pane.findField.model, "欄は出たまま")
   }
 
   /// 選択文字列の他の出現は即時に本文へ出る。選択が語をはみ出すと語の出現は出ない。
@@ -282,8 +284,8 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertEqual(hosted.pane.occurrences.wordOccurrences, [], "古い予約は何もしない")
   }
 
-  /// 検索バーが同じ文字列を探している間は、選択文字列の出現を出さない（検索の一致と二重にしない）。
-  func testSelectionOccurrencesStepAsideForTheFindBar() throws {
+  /// ファイル内検索が同じ文字列を探している間は、選択文字列の出現を出さない（検索の一致と二重にしない）。
+  func testSelectionOccurrencesStepAsideForTheFindField() throws {
     let clock = Clock()
     let hosted = try host(" ab ab ab\n", clock: clock)
     let pane = hosted.pane
@@ -295,7 +297,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "同じ文字列を検索中は出ない")
     pane.closeSearch()
     catchUp(hosted.document)
-    XCTAssertEqual(pane.occurrences.selectionOccurrences.count, 2, "バーを閉じれば出る")
+    XCTAssertEqual(pane.occurrences.selectionOccurrences.count, 2, "欄を閉じれば出る")
   }
 
   /// 語の出現を頼んだ後、結果が届く前に打鍵で消した問いの結果は、届いても出さない（打鍵のたびに地が点滅しない）。

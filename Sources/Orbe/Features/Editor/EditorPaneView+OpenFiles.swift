@@ -57,6 +57,16 @@ extension EditorPaneView {
     }
   }
 
+  /// ツリーの開いている印の写しを作り直す（値が変わったときだけ書く）。開いている文書（仮の文書を含む）の、根からの相対パス
+  /// → 閉じられる行の印。根の外の文書は入れない。セッションが変わったとき・根が替わったときに呼ぶ。
+  func refreshOpenMarks() {
+    var marks: [String: EditorItemListRow.Mark] = [:]
+    for document in group?.editor.documents ?? [] {
+      if let path = tree.relativePath(of: document.url) { marks[path] = .closable(document) }
+    }
+    tree.setOpenMarks(marks)
+  }
+
   /// 今の仮の文書を普通の文書にする（上のバーの「開いたままにする」。フォーカスは動かさない）。
   func keepCurrentOpen() {
     guard let session = group?.editor, let url = session.activeURL else { return }
@@ -133,7 +143,7 @@ extension EditorPaneView {
     return EditorItemListRow.File(
       chip: FileChip.resolve(document.url), name: document.url.lastPathComponent,
       isItalic: isPreview, directory: directory(of: document.url), tags: tags,
-      mark: closable ? (state == .none ? .close : state) : .none,
+      mark: closable ? .closable(document) : .none,
       badge: group?.editor.badge(of: document),
       closeLabel: L10n.string(.editorItemListClose, language),
       markLabel: markLabel(state))

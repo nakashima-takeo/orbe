@@ -154,7 +154,7 @@ private struct EditorTruncatedName: Layout {
 }
 
 /// 文書の印の丸（未保存は primary、「ディスクが変わった」は caution）。印の意味をツールチップと VoiceOver に出す。上のバーの今の
-/// ファイルのボタンと diff の見出しが使う。
+/// ファイルのボタン・diff の見出し・ツリーの開いている行の印の枠が使う。
 struct EditorMarkDot: View {
   private let isDiskChanged: Bool
   private let size: CGFloat

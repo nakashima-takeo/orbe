@@ -24,6 +24,8 @@ struct EditorBarRoot: View {
   let pullRequestPanel: PrPanel
   /// レビューのポップアップの持ち主（「レビュー」のボタンが読む）。
   let reviewPopup: PrReviewPopup
+  /// ファイル内検索の欄の持ち主（Files の中ほど）。
+  let findField: EditorFindField
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
   /// 部品の間隔。
