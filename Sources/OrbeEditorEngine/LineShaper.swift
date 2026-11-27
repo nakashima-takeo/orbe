@@ -76,30 +76,36 @@ enum LineShaper {
     return Source(head: head, length: length)
   }
 
+  /// 箱で見せる書式文字 1 つ——描く単位の位置と、元の字。
+  struct Box: Hashable {
+    var index: Int
+    var unit: UInt16
+  }
+
   /// 描く単位の列（上限を書記素の境で切り、制御文字を記号に置き換えたもの）と、打ち切って描かない単位の数と、箱で
-  /// 見せる書式文字（描く単位の位置 → 元の字）。箱の位置の単位は、並びに効かない U+FFFC に置き換える。
+  /// 見せる書式文字（位置の昇順）。箱の位置の単位は、並びに効かない U+FFFC に置き換える。箱は列で持つ——書式文字の多い
+  /// 本文で、行ごとに表を作らない。
   struct Displayed: Hashable {
     var units: ContiguousArray<UInt16>
     var omitted: Int
-    var boxes: [Int: UInt16]
+    var boxes: [Box]
 
     /// 描く単位の区間 `range` の段——区間の単位と、区間の中の箱（位置は区間の頭から）。打ち切った単位の数は、行の最後の段
     /// （`last`）だけが持つ。
     func segment(_ range: Range<Int>, last: Bool) -> Displayed {
       guard range != 0..<units.count || !last else { return self }
-      var boxes: [Int: UInt16] = [:]
-      for (index, unit) in self.boxes where range.contains(index) {
-        boxes[index - range.lowerBound] = unit
-      }
+      let first = boxes.firstBox(atOrAfter: range.lowerBound)
+      let end = boxes.firstBox(atOrAfter: range.upperBound)
       return Displayed(
-        units: ContiguousArray(units[range]), omitted: last ? omitted : 0, boxes: boxes)
+        units: ContiguousArray(units[range]), omitted: last ? omitted : 0,
+        boxes: boxes[first..<end].map { Box(index: $0.index - range.lowerBound, unit: $0.unit) })
     }
   }
 
   static func display(_ source: Source) -> Displayed {
     let cut = source.length > limit ? graphemeCut(source.head) : source.length
     var units = ContiguousArray(source.head[0..<cut])
-    var boxes: [Int: UInt16] = [:]
+    var boxes: [Box] = []
     for i in units.indices {
       let u = units[i]
       if u < 0x20, u != 0x09 {
@@ -109,7 +115,7 @@ enum LineShaper {
       } else if u == 0x2028 || u == 0x2029 || u == 0x85 || u == 0xFEFF {
         units[i] = 0xFFFD
       } else if isDirectionalFormat(u) {
-        boxes[i] = u
+        boxes.append(Box(index: i, unit: u))
         units[i] = 0xFFFC
       }
     }
@@ -175,9 +181,9 @@ enum LineShaper {
   static func shape(_ string: String, font: CTFont) -> ShapedLine {
     let units = ContiguousArray(string.utf16)
     let ascii = isASCII(units)
-    let line = makeLine(units, boxes: [:], font: font, tabWidth: 0, ascii: ascii)
+    let line = makeLine(units, boxes: [], font: font, tabWidth: 0, ascii: ascii)
     return ShapedLine(
-      line, omitted: 0, boxes: [:], font: font, ascii: isMonospaced(font) && ascii)
+      line, omitted: 0, boxes: [], font: font, ascii: isMonospaced(font) && ascii)
   }
 
   /// 行を組む。字の字体は字ごとの字体の表（`GlyphFonts`）から引き、同じ字体が続く範囲ごとに表の字体を渡して組む。渡した
@@ -185,15 +191,15 @@ enum LineShaper {
   /// 本体の字体のまま渡す。ASCII の字とタブだけの行は、本体の字体がどの ASCII の字も持つなら、表を引かずに本体の字体で
   /// 組む。
   private static func makeLine(
-    _ units: ContiguousArray<UInt16>, boxes: [Int: UInt16], font: CTFont, tabWidth: CGFloat,
+    _ units: ContiguousArray<UInt16>, boxes: [Box], font: CTFont, tabWidth: CGFloat,
     ascii: Bool
   ) -> CTLine {
     let attributed = attributed(units, font: font, tabWidth: tabWidth)
     let widths = boxes.isEmpty ? [] : GlyphFonts.asciiWidths(font)
-    for (index, unit) in boxes {
+    for box in boxes {
       CFAttributedStringSetAttribute(
-        attributed, CFRange(location: index, length: 1), kCTRunDelegateAttributeName,
-        boxDelegate(width: boxWidth(unit, ascii: widths), font: font))
+        attributed, CFRange(location: box.index, length: 1), kCTRunDelegateAttributeName,
+        boxDelegate(width: boxWidth(box.unit, ascii: widths), font: font))
     }
     if !units.isEmpty, !ascii || !GlyphFonts.coversASCII(font) {
       let glyphs = GlyphFonts.glyphs(units, font: font)
@@ -282,7 +288,7 @@ extension ShapedLine {
   /// 組んだ行から写す。書式文字の箱（`boxes`）の位置には、箱の中身の字を同じ元の位置で置く。`ascii` は等幅のフォントで
   /// 組み、描く単位がどれも ASCII の字かタブか。
   fileprivate init(
-    _ line: CTLine, omitted: Int, boxes: [Int: UInt16], font: CTFont, ascii: Bool
+    _ line: CTLine, omitted: Int, boxes: [LineShaper.Box], font: CTFont, ascii: Bool
   ) {
     var runs: [Run] = []
     for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
@@ -302,7 +308,7 @@ extension ShapedLine {
           attributes, Unmanaged.passUnretained(kCTRunDelegateAttributeName).toOpaque()) == nil
       else {
         for (position, index) in zip(positions, indices) {
-          guard let unit = boxes[index] else { continue }
+          guard let unit = boxes.unit(at: index) else { continue }
           for label in LineShaper.shape(LineShaper.boxLabel(unit), font: font).runs {
             runs.append(
               Run(
@@ -331,5 +337,24 @@ extension ShapedLine {
   /// 字の元の位置と x の列（run をまたいで並べたもの。x は左から右へ増えていく）。
   var stops: (offsets: [Int], xs: [CGFloat]) {
     (runs.flatMap(\.offsets), runs.flatMap(\.xs))
+  }
+}
+
+extension [LineShaper.Box] {
+  /// 位置の昇順の箱の列で、位置が `index` 以上の最初の箱の番号（無ければ `count`）。
+  func firstBox(atOrAfter index: Int) -> Int {
+    var low = 0
+    var high = count
+    while low < high {
+      let mid = (low + high) / 2
+      if self[mid].index < index { low = mid + 1 } else { high = mid }
+    }
+    return low
+  }
+
+  /// 位置 `index` の箱の元の字（箱が無ければ nil）。
+  func unit(at index: Int) -> UInt16? {
+    let found = firstBox(atOrAfter: index)
+    return found < count && self[found].index == index ? self[found].unit : nil
   }
 }

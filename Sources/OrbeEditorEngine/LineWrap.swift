@@ -74,15 +74,16 @@ enum LineWrap {
     let boxes = shown.boxes
     if shown.omitted == 0, boxes.isEmpty, fitsASCII(units, metrics) { return nil }
     let glyphs: GlyphFonts.Glyphs? =
-      LineShaper.isASCII(units) && boxes.isEmpty
-      ? nil : GlyphFonts.glyphs(units, font: metrics.font)
+      isASCII(units, besides: boxes.count) ? nil : GlyphFonts.glyphs(units, font: metrics.font)
     let tab = metrics.tabWidth
-    /// 単位 `index` で始まる字の幅（字の続きの単位なら nil）。`x` は段の頭からの位置（タブの幅を決める）。
+    var nextBox = 0
+    /// 単位 `index` で始まる字の幅（字の続きの単位なら nil）。`x` は段の頭からの位置（タブの幅を決める）。箱の位置の
+    /// 単位は U+FFFC なので、箱を引くのはその単位だけ。
     func advance(_ index: Int, at x: CGFloat) -> CGFloat? {
       let unit = units[index]
       if unit == 0x09 { return tabAdvance(at: x, tab) }
-      if !boxes.isEmpty, let label = boxes[index] {
-        return LineShaper.boxWidth(label, ascii: metrics.ascii)
+      if unit == 0xFFFC, let box = boxWidth(at: index, boxes, next: &nextBox, metrics.ascii) {
+        return box
       }
       guard let glyphs else { return metrics.ascii[Int(unit) - 0x20] }
       return glyphs.width(at: index)
@@ -128,6 +129,32 @@ enum LineWrap {
       index += 1
     }
     return result.starts.isEmpty ? nil : result
+  }
+
+  /// 位置 `index` の箱の幅（箱が無ければ nil）。`next` は次に引くはずの箱の番号——位置は前から順に読むので、多くは
+  /// 探さずに当たる。
+  private static func boxWidth(
+    at index: Int, _ boxes: [LineShaper.Box], next: inout Int, _ ascii: [CGFloat]
+  ) -> CGFloat? {
+    let found =
+      next < boxes.count && boxes[next].index == index ? next : boxes.firstBox(atOrAfter: index)
+    guard found < boxes.count, boxes[found].index == index else { return nil }
+    next = found + 1
+    return LineShaper.boxWidth(boxes[found].unit, ascii: ascii)
+  }
+
+  /// 箱（`boxes` 個）のほかは ASCII の字とタブだけの列か——箱の位置の単位は U+FFFC で、列の U+FFFC がどれも箱なら、
+  /// 字ごとの字体と幅の表を引かずに幅が決まる。
+  static func isASCII(_ units: ContiguousArray<UInt16>, besides boxes: Int) -> Bool {
+    var marks = 0
+    for unit in units {
+      if unit == 0xFFFC {
+        marks += 1
+      } else if unit != 0x09, !(0x20...0x7E).contains(unit) {
+        return false
+      }
+    }
+    return marks == boxes
   }
 
   /// 段の頭から `x` の所のタブの幅——次のタブ位置（刻み `tab` の倍数で、`x` より右）まで。
