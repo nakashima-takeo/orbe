@@ -2,8 +2,8 @@
   import Foundation
 
   /// PR のパネルと PR の diff の gallery / flow の、差し替えの GitHub のレビューのやりとり。StateHooks.swift の新しい側の行 12
-  /// （you の未送信のコメントと、もう 1 人の返信）のスレッドに、古い側の行の Markdown 入りのスレッド・解決済みのスレッド・
-  /// 今の diff に置けないスレッド・README.md のスレッドを足した姿を答える。書き込みは GitHub と同じく次の読みに出る
+  /// （you の未送信のコメントと、もう 1 人の返信）のスレッドに、新しい側の行 14〜16 の範囲のスレッド・古い側の行の Markdown
+  /// 入りのスレッド・解決済みのスレッド・今の diff に置けないスレッド・README.md のスレッドを足した姿を答える。書き込みは GitHub と同じく次の読みに出る
   /// （返信・解決・新しいスレッドは未送信のレビューに積み、送信で公開する）。`writes` で、書き込みの答えを返さない（書き込みの
   /// 最中を撮る）・失敗を返す、に替えられる。返さずにおいた答えは `release` でその時の答え方で返す。`viewerIsAuthor` で、自分の
   /// PR の答えに替えられる。
@@ -32,9 +32,28 @@
 
     init(head: @escaping () -> String) {
       self.head = head
-      let now = Date()
+      threads = Self.initialThreads(now: Date())
+    }
+
+    /// 古い側の行のスレッドの、Markdown 入りの本文。
+    private static let legacyBody = """
+      **旧い経路**では `append` の後に `notify` を *毎回* 呼んでいた。
+
+      - 呼ぶ回数: ~~イベントごと~~ → まとめて 1 回
+      - 経緯は [設計メモ](https://example.com/hooks) に
+
+      ```swift
+      buffer.append(event)
+      renderer.notify(.hooksDidEmit)
+      ```
+
+      > 描画は最新の状態だけを見せればよい
+      """
+
+    /// 最初に答えるスレッド（時刻は `now` からの経過で書く）。
+    private static func initialThreads(now: Date) -> [GitHubPullRequestReview.Thread] {
       let ago = { (minutes: Double) in now.addingTimeInterval(-minutes * 60) }
-      threads = [
+      return [
         Self.thread(
           "T_coalesce", lines: Self.at(12),
           [
@@ -49,23 +68,20 @@
               createdAt: ago(3), isPending: false),
           ]),
         Self.thread(
+          "T_branch",
+          lines: GitHubLineRange(
+            start: GitHubLine(side: .new, line: 14), end: GitHubLine(side: .new, line: 16)),
+          [
+            .init(
+              id: "C_7", author: "octocat", body: "else の側も tail を更新しなくてよいですか？",
+              createdAt: ago(20), isPending: false)
+          ]),
+        Self.thread(
           "T_legacy", lines: Self.at(10, side: .old),
           [
             .init(
               id: "C_3", author: "octocat",
-              body: """
-                **旧い経路**では `append` の後に `notify` を *毎回* 呼んでいた。
-
-                - 呼ぶ回数: ~~イベントごと~~ → まとめて 1 回
-                - 経緯は [設計メモ](https://example.com/hooks) に
-
-                ```swift
-                buffer.append(event)
-                renderer.notify(.hooksDidEmit)
-                ```
-
-                > 描画は最新の状態だけを見せればよい
-                """,
+              body: legacyBody,
               createdAt: ago(180), isPending: false)
           ]),
         Self.thread(

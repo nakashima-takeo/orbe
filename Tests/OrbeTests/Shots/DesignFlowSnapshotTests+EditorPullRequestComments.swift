@@ -58,8 +58,8 @@ extension DesignFlowSnapshotTests {
       steps: [
         ("line_gone", steps.rewriteDraftLine)
       ])
+    try renderEntry(queriesRoot: queriesRoot)
   }
-
   /// レビューのポップアップの、人の PR の flow に出ない姿: 自分の PR（種類が無く、返信をまとめて送るだけ）と、diff の両端を
   /// 求められない PR（下端の帯に送れない理由）。
   func testEditorPrReview() throws {
