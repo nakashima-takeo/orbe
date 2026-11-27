@@ -117,7 +117,8 @@ extension EditorPaneView {
         }
         if escapeRepeatIsSwallowed(event) { return nil }
         guard !confirm.isShown else { return event }
-        return handleStepKey(event) || handleViewedKey(event) ? nil : event
+        return handleStepKey(event) || handleViewedKey(event) || handleCommentKey(event)
+          ? nil : event
       }
     }
   }
