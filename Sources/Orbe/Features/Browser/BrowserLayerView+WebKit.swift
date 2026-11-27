@@ -5,7 +5,9 @@ import WebKit
 extension BrowserLayerView {
   /// アクティブタブの実行体を `belowBar` へ差し替え、空画面・ツールバー・焦点を同期する。
   func mountRuntime(_ next: BrowserTabRuntime?) {
-    if mountedRuntime === next {
+    let nextSpaceId = session.store.activeSpace?.id
+    let nextTabId = session.store.activeTab?.id
+    if mountedRuntime === next && displayedSpaceId == nextSpaceId && displayedTabId == nextTabId {
       emptyOverlay.isHidden = next?.hasNavigated ?? false
       syncToolbar(from: next)
       if let next, next.hasNavigated, mode.isOpen, !isEditingURL, window?.firstResponder === self {
@@ -17,14 +19,20 @@ extension BrowserLayerView {
     if isEditingURL {
       endURLEditingExternally()
     }
-    mountedRuntime?.webView.removeFromSuperview()
-    mountedRuntime = next
+    if mountedRuntime !== next {
+      mountedRuntime?.webView.removeFromSuperview()
+      mountedRuntime = next
+    }
+    displayedSpaceId = nextSpaceId
+    displayedTabId = nextTabId
     clearWebSnapshot()
     if let next {
-      next.applyAppearance(effectiveAppearance)
-      next.webView.frame = belowBar.bounds
-      next.webView.autoresizingMask = [.width, .height]
-      belowBar.addSubview(next.webView, positioned: .above, relativeTo: belowGround)
+      if next.webView.superview !== belowBar {
+        next.applyAppearance(effectiveAppearance)
+        next.webView.frame = belowBar.bounds
+        next.webView.autoresizingMask = [.width, .height]
+        belowBar.addSubview(next.webView, positioned: .above, relativeTo: belowGround)
+      }
       emptyOverlay.isHidden = next.hasNavigated
     } else {
       emptyOverlay.isHidden = false

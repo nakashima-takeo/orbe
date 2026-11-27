@@ -33,6 +33,8 @@ final class BrowserLayerView: NSView {
 
   /// 現在マウント中のアクティブタブ実行体（弱参照。強参照は `session.runtimes` が所有）。
   weak var mountedRuntime: BrowserTabRuntime?
+  var displayedSpaceId: UUID?
+  var displayedTabId: UUID?
   var webView: WKWebView? { mountedRuntime?.webView }
   var hasNavigated: Bool { mountedRuntime?.hasNavigated ?? false }
   var committedURL: URL? { mountedRuntime?.committedURL }
