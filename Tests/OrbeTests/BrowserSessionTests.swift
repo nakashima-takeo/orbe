@@ -215,7 +215,10 @@ final class BrowserSessionTests: OrbeTestCase {
     browser.loadHTMLString(
       "<!doctype html><title>Fake</title><p>local</p>",
       baseURL: URL(string: "https://fake.orbe.dev/doc"))
-    pumpMain(until: { finishes >= 1 }, timeout: 5, "ローカル HTML 完了")
+    pumpMain(
+      until: { finishes >= 1 && browser.webView?.title == "Fake" },
+      timeout: 5, "ローカル HTML 完了と webView.title 到達")
+    nextTurn()
     let localTab = try XCTUnwrap(store.activeTab)
     XCTAssertNil(localTab.url, "loadHTMLString の架空 baseURL は DB へ書き込まない")
     XCTAssertEqual(localTab.title, "", "loadHTMLString のタイトルは DB へ書き込まない")
@@ -230,6 +233,7 @@ final class BrowserSessionTests: OrbeTestCase {
 
     browser.load(failURL)
     pumpMain(until: { !browser.isProvisionalNavigation }, timeout: 5, "暫定失敗完了")
+    nextTurn()
     XCTAssertEqual(store.tab(id: localTab.id)?.url, okURL, "暫定失敗で永続 URL を上書きしない")
   }
 
