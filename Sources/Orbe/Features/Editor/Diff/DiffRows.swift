@@ -37,8 +37,8 @@ enum DiffRows {
   /// 後（次の区間の削除行より上）、古い側の行の絵は、削除行ならその削除行の直後（削除行の塊を割る）、文脈の行なら対応する新しい
   /// 側の行の後。
   static func inline(_ hunks: [LineHunk], new: Side, notes: Notes = Notes()) -> SurfaceRows {
-    let lines = { (range: DiffLineRange) in inlineLines(of: range, hunks) }
-    let removedOverrides = resolve(notes.overrides, side: .old, lines)
+    let covered = notes.overrides.map { inlineLines(of: $0.range, hunks) }
+    let removedOverrides = resolve(notes.overrides, covered, side: .old)
     var spans = Spans(limit: new.lines)
     var runs: [Int: [InsertedLine]] = [:]
     var oldNext = 0
@@ -77,7 +77,7 @@ enum DiffRows {
       insertions: slots.insertions(runs: runs),
       spans: refine(
         spans.items, lines: new.lines, hunks: notes.hunks.ranges(.new),
-        overrides: resolve(notes.overrides, side: .new, lines)))
+        overrides: resolve(notes.overrides, covered, side: .new)))
   }
 
   /// 並列の左（古い側）と右（新しい側）——文脈は両側とも型なし。区間は両側の同じ行から始め、左は型「削除」、右は型「追加」で、
@@ -105,7 +105,7 @@ enum DiffRows {
       left.spans.add(block.old.upperBound)
       right.spans.add(block.new.upperBound)
     }
-    let covered = { (range: DiffLineRange) in coveredLines(of: range, hunks) }
+    let covered = notes.overrides.map { coveredLines(of: $0.range, hunks) }
     var slots = (left: Slots(), right: Slots())
     for zone in notes.zones {
       guard let (own, other) = sideSlots(zone, hunks, old: old, new: new) else { continue }
@@ -123,12 +123,12 @@ enum DiffRows {
         insertions: slots.left.insertions(runs: left.runs),
         spans: refine(
           left.spans.items, lines: old.lines, hunks: notes.hunks.ranges(.old),
-          overrides: resolve(notes.overrides, side: .old, covered))),
+          overrides: resolve(notes.overrides, covered, side: .old))),
       SurfaceRows(
         insertions: slots.right.insertions(runs: right.runs),
         spans: refine(
           right.spans.items, lines: new.lines, hunks: notes.hunks.ranges(.new),
-          overrides: resolve(notes.overrides, side: .new, covered)))
+          overrides: resolve(notes.overrides, covered, side: .new)))
     )
   }
 

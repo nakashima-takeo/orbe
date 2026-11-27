@@ -101,24 +101,30 @@ extension DiffRows {
 
   /// 古い側の行 `line` が、どの区間の何番目の削除行か、区間の外なら対応する新しい側の行。
   static func row(ofOld line: Int, _ hunks: [LineHunk]) -> Row {
-    var shift = 0
-    for hunk in hunks {
-      if line < hunk.oldLines.lowerBound { break }
-      if line < hunk.oldLines.upperBound { return .changed(hunk, line - hunk.oldLines.lowerBound) }
-      shift = hunk.newLines.upperBound - hunk.oldLines.upperBound
-    }
-    return .context(line + shift)
+    row(of: line, hunks, \.oldLines, \.newLines)
   }
 
   /// 新しい側の行 `line` が、どの区間の何番目の追加の行か、区間の外なら対応する古い側の行。
   private static func row(ofNew line: Int, _ hunks: [LineHunk]) -> Row {
-    var shift = 0
-    for hunk in hunks {
-      if line < hunk.newLines.lowerBound { break }
-      if line < hunk.newLines.upperBound { return .changed(hunk, line - hunk.newLines.lowerBound) }
-      shift = hunk.oldLines.upperBound - hunk.newLines.upperBound
+    row(of: line, hunks, \.newLines, \.oldLines)
+  }
+
+  /// 側 `own` の行 `line` の、行差分 `hunks` の中での位置（反対側は `other`）。区間の列は両側とも昇順なので、`line` 以前に
+  /// 始まる最後の区間を二分探索で引く。
+  private static func row(
+    of line: Int, _ hunks: [LineHunk], _ own: KeyPath<LineHunk, Range<Int>>,
+    _ other: KeyPath<LineHunk, Range<Int>>
+  ) -> Row {
+    var (low, high) = (0, hunks.count)
+    while low < high {
+      let mid = (low + high) / 2
+      if hunks[mid][keyPath: own].lowerBound <= line { low = mid + 1 } else { high = mid }
     }
-    return .context(line + shift)
+    guard low > 0 else { return .context(line) }
+    let hunk = hunks[low - 1]
+    let lines = hunk[keyPath: own]
+    if line < lines.upperBound { return .changed(hunk, line - lines.lowerBound) }
+    return .context(line + hunk[keyPath: other].upperBound - lines.upperBound)
   }
 
   /// 並列で、行 `zone.line` の絵を置く所（その側）と、相手と同じ高さの空きを置く所（反対側）。区間の `k` 段目は左の古い側の
@@ -248,14 +254,14 @@ extension DiffRows {
     return low
   }
 
-  /// 地を替える範囲 `overrides` の、その側の行の区間と行の上書きの番号（列の順）。`lines` は範囲を行に解く関数。
+  /// 地を替える範囲 `overrides` の、その側の行の区間と行の上書きの番号（列の順）。`covered` は範囲ごとに行に解いた区間（側ごと。
+  /// `overrides` と同じ順）。
   static func resolve(
-    _ overrides: [Override], side version: Version,
-    _ lines: (DiffLineRange) -> (old: Range<Int>, new: Range<Int>)
+    _ overrides: [Override], _ covered: [(old: Range<Int>, new: Range<Int>)],
+    side version: Version
   ) -> [(range: Range<Int>, style: Int)] {
-    overrides.compactMap { override in
-      let covered = lines(override.range)
-      let range = version == .old ? covered.old : covered.new
+    zip(overrides, covered).compactMap { override, lines in
+      let range = version == .old ? lines.old : lines.new
       return range.isEmpty ? nil : (range, override.kind.style)
     }
   }
