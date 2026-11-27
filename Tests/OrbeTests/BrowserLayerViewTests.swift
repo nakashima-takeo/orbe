@@ -49,15 +49,40 @@ final class BrowserLayerViewTests: OrbeTestCase {
     return Hosted(window: window, stage: stage, underlay: underlay, browser: browser)
   }
 
+  /// 窓座標（原点は左下）の 1 点を実 NSEvent のマウス押下・離上でクリック配送する（事前に `placeOffscreen` が必要）。
+  func clickWindowPoint(_ point: NSPoint, in window: NSWindow) {
+    let make = { (type: NSEvent.EventType) in
+      NSEvent.mouseEvent(
+        with: type, location: point, modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
+    }
+    NSApp.postEvent(make(.leftMouseUp), atStart: false)
+    NSApp.sendEvent(make(.leftMouseDown))
+    if let pending = NSApp.nextEvent(
+      matching: .leftMouseUp, until: .distantPast, inMode: .default, dequeue: true)
+    {
+      NSApp.sendEvent(pending)
+    }
+    flush(window)
+  }
+
   // MARK: - 遅延生成と隔離
 
-  /// 初回表示まで `WKWebView` を作らず、隔離環境では `identifier` の有無に依らず非永続ストアだけを返す。
+  /// 閉状態およびタブ 0 枚の空画面では `WKWebView` を作らず、遷移要求で初めて遅延生成する。
+  /// 隔離環境ではプロファイル UUID ごとに独立した非永続ストアを共有し、永続ストアへ触れない。
   func testWebViewIsCreatedLazilyWithNonPersistentStoreInIsolatedEnvironment() throws {
     XCTAssertTrue(StateDir.isIsolated, "前提: テストプロセスは隔離環境")
-    XCTAssertFalse(BrowserDataStore.make().isPersistent, "既定呼び出しは非永続ストア")
-    XCTAssertFalse(
-      BrowserDataStore.make(isolated: true, identifier: UUID()).isPersistent,
-      "隔離時は identifier 指定でも非永続ストアを優先する")
+    let registry = BrowserDataStoreRegistry()
+    let profileA = UUID()
+    let profileB = UUID()
+    let storeA1 = registry.store(for: profileA)
+    let storeA2 = registry.store(for: profileA)
+    let storeB = registry.store(for: profileB)
+    XCTAssertFalse(storeA1.isPersistent, "隔離環境では非永続ストアを返す")
+    XCTAssertFalse(storeB.isPersistent, "別プロファイルも非永続ストアを返す")
+    XCTAssertTrue(storeA1 === storeA2, "同一プロファイルは同じ非永続ストアを共有する")
+    XCTAssertFalse(storeA1 === storeB, "異なるプロファイルは別の非永続ストアへ分離する")
 
     let hosted = hostBrowser()
     let browser = hosted.browser
@@ -65,15 +90,19 @@ final class BrowserLayerViewTests: OrbeTestCase {
     XCTAssertTrue(browser.sheetView.isHidden)
 
     browser.setMode(.sheet, animated: false)
-    let webView = try XCTUnwrap(browser.webView, "初回表示で生成される")
+    XCTAssertNil(browser.webView, "タブ 0 枚の空画面では WKWebView を生成しない")
+    XCTAssertFalse(browser.newTabHost.isHidden)
+
+    browser.loadHTMLString("<p>lazy</p>", baseURL: URL(string: "https://docs.orbe.dev/lazy"))
+    let webView = try XCTUnwrap(browser.webView, "遷移要求で初めて遅延生成される")
     XCTAssertFalse(webView.configuration.websiteDataStore.isPersistent, "非永続ストアを使う")
   }
 
   // MARK: - hitTest 貫通と透かし吸収
 
-  /// 右シート左半分と閉じフェード中は下層へ貫通し、シート内空画面クリックは焦点を取る。
-  /// 透かし中は左半分を含め全領域をブラウザ層自身が吸収する。
-  func testHitTestPassesThroughLeftHalfAndClosingFadeAndAbsorbsWhilePeeking() {
+  /// 右シート左半分と閉じフェード中は下層へ貫通し、シート内新タブ画面はブラウザ層配下が受けて
+  /// 余白タップで焦点を取る。透かし中は左半分を含め全領域をブラウザ層自身が吸収する。
+  func testHitTestPassesThroughLeftHalfAndClosingFadeAndAbsorbsWhilePeeking() throws {
     let hosted = hostBrowser(reduceMotion: false)
     let (window, stage, underlay, browser) = (
       hosted.window, hosted.stage, hosted.underlay, hosted.browser
@@ -84,11 +113,15 @@ final class BrowserLayerViewTests: OrbeTestCase {
     let leftPoint = NSPoint(x: 100, y: 300)
     let sheetPoint = NSPoint(x: 750, y: 300)
     XCTAssertTrue(stage.hitTest(leftPoint) === underlay, "右シート左半分は下層へ貫通する")
-    XCTAssertTrue(stage.hitTest(sheetPoint) === browser, "空画面はブラウザ層自身が受ける")
+    let sheetHit = try XCTUnwrap(stage.hitTest(sheetPoint))
+    XCTAssertTrue(
+      sheetHit === browser || sheetHit.isDescendant(of: browser),
+      "新タブ画面はブラウザ層配下が受ける")
 
     window.makeFirstResponder(nil)
-    browser.mouseDown(with: .mouse(.leftMouseDown, at: sheetPoint, in: window))
-    XCTAssertTrue(window.firstResponder === browser, "空画面クリックでブラウザ層が焦点を取る")
+    placeOffscreen(window)
+    clickWindowPoint(NSPoint(x: 960, y: 40), in: window)
+    XCTAssertTrue(window.firstResponder === browser, "新タブ画面余白の実クリックでブラウザ層が焦点を取る")
 
     browser.setPeeking(true, animated: false)
     XCTAssertTrue(stage.hitTest(leftPoint) === browser, "透かし中は左半分もブラウザ層が吸収する")

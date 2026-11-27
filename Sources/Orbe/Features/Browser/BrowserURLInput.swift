@@ -10,6 +10,16 @@ struct BrowserDisplayURL: Equatable {
 
 /// URL 欄の表示分解と入力正規化（純粋関数）。
 enum BrowserURLInput {
+  /// HTTP(S) スキームかつ非空ホストを持つナビゲーション可能な URL かを判定する。
+  static func isValidHTTPNavigationURL(_ url: URL?) -> Bool {
+    guard let url,
+      let scheme = url.scheme?.lowercased(),
+      scheme == "http" || scheme == "https",
+      let host = url.host, !host.isEmpty
+    else { return false }
+    return true
+  }
+
   /// URL をホスト部とパス部へ分解する。`about:blank` 等の空ページは `nil`。
   static func display(_ url: URL?, isSecure: Bool? = nil) -> BrowserDisplayURL? {
     guard let url else { return nil }
@@ -37,7 +47,7 @@ enum BrowserURLInput {
 
   /// URL 表示の並び替えや切り詰めを引き起こす Bidi 書式文字・制御文字・行/段落区切りのみを
   /// UTF-8 バイト単位で再パーセントエンコードし、日本語等の可読パスは維持する。
-  private static func sanitizeForDisplay(_ text: String) -> String {
+  static func sanitizeForDisplay(_ text: String) -> String {
     guard text.unicodeScalars.contains(where: requiresDisplayPercentEncoding) else { return text }
     var result = ""
     result.reserveCapacity(text.utf8.count)

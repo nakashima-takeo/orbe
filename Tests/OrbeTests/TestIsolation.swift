@@ -66,6 +66,7 @@ extension OrbeTestCase {
   func guiConfFile() throws -> URL { try XCTUnwrap(GuiConfig.fileURL) }
   func tasksFile() throws -> URL { try XCTUnwrap(TaskPersistence.fileURL) }
   func automationsFolder() throws -> URL { try XCTUnwrap(AutomationPersistence.folder) }
+  func browserFolder() throws -> URL { try XCTUnwrap(BrowserPersistence.folder) }
 }
 
 /// テストプロセス全体の隔離。`installOnce()` は冪等で、最初の 1 回だけ実際に張る。
@@ -179,6 +180,7 @@ enum TestIsolation {
     TaskPersistence.fileURLOverride = dir.appendingPathComponent("tasks.json")
     AutomationPersistence.folderOverride = dir.appendingPathComponent(
       "automations", isDirectory: true)
+    BrowserPersistence.folderOverride = dir.appendingPathComponent("browser", isDirectory: true)
 
     // 同梱リソースの探索根。既定は Xcode の bin を指しており空でも中立でもないため、管理下の
     // 空ディレクトリを用意する（層1 の `orbe-defaults.conf` は不在になる）。テストが同梱物を

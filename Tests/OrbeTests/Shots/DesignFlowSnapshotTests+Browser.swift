@@ -18,8 +18,10 @@ extension DesignFlowSnapshotTests {
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: .darkAqua)
 
+    let session = BrowserSession.inMemory(language: .ja, workspaceName: "orbe")
     let browser = BrowserLayerView(
-      localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
+      session: session, localization: LocalizationStore(language: .ja),
+      fontResolver: ChromeFontResolver())
     browser.reduceMotion = true
 
     let stage = BrowserShotStage(frame: NSRect(origin: .zero, size: size))
@@ -50,9 +52,133 @@ extension DesignFlowSnapshotTests {
     try captureSheetDrag(window: window, stage: stage, browser: browser, idx: &idx)
     try captureFullAndPeek(
       window: window, stage: stage, faces: scene.group.view, browser: browser, idx: &idx)
+    try captureSidebarPopoverAndNewTab(window: window, stage: stage, browser: browser, idx: &idx)
   }
 
-  /// 右シート最小幅（240pt）と狭幅ウィンドウでの全面 Peek で 4 つの主要ボタンが 1px も切れないことを撮る。
+  /// サイドバー（自由・ローカル）・プロファイルポップオーバー・新しいタブ画面・360pt 狭幅オーバーレイを撮る。
+  private func captureSidebarPopoverAndNewTab(
+    window: NSWindow, stage: NSView, browser: BrowserLayerView, idx: inout Int
+  ) throws {
+    let store = browser.session.store
+    let personalSpace = try XCTUnwrap(store.freeSpaces.first { $0.icon == .person })
+    let localSpace = try XCTUnwrap(store.currentLocalSpace)
+    populateSidebarFixtureTabs(in: browser.session, personal: personalSpace, local: localSpace)
+
+    // 1. 全面ローカルスペースサイドバー（Dark / Light）
+    _ = browser.session.selectSpace(.local)
+    browser.setMode(.full, animated: false)
+    browser.setSidebarOpen(true)
+    browser.setFocused(true)
+    loadBrowserFixturePage(in: browser)
+    for (appearance, suffix) in [(NSAppearance.Name.darkAqua, "dark"), (.aqua, "light")] {
+      window.appearance = NSAppearance(named: appearance)
+      try writeBrowserShot(
+        stage: stage, browser: browser, captureWeb: true, idx: &idx,
+        label: "full_local_sidebar_\(suffix)")
+    }
+
+    // 2. 全面自由スペース（個人・非公開ピル＋Favorites 4 タイル＋PINNED＋TODAY）Dark / Light
+    _ = browser.session.selectSpace(.free(personalSpace.id))
+    loadBrowserFixturePage(in: browser)
+    for (appearance, suffix) in [(NSAppearance.Name.darkAqua, "dark"), (.aqua, "light")] {
+      window.appearance = NSAppearance(named: appearance)
+      try writeBrowserShot(
+        stage: stage, browser: browser, captureWeb: true, idx: &idx,
+        label: "full_free_sidebar_\(suffix)")
+    }
+
+    // 3. プロファイルポップオーバー開（Dark / Light）
+    browser.openPopover(.profile)
+    for (appearance, suffix) in [(NSAppearance.Name.darkAqua, "dark"), (.aqua, "light")] {
+      window.appearance = NSAppearance(named: appearance)
+      try writeBrowserShot(
+        stage: stage, browser: browser, captureWeb: true, idx: &idx,
+        label: "popover_profile_\(suffix)")
+    }
+    browser.closePopover()
+
+    // 4. 新しいタブ画面（クイックアクセス＋最近閉じたタブあり）Dark / Light
+    browser.openNewTab()
+    for (appearance, suffix) in [(NSAppearance.Name.darkAqua, "dark"), (.aqua, "light")] {
+      window.appearance = NSAppearance(named: appearance)
+      try writeBrowserShot(
+        stage: stage, browser: browser, captureWeb: false, idx: &idx,
+        label: "newtab_rich_\(suffix)")
+    }
+
+    // 5. 狭幅右シート 360pt オーバーレイサイドバー開（WKWebView 合成上に暗幕＋サイドバー）
+    window.appearance = NSAppearance(named: .darkAqua)
+    _ = browser.session.selectSpace(.local)
+    browser.setMode(.sheet, animated: false)
+    browser.setSheetRatio(360.0 / 1100.0)
+    browser.setSidebarOpen(true)
+    loadBrowserFixturePage(in: browser)
+    stage.layoutSubtreeIfNeeded()
+    XCTAssertTrue(browser.isSidebarOverlay, "360pt 右シートではオーバーレイドロワーに切り替わる")
+    try writeBrowserShot(
+      stage: stage, browser: browser, captureWeb: true, idx: &idx,
+      label: "sheet_overlay_360_dark")
+    browser.setSidebarOpen(false)
+    browser.setSheetRatio(BrowserResizeSession.defaultRatio)
+  }
+
+  private func populateSidebarFixtureTabs(
+    in session: BrowserSession, personal: BrowserSpace, local: BrowserSpace
+  ) {
+    if let initialLocalTab = session.store.tabs(in: local.id).first {
+      _ = session.store.updateTabTitle(initialLocalTab.id, title: "Orbe Preview — SyncClient")
+    }
+
+    let favEntries: [(String, String)] = [
+      ("https://mail.google.com/mail/u/0/#inbox", "Gmail"),
+      ("https://calendar.google.com/calendar", "Google カレンダー"),
+      ("https://www.youtube.com/watch?v=orbe", "YouTube"),
+      ("https://github.com/notifications", "GitHub"),
+    ]
+    for (raw, title) in favEntries {
+      _ = session.openTab(
+        in: personal.id, section: .favorite, url: URL(string: raw), title: title, activate: false)
+    }
+    _ = session.openTab(
+      in: personal.id, section: .pinned, url: URL(string: "https://x.com/home"),
+      title: "ホーム / X", activate: false)
+    _ = session.openTab(
+      in: personal.id, section: .pinned, url: URL(string: "https://www.amazon.co.jp/orders"),
+      title: "注文履歴 — Amazon", activate: false)
+    // アクティブタブは外部通信ゼロでローカル HTML を差し込めるよう url: nil で生成する。
+    _ = session.openTab(
+      in: personal.id, section: .today, url: nil, title: "週末の予定 — Notion", activate: true)
+
+    _ = session.openTab(
+      in: local.id, section: .pinned,
+      url: URL(string: "https://github.com/nakashima-takeo/orbe/actions"),
+      title: "CI · build-test #429", activate: false)
+    _ = session.openTab(
+      in: local.id, section: .pinned,
+      url: URL(string: "https://developer.apple.com/documentation/webkit"),
+      title: "WKWebsiteDataStore — Apple Docs", activate: false)
+    _ = session.openTab(
+      in: local.id, section: .today,
+      url: URL(string: "https://developer.mozilla.org/ja/docs/Web/API/WebSockets_API"),
+      title: "WebSockets API — MDN", activate: false)
+
+    if let closed1 = session.openTab(
+      in: personal.id, section: .today,
+      url: URL(string: "https://developer.apple.com/videos/play/wwdc2024/10134"),
+      title: "WKWebExtension in macOS — WWDC24", activate: false)
+    {
+      _ = session.closeTab(closed1.id, recordClosed: true)
+    }
+    if let closed2 = session.openTab(
+      in: local.id, section: .today,
+      url: URL(string: "https://localhost:5173/preview"),
+      title: "Orbe Preview — SyncClient", activate: false)
+    {
+      _ = session.closeTab(closed2.id, recordClosed: true)
+    }
+  }
+
+  /// 右シート最小幅（240pt）と狭幅ウィンドウでの全面 Peek で 5 つの主要ボタンが 1px も切れないことを撮る。
   private func captureNarrowSheetAndPeek(
     window: NSWindow, stage: NSView, browser: BrowserLayerView, idx: inout Int
   ) throws {
@@ -174,6 +300,9 @@ extension DesignFlowSnapshotTests {
     browser.loadHTMLString(
       Self.browserFixtureHTML, baseURL: URL(string: "https://docs.orbe.dev/browser/preview"))
     pumpMain(until: { finished }, timeout: 5, "ローカル HTML の読み込み完了")
+    if let tab = browser.session.store.activeTab, tab.title.isEmpty {
+      _ = browser.session.store.updateTabTitle(tab.id, title: "Orbe Preview — SyncClient")
+    }
     RunLoop.main.run(until: Date().addingTimeInterval(0.15))
   }
 

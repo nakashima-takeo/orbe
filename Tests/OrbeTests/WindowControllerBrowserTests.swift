@@ -10,7 +10,7 @@ import XCTest
 /// ブラウザ覆い判定とクリック時閉鎖、および URL 編集中フォーカス保護・タブ改名クリックを実窓で守る。
 ///
 /// 壊れると何が起きるか。ブラウザ開閉で端末の行桁が崩れて pty に SIGWINCH が飛ぶ。
-/// 0 タブやボード上で `⌘B` が効かなくなる。URL 欄編集中に `⌘T` 等が暴発する、または背景操作・タブ改名欄の
+/// 0 タブやボード上で `⌘B` が効かなくなる。URL 欄編集中に下層パレット等が暴発する、または背景操作・タブ改名欄の
 /// blur で入力中の URL やブラウザ焦点が奪われる。
 /// workspace 切替やパレット往復でブラウザが閉じたり焦点が背後の端末へ奪われたりする。
 /// 全面ブラウザ上の `⌘E` や `open_file` でブラウザが閉じずゴースト入力になる。
@@ -51,7 +51,7 @@ final class WindowControllerBrowserTests: OrbeTestCase {
   // MARK: - ⌘B トグル・端末寸法不変・0 タブ・ボード・URL 編集中ガード
 
   /// `⌘B` はタブ・0 タブ・ボードを問わず開閉し、開閉・幅変更・全面切替の前後で端末の寸法を 1px も変えない。
-  /// URL 欄編集中は `⌘B` 以外のタブ不要コマンドを不活性化し、`⌘B` は編集を外因終了して閉じる。
+  /// URL 欄編集中は単一降下ゲート経由のタブ不要コマンドを不活性化し、`⌘B` は編集を外因終了して閉じる。
   func testCommandBTogglesAcrossTabsZeroTabsAndBoardWithoutResizingTerminal() throws {
     let window = OrbeWindowFake()
     let wc = try restore(
@@ -83,9 +83,11 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     XCTAssertEqual(wc.browserView.sheetRatio, 0.72, accuracy: 0.001, "右シート復帰後も設定比率を保つ")
     wc.setBrowserMode(.full, animated: false)
 
-    // URL 欄編集中は ⌘T が不活性で暴発せず、⌘B だけ編集を外因終了して閉じる。
+    // URL 欄編集中は単一降下ゲート経由の下層パレットコマンドが不活性で暴発せず、⌘B だけ編集を外因終了して閉じる。
     wc.browserView.beginURLEditing()
-    XCTAssertFalse(wc.handleWindowKeyCommand(.showWorktreePalette), "URL 編集中は ⌘T を抑止")
+    XCTAssertFalse(
+      wc.handleWindowKeyCommand(.showWorktreePalette),
+      "URL 編集中は単一降下ゲート経由の下層コマンドを抑止")
     XCTAssertEqual(wc.presentedOverlay, .none)
     XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("b")))
     XCTAssertEqual(wc.browserMode, .closed)
@@ -113,7 +115,9 @@ final class WindowControllerBrowserTests: OrbeTestCase {
 
   // MARK: - workspace 切替・overlay・背景タブ閉鎖での保持
 
-  /// タブ・worktree・workspace 切替・背景タブ閉鎖・overlay 往復でブラウザの開閉・比率・表示ページ・焦点記憶を保持する。
+  /// 自由スペース表示中のタブ・worktree・workspace 切替・背景タブ閉鎖・overlay 往復でブラウザの開閉・
+  /// 比率・表示ページ・焦点記憶を保持する。
+  @MainActor
   func testWorkspaceSwitchOverlayAndBackgroundClosePreserveBrowserAndFocus() throws {
     let wt1 = try caseDir("wt1")
     let wt2 = try caseDir("wt2")
@@ -132,16 +136,20 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     let wsA = try XCTUnwrap(wc.workspaces.first { $0.name == "a" })
     let wsAIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "a" })
     let wsBIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "b" })
+    let freeSpace = try XCTUnwrap(wc.browserSession.store.freeSpaces.first)
     let pageURL = URL(string: "https://docs.orbe.dev/guide")!
 
+    XCTAssertTrue(wc.browserSession.selectSpace(.free(freeSpace.id)))
     wc.setBrowserMode(.sheet, animated: false)
     wc.browserView.setSheetRatio(0.65)
     loadPage(pageURL, in: wc)
+    let freeWebView = try XCTUnwrap(wc.browserView.webView)
     XCTAssertTrue(wc.browserView.focusIsInside, "前提: 右シートに焦点")
 
     // 別 worktree タブへ切り替えても表示ページとシート比率を保持する。
     wc.select(1)
     XCTAssertEqual(wc.browserMode, .sheet)
+    XCTAssertTrue(wc.browserView.webView === freeWebView, "同一 WKWebView 実体を維持する")
     XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertEqual(wc.browserView.toolbar.displayURL?.host, "docs.orbe.dev")
     wc.select(0)
@@ -153,10 +161,11 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertTrue(wc.browserView.focusIsInside)
 
-    // ブラウザ焦点のまま workspace 切替しても右シート・比率・ページ・ブラウザ焦点を保持する。
+    // 自由スペース表示のまま workspace 切替しても右シート・比率・ページ・同一 WKWebView・焦点を保持する。
     wc.switchWorkspace(to: wsBIndex)
     XCTAssertEqual(wc.browserMode, .sheet)
     XCTAssertEqual(wc.browserView.sheetRatio, 0.65, accuracy: 0.001)
+    XCTAssertTrue(wc.browserView.webView === freeWebView, "自由スペース切替で WKWebView を再生成しない")
     XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertEqual(wc.browserView.toolbar.displayURL?.path, "/guide")
     XCTAssertTrue(wc.browserView.focusIsInside, "右シート焦点記憶があればブラウザに焦点を保つ")
@@ -169,19 +178,57 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     XCTAssertEqual(wc.browserMode, .sheet, "overlay 閉鎖後も右シートを保つ")
     XCTAssertTrue(wc.browserView.focusIsInside, "overlay 閉鎖でブラウザへ焦点復帰")
 
-    // 下層の端末へ焦点を移してから workspace 切替すると、右シートとページは保ったまま切替先の端末へ焦点が移る。
+    // 下層の端末へ焦点を移してから workspace 切替すると、自由スペースのページは保ったまま切替先端末へ焦点が移る。
     wc.window.makeFirstResponder(try XCTUnwrap(wc.activeTab).surface)
     wc.switchWorkspace(to: wsAIndex)
     XCTAssertEqual(wc.browserMode, .sheet, "右シートは保持")
     XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertTrue(wc.window.firstResponder === wsA.tabs[0].surface, "下層焦点だったなら切替先端末へ")
 
-    // 全面表示では常にブラウザ・ページ・焦点を保持する。
+    // 全面表示の自由スペースでは常にブラウザ・ページ・焦点を保持する。
     wc.setBrowserMode(.full, animated: false)
     wc.switchWorkspace(to: wsBIndex)
     XCTAssertEqual(wc.browserMode, .full)
     XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertTrue(wc.browserView.focusIsInside)
+  }
+
+  /// ローカルスペース表示中は workspace 切替に追従して切替先 workspace の中身と現在 workspace 名へ切り替わり、
+  /// アクティブ workspace 改名のみ即時同期し（背景改名では上書きしない）、元の workspace へ戻すと復帰する。
+  @MainActor
+  func testLocalSpaceFollowsWorkspaceSwitch() throws {
+    let window = OrbeWindowFake()
+    let wc = try restore(
+      [
+        WorkspaceState(name: "a", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain]),
+        WorkspaceState(name: "b", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain]),
+      ], window: window)
+    window.isKey = true
+    let wsAIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "a" })
+    let wsBIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "b" })
+    let localPageURL = URL(string: "https://local.orbe.dev/ws-a")!
+
+    wc.setBrowserMode(.full, animated: false)
+    XCTAssertEqual(wc.browserSession.store.activeSpaceSelection, .local, "初回選択はローカルスペース")
+    XCTAssertEqual(wc.browserSession.store.currentWorkspaceName, "a", "起動時に現在 WS 名を同期")
+    loadPage(localPageURL, in: wc)
+    XCTAssertEqual(wc.browserView.webView?.url, localPageURL)
+
+    wc.switchWorkspace(to: wsBIndex)
+    XCTAssertEqual(wc.browserSession.store.currentWorkspaceName, "b", "WS 切替で現在 WS 名を同期")
+    XCTAssertNil(wc.browserView.webView, "wsB のローカルスペースは空画面へ切り替わる")
+    XCTAssertNil(wc.browserView.toolbar.displayURL)
+    XCTAssertTrue(wc.browserView.focusIsInside, "全面表示の焦点は維持する")
+
+    wc.renameWorkspace(wsBIndex, to: "beta")
+    XCTAssertEqual(wc.browserSession.store.currentWorkspaceName, "beta", "アクティブ WS 改名を即時同期")
+    wc.renameWorkspace(wsAIndex, to: "alpha")
+    XCTAssertEqual(
+      wc.browserSession.store.currentWorkspaceName, "beta", "背景 WS 改名では現在 WS 名を上書きしない")
+
+    wc.switchWorkspace(to: wsAIndex)
+    XCTAssertEqual(wc.browserSession.store.currentWorkspaceName, "alpha", "復帰先に改名後 WS 名を同期")
+    XCTAssertEqual(wc.browserView.webView?.url, localPageURL, "wsA へ戻すと wsA のローカルページへ復帰する")
   }
 
   private func caseDir(_ name: String) throws -> String {

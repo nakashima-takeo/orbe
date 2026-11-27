@@ -2,10 +2,43 @@ import AppKit
 
 /// ウィンドウ単一の内蔵ブラウザ層（Z=2）の配線・開閉・モード切替・フォーカス同期。
 extension WindowController {
+  static func makeBrowserSession(language: Language) -> BrowserSession {
+    MainActor.assumeIsolated {
+      BrowserSession(store: BrowserStore.open(language: language))
+    }
+  }
+
+  func startBrowserSession() {
+    MainActor.assumeIsolated {
+      browserSession.start(initialWorkspaceId: current.id, workspaceName: current.name)
+    }
+  }
+
+  func syncBrowserDefaultFreeSpaceNames() {
+    MainActor.assumeIsolated {
+      _ = browserSession.store.syncDefaultFreeSpaceNames(to: localization.language)
+    }
+  }
+
+  func stopBrowserSession(flushingActiveTab: Bool = false) {
+    MainActor.assumeIsolated { browserSession.stop(flushingActiveTab: flushingActiveTab) }
+  }
+
   /// `BrowserLayerView` と `OrbeWindow` のフォーカス監視を配線する。
   func wireBrowser() {
     window.onFirstResponderChange = { [weak self] responder in
       self?.firstResponderDidChange(responder)
+    }
+    window.keyViewContainmentBoundary = { [weak self] in
+      guard let self, self.model.overlay == .none else { return nil }
+      guard self.browserMode == .full || self.browserView.ownsKeyRouting else { return nil }
+      if self.browserView.isPopoverOpen { return self.browserView.popoverHost }
+      if let webView = self.browserView.webView, self.browserView.hasNavigated,
+        !self.browserView.isEditingAnyURL, !self.browserView.isSidebarOverlay
+      {
+        return webView
+      }
+      return self.browserView
     }
     browserView.onWindowCommand = { [weak self] command in
       self?.handleWindowCommand(command)

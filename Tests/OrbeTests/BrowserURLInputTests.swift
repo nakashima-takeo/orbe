@@ -10,6 +10,41 @@ import XCTest
 /// あるいは `javascript:` / `file:` のような危険スキームが誤って遷移してしまう。
 /// 表示分解が壊れると HTTPS 鍵アイコンやホスト部・パス部の 2 トーン表示が崩れる。
 final class BrowserURLInputTests: OrbeTestCase {
+  /// `isValidHTTPNavigationURL` は HTTP(S) スキームかつ非空ホスト（大文字スキーム・IPv6 含む）のみ許可し、
+  /// `nil`・空ホスト・非 HTTP(S) スキーム群を拒否する。
+  func testIsValidHTTPNavigationURLAcceptsHTTPWithHostAndRejectsOthers() {
+    let valid = [
+      "http://localhost",
+      "https://example.com/path?q=1#top",
+      "HTTP://Example.COM:8080/",
+      "HTTPS://[::1]:3000/app",
+      "http://127.0.0.1/",
+    ]
+    for raw in valid {
+      XCTAssertTrue(
+        BrowserURLInput.isValidHTTPNavigationURL(URL(string: raw)),
+        "許可すべき URL が拒否された: \(raw)")
+    }
+
+    XCTAssertFalse(BrowserURLInput.isValidHTTPNavigationURL(nil))
+    let rejected = [
+      "http:///only-path",
+      "https://",
+      "about:blank",
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "data:text/html,<h1>x</h1>",
+      "ftp://example.com",
+      "mailto:user@example.com",
+      "orbe://open",
+    ]
+    for raw in rejected {
+      XCTAssertFalse(
+        BrowserURLInput.isValidHTTPNavigationURL(URL(string: raw)),
+        "拒否すべき URL が許可された: \(raw)")
+    }
+  }
+
   /// 明示 HTTP(S) を維持し、スキーム省略時はローカル開発向けへ `http://`、通常ホストへ `https://` を補完する。
   func testResolveNormalizesHTTPURLsAndInfersLocalVsPublicScheme() {
     let cases: [(input: String, expected: String)] = [

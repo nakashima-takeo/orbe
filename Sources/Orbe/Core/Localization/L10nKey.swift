@@ -1093,6 +1093,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutFontReset
 
   // MARK: - Browser（内蔵ブラウザ・L10nTable+Browser）
+  case browserBarToggleSidebar
   case browserBarBack
   case browserBarForward
   case browserBarReload
@@ -1107,8 +1108,64 @@ enum L10nKey: String, CaseIterable, Sendable {
   case browserPeekShowEditor
   case browserPeekShowBoard
   case browserPeekShowWindow
-  case browserEmptyTitle
-  case browserEmptyLead
-  case browserEmptyShortcutClose
-  case browserEmptyShortcutReload
+  case browserDefaultSpacePersonal
+  case browserDefaultSpaceWork
+  case browserDefaultSpaceResearch
+  case browserSidebarLocalTag
+  case browserSidebarLocalFallback
+  case browserSidebarProfileTooltip
+  case browserSidebarSectionPinned
+  case browserSidebarSectionToday
+  case browserSidebarClearToday
+  case browserSidebarClearTodayTooltip
+  case browserSidebarNewTab
+  case browserSidebarCloseTabTooltip
+  case browserSidebarAddSpaceTooltip
+  case browserSidebarLocalTooltip
+  case browserSidebarSpaceTooltip
+  case browserMenuPin
+  case browserMenuAddFavorite
+  case browserMenuUnpin
+  case browserMenuMoveToPinned
+  case browserMenuMoveToToday
+  case browserMenuCloseTab
+  case browserMenuEditSpace
+  case browserMenuDeleteSpace
+  case browserProfileHeading
+  case browserProfileCookieNote
+  case browserProfileMCPAllowed
+  case browserProfileMCPBlocked
+  case browserProfileMCPAllowedNote
+  case browserProfileMCPBlockedNote
+  case browserProfileSectionSpace
+  case browserProfileCreateAction
+  case browserProfileEditTooltip
+  case browserProfileCreateTitle
+  case browserProfileEditTitle
+  case browserProfileNameLabel
+  case browserProfileNamePlaceholder
+  case browserProfileColorLabel
+  case browserProfileDeleteAction
+  case browserProfileDeleteTitle
+  case browserProfileDeleteMessage
+  case browserProfileReassignLabel
+  case browserProfileReassignMCPExposeWarning
+  case browserSpaceCreateTitle
+  case browserSpaceEditTitle
+  case browserSpaceNameLabel
+  case browserSpaceNamePlaceholder
+  case browserSpaceIconLabel
+  case browserSpaceProfileLabel
+  case browserSpaceDeleteAction
+  case browserSpaceDeleteTitle
+  case browserSpaceDeleteMessageOne
+  case browserSpaceDeleteMessageOther
+  case browserActionSave
+  case browserActionCreate
+  case browserActionCancel
+  case browserActionDelete
+  case browserActionBack
+  case browserNewTabTitle
+  case browserNewTabQuickAccess
+  case browserNewTabRecentlyClosed
 }

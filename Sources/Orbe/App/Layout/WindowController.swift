@@ -13,7 +13,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   let statusModel: StatusRowModel
   // パレット提示の拡張（WindowController+Palette）も握るため internal。
   let model: AppShellModel
-  /// ウィンドウ最上層（Z=2）の内蔵ブラウザ層。workspace 切替をまたいで状態を保持する。
+  let browserSession: BrowserSession
   let browserView: BrowserLayerView
   var browserMode: BrowserMode = .closed
   /// overlay・改名欄から戻す先がブラウザ層かを記憶する（見た目の焦点判定には使わない）。
@@ -150,8 +150,9 @@ final class WindowController: NSObject, NSWindowDelegate {
     self.window = window
     let statusModel = StatusRowModel()
     self.statusModel = statusModel
-    let browserView = BrowserLayerView(localization: localization, fontResolver: fontResolver)
-    self.browserView = browserView
+    browserSession = Self.makeBrowserSession(language: localization.language)
+    browserView = BrowserLayerView(
+      session: browserSession, localization: localization, fontResolver: fontResolver)
     let model = AppShellModel(statusModel: statusModel, content: NSView(), browser: browserView)
     self.model = model
     hostingView = ChromeHostingView(
@@ -195,6 +196,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       applyActiveWorkspaceConfig()
     }
     ensureHome()  // 復元・新規のどちらの後にも 1 回（先に置くと復元の配列で上書きされる）
+    startBrowserSession()
     agentLauncher.appModel = model
     agentLauncher.localization = localization  // 起動パレット・オンボーディングの文言引き用
     configureAgentDefaults()
@@ -220,6 +222,8 @@ final class WindowController: NSObject, NSWindowDelegate {
     waitConditions.start()
     window.center()
   }
+
+  deinit { stopBrowserSession() }
 
   /// chrome（StatusRow・SwiftUI ルート）からの操作コールバック配線。
   private func wireChromeCallbacks() {

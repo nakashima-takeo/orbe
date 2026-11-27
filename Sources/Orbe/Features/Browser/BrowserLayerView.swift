@@ -7,13 +7,18 @@ import WebKit
 /// 既存の `model.content`（Z=0 端末・ボード / Z=1 エディター）の上に兄弟配置され、
 /// 開閉・幅変更・全面切替のいずれでも端末寸法へ一切干渉しない。
 ///
-/// 不透明地は `barGround`（36pt ツールバー部）と `belowGround`（バーより下）へ分離し、
+/// 不透明地は `barGround`（36pt ツールバー部）・`belowGround`（バーより下）・`sidebarGround`（サイドバー部）へ分離し、
 /// `sheetView` 自身は背景色を持たず左落ち影だけを担う（全面 `⌥` めくりで `belowBar.alphaValue = 0` にした際、
 /// 不透明な 36pt バーだけを残して下層を露出させるため）。
-/// `WKWebView` は初回表示まで遅延生成し、生成時は `BrowserDataStore.make()` で隔離する。
+/// アクティブタブ 1 枚の `BrowserTabRuntime` のみを弱参照でマウントし、強参照所有は `BrowserSession` に一本化する。
 final class BrowserLayerView: NSView {
+  let session: BrowserSession
   let toolbar = BrowserToolbarModel()
   let snapBadge = BrowserSnapBadgeModel()
+  let newTabModel = BrowserNewTabModel()
+  let newTabActions = BrowserNewTabActions()
+  let sidebarActions = BrowserSidebarActions()
+  let popoverModel = BrowserPopoverModel()
 
   let leftVeilView = BrowserPassthroughView()
   let sheetView = BrowserSheetContainerView()
@@ -22,35 +27,47 @@ final class BrowserLayerView: NSView {
   let barHost: BrowserBarHost
   let belowBar = BrowserFlippedView()
   let belowGround = NSView()
-  let emptyOverlay: BrowserEmptyHost
+  let contentView = BrowserFlippedView()
+  let newTabHost: BrowserNewTabHost
+  let sidebarScrim = BrowserSidebarScrimView()
+  let sidebarContainer = BrowserFlippedView()
+  let sidebarGround = NSView()
+  let sidebarHost: BrowserSidebarHost
+  let sidebarBorder = NSView()
+  let popoverHost: BrowserPopoverHost
   let resizeHandle = BrowserResizeHandleView()
   let snapBadgeHost: BrowserSnapBadgeHost
   let peekRailView = BrowserPassthroughView()
 
-  /// `visual-check` 撮影中のみ `belowBar` へ一時配置する `WKWebView.takeSnapshot` 合成面。
+  /// `visual-check` 撮影中のみ `contentView` へ一時配置する `WKWebView.takeSnapshot` 合成面。
   var snapshotOverlay: NSImageView?
 
-  /// 初回表示時に遅延生成される `WKWebView`。閉じたままの間は nil。
-  var webView: WKWebView?
+  /// 現在マウント中のアクティブタブ実行体（弱参照。強参照は `session.runtimes` が所有）。
+  weak var mountedRuntime: BrowserTabRuntime?
+  var displayedSpaceId: UUID?
+  var displayedTabId: UUID?
+  var webView: WKWebView? { mountedRuntime?.webView }
+  var hasNavigated: Bool { mountedRuntime?.hasNavigated ?? false }
+  var committedURL: URL? { mountedRuntime?.committedURL }
+  var lastRequestedURL: URL? { mountedRuntime?.lastRequestedURL }
+  var isProvisionalNavigation: Bool { mountedRuntime?.isProvisionalNavigation ?? false }
+
   private(set) var mode: BrowserMode = .closed
   private(set) var isPeeking = false
-  var sheetRatio: CGFloat = BrowserResizeSession.defaultRatio
-  var hasNavigated = false
-  var committedPage: CommittedPage?
-  var committedURL: URL? { committedPage?.url }
-  var lastRequestedURL: URL?
-  var pendingNavigation: PendingNavigation?
-  var navigationMetadata = NavigationMetadataStore()
-  var isProvisionalNavigation: Bool { pendingNavigation != nil }
+  var sheetRatio: CGFloat
+
+  /// 右シート（既定: 閉）と全面（既定: 開）で独立に記憶するサイドバー開閉状態（メモリ保持のみ）。
+  var sheetSidebarOpen = false
+  var fullSidebarOpen = true
+  var lastLayoutWasSidebarOverlay = false
 
   /// 窓の key 状態とブラウザ内焦点から上位（`WindowController`）が与える真のブラウザ焦点状態。
   private(set) var isBrowserFocused = false
   var isSheetHovered = false
   var resizeSession: BrowserResizeSession?
-  var kvoObservations: [NSKeyValueObservation] = []
 
   enum Fade: Equatable {
-    case sheet(closingWidth: CGFloat? = nil)
+    case sheet(closingWidth: CGFloat? = nil, closingSidebarOpen: Bool = false)
     case belowBar
   }
   var fade: Fade?
@@ -68,6 +85,50 @@ final class BrowserLayerView: NSView {
   override var isFlipped: Bool { true }
   override var acceptsFirstResponder: Bool { true }
   var isEditingURL: Bool { toolbar.isEditingURL }
+  var popoverState: BrowserPopoverState? { popoverModel.state }
+  var isPopoverOpen: Bool { popoverState != nil }
+  /// ブラウザ層が窓レベルのショートカットを単一降下ゲート経由で引き取る条件。
+  var ownsKeyRouting: Bool { mode.isOpen && (focusIsInside || isEditingURL) }
+
+  var isSidebarOpen: Bool {
+    switch mode {
+    case .sheet: sheetSidebarOpen
+    case .full: fullSidebarOpen
+    case .closed: false
+    }
+  }
+
+  /// 閉鎖フェード中は閉鎖直前のサイドバー開閉状態を凍結し、フェード開始時の横ジャンプを防ぐ。
+  var effectiveSidebarOpen: Bool {
+    switch mode {
+    case .sheet: sheetSidebarOpen
+    case .full: fullSidebarOpen
+    case .closed:
+      if case .sheet(_, let closingSidebarOpen) = fade {
+        closingSidebarOpen
+      } else {
+        false
+      }
+    }
+  }
+
+  var isSidebarOverlay: Bool {
+    let width = currentSheetWidth()
+    return isSidebarOpen && width > 0 && width < Theme.Layout.browserSidebarInlineThreshold
+  }
+
+  var effectiveSidebarOverlay: Bool {
+    let width = currentSheetWidth()
+    return effectiveSidebarOpen && width > 0 && width < Theme.Layout.browserSidebarInlineThreshold
+  }
+
+  var isEditingNewTabURL: Bool {
+    if newTabModel.isInputFocused { return true }
+    guard let editor = window?.firstResponder as? NSTextView else { return false }
+    return editor.isDescendant(of: newTabHost)
+  }
+
+  var isEditingAnyURL: Bool { isEditingURL || isEditingNewTabURL }
 
   /// first responder が自分か配下にあるか。
   var focusIsInside: Bool {
@@ -75,18 +136,36 @@ final class BrowserLayerView: NSView {
     return responder === self || responder.isDescendant(of: self)
   }
 
-  /// ブラウザ内の焦点の宛先（遷移済みなら `webView`、初期空状態なら自分自身）。
+  /// ブラウザ内の焦点の宛先。ポップオーバーまたは狭幅オーバーレイ表示中は背後 WebView へ流出させず `self` 固定。
   var focusTarget: NSView {
-    if hasNavigated, let webView { return webView }
+    if isPopoverOpen || isSidebarOverlay { return self }
+    if let runtime = mountedRuntime, runtime.hasNavigated { return runtime.webView }
     return self
   }
 
-  init(localization: LocalizationStore, fontResolver: ChromeFontResolver) {
+  init(
+    session: BrowserSession? = nil,
+    localization: LocalizationStore,
+    fontResolver: ChromeFontResolver
+  ) {
+    let resolvedSession = session ?? BrowserSession.inMemory(language: localization.language)
+    self.session = resolvedSession
+    self.sheetRatio = CGFloat(resolvedSession.store.sheetRatio)
     self.localization = localization
     barHost = BrowserBarHost(
-      rootView: BrowserBarRoot(
-        model: toolbar, localization: localization, fontResolver: fontResolver))
-    emptyOverlay = BrowserEmptyHost(rootView: BrowserEmptyView(localization: localization))
+      rootView: BrowserBarRoot(model: toolbar, localization: localization))
+    newTabHost = BrowserNewTabHost(
+      rootView: BrowserNewTabView(
+        model: newTabModel, session: resolvedSession, localization: localization,
+        fontResolver: fontResolver, actions: newTabActions))
+    sidebarHost = BrowserSidebarHost(
+      rootView: BrowserSidebarRoot(
+        store: resolvedSession.store, localization: localization,
+        fontResolver: fontResolver, actions: sidebarActions))
+    popoverHost = BrowserPopoverHost(
+      rootView: BrowserPopoverOverlayRoot(
+        model: popoverModel, session: resolvedSession, localization: localization,
+        fontResolver: fontResolver))
     snapBadgeHost = BrowserSnapBadgeHost(
       rootView: BrowserSnapBadge(model: snapBadge, localization: localization))
     super.init(frame: .zero)
@@ -94,7 +173,10 @@ final class BrowserLayerView: NSView {
     clipsToBounds = true
     assembleViews()
     wireCallbacks()
+    wireSidebarAndPopoverCallbacks()
+    wireSession()
     observeLocalization()
+    mountRuntime(resolvedSession.activeRuntime)
     applyPresentation()
     NSWorkspace.shared.notificationCenter.addObserver(
       self, selector: #selector(accessibilityDisplayOptionsDidChange),
@@ -112,7 +194,8 @@ final class BrowserLayerView: NSView {
 
   private func assembleViews() {
     for view in [
-      leftVeilView, sheetView, leftBorderLine, barGround, belowBar, belowGround, peekRailView,
+      leftVeilView, sheetView, leftBorderLine, barGround, belowBar, belowGround,
+      contentView, sidebarScrim, sidebarContainer, sidebarGround, sidebarBorder, peekRailView,
     ] {
       view.wantsLayer = true
       view.autoresizingMask = []
@@ -120,13 +203,17 @@ final class BrowserLayerView: NSView {
     sheetView.clipsToBounds = false
     sheetView.layer?.masksToBounds = false
     belowBar.clipsToBounds = true
-    for host in [barHost, emptyOverlay, snapBadgeHost] as [NSView] {
+    contentView.clipsToBounds = true
+    sidebarContainer.clipsToBounds = false
+    sidebarContainer.layer?.masksToBounds = false
+    for host in [barHost, newTabHost, sidebarHost, popoverHost, snapBadgeHost] as [NSView] {
       host.wantsLayer = true
       host.layer?.isOpaque = false
       host.autoresizingMask = []
     }
     barHost.clipsToBounds = true
     barHost.layer?.masksToBounds = true
+    popoverHost.isHidden = true
     resizeHandle.autoresizingMask = []
     resizeHandle.coordinateView = self
 
@@ -142,52 +229,28 @@ final class BrowserLayerView: NSView {
     sheetView.addSubview(snapBadgeHost)
 
     belowBar.addSubview(belowGround)
-    belowBar.addSubview(emptyOverlay)
+    belowBar.addSubview(contentView)
+    belowBar.addSubview(sidebarScrim)
+    belowBar.addSubview(sidebarContainer)
+    belowBar.addSubview(popoverHost)
+
+    contentView.addSubview(newTabHost)
+
+    sidebarContainer.addSubview(sidebarGround)
+    sidebarContainer.addSubview(sidebarHost)
+    sidebarContainer.addSubview(sidebarBorder)
   }
 
-  private func wireCallbacks() {
-    sheetView.onHoverChange = { [weak self] hovered in
-      guard let self, self.isSheetHovered != hovered else { return }
-      self.isSheetHovered = hovered
-      self.syncFocusAppearance()
+  private func wireSession() {
+    session.onActiveDisplayChange = { [weak self] runtime in
+      self?.mountRuntime(runtime)
     }
-    resizeHandle.onDragStart = { [weak self] in self?.dragDidStart() }
-    resizeHandle.onDragMove = { [weak self] x in self?.dragDidMove(to: x) }
-    resizeHandle.onDragEnd = { [weak self] cancelled in self?.dragDidEnd(cancelled: cancelled) }
-    resizeHandle.onDoubleClick = { [weak self] in
-      guard let self, self.mode == .sheet else { return }
-      self.requestModeChange(.full, animated: true)
+    session.onActiveRuntimeStateChange = { [weak self] runtime in
+      self?.syncActiveRuntimeState(runtime)
     }
-
-    toolbar.onBack = { [weak self] in
-      guard let self else { return }
-      self.endURLEditingExternally()
-      self.goBack()
-      self.focusBrowser()
+    session.onActiveNavigationFinish = { [weak self] in
+      self?.onNavigationFinish?()
     }
-    toolbar.onForward = { [weak self] in
-      guard let self else { return }
-      self.endURLEditingExternally()
-      self.goForward()
-      self.focusBrowser()
-    }
-    toolbar.onReloadOrStop = { [weak self] in
-      guard let self else { return }
-      self.endURLEditingExternally()
-      self.reloadOrStop()
-      self.focusBrowser()
-    }
-    toolbar.onToggleFull = { [weak self] in
-      guard let self else { return }
-      self.endURLEditingExternally()
-      let next: BrowserMode = self.mode == .full ? .sheet : .full
-      self.requestModeChange(next, animated: true)
-      self.focusBrowser()
-    }
-    toolbar.onBeginURLEditing = { [weak self] in self?.beginURLEditing() }
-    toolbar.onCommitURL = { [weak self] text in self?.commitURLEditing(text) ?? false }
-    toolbar.onCancelURL = { [weak self] in self?.cancelURLEditing() }
-    toolbar.onBlurURL = { [weak self] in self?.endURLEditingExternally() }
   }
 
   private func observeLocalization() {
@@ -215,8 +278,12 @@ final class BrowserLayerView: NSView {
   }
 
   func setFocused(_ focused: Bool) {
-    guard focused != isBrowserFocused else { return }
+    let wasFocused = isBrowserFocused
+    guard focused != wasFocused else { return }
     isBrowserFocused = focused
+    if wasFocused && !focused {
+      closePopover()
+    }
     syncFocusAppearance()
   }
 
@@ -234,25 +301,34 @@ final class BrowserLayerView: NSView {
   func setMode(_ next: BrowserMode, animated: Bool) {
     guard next != mode else { return }
     let previous = mode
+    let wasSidebarOpen = isSidebarOpen
+    let wasNarrowOverlay = isSidebarOverlay
     let closingWidth: CGFloat? =
       previous.isOpen && next == .closed && sheetView.frame.width > 0
       ? sheetView.frame.width : nil
     resizeHandle.cancelDragIfNeeded()
+    closePopover()
+    if !next.isOpen && wasNarrowOverlay {
+      switch previous {
+      case .sheet: sheetSidebarOpen = false
+      case .full: fullSidebarOpen = false
+      case .closed: break
+      }
+    }
     mode = next
     toolbar.mode = next
     endURLEditingExternally()
-    if next.isOpen {
-      _ = ensureWebView()
-    } else {
+    if !next.isOpen {
       isPeeking = false
       toolbar.isPeeking = false
       isSheetHovered = false
     }
+    session.setBrowserOpen(next.isOpen)
     let fadeTarget: Fade? =
       if previous == .closed && next.isOpen {
         .sheet()
       } else if previous.isOpen && next == .closed {
-        .sheet(closingWidth: closingWidth)
+        .sheet(closingWidth: closingWidth, closingSidebarOpen: wasSidebarOpen)
       } else {
         nil
       }
