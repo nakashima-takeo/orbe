@@ -157,8 +157,8 @@ final class BrowserSession {
     else { return }
 
     guard let runtime = materializeRuntime(for: tab) else { return }
-    onActiveDisplayChange?(runtime)
     runtime.load(url)
+    onActiveDisplayChange?(runtime)
   }
 
   func ensureRuntime(for tab: BrowserTab) -> BrowserTabRuntime? {

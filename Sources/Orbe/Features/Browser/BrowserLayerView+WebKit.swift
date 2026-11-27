@@ -8,6 +8,9 @@ extension BrowserLayerView {
     if mountedRuntime === next {
       emptyOverlay.isHidden = next?.hasNavigated ?? false
       syncToolbar(from: next)
+      if let next, next.hasNavigated, mode.isOpen, !isEditingURL, window?.firstResponder === self {
+        focusBrowser()
+      }
       return
     }
     let wasFocused = focusIsInside
