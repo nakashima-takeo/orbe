@@ -91,6 +91,22 @@ final class LineLayoutCache {
     var segment: Int
   }
 
+  /// 表の鍵と、そのハッシュ値。ハッシュ値は鍵を作るときに 1 度だけ出す——行の中身は 1 万字近くありうるので、表を引いて
+  /// 足すまでに、行の中身を何度も読んでハッシュ値を出さない。
+  private struct Hashed<Value: Hashable>: Hashable {
+    let value: Value
+    let hash: Int
+
+    init(_ value: Value) {
+      self.value = value
+      hash = value.hashValue
+    }
+
+    func hash(into hasher: inout Hasher) { hasher.combine(hash) }
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.hash == rhs.hash && lhs.value == rhs.value }
+  }
+
   /// 読んだ行（→ `read`）。
   private struct Read {
     let shown: LineShaper.Displayed
@@ -103,8 +119,8 @@ final class LineLayoutCache {
   static let capacity = 4096
   static let weightBudget = 2_000_000
 
-  private var entries: [Key: Entry] = [:]
-  private var reads: [LineShaper.Source: Read] = [:]
+  private var entries: [Hashed<Key>: Entry] = [:]
+  private var reads: [Hashed<LineShaper.Source>: Read] = [:]
   private var readWeight = 0
   private var clock: UInt64 = 0
   /// 覚えている段の数と、持つ単位の数。
@@ -237,7 +253,8 @@ final class LineLayoutCache {
   /// 行の中身 `source` の描く単位の列と装備の素。行の中身を鍵に覚え、同じ中身の行は作り直さない。
   func read(_ source: LineShaper.Source) -> (shown: LineShaper.Displayed, decor: LineDecor) {
     clock += 1
-    if let index = reads.index(forKey: source) {
+    let key = Hashed(source)
+    if let index = reads.index(forKey: key) {
       reads.values[index].used = clock
       return (reads.values[index].shown, reads.values[index].decor)
     }
@@ -253,7 +270,7 @@ final class LineLayoutCache {
       reads = reads.filter { $0.value.used > cut }
       readWeight = reads.values.reduce(0) { $0 + $1.weight }
     }
-    reads[source] = entry
+    reads[key] = entry
     readWeight += entry.weight
     return (shown, decor)
   }
@@ -265,7 +282,7 @@ final class LineLayoutCache {
     carets: Bool
   ) -> LaidOutLine {
     clock += 1
-    let key = Key(shown: shown, tabColumns: tabColumns)
+    let key = Hashed(Key(shown: shown, tabColumns: tabColumns))
     let font = face?.font ?? config.font
     let tabWidth = face?.tabWidth ?? config.tabWidth(columns: tabColumns)
     let shape = { LineShaper.shape(shown, font: font, tabWidth: tabWidth) }
