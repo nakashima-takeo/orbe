@@ -262,8 +262,8 @@ extension EditCommands {
   }
 
   /// ⌘⌫（VS Code の `deleteAllLeft`）——選択があれば始まりの行頭から選択の終わりまで、1 列目なら前の改行、そうでなければ
-  /// 行頭まで。縦の並び `rows` で折り返した行の続きの段では、行頭の代わりに段の頭まで（段の頭に居れば行頭まで——⌘⇧← と
-  /// 同じ単位）。`rows` を省けば文書の行（行頭までのキル）。
+  /// 行頭まで。縦の並び `rows` で折り返した行の続きの段では、行頭の代わりに段の頭まで（選択が空で段の頭に居れば行頭まで——
+  /// ⌘⇧← と同じ単位。選択が続きの段の頭から始まれば選択だけ）。`rows` を省けば文書の行（行頭までのキル）。
   static func lineStartRange(_ cursor: Cursor, _ text: TextRope, rows: RowLayout? = nil) -> NSRange?
   {
     let selection = cursor.selection
@@ -274,7 +274,7 @@ extension EditCommands {
       let column = selection.location - lineStart
       let head = wrap.start(
         of: wrap.segment(containing: column, upstream: cursor.upstream(at: selection.location)))
-      if head > 0, column > head { start = lineStart + head }
+      if head > 0, column > head || selection.length > 0 { start = lineStart + head }
     }
     if selection.length > 0 {
       return NSRange(location: start, length: NSMaxRange(selection) - start)
