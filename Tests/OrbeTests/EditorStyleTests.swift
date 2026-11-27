@@ -87,8 +87,8 @@ final class EditorStyleTests: OrbeTestCase {
 
   /// 打ち切った行の末尾の印の略記——丸めて次の単位に届けば次の単位で出す（「1,000K」「10,000万」にしない）。
   func testOmittedLabelAbbreviatesAtTheUnitBoundaries() {
-    func en(_ count: Int) -> String { EditorStyle.omittedLabel(count, language: .en) }
-    func ja(_ count: Int) -> String { EditorStyle.omittedLabel(count, language: .ja) }
+    let en = EditorStyle.OmittedLabel(language: .en, locale: .current)
+    let ja = EditorStyle.OmittedLabel(language: .ja, locale: .current)
     XCTAssertEqual(en(999), "999 more")
     XCTAssertEqual(en(999_949), "999.9K more")
     XCTAssertEqual(en(999_950), "1M more")
@@ -98,5 +98,43 @@ final class EditorStyleTests: OrbeTestCase {
     XCTAssertEqual(ja(10_000), "ほか 1万字")
     XCTAssertEqual(ja(12_345), "ほか 1.2万字")
     XCTAssertEqual(ja(99_999_999), "ほか 1億字")
+  }
+
+  /// 打ち切った行の末尾の印の数は、地域の数の書式（Foundation）と同じ字で出る——数字・桁区切りの字と位置・小数点。
+  func testOmittedLabelWritesNumbersAsTheRegionsNumberFormat() {
+    func reference(_ count: Int, _ language: Language, _ locale: Locale) -> String {
+      let ladder: [(unit: Double, suffix: String)] =
+        language == .ja
+        ? [(10_000, "万"), (100_000_000, "億")] : [(1_000, "K"), (1_000_000, "M"), (1e9, "B")]
+      var value = count.formatted(.number.grouping(.automatic).locale(locale))
+      var index = ladder.lastIndex { Double(count) >= $0.unit }
+      while let i = index {
+        let rounded = (Double(count) / ladder[i].unit * 10).rounded() / 10
+        if i + 1 < ladder.count, rounded * ladder[i].unit >= ladder[i + 1].unit {
+          index = i + 1
+          continue
+        }
+        value =
+          rounded.formatted(.number.precision(.fractionLength(0...1)).locale(locale))
+          + ladder[i].suffix
+        index = nil
+      }
+      return L10n.format(.editorOmittedCharacters, language, value)
+    }
+    let counts = [
+      0, 1, 9, 10, 999, 1_000, 1_234, 9_999, 10_000, 12_345, 99_999, 100_000, 123_456, 999_949,
+      999_950, 1_000_000, 1_234_567, 99_999_999, 100_000_000, 123_456_789, 1_000_000_000,
+      12_345_678_901,
+    ]
+    for identifier in ["en_US", "ja_JP", "de_DE", "fr_FR", "es_ES", "en_IN", "ar_EG"] {
+      let locale = Locale(identifier: identifier)
+      for language in Language.allCases {
+        let label = EditorStyle.OmittedLabel(language: language, locale: locale)
+        for count in counts {
+          XCTAssertEqual(
+            label(count), reference(count, language, locale), "\(identifier) \(language) \(count)")
+        }
+      }
+    }
   }
 }

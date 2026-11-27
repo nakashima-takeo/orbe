@@ -41,44 +41,6 @@ enum EditorStyle {
       overview: overview())
   }
 
-  /// 打ち切った行の末尾の印の数の書式（桁区切りの整数と、小数 1 桁までの数。利用者の環境の地域に従う）。
-  private static let integerFormat: NumberFormatter = {
-    let format = NumberFormatter()
-    format.locale = .autoupdatingCurrent
-    format.numberStyle = .decimal
-    return format
-  }()
-  private static let fractionFormat: NumberFormatter = {
-    let format = NumberFormatter()
-    format.locale = .autoupdatingCurrent
-    format.numberStyle = .decimal
-    format.minimumFractionDigits = 0
-    format.maximumFractionDigits = 1
-    return format
-  }()
-
-  /// 1 行で描く上限を越えて打ち切った行の末尾の印（「ほか 1.2万字」）。数は 1 万（英語は千）以上を 1 桁の小数で略し、
-  /// 丸めて次の単位に届けば次の単位で出す（999,999 は「1,000K」でなく「1M」）。折り返す面は、打ち切った行で打つたびに
-  /// 印の幅を引くので、数の書式は作っておいたものを使う（書式を毎回作ると、打鍵ごとの main の仕事が膨らむ）。
-  static func omittedLabel(_ count: Int, language: Language) -> String {
-    let ladder: [(unit: Double, suffix: String)] =
-      language == .ja
-      ? [(10_000, "万"), (100_000_000, "億")] : [(1_000, "K"), (1_000_000, "M"), (1e9, "B")]
-    var value = integerFormat.string(from: count as NSNumber) ?? String(count)
-    var index = ladder.lastIndex { Double(count) >= $0.unit }
-    while let i = index {
-      let rounded = (Double(count) / ladder[i].unit * 10).rounded() / 10
-      if i + 1 < ladder.count, rounded * ladder[i].unit >= ladder[i + 1].unit {
-        index = i + 1
-        continue
-      }
-      value =
-        (fractionFormat.string(from: rounded as NSNumber) ?? String(rounded)) + ladder[i].suffix
-      index = nil
-    }
-    return L10n.format(.editorOmittedCharacters, language, value)
-  }
-
   /// 役割ごとの文字色（本文とミニマップが共有する）。
   static let roleColors: [SyntaxRole: NSColor] = [
     .keyword: Theme.Color.syntaxKeyword,
@@ -186,18 +148,16 @@ struct EditorSurfaces {
     self.language = language
   }
 
-  /// 本物の面を、指定の根の queries で組む。打ち切った行の印の文言は、面を作る時点の UI の言語（`language`）で決まる。
+  /// 本物の面を、指定の根の queries で組む。打ち切った行の印の文言は面を作る時点の UI の言語（`language`）で、印の数の
+  /// 書き方は面を作る時点の地域で決まる。
   init(
     queriesRoot: URL?, language: @escaping @MainActor () -> Language = { .systemDefault }
   ) {
     self.init(
       registry: LanguageRegistry(queriesRoot: queriesRoot),
       make: {
-        makeMetalTextSurface(
-          style: EditorStyle.make(),
-          omittedLabel: { [language = language()] in
-            EditorStyle.omittedLabel($0, language: language)
-          })
+        let label = EditorStyle.OmittedLabel(language: language(), locale: .current)
+        return makeMetalTextSurface(style: EditorStyle.make(), omittedLabel: { label($0) })
       },
       prepare: prepareMetalTextEngine, language: language)
   }
