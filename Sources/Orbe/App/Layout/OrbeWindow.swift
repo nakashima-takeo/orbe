@@ -15,6 +15,9 @@ class OrbeWindow: NSWindow {
   /// 非 `nil` の間は、その境界の外側へ抜けるキービュー遷移を抑止する。
   var keyViewContainmentBoundary: (() -> NSView?)?
 
+  private var makeFirstResponderDepth = 0
+  private weak var outerPreviousResponder: NSResponder?
+
   /// 主窓の大きさとスタイルで作る。
   convenience init() {
     self.init(
@@ -33,10 +36,18 @@ class OrbeWindow: NSWindow {
 
   @discardableResult
   override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
-    let previous = firstResponder
+    if makeFirstResponderDepth == 0 {
+      outerPreviousResponder = firstResponder
+    }
+    makeFirstResponderDepth += 1
     let changed = super.makeFirstResponder(responder)
-    if changed, firstResponder !== previous {
-      onFirstResponderChange?(firstResponder)
+    makeFirstResponderDepth -= 1
+    if makeFirstResponderDepth == 0 {
+      let previous = outerPreviousResponder
+      outerPreviousResponder = nil
+      if firstResponder !== previous {
+        onFirstResponderChange?(firstResponder)
+      }
     }
     return changed
   }
