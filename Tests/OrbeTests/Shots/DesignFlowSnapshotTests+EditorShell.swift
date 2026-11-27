@@ -218,3 +218,31 @@ extension DesignFlowSnapshotTests {
       ])
   }
 }
+
+extension DesignFlowSnapshotTests {
+  /// ツリーの絞り込み: 打つ → 結果（合ったファイルと親のフォルダだけが全部開いた形で残る）→ フォルダを畳む → 字を変える
+  /// （全部開いた形に戻る）→ 0 件 → 字を消す（絞り込む前のツリーに戻る）。開いている文書の印も、結果の行に出る。
+  func testEditorShellFilter() throws {
+    let size = NSSize(width: 1100, height: 640)
+    let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
+    let scene = try EditorShellFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
+    defer { scene.cleanup() }
+    scene.warmUp(size: size)
+    pumpMain(until: { scene.isReady }, "git バッジが揃う")
+    let tree = scene.pane.tree
+    func filter(_ text: String) {
+      tree.setFilterText(text)
+      pumpMain(until: { tree.filter.shown?.text == text }, timeout: 10, "「\(text)」の結果が届く")
+    }
+    try renderInPlace(
+      scene.pane, name: "editor_shell_filter", dir: previewDir("flows"),
+      appearances: [true, false],
+      steps: [
+        ("typed", { filter("e") }),
+        ("folder_collapsed", { tree.toggle("docs") }),
+        ("refined", { filter("ee") }),
+        ("no_match", { filter("zzq") }),
+        ("cleared", { tree.setFilterText("") }),
+      ])
+  }
+}

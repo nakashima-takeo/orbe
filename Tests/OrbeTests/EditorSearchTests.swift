@@ -6,7 +6,7 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// ファイル内検索——⌘F で本文の右上にバーが出て入力欄に焦点、needle で全一致に地・キャレット以降の一致を選んで
+/// ファイル内検索——⌘F で上のバーにファイル内検索の欄が出て焦点が入り、needle で全一致に地・キャレット以降の一致を選んで
 /// 見せ、Enter / ⇧Enter で循環、本文の編集で一致は追従して選択は動かず、文書の切替は同じ needle で敷き直し、
 /// Esc で閉じて焦点がテキスト面へ戻り選択は残る。
 ///
@@ -37,7 +37,7 @@ final class EditorSearchTests: OrbeTestCase {
     return Hosted(tab: tab, pane: pane, document: document, window: window)
   }
 
-  /// 件数の観測（バーの model は閉じているので、pane が bar へ写す closure に割り込む）。
+  /// 件数の観測（pane が欄の状態へ写す closure に割り込む）。
   func counts(_ pane: EditorPaneView) -> () -> [(Int?, Int)] {
     var seen: [(Int?, Int)] = []
     let forward = pane.search.onCountChange
@@ -52,9 +52,6 @@ final class EditorSearchTests: OrbeTestCase {
     hosted.document.text.row(containing: offset)
   }
 
-  /// バー（本文の右上に浮く）の下に入らない行から本文を始めるための空行。地を画素で読むテストが使う。
-  static let belowTheBar = "\n\n\n\n"
-
   /// 本文の `line` 行目（1 始まり）・`column` 桁目（0 始まり）のセルの中心（pane の座標）。地の有無は字の無いセルで読む。
   func cellCenter(_ hosted: Hosted, line: Int, column: Int) -> NSPoint {
     let surface = hosted.document.surface.view
@@ -65,29 +62,34 @@ final class EditorSearchTests: OrbeTestCase {
       y: origin.y + style.topInset + (CGFloat(line) - 0.5) * style.lineHeight)
   }
 
-  func testCommandFOpensTheBarAtTheTopRightOfTheSurfaceAndFocusesTheField() throws {
+  /// 上のバーのファイル内検索の欄（バーの host の配下の入力。バーの入力はこれだけ）。
+  func findFieldView(_ pane: EditorPaneView) -> NSTextField? {
+    func field(in view: NSView) -> NSTextField? {
+      if let field = view as? NSTextField, field.isEditable { return field }
+      return view.subviews.lazy.compactMap(field(in:)).first
+    }
+    return field(in: pane.barHost)
+  }
+
+  /// フォーカスがファイル内検索の欄にあるか（first responder が上のバーの host の配下）。
+  func focusIsInFindField(_ hosted: Hosted) -> Bool {
+    (hosted.window.firstResponder as? NSView)?.isDescendant(of: hosted.pane.barHost) == true
+  }
+
+  func testCommandFOpensTheFieldInTheTopBarAndFocusesIt() throws {
     let hosted = try host("foo bar\nfoo baz\nFOO\n")
     let pane = hosted.pane
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
     catchUp(pane)
-    let bar = try XCTUnwrap(pane.searchBar)
-    pane.layoutSubtreeIfNeeded()
-    XCTAssertEqual(
-      bar.frame.maxX, pane.bodyRect.maxX - pane.rightColumnWidth - 12, accuracy: 0.5,
-      "右列（ミニマップとスクロールバー）の左・右 12")
-    XCTAssertEqual(bar.frame.minY, pane.bodyRect.minY + 12, accuracy: 0.5, "上 12")
-    pumpMain(
-      until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true },
-      "入力欄に焦点")
+    let model = try XCTUnwrap(pane.findField.model)
+    pumpMain(until: { self.findFieldView(pane) != nil }, "欄が上のバーに出る")
+    let field = try XCTUnwrap(findFieldView(pane))
+    let frame = pane.convert(field.bounds, from: field)
+    XCTAssertTrue(pane.barHost.frame.contains(frame), "欄は上のバーの中")
+    pumpMain(until: { self.focusIsInFindField(hosted) }, "欄に焦点")
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")), "表示中の ⌘F は再フォーカスのみ")
     catchUp(pane)
-    XCTAssertTrue(pane.searchBar === bar, "二重生成しない")
-
-    hosted.window.setContentSize(NSSize(width: 600, height: 400))
-    pane.layoutSubtreeIfNeeded()
-    XCTAssertEqual(
-      bar.frame.maxX, pane.bodyRect.maxX - pane.rightColumnWidth - 12, accuracy: 0.5,
-      "窓の幅が変われば追従する")
+    XCTAssertTrue(pane.findField.model === model, "二重生成しない")
   }
 
   /// needle で全一致に地が敷かれ、キャレット以降で最初の一致が選ばれる。件数は selected/total。
@@ -113,7 +115,7 @@ final class EditorSearchTests: OrbeTestCase {
       hosted.document.surface.selectedRange, NSRange(location: 8, length: 3), "一致が無ければ選択は残る")
   }
 
-  /// バーの Enter / ⇧Enter は次・前へ循環し、見えていない一致は中央へスクロールして見せる。
+  /// 欄の Enter / ⇧Enter は次・前へ循環し、見えていない一致は中央へスクロールして見せる。
   func testNextAndPreviousCycleAndRevealOffscreenMatches() throws {
     var lines = (1...100).map { "line \($0)" }
     for n in [10, 60, 90] { lines[n - 1] += " needle" }
@@ -122,7 +124,7 @@ final class EditorSearchTests: OrbeTestCase {
     let document = hosted.document
     pane.showSearch()
     catchUp(pane)
-    let bar = try XCTUnwrap(pane.searchBar)
+    let bar = try XCTUnwrap(pane.findField.model)
     bar.onNeedleChange?("needle")
     catchUp(pane)
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 9)
@@ -162,7 +164,7 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(x(), 0)
     pane.showSearch()
     catchUp(pane)
-    let bar = try XCTUnwrap(pane.searchBar)
+    let bar = try XCTUnwrap(pane.findField.model)
     bar.onNeedleChange?("needle")
     catchUp(pane)
     XCTAssertEqual(document.surface.selectedRange.location, 201)
@@ -204,7 +206,7 @@ final class EditorSearchTests: OrbeTestCase {
     pumpMain(until: { seen().last?.1 == 3 }, "件数が追従する")
   }
 
-  /// 一致は上限（19999）で打ち切り、件数には打ち切ったことが届く（バーは「19999+」と出す）。
+  /// 一致は上限（19999）で打ち切り、件数には打ち切ったことが届く（欄は「19999+」と出す）。
   func testMatchesStopAtTheLimitAndTheCountSaysSo() throws {
     let hosted = try host(String(repeating: "a", count: 20_500) + "\n")
     let pane = hosted.pane
@@ -234,7 +236,7 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
     catchUp(pane)
     XCTAssertEqual(pane.search.needle, "beta")
-    XCTAssertEqual(pane.searchBar?.needle, "beta")
+    XCTAssertEqual(pane.findField.model?.needle, "beta")
     XCTAssertEqual(pane.search.matches.count, 1)
     XCTAssertEqual(pane.search.current, 0, "選択がそのまま現在の一致")
     pane.closeSearch()
@@ -254,7 +256,7 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
     catchUp(pane)
     XCTAssertEqual(pane.search.needle, "beta")
-    XCTAssertEqual(pane.searchBar?.needle, "beta")
+    XCTAssertEqual(pane.findField.model?.needle, "beta")
     XCTAssertEqual(pane.search.matches.count, 2)
     XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 7, length: 0))
     XCTAssertNil(pane.search.current)
@@ -267,38 +269,36 @@ final class EditorSearchTests: OrbeTestCase {
   }
 
   /// Esc で閉じると一致の地は消え、選択は残り、焦点はテキスト面へ戻る。閉じた後は、残った選択の文字列の他の出現に
-  /// 選択文字列の出現の地が付く（検索バーが同じ文字列を探している間は出ない）。
+  /// 選択文字列の出現の地が付く（ファイル内検索が同じ文字列を探している間は出ない）。
   func testClosingKeepsTheSelectionAndReturnsFocusToTheText() throws {
-    let hosted = try host(Self.belowTheBar + "x a b y\nx a b y\n")
+    let hosted = try host("x a b y\nx a b y\n")
     let pane = hosted.pane
     let document = hosted.document
     pane.showSearch()
     catchUp(pane)
     pane.search.setNeedle("a b")
     catchUp(pane)
-    let bar = try XCTUnwrap(pane.searchBar)
-    pumpMain(
-      until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true },
-      "入力欄に焦点")
+    let bar = try XCTUnwrap(pane.findField.model)
+    pumpMain(until: { self.focusIsInFindField(hosted) }, "欄に焦点")
     // 地は現在でない一致（選択の地に覆われない）の空白のセルで見る。
-    let match = cellCenter(hosted, line: 6, column: 3)
-    let ground = try PaneProbe(pane).rgb(match.x, y: cellCenter(hosted, line: 10, column: 3).y)
+    let match = cellCenter(hosted, line: 2, column: 3)
+    let ground = try PaneProbe(pane).rgb(match.x, y: cellCenter(hosted, line: 6, column: 3).y)
     let found = try probe(pane) { try !PaneProbe.same($0.rgb(match.x, y: match.y), ground) }
     let findGround = try found.rgb(match.x, y: match.y)
-    XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "検索バーが同じ文字列を探している間は出ない")
+    XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "ファイル内検索が同じ文字列を探している間は出ない")
 
     bar.onClose?()
     catchUp(pane)
-    XCTAssertNil(pane.searchBar)
+    XCTAssertNil(pane.findField.model)
     XCTAssertTrue(hosted.window.firstResponder === document.surface.responder, "焦点はテキスト面へ")
-    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 6, length: 3), "選択は残る")
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 2, length: 3), "選択は残る")
     XCTAssertEqual(pane.search.matches, [])
-    XCTAssertEqual(pane.occurrences.selectionOccurrences, [NSRange(location: 14, length: 3)])
+    XCTAssertEqual(pane.occurrences.selectionOccurrences, [NSRange(location: 10, length: 3)])
     _ = try probe(pane) { try !PaneProbe.same($0.rgb(match.x, y: match.y), findGround) }
   }
 
-  /// 文書を切り替えると同じ needle で新しい文書に敷き直す（ジャンプしない）。文書が無くなればバーは閉じる。
-  func testSwitchingDocumentsReappliesTheNeedleAndClosingTheLastDocumentClosesTheBar() throws {
+  /// 文書を切り替えると同じ needle で新しい文書に敷き直す（ジャンプしない）。文書が無くなれば欄は閉じる。
+  func testSwitchingDocumentsReappliesTheNeedleAndClosingTheLastDocumentClosesTheField() throws {
     let hosted = try host("one two one\n")
     let pane = hosted.pane
     let seen = counts(pane)
@@ -314,12 +314,12 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(pane.search.matches.count, 1, "新しい文書の一致")
     XCTAssertEqual(other.surface.selectedRange, NSRange(location: 0, length: 0), "選択は動かさない")
     pumpMain(until: { seen().last?.1 == 1 }, "件数")
-    XCTAssertNotNil(pane.searchBar, "バーは残る")
+    XCTAssertNotNil(pane.findField.model, "欄は残る")
 
     hosted.tab.group.editor.close(other)
     catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 2, "戻れば元の文書の一致")
     hosted.tab.group.editor.close(hosted.document)
-    XCTAssertNil(pane.searchBar, "文書が無くなればバーは閉じる")
+    XCTAssertNil(pane.findField.model, "文書が無くなれば欄は閉じる")
   }
 }
