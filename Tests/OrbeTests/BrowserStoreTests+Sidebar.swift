@@ -118,4 +118,123 @@ extension BrowserStoreTests {
     XCTAssertEqual(reopened.reopenableClosedTabs().map(\.url), [url("/local-b"), url("/free-2")])
     XCTAssertEqual(reopened.tab(id: restoredId)?.url, url("/free-1"))
   }
+
+  // MARK: - 履歴隔離・workspace 状態整合・初回言語同期
+
+  /// `setSpaceProfile` と `deleteProfile` は付け替え対象スペースの `closed_tabs` 履歴を
+  /// メモリ・DB 双方から同一トランザクションで消去し、対象外スペースの履歴は維持する。
+  func testSetSpaceProfileAndDeleteProfilePurgeClosedTabsInReassignedSpaces() throws {
+    let t0 = Self.baseTime
+    let keptURL = url("/kept-work")
+    let setProfileURL = url("/private-set")
+    let deletedProfileURL = url("/private-del")
+
+    do {
+      let store = openStore(now: t0)
+      let personal = store.profiles[0]
+      let work = store.profiles[1]
+      let extraPrivate = try XCTUnwrap(
+        store.createProfile(name: "secret", color: .amber, mcpAllowed: false, now: t0).value)
+      let personalSpace = store.freeSpaces[0]
+      let workSpace = store.freeSpaces[1]
+      let secretSpace = try XCTUnwrap(
+        store.createFreeSpace(name: "秘密", icon: .globe, profileId: extraPrivate.id, now: t0).value
+      )
+
+      let tKeep = try XCTUnwrap(
+        store.openTab(in: workSpace.id, url: keptURL, title: "Work", now: t0).value)
+      let tSet = try XCTUnwrap(
+        store.openTab(in: personalSpace.id, url: setProfileURL, title: "Set", now: t0).value)
+      let tDel = try XCTUnwrap(
+        store.openTab(in: secretSpace.id, url: deletedProfileURL, title: "Del", now: t0).value)
+      XCTAssertTrue(store.closeTab(tKeep.id, recordClosed: true, now: t0).didPersist)
+      XCTAssertTrue(store.closeTab(tSet.id, recordClosed: true, now: t0).didPersist)
+      XCTAssertTrue(store.closeTab(tDel.id, recordClosed: true, now: t0).didPersist)
+
+      XCTAssertTrue(store.setSpaceProfile(personalSpace.id, profileId: work.id).didPersist)
+      XCTAssertFalse(store.closedTabs.contains { $0.url == setProfileURL })
+      XCTAssertTrue(store.closedTabs.contains { $0.url == keptURL })
+      XCTAssertTrue(store.closedTabs.contains { $0.url == deletedProfileURL })
+
+      XCTAssertTrue(
+        store.deleteProfile(extraPrivate.id, reassigningTo: personal.id, now: t0).didPersist)
+      XCTAssertEqual(store.closedTabs.map(\.url), [keptURL])
+    }
+
+    let reopened = openStore(now: t0.addingTimeInterval(10))
+    XCTAssertEqual(reopened.closedTabs.map(\.url), [keptURL], "DB 側でも対象スペース履歴が消去済み")
+  }
+
+  /// `setCurrentWorkspace` の DB 失敗時に `currentWorkspaceId` / `currentWorkspaceName` がズレず、
+  /// `removeLocalSpace(for:)` で現在 workspace を削除すると ID と表示名の両方がリセットされる。
+  func testSetCurrentWorkspaceFailureDoesNotSkewNameAndRemoveLocalSpaceClearsState() throws {
+    let wsA = UUID()
+    let wsFail = UUID()
+    do {
+      let seeded = openStore()
+      _ = seeded.setCurrentWorkspace(wsA, name: "alpha", now: Self.baseTime)
+    }
+
+    let rawDB = try rawDatabase()
+    try rawDB.exec(
+      """
+      PRAGMA foreign_keys = ON;
+      CREATE TRIGGER block_local_insert BEFORE INSERT ON spaces
+      WHEN NEW.kind = 'local'
+      BEGIN SELECT RAISE(ABORT, 'blocked'); END;
+      """)
+    let loaded = try BrowserDatabase.loadOrSeed(rawDB, language: .ja, now: Self.baseTime)
+    let store = BrowserStore(
+      opening: .opened(
+        BrowserDatabase.Opened(
+          database: BrowserDatabase(rawDB), memory: loaded.memory,
+          seededLanguage: loaded.seededLanguage)))
+
+    XCTAssertTrue(store.setCurrentWorkspace(wsA, name: "alpha", now: Self.baseTime).didSucceed)
+    let failed = store.setCurrentWorkspace(wsFail, name: "broken", now: Self.baseTime)
+    XCTAssertFalse(failed.didSucceed, "ローカルスペース作成失敗時は .failed")
+    XCTAssertEqual(store.currentWorkspaceId, wsA, "失敗時に currentWorkspaceId を進めない")
+    XCTAssertEqual(store.currentWorkspaceName, "alpha", "失敗時に currentWorkspaceName だけズレない")
+
+    XCTAssertTrue(store.removeLocalSpace(for: wsA).didPersist)
+    XCTAssertNil(store.currentWorkspaceId, "現在 WS のローカルスペース削除で ID をクリア")
+    XCTAssertEqual(store.currentWorkspaceName, "", "現在 WS のローカルスペース削除で表示名もクリア")
+  }
+
+  /// 初回シード直後の `syncDefaultFreeSpaceNames(to:)` は未変更の既定自由スペース 3 種だけを
+  /// 確定言語へ 1 Tx で永続同期し、改名済みスペースと既存 DB 再起動後には触れない。
+  func testSyncDefaultFreeSpaceNamesUpdatesUnmodifiedOnlyAndSkipsExistingDB() throws {
+    let t0 = Self.baseTime
+    do {
+      let store = openStore(language: .en, now: t0)
+      XCTAssertEqual(
+        store.freeSpaces.map(\.name),
+        [
+          L10n.string(.browserDefaultSpacePersonal, .en),
+          L10n.string(.browserDefaultSpaceWork, .en),
+          L10n.string(.browserDefaultSpaceResearch, .en),
+        ])
+
+      let renamedId = store.freeSpaces[1].id
+      XCTAssertTrue(store.updateFreeSpace(renamedId, name: "Custom", icon: .briefcase).didPersist)
+      XCTAssertTrue(store.syncDefaultFreeSpaceNames(to: .ja).didPersist)
+      XCTAssertEqual(
+        store.freeSpaces.map(\.name),
+        [
+          L10n.string(.browserDefaultSpacePersonal, .ja),
+          "Custom",
+          L10n.string(.browserDefaultSpaceResearch, .ja),
+        ])
+    }
+
+    let reopened = openStore(language: .en, now: t0.addingTimeInterval(60))
+    let expected = [
+      L10n.string(.browserDefaultSpacePersonal, .ja),
+      "Custom",
+      L10n.string(.browserDefaultSpaceResearch, .ja),
+    ]
+    XCTAssertEqual(reopened.freeSpaces.map(\.name), expected)
+    XCTAssertTrue(reopened.syncDefaultFreeSpaceNames(to: .en).didSucceed)
+    XCTAssertEqual(reopened.freeSpaces.map(\.name), expected, "非シード起動後は既定スペース名を変更しない")
+  }
 }

@@ -1,6 +1,5 @@
 import Foundation
 import OrbeTestSupport
-import SQLite3
 import XCTest
 
 @testable import Orbe
@@ -72,13 +71,20 @@ final class BrowserStoreTests: OrbeTestCase {
       store.createProfile(name: "qa", color: .teal, mcpAllowed: false, now: t0).value)
     let disposable = try XCTUnwrap(
       store.createProfile(name: "temp", color: .pink, mcpAllowed: false, now: t0).value)
+    let tailProfile = try XCTUnwrap(
+      store.createProfile(name: "ops", color: .green, mcpAllowed: true, now: t0).value)
     _ = store.updateProfile(customProfile.id, name: "staging", color: .purple, mcpAllowed: true)
 
     let customSpace = try XCTUnwrap(
       store.createFreeSpace(name: "設計", icon: .code, profileId: disposable.id, now: t0).value)
     _ = store.updateFreeSpace(customSpace.id, name: "仕様", icon: .globe)
+    // 中間プロファイル（disposable）削除で後続 tailProfile の position が DB ごと詰め直される（updateProfilePosition）。
     XCTAssertTrue(
       store.deleteProfile(disposable.id, reassigningTo: customProfile.id, now: t0).didPersist)
+    XCTAssertEqual(store.profiles.map(\.position), [0, 1, 2, 3])
+    XCTAssertEqual(store.profile(id: tailProfile.id)?.position, 3)
+    // 実 DB でのスペースプロファイル変更（updateSpaceProfile）も再起動往復で一致する。
+    XCTAssertTrue(store.setSpaceProfile(customSpace.id, profileId: tailProfile.id).didPersist)
 
     let localA = try XCTUnwrap(store.setCurrentWorkspace(wsA, now: t0).value)
     let localB = try XCTUnwrap(store.setCurrentWorkspace(wsB, now: t0).value)

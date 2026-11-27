@@ -12,41 +12,15 @@ import XCTest
 extension BrowserStoreTests {
   // MARK: - 破損 DB の退避と再作成
 
-  /// `PRAGMA foreign_key_check` 違反・`profiles` 空・`browser_meta` 欠損・非 DB 破損ファイルは
+  /// `PRAGMA foreign_key_check` 違反・`profiles` 空・`browser_meta` 欠損・非正規（小文字）UUID・
+  /// 大小文字重複 UUID・`pending_store_removals` と生存プロファイルの衝突・非 DB 破損ファイルは
   /// フォルダごと `browser-broken-*` へ退避してから既定シードで健全再作成する。
   func testForeignKeyViolationAndCorruptDatabasesAreQuarantinedAndReseeded() throws {
     let originalOverride = BrowserPersistence.folderOverride
     defer { BrowserPersistence.folderOverride = originalOverride }
 
-    try assertQuarantined(caseName: "fk-space-profile") { db, seed in
-      let space = try XCTUnwrap(seed.spaces.first { $0.kind == .free })
-      try db.run(
-        "UPDATE spaces SET profile_id = ? WHERE id = ?",
-        [.text(UUID().uuidString), .text(space.id.uuidString)])
-    }
-
-    try assertQuarantined(caseName: "fk-cross-space-active") { db, seed in
-      let freeSpaces = seed.spaces.filter { $0.kind == .free }
-      let tab = try XCTUnwrap(seed.tabs.first { $0.spaceId == freeSpaces[0].id })
-      try db.run(
-        "INSERT OR REPLACE INTO space_active_tabs (space_id, tab_id) VALUES (?, ?)",
-        [.text(freeSpaces[1].id.uuidString), .text(tab.id.uuidString)])
-    }
-
-    try assertQuarantined(caseName: "fk-case-mismatch-closed-tab") { db, seed in
-      let space = try XCTUnwrap(seed.spaces.first { $0.kind == .free })
-      try db.run(
-        "INSERT INTO closed_tabs (url, title, original_space_id, closed_at) VALUES (?, 'Case', ?, 1)",
-        [.text(url("/case-fk").absoluteString), .text(space.id.uuidString.lowercased())])
-    }
-
-    try assertQuarantined(caseName: "empty-profiles") { db, _ in
-      try db.exec("DELETE FROM spaces; DELETE FROM profiles;")
-    }
-
-    try assertQuarantined(caseName: "missing-meta") { db, _ in
-      try db.exec("DELETE FROM browser_meta;")
-    }
+    try assertForeignKeyCorruptionCases()
+    try assertStructuralAndUUIDCorruptionCases()
 
     // 非 DB バイト列で上書きしたファイル破損も退避して再作成する。
     let corruptRoot = TestScratch.caseDir.appendingPathComponent("not-a-db", isDirectory: true)
@@ -62,8 +36,140 @@ extension BrowserStoreTests {
     XCTAssertTrue(siblings.contains(where: { $0.hasPrefix("browser-broken-") }))
   }
 
+  private func assertForeignKeyCorruptionCases() throws {
+    try assertQuarantined(caseName: "fk-space-profile", expectValidForeignKeys: false) { db, seed in
+      let space = try XCTUnwrap(seed.spaces.first { $0.kind == .free })
+      try db.run(
+        "UPDATE spaces SET profile_id = ? WHERE id = ?",
+        [.text(UUID().uuidString), .text(space.id.uuidString)])
+    }
+
+    try assertQuarantined(
+      caseName: "fk-cross-space-active", expectValidForeignKeys: false
+    ) { db, seed in
+      let freeSpaces = seed.spaces.filter { $0.kind == .free }
+      let tab = try XCTUnwrap(seed.tabs.first { $0.spaceId == freeSpaces[0].id })
+      try db.run(
+        "INSERT OR REPLACE INTO space_active_tabs (space_id, tab_id) VALUES (?, ?)",
+        [.text(freeSpaces[1].id.uuidString), .text(tab.id.uuidString)])
+    }
+
+    try assertQuarantined(
+      caseName: "fk-case-mismatch-closed-tab", expectValidForeignKeys: false
+    ) { db, seed in
+      let space = try XCTUnwrap(seed.spaces.first { $0.kind == .free })
+      try db.run(
+        "INSERT INTO closed_tabs (url, title, original_space_id, closed_at) VALUES (?, 'Case', ?, 1)",
+        [.text(url("/case-fk").absoluteString), .text(space.id.uuidString.lowercased())])
+    }
+  }
+
+  private func assertStructuralAndUUIDCorruptionCases() throws {
+    // 1. FK 整合を満たしたまま profiles 空・browser_meta 欠損・pending 衝突を退避する。
+    try assertQuarantined(caseName: "empty-profiles") { db, _ in
+      try db.exec(
+        """
+        UPDATE browser_meta SET active_space_kind = 'local', active_free_space_id = NULL;
+        DELETE FROM space_active_tabs;
+        DELETE FROM tabs;
+        DELETE FROM spaces;
+        DELETE FROM profiles;
+        """)
+    }
+    try assertQuarantined(caseName: "missing-meta") { db, _ in
+      try db.exec("DELETE FROM browser_meta;")
+    }
+    try assertQuarantined(caseName: "pending-removal-collides-profile") { db, seed in
+      let alive = try XCTUnwrap(seed.profiles.first)
+      try db.run(
+        "INSERT INTO pending_store_removals (store_id, queued_at) VALUES (?, 1)",
+        [.text(alive.id.uuidString)])
+    }
+
+    // 2. 単独の非正規（小文字）UUID 行（親子一致で FK を通過するケース含む）も退避する。
+    try assertQuarantined(caseName: "lowercase-profile-and-children") { db, _ in
+      try db.exec(
+        """
+        UPDATE profiles SET id = LOWER(id);
+        UPDATE spaces SET id = LOWER(id), profile_id = LOWER(profile_id);
+        UPDATE tabs SET id = LOWER(id), space_id = LOWER(space_id);
+        UPDATE space_active_tabs SET space_id = LOWER(space_id), tab_id = LOWER(tab_id);
+        UPDATE browser_meta SET active_free_space_id = LOWER(active_free_space_id)
+          WHERE active_free_space_id IS NOT NULL;
+        """)
+    }
+    try assertQuarantined(caseName: "lowercase-workspace-id") { db, seed in
+      let profile = try XCTUnwrap(seed.profiles.first)
+      try db.run(
+        """
+        INSERT INTO spaces (id, kind, workspace_id, name, icon, profile_id, position, created_at)
+        VALUES (?, 'local', ?, '', 'local', ?, 0, 0)
+        """,
+        [
+          .text(UUID().uuidString), .text(UUID().uuidString.lowercased()),
+          .text(profile.id.uuidString),
+        ])
+    }
+    try assertQuarantined(caseName: "lowercase-pending-removal") { db, _ in
+      try db.run(
+        "INSERT INTO pending_store_removals (store_id, queued_at) VALUES (?, 0)",
+        [.text(UUID().uuidString.lowercased())])
+    }
+
+    // 3. 大小文字違いの同一 UUID 重複行（FK を通過する各テーブル）を退避する。
+    try assertDuplicateUUIDCorruptionCases()
+  }
+
+  private func assertDuplicateUUIDCorruptionCases() throws {
+    try assertQuarantined(caseName: "dup-profile") { db, seed in
+      let profile = try XCTUnwrap(seed.profiles.first)
+      try db.run(
+        """
+        INSERT INTO profiles (id, name, color, mcp_allowed, position, created_at)
+        VALUES (?, 'dup', 'blue', 0, 9, 0)
+        """, [.text(profile.id.uuidString.lowercased())])
+    }
+    try assertQuarantined(caseName: "dup-space") { db, seed in
+      let space = try XCTUnwrap(seed.spaces.first { $0.kind == .free })
+      try db.run(
+        """
+        INSERT INTO spaces (id, kind, workspace_id, name, icon, profile_id, position, created_at)
+        VALUES (?, 'free', NULL, 'dup', 'globe', ?, 9, 0)
+        """, [.text(space.id.uuidString.lowercased()), .text(space.profileId.uuidString)])
+    }
+    try assertQuarantined(caseName: "dup-tab") { db, seed in
+      let tab = try XCTUnwrap(seed.tabs.first)
+      try db.run(
+        """
+        INSERT INTO tabs (id, space_id, space_kind, section, position, url, title, created_at,
+          last_active_at)
+        VALUES (?, ?, 'free', 'today', 9, NULL, '', 0, 0)
+        """, [.text(tab.id.uuidString.lowercased()), .text(tab.spaceId.uuidString)])
+    }
+    try assertQuarantined(caseName: "dup-workspace-id") { db, seed in
+      let profile = try XCTUnwrap(seed.profiles.first)
+      let wsId = UUID()
+      for rawWs in [wsId.uuidString, wsId.uuidString.lowercased()] {
+        try db.run(
+          """
+          INSERT INTO spaces (id, kind, workspace_id, name, icon, profile_id, position, created_at)
+          VALUES (?, 'local', ?, '', 'local', ?, 0, 0)
+          """, [.text(UUID().uuidString), .text(rawWs), .text(profile.id.uuidString)])
+      }
+    }
+    try assertQuarantined(caseName: "dup-pending-removal") { db, _ in
+      let id = UUID()
+      for (i, raw) in [id.uuidString, id.uuidString.lowercased()].enumerated() {
+        try db.run(
+          "INSERT INTO pending_store_removals (store_id, queued_at) VALUES (?, ?)",
+          [.text(raw), .integer(Int64(i))])
+      }
+    }
+  }
+
   private func assertQuarantined(
     caseName: String,
+    expectValidForeignKeys: Bool = true,
     corrupt: (SQLiteDatabase, BrowserMemory) throws -> Void,
     file: StaticString = #filePath,
     line: UInt = #line
@@ -85,6 +191,16 @@ extension BrowserStoreTests {
       let raw = try SQLiteDatabase(url: folder.appendingPathComponent("db.sqlite"))
       try raw.exec("PRAGMA foreign_keys = OFF")
       try corrupt(raw, seeded)
+      let fkViolations = try raw.select("PRAGMA foreign_key_check", []) { $0.text(at: 0) ?? "" }
+      if expectValidForeignKeys {
+        XCTAssertTrue(
+          fkViolations.isEmpty,
+          "\(caseName): PRAGMA foreign_key_check を通過し主張経路へ到達する（違反: \(fkViolations)）",
+          file: file, line: line)
+      } else {
+        XCTAssertFalse(
+          fkViolations.isEmpty, "\(caseName): 前提として FK 違反が発生する", file: file, line: line)
+      }
     }
 
     let reopened = openStore()
