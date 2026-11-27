@@ -14,7 +14,7 @@ import OrbeEditorCore
 @MainActor
 final class PrCommentLayer {
   let pullRequest: EditorDiffPullRequest
-  /// diff の根の worktree の今の PR（答えを読むだけで、見ている者にはならない——見ているのは PR のパネル）。保留中のレビューを
+  /// diff の根の worktree の今の PR（答えを読むだけで、見ている者にはならない——見ているのは PR のパネル）。未送信のレビューを
   /// 送れるのは、その PR を出すパネルだけ。
   private let current: BranchPullRequest
   /// 並びを置き直させる（スレッドの出入り・新しいコメントの欄の開閉・印を出せる行が分かった）。
@@ -27,6 +27,12 @@ final class PrCommentLayer {
   var held: [String: PrCommentPlacement] = [:]
   /// 新しいコメントの欄（書きかけの通し番号の順。開いた順でもある）。
   var drafts: [PrCommentPlacement] = []
+  /// 見せるよう頼まれたスレッドと押したコメント（→ `PrCommentLayer+Reveal`）。
+  var revealRequest: RevealRequest?
+  /// 見せるよう頼まれた・頼まれたスレッドの、組み終えるのを待っていた絵の本文を組み終えた（diff が見せる）。
+  var onRevealChange: () -> Void = {}
+  /// 最後に並びへ注記を渡した回に載せたスレッドの絵と、その側と行（スレッドの id ごと。行を追う絵は、その回の置き場）。
+  private(set) var shownThreads: [String: DiffRows.Zone] = [:]
   /// 求めた（求めている）印を出せる行の、両端と結果。
   private var commentable: (ends: PullRequestState.DiffEnds, lines: GitDiffHunkLines?)?
   /// 最後に並びへ注記を渡した両端とその両側の本文、並列の古い側の面（インラインでは nil）。
@@ -69,9 +75,9 @@ final class PrCommentLayer {
     for zone in threads.values { zone.redraw() }
   }
 
-  /// この PR が、diff の根の worktree の今の PR で open か。そうでない間（ブランチの切り替え・マージ・クローズの後）は、保留中の
+  /// この PR が、diff の根の worktree の今の PR で open か。そうでない間（ブランチの切り替え・マージ・クローズの後）は、未送信の
   /// レビューに積む書き込み（新しいスレッド・返信）を断る——積んでも、Orbe から送る所が無い。
-  var isCurrentPullRequest: Bool { current.state === state && state.content?.state == .open }
+  var isCurrentPullRequest: Bool { current.state === state && state.isOpenPullRequest }
 
   var state: PullRequestState { pullRequest.state }
   var path: String { pullRequest.id.path }
@@ -94,13 +100,17 @@ final class PrCommentLayer {
 
   /// diff が見せている両側の本文 `shown` の並びに混ぜる注記。PR ごとの書きかけのうち層にまだ無いものを欄にし、スレッドの値と
   /// 書き込みの最中かを絵の差し込みへ写し、見せている両端の先頭のコミットで読んだスレッドのうち今の diff に置けるもの
-  /// （`PullRequestState.canPlace`）と、行を追う欄（新しいコメントの欄と、返信の書きかけを持ったまま置けなくなったスレッド）を
+  /// （`PullRequestState.placement` が置けると答えるもの）と、行を追う欄（新しいコメントの欄と、返信の書きかけを持ったまま置けなくなったスレッド）を
   /// 置く。行を導いた両端が見せている両端と違う欄は、欄の起点から今の版の行を導き始める。見せている本文が前に注記を渡した本文のままなら、そのときの
   /// 両端で置く（出どころが新しい両端の本文を読み終えても、diff がそれを見せるまでは前の両端）。両端が分からなければ何も
   /// 置かない。
   func notes(shown: EditorDiff.SideTexts?) -> DiffRows.Notes {
     let notes = compose(shown: shown)
     placing = (notes.zones.compactMap { $0.zone as? PrCommentZone }, [])
+    shownThreads = Dictionary(
+      notes.zones.compactMap { placed in
+        (placed.zone as? PrCommentZone)?.threadID.map { ($0, placed) }
+      }, uniquingKeysWith: { first, _ in first })
     return notes
   }
 
@@ -120,8 +130,8 @@ final class PrCommentLayer {
     adoptDrafts()
     // diff が見せている両端が PR の今の両端でない間（PR への push・ベースの付け替えを読んで、両端を求め直し、diff が
     // 新しい両端の本文を読み終えるまで）は、古い側の行のスレッドを前の並びに置かない（GitHub は古い側の行を今の
-    // マージベースの diff の行として読む）。
-    let isCurrent = state.diffEnds == ends
+    // マージベースの diff の行として読む）——置き方の決まりが答える（→ `PullRequestState.placement`・`kept`）。
+    settleRevealRequest(ends: ends)
     if let read = state.threads(at: ends.head) {
       let ids = Set(read.map(\.id))
       for (id, zone) in threads where !ids.contains(id) { forget(id, zone) }
@@ -132,9 +142,7 @@ final class PrCommentLayer {
           < (b.comments.first?.createdAt ?? .distantPast, b.id)
       }
       for thread in ordered {
-        guard state.canPlace(thread, in: ends) == true, isCurrent || thread.side == .new,
-          let line = thread.line
-        else {
+        guard state.placement(of: thread, shown: ends) == .placeable, let line = thread.line else {
           hold(thread)
           continue
         }
@@ -150,7 +158,7 @@ final class PrCommentLayer {
         place(zone, at: spot, in: &notes)
       }
     } else {
-      keepPlaced(current, isCurrent: isCurrent, language: language, in: &notes)
+      keepPlaced(current, language: language, in: &notes)
     }
     placeFollowing(current, commentable: markable, language: language, in: &notes)
     return notes
@@ -184,17 +192,18 @@ final class PrCommentLayer {
   }
 
   /// レビューのやりとりが、diff が見せている先頭と違う先頭を読んだ間（PR への push を読み、diff が新しい両端を見せるまで）は、
-  /// diff が見せている両端と本文 `current` で最後に置いたスレッドを、その行に残す（古い側の行のスレッドは、両端が PR の今の
-  /// 両端の間だけ）。ほかの返信の書きかけは、書きかけの欄の位置から行を追う。
+  /// 残すと置き方が答えるスレッド（`PullRequestState.keepsPlacement`）を、diff が見せている本文 `current` で最後に置いた行に
+  /// 残す。ほかのスレッドと返信の書きかけは、置かない（書きかけがあれば、書きかけの欄の位置から行を追う）。
   private func keepPlaced(
-    _ current: Placed, isCurrent: Bool, language: Language, in notes: inout DiffRows.Notes
+    _ current: Placed, language: Language, in notes: inout DiffRows.Notes
   ) {
     let ordered = threads.sorted { a, b in
       (a.value.firstCommentTime, a.key) < (b.value.firstCommentTime, b.key)
     }
     for (id, zone) in ordered where held[id] == nil {
-      guard let spot = lastPlaced[id], spot.ends == current.ends, spot.basis == current.shown,
-        isCurrent || spot.side == .new
+      guard let spot = lastPlaced[id], spot.basis == current.shown,
+        case .thread(let thread) = zone.subject,
+        state.keepsPlacement(of: thread, shown: current.ends)
       else {
         _ = startHolding(id, zone)
         continue

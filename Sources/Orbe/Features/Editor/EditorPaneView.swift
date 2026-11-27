@@ -86,6 +86,8 @@ final class EditorPaneView: NSView {
   private(set) var pullRequest: PrPanel
   private(set) var pullRequestList: RowList<PrListSource>
   private(set) var pullRequestHeader = PrDescriptionHeader(frame: .zero)
+  /// レビューのポップアップの持ち主（面ごと。根が変われば作り直す）。
+  private(set) var reviewPopup: PrReviewPopup
   /// 一覧の器（今の項目のボタンに付いて浮く一覧）と、その地と下の案内の host。器の行の列と host は、開いている間だけ
   /// バーより下の最前面に出す。
   let itemList = EditorItemList()
@@ -98,7 +100,7 @@ final class EditorPaneView: NSView {
   var itemButtonFrame: CGRect?
   /// ポップアップの器（上のバーの右端のボタンから、バーの右下に開く）と、ポップアップとその下に並ぶ札を置く host（バーより
   /// 下の層）。
-  let popup = EditorPopup()
+  let popup: EditorPopup
   private(set) lazy var dockHost = EditorDockHost(rootView: dockRoot())
   /// ポップアップを開く前のフォーカスの場所（閉じたら、きっかけが求めれば戻す）。
   var popupReturn = FocusPlace.body
@@ -112,8 +114,11 @@ final class EditorPaneView: NSView {
   /// 上のバーの右端の主な操作のボタンの枠（ボタンの印ごと。バーの座標＝面の座標。今あるボタンの分だけ）。ポップアップの外の
   /// 押下の判定の入力。
   var actionButtonFrames: [UUID: CGRect] = [:]
-  /// F4 / ⇧F4・PR の画面のキー v と、結果の列・一覧の器の外の押下を拾うイベントの監視（窓に付いている間だけ）。
+  /// F4 / ⇧F4・PR の画面のキー v・esc で閉じた後の esc のキーリピートと、結果の列・一覧の器の外の押下を拾うイベントの監視
+  /// （窓に付いている間だけ）。
   var eventMonitor: Any?
+  /// esc で面の器を閉じた後、そのキーを押し続けている間（→ `escapeRepeatIsSwallowed`）。
+  var swallowsEscapeRepeat = false
   /// 左の列の幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
@@ -142,6 +147,8 @@ final class EditorPaneView: NSView {
     self.searchResults = searchResults
     let scm = ScmPanel(root: root)
     self.scm = scm
+    let popup = EditorPopup()
+    self.popup = popup
     let commitPopup = ScmCommitPopup(panel: scm, popup: popup)
     self.commitPopup = commitPopup
     let scmList = Self.scmList(scm)
@@ -152,11 +159,14 @@ final class EditorPaneView: NSView {
     self.pullRequest = pullRequest
     let pullRequestList = Self.pullRequestList(pullRequest)
     self.pullRequestList = pullRequestList
+    let reviewPopup = PrReviewPopup(pullRequest: pullRequest.pullRequest, popup: popup)
+    self.reviewPopup = reviewPopup
     barHost = EditorBarHost(
       rootView: EditorBarRoot(
         shell: shell, sidebar: sidebar, itemList: itemList, scm: scm, commitPopup: commitPopup,
-        pullRequest: pullRequest.pullRequest, findField: findField,
-        localization: localization, fontResolver: fontResolver))
+        pullRequest: pullRequest.pullRequest, pullRequestPanel: pullRequest,
+        reviewPopup: reviewPopup, findField: findField, localization: localization,
+        fontResolver: fontResolver))
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
@@ -175,15 +185,11 @@ final class EditorPaneView: NSView {
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
     assembleViews()
-    search.onCountChange = { [weak self] selected, total, limited in
-      self?.findField.model?.updateCount(selected: selected, total: total, limited: limited)
-    }
-    search.onMatchesChange = { [weak self] in self?.pushFindGround() }
-    search.onNeedleChange = { [weak self] in self?.syncFindState() }
     sidebarHandle.shownWidth = { [weak self] in self?.shownSidebarWidth ?? 0 }
     sidebarHandle.onDrag = { [weak self] width in self?.resizeSidebar(to: width) }
     sidebarHandle.onRelease = { [weak self] in self?.sidebar.commit() }
     wireShell()
+    wireSearch()
     wireTree()
     wireProjectSearch()
     wireSourceControl()
@@ -216,19 +222,12 @@ final class EditorPaneView: NSView {
     needsLayout = true
   }
 
-  private static func scmList(_ scm: ScmPanel) -> RowList<ScmListSource> {
-    RowList(source: ScmListSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
-  }
-
-  private static func scmGraphList(_ scm: ScmPanel) -> RowList<ScmGraphSource> {
-    RowList(source: ScmGraphSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
-  }
-
   private func installRoots() {
     barHost.rootView = EditorBarRoot(
       shell: shell, sidebar: sidebar, itemList: itemList, scm: scm, commitPopup: commitPopup,
-      pullRequest: pullRequest.pullRequest, findField: findField,
-      localization: localization, fontResolver: fontResolver)
+      pullRequest: pullRequest.pullRequest, pullRequestPanel: pullRequest,
+      reviewPopup: reviewPopup, findField: findField, localization: localization,
+      fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
       scmList: scmList, scmGraphList: scmGraphList, pullRequest: pullRequest,
@@ -291,10 +290,10 @@ final class EditorPaneView: NSView {
   }
 
   /// 根が変わった（cd）。面の中の確認をキャンセルで閉じ、ポップアップを閉じ（戻したフォーカスは、パネルが外れる前に本体へ
-  /// 移す決まりを通る）、ツリーとソース管理パネル（とコミットのポップアップの持ち主）と PR のパネルを作り直し（前の根の PR は
-  /// 見るのをやめる）、握っていたなら握り直す（worktree の状態——メッセージ・操作・失敗——は worktree ごとに残るので、戻れば
-  /// 同じものが見える）。プロジェクト検索は結果を捨て、この面の検索パネルが画面に見えていれば今の問いで検索し直す（裏の連の
-  /// cd で見えない根を探さない）。
+  /// 移す決まりを通る）、ツリーとソース管理パネル（とコミットのポップアップの持ち主）と PR のパネル（とレビューのポップアップの
+  /// 持ち主）を作り直し（前の根の PR は見るのをやめる）、握っていたなら握り直す（worktree の状態——メッセージ・操作・失敗——は
+  /// worktree ごとに残るので、戻れば同じものが見える）。プロジェクト検索は結果を捨て、この面の検索パネルが画面に見えていれば
+  /// 今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
     confirm.close(.itemGone)
@@ -321,6 +320,7 @@ final class EditorPaneView: NSView {
     pullRequest = PrPanel(root: root, source: .gh())
     pullRequestList = Self.pullRequestList(pullRequest)
     pullRequestHeader = PrDescriptionHeader(frame: .zero)
+    reviewPopup = PrReviewPopup(pullRequest: pullRequest.pullRequest, popup: popup)
     wirePullRequest()
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()

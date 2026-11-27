@@ -138,11 +138,21 @@ extension EditingSite {
   // MARK: - 見せ方
 
   /// 区間 `range`（nil なら主のキャレット）の行の縦の範囲（表示の単位——面の行高を 1 とする縦の並びの位置）。本文の場で
-  /// `rows`（縦の並びの中の 2 つの位置）があれば、その上端から上端まで。
+  /// `zone`（絵の差し込みの中の縦の範囲。絵の座標、pt）があれば、その差し込みの上端からの範囲（差し込みが並びに無ければ
+  /// nil）。そうでなく `rows`（縦の並びの中の 2 つの位置）があれば、その上端から上端まで。
   func revealSpan(
-    _ range: NSRange?, rows positions: (from: RowPosition, to: RowPosition)?
+    _ range: NSRange?, rows positions: (from: RowPosition, to: RowPosition)?,
+    zone inZone: ZoneSpan?
   ) -> Range<Double>? {
     guard let text = currentContent?.text else { return nil }
+    if isBody, let inZone {
+      let rows = surface.rows
+      guard let block = rows.block(ofZone: inZone.zone) else { return nil }
+      let unit = Double(surface.config.lineHeight)
+      let top = rows.top(ofBlock: block)
+      return (top + Double(inZone.top)) / unit..<(top + Double(max(inZone.top, inZone.bottom)))
+        / unit
+    }
     if isBody, let positions {
       let rows = surface.rows
       let from = rows.unit(of: positions.from, lineCount: text.lineCount)

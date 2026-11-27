@@ -78,6 +78,8 @@ final class FakeTextSurface: TextSurface {
 
   func reveal(from: RowPosition, to: RowPosition, policy: TextReveal) {}
 
+  func reveal(_ zone: SurfaceZone, from top: CGFloat, to bottom: CGFloat, policy: TextReveal) {}
+
   func setRows(_ rows: SurfaceRows) {}
 
   func rowSourceRolesDidChange(_ ranges: IndexSet) {}

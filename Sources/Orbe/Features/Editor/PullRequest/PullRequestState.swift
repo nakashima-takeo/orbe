@@ -61,13 +61,6 @@ final class PullRequestState {
     }
   }
 
-  /// 中身の読みか確認済みの書き込みの、最後の失敗。次に中身が読めたときと、確認済みの書き込みを始めたときに消える
-  /// （読み直している間は前の失敗を残す）。
-  enum Failure: Equatable {
-    case read(GitHubFailure)
-    case write(GitHubFailure)
-  }
-
   let key: Key
   @ObservationIgnored let source: PullRequestSource
   /// git に問い合わせるリポジトリと、PR のコミットを取りに行く remote（PR が置かれたリポジトリを指す remote）と、PR の
@@ -83,11 +76,19 @@ final class PullRequestState {
     done((repo, trackedRefs))
   }
   /// 最後に読めた中身と、その変更ファイルの並び・パスからの索引（中身を読んだときに作り直す）。
-  private(set) var content: GitHubPullRequestContent?
+  private(set) var content: GitHubPullRequestContent? {
+    didSet {
+      if content?.files != oldValue?.files { changedFiles = PrChangedFiles(content?.files ?? []) }
+      refreshPlacements()
+    }
+  }
   private(set) var changedFiles = PrChangedFiles.empty
-  var failure: Failure?
+  /// 中身の最後の読みの失敗。次に中身が読めたら消える（読み直している間は前の失敗を残す）。
+  var contentFailure: GitHubFailure?
+  /// 最後の確認済みの書き込みの失敗。失敗の知らせを閉じたとき・次の確認済みの書き込みを始めたときに消える。
+  var viewedFailure: GitHubFailure?
   private(set) var isReading = false
-  private(set) var bounds = Bounds.none
+  private(set) var bounds = Bounds.none { didSet { refreshPlacements() } }
 
   /// 確認済みの GitHub の値（パス → 値）と、その値を決めた問い合わせの通し番号。
   var viewed: [String: Bool] = [:] {
@@ -104,16 +105,15 @@ final class PullRequestState {
   @ObservationIgnored var isWriting = false
 
   /// 最後に読めたレビューのやりとり（→ `PullRequestState+Review`）。
-  var review: GitHubPullRequestReview? {
-    didSet { reviewVersion &+= 1 }
-  }
-  /// `review` が変わるたびに進む（列が見えている行を描き直す合図）。
-  private(set) var reviewVersion = 0
-  /// レビューのやりとりの最後の読みの失敗。中身の失敗（`failure`）とは分けて持ち、次に読めたら消える。
+  var review: GitHubPullRequestReview? { didSet { refreshPlacements() } }
+  /// 置き方から導いた値（→ `PullRequestState+Placement`）と、デバッグのビルドで、その材料が作り直す前に変わった印。
+  var placementsMade = Placements.empty
+  @ObservationIgnored var placementsAreStale = false
+  /// レビューのやりとりの最後の読みの失敗。中身の読みの失敗とは分けて持ち、次に読めたら消える。
   var reviewFailure: GitHubFailure?
-  /// レビューの送信の、全体へのコメントの書きかけと選んだ種類（PR のパネルが書く。メモリだけで、パネルを隠しても残る）。
+  /// レビューの送信の、全体へのコメントの書きかけと選んだ種類（メモリだけで、パネルを隠しても残る）。
   var reviewDraft = ReviewDraft()
-  /// 最後のレビューの送信の失敗（PR のパネルが書く。次に送るときに消す）。
+  /// 最後のレビューの送信の失敗。失敗の知らせを閉じたとき・次に送るときに消える。
   var submissionFailure: GitHubFailure?
   /// スレッドへの返信の書きかけと、新しいコメントの書きかけ（→ `PullRequestState+CommentDrafts`）。
   @ObservationIgnored var commentDrafts = CommentDrafts()
@@ -122,13 +122,13 @@ final class PullRequestState {
   var reviewWriteTargets: Set<ReviewTarget> = []
   @ObservationIgnored var reviewWrites: [ReviewWrite] = []
   @ObservationIgnored var isSendingReviewWrite = false
-  @ObservationIgnored var isReadingReview = false
+  var isReadingReview = false
   @ObservationIgnored var readReviewAgain = false
   /// 最後にレビューへの書き込みの答えが届いた時点の通し番号。これより前に出した読みの答えは入れない。
   @ObservationIgnored var reviewWrittenOrder = 0
   /// 次に届く新しい読みを待っている書き込みの続き。
   @ObservationIgnored var reviewReadWaiters: [() -> Void] = []
-  /// 書き込みが名指しする自分の保留中のレビュー（読みの答えと、書き込みの答えで分かったもの）。
+  /// 書き込みが名指しする自分の未送信のレビュー（読みの答えと、書き込みの答えで分かったもの）。
   @ObservationIgnored var pendingReviewID: String?
   /// 今の中身と、今のレビューのやりとりを読んだ問い合わせの通し番号（読みが通った時点で進む）。
   @ObservationIgnored private var contentOrder = 0
@@ -136,20 +136,23 @@ final class PullRequestState {
   /// 最後に答えが届いた（通った・失敗した）中身とレビューのやりとりの読みの通し番号。
   @ObservationIgnored private var contentAnsweredOrder = 0
   @ObservationIgnored var reviewAnsweredOrder = 0
-  /// 先頭のコミットを揃える読み直し（→ `alignHeads`）。走っていれば、その読みを出す直前の通し番号と、揃え始めてから
-  /// 読んだ先頭のコミット。
-  @ObservationIgnored private var alignment: (start: Int, seen: Set<String>)?
+  /// 先頭のコミットを揃える読み直しの様子。やめた（`stopped`）は、`alignHeads` がやめると決めたときだけ——先頭が食い違って
+  /// いても、読みの答えを受けて `alignHeads` が見比べるまでは、やめていない。
+  private enum Alignment: Equatable {
+    /// 揃える読みが走っていない。
+    case idle
+    /// 揃える読みが走っている——その読みを出す直前の通し番号と、揃え始めてから読んだ先頭のコミット。
+    case aligning(start: Int, seen: Set<String>)
+    /// 揃える読みが失敗した・揃え始めてから見ていない先頭のコミットが現れなかったので、揃えるのをやめた。
+    case stopped
+  }
+  private var alignment = Alignment.idle { didSet { refreshPlacements() } }
   /// 読み直しと書き込みに付ける、出した順の通し番号。
   @ObservationIgnored private var nextOrder = 0
 
   @ObservationIgnored private var watchers = 0
   @ObservationIgnored private var readAgain = false
   @ObservationIgnored private var observers: [WeakObserver] = []
-
-  struct ReviewDraft: Equatable {
-    var body = ""
-    var event = GitHubReviewEvent.comment
-  }
 
   struct PendingViewed: Equatable {
     let value: Bool
@@ -238,7 +241,7 @@ final class PullRequestState {
       return
     }
     // 新しいきっかけでは、先頭のコミットを揃える読み直しを最初から数える。
-    alignment = nil
+    alignment = .idle
     startReading()
   }
 
@@ -267,10 +270,10 @@ final class PullRequestState {
       case .success(let read):
         apply(read, order: order)
         contentOrder = order
-        failure = nil
+        contentFailure = nil
         // 中身が読めて追跡 ref が新しく分かったら、その値も覚える。
         if trackedRefs.contains(where: tracking.lacks) { tracking.record() }
-      case .failure(let reason): failure = .read(reason)
+      case .failure(let reason): contentFailure = reason
       }
       if readAgain {
         readAgain = false
@@ -294,24 +297,22 @@ final class PullRequestState {
   func alignHeads() {
     guard !isReading, !isReadingReview else { return }
     guard let content, let review, content.headCommit != review.headCommit else {
-      alignment = nil
+      alignment = .idle
       return
     }
     let heads: Set = [content.headCommit, review.headCommit]
     var seen = heads
-    if let alignment {
+    if case .aligning(let start, let seenBefore) = alignment {
       // 揃える読みの答えが両方届くまで待つ。
-      guard contentAnsweredOrder > alignment.start, reviewAnsweredOrder > alignment.start else {
-        return
+      guard contentAnsweredOrder > start, reviewAnsweredOrder > start else { return }
+      // 揃える読みのどちらかが失敗した・GitHub の答えが一貫していない。
+      guard contentOrder > start, reviewOrder > start, !heads.isSubset(of: seenBefore) else {
+        return alignment = .stopped
       }
-      self.alignment = nil
-      // 揃える読みのどちらかが失敗した。
-      guard contentOrder > alignment.start, reviewOrder > alignment.start else { return }
-      guard !heads.isSubset(of: alignment.seen) else { return }
-      seen.formUnion(alignment.seen)
+      seen.formUnion(seenBefore)
     }
-    guard isWatched else { return }
-    alignment = (issueOrder(), seen)
+    guard isWatched else { return alignment = .idle }
+    alignment = .aligning(start: issueOrder(), seen: seen)
     startReading()
   }
 
@@ -319,7 +320,7 @@ final class PullRequestState {
   /// 読まない）。
   var stoppedAligning: Bool {
     guard let content, let review, content.headCommit != review.headCommit else { return false }
-    return alignment == nil && !isReading && !isReadingReview
+    return alignment == .stopped
   }
 
   /// 問い合わせずに読むのをやめる（積んだ読み直しも捨てる）。
@@ -337,7 +338,6 @@ final class PullRequestState {
 
   /// 読めた中身を入れる。確認済みは、その読み直しより後に出した書き込みで決まったパスでは上書きしない。
   private func apply(_ read: GitHubPullRequestContent, order: Int) {
-    if read.files != content?.files { changedFiles = PrChangedFiles(read.files) }
     content = read
     for file in read.files where (viewedOrder[file.path] ?? 0) < order {
       viewed[file.path] = file.isViewed

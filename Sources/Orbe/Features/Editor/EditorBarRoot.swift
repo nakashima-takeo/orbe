@@ -20,6 +20,10 @@ struct EditorBarRoot: View {
   let commitPopup: ScmCommitPopup
   /// PR の番号の持ち主（worktree の今の PR）。
   let pullRequest: BranchPullRequest
+  /// PR の画面の面ごとの状態（PR の札・再読込・「GitHub で開く」が読む）。
+  let pullRequestPanel: PrPanel
+  /// レビューのポップアップの持ち主（「レビュー」のボタンが読む）。
+  let reviewPopup: PrReviewPopup
   /// ファイル内検索の欄の持ち主（Files の中ほど）。
   let findField: EditorFindField
   let localization: LocalizationStore

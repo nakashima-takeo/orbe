@@ -79,6 +79,7 @@ final class EditorDiff {
       }
     }
     comments?.onRowsChange = { [weak self] in self?.applyRows() }
+    comments?.onRevealChange = { [weak self] in self?.revealRequestedThread() }
   }
 
   /// 種類の出どころで開く。作業ツリー diff は `documents`（セッション）から新しい側の文書を引く。テキスト面を作れなければ
@@ -213,6 +214,7 @@ final class EditorDiff {
   func viewportDidChange() {
     guard presented != nil, let surface = newSurface else { return }
     if placement != .placed || carried != nil { placeFirstView(on: surface) }
+    revealRequestedThread()
     sendVisibleRemovedLines(on: surface)
   }
 
@@ -348,6 +350,7 @@ final class EditorDiff {
       (document?.surface ?? newRevisionSurface)?.rowSourceRolesDidChange(ranges)
     }
     revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
+    revision.onUserInput = { [weak self] in self?.userDidInput() }
     old = revision
     oldSide = DiffRows.Side(text == nil ? nil : revision.text)
   }
@@ -377,6 +380,7 @@ final class EditorDiff {
     newRevision?.detach()
     revision.onViewportChange = { [weak self] in self?.viewportDidChange() }
     revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
+    revision.onUserInput = { [weak self] in self?.userDidInput() }
     newRevision = revision
     newRevisionSide = DiffRows.Side(text == nil ? nil : revision.text)
     newRevisionSurface = surfaces.make()

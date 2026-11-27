@@ -39,6 +39,11 @@ public protocol TextSurface: AnyObject {
   /// 横は `from` の行の行頭が見えるところまで最小限。判定は面の最新の位置で行い、選択は動かさない。
   func reveal(from: RowPosition, to: RowPosition, policy: TextReveal)
 
+  /// 並びに置いた絵の差し込み `zone` の中の縦の範囲 `top`〜`bottom`（絵の座標、pt）を、縦は方針 `policy` で見せる。横は
+  /// 差し込みの下の文書の行の行頭が見えるところまで最小限。差し込みが並びに無ければ何もしない。判定は面の最新の位置で行い、
+  /// 選択は動かさない。
+  func reveal(_ zone: SurfaceZone, from top: CGFloat, to bottom: CGFloat, policy: TextReveal)
+
   /// 選択（UTF-16）。置いても見せない——見せるのは `reveal`。置くと本文が主になる（絵の差し込みの文の選択と入力欄から
   /// 本文へ戻る。同じ値でも）。
   var selectedRange: NSRange { get set }
@@ -165,12 +170,20 @@ public protocol TextSurfaceDelegate: AnyObject {
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   /// `viewport` が変わった（スクロール・窓の高さ）。
   func surfaceDidChangeViewport(_ surface: any TextSurface)
+  /// 利用者が面を操作した（スクロール・押下・打鍵）。数えるのは、面の view が受けたスクロールホイール・押下・`keyDown` と、
+  /// key equivalent の段で面が自分で処理する打鍵（入力欄の ⌘↵・複数カーソルのキー。キーリピートも）。面が処理せずに流す
+  /// キー（アプリのショートカット）と、載せる側が頼んだ移動（区間を見せる・位置を置く）は含まない。
+  func surfaceDidReceiveUserInput(_ surface: any TextSurface)
   /// 選択が変わった——どれかのカーソルの選択か、続いている ⌘D の問いが変わった。
   func surfaceDidChangeSelection(_ surface: any TextSurface)
   /// 文書の写し（本文・役割の並び・版）。面が、結ばれたとき・`rolesDidChange` と `setLineMarks` を受けたとき・自分が
   /// 出した編集の通知から戻ったときに引いて描く。文書はどの知らせも自分の写しを更新した後に出すので、
   /// 引いた写しは知らせと同じ版。
   func surfaceContent(_ surface: any TextSurface) -> SurfaceContent
+}
+
+extension TextSurfaceDelegate {
+  public func surfaceDidReceiveUserInput(_ surface: any TextSurface) {}
 }
 
 /// 文書の写し——本文のロープ・役割の並び・版の組。値として写すのは O(1) で、変わらないので、描画のスレッドがロックも

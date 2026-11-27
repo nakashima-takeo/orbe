@@ -12,6 +12,8 @@ struct EditorDockRoot: View {
   let popup: EditorPopup
   /// コミットのポップアップの持ち主（Changes の札が、ソース管理の状態と、ポップアップが開いているかを読む）。
   let commitPopup: ScmCommitPopup
+  /// レビューのポップアップの持ち主（PR の画面の札が、worktree の今の PR とポップアップが開いているかを読む）。
+  let reviewPopup: PrReviewPopup
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
   let translucency: ChromeTranslucency

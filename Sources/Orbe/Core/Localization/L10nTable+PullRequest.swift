@@ -19,6 +19,7 @@ extension L10n {
     .editorPrTitle: ("プルリクエスト", "Pull Request"),
     .editorPrRefresh: ("再読込", "Refresh"),
     .editorPrOpenOnGitHub: ("GitHub で開く", "Open on GitHub"),
+    .editorPrBarChip: ("プルリクエスト #%lld、%@ → %@", "Pull request #%lld, %@ → %@"),
     .editorPrInSync: ("この worktree でチェックアウト済み", "Checked out in this worktree"),
     .editorPrUnpushed: ("未 push のコミットが %lld 件あります", "Unpushed commits: %lld"),
     .editorPrUnfetched: ("PR に未取得のコミットが %lld 件あります", "Commits in the PR not fetched: %lld"),
@@ -65,7 +66,7 @@ extension L10n {
     .editorPrFailedRead: ("GitHub から取得できませんでした", "Couldn’t fetch from GitHub"),
     .editorPrFailedWrite: ("GitHub に反映できませんでした", "Couldn’t update GitHub"),
     .editorPrThreadLine: ("行 %lld", "Line %lld"),
-    .editorPrThreadPending: ("保留中", "Pending"),
+    .editorPrThreadPending: ("未送信", "Pending"),
     .editorPrThreadResolved: ("解決済み", "Resolved"),
     .editorPrThreadResolve: ("解決", "Resolve"),
     .editorPrThreadUnresolve: ("解決を取り消す", "Unresolve"),
@@ -92,8 +93,11 @@ extension L10n {
       "GitHub didn’t respond. Check on GitHub whether it was applied"
     ),
     .editorPrReview: ("レビュー", "Review"),
-    .editorPrReviewPending: ("保留中のコメント %lld", "Pending comments: %lld"),
-    .editorPrReviewPlaceholder: ("全体へのコメント（任意）", "Overall comment (optional)"),
+    .editorPrReviewPending: ("未送信のコメント %lld", "Pending comments: %lld"),
+    .editorPrReviewButtonPending: (
+      "レビュー、未送信のコメント %lld", "Review, pending comments: %lld"
+    ),
+    .editorPrReviewOverall: ("全体へのコメント", "Overall Comment"),
     .editorPrReviewApprove: ("承認", "Approve"),
     .editorPrReviewComment: ("コメント", "Comment"),
     .editorPrReviewRequestChanges: ("変更を依頼", "Request Changes"),
@@ -108,6 +112,16 @@ extension L10n {
     .editorPrReviewNoDiff: (
       "PR の diff を表示できないため、送信できません。再読込するか、GitHub で送信してください",
       "Can’t submit because the pull request diff can’t be shown. Refresh, or submit on GitHub"
+    ),
+    .editorPrViewedFailed: ("確認済みを反映できませんでした（%@）", "Couldn’t update Viewed (%@)"),
+    .editorPrViewedTimedOut: (
+      "確認済みの書き込みに GitHub の応答がありません。GitHub の今の値を読み直します",
+      "GitHub didn’t respond to the Viewed update. Reloading the current state from GitHub"
+    ),
+    .editorPrSubmitFailed: ("レビューを送信できませんでした（%@）", "Couldn’t submit the review (%@)"),
+    .editorPrSubmitTimedOut: (
+      "レビューの送信に GitHub の応答がありません。反映されたかは GitHub で確かめてください",
+      "GitHub didn’t respond to the review submission. Check on GitHub whether it went through."
     ),
     .editorPrReviewReadFailed: (
       "レビューのコメントを読み込めません（%@）", "Couldn’t load review comments (%@)"

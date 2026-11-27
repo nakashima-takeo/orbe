@@ -5,7 +5,7 @@ import OrbeEditorCore
 ///
 /// 箱は本文の区画の左端から始まり、右に 16、上に 4、下に 8 の空きを持つ（角丸 6・枠 1・影 0 10 30）。開いたスレッドは、頭（高さ
 /// 26 と下縁 1。上の 2 角だけ丸い。「行 N」・状態・「解決」・「折りたたむ」）・コメントの列（アバターの頭文字の円・書いた人と
-/// 時刻と保留中の札・本文）・返信の行（返信欄・「レビューに追加」・「解決して返信」）・失敗の文。畳んだスレッドは頭の帯だけ
+/// 時刻と未送信の札・本文）・返信の行（返信欄・「レビューに追加」・「解決して返信」）・失敗の文。畳んだスレッドは頭の帯だけ
 /// （4 角とも丸い）で、「行 N」の後に最初のコメントの書いた人と本文の先頭 1 行を出す。新しいコメントの欄は、箱から頭と
 /// コメントの列を除いた形（返信欄・「レビューに追加」・「取り消す」）で、書き込めない間（欄の行を移している・行が
 /// 現在の diff に無い）は「レビューに追加」を押せない姿にする。置き場所の文（→ `PrCommentNotice`）は失敗の文の上に出す。
@@ -25,10 +25,12 @@ enum PrCommentPicture {
     let language: Language
   }
 
-  /// 組んだ絵と、その絵のリンクの行き先（コメントの id → 本文の層の中の通し番号 → URL）。
+  /// 組んだ絵と、その絵のリンクの行き先（コメントの id → 本文の層の中の通し番号 → URL）と、開いたスレッドのコメントごとの
+  /// 縦の範囲（コメントの id → 絵の座標の上端〜下端）。
   struct Composed {
     let picture: ZonePicture
     let links: [String: [Int: URL]]
+    var comments: [String: Range<CGFloat>] = [:]
   }
 
   /// 頭の帯の敷き方。
@@ -73,9 +75,12 @@ enum PrCommentPicture {
     var y = frame.minY + 1
     header(thread, collapsed: false, in: frame, top: y, &canvas)
     y += Size.editorPrThreadHead + 1 + Size.editorPrThreadListPadY
+    var spans: [String: Range<CGFloat>] = [:]
     for (index, comment) in thread.comments.enumerated() {
       if index > 0 { y += Size.editorPrThreadCommentGap }
+      let top = y
       y += self.comment(comment, bodies[comment.id], in: frame, top: y, &canvas)
+      spans[comment.id] = top..<y
     }
     y += Size.editorPrThreadListPadY
     if thread.canReply {
@@ -86,7 +91,9 @@ enum PrCommentPicture {
     }
     y += notice(in: frame, top: y, &canvas)
     y += failure(in: frame, top: y, &canvas)
-    return canvas.finish(frame, bottom: y + 1, head: .top)
+    var composed = canvas.finish(frame, bottom: y + 1, head: .top)
+    composed.comments = spans
+    return composed
   }
 
   // MARK: - 畳んだスレッド

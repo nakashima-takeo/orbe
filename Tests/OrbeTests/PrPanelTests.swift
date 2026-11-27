@@ -26,13 +26,25 @@ final class PrPanelTests: OrbeTestCase {
   /// ブランチに open の PR があるか（偽なら、PR が無いと答える）。
   private var open = true
   /// PR の番号（テストが替えて、次の引き直しに答えさせる）。
-  private var number = 9
-  /// レビューのやりとりの答え（自分が作者か・保留中のコメントの数・スレッド）と、届いたレビューへの書き込みとその答えの失敗。
+  var number = 9
+  /// レビューのやりとりの答え（自分が作者か・未送信のコメントの数・スレッド）と、届いたレビューへの書き込みとその答えの失敗。
   var viewerIsAuthor = false
   var pendingComments = 0
   var threads: [GitHubPullRequestReview.Thread] = []
   var reviewWrites: [GitHubReviewWrite] = []
   var reviewFailure: GitHubFailure?
+  /// 真ならレビューへの書き込みの答えを返さずに `heldReviewWrites` に溜める（送信の最中を作る）。
+  var holdsReviewWrites = false
+  var heldReviewWrites: [() -> Void] = []
+  /// GitHub の読み（ブランチの PR の問い合わせ・中身・レビューのやりとり）の失敗と、確認済みの書き込みの失敗。
+  var readFailure: GitHubFailure?
+  /// レビューのやりとりの読みだけの失敗。
+  var reviewReadFailure: GitHubFailure?
+  var viewedFailure: GitHubFailure?
+  /// GitHub が rename と答える変更ファイル。真なら中身の読みの答えを `heldContents` に溜める。
+  var renamed: Set<String> = []
+  var holdsContents = false
+  var heldContents: [() -> Void] = []
   /// PR の先頭のコミット（手元の feat の先頭。ベースも同じコミット）と、レビューのやりとりが答える先頭のコミット。
   var head = ""
   var reviewHead = ""
@@ -77,28 +89,39 @@ final class PrPanelTests: OrbeTestCase {
         let pullRequest = GitHubBranchPR(
           number: number, headRefName: "feat", state: "OPEN", baseRefName: "main",
           headRepository: me, url: "https://github.com/me/r/pull/\(number)")
+        let found: Result<[GitHubBranchPR], GitHubFailure> =
+          readFailure.map { .failure($0) } ?? .success(open ? [pullRequest] : [])
         completion(
           GitHubBranchPullRequests(
-            ledger: nil,
-            branches: [branch: .gitHub(ref, pullRequests: .success(open ? [pullRequest] : []))]))
+            ledger: nil, branches: [branch: .gitHub(ref, pullRequests: found)]))
       },
       branchExists: { _, completion in completion(.success(true)) },
-      content: { [unowned self] _, completion in completion(.success(content)) },
+      content: { [unowned self] _, completion in
+        let answer = { [unowned self] in
+          completion(readFailure.map { .failure($0) } ?? .success(content))
+        }
+        if holdsContents { heldContents.append(answer) } else { answer() }
+      },
       setViewed: { [unowned self] viewed, paths, _, completion in
         writes.append((viewed, paths))
-        completion(GitHubViewedWrite(written: paths, failure: nil))
+        completion(
+          GitHubViewedWrite(written: viewedFailure == nil ? paths : [], failure: viewedFailure))
       },
       review: { [unowned self] _, completion in
         completion(
-          .success(
-            GitHubPullRequestReview(
-              viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
-              pendingReview: pendingComments > 0
-                ? .init(id: "R", commentCount: pendingComments) : nil, threads: threads)))
+          (readFailure ?? reviewReadFailure).map { .failure($0) }
+            ?? .success(
+              GitHubPullRequestReview(
+                viewerIsAuthor: viewerIsAuthor, headCommit: reviewHead,
+                pendingReview: pendingComments > 0
+                  ? .init(id: "R", commentCount: pendingComments) : nil, threads: threads)))
       },
       writeReview: { [unowned self] write, _, pending, _, completion in
         reviewWrites.append(write)
-        completion(GitHubReviewWriteResult(pendingReview: pending, failure: reviewFailure))
+        let answer = { [unowned self] in
+          completion(GitHubReviewWriteResult(pendingReview: pending, failure: reviewFailure))
+        }
+        if holdsReviewWrites { heldReviewWrites.append(answer) } else { answer() }
       })
   }
 
@@ -109,7 +132,11 @@ final class PrPanelTests: OrbeTestCase {
       headRefName: "feat",
       baseCommit: head, headCommit: head, commitCount: 2,
       commits: [.init(oid: "c1", headline: "一"), .init(oid: "c2", headline: "二")],
-      files: files.map { .init(path: $0, change: .modified, isViewed: $0 == "src/a/x.swift") })
+      files: files.map {
+        .init(
+          path: $0, change: renamed.contains($0) ? .renamed : .modified,
+          isViewed: $0 == "src/a/x.swift")
+      })
   }
 
   /// 変更ファイルを `next` にして読み直し、列の行が組み直されるまで待つ。
@@ -152,31 +179,6 @@ final class PrPanelTests: OrbeTestCase {
 
     hide(panel)
     XCTAssertFalse(state.isWatched, "隠せば PR の状態を見るのをやめる")
-  }
-
-  /// 隠している間に、ほかの面のパネルが今の PR の替わりを受けても、出し直した後の同じ PR の知らせでは、全体へのコメント
-  /// 欄の変換中の字を確定せず、焦点も移さない（区画は出し直したときの PR で作られていて、作り直しは起きていない）。
-  func testAPullRequestThatChangedWhileHiddenLeavesTheFieldAloneAfterShowingAgain() throws {
-    let other = PrPanel(root: repo.root, source: source)
-    show(other)
-    defer { hide(other) }
-    let previous = try shown()
-    hide(panel)
-    number = 10
-    other.refresh()
-    pumpMain(
-      until: { other.state.map { $0 !== previous && $0.content != nil } ?? false },
-      "前提: ほかの面のパネルが次の PR を見る")
-    show(panel)
-    var confirms = 0
-    var closings = 0
-    panel.confirmReviewComposition = { confirms += 1 }
-    panel.onFocusWillClose = { closings += 1 }
-    panel.isReviewFieldFocused = true
-    panel.toggleViewed("README.md")
-    XCTAssertEqual(confirms, 0, "作り直していない欄の変換中の字を確定しない")
-    XCTAssertEqual(closings, 0)
-    XCTAssertTrue(panel.isReviewFieldFocused, "焦点は欄のまま")
   }
 
   // MARK: - キー

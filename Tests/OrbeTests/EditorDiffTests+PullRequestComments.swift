@@ -24,6 +24,9 @@ extension EditorDiffTests {
     /// 真なら書き込みの答えを返さずに `held` に溜める（書き込みの最中を作る）。
     var holds = false
     var held: [() -> Void] = []
+    /// 真ならレビューのやりとりの読みの答えを返さずに `heldReviews` に溜める（答えは返す時点の `head` と `threads` で作る）。
+    var holdsReviews = false
+    var heldReviews: [() -> Void] = []
   }
 
   /// PR の diff を開く。PR のコミットは `edit`（無ければ a.txt の行 3 を変える）で作り、GitHub はファイル `path` を `change`
@@ -80,11 +83,14 @@ extension EditorDiffTests {
         },
         setViewed: { _, _, _, _ in },
         review: { _, completion in
-          completion(
-            .success(
-              GitHubPullRequestReview(
-                viewerIsAuthor: false, headCommit: remote.head, pendingReview: nil,
-                threads: remote.threads)))
+          let answer = {
+            completion(
+              .success(
+                GitHubPullRequestReview(
+                  viewerIsAuthor: false, headCommit: remote.head, pendingReview: nil,
+                  threads: remote.threads)))
+          }
+          if remote.holdsReviews { remote.heldReviews.append(answer) } else { answer() }
         },
         writeReview: { write, _, pending, _, completion in
           remote.writes.append(write)
@@ -340,5 +346,16 @@ extension EditorDiffTests {
     while !remote.held.isEmpty { remote.held.removeFirst()() }
     pumpMain(until: { layer.draft(.new, line: 1) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(remote.writes.count, 1)
+  }
+}
+
+extension GitHubPullRequestContent {
+  /// 先頭のコミットだけを `head` に替えた中身（PR への push）。
+  func withHead(_ head: String) -> GitHubPullRequestContent {
+    GitHubPullRequestContent(
+      nodeID: nodeID, number: number, title: title, url: url, isDraft: isDraft, state: state,
+      body: body, author: author, baseRefName: baseRefName, headRefName: headRefName,
+      baseCommit: baseCommit, headCommit: head, commitCount: commitCount + 1, commits: commits,
+      files: files)
   }
 }

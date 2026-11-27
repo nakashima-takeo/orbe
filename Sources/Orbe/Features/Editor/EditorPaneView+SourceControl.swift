@@ -4,6 +4,14 @@ import OrbeEditorCore
 /// ソース管理パネルの結線——行から diff・ファイルを開く・破棄の確認・親を畳むときの焦点・列の ⌘↑（コミットのポップアップを
 /// 開く）。
 extension EditorPaneView {
+  static func scmList(_ scm: ScmPanel) -> RowList<ScmListSource> {
+    RowList(source: ScmListSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
+  }
+
+  static func scmGraphList(_ scm: ScmPanel) -> RowList<ScmGraphSource> {
+    RowList(source: ScmGraphSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
+  }
+
   func wireSourceControl() {
     scm.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
     scm.onChangesDidApply = { [weak self] emptied in self?.changesDidApply(emptied: emptied) }
@@ -16,6 +24,7 @@ extension EditorPaneView {
     }
     scm.autoFetchEnabled = { [weak self] in self?.settings()[SettingKeys.scmAutoFetch] ?? false }
     commitPopup.language = { [weak self] in self?.localization.language ?? .systemDefault }
+    commitPopup.menuDidClose = { [weak self] dismissal in self?.containerDidClose(dismissal) }
   }
 
   /// ソース管理の件数と行の組が差し替わった。件数が 1 以上から 0 になったら Changes の diff を閉じ、本体の diff を整合させ、

@@ -50,6 +50,7 @@ extension EditorPaneView {
   /// 隠すと、フォーカスが窓へ落ちる。
   private func confirmDidClose(_ dismissal: EditorDismissal) {
     confirmFocusWatch = nil
+    containerDidClose(dismissal)
     if dismissal.returnsFocus { returnFocus(to: confirmReturn) }
     confirmHost.didClose()
     confirmHost.isHidden = true

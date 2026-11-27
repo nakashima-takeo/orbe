@@ -40,6 +40,7 @@ extension EditorDiff {
       }
     }
     placeFirstView(on: surface)
+    revealRequestedThread()
     sendVisibleRemovedLines(on: surface)
   }
 

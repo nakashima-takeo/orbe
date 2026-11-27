@@ -107,6 +107,7 @@ final class MetalTextView: TextSurfaceInputView {
     if Self.submitKeys.contains(chord), let surface, let site = surface.primarySite,
       let field = site.field
     {
+      surface.userDidInput()
       guard !event.isARepeat else { return true }
       surface.input(keystroke: event.timestamp) {
         site.editor.finishComposition(.commit)
@@ -117,6 +118,7 @@ final class MetalTextView: TextSurfaceInputView {
     guard let selector = Self.multiCursorKeys[chord] else {
       return super.performKeyEquivalent(with: event)
     }
+    surface?.userDidInput()
     surface?.input(keystroke: event.timestamp) { _ = perform(selector, with: nil) }
     return true
   }
@@ -259,12 +261,14 @@ final class MetalTextView: TextSurfaceInputView {
   // MARK: - 出来事
 
   override func scrollWheel(with event: NSEvent) {
+    surface?.userDidInput()
     surface?.scrollWheel(event)
   }
 
   /// 変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。俯瞰の上の押下は俯瞰が受ける
   /// （テキストの選択・ドラッグ＆ドロップは始まらない。窓からは焦点を取らない子 `OverviewHitView` を経て届く）。
   override func mouseDown(with event: NSEvent) {
+    surface?.userDidInput()
     if composing, inputContext?.handleEvent(event) == true { return }
     let point = convert(event.locationInWindow, from: nil)
     guard let surface else { return }
@@ -302,6 +306,7 @@ final class MetalTextView: TextSurfaceInputView {
   /// DefaultKeyBinding の連続セレクタ）も、IME が「確定 → 次の未確定」を続けて呼ぶ打鍵も、呼び出しごとの状態はその場で
   /// 更新し、描くのは打鍵の後の 1 状態だけ。打鍵の時刻は取引が材料へ添える（打鍵→画面の遅れ）。
   override func keyDown(with event: NSEvent) {
+    surface?.userDidInput()
     surface?.input(keystroke: event.timestamp) { interpretKeyEvents([event]) }
   }
 

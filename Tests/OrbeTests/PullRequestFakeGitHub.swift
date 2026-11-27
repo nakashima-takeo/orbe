@@ -62,7 +62,7 @@ final class PullRequestFakeGitHub {
           pendingReview: nil, threads: []))
   }
 
-  /// 最初のレビューへの書き込みを、その後の保留中のレビューが `pendingReview`（省けば送る前のまま）として返す。
+  /// 最初のレビューへの書き込みを、その後の未送信のレビューが `pendingReview`（省けば送る前のまま）として返す。
   func finishReviewWrite(pendingReview: String?? = .none, failure: GitHubFailure? = nil) {
     let write = reviewWrites.removeFirst()
     write.done(
@@ -84,7 +84,7 @@ final class PullRequestFakeGitHub {
 /// 差し替えの構造体が受けたレビューへの書き込み 1 回。
 struct PullRequestFakeReviewWrite {
   let write: GitHubReviewWrite
-  /// 送る前に分かっていた保留中のレビュー。
+  /// 送る前に分かっていた未送信のレビュー。
   let pendingReview: String?
   /// 利用者が見ていたレビューのやりとりを読んだ時点の PR の先頭のコミット。
   let reviewedCommit: String

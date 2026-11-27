@@ -22,6 +22,8 @@ public final class RevisionDocument {
   public var onFocusChange: ((Bool) -> Void)?
   /// 結んだ面の見えている範囲が変わった。
   public var onViewportChange: (() -> Void)?
+  /// 利用者が結んだ面を操作した（スクロール・押下・打鍵）。
+  public var onUserInput: (() -> Void)?
 
   private let inbox = AnalysisInbox()
   private var reception: SyntaxReception
@@ -115,6 +117,10 @@ extension RevisionDocument: TextSurfaceDelegate {
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {
     reception.setVisible(SyntaxReception.lines(of: surface.viewport))
     onViewportChange?()
+  }
+
+  public func surfaceDidReceiveUserInput(_ surface: any TextSurface) {
+    onUserInput?()
   }
 
   public func surfaceDidChangeSelection(_ surface: any TextSurface) {}

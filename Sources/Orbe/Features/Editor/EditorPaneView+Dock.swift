@@ -16,7 +16,8 @@ extension EditorPaneView {
   /// 置き場の根。根へ渡す持ち主は、ここで足す。
   func dockRoot() -> EditorDockRoot {
     EditorDockRoot(
-      shell: shell, popup: popup, commitPopup: commitPopup, localization: localization,
+      shell: shell, popup: popup, commitPopup: commitPopup, reviewPopup: reviewPopup,
+      localization: localization,
       fontResolver: fontResolver,
       translucency: translucency ?? ChromeTranslucency(),
       framesDidChange: { [weak self] frames in self?.dockHost.itemFrames = frames })
@@ -65,6 +66,7 @@ extension EditorPaneView {
   /// フォーカスを持ったまま外れて窓へ落ちる前に、ここで移す。
   private func popupDidClose(_ dismissal: EditorDismissal) {
     popupFocusWatch = nil
+    containerDidClose(dismissal)
     if dismissal.returnsFocus { returnFocus(to: popupReturn) }
     needsLayout = true
   }

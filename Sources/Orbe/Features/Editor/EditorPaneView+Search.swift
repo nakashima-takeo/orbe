@@ -5,6 +5,15 @@ import OrbeEditorCore
 /// （`findField`）が持つ。欄の状態の型と件数の規則は、端末のスクロールバック検索のバーと共有する。検索の状態は
 /// `EditorSearch`、規則は Core。
 extension EditorPaneView {
+  /// 検索の状態の知らせを結ぶ——件数は欄へ、一致の変化は一致の地へ、検索語の変化は検索の状態の写しへ。
+  func wireSearch() {
+    search.onCountChange = { [weak self] selected, total, limited in
+      self?.findField.model?.updateCount(selected: selected, total: total, limited: limited)
+    }
+    search.onMatchesChange = { [weak self] in self?.pushFindGround() }
+    search.onNeedleChange = { [weak self] in self?.syncFindState() }
+  }
+
   /// 欄を出す。種があれば検索語に入れて即検索する——1 行以内の非空の選択、選択が空ならキャレットの語（VS Code の
   /// seedSearchStringFromSelection の既定）。選択は動かさない。種は検索へ直接渡し、欄には表示として写す（初回描画前の
   /// 値では SwiftUI の `onChange` が走らず、描画後なら走るが同じ検索語なので検索は何もしない）。欄が既にあれば、

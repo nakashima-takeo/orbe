@@ -5,6 +5,11 @@ import simd
 
 /// スクロール——指の出来事、main の操作（区間を見せる・俯瞰の操作の位置）、取引の見せ方、スクロールだけのキー。
 extension MetalTextSurface {
+  /// 利用者が面を操作した（スクロール・押下・打鍵）ことを載せる側へ知らせる。
+  func userDidInput() {
+    delegate?.surfaceDidReceiveUserInput(self)
+  }
+
   /// 指のスクロールの始まりと終わりを IME にも知らせる（候補窓・音声入力の印をスクロールの間は隠し、終わりで置き直す）。
   func scrollWheel(_ event: NSEvent) {
     let context = textView.inputContext
@@ -92,6 +97,17 @@ extension MetalTextSurface {
     let head = text.lineStart(min(max(0, from.line), text.lineCount - 1))
     bodySite.transact(reveal: .showing(policy), of: NSRange(location: head, length: 0)) {
       transaction?.revealingRows = (from, to)
+    }
+  }
+
+  func reveal(_ zone: SurfaceZone, from top: CGFloat, to bottom: CGFloat, policy: TextReveal) {
+    guard let text = currentContent?.text, let block = rows.block(ofZone: ObjectIdentifier(zone))
+    else { return }
+    let line = min(max(0, rows.boundaries[block]), text.lineCount - 1)
+    bodySite.transact(
+      reveal: .showing(policy), of: NSRange(location: text.lineStart(line), length: 0)
+    ) {
+      transaction?.revealingZone = ZoneSpan(zone: ObjectIdentifier(zone), top: top, bottom: bottom)
     }
   }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// レビューのやりとり——スレッドと保留中のレビューを読み、書き込み（スレッドの追加・返信・解決・レビューの送信）を PR ごとに
+/// レビューのやりとり——スレッドと未送信のレビューを読み、書き込み（スレッドの追加・返信・解決・レビューの送信）を PR ごとに
 /// 1 つずつ順に送る。書き込みは、レスポンスが届いた後にレビューのやりとりを読み直し、その読み直しのレスポンスが届いて初めて
 /// 終わる（結果は、書き込みを頼んだ呼び出し元へ 1 回だけ返す）。書き込みのレスポンスより前に出した読みのレスポンスは、GitHub が
 /// 書き込みを受ける前の状態を返しうるので取り込まない。受け付けた書き込みは、見ている者がいなくなっても最後まで順に送る
@@ -34,15 +34,15 @@ extension PullRequestState {
   /// ファイル `path` が rename かの判定が、GitHub（中身のファイルの列）と手元の diff の両端 `ends` で同じか。違えば、古い側の
   /// 行の対応が GitHub と手元で変わる。
   func agreesOnRename(of path: String, _ ends: DiffEnds) -> Bool {
-    (changedFiles.change(of: path) == .renamed) == (ends.renames[path] != nil)
+    Self.agreesOnRename(of: path, changedFiles, ends)
   }
 
-  /// スレッド `thread` を、両端 `ends` の diff の行に置けるか——今の diff の行に付いていて、古い側の行なら rename の判定が
-  /// GitHub と手元で同じ。古い側の行のスレッドで両端が分からなければ、決められない（nil）。
-  func canPlace(_ thread: GitHubPullRequestReview.Thread, in ends: DiffEnds?) -> Bool? {
-    guard thread.line != nil else { return false }
-    guard thread.side == .old else { return true }
-    return ends.map { agreesOnRename(of: thread.path, $0) }
+  /// rename の判定の決まり（1 つ）——変更ファイル `files`（GitHub の答え）でファイル `path` が rename か、と、手元の diff の
+  /// 両端 `ends` で rename か、が同じ。置き方と、新しいコメントの印を古い側の行に出すかが、これを読む。
+  nonisolated static func agreesOnRename(
+    of path: String, _ files: PrChangedFiles, _ ends: DiffEnds
+  ) -> Bool {
+    (files.change(of: path) == .renamed) == (ends.renames[path] != nil)
   }
 
   /// 今の PR の diff の両端——求め終えていて、その先頭が中身の先頭と同じとき（求めている・求められない・中身が新しい先頭を
