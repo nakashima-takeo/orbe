@@ -198,10 +198,10 @@ extension BrowserLayerViewTests {
   ) throws {
     browser.openNewTab()
     flush(window)
-    pumpMain(
-      until: {
-        (window.firstResponder as? NSTextView)?.isDescendant(of: browser.newTabHost) == true
-      }, "openNewTab() で中央入力欄が焦点を取る")
+    nextTurn()
+    XCTAssertTrue(
+      (window.firstResponder as? NSTextView)?.isDescendant(of: browser.newTabHost) == true,
+      "対の肯定: openNewTab() は 1 段目の否定条件と同じ flush + nextTurn 時点で中央入力欄が焦点を取る")
     let newTabEditor = try XCTUnwrap(window.firstResponder as? NSTextView)
     replaceAll("not a url", in: newTabEditor)
     deliverKeyDown(keyEvent("\r", keyCode: 36, in: window), to: window)
