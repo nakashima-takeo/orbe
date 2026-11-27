@@ -148,4 +148,21 @@ final class SurfaceDecorTests: EngineTestCase {
       "選択の中の点は選択の外の点と同じ色")
     XCTAssertEqual(shot.rgb(x(opened, 1.05), rowMidY(0)), [59, 61, 66], "点の間は選択の地（焦点が無いので弱い色）")
   }
+
+  /// 折り返した行で段をまたぐ URL は、⌘ を押してどちらかの段の部分にポインタを乗せると、両方の段の部分に下線を引く。
+  func testLinkUnderlineCoversEverySegmentOfAWrappedURL() throws {
+    let lead = String(repeating: "x ", count: 40)
+    let url = "https://example.com/" + (0..<20).map { "p\($0)" }.joined(separator: "/")
+    let opened = try focusedHost(lead + url + " end\n", name: "a.txt")
+    let wrap = try XCTUnwrap(opened.surface.rows.wrap(ofLine: 0), "前提: 行 0 は折り返す")
+    let start = (lead as NSString).length
+    let segment = opened.surface.rows.segment(containing: start, line: 0)
+    let next = wrap.start(of: segment + 1)
+    XCTAssertLessThan(next, start + (url as NSString).length, "前提: URL は段をまたぐ")
+    let head = CGFloat(start - wrap.start(of: segment)) + 1.5
+    hover(opened, at: point(opened, row: segment + 1, column: 1))
+    let shot = try pixelShot(opened)
+    XCTAssertTrue(shot.hasInk(x(opened, head), underlineY(opened, row: segment)), "前の段の部分")
+    XCTAssertTrue(shot.hasInk(x(opened, 1.5), underlineY(opened, row: segment + 1)), "次の段の部分")
+  }
 }
