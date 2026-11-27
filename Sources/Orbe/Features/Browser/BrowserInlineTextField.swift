@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// ツールバー URL 欄・新タブ中央 URL 入力欄・ポップオーバー内フォームで共有するインライン `NSTextField` ラッパー。
-/// - `controlTextDidBeginEditing` で毎回明示終了フラグをリセットし、常駐欄の再フォーカス後も `onBlur` を保つ。
+/// - `becomeFirstResponder()` 時点でフォーカス通知と明示終了フラグのリセットを行い、文字入力前の強調表示と常駐欄の未編集再フォーカス後 `onBlur` を保つ。
 /// - 日本語 IME 変換中（`hasMarkedText()`）は Enter / Esc を握って IME 変換を保護する。
 /// - 非同期フォーカス直前に `canFocus()`・`window != nil`・可視性を検証し、非表示・閉鎖後のゴースト焦点を防ぐ。
 struct BrowserInlineTextField: NSViewRepresentable {
@@ -18,7 +18,7 @@ struct BrowserInlineTextField: NSViewRepresentable {
   var onBlur: () -> Void = {}
 
   func makeNSView(context: Context) -> NSTextField {
-    let field = NSTextField(string: text)
+    let field = InlineTextField(string: text)
     field.font = font
     field.textColor = Theme.Color.textPrimary
     field.isBordered = false
@@ -29,6 +29,10 @@ struct BrowserInlineTextField: NSViewRepresentable {
     field.cell?.isScrollable = true
     field.placeholderString = placeholder
     field.delegate = context.coordinator
+    let coordinator = context.coordinator
+    field.onBecomeFirstResponder = { [weak coordinator] in
+      coordinator?.handleFocusAcquired()
+    }
     return field
   }
 
@@ -51,7 +55,6 @@ struct BrowserInlineTextField: NSViewRepresentable {
     if tokenChanged {
       coordinator.lastFocusToken = focusToken
       if focusToken > 0 {
-        coordinator.endedExplicitly = false
         if nsView.stringValue != text { nsView.stringValue = text }
         let selectAll = selectAllOnFocus
         DispatchQueue.main.async {
@@ -90,7 +93,8 @@ struct BrowserInlineTextField: NSViewRepresentable {
     var onCancel: () -> Void
     var onBlur: () -> Void
     var lastFocusToken = 0
-    var endedExplicitly = false
+    private var isFocused = false
+    private var endedExplicitly = false
 
     init(
       onTextChange: @escaping (String) -> Void,
@@ -108,9 +112,15 @@ struct BrowserInlineTextField: NSViewRepresentable {
       self.onBlur = onBlur
     }
 
-    func controlTextDidBeginEditing(_ obj: Notification) {
+    func handleFocusAcquired() {
       endedExplicitly = false
+      guard !isFocused else { return }
+      isFocused = true
       onFocusChange?(true)
+    }
+
+    func controlTextDidBeginEditing(_ obj: Notification) {
+      handleFocusAcquired()
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -141,9 +151,22 @@ struct BrowserInlineTextField: NSViewRepresentable {
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
-      onFocusChange?(false)
+      if isFocused {
+        isFocused = false
+        onFocusChange?(false)
+      }
       guard !endedExplicitly else { return }
       onBlur()
     }
+  }
+}
+
+private final class InlineTextField: NSTextField {
+  var onBecomeFirstResponder: (() -> Void)?
+
+  override func becomeFirstResponder() -> Bool {
+    guard super.becomeFirstResponder() else { return false }
+    onBecomeFirstResponder?()
+    return true
   }
 }

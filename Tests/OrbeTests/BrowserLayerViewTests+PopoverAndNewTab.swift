@@ -318,9 +318,9 @@ extension BrowserLayerViewTests {
     XCTAssertEqual(focusHistory.last, false)
   }
 
-  /// バグ疑い（xfail）: `BrowserInlineTextField` は `becomeFirstResponder()` 直後（文字入力前）から
-  /// `onFocusChange(true)` を通知し、Esc 明示終了後に直接再フォーカスして未編集のまま他所へ移動しても
-  /// `endedExplicitly` リセット済みとして `onBlur` を発火すべき。
+  /// `BrowserInlineTextField` は `becomeFirstResponder()` 直後（文字入力前）から
+  /// `onFocusChange(true)` を重複なく通知し、Esc 明示終了後に直接再フォーカスして未編集のまま他所へ移動しても
+  /// `endedExplicitly` リセット済みとして `onBlur` を発火する。
   func testInlineTextFieldNotifiesFocusAndResetsExplicitEndBeforeTyping() throws {
     let hosted = hostBrowser()
     let (window, browser) = (hosted.window, hosted.browser)
@@ -335,9 +335,7 @@ extension BrowserLayerViewTests {
       until: {
         (window.firstResponder as? NSTextView)?.isDescendant(of: browser.newTabHost) == true
       }, "新タブ入力欄が焦点を取る")
-    XCTExpectFailure("becomeFirstResponder 時点で onFocusChange(true) が未通知") {
-      XCTAssertTrue(browser.newTabModel.isInputFocused, "文字入力前からフォーカス強調枠が点灯する")
-    }
+    XCTAssertTrue(browser.newTabModel.isInputFocused, "文字入力前からフォーカス強調枠が点灯する")
 
     // 2. Esc 取消 → 直接再フォーカス → 未編集のまま他所クリックでも onFocusChange(true) と onBlur が動く。
     var blurCount = 0
@@ -351,12 +349,10 @@ extension BrowserLayerViewTests {
     XCTAssertEqual(blurCount, 0)
 
     XCTAssertTrue(window.makeFirstResponder(field))
-    XCTExpectFailure("未編集再フォーカス時に endedExplicitly リセットと焦点通知を行わない") {
-      XCTAssertEqual(focusHistory.last, true, "未編集の再フォーカス直後に onFocusChange(true) が届く")
-      XCTAssertTrue(window.makeFirstResponder(outsider))
-      XCTAssertEqual(blurCount, 1, "未編集のまま他所クリックしても onBlur が発火する")
-      XCTAssertEqual(focusHistory.last, false)
-    }
+    XCTAssertEqual(focusHistory.last, true, "未編集の再フォーカス直後に onFocusChange(true) が届く")
+    XCTAssertTrue(window.makeFirstResponder(outsider))
+    XCTAssertEqual(blurCount, 1, "未編集のまま他所クリックしても onBlur が発火する")
+    XCTAssertEqual(focusHistory, [true, false, true, false], "初文字入力で重複通知せず焦点遷移と一致する")
   }
 
   private func makeInlineFieldProbe(
