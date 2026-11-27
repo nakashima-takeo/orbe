@@ -41,13 +41,30 @@ enum EditorStyle {
       overview: overview())
   }
 
+  /// 打ち切った行の末尾の印の数の書式（桁区切りの整数と、小数 1 桁までの数。利用者の環境の地域に従う）。
+  private static let integerFormat: NumberFormatter = {
+    let format = NumberFormatter()
+    format.locale = .autoupdatingCurrent
+    format.numberStyle = .decimal
+    return format
+  }()
+  private static let fractionFormat: NumberFormatter = {
+    let format = NumberFormatter()
+    format.locale = .autoupdatingCurrent
+    format.numberStyle = .decimal
+    format.minimumFractionDigits = 0
+    format.maximumFractionDigits = 1
+    return format
+  }()
+
   /// 1 行で描く上限を越えて打ち切った行の末尾の印（「ほか 1.2万字」）。数は 1 万（英語は千）以上を 1 桁の小数で略し、
-  /// 丸めて次の単位に届けば次の単位で出す（999,999 は「1,000K」でなく「1M」）。
+  /// 丸めて次の単位に届けば次の単位で出す（999,999 は「1,000K」でなく「1M」）。折り返す面は、打ち切った行で打つたびに
+  /// 印の幅を引くので、数の書式は作っておいたものを使う（書式を毎回作ると、打鍵ごとの main の仕事が膨らむ）。
   static func omittedLabel(_ count: Int, language: Language) -> String {
     let ladder: [(unit: Double, suffix: String)] =
       language == .ja
       ? [(10_000, "万"), (100_000_000, "億")] : [(1_000, "K"), (1_000_000, "M"), (1e9, "B")]
-    var value = count.formatted(.number.grouping(.automatic))
+    var value = integerFormat.string(from: count as NSNumber) ?? String(count)
     var index = ladder.lastIndex { Double(count) >= $0.unit }
     while let i = index {
       let rounded = (Double(count) / ladder[i].unit * 10).rounded() / 10
@@ -55,7 +72,8 @@ enum EditorStyle {
         index = i + 1
         continue
       }
-      value = rounded.formatted(.number.precision(.fractionLength(0...1))) + ladder[i].suffix
+      value =
+        (fractionFormat.string(from: rounded as NSNumber) ?? String(rounded)) + ladder[i].suffix
       index = nil
     }
     return L10n.format(.editorOmittedCharacters, language, value)
