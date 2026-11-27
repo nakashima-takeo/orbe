@@ -17,10 +17,7 @@ final class BrowserStoreTests: OrbeTestCase {
   static let baseTime = Date(timeIntervalSince1970: 1_800_000_000)
 
   func openStore(language: Language = .ja, now: Date = baseTime) -> BrowserStore {
-    BrowserStore(
-      opening: BrowserPersistence.open(language: language, now: now),
-      language: language,
-      now: now)
+    BrowserStore.open(language: language, now: now)
   }
 
   func quarantined() throws -> [String] {

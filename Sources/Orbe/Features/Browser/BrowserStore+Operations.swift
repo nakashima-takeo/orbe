@@ -37,7 +37,8 @@ extension BrowserStore {
     }
   }
 
-  /// プロファイルを削除し、参照スペースを `fallbackProfileId` へ付け替え、OS ストア削除キューへ積む。
+  /// プロファイルを削除し、参照スペースを `fallbackProfileId` へ付け替え、対象スペースの閉じたタブ履歴を消去し、
+  /// OS ストア削除キューへ積む。
   func deleteProfile(
     _ id: UUID, reassigningTo fallbackProfileId: UUID, now: Date = Date()
   ) -> BrowserStoreCommitResult<Void> {
@@ -49,11 +50,16 @@ extension BrowserStore {
     let removal = BrowserPendingStoreRemoval(
       storeId: id, queuedAt: BrowserPersistence.storedInstant(now))
     return commit { db, draft in
+      let reassignedSpaceIds = Set(draft.spaces.filter { $0.profileId == id }.map(\.id))
       try db?.reassignSpaces(fromProfile: id, toProfile: fallbackProfileId)
+      for spaceId in reassignedSpaceIds {
+        try db?.deleteClosedTabs(inSpace: spaceId)
+      }
       try db?.deleteProfile(id)
       for i in draft.spaces.indices where draft.spaces[i].profileId == id {
         draft.spaces[i].profileId = fallbackProfileId
       }
+      draft.closedTabs.removeAll { reassignedSpaceIds.contains($0.originalSpaceId) }
       draft.profiles.removeAll { $0.id == id }
       for i in draft.profiles.indices where draft.profiles[i].position != i {
         draft.profiles[i].position = i
@@ -77,12 +83,12 @@ extension BrowserStore {
 
   // MARK: - Spaces & Workspace 連動
 
-  /// 現在の workspace を同期し、該当ローカルスペースが無ければ 1 トランザクションで遅延作成する。
-  func setCurrentWorkspace(_ workspaceId: UUID, now: Date = Date())
+  /// 現在の workspace と表示名を同期し、該当ローカルスペースが無ければ 1 トランザクションで遅延作成する。
+  func setCurrentWorkspace(_ workspaceId: UUID, name: String? = nil, now: Date = Date())
     -> BrowserStoreCommitResult<BrowserSpace>
   {
     if let existing = localSpace(for: workspaceId) {
-      currentWorkspaceId = workspaceId
+      updateCurrentWorkspaceState(id: workspaceId, name: name)
       return noopResult(existing)
     }
     guard let profileId = defaultLocalProfileId else { return .failed }
@@ -95,7 +101,38 @@ extension BrowserStore {
       return created
     }
     if result.didSucceed {
-      currentWorkspaceId = workspaceId
+      updateCurrentWorkspaceState(id: workspaceId, name: name)
+    }
+    return result
+  }
+
+  /// 初回シード直後から未変更の既定自由スペース名を確定言語の文言へ 1 トランザクションで同期する。
+  @discardableResult
+  func syncDefaultFreeSpaceNames(to language: Language) -> BrowserStoreCommitResult<Void> {
+    guard !initialDefaultFreeSpaces.isEmpty else { return noopResult(()) }
+    var updates: [(index: Int, space: BrowserSpace)] = []
+    for entry in initialDefaultFreeSpaces {
+      guard let idx = spaces.firstIndex(where: { $0.id == entry.id && $0.kind == .free }),
+        spaces[idx].name == entry.seededName
+      else { continue }
+      let localized = L10n.string(entry.key, language)
+      guard spaces[idx].name != localized else { continue }
+      var updated = spaces[idx]
+      updated.name = localized
+      updates.append((idx, updated))
+    }
+    guard !updates.isEmpty else {
+      initialDefaultFreeSpaces.removeAll()
+      return noopResult(())
+    }
+    let result = commit { db, draft in
+      for (idx, updated) in updates {
+        try db?.updateSpace(updated)
+        draft.spaces[idx] = updated
+      }
+    }
+    if result.didSucceed {
+      initialDefaultFreeSpaces.removeAll()
     }
     return result
   }
@@ -159,7 +196,9 @@ extension BrowserStore {
     updated.profileId = profileId
     return commit { db, draft in
       try db?.updateSpaceProfile(spaceId, profileId: profileId)
+      try db?.deleteClosedTabs(inSpace: spaceId)
       draft.spaces[index] = updated
+      draft.closedTabs.removeAll { $0.originalSpaceId == spaceId }
       return updated
     }
   }
@@ -208,7 +247,7 @@ extension BrowserStore {
       return removedTabIds
     }
     if result.didSucceed, currentWorkspaceId == workspaceId {
-      currentWorkspaceId = nil
+      updateCurrentWorkspaceState(id: nil, name: "")
     }
     return result
   }

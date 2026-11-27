@@ -23,7 +23,7 @@ extension BrowserStoreTests {
 
     XCTAssertEqual(store.displayName(for: freeSpace, fallbackLocalName: "Local"), freeSpace.name)
 
-    store.currentWorkspaceName = "  orbe  "
+    _ = store.setCurrentWorkspace(wsB, name: "  orbe  ", now: t0)
     XCTAssertEqual(
       store.displayName(for: localB, fallbackLocalName: "Local"), "orbe",
       "現在 workspace のローカルスペースは trim 済みの currentWorkspaceName を優先する")
@@ -31,7 +31,7 @@ extension BrowserStoreTests {
       store.displayName(for: localA, fallbackLocalName: "Local"), "Local",
       "現在でない workspace のローカルスペースへ currentWorkspaceName を誤適用しない")
 
-    store.currentWorkspaceName = "   "
+    _ = store.setCurrentWorkspace(wsB, name: "   ", now: t0)
     XCTAssertEqual(
       store.displayName(for: localB, fallbackLocalName: "Local"), "Local",
       "currentWorkspaceName が空白のみのときはフォールバックへ降りる")

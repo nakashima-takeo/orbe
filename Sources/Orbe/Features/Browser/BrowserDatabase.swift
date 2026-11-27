@@ -6,6 +6,18 @@ final class BrowserDatabase {
   struct Opened {
     let database: BrowserDatabase
     let memory: BrowserMemory
+    let seededLanguage: Language?
+
+    init(database: BrowserDatabase, memory: BrowserMemory, seededLanguage: Language? = nil) {
+      self.database = database
+      self.memory = memory
+      self.seededLanguage = seededLanguage
+    }
+  }
+
+  struct Loaded {
+    let memory: BrowserMemory
+    let seededLanguage: Language?
   }
 
   let db: SQLiteDatabase
@@ -220,6 +232,11 @@ final class BrowserDatabase {
 
   func deleteClosedTab(_ id: Int64) throws {
     try db.run("DELETE FROM closed_tabs WHERE id = ?", [.integer(id)])
+  }
+
+  func deleteClosedTabs(inSpace spaceId: UUID) throws {
+    try db.run(
+      "DELETE FROM closed_tabs WHERE original_space_id = ?", [.text(spaceId.uuidString)])
   }
 
   func insertPendingStoreRemoval(_ removal: BrowserPendingStoreRemoval) throws {

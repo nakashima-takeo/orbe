@@ -200,8 +200,6 @@ extension BrowserStoreTests {
       let space = try XCTUnwrap(store.freeSpaces.first)
       let saved = try XCTUnwrap(
         store.openTab(in: space.id, url: preservedURL, title: "Saved", now: Self.baseTime).value)
-      var unavailableCount = 0
-      store.onUnavailable = { unavailableCount += 1 }
 
       // 1. 非破損エラー（制約エラー）は DB・メモリとも巻き戻し、接続は維持する。
       let constraintResult: BrowserStoreCommitResult<Void> = store.commit { db, draft in
@@ -214,7 +212,7 @@ extension BrowserStoreTests {
       }
       XCTAssertFalse(constraintResult.didSucceed)
       XCTAssertTrue(store.available, "非破損エラーでは接続を切らない")
-      XCTAssertEqual(unavailableCount, 0)
+      XCTAssertNil(store.unavailableReason)
       XCTAssertEqual(store.tabs.map(\.id), [saved.id], "メモリがロールバックされる")
 
       // 2. 運転中の SQLITE_CORRUPT 検知で原本を残したまま非永続モードへ移行する。
@@ -224,7 +222,7 @@ extension BrowserStoreTests {
       }
       XCTAssertFalse(brokenResult.didSucceed)
       XCTAssertFalse(store.available, "破損検知後は非永続モードへ移行する")
-      XCTAssertEqual(unavailableCount, 1)
+      XCTAssertNotNil(store.unavailableReason)
       XCTAssertEqual(
         store.sheetRatioBps, BrowserPersistence.defaultSheetRatioBps, "失敗 Tx の変更は反映しない")
       XCTAssertEqual(try quarantined(), [], "運転中破損の退避は次回起動へ任せる")

@@ -136,6 +136,12 @@ struct BrowserMemory: Equatable {
   var sheetRatioBps: Int
   var pendingStoreRemovals: [BrowserPendingStoreRemoval]
 
+  static let defaultFreeSpaceSpecs: [(icon: BrowserSpaceIcon, key: L10nKey)] = [
+    (.person, .browserDefaultSpacePersonal),
+    (.briefcase, .browserDefaultSpaceWork),
+    (.search, .browserDefaultSpaceResearch),
+  ]
+
   /// 初回起動時および DB 利用不可時の既定構成を組む（プロファイル 2 種・自由スペース 3 種・初期選択 `.local`）。
   static func makeDefaultSeed(language: Language, now: Date) -> BrowserMemory {
     let createdAt = BrowserPersistence.storedInstant(now)
@@ -145,20 +151,13 @@ struct BrowserMemory: Equatable {
     let work = BrowserProfile(
       id: UUID(), name: "work", color: .blue, mcpAllowed: true, position: 1,
       createdAt: createdAt)
-    let freeSpaces = [
+    let profileIds = [personal.id, work.id, work.id]
+    let freeSpaces = zip(Self.defaultFreeSpaceSpecs, profileIds).enumerated().map { idx, pair in
       BrowserSpace(
         id: UUID(), kind: .free, workspaceId: nil,
-        name: L10n.string(.browserDefaultSpacePersonal, language), icon: .person,
-        profileId: personal.id, position: 0, createdAt: createdAt),
-      BrowserSpace(
-        id: UUID(), kind: .free, workspaceId: nil,
-        name: L10n.string(.browserDefaultSpaceWork, language), icon: .briefcase,
-        profileId: work.id, position: 1, createdAt: createdAt),
-      BrowserSpace(
-        id: UUID(), kind: .free, workspaceId: nil,
-        name: L10n.string(.browserDefaultSpaceResearch, language), icon: .search,
-        profileId: work.id, position: 2, createdAt: createdAt),
-    ]
+        name: L10n.string(pair.0.key, language), icon: pair.0.icon,
+        profileId: pair.1, position: idx, createdAt: createdAt)
+    }
     return BrowserMemory(
       profiles: [personal, work],
       spaces: freeSpaces,

@@ -83,7 +83,7 @@ extension WindowControllerBrowserTests {
 
     // 1. 事前状態を実 DB へ保存して接続を解放する（WindowControllerRestoreTests と同じ流儀）。
     let (expiredTabId, keptTabId): (UUID, UUID) = try {
-      let store = BrowserStore(opening: BrowserPersistence.open(language: .ja), language: .ja)
+      let store = BrowserStore.open(language: .ja)
       XCTAssertTrue(store.setSheetRatio(0.68).didPersist)
       let freeSpace = try XCTUnwrap(store.freeSpaces.first)
       XCTAssertTrue(store.selectSpace(.free(freeSpace.id)).didPersist)

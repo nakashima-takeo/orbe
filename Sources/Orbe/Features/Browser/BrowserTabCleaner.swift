@@ -78,9 +78,8 @@ final class BrowserTabCleaner {
       onSweep(current)
     }
     guard isStarted, let next = nextFireDate() else { return }
-    let afterSweep = now()
     // DB 書込失敗などで期限超過行が残った場合に即時ループへ陥らないよう、未来時刻のみ予約する。
-    guard next > afterSweep else { return }
+    guard next > current else { return }
     disarm = arm(next) { [weak self] in
       self?.recount()
     }

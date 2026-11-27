@@ -88,8 +88,7 @@ final class BrowserSession {
       invalidateRuntimes(removed)
     }
     isStarted = true
-    store.currentWorkspaceName = workspaceName
-    _ = store.setCurrentWorkspace(initialWorkspaceId, now: now())
+    _ = syncWorkspaceIntoStore(initialWorkspaceId, name: workspaceName)
     syncVisibilityAndDisplay(touchingLeavingTab: false)
     drainPendingStoreRemovals()
     cleaner.start()
@@ -102,12 +101,20 @@ final class BrowserSession {
   /// `renderSelection()`・`renameWorkspace()` から呼ばれる冪等な workspace 同期。`start` 完了前は無操作。
   func syncCurrentWorkspace(_ workspaceId: UUID, name: String? = nil) {
     guard isStarted else { return }
-    if let name, store.currentWorkspaceName != name {
-      store.currentWorkspaceName = name
+    let workspaceChanged = store.currentWorkspaceId != workspaceId
+    guard workspaceChanged || (name != nil && store.currentWorkspaceName != name) else { return }
+    let didSync = syncWorkspaceIntoStore(workspaceId, name: name)
+    if workspaceChanged && didSync {
+      syncVisibilityAndDisplay()
     }
-    guard store.currentWorkspaceId != workspaceId else { return }
-    _ = store.setCurrentWorkspace(workspaceId, now: now())
-    syncVisibilityAndDisplay()
+  }
+
+  /// 運転中破損で非永続モードへ転落した直後は、メモリ上で 1 回だけ再同期して `.local` を機能継続させる。
+  private func syncWorkspaceIntoStore(_ workspaceId: UUID, name: String?) -> Bool {
+    let first = store.setCurrentWorkspace(workspaceId, name: name, now: now())
+    if first.didSucceed { return true }
+    guard !store.available else { return false }
+    return store.setCurrentWorkspace(workspaceId, name: name, now: now()).didSucceed
   }
 
   func removeLocalSpace(for workspaceId: UUID) {

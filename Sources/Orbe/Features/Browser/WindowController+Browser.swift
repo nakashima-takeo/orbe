@@ -4,15 +4,19 @@ import AppKit
 extension WindowController {
   static func makeBrowserSession(language: Language) -> BrowserSession {
     MainActor.assumeIsolated {
-      let store = BrowserStore(
-        opening: BrowserPersistence.open(language: language), language: language)
-      return BrowserSession(store: store)
+      BrowserSession(store: BrowserStore.open(language: language))
     }
   }
 
   func startBrowserSession() {
     MainActor.assumeIsolated {
       browserSession.start(initialWorkspaceId: current.id, workspaceName: current.name)
+    }
+  }
+
+  func syncBrowserDefaultFreeSpaceNames() {
+    MainActor.assumeIsolated {
+      _ = browserSession.store.syncDefaultFreeSpaceNames(to: localization.language)
     }
   }
 

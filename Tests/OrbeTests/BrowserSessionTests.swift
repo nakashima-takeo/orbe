@@ -24,10 +24,7 @@ final class BrowserSessionTests: OrbeTestCase {
   }
 
   func openPersistentStore(language: Language = .ja, now: Date = baseTime) -> BrowserStore {
-    BrowserStore(
-      opening: BrowserPersistence.open(language: language, now: now),
-      language: language,
-      now: now)
+    BrowserStore.open(language: language, now: now)
   }
 
   func makeHostedLayer(session: BrowserSession) -> HostedLayer {

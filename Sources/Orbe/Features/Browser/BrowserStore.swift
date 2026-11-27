@@ -18,32 +18,37 @@ import Observation
   private(set) var sheetRatioBps: Int
   private(set) var pendingStoreRemovals: [BrowserPendingStoreRemoval]
   /// 現在のアクティブ workspace ID（ランタイム同期値。永続化しない）。
-  var currentWorkspaceId: UUID?
+  private(set) var currentWorkspaceId: UUID?
   /// 現在のアクティブ workspace 表示名（ランタイム同期値。永続化しない）。
-  var currentWorkspaceName = ""
+  private(set) var currentWorkspaceName = ""
 
   private var database: BrowserDatabase?
   private(set) var unavailableReason: String?
   var available: Bool { database != nil }
 
   @ObservationIgnored private var nextInMemoryClosedTabId: Int64
-  @ObservationIgnored var onUnavailable: (() -> Void)?
+  /// 初回シードで投入された既定自由スペースの初期状態（初回言語選択確定時の未変更同期に使う）。
+  @ObservationIgnored var initialDefaultFreeSpaces: [(id: UUID, key: L10nKey, seededName: String)] =
+    []
 
   init(
-    opening: BrowserPersistence.Opening = BrowserPersistence.open(),
+    opening: BrowserPersistence.Opening,
     language: Language = .systemDefault,
     now: Date = Date()
   ) {
     let initial: BrowserMemory
+    let seededLanguage: Language?
     switch opening {
     case .opened(let opened):
       database = opened.database
       unavailableReason = nil
       initial = opened.memory
+      seededLanguage = opened.seededLanguage
     case .refused(let reason):
       database = nil
       unavailableReason = reason
       initial = BrowserMemory.makeDefaultSeed(language: language, now: now)
+      seededLanguage = language
     }
     profiles = initial.profiles
     spaces = initial.spaces
@@ -54,10 +59,31 @@ import Observation
     sheetRatioBps = initial.sheetRatioBps
     pendingStoreRemovals = initial.pendingStoreRemovals
     nextInMemoryClosedTabId = (initial.closedTabs.map(\.id).max() ?? 0) + 1
+    if let seededLanguage {
+      let seededFree = initial.spaces.filter { $0.kind == .free }.sorted(by: Self.spaceOrder)
+      if seededFree.count == BrowserMemory.defaultFreeSpaceSpecs.count {
+        initialDefaultFreeSpaces = zip(seededFree, BrowserMemory.defaultFreeSpaceSpecs).map {
+          space, spec in
+          (id: space.id, key: spec.key, seededName: L10n.string(spec.key, seededLanguage))
+        }
+      }
+    }
+  }
+
+  static func open(language: Language = .systemDefault, now: Date = Date()) -> BrowserStore {
+    BrowserStore(
+      opening: BrowserPersistence.open(language: language, now: now), language: language, now: now)
   }
 
   static func inMemory(language: Language = .systemDefault, now: Date = Date()) -> BrowserStore {
     BrowserStore(opening: .refused("in-memory session"), language: language, now: now)
+  }
+
+  func updateCurrentWorkspaceState(id: UUID?, name: String?) {
+    currentWorkspaceId = id
+    if let name {
+      currentWorkspaceName = name
+    }
   }
 
   var memory: BrowserMemory {
@@ -240,7 +266,6 @@ import Observation
     if let sqliteError = error as? SQLiteError, sqliteError.isBroken {
       database = nil
       unavailableReason = "browser database broke while running; see the log"
-      onUnavailable?()
     }
   }
 

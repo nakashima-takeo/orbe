@@ -9,17 +9,15 @@ extension BrowserDatabase {
 
   /// 完全空 DB なら初回シードを 1 トランザクションで投入し、既存行があれば `foreign_key_check` と構造検査を通して読む。
   /// 構造不整合は `SQLITE_CORRUPT` を投げて `StateDatabase.open` の正規退避経路へ委ねる。
-  static func loadOrSeed(_ db: SQLiteDatabase, language: Language, now: Date) throws
-    -> BrowserMemory
-  {
+  static func loadOrSeed(_ db: SQLiteDatabase, language: Language, now: Date) throws -> Loaded {
     let database = BrowserDatabase(db)
     if try database.isCompletelyEmpty() {
       let seed = BrowserMemory.makeDefaultSeed(language: language, now: now)
       try database.writeSeed(seed)
-      return seed
+      return Loaded(memory: seed, seededLanguage: language)
     }
     try database.verifyForeignKeys()
-    return try database.readAll()
+    return Loaded(memory: try database.readAll(), seededLanguage: nil)
   }
 
   private func isCompletelyEmpty() throws -> Bool {
@@ -59,13 +57,13 @@ extension BrowserDatabase {
     }
     let profileIds = Set(profiles.map(\.id))
     let spaces = try readSpaces(validProfileIds: profileIds)
-    let spaceById = try Self.uniqueById(spaces, key: \.id, label: "space")
+    let spaceById = Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0) })
     let tabs = try readTabs(spaceById: spaceById)
-    let tabById = try Self.uniqueById(tabs, key: \.id, label: "tab")
+    let tabById = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
     let activeTabBySpace = try readActiveTabs(spaceById: spaceById, tabById: tabById)
     let closedTabs = try readClosedTabs(spaceById: spaceById)
     let (activeSpaceSelection, sheetRatioBps) = try readMeta(spaceById: spaceById)
-    let pendingStoreRemovals = try readPendingStoreRemovals()
+    let pendingStoreRemovals = try readPendingStoreRemovals(excluding: profileIds)
     return BrowserMemory(
       profiles: profiles,
       spaces: spaces,
@@ -77,18 +75,11 @@ extension BrowserDatabase {
       pendingStoreRemovals: pendingStoreRemovals)
   }
 
-  private static func uniqueById<T>(
-    _ items: [T], key: (T) -> UUID, label: String
-  ) throws -> [UUID: T] {
-    var result: [UUID: T] = [:]
-    result.reserveCapacity(items.count)
-    for item in items {
-      let id = key(item)
-      guard result.updateValue(item, forKey: id) == nil else {
-        throw Self.corrupt("duplicate \(label) id")
-      }
-    }
-    return result
+  /// SQLite の `TEXT` 比較は `BINARY` であり全書き込みが大文字 `UUID.uuidString` を使うため、
+  /// 非正規形式（小文字等）は起動時検査で `nil` 扱いとして破損退避へ送る。
+  private static func canonicalUUID(_ raw: String?) -> UUID? {
+    guard let raw, let uuid = UUID(uuidString: raw), raw == uuid.uuidString else { return nil }
+    return uuid
   }
 
   private func readProfiles() throws -> [BrowserProfile] {
@@ -99,7 +90,7 @@ extension BrowserDatabase {
       FROM profiles ORDER BY position, created_at, id
       """, []
     ) { s in
-      guard let rawId = s.text(at: 0), let id = UUID(uuidString: rawId),
+      guard let id = Self.canonicalUUID(s.text(at: 0)),
         seenIds.insert(id).inserted,
         let name = s.text(at: 1), !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
         let rawColor = s.text(at: 2), let color = BrowserProfileColor(rawValue: rawColor)
@@ -126,12 +117,12 @@ extension BrowserDatabase {
       FROM spaces ORDER BY kind, position, created_at, id
       """, []
     ) { s in
-      guard let rawId = s.text(at: 0), let id = UUID(uuidString: rawId),
+      guard let id = Self.canonicalUUID(s.text(at: 0)),
         seenIds.insert(id).inserted,
         let rawKind = s.text(at: 1), let kind = BrowserSpaceKind(rawValue: rawKind),
         let name = s.text(at: 3),
         let rawIcon = s.text(at: 4), let icon = BrowserSpaceIcon(rawValue: rawIcon),
-        let rawProfileId = s.text(at: 5), let profileId = UUID(uuidString: rawProfileId),
+        let profileId = Self.canonicalUUID(s.text(at: 5)),
         validProfileIds.contains(profileId)
       else {
         throw Self.corrupt("invalid space row")
@@ -140,7 +131,7 @@ extension BrowserDatabase {
       guard position >= 0 else { throw Self.corrupt("negative space position") }
       let workspaceId: UUID?
       if let rawWorkspaceId = s.text(at: 2) {
-        guard let parsed = UUID(uuidString: rawWorkspaceId) else {
+        guard let parsed = Self.canonicalUUID(rawWorkspaceId) else {
           throw Self.corrupt("invalid space workspace_id")
         }
         workspaceId = parsed
@@ -174,9 +165,9 @@ extension BrowserDatabase {
       FROM tabs ORDER BY space_id, section, position, created_at, id
       """, []
     ) { s in
-      guard let rawId = s.text(at: 0), let id = UUID(uuidString: rawId),
+      guard let id = Self.canonicalUUID(s.text(at: 0)),
         seenIds.insert(id).inserted,
-        let rawSpaceId = s.text(at: 1), let spaceId = UUID(uuidString: rawSpaceId),
+        let spaceId = Self.canonicalUUID(s.text(at: 1)),
         let space = spaceById[spaceId],
         let rawKind = s.text(at: 2), let spaceKind = BrowserSpaceKind(rawValue: rawKind),
         space.kind == spaceKind,
@@ -206,8 +197,8 @@ extension BrowserDatabase {
   ) throws -> [UUID: UUID] {
     var result: [UUID: UUID] = [:]
     let rows = try db.select("SELECT space_id, tab_id FROM space_active_tabs", []) { s in
-      guard let rawSpaceId = s.text(at: 0), let spaceId = UUID(uuidString: rawSpaceId),
-        let rawTabId = s.text(at: 1), let tabId = UUID(uuidString: rawTabId),
+      guard let spaceId = Self.canonicalUUID(s.text(at: 0)),
+        let tabId = Self.canonicalUUID(s.text(at: 1)),
         spaceById[spaceId] != nil, let tab = tabById[tabId], tab.spaceId == spaceId
       else {
         throw Self.corrupt("invalid space_active_tabs row")
@@ -230,7 +221,7 @@ extension BrowserDatabase {
       """, []
     ) { s -> BrowserClosedTab? in
       let id = s.int64(at: 0)
-      guard let rawSpaceId = s.text(at: 3), let spaceId = UUID(uuidString: rawSpaceId),
+      guard let spaceId = Self.canonicalUUID(s.text(at: 3)),
         spaceById[spaceId] != nil
       else {
         throw Self.corrupt("invalid closed_tabs space reference")
@@ -274,23 +265,25 @@ extension BrowserDatabase {
       }
       selection = .local
     case .free:
-      guard let rawFreeId = row.freeId, let freeId = UUID(uuidString: rawFreeId),
+      guard let freeId = Self.canonicalUUID(row.freeId),
         let space = spaceById[freeId], space.kind == .free
       else {
         throw Self.corrupt("browser_meta free selection points to missing or non-free space")
       }
       selection = .free(freeId)
     }
-    let ratio = BrowserPersistence.ratio(fromBps: row.ratioBps)
-    return (selection, BrowserPersistence.ratioBps(from: ratio))
+    return (selection, BrowserPersistence.clampSheetRatioBps(row.ratioBps))
   }
 
-  private func readPendingStoreRemovals() throws -> [BrowserPendingStoreRemoval] {
+  private func readPendingStoreRemovals(excluding activeProfileIds: Set<UUID>) throws
+    -> [BrowserPendingStoreRemoval]
+  {
     var seenIds = Set<UUID>()
     return try db.select(
       "SELECT store_id, queued_at FROM pending_store_removals ORDER BY queued_at, store_id", []
     ) { s in
-      guard let rawId = s.text(at: 0), let storeId = UUID(uuidString: rawId),
+      guard let storeId = Self.canonicalUUID(s.text(at: 0)),
+        !activeProfileIds.contains(storeId),
         seenIds.insert(storeId).inserted
       else {
         throw Self.corrupt("invalid pending_store_removals row")

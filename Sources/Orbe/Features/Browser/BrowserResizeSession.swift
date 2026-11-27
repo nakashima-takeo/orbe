@@ -2,9 +2,9 @@ import CoreGraphics
 
 /// 右シート左端ドラッグのリサイズ・全面吸着・右投げ閉じの純粋計算。
 struct BrowserResizeSession: Equatable {
-  static let defaultRatio: CGFloat = 0.52
-  static let minRatio: CGFloat = 0.28
-  static let maxRatio: CGFloat = 0.84
+  static let defaultRatio = CGFloat(BrowserPersistence.defaultSheetRatio)
+  static let minRatio = CGFloat(BrowserPersistence.minSheetRatio)
+  static let maxRatio = CGFloat(BrowserPersistence.maxSheetRatio)
   static let fullSnapRatio: CGFloat = 0.86
   static let closeThresholdWidth: CGFloat = 240
   static let minClosePreviewWidth: CGFloat = 120

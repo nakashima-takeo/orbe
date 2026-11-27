@@ -25,6 +25,7 @@ extension WindowController {
     if AppStatePersistence.load()?.preferredLanguage == nil {
       showLanguageSelect { [weak self] in
         self?.prepareHomeFolder()
+        self?.syncBrowserDefaultFreeSpaceNames()
         self?.agentLauncher.showOnboardingIfNeeded()
       }
     } else {

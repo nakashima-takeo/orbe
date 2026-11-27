@@ -1,4 +1,3 @@
-import CoreGraphics
 import Foundation
 
 /// 内蔵ブラウザの永続入口。state の `browser/` フォルダの SQLite DB（`StateDatabase`）を開く。
@@ -9,6 +8,10 @@ enum BrowserPersistence {
   static let defaultSheetRatioBps = 5200
   static let minSheetRatioBps = 2800
   static let maxSheetRatioBps = 8400
+
+  static let defaultSheetRatio = Double(defaultSheetRatioBps) / 10000.0
+  static let minSheetRatio = Double(minSheetRatioBps) / 10000.0
+  static let maxSheetRatio = Double(maxSheetRatioBps) / 10000.0
 
   /// テスト用に DB のフォルダを差し替える（設定時はこちらを使う）。本番は nil。
   static var folderOverride: URL?
@@ -34,7 +37,9 @@ enum BrowserPersistence {
     case .opened(let opened):
       return .opened(
         BrowserDatabase.Opened(
-          database: BrowserDatabase(opened.database), memory: opened.contents))
+          database: BrowserDatabase(opened.database),
+          memory: opened.contents.memory,
+          seededLanguage: opened.contents.seededLanguage))
     case .refused(let reason):
       return .refused("browser database is unavailable: the database \(reason)")
     }
@@ -53,13 +58,20 @@ enum BrowserPersistence {
     Self.date(Self.millis(date))
   }
 
+  static func clampSheetRatio(_ ratio: Double) -> Double {
+    guard ratio.isFinite else { return defaultSheetRatio }
+    return min(maxSheetRatio, max(minSheetRatio, ratio))
+  }
+
+  static func clampSheetRatioBps(_ bps: Int) -> Int {
+    min(maxSheetRatioBps, max(minSheetRatioBps, bps))
+  }
+
   static func ratioBps(from ratio: Double) -> Int {
-    let clamped = Double(BrowserResizeSession.clampRatio(CGFloat(ratio)))
-    let bps = Int((clamped * 10000).rounded())
-    return min(maxSheetRatioBps, max(minSheetRatioBps, bps))
+    clampSheetRatioBps(Int((clampSheetRatio(ratio) * 10000).rounded()))
   }
 
   static func ratio(fromBps bps: Int) -> Double {
-    Double(BrowserResizeSession.clampRatio(CGFloat(Double(bps) / 10000.0)))
+    Double(clampSheetRatioBps(bps)) / 10000.0
   }
 }

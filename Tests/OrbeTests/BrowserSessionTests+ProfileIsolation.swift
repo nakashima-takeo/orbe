@@ -314,9 +314,12 @@ extension BrowserSessionTests {
       CREATE TRIGGER block_profile_delete BEFORE DELETE ON profiles
       BEGIN SELECT RAISE(ABORT, 'blocked'); END;
       """)
-    let memory = try BrowserDatabase.loadOrSeed(rawDB, language: .ja, now: Self.baseTime)
+    let loaded = try BrowserDatabase.loadOrSeed(rawDB, language: .ja, now: Self.baseTime)
     let store = BrowserStore(
-      opening: .opened(BrowserDatabase.Opened(database: BrowserDatabase(rawDB), memory: memory)))
+      opening: .opened(
+        BrowserDatabase.Opened(
+          database: BrowserDatabase(rawDB), memory: loaded.memory,
+          seededLanguage: loaded.seededLanguage)))
     var failedCalls = 0
     let failSession = BrowserSession(
       store: store,
