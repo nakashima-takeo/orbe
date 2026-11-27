@@ -12,22 +12,48 @@ extension BrowserLayerViewTests {
   /// `BrowserNewTabView` の背景余白への実マウスクリックが `ScrollView` に遮られず `onTapBackground` へ届き、
   /// 非フォーカス右シートからでも新タブ入力欄編集中からでもブラウザ層へ焦点が移る。
   func testNewTabBackgroundClickReachesOnTapBackgroundFromUnderlayAndNewTabEditing() throws {
+    // 1. 単体 BrowserNewTabView（BrowserLayerView.mouseDown フォールバックなし）の余白実クリックが
+    //    ScrollView に遮られず actions.onTapBackground へ直接到達する。
+    let probeWindow = OrbeWindowFake(
+      contentRect: NSRect(x: 0, y: 0, width: 600, height: 500), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    probeWindow.isReleasedWhenClosed = false
+    probeWindow.isKey = true
+    holdUntilTestEnds(probeWindow)
+    addTeardownBlock { MainActor.assumeIsolated { probeWindow.contentView = nil } }
+    let actions = BrowserNewTabActions()
+    var tapCount = 0
+    actions.onTapBackground = { tapCount += 1 }
+    let viewHost = BrowserNewTabHost(
+      rootView: BrowserNewTabView(
+        model: BrowserNewTabModel(), session: BrowserSession.inMemory(language: .ja),
+        localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver(),
+        actions: actions))
+    viewHost.frame = NSRect(x: 0, y: 0, width: 600, height: 500)
+    probeWindow.contentView = viewHost
+    viewHost.layoutSubtreeIfNeeded()
+    placeOffscreen(probeWindow)
+    flush(probeWindow)
+    clickWindowPoint(NSPoint(x: 560, y: 40), in: probeWindow)
+    XCTAssertEqual(
+      tapCount, 1, "BrowserNewTabView 余白の実クリックが ScrollView に遮られず onTapBackground へ届く")
+
+    // 2. 統合 BrowserLayerView: 下層 outsider 焦点中および新タブ入力欄編集中からの余白実クリックで焦点復帰。
     let hosted = hostBrowser()
     let (window, browser) = (hosted.window, hosted.browser)
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 80, height: 24))
     hosted.underlay.addSubview(outsider)
     browser.setMode(.sheet, animated: false)
     placeOffscreen(window)
+    flush(window)
 
-    // 1. 下層 outsider 焦点中の非フォーカス右シート余白を実クリック → onTapBackground → focusBrowser()。
     XCTAssertTrue(window.makeFirstResponder(outsider))
     XCTAssertFalse(browser.focusIsInside)
     clickWindowPoint(NSPoint(x: 960, y: 60), in: window)
     XCTAssertTrue(
       window.firstResponder === browser,
-      "非フォーカス右シートの新タブ画面余白クリックが ScrollView に遮られず focusBrowser() へ届く")
+      "非フォーカス右シートの新タブ画面余白クリックで focusBrowser() が成立する")
 
-    // 2. 新タブ中央入力欄の編集中に背景余白を実クリック → 編集終了して browser へ焦点が移る。
     browser.openNewTab()
     flush(window)
     pumpMain(
