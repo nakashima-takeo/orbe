@@ -63,8 +63,7 @@ final class EditorTypingPerfTests: OrbeTestCase {
       let opened = try openEditor(text)
       let row = label == "long-line" ? 0 : opened.document.text.lineCount / 3
       let caret = label == "long-line" ? 9_990 : opened.document.text.lineStart(row + 5) + 4
-      try gateKeystrokes(
-        opened, baseline: text, label: label, caret: caret)
+      try gateKeystrokes(opened, baseline: text, label: label, caret: caret)
     }
   }
 
@@ -90,8 +89,7 @@ final class EditorTypingPerfTests: OrbeTestCase {
       let found = (text as NSString).range(
         of: needle, range: NSRange(location: from, length: (text as NSString).length - from))
       XCTAssertNotEqual(found.location, NSNotFound, "\(label): 前提: 打つ所がある")
-      try gateKeystrokes(
-        opened, baseline: text, label: label, caret: found.location)
+      try gateKeystrokes(opened, baseline: text, label: label, caret: found.location)
     }
   }
 

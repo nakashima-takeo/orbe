@@ -76,8 +76,8 @@ final class LineWrapPerfTests: EngineTestCase {
   /// 上限（UTF-8 のバイト数）の前後の大きさの文書で、窓の幅を変えた 1 回の main の仕事（取引の確定で全部の行を折り返し
   /// 直す）。本文は日本語の Markdown（spec の写し。字の量あたりの手間がいちばん重い）と、ASCII の Swift と、書式文字（箱で
   /// 見せる U+200E）が字の 3 つに 1 つを占める本文で、上限の半分・すぐ下・すぐ上の大きさ。すぐ上の文書は折り返さない。
-  /// 関門は 16ms。書式文字の本文だけは 33ms（2 コマ）——書式文字の密度を上限に置いた場面で、守るのは、箱の幅を箱ごとに
-  /// Core Text で組んで引く作りへ戻らないこと（戻れば上限のすぐ下で約 40ms かかる）。
+  /// 関門は 16ms。書式文字の本文だけは 33ms（2 コマ）——今の作りで、上限のすぐ下が 1 コマをわずかに越える。守るのは、
+  /// 箱の幅を組まずに ASCII の字の幅の和で引き、箱と ASCII だけの行で字ごとの字体と幅の表を引かないこと。
   func testResizingDocumentsAroundTheLimit() throws {
     let limit = MetalTextSurface.wrapLimit
     let scenes = [
