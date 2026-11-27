@@ -125,7 +125,7 @@ extension MetalTextView {
     guard let surface, let host = surface.host, overview.area(at: point) == nil else { return nil }
     let target = surface.target(at: point)
     switch target {
-    case .button, .trailingMark: return nil
+    case .button, .leadingMark: return nil
     default: break
     }
     surface.input {
@@ -150,7 +150,7 @@ extension MetalTextView {
         surface.setPrimary(.zoneText)
       case .zoneSpace:
         surface.setPrimary(.body)
-      case .button, .trailingMark:
+      case .button, .leadingMark:
         break
       }
     }

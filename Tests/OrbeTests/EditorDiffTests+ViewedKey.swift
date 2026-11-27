@@ -40,7 +40,7 @@ extension EditorDiffTests {
     let window = try XCTUnwrap(pane.window)
     window.makeFirstResponder(surface.responder)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(1))
+    layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
     XCTAssertNotNil(layer.draft(.new, line: 1), "前提: 欄に焦点")
 
     XCTAssertFalse(pane.handleViewedKey(viewedKey))

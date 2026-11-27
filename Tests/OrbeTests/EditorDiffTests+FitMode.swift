@@ -82,7 +82,7 @@ extension EditorDiffTests {
     let window = try XCTUnwrap(right.textView.window)
     let layer = try XCTUnwrap(diff.comments)
     window.makeFirstResponder(right.textView)
-    layer.surface(right, didPressTrailingMarkOn: .source(2))
+    layer.surface(right, didMarkFrom: .source(2), to: .source(2))
     let draft = try XCTUnwrap(layer.draft(.old, line: 2))
 
     resize(window, width: Self.sideWidth)
@@ -97,7 +97,7 @@ extension EditorDiffTests {
     let window = try XCTUnwrap(right.textView.window)
     let layer = try XCTUnwrap(diff.comments)
     window.makeFirstResponder(right.textView)
-    layer.surface(right, didPressTrailingMarkOn: .document(1))
+    layer.surface(right, didMarkFrom: .document(1), to: .document(1))
     let draft = try XCTUnwrap(layer.draft(.new, line: 1))
 
     resize(window, width: Self.sideWidth)

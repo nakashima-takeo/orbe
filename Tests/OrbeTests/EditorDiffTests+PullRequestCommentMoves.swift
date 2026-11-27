@@ -41,7 +41,7 @@ extension EditorDiffTests {
     let remote = Remote()
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(3))
+    layer.surface(surface, didMarkFrom: .document(3), to: .document(3))
     let draft = try XCTUnwrap(layer.draft(.new, line: 3))
     surface.replaceText(of: draft.field, with: "書きかけ")
 
@@ -61,7 +61,7 @@ extension EditorDiffTests {
     let remote = Remote()
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(2))
+    layer.surface(surface, didMarkFrom: .document(2), to: .document(2))
     let draft = try XCTUnwrap(layer.draft(.new, line: 2))
     surface.replaceText(of: draft.field, with: "書きかけ")
 

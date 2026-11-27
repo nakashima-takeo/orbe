@@ -8,7 +8,7 @@ extension MetalTextSurface {
     let insertions = rows.insertions
     guard
       !holds(insertions) || rows.spans != self.rows.spans || rows.source !== rowSource
-        || rows.trailingMarkTarget !== trailingMarkTarget
+        || rows.leadingMarkTarget !== leadingMarkTarget
     else { return }
     precondition(
       insertions.isEmpty || !presentation.showsMinimap, "差し込みはミニマップを出していない面にだけ置く")
@@ -36,8 +36,13 @@ extension MetalTextSurface {
     precondition(zonesAreUnique, "同じ絵の差し込みは並びに 1 度だけ置く")
     transact {
       noteRowsChange()
+      cancelLeadingMarkDrag()
+      if leadingMarkHover != nil {
+        leadingMarkHover = nil
+        publishLeadingMark()
+      }
       rowSource = rows.source
-      trailingMarkTarget = rows.trailingMarkTarget
+      leadingMarkTarget = rows.leadingMarkTarget
       write { $0.rowSourceContent = sourceContent }
       syncZones(zoneList)
       let lineHeight = Double(config.lineHeight)
@@ -71,18 +76,24 @@ extension MetalTextSurface {
   func setPresentation(_ presentation: SurfacePresentation) {
     guard presentation != self.presentation else { return }
     precondition(!presentation.showsMinimap || rows.isEmpty, "差し込みのある面ではミニマップを出さない")
-    let restyles = presentation.lineStyles != self.presentation.lineStyles
-    let previousMark = self.presentation.trailingMark
+    let restyles =
+      presentation.lineStyles != self.presentation.lineStyles
+      || presentation.lineOverrides != self.presentation.lineOverrides
+      || presentation.leadingMark?.lineColor != self.presentation.leadingMark?.lineColor
+    let previousMark = self.presentation.leadingMark
     transact {
       self.presentation = presentation
       let arrangement = SurfaceArrangement(presentation)
       self.arrangement = arrangement
       write { $0.arrangement = arrangement }
       if restyles { appearanceDidChange() }
-      if presentation.trailingMark != previousMark {
-        paintTrailingMark()
-        if presentation.trailingMark == nil { trailingMarkHover = nil }
-        publishTrailingMark()
+      if presentation.leadingMark != previousMark {
+        paintLeadingMark()
+        if presentation.leadingMark == nil {
+          leadingMarkHover = nil
+          cancelLeadingMarkDrag()
+        }
+        publishLeadingMark()
       }
     }
   }

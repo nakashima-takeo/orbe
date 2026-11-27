@@ -59,7 +59,7 @@ final class FrameBuilder {
   var zoneBoxes: [BoxInstance] = []
   var zoneImages: [[GlyphInstance]] = []
   var zoneSelectionShapes: [ShapeInstance] = []
-  /// 行の右端の印の画像（画像の地図の頁ごと。本文の字の上に描く）。
+  /// 行の頭の印の絵の画像（画像の地図の頁ごと。行番号の列の切り取りの中で、行番号と頭の線の上に描く）。
   var markImages: [[GlyphInstance]] = []
   /// 見えている入力欄の層。
   var fieldLayers: [FieldLayer] = []
@@ -127,6 +127,12 @@ final class FrameBuilder {
       top + (rows.top(ofBlock: index, scale: scale) + Double(line) * lineHeight).rounded()
         - scrollY
     }
+
+    /// 印の行 `row` の上端と下端の y。
+    func extent(of row: LeadingMarkRow) -> (top: Double, bottom: Double) {
+      let found = rows.extent(of: row, scale: scale)
+      return (top + found.top.rounded() - scrollY, top + found.bottom.rounded() - scrollY)
+    }
   }
 
   /// 1 コマの間だけ使う、描く先の座標系と色・アトラス・見え方。
@@ -146,8 +152,9 @@ final class FrameBuilder {
     /// 本文の行に重ねるもの（選択・キャレット・未確定の文字・落とす位置）の筆。
     var pen: OverlayPen
     let fonts: FontRegistry
-    /// 行番号の列の中の配置。
+    /// 行番号の列の中の配置と、表示の構成のうち配置と描き方に効くもの。
     let gutter: GutterColumns
+    let arrangement: SurfaceArrangement
     /// 続きの段の字下げ（px）。
     var indent: Double = 0
 
@@ -226,11 +233,10 @@ final class FrameBuilder {
       top: (Double(config.topInset) * s).rounded(), lineHeight: Double(config.lineHeight) * s,
       column: (Double(layout.column) * s).rounded(),
       textRight: (Double(layout.text.maxX) * s).rounded(), rows: rows)
-    let tabColumns = source.material.tabColumns
     let focused = source.material.caret.focused
     let c = Context(
       g: g, palette: palette, focused: focused, atlas: source.atlas, config: config,
-      tabColumns: tabColumns, roles: content.roles,
+      tabColumns: source.material.tabColumns, roles: content.roles,
       linkPointer: source.material.linkPointer.map { SIMD2(Double($0.x) * s, Double($0.y) * s) },
       pen: OverlayPen(
         originX: g.column - g.scrollX, lineHeight: g.lineHeight,
@@ -238,7 +244,8 @@ final class FrameBuilder {
         caretSize: config.caretSize, focused: focused, selection: palette.selection,
         inactiveSelection: palette.inactiveSelection, caret: palette.caret,
         activeClause: palette.text.color, markedUnderline: palette.markedUnderline,
-        markedBackground: palette.markedBackground), fonts: fonts, gutter: layout.gutter)
+        markedBackground: palette.markedBackground), fonts: fonts, gutter: layout.gutter,
+      arrangement: source.material.arrangement)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
     zoneScissor = Self.scissor(x: 0, y: g.top, width: g.textRight, g)

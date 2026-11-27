@@ -47,11 +47,12 @@ final class PrCommentPlacement {
   var isSettled: Bool { !isMoving }
 
   /// diff が両端 `ends`（両側の本文 `shown`）を見せている今に合わせる——行を導いた両端と違えば、導いている最中でない限り起点から
-  /// 導き始め（導き終えたら `done` を呼ぶ）、同じ両端なら、印を出せる行 `commentable`（求め終えていれば）で導いた行を確かめる。
+  /// 導き始め（導き終えたら `done` を呼ぶ）、同じ両端なら、コメントできる行のまとまり `commentable`（求め終えていれば）で
+  /// 導いた行を確かめる。
   /// 導いている間は、次の両端が来ても新しく導き始めない（導き終えた後の `done` からの呼び直しで追う）。
   func follow(
     _ ends: PullRequestState.DiffEnds, shown: EditorDiff.SideTexts,
-    commentable: (old: [Range<Int>], new: [Range<Int>])?, done: @escaping () -> Void
+    commentable: DiffRows.CommentHunks?, done: @escaping () -> Void
   ) {
     if ends != self.ends {
       if computing == nil { derive(ends, shown: shown, done: done) }
@@ -88,14 +89,12 @@ final class PrCommentPlacement {
     }
   }
 
-  /// 導いた行が変更区間の中か、印を出せる行（側ごとの 0 始まりの半開区間）`commentable` の外なら、行が無くなったとし、そうで
-  /// なければ行が在るとする。確かめ終えたら、導いている姿を下ろす。行差分を取っている間は何もしない。
-  private func settle(commentable: (old: [Range<Int>], new: [Range<Int>])) {
+  /// 導いた行が変更区間の中か、コメントできる行のまとまり `commentable` の外なら、行が無くなったとし、そうでなければ行が在る
+  /// とする。確かめ終えたら、導いている姿を下ろす。行差分を取っている間は何もしない。
+  private func settle(commentable: DiffRows.CommentHunks) {
     guard computing == nil else { return }
     isMoving = false
-    isGone =
-      isInChange
-      || !DiffRows.contains(version == .old ? commentable.old : commentable.new, line)
+    isGone = isInChange || commentable.index(of: line, version) == nil
   }
 
   /// 本文 `from` の行 `line` の、本文 `to` での行。変更区間の中なら、その区間の新しい側の終わりの行（区間が新しい側に行を

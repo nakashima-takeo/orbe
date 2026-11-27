@@ -19,9 +19,9 @@ import simd
 /// しない。
 ///
 /// 押下は、押した点の行き先（→ `SurfaceTarget`）で振り分ける。本文・行番号の列・絵の差し込みの、ほかに当たらない所は
-/// 本文の場、入力欄はその場で選ぶ（どちらも主をその場にする）。行の右端の印は、同じ印の上で離せば並びの受け手へ知らせる
-/// （選択も主も変えない）。絵の差し込みの選べる文は、その文の選択になる（主を絵の差し込みの文にする。ドラッグは
-/// 同じ自動スクロールで伸びる）。押せる場所は押下を数え、同じ押せる場所で離せば載せる側へ知らせる（主は変えない。
+/// 本文の場、入力欄はその場で選ぶ（どちらも主をその場にする）。行の頭の印は、押した行から引いた所の同じ組の行までを範囲に
+/// し、離せばどこでも並びの受け手へ知らせる（選択も主も変えない。上下の外へ出れば縦にだけ同じ自動スクロールで伸びる）。
+/// 絵の差し込みの選べる文は、その文の選択になる（主を絵の差し込みの文にする。ドラッグは同じ自動スクロールで伸びる）。押せる場所は押下を数え、同じ押せる場所で離せば載せる側へ知らせる（主は変えない。
 /// 選べる文に重なる押せる場所は、4pt を越えてドラッグすれば選択になる）。
 @MainActor
 final class MouseSelection: NSObject {
@@ -39,8 +39,8 @@ final class MouseSelection: NSObject {
     case zoneText
     /// 押せる場所を押している。
     case button(ZonePress)
-    /// 行の右端の印を押している。
-    case trailingMark(TrailingMarkLine)
+    /// 行の頭の印を押して引いている（範囲は面が持つ）。
+    case leadingMark
   }
 
   /// 押している押せる場所——絵の差し込み・id・押した位置（窓の座標）と、重なる選べる文（まとまりと位置）。
@@ -49,18 +49,6 @@ final class MouseSelection: NSObject {
     var id: AnyHashable
     var down: NSPoint
     var text: (AnyHashable, Int)?
-  }
-
-  enum Edge {
-    case above(CGFloat)
-    case below(CGFloat)
-    case left(CGFloat)
-    case right(CGFloat)
-
-    var isAbove: Bool {
-      if case .above = self { return true }
-      return false
-    }
   }
 
   var drag: Drag?
@@ -106,12 +94,13 @@ final class MouseSelection: NSObject {
       surface.beginZoneSelection(
         entry, text: text, offset: offset, clicks: event.clickCount,
         extending: event.modifierFlags.contains(.shift))
-    case .trailingMark(let line):
+    case .leadingMark(let spot):
       cancel()
       optionPress = nil
       guard !control else { return }
       begin(event, in: view)
-      drag = .trailingMark(line)
+      drag = .leadingMark
+      surface.beginLeadingMarkDrag(spot)
     case .button(let entry, let button):
       cancel()
       optionPress = nil
@@ -254,7 +243,9 @@ final class MouseSelection: NSObject {
   func mouseDragged(_ event: NSEvent, in view: NSView) {
     guard let drag, let surface else { return }
     switch drag {
-    case .link, .trailingMark: return
+    case .link: return
+    case .leadingMark:
+      return dragLeadingMark(event, in: view)
     case .candidate(_, _, let down):
       guard Self.moved(event, from: down) > Self.clickSlop else { return }
       self.drag = nil
@@ -333,6 +324,7 @@ final class MouseSelection: NSObject {
   /// 押している間に窓から外れた（mouse-up が届かない）。
   func cancel() {
     stopAutoscroll()
+    if case .leadingMark = drag { surface?.cancelLeadingMarkDrag() }
     drag = nil
     others = []
     moving = nil

@@ -80,8 +80,11 @@ struct FramePalette: Equatable, Sendable {
   var selectionOccurrenceInactive: FrameColor
   var wordOccurrence: FrameColor
   var overview: OverviewPalette
-  /// 行の型（表示の構成の `lineStyles` の番号で引く）。
+  /// 行の型と行の上書き（表示の構成の `lineStyles`・`lineOverrides` の番号で引く）。
   var lineStyles: [LineInk]
+  var lineOverrides: [OverrideInk]
+  /// 行の頭の印の線の色（構成が印を持たなければ nil）。
+  var leadingMark: FrameColor?
 
   /// 役割 `role` の字の色（役割が無ければ本文の色）。
   func ink(_ role: SyntaxRole?) -> InkColor { role.map { roles[$0.rawValue] } ?? text }
@@ -92,13 +95,19 @@ struct FramePalette: Equatable, Sendable {
     return lineStyles[style]
   }
 
+  /// 行の上書き `override` の色（上書きが無いか、構成の上書きの外を指していれば nil）。
+  func lineOverride(_ override: Int?) -> OverrideInk? {
+    guard let override, lineOverrides.indices.contains(override) else { return nil }
+    return lineOverrides[override]
+  }
+
   /// NSTextView の既定の未確定の地（外観で解く動的な色）。
   @MainActor private static let markedBackgroundColor =
     NSTextView().markedTextAttributes?[.backgroundColor] as? NSColor ?? .systemYellow
 
   @MainActor
   init(
-    style: TextSurfaceStyle, lineStyles: [LineStyle], appearance: NSAppearance,
+    style: TextSurfaceStyle, presentation: SurfacePresentation, appearance: NSAppearance,
     space: CGColorSpace, scale: CGFloat
   ) {
     let resolve = { FrameColor($0, appearance: appearance, space: space) }
@@ -124,12 +133,22 @@ struct FramePalette: Equatable, Sendable {
     wordOccurrence = resolve(style.highlights.wordOccurrence)
     overview = OverviewPalette(style.overview, appearance: appearance, space: space)
     let gutterText = gutterText
-    self.lineStyles = lineStyles.map { line in
+    lineStyles = presentation.lineStyles.map { line in
       LineInk(
         background: line.background.map(resolve), sign: line.sign,
         signInk: line.signColor.map(ink) ?? gutterText)
     }
+    lineOverrides = presentation.lineOverrides.map { line in
+      OverrideInk(background: line.background.map(resolve), mark: line.markColor.map(resolve))
+    }
+    leadingMark = presentation.leadingMark.map { resolve($0.lineColor) }
   }
+}
+
+/// 行の上書きを外観で解いた色——行の地と頭の線の色。
+struct OverrideInk: Equatable, Sendable {
+  var background: FrameColor?
+  var mark: FrameColor?
 }
 
 /// 行の型を外観で解いた色——行の地・記号の字とその色。

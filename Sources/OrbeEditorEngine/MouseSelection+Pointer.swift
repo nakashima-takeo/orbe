@@ -3,7 +3,7 @@ import OrbeEditorCore
 
 extension MouseSelection {
   /// ポインタの形と URL の下線——行番号と印の列は矢印、本文は I ビーム、⌘ を押して URL の上なら指（面に焦点があるとき）。
-  /// 絵の差し込みの押せる場所は載せる側が決めた形、行の右端の印は指、絵の差し込みの入力欄・選べる文・ほかに当たらない所は
+  /// 絵の差し込みの押せる場所は載せる側が決めた形、行の頭の印は指、絵の差し込みの入力欄・選べる文・ほかに当たらない所は
   /// I ビーム。
   /// ⌘ を押している間は、面に焦点があれば本文の上のポインタの位置を面へ渡し、下線はその位置の下の URL に描画スレッドが
   /// そのコマの配置で引く（指カーソル・⌘クリックと同じ、面の焦点の判定）。スクロールで URL の矩形が動くので、矩形は登録せずその場の当たりで決める。
@@ -16,7 +16,7 @@ extension MouseSelection {
       case .button(_, let button):
         surface.setLinkPointer(nil)
         return button.cursor.set()
-      case .trailingMark:
+      case .leadingMark:
         surface.setLinkPointer(nil)
         return NSCursor.pointingHand.set()
       case .field, .zoneText, .zoneSpace:
@@ -37,8 +37,8 @@ extension MouseSelection {
     }
   }
 
-  /// 押せる場所か行の右端の印を押していたなら、離した点 `up`（view の座標）が同じものの上のときだけ押下を知らせる。押して
-  /// いたなら true。
+  /// 押せる場所を押していたなら、離した点 `up`（view の座標）が同じものの上のときだけ押下を知らせる。行の頭の印を引いて
+  /// いたなら、離した所に依らず範囲を知らせる。どちらかを押していたなら true。
   func releasePress(at up: CGPoint) -> Bool {
     guard let surface else { return false }
     switch drag {
@@ -48,11 +48,25 @@ extension MouseSelection {
       else { return true }
       surface.transact { entry.zone.zone(.pressed(press.id)) }
       return true
-    case .trailingMark(let line):
-      if case .trailingMark(line) = surface.target(at: up) { surface.pressTrailingMark(line) }
+    case .leadingMark:
+      surface.finishLeadingMarkDrag()
       return true
     default:
       return false
+    }
+  }
+
+  /// 行の頭の印を引いている範囲を点まで伸ばす。上下の外では縦にだけ自動スクロールする。
+  func dragLeadingMark(_ event: NSEvent, in view: NSView) {
+    guard let surface else { return }
+    point = view.convert(event.locationInWindow, from: nil)
+    if point.y < surface.config.topInset {
+      autoscroll(.above(surface.config.topInset - point.y))
+    } else if point.y > view.bounds.height {
+      autoscroll(.below(point.y - view.bounds.height))
+    } else {
+      stopAutoscroll()
+      surface.extendLeadingMarkDrag(to: point)
     }
   }
 }

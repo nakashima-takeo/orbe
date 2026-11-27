@@ -1,7 +1,7 @@
 import CoreGraphics
 import OrbeEditorCore
 
-/// 面の区画の配置（VS Code の `EditorLayoutInfo`）——左から行番号の列（番号の列・git の印の列・記号の列）｜本文の区画｜
+/// 面の区画の配置（VS Code の `EditorLayoutInfo`）——左から行番号の列（頭の列・番号の列・git の印の列・記号の列）｜本文の区画｜
 /// ミニマップ｜縦スクロールバー、本文の区画の下端に横スクロールバーが重なる。ミニマップの幅は VS Code の式（Core の
 /// `MinimapLayout.width`）に面の実の行番号の列の幅を入れて出す。ミニマップを出さない構成では、右列は縦スクロールバー
 /// だけ。当たり・自動スクロールの境・見せるところまで・見えている範囲・IME の文字の矩形・切り取りは、どれもこの 1 つの
@@ -105,7 +105,7 @@ extension SurfaceConfig {
       max(minimum, ceil(self.numberWidth(max(1, number))) + trailing)
     }
     return GutterColumns(
-      own: width(lineCount),
+      lead: arrangement.leadingMark?.width ?? 0, own: width(lineCount),
       other: arrangement.numberColumns == 2
         ? width(rows.otherNumberMax(lineCount: lineCount)) : nil,
       marks: arrangement.showsMarks ? marks.gutterWidth : 0, sign: arrangement.signWidth,
@@ -122,6 +122,7 @@ struct SurfaceArrangement: Equatable, Sendable {
   var numberTrailing: CGFloat?
   var signWidth: CGFloat = 0
   var showsMarks = true
+  var leadingMark: LeadingMarkArrangement?
 
   init() {}
 
@@ -133,12 +134,26 @@ struct SurfaceArrangement: Equatable, Sendable {
     numberTrailing = presentation.numberTrailing
     signWidth = presentation.signWidth
     showsMarks = presentation.showsMarks
+    leadingMark = presentation.leadingMark.map {
+      LeadingMarkArrangement(
+        width: $0.width, lineWidth: $0.lineWidth, dragOverride: $0.dragOverride)
+    }
   }
 }
 
-/// 行番号の列の中の配置（pt）。左から 番号の列（2 列ならもう一方の番号・文書の行の番号）｜git の印の列｜記号の列。位置は
-/// 列の右端からの距離で持つ（行番号の数字は右寄せ）。
+/// 行の頭の印の、配置と描き方に効くもの（頭の列の幅・線の幅（pt）・引いている範囲に当てる行の上書きの番号）。色は
+/// `FramePalette.leadingMark`。
+struct LeadingMarkArrangement: Equatable, Sendable {
+  var width: CGFloat
+  var lineWidth: CGFloat
+  var dragOverride: Int?
+}
+
+/// 行番号の列の中の配置（pt）。左から 頭の列｜番号の列（2 列ならもう一方の番号・文書の行の番号）｜git の印の列｜記号の列。
+/// 頭の列は左端から、ほかの列の位置は列の右端からの距離で持つ（行番号の数字は右寄せ）。
 struct GutterColumns: Equatable, Sendable {
+  /// 頭の列の幅（持たなければ 0）。
+  let lead: CGFloat
   /// 文書の行の番号の列と、もう一方の番号の列（1 列なら nil）の幅。
   let own: CGFloat
   let other: CGFloat?
@@ -149,7 +164,7 @@ struct GutterColumns: Equatable, Sendable {
   let trailing: CGFloat
 
   /// 行番号の列の幅。
-  var width: CGFloat { (other ?? 0) + own + marks + sign }
+  var width: CGFloat { lead + (other ?? 0) + own + marks + sign }
 
   /// 番号の列の右端（印の列の左端）の、列の右端からの距離。
   var numbersInset: CGFloat { marks + sign }

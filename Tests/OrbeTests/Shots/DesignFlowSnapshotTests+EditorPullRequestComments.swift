@@ -9,7 +9,7 @@ import XCTest
 /// PR のコメントの flow（fixture は `PrFixtures` と `PrFixtureReview`——本物の git の場と、PR #131 とスレッドを答える
 /// 差し替えの出どころ）。3 つに分けて撮る。
 /// - `editor_pr_comments`（dark）: PR の diff のスレッド（既定のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
-///   コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 左の列を閉じて並列。
+///   行の頭のコメントの印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 左の列を閉じて並列。
 /// - `editor_pr_review`（面を付けた窓の中で dark と light。窓から外れるとポップアップは閉じる）: 左の列を開き（インラインに
 ///   戻る）、レビューのポップアップを開いて全体へのコメントを書く → 「承認」を選ぶ → 「変更を依頼」を選ぶ → 未送信のコメントの
 ///   行を押す（ポップアップが閉じ、畳んだスレッドが開いてその行が見える）→ 開き直して「承認」で送信の最中 → 送信の失敗（下端の
@@ -191,14 +191,13 @@ private struct CommentSteps {
     settle()
   }
 
-  /// 文脈の行（新しい側の行 8）にポインタを乗せ、行の右端の印の上へ動かす。
+  /// 文脈の行（新しい側の行 8）の頭の列にポインタを乗せる。
   func hoverMark() {
     guard let surface else { return XCTFail("前提: 面がある") }
     let y =
       surface.config.topInset + CGFloat(surface.rows.y(ofLine: 7) - surface.scrollPosition.y)
       + surface.config.lineHeight / 2
-    surface.hover(
-      at: CGPoint(x: surface.surfaceLayout.text.maxX - Theme.Layout.editorPrMarkInset - 9, y: y))
+    surface.hover(at: CGPoint(x: Theme.Layout.editorPrMarkColumn / 2, y: y))
     settle()
   }
 

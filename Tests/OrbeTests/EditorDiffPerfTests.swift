@@ -205,17 +205,17 @@ final class EditorDiffPerfTests: OrbeTestCase {
 
   // MARK: - PR の注記（製品のコメントの層が渡す形）
 
-  /// ハンク `hunks` の前後 3 行までを印を出せる行にし、10 ハンクごとに、ハンクの新しい側の最初の行にスレッドを置く注記。
+  /// ハンク `hunks` の前後 3 行までをコメントできる行のまとまりにし、10 ハンクごとに、ハンクの新しい側の最初の行にスレッドを
+  /// 置く注記。
   static func pullRequestNotes(_ hunks: [LineHunk], lines: (old: Int, new: Int)) -> DiffRows.Notes {
     var notes = DiffRows.Notes()
     let widen = { (range: Range<Int>, count: Int) in
       max(0, range.lowerBound - 3)..<min(count, range.upperBound + 3)
     }
-    for hunk in hunks {
-      notes.commentable.old.append(widen(hunk.oldLines, lines.old))
-      notes.commentable.new.append(widen(hunk.newLines, lines.new))
-    }
-    notes.commentable = (merged(notes.commentable.old), merged(notes.commentable.new))
+    let old = merged(hunks.map { widen($0.oldLines, lines.old) })
+    let new = merged(hunks.map { widen($0.newLines, lines.new) })
+    notes.hunks = DiffRows.CommentHunks(
+      items: zip(old, new).map { DiffRows.CommentHunk(old: $0, new: $1) })
     for (index, hunk) in hunks.enumerated() where index % 10 == 0 {
       let line = hunk.newLines.lowerBound
       let thread = GitHubPullRequestReview.Thread(

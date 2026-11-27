@@ -1,8 +1,8 @@
 import Foundation
 import OrbeEditorCore
 
-/// 並びに混ぜる注記（PR の diff のコメントの層が渡す）——行の下に置く絵の差し込み、印を出せる行、スレッドのある行。行はどれも
-/// その側の版の行（0 始まり）。
+/// 並びに混ぜる注記（PR の diff のコメントの層が渡す）——行の下に置く絵の差し込み、コメントできる行のまとまり、スレッドのある
+/// 行。行はどれもその側の版の行（0 始まり）。
 extension DiffRows {
   /// diff のどちらの側の行か。
   enum Version: Hashable {
@@ -13,10 +13,48 @@ extension DiffRows {
   struct Notes {
     /// 行の下に置く絵の差し込み。同じ行の差し込みは、列の順に上から並ぶ。
     var zones: [Zone] = []
-    /// 印を出せる行（側ごとの、半開区間の昇順の列）。
-    var commentable: (old: [Range<Int>], new: [Range<Int>]) = ([], [])
-    /// スレッドのある行（側ごと）。行の地をスレッドのある行の型にする。
+    /// コメントできる行のまとまり。まとまりの行に行の頭の印を出し、まとまりの番号を印の組にする。
+    var hunks = CommentHunks()
+    /// スレッドのある行（側ごと）。行の地をスレッドのある行の上書きにする。
     var threads: (old: Set<Int>, new: Set<Int>) = ([], [])
+  }
+
+  /// コメントできる行のまとまり 1 つ——古い側と新しい側の、その側の版の行（0 始まり）の半開区間。
+  struct CommentHunk: Equatable {
+    let old: Range<Int>
+    let new: Range<Int>
+  }
+
+  /// コメントできる行のまとまり（手元の git が出す、変更とその前後 3 行の区間。GitHub の PR の diff の区間と同じもの）の列
+  /// ——まとまりごとに、古い側と新しい側の、その側の版の行（0 始まり）の半開区間（どちらかが空のこともある）。どちらの側も、
+  /// 区間は昇順で重ならない。列の中の番号が、並びの印の組になる。
+  struct CommentHunks: Equatable {
+    var items: [CommentHunk] = []
+
+    /// 側 `version` の行 `line` を含むまとまりの番号（無ければ nil）。
+    func index(of line: Int, _ version: Version) -> Int? {
+      let side = { (hunk: CommentHunk) in version == .old ? hunk.old : hunk.new }
+      var (low, high) = (0, items.count)
+      while low < high {
+        let mid = (low + high) / 2
+        let range = side(items[mid])
+        if range.isEmpty ? range.lowerBound <= line : range.upperBound <= line {
+          low = mid + 1
+        } else {
+          high = mid
+        }
+      }
+      while low < items.count, side(items[low]).isEmpty { low += 1 }
+      return low < items.count && side(items[low]).contains(line) ? low : nil
+    }
+
+    /// 側 `version` の、空でない区間とまとまりの番号の列（昇順）。
+    func ranges(_ version: Version) -> [(range: Range<Int>, index: Int)] {
+      items.enumerated().compactMap { index, hunk in
+        let range = version == .old ? hunk.old : hunk.new
+        return range.isEmpty ? nil : (range, index)
+      }
+    }
   }
 
   /// 行 `line` の下に置く絵の差し込み。
@@ -129,28 +167,30 @@ extension DiffRows {
     }
   }
 
-  /// 文書の行の区間を、印を出せる行の範囲の端とスレッドのある行で割る。割った区間は元の区間の型ともう一方の番号を引き継ぎ、
-  /// 印を出せる範囲に入る区間は印を出せ、スレッドのある行はスレッドのある行の型になる。どちらも無ければ元の列のまま。
+  /// 文書の行の区間を、まとまりの区間 `hunks`（その側の区間とまとまりの番号）の端とスレッドのある行で割る。割った区間は元の
+  /// 区間の型ともう一方の番号を引き継ぎ、まとまりの区間に入る区間はその番号を印の組にし、スレッドのある行はスレッドのある行の
+  /// 上書きを持つ。どちらも無ければ元の列のまま。
   static func refine(
-    _ spans: [LineSpan], lines: Int, commentable: [Range<Int>], threads: Set<Int>
+    _ spans: [LineSpan], lines: Int, hunks: [(range: Range<Int>, index: Int)], threads: Set<Int>
   ) -> [LineSpan] {
-    guard !commentable.isEmpty || !threads.isEmpty else { return spans }
+    guard !hunks.isEmpty || !threads.isEmpty else { return spans }
     var cuts = Set(spans.map(\.line))
-    for range in commentable { cuts.formUnion([range.lowerBound, range.upperBound]) }
+    for hunk in hunks { cuts.formUnion([hunk.range.lowerBound, hunk.range.upperBound]) }
     for line in threads { cuts.formUnion([line, line + 1]) }
     var result: [LineSpan] = []
     var owner = -1
-    var range = 0
+    var next = 0
     for start in cuts.filter({ $0 >= 0 && $0 < lines }).sorted() {
       while owner + 1 < spans.count, spans[owner + 1].line <= start { owner += 1 }
-      while range < commentable.count, commentable[range].upperBound <= start { range += 1 }
+      while next < hunks.count, hunks[next].range.upperBound <= start { next += 1 }
       let base = owner >= 0 ? spans[owner] : LineSpan(line: start)
-      let threaded = threads.contains(start)
       result.append(
         LineSpan(
-          line: start, style: threaded ? DiffStyle.thread(base.style) : base.style,
+          line: start, style: base.style,
           otherNumber: base.otherNumber.map { $0 + start - base.line },
-          allowsTrailingMark: range < commentable.count && commentable[range].contains(start)))
+          markGroup: next < hunks.count && hunks[next].range.contains(start)
+            ? hunks[next].index : nil,
+          override: threads.contains(start) ? DiffStyle.threadOverride : nil))
     }
     return result
   }

@@ -198,7 +198,7 @@ extension EditorDiffTests {
     let surface = try engine(diff.newSurface)
     window.makeFirstResponder(surface.responder)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(1))
+    layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
     let draft = try XCTUnwrap(layer.draft(.new, line: 1))
 
     let body = pane.bodyRect

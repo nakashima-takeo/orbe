@@ -223,35 +223,41 @@ extension FramePerfTests {
 
   // MARK: - PR の diff の構成（製品の PR の構成と同じ作り）
 
-  /// diff の構成（→ `diffPresentation`）に、行の右端のコメントの印と、スレッドのある文脈の行の型（3）を足したもの。
+  /// diff の構成（→ `diffPresentation`）に、行の頭のコメントの印と、行の上書き（0 はスレッドのある行、1 は書いている範囲）を
+  /// 足したもの。
   static func pullRequestPresentation(columns: Int, wraps: Bool) -> SurfacePresentation {
     var presentation = diffPresentation(columns: columns)
-    presentation.lineStyles.append(LineStyle(background: threadGround))
-    presentation.trailingMark = pullRequestMark
+    presentation.lineOverrides = [
+      LineOverride(background: threadGround),
+      LineOverride(background: draftGround, markColor: .systemPurple),
+    ]
+    presentation.leadingMark = pullRequestMark
     presentation.wraps = wraps
     return presentation
   }
 
   static let threadGround = NSColor(srgbRed: 0.56, green: 0.41, blue: 0.94, alpha: 0.14)
+  static let draftGround = NSColor(srgbRed: 0.56, green: 0.41, blue: 0.94, alpha: 0.22)
 
-  /// 製品と同じ大きさ・同じ距離の印（18×18・右端から 8）。
-  static let pullRequestMark = TrailingMark(
-    size: CGSize(width: 18, height: 18), inset: 8,
-    image: plusImage(size: 18, ground: nil, glyph: NSColor(white: 0.6, alpha: 0.6)),
-    hoveredImage: plusImage(size: 18, ground: threadGround, glyph: .systemPurple))
+  /// 製品と同じ寸法の印（頭の列 24・線 3・＋ 16×16）。
+  static let pullRequestMark = LeadingMark(
+    width: 24, lineWidth: 3,
+    lineColor: NSColor(srgbRed: 0.56, green: 0.41, blue: 0.94, alpha: 0.55),
+    size: CGSize(width: 16, height: 16),
+    image: plusImage(size: 16, ground: .systemPurple, glyph: .white), dragOverride: 1)
 
   /// 角丸の地（無ければ透明）に ＋ を描いた絵。
   static func plusImage(size: CGFloat, ground: NSColor?, glyph: NSColor) -> NSImage {
     NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
       if let ground {
         ground.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
+        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
       }
       let path = NSBezierPath()
-      path.move(to: CGPoint(x: rect.midX, y: rect.minY + 4))
-      path.line(to: CGPoint(x: rect.midX, y: rect.maxY - 4))
-      path.move(to: CGPoint(x: rect.minX + 4, y: rect.midY))
-      path.line(to: CGPoint(x: rect.maxX - 4, y: rect.midY))
+      path.move(to: CGPoint(x: rect.midX, y: rect.minY + 3))
+      path.line(to: CGPoint(x: rect.midX, y: rect.maxY - 3))
+      path.move(to: CGPoint(x: rect.minX + 3, y: rect.midY))
+      path.line(to: CGPoint(x: rect.maxX - 3, y: rect.midY))
       path.lineWidth = 1.5
       glyph.setStroke()
       path.stroke()
@@ -260,64 +266,66 @@ extension FramePerfTests {
   }
 
   /// 8 行ごとに、6 行の文脈の区間と、出どころの 3 行を指す削除の差し込みと、2 行の追加の区間（→ `inlineRows`）。印を出せる
-  /// 周期（→ `hunk(ofPeriod:)`）の行と削除行は印を出せ、スレッドを置く周期は、頭の行をスレッドのある行にし、その下に
-  /// スレッドの絵の差し込みを置く。
-  static func pullRequestInlineRows(lineCount: Int, source: DocumentRowSource) -> SurfaceRows {
+  /// 周期（→ `hunk(ofPeriod:)`。`oneHunk` なら全部の周期を 1 つのハンクにする）の行と削除行はハンクの番号を印の組にし、
+  /// スレッドを置く周期は、頭の行をスレッドのある行の上書きにし、その下にスレッドの絵の差し込みを置く。
+  static func pullRequestInlineRows(
+    lineCount: Int, source: DocumentRowSource, oneHunk: Bool = false
+  ) -> SurfaceRows {
     var insertions: [RowInsertion] = []
     var spans: [LineSpan] = []
     var old = 0
     let last = source.rowSourceContent.text.lineCount - 1
     for (period, start) in stride(from: 0, to: lineCount - 8, by: 8).enumerated() {
-      let marked = hunk(ofPeriod: period) != nil
+      let group = oneHunk ? 0 : hunk(ofPeriod: period)
       if threaded(period) {
         spans.append(
-          LineSpan(line: start, style: 3, otherNumber: old + 1, allowsTrailingMark: marked))
-        spans.append(LineSpan(line: start + 1, otherNumber: old + 2, allowsTrailingMark: marked))
+          LineSpan(line: start, otherNumber: old + 1, markGroup: group, override: 0))
+        spans.append(LineSpan(line: start + 1, otherNumber: old + 2, markGroup: group))
         insertions.append(
           RowInsertion(
             line: start + 1,
             content: .zone(ThreadZone(comment: "スレッド \(period) の本文。幅で折り返す。"))))
       } else {
-        spans.append(LineSpan(line: start, otherNumber: old + 1, allowsTrailingMark: marked))
+        spans.append(LineSpan(line: start, otherNumber: old + 1, markGroup: group))
       }
       old += 6
       let removed = (0..<3).map {
-        InsertedLine(line: min(old + $0, last), style: 1, allowsTrailingMark: marked)
+        InsertedLine(line: min(old + $0, last), style: 1, markGroup: group)
       }
       insertions.append(RowInsertion(line: start + 6, content: .lines(removed)))
       old += 3
-      spans.append(LineSpan(line: start + 6, style: 0, allowsTrailingMark: marked))
+      spans.append(LineSpan(line: start + 6, style: 0, markGroup: group))
     }
     return SurfaceRows(insertions: insertions, spans: spans, source: source)
   }
 
   /// 並列の左右——12 行ごとの周期の 6 行目から 3 行の詰め物を、左は奇数、右は偶数の周期に置き（→ `paddedRows`）、4 周期の
-  /// うち 3 周期の行を印を出せる行にする。スレッドを置く周期は、右の頭の行をスレッドのある行にして下にスレッドの絵の
-  /// 差し込みを、左の同じ所に相手と同じ高さの空きを置く。
+  /// うち 3 周期の行をハンクの番号を印の組にした行にする。スレッドを置く周期は、右の頭の行をスレッドのある行の上書きにして下に
+  /// スレッドの絵の差し込みを、左の同じ所に相手と同じ高さの空きを置く。
   static func pullRequestSideRows(lineCount: Int) -> (left: SurfaceRows, right: SurfaceRows) {
     let pads = (0..<3).map { _ in InsertedLine(style: 2) }
     var left = SurfaceRows()
     var right = SurfaceRows()
     for (period, start) in stride(from: 0, to: lineCount - 12, by: 12).enumerated() {
-      let marked = hunk(ofPeriod: period) != nil
+      let group = hunk(ofPeriod: period)
       let pad = RowInsertion(line: start + 6, content: .lines(pads))
       if threaded(period) {
         let zone = ThreadZone(comment: "スレッド \(period) の本文。幅で折り返す。")
-        right.spans.append(LineSpan(line: start, style: 3, allowsTrailingMark: marked))
-        right.spans.append(LineSpan(line: start + 1, allowsTrailingMark: marked))
+        right.spans.append(LineSpan(line: start, markGroup: group, override: 0))
+        right.spans.append(LineSpan(line: start + 1, markGroup: group))
         right.insertions.append(RowInsertion(line: start + 1, content: .zone(zone)))
         left.insertions.append(RowInsertion(line: start + 1, content: .gap(zone)))
       } else {
-        right.spans.append(LineSpan(line: start, allowsTrailingMark: marked))
+        right.spans.append(LineSpan(line: start, markGroup: group))
       }
-      left.spans.append(LineSpan(line: start, allowsTrailingMark: marked))
+      left.spans.append(LineSpan(line: start, markGroup: group))
       if period % 2 == 0 { right.insertions.append(pad) } else { left.insertions.append(pad) }
     }
     return (left, right)
   }
 
   /// ポインタの下で印を出している行（無ければ nil）。
-  static func hoveredMarkRow(_ surface: MetalTextSurface) -> TrailingMarkRow? {
-    surface.trailingMarkHover?.row
+  static func hoveredMarkRow(_ surface: MetalTextSurface) -> LeadingMarkRow? {
+    surface.leadingMarkHover?.row
   }
 }

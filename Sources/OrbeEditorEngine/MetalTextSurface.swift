@@ -61,12 +61,13 @@ final class MetalTextSurface: TextSurface {
   var rows: RowLayout
   /// 本文の字体の ASCII の字の幅（折り返しの寸法）。
   private(set) lazy var asciiWidths = GlyphFonts.asciiWidths(config.font)
-  /// 差し込んだ行の出どころと、行の右端の印の押下の受け手（どちらも並びと一緒に置く）。
+  /// 差し込んだ行の出どころと、行の頭の印の知らせの受け手（どちらも並びと一緒に置く）。
   weak var rowSource: (any SurfaceRowSource)?
-  weak var trailingMarkTarget: (any SurfaceTrailingMarkTarget)?
-  /// ポインタの下の、印を出せる行と、表示の構成の印の絵を描いた材料（通常・印の上）。
-  var trailingMarkHover: TrailingMarkHover?
-  var trailingMarkLooks: (normal: ZoneMaterial, hovered: ZoneMaterial)?
+  weak var leadingMarkTarget: (any SurfaceLeadingMarkTarget)?
+  /// ポインタの下の、印を出せる行と、引いている範囲と、表示の構成の印の絵を描いた材料。
+  var leadingMarkHover: LeadingMarkSpot?
+  var leadingMarkDrag: LeadingMarkDrag?
+  var leadingMarkLook: ZoneMaterial?
   /// 表示の構成と、そのうち配置と描き方に効くもの。
   var presentation = SurfacePresentation.code
   var arrangement = SurfaceArrangement()
@@ -263,14 +264,14 @@ final class MetalTextSurface: TextSurface {
   /// 外観・色空間・倍率で色を解き直して置く。
   func appearanceDidChange() {
     let palette = FramePalette(
-      style: style, lineStyles: presentation.lineStyles, appearance: textView.effectiveAppearance,
+      style: style, presentation: presentation, appearance: textView.effectiveAppearance,
       space: space, scale: scale)
     write { $0.palette = palette }
     zonesAppearanceDidChange()
-    if presentation.trailingMark != nil {
+    if presentation.leadingMark != nil {
       transact {
-        paintTrailingMark()
-        publishTrailingMark()
+        paintLeadingMark()
+        publishLeadingMark()
       }
     }
   }

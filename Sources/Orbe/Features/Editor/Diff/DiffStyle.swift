@@ -8,19 +8,10 @@ enum DiffStyle {
   static let added = 0
   static let removed = 1
   static let pad = 2
-  /// スレッドのある行（追加・削除・文脈）。記号は元の型のまま、地だけを替える。
-  static let addedThread = 3
-  static let removedThread = 4
-  static let contextThread = 5
-
-  /// 型 `style`（nil は文脈）の行に、スレッドがあるときの型。
-  static func thread(_ style: Int?) -> Int {
-    switch style {
-    case added: addedThread
-    case removed: removedThread
-    default: contextThread
-    }
-  }
+  /// 行の上書きの番号——スレッドのある行（地だけを替える）と、書いている範囲（地と頭の線を替える。行の頭の印を引いている
+  /// 範囲も同じ見え方）。
+  static let threadOverride = 0
+  static let draftOverride = 1
 
   /// インライン——番号 2 列（旧・新）・記号の列・印の列なし・ミニマップなし。値は 1 度だけ作る（色の値の同一性で面が
   /// 同じ構成の押し直しを見分ける）。
@@ -37,18 +28,18 @@ enum DiffStyle {
       numberTrailing: Theme.Layout.editorDiffNumberTrailingSide, showsMarks: false,
       lineStyles: lineStyles)
 
-  /// PR の diff のインラインと並列の片側——ほかの diff の構成に、行の右端のコメント追加の印を足したもの。
+  /// PR の diff のインラインと並列の片側——ほかの diff の構成に、行の頭のコメントの印と、行の上書きを足したもの。
   static let pullRequestInline = commenting(inline)
   static let pullRequestSide = commenting(side)
 
   private static func commenting(_ presentation: SurfacePresentation) -> SurfacePresentation {
     var presentation = presentation
-    presentation.trailingMark = PrCommentStyle.trailingMark
+    presentation.lineOverrides = lineOverrides
+    presentation.leadingMark = PrCommentStyle.leadingMark
     return presentation
   }
 
-  /// 追加（diff.added の地と ＋）・削除（diff.removed の地と −）・詰め物（淡い塗り）と、スレッドのある追加・削除・文脈の行
-  /// （地は accent の α `editorPrThreadRow`）。
+  /// 追加（diff.added の地と ＋）・削除（diff.removed の地と −）・詰め物（淡い塗り）。
   private static let lineStyles: [LineStyle] =
     [
       LineStyle(
@@ -57,10 +48,12 @@ enum DiffStyle {
         background: Theme.Color.editorDiffRemovedRow, sign: "−",
         signColor: Theme.Color.diffRemoved),
       LineStyle(background: EditorStyle.fill(Theme.Opacity.editorDiffPad)),
-      LineStyle(
-        background: Theme.Color.editorPrThreadRow, sign: "+", signColor: Theme.Color.diffAdded),
-      LineStyle(
-        background: Theme.Color.editorPrThreadRow, sign: "−", signColor: Theme.Color.diffRemoved),
-      LineStyle(background: Theme.Color.editorPrThreadRow),
     ]
+
+  /// スレッドのある行（地は accent の α `editorPrThreadRow`）と、書いている範囲（地は accent の α `editorPrDraftRow`、頭の線は
+  /// `accentBright`）。
+  private static let lineOverrides: [LineOverride] = [
+    LineOverride(background: Theme.Color.editorPrThreadRow),
+    LineOverride(background: Theme.Color.editorPrDraftRow, markColor: Theme.Color.accentBright),
+  ]
 }

@@ -28,20 +28,22 @@ extension Theme.Layout {
   static let editorPrBarCountGap: CGFloat = 3
 }
 
-/// PR のコメント（スレッド・コメント追加の印）とレビューのポップアップ。半透明の面はエディター共通の換算
+/// PR のコメント（スレッド・行の頭のコメントの印）とレビューのポップアップ。半透明の面はエディター共通の換算
 /// （`EditorStyle.sunk` / `fill` / `hairline`）に揃える。
 extension Theme.Color {
-  /// スレッドのある diff の行の地（accent の α .14）。
+  /// スレッドのある diff の行の地（accent の α .14）と、書いている範囲の行の地（accent の α .22）。
   static let editorPrThreadRow = accentPrimary.withAlphaComponent(0.14)
+  static let editorPrDraftRow = accentPrimary.withAlphaComponent(0.22)
+  /// コメントできる diff の行の頭の線（accent の α .55）。
+  static let editorPrMarkLine = accentPrimary.withAlphaComponent(0.55)
   /// スレッドの箱の地（パネル地の α .85。ブラーなしの半透明塗り）・枠（accent の α .35）・影（影色の α .35）。
   static let editorPrThreadGround = prDynAB(light: (0xffffff, 0.85), dark: (0x1e1a26, 0.85))
   static let editorPrThreadBorder = accentPrimary.withAlphaComponent(0.35)
   static let editorPrThreadShadow = prDynAB(light: (0x5a4696, 0.35), dark: (0x000000, 0.35))
   /// スレッドの頭の帯（accent の α .08）。
   static let editorPrThreadHead = accentPrimary.withAlphaComponent(0.08)
-  /// インラインコードの地（accent の α .12）と、コメント追加の印のホバーの地（accent の α .16）。
+  /// インラインコードの地（accent の α .12）。
   static let editorPrInlineCode = accentPrimary.withAlphaComponent(0.12)
-  static let editorPrMarkHover = accentPrimary.withAlphaComponent(0.16)
   /// 返信欄の焦点のある枠（accent の α .55）と、その中の選択の地。
   static let editorPrFieldFocus = accentPrimary.withAlphaComponent(0.55)
   static let editorPrFieldSelection = accentPrimary.withAlphaComponent(0.35)
@@ -124,10 +126,13 @@ extension Theme.Layout {
   static let editorPrBodyCodeRadius: CGFloat = 4
   static let editorPrInlineCodePad: CGFloat = 4
   static let editorPrInlineCodeRadius: CGFloat = 3
-  /// コメント追加の印（18×18・角丸 3・行の右端から 8・中の ＋ 11）。
-  static let editorPrMark: CGFloat = 18
-  static let editorPrMarkInset: CGFloat = 8
-  static let editorPrMarkGlyph: CGFloat = 11
+  /// 行の頭のコメントの印——頭の列の幅 24・線の幅 3・＋ の地 16×16 と角丸 4・中の ＋ の長さ 10 と線の幅 1.5。
+  static let editorPrMarkColumn: CGFloat = 24
+  static let editorPrMarkLineWidth: CGFloat = 3
+  static let editorPrMarkButton: CGFloat = 16
+  static let editorPrMarkButtonRadius: CGFloat = 4
+  static let editorPrMarkPlus: CGFloat = 10
+  static let editorPrMarkPlusStroke: CGFloat = 1.5
   /// レビューのポップアップ: 区分（余白 12 12 0・段の間 6・見出しの左右 2）、全体へのコメント欄（1 行のときの高さ 30——行の
   /// 高さ 20 と上下 5）とその箱（余白 5 12——欄の上下 5 と合わせて 10・角丸 9）、
   /// 未送信のコメントの行（高さ 26・間 10・左右の余白 8・角丸 6・見せる行の数 6）とその場所の札（左右の余白 6・角丸 4）、

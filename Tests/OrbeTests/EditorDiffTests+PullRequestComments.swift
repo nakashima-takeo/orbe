@@ -128,7 +128,7 @@ extension EditorDiffTests {
     let remote = Remote()
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(3))
+    layer.surface(surface, didMarkFrom: .document(3), to: .document(3))
     let draft = try XCTUnwrap(layer.draft(.new, line: 3))
     surface.replaceText(of: draft.field, with: "書きかけ")
     XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
@@ -157,12 +157,13 @@ extension EditorDiffTests {
     let (diff, surface) = try commentedDiff(remote)
     let zone = try XCTUnwrap(diff.comments?.zone(thread: "T"))
     pumpMain(until: { surface.rows.block(ofZone: ObjectIdentifier(zone)) != nil }, "スレッドが置かれる")
-    XCTAssertEqual(surface.rows.style(ofLine: 2), DiffStyle.addedThread)
+    XCTAssertEqual(surface.rows.style(ofLine: 2), DiffStyle.added)
+    XCTAssertEqual(surface.rows.lineSpan(ofLine: 2)?.override, DiffStyle.threadOverride)
     let spans = surface.rows.spans
     XCTAssertTrue(
-      spans.filter { $0.line < 4 }.allSatisfy(\.allowsTrailingMark), "4 行は全部が区間の前後 3 行に入る")
+      spans.filter { $0.line < 4 }.allSatisfy { $0.markGroup != nil }, "4 行は全部が区間の前後 3 行に入る")
     XCTAssertEqual(
-      spans.last { $0.line <= 4 }?.allowsTrailingMark, false, "改行の後の空の行は GitHub の diff に無い")
+      spans.last { $0.line <= 4 }?.markGroup, nil, "改行の後の空の行は GitHub の diff に無い")
   }
 
   /// 文脈の行の古い側と新しい側に付いたスレッドは同じ所に並び、側を問わず最初のコメントの時刻の順に上から置く。
@@ -217,7 +218,7 @@ extension EditorDiffTests {
     let window = try XCTUnwrap(surface.textView.window)
     window.makeFirstResponder(surface.textView)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(1))
+    layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
     let draft = try XCTUnwrap(layer.draft(.new, line: 1))
     XCTAssertEqual(surface.primary, .field(draft.field.id), "欄に焦点が入る")
     surface.replaceText(of: draft.field, with: "直す")
@@ -235,7 +236,7 @@ extension EditorDiffTests {
     let (diff, surface) = try commentedDiff(remote)
     let window = try XCTUnwrap(surface.textView.window)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .source(2))
+    layer.surface(surface, didMarkFrom: .source(2), to: .source(2))
     let draft = try XCTUnwrap(layer.draft(.old, line: 2), "削除行「three」の下に開く")
     surface.replaceText(of: draft.field, with: "消した行")
     draft.zone(.pressed(PrCommentControl.add))
@@ -246,7 +247,7 @@ extension EditorDiffTests {
 
     resize(window, width: Self.sideWidth)
     pumpMain(until: { diff.oldSurface != nil && layer.isSettled }, "並列の 2 面が揃う")
-    layer.surface(try engine(diff.oldSurface), didPressTrailingMarkOn: .document(1))
+    layer.surface(try engine(diff.oldSurface), didMarkFrom: .document(1), to: .document(1))
     XCTAssertNotNil(layer.draft(.old, line: 1), "左の面の行は古い側の行")
     XCTAssertNil(layer.draft(.new, line: 1))
   }
@@ -257,7 +258,7 @@ extension EditorDiffTests {
     remote.failure = .unreachable
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(0))
+    layer.surface(surface, didMarkFrom: .document(0), to: .document(0))
     let draft = try XCTUnwrap(layer.draft(.new, line: 0))
     surface.replaceText(of: draft.field, with: "残る")
     draft.zone(.pressed(PrCommentControl.add))
@@ -271,11 +272,11 @@ extension EditorDiffTests {
   func testAnEmptyDraftClosesWhenItLosesFocus() throws {
     let (diff, surface) = try commentedDiff(Remote())
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(0))
+    layer.surface(surface, didMarkFrom: .document(0), to: .document(0))
     surface.replaceText(of: try XCTUnwrap(layer.draft(.new, line: 0)).field, with: " \n")
     surface.selectedRange = NSRange(location: 0, length: 0)
     XCTAssertNil(layer.draft(.new, line: 0), "空白と改行だけの欄は閉じる")
-    layer.surface(surface, didPressTrailingMarkOn: .document(0))
+    layer.surface(surface, didMarkFrom: .document(0), to: .document(0))
     let draft = try XCTUnwrap(layer.draft(.new, line: 0))
     surface.replaceText(of: draft.field, with: "書きかけ")
     surface.selectedRange = NSRange(location: 0, length: 0)
@@ -325,8 +326,8 @@ extension EditorDiffTests {
       if case .lines(let lines) = content { lines } else { [] }
     }
     XCTAssertFalse(removed.isEmpty, "前提: 手元は rename として削除行を出す")
-    XCTAssertFalse(removed.contains(where: \.allowsTrailingMark))
-    XCTAssertTrue(surface.rows.spans.contains(where: \.allowsTrailingMark))
+    XCTAssertFalse(removed.contains { $0.markGroup != nil })
+    XCTAssertTrue(surface.rows.spans.contains { $0.markGroup != nil })
   }
 
   /// 新しいスレッドの書き込みの最中は欄が書き込みの最中の姿で、「レビューに追加」を 2 回押しても書き込みは 1 回。
@@ -335,7 +336,7 @@ extension EditorDiffTests {
     remote.holds = true
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(1))
+    layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
     let draft = try XCTUnwrap(layer.draft(.new, line: 1))
     surface.replaceText(of: draft.field, with: "一度だけ")
     draft.zone(.pressed(PrCommentControl.add))

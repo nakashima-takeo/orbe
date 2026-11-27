@@ -1,7 +1,7 @@
 import Foundation
 import OrbeEditorCore
 
-/// 縦の並びの中の位置・見えている範囲・行の右端の印を出せる行（→ `RowLayout`）。
+/// 縦の並びの中の位置・見えている範囲（→ `RowLayout`）。
 extension RowLayout {
   /// 文書の行 `line` の中で、位置 `column`（行頭からの描く単位）を含む段（→ `WrappedLine.segment`）。
   func segment(containing column: Int, line: Int, upstream: Bool = false) -> Int {
@@ -61,40 +61,4 @@ extension RowLayout {
       return unit(ofBlock: index) + (position - top(ofBlock: index)) / lineHeight
     }
   }
-
-  // MARK: - 行の右端の印
-
-  /// y にある、印を出せる行（`lineCount` 行の文書。出せない行なら nil）。
-  func trailingMarkSpot(atY y: Double, lineCount: Int) -> TrailingMarkSpot? {
-    guard hasTrailingMarks else { return nil }
-    switch item(atY: y) {
-    case .line(let line, _):
-      guard (0..<lineCount).contains(line), let span = span(containing: line),
-        spans[span].allowsTrailingMark
-      else { return nil }
-      return TrailingMarkSpot(
-        row: .document(line), line: .document(line), top: self.y(ofLine: line))
-    case .block(let index):
-      guard case .lines(let lines) = contents[index], !lines.isEmpty else { return nil }
-      let top = top(ofBlock: index)
-      let offset = min(max(0, Int(((y - top) / lineHeight).rounded(.down))), lines.count - 1)
-      guard lines[offset].allowsTrailingMark, let source = lines[offset].line else { return nil }
-      return TrailingMarkSpot(
-        row: .inserted(block: index, line: offset), line: .source(source),
-        top: top + Double(offset) * lineHeight)
-    }
-  }
-}
-
-/// 行の右端の印を描く行——文書の行か、塊 `block` の中の `line` 行目の差し込んだ行。
-enum TrailingMarkRow: Equatable, Sendable {
-  case document(Int)
-  case inserted(block: Int, line: Int)
-}
-
-/// 印を出せる行 1 つ——描く行・押下で知らせる行・行の上端（pt）。
-struct TrailingMarkSpot {
-  var row: TrailingMarkRow
-  var line: TrailingMarkLine
-  var top: Double
 }

@@ -71,27 +71,27 @@ extension FrameBuilder {
     }
   }
 
-  /// 行の右端の印——ポインタの下の、印を出せる行の右端（本文の区画の右端から距離を空けて）の、行の縦の中央に描く。印の
-  /// 画像は本文の字の上の層（`markImages`）に積む——当たりでも印が字より先に取るので、見えている順と押せる順を揃える。
-  func drawTrailingMark(_ source: Source, _ c: Context) {
-    guard let mark = source.material.trailingMark else { return }
+  /// 行の頭の印の絵——ポインタの下の、印を出せる行の頭の列の左右の中央、行の上端から行 1 つ分の高さの縦の中央に描く。
+  /// 絵の画像は行番号の列の切り取りの中の層（`markImages`）に積む。
+  func drawLeadingMark(_ source: Source, _ c: Context) {
+    guard let mark = source.material.leadingMark, let row = mark.hover, let look = mark.look,
+      let lead = c.arrangement.leadingMark?.width
+    else { return }
     let g = c.g
-    let s = g.scale
-    let top: Double
-    switch mark.row {
-    case .document(let row):
-      guard row < source.material.content?.text.lineCount ?? 0 else { return }
-      top = g.rowTop(row)
-    case .inserted(let block, let line):
+    switch row {
+    case .document(let line):
+      guard line < source.material.content?.text.lineCount ?? 0 else { return }
+    case .inserted(let block, _):
       guard block < g.rows.count else { return }
-      top = g.insertedTop(block: block, line: line)
     }
+    let s = g.scale
+    let top = g.extent(of: row).top
     drawPicture(
-      mark.look,
+      look,
       at: (
-        (g.textRight - Double(mark.inset + mark.size.width) * s).rounded(),
+        ((Double(lead) - Double(mark.size.width)) / 2 * s).rounded(),
         top + ((g.lineHeight - Double(mark.size.height) * s) / 2).rounded()
-      ), images: &markImages, source, c)
+      ), layer: .mark, source, c)
   }
 
   private func drawZone(
@@ -99,7 +99,7 @@ extension FrameBuilder {
   ) {
     let s = c.g.scale
     let left = c.g.column
-    drawPicture(zone, at: (left, top), images: &zoneImages, source, c)
+    drawPicture(zone, at: (left, top), layer: .zone, source, c)
     if let selection = source.material.zoneSelection, selection.zone == id {
       let ink = selection.focused ? c.palette.selection : c.palette.inactiveSelection
       for rect in selection.rects {
@@ -122,25 +122,30 @@ extension FrameBuilder {
     }
   }
 
-  /// 絵の箱・画像・字を、左上 `origin`（px）に置く（層ごとに、層の原点の分ずらす）。画像は `images`（画像の地図の頁ごと）に
-  /// 積む。
+  /// 絵の画像を積む層——絵の差し込みの画像（本文の区画の切り取りの中）か、行の頭の印の絵（行番号の列の切り取りの中）。
+  enum PictureLayer {
+    case zone, mark
+  }
+
+  /// 絵の箱・画像・字を、左上 `origin`（px）に置く（層ごとに、層の原点の分ずらす）。画像は層 `layer` の画像の列（画像の地図の
+  /// 頁ごと）に積み、その層の切り取りの横の範囲の外の画像は積まない。
   private func drawPicture(
-    _ zone: ZoneMaterial, at origin: (left: Double, top: Double),
-    images: inout [[GlyphInstance]], _ source: Source, _ c: Context
+    _ zone: ZoneMaterial, at origin: (left: Double, top: Double), layer: PictureLayer,
+    _ source: Source, _ c: Context
   ) {
     let s = c.g.scale
-    for (layerOrigin, layer) in zone.layers {
+    for (layerOrigin, part) in zone.layers {
       drawLayer(
-        layer,
+        part,
         at: (origin.left + Double(layerOrigin.x) * s, origin.top + Double(layerOrigin.y) * s),
-        images: &images, source, c)
+        into: layer, source, c)
     }
   }
 
   /// 層 1 つの箱・画像・字を、層の原点 `origin`（px）に置く。
   private func drawLayer(
-    _ layer: ZoneMaterial.Layer, at origin: (left: Double, top: Double),
-    images: inout [[GlyphInstance]], _ source: Source, _ c: Context
+    _ layer: ZoneMaterial.Layer, at origin: (left: Double, top: Double), into target: PictureLayer,
+    _ source: Source, _ c: Context
   ) {
     let (left, top) = origin
     let g = c.g
@@ -149,16 +154,20 @@ extension FrameBuilder {
     for image in layer.images {
       let x = (left + Double(image.frame.minX) * s).rounded()
       let y = (top + Double(image.frame.minY) * s).rounded()
-      // 画像は本文の区画の切り取りの中に描く。その外の画像は地図に入れない（見えている画像の場所を取らない）。
-      guard x < g.textRight, x + Double(image.pixels.width) > g.column, y < g.height,
+      // 画像は層の切り取りの中に描く。その外の画像は地図に入れない（見えている画像の場所を取らない）。
+      let columns = target == .zone ? g.column..<g.textRight : 0..<g.column
+      guard x < columns.upperBound, x + Double(image.pixels.width) > columns.lowerBound,
+        y < g.height,
         y + Double(image.pixels.height) > g.top,
         let entry = source.zones.images.entry(image.pixels)
       else { continue }
-      Self.append(
-        GlyphInstance(
-          position: SIMD2(Float(x), Float(y)), size: SIMD2(Float(entry.width), Float(entry.height)),
-          uv: SIMD2(Float(entry.x), Float(entry.y)), color: 0xFFFF_FFFF),
-        to: &images, page: entry.page)
+      let instance = GlyphInstance(
+        position: SIMD2(Float(x), Float(y)), size: SIMD2(Float(entry.width), Float(entry.height)),
+        uv: SIMD2(Float(entry.x), Float(entry.y)), color: 0xFFFF_FFFF)
+      switch target {
+      case .zone: Self.append(instance, to: &zoneImages, page: entry.page)
+      case .mark: Self.append(instance, to: &markImages, page: entry.page)
+      }
     }
     for run in layer.runs {
       let baseline = top + Double(run.origin.y) * s

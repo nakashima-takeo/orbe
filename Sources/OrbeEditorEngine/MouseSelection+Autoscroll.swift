@@ -4,8 +4,22 @@ import QuartzCore
 import simd
 
 /// ドラッグの自動スクロール——ドラッグが本文の上下左右の外へ出ている間、ポインタが止まっていても VS Code の速さの式で
-/// 刻みごとに送り、選択を伸ばし続ける（刻みは view の display link）。絵の差し込みの文の選択は上下にだけ送る。
+/// 刻みごとに送り、選択を伸ばし続ける（刻みは view の display link）。絵の差し込みの文の選択と、行の頭の印を引いて作る範囲は
+/// 上下にだけ送る。
 extension MouseSelection {
+  /// ドラッグが出ている本文の外の側と、外へ出た距離（pt）。
+  enum Edge {
+    case above(CGFloat)
+    case below(CGFloat)
+    case left(CGFloat)
+    case right(CGFloat)
+
+    var isAbove: Bool {
+      if case .above = self { return true }
+      return false
+    }
+  }
+
   func autoscroll(_ edge: Edge) {
     self.edge = edge
     guard link == nil, let view else { return }
@@ -56,14 +70,10 @@ extension MouseSelection {
     case .right(let distance): p.x += horizontal(distance)
     }
     p = simd_clamp(p, .zero, simd_max(limits.maximum, .zero))
-    if case .zoneText = drag {
-      let y = edge.isAbove ? surface.config.topInset : view.bounds.height - 0.5
-      surface.inputScope {
-        surface.transact(scrollTo: p) {
-          surface.extendZoneSelection(to: CGPoint(x: point.x, y: y), position: p)
-        }
-      }
-      return
+    switch drag {
+    case .zoneText, .leadingMark:
+      return extendVertically(edge, at: p, in: view)
+    default: break
     }
     let target: CGPoint
     let lineEnd: Bool?
@@ -85,6 +95,23 @@ extension MouseSelection {
     surface.inputScope {
       surface.transact(scrollTo: p) {
         extend(to: target, position: p, lineEnd: lineEnd, reveal: .none)
+      }
+    }
+  }
+
+  /// 縦にだけ送るドラッグ（絵の差し込みの文の選択・行の頭の印の範囲）を、位置 `p` へ送り、見えている上端か下端まで伸ばす。
+  /// スクロールと伸ばすのは 1 つの取引で置く。
+  private func extendVertically(_ edge: Edge, at p: SIMD2<Double>, in view: NSView) {
+    guard let surface else { return }
+    let y = edge.isAbove ? surface.config.topInset : view.bounds.height - 0.5
+    let target = CGPoint(x: point.x, y: y)
+    surface.inputScope {
+      surface.transact(scrollTo: p) {
+        if case .leadingMark = drag {
+          surface.extendLeadingMarkDrag(to: target, position: p)
+        } else {
+          surface.extendZoneSelection(to: target, position: p)
+        }
       }
     }
   }

@@ -156,7 +156,7 @@ extension MetalTextSurface {
     }
     if zoneImagesChanged {
       zoneImagesChanged = false
-      let marks = [trailingMarkLooks?.normal, trailingMarkLooks?.hovered].compactMap { $0 }
+      let marks = [leadingMarkLook].compactMap { $0 }
       painter.keep(images: Set((zones.values.map(\.material) + marks).flatMap(\.pixelKeys)))
     }
   }
@@ -214,13 +214,13 @@ extension MetalTextSurface {
 
   // MARK: - 押せる場所のホバー
 
-  /// ポインタ（view の座標。view の外なら nil）の下の行へ行の右端の印を、押せる場所へホバーを移し、押せる場所の出入りを
+  /// ポインタ（view の座標。view の外なら nil）の下の行へ行の頭の印を、押せる場所へホバーを移し、押せる場所の出入りを
   /// 載せる側へ知らせる。移す間に起きた確定はポインタを引き直さない（今のポインタで引いている最中なので）。
   func hover(at point: CGPoint?) {
     guard !hovering else { return }
     hovering = true
     defer { hovering = false }
-    hoverTrailingMark(at: point)
+    hoverLeadingMark(at: point)
     var next: HoveredButton?
     if let point, case .button(let entry, let button) = target(at: point) {
       next = HoveredButton(zone: ObjectIdentifier(entry.zone), id: button.id)
@@ -235,7 +235,7 @@ extension MetalTextSurface {
   /// 窓の今のポインタの位置でホバーとポインタの形を引き直す（スクロール・並び・載せる側が描いた絵が変わり、押せる場所が
   /// ポインタの下を動いた）。
   func refreshPointer() {
-    guard rows.hasZones || hoveredButton != nil || showsTrailingMarks || trailingMarkHover != nil
+    guard rows.hasZones || hoveredButton != nil || showsLeadingMarks || leadingMarkHover != nil
     else { return }
     textView.refreshPointer()
   }

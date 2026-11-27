@@ -56,7 +56,7 @@ final class GitRepoHunkLinesTests: OrbeTestCase {
 
     XCTAssertEqual(
       hunkLines(base, head, "a.txt"),
-      GitDiffHunkLines(old: [7...13, 27...33], new: [7...13, 27...33]))
+      GitDiffHunkLines(hunks: [.init(old: 7..<14, new: 7..<14), .init(old: 27..<34, new: 27..<34)]))
   }
 
   /// 追加だけのファイルは新しい側の全行、削除だけのファイルは古い側の全行。行の追加は、新しい側だけ行が増える。
@@ -67,9 +67,12 @@ final class GitRepoHunkLinesTests: OrbeTestCase {
       "grow.txt": Self.lines(1...10, replacing: [5: "line 5\ninserted"]),
     ])
 
-    XCTAssertEqual(hunkLines(base, head, "new.txt"), GitDiffHunkLines(old: [], new: [1...4]))
-    XCTAssertEqual(hunkLines(base, head, "gone.txt"), GitDiffHunkLines(old: [1...5], new: []))
-    XCTAssertEqual(hunkLines(base, head, "grow.txt"), GitDiffHunkLines(old: [3...8], new: [3...9]))
+    XCTAssertEqual(
+      hunkLines(base, head, "new.txt"), GitDiffHunkLines(hunks: [.init(old: 0..<0, new: 1..<5)]))
+    XCTAssertEqual(
+      hunkLines(base, head, "gone.txt"), GitDiffHunkLines(hunks: [.init(old: 1..<6, new: 0..<0)]))
+    XCTAssertEqual(
+      hunkLines(base, head, "grow.txt"), GitDiffHunkLines(hunks: [.init(old: 3..<9, new: 3..<10)]))
   }
 
   /// rename は元のパスの版と比べる。末尾に改行の無い行の変更も、行の数え方は変わらない。
@@ -81,7 +84,7 @@ final class GitRepoHunkLinesTests: OrbeTestCase {
 
     XCTAssertEqual(
       hunkLines(base, head, "new.txt", from: "old.txt"),
-      GitDiffHunkLines(old: [18...20], new: [18...21]))
+      GitDiffHunkLines(hunks: [.init(old: 18..<21, new: 18..<22)]))
   }
 
   private struct ShapedChanges {
@@ -112,9 +115,11 @@ final class GitRepoHunkLinesTests: OrbeTestCase {
     return ShapedChanges(
       base: base, head: head,
       answers: [
-        "a.txt": GitDiffHunkLines(old: [7...13, 17...23], new: [7...13, 17...23]),
-        "slide.txt": GitDiffHunkLines(old: [5...10], new: [5...11]),
-        "anchor.txt": GitDiffHunkLines(old: [3...11], new: [3...14]),
+        "a.txt": GitDiffHunkLines(hunks: [
+          .init(old: 7..<14, new: 7..<14), .init(old: 17..<24, new: 17..<24),
+        ]),
+        "slide.txt": GitDiffHunkLines(hunks: [.init(old: 5..<11, new: 5..<12)]),
+        "anchor.txt": GitDiffHunkLines(hunks: [.init(old: 3..<12, new: 3..<15)]),
       ]
     )
   }
@@ -171,7 +176,8 @@ final class GitRepoHunkLinesTests: OrbeTestCase {
       "b.txt": Self.lines(1...3, replacing: [3: "y"]),
     ])
 
-    XCTAssertEqual(hunkLines(base, head, "*.txt"), GitDiffHunkLines(old: [1...3], new: [1...3]))
+    XCTAssertEqual(
+      hunkLines(base, head, "*.txt"), GitDiffHunkLines(hunks: [.init(old: 1..<4, new: 1..<4)]))
   }
 
   /// 手元に無いコミットは読めない。

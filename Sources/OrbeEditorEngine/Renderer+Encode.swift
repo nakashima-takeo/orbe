@@ -105,7 +105,8 @@ extension Renderer {
   /// 絵の差し込みの箱（影 → 塗り → 枠線。影は行番号の列にも落ち、行番号と印がその上に出る）、本文の列に切り取って
   /// 絵の差し込みの画像 → 絵の差し込みの文の選択の地 → 本文の字と長い行の「ほか N 字」と絵の差し込みの字 → 色付きの
   /// 字（絵文字など）、絵の差し込みの入力欄ごとにその矩形と本文の列の交わりに切り取って 入力欄の選択と未確定の
-  /// 地 → 字 → 色付きの字 → 下線とキャレット、行番号の列に切り取って 行番号 → git の印、本文の列に切り取って
+  /// 地 → 字 → 色付きの字 → 下線とキャレット、行番号の列に切り取って 行番号 → git の印と行の頭の線 → 行の頭の印の絵、
+  /// 本文の列に切り取って
   /// 未確定の文字の下線・キャレット・落とす位置の印、面の全体で 影（上端・ミニマップの左）→ ミニマップ
   /// （字 → 装飾）→ 俯瞰の図形（縦スクロールバーの印 → 縁 → ミニマップの帯・縦横のつまみ）。地は描かない（透明に
   /// 消し、下の地を透かす）。ミニマップの装飾は先に画面外の 1 枚に描き、組として不透明度 .9 で重ねる（重なる装飾が
@@ -151,7 +152,6 @@ extension Renderer {
     instances.shapes(built.zoneSelectionShapes, encoder, pass)
     instances.glyphs(built.text, pass.atlas.monoPages, pass.pipelines.mono, encoder)
     instances.glyphs(built.color, pass.atlas.colorPages, pass.pipelines.color, encoder)
-    instances.glyphs(built.markImages, pass.images, pass.pipelines.color, encoder)
     for field in built.fieldLayers {
       encoder.setScissorRect(field.scissor)
       instances.shapes(field.overlays.under, encoder, pass)
@@ -162,6 +162,7 @@ extension Renderer {
     encoder.setScissorRect(built.gutterScissor)
     instances.glyphs(built.gutter, pass.atlas.monoPages, pass.pipelines.mono, encoder)
     instances.shapes(built.shapes, encoder, pass)
+    instances.glyphs(built.markImages, pass.images, pass.pipelines.color, encoder)
     encoder.setScissorRect(built.textScissor)
     instances.shapes(built.overlays.over, encoder, pass)
     let whole = MTLScissorRect(x: 0, y: 0, width: texture.width, height: texture.height)

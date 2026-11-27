@@ -15,7 +15,7 @@ extension EditorDiff {
     case .inline:
       var rows = DiffRows.inline(hunks, new: newSide, notes: notes)
       rows.source = old
-      rows.trailingMarkTarget = comments
+      rows.leadingMarkTarget = comments
       look(
         comments == nil ? DiffStyle.inline : DiffStyle.pullRequestInline, rows,
         absent: newSide.isAbsent
@@ -23,8 +23,8 @@ extension EditorDiff {
       comments?.place(old: nil, new: surface)
     case .side:
       var rows = DiffRows.side(hunks, old: oldSide, new: newSide, notes: notes)
-      rows.left.trailingMarkTarget = comments
-      rows.right.trailingMarkTarget = comments
+      rows.left.leadingMarkTarget = comments
+      rows.right.leadingMarkTarget = comments
       let presentation = comments == nil ? DiffStyle.side : DiffStyle.pullRequestSide
       let left = oldSurface ?? makeOldSurface()
       if let left {

@@ -39,13 +39,13 @@ final class PrCommentPlacementTests: OrbeTestCase {
 
     let current = PullRequestState.DiffEnds(mergeBase: "B", head: "H2", renames: [:])
     let shown = EditorDiff.SideTexts(old: base, new: "zero\n" + base)
-    kept.follow(current, shown: shown, commentable: ([], [0..<5])) {}
+    kept.follow(current, shown: shown, commentable: Self.hunks(new: 0..<5)) {}
     XCTAssertTrue(kept.zone.canSend)
     XCTAssertFalse(kept.isGone)
 
     let outside = placement(line: 3)
     follow(outside, to: "H2", "zero\n" + base)
-    outside.follow(current, shown: shown, commentable: ([], [0..<2])) {}
+    outside.follow(current, shown: shown, commentable: Self.hunks(new: 0..<2)) {}
     XCTAssertTrue(outside.isGone, "印を出せない行は無くなったとする")
   }
 
@@ -68,10 +68,15 @@ final class PrCommentPlacementTests: OrbeTestCase {
     follow(placement, to: "H3", base)
     placement.follow(
       PullRequestState.DiffEnds(mergeBase: "B", head: "H3", renames: [:]),
-      shown: EditorDiff.SideTexts(old: base, new: base), commentable: ([], [0..<4])
+      shown: EditorDiff.SideTexts(old: base, new: base), commentable: Self.hunks(new: 0..<4)
     ) {}
     XCTAssertEqual(placement.line, 2)
     XCTAssertFalse(placement.isGone)
     XCTAssertTrue(placement.zone.canSend)
+  }
+
+  /// 新しい側の行 `new` だけのまとまり 1 つ。
+  private static func hunks(new: Range<Int>) -> DiffRows.CommentHunks {
+    DiffRows.CommentHunks(items: [.init(old: 0..<0, new: new)])
   }
 }
