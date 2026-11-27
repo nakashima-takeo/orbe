@@ -75,11 +75,12 @@ final class LineWrapTests: XCTestCase {
     XCTAssertEqual(deep?.indent, 0)
   }
 
-  /// 前の折り返しを引き継いで決め直した段は、行の頭から決めた段と同じ——語・和文・タブ・結合文字・絵文字・行頭の空白を
-  /// 含む行の、どこを編集しても（打ち切った行の末尾で打っても）。
+  /// 前の折り返しを引き継いで決め直した段は、行の頭から決めた段と同じ——語・和文・タブ・結合文字・絵文字・行頭の空白・
+  /// 書式文字の箱・U+FFFC を含む行の、どこを編集しても（打ち切った行の末尾で打っても）。
   func testResumingMatchesWrappingFromTheStart() {
     let pieces = [
       "word ", "語", "、", "（", "）", "\t", "e\u{301}", "😀", "👩‍💻", "  ", "x", "longidentifier", "。",
+      "\u{202E}", "\u{200E}", "\u{FFFC}",
     ]
     var generator = SplitMix(seed: 11)
     for columns in [13.0, 40] {
@@ -129,7 +130,7 @@ final class LineWrapTests: XCTestCase {
       String(repeating: "※記号★と◐、全角の（括弧）と ① を含む。", count: 6),
       String(repeating: "\tタブ\tを\t含む\t行 ", count: 8),
       String(repeating: "longidentifier_", count: 20),
-      String(repeating: "abc\u{202E}def\u{200E} ", count: 12),
+      String(repeating: "abc\u{202E}def\u{FFFC}\u{200E} ", count: 12),
     ]
     for columns in [17.0, 40, 63.5] {
       let metrics = metrics(columns: columns)
