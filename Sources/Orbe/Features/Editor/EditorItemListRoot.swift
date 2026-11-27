@@ -59,6 +59,23 @@ struct EditorItemListRoot: View {
   }
 }
 
+/// 一覧の器の行の列を SwiftUI に載せる。行の版・選択・字体は器が自分で行の列へ写すので、ここは載せて大きさを渡すだけ
+/// （`RowListHost` は持ち主から読んだ値で列を更新するので使わない）。行の列は 1 つの器に 1 本で、載せる場所も 1 つ。
+struct EditorItemListRowListHost: NSViewRepresentable {
+  let itemList: EditorItemList
+
+  func makeNSView(context: Context) -> RowList<EditorItemListSource> { itemList.list }
+
+  /// 与えられた大きさを埋める（AppKit の自動レイアウトで測らせない）。
+  func sizeThatFits(
+    _ proposal: ProposedViewSize, nsView: RowList<EditorItemListSource>, context: Context
+  ) -> CGSize? {
+    proposal.replacingUnspecifiedDimensions()
+  }
+
+  func updateNSView(_ list: RowList<EditorItemListSource>, context: Context) {}
+}
+
 /// 一覧の器の host。押してもフォーカスを取らない。影の余白の上の押下は受けず、下の view へ通す（一覧の矩形の中の押下は
 /// 受けて、何もしない）。
 final class EditorItemListHost: NSHostingView<EditorItemListRoot> {

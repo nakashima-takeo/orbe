@@ -735,10 +735,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorScmStaged
   case editorScmChanges
   case editorScmGraph
-  case editorScmPlaceholderBranch
   case editorScmPlaceholder
   case editorScmCommit
+  case editorScmStagedDetail
+  case editorScmCommitWithStaged
   case editorScmSync
+  case editorScmSyncUpstreamGone
   case editorScmPublish
   case editorScmMoreActions
   case editorScmCommitActions
@@ -774,9 +776,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorScmDiscardTitleOne
   case editorScmDiscardTitleOther
   case editorScmDiscardMessage
+  case editorScmDiscardMessageWithTrash
   case editorScmDiscardToTrashOne
   case editorScmDiscardToTrashOther
   case editorScmDiscardConfirm
+  case editorScmFailureCard
   case editorScmFailureAuthentication
   case editorScmFailureHostKey
   case editorScmFailurePushRejected
@@ -785,6 +789,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorScmFailureDetached
   case editorScmFailureUndoDetached
   case editorScmFailureNoUpstream
+  case editorScmFailureUpstreamGone
   case editorScmFailureNoPushDestination
   case editorScmFailureHeadPushed
   case editorScmFailureShallow

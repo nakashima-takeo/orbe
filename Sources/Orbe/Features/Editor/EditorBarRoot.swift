@@ -14,8 +14,10 @@ struct EditorBarRoot: View {
   let sidebar: EditorSidebarState
   /// 一覧の器（開閉の持ち主。開いている間は今の項目のボタンを開いている姿にする）。
   let itemList: EditorItemList
-  /// Changes の件数の持ち主。
+  /// Changes の件数・ブランチ・同期の持ち主。
   let scm: ScmPanel
+  /// コミットのポップアップの持ち主（Changes の右端の「コミット」が開閉に使う）。
+  let commitPopup: ScmCommitPopup
   /// PR の番号の持ち主（worktree の今の PR）。
   let pullRequest: BranchPullRequest
   /// PR の画面の面ごとの状態（PR の札・再読込・「GitHub で開く」が読む）。

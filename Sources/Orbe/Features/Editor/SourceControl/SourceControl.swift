@@ -74,11 +74,11 @@ final class SourceControl {
     fileprivate(set) var step: Step
     /// 実際に走っている（順番待ちを抜けた）。裏の fetch に譲って待つ間も、走っている。
     fileprivate(set) var isRunning = false
-    /// 走り始めて（譲る待ちを含む）から帯に出す遅れを越えた。
+    /// 走り始めて（譲る待ちを含む）から実行中の札に出す遅れを越えた。
     fileprivate(set) var isLong = false
     /// git の進捗の最新の行（push / pull / fetch の段だけ。git の語のまま）。
     fileprivate(set) var progress: String?
-    /// 走り始めた順（帯は一番新しいものを出す）。
+    /// 走り始めた順（実行中の札は一番新しいものを出す）。
     @ObservationIgnored fileprivate(set) var order = 0
     /// 今の段の止める手。
     @ObservationIgnored fileprivate var write: RootFiles.Write?
@@ -147,7 +147,7 @@ final class SourceControl {
     case pushDuringRewrite
   }
 
-  /// 走り始めてから帯に出すまでの遅れ（短い操作で帯が点滅しない）。
+  /// 走り始めてから実行中の札に出すまでの遅れ（短い操作で札が点滅しない）。
   static let longAfter: TimeInterval = 0.3
 
   let root: String
@@ -182,8 +182,8 @@ final class SourceControl {
   /// コミットの段（コミット・amend・取り消し・コミットしてプッシュのコミットの段）が列にある。
   var isCommitting: Bool { operations.contains { $0.step.isCommit } }
 
-  /// 帯に出す操作——遅れを越えて実際に走っている操作のうち、一番新しく走り始めたもの。順番待ちの操作は出さない。
-  var bandOperation: Operation? {
+  /// 実行中の札に出す操作——遅れを越えて実際に走っている操作のうち、一番新しく走り始めたもの。順番待ちの操作は出さない。
+  var cardOperation: Operation? {
     operations.filter { $0.isRunning && $0.isLong }.max { $0.order < $1.order }
   }
 
@@ -194,6 +194,12 @@ final class SourceControl {
 
   func removeObserver(_ observer: SourceControlObserver) {
     observers.removeAll { $0.value == nil || $0.value === observer }
+  }
+
+  /// 最後の失敗を消す（失敗の札の ×）。最後の失敗は人が起こした操作 1 回の結果なので、
+  /// 消せば同じ失敗は出ず、次に起きた失敗はまた出る。
+  func clearFailure() {
+    failure = nil
   }
 
   // MARK: - 列（`SourceControl+Operations` が使う）
@@ -222,7 +228,7 @@ final class SourceControl {
     return nil
   }
 
-  /// 段の書き込みを操作に結ぶ。走り始めたら帯の遅れを数え始め、進捗の行は段ごとに消す。
+  /// 段の書き込みを操作に結ぶ。走り始めたら札に出す遅れを数え始め、進捗の行は段ごとに消す。
   func attach(_ write: RootFiles.Write, step: Step, to operation: Operation) {
     operation.step = step
     operation.write = write
@@ -234,7 +240,7 @@ final class SourceControl {
   }
 
   /// 人のネット操作が、ネットの段 `step` の前で、走っている裏の fetch の終わりを待ち始めた。待つのは、人の操作を走らせる
-  /// ための一部なので、その段を走っている操作として帯に出す——塞いでいる裏の fetch は見せず、人には止められない。止める手は
+  /// ための一部なので、その段を走っている操作として実行中の札に出す——塞いでいる裏の fetch は見せず、人には止められない。止める手は
   /// `withdraw`。
   func beginYielding(_ operation: Operation, before step: Step, withdraw: @escaping () -> Void) {
     operation.step = step
@@ -244,8 +250,8 @@ final class SourceControl {
     if !operation.isRunning { begin(operation) }
   }
 
-  /// 譲る待ちが明けた。段を結ぶ前に、走っている扱いを解く——段が順番待ちに入れば、帯は塞いでいる操作を出す。
-  /// 帯に出す遅れはもう越えていれば、越えたままにする（走り始めたその場で帯に戻り、点滅しない）。
+  /// 譲る待ちが明けた。段を結ぶ前に、走っている扱いを解く——段が順番待ちに入れば、実行中の札は塞いでいる操作を出す。
+  /// 札に出す遅れはもう越えていれば、越えたままにする（走り始めたその場で札に戻り、点滅しない）。
   func endYielding(_ operation: Operation) {
     operation.withdraw = nil
     operation.isRunning = false

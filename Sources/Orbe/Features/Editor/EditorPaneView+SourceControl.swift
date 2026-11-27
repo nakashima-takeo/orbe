@@ -1,9 +1,17 @@
 import AppKit
 import OrbeEditorCore
 
-/// ソース管理パネルの結線——行から diff・ファイルを開く・破棄の確認・親を畳むときの焦点・パネルの中のキー（メッセージ欄の
-/// ⌘↵・列の ⌘↑）。
+/// ソース管理パネルの結線——行から diff・ファイルを開く・破棄の確認・親を畳むときの焦点・列の ⌘↑（コミットのポップアップを
+/// 開く）。
 extension EditorPaneView {
+  static func scmList(_ scm: ScmPanel) -> RowList<ScmListSource> {
+    RowList(source: ScmListSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
+  }
+
+  static func scmGraphList(_ scm: ScmPanel) -> RowList<ScmGraphSource> {
+    RowList(source: ScmGraphSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
+  }
+
   func wireSourceControl() {
     scm.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
     scm.onChangesDidApply = { [weak self] emptied in self?.changesDidApply(emptied: emptied) }
@@ -15,6 +23,8 @@ extension EditorPaneView {
       reclaimSidebarFocus()
     }
     scm.autoFetchEnabled = { [weak self] in self?.settings()[SettingKeys.scmAutoFetch] ?? false }
+    commitPopup.language = { [weak self] in self?.localization.language ?? .systemDefault }
+    commitPopup.menuDidClose = { [weak self] dismissal in self?.containerDidClose(dismissal) }
   }
 
   /// ソース管理の件数と行の組が差し替わった。件数が 1 以上から 0 になったら Changes の diff を閉じ、本体の diff を整合させ、
@@ -33,10 +43,9 @@ extension EditorPaneView {
   /// ソース管理パネルが見えている（左の列が開いていて、ソース管理のパネルを出している）。
   var showsSourceControl: Bool { sidebar.isOpen && shell.panel == .sourceControl }
 
-  /// 焦点がソース管理パネルの中（メッセージ欄か列。列のために面が預かっている焦点を含む）にあるか。
+  /// 焦点がソース管理パネルの変更の列（列のために面が預かっている焦点を含む）にあるか。
   var focusIsInSourceControl: Bool {
-    showsSourceControl && focusIsInSidebar
-      && (scm.focusedArea != nil || heldListFocus == .changes)
+    showsSourceControl && focusIsInSidebar && (scm.isListFocused || heldListFocus == .changes)
   }
 
   /// 行の diff を開き、その種類の画面（作業ツリー・ステージ済みは Changes、PR は PR）を選ぶ。開けなければ beep し、画面を
@@ -57,42 +66,28 @@ extension EditorPaneView {
     }
   }
 
-  /// 破棄。戻すパスを含めば確認のシートを出し、確認した中身（見えていた行と行き先）をそのまま渡す（応答までに status が
-  /// 変わっても、根のサービスが呼んだ時点の index で選び直し、見えていた行き先と違えば断る）。ゴミ箱へ移すものだけなら
+  /// 破棄。戻すパスを含めば面の中の確認を出し、「破棄」で、確認した中身（見えていた行と行き先）をそのまま渡す（確定までに
+  /// status が変わっても、根のサービスが呼んだ時点の index で選び直し、見えていた行き先と違えば断る）。ゴミ箱へ移すものだけなら
   /// そのまま。
   func confirmDiscard(_ files: [ScmChanges.File]) {
     let scm = self.scm
     let content = ScmDiscardGate.content(files)
-    guard ScmDiscardGate.needsConfirmation(files), let window else {
+    guard ScmDiscardGate.needsConfirmation(files) else {
       scm.discard(content)
       return
     }
-    let alert = ScmDiscardGate.alert(files, language: localization.language)
-    alert.beginSheetModal(for: window) { response in
-      if ScmDiscardGate.shouldDiscard(response) { scm.discard(content) }
+    confirm.show(ScmDiscardGate.confirmation(files, language: localization.language)) {
+      scm.discard(content)
     }
   }
 
-  /// ソース管理パネルの中のキー（メッセージ欄の ⌘↵・列の ⌘↑）。扱ったら true。
-  ///
-  /// ⌘↵ はコミットしてプッシュ——ボタンが同期・公開に替わっていても同期・公開は起こさず、押せなければ音で断る。変換中なら
-  /// 確定してから働く（押した時点の写しが確定する。chrome キーと同じ規則）。押し続けたキーリピートは食って何もしない。
+  /// 変更の列の ⌘↑——どの行を選んでいても、何も選んでいなくても、コミットのポップアップを開く（開いていれば何もしない）。
+  /// 扱ったら true。
   func handleSourceControlKey(_ event: NSEvent) -> Bool {
-    guard focusIsInSourceControl else { return false }
+    guard focusIsInSourceControl, scm.isListFocused else { return false }
     let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
-    guard flags == [.command] else { return false }
-    switch event.specialKey {
-    case .carriageReturn?, .enter?, .newline?:
-      guard scm.focusedArea == .message else { return false }
-      if event.isARepeat { return true }
-      scm.commitFromMessage(andPush: true)
-      return true
-    case .upArrow?:
-      guard scm.focusedArea == .list else { return false }
-      scm.returnToMessageIfAtTop()
-      return true
-    default:
-      return false
-    }
+    guard flags == [.command], event.specialKey == .upArrow else { return false }
+    commitPopup.open()
+    return true
   }
 }

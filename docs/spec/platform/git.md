@@ -1,7 +1,7 @@
 ---
 title: git 実行
-description: git CLI を起動する共通基盤。並ばない実行・対話の封じ・打ち切りと止める手・出力の読み方・流しながら読む実行・利用者の書き込みとリモートの失敗の分類・コミットを指定した fetch・観測・版の本文・コミットの間の関係と diff の区間の行・コミットグラフ・プロジェクト検索の grep
-updated: 2026-11-20
+description: git CLI を起動する共通基盤。並ばない実行・対話の封じ・打ち切りと止める手・出力の読み方・流しながら読む実行・利用者の書き込みとリモートの失敗の分類・コミットを指定した fetch・観測・版の本文・コミットの間の関係と diff の区間の行・コミットグラフ・ステージ済みの行数・プロジェクト検索の grep
+updated: 2026-11-26
 ---
 
 # git 実行
@@ -83,7 +83,7 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 
 fetch・pull・push（コミットを指定した fetch を除く）は進捗の行（git の語のまま。割合への換算や訳はしない）を届いた順に渡す。失敗は分類を持ち、分類できない失敗は「その他」（git の実質の理由）に倒す——誤分類より安全。
 
-- **前提は本体の git を起こす前に判定する**: merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の pull・push →「ブランチに居ない」、upstream の無いブランチの pull →「upstream が無い」、upstream も push 先の設定も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と、push 先の解決と remote の一覧と、止まった操作の管理エントリ。pull は止まった操作を先に見る——rebase の途中は HEAD が detached で upstream も無いので、逆の順では「ブランチに居ない」「upstream が無い」に化ける。
+- **前提は本体の git を起こす前に判定する**: merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の pull・push →「ブランチに居ない」、upstream の無いブランチの pull →「upstream が無い」、upstream の ref が手元に無い（リモートのブランチが消され、prune 付きの fetch で追跡の ref も消えた）ブランチの pull →「upstream がリモートに無い」、upstream も push 先の設定も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と、push 先の解決と remote の一覧と、止まった操作の管理エントリ。pull は止まった操作を先に見る——rebase の途中は HEAD が detached で upstream も無いので、逆の順では「ブランチに居ない」「upstream が無い」に化ける。
 - **push の拒否**は `--porcelain` の機械向けの行で読む——送れなかった ref がどれも `[rejected] (fetch first)`・`[rejected] (non-fast-forward)` なら「拒否された（先に取り込みが要る）」。それ以外の行があれば（サーバの hook・保護ブランチが拒んだ `[remote rejected]`・取り込んでも直らない `[rejected] (already exists)` など）「断られた」で、送れなかった ref とその要約（`(pre-receive hook declined)` 等）を理由の頭に置く——`--porcelain` では要約が機械向けの行へ移り、stderr には「送れなかった」としか残らないため。「断られた」はリモートと話せたことも示す（自動 fetch の止まりを解く → [editor/source-control](../editor/source-control.md)）。送れなかった ref の行が無い失敗は「その他」。
 - **競合**は「pull の前に無かった止まった操作が、後に在る」で読む（stderr の字面で読まない）。
 - **認証**（ssh の `Permission denied (publickey`、https の `Authentication failed`・`could not read Username`・`terminal prompts disabled`）と**ホスト鍵**（`Host key verification failed`）だけは stderr の字面で読む。git も ssh もそれを機械向けの形で出さない。
@@ -110,6 +110,10 @@ diff の差分は git diff の出力でなくプロセス内で計算するの�
 範囲は HEAD と、在れば upstream。件数を区切って読み、その先があるかも返す（続きの読み方は面の側が持つ → [editor/source-control](../editor/source-control.md)）。各コミットについて題（UTF-8 として読めないバイトは置き換えて読む——encoding ヘッダの無い古い非 UTF-8 の題を無題にしない）・指している local / remote 追跡のブランチ名（`<remote>/HEAD` は含まない）・push 済みか（どれかの remote 追跡ブランチから届くか）が読める。書式は明示し、署名の表示・色・出力の文字コードを封じる（`log.showSignature` 等で出力が変わらない）。ブランチ名は装飾の文字列を割らずに ref から別に引く。push 済みかは、表示する分から remote 追跡ブランチに届かない分を引いて決める——手間は表示する分と未 push の分に比例し、履歴全体を歩かない。remote 追跡ブランチが 1 本も無ければ git を起こさず全部「未 push」。
 
 HEAD の push 済みは、同じ定義で HEAD 1 件だけを読む（グラフを通さない）——HEAD のコミットを解決し、そこから remote 追跡ブランチに届かないコミットがあるかを問う。手間は HEAD と remote 追跡ブランチの分かれ目より新しい分（未 push の分と、remote 側で先に進んだ分）に比例し、グラフの並べ替えの手間を払わない。amend・取り消しの直前の照らしも同じ読みを使う。
+
+## ステージ済みの行数
+
+index と HEAD の差の、追加と削除の行数を、それぞれ全ファイルで足して返す（初回コミット前は空のツリーとの差。Changes の上のバーの「コミット」の添え書き → [editor/source-control](../editor/source-control.md)）。機械向けの行数の出力（`diff --cached --numstat`）を行ごとに読み、先頭の 2 つの欄を足す。バイナリのファイルは 0 行、rename しただけのファイルも 0 行と数える。数が利用者の設定で変わらないよう、rename の検出・アルゴリズム（myers）・サブモジュールの扱い（`diff.ignoreSubmodules`・`.gitmodules` の ignore に依らない）を明示し、外部 diff・textconv・色を使わせず、`diff.relative` に依らず worktree の全体を数える。読めなければ「読めない」で返る。
 
 ## プロジェクト検索の grep
 

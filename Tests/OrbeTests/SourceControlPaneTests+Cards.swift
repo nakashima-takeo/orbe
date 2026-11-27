@@ -1,0 +1,161 @@
+import AppKit
+import OrbeTestSupport
+import XCTest
+
+@testable import Orbe
+
+/// Changes の画面の、上のバーの右下の置き場の札（実 git）——最後の失敗は失敗の札に出て、× で消える。コミットのポップアップを
+/// 開いたまま走り続けるコミットは、ポップアップの下の実行中の札に出て「止める」で止まる。コミットの失敗は、ポップアップが
+/// 開いている間は失敗の札に重ねて出ず、閉じている間は失敗の札に出る。
+///
+/// 壊れると何が起きるか。プル・プッシュの失敗が画面に出ず、通ったと思い込む。× を押しても失敗の札が消えない。コミットを
+/// 始めた時点でポップアップが閉じ、返らない hook のコミットをポップアップの下で止められない。コミットの失敗が、ポップアップの
+/// 赤い行と失敗の札の両方に出る。ポップアップを閉じている間のコミットの失敗がどこにも出ない。本体が差分を見せている間、
+/// 札が差分の見出しの帯を覆い、帯の「ファイルを開く」が押せない。
+extension SourceControlPaneTests {
+  /// 置き場に並ぶ物（ポップアップと札）の枠。置き場の座標で、上から並ぶ順。
+  func dockItemFrames(_ hosted: Hosted) -> [CGRect] {
+    hosted.pane.layoutSubtreeIfNeeded()
+    flush(hosted.window)
+    return hosted.pane.dockHost.itemFrames
+  }
+
+  /// 最後の失敗（upstream の無いブランチのプル）は失敗の札に出て、× で消える。
+  func testAFailureShowsTheFailureCardAndItsCloseClearsIt() throws {
+    let repo = try TempGitRepo()
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["branch", "--unset-upstream"]).isSuccess)
+    let hosted = host(repo)
+    let control = hosted.scm.control
+    let dock = hosted.pane.dockHost
+    hosted.pane.popup.close(.escape)
+    placeOffscreen(hosted.window)
+    pumpMain(until: { hosted.scm.branch != nil && hosted.scm.branch?.upstream == nil }, "ブランチ")
+
+    control.pull()
+    pumpMain(until: { control.failure != nil }, "プルの失敗")
+    let card = try XCTUnwrap(dockItemFrames(hosted).first, "失敗が立った時点で、失敗の札が出ている")
+
+    // × は札の右上の角から余白の内側に在る。
+    let inset = Theme.Layout.editorCardClosePad + Theme.Layout.editorCardClose / 2
+    try click(
+      dock,
+      at: NSPoint(x: card.maxX - inset, y: dock.isFlipped ? card.minY + inset : card.maxY - inset))
+    pumpMain(until: { control.failure == nil }, "× で最後の失敗が消える")
+  }
+
+  /// ポップアップを開いたまま返らない hook でコミットが走り続けると、ポップアップの下に実行中の札が出て、その「止める」で
+  /// 止まる。
+  func testALongRunningCommitShowsTheRunningCardBelowThePopupAndItsStopStopsIt() throws {
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "edited\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    let hang = try GitHangFixture()
+    try hang.installScript("pre-commit", body: hang.waitingBody)
+    XCTAssertTrue(repo.git(["config", "core.hooksPath", hang.dir.path]).isSuccess)
+    let hosted = host(repo)
+    let control = hosted.scm.control
+    placeOffscreen(hosted.window)
+    pumpMain(until: { hosted.scm.changes.staged.count == 1 }, "ステージ済みの行")
+
+    control.message = "wip"
+    hosted.scm.commitSnapshot().commit()
+    XCTAssertTrue(hang.pumpUntilHung(), "前提: hook が返らない")
+    pumpMain(until: { self.dockItemFrames(hosted).count == 2 }, "ポップアップと実行中の札")
+    let card = try XCTUnwrap(dockItemFrames(hosted).last, "実行中の札はポップアップの下")
+    XCTAssertTrue(hosted.pane.popup.isOpen, "走っている間もポップアップは開いたまま")
+
+    // 「止める」は札の右端に、札の右の余白を残して置かれる。
+    try click(
+      hosted.pane.dockHost,
+      at: NSPoint(x: card.maxX - Theme.Layout.editorRunningPadTrailing - 4, y: card.midY))
+    pumpMain(until: { control.operations.isEmpty }, "「止める」で止まる")
+    XCTAssertNil(control.failure, "止めたコミットは失敗にならない")
+    hang.release()
+  }
+
+  /// pre-commit hook が失敗する、ステージ済みの 1 件を持つリポジトリの面（コミットのポップアップは開いている）。
+  private func hostWithAFailingCommit() throws -> Hosted {
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "edited\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    let hook = repo.dir.appendingPathComponent(".git/hooks/pre-commit")
+    try Data("#!/bin/sh\nexit 1\n".utf8).write(to: hook)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+    let hosted = host(repo)
+    pumpMain(until: { hosted.scm.changes.staged.count == 1 }, "ステージ済みの行")
+    hosted.scm.control.message = "wip"
+    return hosted
+  }
+
+  /// ポップアップから押したコミットが失敗しても、置き場にはポップアップだけが並ぶ（失敗はポップアップの赤い行に出し、失敗の
+  /// 札には出さない）。札が出ないことは、失敗が立った時点で確かめる。同じ時点で札が出ることは、対の
+  /// `testACommitFailureWhileThePopupIsClosedShowsTheFailureCardUntilItReopens` が確かめる。
+  func testACommitFailureWhileThePopupIsOpenStaysOutOfTheCards() throws {
+    let hosted = try hostWithAFailingCommit()
+    let control = hosted.scm.control
+
+    hosted.scm.commitSnapshot().commit()
+    pumpMain(until: { control.failure != nil }, "コミットの失敗")
+    XCTAssertTrue(hosted.pane.popup.isOpen, "前提: 失敗したコミットのポップアップは開いたまま")
+    XCTAssertEqual(dockItemFrames(hosted).count, 1, "置き場にはポップアップだけ")
+  }
+
+  /// ポップアップを閉じている間のコミットの失敗は、失敗の札に出る。ポップアップを開き直すと、札は消える（失敗は赤い行に
+  /// 戻る）。
+  func testACommitFailureWhileThePopupIsClosedShowsTheFailureCardUntilItReopens() throws {
+    let hosted = try hostWithAFailingCommit()
+    let control = hosted.scm.control
+    let popup = hosted.pane.commitPopup
+    popup.close(.escape)
+
+    hosted.scm.commitSnapshot().commit()
+    pumpMain(until: { control.failure != nil }, "コミットの失敗")
+    XCTAssertEqual(
+      dockItemFrames(hosted).count, 1,
+      "失敗が立った時点で、失敗の札が出ている。この時点で出ていなければ、同じ時点で札が出ないことを確かめる"
+        + " testACommitFailureWhileThePopupIsOpenStaysOutOfTheCards も、確かめる時点として成り立たない")
+
+    popup.open()
+    XCTAssertEqual(dockItemFrames(hosted).count, 1, "開き直すと、置き場にはポップアップだけ")
+    XCTAssertTrue(popup.isOpen)
+    XCTAssertEqual(control.failure?.kind, .commit, "失敗は残る")
+  }
+
+  /// 本体が差分を見せている間、札は、本体の上端にある差分の見出しの帯の下から並び、帯の上の押下は札でなく帯へ届く。
+  /// 本体に帯が無い間は、札はバーのすぐ下から並び、同じ点の押下は札が受ける。
+  func testTheCardsStayBelowTheDiffHeaderOfTheBody() throws {
+    let repo = try TempGitRepo()
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["branch", "--unset-upstream"]).isSuccess)
+    let hosted = host(repo)
+    let pane = hosted.pane
+    let control = hosted.scm.control
+    pane.popup.close(.escape)
+    pumpMain(until: { hosted.scm.branch != nil && hosted.scm.branch?.upstream == nil }, "ブランチ")
+    control.pull()
+    pumpMain(until: { control.failure != nil }, "プルの失敗")
+    XCTAssertNil(pane.diff, "前提: 本体は差分でない")
+    func card() throws -> NSRect {
+      pane.convert(try XCTUnwrap(dockItemFrames(hosted).first, "失敗の札"), from: pane.dockHost)
+    }
+    func hit(_ point: NSPoint) -> NSView? { pane.hitTest(pane.convert(point, to: pane.superview)) }
+    // 帯が出たときに帯の中になり、帯が無い間は札の中に在る点（本体の上端から、帯の高さの半分）。
+    let point = NSPoint(
+      x: try card().midX, y: pane.bodyRect.minY + Theme.Layout.editorDiffHeader / 2)
+    XCTAssertTrue(try card().contains(point), "前提: 帯が無い間、札はバーのすぐ下から並ぶ")
+    XCTAssertTrue(hit(point)?.isDescendant(of: pane.dockHost) == true, "帯が無い間、その点は札が受ける")
+
+    try repo.write("a.txt", "edited\n")
+    pumpMain(until: { hosted.scm.changes.changes.count == 1 }, "変更の行")
+    hosted.scm.click(try row(hosted, .changes, "a.txt"), in: hosted.scm.layout)
+    pumpMain(until: { pane.diff != nil }, "本体が差分になる")
+    XCTAssertNotNil(control.failure, "前提: 失敗の札は出たまま")
+    // 帯は、本体の上端から editorDiffHeader の高さまで（header の host は、その下に影の分だけ伸びる）。
+    let bandBottom = pane.bodyRect.minY + Theme.Layout.editorDiffHeader
+    XCTAssertGreaterThanOrEqual(try card().minY, bandBottom - 0.5, "札は帯の下から並ぶ")
+    let onBand = try XCTUnwrap(hit(point))
+    XCTAssertFalse(onBand.isDescendant(of: pane.dockHost), "帯の上の押下は札が受けない")
+    XCTAssertTrue(onBand.isDescendant(of: pane.headerHost), "帯の上の押下は帯へ届く")
+  }
+}

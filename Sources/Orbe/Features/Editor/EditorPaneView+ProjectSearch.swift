@@ -110,7 +110,7 @@ extension EditorPaneView {
   /// 列に残る押下——上のバーのボタンなど——も含む）。一覧の器が開いていて、器と今の項目のボタンの外を押したら、器を閉じて
   /// フォーカスを本体へ戻してから、押下をそのまま通す（押した先は今までどおり働く）。ポップアップも同じで、置き場に並んでいる
   /// 物と右端の主な操作のボタンの外を押したら閉じて、開く前の場所へフォーカスを戻す。⌥ で透かしている間の押下では閉じない
-  /// （透かしている間のクリックはエディターに届かない）。
+  /// （透かしている間のクリックはエディターに届かない）。面の中の確認が出ている間は、キーを拾わない（確認の host へ届ける）。
   func updateEventMonitor() {
     if window == nil {
       eventMonitor.map(NSEvent.removeMonitor)
@@ -125,6 +125,7 @@ extension EditorPaneView {
           return event
         }
         if escapeRepeatIsSwallowed(event) { return nil }
+        guard !confirm.isShown else { return event }
         return handleStepKey(event) || handleViewedKey(event) ? nil : event
       }
     }

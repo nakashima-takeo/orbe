@@ -30,6 +30,8 @@ extension Theme.Color {
   /// 上のバーの画面の切り替えの溝の地と、溝・選んだ項目に落とす影の色（見本の `--sunk`・`--inset`）。
   static let editorBarGroove = editorDynAB(light: (0x3a3151, 0.05), dark: (0x08060c, 0.32))
   static let editorBarInset = editorDynAB(light: (0x3a3151, 0.14), dark: (0x000000, 0.4))
+  /// 面の中の確認の幕（見本の `.veil`）。
+  static let editorConfirmVeil = editorDynAB(light: (0x3a3151, 0.2), dark: (0x000000, 0.42))
   /// 種別チップの色相。チップの文字色と、その α .16 の地に使う。
   static let editorHueOrange = editorDyn(light: 0xbf5f2a, dark: 0xd98a5f)
   static let editorHueBlue = editorDyn(light: 0x3f6fd6, dark: 0x85adff)
@@ -180,24 +182,16 @@ extension Theme.Typography {
   /// 件数・打ち切り・0 件・エラーの文（sans 11）。
   static let editorSearchNote = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// ソース管理。親・子の区分・グラフの枠の見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の名前
-  /// （sans 13）とディレクトリ（sans 11）・メッセージ欄（sans 12）・コミットボタン（sans 12 semibold）・グラフの
-  /// コミットの題（sans 12）・ref の札（mono 9）・ブランチの行（mono 11）・「さらに表示」（sans 11.5）・失敗の文
-  /// （sans 11）。
+  /// （sans 13）とディレクトリ（sans 11）・グラフのコミットの題（sans 12）・ref の札（mono 9）・ブランチの行（mono 11）・
+  /// 「さらに表示」（sans 11.5）。
   static let editorScmSection = NSFont.systemFont(ofSize: 11, weight: .bold)
   static let editorScmCount = NSFont.systemFont(ofSize: 9.5, weight: .regular)
   static let editorScmFile = NSFont.systemFont(ofSize: 13, weight: .regular)
   static let editorScmDirectory = NSFont.systemFont(ofSize: 11, weight: .regular)
-  static let editorScmMessage = NSFont.systemFont(ofSize: 12, weight: .regular)
-  static let editorScmButton = NSFont.systemFont(ofSize: 12, weight: .semibold)
   static let editorScmCommit = NSFont.systemFont(ofSize: 12, weight: .regular)
   static let editorScmRef = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
   static let editorScmBranch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   static let editorScmMore = NSFont.systemFont(ofSize: 11.5, weight: .regular)
-  static let editorScmNote = NSFont.systemFont(ofSize: 11, weight: .regular)
-  /// 実行中の帯の操作名（sans 12）・git の進捗の行（mono 10.5）・止める（sans 11）。
-  static let editorScmBandName = NSFont.systemFont(ofSize: 12, weight: .regular)
-  static let editorScmBandProgress = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
-  static let editorScmStop = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// パネルヘッダーの題の字間。
   static let trackingPanelTitle: CGFloat = 0.5
   /// ルート行の字間。
@@ -311,17 +305,13 @@ extension Theme.Layout {
   /// 進みの細い線（検索中・ソース管理の実行中）。
   static let editorProgressLine: CGFloat = 2
   /// ソース管理。行（見出し・ファイル・コミット・さらに表示）の高さ・種別チップ・行の中のボタンとその印・見出しの
-  /// ツールの角とその間（親の見出しのツールも子の見出しの一括操作も）・メッセージ欄の 1 行の高さ・コミットボタンの
-  /// 高さと ▾ の幅・ref の札の高さ・コミットの点・点の列の幅。
+  /// ツールの角とその間（親の見出しのツールも子の見出しの一括操作も）・ref の札の高さ・コミットの点・点の列の幅。
   static let editorScmRow: CGFloat = 22
   static let editorScmChip: CGFloat = 16
   static let editorScmRowButton: CGFloat = 18
   static let editorScmGlyph: CGFloat = 13
   static let editorScmTool: CGFloat = 20
   static let editorScmToolGap: CGFloat = 1
-  static let editorScmMessage: CGFloat = 26
-  static let editorScmCommitButton: CGFloat = 26
-  static let editorScmCommitCaret: CGFloat = 24
   static let editorScmRef: CGFloat = 15
   static let editorScmDot: CGFloat = 7
   static let editorScmDotColumn: CGFloat = 16
@@ -330,9 +320,6 @@ extension Theme.Layout {
   /// グラフの枠の高さ（見出し 22 を含む）の既定（見出し＋8 行）と下限（見出し＋3 行）。
   static let editorScmGraph: CGFloat = 198
   static let editorScmGraphMin: CGFloat = 88
-  /// 実行中の帯の高さと「止める」の高さ。
-  static let editorScmBand: CGFloat = 28
-  static let editorScmStop: CGFloat = 20
 }
 
 extension Theme.Opacity {

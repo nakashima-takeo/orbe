@@ -5,20 +5,20 @@ import XCTest
 
 @testable import Orbe
 
-/// エディター面に結んだソース管理パネル——行は区分に合った diff を Changes の diff として開き、index の版へ戻す破棄は確かめてから行い、
-/// メッセージ欄の ↵ はコミット、⌘↵ はコミットしてプッシュ（同期・公開は起こさない）、改行は ⇧↵・⌥↵・⌃↵。欄は中身の行に
-/// 合わせて伸び縮みし、1 行が高い文字でも 10 行分の高さまで伸びる。欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出して
+/// エディター面に結んだソース管理パネルとコミットのポップアップ——行は区分に合った diff を Changes の diff として開き、index の版へ
+/// 戻す破棄は確かめてから行い、ポップアップのメッセージ欄の ↵ はコミット、⌘↵ はコミットしてプッシュ（同期・公開は起こさない）、
+/// 改行は ⇧↵・⌥↵・⌃↵。欄は中身の行に合わせて伸び縮みし、1 行が高い文字でも 10 行分の高さまで伸びる。欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出して
 /// いなくても面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を出して押せば
 /// 新しい根の diff を開く。行の ＋ を同じ位置で続けて押すと、次の行が次々にステージされる。未追跡の行を破棄した直後の
 /// コミットは、その破棄を数える。
 ///
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
-/// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。未追跡の行を破棄してすぐ ↵ を打つと、自分の破棄のせいで
-/// 「表示と食い違う」と断られる。ボタンが「同期」の間に欄で ⌘↵ を打つと、同期が走る。⇧↵ の改行がコミットを起こす・↵ が
+/// ことになる。追跡中のファイルの編集が、確認なしに、または確認で ↵ を 1 回押しただけで消え、戻せない。未追跡の行を破棄して
+/// すぐ ↵ を打つと、自分の破棄のせいで「表示と食い違う」と断られる。同期のボタンに先行がある間に欄で ⌘↵ を打つと、同期が走る。⇧↵ の改行がコミットを起こす・↵ が
 /// 改行を入れて押せないことに気づかない・⌃↵ が見えない字をメッセージに入れる。改行しても欄が伸びず、打った行が見えない。タイ文字の欄が 10 行分の手前で止まる。
 /// コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、Changes の件数が古い数で
 /// 止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
-/// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・パネルを閉じた後の ⌘Z が、見えない欄の打鍵を
+/// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・ポップアップを閉じた後の ⌘Z が、見えない欄の打鍵を
 /// 戻して前の worktree の打ちかけのメッセージや別の窓の打ち足しを黙って消す。＋ を続けて押すと、ステージ済みの区分が
 /// 現れて行がずれ、意図しない行をステージする。
 @MainActor
@@ -55,20 +55,21 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertTrue(editor.documents.isEmpty, "diff は開いている文書の列に入らない")
   }
 
-  /// 未追跡だけの破棄は確かめずにゴミ箱へ移し、同じ位置で続けて押せるように次の行を留める。index の版へ戻す破棄は確認の
-  /// シートを出し、「破棄」を押すまで作業ツリーに触らない。
+  /// 未追跡だけの破棄は確かめずにゴミ箱へ移し、同じ位置で続けて押せるように次の行を留める。index の版へ戻す破棄は面の中の
+  /// 確認を出し、「破棄」を押すまで作業ツリーに触らない——↵ では確定せず、esc はキャンセル（破棄しない）。
   func testDiscardingTrackedChangesWaitsForTheConfirmation() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "edited\n")
     try repo.write("n.txt", "new\n")
     let hosted = host(repo)
+    let confirm = hosted.pane.confirm
     pumpMain(until: { hosted.scm.changes.changes.count == 2 }, "変更の行")
     let untracked = repo.dir.appendingPathComponent("n.txt").path
 
     XCTAssertNotNil(
       hosted.scm.press(try row(hosted, .changes, "n.txt"), .discard, in: hosted.scm.layout),
       "未追跡だけなら次の行を留める")
-    XCTAssertNil(hosted.window.attachedSheet, "未追跡だけなら確かめない")
+    XCTAssertFalse(confirm.isShown, "未追跡だけなら確かめない")
     pumpMain(
       until: {
         hosted.scm.control.operations.isEmpty && !FileManager.default.fileExists(atPath: untracked)
@@ -76,9 +77,17 @@ final class SourceControlPaneTests: OrbeTestCase {
       "ゴミ箱へ")
 
     hosted.scm.press(try row(hosted, .changes, "a.txt"), .discard, in: hosted.scm.layout)
-    let sheet = try XCTUnwrap(hosted.window.attachedSheet, "追跡中なら確かめる")
+    XCTAssertTrue(confirm.isShown, "追跡中なら確かめる")
+    let responder = try XCTUnwrap(hosted.window.firstResponder)
+    responder.keyDown(with: .key("\r", []))
+    XCTAssertTrue(confirm.isShown, "↵ では確定しない")
+    responder.keyDown(with: .key("\u{1b}", []))
+    XCTAssertFalse(confirm.isShown, "esc で閉じる")
+    XCTAssertTrue(hosted.scm.control.operations.isEmpty, "キャンセルでは捨て始めない")
+
+    hosted.scm.press(try row(hosted, .changes, "a.txt"), .discard, in: hosted.scm.layout)
     XCTAssertTrue(hosted.scm.control.operations.isEmpty, "確かめるまで捨て始めない")
-    hosted.window.endSheet(sheet, returnCode: .alertFirstButtonReturn)
+    confirm.confirm()
     pumpMain(
       until: { (try? String(contentsOf: repo.url("a.txt"), encoding: .utf8)) == "one\n" },
       "破棄を押すと index の版へ戻る")
@@ -103,7 +112,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")
   }
 
-  /// メッセージ欄の ⌘↵ はコミットしてプッシュ——ボタンが「同期」でも同期は起こさず
+  /// メッセージ欄の ⌘↵ はコミットしてプッシュ——同期のボタンに先行があっても同期は起こさず
   /// （押せなければ音で断る）、コミットできるときはコミットしてから push する。
   func testCommandReturnInTheMessageCommitsAndPushes() throws {
     let repo = try TempGitRepo()
@@ -114,10 +123,10 @@ final class SourceControlPaneTests: OrbeTestCase {
     let origin = repo.git(["rev-parse", "origin/main"]).stdoutText
     let hosted = host(repo)
     let scm = hosted.scm
-    pumpMain(until: { scm.focusedArea == .message }, "メッセージ欄に焦点")
+    pumpMain(until: { self.messageFieldHasFocus(hosted) }, "メッセージ欄に焦点")
     pumpMain(
-      until: { scm.commitState.primary == .sync(GitStatus.Divergence(ahead: 1, behind: 0)) },
-      "前提: ボタンが同期")
+      until: { scm.syncState?.action == .sync(GitStatus.Divergence(ahead: 1, behind: 0)) },
+      "前提: 同期のボタンに先行 1")
     let commandReturn = NSEvent.key("\r")
 
     scm.control.message = "typed"
@@ -156,97 +165,19 @@ final class SourceControlPaneTests: OrbeTestCase {
 
     field.keyDown(with: .key("\r", []))
     XCTAssertEqual(scm.control.message, "subject\n\n\n\nbody", "↵ は改行を入れない")
-    pumpMain(until: { scm.control.operations.isEmpty && field.string.isEmpty }, timeout: 20, "コミット")
+    pumpMain(
+      until: { scm.control.operations.isEmpty && scm.control.message.isEmpty }, timeout: 20,
+      "コミット")
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "subject\n")
     XCTAssertTrue(repo.git(["log", "-1", "--format=%b"]).stdoutText.contains("body"))
 
-    field.keyDown(with: .key("\r", []))
-    XCTAssertEqual(field.string, "", "押せなければ改行も入れない")
+    hosted.pane.commitPopup.open()
+    pumpMain(
+      until: { self.messageField(in: hosted.pane).map { $0 !== field } ?? false }, "開き直した欄")
+    let reopened = try XCTUnwrap(messageField(in: hosted.pane))
+    reopened.keyDown(with: .key("\r", []))
+    XCTAssertEqual(reopened.string, "", "押せなければ改行も入れない")
     XCTAssertTrue(scm.control.operations.isEmpty)
-  }
-
-  /// 欄は中身の行に合わせてその場で伸び縮みする——打鍵の改行で 1 行ずつ伸び、外からの差し替えでも中身に合い、空にすれば
-  /// 1 行の 26 に戻る。折り返す文は、サイドバーを狭める・広げる・戻すのどれでも、その幅で組んだ行の高さに合う。
-  func testTheMessageGrowsAndShrinksWithItsLines() throws {
-    let hosted = host(try TempGitRepo())
-    let field = try type("a", in: hosted)
-    let scroll = try XCTUnwrap(field.enclosingScrollView)
-    func height() -> CGFloat {
-      hosted.pane.layoutSubtreeIfNeeded()
-      return scroll.frame.height
-    }
-    XCTAssertEqual(height(), Theme.Layout.editorScmMessage, accuracy: 0.5, "1 行")
-    let line = field.layoutManager!.defaultLineHeight(for: field.font!)
-
-    field.keyDown(with: .key("\r", [.shift]))
-    pumpMain(until: { height() > Theme.Layout.editorScmMessage }, "改行で伸びる")
-    XCTAssertEqual(height(), Theme.Layout.editorScmMessage + line, accuracy: 0.5, "2 行")
-
-    hosted.scm.control.message = "x\ny\nz"
-    pumpMain(until: { field.string == "x\ny\nz" }, "外の差し替えが欄に届く")
-    XCTAssertEqual(height(), Theme.Layout.editorScmMessage + line * 2, accuracy: 0.5, "3 行")
-
-    hosted.scm.control.message = ""
-    pumpMain(until: { field.string.isEmpty }, "空にする")
-    XCTAssertEqual(height(), Theme.Layout.editorScmMessage, accuracy: 0.5, "1 行に戻る")
-
-    let wrapping = String(repeating: "word ", count: 30)
-    hosted.scm.control.message = wrapping
-    pumpMain(until: { field.string == wrapping }, "折り返す文")
-    func wrappedHeight() -> CGFloat {
-      let layout = field.layoutManager!
-      layout.ensureLayout(for: field.textContainer!)
-      return layout.usedRect(for: field.textContainer!).height + Theme.Layout.editorScmMessage
-        - line
-    }
-    var heights: [CGFloat] = []
-    for width in [200, 400, 240] as [CGFloat] {
-      hosted.pane.sidebar.setWidth(width)
-      pumpMain(until: { abs(height() - wrappedHeight()) < 0.5 }, "幅 \(width) の行に合う")
-      heights.append(height())
-    }
-    XCTAssertEqual(Set(heights).count, 3, "前提: 幅ごとに行の数が違う \(heights)")
-  }
-
-  /// 欄は 10 行で止まり、その先は中がスクロールして、打った行とキャレットが見えるように送られる。スクロールバーは字の幅を
-  /// 狭めない。
-  func testTheMessageScrollsPastTenLinesKeepingTheCaretInView() throws {
-    let hosted = host(try TempGitRepo())
-    let field = try type("a", in: hosted)
-    let scroll = try XCTUnwrap(field.enclosingScrollView)
-    let line = field.layoutManager!.defaultLineHeight(for: field.font!)
-    let tallest = Theme.Layout.editorScmMessage + line * CGFloat(ScmMessageField.maxLines - 1)
-    for lines in 2...13 {
-      field.keyDown(with: .key("\r", [.shift]))
-      let height = min(Theme.Layout.editorScmMessage + line * CGFloat(lines - 1), tallest)
-      pumpMain(
-        until: {
-          hosted.pane.layoutSubtreeIfNeeded()
-          return abs(scroll.frame.height - height) < 0.5
-        }, "\(lines) 行の高さ")
-      let caret = field.layoutManager!.extraLineFragmentRect.offsetBy(
-        dx: field.textContainerOrigin.x, dy: field.textContainerOrigin.y)
-      XCTAssertTrue(field.visibleRect.contains(caret), "\(lines) 行: キャレットの行が見える")
-      if lines <= ScmMessageField.maxLines {
-        XCTAssertEqual(scroll.contentView.bounds.minY, 0, "\(lines) 行: 収まる間は先頭の行から見える")
-      }
-    }
-    XCTAssertGreaterThan(field.frame.height, scroll.contentView.bounds.height, "中身は枠より高い")
-    XCTAssertGreaterThan(scroll.contentView.bounds.minY, 0, "中がスクロールしている")
-
-    scroll.scrollerStyle = .legacy  // 推奨の型が legacy へ変わると、AppKit はこの setter で当て直す
-    hosted.pane.layoutSubtreeIfNeeded()
-    XCTAssertEqual(field.frame.width, scroll.frame.width, "スクロールバーが字の幅を狭めない")
-  }
-
-  /// 欄の上限は既定の行の 10 行分の高さで、1 行が既定より高い文字（タイ文字）でも低くならない。
-  func testTheMessageOfTallLinesStopsAtTheSameHeight() throws {
-    let field = MessageTextView(metrics: ScmMessageField.metrics)
-    let line = try XCTUnwrap(field.layoutManager).defaultLineHeight(for: try XCTUnwrap(field.font))
-    field.string = Array(repeating: "ปั้ญู", count: 12).joined(separator: "\n")
-    XCTAssertEqual(
-      field.fittingHeight(width: 300, maxLines: ScmMessageField.maxLines),
-      Theme.Layout.editorScmMessage + line * CGFloat(ScmMessageField.maxLines - 1), accuracy: 0.5)
   }
 
   /// メッセージ欄の中身が外から変わった（コミットで空になった）ら、それまでの取り消しの履歴は捨てる——⌘Z は差し替え前の
@@ -271,6 +202,8 @@ final class SourceControlPaneTests: OrbeTestCase {
     let other = try TempGitRepo(name: "orbe-scm-pane-other")
 
     hosted.tab.group.rekey(other.root)
+    pumpMain(until: { hosted.scm.control !== previous }, "新しい根のパネル")
+    hosted.pane.commitPopup.open()
     pumpMain(
       until: { self.messageField(in: hosted.pane).map { $0 !== old } ?? false }, "新しい根の欄")
     let new = try type("new", in: hosted)
@@ -281,19 +214,21 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertEqual(previous.message, "typed message", "新しい欄に戻すものが無ければ何も戻さない")
   }
 
-  /// 窓から外れた欄の取り消しはどこにも効かない——パネルを閉じて開き直した欄の ⌘Z は、閉じている間に別の窓が打ち足した
-  /// 分も、閉じる前の打鍵も戻さない。
+  /// 窓から外れた欄の取り消しはどこにも効かない——ポップアップを閉じて開き直した欄の ⌘Z は、閉じている間に別の窓が
+  /// 打ち足した分も、閉じる前の打鍵も戻さない。
   func testUndoInAReopenedMessageKeepsWhatAnotherWindowTyped() throws {
     let repo = try TempGitRepo()
     let first = host(repo)
     let second = host(repo, showsPanel: false)
     _ = try type("first", in: first)
     first.pane.switchScreen(.files)
-    pumpMain(until: { self.messageField(in: first.pane) == nil }, "閉じたパネルの欄が外れる")
+    pumpMain(until: { self.messageField(in: first.pane) == nil }, "閉じたポップアップの欄が外れる")
 
     second.pane.switchScreen(.changes)
+    second.pane.commitPopup.open()
     _ = try type(" more", in: second)
     first.pane.switchScreen(.changes)
+    first.pane.commitPopup.open()
     pumpMain(until: { self.messageField(in: first.pane)?.string == "first more" }, "開き直した欄")
     first.window.makeFirstResponder(try XCTUnwrap(messageField(in: first.pane)))
     _ = undo(in: first)
@@ -343,6 +278,12 @@ final class SourceControlPaneTests: OrbeTestCase {
     (view as? MessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
   }
 
+  /// コミットのポップアップのメッセージ欄にフォーカスがある。
+  func messageFieldHasFocus(_ hosted: Hosted) -> Bool {
+    guard let field = messageField(in: hosted.pane) else { return false }
+    return hosted.window.firstResponder === field
+  }
+
   /// メッセージ欄に焦点を入れ、末尾に `text` を打つ（打った文が欄の外へ届くまで待つ）。
   @discardableResult
   func type(_ text: String, in hosted: Hosted) throws -> MessageTextView {
@@ -371,8 +312,8 @@ final class SourceControlPaneTests: OrbeTestCase {
 }
 
 extension SourceControlPaneTests {
-  /// 根 `repo` の連の面だけを窓に載せ、上のバーで Changes の画面を出して、メッセージ欄から始める（`showsPanel` が false
-  /// なら Files の画面のエクスプローラー）。
+  /// 根 `repo` の連の面だけを窓に載せ、上のバーで Changes の画面を出して、コミットのポップアップを開いてメッセージ欄から
+  /// 始める（`showsPanel` が false なら Files の画面のエクスプローラー）。
   func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     tab.group.editor.selectScreen(.files)
@@ -385,7 +326,7 @@ extension SourceControlPaneTests {
     holdUntilTestEnds(window)
     if showsPanel {
       pane.switchScreen(.changes)
-      pane.scm.requestFocus(.message)
+      pane.commitPopup.open()
     }
     return Hosted(repo: repo, tab: tab, pane: pane, window: window)
   }

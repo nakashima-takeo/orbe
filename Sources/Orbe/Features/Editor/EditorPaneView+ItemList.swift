@@ -47,7 +47,7 @@ extension EditorPaneView {
   /// first responder が替わる途中なので、行の列を隠すのは次のターンにする（フォーカスを持つ view を隠すと、AppKit が
   /// その場でフォーカスを動かし、移動が入れ子になる）。
   private func itemListDidClose(_ dismissal: EditorDismissal) {
-    if dismissal == .escape { swallowsEscapeRepeat = true }
+    containerDidClose(dismissal)
     if dismissal.returnsFocus { focusEditor() }
     itemListHost.isHidden = true
     guard focusIsInItemList else {

@@ -74,7 +74,7 @@ extension EditorPaneView {
     switch listState(of: screen) {
     case .rows:
       switch screen {
-      case .changes: scm.requestFocus(.list)
+      case .changes: scm.requestListFocus()
       case .pullRequest: pullRequest.requestFocus()
       case .files: break
       }
@@ -110,7 +110,7 @@ extension EditorPaneView {
   private func listHasFocus(_ screen: EditorScreen) -> Bool {
     guard focusIsInSidebar, heldListFocus == nil else { return false }
     switch screen {
-    case .changes: return scm.focusedArea == .list
+    case .changes: return scm.isListFocused
     case .pullRequest: return pullRequest.isListFocused
     case .files: return false
     }

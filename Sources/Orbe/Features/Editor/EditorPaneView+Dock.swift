@@ -16,7 +16,8 @@ extension EditorPaneView {
   /// 置き場の根。根へ渡す持ち主は、ここで足す。
   func dockRoot() -> EditorDockRoot {
     EditorDockRoot(
-      shell: shell, popup: popup, reviewPopup: reviewPopup, localization: localization,
+      shell: shell, popup: popup, commitPopup: commitPopup, reviewPopup: reviewPopup,
+      localization: localization,
       fontResolver: fontResolver,
       translucency: translucency ?? ChromeTranslucency(),
       framesDidChange: { [weak self] frames in self?.dockHost.itemFrames = frames })
@@ -28,10 +29,13 @@ extension EditorPaneView {
     return responder.isDescendant(of: dockHost)
   }
 
-  /// 置き場の host を置く（`layout()` から。影の余白の分だけ置き場の矩形より広い）。
+  /// 置き場の host を置き（`layout()` から。影の余白の分だけ置き場の矩形より広い）、本体の上端の帯の高さを写す（札が帯を
+  /// 覆わないように）。
   func layoutDock() {
     let margin = EditorDockRoot.margin
     dockHost.frame = dockRect.insetBy(dx: -margin, dy: -margin)
+    let band = bodyBandHeight
+    if shell.bodyBandHeight != band { shell.bodyBandHeight = band }
   }
 
   /// 窓の押下 `event` が、置き場に並んでいる物か、右端の主な操作のボタンの上か。
@@ -62,7 +66,7 @@ extension EditorPaneView {
   /// フォーカスを持ったまま外れて窓へ落ちる前に、ここで移す。
   private func popupDidClose(_ dismissal: EditorDismissal) {
     popupFocusWatch = nil
-    if dismissal == .escape { swallowsEscapeRepeat = true }
+    containerDidClose(dismissal)
     if dismissal.returnsFocus { returnFocus(to: popupReturn) }
     needsLayout = true
   }
