@@ -24,7 +24,7 @@ extension DesignGallerySnapshotTests {
   /// （`editor_bar_files_find`）。
   func renderEditorBarSnapshots(dir: URL) throws {
     try writePNG(
-      EditorShellFixtures.barParts(), size: NSSize(width: 900, height: 200),
+      EditorShellFixtures.barParts(), size: NSSize(width: 900, height: 240),
       name: "editor_bar_parts.png", dir: dir)
     let widths: [CGFloat] = [1100, 820, 600]
     for (screen, name) in [

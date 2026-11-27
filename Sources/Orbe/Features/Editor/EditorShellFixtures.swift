@@ -150,27 +150,23 @@
   /// 上のバーの部品と、3 つの画面の姿の並び（見本の Main・PullRequest・Files の部品を、バーの行と共通の部品で組んだもの）。
   /// gallery が部品の姿と幅ごとの姿を、flow が幅を狭めていく並びを撮る。
   extension EditorShellFixtures {
-    /// 部品の姿——中ほどの札（素の姿・地つきの変種・押せない姿・表示だけの札）・26 角のボタン（ふつう・押された姿）・右端の
-    /// ボタン（ふつう・開いている・押せない・添え書きつき・固定の添えつき）。
+    /// 部品の姿——中ほどの札（ブランチ名の札・同期のボタンの姿〔数つき・ネット操作中・upstream の ref が無い・ブランチを公開〕・
+    /// PR の札・名前を省略したブランチ名の札）・26 角のボタン（ふつう・押された姿）・右端のボタン（「コミット」の添え書きつき・
+    /// 開いている・添え書きなし、固定の添えつき）。Changes の部品は本物。
     @MainActor static func barParts() -> some View {
       VStack(alignment: .leading, spacing: 12) {
         HStack(spacing: 8) {
           branchChip
-          syncChip(isEnabled: true)
-          syncChip(isEnabled: false)
           pullRequestChip
-          EditorBarChip(
-            help: "ブランチ",
-            content: {
-              EditorGlyphView(
-                glyph: EditorGlyphs.branch, size: 12, color: Color.theme.textPrimary)
-              EditorReadableName(
-                "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix,
-                truncation: .tail
-              ) { Text($0) }
-            }
-          )
-          .frame(width: 120)
+          branchChip.frame(width: 120)
+        }
+        HStack(spacing: 8) {
+          syncButton(upstream: .init(name: "origin/feat", divergence: .init(ahead: 2, behind: 1)))
+          syncButton(
+            upstream: .init(name: "origin/feat", divergence: .init(ahead: 2, behind: 1)),
+            isNetworking: true)
+          syncButton(upstream: .init(name: "origin/feat", divergence: nil))
+          syncButton(upstream: nil)
         }
         HStack(spacing: 8) {
           EditorBarIconButton(glyph: EditorGlyphs.sidebarToggle, help: "ツリーを開く") {}
@@ -183,8 +179,7 @@
         HStack(spacing: 8) {
           commitButton(isOpen: false)
           commitButton(isOpen: true)
-          EditorBarActionButton(
-            title: "コミット", isEnabled: false, help: "ステージ済みの変更がありません", action: {})
+          ScmCommitButton(counts: nil, isOpen: false, toggle: {})
         }
         HStack(spacing: 8) {
           reviewButton(isOpen: false)
@@ -260,7 +255,7 @@
             branchChip
           }
           .editorBarPart(drops: .chip, grows: .chipWide)
-          syncChip(isEnabled: true)
+          syncButton(upstream: .init(name: "origin/feat", divergence: .init(ahead: 2, behind: 1)))
         case .pullRequest:
           HStack(spacing: EditorBarRoot.spacing) {
             EditorBarSeparator()
@@ -304,30 +299,17 @@
 
     /// ブランチ名の札（広い姿は名前の全体、狭い姿は名前を省略）。
     @MainActor private static var branchChip: some View {
-      EditorBarChip(
-        help: "ブランチを選ぶ", action: {},
-        content: {
-          EditorGlyphView(glyph: EditorGlyphs.branch, size: 12, color: Color.theme.textPrimary)
-          EditorReadableName(
-            "feat/editor-overlay", prefixLength: Theme.Layout.editorBarChipReadablePrefix,
-            truncation: .tail
-          ) { Text($0) }
-          EditorGlyphView(
-            glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.textMuted)
-        })
+      ScmBranchChip(label: "feat/editor-overlay")
     }
 
-    @MainActor private static func syncChip(isEnabled: Bool) -> some View {
-      EditorBarChip(
-        style: .filled, isEnabled: isEnabled, help: "同期 ↑2 ↓1", action: {},
-        content: {
-          Text("同期")
-          Text("↑2 ↓1")
-            .font(Font.theme.editorBarCount)
-            .foregroundStyle(Color.theme.textSecondary)
-        }
-      )
-      .fixedSize()
+    /// upstream が `upstream` のブランチ `feat/editor-overlay` の同期のボタン。
+    @MainActor private static func syncButton(
+      upstream: GitStatus.Upstream?, isNetworking: Bool = false
+    ) -> some View {
+      let branch = GitStatus.Branch(name: "feat/editor-overlay", commit: "0", upstream: upstream)
+      return ScmSyncState(branch: branch, isNetworking: isNetworking).map {
+        ScmSyncButton(state: $0, sync: {}, publish: {})
+      }
     }
 
     /// PR の札（広い姿は「→ ベース」つき、次に名前の全体、狭い姿は名前を省略）。
@@ -355,16 +337,7 @@
     }
 
     @MainActor private static func commitButton(isOpen: Bool) -> some View {
-      EditorBarActionButton(
-        title: "コミット", isOpen: isOpen, help: "コミット", action: {},
-        detail: {
-          HStack(spacing: 6) {
-            Text("ステージ済み")
-            Text("+125 −3").font(Font.theme.editorBarCount)
-          }
-          .font(Font.theme.editorItemListHint)
-          .foregroundStyle(Color.theme.textSecondary)
-        })
+      ScmCommitButton(counts: GitLineCounts(added: 125, deleted: 3), isOpen: isOpen, toggle: {})
     }
 
     @MainActor private static func reviewButton(isOpen: Bool) -> some View {

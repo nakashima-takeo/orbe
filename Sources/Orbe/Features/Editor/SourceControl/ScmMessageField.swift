@@ -1,24 +1,23 @@
 import AppKit
 import SwiftUI
 
-/// コミットメッセージの欄。↵ はコミット（→ `ScmPanel.commitFromMessage`）、改行は ⇧↵・⌥↵・⌃↵、変換中の ↵ は変換の
-/// 確定だけ（IME が使った ↵ は改行の命令として届かない）。1 行のときの高さは 26 で、10 行まで伸び、その先は
-/// スクロールする。中身は worktree の状態（`SourceControl.message`）そのもので、同じ worktree を見る別の窓の欄とも同じ値に
-/// なる。変換中の字は確定するまでメッセージに入れず、パネルの見せ方（`ScmPanel.composition`）に写す。取り消しの履歴は
-/// 欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り直された・隠れた欄の打鍵を別の欄の ⌘Z が戻し、見えない
-/// worktree のメッセージを書き換える。⌘↵（コミットしてプッシュ）は pane が取る（→ `EditorPaneView+SourceControl`）。
-/// 焦点の出入りはパネルへ写し、焦点の要求（ソース管理を開いた・列の先頭で ⌘↑）はここで当てる。
+/// コミットのポップアップのメッセージ欄。↵ はコミット（→ `ScmPanel.commitFromMessage`）、改行は ⇧↵・⌥↵・⌃↵、変換中の ↵ は
+/// 変換の確定だけ（IME が使った ↵ は改行の命令として届かない）、変換中でない esc はポップアップを閉じる。1 行のときの高さは
+/// 30 で、10 行まで伸び、その先はスクロールする。中身は worktree の状態（`SourceControl.message`）そのもので、同じ worktree を
+/// 見る別の窓の欄とも同じ値になる。変換中の字は確定するまでメッセージに入れず、パネルの見せ方（`ScmPanel.composition`）に写し、
+/// 欄が消えたらその写しを空にする。取り消しの履歴は欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り直された・隠れた欄の打鍵を
+/// 別の欄の ⌘Z が戻し、見えない worktree のメッセージを書き換える。⌘↵（コミットしてプッシュ）はポップアップの器から届く
+/// （→ `ScmCommitPopup`）。欄へのフォーカスの要求は、持ち主が欄の窓に載った時点で当てる。
 struct ScmMessageField: NSViewRepresentable {
-  let panel: ScmPanel
+  let owner: ScmCommitPopup
   let placeholder: String
-  @Binding var focused: Bool
 
   /// 伸びる上限の行数。
   static let maxLines = 10
-  /// 欄の寸法（sans 12・1 行のときの高さ 26・左右の余白は左 8・右 5）。
+  /// 欄の寸法（sans 12.5・行の高さ 20・1 行のときの高さ 30・左右の余白なし）。
   static let metrics = MessageTextView.Metrics(
-    font: Theme.Typography.editorScmMessage, height: Theme.Layout.editorScmMessage,
-    leading: 8, trailing: 5)
+    font: Theme.Typography.editorCommitMessage, height: Theme.Layout.editorCommitMessage,
+    lineHeight: Theme.Layout.editorCommitMessageLine, leading: 0, trailing: 0)
 
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -26,14 +25,20 @@ struct ScmMessageField: NSViewRepresentable {
     let text = MessageTextView(metrics: Self.metrics)
     context.coordinator.text = text
     text.delegate = context.coordinator
-    text.onFocus = { [weak coordinator = context.coordinator] in coordinator?.focusDidChange($0) }
-    text.onWindow = { [weak coordinator = context.coordinator] in coordinator?.applyFocusRequest() }
+    text.onWindow = { [weak coordinator = context.coordinator] in
+      coordinator?.field.owner.applyFieldFocus()
+    }
     text.onCommit = { [weak coordinator = context.coordinator] in
-      coordinator?.field.panel.commitFromMessage(andPush: false)
+      coordinator?.field.owner.panel.commitFromMessage(andPush: false)
+    }
+    text.onEscape = { [weak coordinator = context.coordinator] in
+      coordinator?.field.owner.close(.escape)
     }
     text.onComposition = { [weak coordinator = context.coordinator] in
       coordinator?.compositionDidChange($0)
     }
+    text.setAccessibilityLabel(placeholder)
+    owner.field = text
     let scroll = MessageScrollView()
     scroll.documentView = text
     scroll.drawsBackground = false
@@ -49,18 +54,22 @@ struct ScmMessageField: NSViewRepresentable {
   func updateNSView(_ scroll: NSScrollView, context: Context) {
     context.coordinator.field = self
     guard let text = scroll.documentView as? MessageTextView else { return }
-    panel.confirmComposition = { [weak text] in text?.confirmComposition() }
+    owner.panel.confirmComposition = { [weak text] in text?.confirmComposition() }
     text.placeholder = placeholder
-    let message = panel.control.message
+    let message = owner.panel.control.message
     if text.string != message, !text.hasMarkedText() {
       text.replaceDiscardingUndo(with: message)
     }
-    if panel.focusRequest == .message {
-      DispatchQueue.main.async { context.coordinator.applyFocusRequest() }
-    }
   }
 
-  /// 中身の行の高さに合わせる（1 行で 26、10 行まで）。
+  /// 欄が消えた（ポップアップが閉じた）。変換中の字の写しを空にする——閉じる直前に確定しているので、ここで残っているのは
+  /// 確定の後に届いた写しだけ。
+  static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
+    let panel = coordinator.field.owner.panel
+    if !panel.composition.isEmpty { panel.composition = "" }
+  }
+
+  /// 中身の行の高さに合わせる（1 行で 30、10 行まで）。
   func sizeThatFits(_ proposal: ProposedViewSize, nsView scroll: NSScrollView, context: Context)
     -> CGSize?
   {
@@ -83,23 +92,12 @@ struct ScmMessageField: NSViewRepresentable {
 
     func textDidChange(_ notification: Notification) {
       guard let text = notification.object as? NSTextView else { return }
-      field.panel.control.message = text.string
+      field.owner.panel.control.message = text.string
     }
 
     func compositionDidChange(_ composition: String) {
-      if field.panel.composition != composition { field.panel.composition = composition }
-    }
-
-    func focusDidChange(_ focused: Bool) {
-      field.focused = focused
-      field.panel.focusDidChange(.message, focused: focused)
-    }
-
-    /// 欄へ焦点を入れる要求を当てる（窓に載っていなければ、載ったときにもう一度呼ばれる）。
-    func applyFocusRequest() {
-      guard field.panel.focusRequest == .message, let text, let window = text.window else { return }
-      window.makeFirstResponder(text)
-      field.panel.focusRequestDidApply()
+      let panel = field.owner.panel
+      if panel.composition != composition { panel.composition = composition }
     }
   }
 }

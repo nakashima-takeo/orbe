@@ -267,3 +267,46 @@ extension GitRepo {
     (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
   }
 }
+
+// MARK: - ステージ済みの行数
+
+/// 追加と削除の行数。
+struct GitLineCounts: Equatable {
+  let added: Int
+  let deleted: Int
+}
+
+extension GitRepo {
+  /// index と HEAD の差について、追加の行数と削除の行数を、それぞれ全ファイルで合計する（初回コミット前は空のツリーとの差）。
+  /// バイナリのファイルは 0 行、名前だけ変えたファイルも 0 行と数える。読めなければ nil。
+  ///
+  /// 数が利用者の設定で変わらないよう、rename の検出・アルゴリズム（myers）・サブモジュールの扱いを明示し、外部 diff・textconv・
+  /// 色を使わせない。`diff.relative` に依らず worktree の全体を数える。
+  func stagedLineCounts(completion: @escaping (GitLineCounts?) -> Void) {
+    runner.run(
+      [
+        "diff", "--cached", "--numstat", "-M", "--diff-algorithm=myers", "--no-relative",
+        "--ignore-submodules=none", "--no-ext-diff", "--no-textconv", "--no-color",
+      ], cwd: root,
+      transform: { $0.isSuccess ? Self.parseNumstat($0.stdout) : nil }, completion: completion)
+  }
+
+  /// `<追加>\t<削除>\t<パス>` の行について、先頭の 2 欄（追加・削除）をそれぞれ全行で合計する。バイナリの行は 2 欄とも `-` で、0 と数える。
+  private static func parseNumstat(_ data: Data) -> GitLineCounts? {
+    var added = 0
+    var deleted = 0
+    func count(_ field: Data) -> Int? {
+      guard let text = String(bytes: field, encoding: .utf8) else { return nil }
+      return text == "-" ? 0 : Int(text)
+    }
+    for line in data.split(separator: 0x0A) {
+      let fields = line.split(separator: 0x09, maxSplits: 2, omittingEmptySubsequences: false)
+      guard fields.count == 3, let add = count(fields[0]), let delete = count(fields[1]) else {
+        return nil
+      }
+      added += add
+      deleted += delete
+    }
+    return GitLineCounts(added: added, deleted: deleted)
+  }
+}

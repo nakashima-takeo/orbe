@@ -5,6 +5,8 @@ extension Theme.Typography {
   /// 札の文（sans 12）と、その行の高さ（倍率）。
   static let editorDockCard = NSFont.systemFont(ofSize: 12, weight: .regular)
   static let editorDockCardLineHeight: CGFloat = 1.55
+  /// 実行中の札の進捗の行（mono 11）。
+  static let editorRunningProgress = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
 }
 
 extension Theme.Layout {
@@ -29,6 +31,11 @@ extension Theme.Layout {
   static let editorCardCloseGlyph: CGFloat = 10
   static let editorCardCloseRadius: CGFloat = 4
   static let editorCardClosePad: CGFloat = 7
+  /// 実行中の札——左右の余白・部品の間・進捗の列の幅（進捗の行がある間は字数に依らずこの幅。置き場が狭ければ縮む）。
+  static let editorRunningPadLeading: CGFloat = 14
+  static let editorRunningPadTrailing: CGFloat = 6
+  static let editorRunningGap: CGFloat = 10
+  static let editorRunningProgressWidth: CGFloat = 420
 }
 
 extension Theme.Opacity {

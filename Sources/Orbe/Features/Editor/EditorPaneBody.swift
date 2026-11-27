@@ -56,4 +56,14 @@ enum EditorBody {
   case document(EditorDocument)
   case diff(EditorDiff)
   case empty
+
+  /// `other` と同じ本体か（同じ文書・同じ diff・どちらも空）。
+  func isSame(as other: EditorBody) -> Bool {
+    switch (self, other) {
+    case (.document(let x), .document(let y)): x === y
+    case (.diff(let x), .diff(let y)): x === y
+    case (.empty, .empty): true
+    default: false
+    }
+  }
 }

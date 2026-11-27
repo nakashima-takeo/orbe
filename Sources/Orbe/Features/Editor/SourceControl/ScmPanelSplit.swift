@@ -1,18 +1,21 @@
 import AppKit
 import SwiftUI
 
-/// 帯の下を、親「ソース管理」とグラフの枠に割り振る。両方開いていれば、グラフの枠は持っている高さ（親に最低限を残す上限で
-/// 丸める）、親は残り。親を畳めばグラフの枠が残りを全部取り、グラフを畳めば見出しだけが下端に寄る（→ `ScmPanelSplit`）。
-/// 境目は両方開いているときだけ出し、引けばグラフの枠の高さを変える。
+/// パネルヘッダーの下を、親「ソース管理」とグラフの枠に割り振る。両方開いていれば、グラフの枠は持っている高さ（親に
+/// 最低限を残す上限で丸める）、親は残り。親を畳めばグラフの枠が残りを全部取り、グラフを畳めば見出しだけが下端に寄る
+/// （→ `ScmPanelSplit`）。境目は両方開いているときだけ出し、引けばグラフの枠の高さを変える。変更の列は、行が無く、これからも
+/// 来ない（git 管理下で、今の status から組んだ行の組が空）とき、上に「変更なし」の一言を置く。列は一言の下に置いたままに
+/// する——列にあるフォーカスを、変更が無くなった時点で窓へ落とさないため。
 struct ScmSplit: View {
   let panel: ScmPanel
   let list: RowList<ScmListSource>
   let graphList: RowList<ScmGraphSource>
   let sidebar: EditorSidebarState
-  /// 親の中で列より上に出ているもの（見出し・欄・ボタン・失敗の文）の高さ。
+  /// 親の中で列より上に出ているもの（見出し）の高さ。
   @State private var above = Theme.Layout.editorScmRow
   /// 境目を掴んだときのグラフの枠の高さ。
   @State private var grabbed: CGFloat?
+  @Environment(\.localization) private var l10n
 
   var body: some View {
     GeometryReader { proxy in
@@ -20,12 +23,12 @@ struct ScmSplit: View {
         total: proxy.size.height, above: above, stored: sidebar.graphHeight,
         isRepositoryOpen: panel.isRepositoryOpen, isGraphOpen: panel.isGraphOpen)
       VStack(spacing: 0) {
-        VStack(spacing: 0) {
-          ScmRepositoryHead(panel: panel)
-          if panel.isRepositoryOpen { ScmControls(panel: panel) }
-        }
-        .onGeometryChange(for: CGFloat.self, of: \.size.height) { above = $0 }
+        ScmRepositoryHead(panel: panel)
+          .onGeometryChange(for: CGFloat.self, of: \.size.height) { above = $0 }
         if panel.isRepositoryOpen {
+          if panel.listState == .none {
+            EditorSidebarNote(text: l10n.string(.editorScmNoChanges))
+          }
           ScmList(panel: panel, list: list)
         } else {
           Spacer(minLength: 0)
@@ -63,7 +66,7 @@ struct ScmSplit: View {
 
 /// 親「ソース管理」とグラフの枠の高さの割り振り（純関数）。
 struct ScmPanelSplit {
-  /// 帯の下の高さ。
+  /// パネルヘッダーの下の高さ。
   let total: CGFloat
   /// 親の中で列より上に出ているものの高さ。
   let above: CGFloat
@@ -106,7 +109,7 @@ private struct ScmList: View {
   var body: some View {
     RowListHost(
       list: list, rowsVersion: panel.rowsVersion, selection: panel.selection,
-      emoji: fontResolver.emojiFont, wantsFocus: panel.focusRequest == .list
+      emoji: fontResolver.emojiFont, wantsFocus: panel.wantsListFocus
     )
     .onChange(of: l10n.language, initial: true) { _, language in
       guard list.list.source.language != language else { return }

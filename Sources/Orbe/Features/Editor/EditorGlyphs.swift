@@ -128,13 +128,7 @@ enum EditorGlyphs {
 }
 
 extension EditorGlyphs {
-  /// コミット: レ点（`M3 8.5l3.2 3L13 4.5`。stroke 1.3）。
-  static let check = Glyph(viewBox: 16, stroke: 1.3) { k in [(checkPath(k), 1)] }
-
-  /// コミットボタンのレ点（同じ形で stroke 1.6）。
-  static let commitCheck = Glyph(viewBox: 16, stroke: 1.6) { k in [(checkPath(k), 1)] }
-
-  /// チェックボックスのレ点（同じ形で stroke 2.2）。
+  /// チェックボックスのレ点（`M3 8.5l3.2 3L13 4.5`。stroke 2.2）。
   static let checkboxCheck = Glyph(viewBox: 16, stroke: 2.2) { k in [(checkPath(k), 1)] }
 
   /// PR の頭の帯のレ点（同じ形で stroke 1.6）。
@@ -261,42 +255,38 @@ extension EditorGlyphs {
     return [(path, 1)]
   }
 
-  /// 同期: 下りと上りの矢印。
-  static let sync = Glyph(viewBox: 16, stroke: 1.5) { k in
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
-    var path = Path()
-    path.move(to: p(5, 2))
-    path.addLine(to: p(5, 12))
-    path.move(to: p(2.5, 9.5))
-    path.addLine(to: p(5, 12))
-    path.addLine(to: p(7.5, 9.5))
-    path.move(to: p(11, 14))
-    path.addLine(to: p(11, 4))
-    path.move(to: p(8.5, 6.5))
-    path.addLine(to: p(11, 4))
-    path.addLine(to: p(13.5, 6.5))
-    return [(path, 1)]
+  /// 同期の先行 ↑ `M8 12.5v-9M4.5 7 8 3.5 11.5 7` と遅れ ↓（その上下の反転）。stroke 1.5。
+  static let arrowUp = Glyph(viewBox: 16, stroke: 1.5) { k in
+    [(verticalArrowPath(k, down: false), 1)]
+  }
+  static let arrowDown = Glyph(viewBox: 16, stroke: 1.5) { k in
+    [(verticalArrowPath(k, down: true), 1)]
   }
 
-  /// ブランチを公開: 受け皿から上がる矢印。
-  static let publish = Glyph(viewBox: 16, stroke: 1.4) { k in
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
+  private static func verticalArrowPath(_ k: CGFloat, down: Bool) -> Path {
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: (down ? 16 - y : y) * k) }
     var path = Path()
-    path.move(to: p(8, 10.5))
-    path.addLine(to: p(8, 2.5))
-    path.move(to: p(5, 5.5))
-    path.addLine(to: p(8, 2.5))
-    path.addLine(to: p(11, 5.5))
-    path.move(to: p(3, 9.5))
-    path.addLine(to: p(3, 13))
-    path.addLine(to: p(13, 13))
-    path.addLine(to: p(13, 9.5))
-    return [(path, 1)]
+    path.move(to: p(8, 12.5))
+    path.addLine(to: p(8, 3.5))
+    path.move(to: p(4.5, 7))
+    path.addLine(to: p(8, 3.5))
+    path.addLine(to: p(11.5, 7))
+    return path
   }
 
-  /// 実行中の帯の「止める」: 角の丸い四角（塗り）。
-  static let stopSquare = Glyph(viewBox: 10, stroke: 0, fills: true) { k in
-    [(Path(roundedRect: CGRect(x: k, y: k, width: 8 * k, height: 8 * k), cornerRadius: k), 1)]
+  /// 警告: 三角と感嘆符 `M8 2.5 14.2 13H1.8zM8 6.6v3M8 11.3v.2`（stroke 1.5）。
+  static let warning = Glyph(viewBox: 16, stroke: 1.5) { k in
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
+    var path = Path()
+    path.move(to: p(8, 2.5))
+    path.addLine(to: p(14.2, 13))
+    path.addLine(to: p(1.8, 13))
+    path.closeSubpath()
+    path.move(to: p(8, 6.6))
+    path.addLine(to: p(8, 9.6))
+    path.move(to: p(8, 11.3))
+    path.addLine(to: p(8, 11.5))
+    return [(path, 1)]
   }
 
   /// ブランチ（線描き。小さい寸法で使うので塗りの細部は持たない）。

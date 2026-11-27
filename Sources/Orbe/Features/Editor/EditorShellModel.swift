@@ -57,6 +57,9 @@ final class EditorShellModel {
   var panel = Panel.files
   /// 器が透かしている（上のバーの「⌥ 端末を表示」を押している間の姿にする）。
   var isPeeking = false
+  /// 本体の上端の帯（差分の見出し）の高さ。帯が無ければ 0。書くのは pane だけ（置き直すたびに）。置き場は、札を帯の下から
+  /// 並べるために、これを読む。
+  var bodyBandHeight: CGFloat = 0
   /// 今の項目（無ければボタンを出さない）。書くのは pane だけで、ボタンの表示・⌘P・一覧の器の開閉が同じ値を読む。
   var currentItem: CurrentItem?
 

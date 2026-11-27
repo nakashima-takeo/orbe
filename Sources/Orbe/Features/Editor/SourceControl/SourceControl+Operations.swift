@@ -109,23 +109,23 @@ extension SourceControl {
   private func pull(
     _ files: RootFiles, _ operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void
   ) {
-    network(.pull, of: operation, done) { finished in
+    network(.pull, of: operation, done) { [weak self] finished in
       files.pull(
-        onProgress: { [weak self] in self?.report($0, of: operation) }, completion: finished)
+        onProgress: { self?.report($0, of: operation) }, completion: finished)
     }
   }
 
   private func push(
     _ files: RootFiles, _ operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void
   ) {
-    network(.push, of: operation, done) { finished in
+    network(.push, of: operation, done) { [weak self] finished in
       files.push(
-        onProgress: { [weak self] in self?.report($0, of: operation) }, completion: finished)
+        onProgress: { self?.report($0, of: operation) }, completion: finished)
     }
   }
 
   /// ネットの段（`write` が、渡した完了で起こす書き込み）を起こして結ぶ。そのリポジトリの裏の fetch が走っていれば、止めて
-  /// その終わりを待ってから起こす——待つ間も操作は走っている扱いで帯に出し、止められたら待ちを取り下げてその場で「止めた」で
+  /// その終わりを待ってから起こす——待つ間も操作は走っている扱いで実行中の札に出し、止められたら待ちを取り下げてその場で「止めた」で
   /// 終える。譲るのはネットの段の直前だけ（コミットしてプッシュのコミットは押した時点で順番に入り、待つ間に押した操作が先に
   /// 走らない）。起こした段の終わりは、裏の fetch の係へも届ける（取り下げた段は起こしていないので届けない）。
   private func network(
