@@ -59,4 +59,30 @@ extension SurfaceMinimapTests {
     let lines = surface.viewportLines
     XCTAssertEqual(lines.first + lines.visible / 2, CGFloat(target), accuracy: 1e-6, "行 20 の 2 段目")
   }
+
+  /// 折り返した行では、git の印は行の全部の段に出て、検索の一致は、一致のある段に範囲と地で出る。
+  func testAWrappedLineShowsItsMarkOnEverySegmentAndItsMatchOnItsSegment() throws {
+    let long = (0..<200).map { "w\($0)" }.joined(separator: " ")
+    let opened = try open(
+      "a\n\(long)\nc\n", size: CGSize(width: 800, height: 300), style: style, waitForColors: false)
+    opened.document.baseline = "a\nchanged\nc\n"
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    let rows = opened.surface.rows
+    let segments = rows.segments(ofLine: 1)
+    XCTAssertGreaterThanOrEqual(segments, 3, "前提: 行 2 は折り返す")
+    let rope = opened.document.text
+    let match = NSRange(
+      location: rope.lineStart(1) + (long as NSString).range(of: "w150").location, length: 4)
+    let segment = rows.segment(containing: match.location - rope.lineStart(1), line: 1)
+    XCTAssertGreaterThan(segment, 0, "前提: 一致は続きの段")
+    opened.surface.setHighlights([match], for: .findMatch)
+    let map = try minimap(opened)
+    let mark = { (row: Int) in map.shot.rgb(map.area.minX + 1.25, map.placement.y(ofLine: row) + 1)
+    }
+    for unit in 1...segments {
+      XCTAssertGreaterThan(mark(unit)[2], mark(unit)[0] + 60, "段 \(unit - 1) の変更の印: \(mark(unit))")
+    }
+    XCTAssertEqual(mark(1 + segments), [0, 0, 0], "次の行には印が無い")
+    XCTAssertGreaterThan(map.rowEnd(1 + segment)[0], 60, "一致の段の地: \(map.rowEnd(1 + segment))")
+  }
 }

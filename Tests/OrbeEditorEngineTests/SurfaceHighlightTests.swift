@@ -111,4 +111,28 @@ final class SurfaceHighlightTests: EngineTestCase {
     opened.surface.setHighlights([NSRange(location: 0, length: 1)], for: .findMatch)
     XCTAssertEqual(opened.surface.drawn.revision, revision)
   }
+
+  /// 折り返した行では、検索の一致の地は一致のある段に出る——後ろの段の一致も、段をまたぐ一致の、両方の段の部分も。
+  func testFindGroundsOnAWrappedLineShowOnTheirSegments() throws {
+    let line = (0..<200).map { "w\($0)" }.joined(separator: " ")
+    let opened = try open(line + "\n", name: "a.txt", style: style)
+    let wrap = try XCTUnwrap(opened.surface.rows.wrap(ofLine: 0), "前提: 行 0 は折り返す")
+    let later = (line as NSString).range(of: "w150")
+    let segment = opened.surface.rows.segment(containing: later.location, line: 0)
+    XCTAssertGreaterThan(segment, 1, "前提: 後ろの段")
+    let boundary = wrap.start(of: 1)
+    opened.surface.setHighlights(
+      [NSRange(location: boundary - 2, length: 4), later], for: .findMatch)
+    let shot = try pixelShot(opened)
+    let at = { (row: Int, column: CGFloat) in
+      shot.rgb(
+        self.probe(opened, row: row, column: column).0,
+        self.probe(opened, row: row, column: column).1)
+    }
+    XCTAssertEqual(
+      at(segment, CGFloat(later.location - wrap.start(of: segment)) + 1.5), [255, 0, 0],
+      "後ろの段の一致")
+    XCTAssertEqual(at(0, CGFloat(boundary) - 1.5), [255, 0, 0], "段をまたぐ一致の、前の段の部分")
+    XCTAssertEqual(at(1, 0.5), [255, 0, 0], "段をまたぐ一致の、次の段の部分")
+  }
 }

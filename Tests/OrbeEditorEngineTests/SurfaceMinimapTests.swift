@@ -15,7 +15,7 @@ final class SurfaceMinimapTests: EngineTestCase {
   }
 
   /// 装飾の種類ごとに見分けられる不透明な色の見え方（行の地は半分の濃さになる）。
-  private var style: TextSurfaceStyle {
+  var style: TextSurfaceStyle {
     var style = EngineTestCase.style()
     style.overview.minimap.findMatch = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
     style.overview.minimap.wordOccurrence = NSColor(srgbRed: 0, green: 0, blue: 1, alpha: 1)
@@ -24,7 +24,7 @@ final class SurfaceMinimapTests: EngineTestCase {
   }
 
   /// 撮った絵とミニマップの配置。点はミニマップの行と桁で引く。
-  private struct Minimap {
+  struct Minimap {
     let shot: PixelShot
     let area: CGRect
     let placement: MinimapLayout
@@ -45,7 +45,7 @@ final class SurfaceMinimapTests: EngineTestCase {
     }
   }
 
-  private func minimap(_ opened: Opened) throws -> Minimap {
+  func minimap(_ opened: Opened) throws -> Minimap {
     let shot = try pixelShot(opened)
     return Minimap(
       shot: shot, area: opened.surface.surfaceLayout.minimap,
