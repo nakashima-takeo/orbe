@@ -99,7 +99,7 @@ final class BrowserTabRuntime: NSObject {
 
   // MARK: - 遷移操作
 
-  func load(_ url: URL) {
+  func load(_ url: URL, notify: Bool = true) {
     guard !isInvalidated else { return }
     hasNavigated = true
     lastRequestedURL = url
@@ -114,11 +114,11 @@ final class BrowserTabRuntime: NSObject {
         navigation: navigation, requestedURL: url,
         allowsSameDocumentCompletion: allowsSameDocument,
         initialBackForwardItem: initialItem))
-    notifyStateChange()
+    if notify { notifyStateChange() }
   }
 
   /// ローカル HTML を外部通信なしで読み込む（`visual-check`・テスト用）。
-  func loadHTMLString(_ html: String, baseURL: URL?) {
+  func loadHTMLString(_ html: String, baseURL: URL?, notify: Bool = true) {
     guard !isInvalidated else { return }
     hasNavigated = true
     lastRequestedURL = nil
@@ -132,7 +132,7 @@ final class BrowserTabRuntime: NSObject {
         navigation: navigation, requestedURL: baseURL ?? URL(string: "about:blank"),
         isLocalHTML: true, allowsInternalBlankLoad: baseURL == nil,
         initialBackForwardItem: initialItem))
-    notifyStateChange()
+    if notify { notifyStateChange() }
   }
 
   func goBack() {

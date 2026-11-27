@@ -175,7 +175,6 @@ extension BrowserTabRuntime: WKNavigationDelegate, WKUIDelegate {
       displayURL = nil
       title = ""
     }
-    syncTitleFromWebView()
   }
 
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

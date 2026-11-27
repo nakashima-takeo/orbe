@@ -8,20 +8,22 @@ extension BrowserLayerView {
     let nextSpaceId = session.store.activeSpace?.id
     let nextTabId = session.store.activeTab?.id
     if mountedRuntime === next && displayedSpaceId == nextSpaceId && displayedTabId == nextTabId {
-      newTabHost.isHidden = next?.hasNavigated ?? false
+      let wasEmpty = !newTabHost.isHidden
+      let isNowNavigated = next?.hasNavigated ?? false
+      newTabHost.isHidden = isNowNavigated
       syncToolbar(from: next)
-      if let next, next.hasNavigated, mode.isOpen, !isEditingURL,
-        !isPopoverOpen, !isSidebarOverlay, window?.firstResponder === self
-      {
+      if wasEmpty && isNowNavigated && mode.isOpen && focusIsInside && !isEditingURL {
         focusBrowser()
       }
       return
     }
     let wasFocused = focusIsInside
     if isEditingURL {
+      reclaimFocusToSelfIfInside(barHost)
       endURLEditingExternally()
     }
     if mountedRuntime !== next {
+      reclaimFocusToSelfIfInside(contentView)
       mountedRuntime?.webView.removeFromSuperview()
       mountedRuntime = next
     }
@@ -47,6 +49,13 @@ extension BrowserLayerView {
     if mode.isOpen && wasFocused {
       focusBrowser()
     }
+  }
+
+  /// 同一アクティブランタイムの KVO・遷移状態変化をツールバーと表示状態へ投影する（焦点は動かさない）。
+  func syncActiveRuntimeState(_ runtime: BrowserTabRuntime) {
+    guard mountedRuntime === runtime else { return }
+    newTabHost.isHidden = runtime.hasNavigated
+    syncToolbar(from: runtime)
   }
 
   func syncToolbar(from runtime: BrowserTabRuntime?) {

@@ -60,14 +60,6 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
-    let webView = runtime.webView
-    XCTAssertFalse(
-      webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically,
-      "スクリプト自動ポップアップは WebKit 設定で抑止する")
-    let spy = BrowserNavigationPolicySpy(target: runtime)
-    webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = runtime }
 
     let crossServer = try LocalLoopbackHTTPServer(routes: [
       "/cross": Self.crossOriginFrameHTML,
@@ -82,6 +74,14 @@ extension BrowserLayerViewTests {
     browser.onNavigationFinish = { finishCount += 1 }
     let mainURL = mainServer.url(for: "/main")
     browser.load(mainURL)
+    let runtime = try XCTUnwrap(browser.mountedRuntime)
+    let webView = runtime.webView
+    XCTAssertFalse(
+      webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically,
+      "スクリプト自動ポップアップは WebKit 設定で抑止する")
+    let spy = BrowserNavigationPolicySpy(target: runtime)
+    webView.navigationDelegate = spy
+    defer { webView.navigationDelegate = runtime }
     pumpMain(until: { finishCount >= 1 }, timeout: 5, "メインページ読み込み完了")
     XCTAssertEqual(webView.url, mainURL, "読み込み時の自動 window.open で遷移しない")
 
@@ -209,13 +209,31 @@ extension BrowserLayerViewTests {
     XCTAssertEqual(ctx.webView.url, ctx.mainURL, "\(label) で現在ページが変わらない", file: file, line: line)
   }
 
+  /// 初回遷移前から `navigationDelegate` スパイや KVO 監視を仕掛けるテスト専用補助。
+  func prepareEmptyRuntimeForObservation(
+    in browser: BrowserLayerView,
+    file: StaticString = #filePath, line: UInt = #line
+  ) throws -> BrowserTabRuntime {
+    let tab: BrowserTab
+    if let existing = browser.session.store.activeTab {
+      tab = existing
+    } else {
+      tab = try XCTUnwrap(
+        browser.session.openTab(section: .today, url: nil, activate: true),
+        file: file, line: line)
+    }
+    let runtime = try XCTUnwrap(browser.session.ensureRuntime(for: tab), file: file, line: line)
+    browser.mountRuntime(runtime)
+    return runtime
+  }
+
   /// `webView.isLoading` の `true → false` 遷移を KVO で確実に捕まえてから `browser.load(_:)` を呼び、
   /// 読み込み開始前の素通りを防いだうえで初回失敗と main キュー上のツールバー反映の完了まで待つ。
   func loadAndWaitForInitialFailure(
     _ url: URL, in browser: BrowserLayerView, _ label: String,
     file: StaticString = #filePath, line: UInt = #line
   ) throws {
-    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime(), file: file, line: line)
+    let runtime = try prepareEmptyRuntimeForObservation(in: browser, file: file, line: line)
     let webView = runtime.webView
     var sawLoading = false
     let observation = webView.observe(\.isLoading, options: [.new]) { _, change in

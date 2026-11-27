@@ -6,10 +6,17 @@ import Foundation
 /// プロファイル削除時の解放先行順序を保証する。
 @MainActor
 final class BrowserSession {
+  typealias StoreRemovalScheduler =
+    @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> () -> Void
+
+  static let defaultStoreRemovalRetryDelays: [TimeInterval] = [0.25, 0.5, 1.0]
+
   let store: BrowserStore
   let dataStores: BrowserDataStoreRegistry
   let cleaner: BrowserTabCleaner
   let now: () -> Date
+  let scheduleStoreRemoval: StoreRemovalScheduler
+  var storeRemovalRetryDelays: [TimeInterval] = defaultStoreRemovalRetryDelays
 
   var runtimes: [UUID: BrowserTabRuntime] = [:]
   private(set) var isStarted = false
@@ -17,8 +24,13 @@ final class BrowserSession {
 
   var visibleTabId: UUID?
   private var drainingStoreRemovals = false
+  private var cancelScheduledStoreRemoval: (() -> Void)?
+  private var storeRemovalRetryAttempts: [UUID: Int] = [:]
 
+  /// アクティブタブまたは表示ランタイムの切替通知（マウント・焦点引継用）。
   var onActiveDisplayChange: ((BrowserTabRuntime?) -> Void)?
+  /// 同一アクティブランタイムの KVO・遷移状態更新通知（ツールバー投影のみ）。
+  var onActiveRuntimeStateChange: ((BrowserTabRuntime) -> Void)?
   var onActiveNavigationFinish: (() -> Void)?
 
   var activeRuntime: BrowserTabRuntime? {
@@ -29,10 +41,12 @@ final class BrowserSession {
     store: BrowserStore,
     dataStores: BrowserDataStoreRegistry? = nil,
     cleaner: BrowserTabCleaner? = nil,
-    now: @escaping () -> Date = Date.init
+    now: @escaping () -> Date = Date.init,
+    scheduleStoreRemoval: @escaping StoreRemovalScheduler = BrowserSession.defaultScheduleRemoval
   ) {
     self.store = store
     self.now = now
+    self.scheduleStoreRemoval = scheduleStoreRemoval
     self.dataStores =
       dataStores
       ?? BrowserDataStoreRegistry(isIsolated: { StateDir.isIsolated || !store.available })
@@ -51,14 +65,30 @@ final class BrowserSession {
   deinit {
     let cleaner = self.cleaner
     let runtimes = self.runtimes
+    let cancelRemoval = self.cancelScheduledStoreRemoval
     if Thread.isMainThread {
       MainActor.assumeIsolated {
+        cancelRemoval?()
         cleaner.stop()
         for runtime in runtimes.values {
           runtime.invalidate()
         }
       }
     }
+  }
+
+  static func defaultScheduleRemoval(
+    delay: TimeInterval, work: @escaping @MainActor () -> Void
+  ) -> () -> Void {
+    let item = DispatchWorkItem {
+      MainActor.assumeIsolated { work() }
+    }
+    if delay <= 0 {
+      DispatchQueue.main.async(execute: item)
+    } else {
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+    return { item.cancel() }
   }
 
   /// 単体利用（`BrowserLayerView` 単独・テスト・視覚確認）用のインメモリ即開始セッション。
@@ -84,17 +114,26 @@ final class BrowserSession {
       syncCurrentWorkspace(initialWorkspaceId, name: workspaceName)
       return
     }
-    if let removed = store.pruneExpiredTodayTabs(now: now(), protectedTabId: nil).value {
-      invalidateRuntimes(removed)
-    }
+    let detached =
+      store.pruneExpiredTodayTabs(now: now(), protectedTabId: nil).value.map(detachRuntimes) ?? []
     isStarted = true
     _ = syncWorkspaceIntoStore(initialWorkspaceId, name: workspaceName)
     syncVisibilityAndDisplay(touchingLeavingTab: false)
+    invalidateDetachedRuntimes(detached)
     drainPendingStoreRemovals()
     cleaner.start()
   }
 
-  func stop() {
+  /// セッションを停止する。アプリ終了経路（`flushingActiveTab: true`）では表示中 `TODAY` タブの
+  /// `lastActiveAt` を確定保存してから停止し、`deinit` 等では無副作用で停止する。
+  func stop(flushingActiveTab: Bool = false) {
+    if flushingActiveTab, isBrowserOpen, let tabId = visibleTabId {
+      _ = store.touchTabActive(tabId, now: now())
+      visibleTabId = nil
+    }
+    isStarted = false
+    cancelScheduledStoreRemoval?()
+    cancelScheduledStoreRemoval = nil
     cleaner.stop()
   }
 
@@ -118,11 +157,10 @@ final class BrowserSession {
   }
 
   func removeLocalSpace(for workspaceId: UUID) {
-    guard let space = store.localSpace(for: workspaceId) else { return }
-    let tabIds = store.tabs(in: space.id).map(\.id)
-    invalidateRuntimes(tabIds)
-    _ = store.removeLocalSpace(for: workspaceId)
+    guard let removedTabIds = store.removeLocalSpace(for: workspaceId).value else { return }
+    let detached = detachRuntimes(removedTabIds)
     syncVisibilityAndDisplay(touchingLeavingTab: false)
+    invalidateDetachedRuntimes(detached)
   }
 
   // MARK: - 表示状態・シート幅比率
@@ -156,22 +194,18 @@ final class BrowserSession {
     cleaner.recount()
   }
 
-  /// 段階 1（常時）で破棄済み・不一致ランタイムのアンマウントとツールバー投影を保証し、
-  /// 段階 2（開放中のみ）で URL 付き未 materialize アクティブタブを遅延生成・ロードする。
+  /// 開放中で URL 付き未 materialize アクティブタブがあれば遅延生成・ロードし、表示切替を 1 回だけ通知する。
   func syncActiveDisplay(allowMaterialize: Bool = true) {
     let activeTab = store.activeTab
-    let existing = activeTab.flatMap { runtimes[$0.id] }
-    onActiveDisplayChange?(existing)
-
-    guard allowMaterialize, isBrowserOpen,
-      let tab = activeTab,
-      existing == nil,
-      let url = tab.url
-    else { return }
-
-    guard let runtime = materializeRuntime(for: tab) else { return }
-    runtime.load(url)
-    onActiveDisplayChange?(runtime)
+    var target = activeTab.flatMap { runtimes[$0.id] }
+    if target == nil, allowMaterialize, isBrowserOpen,
+      let tab = activeTab, let url = tab.url,
+      let runtime = materializeRuntime(for: tab)
+    {
+      runtime.load(url, notify: false)
+      target = runtime
+    }
+    onActiveDisplayChange?(target)
   }
 
   func ensureRuntime(for tab: BrowserTab) -> BrowserTabRuntime? {
@@ -187,7 +221,7 @@ final class BrowserSession {
       guard let self, let runtime, self.runtimes[runtime.tabId] === runtime,
         self.store.activeTab?.id == runtime.tabId
       else { return }
-      self.onActiveDisplayChange?(runtime)
+      self.onActiveRuntimeStateChange?(runtime)
     }
     runtime.onCommittedNavigation = { [weak self] url, title in
       guard let self else { return }
@@ -206,42 +240,84 @@ final class BrowserSession {
     return runtime
   }
 
-  func invalidateRuntimes(_ tabIds: [UUID]) {
-    for tabId in tabIds {
-      runtimes.removeValue(forKey: tabId)?.invalidate()
+  /// 指定タブのランタイムを辞書から切り離して返す（表示同期完了まで `superview` と強参照を維持する）。
+  func detachRuntimes(_ tabIds: [UUID]) -> [BrowserTabRuntime] {
+    tabIds.compactMap { runtimes.removeValue(forKey: $0) }
+  }
+
+  func invalidateDetachedRuntimes(_ detached: [BrowserTabRuntime]) {
+    for runtime in detached {
+      runtime.invalidate()
+    }
+  }
+
+  func scheduleDrainPendingStoreRemovals(delay: TimeInterval) {
+    guard isStarted, !dataStores.isIsolated, !store.pendingStoreRemovals.isEmpty else { return }
+    cancelScheduledStoreRemoval?()
+    cancelScheduledStoreRemoval = scheduleStoreRemoval(delay) { [weak self] in
+      guard let self else { return }
+      self.cancelScheduledStoreRemoval = nil
+      self.drainPendingStoreRemovals()
     }
   }
 
   func drainPendingStoreRemovals() {
-    guard !drainingStoreRemovals, !dataStores.isIsolated else { return }
+    guard isStarted, !drainingStoreRemovals, !dataStores.isIsolated else { return }
     let pending = store.pendingStoreRemovals.map(\.storeId)
     guard !pending.isEmpty else { return }
+    cancelScheduledStoreRemoval?()
+    cancelScheduledStoreRemoval = nil
     drainingStoreRemovals = true
-    drainNextStoreRemoval(pending, index: 0)
+    drainNextStoreRemoval(pending, index: 0, failedIds: [])
   }
 
-  private func drainNextStoreRemoval(_ ids: [UUID], index: Int) {
+  private func drainNextStoreRemoval(_ ids: [UUID], index: Int, failedIds: [UUID]) {
     guard index < ids.count else {
       drainingStoreRemovals = false
-      let attempted = Set(ids)
-      if !dataStores.isIsolated,
-        store.pendingStoreRemovals.contains(where: { !attempted.contains($0.storeId) })
-      {
-        drainPendingStoreRemovals()
-      }
+      finishStoreRemovalPass(attempted: Set(ids), failedIds: failedIds)
       return
     }
-    guard !dataStores.isIsolated else {
+    guard isStarted, !dataStores.isIsolated else {
       drainingStoreRemovals = false
+      cancelScheduledStoreRemoval?()
+      cancelScheduledStoreRemoval = nil
       return
     }
     let storeId = ids[index]
     dataStores.removePersistentStore(for: storeId) { [weak self] removed in
       guard let self else { return }
+      var nextFailed = failedIds
       if removed {
+        self.storeRemovalRetryAttempts.removeValue(forKey: storeId)
         _ = self.store.removePendingStoreRemoval(storeId)
+      } else {
+        nextFailed.append(storeId)
       }
-      self.drainNextStoreRemoval(ids, index: index + 1)
+      self.drainNextStoreRemoval(ids, index: index + 1, failedIds: nextFailed)
+    }
+  }
+
+  private func finishStoreRemovalPass(attempted: Set<UUID>, failedIds: [UUID]) {
+    guard isStarted, !dataStores.isIsolated else {
+      cancelScheduledStoreRemoval?()
+      cancelScheduledStoreRemoval = nil
+      return
+    }
+    if store.pendingStoreRemovals.contains(where: { !attempted.contains($0.storeId) }) {
+      scheduleDrainPendingStoreRemovals(delay: 0)
+      return
+    }
+    var minDelay: TimeInterval?
+    for storeId in failedIds
+    where store.pendingStoreRemovals.contains(where: { $0.storeId == storeId }) {
+      let attempt = storeRemovalRetryAttempts[storeId, default: 0]
+      guard attempt < storeRemovalRetryDelays.count else { continue }
+      storeRemovalRetryAttempts[storeId] = attempt + 1
+      let delay = storeRemovalRetryDelays[attempt]
+      minDelay = minDelay.map { min($0, delay) } ?? delay
+    }
+    if let delay = minDelay {
+      scheduleDrainPendingStoreRemovals(delay: delay)
     }
   }
 }

@@ -32,9 +32,12 @@ extension BrowserSession {
     for (tabId, runtime) in runtimes where runtime.profileId == profileId {
       targetTabIds.insert(tabId)
     }
-    invalidateRuntimes(Array(targetTabIds))
-    syncActiveDisplay(allowMaterialize: false)
-    dataStores.releaseCache(for: profileId)
+    autoreleasepool {
+      let detached = detachRuntimes(Array(targetTabIds))
+      syncActiveDisplay(allowMaterialize: false)
+      invalidateDetachedRuntimes(detached)
+      dataStores.releaseCache(for: profileId)
+    }
 
     let result = store.deleteProfile(profileId, reassigningTo: fallbackProfileId, now: now())
     if case .failed = result {
@@ -43,7 +46,7 @@ extension BrowserSession {
     }
     syncActiveDisplay()
     if case .persisted = result, !dataStores.isIsolated {
-      drainPendingStoreRemovals()
+      scheduleDrainPendingStoreRemovals(delay: 0)
     }
     return true
   }
@@ -72,19 +75,22 @@ extension BrowserSession {
     }
     if existing.profileId == profileId { return true }
     let tabIds = store.tabs(in: spaceId).map(\.id)
-    invalidateRuntimes(tabIds)
-    syncActiveDisplay(allowMaterialize: false)
-    let result = store.setSpaceProfile(spaceId, profileId: profileId)
+    guard store.setSpaceProfile(spaceId, profileId: profileId).didSucceed else {
+      return false
+    }
+    let detached = detachRuntimes(tabIds)
     syncActiveDisplay()
-    return result.didSucceed
+    invalidateDetachedRuntimes(detached)
+    return true
   }
 
   @discardableResult
   func deleteFreeSpace(_ id: UUID) -> Bool {
     let result = store.deleteFreeSpace(id)
     guard let removedTabIds = result.value else { return false }
-    invalidateRuntimes(removedTabIds)
+    let detached = detachRuntimes(removedTabIds)
     syncVisibilityAndDisplay(touchingLeavingTab: false)
+    invalidateDetachedRuntimes(detached)
     return true
   }
 
@@ -134,8 +140,9 @@ extension BrowserSession {
     guard store.closeTab(tabId, recordClosed: recordClosed, now: now()).didSucceed else {
       return false
     }
-    invalidateRuntimes([tabId])
+    let detached = detachRuntimes([tabId])
     syncVisibilityAndDisplay(touchingLeavingTab: false)
+    invalidateDetachedRuntimes(detached)
     return true
   }
 
@@ -144,8 +151,9 @@ extension BrowserSession {
     guard let resolvedSpaceId = spaceId ?? store.activeSpace?.id,
       let removed = store.clearTodayTabs(in: resolvedSpaceId, now: now()).value
     else { return [] }
-    invalidateRuntimes(removed)
+    let detached = detachRuntimes(removed)
     syncVisibilityAndDisplay(touchingLeavingTab: false)
+    invalidateDetachedRuntimes(detached)
     return removed
   }
 
@@ -165,8 +173,9 @@ extension BrowserSession {
       ).value
     else { return [] }
     if !removed.isEmpty {
-      invalidateRuntimes(removed)
+      let detached = detachRuntimes(removed)
       syncVisibilityAndDisplay(touchingLeavingTab: false)
+      invalidateDetachedRuntimes(detached)
     }
     return removed
   }
@@ -174,67 +183,37 @@ extension BrowserSession {
   // MARK: - アクティブタブへの遷移操作
 
   func load(_ url: URL) {
-    let tab: BrowserTab
-    if let existing = store.activeTab {
-      tab = existing
-      if existing.url == nil, BrowserURLInput.isValidHTTPNavigationURL(url) {
-        _ = store.updateTabNavigation(existing.id, url: url, title: nil, now: now())
-      }
-    } else {
-      guard let space = store.activeSpace else { return }
-      let initialURL = BrowserURLInput.isValidHTTPNavigationURL(url) ? url : nil
-      guard
-        let created = store.openTab(
-          in: space.id, section: .today, url: initialURL, activate: true, now: now()
-        ).value
-      else { return }
-      tab = created
-      if isBrowserOpen { visibleTabId = created.id }
-    }
-    guard let runtime = ensureRuntime(for: tab) else { return }
+    let initialURL = BrowserURLInput.isValidHTTPNavigationURL(url) ? url : nil
+    guard let runtime = prepareActiveRuntimeForNavigation(initialURL: initialURL) else { return }
+    runtime.load(url, notify: false)
     onActiveDisplayChange?(runtime)
-    runtime.load(url)
     cleaner.recount()
   }
 
   func loadHTMLString(_ html: String, baseURL: URL?) {
-    let tab: BrowserTab
-    if let existing = store.activeTab {
-      tab = existing
-    } else {
-      guard let space = store.activeSpace else { return }
-      guard
-        let created = store.openTab(
-          in: space.id, section: .today, url: nil, activate: true, now: now()
-        ).value
-      else { return }
-      tab = created
-      if isBrowserOpen { visibleTabId = created.id }
-    }
-    guard let runtime = ensureRuntime(for: tab) else { return }
+    guard let runtime = prepareActiveRuntimeForNavigation(initialURL: nil) else { return }
+    runtime.loadHTMLString(html, baseURL: baseURL, notify: false)
     onActiveDisplayChange?(runtime)
-    runtime.loadHTMLString(html, baseURL: baseURL)
     cleaner.recount()
   }
 
-  /// アクティブタブのランタイムを明示的に用意する（必要なら空 `TODAY` タブを作成）。
-  @discardableResult
-  func ensureActiveRuntime() -> BrowserTabRuntime? {
+  private func prepareActiveRuntimeForNavigation(initialURL: URL?) -> BrowserTabRuntime? {
     let tab: BrowserTab
     if let existing = store.activeTab {
       tab = existing
+      if existing.url == nil, let initialURL {
+        _ = store.updateTabNavigation(existing.id, url: initialURL, title: nil, now: now())
+      }
     } else {
       guard let space = store.activeSpace,
         let created = store.openTab(
-          in: space.id, section: .today, url: nil, activate: true, now: now()
+          in: space.id, section: .today, url: initialURL, activate: true, now: now()
         ).value
       else { return nil }
       tab = created
       if isBrowserOpen { visibleTabId = created.id }
     }
-    guard let runtime = ensureRuntime(for: tab) else { return nil }
-    onActiveDisplayChange?(runtime)
-    return runtime
+    return ensureRuntime(for: tab)
   }
 
   func goBack() { activeRuntime?.goBack() }

@@ -245,6 +245,7 @@ extension BrowserSessionTests {
 
       isolated = false
       XCTAssertTrue(session.deleteProfile(victimId, reassigningTo: survivorId))
+      nextTurn()
       XCTAssertEqual(removerCalls, [victimId])
       let obs = try XCTUnwrap(observations.first)
       XCTAssertTrue(obs.mountedIsNil, "OS ストア削除時点で BrowserLayerView のマウント解除済み")

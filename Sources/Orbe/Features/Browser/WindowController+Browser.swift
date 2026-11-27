@@ -20,8 +20,8 @@ extension WindowController {
     }
   }
 
-  func stopBrowserSession() {
-    MainActor.assumeIsolated { browserSession.stop() }
+  func stopBrowserSession(flushingActiveTab: Bool = false) {
+    MainActor.assumeIsolated { browserSession.stop(flushingActiveTab: flushingActiveTab) }
   }
 
   /// `BrowserLayerView` と `OrbeWindow` のフォーカス監視を配線する。

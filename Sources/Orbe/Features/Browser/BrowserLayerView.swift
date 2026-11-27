@@ -225,6 +225,9 @@ final class BrowserLayerView: NSView {
     session.onActiveDisplayChange = { [weak self] runtime in
       self?.mountRuntime(runtime)
     }
+    session.onActiveRuntimeStateChange = { [weak self] runtime in
+      self?.syncActiveRuntimeState(runtime)
+    }
     session.onActiveNavigationFinish = { [weak self] in
       self?.onNavigationFinish?()
     }

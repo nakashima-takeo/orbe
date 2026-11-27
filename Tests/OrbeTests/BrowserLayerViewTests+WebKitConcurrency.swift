@@ -15,11 +15,6 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
-    let webView = runtime.webView
-    let spy = BrowserNavigationPolicySpy(target: runtime)
-    webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = runtime }
 
     let serverA = try LocalLoopbackHTTPServer(routes: [
       "/page-a": "<!doctype html><p>origin-a</p>",
@@ -41,6 +36,11 @@ extension BrowserLayerViewTests {
 
     // 1. オリジン A → 別オリジン B のコミット直前に無応答遷移を重ね、後続失敗後の表示とオリジン判定を検証。
     browser.load(urlA)
+    let runtime = try XCTUnwrap(browser.mountedRuntime)
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
+    webView.navigationDelegate = spy
+    defer { webView.navigationDelegate = runtime }
     pumpMain(until: { finishCount >= 1 }, timeout: 5, "オリジン A 読み込み完了")
     try triggerSupersededCommit(in: browser, spy: spy) { browser.load(urlB) }
     XCTAssertEqual(browser.committedURL, urlB, "後続失敗後も先行コミット先 B を保持する")
@@ -83,11 +83,6 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
-    let webView = runtime.webView
-    let spy = BrowserNavigationPolicySpy(target: runtime)
-    webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = runtime }
 
     let serverA = try LocalLoopbackHTTPServer(routes: ["/page-a": "<!doctype html><p>a</p>"])
     defer { serverA.stop() }
@@ -97,6 +92,11 @@ extension BrowserLayerViewTests {
 
     // 1. baseURL ありローカル HTML の先行コミット＋後続失敗 → backForwardList の旧 A ではなく baseURL を反映。
     browser.load(urlA)
+    let runtime = try XCTUnwrap(browser.mountedRuntime)
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
+    webView.navigationDelegate = spy
+    defer { webView.navigationDelegate = runtime }
     pumpMain(until: { finishCount >= 1 }, timeout: 5, "オリジン A 完了")
     let localBase = URL(string: "https://docs.orbe.dev/local")!
     try triggerSupersededCommit(in: browser, spy: spy) {
@@ -134,11 +134,6 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
-    let webView = runtime.webView
-    let spy = BrowserNavigationPolicySpy(target: runtime)
-    webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = runtime }
 
     let server = try LocalLoopbackHTTPServer(responses: [
       "/page-a": .html("<!doctype html><p>a</p>"),
@@ -155,6 +150,11 @@ extension BrowserLayerViewTests {
 
     // 1. load(hang1) 直後に load(hang2) を重ねても過渡的 isLoading == false で巻き戻らない。
     browser.load(pageA)
+    let runtime = try XCTUnwrap(browser.mountedRuntime)
+    let webView = runtime.webView
+    let spy = BrowserNavigationPolicySpy(target: runtime)
+    webView.navigationDelegate = spy
+    defer { webView.navigationDelegate = runtime }
     pumpMain(until: { finishCount >= 1 }, timeout: 5, "page-a 完了")
     let startsBefore = spy.provisionalStartCount
     browser.load(hang1)
@@ -188,7 +188,7 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
+    let runtime = try prepareEmptyRuntimeForObservation(in: browser)
     let webView = runtime.webView
     let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy

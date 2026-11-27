@@ -107,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ControlServer.shared.stop()
     BackgroundRuns.shared.stopAll()
     windowController?.settleTaskPaletteEditing()  // タスクのストアは変異ごとに即時保存する
-    windowController?.stopBrowserSession()
+    windowController?.stopBrowserSession(flushingActiveTab: true)
     windowController?.flushSave()
   }
 }

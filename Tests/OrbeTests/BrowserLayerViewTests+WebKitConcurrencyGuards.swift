@@ -312,7 +312,7 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let browser = hosted.browser
     browser.setMode(.sheet, animated: false)
-    let runtime = try XCTUnwrap(browser.session.ensureActiveRuntime())
+    let runtime = try prepareEmptyRuntimeForObservation(in: browser)
     let webView = runtime.webView
     let spy = BrowserNavigationPolicySpy(target: runtime)
     webView.navigationDelegate = spy
