@@ -10,7 +10,7 @@ import XCTest
 /// ブラウザ覆い判定とクリック時閉鎖、および URL 編集中フォーカス保護・タブ改名クリックを実窓で守る。
 ///
 /// 壊れると何が起きるか。ブラウザ開閉で端末の行桁が崩れて pty に SIGWINCH が飛ぶ。
-/// 0 タブやボード上で `⌘B` が効かなくなる。URL 欄編集中に `⌘T` 等が暴発する、または背景操作・タブ改名欄の
+/// 0 タブやボード上で `⌘B` が効かなくなる。URL 欄編集中に下層パレット等が暴発する、または背景操作・タブ改名欄の
 /// blur で入力中の URL やブラウザ焦点が奪われる。
 /// workspace 切替やパレット往復でブラウザが閉じたり焦点が背後の端末へ奪われたりする。
 /// 全面ブラウザ上の `⌘E` や `open_file` でブラウザが閉じずゴースト入力になる。
@@ -51,7 +51,7 @@ final class WindowControllerBrowserTests: OrbeTestCase {
   // MARK: - ⌘B トグル・端末寸法不変・0 タブ・ボード・URL 編集中ガード
 
   /// `⌘B` はタブ・0 タブ・ボードを問わず開閉し、開閉・幅変更・全面切替の前後で端末の寸法を 1px も変えない。
-  /// URL 欄編集中は `⌘B` 以外のタブ不要コマンドを不活性化し、`⌘B` は編集を外因終了して閉じる。
+  /// URL 欄編集中は単一降下ゲート経由のタブ不要コマンドを不活性化し、`⌘B` は編集を外因終了して閉じる。
   func testCommandBTogglesAcrossTabsZeroTabsAndBoardWithoutResizingTerminal() throws {
     let window = OrbeWindowFake()
     let wc = try restore(
@@ -83,9 +83,11 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     XCTAssertEqual(wc.browserView.sheetRatio, 0.72, accuracy: 0.001, "右シート復帰後も設定比率を保つ")
     wc.setBrowserMode(.full, animated: false)
 
-    // URL 欄編集中は ⌘T が不活性で暴発せず、⌘B だけ編集を外因終了して閉じる。
+    // URL 欄編集中は単一降下ゲート経由の下層パレットコマンドが不活性で暴発せず、⌘B だけ編集を外因終了して閉じる。
     wc.browserView.beginURLEditing()
-    XCTAssertFalse(wc.handleWindowKeyCommand(.showWorktreePalette), "URL 編集中は ⌘T を抑止")
+    XCTAssertFalse(
+      wc.handleWindowKeyCommand(.showWorktreePalette),
+      "URL 編集中は単一降下ゲート経由の下層コマンドを抑止")
     XCTAssertEqual(wc.presentedOverlay, .none)
     XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("b")))
     XCTAssertEqual(wc.browserMode, .closed)

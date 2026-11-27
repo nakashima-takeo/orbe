@@ -14,30 +14,6 @@ import XCTest
 /// `⌘S` で背後のエディターが保存される。逆に日本語変換中の `⌘B` でブラウザが閉じて変換が失われる、
 /// あるいは端末・エディター・ボードの従来ショートカットが右シート開中に壊れる。
 extension WindowControllerBrowserTests {
-  private func keyEvent(
-    _ chars: String, keyCode: UInt16, flags: NSEvent.ModifierFlags = [], in window: NSWindow
-  ) -> NSEvent {
-    NSEvent.keyEvent(
-      with: .keyDown, location: .zero, modifierFlags: flags,
-      timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-      context: nil, characters: chars, charactersIgnoringModifiers: chars,
-      isARepeat: false, keyCode: keyCode)!
-  }
-
-  private func waitEditor(in host: NSView, window: NSWindow, _ label: String) throws -> NSTextView {
-    flush(window)
-    pumpMain(
-      until: { (window.firstResponder as? NSTextView)?.isDescendant(of: host) == true }, label)
-    return try XCTUnwrap(window.firstResponder as? NSTextView)
-  }
-
-  private func markComposing(_ editor: NSTextView, _ text: String = "へんかん") {
-    editor.setMarkedText(
-      text, selectedRange: NSRange(location: (text as NSString).length, length: 0),
-      replacementRange: NSRange(location: NSNotFound, length: 0))
-    XCTAssertTrue(editor.hasMarkedText(), "前提: IME 変換中")
-  }
-
   // MARK: - ブラウザ焦点中（通常）の 5 キー E2E
 
   /// ブラウザ焦点中は `⌘T`（新タブ）・`⌘W`（`TODAY` のみ閉鎖）・`⌘R`（再読込）・`⌘⇧T`（閉じたタブ復元）・
@@ -133,6 +109,7 @@ extension WindowControllerBrowserTests {
     expectedReopenURL: URL, termCountBefore: Int
   ) {
     XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("w")))
+    nextTurn()
     XCTAssertNil(wc.browserSession.store.tab(id: createdTabId), "TODAY タブが閉じる")
     XCTAssertEqual(wc.current.tabs.count, termCountBefore, "端末タブは閉じない")
 
@@ -143,6 +120,8 @@ extension WindowControllerBrowserTests {
       XCTAssertNotNil(
         wc.browserSession.store.tab(id: protectedId), "PINNED / Favorites は ⌘W で閉じない")
     }
+    nextTurn()
+    XCTAssertEqual(wc.current.tabs.count, termCountBefore, "保護タブ ⌘W 後も端末タブは閉じない")
     XCTAssertEqual(wc.browserMode, .sheet, "⌘W でブラウザ層自体は閉じない")
 
     XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("T", [.command, .shift])))
@@ -163,8 +142,10 @@ extension WindowControllerBrowserTests {
       [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain])],
       window: window)
     window.isKey = true
+    let server = try LocalLoopbackHTTPServer(routes: ["/edit": "<title>Edit</title><p>edit</p>"])
+    defer { server.stop() }
     wc.setBrowserMode(.sheet, animated: false)
-    let pageURL = URL(string: "https://docs.orbe.dev/edit")!
+    let pageURL = server.url(for: "/edit")
     let tab1 = try XCTUnwrap(wc.browserSession.openTab(section: .today, url: pageURL))
 
     try assertToolbarAndNewTabURLEditingShortcuts(
@@ -309,18 +290,22 @@ extension WindowControllerBrowserTests {
       ], window: window)
     window.isKey = true
 
+    let server = try LocalLoopbackHTTPServer(routes: [
+      "/keep": "<title>Keep</title><p>keep</p>",
+      "/old": "<title>Old</title><p>old</p>",
+    ])
+    defer { server.stop() }
     wc.setBrowserMode(.sheet, animated: false)
     let browserTab = try XCTUnwrap(
-      wc.browserSession.openTab(section: .today, url: URL(string: "https://docs.orbe.dev/keep")!))
+      wc.browserSession.openTab(section: .today, url: server.url(for: "/keep")))
     let closedSeed = try XCTUnwrap(
-      wc.browserSession.openTab(
-        section: .today, url: URL(string: "https://docs.orbe.dev/old")!, activate: false))
+      wc.browserSession.openTab(section: .today, url: server.url(for: "/old"), activate: false))
     XCTAssertTrue(wc.browserSession.closeTab(closedSeed.id, recordClosed: true))
     let browserTabCount = wc.browserSession.store.tabs.count
     let closedHistoryCount = wc.browserSession.store.closedTabs.count
 
     assertTerminalShortcutsPreserved(in: wc, window: window, browserTabId: browserTab.id)
-    try assertEditorAndBoardShortcutsPreserved(in: wc, docURL: docURL)
+    try assertEditorAndBoardShortcutsPreserved(in: wc, docURL: docURL, browserTabId: browserTab.id)
 
     XCTAssertEqual(wc.browserSession.store.tabs.count, browserTabCount, "ブラウザタブ数は一貫して不変")
     XCTAssertEqual(
@@ -363,38 +348,40 @@ extension WindowControllerBrowserTests {
 
   @MainActor
   private func assertEditorAndBoardShortcutsPreserved(
-    in wc: WindowController, docURL: URL
+    in wc: WindowController, docURL: URL, browserTabId: UUID
   ) throws {
     let remainingTab = try XCTUnwrap(wc.activeTab)
     let doc = try remainingTab.group.editor.open(docURL, as: .pinned)
     doc.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: "!")
     wc.toggleEditorFace()
-    XCTAssertEqual(wc.browserMode, .sheet, "前提: 右シートは開いたまま")
-    XCTAssertTrue(remainingTab.group.view.editor.focusIsInside)
-
+    XCTAssertTrue(wc.browserMode == .sheet && remainingTab.group.view.editor.focusIsInside)
     XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("s")))
     XCTAssertFalse(doc.isDirty, "エディター焦点中の ⌘S は文書を保存する")
     XCTAssertEqual(try String(contentsOf: docURL, encoding: .utf8), "!before")
     XCTAssertFalse(wc.browserView.isSidebarOpen, "エディター焦点中の ⌘S でサイドバーを開閉しない")
-
     XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("t")))
     XCTAssertEqual(wc.presentedOverlay, .worktreePalette)
+    wc.dismissPalette()
+    XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("T", [.command, .shift])))
+    XCTAssertEqual(wc.presentedOverlay, .closedAgentsPalette, "エディター焦点中の ⌘⇧T は閉じたエージェントパレット")
     wc.dismissPalette()
     XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("r")))
     XCTAssertNotNil(wc.statusModel.editingIndex, "エディター焦点中の ⌘R はタブ改名を開始する")
     wc.statusModel.onCancelRename()
+    XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("w")))
+    pumpMain(until: { wc.current.tabs.isEmpty }, "エディター焦点中の ⌘W は端末タブを閉じる")
+    XCTAssertNotNil(wc.browserSession.store.tab(id: browserTabId), "ブラウザ TODAY タブは無傷")
 
     wc.select(.board, inWorkspaceAt: try XCTUnwrap(wc.store.homeIndex))
-    XCTAssertEqual(wc.browserMode, .sheet)
-    XCTAssertTrue(wc.boardView.focusIsInside)
+    XCTAssertTrue(wc.browserMode == .sheet && wc.boardView.focusIsInside)
     XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("t")))
     XCTAssertEqual(wc.presentedOverlay, .worktreePalette)
     wc.dismissPalette()
     XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("T", [.command, .shift])))
     XCTAssertEqual(wc.presentedOverlay, .closedAgentsPalette)
     wc.dismissPalette()
-    XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("s")))
-    XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("w")))
-    XCTAssertTrue(wc.window.performKeyEquivalent(with: .key("r")))
+    for event in [NSEvent.key("s"), .key("w"), .key("r")] {
+      XCTAssertTrue(wc.window.performKeyEquivalent(with: event))
+    }
   }
 }

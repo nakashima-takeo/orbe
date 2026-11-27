@@ -129,6 +129,52 @@ extension WindowControllerBrowserTests {
     XCTAssertFalse(wc.browserSession.isBrowserOpen, "yieldBrowserToUnderlay 閉鎖も session へ同期")
   }
 
+  /// 初回言語選択フロー（`showFirstRunFlow()`）の言語確定で、未変更の既定自由スペース 3 種が
+  /// 確定言語へ同期され、既に改名済みのスペースは上書きされず DB へ永続化される。
+  @MainActor
+  func testFirstRunLanguageSelectSyncsUneditedDefaultFreeSpacesAndPreservesRenamed() throws {
+    AppStatePersistence.save(AppStateFile(preferredLanguage: nil))
+    let (targetLang, expectedNames): (Language, [String]) = try autoreleasepool {
+      let window = OrbeWindowFake()
+      let wc = try restore(
+        [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [Self.plain])],
+        window: window)
+      window.isKey = true
+
+      let initialLang = wc.localization.language
+      let targetLang: Language = initialLang == .ja ? .en : .ja
+      let freeSpaces = wc.browserSession.store.freeSpaces
+      XCTAssertEqual(freeSpaces.count, 3, "前提: 初回シード自由スペース 3 種")
+      let renamed = freeSpaces[2]
+      XCTAssertNotNil(
+        wc.browserSession.updateFreeSpace(renamed.id, name: "カスタム調査", icon: renamed.icon))
+
+      wc.showFirstRunFlow()
+      XCTAssertEqual(wc.model.overlay, .languageSelect, "preferredLanguage 未設定で初回言語選択が出る")
+      let langSelect = try XCTUnwrap(wc.model.languageSelect)
+      langSelect.onConfirm(targetLang)
+
+      let targetL10n = LocalizationStore(language: targetLang)
+      let expected = [
+        targetL10n.string(.browserDefaultSpacePersonal),
+        targetL10n.string(.browserDefaultSpaceWork),
+        "カスタム調査",
+      ]
+      XCTAssertEqual(
+        wc.browserSession.store.freeSpaces.map(\.name), expected,
+        "未変更 2 種は確定言語へ同期され、改名済み 1 種は保持される")
+      wc.stopBrowserSession()
+      window.contentView = nil
+      window.delegate = nil
+      return (targetLang, expected)
+    }
+
+    // 再起動（永続 DB 再開）しても同期結果が維持される。
+    let reopened = BrowserStore.open(language: targetLang)
+    XCTAssertTrue(reopened.available)
+    XCTAssertEqual(reopened.freeSpaces.map(\.name), expectedNames)
+  }
+
   @MainActor
   private func populateLocalWorkspace(
     _ wc: WindowController, index: Int, url: URL

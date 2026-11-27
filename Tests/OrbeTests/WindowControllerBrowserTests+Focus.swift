@@ -108,4 +108,75 @@ extension WindowControllerBrowserTests {
     XCTAssertFalse(wc.browserView.isEditingURL, "ローカルスペース切替で URL 編集が外因終了される")
     XCTAssertNil(wc.browserView.mountedRuntime)
   }
+
+  /// 右シート＋ローカルスペース焦点中（ページ表示中・URL 編集中）からの別 workspace 宛て下層遷移
+  /// （`controlFocusTab`・`controlOpenFile`・`select(.tab(...), inWorkspaceAt:)`）で、
+  /// `renderSelection` 内の `syncCurrentWorkspace` 後にブラウザが下層から焦点を奪い返さない。
+  @MainActor
+  func testLocalSpaceSheetYieldsFocusToTargetWorkspaceUnderlayWithoutReclaiming() throws {
+    let dir = TestScratch.caseDir.appendingPathComponent("ws-yield", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let file = try caseFile("ws-yield/target.txt", "hello")
+    let server = try LocalLoopbackHTTPServer(routes: [
+      "/a": "<!doctype html><title>A</title><p>a</p>",
+      "/b": "<!doctype html><title>B</title><p>b</p>",
+    ])
+    defer { server.stop() }
+
+    let window = OrbeWindowFake()
+    let wc = try restore(
+      [
+        WorkspaceState(name: "a", rootPath: dir.path, activeTab: 0, tabs: [Self.plain]),
+        WorkspaceState(name: "b", rootPath: dir.path, activeTab: 0, tabs: [Self.plain]),
+      ], window: window)
+    window.isKey = true
+    let wsAIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "a" })
+    let wsBIndex = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "b" })
+    let wsBTab = try XCTUnwrap(wc.workspaces[wsBIndex].tabs.first)
+
+    // wsB のローカルスペースにも遷移済みページを持たせ、syncCurrentWorkspace で mountRuntime が走る条件を作る。
+    wc.setBrowserMode(.sheet, animated: false)
+    wc.switchWorkspace(to: wsBIndex)
+    var finishes = 0
+    wc.browserView.onNavigationFinish = { finishes += 1 }
+    wc.browserView.load(server.url(for: "/b"))
+    pumpMain(until: { finishes >= 1 }, timeout: 5, "wsB ローカルページ読込")
+    wc.switchWorkspace(to: wsAIndex)
+    wc.browserView.load(server.url(for: "/a"))
+    pumpMain(until: { finishes >= 2 }, timeout: 5, "wsA ローカルページ読込")
+
+    // 1. controlFocusTab: wsA ローカル右シート焦点中 → wsB 端末へ遷移しブラウザが奪い返さない。
+    wc.browserView.focusBrowser()
+    XCTAssertTrue(wc.browserView.focusIsInside)
+    guard case .success = wc.controlFocusTab(tabId: wsBTab.id) else {
+      return XCTFail("controlFocusTab は success")
+    }
+    XCTAssertEqual(wc.browserMode, .sheet, "右シートは維持")
+    XCTAssertTrue(window.firstResponder === wsBTab.surface, "切替先 wsB 端末へ焦点が移る")
+    XCTAssertFalse(wc.browserView.focusIsInside, "syncCurrentWorkspace でブラウザが焦点を奪い返さない")
+    XCTAssertFalse(wc.browserWasFocused)
+
+    // 2. controlOpenFile: wsA ローカル右シート URL 編集中 → wsB エディターへ遷移しブラウザが奪い返さない。
+    wc.switchWorkspace(to: wsAIndex)
+    wc.browserView.focusBrowser()
+    wc.browserView.beginURLEditing()
+    flush(window)
+    pumpMain(
+      until: {
+        (window.firstResponder as? NSTextView)?.isDescendant(of: wc.browserView.barHost) == true
+      }, "wsA ローカル URL 欄編集中")
+    guard case .success = wc.controlOpenFile(tabId: wsBTab.id, path: file.path) else {
+      return XCTFail("controlOpenFile は success")
+    }
+    XCTAssertFalse(wc.browserView.isEditingURL, "URL 編集が外因終了される")
+    XCTAssertTrue(wsBTab.group.view.editor.focusIsInside, "切替先 wsB エディターへ焦点が移る")
+    XCTAssertFalse(wc.browserView.focusIsInside, "ブラウザがエディターから焦点を奪い返さない")
+
+    // 3. select(.tab, inWorkspaceAt:): wsA ローカル右シート焦点中 → wsB 端末へ遷移し奪い返さない。
+    wc.switchWorkspace(to: wsAIndex)
+    wc.browserView.focusBrowser()
+    wc.select(.tab(wsBTab), inWorkspaceAt: wsBIndex)
+    XCTAssertTrue(window.firstResponder === wsBTab.surface, "select による別 WS 遷移で端末に焦点")
+    XCTAssertFalse(wc.browserView.focusIsInside, "select 後の syncCurrentWorkspace で奪い返さない")
+  }
 }
