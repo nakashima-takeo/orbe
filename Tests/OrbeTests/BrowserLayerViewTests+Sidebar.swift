@@ -84,13 +84,34 @@ extension BrowserLayerViewTests {
     browser.setMode(.full, animated: false)
     XCTAssertFalse(browser.isSidebarOpen, "全面を閉じた記憶も右シートとは独立して残る")
 
-    // 4. 狭幅オーバーレイ開中の閉鎖は sheetSidebarOpen を false へリセットする。
+    // 4. 狭幅オーバーレイ開中の閉鎖は previous モード側の開閉フラグのみリセットし他モード記憶を壊さない。
+    assertNarrowOverlayCloseResetsOnlyPreviousMode(in: hosted)
+  }
+
+  private func assertNarrowOverlayCloseResetsOnlyPreviousMode(in hosted: Hosted) {
+    let browser = hosted.browser
     browser.setSheetRatio(0.40)  // 400pt < 520pt（狭幅オーバーレイ）
     browser.setMode(.sheet, animated: false)
     XCTAssertTrue(browser.isSidebarOverlay, "前提: 狭幅右シートでオーバーレイ開")
     browser.setMode(.closed, animated: false)
     browser.setMode(.sheet, animated: false)
     XCTAssertFalse(browser.isSidebarOpen, "狭幅オーバーレイ開中に閉じると次回は閉で始まる")
+
+    // 広幅右シートの開記憶を保持したまま全面狭幅オーバーレイを閉じても、full 側のみリセットされる。
+    browser.setSheetRatio(0.60)  // 600pt 横並び
+    hosted.stage.layoutSubtreeIfNeeded()
+    browser.toggleSidebar()
+    XCTAssertTrue(browser.sheetSidebarOpen, "前提: 広幅右シートで開記憶")
+    browser.setMode(.full, animated: false)
+    browser.toggleSidebar()  // fullSidebarOpen = true
+    resizeStage(in: hosted, width: 400)
+    XCTAssertTrue(browser.isSidebarOverlay, "前提: 全面 400pt は狭幅オーバーレイ")
+    browser.setMode(.closed, animated: false)
+    XCTAssertFalse(browser.fullSidebarOpen, "previous(.full) 側の狭幅オーバーレイのみリセットする")
+    XCTAssertTrue(browser.sheetSidebarOpen, "他モード(.sheet) の開記憶は壊さない")
+    resizeStage(in: hosted, width: 1000)
+    browser.setMode(.sheet, animated: false)
+    XCTAssertTrue(browser.isSidebarOpen, "広幅右シートを開き直すと開記憶が維持されている")
   }
 
   /// 狭幅オーバーレイは暗幕クリック・タブ選択・`Esc` で自動閉鎖してブラウザへ焦点を戻し、
@@ -162,15 +183,15 @@ extension BrowserLayerViewTests {
     let hosted = hostBrowser()
     let (window, browser) = (hosted.window, hosted.browser)
 
-    // 1. 狭幅右シートで新タブ入力欄に焦点がある状態から toggleSidebar() → 同期で self へ退避。
+    // 1. 狭幅右シート（オーバーレイ閉）で focusToken を進めると同じ flush + nextTurn 時点で焦点を取る（対の肯定）。
     browser.setSheetRatio(0.40)
     browser.setMode(.sheet, animated: false)
     browser.openNewTab()
     flush(window)
-    pumpMain(
-      until: {
-        (window.firstResponder as? NSTextView)?.isDescendant(of: browser.newTabHost) == true
-      }, "前提: 新タブ入力欄に焦点がある")
+    nextTurn()
+    XCTAssertTrue(
+      (window.firstResponder as? NSTextView)?.isDescendant(of: browser.newTabHost) == true,
+      "対の肯定: オーバーレイ閉時は flush + nextTurn で新タブ入力欄に焦点が当たる（不成立なら下の否定時点も無効）")
 
     browser.toggleSidebar()
     XCTAssertTrue(browser.isSidebarOverlay)
@@ -179,7 +200,6 @@ extension BrowserLayerViewTests {
       "toggleSidebar() でオーバーレイが出現した瞬間に contentView 配下から同期退避する")
 
     // 2. オーバーレイ開中に focusToken が進んでも canFocusInput ガードで暗幕裏へ焦点を入れない。
-    //    対の確認: 1 段目で同じ focusToken 経路がオーバーレイ閉時に焦点を取ることを確認済み。
     browser.newTabModel.focusToken &+= 1
     flush(window)
     nextTurn()
@@ -205,5 +225,80 @@ extension BrowserLayerViewTests {
     XCTAssertTrue(
       window.firstResponder === browser,
       "リサイズによる横並び→オーバーレイ遷移でも contentView 配下から焦点が退避される")
+  }
+
+  /// 遷移済み `WKWebView` 上の狭幅オーバーレイで、同期退避・スペース切替時の背後非流出・
+  /// 暗幕/`Esc` 閉鎖後の `WKWebView` 焦点復帰・`+ 新しいタブ` 自動閉鎖、および暗幕/サイドバーの `hitTest` を守る。
+  func testSidebarOverlayProtectsNavigatedWebViewFocusAutoClosesOnNewTabAndHitTests() throws {
+    let hosted = hostBrowser()
+    let (window, stage, browser) = (hosted.window, hosted.stage, hosted.browser)
+    let session = browser.session
+    let freeSpace = try XCTUnwrap(session.store.freeSpaces.first)
+    let secondSpace = try XCTUnwrap(session.store.freeSpaces.dropFirst().first)
+
+    browser.setSheetRatio(0.40)  // 400pt < 520pt
+    browser.setMode(.sheet, animated: false)
+    XCTAssertTrue(session.selectSpace(.free(freeSpace.id)))
+    var finishes = 0
+    browser.onNavigationFinish = { finishes += 1 }
+    browser.loadHTMLString("<title>SpaceA</title><p>a</p>", baseURL: nil)
+    pumpMain(until: { finishes >= 1 }, timeout: 5, "SpaceA の初期 HTML 読込完了")
+
+    XCTAssertTrue(session.selectSpace(.free(secondSpace.id)))
+    browser.loadHTMLString("<title>SpaceB</title><p>b</p>", baseURL: nil)
+    pumpMain(until: { finishes >= 2 }, timeout: 5, "SpaceB の初期 HTML 読込完了")
+    let webViewB = try XCTUnwrap(browser.webView)
+    browser.focusBrowser()
+    XCTAssertTrue(window.firstResponder === webViewB, "前提: 遷移済み WKWebView に焦点")
+
+    // 1. オーバーレイ開で WKWebView から同期退避し、hitTest で暗幕とサイドバーを分離できる。
+    browser.toggleSidebar()
+    XCTAssertTrue(browser.isSidebarOverlay)
+    XCTAssertTrue(window.firstResponder === browser, "遷移済み WKWebView から self へ同期退避する")
+    let scrimPoint = browser.belowBar.convert(NSPoint(x: 350, y: 200), to: stage)
+    let sidebarPoint = browser.belowBar.convert(NSPoint(x: 100, y: 200), to: stage)
+    XCTAssertTrue(stage.hitTest(scrimPoint) === browser.sidebarScrim, "暗幕露出域は sidebarScrim")
+    let sidebarHit = try XCTUnwrap(stage.hitTest(sidebarPoint))
+    XCTAssertTrue(
+      sidebarHit === browser.sidebarContainer
+        || sidebarHit.isDescendant(of: browser.sidebarContainer),
+      "サイドバー領域は sidebarContainer 配下に当たる")
+
+    // 2. オーバーレイ開中に別スペース（遷移済み WKWebView あり）へ切り替えても背後へ流出しない。
+    browser.sidebarActions.onSelectSpace(.free(freeSpace.id))
+    let webViewA = try XCTUnwrap(browser.webView)
+    XCTAssertTrue(browser.isSidebarOverlay)
+    XCTAssertTrue(window.firstResponder === browser, "スペース切替で背後 WKWebView へ焦点が流出しない")
+
+    // 3. 暗幕クリックおよび Esc で閉じると遷移済み WKWebView へ焦点が戻る。
+    let scrimClick = NSEvent.mouse(
+      .leftMouseDown,
+      at: browser.sidebarScrim.convert(NSPoint(x: 350, y: 100), to: nil),
+      in: window)
+    browser.sidebarScrim.mouseDown(with: scrimClick)
+    XCTAssertFalse(browser.isSidebarOpen)
+    XCTAssertTrue(window.firstResponder === webViewA, "暗幕閉鎖で遷移済み WKWebView へ焦点復帰")
+
+    browser.toggleSidebar()
+    XCTAssertTrue(window.firstResponder === browser)
+    let esc = NSEvent.keyEvent(
+      with: .keyDown, location: .zero, modifierFlags: [],
+      timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+      context: nil, characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}",
+      isARepeat: false, keyCode: 53)!
+    XCTAssertTrue(browser.performKeyEquivalent(with: esc))
+    XCTAssertFalse(browser.isSidebarOpen)
+    XCTAssertTrue(window.firstResponder === webViewA, "Esc 閉鎖で遷移済み WKWebView へ焦点復帰")
+
+    // 4. オーバーレイ開中の + 新しいタブ でオーバーレイ自動閉鎖＋新タブ入力欄へ焦点が移る。
+    browser.toggleSidebar()
+    XCTAssertTrue(browser.isSidebarOverlay)
+    browser.sidebarActions.onOpenNewTab()
+    XCTAssertFalse(browser.isSidebarOpen, "+ 新しいタブ で狭幅オーバーレイが自動閉鎖する")
+    flush(window)
+    pumpMain(
+      until: {
+        (window.firstResponder as? NSTextView)?.isDescendant(of: browser.newTabHost) == true
+      }, "+ 新しいタブ で新タブ入力欄へ焦点が当たる")
   }
 }
