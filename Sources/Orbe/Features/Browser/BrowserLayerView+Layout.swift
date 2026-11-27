@@ -1,6 +1,37 @@
 import AppKit
 import QuartzCore
 
+/// サイドバーの横並び ⇄ 狭幅オーバーレイ幾何の純粋計算。
+struct BrowserSidebarLayout: Equatable {
+  let isVisible: Bool
+  let isOverlay: Bool
+  let sidebarFrame: NSRect
+  let contentFrame: NSRect
+  let scrimFrame: NSRect
+
+  static func compute(belowBounds: NSRect, isSidebarOpen: Bool) -> BrowserSidebarLayout {
+    guard isSidebarOpen, belowBounds.width > 0 else {
+      return BrowserSidebarLayout(
+        isVisible: false, isOverlay: false,
+        sidebarFrame: .zero, contentFrame: belowBounds, scrimFrame: .zero)
+    }
+    let isOverlay = belowBounds.width < Theme.Layout.browserSidebarInlineThreshold
+    let sidebarWidth = min(Theme.Layout.browserSidebarWidth, belowBounds.width)
+    let sidebarFrame = NSRect(x: 0, y: 0, width: sidebarWidth, height: belowBounds.height)
+    if isOverlay {
+      return BrowserSidebarLayout(
+        isVisible: true, isOverlay: true,
+        sidebarFrame: sidebarFrame, contentFrame: belowBounds, scrimFrame: belowBounds)
+    }
+    let contentFrame = NSRect(
+      x: sidebarWidth, y: 0,
+      width: max(0, belowBounds.width - sidebarWidth), height: belowBounds.height)
+    return BrowserSidebarLayout(
+      isVisible: true, isOverlay: false,
+      sidebarFrame: sidebarFrame, contentFrame: contentFrame, scrimFrame: .zero)
+  }
+}
+
 /// `BrowserLayerView` の幾何配置・外観追従・フェードアニメーション。
 extension BrowserLayerView {
   private static let fadeKey = "browserFade"
@@ -29,13 +60,43 @@ extension BrowserLayerView {
       x: 0, y: barH, width: sheetWidth, height: max(0, sheetView.bounds.height - barH))
     belowBar.frame = belowRect
     belowGround.frame = belowBar.bounds
-    webView?.frame = belowBar.bounds
-    emptyOverlay.frame = belowBar.bounds
-    snapshotOverlay?.frame = belowBar.bounds
+    layoutBelowBarSubtree()
 
     resizeHandle.frame = NSRect(
       x: 0, y: 0, width: Theme.Layout.browserResizeHandleWidth, height: sheetView.bounds.height)
     layoutSnapBadge()
+  }
+
+  private func layoutBelowBarSubtree() {
+    let sidebarLayout = BrowserSidebarLayout.compute(
+      belowBounds: belowBar.bounds, isSidebarOpen: isSidebarOpen)
+    contentView.frame = sidebarLayout.contentFrame
+    webView?.frame = contentView.bounds
+    newTabHost.frame = contentView.bounds
+    snapshotOverlay?.frame = contentView.bounds
+
+    sidebarScrim.frame = sidebarLayout.scrimFrame
+    sidebarScrim.isHidden = !sidebarLayout.isOverlay
+    sidebarContainer.isHidden = !sidebarLayout.isVisible
+    sidebarContainer.frame = sidebarLayout.sidebarFrame
+    sidebarGround.frame = sidebarContainer.bounds
+    sidebarHost.frame = sidebarContainer.bounds
+    sidebarBorder.frame = NSRect(
+      x: max(0, sidebarContainer.bounds.width - Theme.Stroke.hairline), y: 0,
+      width: Theme.Stroke.hairline, height: sidebarContainer.bounds.height)
+    sidebarContainer.layer?.shadowPath = CGPath(rect: sidebarContainer.bounds, transform: nil)
+
+    popoverHost.frame = belowBar.bounds
+    popoverHost.isHidden = !isPopoverOpen
+
+    if !lastLayoutWasSidebarOverlay && sidebarLayout.isOverlay {
+      DispatchQueue.main.async { [weak self] in
+        guard let self, self.isSidebarOverlay else { return }
+        self.reclaimFocusToSelfIfInside(self.contentView)
+      }
+    }
+    lastLayoutWasSidebarOverlay = sidebarLayout.isOverlay
+    syncSidebarShadow(isOverlay: sidebarLayout.isOverlay)
   }
 
   override func viewDidChangeEffectiveAppearance() {
@@ -50,7 +111,7 @@ extension BrowserLayerView {
     }
   }
 
-  private func currentSheetWidth() -> CGFloat {
+  func currentSheetWidth() -> CGFloat {
     switch mode {
     case .full:
       return bounds.width
@@ -122,7 +183,8 @@ extension BrowserLayerView {
     let showPeekRail = mode == .sheet && isPeeking
     peekRailView.isHidden = !showPeekRail
     peekRailView.alphaValue = showPeekRail ? 1 : 0
-    emptyOverlay.isHidden = hasNavigated
+    newTabHost.isHidden = hasNavigated
+    popoverHost.isHidden = !isPopoverOpen
     syncFocusAppearance()
   }
 
@@ -137,6 +199,9 @@ extension BrowserLayerView {
       let base = Theme.Color.bgBase.cgColor
       barGround.layer?.backgroundColor = base
       belowGround.layer?.backgroundColor = base
+      sidebarGround.layer?.backgroundColor = Theme.Color.browserSidebarBg.cgColor
+      sidebarBorder.layer?.backgroundColor = Theme.Color.browserBarBorder.cgColor
+      sidebarScrim.layer?.backgroundColor = Theme.Color.browserSidebarScrim.cgColor
       leftVeilView.layer?.backgroundColor = Theme.Color.browserLeftVeil.cgColor
       peekRailView.layer?.backgroundColor = Theme.Color.browserPeekRail.cgColor
       let borderColor =
@@ -151,6 +216,18 @@ extension BrowserLayerView {
       let showShadow = mode == .sheet && !isPeeking
       sheetView.layer?.shadowOpacity = showShadow ? shadow.opacity : 0
       webView?.underPageBackgroundColor = Theme.Color.bgBase
+    }
+    syncSidebarShadow(isOverlay: isSidebarOverlay)
+  }
+
+  private func syncSidebarShadow(isOverlay: Bool) {
+    effectiveAppearance.performAsCurrentDrawingAppearance {
+      let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+      let shadow = Theme.Color.browserSidebarShadow(dark: isDark)
+      sidebarContainer.layer?.shadowColor = shadow.color.cgColor
+      sidebarContainer.layer?.shadowOffset = shadow.offset
+      sidebarContainer.layer?.shadowRadius = shadow.radius
+      sidebarContainer.layer?.shadowOpacity = isOverlay ? shadow.opacity : 0
     }
   }
 

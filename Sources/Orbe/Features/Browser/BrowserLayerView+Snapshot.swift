@@ -3,10 +3,11 @@ import WebKit
 
 /// `visual-check` 撮影用フック。
 /// 非表示 borderless `NSWindow` 上では `cacheDisplay(in:to:)` が `WKWebView` を白紙で描くため、
-/// `WKWebView.takeSnapshot(with:)` で取得した画像を `belowBar` 内へ一時配置して合成する。
-/// `belowBar` 配下に置くことで、全面 Peek（`belowBar.alphaValue = 0`）や右シート Peek でも同期して消える。
+/// `WKWebView.takeSnapshot(with:)` で取得した画像を `contentView` 内へ一時配置して合成する。
+/// `contentView` 配下に置くことで、サイドバー・暗幕・ポップオーバーの背後に収まり、
+/// 全面 Peek（`belowBar.alphaValue = 0`）や右シート Peek でも同期して消える。
 extension BrowserLayerView {
-  /// 現在の `WKWebView` 表示内容を撮影し、`belowBar` の最前面へ一時合成する。
+  /// 現在の `WKWebView` 表示内容を撮影し、`contentView` の最前面へ一時合成する。
   func captureWebSnapshot(completion: @escaping (Bool) -> Void) {
     guard let webView else {
       completion(false)
@@ -21,10 +22,10 @@ extension BrowserLayerView {
         let overlay = self.snapshotOverlay ?? NSImageView()
         overlay.imageScaling = .scaleAxesIndependently
         overlay.image = image
-        overlay.frame = self.belowBar.bounds
+        overlay.frame = self.contentView.bounds
         overlay.autoresizingMask = [.width, .height]
-        if overlay.superview !== self.belowBar {
-          self.belowBar.addSubview(overlay)
+        if overlay.superview !== self.contentView {
+          self.contentView.addSubview(overlay)
         }
         self.snapshotOverlay = overlay
         completion(true)
