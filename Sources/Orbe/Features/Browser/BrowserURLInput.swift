@@ -10,6 +10,16 @@ struct BrowserDisplayURL: Equatable {
 
 /// URL 欄の表示分解と入力正規化（純粋関数）。
 enum BrowserURLInput {
+  /// HTTP(S) スキームかつ非空ホストを持つナビゲーション可能な URL かを判定する。
+  static func isValidHTTPNavigationURL(_ url: URL?) -> Bool {
+    guard let url,
+      let scheme = url.scheme?.lowercased(),
+      scheme == "http" || scheme == "https",
+      let host = url.host, !host.isEmpty
+    else { return false }
+    return true
+  }
+
   /// URL をホスト部とパス部へ分解する。`about:blank` 等の空ページは `nil`。
   static func display(_ url: URL?, isSecure: Bool? = nil) -> BrowserDisplayURL? {
     guard let url else { return nil }
