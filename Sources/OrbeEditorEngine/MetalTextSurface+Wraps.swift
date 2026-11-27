@@ -65,9 +65,9 @@ extension MetalTextSurface {
   /// 面自身の編集の束を当てた後の写し `content` で、折り返しを待つ行 `unwrapped`（`RowLayout.shift` が返したもの）を
   /// 折り返し直す。
   func rewrapEdited(_ content: SurfaceContent, _ unwrapped: RowLayout.Unwrapped) {
-    guard let wraps = rows.wraps else { return }
+    guard let width = rows.wraps?.width, let tabWidth = rows.wraps?.tabWidth else { return }
     let text = content.text
-    let metrics = wrapMetrics(width: wraps.width, tabWidth: wraps.tabWidth)
+    let metrics = wrapMetrics(width: width, tabWidth: tabWidth)
     rows.rewrap(unwrapped, version: content.version) {
       LineWrap.wrap(rows: $0, in: text, metrics, resuming: $1)
     }
