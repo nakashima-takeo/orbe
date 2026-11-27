@@ -5,7 +5,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 行の折り返しの時間の計測（main の CPU 時間）。`ORBE_EDITOR_PERF=1` のときだけ走る（時間はマシンで変わる）。release で
-/// 回し、`PERF-WRAP` の行を出す。関門: 1 万字の行 1 本の折り返し 0.2ms 以下、上限（UTF-8 のバイト数）の前後の文書で幅を
+/// `scripts/perf-editor-frames.sh` が回し、`PERF-WRAP` の行を出す。関門: 1 万字の行 1 本の折り返し 0.2ms 以下、上限（UTF-8 のバイト数）の前後の文書で幅を
 /// 変えた 1 回の main の仕事（全部の行の折り返しを含む）16ms 以下、字ごとの字体と幅の表が空のときに、字の種類が 1,000 前後の
 /// 日本語の Markdown の全部の行を折り返す 50ms 以下。
 @MainActor

@@ -45,9 +45,9 @@ final class EditorTypingPerfTests: OrbeTestCase {
   /// 戻るまでの main のスレッドの CPU 時間。p99 1ms 以下（200KB・1MB、git 管理下、1 万字近い長い行の行末）。壁時計の
   /// 時間は参考に出すだけにする（利用者が感じる遅れは打鍵→present の関門が見る）。描くのは描画スレッド。ライブ変換は、
   /// IME の呼び出し 1 回と、IME がその直後に読み返す未確定の範囲・未確定と選択の矩形・未確定の上の点の下の字を合わせて
-  /// 1 回と数え、同じく main のスレッドの CPU 時間で見る。変換の続き（2 回目以降と確定）は 3 つとも p99 1ms 以下。変換の
-  /// 始まり（最初の呼び出し）は未確定の先頭の x を出すために行を 1 回組むので、普通の行（200KB・1MB）で p99 1ms 以下、
-  /// 長い行は値を出すだけ。プロセスで最初の 1 打鍵と最初の変換（入力の仕組みの初期化を含む）は数えないので、測る文書を
+  /// 1 回と数え、同じく main のスレッドの CPU 時間で見る。変換の続き（2 回目以降と確定）と変換の始まり（最初の呼び出し。
+  /// 未確定の先頭の x を出すために、未確定の先頭を含む段の頭から先頭までを組む——折り返す面では長い行でも段の長さまで）は、
+  /// どれも p99 1ms 以下。プロセスで最初の 1 打鍵と最初の変換（入力の仕組みの初期化を含む）は数えないので、測る文書を
   /// 開く前に別の文書で打つ。製品では、文書を開いた後と打鍵の後に、描画スレッドが見えている行を組んで描くので、打鍵の
   /// 前と変換の前に、同じ描画スレッドの経路で見えている行を描かせる（窓は画面に出さず、画面外に描く）。
   func testKeystrokeMainTime() throws {
@@ -64,7 +64,7 @@ final class EditorTypingPerfTests: OrbeTestCase {
       let row = label == "long-line" ? 0 : opened.document.text.lineCount / 3
       let caret = label == "long-line" ? 9_990 : opened.document.text.lineStart(row + 5) + 4
       try gateKeystrokes(
-        opened, baseline: text, label: label, caret: caret, gatesStart: label != "long-line")
+        opened, baseline: text, label: label, caret: caret)
     }
   }
 
@@ -91,15 +91,15 @@ final class EditorTypingPerfTests: OrbeTestCase {
         of: needle, range: NSRange(location: from, length: (text as NSString).length - from))
       XCTAssertNotEqual(found.location, NSNotFound, "\(label): 前提: 打つ所がある")
       try gateKeystrokes(
-        opened, baseline: text, label: label, caret: found.location, gatesStart: true)
+        opened, baseline: text, label: label, caret: found.location)
     }
   }
 
-  /// 文書 `opened` を git 管理下（baseline は `baseline`）にし、位置 `caret` で打鍵とライブ変換を流して、打鍵 1 回と変換の続きの
-  /// 呼び出し 1 回の main のスレッドの CPU 時間の p99 を関門（1ms 以下）にかける。`gatesStart` なら変換の始まりも関門に
-  /// かける。打鍵の前と変換の前に、見えている行を描画スレッドに描かせる。
+  /// 文書 `opened` を git 管理下（baseline は `baseline`）にし、位置 `caret` で打鍵とライブ変換を流して、打鍵 1 回と変換の
+  /// 始まりと続きの呼び出し 1 回の main のスレッドの CPU 時間の p99 を関門（1ms 以下）にかける。打鍵の前と変換の前に、
+  /// 見えている行を描画スレッドに描かせる。
   private func gateKeystrokes(
-    _ opened: OpenedEditor, baseline: String, label: String, caret: Int, gatesStart: Bool
+    _ opened: OpenedEditor, baseline: String, label: String, caret: Int
   ) throws {
     opened.document.baseline = baseline
     XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
@@ -135,11 +135,9 @@ final class EditorTypingPerfTests: OrbeTestCase {
     XCTAssertLessThanOrEqual(
       Self.p99(composing.continuing.cpu), 1,
       "\(label): 変換の続きの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
-    if gatesStart {
-      XCTAssertLessThanOrEqual(
-        Self.p99(composing.starting.cpu), 1,
-        "\(label): 変換の始まりの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
-    }
+    XCTAssertLessThanOrEqual(
+      Self.p99(composing.starting.cpu), 1,
+      "\(label): 変換の始まりの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
     opened.window.orderOut(nil)
   }
 
