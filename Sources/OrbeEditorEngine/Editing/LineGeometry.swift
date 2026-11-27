@@ -5,8 +5,6 @@ import OrbeEditorCore
 /// 行の横位置の問い合わせ（↑↓の覚えた位置・クリック・ドラッグ）。位置は行頭からの UTF-16 の距離、x は行の左端（本文の
 /// 区画の行頭。続きの段の字下げを含む）からの pt。折り返した行は段ごとに問う——折り返さない行は 1 段。
 protocol LineGeometry {
-  /// 行 `row` の段の数。
-  func segments(ofRow row: Int) -> Int
   /// 行 `row` の位置 `column` の段と x。段の境の位置は、付き（`upstream`）なら上の段の終わり、そうでなければ下の段の頭。
   func place(ofColumn column: Int, row: Int, upstream: Bool) -> (segment: Int, x: CGFloat)
   /// 行 `row` の段 `segment` の中で x にいちばん近い書記素の境と、その付き（下に段が続く段の終わりなら true）。段の左より左は
@@ -101,8 +99,6 @@ struct ShapedLineGeometry: LineGeometry {
   /// 本文の写しと同じ時点の縦の並び（行ごとの折り返し）。
   let rows: RowLayout
 
-  func segments(ofRow row: Int) -> Int { rows.segments(ofLine: row) }
-
   /// 行 `row` の段 `segment` を組んだ字の位置。
   func stops(_ segment: Int, row: Int) -> SegmentStops {
     let (source, start) = LineShaper.source(row: row, in: text)
@@ -151,8 +147,8 @@ struct ShapedLineGeometry: LineGeometry {
 }
 
 /// 変換中の未確定の文字の横位置（IME が問う文字の矩形と点の下の字）。未確定の先頭の x は、今の折り返しで未確定の先頭を含む段の
-/// 頭から未確定の先頭までを、変換の前の本文から組んで出す——変換中は未確定より前の中身が変わらないので、中身を鍵に覚えた
-/// 組版に当たり、組むのは段の頭が動いたときだけ。未確定の中は、その x に未確定の文字列だけを組んだ x を足す（打鍵ごとに組む
+/// 頭から未確定の先頭までを、今の本文から組んで出す（段の頭と同じ本文の描く単位で切る）——変換中は未確定より前の中身が変わら
+/// ないので、中身を鍵に覚えた組版に当たり、組むのは段の頭が動いたときだけ。未確定の中は、その x に未確定の文字列だけを組んだ x を足す（打鍵ごとに組む
 /// のは未確定の長さだけ）。境目の字詰め・合字・右から左の字・タブの位置・段の終わりで描画とわずかにずれうるが、候補窓の
 /// 位置には効かない。
 struct MarkedLineGeometry {
@@ -182,10 +178,9 @@ struct MarkedLineGeometry {
     var end = min(NSMaxRange(marked), NSMaxRange(text.contentRange(ofRow: row)))
     if let wrap, segment + 1 < wrap.segments { end = min(end, start + wrap.start(of: segment + 1)) }
     range = NSRange(location: marked.location, length: max(0, end - marked.location))
-    let before = LineShaper.display(
-      LineShaper.source(row: row, in: composition.textBefore).source)
+    let shown = LineShaper.display(LineShaper.source(row: row, in: text).source)
     let head = cache.stops(
-      before.segment(base..<min(column, before.units.count), last: false), tabWidth: tabWidth)
+      shown.segment(base..<min(column, shown.units.count), last: false), tabWidth: tabWidth)
     anchor = (segment > 0 ? CGFloat(wrap?.indent ?? 0) : 0) + head.width
     let units = text.units(in: range)
     stops = cache.stops(

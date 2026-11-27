@@ -30,10 +30,16 @@ extension EditCommands {
     let collapses = cursor.hasSelection && !extending
     switch movement {
     case .left:
-      if collapses { return Cursor(cursor.selection.location) }
+      if collapses {
+        let start = cursor.selection.location
+        return Cursor(start, upstream: cursor.upstream(at: start))
+      }
       return cursor.moved(to: text.previousBoundary(before: cursor.position), extending: extending)
     case .right:
-      if collapses { return Cursor(NSMaxRange(cursor.selection)) }
+      if collapses {
+        let end = NSMaxRange(cursor.selection)
+        return Cursor(end, upstream: cursor.upstream(at: end))
+      }
       return cursor.moved(to: text.nextBoundary(after: cursor.position), extending: extending)
     case .up, .pageUp:
       return vertical(cursor, by: movement == .up ? -1 : -env.pageLines, extending: extending, env)
@@ -45,28 +51,9 @@ extension EditCommands {
     case .wordRight:
       return cursor.moved(to: wordRight(from: cursor.position, text), extending: extending)
     case .home:
-      let row = text.row(containing: cursor.position)
-      let start = text.lineStart(row)
-      if let wrap = env.rows.wrap(ofLine: row) {
-        let segment = wrap.segment(containing: cursor.position - start, upstream: cursor.upstream)
-        if segment > 0 {
-          return cursor.moved(to: start + wrap.start(of: segment), extending: extending)
-        }
-      }
-      let first = firstNonWhitespace(ofRow: row, text) ?? start
-      let target = cursor.position == first ? start : first
-      return cursor.moved(to: target, extending: extending)
+      return home(cursor, extending: extending, env)
     case .end:
-      let row = text.row(containing: cursor.position)
-      let start = text.lineStart(row)
-      if let wrap = env.rows.wrap(ofLine: row) {
-        let segment = wrap.segment(containing: cursor.position - start, upstream: cursor.upstream)
-        if segment + 1 < wrap.segments {
-          return cursor.moved(
-            to: start + wrap.start(of: segment + 1), extending: extending, upstream: true)
-        }
-      }
-      return cursor.moved(to: NSMaxRange(text.contentRange(ofRow: row)), extending: extending)
+      return end(cursor, extending: extending, env)
     case .lineEnd:
       let row = text.row(containing: cursor.position)
       return cursor.moved(to: NSMaxRange(text.contentRange(ofRow: row)), extending: extending)
@@ -84,6 +71,38 @@ extension EditCommands {
     }
   }
 
+  /// ⌘←——最初の非空白と 1 列目を行き来する。折り返した行の続きの段では段の頭へ動き、段の頭に居れば文書の行の端へ進む。
+  private static func home(_ cursor: Cursor, extending: Bool, _ env: EditingEnvironment) -> Cursor {
+    let text = env.text
+    let row = text.row(containing: cursor.position)
+    let start = text.lineStart(row)
+    if let wrap = env.rows.wrap(ofLine: row) {
+      let segment = wrap.segment(containing: cursor.position - start, upstream: cursor.upstream)
+      let head = start + wrap.start(of: segment)
+      if segment > 0, cursor.position != head {
+        return cursor.moved(to: head, extending: extending)
+      }
+    }
+    let first = firstNonWhitespace(ofRow: row, text) ?? start
+    let target = cursor.position == first ? start : first
+    return cursor.moved(to: target, extending: extending)
+  }
+
+  /// ⌘→——行末へ。折り返した行の最後でない段では段の終わり（付き）へ動き、段の終わりに居れば文書の行末へ進む。
+  private static func end(_ cursor: Cursor, extending: Bool, _ env: EditingEnvironment) -> Cursor {
+    let text = env.text
+    let row = text.row(containing: cursor.position)
+    let start = text.lineStart(row)
+    if let wrap = env.rows.wrap(ofLine: row) {
+      let segment = wrap.segment(containing: cursor.position - start, upstream: cursor.upstream)
+      let boundary = segment + 1 < wrap.segments ? start + wrap.start(of: segment + 1) : nil
+      if let boundary, cursor.position != boundary {
+        return cursor.moved(to: boundary, extending: extending, upstream: true)
+      }
+    }
+    return cursor.moved(to: NSMaxRange(text.contentRange(ofRow: row)), extending: extending)
+  }
+
   /// ↑↓とページ送り（VS Code の `MoveOperations.vertical`）。横位置は覚えた x（無ければ今の位置の x。行の左端から）で、先頭の
   /// 段より上は文書の先頭、最後の段より下は文書の末尾。選択があって伸ばさないなら、↑は始まり・↓は終わりから動く。↑↓は段を
   /// 1 つ（折り返さない行は 1 行が 1 段）、ページ送りは縦の並びでページの高さだけ離れた所の段（差し込みの上なら、進む向きの
@@ -98,13 +117,12 @@ extension EditCommands {
       ? (lines < 0 ? cursor.selection.location : NSMaxRange(cursor.selection)) : cursor.position
     let row = text.row(containing: from)
     let place = env.geometry.place(
-      ofColumn: from - text.lineStart(row), row: row,
-      upstream: !collapses && cursor.upstream)
+      ofColumn: from - text.lineStart(row), row: row, upstream: cursor.upstream(at: from))
     let x = cursor.desiredX ?? place.x
     let target =
       abs(lines) > 1
       ? paged(from: (row, place.segment), by: lines, env.rows)
-      : stepped(from: (row, place.segment), by: lines, env.geometry)
+      : stepped(from: (row, place.segment), by: lines, env.rows)
     if target.row < 0 {
       return cursor.moved(to: 0, extending: extending, desiredX: from == 0 ? nil : x)
     }
@@ -120,14 +138,14 @@ extension EditCommands {
 
   /// 文書の行 `from.row` の段 `from.segment` から `lines`（1 か −1）段離れた段。文書の外は、その外の行の段 0。
   static func stepped(
-    from: (row: Int, segment: Int), by lines: Int, _ geometry: any LineGeometry
+    from: (row: Int, segment: Int), by lines: Int, _ rows: RowLayout
   ) -> (row: Int, segment: Int) {
     if lines < 0 {
       guard from.segment == 0 else { return (from.row, from.segment - 1) }
       let row = from.row - 1
-      return (row, row >= 0 ? geometry.segments(ofRow: row) - 1 : 0)
+      return (row, row >= 0 ? rows.segments(ofLine: row) - 1 : 0)
     }
-    guard from.segment + 1 >= geometry.segments(ofRow: from.row) else {
+    guard from.segment + 1 >= rows.segments(ofLine: from.row) else {
       return (from.row, from.segment + 1)
     }
     return (from.row + 1, 0)
@@ -261,9 +279,11 @@ extension EditCommands {
     return nil
   }
 
-  /// 語の単位のまま動く端を `offset` へ伸ばす（VS Code の `WordOperations.word` の選択中）——語の内側なら語の端へ揃え、
-  /// 起点の範囲の中なら起点の範囲を保つ。
-  static func extendByWord(_ cursor: Cursor, to offset: Int, _ text: TextRope) -> Cursor {
+  /// 語の単位のまま動く端を `offset`（付き `upstream`）へ伸ばす（VS Code の `WordOperations.word` の選択中）——語の内側なら
+  /// 語の端へ揃え、起点の範囲の中なら起点の範囲を保つ。付きは、動く端が `offset` に着いたときだけ持つ。
+  static func extendByWord(
+    _ cursor: Cursor, to offset: Int, upstream: Bool = false, _ text: TextRope
+  ) -> Cursor {
     let row = text.row(containing: offset)
     let line = LineWindow(row: row, around: offset - text.lineStart(row), text)
     let column = line.local(offset - text.lineStart(row))
@@ -287,7 +307,7 @@ extension EditCommands {
       target = NSMaxRange(bounds)
       if contains(target) { target = start.location }
     }
-    return cursor.moved(to: target, extending: true)
+    return cursor.moved(to: target, extending: true, upstream: upstream && target == offset)
   }
 
   /// 行の単位のまま動く端を行 `row` へ伸ばす（VS Code の `cursorMoveCommands.line` の選択中）——起点の行より上ならその行頭、

@@ -83,8 +83,8 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let clipped = site.segmentRange(
       NSRange(location: location, length: max(0, end - location)), row: row, env)
     actualRange?.pointee = clipped
-    let cursor = site.editor.state.cursors.primary
-    let upstream = cursor.upstream && clipped.length == 0 && clipped.location == cursor.position
+    let upstream =
+      clipped.length == 0 && site.editor.state.cursors.primary.upstream(at: clipped.location)
     return window.convertToScreen(
       convert(
         site.textRect(clipped, row: row, env, marked: marked, upstream: upstream), to: nil))
@@ -153,13 +153,16 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let first = min(max(rows.lowerBound, visible.lowerBound), rows.upperBound)
     let last = max(min(rows.upperBound, visible.upperBound), first)
     let marked = site.markedLine
+    let upstream =
+      selection.length == 0 && site.editor.state.cursors.primary.upstream(at: selection.location)
     var union = NSRect.null
     for row in first...last {
       let content = text.contentRange(ofRow: row)
       let start = max(selection.location, text.lineStart(row))
       let end = min(NSMaxRange(selection), NSMaxRange(content))
       for rect in site.textRects(
-        NSRange(location: start, length: max(0, end - start)), row: row, env, marked: marked)
+        NSRange(location: start, length: max(0, end - start)), row: row, env, marked: marked,
+        upstream: upstream)
       {
         union = union.union(rect)
       }

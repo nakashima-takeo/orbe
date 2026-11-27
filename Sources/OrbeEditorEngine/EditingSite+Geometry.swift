@@ -87,22 +87,19 @@ extension EditingSite {
       location: range.location, length: max(0, min(NSMaxRange(range), end) - range.location))
   }
 
-  /// 1 行の 1 段の中の範囲の矩形（行の高さいっぱい）。空の範囲の段は付き `upstream` で決める。未確定の行の未確定の中の端は
-  /// `marked` で出す。
+  /// 1 行の 1 段の中の範囲の矩形（行の高さいっぱい）。段は範囲の始まりで決め、空の範囲が段の境なら付き `upstream` で
+  /// 決める。未確定の行の未確定の中の端は、未確定の先頭と同じ段なら `marked` で出す（段の頭から始まる文節は下の段に出る）。
   func textRect(
     _ range: NSRange, row: Int, _ env: EditingEnvironment, marked: MarkedLineGeometry?,
     upstream: Bool = false
   ) -> NSRect {
     let start = env.text.lineStart(row)
-    let onMarked = marked?.row == row ? marked : nil
-    let segment: Int
-    let x0: CGFloat
-    if let onMarked, let x = onMarked.x(of: range.location) {
-      (segment, x0) = (onMarked.segment, x)
-    } else {
-      (segment, x0) = env.geometry.place(
-        ofColumn: range.location - start, row: row, upstream: upstream && range.length == 0)
-    }
+    let raised = upstream && range.length == 0
+    let segment = env.rows.segment(containing: range.location - start, line: row, upstream: raised)
+    let onMarked = marked.flatMap { $0.row == row && $0.segment == segment ? $0 : nil }
+    let x0 =
+      onMarked?.x(of: range.location)
+      ?? env.geometry.place(ofColumn: range.location - start, row: row, upstream: raised).x
     let x1 =
       onMarked?.x(of: NSMaxRange(range))
       ?? env.geometry.place(
@@ -122,9 +119,10 @@ extension EditingSite {
       width: x1 - x0, height: config.lineHeight)
   }
 
-  /// 1 行の中の範囲の、段ごとの矩形（折り返さない行は 1 つ）。
+  /// 1 行の中の範囲の、段ごとの矩形（折り返さない行は 1 つ）。空の範囲が段の境なら付き `upstream` で段を決める。
   func textRects(
-    _ range: NSRange, row: Int, _ env: EditingEnvironment, marked: MarkedLineGeometry?
+    _ range: NSRange, row: Int, _ env: EditingEnvironment, marked: MarkedLineGeometry?,
+    upstream: Bool = false
   ) -> [NSRect] {
     var rects: [NSRect] = []
     var location = range.location
@@ -132,7 +130,7 @@ extension EditingSite {
     repeat {
       let piece = segmentRange(
         NSRange(location: location, length: end - location), row: row, env)
-      rects.append(textRect(piece, row: row, env, marked: marked))
+      rects.append(textRect(piece, row: row, env, marked: marked, upstream: upstream))
       guard piece.length > 0 else { break }
       location = NSMaxRange(piece)
     } while location < end
@@ -178,10 +176,11 @@ extension EditingSite {
 
   // MARK: - 見せ方
 
-  /// 区間 `range`（nil なら主のキャレット）の行の縦の範囲（表示の単位——面の行高を 1 とする縦の並びの位置）。本文の場で
-  /// `rows`（縦の並びの中の 2 つの位置）があれば、その上端から上端まで。
+  /// 区間 `range`（nil なら主のキャレット。空の区間が折り返した行の段の境なら、付き `upstream` で段を決める）の行の縦の
+  /// 範囲（表示の単位——面の行高を 1 とする縦の並びの位置）。本文の場で `rows`（縦の並びの中の 2 つの位置）があれば、その
+  /// 上端から上端まで。
   func revealSpan(
-    _ range: NSRange?, rows positions: (from: RowPosition, to: RowPosition)?
+    _ range: NSRange?, upstream: Bool = false, rows positions: (from: RowPosition, to: RowPosition)?
   ) -> Range<Double>? {
     guard let text = currentContent?.text else { return nil }
     if isBody, let positions {
@@ -197,13 +196,13 @@ extension EditingSite {
     let lines = text.rows(of: NSRange(location: location, length: end - location))
     let rows = surface.rows
     guard let field else {
-      let upstream = range == nil && primary.upstream
+      let raised = range == nil ? primary.upstream : upstream && shown.length == 0
       let first = rows.segment(
         containing: location - text.lineStart(lines.lowerBound), line: lines.lowerBound,
-        upstream: upstream)
+        upstream: raised)
       let last = rows.segment(
         containing: end - text.lineStart(lines.upperBound), line: lines.upperBound,
-        upstream: upstream || end > location)
+        upstream: raised || end > location)
       return
         (rows.unit(ofLine: lines.lowerBound) + Double(first))..<(rows.unit(
           ofLine: lines.upperBound) + Double(last) + 1)

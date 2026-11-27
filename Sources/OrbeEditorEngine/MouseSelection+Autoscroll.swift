@@ -87,4 +87,21 @@ extension MouseSelection {
       }
     }
   }
+
+  /// 当たり `hit` を、その行の行末（`lineEnd`）か、その段の頭（折り返さない行では行頭）にしたもの。
+  static func edge(of hit: PointerHit, lineEnd: Bool, _ text: TextRope, _ rows: RowLayout)
+    -> PointerHit
+  {
+    var result = hit
+    let content = text.contentRange(ofRow: hit.row)
+    if lineEnd {
+      result.offset = NSMaxRange(content)
+    } else {
+      let segment = rows.segment(
+        containing: hit.offset - content.location, line: hit.row, upstream: hit.upstream)
+      result.offset = content.location + (rows.wrap(ofLine: hit.row)?.start(of: segment) ?? 0)
+    }
+    result.upstream = false
+    return result
+  }
 }

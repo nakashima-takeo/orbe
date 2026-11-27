@@ -77,16 +77,17 @@ final class EditingSite {
   // MARK: - 取引と文
 
   /// 取引の中で `body` を行う（→ `MetalTextSurface.transact`）。`reveal` は取引の後の見せ方（`range` は見せる区間、nil なら
-  /// 主のキャレット。後から頼んだものが勝つ）、`remeasure` は最も長い行の測り直し（本文の場）。
+  /// 主のキャレット。`upstream` は空の区間の付き。後から頼んだものが勝つ）、`remeasure` は最も長い行の測り直し（本文の場）。
   func transact(
-    reveal: Reveal = .none, of range: NSRange? = nil, scrollTo: SIMD2<Double>? = nil,
-    remeasure: Bool = false, _ body: () -> Void = {}
+    reveal: Reveal = .none, of range: NSRange? = nil, upstream: Bool = false,
+    scrollTo: SIMD2<Double>? = nil, remeasure: Bool = false, _ body: () -> Void = {}
   ) {
     surface.transact(scrollTo: scrollTo) {
       touch()
       if reveal != .none {
         surface.transaction?.reveal = reveal
         surface.transaction?.revealing = range
+        surface.transaction?.revealingUpstream = upstream
         surface.transaction?.revealingRows = nil
         surface.transaction?.revealSite = self
       }

@@ -51,7 +51,9 @@ final class SurfaceEditor {
       guard let env = site.editingEnvironment() else { return }
       let before = state
       let result = EditCommands.run(command, before, env)
-      site.transact(reveal: result.reveal, of: result.revealing) {
+      site.transact(
+        reveal: result.reveal, of: result.revealing, upstream: result.revealingUpstream
+      ) {
         record(
           result.edits, kind: result.undo, from: before.cursors, to: result.state.cursors, env.text)
         state = result.state
@@ -61,9 +63,11 @@ final class SurfaceEditor {
   }
 
   /// カーソルの列を直接置く（マウス・行番号の列）。編集を伴わないので undo のまとまりを切る。`range` は見せる区間（nil なら
-  /// 主のキャレット）。
-  func select(_ cursors: CursorList, reveal: Reveal, of range: NSRange? = nil) {
-    site.transact(reveal: reveal, of: range) {
+  /// 主のキャレット）で、`upstream` はその付き（空の区間が段の境なら、上の段の終わりを見せる）。
+  func select(
+    _ cursors: CursorList, reveal: Reveal, of range: NSRange? = nil, upstream: Bool = false
+  ) {
+    site.transact(reveal: reveal, of: range, upstream: upstream) {
       finishComposition(.commit)
       guard let length = site.textLength else { return }
       var cursors = cursors.map { $0.clamped(to: length) }

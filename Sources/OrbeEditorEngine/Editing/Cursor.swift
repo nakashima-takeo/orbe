@@ -65,6 +65,13 @@ struct Cursor: Equatable, Sendable {
   /// 動く端が先頭にある（前へ伸ばした）選択か。
   var isReversed: Bool { position < anchor }
 
+  /// 端 `edge`（動く端か、選択の端）の付き——折り返した行の段の境にある端を、上の段の終わりとして扱うか。動く端なら、その
+  /// 付き。動かない端なら、空でない選択の終わりは上の段の終わり（選択の地がそこで終わる）、始まりは下の段の頭。選択を
+  /// 畳む ←→・↑↓、端の矩形と見せ方が、この規則で端の段を決める。
+  func upstream(at edge: Int) -> Bool {
+    edge == position ? upstream : selection.length > 0 && edge == NSMaxRange(selection)
+  }
+
   /// 選択か起点の範囲がある（VS Code の `hasSelection`。伸ばさない ←→ はその端へ畳む）。
   var hasSelection: Bool { selection.length > 0 || selectionStart.length > 0 }
 

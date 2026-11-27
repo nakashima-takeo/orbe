@@ -17,8 +17,10 @@ struct Transaction {
   /// 取引の中で頼まれた、材料のほかの欄（見え方・焦点・大きさ・絵の差し込み）の書き込み。
   var writes: [@Sendable (inout FrameMaterial) -> Void] = []
   var reveal = Reveal.none
-  /// 見せる区間（nil なら見せ方を頼んだ場の主のキャレット）と、見せ方を頼んだ場。
+  /// 見せる区間（nil なら見せ方を頼んだ場の主のキャレット）とその付き（空の区間が折り返した行の段の境なら、上の段の
+  /// 終わりを見せる）と、見せ方を頼んだ場。
   var revealing: NSRange?
+  var revealingUpstream = false
   var revealSite: EditingSite?
   /// 見せる縦の範囲を縦の並びの中の位置で頼んだ（本文の場。`revealing` は横の寄せだけに使う）。
   var revealingRows: (from: RowPosition, to: RowPosition)?
@@ -81,7 +83,9 @@ extension MetalTextSurface {
     let rewrapped = settleWraps(change.content ?? currentContent)
     let span =
       finished.reveal == .none
-      ? nil : finished.revealSite?.revealSpan(finished.revealing, rows: finished.revealingRows)
+      ? nil
+      : finished.revealSite?.revealSpan(
+        finished.revealing, upstream: finished.revealingUpstream, rows: finished.revealingRows)
     bodySite.change = nil
     editor.noteTransaction(
       from: change.cursors, edited: change.edited, restored: change.restoresCursors)

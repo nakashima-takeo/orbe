@@ -95,7 +95,7 @@ extension EditCommands {
     return (SearchQuestion(needle: text.substring(word), rule: rule), word)
   }
 
-  /// ⌥⌘↑・⌥⌘↓。各カーソルの後ろに、選択の両端をそれぞれの覚えた横位置で 1 行上（下）へ写したカーソルを足す。先頭行の上・
+  /// ⌥⌘↑・⌥⌘↓。各カーソルの後ろに、選択の両端をそれぞれの覚えた横位置で 1 段上（下）へ写したカーソルを足す。先頭行の上・
   /// 最終行の下へは写さない（元と同じになり、まとまる）。いちばん上（下）のカーソルが見えるところまで最小限。
   static func insertCursor(below: Bool, _ state: EditState, _ env: EditingEnvironment)
     -> CommandResult
@@ -108,11 +108,14 @@ extension EditCommands {
     }
     guard var cursors = CursorList(added) else { return CommandResult(state: state) }
     cursors.normalize()
-    let positions = cursors.all.map(\.position)
-    let edge = (below ? positions.max() : positions.min()) ?? cursors.primary.position
+    let all = cursors.all
+    let edge =
+      (below
+        ? all.max { $0.position < $1.position } : all.min { $0.position < $1.position })
+      ?? cursors.primary
     return CommandResult(
       state: EditState(cursors: cursors, mark: state.mark),
-      revealing: NSRange(location: edge, length: 0))
+      revealing: NSRange(location: edge.position, length: 0), revealingUpstream: edge.upstream)
   }
 
   /// カーソルを 1 段上下へ写したもの（VS Code の `MoveOperations.translateUp/Down`。単位は ↑↓ と同じ段）。両端それぞれ、
@@ -126,7 +129,7 @@ extension EditCommands {
       let row = text.row(containing: end.position)
       let place = env.geometry.place(
         ofColumn: end.position - text.lineStart(row), row: row, upstream: end.upstream)
-      let target = stepped(from: (row, place.segment), by: lines, env.geometry)
+      let target = stepped(from: (row, place.segment), by: lines, env.rows)
       guard target.row >= 0, target.row < text.lineCount else { return end }
       let x = end.desiredX ?? place.x
       let found = env.geometry.column(atX: x, row: target.row, segment: target.segment)

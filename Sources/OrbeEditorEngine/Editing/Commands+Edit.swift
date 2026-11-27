@@ -262,27 +262,46 @@ extension EditCommands {
   }
 
   /// ⌘⌫（VS Code の `deleteAllLeft`）——選択があれば始まりの行頭から選択の終わりまで、1 列目なら前の改行、そうでなければ
-  /// 行頭まで。
-  static func lineStartRange(_ cursor: Cursor, _ text: TextRope) -> NSRange? {
+  /// 行頭まで。縦の並び `rows` で折り返した行の続きの段では、行頭の代わりに段の頭まで（段の頭に居れば行頭まで——⌘⇧← と
+  /// 同じ単位）。`rows` を省けば文書の行（行頭までのキル）。
+  static func lineStartRange(_ cursor: Cursor, _ text: TextRope, rows: RowLayout? = nil) -> NSRange?
+  {
     let selection = cursor.selection
     let row = text.row(containing: selection.location)
-    let start = text.lineStart(row)
+    let lineStart = text.lineStart(row)
+    var start = lineStart
+    if let wrap = rows?.wrap(ofLine: row) {
+      let column = selection.location - lineStart
+      let head = wrap.start(
+        of: wrap.segment(containing: column, upstream: cursor.upstream(at: selection.location)))
+      if head > 0, column > head { start = lineStart + head }
+    }
     if selection.length > 0 {
       return NSRange(location: start, length: NSMaxRange(selection) - start)
     }
-    guard selection.location == start else {
+    guard selection.location == lineStart else {
       return NSRange(location: start, length: selection.location - start)
     }
     guard row > 0 else { return nil }
     let end = NSMaxRange(text.contentRange(ofRow: row - 1))
-    return NSRange(location: end, length: start - end)
+    return NSRange(location: end, length: lineStart - end)
   }
 
-  /// 行末まで（VS Code の `deleteAllRight`）——選択があれば選択、行末なら改行、そうでなければ行末まで。
-  static func lineEndRange(_ cursor: Cursor, _ text: TextRope) -> NSRange? {
+  /// 行末まで（VS Code の `deleteAllRight`）——選択があれば選択、行末なら改行、そうでなければ行末まで。縦の並び `rows` で
+  /// 折り返した行の最後でない段では、行末の代わりに段の終わりまで（段の終わりに居れば行末まで——⌘⇧→ と同じ単位）。`rows`
+  /// を省けば文書の行（⌃K）。
+  static func lineEndRange(_ cursor: Cursor, _ text: TextRope, rows: RowLayout? = nil) -> NSRange? {
     let selection = cursor.selection
     guard selection.length == 0 else { return selection }
     let row = text.row(containing: selection.location)
+    let lineStart = text.lineStart(row)
+    if let wrap = rows?.wrap(ofLine: row) {
+      let column = selection.location - lineStart
+      let segment = wrap.segment(containing: column, upstream: cursor.upstream)
+      if segment + 1 < wrap.segments, column < wrap.start(of: segment + 1) {
+        return NSRange(location: selection.location, length: wrap.start(of: segment + 1) - column)
+      }
+    }
     let end = NSMaxRange(text.contentRange(ofRow: row))
     guard selection.location == end else {
       return NSRange(location: selection.location, length: end - selection.location)

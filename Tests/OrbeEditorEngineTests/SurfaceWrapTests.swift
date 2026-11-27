@@ -12,7 +12,7 @@ final class SurfaceWrapTests: EngineTestCase {
   private let size = CGSize(width: 420, height: 300)
 
   /// 語が並ぶ長い行と、短い行。
-  private var sample: String {
+  var sample: String {
     (0..<40).map { "word\($0)" }.joined(separator: " ") + "\nshort\n"
   }
 
