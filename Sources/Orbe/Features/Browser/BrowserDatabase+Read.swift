@@ -59,9 +59,9 @@ extension BrowserDatabase {
     }
     let profileIds = Set(profiles.map(\.id))
     let spaces = try readSpaces(validProfileIds: profileIds)
-    let spaceById = Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0) })
+    let spaceById = try Self.uniqueById(spaces, key: \.id, label: "space")
     let tabs = try readTabs(spaceById: spaceById)
-    let tabById = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
+    let tabById = try Self.uniqueById(tabs, key: \.id, label: "tab")
     let activeTabBySpace = try readActiveTabs(spaceById: spaceById, tabById: tabById)
     let closedTabs = try readClosedTabs(spaceById: spaceById)
     let (activeSpaceSelection, sheetRatioBps) = try readMeta(spaceById: spaceById)
@@ -77,14 +77,30 @@ extension BrowserDatabase {
       pendingStoreRemovals: pendingStoreRemovals)
   }
 
+  private static func uniqueById<T>(
+    _ items: [T], key: (T) -> UUID, label: String
+  ) throws -> [UUID: T] {
+    var result: [UUID: T] = [:]
+    result.reserveCapacity(items.count)
+    for item in items {
+      let id = key(item)
+      guard result.updateValue(item, forKey: id) == nil else {
+        throw Self.corrupt("duplicate \(label) id")
+      }
+    }
+    return result
+  }
+
   private func readProfiles() throws -> [BrowserProfile] {
-    try db.select(
+    var seenIds = Set<UUID>()
+    return try db.select(
       """
       SELECT id, name, color, mcp_allowed, position, created_at
       FROM profiles ORDER BY position, created_at, id
       """, []
     ) { s in
       guard let rawId = s.text(at: 0), let id = UUID(uuidString: rawId),
+        seenIds.insert(id).inserted,
         let name = s.text(at: 1), !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
         let rawColor = s.text(at: 2), let color = BrowserProfileColor(rawValue: rawColor)
       else {
@@ -102,6 +118,7 @@ extension BrowserDatabase {
   }
 
   private func readSpaces(validProfileIds: Set<UUID>) throws -> [BrowserSpace] {
+    var seenIds = Set<UUID>()
     var seenWorkspaces = Set<UUID>()
     return try db.select(
       """
@@ -110,6 +127,7 @@ extension BrowserDatabase {
       """, []
     ) { s in
       guard let rawId = s.text(at: 0), let id = UUID(uuidString: rawId),
+        seenIds.insert(id).inserted,
         let rawKind = s.text(at: 1), let kind = BrowserSpaceKind(rawValue: rawKind),
         let name = s.text(at: 3),
         let rawIcon = s.text(at: 4), let icon = BrowserSpaceIcon(rawValue: rawIcon),
@@ -149,13 +167,15 @@ extension BrowserDatabase {
   }
 
   private func readTabs(spaceById: [UUID: BrowserSpace]) throws -> [BrowserTab] {
-    try db.select(
+    var seenIds = Set<UUID>()
+    return try db.select(
       """
       SELECT id, space_id, space_kind, section, position, url, title, created_at, last_active_at
       FROM tabs ORDER BY space_id, section, position, created_at, id
       """, []
     ) { s in
       guard let rawId = s.text(at: 0), let id = UUID(uuidString: rawId),
+        seenIds.insert(id).inserted,
         let rawSpaceId = s.text(at: 1), let spaceId = UUID(uuidString: rawSpaceId),
         let space = spaceById[spaceId],
         let rawKind = s.text(at: 2), let spaceKind = BrowserSpaceKind(rawValue: rawKind),
@@ -195,7 +215,9 @@ extension BrowserDatabase {
       return (spaceId, tabId)
     }
     for (spaceId, tabId) in rows {
-      result[spaceId] = tabId
+      guard result.updateValue(tabId, forKey: spaceId) == nil else {
+        throw Self.corrupt("duplicate space_active_tabs space_id")
+      }
     }
     return result
   }
@@ -264,10 +286,13 @@ extension BrowserDatabase {
   }
 
   private func readPendingStoreRemovals() throws -> [BrowserPendingStoreRemoval] {
-    try db.select(
+    var seenIds = Set<UUID>()
+    return try db.select(
       "SELECT store_id, queued_at FROM pending_store_removals ORDER BY queued_at, store_id", []
     ) { s in
-      guard let rawId = s.text(at: 0), let storeId = UUID(uuidString: rawId) else {
+      guard let rawId = s.text(at: 0), let storeId = UUID(uuidString: rawId),
+        seenIds.insert(storeId).inserted
+      else {
         throw Self.corrupt("invalid pending_store_removals row")
       }
       return BrowserPendingStoreRemoval(
