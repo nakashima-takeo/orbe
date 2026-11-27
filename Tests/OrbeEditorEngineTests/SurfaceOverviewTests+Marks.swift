@@ -281,8 +281,8 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     let shot = try pixelShot(opened)
     let bar = opened.surface.surfaceLayout.verticalScrollbar
     let ruler = OverviewRuler(
-      contentLines: CGFloat(segments + 1), visibleLines: opened.surface.viewportLines.visible,
-      height: bar.height, scale: 2)
+      contentLines: CGFloat(rows.contentLines(lineCount: opened.document.text.lineCount)),
+      visibleLines: opened.surface.viewportLines.visible, height: bar.height, scale: 2)
     let lane = OverviewRuler.lane(.center, width: bar.width, scale: 2)
     let at = { (span: OverviewRuler.Span) -> [Int] in
       shot.rgb(

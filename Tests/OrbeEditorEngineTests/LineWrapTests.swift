@@ -76,7 +76,7 @@ final class LineWrapTests: XCTestCase {
   }
 
   /// 前の折り返しを引き継いで決め直した段は、行の頭から決めた段と同じ——語・和文・タブ・結合文字・絵文字・行頭の空白・
-  /// 書式文字の箱・U+FFFC を含む行の、どこを編集しても（打ち切った行の末尾で打っても）。
+  /// 書式文字の箱・U+FFFC を含む行の、どこを編集しても（打ち切った部分の中でも）。
   func testResumingMatchesWrappingFromTheStart() {
     let pieces = [
       "word ", "語", "、", "（", "）", "\t", "e\u{301}", "😀", "👩‍💻", "  ", "x", "longidentifier", "。",
@@ -123,13 +123,15 @@ final class LineWrapTests: XCTestCase {
     }
   }
 
-  /// 段を独立した行として組んだ幅（字下げを含む）は、折り返しの幅に収まる——本文の字・記号・タブ・書式文字の箱を含む行で。
+  /// 段を独立した行として組んだ幅（字下げを含む）は、折り返しの幅に収まる——本文の字・記号・タブ・書式文字の箱を含む行と、
+  /// 本文にもともとある U+FFFC も含む行で。
   func testShapedSegmentsFitTheWidth() {
     let lines = [
       String(repeating: "日本語の文と English words が混ざる行。", count: 6),
       String(repeating: "※記号★と◐、全角の（括弧）と ① を含む。", count: 6),
       String(repeating: "\tタブ\tを\t含む\t行 ", count: 8),
       String(repeating: "longidentifier_", count: 20),
+      String(repeating: "abc\u{202E}def\u{200E} ", count: 12),
       String(repeating: "abc\u{202E}def\u{FFFC}\u{200E} ", count: 12),
     ]
     for columns in [17.0, 40, 63.5] {
