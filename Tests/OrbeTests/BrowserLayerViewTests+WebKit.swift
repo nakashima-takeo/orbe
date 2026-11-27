@@ -211,17 +211,12 @@ extension BrowserLayerViewTests {
 
   /// 初回遷移前から `navigationDelegate` スパイや KVO 監視を仕掛けるテスト専用補助。
   func prepareEmptyRuntimeForObservation(
-    in browser: BrowserLayerView,
-    file: StaticString = #filePath, line: UInt = #line
+    in browser: BrowserLayerView, file: StaticString = #filePath, line: UInt = #line
   ) throws -> BrowserTabRuntime {
-    let tab: BrowserTab
-    if let existing = browser.session.store.activeTab {
-      tab = existing
-    } else {
-      tab = try XCTUnwrap(
-        browser.session.openTab(section: .today, url: nil, activate: true),
-        file: file, line: line)
-    }
+    let tab =
+      try browser.session.store.activeTab
+      ?? XCTUnwrap(
+        browser.session.openTab(section: .today, url: nil, activate: true), file: file, line: line)
     let runtime = try XCTUnwrap(browser.session.ensureRuntime(for: tab), file: file, line: line)
     browser.mountRuntime(runtime)
     return runtime
@@ -233,8 +228,7 @@ extension BrowserLayerViewTests {
     _ url: URL, in browser: BrowserLayerView, _ label: String,
     file: StaticString = #filePath, line: UInt = #line
   ) throws {
-    let runtime = try prepareEmptyRuntimeForObservation(in: browser, file: file, line: line)
-    let webView = runtime.webView
+    let webView = try prepareEmptyRuntimeForObservation(in: browser, file: file, line: line).webView
     var sawLoading = false
     let observation = webView.observe(\.isLoading, options: [.new]) { _, change in
       if change.newValue == true { sawLoading = true }
@@ -358,14 +352,10 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
   }
 
   func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-    if let navigation {
-      onBeforeDidStartProvisional?(navigation)
-    }
+    if let navigation { onBeforeDidStartProvisional?(navigation) }
     provisionalStartCount += 1
     target?.webView(webView, didStartProvisionalNavigation: navigation)
-    if let navigation {
-      onDidStartProvisional?(navigation)
-    }
+    if let navigation { onDidStartProvisional?(navigation) }
   }
 
   func webView(
@@ -377,9 +367,7 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
   }
 
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-    if let navigation {
-      onBeforeDidCommit?(navigation)
-    }
+    if let navigation { onBeforeDidCommit?(navigation) }
     commitCount += 1
     target?.webView(webView, didCommit: navigation)
   }
@@ -400,9 +388,7 @@ final class BrowserNavigationPolicySpy: NSObject, WKNavigationDelegate {
   ) {
     failProvisionalCount += 1
     target?.webView(webView, didFailProvisionalNavigation: navigation, withError: error)
-    if let navigation {
-      onDidFailProvisional?(navigation)
-    }
+    if let navigation { onDidFailProvisional?(navigation) }
   }
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {

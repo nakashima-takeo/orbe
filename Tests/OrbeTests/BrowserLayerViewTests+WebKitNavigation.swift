@@ -223,16 +223,25 @@ extension BrowserLayerViewTests {
 
   private func makeSheetBrowserWithRuntime() throws -> (BrowserLayerView, BrowserTabRuntime) {
     let browser = makeSheetBrowser()
-    let runtime = try prepareEmptyRuntimeForObservation(in: browser)
-    return (browser, runtime)
+    return (browser, try prepareEmptyRuntimeForObservation(in: browser))
+  }
+
+  private func assertTerminationClearedLoading(
+    in browser: BrowserLayerView, runtime: BrowserTabRuntime,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertFalse(browser.isProvisionalNavigation, file: file, line: line)
+    XCTAssertFalse(runtime.isLoading, file: file, line: line)
+    XCTAssertEqual(runtime.estimatedProgress, 0, file: file, line: line)
+    XCTAssertFalse(browser.toolbar.isLoading, file: file, line: line)
+    XCTAssertEqual(browser.toolbar.estimatedProgress, 0, file: file, line: line)
   }
 
   /// WebContent 異常終了時はリモート／ローカル HTML 暫定中・初回未確定 `https://` 要求のいずれも
   /// 暫定状態と読込表示をリセットして URL・鍵保護・`lastRequestedURL` を整え、再読込や後続遷移で復帰できる。
   func testWebContentProcessTerminationResetsStateProtectsURLAndRecovers() throws {
     let server = try LocalLoopbackHTTPServer(responses: [
-      "/page-a": .html("<!doctype html><p>page-a</p>"),
-      "/hang": .hang,
+      "/page-a": .html("<!doctype html><p>page-a</p>"), "/hang": .hang,
     ])
     defer { server.stop() }
     let pageA = server.url(for: "/page-a")
@@ -244,21 +253,15 @@ extension BrowserLayerViewTests {
     remote.load(pageA)
     let remoteRuntime = try XCTUnwrap(remote.mountedRuntime)
     pumpMain(until: { remoteFinish >= 1 }, timeout: 5, "page-a 完了")
-
     remote.load(server.url(for: "/hang"))
     XCTAssertTrue(remote.isProvisionalNavigation, "前提: /hang 暫定中")
     remoteRuntime.isLoading = true
     remoteRuntime.estimatedProgress = 0.6
     remote.syncToolbar(from: remoteRuntime)
     remoteRuntime.webViewWebContentProcessDidTerminate(remoteRuntime.webView)
-    XCTAssertFalse(remote.isProvisionalNavigation)
-    XCTAssertFalse(remoteRuntime.isLoading)
-    XCTAssertEqual(remoteRuntime.estimatedProgress, 0)
-    XCTAssertFalse(remote.toolbar.isLoading)
-    XCTAssertEqual(remote.toolbar.estimatedProgress, 0)
+    assertTerminationClearedLoading(in: remote, runtime: remoteRuntime)
     XCTAssertEqual(remote.toolbar.displayURL?.path, "/page-a")
     XCTAssertEqual(remote.lastRequestedURL, pageA, "暫定先 /hang ではなくコミット済み /page-a へ戻す")
-
     let beforeReload = remoteFinish
     remote.reloadPage()
     pumpMain(until: { remoteFinish > beforeReload }, timeout: 5, "異常終了後に reloadPage で /page-a へ復帰")
@@ -291,14 +294,9 @@ extension BrowserLayerViewTests {
     freshRuntime.displayURL = nil
     fresh.syncToolbar(from: freshRuntime)
     freshRuntime.webViewWebContentProcessDidTerminate(freshRuntime.webView)
-    XCTAssertFalse(fresh.isProvisionalNavigation)
-    XCTAssertFalse(freshRuntime.isLoading)
-    XCTAssertEqual(freshRuntime.estimatedProgress, 0)
-    XCTAssertFalse(fresh.toolbar.isLoading)
-    XCTAssertEqual(fresh.toolbar.estimatedProgress, 0)
+    assertTerminationClearedLoading(in: fresh, runtime: freshRuntime)
     XCTAssertEqual(fresh.toolbar.displayURL?.raw, secureTarget.absoluteString)
     XCTAssertEqual(fresh.toolbar.displayURL?.isSecure, false, "未確定 https:// では鍵アイコンを出さない")
-
     fresh.load(pageA)
     pumpMain(until: { freshFinish >= 1 }, timeout: 5, "異常終了後の後続遷移で正常復帰する")
     XCTAssertEqual(freshRuntime.webView.url, pageA)
@@ -354,7 +352,6 @@ extension BrowserLayerViewTests {
     let beforeP2 = finishCount
     browser.load(p2)
     pumpMain(until: { finishCount > beforeP2 }, timeout: 5, "p2 完了")
-
     let beforeBack = finishCount
     browser.goBack()
     XCTAssertTrue(browser.isProvisionalNavigation, "別文書 goBack 直後から暫定遷移として追跡する")
@@ -363,7 +360,6 @@ extension BrowserLayerViewTests {
       timeout: 5, "別文書 goBack が完了し pending を解放する")
     XCTAssertEqual(browser.committedURL?.path, "/p1/s2")
     XCTAssertEqual(browser.toolbar.displayURL?.path, "/p1/s2")
-
     let beforeForward = finishCount
     browser.goForward()
     XCTAssertTrue(browser.isProvisionalNavigation, "別文書 goForward 直後から暫定遷移として追跡する")
@@ -377,19 +373,17 @@ extension BrowserLayerViewTests {
   /// `browser.load` で非 HTTP(S) スキームがポリシー遮断されたとき、未開始 `pendingNavigation` を
   /// 解放し `lastRequestedURL` とアドレスバーをコミット済みページへ復元する。
   func testBlockedMainFrameLoadReleasesPendingAndRestoresLastRequestedURL() throws {
-    let (browser, runtime) = try makeSheetBrowserWithRuntime()
-    let webView = runtime.webView
-    let spy = BrowserNavigationPolicySpy(target: runtime)
-    webView.navigationDelegate = spy
-    defer { webView.navigationDelegate = runtime }
-
+    let browser = makeSheetBrowser()
     let server = try LocalLoopbackHTTPServer(routes: ["/p": "<!doctype html><p>ok</p>"])
     defer { server.stop() }
-
     var finishCount = 0
     browser.onNavigationFinish = { finishCount += 1 }
     let committed = server.url(for: "/p")
     browser.load(committed)
+    let runtime = try XCTUnwrap(browser.mountedRuntime)
+    let spy = BrowserNavigationPolicySpy(target: runtime)
+    runtime.webView.navigationDelegate = spy
+    defer { runtime.webView.navigationDelegate = runtime }
     pumpMain(until: { finishCount >= 1 }, timeout: 5, "初期ページ完了")
 
     let decisionsBefore = spy.decisions.count

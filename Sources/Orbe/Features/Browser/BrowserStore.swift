@@ -26,10 +26,15 @@ import Observation
   private(set) var unavailableReason: String?
   var available: Bool { database != nil }
 
+  struct InitialDefaultFreeSpace {
+    let id: UUID
+    let key: L10nKey
+    let seededName: String
+  }
+
   @ObservationIgnored private var nextInMemoryClosedTabId: Int64
   /// 初回シードで投入された既定自由スペースの初期状態（初回言語選択確定時の未変更同期に使う）。
-  @ObservationIgnored var initialDefaultFreeSpaces: [(id: UUID, key: L10nKey, seededName: String)] =
-    []
+  @ObservationIgnored var initialDefaultFreeSpaces: [InitialDefaultFreeSpace] = []
 
   init(
     opening: BrowserPersistence.Opening,
@@ -63,8 +68,8 @@ import Observation
       let seededFree = initial.spaces.filter { $0.kind == .free }.sorted(by: Self.spaceOrder)
       if seededFree.count == BrowserMemory.defaultFreeSpaceSpecs.count {
         initialDefaultFreeSpaces = zip(seededFree, BrowserMemory.defaultFreeSpaceSpecs).map {
-          space, spec in
-          (id: space.id, key: spec.key, seededName: L10n.string(spec.key, seededLanguage))
+          InitialDefaultFreeSpace(
+            id: $0.id, key: $1.key, seededName: L10n.string($1.key, seededLanguage))
         }
       }
     }
