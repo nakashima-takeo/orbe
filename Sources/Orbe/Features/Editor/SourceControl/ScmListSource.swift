@@ -33,11 +33,11 @@ final class ScmListSource: RowListSource {
     ScmRowView.prepare(for: appearance)
   }
 
-  var wantsFocus: Bool { panel.focusRequest == .list }
+  var wantsFocus: Bool { panel.wantsListFocus }
 
-  func focusRequestDidApply() { panel.focusRequestDidApply() }
+  func focusRequestDidApply() { panel.listFocusRequestDidApply() }
 
-  func focusDidChange(_ focused: Bool) { panel.focusDidChange(.list, focused: focused) }
+  func focusDidChange(_ focused: Bool) { panel.listFocusDidChange(focused) }
 
   func perform(_ key: RowListKey, in layout: ScmLayout) {
     switch key.action {
@@ -46,7 +46,9 @@ final class ScmListSource: RowListSource {
     case .left: panel.moveLeft()
     case .right: panel.moveRight(isRepeat: key.isRepeat, in: layout)
     case .enter: panel.activateSelection()
-    case .escape: panel.select(nil)
+    case .escape:
+      // 押し続けた esc は、ポップアップを閉じて戻った後の列の選択を外さない。
+      if !key.isRepeat { panel.select(nil) }
     }
   }
 

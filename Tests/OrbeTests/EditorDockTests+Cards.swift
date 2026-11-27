@@ -8,7 +8,7 @@ import XCTest
 /// 置き場の並び（`EditorDockStack`）と失敗の札（`EditorFailureCard`）——高さが足りないときの並び、札の幅と、札の × の働き。
 ///
 /// 壊れると何が起きるか（`EditorDockTests` の説明に書いたことのほか）。短い失敗の札が置き場の幅いっぱいに広がり、札の左の
-/// 本体が押せなくなる。
+/// 本体が押せなくなる。本体の上端に帯がある間、ポップアップがバーから離れて開く。
 extension EditorDockTests {
   /// 置き場の高さが足りなければ、札は全部が置き場の中に見え、ポップアップは札の残りの高さに縮む。
   func testTheCardsStayWholeAndThePopupShrinksWhenTheDockIsShort() throws {
@@ -42,6 +42,36 @@ extension EditorDockTests {
     XCTAssertEqual(cards[1].minY, cards[0].maxY + gap, accuracy: 0.5)
     XCTAssertLessThanOrEqual(cards[1].maxY, height + 0.5, "札は全部が置き場の中")
     XCTAssertLessThan(popup.height, 400, "ポップアップが縮む")
+  }
+
+  /// 本体の上端に帯がある（`cardsTop` が 0 でない）間も、ポップアップは並びの上端（バーの下端）から開き、
+  /// 札はポップアップの下に並ぶ。
+  func testWithABandAboveTheBodyThePopupStillOpensAtTheTopAndTheCardsFollowIt() throws {
+    let band: CGFloat = 32
+    let frames = Record<[CGRect]>([])
+    let host = NSHostingView(
+      rootView: EditorDockStack(cardsTop: band) {
+        Color.clear.frame(width: 300, height: 120).editorDockItem()
+      } cards: {
+        EditorFailureCard(text: "プッシュに失敗しました。", dismiss: {})
+      }
+      .frame(width: Theme.Layout.editorDockWidth, height: 400)
+      .coordinateSpace(.named(EditorDockRoot.space))
+      .onPreferenceChange(EditorDockFramesKey.self) { frames.value = $0 }
+      .environment(\.localization, LocalizationStore(language: .ja)))
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: Theme.Layout.editorDockWidth, height: 400),
+      styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = host
+    holdUntilTestEnds(window)
+    host.layoutSubtreeIfNeeded()
+    pumpMain(until: { frames.value.count == 2 }, "ポップアップと札の枠")
+
+    let popup = frames.value[0]
+    let card = frames.value[1]
+    XCTAssertEqual(popup.minY, 0, accuracy: 0.5, "ポップアップは上端から開く")
+    XCTAssertEqual(
+      card.minY, popup.maxY + Theme.Layout.editorDockGap, accuracy: 0.5, "札はポップアップの下")
   }
 
   /// 短い文の失敗の札は、文の幅だけを取って右に寄り、置き場が押下を受ける枠も、その幅だけ（札の左の空いた所は、下の

@@ -7,7 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。upstream の無いブランチを送れない・送れても upstream が付かず次から pull できない・拒否と認証の
 /// 失敗が同じ文で出て何をすべきか分からない・競合で止まったのに「失敗」としか言えない・fetch しても遅れの数が動かない・
-/// 長い push の間に何も出ず固まって見える。
+/// 長い push の間に何も出ず固まって見える。リモートで消えたブランチの pull が、git の理由の行のまま断られ、何をすべきか分からない。
 @MainActor
 final class RootFilesRemoteTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -247,5 +247,19 @@ final class RootFilesRemoteTests: OrbeTestCase {
     XCTAssertEqual(
       finish(files) { files.pull(onProgress: { _ in }, completion: $0) }.failure,
       .operationInProgress(.rebase))
+  }
+
+  /// upstream の ref が消えたブランチ（リモートのブランチを消した）の pull は、本体の git を起こす前に、upstream の名前を持つ
+  /// 分類された失敗で返る。
+  func testPullingABranchWhoseUpstreamIsGoneIsClassifiedUpFront() throws {
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["checkout", "-q", "-b", "feat"]).isSuccess)
+    XCTAssertTrue(repo.git(["push", "-q", "-u", "origin", "feat"]).isSuccess)
+    XCTAssertTrue(repo.git(["push", "-q", "origin", "--delete", "feat"]).isSuccess)
+    let files = repo.files()
+
+    XCTAssertEqual(
+      finish(files) { files.pull(onProgress: { _ in }, completion: $0) }.failure,
+      .upstreamGone("origin/feat"))
   }
 }

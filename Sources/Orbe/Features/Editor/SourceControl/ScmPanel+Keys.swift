@@ -2,7 +2,7 @@ import Foundation
 
 /// 変更の列の選択・キー・押下（検索結果の列と同じ型。→ `ScmListSource`）。
 extension ScmPanel {
-  /// 変更の列の状態。git 管理外・親「ソース管理」を畳んでいる（欄と列が左の列に出ていない）なら無い。行があればある。
+  /// 変更の列の状態。git 管理外・親「ソース管理」を畳んでいる（列が左の列に出ていない）なら無い。行があればある。
   /// 無ければ、git 管理下かの判定の前・行が今の status からまだ出来ていない間はこれから来る、それ以外（変更なし）は無い。
   var listState: EditorListState {
     if isManaged == false || !isRepositoryOpen { return .none }
@@ -122,13 +122,6 @@ extension ScmPanel {
     }
   }
 
-  /// ⌘↑: 先頭の行（か未選択）ならメッセージ欄へ戻る（列が見えていれば、同じ親の中の欄も見えている）。
-  func returnToMessageIfAtTop() {
-    let top = layout.items.indices.first
-    guard selection.map({ layout.index[$0] == top }) ?? true else { return }
-    requestFocus(.message)
-  }
-
   // MARK: - 押下
 
   func click(_ row: Int, in layout: ScmLayout) {
@@ -151,7 +144,7 @@ extension ScmPanel {
 
   /// 行の中の部品を押した（押せない姿の部品は列が渡さない）。ステージ・解除・確認を出さない破棄（ゴミ箱へ移すだけのもの）
   /// は、押した行と後継の行（同じ区分の次の行。無ければ前の行。区分の最後の 1 件なら後継なし）を錨として返す——同じ位置で
-  /// 続けて押すと、次の行が次々に処理され、区分が尽きた後にポインタの下へ来たものは働かない。確認のシートを経る破棄と
+  /// 続けて押すと、次の行が次々に処理され、区分が尽きた後にポインタの下へ来たものは働かない。確認を経る破棄と
   /// 見出しの一括操作は返さない。
   @discardableResult
   func press(_ row: Int, _ control: ScmControl, in layout: ScmLayout) -> RowListAnchor<ScmRowID>? {

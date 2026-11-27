@@ -2,10 +2,10 @@ import XCTest
 
 @testable import Orbe
 
-/// コミットボタンと ▾ の姿。
+/// コミットと ▾ の項目の可否と、同期のボタンの姿。
 ///
-/// 壊れると何が起きるか。変更があるのにボタンが同期に替わって押すとネット操作が走る・upstream の無いブランチで公開が
-/// 出ない・push 済みのコミットを amend で書き換えられる（Orbe の中では戻せない）・push 済みか分からない間に取り消せる・
+/// 壊れると何が起きるか。upstream の無いブランチで公開が出ない・detached HEAD で同期が出て押すと断られる・ネット操作の
+/// 最中に同期が押せる・push 済みのコミットを amend で書き換えられる（Orbe の中では戻せない）・push 済みか分からない間に取り消せる・
 /// push と並んで amend・取り消しが走り、push したコミットを書き換える・競合だけなのにコミットが押せる。
 final class ScmCommitStateTests: OrbeTestCase {
   private func branch(
@@ -24,17 +24,15 @@ final class ScmCommitStateTests: OrbeTestCase {
     blank: Bool = true, networking: Bool = false, committing: Bool = false, pushed: Bool? = false
   ) -> ScmCommitState {
     ScmCommitState(
-      staged: staged, changes: changes, committable: committable ?? changes, branch: branch,
-      messageIsBlank: blank,
+      staged: staged, committable: committable ?? changes, branch: branch, messageIsBlank: blank,
       isNetworking: networking, isCommitting: committing, isHeadPushed: pushed)
   }
 
-  /// 変更が 1 つでもあればコミット。押せるのはステージ済みかコミットに入る変更（競合と中身だけ変わったサブモジュールを
-  /// 除く）があり、メッセージが空白だけでなく、コミット中でないとき。
+  /// コミットが押せるのは、ステージ済みかコミットに入る変更（競合と中身だけ変わったサブモジュールを除く）があり、
+  /// メッセージが空白だけでなく、コミット中でないとき。
   func testCommitNeedsCommittableChangesAndAMessage() {
     let tracked = branch(upstream: upstream(ahead: 2, behind: 0))
-    XCTAssertEqual(state(changes: 1, branch: tracked, blank: false).primary, .commit)
-    XCTAssertTrue(state(changes: 1, branch: tracked, blank: false).isButtonEnabled)
+    XCTAssertTrue(state(changes: 1, branch: tracked, blank: false).canCommit)
     XCTAssertFalse(state(changes: 1, committable: 0, branch: tracked, blank: false).canCommit)
     XCTAssertFalse(state(staged: 1, branch: tracked).canCommit)
     XCTAssertTrue(state(staged: 1, branch: tracked, blank: false).canCommit)
@@ -44,22 +42,26 @@ final class ScmCommitStateTests: OrbeTestCase {
       state(staged: 1, branch: tracked, blank: false, networking: true).canCommitAndPush)
   }
 
-  /// 変更が無ければ、先行/遅れのある upstream で同期、upstream の無いブランチで公開。ネット操作中は押せず、↵ の
-  /// コミットはどちらでも起きない。
-  func testSyncAndPublishReplaceTheButtonOnlyWithoutChanges() {
-    let ahead = state(branch: branch(upstream: upstream(ahead: 2, behind: 1)))
-    XCTAssertEqual(ahead.primary, .sync(GitStatus.Divergence(ahead: 2, behind: 1)))
-    XCTAssertTrue(ahead.isButtonEnabled)
-    XCTAssertFalse(ahead.canCommit)
-    XCTAssertFalse(
-      state(branch: branch(upstream: upstream(ahead: 2, behind: 0)), networking: true)
-        .isButtonEnabled)
-    XCTAssertEqual(state(branch: branch(upstream: upstream(ahead: 0, behind: 0))).primary, .commit)
-    XCTAssertEqual(state(branch: branch()).primary, .publish)
-    XCTAssertEqual(state(branch: branch(name: nil)).primary, .commit)
-    XCTAssertEqual(state(branch: branch(commit: nil)).primary, .commit)
-    let unknown = GitStatus.Upstream(name: "origin/feat", divergence: nil)
-    XCTAssertEqual(state(branch: branch(upstream: unknown)).primary, .commit)
+  /// 同期のボタンは、upstream の在るブランチで同期（先行・遅れが分かり、和が 1 以上なら数つき）、コミットが在り upstream の
+  /// 無いブランチで公開。upstream の ref が手元に無いブランチでは、同期の姿で押せない。detached HEAD・初回コミットの前・
+  /// ブランチが分からない間は出さない。ネット操作中は押せない。
+  func testSyncAndPublishFollowTheBranch() {
+    func sync(_ branch: GitStatus.Branch?, networking: Bool = false) -> ScmSyncState? {
+      ScmSyncState(branch: branch, isNetworking: networking)
+    }
+    let ahead = sync(branch(upstream: upstream(ahead: 2, behind: 1)))
+    XCTAssertEqual(ahead?.action, .sync(GitStatus.Divergence(ahead: 2, behind: 1)))
+    XCTAssertEqual(ahead?.isEnabled, true)
+    XCTAssertEqual(
+      sync(branch(upstream: upstream(ahead: 2, behind: 0)), networking: true)?.isEnabled, false)
+    XCTAssertEqual(sync(branch(upstream: upstream(ahead: 0, behind: 0)))?.action, .sync(nil))
+    let gone = GitStatus.Upstream(name: "origin/feat", divergence: nil)
+    XCTAssertEqual(sync(branch(upstream: gone))?.action, .upstreamGone("origin/feat"))
+    XCTAssertEqual(sync(branch(upstream: gone))?.isEnabled, false)
+    XCTAssertEqual(sync(branch())?.action, .publish)
+    XCTAssertNil(sync(branch(name: nil)))
+    XCTAssertNil(sync(branch(commit: nil)))
+    XCTAssertNil(sync(nil))
   }
 
   /// HEAD が push 済み・分からない・初回コミット前、コミット中・ネット操作中なら amend と取り消しは押せない。

@@ -22,7 +22,7 @@ extension DesignGallerySnapshotTests {
   /// 上のバーの部品の姿（`editor_bar_parts`）と、3 つの画面の姿の並びを幅 1100・820・600 で（`editor_bar_<画面>`）。
   func renderEditorBarSnapshots(dir: URL) throws {
     try writePNG(
-      EditorShellFixtures.barParts(), size: NSSize(width: 900, height: 200),
+      EditorShellFixtures.barParts(), size: NSSize(width: 900, height: 240),
       name: "editor_bar_parts.png", dir: dir)
     let widths: [CGFloat] = [1100, 820, 600]
     for (screen, name) in [

@@ -4,13 +4,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 親「ソース管理」とグラフの枠（エディター面に結んだパネル）——親を畳むと、焦点のあった欄・列から本文へ焦点を移してから
-/// 隠す。cd で根が変わってパネルが作り直されるときも、上のバーでほかの画面へ移ってパネルが隠れるときも、同じく本文へ
-/// 焦点を移す。親を畳んだままソース管理を出しても、パネルの中へ焦点を求めない。グラフの列で押して働くのは「さらに表示」
+/// 親「ソース管理」とグラフの枠（エディター面に結んだパネル）——親を畳むと、焦点のあった列から本文へ焦点を移してから
+/// 隠す。cd で根が変わってパネルが作り直されるときも、上のバーでほかの画面へ移ってパネルが隠れるときも、コミットの
+/// ポップアップの欄か列に焦点があれば、同じく本文へ焦点を移す。親を畳んだままソース管理を出しても、パネルの中へ焦点を求めない。グラフの列で押して働くのは「さらに表示」
 /// だけで、押しても変更の列の焦点と選択は動かない。境目を引くとグラフの枠の高さが変わり、離すと記憶へ書き戻す。
 ///
 /// 壊れると何が起きるか。列で ↑↓ していて親を畳むと、焦点が窓へ落ちてキーがどこにも届かない（パネルは焦点があると思った
-/// まま）。欄や列に焦点がある間に cd しても、上のバーで画面を替えても、焦点が窓へ落ちてキーがどこにも届かない。畳んだ親を
+/// まま）。ポップアップの欄や列に焦点がある間に cd しても、上のバーで画面を替えても、焦点が窓へ落ちてキーがどこにも届かない。畳んだ親を
 /// 開いた瞬間に、残っていた焦点の要求が本文の焦点を奪う。グラフのコミットを押すと、変更の列から焦点が抜けて ↑↓ が効かなく
 /// なる。「さらに表示」を押しても 50 件の先が出ない。境目を引いても枠が動かない・逆へ動く・ポインタから離れて動く、離しても
 /// 高さが残らず再起動で戻る。
@@ -40,12 +40,12 @@ extension SourceControlPaneTests {
     let selected = ScmRowID(section: .changes, path: "a.txt")
     scm.select(selected)
     hosted.window.makeFirstResponder(list)
-    XCTAssertEqual(scm.focusedArea, .list, "前提: 列に焦点")
+    XCTAssertTrue(scm.isListFocused, "前提: 列に焦点")
 
     scm.setRepositoryOpen(false)
     pumpMain(until: { list.window == nil }, "列が窓から外れる")
     XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "焦点は本文の行き先へ")
-    XCTAssertNil(scm.focusedArea)
+    XCTAssertFalse(scm.isListFocused)
     XCTAssertEqual(scm.selection, selected, "選択は残る")
 
     scm.setRepositoryOpen(true)
@@ -58,44 +58,48 @@ extension SourceControlPaneTests {
     XCTAssertTrue(hosted.window.firstResponder === list, "押せば列が焦点を取り直す")
   }
 
-  /// 欄か列に焦点がある間に cd で根が変わっても、焦点は面の焦点の行き先へ戻る（作り直されるパネルと一緒に窓へ落ちない）。
+  /// コミットのポップアップの欄か変更の列に焦点がある間に cd で根が変わっても、焦点は面の焦点の行き先へ戻る（作り直される
+  /// パネルと一緒に窓へ落ちない）。
   ///
-  /// 作り直されたパネルが焦点を奪わないことは、待たずに確かめる。前提は、パネルの中へ焦点を入れる経路が、どれも走る時点で
-  /// 焦点の要求（`focusRequest`）を見直すことと、要求を出すのが明示の呼び出しだけであること。作り直されたパネルが要求を
+  /// 作り直されたパネルが焦点を奪わないことは、待たずに確かめる。前提は、列へ焦点を入れる経路が、どれも走る時点で焦点の
+  /// 要求（`wantsListFocus`）を見直すことと、要求を出すのが明示の呼び出しだけであること。作り直されたパネルが要求を
   /// 持って始まるようにすると、このテストが落ちることを確かめてある。焦点を入れる経路か、要求を出す経路を変えたときは、
   /// 確かめ直す。
   func testChangingTheRootWithTheFocusInThePanelReturnsItToTheBody() throws {
-    for area in [ScmPanel.Area.message, .list] {
+    for inList in [false, true] {
+      let place = inList ? "列" : "欄"
       let hosted = try layersPane()
       let old = hosted.scm
-      pumpMain(until: { old.focusedArea == .message }, "\(area): 欄に焦点")
-      if area == .list { hosted.window.makeFirstResponder(hosted.pane.scmList.list) }
-      XCTAssertEqual(old.focusedArea, area, "前提")
+      pumpMain(until: { self.messageFieldHasFocus(hosted) }, "\(place): 欄に焦点")
+      if inList { hosted.window.makeFirstResponder(hosted.pane.scmList.list) }
+      XCTAssertEqual(old.isListFocused, inList, "前提")
       hosted.tab.group.rekey(try TempGitRepo().root)
-      pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "\(area): 新しいパネル")
-      XCTAssertNil(hosted.scm.focusRequest, "\(area): 新しいパネルは焦点を求めない")
-      XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "\(area)")
+      pumpMain(until: { hosted.scm !== old }, "\(place): 新しいパネル")
+      XCTAssertFalse(hosted.scm.wantsListFocus, "\(place): 新しいパネルは焦点を求めない")
+      XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, place)
     }
   }
 
-  /// 欄か列に焦点がある間に上のバーでほかの画面へ移っても、焦点は面の焦点の行き先へ戻る（隠れるパネルと一緒に窓へ落ちない）。
+  /// コミットのポップアップの欄か変更の列に焦点がある間に上のバーでほかの画面へ移っても、焦点は面の焦点の行き先へ戻る
+  /// （隠れるポップアップ・パネルと一緒に窓へ落ちない）。
   func testHidingThePanelWithTheFocusInItReturnsItToTheBody() throws {
-    for area in [ScmPanel.Area.message, .list] {
+    for inList in [false, true] {
+      let place = inList ? "列" : "欄"
       let hosted = try layersPane()
       let scm = hosted.scm
-      pumpMain(until: { scm.focusedArea == .message }, "\(area): 欄に焦点")
-      if area == .list { hosted.window.makeFirstResponder(hosted.pane.scmList.list) }
-      XCTAssertEqual(scm.focusedArea, area, "前提")
+      pumpMain(until: { self.messageFieldHasFocus(hosted) }, "\(place): 欄に焦点")
+      if inList { hosted.window.makeFirstResponder(hosted.pane.scmList.list) }
+      XCTAssertEqual(scm.isListFocused, inList, "前提")
       hosted.pane.switchScreen(.files)
       pumpMain(
-        until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "\(area): 本文へ戻る")
+        until: { hosted.window.firstResponder === hosted.pane.focusTarget }, "\(place): 本文へ戻る")
     }
   }
 
   /// 親を畳んだまま上のバーで Changes を出し直しても、パネルの中へ焦点を求めない。開いても焦点は本文のまま。
   ///
-  /// 開いても焦点を奪わないことは、待たずに確かめる。前提は、パネルの中へ焦点を入れる経路が、どれも走る時点で焦点の要求
-  /// （`focusRequest`）を見直すことと、要求を出すのが明示の呼び出しだけであること。親を開く操作が焦点を求めるようにすると、
+  /// 開いても焦点を奪わないことは、待たずに確かめる。前提は、列へ焦点を入れる経路が、どれも走る時点で焦点の要求
+  /// （`wantsListFocus`）を見直すことと、要求を出すのが明示の呼び出しだけであること。親を開く操作が焦点を求めるようにすると、
   /// このテストが落ちることを確かめてある。焦点を入れる経路か、要求を出す経路を変えたときは、確かめ直す。
   func testShowingThePanelWhileTheRepositoryIsClosedRequestsNoFocus() throws {
     let hosted = try layersPane()
@@ -103,11 +107,11 @@ extension SourceControlPaneTests {
     scm.setRepositoryOpen(false)
     hosted.pane.switchScreen(.files)
     hosted.pane.switchScreen(.changes)
-    XCTAssertNil(scm.focusRequest)
+    XCTAssertFalse(scm.wantsListFocus)
     scm.setRepositoryOpen(true)
     pumpMain(until: { hosted.pane.scmList.list.window != nil }, "列が戻る")
-    XCTAssertNil(scm.focusRequest, "開いても焦点を求めない")
-    XCTAssertNil(scm.focusedArea, "開いても焦点を奪わない")
+    XCTAssertFalse(scm.wantsListFocus, "開いても焦点を求めない")
+    XCTAssertFalse(scm.isListFocused, "開いても焦点を奪わない")
   }
 
   /// グラフの列のコミットを押しても何も起きず、「さらに表示」を押すと 50 件の先のコミットが出る。どちらでも変更の列の

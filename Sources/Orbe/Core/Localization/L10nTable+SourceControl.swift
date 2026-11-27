@@ -7,10 +7,14 @@ extension L10n {
     .editorScmStaged: ("ステージされている変更", "Staged Changes"),
     .editorScmChanges: ("変更", "Changes"),
     .editorScmGraph: ("グラフ", "Graph"),
-    .editorScmPlaceholderBranch: ("メッセージ (↵ で \"%@\" にコミット)", "Message (↵ to commit on \"%@\")"),
-    .editorScmPlaceholder: ("メッセージ (↵ でコミット)", "Message (↵ to commit)"),
+    .editorScmPlaceholder: ("メッセージ", "Message"),
     .editorScmCommit: ("コミット", "Commit"),
+    .editorScmStagedDetail: ("ステージ済み", "Staged"),
+    .editorScmCommitWithStaged: ("コミット、ステージ済み %@", "Commit, staged %@"),
     .editorScmSync: ("同期", "Sync Changes"),
+    .editorScmSyncUpstreamGone: (
+      "同期（upstream の %@ がリモートにありません）", "Sync Changes (the upstream %@ isn't on the remote)"
+    ),
     .editorScmPublish: ("ブランチを公開", "Publish Branch"),
     .editorScmMoreActions: ("その他の操作", "More Actions"),
     .editorScmCommitActions: ("その他のコミット操作", "More Commit Actions"),
@@ -49,9 +53,11 @@ extension L10n {
       "作業ツリーを index の版に戻します。この操作は元に戻せません。",
       "The working tree goes back to the staged version. This can't be undone."
     ),
+    .editorScmDiscardMessageWithTrash: ("%@%@", "%@ %@"),
     .editorScmDiscardToTrashOne: ("%lld 件はゴミ箱へ移します。", "%lld file goes to the Trash."),
     .editorScmDiscardToTrashOther: ("%lld 件はゴミ箱へ移します。", "%lld files go to the Trash."),
     .editorScmDiscardConfirm: ("破棄", "Discard"),
+    .editorScmFailureCard: ("%@　%@", "%@: %@"),
     .editorScmFailureAuthentication: (
       "認証できませんでした。端末で git の認証（ssh の鍵・資格情報）を設定してください。",
       "Authentication failed. Set up git authentication (ssh key or credentials) in the terminal."
@@ -82,6 +88,10 @@ extension L10n {
     .editorScmFailureNoUpstream: (
       "このブランチには upstream がありません。先にブランチを公開してください。",
       "This branch has no upstream. Publish the branch first."
+    ),
+    .editorScmFailureUpstreamGone: (
+      "upstream の %@ がリモートにありません。端末で別のブランチに切り替えるか、upstream を設定し直してください。",
+      "The upstream %@ isn't on the remote. Switch to another branch or set a new upstream in the terminal."
     ),
     .editorScmFailureNoPushDestination: (
       "push 先の remote がありません。端末で remote を追加してください。",

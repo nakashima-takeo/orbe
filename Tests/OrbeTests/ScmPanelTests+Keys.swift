@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// 変更の列のキー——↑↓ は子の見出しとファイル行を渡り（グラフは別の列で、キーでは入らない）、ファイル行でだけ仮で開く。
-/// ← → Enter は見出しの開閉と見出し・ファイル行の行き来、Enter はファイル行を普通の文書として開く。⌘↑ は先頭の行から欄へ戻る。
+/// ← → Enter は見出しの開閉と見出し・ファイル行の行き来、Enter はファイル行を普通の文書として開く。
 /// 押し続けた ↑↓ は離すまで開かず、待っている開きは人の注意が列から移ったら捨てる。
 ///
 /// 壊れると何が起きるか。↓ が列の末尾を越えて選択を失う。見出しへ動いただけで diff が開く。Enter で開いても焦点が列に残る。
@@ -123,27 +123,11 @@ extension ScmPanelTests {
     }
   }
 
-  /// ⌘↑ は先頭の行か未選択のときだけ欄へ焦点を求める。
-  func testCommandUpReturnsToTheMessageOnlyFromTheTop() throws {
-    _ = try keysPanel()
-    panel.select(id(.staged, "s.txt"))
-    panel.returnToMessageIfAtTop()
-    XCTAssertNil(panel.focusRequest, "先頭でなければ戻らない")
-
-    panel.select(id(.staged))
-    panel.returnToMessageIfAtTop()
-    XCTAssertEqual(panel.focusRequest, .message)
-    panel.focusRequestDidApply()
-    panel.select(nil)
-    panel.returnToMessageIfAtTop()
-    XCTAssertEqual(panel.focusRequest, .message, "未選択からも戻る")
-  }
-
-  /// 当てられないまま隠れた焦点の要求は捨てる（後で欄が現れても、面の外の焦点を奪わない）。
+  /// 当てられないまま隠れた焦点の要求は捨てる（後で列が現れても、面の外の焦点を奪わない）。
   func testAFocusRequestLeftUnappliedIsDroppedWhenThePanelHides() throws {
     show(until: { $0.isManaged == true }, "パネル")
-    panel.requestFocus(.message)
+    panel.requestListFocus()
     panel.isShown = false
-    XCTAssertNil(panel.focusRequest)
+    XCTAssertFalse(panel.wantsListFocus)
   }
 }
