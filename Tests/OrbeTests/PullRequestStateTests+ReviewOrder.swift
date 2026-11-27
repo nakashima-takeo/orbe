@@ -174,11 +174,11 @@ private final class ReviewWriteRun {
       .reply(thread: "T1", body: "x", resolve: false), .setResolved(thread: "T1", true),
       .reply(thread: "T2", body: "x", resolve: true),
       .addThread(
-        path: "a", side: .new, line: 1, commit: random.next(below: 2) == 0 ? seen : head, body: "x"),
+        path: "a", lines: .at(.new, 1), commit: random.next(below: 2) == 0 ? seen : head, body: "x"),
     ]
     let write = writes[random.next(below: writes.count)]
     let expected: Bool
-    if case .addThread(_, _, _, let commit, _) = write {
+    if case .addThread(_, _, let commit, _) = write {
       expected = commit == seen
     } else {
       let target = Self.target(of: write)
@@ -209,7 +209,7 @@ private final class ReviewWriteRun {
       pendingReview: pending.map { .init(id: $0, commentCount: 1) },
       threads: [
         .init(
-          id: "r\(tag)", path: "a", side: .new, line: 1, isResolved: false, canReply: true,
+          id: "r\(tag)", path: "a", lines: .at(.new, 1), isResolved: false, canReply: true,
           canResolve: true, canUnresolve: false, comments: [])
       ])
     gitHub.review = failing ? .failure(.unreachable) : .success(read)

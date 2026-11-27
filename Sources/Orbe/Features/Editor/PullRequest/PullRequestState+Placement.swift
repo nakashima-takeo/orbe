@@ -39,7 +39,7 @@ extension PullRequestState {
   nonisolated static func placement(
     of thread: GitHubPullRequestReview.Thread, in inputs: PlacementInputs
   ) -> Placement {
-    guard thread.line != nil, inputs.ends != .failed else { return .unplaceable }
+    guard thread.lines != nil, inputs.ends != .failed else { return .unplaceable }
     guard let head = inputs.head, inputs.review?.headCommit == head else {
       return inputs.readsStopped ? .unplaceable : .unknown
     }
@@ -65,9 +65,8 @@ extension PullRequestState {
     let id: String
     let thread: String
     let path: String
-    let side: GitHubDiffSide
-    /// スレッドが付いた行（その側の版の行。1 始まり）。行を持たないスレッドなら nil。
-    let line: Int?
+    /// スレッドが付いた行の範囲。行を持たないスレッドなら nil。
+    let lines: GitHubLineRange?
     let body: String
     /// 今の diff に置ける（置き方が「まだ分からない」間は、置けるとみなす）。
     let isPlaceable: Bool
@@ -121,7 +120,7 @@ extension PullRequestState {
   /// 決まった答え（`answers`）は、今の PR の両端を求め終えていたときに決まったものだけを持ち、まだ分からない間は持ち越す
   /// （コメントの層は、diff が見せている両端について読む）。
   struct Placements {
-    /// 最後に読めたレビューのやりとりの、未送信のコメント。並びはパスの順 → 行の順（行を持たないものはそのファイルの最後）→
+    /// 最後に読めたレビューのやりとりの、未送信のコメント。並びはパスの順 → 終わりの行の順（行を持たないものはそのファイルの最後）→
     /// 書いた時刻の順。
     let pendingComments: [PendingComment]
     /// 今の diff に置けない未解決のスレッドの数。
@@ -163,14 +162,12 @@ extension PullRequestState {
       }
       pendingComments = found.sorted { a, b in
         if a.thread.path != b.thread.path { return a.thread.path < b.thread.path }
-        if a.thread.line != b.thread.line {
-          return (a.thread.line ?? .max) < (b.thread.line ?? .max)
-        }
+        let (x, y) = (a.thread.lines?.end.line, b.thread.lines?.end.line)
+        if x != y { return (x ?? .max) < (y ?? .max) }
         return (a.comment.createdAt, a.comment.id) < (b.comment.createdAt, b.comment.id)
       }.map { thread, comment in
         PendingComment(
-          id: comment.id, thread: thread.id, path: thread.path, side: thread.side,
-          line: thread.line,
+          id: comment.id, thread: thread.id, path: thread.path, lines: thread.lines,
           body: comment.body, isPlaceable: placement(thread) != .unplaceable)
       }
       outdatedThreadCount = threads.count { !$0.isResolved && placement($0) == .unplaceable }

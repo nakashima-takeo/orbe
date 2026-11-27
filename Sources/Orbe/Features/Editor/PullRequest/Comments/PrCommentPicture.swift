@@ -4,16 +4,18 @@ import OrbeEditorCore
 /// スレッドと新しいコメントの欄の絵を組む（中身・状態・幅 → 絵の純関数）。
 ///
 /// 箱は本文の区画の左端から始まり、右に 16、上に 4、下に 8 の空きを持つ（角丸 6・枠 1・影 0 10 30）。開いたスレッドは、頭（高さ
-/// 26 と下縁 1。上の 2 角だけ丸い。「行 N」・状態・「解決」・「折りたたむ」）・コメントの列（アバターの頭文字の円・書いた人と
-/// 時刻と未送信の札・本文）・返信の行（返信欄・「レビューに追加」・「解決して返信」）・失敗の文。畳んだスレッドは頭の帯だけ
-/// （4 角とも丸い）で、「行 N」の後に最初のコメントの書いた人と本文の先頭 1 行を出す。新しいコメントの欄は、箱から頭と
-/// コメントの列を除いた形（返信欄・「レビューに追加」・「取り消す」）で、書き込めない間（欄の行を移している・行が
-/// 現在の diff に無い）は「レビューに追加」を押せない姿にする。置き場所の文（→ `PrCommentNotice`）は失敗の文の上に出す。
+/// 26 と下縁 1。上の 2 角だけ丸い。「行 N」（範囲なら「行 N〜M」）・状態・「解決」・「折りたたむ」）・コメントの列（アバターの
+/// 頭文字の円・書いた人と時刻と未送信の札・本文）・返信の行（返信欄・「レビューに追加」・「解決して返信」）・失敗の文。畳んだ
+/// スレッドは頭の帯だけ（4 角とも丸い）で、「行 N」の後に最初のコメントの書いた人と本文の先頭 1 行を出す。新しいコメントの欄は、
+/// 箱から頭とコメントの列を除いた形（返信欄・「レビューに追加」・「取り消す」）で、範囲の欄だけ、箱の中の最初の行（高さ 26）に
+/// 「N〜M 行にコメント」を出す。書き込めない間（欄の行を移している・行が現在の diff に無い）は「レビューに追加」を押せない
+/// 姿にする。置き場所の文（→ `PrCommentNotice`）は失敗の文の上に出す。
 @MainActor
 enum PrCommentPicture {
-  /// 中身の外の状態（付いた行・ホバー・書き込みの最中・入力欄が主か・失敗の文・置き場所の文・書き込めるか・入力欄に字があるか・文言の言語）。
+  /// 中身の外の状態（付いた行の範囲・ホバー・書き込みの最中・入力欄が主か・失敗の文・置き場所の文・書き込めるか・入力欄に字が
+  /// あるか・文言の言語）。
   struct State {
-    let line: Int
+    let lines: GitHubLineRange
     let hovered: PrCommentControl?
     let isWriting: Bool
     let isFieldPrimary: Bool
@@ -124,7 +126,17 @@ enum PrCommentPicture {
   static func draft(field: ZoneTextField, _ state: State, width: CGFloat) -> Composed {
     var canvas = PrCommentCanvas(state: state)
     let frame = box(width)
-    var y = frame.minY + 1 + Size.editorPrThreadListPadY
+    var y = frame.minY + 1
+    if state.lines.start != nil {
+      let font = Theme.Typography.editorPrThreadHead
+      canvas.label(
+        draftLabel(state), font: font, color: Theme.Color.accentBright,
+        x: frame.minX + 1 + Size.editorPrThreadPadX,
+        baseline: PrCommentStyle.baseline(top: y, height: Size.editorPrThreadHead, font: font))
+      y += Size.editorPrThreadHead
+    } else {
+      y += Size.editorPrThreadListPadY
+    }
     y += reply(field, buttons: [.add, .cancel], in: frame, top: y, &canvas)
     y += Size.editorPrThreadListPadY
     y += notice(in: frame, top: y, &canvas)
@@ -134,8 +146,27 @@ enum PrCommentPicture {
 
   // MARK: - 文言
 
+  /// スレッドの頭の「行 N」（範囲なら「行 N〜M」。側をまたげば、差分の記号を付けて「行 −N〜+M」）。
   static func lineLabel(_ state: State) -> String {
-    L10n.format(.editorPrThreadLine, state.language, state.line)
+    guard state.lines.start != nil else {
+      return L10n.format(.editorPrThreadLine, state.language, state.lines.end.line)
+    }
+    let (start, end) = ends(state.lines)
+    return L10n.format(.editorPrThreadLines, state.language, start, end)
+  }
+
+  /// 範囲の新しいコメントの欄の頭の「N〜M 行にコメント」（側をまたげば「−N〜+M 行にコメント」）。
+  static func draftLabel(_ state: State) -> String {
+    let (start, end) = ends(state.lines)
+    return L10n.format(.editorPrDraftLines, state.language, start, end)
+  }
+
+  /// 範囲の両端の行の番号の文言（側をまたげば、差分の記号 − ＋ を付ける）。
+  private static func ends(_ lines: GitHubLineRange) -> (String, String) {
+    let start = lines.start ?? lines.end
+    guard start.side != lines.end.side else { return ("\(start.line)", "\(lines.end.line)") }
+    let signed = { (line: GitHubLine) in (line.side == .old ? "−" : "+") + "\(line.line)" }
+    return (signed(start), signed(lines.end))
   }
 
   /// アバターの頭文字（login の先頭 2 字。消えたアカウントは「?」）。

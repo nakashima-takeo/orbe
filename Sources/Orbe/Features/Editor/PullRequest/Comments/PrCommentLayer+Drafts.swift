@@ -9,9 +9,9 @@ extension PrCommentLayer {
 
   /// スレッド `thread` の絵の差し込みを、返信の書きかけの本文で作る（書きかけのある欄と、開くよう頼まれたスレッドは、解決済み
   /// でも開いて出す）。
-  func makeZone(_ thread: GitHubPullRequestReview.Thread, line: Int) -> PrCommentZone {
+  func makeZone(_ thread: GitHubPullRequestReview.Thread, lines: GitHubLineRange) -> PrCommentZone {
     let zone = PrCommentZone(
-      subject: .thread(thread), line: line, fieldID: "thread:\(thread.id)",
+      subject: .thread(thread), lines: lines, fieldID: "thread:\(thread.id)",
       text: state.commentDrafts.replies[thread.id]?.body ?? "")
     zone.isCollapsed = thread.isResolved && !zone.hasText && revealRequest?.thread != thread.id
     zone.onPress = { [weak self] zone, control in self?.press(control, in: zone) }
@@ -46,22 +46,22 @@ extension PrCommentLayer {
 
   // MARK: - 新しいコメントの欄
 
-  /// 側 `version` の行 `line`（0 始まり）の下に新しいコメントの欄を開き、焦点を入れる（その行に送れる欄が開いていれば焦点
-  /// だけ入れる）。
-  func openDraft(_ version: DiffRows.Version, line: Int) {
-    guard let placed else { return }
-    if let draft = drafts.first(where: {
-      $0.version == version && $0.line == line && !$0.isGone
-    }) {
+  /// 範囲 `range`（0 始まり）の終わりの行の下に新しいコメントの欄を開き、焦点を入れる（同じ範囲に送れる欄が開いていれば焦点
+  /// だけ入れる）。範囲の両端がコメントできる行で、同じまとまりに入るときだけ開き（まとまりをまだ求めていない間は開かない）、
+  /// 開いたか焦点を入れたなら true。欄を開く口はここだけで、行の頭の印の知らせとキー c がここを呼ぶ。
+  @discardableResult
+  func openDraft(_ range: DiffLineRange) -> Bool {
+    guard let placed, commentableHunks(placed.ends)?.holds(range) == true else { return false }
+    if let draft = drafts.first(where: { $0.range == range && !$0.isGone }) {
       draft.zone.surface?.focus(draft.zone.field)
-      return
+      return true
     }
-    let spot = PullRequestState.CommentSpot(
-      side: version == .old ? .old : .new, line: line, ends: placed.ends, basis: placed.shown)
+    let spot = PullRequestState.CommentSpot(range: range, ends: placed.ends, basis: placed.shown)
     let draft = makeDraft(state.issueCommentSerial(), at: spot, text: "")
     drafts.append(draft)
     onRowsChange()
     draft.zone.surface?.focus(draft.zone.field)
+    return true
   }
 
   /// 新しいコメントの欄を閉じ、その書きかけを消す（「取り消す」・空の欄から焦点が外れた）。
@@ -77,7 +77,8 @@ extension PrCommentLayer {
     _ serial: Int, at spot: PullRequestState.CommentSpot, text: String
   ) -> PrCommentPlacement {
     let zone = PrCommentZone(
-      subject: .draft(serial), line: spot.line + 1, fieldID: "draft:\(serial)", text: text)
+      subject: .draft(serial), lines: GitHubLineRange(spot.range), fieldID: "draft:\(serial)",
+      text: text)
     let draft = PrCommentPlacement(zone: zone, origin: spot)
     zone.onPress = { [weak self] zone, control in self?.press(control, in: zone) }
     zone.onTextChange = { [weak self, weak draft] zone in
@@ -97,7 +98,7 @@ extension PrCommentLayer {
   func adoptDrafts() {
     let stored = state.commentDrafts
     for reply in stored.replies.values where adopts(reply) {
-      _ = makeZone(reply.thread, line: reply.spot.line + 1)
+      _ = makeZone(reply.thread, lines: GitHubLineRange(reply.spot.range))
     }
     let comments = stored.comments.filter { adopts($0.key, $0.value) }
     guard !comments.isEmpty else { return }

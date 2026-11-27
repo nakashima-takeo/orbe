@@ -199,7 +199,7 @@ extension EditorDiffTests {
     window.makeFirstResponder(surface.responder)
     let layer = try XCTUnwrap(diff.comments)
     layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 1))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 1)))
 
     let body = pane.bodyRect
     try click(
@@ -211,6 +211,6 @@ extension EditorDiffTests {
     pumpMain(until: { state.isViewed("a.txt") }, "確認済みが付く")
     XCTAssertTrue(window.firstResponder === surface.responder, "焦点は面のまま")
     XCTAssertEqual(surface.primary, .field(draft.field.id), "欄が主のまま")
-    XCTAssertIdentical(layer.draft(.new, line: 1), draft, "空の欄は閉じない")
+    XCTAssertIdentical(layer.draft(at: .at(.new, 1)), draft, "空の欄は閉じない")
   }
 }

@@ -1,8 +1,8 @@
 import Foundation
 import OrbeEditorCore
 
-/// 並びに混ぜる注記（PR の diff のコメントの層が渡す）——行の下に置く絵の差し込み、コメントできる行のまとまり、スレッドのある
-/// 行。行はどれもその側の版の行（0 始まり）。
+/// 並びに混ぜる注記（PR の diff のコメントの層が渡す）——行の下に置く絵の差し込み、コメントできる行のまとまり、地を替える
+/// 行の範囲。行はどれもその側の版の行（0 始まり）。
 extension DiffRows {
   /// diff のどちらの側の行か。
   enum Version: Hashable {
@@ -15,8 +15,23 @@ extension DiffRows {
     var zones: [Zone] = []
     /// コメントできる行のまとまり。まとまりの行に行の頭の印を出し、まとまりの番号を印の組にする。
     var hunks = CommentHunks()
-    /// スレッドのある行（側ごと）。行の地をスレッドのある行の上書きにする。
-    var threads: (old: Set<Int>, new: Set<Int>) = ([], [])
+    /// 地を替える行の範囲（列の順に当て、同じ行に掛かれば後の範囲が勝つ）。
+    var overrides: [Override] = []
+  }
+
+  /// 地を替える行の範囲 1 つ——範囲と、替える地の種類。
+  struct Override {
+    let range: DiffLineRange
+    let kind: OverrideKind
+  }
+
+  /// 替える地の種類——スレッドのある行か、書いている欄の範囲か。
+  enum OverrideKind {
+    case thread
+    case draft
+
+    /// 行の上書きの番号（→ `DiffStyle`）。
+    var style: Int { self == .thread ? DiffStyle.threadOverride : DiffStyle.draftOverride }
   }
 
   /// コメントできる行のまとまり 1 つ——古い側と新しい側の、その側の版の行（0 始まり）の半開区間。
@@ -46,6 +61,12 @@ extension DiffRows {
       }
       while low < items.count, side(items[low]).isEmpty { low += 1 }
       return low < items.count && side(items[low]).contains(line) ? low : nil
+    }
+
+    /// 範囲 `range` の両端が、同じまとまりに入るか。
+    func holds(_ range: DiffLineRange) -> Bool {
+      guard let found = index(of: range.end.line, range.end.version) else { return false }
+      return index(of: range.first.line, range.first.version) == found
     }
 
     /// 側 `version` の、空でない区間とまとまりの番号の列（昇順）。
@@ -167,16 +188,96 @@ extension DiffRows {
     }
   }
 
-  /// 文書の行の区間を、まとまりの区間 `hunks`（その側の区間とまとまりの番号）の端とスレッドのある行で割る。割った区間は元の
-  /// 区間の型ともう一方の番号を引き継ぎ、まとまりの区間に入る区間はその番号を印の組にし、スレッドのある行はスレッドのある行の
-  /// 上書きを持つ。どちらも無ければ元の列のまま。
+  /// 範囲 `range` が覆う行（側ごとの半開区間）。同じ側の範囲はその側の始まり〜終わり、側をまたぐ範囲はインラインの並びの順で
+  /// 始まりから終わりまでの間に出る行（→ `inlineLines`）。行差分 `hunks` は、範囲の行を数えた版の、両側の本文の行差分。
+  static func coveredLines(of range: DiffLineRange, _ hunks: [LineHunk]) -> (
+    old: Range<Int>, new: Range<Int>
+  ) {
+    let first = range.first
+    guard first.version == range.end.version else { return inlineLines(of: range, hunks) }
+    let lines = min(first.line, range.end.line)..<(max(first.line, range.end.line) + 1)
+    return first.version == .old ? (lines, 0..<0) : (0..<0, lines)
+  }
+
+  /// 範囲 `range` の始まりから終わりまでの、インラインの並びの順で間に出る行（両端を含む。側ごとの半開区間）。並びの順では、
+  /// 文脈の行が 1 行で両側の番号を持ち、変更区間では削除行の後に追加の行が来る。古い側の文脈の行は、対応する新しい側の行の所に
+  /// 出る。
+  static func inlineLines(of range: DiffLineRange, _ hunks: [LineHunk]) -> (
+    old: Range<Int>, new: Range<Int>
+  ) {
+    let ends = [order(of: range.first, hunks), order(of: range.end, hunks)].sorted()
+    let (from, to) = (ends[0], ends[1])
+    let new = from.line..<max(from.line, to.kind == 1 ? to.line + 1 : to.line)
+    // 最後の区間より後の古い側の行 o は、新しい側の行 o + shift の所に出る。だから、to より後に出る古い側の行は、二分探索の
+    // 上限 bound より前に必ず在る。
+    let shift = hunks.reduce(0) { $0 + $1.newLines.count - $1.oldLines.count }
+    let bound = max(0, hunks.last?.oldLines.upperBound ?? 0, to.line - shift + 1)
+    let old = { (line: Int) in order(of: DiffLine(version: .old, line: line), hunks) }
+    let firstOld = searchOld(bound) { old($0) >= from }
+    let pastOld = searchOld(bound) { old($0) > to }
+    return (firstOld..<max(firstOld, pastOld), new)
+  }
+
+  /// インラインの並びの順の位置——新しい側の行 n は (n, 1, 0)、区間の k 番目の削除行は (区間の新しい側の始まり, 0, k)。
+  private struct InlineOrder: Comparable {
+    let line: Int
+    let kind: Int
+    let row: Int
+
+    static func < (a: InlineOrder, b: InlineOrder) -> Bool {
+      (a.line, a.kind, a.row) < (b.line, b.kind, b.row)
+    }
+  }
+
+  private static func order(of line: DiffLine, _ hunks: [LineHunk]) -> InlineOrder {
+    guard line.version == .old else { return InlineOrder(line: line.line, kind: 1, row: 0) }
+    switch row(ofOld: line.line, hunks) {
+    case .changed(let hunk, let k):
+      return InlineOrder(line: hunk.newLines.lowerBound, kind: 0, row: k)
+    case .context(let new): return InlineOrder(line: new, kind: 1, row: 0)
+    }
+  }
+
+  /// 古い側の行 `0..<count` のうち、`isPast` が成り立つ最初の行（成り立つ行は後ろに続く。無ければ `count`）。
+  private static func searchOld(_ count: Int, _ isPast: (Int) -> Bool) -> Int {
+    var (low, high) = (0, max(0, count))
+    while low < high {
+      let mid = (low + high) / 2
+      if isPast(mid) { high = mid } else { low = mid + 1 }
+    }
+    return low
+  }
+
+  /// 地を替える範囲 `overrides` の、その側の行の区間と行の上書きの番号（列の順）。`lines` は範囲を行に解く関数。
+  static func resolve(
+    _ overrides: [Override], side version: Version,
+    _ lines: (DiffLineRange) -> (old: Range<Int>, new: Range<Int>)
+  ) -> [(range: Range<Int>, style: Int)] {
+    overrides.compactMap { override in
+      let covered = lines(override.range)
+      let range = version == .old ? covered.old : covered.new
+      return range.isEmpty ? nil : (range, override.kind.style)
+    }
+  }
+
+  /// 行 `line` に掛かる、地を替える範囲の最後のものの上書きの番号（無ければ nil）。
+  static func override(of line: Int, in overrides: [(range: Range<Int>, style: Int)]) -> Int? {
+    overrides.last { $0.range.contains(line) }?.style
+  }
+
+  /// 文書の行の区間を、まとまりの区間 `hunks`（その側の区間とまとまりの番号）の端と地を替える範囲 `overrides`（その側の区間と
+  /// 行の上書きの番号）の端で割る。割った区間は元の区間の型ともう一方の番号を引き継ぎ、まとまりの区間に入る区間はその番号を
+  /// 印の組にし、地を替える範囲に入る区間はその上書きを持つ。どちらも無ければ元の列のまま。
   static func refine(
-    _ spans: [LineSpan], lines: Int, hunks: [(range: Range<Int>, index: Int)], threads: Set<Int>
+    _ spans: [LineSpan], lines: Int, hunks: [(range: Range<Int>, index: Int)],
+    overrides: [(range: Range<Int>, style: Int)]
   ) -> [LineSpan] {
-    guard !hunks.isEmpty || !threads.isEmpty else { return spans }
+    guard !hunks.isEmpty || !overrides.isEmpty else { return spans }
     var cuts = Set(spans.map(\.line))
     for hunk in hunks { cuts.formUnion([hunk.range.lowerBound, hunk.range.upperBound]) }
-    for line in threads { cuts.formUnion([line, line + 1]) }
+    for override in overrides {
+      cuts.formUnion([override.range.lowerBound, override.range.upperBound])
+    }
     var result: [LineSpan] = []
     var owner = -1
     var next = 0
@@ -190,7 +291,7 @@ extension DiffRows {
           otherNumber: base.otherNumber.map { $0 + start - base.line },
           markGroup: next < hunks.count && hunks[next].range.contains(start)
             ? hunks[next].index : nil,
-          override: threads.contains(start) ? DiffStyle.threadOverride : nil))
+          override: override(of: start, in: overrides)))
     }
     return result
   }

@@ -33,9 +33,12 @@ enum DiffRows {
   /// インライン——新しい側の面に、区間の削除行を「古い側の行を指す差し込み」として区間の新しい側の始まりの境に置き、追加の
   /// 区間に型「追加」、文脈の区間に旧番号の始まりを渡す（差し込みの出どころは呼び手が添える）。注記（`notes`）があれば、絵の
   /// 差し込みを行の下に置き、コメントできる行に印の組（まとまりの番号。同じまとまりの削除行と新しい側の行は同じ組）を、
-  /// スレッドのある行に上書きを付ける——新しい側の行の絵はその行の後（次の区間の削除行より上）、古い側の行の絵は、削除行なら
-  /// その削除行の直後（削除行の塊を割る）、文脈の行なら対応する新しい側の行の後。
+  /// 地を替える範囲の行（並びの順で範囲の始まりから終わりまでの間の行の全部）に上書きを付ける——新しい側の行の絵はその行の
+  /// 後（次の区間の削除行より上）、古い側の行の絵は、削除行ならその削除行の直後（削除行の塊を割る）、文脈の行なら対応する新しい
+  /// 側の行の後。
   static func inline(_ hunks: [LineHunk], new: Side, notes: Notes = Notes()) -> SurfaceRows {
+    let lines = { (range: DiffLineRange) in inlineLines(of: range, hunks) }
+    let removedOverrides = resolve(notes.overrides, side: .old, lines)
     var spans = Spans(limit: new.lines)
     var runs: [Int: [InsertedLine]] = [:]
     var oldNext = 0
@@ -47,7 +50,7 @@ enum DiffRows {
         runs[block.new.lowerBound] = block.old.map { line in
           InsertedLine(
             line: line, style: DiffStyle.removed, markGroup: notes.hunks.index(of: line, .old),
-            override: notes.threads.old.contains(line) ? DiffStyle.threadOverride : nil)
+            override: override(of: line, in: removedOverrides))
         }
       }
       if !block.new.isEmpty { spans.add(block.new.lowerBound, style: DiffStyle.added) }
@@ -70,21 +73,17 @@ enum DiffRows {
       }
       if let slot { slots.add(.zone(zone.zone), at: slot) }
     }
-    let threaded = notes.threads.new.union(
-      notes.threads.old.compactMap { line in
-        if case .context(let new) = row(ofOld: line, hunks) { return new }
-        return nil
-      })
     return SurfaceRows(
       insertions: slots.insertions(runs: runs),
       spans: refine(
-        spans.items, lines: new.lines, hunks: notes.hunks.ranges(.new), threads: threaded))
+        spans.items, lines: new.lines, hunks: notes.hunks.ranges(.new),
+        overrides: resolve(notes.overrides, side: .new, lines)))
   }
 
   /// 並列の左（古い側）と右（新しい側）——文脈は両側とも型なし。区間は両側の同じ行から始め、左は型「削除」、右は型「追加」で、
   /// 削除と追加の数の差だけ短い側の区間の後ろに詰め物（何も指さない差し込み・型「詰め物」）を置く。注記（`notes`）があれば、
   /// 古い側の行の絵は左、新しい側の行の絵は右の、その行の後に置き、反対側の同じ段の後（詰め物の塊の途中を含む）に相手と同じ
-  /// 高さの空きを置く。
+  /// 高さの空きを置く。地を替える範囲は、範囲が覆う行（→ `coveredLines`）の古い側を左、新しい側を右の行に付ける。
   static func side(_ hunks: [LineHunk], old: Side, new: Side, notes: Notes = Notes()) -> (
     left: SurfaceRows, right: SurfaceRows
   ) {
@@ -106,6 +105,7 @@ enum DiffRows {
       left.spans.add(block.old.upperBound)
       right.spans.add(block.new.upperBound)
     }
+    let covered = { (range: DiffLineRange) in coveredLines(of: range, hunks) }
     var slots = (left: Slots(), right: Slots())
     for zone in notes.zones {
       guard let (own, other) = sideSlots(zone, hunks, old: old, new: new) else { continue }
@@ -123,12 +123,12 @@ enum DiffRows {
         insertions: slots.left.insertions(runs: left.runs),
         spans: refine(
           left.spans.items, lines: old.lines, hunks: notes.hunks.ranges(.old),
-          threads: notes.threads.old)),
+          overrides: resolve(notes.overrides, side: .old, covered))),
       SurfaceRows(
         insertions: slots.right.insertions(runs: right.runs),
         spans: refine(
           right.spans.items, lines: new.lines, hunks: notes.hunks.ranges(.new),
-          threads: notes.threads.new))
+          overrides: resolve(notes.overrides, side: .new, covered)))
     )
   }
 

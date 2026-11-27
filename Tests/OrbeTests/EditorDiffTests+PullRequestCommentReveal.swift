@@ -122,7 +122,7 @@ extension EditorDiffTests {
     let body = (1...4).map { "段落 \($0)" }.joined(separator: "\n\n")
     remote.threads = [
       GitHubPullRequestReview.Thread(
-        id: "T_long", path: "a.txt", side: .new, line: 100, isResolved: false, canReply: true,
+        id: "T_long", path: "a.txt", lines: .at(.new, 100), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: (1...30).map {
           .init(
@@ -364,7 +364,7 @@ extension EditorDiffTests {
     _ id: String, line: Int, side: GitHubDiffSide = .new, resolved: Bool = false
   ) -> GitHubPullRequestReview.Thread {
     GitHubPullRequestReview.Thread(
-      id: id, path: "a.txt", side: side, line: line, isResolved: resolved, canReply: true,
+      id: id, path: "a.txt", lines: .at(side, line), isResolved: resolved, canReply: true,
       canResolve: true, canUnresolve: false,
       comments: [.init(id: "\(id)-C", author: "me", body: "本文", createdAt: Date(), isPending: true)]
     )

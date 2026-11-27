@@ -98,7 +98,9 @@ final class EditorDiffPerfTests: OrbeTestCase {
       notes.zones.append(
         DiffRows.Zone(
           version: .new, line: hunks[k * 3].newLines.lowerBound,
-          zone: PrCommentZone(subject: .draft(k), line: 1, fieldID: "draft:\(k)")))
+          zone: PrCommentZone(
+            subject: .draft(k), lines: .at(.new, hunks[k * 3].newLines.lowerBound + 1),
+            fieldID: "draft:\(k)")))
       again.append(place(notes))
     }
     print(
@@ -206,7 +208,7 @@ final class EditorDiffPerfTests: OrbeTestCase {
   // MARK: - PR の注記（製品のコメントの層が渡す形）
 
   /// ハンク `hunks` の前後 3 行までをコメントできる行のまとまりにし、10 ハンクごとに、ハンクの新しい側の最初の行にスレッドを
-  /// 置く注記。
+  /// 置く注記（20 ハンクごとのスレッドは、その 2 行上からの範囲のスレッド）。
   static func pullRequestNotes(_ hunks: [LineHunk], lines: (old: Int, new: Int)) -> DiffRows.Notes {
     var notes = DiffRows.Notes()
     let widen = { (range: Range<Int>, count: Int) in
@@ -219,7 +221,7 @@ final class EditorDiffPerfTests: OrbeTestCase {
     for (index, hunk) in hunks.enumerated() where index % 10 == 0 {
       let line = hunk.newLines.lowerBound
       let thread = GitHubPullRequestReview.Thread(
-        id: "thread-\(index)", path: "big.swift", side: .new, line: line + 1, isResolved: false,
+        id: "thread-\(index)", path: "big.swift", lines: .at(.new, line + 1), isResolved: false,
         canReply: true, canResolve: true, canUnresolve: false,
         comments: [
           GitHubPullRequestReview.Comment(
@@ -230,8 +232,11 @@ final class EditorDiffPerfTests: OrbeTestCase {
         DiffRows.Zone(
           version: .new, line: line,
           zone: PrCommentZone(
-            subject: .thread(thread), line: line + 1, fieldID: "thread:\(thread.id)")))
-      notes.threads.new.insert(line)
+            subject: .thread(thread), lines: .at(.new, line + 1), fieldID: "thread:\(thread.id)")))
+      let range = DiffLineRange(
+        start: index % 20 == 0 ? DiffLine(version: .new, line: max(0, line - 2)) : nil,
+        end: DiffLine(version: .new, line: line))
+      notes.overrides.append(.init(range: range, kind: .thread))
     }
     return notes
   }

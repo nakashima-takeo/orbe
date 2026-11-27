@@ -156,17 +156,15 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     XCTAssertEqual(review.headCommit, "h1")
     XCTAssertEqual(review.pendingReview, .init(id: "R1", commentCount: 2))
     XCTAssertEqual(review.threads.count, 103)
-    XCTAssertEqual(review.threads[0].line, 3)
-    XCTAssertEqual(review.threads[0].side, .new)
+    XCTAssertEqual(review.threads[0].lines, .at(.new, 3))
     XCTAssertTrue(review.threads[0].canReply)
     XCTAssertEqual(review.threads[0].comments.map(\.isPending), [true, false])
     XCTAssertNil(review.threads[0].comments[1].author, "消えたアカウント")
     XCTAssertEqual(
       review.threads[0].comments[0].createdAt, Date(timeIntervalSince1970: 1_794_877_323))
-    XCTAssertNil(review.threads[100].line, "ファイル単位")
-    XCTAssertNil(review.threads[101].line, "古い版に付いた")
-    XCTAssertEqual(review.threads[101].side, .old)
-    XCTAssertNil(review.threads[102].line, "古い版に付いたスレッドは、行の値が残っていても置かない")
+    XCTAssertNil(review.threads[100].lines, "ファイル単位")
+    XCTAssertNil(review.threads[101].lines, "古い版に付いた")
+    XCTAssertNil(review.threads[102].lines, "古い版に付いたスレッドは、行の値が残っていても置かない")
   }
 
   /// ページの間に push があれば、最初から読み直して新しい時点のスレッドだけを返す。読み直した後も PR の先頭のコミットが動けば失敗。
@@ -223,7 +221,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     var n = 0
     for body in bodies {
       for kind in [
-        GitHubReviewWrite.addThread(path: "a.swift", side: .new, line: 3, commit: "h1", body: body),
+        GitHubReviewWrite.addThread(path: "a.swift", lines: .at(.new, 3), commit: "h1", body: body),
         .reply(thread: "T1", body: body, resolve: false),
         .submit(.approve, body: body), .submit(.comment, body: body),
         .submit(.requestChanges, body: body),
@@ -266,7 +264,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
   func testAMissingPendingReviewIsCreatedInTheFewestCalls() throws {
     XCTAssertEqual(
       write(
-        .addThread(path: "a.swift", side: .old, line: 9, commit: "h1", body: "b"),
+        .addThread(path: "a.swift", lines: .at(.old, 9), commit: "h1", body: "b"),
         pendingReview: nil),
       GitHubReviewWriteResult(pendingReview: "create-id", failure: nil))
     XCTAssertEqual(calls(), ["create"])
@@ -289,7 +287,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
 
     _ = write(.reply(thread: "T1", body: "b", resolve: false), pendingReview: "R1")
     _ = write(
-      .addThread(path: "a.swift", side: .new, line: 1, commit: "h1", body: "b"), pendingReview: "R1"
+      .addThread(path: "a.swift", lines: .at(.new, 1), commit: "h1", body: "b"), pendingReview: "R1"
     )
     XCTAssertEqual(calls().suffix(2), ["reply", "thread"], "在れば作らない")
     XCTAssertEqual(try call(5).variables["review"] as? String, "R1")
@@ -334,7 +332,7 @@ final class GitHubCLIReviewTests: OrbeTestCase {
     try serve("thread.exit", "1")
     XCTAssertEqual(
       write(
-        .addThread(path: "a.swift", side: .new, line: 99, commit: "h1", body: "b"),
+        .addThread(path: "a.swift", lines: .at(.new, 99), commit: "h1", body: "b"),
         pendingReview: "R1"),
       GitHubReviewWriteResult(
         pendingReview: "R1", failure: .reason("gh: Line could not be resolved")))

@@ -16,7 +16,7 @@ extension PullRequestStateTests {
       viewerIsAuthor: false, headCommit: head, pendingReview: nil,
       threads: threads.map {
         .init(
-          id: $0, path: "a", side: .new, line: 1, isResolved: false, canReply: true,
+          id: $0, path: "a", lines: .at(.new, 1), isResolved: false, canReply: true,
           canResolve: true, canUnresolve: false, comments: [])
       })
   }
@@ -86,7 +86,7 @@ extension PullRequestStateTests {
     XCTAssertEqual(reads, before + 4)
     XCTAssertNotNil(state.threads(at: "h1"))
     XCTAssertTrue(
-      state.writeReview(.addThread(path: "a", side: .new, line: 1, commit: "h1", body: "x")) { _ in
+      state.writeReview(.addThread(path: "a", lines: .at(.new, 1), commit: "h1", body: "x")) { _ in
       })
   }
 
@@ -179,11 +179,11 @@ extension PullRequestStateTests {
   func testANewThreadOnAnotherHeadIsRefused() {
     let state = readState()
     XCTAssertFalse(
-      state.writeReview(.addThread(path: "a", side: .new, line: 1, commit: "h2", body: "x")) { _ in
+      state.writeReview(.addThread(path: "a", lines: .at(.new, 1), commit: "h2", body: "x")) { _ in
       })
     XCTAssertTrue(gitHub.reviewWrites.isEmpty)
     XCTAssertTrue(
-      state.writeReview(.addThread(path: "a", side: .new, line: 1, commit: "h", body: "x")) { _ in }
+      state.writeReview(.addThread(path: "a", lines: .at(.new, 1), commit: "h", body: "x")) { _ in }
     )
   }
 

@@ -30,7 +30,10 @@ extension DiffRowsTests {
       DiffRows.Zone(version: .old, line: 2, zone: removed),
       DiffRows.Zone(version: .old, line: 4, zone: context),
     ]
-    notes.threads = ([2, 4], [1])
+    notes.overrides = [
+      .init(range: .at(.old, 2), kind: .thread), .init(range: .at(.old, 4), kind: .thread),
+      .init(range: .at(.new, 1), kind: .thread),
+    ]
     let rows = DiffRows.inline(hunks, new: new, notes: notes)
     XCTAssertEqual(
       rows.insertions,
@@ -113,6 +116,28 @@ extension DiffRowsTests {
             InsertedLine(line: 3, style: DiffStyle.removed, markGroup: 0),
           ]))
       ])
+  }
+
+  /// 範囲が覆う行——側をまたぐ範囲は、インラインの並びの順で間に出る行（削除行の後に追加の行）。同じ側の範囲は、その側の
+  /// 始まり〜終わりだけ。インラインで地を替える行は、同じ側の範囲でも、間に差し込まれた削除行を含む。
+  func testRangesCoverTheRowsBetweenTheirEnds() {
+    let hunks = noted.hunks
+    let across = DiffLineRange(
+      start: DiffLine(version: .old, line: 3), end: DiffLine(version: .new, line: 4))
+    XCTAssertTrue(DiffRows.coveredLines(of: across, hunks) == (3..<4, 2..<5))
+    let same = DiffLineRange(
+      start: DiffLine(version: .new, line: 1), end: DiffLine(version: .new, line: 10))
+    XCTAssertTrue(DiffRows.coveredLines(of: same, hunks) == (0..<0, 1..<11))
+    XCTAssertTrue(DiffRows.inlineLines(of: same, hunks) == (1..<5, 1..<11))
+    var notes = DiffRows.Notes()
+    notes.overrides = [.init(range: same, kind: .draft)]
+    let rows = DiffRows.inline(hunks, new: noted.new, notes: notes)
+    guard case .lines(let removed) = rows.insertions.first?.content else {
+      return XCTFail("前提: 削除行の塊")
+    }
+    XCTAssertEqual(removed.map(\.override), [DiffStyle.draftOverride, DiffStyle.draftOverride])
+    XCTAssertEqual(rows.spans.first { $0.line == 1 }?.override, DiffStyle.draftOverride)
+    XCTAssertNil(rows.spans.first { $0.line == 11 }?.override)
   }
 }
 

@@ -204,9 +204,9 @@ private struct CommentSteps {
   /// 行 8 に新しいコメントの欄を開き、打つ。
   func newComment() {
     surface?.hover(at: nil)
-    diff?.comments?.openDraft(.new, line: 7)
+    diff?.comments?.openDraft(.at(.new, 7))
     settle()
-    guard let draft = diff?.comments?.draft(.new, line: 7) else { return XCTFail("前提: 欄が開く") }
+    guard let draft = diff?.comments?.draft(at: .at(.new, 7)) else { return XCTFail("前提: 欄が開く") }
     surface?.replaceText(of: draft.field, with: "queue の label は定数に寄せたい")
     settle()
   }
@@ -214,7 +214,7 @@ private struct CommentSteps {
   /// 書き込みの答えを返さない出どころで「レビューに追加」を押す（欄とボタンが押せない姿）。
   func write() {
     scene.review.writes = .hold
-    guard let draft = diff?.comments?.draft(.new, line: 7) else { return XCTFail("前提: 欄") }
+    guard let draft = diff?.comments?.draft(at: .at(.new, 7)) else { return XCTFail("前提: 欄") }
     draft.zone(.pressed(PrCommentControl.add))
     settle()
   }
@@ -298,9 +298,9 @@ private struct CommentSteps {
   /// 行 7 に新しいコメントの欄を開いて打ち、行 7 を書き換える push を起こす。
   func rewriteDraftLine() {
     surface?.scroll(toFirstLine: 2)
-    diff?.comments?.openDraft(.new, line: 6)
+    diff?.comments?.openDraft(.at(.new, 6))
     settle()
-    guard let draft = diff?.comments?.draft(.new, line: 6) else { return XCTFail("前提: 欄が開く") }
+    guard let draft = diff?.comments?.draft(at: .at(.new, 6)) else { return XCTFail("前提: 欄が開く") }
     surface?.replaceText(of: draft.field, with: "label は bundle id から作りたい")
     let rewritten = EditorDiffFixtures.edited.replacingOccurrences(
       of: "\"orbe.hooks\"", with: "\"orbe.agent.hooks\"")

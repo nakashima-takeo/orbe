@@ -41,7 +41,7 @@ extension EditorDiffTests {
     window.makeFirstResponder(surface.responder)
     let layer = try XCTUnwrap(diff.comments)
     layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
-    XCTAssertNotNil(layer.draft(.new, line: 1), "前提: 欄に焦点")
+    XCTAssertNotNil(layer.draft(at: .at(.new, 1)), "前提: 欄に焦点")
 
     XCTAssertFalse(pane.handleViewedKey(viewedKey))
     XCTAssertFalse(state.isViewed("a.txt"))

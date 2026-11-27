@@ -32,9 +32,9 @@ final class PrCommentZone: SurfaceZone {
 
   let field: ZoneTextField
   private(set) var subject: Subject
-  /// 付いた行（その側の版の行。1 始まり）。
-  var line: Int {
-    didSet { if line != oldValue { redraw() } }
+  /// 付いた行の範囲。
+  var lines: GitHubLineRange {
+    didSet { if lines != oldValue { redraw() } }
   }
   /// 描き直させる面（並びに置いた面。並びを置くたびに載せる層が置き直し、入力欄の主もその層が運ぶ）。
   weak var surface: (any TextSurface)?
@@ -98,9 +98,9 @@ final class PrCommentZone: SurfaceZone {
   }
 
   /// 入力欄の本文の初期値を `text` にする。
-  init(subject: Subject, line: Int, fieldID: String, text: String = "") {
+  init(subject: Subject, lines: GitHubLineRange, fieldID: String, text: String = "") {
     self.subject = subject
-    self.line = line
+    self.lines = lines
     field = ZoneTextField(id: fieldID, text: text, style: PrCommentStyle.field)
     fieldShape = FieldShape(
       lines: field.lineCount, empty: text.isEmpty, blank: !PullRequestState.hasText(text))
@@ -197,7 +197,7 @@ final class PrCommentZone: SurfaceZone {
 
   func picture(width: CGFloat) -> ZonePicture {
     let state = PrCommentPicture.State(
-      line: line, hovered: hovered, isWriting: isWriting, isFieldPrimary: isFieldPrimary,
+      lines: lines, hovered: hovered, isWriting: isWriting, isFieldPrimary: isFieldPrimary,
       failure: failure, notice: notice, canSend: canSend, hasText: hasText, language: language)
     let composed: PrCommentPicture.Composed
     switch subject {

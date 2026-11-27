@@ -193,10 +193,11 @@ private struct PrPendingCommentRow: View {
     .onTapGesture(perform: action)
   }
 
-  /// `ファイル名:行`（行を持たなければ `ファイル名`）。
+  /// `ファイル名:行`（範囲なら `ファイル名:始まりの行-終わりの行`。側に依らず数字だけ。行を持たなければ `ファイル名`）。
   private var place: String {
     let name = (comment.path as NSString).lastPathComponent
-    return comment.line.map { "\(name):\($0)" } ?? name
+    guard let lines = comment.lines else { return name }
+    return "\(name):" + (lines.start.map { "\($0.line)-" } ?? "") + "\(lines.end.line)"
   }
 
   private var firstLine: String {
