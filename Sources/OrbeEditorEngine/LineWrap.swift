@@ -2,34 +2,6 @@ import CoreText
 import Foundation
 import OrbeEditorCore
 
-/// 折り返した行——2 段目からの段の始まり（描く単位の位置。昇順）と、続きの段の字下げ（pt）。段の始まりが描く単位の数と
-/// 同じなら、その段は打ち切った行の末尾の印だけを持つ。
-struct WrappedLine: Equatable, Sendable {
-  var starts: [Int32]
-  var indent: Float
-  /// 最後の段より前の各段について、その段の終わりを決めるために読んだ、描く単位の区間の終わり（その位置を含まない）。
-  /// これより後ろだけを変えた編集では、その段の終わりは変わらない（→ `LineWrap.Resume`）。
-  var ends: [Int32]
-
-  /// 段の数。
-  var segments: Int { starts.count + 1 }
-
-  /// 段 `segment` の始まり（描く単位の位置）。
-  func start(of segment: Int) -> Int { segment == 0 ? 0 : Int(starts[segment - 1]) }
-
-  /// 位置 `column`（描く単位）を含む段。段の境の位置は、`upstream`（付き）なら上の段の終わり、そうでなければ下の段の頭。
-  func segment(containing column: Int, upstream: Bool = false) -> Int {
-    var low = 0
-    var high = starts.count
-    while low < high {
-      let mid = (low + high) / 2
-      let start = Int(starts[mid])
-      if start < column || (start == column && !upstream) { low = mid + 1 } else { high = mid }
-    }
-    return low
-  }
-}
-
 /// 行の折り返しの規則（純関数）。行の描く単位の列（`LineShaper.display` の後）を、字ごとの幅の足し算で段に分ける。字の幅は
 /// 字ごとの字体と幅の表（`GlyphFonts`）の幅で、タブは段の頭から数えた次のタブ位置まで、書式文字の箱は箱の幅、打ち切った行の
 /// 末尾の印は途中で分けない 1 字として数える。計算するのは main だけで、結果は縦の並びに載る。

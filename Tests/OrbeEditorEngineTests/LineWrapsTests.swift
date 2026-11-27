@@ -1,6 +1,6 @@
-import OrbeEditorCore
 import XCTest
 
+@testable import OrbeEditorCore
 @testable import OrbeEditorEngine
 
 /// 行ごとの折り返しの木と、縦の並びの段の式。壊れると、折り返した面で行・キャレット・当たりが別の段の位置に出る、打鍵で
