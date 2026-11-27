@@ -7,7 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。コミットが通ってもメッセージが残る・コミットの間に打ち足した分まで消える・コミットしてプッシュが
 /// push しない・コミットが通らなかったのに前からある未 push のコミットを push する・失敗の文が次の操作でも残る・順番待ちの
-/// 操作が帯に出て、実際に止まっているコミットを隠す・同じ worktree でネット操作が重なる・push と並んで
+/// 操作が実行中の札に出て、実際に止まっているコミットを隠す・同じ worktree でネット操作が重なる・push と並んで
 /// amend・取り消しが走り、push したコミットを書き換える。
 @MainActor
 final class SourceControlTests: OrbeTestCase {
@@ -87,9 +87,9 @@ final class SourceControlTests: OrbeTestCase {
       repo.git(["ls-remote", "origin", "main"]).stdoutText.prefix(40), origin.prefix(40))
   }
 
-  /// 返らない hook のコミットは 0.3 秒を超えると帯に出て、その後ろのステージ（順番待ち）は帯に出ない。止めると失敗に
+  /// 返らない hook のコミットは 0.3 秒を超えると実行中の札に出て、その後ろのステージ（順番待ち）は札に出ない。止めると失敗に
   /// ならず、index.lock も残らない。
-  func testBandShowsTheRunningOperationAndStopLeavesNoLock() throws {
+  func testTheRunningCardShowsTheRunningOperationAndStopLeavesNoLock() throws {
     let hook = repo.dir.appendingPathComponent(".git/hooks/pre-commit")
     try Data("#!/bin/sh\nsleep 60\n".utf8).write(to: hook)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
@@ -100,10 +100,10 @@ final class SourceControlTests: OrbeTestCase {
     control.message = "hang"
     control.commit(.staged("a.txt"))
     control.stage([GitStatus.Row(path: "b.txt", originalPath: nil)])
-    pumpMain(until: { self.control.bandOperation != nil }, "帯")
-    XCTAssertEqual(control.bandOperation?.kind, .commit)
+    pumpMain(until: { self.control.cardOperation != nil }, "実行中の札")
+    XCTAssertEqual(control.cardOperation?.kind, .commit)
     XCTAssertEqual(control.operations.count, 2)
-    control.bandOperation?.stop()
+    control.cardOperation?.stop()
     idle("止めたコミットと後ろのステージ")
     XCTAssertNil(control.failure)
     XCTAssertEqual(control.message, "hang")

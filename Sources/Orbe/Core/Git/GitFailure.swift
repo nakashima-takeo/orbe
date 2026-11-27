@@ -42,6 +42,9 @@ enum GitWriteFailure: Error, Equatable {
   case operationInProgress(GitWorktreeOperation)
   /// upstream の無いブランチを pull しようとした。
   case noUpstream
+  /// upstream の ref が手元に無いブランチを pull しようとした（リモートのブランチが消され、prune 付きの fetch で追跡の ref も
+  /// 消えた）。持つのは upstream の名前（`origin/feat`）。
+  case upstreamGone(String)
   /// upstream も push 先の設定も origin も無いブランチを push しようとした。
   case noPushDestination
   /// ブランチに居ない（detached HEAD）。push・pull と、初回コミットの取り消しが要る。

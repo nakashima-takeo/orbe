@@ -6,7 +6,7 @@ import Foundation
 /// ものは進捗（git の語の行）を届いた順に渡す。ユーザーの設定（既定の remote・prune・`pull.rebase`・`push.default`・`pushRemote`・
 /// `core.sshCommand`・credential helper）はそのまま効く。completion は main で返る。
 ///
-/// 前提（upstream・detached・push 先・止まった操作）は本体の git を起こす前に判定する。`branch` は呼んだ時点の status の
+/// 前提（upstream とその ref・detached・push 先・止まった操作）は本体の git を起こす前に判定する。`branch` は呼んだ時点の status の
 /// ブランチで、nil（分からない）ならブランチに依る判定を飛ばして git に任せる。
 extension GitRepo {
   /// 取ってくる。`handle` が見ていない手なら人が見ていない実行（裏の fetch）——無出力で打ち切り（進捗の行が延命する）、
@@ -56,6 +56,9 @@ extension GitRepo {
     }
     if let branch, branch.name == nil { return Self.fail(.detached, completion) }
     if let branch, branch.upstream == nil { return Self.fail(.noUpstream, completion) }
+    if let upstream = branch?.upstream, upstream.divergence == nil {
+      return Self.fail(.upstreamGone(upstream.name), completion)
+    }
     let pull = ["pull", "--progress"]
     runner.run(pull, cwd: root, onProgress: onProgress, handle: handle) { output in
       let failure = GitWriteFailure.ofRemote(output)

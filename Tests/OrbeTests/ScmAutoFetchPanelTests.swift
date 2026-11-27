@@ -5,9 +5,9 @@ import XCTest
 @testable import Orbe
 
 /// 裏の fetch（実 git）: エディター面が見えていて Orbe が前面なら（ソース管理パネルを出していなくても）、手で何も押さなくても
-/// 裏の fetch で先行・遅れが新しくなり、worktree の操作の列（帯・失敗の文・ボタンの可否）には出ない。
+/// 裏の fetch で先行・遅れが新しくなり、worktree の操作の列（実行中の札・失敗の札・ボタンの可否）には出ない。
 ///
-/// 壊れると何が起きるか。別の clone で origin が進んでも「同期 ↓N」に気づけない・3 分ごとに帯や失敗の文が出入りする。
+/// 壊れると何が起きるか。別の clone で origin が進んでも「同期 ↓N」に気づけない・3 分ごとに実行中の札や失敗の札が出入りする。
 @MainActor
 final class ScmAutoFetchPanelTests: OrbeTestCase {
   private var panel: ScmPanel?
@@ -190,14 +190,14 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     return (panel, autoFetch)
   }
 
-  /// 裏の fetch に譲って待つ人の操作は、待つ間も帯に出て止められる。止めると裏の fetch の終わりを待たずに「止めた」で
+  /// 裏の fetch に譲って待つ人の操作は、待つ間も実行中の札に出て止められる。止めると裏の fetch の終わりを待たずに「止めた」で
   /// 終わり、係の人の数は 0 に戻る。
-  func testAHumanOperationWaitingForTheBackgroundFetchShowsTheBandAndStopsAtOnce() throws {
+  func testAHumanOperationWaitingForTheBackgroundFetchShowsTheRunningCardAndStopsAtOnce() throws {
     let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
     panel.control.fetch()
     XCTAssertEqual(autoFetch.rules.humans, 1)
     let operation = try XCTUnwrap(panel.control.operations.first)
-    pumpMain(until: { panel.control.bandOperation === operation }, "待つ間も帯に出る")
+    pumpMain(until: { panel.control.cardOperation === operation }, "待つ間も実行中の札に出る")
     XCTAssertTrue(autoFetch.rules.isRunning, "前提: 裏の fetch はまだ終わっていない")
 
     operation.stop()
@@ -215,7 +215,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
     panel.control.fetch()
     let operation = try XCTUnwrap(panel.control.operations.first)
-    pumpMain(until: { panel.control.bandOperation === operation }, "待つ間も帯に出る")
+    pumpMain(until: { panel.control.cardOperation === operation }, "待つ間も実行中の札に出る")
     try XCTUnwrap(hook).release()
 
     pumpMain(until: { panel.control.operations.isEmpty }, timeout: 20, "待ちが明けて走り、終わる")
@@ -246,13 +246,13 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     XCTAssertEqual(autoFetch.rules.humans, 0)
   }
 
-  /// push の段の前の待ちも帯に出て止められ、止めればその場で終わる（コミットは残り、裏の fetch が終わった後も push は
+  /// push の段の前の待ちも実行中の札に出て止められ、止めればその場で終わる（コミットは残り、裏の fetch が終わった後も push は
   /// 走らない）。origin の main は進めない——走れば通る push にしておく。
   ///
   /// 「push は走らない」は、裏の fetch が終わった時点で確かめる。待っていた操作を起こすかは、裏の fetch の終わりの処理の中で
   /// 同期に決まる、という前提に依る（取り下げた待ちを列から外さない形に壊すと、このテストが落ちることを確かめてある）。本番が
   /// 待っていた操作を起こす経路を変えたときは、確かめ直す。
-  func testTheWaitBeforeThePushStepShowsTheBandAndStopsAtOnce() throws {
+  func testTheWaitBeforeThePushStepShowsTheRunningCardAndStopsAtOnce() throws {
     let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch(advancing: "other")
     let repo = try XCTUnwrap(self.repo)
     try repo.write("a.txt", "edited\n")
@@ -263,8 +263,8 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     panel.commitSnapshot().commitAndPush()
     let operation = try XCTUnwrap(panel.control.operations.first)
     pumpMain(
-      until: { panel.control.bandOperation === operation && operation.step == .network(.push) },
-      "push の段の前で待つ間も帯に出る")
+      until: { panel.control.cardOperation === operation && operation.step == .network(.push) },
+      "push の段の前で待つ間も実行中の札に出る")
     XCTAssertTrue(autoFetch.rules.isRunning, "前提: 裏の fetch はまだ終わっていない")
     XCTAssertFalse(panel.control.isCommitting, "コミットの段は終わっている")
 

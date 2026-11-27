@@ -2,9 +2,13 @@ import AppKit
 
 /// 面の可視性——ツリー・プロジェクト検索・ソース管理パネル・PR のパネルが根のサービスを握る寿命と、本体の diff を見る寿命。
 extension EditorPaneView {
-  /// 窓から外れる前に、ポップアップを閉じる（閉じる直前の知らせの中で、中身はまだ窓に居る）。
+  /// 窓から外れる前に、面の中の確認をキャンセルで閉じ、ポップアップを閉じる（閉じる直前の知らせの中で、中身はまだ窓に
+  /// 居る）。
   override func viewWillMove(toWindow newWindow: NSWindow?) {
-    if newWindow == nil { popup.close(.faceHidden) }
+    if newWindow == nil {
+      confirm.close(.faceHidden)
+      popup.close(.faceHidden)
+    }
     super.viewWillMove(toWindow: newWindow)
   }
 
@@ -19,6 +23,7 @@ extension EditorPaneView {
     super.viewDidHide()
     itemList.close(.faceHidden)
     popup.close(.faceHidden)
+    confirm.close(.faceHidden)
     updateLiveness()
   }
 

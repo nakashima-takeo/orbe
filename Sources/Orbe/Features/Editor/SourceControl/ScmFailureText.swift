@@ -4,6 +4,13 @@ import Foundation
 /// git の理由の行そのまま。止めた・管理外は文にしない（管理外はパネル全体が理由の一文になる）。ブランチに居ない断りは、
 /// 断った操作（プル・プッシュか、初回コミットの取り消しか）を言う。
 enum ScmFailureText {
+  /// 失敗の札の文——頭に操作の名前（今あるメニューとボタンの文言）を置き、札だけで何の操作の失敗かが分かるようにする。
+  static func card(_ failure: SourceControl.Failure, _ language: Language) -> String? {
+    text(failure, language).map {
+      L10n.format(.editorScmFailureCard, language, L10n.string(failure.kind.title, language), $0)
+    }
+  }
+
   static func text(_ failure: SourceControl.Failure, _ language: Language) -> String? {
     switch failure.cause {
     case .git(.detached) where failure.kind == .undo:
@@ -27,12 +34,34 @@ enum ScmFailureText {
       L10n.format(.editorScmFailureInProgress, language, operation.name)
     case .detached: L10n.string(.editorScmFailureDetached, language)
     case .noUpstream: L10n.string(.editorScmFailureNoUpstream, language)
+    case .upstreamGone(let upstream):
+      L10n.format(.editorScmFailureUpstreamGone, language, upstream)
     case .noPushDestination: L10n.string(.editorScmFailureNoPushDestination, language)
     case .conflictsRemain: L10n.string(.editorScmFailureConflictsRemain, language)
     case .contentMismatch: L10n.string(.editorScmFailureContentMismatch, language)
     case .headPushed: L10n.string(.editorScmFailureHeadPushed, language)
     case .shallowBoundary: L10n.string(.editorScmFailureShallow, language)
     case .remoteRefused(let reason), .reason(let reason): reason
+    }
+  }
+}
+
+extension SourceControl.Kind {
+  /// 操作の名前（失敗の札の文の頭）。
+  var title: L10nKey {
+    switch self {
+    case .stage: .editorScmStage
+    case .unstage: .editorScmUnstage
+    case .discard: .editorScmDiscard
+    case .commit: .editorScmCommit
+    case .amend: .editorScmAmend
+    case .undo: .editorScmUndo
+    case .pull: .editorScmPull
+    case .push: .editorScmPush
+    case .fetch: .editorScmFetch
+    case .sync: .editorScmSync
+    case .publish: .editorScmPublish
+    case .commitAndPush: .editorScmCommitAndPush
     }
   }
 }

@@ -39,15 +39,10 @@ enum ScmMenu {
     }
   }
 
-  /// nil は区切り線。
-  static func make(_ items: [Item?]) -> NSMenu {
+  static func make(_ items: [Item]) -> NSMenu {
     let menu = NSMenu()
     menu.autoenablesItems = false
     for item in items {
-      guard let item else {
-        menu.addItem(.separator())
-        continue
-      }
       let entry = ActionItem(title: item.title, action: item.action)
       entry.isEnabled = item.isEnabled
       menu.addItem(entry)

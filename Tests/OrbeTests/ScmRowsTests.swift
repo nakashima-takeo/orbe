@@ -6,9 +6,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。ステージした後に編集したファイルが片方の区分にしか出ない・競合がステージ済みに並んで一括で
 /// 解決済みにされる・`git rm --cached` のファイルを解除できない・削除したファイルを「ファイルを開く」で開こうとする・
-/// 未追跡を確認なしで捨てる側に数える・戻せない破棄が確認の Return 1 打で走る・git が何も変えない行を一括操作に数える・
-/// ボタンの姿が古い行のまま残る・パスの順に並ばない・Changes の件数が行の数と食い違う。グラフの列の頭にブランチが出ない・
-/// さらに表示が出ない・管理外でも空の枠が出る。
+/// 未追跡を確認なしで捨てる側に数える・git が何も変えない行を一括操作に数える・ボタンの姿が古い行のまま残る・パスの順に
+/// 並ばない・Changes の件数が行の数と食い違う。グラフの列の頭にブランチが出ない・さらに表示が出ない・管理外でも空の枠が出る。
 final class ScmRowsTests: OrbeTestCase {
   private func entry(
     _ staged: GitStatus.Change?, _ unstaged: GitStatus.Change?, from original: String? = nil
@@ -110,25 +109,11 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertTrue(ScmDiscardGate.needsConfirmation(pick(["renamed.txt"])), "元パスは戻す")
     XCTAssertTrue(ScmDiscardGate.needsConfirmation(pick(["intended.txt", "a.txt"])))
     XCTAssertTrue(ScmDiscardGate.needsConfirmation(pick(["gone.txt"])), "消えた intent-to-add は戻す")
-    let alert = ScmDiscardGate.alert(pick(["intended.txt", "renamed.txt", "a.txt"]), language: .en)
-    XCTAssertTrue(
-      alert.informativeText.hasSuffix(" 2 files go to the Trash."), alert.informativeText)
-    let one = ScmDiscardGate.alert(pick(["intended.txt", "a.txt"]), language: .en)
-    XCTAssertTrue(one.informativeText.hasSuffix(" 1 file goes to the Trash."), one.informativeText)
-  }
-
-  /// 戻す破棄の確認で、「破棄」は Return では押されず（戻せない側）、Esc はキャンセル。破棄するのは「破棄」を押したときだけ。
-  @MainActor
-  func testTheDiscardAlertDoesNotConfirmOnReturn() {
-    let tracked = ScmChanges.File(
-      row: GitStatus.Row(path: "a.txt", originalPath: nil), badge: .modified,
-      opensAsFile: true, discardMovesToTrash: false)
-    let alert = ScmDiscardGate.alert([tracked], language: .en)
-    XCTAssertEqual(alert.buttons.map(\.title), ["Discard", "Cancel"])
-    XCTAssertEqual(alert.buttons[0].keyEquivalent, "", "破棄は Return で確定しない")
-    XCTAssertEqual(alert.buttons[1].keyEquivalent, "\u{1b}", "Esc はキャンセル")
-    XCTAssertTrue(ScmDiscardGate.shouldDiscard(.alertFirstButtonReturn))
-    XCTAssertFalse(ScmDiscardGate.shouldDiscard(.alertSecondButtonReturn))
+    let many = ScmDiscardGate.confirmation(
+      pick(["intended.txt", "renamed.txt", "a.txt"]), language: .en)
+    XCTAssertTrue(many.message.hasSuffix(" 2 files go to the Trash."), many.message)
+    let one = ScmDiscardGate.confirmation(pick(["intended.txt", "a.txt"]), language: .en)
+    XCTAssertTrue(one.message.hasSuffix(" 1 file goes to the Trash."), one.message)
   }
 
   /// すべてステージ・ステージ済みが無いときのコミットに入る行は「変更」の行から、競合と中身だけ変わったサブモジュールを

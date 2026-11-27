@@ -45,7 +45,7 @@ extension SourceControlPaneTests {
     pane.toggleSidebar()
     pane.switchScreen(.changes)
     XCTAssertTrue(hosted.window.firstResponder === pane.focusTarget, "閉じていれば本体の行き先")
-    XCTAssertNil(hosted.scm.focusRequest, "列へ焦点を求めない")
+    XCTAssertFalse(hosted.scm.wantsListFocus, "列へ焦点を求めない")
   }
 
   /// 行を待つ間に本体を押すか左の列を閉じると、後から行が出ても列は焦点を取らず、焦点は自動で開いた diff の本文へ移る。
@@ -69,7 +69,7 @@ extension SourceControlPaneTests {
       pumpMain(
         until: { self.diffIsShown(hosted) && hosted.window.firstResponder === pane.focusTarget },
         "\(how): 焦点は diff の本文へ")
-      XCTAssertNil(hosted.scm.focusRequest, "\(how): 列へ焦点を求めない")
+      XCTAssertFalse(hosted.scm.wantsListFocus, "\(how): 列へ焦点を求めない")
     }
   }
 }
