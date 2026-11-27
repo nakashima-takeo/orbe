@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// `BrowserLayerView` の左端ドラッグハンドル・キー分類・本物の `BrowserURLTextField`（`NSTextField` /
+/// `BrowserLayerView` の左端ドラッグハンドル・キー分類・本物の `BrowserInlineTextField`（`NSTextField` /
 /// `Coordinator`＋IME）経由の URL インライン編集を守る。
 extension BrowserLayerViewTests {
   private func mouse(_ type: NSEvent.EventType, x: CGFloat, in hosted: Hosted, clickCount: Int = 1)
@@ -17,7 +17,7 @@ extension BrowserLayerViewTests {
       clickCount: clickCount, pressure: 1)!
   }
 
-  private func specialKey(
+  func specialKey(
     _ special: NSEvent.SpecialKey, keyCode: UInt16, flags: NSEvent.ModifierFlags = [],
     in window: NSWindow
   ) -> NSEvent {
@@ -29,7 +29,7 @@ extension BrowserLayerViewTests {
       isARepeat: false, keyCode: keyCode)!
   }
 
-  private func keyEvent(
+  func browserKeyEvent(
     _ chars: String, keyCode: UInt16, flags: NSEvent.ModifierFlags = [], in window: NSWindow
   ) -> NSEvent {
     NSEvent.keyEvent(
@@ -151,12 +151,23 @@ extension BrowserLayerViewTests {
       "⌘⇧T は閉じたタブ復元として消費")
     XCTAssertTrue(commands.isEmpty, "ブラウザ固有 5 キーは onWindowCommand を呼ばない")
 
-    // 安全遷移系は上位へ転送し、⌘↑/⌘↓/⌘C は素通しする。
+    // 安全遷移系（availableWithoutTabs 6 コマンド＋⌘⇧←/→ 含む全 ChromeAction 転送群）を上位転送する。
     for event in [
       NSEvent.key("e"), .key("F", [.command, .shift]), .key("}", [.command, .shift]),
       .key("{", [.command, .shift]), .key("E", [.command, .shift]),
+      .key("S", [.command, .shift]), .key("C", [.command, .shift]),
+      .key("A", [.command, .shift]), .key("X", [.command, .shift]),
+      .key(","), .key("h"),
+      specialKey(.rightArrow, keyCode: 124, flags: [.command, .shift], in: window),
+      specialKey(.leftArrow, keyCode: 123, flags: [.command, .shift], in: window),
     ] { XCTAssertTrue(browser.performKeyEquivalent(with: event)) }
-    XCTAssertEqual(commands, [.toggleEditorFace, .findInProject, .nextTab, .prevTab, .openEditor])
+    XCTAssertEqual(
+      commands,
+      [
+        .toggleEditorFace, .findInProject, .nextTab, .prevTab, .openEditor,
+        .switchWorkspace, .launchDefaultAgent, .showAgentPalette, .showTaskPalette,
+        .showSettings, .toggleHelp, .nextTab, .prevTab,
+      ])
     commands.removeAll()
     for event in [
       specialKey(.upArrow, keyCode: 126, flags: [.command], in: window),
@@ -223,7 +234,7 @@ extension BrowserLayerViewTests {
       text, replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
   }
 
-  // MARK: - 本物の BrowserURLTextField（NSTextField / Coordinator＋IME）経由の編集契約
+  // MARK: - 本物の BrowserInlineTextField（NSTextField / Coordinator＋IME）経由の編集契約
 
   /// URL 欄編集開始で本物の field editor が焦点を取って全選択し、IME 変換中の Enter / Esc は保護する。
   /// 不正入力の Enter は編集欄に留まったうえで直後の他所焦点移動（blur）を焦点を奪い返さず終了でき、
@@ -254,10 +265,10 @@ extension BrowserLayerViewTests {
       "編集開始時は現在 URL を全選択する")
 
     markComposing(editor)
-    deliverKeyDown(keyEvent("\r", keyCode: 36, in: window), to: window)
+    deliverKeyDown(browserKeyEvent("\r", keyCode: 36, in: window), to: window)
     XCTAssertTrue(browser.isEditingURL, "IME 変換中の Enter で URL 編集を終了しない")
     markComposing(editor)
-    deliverKeyDown(keyEvent("\u{1B}", keyCode: 53, in: window), to: window)
+    deliverKeyDown(browserKeyEvent("\u{1B}", keyCode: 53, in: window), to: window)
     XCTAssertTrue(browser.isEditingURL, "IME 変換中の Esc で URL 編集を終了しない")
     editor.unmarkText()
 
@@ -270,7 +281,7 @@ extension BrowserLayerViewTests {
     XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: fullLength))
 
     replaceAll("not a url", in: editor)
-    deliverKeyDown(keyEvent("\r", keyCode: 36, in: window), to: window)
+    deliverKeyDown(browserKeyEvent("\r", keyCode: 36, in: window), to: window)
     XCTAssertTrue(browser.isEditingURL, "不正入力の Enter は編集欄に留まる")
     XCTAssertEqual(finishCount, 1, "不正入力では遷移しない")
 
@@ -286,13 +297,13 @@ extension BrowserLayerViewTests {
 
     // 3. 非変換中の Esc 取消と有効 URL の Enter 確定はどちらもブラウザ本体へ焦点を戻す。
     _ = try beginAndFocusURLField(in: hosted)
-    deliverKeyDown(keyEvent("\u{1B}", keyCode: 53, in: window), to: window)
+    deliverKeyDown(browserKeyEvent("\u{1B}", keyCode: 53, in: window), to: window)
     XCTAssertFalse(browser.isEditingURL, "非変換中の Esc で編集を取り消す")
     XCTAssertTrue(window.firstResponder === browser.focusTarget, "明示取消はブラウザ本体へ焦点を戻す")
 
     let nextURL = server.url(for: "/next")
     replaceAll(nextURL.absoluteString, in: try beginAndFocusURLField(in: hosted))
-    deliverKeyDown(keyEvent("\r", keyCode: 36, in: window), to: window)
+    deliverKeyDown(browserKeyEvent("\r", keyCode: 36, in: window), to: window)
     XCTAssertFalse(browser.isEditingURL, "有効 URL の Enter で編集を閉じる")
     XCTAssertTrue(window.firstResponder === browser.focusTarget, "明示確定はブラウザ本体へ焦点を戻す")
     pumpMain(until: { finishCount >= 2 }, timeout: 5, "確定先 URL の読み込み完了")

@@ -66,7 +66,7 @@ extension BrowserLayerViewTests {
       narrowRect.maxX, 320 - rightSpan, "320pt 全面 Peek で右端の切替ボタンを押し出さない")
   }
 
-  /// 全面表示で URL 欄を本物の `BrowserURLTextField`（field editor＋IME 未確定文字あり）で編集中に、
+  /// 全面表示で URL 欄を本物の `BrowserInlineTextField`（field editor＋IME 未確定文字あり）で編集中に、
   /// `setPeeking(true)` → ピル表示閾値（`browserURLPeekMinWidth`）を跨ぐ幅変更 → `setPeeking(false)` を
   /// 往復しても、編集状態・入力文字列・IME 未確定文字・field editor 焦点・`NSTextField` 実体が破棄されない。
   func testFullPeekAndWidthThresholdCrossingPreserveURLEditingAndIME() throws {
