@@ -70,7 +70,8 @@ extension SurfaceWrapTests {
       opened.surface.caretLocation, wrap.start(of: 1) + 3, "字下げの分を引いた桁ではなく、同じ x の字")
   }
 
-  /// 変換中の未確定の字が段をまたいでも、未確定の矩形は、未確定の先頭がある段の 1 段の高さに付く。
+  /// 変換中の未確定の字が段をまたいでも、未確定の矩形は、未確定の先頭がある段の 1 段の高さに付き、その段の終わりで切れる
+  /// （IME へ返す範囲もそこまで）。未確定の中の、次の段の頭から始まる文節の矩形は、次の段に付き、幅を持つ。
   func testTheMarkedRectSitsOnTheSegmentWhereTheMarkedTextStarts() throws {
     let opened = try opened(words)
     let window = host(opened, size: CGSize(width: 420, height: 300))
@@ -85,11 +86,47 @@ extension SurfaceWrapTests {
     XCTAssertEqual(segment, 1, "前提: 未確定の先頭は 2 段目")
     XCTAssertGreaterThan(
       rows.segment(containing: NSMaxRange(marked) - 1, line: 0), segment, "前提: 未確定は段をまたぐ")
-    let rect = client.convert(
-      window.convertFromScreen(client.firstRect(forCharacterRange: marked, actualRange: nil)),
+    let next = try XCTUnwrap(rows.wrap(ofLine: 0)).start(of: segment + 1)
+    func rect(_ range: NSRange) -> (rect: NSRect, actual: NSRange) {
+      var actual = NSRange(location: NSNotFound, length: 0)
+      let screen = client.firstRect(forCharacterRange: range, actualRange: &actual)
+      return (client.convert(window.convertFromScreen(screen), from: nil), actual)
+    }
+    let whole = rect(marked)
+    XCTAssertEqual(
+      whole.rect.midY, point(opened, row: 1, column: 0).y, accuracy: 0.5, "2 段目の縦の中央")
+    XCTAssertEqual(whole.rect.height, opened.surface.config.lineHeight, accuracy: 0.5, "1 段の高さ")
+    XCTAssertEqual(
+      whole.actual, NSRange(location: marked.location, length: next - marked.location),
+      "2 段目の終わりで切る")
+    XCTAssertGreaterThan(whole.rect.width, 0)
+    let head = rect(NSRange(location: next, length: 2))
+    XCTAssertEqual(
+      head.rect.midY, point(opened, row: 2, column: 0).y, accuracy: 0.5, "次の段の頭からの文節は 3 段目")
+    XCTAssertGreaterThan(head.rect.width, 0, "次の段の頭からの文節の幅")
+    XCTAssertLessThan(head.rect.minX, point(opened, row: 2, column: 1).x, "次の段の頭から")
+  }
+
+  /// 段の終わり（付き）にキャレットがあるとき、IME が問う文字の矩形も選択の矩形も、キャレットを描いた上の段の終わりに出る。
+  func testTheRectsOfACaretAtASegmentEndSitWhereTheCaretIsDrawn() throws {
+    let opened = try opened(words)
+    let window = host(opened, size: CGSize(width: 420, height: 300))
+    let wrap = try wrap(opened)
+    opened.surface.selectedRange = NSRange(location: 2, length: 0)
+    opened.surface.editor.perform(.move(.end, extending: false))
+    XCTAssertEqual(opened.surface.caretLocation, wrap.start(of: 1), "前提: 段の終わり（付き）")
+    let client = opened.surface.textView
+    let caret = client.convert(
+      window.convertFromScreen(
+        client.firstRect(
+          forCharacterRange: NSRange(location: wrap.start(of: 1), length: 0), actualRange: nil)),
       from: nil)
-    XCTAssertEqual(rect.midY, point(opened, row: 1, column: 0).y, accuracy: 0.5, "2 段目の縦の中央")
-    XCTAssertEqual(rect.height, opened.surface.config.lineHeight, accuracy: 0.5, "1 段の高さ")
+    let first = point(opened, row: 0, column: 0)
+    XCTAssertEqual(caret.midY, first.y, accuracy: 0.5, "1 段目")
+    XCTAssertGreaterThan(caret.minX, first.x, "段の頭ではなく終わり")
+    let union = client.convert(
+      window.convertFromScreen(client.unionRectInVisibleSelectedRange), from: nil)
+    XCTAssertEqual(union.midY, first.y, accuracy: 0.5, "選択の矩形も 1 段目")
   }
 
   /// 区間を見せると（⌘F の一致へ送る）、長い行の後ろの段にある区間でも、その段が見える。
@@ -110,5 +147,80 @@ extension SurfaceWrapTests {
     XCTAssertLessThanOrEqual(shown.top.offset, segment)
     XCTAssertLessThan(
       CGFloat(segment), CGFloat(shown.top.offset) + shown.visibleLines, "一致の段が見える")
+  }
+
+  /// マウスで段の終わりより右に着いた端は、付きを持つ——選択の中を押して離したときも、語の単位のドラッグでも。
+  func testTheMouseLandsOnTheSegmentEndFromItsRight() throws {
+    let opened = try opened(words)
+    let wrap = try wrap(opened)
+    let editor = opened.surface.editor
+    let end = wrap.start(of: 1)
+    let last = point(opened, row: 0, column: CGFloat(end - 1) + 0.5)
+    opened.surface.selectedRange = NSRange(location: 0, length: end)
+    try mouse(opened, .leftMouseDown, at: last)
+    try mouse(opened, .leftMouseUp, at: last)
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: end, length: 0), "選択の中を押して離す")
+    XCTAssertTrue(editor.state.cursors.primary.upstream, "段の終わり")
+    let right = CGPoint(
+      x: opened.surface.surfaceLayout.text.maxX - 2, y: point(opened, row: 0, column: 0).y)
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 0, column: 1), clicks: 2)
+    try mouse(opened, .leftMouseDragged, at: right, clicks: 2)
+    try mouse(opened, .leftMouseUp, at: right, clicks: 2)
+    XCTAssertEqual(NSMaxRange(opened.surface.selectedRange), end, "語の単位のドラッグ")
+    XCTAssertTrue(editor.state.cursors.primary.upstream, "段の終わり")
+  }
+
+  /// 見えているいちばん下の段の右を押しても、キャレットはその段の終わり（付き）に入り、本文はスクロールしない。
+  func testPressingRightOfTheBottomSegmentDoesNotScroll() throws {
+    let opened = try opened((0..<600).map { "w\($0)" }.joined(separator: " ") + "\n")
+    let surface = opened.surface
+    let bottom = Int(surface.viewport.visibleLines) - 1
+    XCTAssertLessThan(bottom + 1, try wrap(opened).segments, "前提: 下に続きの段がある")
+    let before = surface.scrollPosition
+    let at = CGPoint(
+      x: surface.surfaceLayout.text.maxX - 2, y: point(opened, row: bottom, column: 0).y)
+    try mouse(opened, .leftMouseDown, at: at)
+    try mouse(opened, .leftMouseUp, at: at)
+    XCTAssertEqual(surface.caretLocation, try wrap(opened).start(of: bottom + 1))
+    XCTAssertTrue(surface.editor.state.cursors.primary.upstream)
+    XCTAssertEqual(surface.scrollPosition, before, "スクロールしない")
+  }
+
+  /// 選択のドラッグが本文の上の外へ出ると、自動スクロールのコマごとに、見えているいちばん上の段の頭まで伸びる（画面の外の
+  /// 段落の頭へ飛ばない）。
+  func testDraggingAboveTheTextExtendsToTheTopVisibleSegment() throws {
+    let opened = try opened((0..<600).map { "w\($0)" }.joined(separator: " ") + "\n")
+    let surface = opened.surface
+    let wrap = try wrap(opened)
+    let pointer = try XCTUnwrap((surface.responder as? MetalTextView)?.pointer)
+    surface.scroll(toFirstLine: 20)
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 3, column: 2))
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: 100, y: 1))
+    // 窓は画面に出ないので display link は回らない。自動スクロールのコマを、時刻を渡して 2 回進める。
+    pointer.frame(now: 10)
+    pointer.frame(now: 10.1)
+    let top = surface.viewport.top
+    XCTAssertEqual(top.line, 0)
+    XCTAssertGreaterThan(top.offset, 0, "前提: 続きの段が上端")
+    XCTAssertEqual(surface.selectedRange.location, wrap.start(of: top.offset), "上端の段の頭")
+    try mouse(opened, .leftMouseUp, at: CGPoint(x: 100, y: 1))
+  }
+
+  /// 字下げした続きの段の URL は、押した点の字から引く（⌘クリックで開く URL）——URL の最後の字の上でも。
+  func testALinkOnAnIndentedContinuationSegmentIsFoundUnderThePointer() throws {
+    let indent = "        "
+    let url = "https://example.com/wrapped"
+    let opened = try opened(
+      indent + (0..<30).map { "w\($0)" }.joined(separator: " ") + " " + url + " tail\n")
+    let wrap = try wrap(opened)
+    let location = (text(opened.document) as NSString).range(of: url).location
+    let segment = opened.surface.rows.segment(containing: location, line: 0)
+    XCTAssertGreaterThan(segment, 0, "前提: URL は続きの段")
+    XCTAssertEqual(
+      opened.surface.rows.segment(containing: location + url.utf16.count - 1, line: 0), segment,
+      "前提: URL は 1 つの段に収まる")
+    let column = CGFloat(indent.count + location + url.utf16.count - 1 - wrap.start(of: segment))
+    XCTAssertEqual(
+      opened.surface.link(at: point(opened, row: segment, column: column)), URL(string: url))
   }
 }

@@ -140,4 +140,21 @@ final class SurfaceWrapTests: EngineTestCase {
     opened.surface.editor.perform(.deleteSelection)
     XCTAssertNotNil(opened.surface.rows.wraps, "上限以下に戻れば折り返す")
   }
+
+  /// 貼り付けで本文が上限を越え、折り返しを外す取引でも、貼り終えた位置のキャレットが見える（見せる位置を、外した後の並びで
+  /// 決める）。
+  func testTheCaretIsShownAfterAPasteCrossesTheLimit() throws {
+    let opened = try opened(String(repeating: "s\n", count: 60_000))
+    XCTAssertNotNil(opened.surface.rows.wraps, "前提: 上限より小さい本文は折り返す")
+    let line = String(repeating: "word ", count: 30) + "\n"
+    let paste = String(repeating: line, count: MetalTextSurface.wrapLimit / line.utf8.count + 1)
+    opened.surface.selectedRange = NSRange(location: 0, length: 0)
+    opened.surface.responder.insertText(paste)
+    XCTAssertNil(opened.surface.rows.wraps, "前提: 上限を越えて折り返さない")
+    let row = opened.document.text.row(containing: opened.surface.caretLocation)
+    let viewport = opened.surface.viewport
+    XCTAssertLessThanOrEqual(viewport.top.line, row)
+    XCTAssertLessThan(
+      CGFloat(row), CGFloat(viewport.top.line) + viewport.visibleLines, "キャレットの行が見える")
+  }
 }
