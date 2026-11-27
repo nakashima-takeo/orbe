@@ -201,12 +201,12 @@ final class SurfaceRowsTests: EngineTestCase {
   func testWithoutTheMinimapTheRightColumnIsTheScrollbar() throws {
     let opened = try openRows()
     XCTAssertEqual(
-      opened.surface.rightColumnWidth, EngineTestCase.overviewStyle().scrollbar.width)
+      opened.surface.surfaceLayout.rightColumnWidth, EngineTestCase.overviewStyle().scrollbar.width)
     _ = opened.surface.snapshot()
     XCTAssertNil(opened.surface.placementBox.read(), "ミニマップを組まない")
     opened.surface.setPresentation(.code)
     XCTAssertGreaterThan(
-      opened.surface.rightColumnWidth, EngineTestCase.overviewStyle().scrollbar.width)
+      opened.surface.surfaceLayout.rightColumnWidth, EngineTestCase.overviewStyle().scrollbar.width)
   }
 
   /// `x`・`y` の画素の範囲で、`after` の行を `dy` px 下げた所と `before` が違う画素の数。

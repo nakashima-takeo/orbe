@@ -1,49 +1,39 @@
 import AppKit
 import OrbeEditorCore
 
-/// ファイル内検索。バーはスクロールバック検索と同じ部品（`SearchBar`）で、本文の右上（ミニマップの左）に浮く。
-/// 検索の状態は `EditorSearch`、規則は Core。`SurfaceView+Search` と同形。
+/// ファイル内検索。欄は上のバーの Files の中ほど（`EditorBarFindField`）で、出している間の欄の状態は面ごとの持ち主
+/// （`findField`）が持つ。欄の状態の型と件数の規則は、端末のスクロールバック検索のバーと共有する。検索の状態は
+/// `EditorSearch`、規則は Core。
 extension EditorPaneView {
-  /// 検索バーを出す。種があれば needle に入れて即検索する——1 行以内の非空の選択、選択が空ならキャレットの語（VS Code の
-  /// seedSearchStringFromSelection の既定）。選択は動かさない。種は検索へ直接渡し、バーには表示として写す（初回描画前の
-  /// 値では SwiftUI の `onChange` が走らず、描画後なら走るが同じ needle なので検索は何もしない）。バーが既にあれば、
-  /// 種で needle を取り直し（種が無ければ前の needle のまま）、入力欄に焦点を入れて全選択する（VS Code と同じ）。
+  /// 欄を出す。種があれば検索語に入れて即検索する——1 行以内の非空の選択、選択が空ならキャレットの語（VS Code の
+  /// seedSearchStringFromSelection の既定）。選択は動かさない。種は検索へ直接渡し、欄には表示として写す（初回描画前の
+  /// 値では SwiftUI の `onChange` が走らず、描画後なら走るが同じ検索語なので検索は何もしない）。欄が既にあれば、
+  /// 種で検索語を取り直し（種が無ければ前の検索語のまま）、欄にフォーカスを入れて全選択する（VS Code と同じ）。
   /// 文書が無ければ何も起きない。
   func showSearch() {
     guard let document else { return }
     let seed = searchSeed(document)
-    if let bar = searchBar {
+    if let field = findField.model {
       if let seed {
         search.seed(seed)
-        bar.needle = seed
+        field.needle = seed
       }
-      bar.focusField()
-      bar.selectNeedle()
+      findField.requestFocus()
       return
     }
-    let bar = SearchBar(
-      translucency: translucency ?? ChromeTranslucency(), localization: localization)
-    bar.showsUnknownPosition = true
-    bar.onNeedleChange = { [weak self] needle in self?.search.setNeedle(needle) }
-    bar.onFocusChange = { [weak self] in self?.focusDidChange() }
-    bar.onNext = { [weak self] in self?.search.next() }
-    bar.onPrev = { [weak self] in self?.search.previous() }
-    bar.onClose = { [weak self] in self?.closeSearch() }
-    belowBar.addSubview(bar)
-    let trailing = bar.trailingAnchor.constraint(equalTo: trailingAnchor)
-    NSLayoutConstraint.activate([
-      trailing,
-      bar.topAnchor.constraint(equalTo: topAnchor, constant: bodyRect.minY + Theme.Space.beat),
-    ])
-    searchBar = bar
-    searchBarTrailing = trailing
-    placeSearchBar()
+    let field = findField.open()
+    field.showsUnknownPosition = true
+    field.onNeedleChange = { [weak self] needle in self?.search.setNeedle(needle) }
+    field.onFocusChange = { [weak self] in self?.focusDidChange() }
+    field.onNext = { [weak self] in self?.search.next() }
+    field.onPrev = { [weak self] in self?.search.previous() }
+    field.onClose = { [weak self] in self?.closeSearch() }
     syncFindState()
     if let seed {
-      bar.needle = seed
+      field.needle = seed
       search.seed(seed)
     }
-    bar.focusField()
+    findField.requestFocus()
   }
 
   /// 検索の種——1 行以内の非空の選択、選択が空ならキャレットの語。
@@ -56,15 +46,13 @@ extension EditorPaneView {
     return seed.contains(where: \.isNewline) ? nil : seed
   }
 
-  /// バーを閉じる。一致の地は消え、選択はそのまま残る。焦点がバーにあればテキスト面へ戻す。
+  /// 欄を閉じる。一致の地は消え、選択はそのまま残る。フォーカスが欄にあれば、欄を消す前にテキスト面へ移す（フォーカスを
+  /// 持ったまま消すと、AppKit がフォーカスを窓へ落とす）。
   func closeSearch() {
-    guard let bar = searchBar else { return }
-    let focused = (window?.firstResponder as? NSView)?.isDescendant(of: bar) == true
+    guard findField.model != nil else { return }
+    if findField.isFocused { window?.makeFirstResponder(focusTarget) }
     search.close()
-    bar.removeFromSuperview()
-    searchBar = nil
-    searchBarTrailing = nil
+    findField.close()
     syncFindState()
-    if focused { window?.makeFirstResponder(focusTarget) }
   }
 }

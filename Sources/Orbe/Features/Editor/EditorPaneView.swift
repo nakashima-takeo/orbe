@@ -55,6 +55,8 @@ final class EditorPaneView: NSView {
   var diffAwaitingRow: EditorDiff.Key?
   /// 焦点を預かっている一覧の画面（Changes・PR。行が出たら一覧へ渡す。→ `holdListFocus`）。
   var heldListFocus: EditorScreen?
+  /// ツリーの × を押した後の押し続けの守り（→ `closeFromTree`）。
+  var treeMarkPressGuard: RowListPressGuard?
   /// 並列の diff で最後に焦点のあった側（焦点の行き先。既定は右）。
   var diffFocusesLeft = false
   /// 並列の diff の 2 面の境。
@@ -63,11 +65,9 @@ final class EditorPaneView: NSView {
   var diffViews: [NSView] = []
   /// 知らせを結んでいる文書（本体で編集する文書を結んだもの——`bindEditedDocument`）。
   weak var boundDocument: EditorDocument?
-  /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
+  /// ファイル内検索の状態と、上のバーの欄の持ち主（pane ごと）。欄の状態は出している間だけある。
   let search = EditorSearch()
-  var searchBar: SearchBar?
-  /// 検索バーの右端の制約（右列の幅が本体の幅で変わるので `layout()` が置き直す）。
-  var searchBarTrailing: NSLayoutConstraint?
+  let findField = EditorFindField()
   /// 出現の強調の状態（pane ごと）。
   let occurrences = EditorOccurrences()
   /// プロジェクト検索の状態（pane ごと＝連ごと）。
@@ -155,7 +155,7 @@ final class EditorPaneView: NSView {
     barHost = EditorBarHost(
       rootView: EditorBarRoot(
         shell: shell, sidebar: sidebar, itemList: itemList, scm: scm, commitPopup: commitPopup,
-        pullRequest: pullRequest.pullRequest,
+        pullRequest: pullRequest.pullRequest, findField: findField,
         localization: localization, fontResolver: fontResolver))
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
@@ -176,7 +176,7 @@ final class EditorPaneView: NSView {
     layerContentsRedrawPolicy = .onSetNeedsDisplay
     assembleViews()
     search.onCountChange = { [weak self] selected, total, limited in
-      self?.searchBar?.updateCount(selected: selected, total: total, limited: limited)
+      self?.findField.model?.updateCount(selected: selected, total: total, limited: limited)
     }
     search.onMatchesChange = { [weak self] in self?.pushFindGround() }
     search.onNeedleChange = { [weak self] in self?.syncFindState() }
@@ -227,7 +227,7 @@ final class EditorPaneView: NSView {
   private func installRoots() {
     barHost.rootView = EditorBarRoot(
       shell: shell, sidebar: sidebar, itemList: itemList, scm: scm, commitPopup: commitPopup,
-      pullRequest: pullRequest.pullRequest,
+      pullRequest: pullRequest.pullRequest, findField: findField,
       localization: localization, fontResolver: fontResolver)
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
@@ -272,6 +272,7 @@ final class EditorPaneView: NSView {
     }
     reconcileWithLists()
     refreshCurrentItem()
+    refreshOpenMarks()
   }
 
   /// 本体が文書なら、その文書（ファイル内検索・出現の強調・一致の地の相手）。
@@ -299,6 +300,9 @@ final class EditorPaneView: NSView {
     confirm.close(.itemGone)
     popup.close(.itemGone)
     tree.cancelNew()
+    // エクスプローラーは同じ欄のまま作り直したツリーへ替わり、欄の焦点を新しいツリーへ写さないので、作り直す前に焦点を面の
+    // 行き先へ移す。
+    if tree.explorerFocus == .filter { reclaimSidebarFocus() }
     tree.isLive = false
     tree = FileTree(root: root)
     wireTree()
@@ -323,18 +327,19 @@ final class EditorPaneView: NSView {
     installRoots()
     if let url = group?.editor.activeURL { tree.reveal(url) }
     refreshCurrentItem()
+    refreshOpenMarks()
   }
 
   /// 本体を置き換える 1 か所——前の本体を外し（文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の
   /// 見え方をコードへ戻す）、新しい本体を載せる（文書の面にはコードの見え方を、diff には今の見せ方の見え方を載せる）。
   /// 配置を頼み、文書を初めて画面に出すときはその配置で、最初の描画に色が間に合うよう上限つきで待つ（→
-  /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
+  /// `prepareBodyIfVisible`）。検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなれば欄は閉じる。
   /// 文書の知らせは、本体で編集する文書へ結び直す（→ `bindEditedDocument`）。
   /// 前の文書の一致の地は消し、新しい文書に 2 つの出どころの和を敷く。焦点が本体にあれば新しい行き先へ移す——判定は
   /// 前の面を外す前に取る（外した瞬間に AppKit が first responder を窓へ戻すので、外した後では「中にあった」ことが
   /// 分からない）。左の列の焦点（検索結果・行内入力）と一覧の器の焦点は面を外しても残るので動かさない。
   func show(_ next: EditorBody) {
-    guard !Self.same(next, body) else { return }
+    guard !next.isSame(as: body) else { return }
     let hadFocusInside = focusIsInBody
     unbind(body)
     body = next
@@ -343,8 +348,8 @@ final class EditorPaneView: NSView {
       SurfaceLook.code.apply(to: document.surface, document: document)
       install(document.surface)
     case .diff(let diff):
-      closeSearch()
       showDiff(diff)
+      closeSearch()
     case .empty:
       closeSearch()
     }
@@ -359,16 +364,6 @@ final class EditorPaneView: NSView {
       window?.makeFirstResponder(focusTarget)
     }
     updateDiffWatching()
-  }
-
-  /// 同じ本体か（同じ文書・同じ diff・どちらも空）。
-  private static func same(_ a: EditorBody, _ b: EditorBody) -> Bool {
-    switch (a, b) {
-    case (.document(let x), .document(let y)): x === y
-    case (.diff(let x), .diff(let y)): x === y
-    case (.empty, .empty): true
-    default: false
-    }
   }
 
   /// 見せている本体を、セッションに告げずに手放す——この面の観測・テキスト面の親・一致の強調を外し、diff は見せるのをやめて

@@ -22,9 +22,12 @@ struct EditorSideRoot: View {
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
 
+  /// host 全体の座標空間（左上が原点。host の座標と一致する）。中の部品が、自分の枠を面へ渡すときに使う。
+  static let space = "editorSide"
+
   var body: some View {
-    // GeometryReader は中身の最小幅に縛られず host の幅を取る——エクスプローラーのヘッダー（3 ボタン）より狭く切り詰め
-    // られても root が中央寄せで左へずれない。溢れは右で、切り落とす。
+    // GeometryReader は中身の最小幅に縛られず host の幅を取る——エクスプローラーの上の行（絞り込みの欄と 3 つのツール）より
+    // 狭く切り詰められても root が中央寄せで左へずれない。溢れは右で、切り落とす。
     GeometryReader { _ in
       if sidebar.isOpen {
         switch shell.panel {
@@ -38,6 +41,7 @@ struct EditorSideRoot: View {
       }
     }
     .clipped()
+    .coordinateSpace(.named(Self.space))
     .environment(\.localization, localization)
     .environment(\.chromeFontResolver, fontResolver)
   }
@@ -84,124 +88,6 @@ struct EditorPanelHeader<Tools: View>: View {
   }
 }
 
-/// 左の列: エクスプローラー（ヘッダー・ルート行・ツリー）。ツリーのスクロール位置はツリーが覚え、画面を切り替えて・左の列を
-/// 閉じて・検索パネルから戻って作り直されても戻す。隠れている間に選択が替わっていれば、位置を戻す代わりに選択の行を見せる。
-struct ExplorerView: View {
-  let shell: EditorShellModel
-  let tree: FileTree
-  /// 作り直した一覧を戻す位置（作られた時点でツリーが覚えていた位置。戻し終えたら nil）。中身が溢れるまで戻さずに待ち、その間の
-  /// 位置の知らせで覚えた位置を書き換えない。
-  @State private var pendingFraction: CGFloat?
-  /// 作り直した一覧で見せる選択の行（隠れている間に選択が替わったとき）。最初のレイアウトの後に 1 度だけ中ほどへ送って
-  /// 終える——行を宛先に送るので、中身が溢れるのを待たない（収まっていれば何も動かない）。
-  @State private var pendingReveal: String?
-
-  init(shell: EditorShellModel, tree: FileTree) {
-    self.shell = shell
-    self.tree = tree
-    let selected = tree.selected
-    let reveals = selected != nil && selected != tree.scrolledSelection
-    _pendingReveal = State(initialValue: reveals ? selected : nil)
-    _pendingFraction = State(
-      initialValue: !reveals && tree.scrollFraction > 0 ? tree.scrollFraction : nil)
-  }
-  @Environment(\.localization) private var l10n
-
-  /// ツリーの中身全体の id（つまみのドラッグと位置の戻しが比の anchor で送る先。行の id と型で分ける）。
-  private enum Content: Hashable { case tree }
-
-  /// 送れる範囲（pt）。
-  private static func range(_ geometry: ScrollGeometry) -> CGFloat {
-    geometry.contentSize.height - geometry.containerSize.height
-  }
-
-  var body: some View {
-    EditorSidebarPanel {
-      header
-      rootRow
-      ScrollViewReader { proxy in
-        ScrollView(.vertical) {
-          LazyVStack(spacing: 0) {
-            ForEach(tree.rows) { row in
-              if case .input(let isDirectory, let generation) = row.kind {
-                InlineInputRow(
-                  row: row, isDirectory: isDirectory, generation: generation, tree: tree,
-                  shell: shell)
-              } else {
-                TreeRowView(row: row, tree: tree, shell: shell)
-              }
-            }
-          }
-          // 最後の行の下に行 1 つ分の空き（末尾まで送っても最後の行が下端に付かない）。つまみが測る中身に含める。
-          .padding(.bottom, Theme.Layout.editorRow)
-          .sidebarScrollContent(id: Content.tree)
-        }
-        .scrollIndicators(.never)
-        .onScrollGeometryChange(for: ScrollGeometry.self, of: \.self) { _, geometry in
-          let range = Self.range(geometry)
-          if let path = pendingReveal {
-            // 位置の戻しと同じく、レイアウトを終えてから送る。
-            pendingReveal = nil
-            Task { @MainActor in proxy.scrollTo(path, anchor: .center) }
-          }
-          if let pending = pendingFraction {
-            guard range > 0 else { return }
-            // 作り直した一覧を、覚えた位置へ送る（比の anchor はつまみのドラッグと同じ送り方）。位置の知らせはレイアウトの
-            // 最中に届き、その場で送る要求は捨てられることがあるので、レイアウトを終えてから送る。
-            pendingFraction = nil
-            Task { @MainActor in proxy.scrollTo(Content.tree, anchor: UnitPoint(x: 0, y: pending)) }
-            return
-          }
-          tree.scrollFraction = range > 0 ? min(1, max(0, geometry.contentOffset.y / range)) : 0
-          tree.scrolledSelection = tree.selected
-        }
-        .sidebarScrollbar(proxy, contentID: Content.tree)
-        // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
-        .onChange(of: tree.newEntry?.generation) { _, _ in
-          if let entry = tree.newEntry { proxy.scrollTo(FileTree.inputRowID(entry)) }
-        }
-        .onChange(of: tree.selected) { _, path in
-          if let path { proxy.scrollTo(path) }
-          tree.scrolledSelection = path
-        }
-      }
-    }
-  }
-
-  /// 右端の 3 ツール（新規ファイル／新規フォルダ／すべて折りたたむ）。
-  private var header: some View {
-    EditorPanelHeader(title: l10n.string(.editorExplorerTitle)) {
-      EditorIconButton(
-        glyph: EditorGlyphs.newFile, help: l10n.string(.editorNewFile), action: shell.createFile)
-      EditorIconButton(
-        glyph: EditorGlyphs.newFolder, help: l10n.string(.editorNewFolder),
-        action: shell.createDirectory)
-      EditorIconButton(
-        glyph: EditorGlyphs.collapseAll, help: l10n.string(.editorCollapseAll),
-        action: shell.collapseAll)
-    }
-  }
-
-  /// ルート行 20: シェブロン ＋ 根の basename（大文字）。クリックで根の開閉。
-  private var rootRow: some View {
-    HStack(spacing: 0) {
-      TreeChevron(open: tree.isRootOpen)
-      Text(tree.rootName)
-        .font(Font.theme.editorRootLabel)
-        .tracking(Theme.Typography.trackingRootLabel)
-        .foregroundStyle(Color.theme.editorText)
-        .lineLimit(1)
-        .padding(.leading, Theme.Space.hair)
-      Spacer(minLength: 0)
-    }
-    .padding(.leading, 10)
-    .padding(.trailing, Theme.Space.step)
-    .frame(height: Theme.Layout.editorRow)
-    .contentShape(Rectangle())
-    .onTapGesture { tree.isRootOpen.toggle() }
-  }
-}
-
 /// 22 角のアイコンボタン（radius 4。ホバーで地 fill .08 ＋ 文字が上がる）。
 struct EditorIconButton: View {
   let glyph: EditorGlyphs.Glyph
@@ -231,15 +117,14 @@ struct EditorIconButton: View {
   }
 }
 
-/// 折りたたみのシェブロン 16。開いていると 90° 回る。
+/// 折りたたみのシェブロン（既定 16）。開いていると 90° 回る。
 struct TreeChevron: View {
   let open: Bool
+  var size = Theme.Layout.editorChevron
 
   var body: some View {
-    EditorGlyphView(
-      glyph: EditorGlyphs.chevron, size: Theme.Layout.editorChevron, color: Color.theme.editorIcon
-    )
-    .rotationEffect(open ? .degrees(90) : .zero)
-    .frame(width: Theme.Layout.editorChevron)
+    EditorGlyphView(glyph: EditorGlyphs.chevron, size: size, color: Color.theme.editorIcon)
+      .rotationEffect(open ? .degrees(90) : .zero)
+      .frame(width: size)
   }
 }

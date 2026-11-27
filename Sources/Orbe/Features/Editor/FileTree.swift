@@ -9,24 +9,13 @@ import Foundation
 /// status はツリー自身のキャッシュで、サービスの status が非 nil のときだけ上書きする——握り直した直後の
 /// 新しいサービスは git が返るまで nil で、それを写すとバッジが毎回消えて戻る。
 /// 展開集合は根からの相対パスの集合で、祖先について閉じている（畳めば配下も外れる）。永続しない。
+///
+/// 子がフォルダ 1 つだけのフォルダの連なりは 1 行にまとめる（行の組み立ては `FileTree+Rows`）。連なりは「フォルダ → ただ 1 つの
+/// 子フォルダ」の覚え（`onlyChild`）から導く。覚えは、一覧を持つフォルダについては一覧から書き、開いていないフォルダについては
+/// 根が git の作業ツリーのときだけ裏の先読み（`FileTreeLookahead`）が書く。覚えは調べ直した結果が届くまでの仮の姿で、一覧を
+/// 新しく取ったフォルダの開いていない子フォルダは、覚えの有無に依らず調べ直す（先読みしない根では覚えを消す）。
 @MainActor @Observable
 final class FileTree: RootFilesObserver {
-  enum RowKind: Equatable {
-    case directory(isExpanded: Bool)
-    case file(badge: GitStatus.Badge?)
-    /// 新規作成の行内入力（ディレクトリならシェブロンの幅を空ける）。世代は `NewEntry.generation`。
-    case input(isDirectory: Bool, generation: Int)
-  }
-
-  struct Row: Identifiable, Equatable {
-    let id: String
-    let depth: Int
-    let name: String
-    let url: URL
-    let kind: RowKind
-    let isSelected: Bool
-  }
-
   /// 行内入力の状態。打ちかけの名前もここに持つ——view の寿命（容器が行を捨てて作り直す）に依らない。
   struct NewEntry: Equatable {
     /// 挿す先のディレクトリ（相対パス。根は空）。
@@ -40,16 +29,34 @@ final class FileTree: RootFilesObserver {
 
   /// 根（正規形）。
   let root: String
-  /// ルート行の題（根の basename を大文字）。
-  let rootName: String
-  /// 根を畳めば行内入力も終わる（入力行は根の配下にしか無い）。
-  var isRootOpen = true {
-    didSet { if !isRootOpen { newEntry = nil } }
-  }
   private(set) var expanded: Set<String> = []
   /// 相対ディレクトリ → 一覧。空文字が根。
   private(set) var entries: [String: [RootFiles.Entry]] = [:]
   private(set) var status: GitStatus?
+  /// 開いている文書（仮の文書を含む）の、根からの相対パス → 行の印（×・未保存の丸・ディスクが変わったときの丸）。面が
+  /// セッションから作って書く写し。
+  private(set) var openMarks: [String: EditorItemListRow.Mark] = [:]
+  /// フォルダ（根からの相対）→ ただ 1 つの子フォルダの名前。中身がフォルダ 1 つだけでないフォルダは持たない。
+  private(set) var onlyChild: [String: String] = [:]
+  /// エクスプローラーの中の入力のフォーカス（絞り込みの欄か、行内入力とその世代）。
+  enum ExplorerFocus: Hashable {
+    case filter
+    case input(generation: Int)
+  }
+
+  /// エクスプローラーの中の 2 つの入力のどちらがフォーカスを持つか（無ければ nil）。view が、フォーカスが変わるたびに写す
+  /// （行内入力から絞り込みの欄へ移るのは 1 回の変化として届く）。行内入力から絞り込みの欄へ移ったら、その入力を取り消す。欄に入ったら
+  /// 対象の一覧が無いか古ければ取り、欄から出て字が空なら一覧を捨てる。
+  var explorerFocus: ExplorerFocus? {
+    didSet { if explorerFocus != oldValue { explorerFocusDidChange(from: oldValue) } }
+  }
+  /// エクスプローラーが出ているか（面が見えていて、左の列が開いていて、Files の左の列がエクスプローラー）。面が書く。出し
+  /// 直したとき、絞り込み中で対象の一覧が古ければ取り直す。
+  var isExplorerShown = false {
+    didSet { if isExplorerShown, !oldValue { refreshFilterListIfStale() } }
+  }
+  /// 絞り込み（字・結果・絞り込みの間の開閉と、裏の仕事）。
+  @ObservationIgnored let filter: FileTreeFilter
   struct Selection: Equatable {
     let path: String
     let isDirectory: Bool
@@ -71,6 +78,7 @@ final class FileTree: RootFilesObserver {
   /// 行内入力が終わった（呼び手が焦点を引き取る）。
   @ObservationIgnored var onInputEnded: (() -> Void)?
   @ObservationIgnored private var files: RootFiles?
+  @ObservationIgnored private let lookahead: FileTreeLookahead
   /// 一覧のスクロール位置（送れる範囲に対する比。0 が先頭、1 が末尾）。画面を切り替えて・左の列を閉じて一覧の view が
   /// 作り直されても戻すために、ツリーが覚える。
   @ObservationIgnored var scrollFraction: CGFloat = 0
@@ -88,6 +96,9 @@ final class FileTree: RootFilesObserver {
         files.addObserver(self)
         reloadAll()
         if let status = files.status { self.status = status }
+        // 見えていなかった間の変化は、通知が届いていない。
+        filter.markStale()
+        refreshFilterListIfStale()
       } else {
         files?.removeObserver(self)
         files = nil
@@ -97,63 +108,33 @@ final class FileTree: RootFilesObserver {
 
   init(root: String) {
     self.root = root
-    rootName = (root as NSString).lastPathComponent.uppercased()
-  }
-
-  // MARK: - 行
-
-  /// 描画用の平坦化（深さ優先。閉じたディレクトリの配下は出ない）。
-  var rows: [Row] {
-    guard isRootOpen else { return [] }
-    var out: [Row] = []
-    append(directory: "", depth: 0, into: &out)
-    return out
-  }
-
-  /// 一覧は名前順（→ `RootFiles.entries`）。面ではディレクトリを先に並べる（VS Code の慣習）。
-  private static func directoriesFirst(_ list: [RootFiles.Entry]) -> [RootFiles.Entry] {
-    list.filter(\.isDirectory) + list.filter { !$0.isDirectory }
-  }
-
-  private func append(directory: String, depth: Int, into out: inout [Row]) {
-    if let newEntry, newEntry.directory == directory {
-      out.append(
-        Row(
-          id: Self.inputRowID(newEntry), depth: depth, name: "", url: url(of: directory),
-          kind: .input(isDirectory: newEntry.isDirectory, generation: newEntry.generation),
-          isSelected: false))
-    }
-    for entry in Self.directoriesFirst(entries[directory] ?? []) {
-      let path = Self.join(directory, entry.name)
-      if entry.isDirectory {
-        let isExpanded = expanded.contains(path)
-        out.append(
-          Row(
-            id: path, depth: depth, name: entry.name, url: entry.url,
-            kind: .directory(isExpanded: isExpanded), isSelected: selected == path))
-        if isExpanded { append(directory: path, depth: depth + 1, into: &out) }
-      } else {
-        out.append(
-          Row(
-            id: path, depth: depth, name: entry.name, url: entry.url,
-            kind: .file(badge: status?.badge(of: path)), isSelected: selected == path))
-      }
-    }
+    lookahead = FileTreeLookahead(root: root)
+    filter = FileTreeFilter(root: root)
   }
 
   // MARK: - 開閉・選択
 
-  func toggle(_ directory: String) {
-    selection = Selection(path: directory, isDirectory: true)
-    if expanded.contains(directory) {
-      collapse(directory)
+  /// 行 `head`（連なりの先頭のフォルダ）を開閉する。開いていなければ連なりの全部を開き（どれも一覧を取る。覚えが古くて
+  /// 連なりが途中で切れていれば、取った一覧が正になる）、開いていれば先頭から配下ごと畳む（覚えは残す）。選択は、連なりの
+  /// いちばん深いフォルダ。
+  func toggle(_ head: String) {
+    if filter.shown != nil { return filter.toggle(head) }
+    if expanded.contains(deepest(from: head)) {
+      collapse(head)
     } else {
-      expand(directory)
+      var path = head
+      expand(path)
+      while let child = onlyChild[path] {
+        path = Self.join(path, child)
+        expand(path)
+      }
     }
+    selection = Selection(path: deepest(from: head), isDirectory: true)
   }
 
-  /// 根は開いたまま、展開をすべて畳む。
+  /// 展開をすべて畳む。
   func collapseAll() {
+    if filter.shown != nil { return filter.collapseAll() }
     expanded = []
     entries = entries.filter { $0.key.isEmpty }
     newEntry = nil
@@ -169,7 +150,6 @@ final class FileTree: RootFilesObserver {
   }
 
   private func revealPath(_ path: String, isDirectory: Bool) {
-    isRootOpen = true
     for ancestor in Self.ancestors(of: path) { expand(ancestor) }
     selection = Selection(path: path, isDirectory: isDirectory)
   }
@@ -193,17 +173,24 @@ final class FileTree: RootFilesObserver {
     }
   }
 
+  /// 開いている印の写しを置き換える（変わったときだけ書く）。
+  func setOpenMarks(_ marks: [String: EditorItemListRow.Mark]) {
+    if marks != openMarks { openMarks = marks }
+  }
+
   // MARK: - 新規作成
 
-  /// 行内入力を出す。挿す先は、選択がディレクトリならそこ、ファイルならその親、無ければ根。
+  /// 行内入力を出す。挿す先は、選択がディレクトリならそこから覚えをたどったいちばん深いフォルダ、ファイルならその親、
+  /// 無ければ根。
   func beginNew(isDirectory: Bool) {
+    setFilterText("")
     let directory: String
     if let selection {
-      directory = selection.isDirectory ? selection.path : Self.parent(of: selection.path)
+      directory =
+        selection.isDirectory ? deepest(from: selection.path) : Self.parent(of: selection.path)
     } else {
       directory = ""
     }
-    isRootOpen = true
     for ancestor in Self.ancestors(of: directory) + [directory] { expand(ancestor) }
     newGeneration += 1
     newEntry = NewEntry(directory: directory, isDirectory: isDirectory, generation: newGeneration)
@@ -260,24 +247,45 @@ final class FileTree: RootFilesObserver {
 
   // MARK: - 一覧
 
+  /// 一覧を持つフォルダを全部取り直す（面が見え直した・取りこぼし）。どれも一覧を新しく取ったものとして、開いていない子
+  /// フォルダを先読みへ頼む（見えていなかった間の変化は、通知が調べ直していない）。
   private func reloadAll() {
-    reload("")
+    var lookaheads = Set<String>()
+    reload("", fresh: true, lookaheads: &lookaheads)
     for directory in expanded.sorted(by: { $0.count < $1.count }) where expanded.contains(directory)
     {
-      reload(directory)
+      reload(directory, fresh: true, lookaheads: &lookaheads)
     }
+    requestLookahead(lookaheads)
+  }
+
+  /// 一覧を取り直す（ほかの取り直しと先読みを束ねない 1 回）。
+  private func reload(_ directory: String) {
+    var lookaheads = Set<String>()
+    reload(directory, fresh: false, lookaheads: &lookaheads)
+    requestLookahead(lookaheads)
   }
 
   /// 一覧を取り直す。読めなければ空として扱い、展開中なら畳む。取り直した親に無くなった展開中の
-  /// ディレクトリは配下ごと畳む。
-  private func reload(_ directory: String) {
+  /// ディレクトリは配下ごと畳み、その覚えも消す。覚えは一覧から書き、一覧を新しく取った（それまで持っていなかった）か
+  /// `fresh` なら、開いていない子フォルダを `lookaheads` へ足す。
+  private func reload(_ directory: String, fresh: Bool, lookaheads: inout Set<String>) {
     guard let files else { return }
+    let isNew = fresh || entries[directory] == nil
     if let list = try? files.entries(of: url(of: directory)) {
       entries[directory] = list
-      let present = Set(list.filter(\.isDirectory).map { Self.join(directory, $0.name) })
+      let folders = list.filter(\.isDirectory).map { Self.join(directory, $0.name) }
+      let present = Set(folders)
       for path in expanded where Self.parent(of: path) == directory && !present.contains(path) {
         collapse(path)
       }
+      var memo = onlyChild
+      memo[directory] = list.count == 1 && list[0].isDirectory ? list[0].name : nil
+      for path in memo.keys where Self.isGone(path, under: directory, present: present) {
+        memo[path] = nil
+      }
+      if memo != onlyChild { onlyChild = memo }
+      if isNew { lookaheads.formUnion(present.subtracting(expanded)) }
     } else if directory.isEmpty {
       entries[directory] = []
     } else {
@@ -286,25 +294,68 @@ final class FileTree: RootFilesObserver {
     }
   }
 
+  // MARK: - 先読み
+
+  /// `paths`（開いていないフォルダ）の連なりを裏で調べさせる。届いた結果は、今も開いていないフォルダの分だけを覚えへ
+  /// 書く（開いたフォルダは一覧が正）。根が git の作業ツリーでなければ調べず、その覚えを消す——調べ直せない覚えを古い形の
+  /// まま残さない。git 管理下かの判定の前は何もしない（覚えはそのまま出し、判定が済んだときに扱い直す）。
+  private func requestLookahead(_ paths: Set<String>) {
+    guard let files, files.isResolved else { return }
+    guard files.repo != nil else {
+      let stale = paths.filter { onlyChild[$0] != nil && !expanded.contains($0) }
+      if !stale.isEmpty { onlyChild = onlyChild.filter { !stale.contains($0.key) } }
+      return
+    }
+    lookahead.request(paths) { [weak self] result in
+      guard let self else { return }
+      var memo = onlyChild
+      for (path, child) in result where !expanded.contains(path) { memo[path] = child }
+      if memo != onlyChild { onlyChild = memo }
+    }
+  }
+
   // MARK: - 通知
 
+  /// 変わったパスを含む、一覧を持つフォルダのうちいちばん深いものを求める。パスがその直下なら一覧を取り直し、そのパスが
+  /// 開いていない子フォルダなら、その連なりを先読みへ頼む。直下でなければ、その一覧の子のうちパスを含むフォルダの連なりを
+  /// 先読みへ頼む。
   func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
     switch change {
     case .scanAll:
       reloadAll()
     case .paths(let paths):
       var directories = Set<String>()
+      var direct = Set<String>()
+      var lookaheads = Set<String>()
       for path in paths {
         guard let relative = relativePath(ofAbsolute: path) else { continue }
-        let parent = Self.parent(of: relative)
-        if parent.isEmpty || expanded.contains(parent) { directories.insert(parent) }
+        var listed = Self.parent(of: relative)
+        while !listed.isEmpty, !expanded.contains(listed) { listed = Self.parent(of: listed) }
+        let child = Self.child(of: listed, toward: relative)
+        if child == relative {
+          directories.insert(listed)
+          direct.insert(child)
+        } else if !expanded.contains(child) {
+          lookaheads.insert(child)
+        }
       }
       // 浅い順。親の取り直しで畳まれたディレクトリは取り直さない。
       for directory in directories.sorted(by: { $0.count < $1.count })
       where directory.isEmpty || expanded.contains(directory) {
-        reload(directory)
+        reload(directory, fresh: false, lookaheads: &lookaheads)
       }
+      for child in direct where !expanded.contains(child) && isListedFolder(child) {
+        lookaheads.insert(child)
+      }
+      requestLookahead(lookaheads)
     }
+    filterSawChange()
+  }
+
+  /// git 管理下かの判定が済んだ。判定の前に先読みを頼めなかった分も含め、一覧に在る開いていないフォルダを全部扱い直す。
+  func rootFilesDidResolve(_ files: RootFiles) {
+    requestLookahead(listedFolders.subtracting(expanded))
+    filterSawChange()
   }
 
   func rootFilesStatusDidChange(_ files: RootFiles) {
@@ -313,40 +364,34 @@ final class FileTree: RootFilesObserver {
 
   func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
 
-  // MARK: - パス
+  // MARK: - 絞り込み
 
-  private func url(of relativePath: String) -> URL {
-    let rootURL = URL(fileURLWithPath: root, isDirectory: true)
-    return relativePath.isEmpty
-      ? rootURL : rootURL.appendingPathComponent(relativePath, isDirectory: true)
+  /// 絞り込みの字を置き換える（欄が書く）。空になり、欄にフォーカスも無ければ対象の一覧を捨てる。
+  func setFilterText(_ text: String) {
+    filter.setText(text, files: files)
+    if text.isEmpty, explorerFocus != .filter { filter.discardList() }
   }
 
-  private func relativePath(of url: URL) -> String? {
-    relativePath(ofAbsolute: GitWorktreeRoot.normalizedPath(url.path))
-  }
-
-  private func relativePath(ofAbsolute path: String) -> String? {
-    guard path.hasPrefix(root + "/") else { return nil }
-    return String(path.dropFirst(root.count + 1))
-  }
-
-  private static func join(_ directory: String, _ name: String) -> String {
-    directory.isEmpty ? name : directory + "/" + name
-  }
-
-  private static func parent(of path: String) -> String {
-    guard let slash = path.lastIndex(of: "/") else { return "" }
-    return String(path[..<slash])
-  }
-
-  /// 根を除く祖先（浅い順）。
-  private static func ancestors(of path: String) -> [String] {
-    var out: [String] = []
-    var current = parent(of: path)
-    while !current.isEmpty {
-      out.append(current)
-      current = parent(of: current)
+  private func explorerFocusDidChange(from old: ExplorerFocus?) {
+    if case .input(let generation) = old, explorerFocus == .filter { cancelNew(generation) }
+    if explorerFocus == .filter {
+      if filter.isStale, let files { filter.relist(files) }
+    } else if old == .filter, !filter.isActive {
+      filter.discardList()
     }
-    return out.reversed()
+  }
+
+  /// 根の下が変わった・git 管理下かの判定が済んだ。絞り込み中でエクスプローラーが出ていれば対象の一覧を取り直し、それ以外は
+  /// 「古い」の印だけを立てる。
+  private func filterSawChange() {
+    if filter.isActive, isExplorerShown, let files {
+      filter.relist(files)
+    } else {
+      filter.markStale()
+    }
+  }
+
+  private func refreshFilterListIfStale() {
+    if filter.isActive, isExplorerShown, filter.isStale, let files { filter.relist(files) }
   }
 }

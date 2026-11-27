@@ -2,19 +2,19 @@ import OrbeEditorCore
 import SwiftUI
 
 /// サイドバー: 検索パネル。上から、見出し（題・すべて折りたたむ／すべて展開・「ツリーに戻る」か「止める」。検索中はその
-/// 下端に進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 結果の列 → 件数の文（パネルの下に固定）。状態は
-/// `ProjectSearch` だけを読み、入力欄の焦点は SwiftUI の焦点を `focusedArea` へ写す（結果の列の焦点は列が自分で写す）。
+/// 下端に進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 件数の文 → 結果の列。状態は
+/// `ProjectSearch` だけを読み、入力欄の焦点は欄の first responder の出入りを `focusedArea` へ写す（結果の列の焦点は列が
+/// 自分で写す）。焦点の要求は、入力欄への分は欄が、結果の列への分は列が当てる。
 /// 部分ごとに別の view にして、読む値が変わった部分だけを組み直す（結果が届くたびに入力欄まで組み直さない）。
 struct SearchPanelView: View {
   let search: ProjectSearch
   let results: RowList<SearchResultsSource>
-  @FocusState private var fieldFocused: Bool
   @Environment(\.localization) private var l10n
 
   var body: some View {
     EditorSidebarPanel {
       SearchPanelHeader(search: search)
-      ProjectSearchField(search: search, focus: $fieldFocused)
+      ProjectSearchField(search: search)
       if let error = search.error {
         Text(message(for: error))
           .font(Font.theme.editorSearchNote)
@@ -24,20 +24,10 @@ struct SearchPanelView: View {
           .padding(.horizontal, 12)
           .padding(.bottom, Theme.Space.step)
       }
-      SearchResultsList(search: search, results: results)
       SearchSummary(search: search)
+      SearchResultsList(search: search, results: results)
     }
-    .onChange(of: fieldFocused) { _, focused in search.focusDidChange(.field, focused: focused) }
-    .onChange(of: search.focusRequest) { _, _ in applyFocusRequest() }
-    .onAppear(perform: applyFocusRequest)
     .onDisappear(perform: search.panelDidHide)
-  }
-
-  /// 入力欄への要求を当てる（結果の列への要求は列が当てる）。
-  private func applyFocusRequest() {
-    guard search.focusRequest == .field else { return }
-    fieldFocused = true
-    search.focusRequestDidApply()
   }
 
   private func message(for error: ProjectSearch.Failure) -> String {
@@ -104,65 +94,42 @@ private struct SearchPanelHeader: View {
   }
 }
 
-/// 入力欄 28: 入力（mono 12）と右端の Aa / ab / .*。焦点があると枠が accent になり角が 5 になる。
+/// 入力欄（入力欄の枠の高さ 28）: 虫眼鏡・入力（mono 12）・右の Aa / ab / .*。フォーカスがある間の枠は入力欄の枠が描く。
+/// ↵ と ⇧↵ は検索し直す。esc は見出しのボタンと同じ（キーリピートでは何もしない）。
 private struct ProjectSearchField: View {
   let search: ProjectSearch
-  var focus: FocusState<Bool>.Binding
-  @Environment(\.colorScheme) private var scheme
   @Environment(\.localization) private var l10n
 
-  private static let sunkAlpha = 0.35
-  private static let borderAlpha = 0.10
-  private static let focusBorderAlpha = 0.55
-
   var body: some View {
-    let ink = EditorInk(scheme)
-    let focused = focus.wrappedValue
-    HStack(spacing: 6) {
-      TextField(
-        "", text: Binding(get: { search.query.pattern }, set: search.setPattern),
-        prompt: Text(l10n.string(.editorSearchPlaceholder)).foregroundStyle(
-          Color.theme.editorTertiary)
-      )
-      .textFieldStyle(.plain)
-      .font(Font.theme.editorSearchField)
-      .foregroundStyle(Color.theme.textPrimary)
-      .tint(Color.theme.accentPrimary)
-      .lineLimit(1)
-      .focused(focus)
-      .onSubmit { search.search() }
-      .onKeyPress(.escape, phases: [.down, .repeat]) { press in
-        search.dismiss(isRepeat: press.phase == .repeat)
-        return .handled
+    EditorFieldFrame(
+      height: Theme.Layout.editorSearchField, isFocused: search.focusedArea == .field
+    ) {
+      EditorTextField(
+        text: search.query.pattern, placeholder: l10n.string(.editorSearchPlaceholder),
+        font: Theme.Typography.editorSearchField, placeholderColor: Theme.Color.editorTertiary,
+        wantsFocus: search.focusRequest == .field, requestDidApply: search.focusRequestDidApply,
+        onTextChange: search.setPattern,
+        onFocusChange: { search.focusDidChange(.field, focused: $0) },
+        onReturn: { _ in search.search() },
+        onEscape: { search.dismiss(isRepeat: $0) })
+    } accessory: {
+      HStack(spacing: Theme.Layout.editorFieldGap) {
+        SearchOption(
+          label: "Aa", underline: false, isOn: search.query.matchCase,
+          help: l10n.string(.editorSearchMatchCase)
+        ) { search.toggle(.matchCase) }
+        SearchOption(
+          label: "ab", underline: true, isOn: search.query.wholeWord,
+          help: l10n.string(.editorSearchWholeWord)
+        ) { search.toggle(.wholeWord) }
+        SearchOption(
+          label: ".*", underline: false, isOn: search.query.isRegex,
+          help: l10n.string(.editorSearchRegex)
+        ) { search.toggle(.regex) }
       }
-      SearchOption(
-        label: "Aa", underline: false, isOn: search.query.matchCase,
-        help: l10n.string(.editorSearchMatchCase)
-      ) { search.toggle(.matchCase) }
-      SearchOption(
-        label: "ab", underline: true, isOn: search.query.wholeWord,
-        help: l10n.string(.editorSearchWholeWord)
-      ) { search.toggle(.wholeWord) }
-      SearchOption(
-        label: ".*", underline: false, isOn: search.query.isRegex,
-        help: l10n.string(.editorSearchRegex)
-      ) { search.toggle(.regex) }
     }
     .padding(.horizontal, Theme.Space.step)
-    .frame(height: Theme.Layout.editorSearchField)
-    .background(
-      RoundedRectangle(cornerRadius: focused ? 5 : Theme.Radius.xs).fill(ink.sunk(Self.sunkAlpha))
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: focused ? 5 : Theme.Radius.xs)
-        .strokeBorder(
-          focused
-            ? Color.theme.accentPrimary.opacity(Self.focusBorderAlpha)
-            : ink.hairline(Self.borderAlpha),
-          lineWidth: Theme.Stroke.hairline)
-    )
-    .padding(.horizontal, 12)
-    .padding(.bottom, 10)
+    .padding(.bottom, Theme.Layout.editorSearchFieldBottom)
   }
 }
 
@@ -207,7 +174,7 @@ private struct SearchOption: View {
   }
 }
 
-/// パネルの下に固定する件数の文（11pt tertiary、padding 10 12）。打ち切り・0 件もここに出す。
+/// 入力欄と結果の列の間の件数の文（11pt tertiary、上 4・左右 12・下 8）。打ち切り・0 件もここに出す。
 private struct SearchSummary: View {
   let search: ProjectSearch
   @Environment(\.localization) private var l10n
@@ -224,8 +191,9 @@ private struct SearchSummary: View {
       .font(Font.theme.editorSearchNote)
       .foregroundStyle(Color.theme.editorTertiary)
       .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.top, Theme.Layout.editorSearchSummaryTop)
       .padding(.horizontal, 12)
-      .padding(.vertical, 10)
+      .padding(.bottom, Theme.Space.step)
     }
   }
 

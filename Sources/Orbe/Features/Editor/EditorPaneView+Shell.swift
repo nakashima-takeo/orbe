@@ -8,6 +8,8 @@ extension EditorPaneView {
     shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
     shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
     shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
+    shell.closeDocument = { [weak self] url, frame in self?.closeFromTree(url, markFrame: frame) }
+    shell.focusBody = { [weak self] in self?.focusEditor() }
     shell.selectScreen = { [weak self] screen in self?.switchScreen(screen) }
     shell.toggleSidebar = { [weak self] in self?.toggleSidebar() }
     shell.inlineInputLostFocus = { [weak self] generation in
@@ -165,6 +167,21 @@ extension EditorPaneView {
     }
   }
 
+  /// ツリーの開いている行の × で文書 `url` を閉じる。押した × の枠（左の列の host の座標）に押し続けの守り
+  /// （`RowListPressGuard`。左の列の一覧の部品の押下と同じ守り）を張る——ポインタがその枠の中に居る間、枠の中の押下は、その
+  /// 文書がまだ開いていて × が在るときだけ × へ通す。閉じた後は行が残って × だけが消えるので、続けた押下（ダブルクリックの
+  /// 2 回目・連打）が行に落ちて、閉じた文書を開き直したり普通の文書にしたり、送られて来た別の行を開いたりしない。
+  func closeFromTree(_ url: URL, markFrame: CGRect) {
+    treeMarkPressGuard?.end()
+    treeMarkPressGuard = nil
+    if let window, let path = tree.relativePath(of: url) {
+      treeMarkPressGuard = RowListPressGuard(
+        window: window, frame: sideHost.convert(markFrame, to: nil)
+      ) { [weak self] _ in self?.tree.openMarks[path] != nil }
+    }
+    requestClose(url)
+  }
+
   /// 行内入力を出す前に pane 自身を first responder にする——入力欄は焦点を面が持っている（窓か面自身）ときだけ取る
   /// （`inlineInputMayTakeFocus`）。続けて出したときは前の入力欄がここで焦点を手放し、新しい行が「面が持っている」と
   /// 見て取る。
@@ -173,23 +190,25 @@ extension EditorPaneView {
     tree.beginNew(isDirectory: isDirectory)
   }
 
-  /// 入力欄が焦点を失った。別の view（端末・テキスト面・面自身）へ移ったなら取り消し＝入力の終わり。窓へ
-  /// 落ちたなら人の操作ではない（容器が行を捨てた）ので、入力は生かしたまま焦点を面が預かる——行が戻れば
-  /// 入力欄が取り直し、預かっている間に面が焦点を外へ明け渡せば `resignFirstResponder` から同じ判定を通る。
+  /// 入力欄が焦点を失った（エクスプローラーの中の入力のどれにも焦点が無くなった）。別の view（端末・テキスト面・面自身）へ
+  /// 移ったなら取り消し＝入力の終わり。窓へ落ちたなら人の操作ではない（容器が行を捨てた）ので、入力は生かしたまま焦点を面が
+  /// 預かる——行が戻れば入力欄が取り直し、預かっている間に面が焦点を外へ明け渡せば `resignFirstResponder` から同じ判定を通る。
+  /// 判定は、エクスプローラーの入力のフォーカスの値で決める（入力欄が取り直していれば取り消さない）。
   func inlineInputLostFocus(generation: Int) {
     guard let window else { return }
-    let responder = window.firstResponder
-    if responder === window {
+    if window.firstResponder === window {
       window.makeFirstResponder(self)
       return
     }
-    guard (responder as? NSView)?.isDescendant(of: sideHost) != true else { return }
+    guard tree.explorerFocus != .input(generation: generation) else { return }
     tree.cancelNew(generation)
   }
 
-  /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・作成先を畳む・
+  /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・作成先を畳む・
   /// 左の列を閉じる・cd）。
   func inlineInputDidEnd() {
+    // 入力の途中で絞り込みの欄を押して終わったなら、焦点は欄に残す。
+    guard tree.explorerFocus != .filter else { return }
     reclaimSidebarFocus()
   }
 

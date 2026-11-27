@@ -678,6 +678,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorBarHideSidebar
   case editorBarShowSidebar
   case editorBarShowTerminal
+  case editorFindPlaceholder
   case editorBarOpenFiles
   case editorBarChangedFiles
   case editorItemUnsaved
@@ -700,11 +701,15 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorDockCardClose
 
   // MARK: - Editor 面（骨: エクスプローラー）
-  case editorExplorerTitle
   case editorNewFile
   case editorNewFolder
   case editorCollapseAll
   case editorExpandAll
+  case editorFilterPlaceholder
+  case editorFilterNoMatches
+  case editorFilterTooManyMatches
+  case editorFilterTooManyFiles
+  case editorFilterListFailed
 
   // MARK: - Editor 面（プロジェクト検索）
   case editorSearchTitle
