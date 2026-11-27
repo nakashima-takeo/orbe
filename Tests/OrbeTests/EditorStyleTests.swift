@@ -87,20 +87,21 @@ final class EditorStyleTests: OrbeTestCase {
 
   /// 打ち切った行の末尾の印の略記——丸めて次の単位に届けば次の単位で出す（「1,000K」「10,000万」にしない）。
   func testOmittedLabelAbbreviatesAtTheUnitBoundaries() {
-    let en = EditorStyle.OmittedLabel(language: .en, locale: .current)
-    let ja = EditorStyle.OmittedLabel(language: .ja, locale: .current)
+    let en = EditorStyle.OmittedLabel(language: .en, locale: Locale(identifier: "en_US"))
+    let ja = EditorStyle.OmittedLabel(language: .ja, locale: Locale(identifier: "ja_JP"))
     XCTAssertEqual(en(999), "999 more")
     XCTAssertEqual(en(999_949), "999.9K more")
     XCTAssertEqual(en(999_950), "1M more")
     XCTAssertEqual(en(999_999), "1M more")
     XCTAssertEqual(en(1_000_000), "1M more")
-    XCTAssertEqual(ja(9_999), "ほか \(9_999.formatted(.number.grouping(.automatic)))字")
+    XCTAssertEqual(ja(9_999), "ほか 9,999字")
     XCTAssertEqual(ja(10_000), "ほか 1万字")
     XCTAssertEqual(ja(12_345), "ほか 1.2万字")
     XCTAssertEqual(ja(99_999_999), "ほか 1億字")
   }
 
-  /// 打ち切った行の末尾の印の数は、地域の数の書式（Foundation）と同じ字で出る——数字・桁区切りの字と位置・小数点。
+  /// 打ち切った行の末尾の印の数は、地域の数の書式（Foundation）と同じ字で出る——数字・桁区切りの字と位置・小数点。位取りで
+  /// 書かない数字体系の地域（漢数字）と、桁区切りを使わない地域でも。
   func testOmittedLabelWritesNumbersAsTheRegionsNumberFormat() {
     func reference(_ count: Int, _ language: Language, _ locale: Locale) -> String {
       let ladder: [(unit: Double, suffix: String)] =
@@ -126,7 +127,9 @@ final class EditorStyleTests: OrbeTestCase {
       999_950, 1_000_000, 1_234_567, 99_999_999, 100_000_000, 123_456_789, 1_000_000_000,
       12_345_678_901,
     ]
-    for identifier in ["en_US", "ja_JP", "de_DE", "fr_FR", "es_ES", "en_IN", "ar_EG"] {
+    for identifier in [
+      "en_US", "ja_JP", "de_DE", "fr_FR", "es_ES", "ar_EG", "ja_JP@numbers=jpan", "en_US_POSIX",
+    ] {
       let locale = Locale(identifier: identifier)
       for language in Language.allCases {
         let label = EditorStyle.OmittedLabel(language: language, locale: locale)
