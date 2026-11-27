@@ -77,9 +77,14 @@ extension BrowserStore {
       let index = tabs.firstIndex(where: { $0.id == tabId })
     else { return .failed }
     let instant = BrowserPersistence.storedInstant(now)
-    var updated = tabs[index]
+    let existing = tabs[index]
+    var updated = existing
     updated.url = url
-    if let title { updated.title = title }
+    if let title, !title.isEmpty {
+      updated.title = title
+    } else if existing.url != url {
+      updated.title = ""
+    }
     updated.lastActiveAt = instant
     return commit { db, draft in
       try db?.updateTabNavigation(

@@ -159,17 +159,12 @@ extension BrowserTabRuntime: WKNavigationDelegate, WKUIDelegate {
       applyURLState(url, isSecure: Self.isSecure(url, in: webView))
       if !wasLocalHTML, BrowserURLInput.isValidHTTPNavigationURL(url) {
         let liveTitle = (webView.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let nextTitle: String?
         if url != previousCommittedURL {
           title = liveTitle
-          nextTitle = liveTitle
         } else if !liveTitle.isEmpty {
           title = liveTitle
-          nextTitle = liveTitle
-        } else {
-          nextTitle = nil
         }
-        onCommittedNavigation?(url, nextTitle)
+        onCommittedNavigation?(url, liveTitle.isEmpty ? nil : liveTitle)
       }
     } else {
       committedPage = nil

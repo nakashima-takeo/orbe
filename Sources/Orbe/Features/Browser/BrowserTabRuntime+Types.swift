@@ -224,7 +224,11 @@ extension BrowserTabRuntime {
           if !committed.isLocalHTML {
             lastRequestedURL = liveURL
             if urlChanged, BrowserURLInput.isValidHTTPNavigationURL(liveURL) {
-              onCommittedNavigation?(liveURL, nil)
+              let liveTitle = (webView.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+              if !liveTitle.isEmpty {
+                title = liveTitle
+              }
+              onCommittedNavigation?(liveURL, liveTitle.isEmpty ? nil : liveTitle)
             }
           }
           applyURLState(liveURL, isSecure: Self.isSecure(liveURL, in: webView))
