@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・3 層ステージと workspace / 連 / タブ / 面 / surface の構造・content の照合・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-11-26
+updated: 2026-11-27
 ---
 
 # レイアウト
@@ -54,12 +54,12 @@ mount の単位は連の器と、その中の起きた（materialize 済みの�
 
 chrome キーは「どの面が所有するか」（window / 端末 / エディター / 両面）と、window コマンドは「タブが無くても効くか」の網羅分類を持つ。default 節なしの switch なので、将来コマンドを追加するとこの分類はコンパイルで強制される。
 
-- **タブ不要のコマンド**（ブラウザ開閉 ⌘B・新タブ・閉じたエージェント パレット・新規 workspace・workspace 切替・デフォルトエージェント起動・各パレット表示・設定・ヘルプ）は window レベルが面より先に配信するため、面が 1 つも無い 0 タブやボード上でも効く（overlay 表示中・タブ改名中は不活性。ブラウザ URL 欄の編集中は ⌘B だけを編集破棄＋閉鎖として通し、他は不活性。面があるときも同じハンドラへ集約されるので挙動差はない）。
-- **タブ依存のコマンド**（タブ切替・リネーム・⌘W・⌘E・⌘⇧F）は焦点の面（端末 surface・エディター pane・ブラウザ層）起点で届く。端末・エディターでは同じに効き、0 タブでは受け手が無く no-op。ブラウザ焦点中は安全遷移系（⌘E・⌘⇧F・タブ切替・⌘⇧E）のみ上位へ転送し、⌘R はページ再読込、⌘W・端末専用・エディター専用・⌘F は背後誤爆を防ぐため無動作で消費する（URL 編集中は遷移系・再読込も抑止 → [browser/core](../browser/core.md)）。ボードの面も、焦点が自分の中にあるときだけ同じ window コマンドを受け（タブ切替は巡回し、選んでいるタブが無いので他は no-op）、端末・エディター・両面のキーは何も起こさず飲む（→ [board](board.md)）。
+- **タブ不要のコマンド**（ブラウザ開閉 ⌘B・新タブ・閉じたエージェント パレット・新規 workspace・workspace 切替・デフォルトエージェント起動・各パレット表示・設定・ヘルプ）は window レベルが面より先に配信するため、面が 1 つも無い 0 タブやボード上でも効く（overlay 表示中・タブ改名中は不活性。ブラウザが開いて焦点がブラウザ層内にある間は、window レベルで横取りせずブラウザ層へ単一降下させて一括裁定する → [browser/chrome](../browser/chrome.md)。面があるときも同じハンドラへ集約されるので挙動差はない）。
+- **タブ依存のコマンド**（タブ切替・リネーム・⌘W・⌘E・⌘⇧F）は焦点の面（端末 surface・エディター pane・ブラウザ層）起点で届く。端末・エディターでは同じに効き、0 タブでは受け手が無く no-op。ブラウザ焦点中は網羅分類で一括裁定し、ブラウザ操作 5 キー（`⌘T` 新タブ・`⌘W` `TODAY` タブ閉鎖・`⌘R` ページ再読込・`⌘⇧T` 閉じたタブ復元・`⌘S` サイドバー開閉）と `⌘B` / `Esc` をブラウザ層が直接処理、安全な下層遷移とパレット類は上位へ転送、端末・エディター専用キーと `⌘F` は背後誤爆を防ぐため無動作で消費する（URL 入力中・ポップオーバー表示中・IME 変換中の保護規則は [browser/chrome](../browser/chrome.md)）。ボードの面も、焦点が自分の中にあるときだけ同じ window コマンドを受け（タブ切替は巡回し、選んでいるタブが無いので他は no-op）、端末・エディター・両面のキーは何も起こさず飲む（→ [board](board.md)）。
 - **端末のキー**（フォント ⌘+/-/0）は端末面だけが扱う。エディター・ブラウザ焦点中は消費して何も起こさず、端末へも届かない。
-- **エディターのキー**（⌘S 保存・⌘⇧B 左の列の開閉・⌘P 上のバーの今の項目の一覧の開閉）はエディター面だけが扱う。端末焦点中は Orbe が束縛せず端末へ届く。
+- **エディターのキー**（⌘S 保存・⌘⇧B 左の列の開閉・⌘P 上のバーの今の項目の一覧の開閉）はエディター面だけが扱う（ただしブラウザ焦点中の `⌘S` はサイドバー開閉としてブラウザ層が扱う）。端末焦点中は Orbe が束縛せず端末へ届く。
 - **両面のキー**（⌘F・⌘↑↓）は焦点の面がそれぞれの意味で扱う——⌘F は端末がスクロールバック検索、エディターがファイル内検索（→ [editor/code](../editor/code.md)。本体が diff のときと、本体が空のときは何も起きず、端末にも届かない）。⌘↑↓ は端末がスクロールバックの先頭／末尾、エディターが文書の先頭／末尾、ブラウザではページまたは入力欄の既定動作へ通す。
-- エディター面ではその他の通常キーは、本体に面があればテキスト面へ届き、面の無い本体（空・使えないときの表示・diff の理由の一文）では面が飲む（→ [editor/code](../editor/code.md)・[editor/diff](../editor/diff.md)）。ブラウザの初期空画面も通常打鍵を飲む。
+- エディター面ではその他の通常キーは、本体に面があればテキスト面へ届き、面の無い本体（空・使えないときの表示・diff の理由の一文）では面が飲む（→ [editor/code](../editor/code.md)・[editor/diff](../editor/diff.md)）。ブラウザの新しいタブ画面の背景も通常打鍵を飲む。
 
 ## フォーカス
 
@@ -67,7 +67,7 @@ chrome キーは「どの面が所有するか」（window / 端末 / エディ�
 
 ## ショートカット
 
-- Cmd+B 内蔵ブラウザを開く・閉じる（→ [browser/core](../browser/core.md)）/ Cmd+E エディターを開く・閉じる（→ [editor/faces](../editor/faces.md)）/ Cmd+S エディターの文書を保存（→ [editor/code](../editor/code.md)）/ Cmd+Shift+B エディターの左の列を開く・閉じる（→ [editor/shell](../editor/shell.md)）/ Cmd+T 新タブ（[worktree パレット](../palette/worktree.md)を開く。タブ行の `+` も同じ）/ Cmd+Shift+T 閉じたエージェント パレット（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替（ボードを持つ workspace ではボードも含めて巡回 → [board](board.md)）/ Cmd+W タブを閉じる（連の最後のタブで、エディターに未保存の文書があれば確認 → [editor/shell](../editor/shell.md)。アクティブ workspace の最後のタブを閉じても、ボードを持てばボード、持たなければ 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+Shift+X タスク画面（→ [tasks](../palette/tasks.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F 検索（端末はスクロールバック → [search](../terminal/search.md)、エディターはファイル内 → [editor/code](../editor/code.md)）/ Cmd+R タブリネーム（ブラウザ焦点中はページ再読込 → [chrome](chrome.md)・[browser/core](../browser/core.md)）/ Cmd+↑↓ 先頭/末尾ジャンプ（端末はスクロールバック → [terminal/core](../terminal/core.md)、エディターは文書 → [editor/code](../editor/code.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
+- Cmd+B 内蔵ブラウザを開く・閉じる（→ [browser/core](../browser/core.md)）/ Cmd+E エディターを開く・閉じる（→ [editor/faces](../editor/faces.md)）/ Cmd+S エディターの文書を保存（→ [editor/code](../editor/code.md)。ブラウザ焦点中はサイドバー開閉 → [browser/chrome](../browser/chrome.md)）/ Cmd+Shift+B エディターの左の列を開く・閉じる（→ [editor/shell](../editor/shell.md)）/ Cmd+T 新タブ（[worktree パレット](../palette/worktree.md)を開く。タブ行の `+` も同じ。ブラウザ焦点中は新しいタブを作成 → [browser/chrome](../browser/chrome.md)）/ Cmd+Shift+T 閉じたエージェント パレット（後述。ブラウザ焦点中は閉じたタブを復元 → [browser/chrome](../browser/chrome.md)）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替（ボードを持つ workspace ではボードも含めて巡回 → [board](board.md)）/ Cmd+W タブを閉じる（連の最後のタブで、エディターに未保存の文書があれば確認 → [editor/shell](../editor/shell.md)。アクティブ workspace の最後のタブを閉じても、ボードを持てばボード、持たなければ 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)。ブラウザ焦点中は `TODAY` タブのみ閉鎖 → [browser/chrome](../browser/chrome.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+Shift+X タスク画面（→ [tasks](../palette/tasks.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F 検索（端末はスクロールバック → [search](../terminal/search.md)、エディターはファイル内 → [editor/code](../editor/code.md)）/ Cmd+R タブリネーム（ブラウザ焦点中はページ再読込 → [chrome](chrome.md)・[browser/chrome](../browser/chrome.md)）/ Cmd+↑↓ 先頭/末尾ジャンプ（端末はスクロールバック → [terminal/core](../terminal/core.md)、エディターは文書 → [editor/code](../editor/code.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
 - フォント動的ズーム Cmd +/-/0（ghostty binding action）。
 
 **Cmd+Shift+T は「閉じたエージェント」パレットを開く**（→ [closed-agents](../palette/closed-agents.md)）。この workspace で閉じたまま戻っていないエージェントセッションを[寿命ログ](../platform/session-log.md)から一覧し、Enter で 1 件を休眠チケットとして戻して起こす。閉じ方（人のジェスチャ・プロセス終了・制御 API・エージェント自身の終了）を問わず、アプリの再起動をまたいで戻せる。素のシェルタブは対象外——戻してもプロセスもスクロールバックも戻らず、resume を持つ CLI だけが中身ごと戻るため。戻るのは cwd と同一性だけで、明示タイトルは付かず、位置は新規タブと同じ規則——同じ worktree の連が残っていればその右端、無ければ末尾（→ [persistence](../platform/persistence.md)・[chrome](chrome.md) の連）。0 タブの workspace でも開く。

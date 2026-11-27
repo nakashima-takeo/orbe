@@ -1,12 +1,12 @@
 ---
 title: Orbe デザインシステム
 description: 外観の思想・契約を記す自由記述ドキュメント。値の正は DesignSystem/ の Swift、思想・契約の正は本書
-updated: 2026-11-26
+updated: 2026-11-27
 ---
 
 # Orbe デザインシステム
 
-> ステータス: v0.18.0 · 2026-11-26
+> ステータス: v0.19.0 · 2026-11-27
 > 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）を dark / light 別に持つ表は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
 > エディター面のトークン（`editor.*` / `diff.*` / `syntax.*` / `type.editor*` / `layout.editor*` / `opacity.editor*` / `stroke.editor*` / `editorSlider*` `editorScrollbar*`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。ただし PR のパネルと PR のコメントの色・字・寸法（§5 の PR panel・PR comments が使うものと、§3 の type の `editorPr…` の行）は `Sources/Orbe/DesignSystem/DesignTokens+PullRequest.swift` が所有。
@@ -114,13 +114,17 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `syntax.comment` | 構文: コメント | `#7a7387` | `#8d87a0` |
 | `syntax.variable` | 構文: 変数・引数・プロパティ | `#9cdcfe` | `#2a7bbd` |
 | `syntax.punctuation` | 構文: 記号・演算子・区切り | `#d4d4d4` | `#4a4658` |
-| `browser.barBorder` | ブラウザツールバー下端の 1px 線（`borderInk`） | `rgba(199,185,235,.08)` | `rgba(110,90,170,.12)` |
+| `browser.barBorder` | ブラウザツールバー下端・サイドバー右端・区切り線の 1px 線（`borderInk`） | `rgba(199,185,235,.08)` | `rgba(110,90,170,.12)` |
 | `browser.sheetBorderFocus` | 右シート左端の 1px 境界線（フォーカス / ホバー時） | `rgba(199,185,235,.18)` | `rgba(110,90,170,.22)` |
 | `browser.sheetBorderSoft` | 右シート左端の 1px 境界線（非フォーカス時） | `rgba(199,185,235,.12)` | `rgba(110,90,170,.14)` |
 | `browser.leftVeil` | 右シート＋ブラウザ焦点＋非 Peek 時の左層ベール（`sunkInk`） | `rgba(10,8,14,.22)` | `rgba(58,49,81,.06)` |
-| `browser.shadowTint` | 右シート左落ち影の基色（フォーカス dark .62 offset `-28,0` r32 / light .22 offset `-22,0` r27、非フォーカス dark .34 offset `-14,0` r18 / light .12 offset `-10,0` r14） | `#000000` | `#463278` |
+| `browser.shadowTint` | 右シート左落ち影（フォーカス dark .62 offset `-28,0` r32 / light .22 offset `-22,0` r27、非フォーカス dark .34 offset `-14,0` r18 / light .12 offset `-10,0` r14）および狭幅オーバーレイサイドバー右落ち影（dark .45 offset `14,0` r20 / light .18 offset `10,0` r16）の基色 | `#000000` | `#463278` |
 | `browser.peekRail` | 右シート Peek 時の右端 2pt ライン（`accent.primary` .65） | `rgba(144,104,240,.65)` | `rgba(109,67,216,.65)` |
 | `browser.resizeLine` | 左端ドラッグハンドルの 2pt 強調線（`accent.primary` .85） | `rgba(144,104,240,.85)` | `rgba(109,67,216,.85)` |
+| `browser.sidebarBg` | ブラウザサイドバーの不透明地（100% 不透明、`ChromeTranslucency` 非適用） | `#14111b` | `#f3effa` |
+| `browser.sidebarScrim` | 狭幅オーバーレイサイドバー背面の暗幕 | `rgba(10,8,14,.36)` | `rgba(58,49,81,.14)` |
+| `browser.localBadge` / `browser.localBadgeInk` | ローカルスペースのティール角丸バッジ地と文字色 | `#7fd0c3` / `#14111b` | `#178a76` / `#fcfbfe` |
+| `browser.profile.{green,blue,amber,purple,pink,teal}` | ブラウザプロファイル識別色 6 色 | `#82d894` / `#85adff` / `#e0a97c` / `#b18aff` / `#e06c75` / `#7fd0c3` | `#279a4d` / `#2563c9` / `#bf6a2e` / `#6d43d8` / `#c8323e` / `#178a76` |
 
 **意図的な同値収束（事故ではない）**: Orbe の配色は色階層が少なく、複数の semantic 名が同一値へ収束する。SSOT では別名で表現している。
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
@@ -218,6 +222,19 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `type.browserURL` | 12 / regular / mono | ブラウザ URL 欄の表示・入力 |
 | `type.browserPeekPill` | 11 / regular / mono | 全面ブラウザ Peek ピルの文言 |
 | `type.browserSnapBadge` | 11 / regular / mono | ブラウザ幅ドラッグ中のスナップバッジ |
+| `type.browserSidebarSpaceTitle` | 13 / semibold / sans | サイドバーヘッダのスペース名 |
+| `type.browserSidebarMeta` | 10 / regular / mono | サイドバーのローカルタグ・セクション見出し・整理ボタン |
+| `type.browserSidebarProfilePill` | 10.5 / regular / mono | プロファイルピル・ポップオーバー補足・新タブ相対時刻 |
+| `type.browserSidebarTab` | 12.5 / regular / sans | サイドバータブ行・ポップオーバー項目・新タブ最近閉じたタブ行 |
+| `type.browserSidebarAction` | 12 / regular / sans | サイドバー `+ 新しいタブ` 行・ポップオーバー副ボタン |
+| `type.browserPopoverTitle` | 12 / semibold / sans | ポップオーバー見出し・フォーム保存ボタン |
+| `type.browserPopoverSection` | 9.5 / regular / mono | ポップオーバー小セクション見出し |
+| `type.browserSidebarFavLabel` | 9.5 / regular / sans | Favorites タイル下の短いラベル |
+| `type.browserSidebarChip` / `browserSidebarFavChip` | 9.5・10.5 / bold / sans | モノグラムチップ（17×17 行用 / 20×20 Favorites・24×24 新タブ用） |
+| `type.browserLocalBadge` | 8.5 / bold / mono | ローカルスペース角丸バッジの文字 |
+| `type.browserSwitcherLocal` | 11.5 / medium / mono | 下端スペース切替バーのローカルスペース名 |
+| `type.browserNewTabInput` | 13.5 / regular / mono | 新タブ中央 URL 入力欄 |
+| `type.browserNewTabTile` | 11 / regular / sans | 新タブクイックアクセスタイルラベル |
 
 **tracking / line-height スカラ**（NSFont では表せず、使用側で `.tracking()` / lineSpacing 換算）:
 `tracking.label` 1（大文字セクション見出し）／ `tracking.status` 0.3（ステータスストリップ）／ `tracking.key` 1（⌘H バッジ・キーバッジ・チップのキー表記）／ `tracking.panelTitle` 0.5（左の列のパネルヘッダーの題）／ `tracking.rootLabel` 0.8（エクスプローラーのルート行）／ `line.body` 1.6（本文）／ `line.terminal` 1.55（ターミナル本文）／ `line.editorCode` 18pt（コード本体。倍率ではなく固定値）。倍率の行高は CSS の line-height と同じく、1 行目の上と最終行の下にも差の半分ずつを置く。
@@ -315,7 +332,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **Diff file header**（差分のファイルの見出し。見本の `.fh`。→ [editor/diff](../spec/editor/diff.md#見出し)）: 本体が diff の間だけ本体の上端に置く帯。高さ `layout.editorDiffHeader` 32（下端の 1px hairline `opacity.editorDiffHeaderLine` .07 を含む）・地 `surfaceInk` `opacity.editorDiffHeaderGround` .035（Changes・PR とも同じ）・部品の間 `layout.editorDiffHeaderGap` 8・左の余白 `layout.editorDiffHeaderLeading` 12（PR は `editorDiffHeaderLeadingPullRequest` 18）・右の余白 `layout.editorDiffHeaderTrailing` 12。左から、（PR だけ）確認済みのチェック（PR panel の行のチェックと同じ姿・14 角）・パス（`type.editorDiffHeaderPath`。フォルダ `text.muted`・頭から省く、ファイル名 `type.editorDiffHeaderName` `text.primary`・省かない）・印の丸（`layout.editorDiffHeaderDot` 7 の円。未保存は `text.primary`、ディスクが変わったは `editor.caution`。ファイル名との間 6）・状態の字（`type.editorDiffHeaderBadge`・幅 `layout.editorDiffHeaderBadge` 12・中央。色は Explorer の git バッジと同じ）・区切り線（1×`layout.editorDiffHeaderDivider` 16・hairline `opacity.editorDiffHeaderDivider` .15・左右 `layout.editorDiffHeaderDividerInset` 6）・（PR だけ）Text button「確認済みにする」「確認済みを外す」＋ Key cap「v」・Text button「ファイルを開く」（印 `openFile`。押せないときは Text button の押せない姿）。帯の下に影（見本の `0 6px 14px -8px rgba(0,0,0,.55)`）を `layout.editorDiffHeaderShadow` 14 の縦の階調で落とし、diff の面の上端に重ねる（影の上の押下は面へ通す）。押してもフォーカスを取らない。
 - **Diff body**（→ [editor/diff](../spec/editor/diff.md)）: 本体はコードビューと同じ字・行高 18・上 4・地なし（chrome の veil を透かす）。本体の幅が `layout.editorDiffSideWidth` 1000 以上なら並列、未満ならインライン（保存しない）。行番号の字はコードビューと同じ `editor.lineNumber`。番号の列 1 つは最小 44（`layout.editorDiffNumber`。収まらなければ広がる）で、番号の右の余白はインライン 6・並列 8。インラインは 旧番号｜新番号｜記号の列 18（＋ `diff.added` / − `diff.removed`）｜本文、並列は各側 番号 1 列｜本文で、2 面の境は 1px `borderInk` .07（light ×1.4）。行の地は追加 `diff.added`・削除 `diff.removed` の α `opacity.editorDiffRow`（.12）、詰め物は `surfaceInk` .02（light ×0.6）で、行番号の列の左端から面の右端（縦スクロールバーの列の下）まで。**字は全部の行を普通のファイルと同じ構文色**で描く（§3）。空白の点も普通のファイルと同じ。ミニマップ・git の印の列・スクロールバーの git の印は持たない。表示できないときの一文は `type.editorLead`・`text.muted`・中央。
 - **Board（自動化のウィジェット）**: 画面の構成と契約は [chrome/board](../spec/chrome/board.md) が持ち、寸法・トークンの値はボードのビュー（`Sources/Orbe/Features/Board/`）が持つ。
-- **Browser layer（内蔵ブラウザ Z=2。→ [browser/core](../spec/browser/core.md)）**: ツールバー地と本体地は常に不透明度 100% の `bg.base`（`ChromeTranslucency` 非適用）。ツールバーは高さ `layout.browserBar` 36（下端 1px `browser.barBorder` を含む）・左 8 / 右 10・gap 4 で、戻る・進む・再読込/停止（各 26 角 radius 7・無効時 `opacity.browserButtonDisabled` .35・ホバー `surfaceInk` .07・ON `surfaceInk` .09）・URL 欄（高さ 26・幅可変で狭幅時は 0 まで縮小し主要ボタン 4 つを切らない・radius 7・左右 4・地 `surfaceInk` .055 / ホバー・編集 .08・枠 `surfaceInk` .05 / 編集 `accent.primary` .65・等幅 12pt でホスト `text.primary` / パス `text.muted`・HTTPS 鍵 12・底面 2pt 進捗バー `accent.primary`）・全面 Peek ピル（`⌥` Key cap 地 `accent.primary` / 印 `on.accent`＋`type.browserPeekPill` `text.primary`。URL 欄へ `layout.browserURLPeekMinWidth` 120 を確保できない狭幅では省略）・全面⇄右シート切替ボタン（右シート時 ON）。右シートの左端外側に 1px 線（`browser.sheetBorderFocus` / `Soft`）と左落ち影（`browser.shadowTint`）、左端内側に 9pt ドラッグ当たり（ホバー・ドラッグ中のみ左端 2pt `browser.resizeLine`）。非フォーカス時は左落ち影を浅くし、ツールバー子要素のみ `opacity.browserBarInactive` .68 へ落ち着かせる（シート上ホバーまたはフォーカスで 1.0・通常影へ復帰）。右シートかつ真のブラウザ焦点かつ非 Peek 時のみ、左層へ `browser.leftVeil` を掛ける。右シート Peek 時はシート全体を隠し右端 2pt `browser.peekRail` のみ残す。全面 Peek 時は 36pt バーを 100% 不透明のまま残し、バーより下を透明化する。
+- **Browser layer（内蔵ブラウザ Z=2。→ [browser/core](../spec/browser/core.md)・[browser/chrome](../spec/browser/chrome.md)）**: ツールバー地と本体地は常に不透明度 100% の `bg.base`、サイドバー地は不透明度 100% の `browser.sidebarBg`（いずれも `ChromeTranslucency` 非適用）。ツールバーは高さ `layout.browserBar` 36（下端 1px `browser.barBorder` を含む）・左 8 / 右 10・gap 4 で、左から サイドバー開閉（開時 ON）・戻る・進む・再読込/停止（各 26 角 radius 7・無効時 `opacity.browserButtonDisabled` .35・ホバー `surfaceInk` .07・ON `surfaceInk` .09）・URL 欄（高さ 26・幅可変で狭幅時は 0 まで縮小し主要ボタン 5 つを切らない・radius 7・左右 4・地 `surfaceInk` .055 / ホバー・編集 .08・枠 `surfaceInk` .05 / 編集 `accent.primary` .65・等幅 12pt でホスト `text.primary` / パス `text.muted`・HTTPS 鍵 12・底面 2pt 進捗バー `accent.primary`）・全面 Peek ピル（`⌥` Key cap 地 `accent.primary` / 印 `on.accent`＋`type.browserPeekPill` `text.primary`。URL 欄へ `layout.browserURLPeekMinWidth` 120 を確保できない狭幅では省略）・全面⇄右シート切替ボタン（右シート時 ON）。**サイドバー**は幅 `layout.browserSidebarWidth` 256・右端 1px `browser.barBorder` で、ブラウザ幅 `layout.browserSidebarInlineThreshold` 520 以上は本文と横並び、未満は暗幕 `browser.sidebarScrim` と右落ち影（`browser.shadowTint`）を伴うオーバーレイ配置。ヘッダ 40（スペース名 `type.browserSidebarSpaceTitle`＋右端プロファイルピル高さ 20 最大幅 104）・自由スペース最上部の 4 列 Favorites タイル（高さ 44 radius 9・アクティブ `selectionFill`＋`accent.primary` .55 1.5pt 枠）・`PINNED` / `TODAY` タブ行（高さ 30 radius 7・モノグラムチップ 17 角・選択 `selectionFill`・ホバー `surfaceInk` .06）・下端スペース切替バー高さ 42（自由スペース 30×28＋右下 6pt プロファイル色ドット・追加 26×28・右端ローカルスペース最大幅 112）。**ビュー内ポップオーバー**は `GlassPanel(.popup)`（角丸 `layout.browserPopoverRadius` 12・プロファイル基準幅 296 / 自由スペース基準幅 272）をブラウザ本体領域内に収め、自然高さにフィットさせつつ溢れる高さでのみ縦スクロールする。**新しいタブ画面**は `bg.base` 地の中央縦組みで、`OrbeMark` 36・URL 入力欄（最大幅 520×高さ 42 radius 11）・クイックアクセスタイル（72×64 radius 11）・最近閉じたタブ行（高さ 30）で構成する。右シートの左端外側に 1px 線（`browser.sheetBorderFocus` / `Soft`）と左落ち影（`browser.shadowTint`）、左端内側に 9pt ドラッグ当たり（ホバー・ドラッグ中のみ左端 2pt `browser.resizeLine`）。非フォーカス時は左落ち影を浅くし、ツールバー子要素のみ `opacity.browserBarInactive` .68 へ落ち着かせる（シート上ホバーまたはフォーカスで 1.0・通常影へ復帰）。右シートかつ真のブラウザ焦点かつ非 Peek 時のみ、左層へ `browser.leftVeil` を掛ける。右シート Peek 時はシート全体を隠し右端 2pt `browser.peekRail` のみ残す。全面 Peek 時は 36pt バーを 100% 不透明のまま残し、バーより下を透明化する。
 - **Empty state**: 中央・`type.body`・`text.muted` の一文＋必要なら `type.meta` ヒント。装飾なし。**エディター面**の空・使えないときの表示（→ [editor/faces](../spec/editor/faces.md)）: 本体は、下 60 を除いた範囲の中央に、見出し `type.editorEmptyTitle` `text.secondary`、その 6 下に案内の一文 `type.editorEmptyText` `text.muted`（中央揃え・左右 padding 16・折り返す）。ボタンは一文の 18 下（高さ 30・padding 0 14・radius 8。主は地 `accent.primary`・字 `type.editorEmptyButton` `on.accent`、主でないものは地 `surfaceInk` .08・字 `type.editorEmptyText` `text.primary`。押せない間は `Opacity.disabled`）。ショートカットの行は見出しの 14 下から行の間 6（案内 `type.editorEmptyText` `text.muted` と、8 右に Key cap（字））。左の列の一言は、パネルの題の行の下に `type.editorSidebarNote` `text.muted`・中央・padding 22 14。**ボード**の空状態は一文だけで、字種と色は表示できない diff の理由の一文と同じ（`type.editorLead`・`text.muted`）。
 
 ### 5.1 chrome（2 段 28+28・TopBar＋TabBar）
