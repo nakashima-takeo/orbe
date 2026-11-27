@@ -14,7 +14,8 @@ struct LaidOutLine {
   /// 元の行の UTF-16 の位置。
   var offsets: [Int32] = []
   var width: CGFloat = 0
-  /// 行の中身の長さ（UTF-16。改行と行末の `\r` を除く——`LineShaper.Source.length`）。
+  /// 組んだ段の長さ（UTF-16。打ち切って描かない単位を含み、改行と行末の `\r` を除く。折り返さない行では行の中身の長さ
+  /// ——`LineShaper.Source.length`）。
   var length: Int
   /// 打ち切って描かない単位の数と、行末に出す印（打ち切っていなければ nil）。
   var omitted = 0

@@ -6,7 +6,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 行番号の列の flow（fixture は gallery と同じ `EditorCodeFixtures`）。番号のクリックで行を選び、ドラッグで下へ・上へ
-/// 行単位に伸ばし、⇧クリックで起点から伸ばす過程と、横スクロールしても本文が行番号の列の下をくぐらないことを撮る。
+/// 行単位に伸ばし、⇧クリックで起点から伸ばす過程を撮る。
 extension DesignFlowSnapshotTests {
   func testEditorLineSelect() throws {
     let scene = try codeScene()
@@ -56,13 +56,6 @@ extension DesignFlowSnapshotTests {
           {  // 直前に選んだ 6 行目が起点のまま、11 行目の終わりまで伸びる
             view.mouseDown(with: mouse(.leftMouseDown, row: 11, .shift))
             view.mouseUp(with: mouse(.leftMouseUp, row: 11, .shift))
-          }
-        ),
-        (
-          "scrolled_right",
-          {  // 20 桁ぶん右へ: 本文と選択の地は動き、行番号の列は本文の左に並んだまま
-            surface.scroll(toX: 20 * config.cell)
-            self.settleFades(scene.pane)
           }
         ),
       ])

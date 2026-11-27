@@ -181,11 +181,10 @@ extension FrameBuilder {
     /// 行頭と次の行頭のオフセット。
     let start: Int
     let end: Int
-    /// 行の中の段と、段の始まり（行頭からの描く単位）・字下げ（pt）・行の最後の段か。
+    /// 行の中の段と、段の始まり（行頭からの描く単位）・字下げ（pt）。
     let segment: Int
     let base: Int
     let indent: Float
-    let last: Bool
     /// 段を組んだ結果と、段に重ねるもの（どちらも位置は段の頭から）。
     let laid: LaidOutLine
     let overlay: RowOverlays
@@ -245,7 +244,7 @@ extension FrameBuilder {
         result.append(
           RowInFrame(
             row: row, start: start, end: end, segment: segment, base: base,
-            indent: segment > 0 ? wrap?.indent ?? 0 : 0, last: segment + 1 == count, laid: laid!,
+            indent: segment > 0 ? wrap?.indent ?? 0 : 0, laid: laid!,
             overlay: overlay.segment(
               base: base, end: segment + 1 < count ? wrap!.start(of: segment + 1) : nil)))
       }
