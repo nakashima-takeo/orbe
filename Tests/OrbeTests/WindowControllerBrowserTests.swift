@@ -141,11 +141,13 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     wc.setBrowserMode(.sheet, animated: false)
     wc.browserView.setSheetRatio(0.65)
     loadPage(pageURL, in: wc)
+    let freeWebView = try XCTUnwrap(wc.browserView.webView)
     XCTAssertTrue(wc.browserView.focusIsInside, "前提: 右シートに焦点")
 
     // 別 worktree タブへ切り替えても表示ページとシート比率を保持する。
     wc.select(1)
     XCTAssertEqual(wc.browserMode, .sheet)
+    XCTAssertTrue(wc.browserView.webView === freeWebView, "同一 WKWebView 実体を維持する")
     XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertEqual(wc.browserView.toolbar.displayURL?.host, "docs.orbe.dev")
     wc.select(0)
@@ -157,10 +159,11 @@ final class WindowControllerBrowserTests: OrbeTestCase {
     XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertTrue(wc.browserView.focusIsInside)
 
-    // 自由スペース表示のまま workspace 切替しても右シート・比率・ページ・ブラウザ焦点を保持する。
+    // 自由スペース表示のまま workspace 切替しても右シート・比率・ページ・同一 WKWebView・焦点を保持する。
     wc.switchWorkspace(to: wsBIndex)
     XCTAssertEqual(wc.browserMode, .sheet)
     XCTAssertEqual(wc.browserView.sheetRatio, 0.65, accuracy: 0.001)
+    XCTAssertTrue(wc.browserView.webView === freeWebView, "自由スペース切替で WKWebView を再生成しない")
     XCTAssertEqual(wc.browserView.webView?.url, pageURL)
     XCTAssertEqual(wc.browserView.toolbar.displayURL?.path, "/guide")
     XCTAssertTrue(wc.browserView.focusIsInside, "右シート焦点記憶があればブラウザに焦点を保つ")

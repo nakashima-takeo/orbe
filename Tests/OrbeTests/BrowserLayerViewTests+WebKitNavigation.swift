@@ -241,10 +241,13 @@ extension BrowserLayerViewTests {
 
     remote.load(server.url(for: "/hang"))
     XCTAssertTrue(remote.isProvisionalNavigation, "前提: /hang 暫定中")
-    remote.toolbar.isLoading = true
-    remote.toolbar.estimatedProgress = 0.6
+    remoteRuntime.isLoading = true
+    remoteRuntime.estimatedProgress = 0.6
+    remote.syncToolbar(from: remoteRuntime)
     remoteRuntime.webViewWebContentProcessDidTerminate(remoteRuntime.webView)
     XCTAssertFalse(remote.isProvisionalNavigation)
+    XCTAssertFalse(remoteRuntime.isLoading)
+    XCTAssertEqual(remoteRuntime.estimatedProgress, 0)
     XCTAssertFalse(remote.toolbar.isLoading)
     XCTAssertEqual(remote.toolbar.estimatedProgress, 0)
     XCTAssertEqual(remote.toolbar.displayURL?.path, "/page-a")
@@ -275,11 +278,14 @@ extension BrowserLayerViewTests {
     fresh.onNavigationFinish = { freshFinish += 1 }
     let secureTarget = URL(string: "https://127.0.0.1:\(hanging.port)/secure")!
     fresh.load(secureTarget)
-    fresh.toolbar.isLoading = true
-    fresh.toolbar.estimatedProgress = 0.4
-    fresh.toolbar.displayURL = nil
+    freshRuntime.isLoading = true
+    freshRuntime.estimatedProgress = 0.4
+    freshRuntime.displayURL = nil
+    fresh.syncToolbar(from: freshRuntime)
     freshRuntime.webViewWebContentProcessDidTerminate(freshRuntime.webView)
     XCTAssertFalse(fresh.isProvisionalNavigation)
+    XCTAssertFalse(freshRuntime.isLoading)
+    XCTAssertEqual(freshRuntime.estimatedProgress, 0)
     XCTAssertFalse(fresh.toolbar.isLoading)
     XCTAssertEqual(fresh.toolbar.estimatedProgress, 0)
     XCTAssertEqual(fresh.toolbar.displayURL?.raw, secureTarget.absoluteString)
