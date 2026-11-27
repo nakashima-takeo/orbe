@@ -206,6 +206,34 @@ extension SurfaceWrapTests {
     try mouse(opened, .leftMouseUp, at: CGPoint(x: 100, y: 1))
   }
 
+  /// 最終行が折り返し、その最後の段が見えていない間は、下の外へのドラッグは、見えている下端の段のポインタの桁まで伸びる
+  /// （画面の外の文書の末尾まで飛ばない）。
+  func testDraggingBelowTheTextStopsAtTheBottomVisibleSegmentOfTheLastLine() throws {
+    let last = (0..<600).map { "w\($0)" }.joined(separator: " ")
+    let opened = try opened(String(repeating: "line\n", count: 30) + last)
+    let surface = opened.surface
+    let pointer = try XCTUnwrap((surface.responder as? MetalTextView)?.pointer)
+    surface.scroll(toFirstLine: 30)
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 2, column: 2))
+    let below = CGPoint(x: 100, y: surface.view.bounds.height + 1)
+    try mouse(opened, .leftMouseDragged, at: below)
+    // 窓は画面に出ないので display link は回らない。自動スクロールのコマを、時刻を渡して 2 回進める。
+    pointer.frame(now: 10)
+    pointer.frame(now: 10.1)
+    let viewport = surface.viewport
+    let segments = surface.rows.segments(ofLine: 30)
+    XCTAssertEqual(viewport.top.line, 30, "前提: 最終行が上端")
+    XCTAssertLessThan(
+      CGFloat(viewport.top.offset) + viewport.visibleLines, CGFloat(segments - 1),
+      "前提: 最終行の最後の段は見えていない")
+    let end = NSMaxRange(surface.selectedRange)
+    XCTAssertLessThan(end, opened.document.text.length, "文書の末尾まで伸ばさない")
+    XCTAssertLessThan(
+      CGFloat(surface.rows.segment(containing: end - opened.document.text.lineStart(30), line: 30)),
+      CGFloat(viewport.top.offset) + viewport.visibleLines, "見えている段まで")
+    try mouse(opened, .leftMouseUp, at: below)
+  }
+
   /// 字下げした続きの段の URL は、押した点の字から引く（⌘クリックで開く URL）——URL の最後の字の上でも。
   func testALinkOnAnIndentedContinuationSegmentIsFoundUnderThePointer() throws {
     let indent = "        "
