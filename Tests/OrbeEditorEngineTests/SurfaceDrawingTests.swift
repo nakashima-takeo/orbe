@@ -278,4 +278,27 @@ final class SurfaceDrawingTests: EngineTestCase {
     waitUntilPaused()
     XCTAssertEqual(shaped { surface.editor.perform(.tab) }, 3, "字下げした 3 行だけ")
   }
+
+  /// 幅を変えて段を組み直すコマでも、行の中身が同じなら、行を読み直さない（描く単位の列と装備の素は、行の中身で覚えた
+  /// ものを使う——URL を探す走査を、幅を変えるたびに見えている行の全部で繰り返さない）。
+  func testResizingDoesNotReadTheLinesAgain() throws {
+    let text = (0..<20).map {
+      "row \($0) https://example.com/\($0) " + String(repeating: "word ", count: 30)
+    }.joined(separator: "\n")
+    let opened = try open(text, name: "a.txt")
+    _ = host(opened, size: CGSize(width: 600, height: 400))
+    let surface = opened.surface
+    func reads() -> Int {
+      let id = surface.id
+      return RenderThread.shared.performAndWait { $0.slot(id)?.lines.readTotal ?? -1 }
+    }
+    _ = surface.snapshot()
+    let before = reads()
+    let starts = surface.rows.wrap(ofLine: 0)?.starts
+    XCTAssertGreaterThan(before, 0, "前提: 見えている行を読んだ")
+    surface.viewStateDidChange(size: CGSize(width: 450, height: 400), scale: 2, visible: false)
+    _ = surface.snapshot()
+    XCTAssertNotEqual(surface.rows.wrap(ofLine: 0)?.starts, starts, "前提: 段が変わった")
+    XCTAssertEqual(reads(), before, "幅を変えても読み直さない")
+  }
 }

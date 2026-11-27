@@ -158,6 +158,8 @@ final class LineLayoutCache {
     didSet { if shapedInFrame > oldValue { shapedTotal += shapedInFrame - oldValue } }
   }
   private(set) var shapedTotal = 0
+  /// 行の中身を読んだ（読みの表に無かった）行の数の、面を結んでからの合計。
+  private(set) var readTotal = 0
   private var drawnRows: [Segment: LaidOutLine] = [:]
   private var frameRows: [Segment: LaidOutLine] = [:]
   private var rowsVersion: Int?
@@ -281,6 +283,7 @@ final class LineLayoutCache {
     clock += 1
     let key = Hashed(source)
     if let found = reads.access(key, now: clock, { $0.value }) { return found }
+    readTotal += 1
     let shown = LineShaper.display(source)
     let decor = LineDecor(source)
     reads.insert(
