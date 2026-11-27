@@ -59,6 +59,63 @@ struct LaidOutLine {
   }
 }
 
+/// 表の鍵と、そのハッシュ値。ハッシュ値は鍵を作るときに 1 度だけ出す——行の中身は 1 万字近くありうるので、表を引いて
+/// 足すまでに、行の中身を何度も読んでハッシュ値を出さない。
+private struct Hashed<Value: Hashable>: Hashable {
+  let value: Value
+  let hash: Int
+
+  init(_ value: Value) {
+    self.value = value
+    hash = value.hashValue
+  }
+
+  func hash(into hasher: inout Hasher) { hasher.combine(hash) }
+
+  static func == (lhs: Self, rhs: Self) -> Bool { lhs.hash == rhs.hash && lhs.value == rhs.value }
+}
+
+/// 上限つきの表——ハッシュ値つきの鍵から値を引き、項目ごとに使った時刻と持つ単位の数（重み）を持つ。項目の数が
+/// `capacity` に達するか、重みの合計が `weightBudget` を越えるなら、足す前に、古く使われたものから半分を捨てる。
+private struct Bounded<Key: Hashable, Value> {
+  struct Item {
+    var value: Value
+    var used: UInt64
+    var weight: Int
+  }
+
+  private var items: [Hashed<Key>: Item] = [:]
+  private(set) var weight = 0
+  var count: Int { items.count }
+
+  /// 鍵 `key` の項目を `body` で読み書きする（無ければ nil）。当たれば使った時刻を `now` にする。`body` は項目の値と重みを
+  /// 変えてよい。
+  mutating func access<Result>(
+    _ key: Hashed<Key>, now: UInt64, _ body: (inout Item) -> Result
+  ) -> Result? {
+    guard let index = items.index(forKey: key) else { return nil }
+    items.values[index].used = now
+    let before = items.values[index].weight
+    let result = body(&items.values[index])
+    weight += items.values[index].weight - before
+    return result
+  }
+
+  /// 鍵 `key` に値 `value`（重み `weight`、使った時刻 `now`）を足す。
+  mutating func insert(_ value: Value, for key: Hashed<Key>, weight: Int, now: UInt64) {
+    while !items.isEmpty,
+      items.count >= LineLayoutCache.capacity
+        || self.weight + weight > LineLayoutCache.weightBudget
+    {
+      let cut = items.values.map(\.used).sorted()[items.count / 2]
+      items = items.filter { $0.value.used > cut }
+      self.weight = items.values.reduce(0) { $0 + $1.weight }
+    }
+    items[key] = Item(value: value, used: now, weight: weight)
+    self.weight += weight
+  }
+}
+
 /// 描画スレッドの行の組版のキャッシュ（面ごと）。2 段で引く。組む単位は行の段（折り返さない行は行全体の 1 段）。
 ///
 /// - 前のコマで描いた段（写しの版と行と段 → 組んだ結果）: 定常のスクロールでは見えている段のほとんどがここで当たり、行の
@@ -70,19 +127,12 @@ struct LaidOutLine {
 ///
 /// 段を組む前に読む行（行の中身 → 描く単位の列と装備の素）も、行の中身を鍵に覚える（→ `read`）——段の一部だけが前の
 /// コマに無い行・折り返しの幅が変わった行・差し込んだ行で、URL の検出と空白の走査を、コマごとに行全体で走らせない。どちらの
-/// 表も、項目の数か、持つ単位（行の中身とグリフ）の数が上限を越えたら、古く使われたものから半分を捨てる——長い行ばかりの文書でも
+/// 表も、項目の数か、持つ単位の数（→ `Bounded`）が上限を越えたら、古く使われたものから半分を捨てる——長い行ばかりの文書でも
 /// 覚える量が行の長さに比例して膨らまない。
 final class LineLayoutCache {
   private struct Key: Hashable {
     let shown: LineShaper.Displayed
     let tabColumns: Int
-  }
-
-  private struct Entry {
-    var line: LaidOutLine
-    var used: UInt64
-    /// 持つ単位の数（行の中身・グリフ・キャレットの位置）。
-    var weight: Int
   }
 
   /// 前のコマで描いた段の鍵——文書の行と、行の中の段。
@@ -91,41 +141,17 @@ final class LineLayoutCache {
     var segment: Int
   }
 
-  /// 表の鍵と、そのハッシュ値。ハッシュ値は鍵を作るときに 1 度だけ出す——行の中身は 1 万字近くありうるので、表を引いて
-  /// 足すまでに、行の中身を何度も読んでハッシュ値を出さない。
-  private struct Hashed<Value: Hashable>: Hashable {
-    let value: Value
-    let hash: Int
-
-    init(_ value: Value) {
-      self.value = value
-      hash = value.hashValue
-    }
-
-    func hash(into hasher: inout Hasher) { hasher.combine(hash) }
-
-    static func == (lhs: Self, rhs: Self) -> Bool { lhs.hash == rhs.hash && lhs.value == rhs.value }
-  }
-
-  /// 読んだ行（→ `read`）。
-  private struct Read {
-    let shown: LineShaper.Displayed
-    let decor: LineDecor
-    var used: UInt64
-    /// 持つ単位の数（行の中身・描く単位の列・装備）。
-    let weight: Int
-  }
-
   static let capacity = 4096
   static let weightBudget = 2_000_000
 
-  private var entries: [Hashed<Key>: Entry] = [:]
-  private var reads: [Hashed<LineShaper.Source>: Read] = [:]
-  private var readWeight = 0
+  /// 段の表（重みは、行の中身・グリフ・キャレットの位置の単位の数）と、読みの表（重みは、行の中身・描く単位の列・装備の
+  /// 単位の数）。
+  private var entries = Bounded<Key, LaidOutLine>()
+  private var reads = Bounded<LineShaper.Source, (shown: LineShaper.Displayed, decor: LineDecor)>()
   private var clock: UInt64 = 0
-  /// 覚えている段の数と、持つ単位の数。
+  /// 段の表の項目の数と、持つ単位の数。
   var count: Int { entries.count }
-  private(set) var weight = 0
+  var weight: Int { entries.weight }
 
   /// このコマで組版した（どちらの段にも無かった）段の数と、面を結んでからの合計。
   private(set) var shapedInFrame = 0 {
@@ -254,24 +280,12 @@ final class LineLayoutCache {
   func read(_ source: LineShaper.Source) -> (shown: LineShaper.Displayed, decor: LineDecor) {
     clock += 1
     let key = Hashed(source)
-    if let index = reads.index(forKey: key) {
-      reads.values[index].used = clock
-      return (reads.values[index].shown, reads.values[index].decor)
-    }
+    if let found = reads.access(key, now: clock, { $0.value }) { return found }
     let shown = LineShaper.display(source)
     let decor = LineDecor(source)
-    let entry = Read(
-      shown: shown, decor: decor, used: clock,
-      weight: source.head.count + shown.units.count + decor.weight)
-    while !reads.isEmpty,
-      reads.count >= Self.capacity || readWeight + entry.weight > Self.weightBudget
-    {
-      let cut = reads.values.map(\.used).sorted()[reads.count / 2]
-      reads = reads.filter { $0.value.used > cut }
-      readWeight = reads.values.reduce(0) { $0 + $1.weight }
-    }
-    reads[key] = entry
-    readWeight += entry.weight
+    reads.insert(
+      (shown, decor), for: key, weight: source.head.count + shown.units.count + decor.weight,
+      now: clock)
     return (shown, decor)
   }
 
@@ -286,17 +300,16 @@ final class LineLayoutCache {
     let font = face?.font ?? config.font
     let tabWidth = face?.tabWidth ?? config.tabWidth(columns: tabColumns)
     let shape = { LineShaper.shape(shown, font: font, tabWidth: tabWidth) }
-    if let index = entries.index(forKey: key) {
-      entries.values[index].used = clock
-      if carets, entries.values[index].line.carets == nil {
+    let found = entries.access(key, now: clock) { item in
+      if carets, item.value.carets == nil {
         shapedInFrame += 1
         let map = shape().carets
-        entries.values[index].line.carets = map
-        entries.values[index].weight += map.count
-        weight += map.count
+        item.value.carets = map
+        item.weight += map.count
       }
-      return entries.values[index].line
+      return item.value
     }
+    if let found { return found }
     shapedInFrame += 1
     let shaped = shape()
     var line = LaidOutLine(
@@ -306,22 +319,9 @@ final class LineLayoutCache {
       line.omittedMark = LaidOutLine.OmittedMark(
         LineShaper.shape(config.omittedLabel(line.omitted), font: font), fonts: fonts)
     }
-    let entry = Entry(
-      line: line, used: clock,
-      weight: shown.units.count + line.glyphs.count + (line.carets?.count ?? 0))
-    while !entries.isEmpty,
-      entries.count >= Self.capacity || weight + entry.weight > Self.weightBudget
-    {
-      evict()
-    }
-    entries[key] = entry
-    weight += entry.weight
+    entries.insert(
+      line, for: key, weight: shown.units.count + line.glyphs.count + (line.carets?.count ?? 0),
+      now: clock)
     return line
-  }
-
-  private func evict() {
-    let cut = entries.values.map(\.used).sorted()[entries.count / 2]
-    entries = entries.filter { $0.value.used > cut }
-    weight = entries.values.reduce(0) { $0 + $1.weight }
   }
 }
