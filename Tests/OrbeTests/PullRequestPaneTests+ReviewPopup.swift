@@ -143,9 +143,9 @@ extension PullRequestPaneTests {
     XCTAssertEqual(state.reviewDraft.body, "前のかきかけ", "esc で閉じても書きかけは残る")
     // 押し続けた esc を捨てるのは窓のイベントの監視で、テストから窓へ送るキーはそこを通らないので、監視の判定を見る。
     let repeated = NSEvent.key("\u{1b}", [], isRepeat: true)
-    XCTAssertTrue(hosted.pane.escapeRepeatIsSwallowed(repeated), "押し続けて届いた esc は捨てる")
-    XCTAssertFalse(hosted.pane.escapeRepeatIsSwallowed(.key("j", [])), "前提: 押し続けでない打鍵は届く")
-    XCTAssertFalse(hosted.pane.escapeRepeatIsSwallowed(repeated), "押し続けでない打鍵の後は捨てない")
+    XCTAssertTrue(hosted.pane.keyRepeatIsSwallowed(repeated), "押し続けて届いた esc は捨てる")
+    XCTAssertFalse(hosted.pane.keyRepeatIsSwallowed(.key("j", [])), "前提: 押し続けでない打鍵は届く")
+    XCTAssertFalse(hosted.pane.keyRepeatIsSwallowed(repeated), "押し続けでない打鍵の後は捨てない")
   }
 
   /// 開いている間に PR が open でなくなる（マージされた）と、ポップアップは閉じ、開き直せず、送れない。

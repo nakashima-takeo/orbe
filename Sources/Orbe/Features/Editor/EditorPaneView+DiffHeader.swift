@@ -63,7 +63,8 @@ extension EditorPaneView {
   /// PR の画面のキー c: 焦点のある差分の面の本文の、主のカーソルの行（選択があれば、その最初の行から最後の行まで。選択が
   /// 行頭で終わっていれば、その行は含めない）に新しいコメントの欄を開く（行の頭の印を押したのと同じ口）。働くのは、本体に PR
   /// の差分が出ていて、焦点が差分の面の本文（字を打つ場ではない所）にあるとき。欄を開けなければ（コメントできない行・1 つの
-  /// まとまりに収まらない選択・コメントできる行をまだ求めていない間）、音で断る。押し続けて届く繰り返しは捨てる。扱ったら true。
+  /// まとまりに収まらない選択・コメントできる行をまだ求めていない間）、音で断る。押し続けて届くキーリピートは捨てる——欄を開いた
+  /// 後のキーリピートは、欄へ移った焦点の打鍵として届くので、キーを離すまで監視が捨てる（→ `keyRepeatIsSwallowed`）。扱ったら true。
   func handleCommentKey(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
     guard flags.isEmpty, event.charactersIgnoringModifiers == "c",
@@ -76,6 +77,7 @@ extension EditorPaneView {
       NSSound.beep()
       return true
     }
+    swallowedRepeat = "c"
     return true
   }
 

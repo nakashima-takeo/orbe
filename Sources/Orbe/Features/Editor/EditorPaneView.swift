@@ -114,11 +114,12 @@ final class EditorPaneView: NSView {
   /// 上のバーの右端の主な操作のボタンの枠（ボタンの印ごと。バーの座標＝面の座標。今あるボタンの分だけ）。ポップアップの外の
   /// 押下の判定の入力。
   var actionButtonFrames: [UUID: CGRect] = [:]
-  /// F4 / ⇧F4・PR の画面のキー v・esc で閉じた後の esc のキーリピートと、結果の列・一覧の器の外の押下を拾うイベントの監視
-  /// （窓に付いている間だけ）。
+  /// イベントの監視（窓に付いている間だけ）。拾うのは F4 / ⇧F4・PR の画面のキー v と c・捨てるキーリピートと、結果の列・
+  /// 一覧の器の外の押下。
   var eventMonitor: Any?
-  /// esc で面の器を閉じた後、そのキーを押し続けている間（→ `escapeRepeatIsSwallowed`）。
-  var swallowsEscapeRepeat = false
+  /// 焦点を移したキー（esc で面の器を閉じた・キー c で欄を開いた）を押し続けている間の、そのキーの字
+  /// （→ `keyRepeatIsSwallowed`）。
+  var swallowedRepeat: String?
   /// 左の列の幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }

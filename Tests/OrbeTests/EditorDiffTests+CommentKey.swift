@@ -67,4 +67,23 @@ extension EditorDiffTests {
     XCTAssertNotNil(layer.draft(at: .at(.old, 2)), "左の面の行は古い側の行")
     XCTAssertNil(layer.draft(at: .at(.new, 2)))
   }
+
+  /// c で欄を開いた後、押し続けて届く c のキーリピートは、監視が捨てて欄に入らない。キーを離した後の c（キーリピートで
+  /// ない打鍵）からは、欄の打鍵として届き、そのキーリピートも捨てない。
+  func testHoldingCAfterOpeningADraftDoesNotTypeIntoIt() throws {
+    let (diff, tab) = try commentedTab(Remote())
+    let pane = tab.group.view.editor
+    let surface = try engine(diff.newSurface)
+    let window = try XCTUnwrap(pane.window)
+    window.makeFirstResponder(surface.responder)
+    let text = try XCTUnwrap(diff.newRevision?.text ?? diff.document?.text)
+    surface.selectedRange = NSRange(location: text.lineStart(1) + 1, length: 0)
+    XCTAssertTrue(pane.handleCommentKey(.key("c", [])))
+    XCTAssertNotNil(diff.comments?.draft(at: .at(.new, 1)), "前提: 欄が開き、焦点が欄に移る")
+    let repeated = NSEvent.key("c", [], isRepeat: true)
+    XCTAssertFalse(pane.handleCommentKey(repeated), "前提: 欄にいる間は、キー c として扱わない")
+    XCTAssertTrue(pane.keyRepeatIsSwallowed(repeated), "欄を開いた c の押し続けは捨てる")
+    XCTAssertFalse(pane.keyRepeatIsSwallowed(.key("c", [])), "キーを離した後の c は届く")
+    XCTAssertFalse(pane.keyRepeatIsSwallowed(repeated), "欄で打ち始めた c の押し続けは捨てない")
+  }
 }
