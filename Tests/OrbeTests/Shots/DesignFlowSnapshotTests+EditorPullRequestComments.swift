@@ -9,7 +9,7 @@ import XCTest
 /// PR のコメントの flow（fixture は `PrFixtures` と `PrFixtureReview`——本物の git の場と、PR #131 とスレッドを答える
 /// 差し替えの出どころ）。3 つに分けて撮る。
 /// - `editor_pr_comments`（dark）: PR の diff のスレッド（既定のスレッド・古い側の Markdown 入り・解決済みの畳んだ姿）→
-///   コメント追加の印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 左の列を閉じて並列。
+///   行の頭のコメントの印のホバー → 新しいコメントの欄 → 書き込みの最中 → 失敗 → 返信の後 → スレッドを畳む → 左の列を閉じて並列。
 /// - `editor_pr_review`（面を付けた窓の中で dark と light。窓から外れるとポップアップは閉じる）: 左の列を開き（インラインに
 ///   戻る）、レビューのポップアップを開いて全体へのコメントを書く → 「承認」を選ぶ → 「変更を依頼」を選ぶ → 未送信のコメントの
 ///   行を押す（ポップアップが閉じ、畳んだスレッドが開いてその行が見える）→ 開き直して「承認」で送信の最中 → 送信の失敗（下端の
@@ -58,6 +58,7 @@ extension DesignFlowSnapshotTests {
       steps: [
         ("line_gone", steps.rewriteDraftLine)
       ])
+    try renderEntry(queriesRoot: queriesRoot)
   }
 
   /// レビューのポップアップの、人の PR の flow に出ない姿: 自分の PR（種類が無く、返信をまとめて送るだけ）と、diff の両端を
@@ -191,23 +192,22 @@ private struct CommentSteps {
     settle()
   }
 
-  /// 文脈の行（新しい側の行 8）にポインタを乗せ、行の右端の印の上へ動かす。
+  /// 文脈の行（新しい側の行 8）の頭の列にポインタを乗せる。
   func hoverMark() {
     guard let surface else { return XCTFail("前提: 面がある") }
     let y =
       surface.config.topInset + CGFloat(surface.rows.y(ofLine: 7) - surface.scrollPosition.y)
       + surface.config.lineHeight / 2
-    surface.hover(
-      at: CGPoint(x: surface.surfaceLayout.text.maxX - Theme.Layout.editorPrMarkInset - 9, y: y))
+    surface.hover(at: CGPoint(x: Theme.Layout.editorPrMarkColumn / 2, y: y))
     settle()
   }
 
   /// 行 8 に新しいコメントの欄を開き、打つ。
   func newComment() {
     surface?.hover(at: nil)
-    diff?.comments?.openDraft(.new, line: 7)
+    diff?.comments?.openDraft(.at(.new, 7))
     settle()
-    guard let draft = diff?.comments?.draft(.new, line: 7) else { return XCTFail("前提: 欄が開く") }
+    guard let draft = diff?.comments?.draft(at: .at(.new, 7)) else { return XCTFail("前提: 欄が開く") }
     surface?.replaceText(of: draft.field, with: "queue の label は定数に寄せたい")
     settle()
   }
@@ -215,7 +215,7 @@ private struct CommentSteps {
   /// 書き込みの答えを返さない出どころで「レビューに追加」を押す（欄とボタンが押せない姿）。
   func write() {
     scene.review.writes = .hold
-    guard let draft = diff?.comments?.draft(.new, line: 7) else { return XCTFail("前提: 欄") }
+    guard let draft = diff?.comments?.draft(at: .at(.new, 7)) else { return XCTFail("前提: 欄") }
     draft.zone(.pressed(PrCommentControl.add))
     settle()
   }
@@ -299,9 +299,9 @@ private struct CommentSteps {
   /// 行 7 に新しいコメントの欄を開いて打ち、行 7 を書き換える push を起こす。
   func rewriteDraftLine() {
     surface?.scroll(toFirstLine: 2)
-    diff?.comments?.openDraft(.new, line: 6)
+    diff?.comments?.openDraft(.at(.new, 6))
     settle()
-    guard let draft = diff?.comments?.draft(.new, line: 6) else { return XCTFail("前提: 欄が開く") }
+    guard let draft = diff?.comments?.draft(at: .at(.new, 6)) else { return XCTFail("前提: 欄が開く") }
     surface?.replaceText(of: draft.field, with: "label は bundle id から作りたい")
     let rewritten = EditorDiffFixtures.edited.replacingOccurrences(
       of: "\"orbe.hooks\"", with: "\"orbe.agent.hooks\"")

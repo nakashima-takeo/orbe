@@ -15,7 +15,7 @@ extension EditorDiffTests {
   /// 新しい側の行 3 に付いた、返信できるスレッド T。
   private var replyable: GitHubPullRequestReview.Thread {
     GitHubPullRequestReview.Thread(
-      id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
+      id: "T", path: "a.txt", lines: .at(.new, 3), isResolved: false, canReply: true,
       canResolve: true, canUnresolve: false,
       comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
   }
@@ -43,10 +43,10 @@ extension EditorDiffTests {
     let reply = try XCTUnwrap(layer.zone(thread: "T"))
     waitPlaced(diff, [reply], "スレッドが置かれる")
     surface.replaceText(of: reply.field, with: "返信の書きかけ")
-    layer.surface(surface, didPressTrailingMarkOn: .document(1))
-    surface.replaceText(of: try XCTUnwrap(layer.draft(.new, line: 1)).field, with: "コメントの書きかけ")
-    layer.surface(surface, didPressTrailingMarkOn: .document(0))
-    let cancelled = try XCTUnwrap(layer.draft(.new, line: 0))
+    layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
+    surface.replaceText(of: try XCTUnwrap(layer.draft(at: .at(.new, 1))).field, with: "コメントの書きかけ")
+    layer.surface(surface, didMarkFrom: .document(0), to: .document(0))
+    let cancelled = try XCTUnwrap(layer.draft(at: .at(.new, 0)))
     surface.replaceText(of: cancelled.field, with: "取り消す書きかけ")
     cancelled.zone(.pressed(PrCommentControl.cancel))
 
@@ -55,11 +55,11 @@ extension EditorDiffTests {
     let next = try XCTUnwrap(reopened.comments)
     XCTAssertFalse(next === layer, "前提: 開き直した diff は別の層を持つ")
     let nextReply = try XCTUnwrap(next.zone(thread: "T"))
-    let comment = try XCTUnwrap(next.draft(.new, line: 1))
+    let comment = try XCTUnwrap(next.draft(at: .at(.new, 1)))
     waitPlaced(reopened, [nextReply, comment], "返信欄と新しいコメントの欄が置かれる")
     XCTAssertEqual(nextReply.text, "返信の書きかけ")
     XCTAssertEqual(comment.text, "コメントの書きかけ")
-    XCTAssertNil(next.draft(.new, line: 0), "取り消した欄は出ない")
+    XCTAssertNil(next.draft(at: .at(.new, 0)), "取り消した欄は出ない")
   }
 
   /// 同じ PR の同じファイルの diff を 2 か所（別の連のタブ）で開くと、片方で打った返信と新しいコメントの書きかけは、後から
@@ -72,14 +72,14 @@ extension EditorDiffTests {
     let mine = try XCTUnwrap(layer.zone(thread: "T"))
     waitPlaced(first, [mine], "スレッドが置かれる")
     surface.replaceText(of: mine.field, with: "一つ目で打った返信")
-    layer.surface(surface, didPressTrailingMarkOn: .document(1))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 1))
+    layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 1)))
     surface.replaceText(of: draft.field, with: "一つ目で打ったコメント")
 
     let (second, _) = try open(layer.state)
     let other = try XCTUnwrap(second.comments)
     let otherReply = try XCTUnwrap(other.zone(thread: "T"))
-    let otherDraft = try XCTUnwrap(other.draft(.new, line: 1))
+    let otherDraft = try XCTUnwrap(other.draft(at: .at(.new, 1)))
     waitPlaced(second, [otherReply, otherDraft], "後から開いた diff に返信欄と新しいコメントの欄が置かれる")
     XCTAssertEqual(otherReply.text, "一つ目で打った返信")
     XCTAssertEqual(otherDraft.text, "一つ目で打ったコメント")
@@ -101,13 +101,13 @@ extension EditorDiffTests {
     let mine = try XCTUnwrap(layer.zone(thread: "T"))
     waitPlaced(first, [mine], "スレッドが置かれる")
     surface.replaceText(of: mine.field, with: "返信")
-    layer.surface(surface, didPressTrailingMarkOn: .document(1))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 1))
+    layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 1)))
     surface.replaceText(of: draft.field, with: "コメント")
     let (second, _) = try open(layer.state)
     let other = try XCTUnwrap(second.comments)
     let otherReply = try XCTUnwrap(other.zone(thread: "T"))
-    let otherDraft = try XCTUnwrap(other.draft(.new, line: 1))
+    let otherDraft = try XCTUnwrap(other.draft(at: .at(.new, 1)))
     waitPlaced(second, [otherReply, otherDraft], "前提: もう片方にも書きかけが出る")
 
     remote.holds = true
@@ -120,13 +120,13 @@ extension EditorDiffTests {
       until: {
         while !remote.held.isEmpty { remote.held.removeFirst()() }
         return mine.text.isEmpty && otherReply.text.isEmpty
-          && layer.draft(.new, line: 1) == nil && other.draft(.new, line: 1) == nil
+          && layer.draft(at: .at(.new, 1)) == nil && other.draft(at: .at(.new, 1)) == nil
       }, "通れば両方の返信欄が空になり、両方の新しいコメントの欄が閉じる")
     XCTAssertEqual(
       remote.writes,
       [
         .reply(thread: "T", body: "返信", resolve: false),
-        .addThread(path: "a.txt", side: .new, line: 2, commit: remote.head, body: "コメント"),
+        .addThread(path: "a.txt", lines: .at(.new, 2), commit: remote.head, body: "コメント"),
       ])
   }
 

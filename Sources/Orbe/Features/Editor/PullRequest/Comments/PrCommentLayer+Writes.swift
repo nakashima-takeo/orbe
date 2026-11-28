@@ -69,8 +69,7 @@ extension PrCommentLayer {
     }
     zone.failure = nil
     let accepted = state.sendComment(
-      serial, side: draft.version == .old ? .old : .new, line: draft.line, ends: draft.ends,
-      completion: failed(in: zone))
+      serial, range: draft.range, ends: draft.ends, completion: failed(in: zone))
     if !accepted { zone.failure = L10n.string(.editorPrThreadNotReady, language()) }
   }
 

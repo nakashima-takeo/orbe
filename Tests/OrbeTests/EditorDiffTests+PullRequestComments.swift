@@ -5,7 +5,7 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// PR の diff のコメントの層——スレッドが付いた行の下に置き、行の右端の印から新しいコメントの欄を開き、書き込みの結果で欄を
+/// PR の diff のコメントの層——スレッドが付いた行の下に置き、行の頭の印から新しいコメントの欄を開き、書き込みの結果で欄を
 /// 空にするか本文を残す。PR の中身とレビューのやりとりは差し替えの構造体が答える。
 ///
 /// 壊れると何が起きるか: スレッドが別の行の下に出る。印を押しても欄が開かない・焦点が入らない・⌘↵ で書けない。書いた行と
@@ -128,8 +128,8 @@ extension EditorDiffTests {
     let remote = Remote()
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(3))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 3))
+    layer.surface(surface, didMarkFrom: .document(3), to: .document(3))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 3)))
     surface.replaceText(of: draft.field, with: "書きかけ")
     XCTAssertTrue(repo.git(["switch", "-q", "main"]).isSuccess)
     pumpMain(until: { !layer.isCurrentPullRequest }, "前提: ブランチを切り替えると今の PR でなくなる")
@@ -148,7 +148,7 @@ extension EditorDiffTests {
     let remote = Remote()
     remote.threads = [
       GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
+        id: "T", path: "a.txt", lines: .at(.new, 3), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [
           .init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: true)
@@ -157,12 +157,13 @@ extension EditorDiffTests {
     let (diff, surface) = try commentedDiff(remote)
     let zone = try XCTUnwrap(diff.comments?.zone(thread: "T"))
     pumpMain(until: { surface.rows.block(ofZone: ObjectIdentifier(zone)) != nil }, "スレッドが置かれる")
-    XCTAssertEqual(surface.rows.style(ofLine: 2), DiffStyle.addedThread)
+    XCTAssertEqual(surface.rows.style(ofLine: 2), DiffStyle.added)
+    XCTAssertEqual(surface.rows.lineSpan(ofLine: 2)?.override, DiffStyle.threadOverride)
     let spans = surface.rows.spans
     XCTAssertTrue(
-      spans.filter { $0.line < 4 }.allSatisfy(\.allowsTrailingMark), "4 行は全部が区間の前後 3 行に入る")
+      spans.filter { $0.line < 4 }.allSatisfy { $0.markGroup != nil }, "4 行は全部が区間の前後 3 行に入る")
     XCTAssertEqual(
-      spans.last { $0.line <= 4 }?.allowsTrailingMark, false, "改行の後の空の行は GitHub の diff に無い")
+      spans.last { $0.line <= 4 }?.markGroup, nil, "改行の後の空の行は GitHub の diff に無い")
   }
 
   /// 文脈の行の古い側と新しい側に付いたスレッドは同じ所に並び、側を問わず最初のコメントの時刻の順に上から置く。
@@ -170,7 +171,7 @@ extension EditorDiffTests {
     let remote = Remote()
     let thread = { (id: String, side: GitHubDiffSide, time: TimeInterval) in
       GitHubPullRequestReview.Thread(
-        id: id, path: "a.txt", side: side, line: 1, isResolved: false, canReply: true,
+        id: id, path: "a.txt", lines: .at(side, 1), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [
           .init(
@@ -197,7 +198,7 @@ extension EditorDiffTests {
     let remote = Remote()
     remote.threads = [
       GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
+        id: "T", path: "a.txt", lines: .at(.new, 3), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
     ]
@@ -217,15 +218,15 @@ extension EditorDiffTests {
     let window = try XCTUnwrap(surface.textView.window)
     window.makeFirstResponder(surface.textView)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(1))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 1))
+    layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 1)))
     XCTAssertEqual(surface.primary, .field(draft.field.id), "欄に焦点が入る")
     surface.replaceText(of: draft.field, with: "直す")
     XCTAssertTrue(window.performKeyEquivalent(with: .key("\r")))
-    pumpMain(until: { layer.draft(.new, line: 1) == nil }, "通れば欄が閉じる")
+    pumpMain(until: { layer.draft(at: .at(.new, 1)) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(
       remote.writes,
-      [.addThread(path: "a.txt", side: .new, line: 2, commit: remote.head, body: "直す")])
+      [.addThread(path: "a.txt", lines: .at(.new, 2), commit: remote.head, body: "直す")])
   }
 
   /// 古い側の行の印——インラインで差し込まれた削除行と、並列の左の面の行——は、古い側のその行に欄を開き、古い側の行（1 始まり）
@@ -235,20 +236,20 @@ extension EditorDiffTests {
     let (diff, surface) = try commentedDiff(remote)
     let window = try XCTUnwrap(surface.textView.window)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .source(2))
-    let draft = try XCTUnwrap(layer.draft(.old, line: 2), "削除行「three」の下に開く")
+    layer.surface(surface, didMarkFrom: .source(2), to: .source(2))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.old, 2)), "削除行「three」の下に開く")
     surface.replaceText(of: draft.field, with: "消した行")
     draft.zone(.pressed(PrCommentControl.add))
-    pumpMain(until: { layer.draft(.old, line: 2) == nil }, "通れば欄が閉じる")
+    pumpMain(until: { layer.draft(at: .at(.old, 2)) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(
       remote.writes,
-      [.addThread(path: "a.txt", side: .old, line: 3, commit: remote.head, body: "消した行")])
+      [.addThread(path: "a.txt", lines: .at(.old, 3), commit: remote.head, body: "消した行")])
 
     resize(window, width: Self.sideWidth)
     pumpMain(until: { diff.oldSurface != nil && layer.isSettled }, "並列の 2 面が揃う")
-    layer.surface(try engine(diff.oldSurface), didPressTrailingMarkOn: .document(1))
-    XCTAssertNotNil(layer.draft(.old, line: 1), "左の面の行は古い側の行")
-    XCTAssertNil(layer.draft(.new, line: 1))
+    layer.surface(try engine(diff.oldSurface), didMarkFrom: .document(1), to: .document(1))
+    XCTAssertNotNil(layer.draft(at: .at(.old, 1)), "左の面の行は古い側の行")
+    XCTAssertNil(layer.draft(at: .at(.new, 1)))
   }
 
   /// 書き込みが通らなければ、欄は開いたまま本文が残り、失敗の文が出る。
@@ -257,12 +258,12 @@ extension EditorDiffTests {
     remote.failure = .unreachable
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(0))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 0))
+    layer.surface(surface, didMarkFrom: .document(0), to: .document(0))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 0)))
     surface.replaceText(of: draft.field, with: "残る")
     draft.zone(.pressed(PrCommentControl.add))
     pumpMain(until: { draft.failure != nil }, "失敗が届く")
-    XCTAssertIdentical(layer.draft(.new, line: 0), draft)
+    XCTAssertIdentical(layer.draft(at: .at(.new, 0)), draft)
     XCTAssertEqual(draft.text, "残る")
     XCTAssertFalse(draft.isWriting)
   }
@@ -271,15 +272,15 @@ extension EditorDiffTests {
   func testAnEmptyDraftClosesWhenItLosesFocus() throws {
     let (diff, surface) = try commentedDiff(Remote())
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(0))
-    surface.replaceText(of: try XCTUnwrap(layer.draft(.new, line: 0)).field, with: " \n")
+    layer.surface(surface, didMarkFrom: .document(0), to: .document(0))
+    surface.replaceText(of: try XCTUnwrap(layer.draft(at: .at(.new, 0))).field, with: " \n")
     surface.selectedRange = NSRange(location: 0, length: 0)
-    XCTAssertNil(layer.draft(.new, line: 0), "空白と改行だけの欄は閉じる")
-    layer.surface(surface, didPressTrailingMarkOn: .document(0))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 0))
+    XCTAssertNil(layer.draft(at: .at(.new, 0)), "空白と改行だけの欄は閉じる")
+    layer.surface(surface, didMarkFrom: .document(0), to: .document(0))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 0)))
     surface.replaceText(of: draft.field, with: "書きかけ")
     surface.selectedRange = NSRange(location: 0, length: 0)
-    XCTAssertIdentical(layer.draft(.new, line: 0), draft, "本文のある欄は残る")
+    XCTAssertIdentical(layer.draft(at: .at(.new, 0)), draft, "本文のある欄は残る")
   }
 
   /// 返信欄の空白と改行だけの本文は空とみなす——「レビューに追加」は書かず、「解決して返信」は解決だけを書く。
@@ -287,7 +288,7 @@ extension EditorDiffTests {
     let remote = Remote()
     remote.threads = [
       GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
+        id: "T", path: "a.txt", lines: .at(.new, 3), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
     ]
@@ -307,7 +308,7 @@ extension EditorDiffTests {
     let remote = Remote()
     remote.threads = [GitHubDiffSide.old, .new].map { side in
       GitHubPullRequestReview.Thread(
-        id: "T_\(side)", path: "b.txt", side: side, line: 3, isResolved: false, canReply: true,
+        id: "T_\(side)", path: "b.txt", lines: .at(side, 3), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [
           .init(id: "C_\(side)", author: "you", body: "本文", createdAt: Date(), isPending: false)
@@ -325,8 +326,8 @@ extension EditorDiffTests {
       if case .lines(let lines) = content { lines } else { [] }
     }
     XCTAssertFalse(removed.isEmpty, "前提: 手元は rename として削除行を出す")
-    XCTAssertFalse(removed.contains(where: \.allowsTrailingMark))
-    XCTAssertTrue(surface.rows.spans.contains(where: \.allowsTrailingMark))
+    XCTAssertFalse(removed.contains { $0.markGroup != nil })
+    XCTAssertTrue(surface.rows.spans.contains { $0.markGroup != nil })
   }
 
   /// 新しいスレッドの書き込みの最中は欄が書き込みの最中の姿で、「レビューに追加」を 2 回押しても書き込みは 1 回。
@@ -335,8 +336,8 @@ extension EditorDiffTests {
     remote.holds = true
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(1))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 1))
+    layer.surface(surface, didMarkFrom: .document(1), to: .document(1))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 1)))
     surface.replaceText(of: draft.field, with: "一度だけ")
     draft.zone(.pressed(PrCommentControl.add))
     XCTAssertTrue(draft.isWriting)
@@ -344,7 +345,7 @@ extension EditorDiffTests {
 
     remote.holds = false
     while !remote.held.isEmpty { remote.held.removeFirst()() }
-    pumpMain(until: { layer.draft(.new, line: 1) == nil }, "通れば欄が閉じる")
+    pumpMain(until: { layer.draft(at: .at(.new, 1)) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(remote.writes.count, 1)
   }
 }

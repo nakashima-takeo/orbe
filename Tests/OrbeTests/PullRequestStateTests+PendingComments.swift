@@ -52,7 +52,7 @@ extension PullRequestStateTests {
     _ id: String, path: String, line: Int?, _ comments: [GitHubPullRequestReview.Comment]
   ) -> GitHubPullRequestReview.Thread {
     GitHubPullRequestReview.Thread(
-      id: id, path: path, side: .new, line: line, isResolved: false, canReply: true,
+      id: id, path: path, lines: line.map { .at(.new, $0) }, isResolved: false, canReply: true,
       canResolve: true, canUnresolve: false, comments: comments)
   }
 

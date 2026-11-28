@@ -10,24 +10,26 @@ struct GitCommitCounts: Equatable {
   let behind: Int
 }
 
-/// 2 つのコミットの間の 1 つのファイルの diff で、区間（変更とその前後の文脈）が覆う行。両側それぞれ、その側の版の行
-/// （1 始まり）の閉区間を、前から順に持つ。
+/// 2 つのコミットの間の 1 つのファイルの diff の区間（変更とその前後の文脈）の列。区間ごとに、古い側と新しい側の、その側の
+/// 版の行（1 始まり）の半開区間を、前から順に持つ（行数 0 の側は空の区間）。
 struct GitDiffHunkLines: Equatable {
-  var old: [ClosedRange<Int>]
-  var new: [ClosedRange<Int>]
+  struct Hunk: Equatable {
+    let old: Range<Int>
+    let new: Range<Int>
+  }
+
+  var hunks: [Hunk]
 }
 
 extension GitDiffHunkLines {
-  /// patch の区間の頭（`@@ -<始まり>[,<行数>] +<始まり>[,<行数>] @@`）から読む。行数を省いた側は 1 行。行数 0 の側は
-  /// 行を覆わない。
+  /// patch の区間の頭（`@@ -<始まり>[,<行数>] +<始まり>[,<行数>] @@`）から読む。行数を省いた側は 1 行。
   init(patch: Data) {
-    self.init(old: [], new: [])
+    self.init(hunks: [])
     for line in patch.split(separator: UInt8(ascii: "\n")) where line.starts(with: Self.header) {
       let fields = line.dropFirst(3).split(separator: UInt8(ascii: " "), maxSplits: 2)
       guard fields.count >= 2, let removed = Self.span(fields[0]), let added = Self.span(fields[1])
       else { continue }
-      if let removed = Self.lines(removed) { old.append(removed) }
-      if let added = Self.lines(added) { new.append(added) }
+      hunks.append(Hunk(old: Self.lines(removed), new: Self.lines(added)))
     }
   }
 
@@ -42,8 +44,8 @@ extension GitDiffHunkLines {
     return (start, numbers.count == 2 ? numbers[1] : 1)
   }
 
-  private static func lines(_ span: (start: Int, count: Int)) -> ClosedRange<Int>? {
-    span.count > 0 ? span.start...(span.start + span.count - 1) : nil
+  private static func lines(_ span: (start: Int, count: Int)) -> Range<Int> {
+    span.start..<(span.start + span.count)
   }
 }
 

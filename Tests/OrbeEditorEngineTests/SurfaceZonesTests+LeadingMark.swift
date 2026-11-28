@@ -1,0 +1,367 @@
+import AppKit
+import OrbeEditorCore
+import OrbeTestSupport
+import XCTest
+
+@testable import OrbeEditorEngine
+
+/// 行の頭の印——印の組を持つ行の頭の列に線をいつも描き、ポインタが乗った行に絵を出し、絵を押して離すと押した行を、引いて
+/// 離すと同じ組の範囲を、並びの順で最初と最後の行にして 1 回だけ並びの受け手へ知らせる。壊れると、コメントできない行に
+/// 入口が出る・別の行の欄が開く・ハンクをまたぐ範囲ができる・並びを置き直した後に古い受け手へ届く。
+extension SurfaceZonesTests {
+  /// 知らせを残す受け手。
+  final class MarkRecorder: SurfaceLeadingMarkTarget {
+    var lines: [(LeadingMarkLine, LeadingMarkLine)] = []
+
+    func surface(
+      _ surface: any TextSurface, didMarkFrom first: LeadingMarkLine, to last: LeadingMarkLine
+    ) {
+      lines.append((first, last))
+    }
+  }
+
+  /// 塗りつぶした 16×16 の絵（外観が暗ければ緑、明るければ紫）。
+  static let markImage = NSImage(size: NSSize(width: 16, height: 16), flipped: true) { rect in
+    let isDark = NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    (isDark
+      ? NSColor(srgbRed: 0, green: 1, blue: 0, alpha: 1)
+      : NSColor(srgbRed: 1, green: 0, blue: 1, alpha: 1)).setFill()
+    rect.fill()
+    return true
+  }
+
+  static let mark = LeadingMark(
+    width: 24, lineWidth: 3, lineColor: NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1),
+    size: CGSize(width: 16, height: 16), image: markImage, dragOverride: 0)
+
+  /// 引いている範囲の上書き（地は青・線は白）。
+  static let presentation = SurfacePresentation(
+    showsMinimap: false,
+    lineOverrides: [
+      LineOverride(
+        background: NSColor(srgbRed: 0, green: 0, blue: 1, alpha: 1),
+        markColor: NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+    ], leadingMark: mark)
+
+  /// 行 3〜7 が組 0（行 5 の前に、組 0 の削除行 2 つ・組 0 の詰め物 1 つ・組を持たない削除行 1 つ、行 6 の前にスレッド）、
+  /// 行 8 が組を持たず、行 9〜11 が組 1、行 12 から先は組を持たない面。
+  struct Marked {
+    let opened: Opened
+    let target: MarkRecorder
+    let thread: ThreadZone
+  }
+
+  func marked() throws -> Marked {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    surface.setPresentation(Self.presentation)
+    let source = InsertedText()
+    var inserted = source.lines(["- a", "- b", "- c"])
+    inserted[0].markGroup = 0
+    inserted[1].markGroup = 0
+    let target = MarkRecorder()
+    let thread = ThreadZone(comment: "本文")
+    let removed = inserted[0..<2] + [InsertedLine(markGroup: 0), inserted[2]]
+    surface.setRows(
+      SurfaceRows(
+        insertions: [
+          RowInsertion(line: 5, content: .lines(Array(removed))),
+          RowInsertion(line: 6, content: .zone(thread)),
+        ],
+        spans: [
+          LineSpan(line: 0), LineSpan(line: 3, markGroup: 0), LineSpan(line: 8),
+          LineSpan(line: 9, markGroup: 1), LineSpan(line: 12),
+        ], source: source, leadingMarkTarget: target))
+    return Marked(opened: opened, target: target, thread: thread)
+  }
+
+  /// 文書の行 `row` の中ほどの点（`x` は view の座標）。
+  func rowPoint(_ surface: MetalTextSurface, row: Int, x: CGFloat = 200) -> CGPoint {
+    CGPoint(
+      x: x,
+      y: surface.config.topInset + CGFloat(surface.rows.y(ofLine: row) - surface.scrollPosition.y)
+        + surface.config.lineHeight / 2)
+  }
+
+  /// 塊 0 の中の `line` 行目の中ほどの点。
+  func insertedPoint(_ surface: MetalTextSurface, line: Int, x: CGFloat = 200) -> CGPoint {
+    CGPoint(
+      x: x,
+      y: surface.config.topInset
+        + CGFloat(surface.rows.top(ofBlock: 0) - surface.scrollPosition.y)
+        + (CGFloat(line) + 0.5) * surface.config.lineHeight)
+  }
+
+  /// ポインタが印を出せる行に乗った間だけ、その行（文書の行か、差し込んだ行）に絵が出る。組を持たない行、何も指さない
+  /// 差し込んだ行、出どころの行を指すが組を持たない差し込んだ行、絵の差し込み、のいずれの上でも出ない。頭の列・行番号・
+  /// 本文のどこに乗っても同じ行。行から行へ動かしても、絵の差し込みは描き直さない。
+  func testTheMarkShowsOnlyOnMarkableRowsUnderThePointer() throws {
+    let setup = try marked()
+    let surface = setup.opened.surface
+    let asked = setup.thread.widths.count
+    surface.hover(at: rowPoint(surface, row: 4))
+    XCTAssertEqual(surface.drawn.leadingMark?.hover, .document(4))
+    surface.hover(at: rowPoint(surface, row: 4, x: 4))
+    XCTAssertEqual(surface.drawn.leadingMark?.hover, .document(4), "頭の列の上")
+    surface.hover(at: rowPoint(surface, row: 2))
+    XCTAssertNil(surface.drawn.leadingMark?.hover, "組を持たない行")
+    surface.hover(at: insertedPoint(surface, line: 1))
+    XCTAssertEqual(surface.drawn.leadingMark?.hover, .inserted(block: 0, line: 1))
+    surface.hover(at: insertedPoint(surface, line: 2))
+    XCTAssertNil(surface.drawn.leadingMark?.hover, "何も指さない差し込んだ行")
+    surface.hover(at: insertedPoint(surface, line: 3))
+    XCTAssertNil(surface.drawn.leadingMark?.hover, "組を持たない差し込んだ行")
+    surface.hover(at: nil)
+    XCTAssertNil(surface.drawn.leadingMark, "面の外")
+    XCTAssertEqual(setup.thread.widths.count, asked, "絵の差し込みを描き直さない")
+  }
+
+  /// 頭の列は行番号の列の左端にあり、印を出せる行には線がいつも描かれ、組を持たない行（文書の行・差し込んだ行）には描かれ
+  /// ない。ポインタの下の行には、頭の列に絵が出る。外観が変われば、絵もその外観で描き直す。
+  func testTheLineIsDrawnOnMarkableRowsAndTheImageOnTheHoveredRow() throws {
+    let setup = try marked()
+    let surface = setup.opened.surface
+    XCTAssertEqual(surface.surfaceLayout.gutter.lead, 24)
+    var shot = try pixelShot(setup.opened)
+    XCTAssertEqual(shot.rgb(1, rowPoint(surface, row: 4).y), [255, 0, 0], "印を出せる行の線")
+    XCTAssertEqual(shot.rgb(1, insertedPoint(surface, line: 0).y), [255, 0, 0], "差し込んだ行の線")
+    XCTAssertNotEqual(shot.rgb(1, rowPoint(surface, row: 2).y), [255, 0, 0], "組を持たない行")
+    XCTAssertNotEqual(
+      shot.rgb(1, insertedPoint(surface, line: 3).y), [255, 0, 0], "組を持たない差し込んだ行")
+    XCTAssertNotEqual(shot.rgb(12, rowPoint(surface, row: 4).y), [0, 255, 0], "前提: 絵はまだ無い")
+    surface.hover(at: rowPoint(surface, row: 4))
+    shot = try pixelShot(setup.opened)
+    XCTAssertEqual(shot.rgb(12, rowPoint(surface, row: 4).y), [0, 255, 0], "頭の列の絵")
+    surface.textView.appearance = NSAppearance(named: .aqua)
+    surface.hover(at: rowPoint(surface, row: 4))
+    shot = try pixelShot(setup.opened)
+    XCTAssertEqual(shot.rgb(12, rowPoint(surface, row: 4).y), [255, 0, 255], "明るい外観の絵")
+  }
+
+  /// 頭の列の印を押して離すと、押した行だけを 1 回知らせ、選択と主は変えない。差し込んだ行は出どころの行。並びを置き直した
+  /// 後は、置き直した並びの受け手だけが知らせを受ける（形の同じ並びで受け手だけを替えても）。頭の列の、組を持たない行の所を
+  /// 押すと、行番号を押したのと同じく行の選択になる。印を出せる行でも、頭の列の右にある行番号の列を押せば行の選択になる。
+  func testPressingTheMarkTellsTheTargetOfTheCurrentRows() throws {
+    let setup = try marked()
+    let (opened, target) = (setup.opened, setup.target)
+    let surface = opened.surface
+    surface.selectedRange = NSRange(location: 2, length: 0)
+    let mark = rowPoint(surface, row: 3, x: 12)
+    try mouse(opened, .leftMouseDown, at: mark)
+    try mouse(opened, .leftMouseUp, at: mark)
+    XCTAssertEqual(target.lines.map(\.0), [.document(3)])
+    XCTAssertEqual(target.lines.map(\.1), [.document(3)])
+    XCTAssertEqual(surface.selectedRange, NSRange(location: 2, length: 0), "選択は変えない")
+    let source = insertedPoint(surface, line: 1, x: 12)
+    try mouse(opened, .leftMouseDown, at: source)
+    try mouse(opened, .leftMouseUp, at: source)
+    XCTAssertEqual(target.lines.last?.0, .source(1), "差し込んだ行は出どころの行")
+    let plain = rowPoint(surface, row: 2, x: 12)
+    try mouse(opened, .leftMouseDown, at: plain)
+    try mouse(opened, .leftMouseUp, at: plain)
+    let text = opened.document.text
+    XCTAssertEqual(
+      surface.selectedRange,
+      NSRange(location: text.lineStart(2), length: text.lineEnd(2) - text.lineStart(2)),
+      "組を持たない行の頭の列は、行番号と同じく行の選択")
+    XCTAssertEqual(target.lines.count, 2, "組を持たない行の頭の列は知らせない")
+    let number = rowPoint(surface, row: 3, x: surface.surfaceLayout.gutter.lead + 4)
+    try mouse(opened, .leftMouseDown, at: number)
+    try mouse(opened, .leftMouseUp, at: number)
+    XCTAssertEqual(
+      surface.selectedRange,
+      NSRange(location: text.lineStart(3), length: text.lineEnd(3) - text.lineStart(3)),
+      "印を出せる行の行番号の列は、行の選択")
+    XCTAssertEqual(target.lines.count, 2, "印を出せる行の行番号の列は知らせない")
+    let next = MarkRecorder()
+    let markable = [LineSpan(line: 0, markGroup: 0)]
+    surface.setRows(SurfaceRows(spans: markable, leadingMarkTarget: next))
+    try mouse(opened, .leftMouseDown, at: mark)
+    try mouse(opened, .leftMouseUp, at: mark)
+    XCTAssertEqual(target.lines.count, 2, "古い並びの受け手へは届かない")
+    XCTAssertEqual(next.lines.map(\.0), [.document(3)])
+    let latest = MarkRecorder()
+    surface.setRows(SurfaceRows(spans: markable, leadingMarkTarget: latest))
+    try mouse(opened, .leftMouseDown, at: mark)
+    try mouse(opened, .leftMouseUp, at: mark)
+    XCTAssertEqual(next.lines.count, 1, "形の同じ並びでも、受け手を替えれば前の受け手へは届かない")
+    XCTAssertEqual(latest.lines.map(\.0), [.document(3)])
+  }
+
+  /// 引くと、押した行から、ポインタの下の同じ組の行までが範囲になり、離すと並びの順で最初と最後の行を知らせる。組を持たない
+  /// 行と絵の差し込みは飛び越し、別の組の行の手前で止まる。上へ引いても、知らせは並びの順。
+  func testDraggingTheMarkMakesARangeInTheSameGroup() throws {
+    let setup = try marked()
+    let (opened, target) = (setup.opened, setup.target)
+    let surface = opened.surface
+    try mouse(opened, .leftMouseDown, at: rowPoint(surface, row: 4, x: 12))
+    try mouse(opened, .leftMouseDragged, at: insertedPoint(surface, line: 2))
+    XCTAssertEqual(
+      surface.drawn.leadingMark?.range?.last, .inserted(block: 0, line: 1),
+      "詰め物の上では、その手前の同じ組の行まで")
+    XCTAssertNil(surface.drawn.leadingMark?.hover, "引いている間は絵を出さない")
+    try mouse(opened, .leftMouseDragged, at: rowPoint(surface, row: 10))
+    XCTAssertEqual(
+      surface.drawn.leadingMark?.range?.last, .document(7), "別の組の行の手前で止まる")
+    try mouse(opened, .leftMouseUp, at: rowPoint(surface, row: 10))
+    XCTAssertEqual(target.lines.count, 1)
+    XCTAssertEqual(target.lines.last?.0, .document(4))
+    XCTAssertEqual(target.lines.last?.1, .document(7))
+    XCTAssertNil(surface.drawn.leadingMark?.range, "離せば範囲を下ろす")
+
+    try mouse(opened, .leftMouseDown, at: rowPoint(surface, row: 7, x: 12))
+    try mouse(opened, .leftMouseDragged, at: rowPoint(surface, row: 1))
+    try mouse(opened, .leftMouseUp, at: rowPoint(surface, row: 1))
+    XCTAssertEqual(target.lines.last?.0, .document(3), "上へ引いても、最初の行は並びの順で前の行")
+    XCTAssertEqual(target.lines.last?.1, .document(7))
+  }
+
+  /// 最終行の後の塊に組を持つ差し込んだ行がある面で、内容の下の空白へ引いても、範囲は下向きのまま——差し込んだ行から
+  /// 引けばその塊の最後の行まで、上の同じ組の文書の行から引けば、下の差し込んだ行まで入る。
+  func testDraggingIntoTheBlankBelowTheContentKeepsTheRangeDownward() throws {
+    let opened = try hostedRows(8)
+    let surface = opened.surface
+    surface.setPresentation(Self.presentation)
+    let source = InsertedText()
+    var inserted = source.lines(["- a", "- b"])
+    inserted[0].markGroup = 0
+    inserted[1].markGroup = 0
+    let lineCount = opened.document.text.lineCount
+    let target = MarkRecorder()
+    surface.setRows(
+      SurfaceRows(
+        insertions: [RowInsertion(line: lineCount, content: .lines(inserted))],
+        spans: [LineSpan(line: 0), LineSpan(line: lineCount - 2, markGroup: 0)], source: source,
+        leadingMarkTarget: target))
+    let blank = CGPoint(x: 200, y: surface.size.height - 10)
+    XCTAssertGreaterThan(
+      blank.y, insertedPoint(surface, line: 1).y + surface.config.lineHeight, "前提: 内容の下に空白がある")
+    for start in [
+      insertedPoint(surface, line: 0, x: 12), rowPoint(surface, row: lineCount - 2, x: 12),
+    ] {
+      try mouse(opened, .leftMouseDown, at: start)
+      try mouse(opened, .leftMouseDragged, at: blank)
+      try mouse(opened, .leftMouseUp, at: blank)
+    }
+    XCTAssertEqual(target.lines.map(\.0), [.source(0), .document(lineCount - 2)])
+    XCTAssertEqual(target.lines.map(\.1), [.source(1), .source(1)], "下の空白へ引けば、最後の差し込んだ行まで")
+  }
+
+  /// 引いている間に並びを置き直すと、引く操作を終え、離すまでは ＋ も出さず、離しても知らせない。離した後は ＋ が出る。
+  func testNewRowsWhileDraggingEndTheDrag() throws {
+    let setup = try marked()
+    let (opened, target) = (setup.opened, setup.target)
+    let surface = opened.surface
+    try mouse(opened, .leftMouseDown, at: rowPoint(surface, row: 4, x: 12))
+    try mouse(opened, .leftMouseDragged, at: rowPoint(surface, row: 6))
+    surface.setRows(
+      SurfaceRows(spans: [LineSpan(line: 0, markGroup: 0)], leadingMarkTarget: target))
+    XCTAssertNil(surface.drawn.leadingMark?.range)
+    surface.hover(at: rowPoint(surface, row: 6))
+    XCTAssertNil(surface.drawn.leadingMark?.hover, "押している間は ＋ を出さない")
+    try mouse(opened, .leftMouseUp, at: rowPoint(surface, row: 6))
+    XCTAssertTrue(target.lines.isEmpty)
+    surface.hover(at: rowPoint(surface, row: 6))
+    XCTAssertEqual(surface.drawn.leadingMark?.hover, .document(6), "離した後は ＋ が出る")
+  }
+
+  /// スクロールの後と並びを置き直した後は、今のポインタの位置で絵を引き直す——ポインタの下へ来た行に移り、置き直した並びで
+  /// 出せなくなった行からは消える。
+  func testTheMarkIsPickedAgainUnderThePointerAfterScrollingAndNewRows() throws {
+    let opened = try open(rows(80), size: CGSize(width: 600, height: 400))
+    let surface = opened.surface
+    let window = PointerWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.answersAsKey = true
+    window.contentView = surface.view
+    surface.viewStateDidChange(size: CGSize(width: 600, height: 400), scale: 2, visible: false)
+    addTeardownBlock { @MainActor in window.contentView = nil }
+    surface.setPresentation(Self.presentation)
+    let markable = [LineSpan(line: 0, markGroup: 0)]
+    surface.setRows(SurfaceRows(spans: markable))
+    window.pointer = surface.textView.convert(rowPoint(surface, row: 4), to: nil)
+    surface.refreshPointer()
+    XCTAssertEqual(surface.drawn.leadingMark?.hover, .document(4), "前提: ポインタの下の行に絵が出る")
+    surface.scroll(to: RowPosition(line: 2))
+    XCTAssertEqual(surface.drawn.leadingMark?.hover, .document(6), "スクロールの後はポインタの下へ来た行に移る")
+    surface.setRows(SurfaceRows(spans: markable + [LineSpan(line: 5)]))
+    XCTAssertNil(surface.drawn.leadingMark?.hover, "置き直した並びで出せなくなった行からは消える")
+  }
+
+  /// 引いている間に本文がスクロールすると、範囲の端はポインタの下に来た同じ組の行まで伸びる——ポインタを置いたままの
+  /// スクロールでも、面の下端の外へ引いた間の自動スクロールでも。
+  func testScrollingWhileDraggingExtendsTheRangeToTheRowUnderThePointer() throws {
+    let size = CGSize(width: 600, height: 400)
+    let opened = try open(rows(80), size: size)
+    let surface = opened.surface
+    let window = PointerWindow(
+      contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.answersAsKey = true
+    window.contentView = surface.view
+    surface.viewStateDidChange(size: size, scale: 2, visible: false)
+    addTeardownBlock { @MainActor in window.contentView = nil }
+    surface.setPresentation(Self.presentation)
+    surface.setRows(
+      SurfaceRows(spans: [LineSpan(line: 0, markGroup: 0)], leadingMarkTarget: MarkRecorder()))
+    let pointer = surface.textView.pointer
+
+    try mouse(opened, .leftMouseDown, at: rowPoint(surface, row: 2, x: 12))
+    let held = rowPoint(surface, row: 5)
+    try mouse(opened, .leftMouseDragged, at: held)
+    window.pointer = surface.textView.convert(held, to: nil)
+    surface.scroll(to: RowPosition(line: 3))
+    XCTAssertEqual(
+      surface.drawn.leadingMark?.range?.last, .document(8), "ポインタを置いたままのスクロール")
+
+    let bottom = surface.rows.markSpot(
+      atY: surface.scrollPosition.y + Double(size.height - surface.config.topInset) - 1,
+      lineCount: 80)
+    guard case .document(let shown) = bottom?.row else { return XCTFail("前提: 下端の行") }
+    let below = CGPoint(x: 12, y: size.height + 20)
+    window.pointer = surface.textView.convert(below, to: nil)
+    try mouse(opened, .leftMouseDragged, at: below)
+    XCTAssertTrue(pointer.isAutoscrolling)
+    pointer.frame(now: 10)
+    pointer.frame(now: 10.1)
+    guard case .document(let extended) = surface.drawn.leadingMark?.range?.last else {
+      return XCTFail("範囲の端は文書の行")
+    }
+    XCTAssertGreaterThan(extended, shown, "自動スクロールで送った分だけ伸びる")
+  }
+
+  /// 引いている範囲の行と、並びで行の上書きを持つ行は、地を行の型の地の代わりに上書きの地で描き、頭の線を上書きの線の色で
+  /// 描く（引いている範囲の行には、表示の構成が範囲に当てる上書きを使う）。範囲の外の行は、元の地と線のまま。
+  func testOverriddenRowsAreDrawnWithTheOverrideGroundAndLine() throws {
+    let setup = try marked()
+    let opened = setup.opened
+    let surface = opened.surface
+    let blue = [0, 0, 255]
+    let white = [255, 255, 255]
+    let ground = { (point: CGPoint) in CGPoint(x: 400, y: point.y) }
+    try mouse(opened, .leftMouseDown, at: rowPoint(surface, row: 4, x: 12))
+    try mouse(opened, .leftMouseDragged, at: insertedPoint(surface, line: 0))
+    var shot = try pixelShot(opened)
+    for point in [rowPoint(surface, row: 4), insertedPoint(surface, line: 0)] {
+      XCTAssertEqual(shot.rgb(ground(point).x, point.y), blue, "引いている範囲の地")
+      XCTAssertEqual(shot.rgb(1, point.y), white, "引いている範囲の線")
+    }
+    let outside = rowPoint(surface, row: 3)
+    XCTAssertNotEqual(shot.rgb(ground(outside).x, outside.y), blue, "範囲の外の地")
+    XCTAssertEqual(shot.rgb(1, outside.y), [255, 0, 0], "範囲の外の線")
+    try mouse(opened, .leftMouseUp, at: insertedPoint(surface, line: 0))
+
+    surface.setRows(
+      SurfaceRows(spans: [
+        LineSpan(line: 0), LineSpan(line: 3, markGroup: 0, override: 0), LineSpan(line: 4),
+      ]))
+    shot = try pixelShot(opened)
+    XCTAssertEqual(shot.rgb(ground(outside).x, outside.y), blue, "並びの上書きの地")
+    XCTAssertEqual(shot.rgb(1, outside.y), white, "並びの上書きの線")
+    let next = rowPoint(surface, row: 4)
+    XCTAssertNotEqual(shot.rgb(ground(next).x, next.y), blue, "上書きを持たない行")
+  }
+}

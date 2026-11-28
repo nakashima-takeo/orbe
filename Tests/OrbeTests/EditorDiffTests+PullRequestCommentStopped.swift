@@ -72,7 +72,7 @@ extension EditorDiffTests {
   /// a.txt の新しい側の行 `line` の、未送信のコメント 1 件を持つ未解決のスレッド。
   private func stoppedThread(_ id: String, line: Int) -> GitHubPullRequestReview.Thread {
     GitHubPullRequestReview.Thread(
-      id: id, path: "a.txt", side: .new, line: line, isResolved: false, canReply: true,
+      id: id, path: "a.txt", lines: .at(.new, line), isResolved: false, canReply: true,
       canResolve: true, canUnresolve: false,
       comments: [.init(id: "\(id)-C", author: "me", body: "本文", createdAt: Date(), isPending: true)]
     )

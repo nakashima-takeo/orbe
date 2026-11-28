@@ -32,9 +32,13 @@ enum DiffRows {
 
   /// インライン——新しい側の面に、区間の削除行を「古い側の行を指す差し込み」として区間の新しい側の始まりの境に置き、追加の
   /// 区間に型「追加」、文脈の区間に旧番号の始まりを渡す（差し込みの出どころは呼び手が添える）。注記（`notes`）があれば、絵の
-  /// 差し込みを行の下に置き、印を出せる行とスレッドのある行の型を付ける——新しい側の行の絵はその行の後（次の区間の削除行より
-  /// 上）、古い側の行の絵は、削除行ならその削除行の直後（削除行の塊を割る）、文脈の行なら対応する新しい側の行の後。
+  /// 差し込みを行の下に置き、コメントできる行に印の組（まとまりの番号。同じまとまりの削除行と新しい側の行は同じ組）を、
+  /// 地を替える範囲の行（並びの順で範囲の始まりから終わりまでの間の行の全部）に上書きを付ける——新しい側の行の絵はその行の
+  /// 後（次の区間の削除行より上）、古い側の行の絵は、削除行ならその削除行の直後（削除行の塊を割る）、文脈の行なら対応する新しい
+  /// 側の行の後。
   static func inline(_ hunks: [LineHunk], new: Side, notes: Notes = Notes()) -> SurfaceRows {
+    let covered = notes.overrides.map { inlineLines(of: $0.range, hunks) }
+    let removedOverrides = resolve(notes.overrides, covered, side: .old)
     var spans = Spans(limit: new.lines)
     var runs: [Int: [InsertedLine]] = [:]
     var oldNext = 0
@@ -44,10 +48,10 @@ enum DiffRows {
       if block.new.lowerBound > newNext { spans.add(newNext, otherNumber: oldNext + 1) }
       if !block.old.isEmpty {
         runs[block.new.lowerBound] = block.old.map { line in
-          let threaded = notes.threads.old.contains(line)
-          return InsertedLine(
-            line: line, style: threaded ? DiffStyle.thread(DiffStyle.removed) : DiffStyle.removed,
-            allowsTrailingMark: contains(notes.commentable.old, line))
+          InsertedLine(
+            line: line, style: DiffStyle.removed,
+            markGroup: notes.commentable.index(of: line, .old),
+            override: override(of: line, in: removedOverrides))
         }
       }
       if !block.new.isEmpty { spans.add(block.new.lowerBound, style: DiffStyle.added) }
@@ -70,21 +74,17 @@ enum DiffRows {
       }
       if let slot { slots.add(.zone(zone.zone), at: slot) }
     }
-    let threaded = notes.threads.new.union(
-      notes.threads.old.compactMap { line in
-        if case .context(let new) = row(ofOld: line, hunks) { return new }
-        return nil
-      })
     return SurfaceRows(
       insertions: slots.insertions(runs: runs),
       spans: refine(
-        spans.items, lines: new.lines, commentable: notes.commentable.new, threads: threaded))
+        spans.items, lines: new.lines, commentable: notes.commentable.ranges(.new),
+        overrides: resolve(notes.overrides, covered, side: .new)))
   }
 
   /// 並列の左（古い側）と右（新しい側）——文脈は両側とも型なし。区間は両側の同じ行から始め、左は型「削除」、右は型「追加」で、
   /// 削除と追加の数の差だけ短い側の区間の後ろに詰め物（何も指さない差し込み・型「詰め物」）を置く。注記（`notes`）があれば、
   /// 古い側の行の絵は左、新しい側の行の絵は右の、その行の後に置き、反対側の同じ段の後（詰め物の塊の途中を含む）に相手と同じ
-  /// 高さの空きを置く。
+  /// 高さの空きを置く。地を替える範囲は、範囲が覆う行（→ `coveredLines`）の古い側を左、新しい側を右の行に付ける。
   static func side(_ hunks: [LineHunk], old: Side, new: Side, notes: Notes = Notes()) -> (
     left: SurfaceRows, right: SurfaceRows
   ) {
@@ -106,6 +106,7 @@ enum DiffRows {
       left.spans.add(block.old.upperBound)
       right.spans.add(block.new.upperBound)
     }
+    let covered = notes.overrides.map { coveredLines(of: $0.range, hunks) }
     var slots = (left: Slots(), right: Slots())
     for zone in notes.zones {
       guard let (own, other) = sideSlots(zone, hunks, old: old, new: new) else { continue }
@@ -122,13 +123,13 @@ enum DiffRows {
       SurfaceRows(
         insertions: slots.left.insertions(runs: left.runs),
         spans: refine(
-          left.spans.items, lines: old.lines, commentable: notes.commentable.old,
-          threads: notes.threads.old)),
+          left.spans.items, lines: old.lines, commentable: notes.commentable.ranges(.old),
+          overrides: resolve(notes.overrides, covered, side: .old))),
       SurfaceRows(
         insertions: slots.right.insertions(runs: right.runs),
         spans: refine(
-          right.spans.items, lines: new.lines, commentable: notes.commentable.new,
-          threads: notes.threads.new))
+          right.spans.items, lines: new.lines, commentable: notes.commentable.ranges(.new),
+          overrides: resolve(notes.overrides, covered, side: .new)))
     )
   }
 
@@ -202,16 +203,6 @@ enum DiffRows {
       shift = new.upperBound - old.upperBound
     }
     return LineRow(line: max(0, anchor.line + shift))
-  }
-
-  /// 昇順の重ならない区間の列 `ranges` のどれかが `line` を含む。
-  static func contains(_ ranges: [Range<Int>], _ line: Int) -> Bool {
-    var (low, high) = (0, ranges.count)
-    while low < high {
-      let mid = (low + high) / 2
-      if ranges[mid].upperBound <= line { low = mid + 1 } else { high = mid }
-    }
-    return low < ranges.count && ranges[low].contains(line)
   }
 
   /// 区間の始まりの昇順の列。同じ行に重ねて置けば後の方を残し、面の行の外（`limit` 以上）は置かない。

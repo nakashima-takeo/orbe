@@ -43,8 +43,8 @@ struct RowLayout: Sendable {
   /// 絵の差し込みを持つか・相手と同じ高さの空きを持つか。
   private(set) var hasZones = false
   private(set) var hasGaps = false
-  /// 行の右端の印を出せる行（区間か差し込んだ行）を持つか。
-  private(set) var hasTrailingMarks = false
+  /// 行の頭の印を出せる行（区間か差し込んだ行）を持つか。
+  private(set) var hasLeadingMarks = false
   /// 絵の差し込みの同一性 → 塊の番号。
   private var zoneBlocks: [ObjectIdentifier: Int] = [:]
   /// 文書の行の区間（始まりの行の昇順）。
@@ -89,11 +89,11 @@ struct RowLayout: Sendable {
       if case .gap = $0 { return true }
       return false
     }
-    hasTrailingMarks =
-      spans.contains(where: \.allowsTrailingMark)
+    hasLeadingMarks =
+      spans.contains { $0.markGroup != nil }
       || contents.contains {
         guard case .lines(let lines) = $0 else { return false }
-        return lines.contains { $0.allowsTrailingMark && $0.line != nil }
+        return lines.contains { $0.markGroup != nil && $0.line != nil }
       }
     settleNumbers()
     version += 1
@@ -292,6 +292,9 @@ struct RowLayout: Sendable {
 
   /// 文書の行 `line` の行の型の番号。
   func style(ofLine line: Int) -> Int? { span(containing: line).flatMap { spans[$0].style } }
+
+  /// 文書の行 `line` を含む区間（最初の区間より上なら nil）。
+  func lineSpan(ofLine line: Int) -> LineSpan? { span(containing: line).map { spans[$0] } }
 
   /// 文書の行 `line` のもう一方の番号。
   func otherNumber(ofLine line: Int) -> Int? {

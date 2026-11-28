@@ -61,6 +61,22 @@ extension FramePerfTests {
     surface.focus(field)
     surface.reveal(
       NSRange(location: opened.document.text.lineStart(middle), length: 0), policy: .center)
+    gateFieldStrokes(surface, label: "zone-field 1MB")
+    XCTAssertEqual(field.text.length, 120, "打鍵は入力欄に入る")
+    var started = CACurrentMediaTime()
+    surface.redrawZone(thread)
+    let one = CACurrentMediaTime() - started
+    started = CACurrentMediaTime()
+    surface.viewStateDidChange(size: CGSize(width: 700, height: 600), scale: 2, visible: true)
+    let all = CACurrentMediaTime() - started
+    print(
+      "PERF-FRAMES zone picture main: one zone", Self.ms(one * 1000), "/ width change",
+      surface.zones.count, "zones", Self.ms(all * 1000))
+  }
+
+  /// 面 `surface` の主の入力欄に、打鍵の間隔 100ms と 33ms で 60 字ずつ打って関門（打鍵→present の中央値 12.5ms・p95
+  /// 17ms、打鍵 1 回の main の仕事 p99 1ms）にかける。
+  func gateFieldStrokes(_ surface: MetalTextSurface, label: String) {
     waitUntilIdle(surface)
     for interval in [0.1, 1.0 / 30] {
       let name = "\(Int((interval * 1000).rounded()))ms"
@@ -72,7 +88,7 @@ extension FramePerfTests {
       let typing = totals(surface).typing.sorted()
       XCTAssertGreaterThanOrEqual(typing.count, 55, "\(name): 前提: 打鍵が画面に出た")
       print(
-        "PERF-FRAMES zone-field 1MB", name, "keystroke→present median",
+        "PERF-FRAMES", label, name, "keystroke→present median",
         Self.ms(Self.quantile(typing, 0.5)), "p95", Self.ms(Self.quantile(typing, 0.95)),
         "/ main CPU p50", Self.ms(Self.quantile(main.cpu, 0.5)), "p99",
         Self.ms(Self.quantile(main.cpu, 0.99)))
@@ -80,16 +96,6 @@ extension FramePerfTests {
       XCTAssertLessThanOrEqual(Self.quantile(typing, 0.95), 17, "\(name): 打鍵→present の p95")
       XCTAssertLessThanOrEqual(Self.quantile(main.cpu, 0.99), 1, "\(name): 打鍵 1 回の main の仕事")
     }
-    XCTAssertEqual(field.text.length, 120, "打鍵は入力欄に入る")
-    var started = CACurrentMediaTime()
-    surface.redrawZone(thread)
-    let one = CACurrentMediaTime() - started
-    started = CACurrentMediaTime()
-    surface.viewStateDidChange(size: CGSize(width: 700, height: 600), scale: 2, visible: true)
-    let all = CACurrentMediaTime() - started
-    print(
-      "PERF-FRAMES zone picture main: one zone", Self.ms(one * 1000), "/ width change",
-      surface.zones.count, "zones", Self.ms(all * 1000))
   }
 
   /// 長い 1 段落の本文を持つスレッドを材料と当たりの表に写す main の仕事は、段落の長さに比例する——本文が 2,000 字と

@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// PR のコメントの絵の見え方——返信欄の見え方・コメント追加の印の絵・短い字の幅の覚え。
+/// PR のコメントの絵の見え方——返信欄の見え方・行の頭のコメントの印・短い字の幅の覚え。
 @MainActor
 enum PrCommentStyle {
   static let field = ZoneTextField.Style(
@@ -10,35 +10,31 @@ enum PrCommentStyle {
     selectionColor: Theme.Color.editorPrFieldSelection,
     inactiveSelectionColor: Theme.Color.editorPrFieldSelectionInactive)
 
-  /// 行の右端のコメント追加の印（18×18・角丸 3・中の ＋ 11、線 1.4）。通常は tertiary の ＋ を不透明度 .6、ポインタが印の
-  /// 上にあれば tint(accent, .16) の地に accentBright の ＋。
-  nonisolated(unsafe) static let trailingMark: TrailingMark = {
-    let size = Theme.Layout.editorPrMark
-    return TrailingMark(
-      size: CGSize(width: size, height: size), inset: Theme.Layout.editorPrMarkInset,
-      image: markImage(ground: nil, glyph: Theme.Color.editorTertiary.withAlphaComponent(0.6)),
-      hoveredImage: markImage(
-        ground: Theme.Color.editorPrMarkHover, glyph: Theme.Color.accentBright))
+  /// 行の頭のコメントの印——頭の列 24・線 3（accent の α .55）と、ポインタの下の行の ＋（16×16・角丸 4・地 accent・中の ＋
+  /// 10、線 1.5）。引いている範囲は、書いている範囲の上書き。
+  nonisolated(unsafe) static let leadingMark: LeadingMark = {
+    let size = Theme.Layout.editorPrMarkButton
+    return LeadingMark(
+      width: Theme.Layout.editorPrMarkColumn, lineWidth: Theme.Layout.editorPrMarkLineWidth,
+      lineColor: Theme.Color.editorPrMarkLine, size: CGSize(width: size, height: size),
+      image: markImage(), dragOverride: DiffStyle.draftOverride)
   }()
 
-  private nonisolated static func markImage(ground: NSColor?, glyph: NSColor) -> NSImage {
-    let size = Theme.Layout.editorPrMark
+  private nonisolated static func markImage() -> NSImage {
+    let size = Theme.Layout.editorPrMarkButton
     return NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
-      if let ground {
-        ground.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
-      }
-      let glyphSize = Theme.Layout.editorPrMarkGlyph
-      let k = glyphSize / 16
-      let origin = CGPoint(x: rect.midX - glyphSize / 2, y: rect.midY - glyphSize / 2)
+      Theme.Color.accentPrimary.setFill()
+      let radius = Theme.Layout.editorPrMarkButtonRadius
+      NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+      let half = Theme.Layout.editorPrMarkPlus / 2
       let path = NSBezierPath()
-      path.move(to: CGPoint(x: origin.x + 8 * k, y: origin.y + 4 * k))
-      path.line(to: CGPoint(x: origin.x + 8 * k, y: origin.y + 12 * k))
-      path.move(to: CGPoint(x: origin.x + 4 * k, y: origin.y + 8 * k))
-      path.line(to: CGPoint(x: origin.x + 12 * k, y: origin.y + 8 * k))
-      path.lineWidth = 1.4 * k
+      path.move(to: CGPoint(x: rect.midX, y: rect.midY - half))
+      path.line(to: CGPoint(x: rect.midX, y: rect.midY + half))
+      path.move(to: CGPoint(x: rect.midX - half, y: rect.midY))
+      path.line(to: CGPoint(x: rect.midX + half, y: rect.midY))
+      path.lineWidth = Theme.Layout.editorPrMarkPlusStroke
       path.lineCapStyle = .round
-      glyph.setStroke()
+      Theme.Color.accentCheckStroke.setStroke()
       path.stroke()
       return true
     }

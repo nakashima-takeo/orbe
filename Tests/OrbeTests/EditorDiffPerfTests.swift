@@ -62,6 +62,55 @@ final class EditorDiffPerfTests: OrbeTestCase {
     }
   }
 
+  /// PR の注記つきの並びを置く 1 回——1MB の Swift の 100 行ごとの書き換え（ハンク数百）に、ハンクの行を印を出せる行にし、
+  /// 10 ハンクごとにスレッドを置いた並びを作り（→ `pullRequestNotes`）、PR の diff の構成の面に置く main の仕事を記録する。
+  /// 1 回目（絵の差し込みを初めて問う）の値と、同じ並びに新しいコメントの欄を 1 つ足して置き直す 5 回の中央値を出す。
+  func testPlacingPullRequestRows() throws {
+    let source = EditorTypingPerfTests.swiftSource(bytes: 1_000_000)
+    let lines = source.components(separatedBy: "\n")
+    let new = lines.enumerated().map { $0 % 100 == 3 ? $1 + " // changed" : $1 }
+      .joined(separator: "\n")
+    let (oldRope, newRope) = (TextRope(source), TextRope(new))
+    let hunks = LineDiff.hunks(old: oldRope, new: newRope, limit: EditorDiff.hunkLimit)
+    let url = try caseFile("\(UUID().uuidString).swift", new)
+    let surface = try XCTUnwrap(
+      makeMetalTextSurface(style: EditorStyle.make(), omittedLabel: { "\($0)" })
+        as? MetalTextSurface)
+    let document = EditorDocument(
+      url: url, contents: try EditorDocument.read(url), surface: surface,
+      registry: LanguageRegistry(queriesRoot: nil))
+    let revision = RevisionDocument(
+      text: source, name: url, registry: LanguageRegistry(queriesRoot: nil))
+    surface.viewStateDidChange(size: CGSize(width: 900, height: 700), scale: 2, visible: false)
+    surface.setPresentation(DiffStyle.pullRequestInline)
+    let place = { (notes: DiffRows.Notes) -> Double in
+      let started = CACurrentMediaTime()
+      var rows = DiffRows.inline(hunks, new: DiffRows.Side(newRope), notes: notes)
+      rows.source = revision
+      surface.setRows(rows)
+      surface.flush()
+      return CACurrentMediaTime() - started
+    }
+    var notes = Self.pullRequestNotes(hunks, lines: (oldRope.lineCount, newRope.lineCount))
+    let threads = notes.zones.count
+    let first = place(notes)
+    var again: [Double] = []
+    for k in 0..<5 {
+      notes.zones.append(
+        DiffRows.Zone(
+          version: .new, line: hunks[k * 3].newLines.lowerBound,
+          zone: PrCommentZone(
+            subject: .draft(k), lines: .at(.new, hunks[k * 3].newLines.lowerBound + 1),
+            fieldID: "draft:\(k)")))
+      again.append(place(notes))
+    }
+    print(
+      "PERF diff pr rows place hunks", hunks.count, "threads", threads,
+      "first", ms(first), "again median", ms(again.sorted()[again.count / 2]), "insertions",
+      surface.rows.count)
+    withExtendedLifetime((document, revision)) {}
+  }
+
   /// 作業ツリー diff の中の打鍵 1 回の main の仕事——キーの出来事を受けてから、面の編集係・文書と、diff を含む Orbe の
   /// 配り先が戻るまでの main のスレッドの CPU 時間。1MB の Swift で、変更が数十か所の普通の diff と、編集の数が上限に近い
   /// diff を、インラインと並列で、変えていない行に字と Enter（行の数を変える）を打って測る。普通の diff は p99 1ms 以下、
@@ -156,4 +205,53 @@ final class EditorDiffPerfTests: OrbeTestCase {
   }
 
   private func ms(_ seconds: Double) -> String { String(format: "%.1fms", seconds * 1000) }
+
+  // MARK: - PR の注記（製品のコメントの層が渡す形）
+
+  /// ハンク `hunks` の前後 3 行までをコメントできる行のまとまりにし、10 ハンクごとに、ハンクの新しい側の最初の行にスレッドを
+  /// 置く注記（20 ハンクごとのスレッドは、その 2 行上からの範囲のスレッド）。
+  static func pullRequestNotes(_ hunks: [LineHunk], lines: (old: Int, new: Int)) -> DiffRows.Notes {
+    var notes = DiffRows.Notes()
+    let widen = { (range: Range<Int>, count: Int) in
+      max(0, range.lowerBound - 3)..<min(count, range.upperBound + 3)
+    }
+    let old = merged(hunks.map { widen($0.oldLines, lines.old) })
+    let new = merged(hunks.map { widen($0.newLines, lines.new) })
+    notes.commentable = DiffRows.CommentHunks(
+      items: zip(old, new).map { DiffRows.CommentHunk(old: $0, new: $1) })
+    for (index, hunk) in hunks.enumerated() where index % 10 == 0 {
+      let line = hunk.newLines.lowerBound
+      let thread = GitHubPullRequestReview.Thread(
+        id: "thread-\(index)", path: "big.swift", lines: .at(.new, line + 1), isResolved: false,
+        canReply: true, canResolve: true, canUnresolve: false,
+        comments: [
+          GitHubPullRequestReview.Comment(
+            id: "comment-\(index)", author: "octocat", body: "スレッド \(index) の本文。",
+            createdAt: Date(timeIntervalSince1970: 0), isPending: false)
+        ])
+      notes.zones.append(
+        DiffRows.Zone(
+          version: .new, line: line,
+          zone: PrCommentZone(
+            subject: .thread(thread), lines: .at(.new, line + 1), fieldID: "thread:\(thread.id)")))
+      let range = DiffLineRange(
+        start: index % 20 == 0 ? DiffLine(version: .new, line: max(0, line - 2)) : nil,
+        end: DiffLine(version: .new, line: line))
+      notes.overrides.append(.init(range: range, kind: .thread))
+    }
+    return notes
+  }
+
+  /// 昇順の区間の列の、重なり・接する区間をまとめた列。
+  private static func merged(_ ranges: [Range<Int>]) -> [Range<Int>] {
+    var result: [Range<Int>] = []
+    for range in ranges where !range.isEmpty {
+      if let last = result.last, last.upperBound >= range.lowerBound {
+        result[result.count - 1] = last.lowerBound..<max(last.upperBound, range.upperBound)
+      } else {
+        result.append(range)
+      }
+    }
+    return result
+  }
 }

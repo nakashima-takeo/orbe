@@ -84,7 +84,7 @@ extension PullRequestStateTests {
     -> GitHubPullRequestReview.Thread
   {
     GitHubPullRequestReview.Thread(
-      id: id, path: "a", side: side, line: line, isResolved: false, canReply: true,
+      id: id, path: "a", lines: line.map { .at(side, $0) }, isResolved: false, canReply: true,
       canResolve: true, canUnresolve: false,
       comments: (1...comments).map {
         .init(

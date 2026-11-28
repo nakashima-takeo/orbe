@@ -155,7 +155,7 @@ extension MetalTextView: NSDraggingSource {
       case .field(let site):
         showDrop(nil)
         operation = dropPlan(sender, site: site).operation
-      case .button, .zoneText, .zoneSpace, .trailingMark:
+      case .button, .zoneText, .zoneSpace, .leadingMark:
         showDrop(nil)
       }
     }
@@ -188,7 +188,7 @@ extension MetalTextView: NSDraggingSource {
     switch surface.target(at: point) {
     case .body: site = surface.bodySite
     case .field(let field): site = field
-    case .button, .zoneText, .zoneSpace, .trailingMark:
+    case .button, .zoneText, .zoneSpace, .leadingMark:
       showDrop(nil)
       return false
     }

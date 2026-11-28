@@ -8,6 +8,24 @@ enum GitHubDiffSide: String, Equatable {
   case new = "RIGHT"
 }
 
+/// GitHub の diff の 1 行——側と、その側の版の行（1 始まり）。
+struct GitHubLine: Hashable {
+  let side: GitHubDiffSide
+  let line: Int
+}
+
+/// GitHub の diff の行の範囲（スレッドが付いた行）——終わりの行と、始まりの行（1 行なら nil。GitHub の `line`・`side` が
+/// 終わり、`startLine`・`startSide` が始まり）。作る口は 1 つで、始まりと終わりが同じ行なら始まりを持たない。
+struct GitHubLineRange: Hashable {
+  let start: GitHubLine?
+  let end: GitHubLine
+
+  init(start: GitHubLine?, end: GitHubLine) {
+    self.start = start == end ? nil : start
+    self.end = end
+  }
+}
+
 /// レビューの種類（GitHub の `PullRequestReviewEvent`）。
 enum GitHubReviewEvent: String, Equatable {
   case approve = "APPROVE"
@@ -31,15 +49,17 @@ struct GitHubPullRequestReview: Equatable {
   struct Thread: Equatable {
     let id: String
     let path: String
-    let side: GitHubDiffSide
-    /// 付いた行（その側の版の行。1 始まり）。今の diff に置けない（古い版に付いた・ファイル単位）なら nil。
-    let line: Int?
+    /// 付いた行の範囲。今の diff に置けない（古い版に付いた・ファイル単位）なら nil。
+    let lines: GitHubLineRange?
     let isResolved: Bool
     let canReply: Bool
     let canResolve: Bool
     let canUnresolve: Bool
     /// 古い順に 100 件まで。
     let comments: [Comment]
+
+    /// 付いた行の範囲の、終わりの行の側（行を持たなければ新しい側）。
+    var side: GitHubDiffSide { lines?.end.side ?? .new }
   }
 
   struct PendingReview: Equatable {
@@ -63,7 +83,8 @@ enum GitHubReviewQuery {
   static let pageSize = 100
 
   private static let threadsFields =
-    "nodes{id isResolved isOutdated path line diffSide subjectType viewerCanResolve viewerCanUnresolve "
+    "nodes{id isResolved isOutdated path line diffSide startLine startDiffSide subjectType "
+    + "viewerCanResolve viewerCanUnresolve "
     + "viewerCanReply comments(first:\(pageSize)){nodes{id author{login} body createdAt state}}} "
     + "pageInfo{hasNextPage endCursor}"
 
@@ -162,8 +183,8 @@ private struct NextNode: Decodable {
 
 extension GitHubPullRequestReview.Thread: Decodable {
   private enum CodingKeys: String, CodingKey {
-    case id, isResolved, isOutdated, path, line, diffSide, subjectType, viewerCanResolve
-    case viewerCanUnresolve
+    case id, isResolved, isOutdated, path, line, diffSide, startLine, startDiffSide, subjectType
+    case viewerCanResolve, viewerCanUnresolve
     case viewerCanReply, comments
   }
 
@@ -171,17 +192,29 @@ extension GitHubPullRequestReview.Thread: Decodable {
 
   /// 古い版に付いた（outdated の）スレッド・ファイル単位のスレッド・Orbe が知らない側のスレッドは、行を持たない（今の diff に
   /// 置けない）として読む。outdated は行の値が残っていても置かない（GitHub の diff でも古い版の行のスレッドとして扱われる）。
-  /// 知らない側でも一覧ごと読めなくしない。
+  /// 知らない側でも一覧ごと読めなくしない。始まりの行は、終わりの行を持つスレッドだけが持ち、始まりの側が Orbe の知らない
+  /// 側なら持たない（1 行のスレッドとして読む）。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
-    let side = GitHubDiffSide(rawValue: try c.decodeIfPresent(String.self, forKey: .diffSide) ?? "")
+    let side = { (key: CodingKeys) in
+      GitHubDiffSide(rawValue: try c.decodeIfPresent(String.self, forKey: key) ?? "")
+    }
     let isLine =
       try c.decodeIfPresent(String.self, forKey: .subjectType) != "FILE"
       && !(c.decodeIfPresent(Bool.self, forKey: .isOutdated) ?? false)
+    var lines: GitHubLineRange?
+    if isLine, let endSide = try side(.diffSide),
+      let end = try c.decodeIfPresent(Int.self, forKey: .line)
+    {
+      let start = try c.decodeIfPresent(Int.self, forKey: .startLine)
+      let startSide = try side(.startDiffSide)
+      lines = GitHubLineRange(
+        start: start.flatMap { line in startSide.map { GitHubLine(side: $0, line: line) } },
+        end: GitHubLine(side: endSide, line: end))
+    }
     self.init(
       id: try c.decode(String.self, forKey: .id), path: try c.decode(String.self, forKey: .path),
-      side: side ?? .new,
-      line: side != nil && isLine ? try c.decodeIfPresent(Int.self, forKey: .line) : nil,
+      lines: lines,
       isResolved: try c.decode(Bool.self, forKey: .isResolved),
       canReply: try c.decode(Bool.self, forKey: .viewerCanReply),
       canResolve: try c.decode(Bool.self, forKey: .viewerCanResolve),

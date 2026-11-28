@@ -53,13 +53,13 @@ final class PrCommentBodiesTests: OrbeTestCase {
     let zone = PrCommentZone(
       subject: .thread(
         GitHubPullRequestReview.Thread(
-          id: "T", path: "a.txt", side: .new, line: 1, isResolved: false, canReply: true,
+          id: "T", path: "a.txt", lines: .at(.new, 1), isResolved: false, canReply: true,
           canResolve: true, canUnresolve: false,
           comments: [
             .init(
               id: comment.id, author: "you", body: comment.body, createdAt: Date(), isPending: false
             )
-          ])), line: 1, fieldID: "thread:T")
+          ])), lines: .at(.new, 1), fieldID: "thread:T")
     _ = zone.picture(width: 600)
     pumpMain(until: { !zone.isTypesetting }, "本文を組み終える")
     let bodyLayers = { (picture: ZonePicture) in

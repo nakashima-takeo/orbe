@@ -268,8 +268,8 @@ struct FrameMaterial: Sendable {
   var fields: [Int: FieldMaterial] = [:]
   /// 絵の差し込みの文の選択の地（絵の差し込みの文が主の間だけ）。
   var zoneSelection: ZoneSelectionMaterial?
-  /// 行の右端の印（ポインタが印を出せる行に乗っている間だけ）。
-  var trailingMark: TrailingMarkMaterial?
+  /// 行の頭の印の絵と引いている範囲（ポインタが印を出せる行に乗っているか、引いている間だけ）。
+  var leadingMark: LeadingMarkMaterial?
   /// 本文の選択の地とキャレット。`focused` は「本文が主で、面に焦点がある」。
   var caret = CaretMaterial()
   /// まだ解いていないかもしれない横の「見えるところまで」（本文を変えて見せない取引は、古い区間を捨てる）。

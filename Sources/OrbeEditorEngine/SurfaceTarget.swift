@@ -11,7 +11,8 @@ enum Primary: Equatable {
   case field(AnyHashable)
 }
 
-/// 点の下の行き先。行の右端の印が何より先に当たり、絵の差し込みの上では、入力欄 → 押せる場所 → 選べる文 の順に当たる。
+/// 点の下の行き先。行の頭の印（印を出せる行の頭の列）が何より先に当たり、絵の差し込みの上では、入力欄 → 押せる場所 →
+/// 選べる文 の順に当たる。
 /// どれにも当たらない所（箱・画像・選べない字の行の上を含む）は、絵の差し込みの、ほかに当たらない所。
 enum SurfaceTarget {
   case body
@@ -21,8 +22,8 @@ enum SurfaceTarget {
   case zoneText(ZoneEntry, text: AnyHashable, offset: Int)
   /// 絵の差し込みの、ほかに当たらない所。
   case zoneSpace(ZoneEntry)
-  /// 行の右端の印（ポインタの下の行の印）。
-  case trailingMark(TrailingMarkLine)
+  /// 行の頭の印（点の行の印）。
+  case leadingMark(LeadingMarkSpot)
 }
 
 /// 行き先を決める 1 段——面の view の入口が最初に通る。点を持つ入口（押す・ドラッグ・右クリック・落とす・字の位置・
@@ -33,9 +34,7 @@ enum SurfaceTarget {
 extension MetalTextSurface {
   /// 点（view の座標、pt）の下の行き先。
   func target(at point: CGPoint) -> SurfaceTarget {
-    if let found = trailingMarkRow(at: point), found.onMark {
-      return .trailingMark(found.line)
-    }
+    if let spot = leadingMarkTarget(at: point) { return .leadingMark(spot) }
     guard rows.hasZones, textView.overview.area(at: point) == nil else { return .body }
     let area = surfaceLayout.text
     guard point.x >= area.minX, point.x < area.maxX, point.y >= config.topInset else {

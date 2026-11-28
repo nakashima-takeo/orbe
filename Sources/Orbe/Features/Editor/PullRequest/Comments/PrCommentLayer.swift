@@ -1,7 +1,7 @@
 import Foundation
 import OrbeEditorCore
 
-/// PR の diff のコメントの層——PR ごとの状態のスレッドを diff の行の下に置き、行の右端の印から新しいコメントの欄を開き、
+/// PR の diff のコメントの層——PR ごとの状態のスレッドを diff の行の下に置き、行の頭の印から新しいコメントの欄を開き、
 /// 返信・解決・新しいスレッドの書き込みを PR ごとの状態へ頼む。PR の diff 1 つに 1 つ。
 ///
 /// 返信と新しいコメントの書きかけは PR ごとの状態が持ち、層はそれを欄へ反映して、打った本文を書き戻す（→
@@ -33,8 +33,8 @@ final class PrCommentLayer {
   var onRevealChange: () -> Void = {}
   /// 最後に並びへ注記を渡した回に載せたスレッドの絵と、その側と行（スレッドの id ごと。行を追う絵は、その回の置き場）。
   private(set) var shownThreads: [String: DiffRows.Zone] = [:]
-  /// 求めた（求めている）印を出せる行の、両端と結果。
-  private var commentable: (ends: PullRequestState.DiffEnds, lines: GitDiffHunkLines?)?
+  /// 求めた（求めている）コメントできる行のまとまりの、両端と結果。
+  private var commentable: (ends: PullRequestState.DiffEnds, hunks: GitDiffHunkLines?)?
   /// 最後に並びへ注記を渡した両端とその両側の本文、並列の古い側の面（インラインでは nil）。
   private(set) var placed: Placed?
   /// 並びを置いている間（注記を渡してから、置いた面を知らされるまで）の、注記に載せた絵の差し込みと、その間に入力欄の主が
@@ -85,15 +85,15 @@ final class PrCommentLayer {
   /// 裏の仕事（本文の組版・印を出せる行・欄の行の導き）が残っていない。
   var isSettled: Bool {
     !threads.values.contains(where: \.isTypesetting) && drafts.allSatisfy(\.isSettled)
-      && held.values.allSatisfy(\.isSettled) && (placed == nil || commentable?.lines != nil)
+      && held.values.allSatisfy(\.isSettled) && (placed == nil || commentable?.hunks != nil)
   }
 
   /// スレッド `id` の絵の差し込み（まだ置いていなければ nil）。
   func zone(thread id: String) -> PrCommentZone? { threads[id] }
 
-  /// 側 `version` の行 `line`（0 始まり）に置いている新しいコメントの欄（行が現在の diff に無い欄を含む）。
-  func draft(_ version: DiffRows.Version, line: Int) -> PrCommentZone? {
-    drafts.first { $0.version == version && $0.line == line }?.zone
+  /// 範囲 `range`（0 始まり）に置いている新しいコメントの欄（行が現在の diff に無い欄を含む）。
+  func draft(at range: DiffLineRange) -> PrCommentZone? {
+    drafts.first { $0.range == range }?.zone
   }
 
   // MARK: - 並び
@@ -125,8 +125,8 @@ final class PrCommentLayer {
     placed = current
     let language = language()
     var notes = DiffRows.Notes()
-    let markable = commentableLines(ends)
-    notes.commentable = markable ?? ([], [])
+    let markable = commentableHunks(ends)
+    notes.commentable = markable ?? DiffRows.CommentHunks()
     adoptDrafts()
     // diff が見せている両端が PR の今の両端でない間（PR への push・ベースの付け替えを読んで、両端を求め直し、diff が
     // 新しい両端の本文を読み終えるまで）は、古い側の行のスレッドを前の並びに置かない（GitHub は古い側の行を今の
@@ -142,18 +142,19 @@ final class PrCommentLayer {
           < (b.comments.first?.createdAt ?? .distantPast, b.id)
       }
       for thread in ordered {
-        guard state.placement(of: thread, shown: ends) == .placeable, let line = thread.line else {
+        guard state.placement(of: thread, shown: ends) == .placeable, let lines = thread.lines
+        else {
           hold(thread)
           continue
         }
-        let zone = zone(for: thread, line: line)
+        let zone = zone(for: thread, lines: lines)
         held[thread.id] = nil
         zone.notice = nil
         zone.isLineMoving = false
         zone.language = language
         zone.isWriting = state.isWritingReview(.thread(thread.id))
         let spot = PullRequestState.CommentSpot(
-          side: thread.side, line: line - 1, ends: ends, basis: shown)
+          range: Self.shownRange(lines, notes.commentable), ends: ends, basis: shown)
         lastPlaced[thread.id] = spot
         place(zone, at: spot, in: &notes)
       }
@@ -167,8 +168,8 @@ final class PrCommentLayer {
   /// 行を追う欄（返信の書きかけを持ったまま置けなくなったスレッドと、新しいコメントの欄）を、diff が見せている両端と本文
   /// `current` に合わせて置く。
   private func placeFollowing(
-    _ current: Placed, commentable: (old: [Range<Int>], new: [Range<Int>])?,
-    language: Language, in notes: inout DiffRows.Notes
+    _ current: Placed, commentable: DiffRows.CommentHunks?, language: Language,
+    in notes: inout DiffRows.Notes
   ) {
     let following =
       held.sorted { a, b in
@@ -184,10 +185,12 @@ final class PrCommentLayer {
       if let serial = placement.zone.draftSerial {
         placement.zone.notice = placement.isGone ? .lineGone : nil
         placement.zone.isWriting = state.isWritingReview(.comment(serial))
+        if !placement.isGone { notes.overrides.append(.init(range: placement.range, kind: .draft)) }
       }
       placement.zone.language = language
       notes.zones.append(
-        DiffRows.Zone(version: placement.version, line: placement.line, zone: placement.zone))
+        DiffRows.Zone(
+          version: placement.version, line: placement.range.end.line, zone: placement.zone))
     }
   }
 
@@ -214,16 +217,25 @@ final class PrCommentLayer {
     }
   }
 
-  /// スレッドの絵の差し込み `zone` を、置いた所 `spot` の行の下に置き、その行に印を付ける。
+  /// スレッドの絵の差し込み `zone` を、置いた所 `spot` の範囲の終わりの行の下に置き、範囲の行の地をスレッドのある行にする。
   private func place(
     _ zone: PrCommentZone, at spot: PullRequestState.CommentSpot, in notes: inout DiffRows.Notes
   ) {
-    let version = Self.version(spot.side)
-    notes.zones.append(DiffRows.Zone(version: version, line: spot.line, zone: zone))
-    switch version {
-    case .old: notes.threads.old.insert(spot.line)
-    case .new: notes.threads.new.insert(spot.line)
+    let end = spot.range.end
+    notes.zones.append(DiffRows.Zone(version: end.version, line: end.line, zone: zone))
+    notes.overrides.append(.init(range: spot.range, kind: .thread))
+  }
+
+  /// GitHub の行の範囲 `lines` の、今の diff の行の範囲。始まりの行が、コメントできる行のまとまり `commentable` の行として引けなければ
+  /// （まとまりをまだ求めていない間も）、終わりの行だけの範囲にする。
+  private static func shownRange(_ lines: GitHubLineRange, _ commentable: DiffRows.CommentHunks)
+    -> DiffLineRange
+  {
+    let range = DiffLineRange(lines)
+    guard let start = range.start, commentable.index(of: start.line, start.version) == nil else {
+      return range
     }
+    return DiffLineRange(start: nil, end: range.end)
   }
 
   /// 今の diff に置けないスレッド `thread` に返信の書きかけがあれば、書きかけの欄の位置から行を追う（返信と解決は送れる）。
@@ -314,55 +326,58 @@ final class PrCommentLayer {
     }
   }
 
-  private static func version(_ side: GitHubDiffSide) -> DiffRows.Version {
-    side == .old ? .old : .new
-  }
-
   /// スレッド `thread` の絵の差し込み（無ければ、返信の書きかけの本文で作る）。
-  private func zone(for thread: GitHubPullRequestReview.Thread, line: Int)
+  private func zone(for thread: GitHubPullRequestReview.Thread, lines: GitHubLineRange)
     -> PrCommentZone
   {
     if let zone = threads[thread.id] {
-      zone.line = line
+      zone.lines = lines
       zone.update(.thread(thread))
       return zone
     }
-    return makeZone(thread, line: line)
+    return makeZone(thread, lines: lines)
   }
 
-  /// 両端 `ends` の、印を出せる行（0 始まりの半開区間）。まだ求めていなければ裏で求め始めて nil を返し、求め終えたら並びを
-  /// 置き直させる。rename の判定が GitHub と手元で食い違うファイルでは、古い側の行に印を出さない（古い側の行の対応が変わる）。
-  private func commentableLines(_ ends: PullRequestState.DiffEnds)
-    -> (old: [Range<Int>], new: [Range<Int>])?
-  {
+  /// 両端 `ends` の、コメントできる行のまとまり。まだ求めていなければ裏で求め始めて nil を返し、求め終えたら並びを置き直させる。
+  /// rename の判定が GitHub と手元で食い違うファイルでは、古い側の行をまとまりに入れない（古い側の行の対応が変わる）。
+  func commentableHunks(_ ends: PullRequestState.DiffEnds) -> DiffRows.CommentHunks? {
     if commentable?.ends != ends {
       commentable = (ends, nil)
       let path = path
       state.repo?.hunkLines(
         from: ends.mergeBase, to: ends.head, path: path, originalPath: ends.renames[path]
-      ) { [weak self] lines in
+      ) { [weak self] hunks in
         guard let self, commentable?.ends == ends else { return }
-        commentable = (ends, lines ?? GitDiffHunkLines(old: [], new: []))
+        commentable = (ends, hunks ?? GitDiffHunkLines(hunks: []))
         onRowsChange()
       }
     }
-    guard let lines = commentable?.lines else { return nil }
-    let ranges = { (lines: [ClosedRange<Int>]) in lines.map { ($0.lowerBound - 1)..<$0.upperBound }
-    }
-    let old = state.agreesOnRename(of: path, ends) ? ranges(lines.old) : []
-    return (old, ranges(lines.new))
+    guard let found = commentable?.hunks else { return nil }
+    let agrees = state.agreesOnRename(of: path, ends)
+    let lines = { (range: Range<Int>) in (range.lowerBound - 1)..<(range.upperBound - 1) }
+    return DiffRows.CommentHunks(
+      items: found.hunks.map { hunk in
+        DiffRows.CommentHunk(
+          old: agrees ? lines(hunk.old) : lines(hunk.old).lowerBound..<lines(hunk.old).lowerBound,
+          new: lines(hunk.new))
+      })
   }
 }
 
-/// 行の右端の印——並列の古い側の面の行とインラインの差し込んだ削除行では古い側の行、ほかでは新しい側の行に、新しいコメントの
-/// 欄を開く。
-extension PrCommentLayer: SurfaceTrailingMarkTarget {
-  func surface(_ surface: any TextSurface, didPressTrailingMarkOn line: TrailingMarkLine) {
-    switch line {
-    case .document(let line):
-      openDraft(oldSurface.map { $0 === surface } == true ? .old : .new, line: line)
-    case .source(let line):
-      openDraft(.old, line: line)
+/// 行の頭の印——並列の古い側の面の行とインラインの差し込んだ削除行では古い側の行、ほかでは新しい側の行として、知らされた
+/// 最初の行から最後の行までの範囲に、新しいコメントの欄を開く（→ `openDraft`）。
+extension PrCommentLayer: SurfaceLeadingMarkTarget {
+  func surface(
+    _ surface: any TextSurface, didMarkFrom first: LeadingMarkLine, to last: LeadingMarkLine
+  ) {
+    let line = { (line: LeadingMarkLine) -> DiffLine in
+      switch line {
+      case .document(let line):
+        DiffLine(
+          version: self.oldSurface.map { $0 === surface } == true ? .old : .new, line: line)
+      case .source(let line): DiffLine(version: .old, line: line)
+      }
     }
+    openDraft(DiffLineRange(start: line(first), end: line(last)))
   }
 }

@@ -41,19 +41,19 @@ extension EditorDiffTests {
     let remote = Remote()
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(3))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 3))
+    layer.surface(surface, didMarkFrom: .document(3), to: .document(3))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 3)))
     surface.replaceText(of: draft.field, with: "書きかけ")
 
     try push("zero\none\ntwo\nTHREE\nfour\n", remote, diff)
-    XCTAssertIdentical(layer.draft(.new, line: 4), draft, "行「four」は 1 行下へ移った")
+    XCTAssertIdentical(layer.draft(at: .at(.new, 4)), draft, "行「four」は 1 行下へ移った")
     XCTAssertEqual(draft.text, "書きかけ")
     XCTAssertNil(draft.notice)
     draft.zone(.pressed(PrCommentControl.add))
-    pumpMain(until: { layer.draft(.new, line: 4) == nil }, "通れば欄が閉じる")
+    pumpMain(until: { layer.draft(at: .at(.new, 4)) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(
       remote.writes,
-      [.addThread(path: "a.txt", side: .new, line: 5, commit: remote.head, body: "書きかけ")])
+      [.addThread(path: "a.txt", lines: .at(.new, 5), commit: remote.head, body: "書きかけ")])
   }
 
   /// PR に push があって欄の行が書き換えられたら、欄は閉じずに書きかけを残し、送れない姿になる。「取り消す」で閉じる。
@@ -61,18 +61,18 @@ extension EditorDiffTests {
     let remote = Remote()
     let (diff, surface) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.surface(surface, didPressTrailingMarkOn: .document(2))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 2))
+    layer.surface(surface, didMarkFrom: .document(2), to: .document(2))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 2)))
     surface.replaceText(of: draft.field, with: "書きかけ")
 
     try push("one\ntwo\nTRES\nfour\n", remote, diff)
-    XCTAssertIdentical(layer.draft(.new, line: 2), draft, "書き換えられた区間の終わりの行の下に残る")
+    XCTAssertIdentical(layer.draft(at: .at(.new, 2)), draft, "書き換えられた区間の終わりの行の下に残る")
     XCTAssertEqual(draft.text, "書きかけ")
     XCTAssertEqual(draft.notice, .lineGone)
     draft.zone(.pressed(PrCommentControl.add))
     XCTAssertEqual(remote.writes, [], "行が現在の diff に無い欄は送れない")
     draft.zone(.pressed(PrCommentControl.cancel))
-    XCTAssertNil(layer.draft(.new, line: 2))
+    XCTAssertNil(layer.draft(at: .at(.new, 2)))
   }
 
   /// ベースの付け替えで先頭のコミットが同じまま古い側の版が替わっても、古い側の欄は書きかけごと新しい版の同じ行へ移り、
@@ -86,8 +86,8 @@ extension EditorDiffTests {
       try self.repo.write("a.txt", "zero\none\ntwo\nTHREE\nfour\n")
     }
     let layer = try XCTUnwrap(diff.comments)
-    layer.openDraft(.old, line: 1)
-    let draft = try XCTUnwrap(layer.draft(.old, line: 1))
+    layer.openDraft(.at(.old, 1))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.old, 1)))
     try XCTUnwrap(draft.surface).replaceText(of: draft.field, with: "古い側")
 
     let content = try XCTUnwrap(remote.content)
@@ -100,13 +100,13 @@ extension EditorDiffTests {
     pumpMain(
       until: { self.text(diff.old) == "one\ntwo\nthree\nfour\n" && layer.isSettled },
       "付け替えたベースの版と、欄の行の移しが揃う")
-    XCTAssertIdentical(layer.draft(.old, line: 0), draft, "行「one」は 1 行上へ移った")
+    XCTAssertIdentical(layer.draft(at: .at(.old, 0)), draft, "行「one」は 1 行上へ移った")
     XCTAssertNil(draft.notice)
     draft.zone(.pressed(PrCommentControl.add))
-    pumpMain(until: { layer.draft(.old, line: 0) == nil }, "通れば欄が閉じる")
+    pumpMain(until: { layer.draft(at: .at(.old, 0)) == nil }, "通れば欄が閉じる")
     XCTAssertEqual(
       remote.writes,
-      [.addThread(path: "a.txt", side: .old, line: 1, commit: remote.head, body: "古い側")])
+      [.addThread(path: "a.txt", lines: .at(.old, 1), commit: remote.head, body: "古い側")])
   }
 
   /// 欄が行を数えた diff の両端が PR の今の両端でない間（ベースの付け替えを読んだ後、両端を求め終えるまで・求められない
@@ -115,8 +115,8 @@ extension EditorDiffTests {
     let remote = Remote()
     let (diff, _) = try commentedDiff(remote)
     let layer = try XCTUnwrap(diff.comments)
-    layer.openDraft(.old, line: 1)
-    let draft = try XCTUnwrap(layer.draft(.old, line: 1))
+    layer.openDraft(.at(.old, 1))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.old, 1)))
     try XCTUnwrap(draft.surface).replaceText(of: draft.field, with: "古い側")
 
     let content = try XCTUnwrap(remote.content)
@@ -142,7 +142,8 @@ extension EditorDiffTests {
     let remote = Remote()
     let thread = { (line: Int?) in
       GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .new, line: line, isResolved: false, canReply: true,
+        id: "T", path: "a.txt", lines: line.map { .at(.new, $0) }, isResolved: false,
+        canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
     }
@@ -175,7 +176,7 @@ extension EditorDiffTests {
     let remote = Remote()
     remote.threads = [
       GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .new, line: 3, isResolved: false, canReply: true,
+        id: "T", path: "a.txt", lines: .at(.new, 3), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
     ]
@@ -217,7 +218,7 @@ extension EditorDiffTests {
   private func assertAPushKeepsTheReplyFocused(side: Bool, pushed: String, line: Int) throws {
     let thread = { (line: Int) in
       GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .new, line: line, isResolved: false, canReply: true,
+        id: "T", path: "a.txt", lines: .at(.new, line), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
     }
@@ -251,7 +252,7 @@ extension EditorDiffTests {
     let remote = Remote()
     remote.threads = [
       GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .old, line: 53, isResolved: false, canReply: true,
+        id: "T", path: "a.txt", lines: .at(.old, 53), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [
           .init(
@@ -289,7 +290,8 @@ extension EditorDiffTests {
     let remote = Remote()
     let thread = { (line: Int?) in
       GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .new, line: line, isResolved: false, canReply: true,
+        id: "T", path: "a.txt", lines: line.map { .at(.new, $0) }, isResolved: false,
+        canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
     }
@@ -319,8 +321,8 @@ extension EditorDiffTests {
       try self.repo.write("a.txt", head.joined(separator: "\n") + "\n")
     }
     let layer = try XCTUnwrap(diff.comments)
-    layer.openDraft(.old, line: 53)
-    let draft = try XCTUnwrap(layer.draft(.old, line: 53))
+    layer.openDraft(.at(.old, 53))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.old, 53)))
     before.replaceText(of: draft.field, with: "書きかけ")
     pumpMain(until: { draft.surface != nil && layer.isSettled }, "4 本目の削除行の下に欄")
     let reading = LineRow(line: 50, offset: -4)

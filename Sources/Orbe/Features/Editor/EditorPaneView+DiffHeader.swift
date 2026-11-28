@@ -1,4 +1,5 @@
 import AppKit
+import OrbeEditorCore
 
 /// 差分のファイルの見出し——本体が diff の間、本体の上端に置く帯。出すものは見出しの root が一覧の持ち主から導き、pane は
 /// 本体の diff の値（どの diff か・新しい側の文書の印）を写して、押されたときの操作を受ける。
@@ -57,6 +58,43 @@ extension EditorPaneView {
     }
     toggleHeaderViewed()
     return true
+  }
+
+  /// PR の画面のキー c: 焦点のある差分の面の本文の、主のカーソルの行（選択があれば、その最初の行から最後の行まで。選択が
+  /// 行頭で終わっていれば、その行は含めない）に新しいコメントの欄を開く（行の頭の印を押したのと同じ口）。働くのは、本体に PR
+  /// の差分が出ていて、焦点が差分の面の本文（字を打つ場ではない所）にあるとき。欄を開けなければ（コメントできない行・1 つの
+  /// まとまりに収まらない選択・コメントできる行をまだ求めていない間）、音で断る。押し続けて届くキーリピートは捨てる——欄を開いた
+  /// 後のキーリピートは、欄へ移った焦点の打鍵として届くので、キーを離すまで監視が捨てる（→ `keyRepeatIsSwallowed`）。扱ったら true。
+  func handleCommentKey(_ event: NSEvent) -> Bool {
+    let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+    guard flags.isEmpty, event.charactersIgnoringModifiers == "c",
+      group?.editor.screen == .pullRequest, let diff, let comments = diff.comments,
+      let responder = window?.firstResponder as? NSView, responder.inputContext == nil,
+      let surface = diffSurfaces(diff).first(where: { $0.responder === responder })
+    else { return false }
+    guard !event.isARepeat else { return true }
+    guard let range = commentRange(diff, on: surface), comments.openDraft(range) else {
+      NSSound.beep()
+      return true
+    }
+    swallowedRepeat = "c"
+    return true
+  }
+
+  /// 差分 `diff` の面 `surface` の本文の、主のカーソルの選択の行の範囲（並列の左の面なら古い側、ほかは新しい側の行）。
+  private func commentRange(_ diff: EditorDiff, on surface: any TextSurface) -> DiffLineRange? {
+    let version: DiffRows.Version = surface === diff.oldSurface ? .old : .new
+    guard
+      let text = version == .old ? diff.old?.text : diff.document?.text ?? diff.newRevision?.text
+    else { return nil }
+    let selection = surface.selectedRange
+    let first = text.row(containing: selection.location)
+    var last = text.row(containing: NSMaxRange(selection))
+    if selection.length > 0, last > first, text.lineStart(last) == NSMaxRange(selection) {
+      last -= 1
+    }
+    return DiffLineRange(
+      start: DiffLine(version: version, line: first), end: DiffLine(version: version, line: last))
   }
 
   /// キー v を受ける焦点の場所。

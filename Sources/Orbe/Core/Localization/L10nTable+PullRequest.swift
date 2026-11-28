@@ -66,6 +66,8 @@ extension L10n {
     .editorPrFailedRead: ("GitHub から取得できませんでした", "Couldn’t fetch from GitHub"),
     .editorPrFailedWrite: ("GitHub に反映できませんでした", "Couldn’t update GitHub"),
     .editorPrThreadLine: ("行 %lld", "Line %lld"),
+    .editorPrThreadLines: ("行 %@〜%@", "Lines %@–%@"),
+    .editorPrDraftLines: ("%@〜%@ 行にコメント", "Comment on lines %@–%@"),
     .editorPrThreadPending: ("未送信", "Pending"),
     .editorPrThreadResolved: ("解決済み", "Resolved"),
     .editorPrThreadResolve: ("解決", "Resolve"),

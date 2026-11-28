@@ -1,6 +1,8 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
+import os
 
 @testable import OrbeEditorEngine
 
@@ -22,6 +24,8 @@ import XCTest
 final class FramePerfTests: EngineTestCase {
   var driver: HeadlessDriver!
   var load: Timer?
+  /// 面を載せた、画面に出さない窓（ポインタを面の上に置く場面）。
+  var pointerWindows: [PointerWindow] = []
 
   override func setUpWithError() throws {
     try super.setUpWithError()
@@ -33,6 +37,8 @@ final class FramePerfTests: EngineTestCase {
 
   override func tearDownWithError() throws {
     load?.invalidate()
+    for window in pointerWindows { window.contentView = nil }
+    pointerWindows = []
     driver?.stop()
     try super.tearDownWithError()
   }
@@ -76,12 +82,13 @@ final class FramePerfTests: EngineTestCase {
 
   /// ドラッグとはじき、端への引っ張りを、main への負荷の有り無しで回して関門にかける。`wraps` は面を折り返す構成で開くか、
   /// `frameLimit` は全部のコマの CPU の p99 の上限（ms。行を組版しなかったコマは常に 2ms）、`gatesLateCommits` は描画
-  /// スレッド自身が落とすコマ 0 を関門にするか。負荷なしのドラッグとはじきの 1 コマの CPU の中央値（ms）を返す。
+  /// スレッド自身が落とすコマ 0 を関門にするか、`pointer` は面の上に置いておくポインタ（→ `attach`）。負荷なしのドラッグと
+  /// はじきの 1 コマの CPU の中央値（ms）を返す。スクロールの出来事 1 回の main の仕事は記録して示す。
   func measure(
     label: String, text: String, wraps: Bool = true, frameLimit: Double = 2,
-    gatesLateCommits: Bool = true, prepare: (Opened) -> Void = { _ in }
+    gatesLateCommits: Bool = true, pointer: CGPoint? = nil, prepare: (Opened) -> Void = { _ in }
   ) throws -> Double {
-    let opened = try attach(text, wraps: wraps)
+    let opened = try attach(text, wraps: wraps, pointer: pointer)
     prepare(opened)
     waitUntilIdle(opened.surface)
     let surface = opened.surface
@@ -91,11 +98,14 @@ final class FramePerfTests: EngineTestCase {
       let name = loaded ? "main-load" : "no-load"
       if loaded { startLoad() }
       reset(surface)
-      runDrag([surface], seconds: 3, speed: 2400)
-      runFlick(surface, peak: 6000)
+      let main = (runDrag([surface], seconds: 3, speed: 2400) + runFlick(surface, peak: 6000))
+        .sorted()
       waitUntilIdle(surface)
       let scrolled = totals(surface)
       report(label, name, scrolled, frameLimit: frameLimit, gatesLateCommits: gatesLateCommits)
+      print(
+        "PERF-FRAMES", label, name, "scroll event main CPU p50", Self.ms(Self.quantile(main, 0.5)),
+        "p99", Self.ms(Self.quantile(main, 0.99)))
       if !loaded { median = Self.quantile(scrolled.cpu.sorted(), 0.5) }
       surface.scroll(toFirstLine: 0)
       waitUntilIdle(surface)
@@ -116,10 +126,24 @@ final class FramePerfTests: EngineTestCase {
     return median
   }
 
-  /// 本文 `text` を開いて描画スレッドに結ぶ。`wraps` は面を折り返す構成で開くか。
-  func attach(_ text: String, holdsPresents: Bool = false, wraps: Bool = true) throws -> Opened {
+  /// 本文 `text` を開いて描画スレッドに結ぶ。`wraps` は面を折り返す構成で開くか。`pointer` を与えれば、面を画面に出さない
+  /// 窓に載せ、窓のポインタをその点（面の view の座標）に置く（ポインタの下の行を引き直す場面）。窓に載せると view の
+  /// display link を結ぶので、窓に載せてから描画スレッドを計測の刻みに結び直す。
+  func attach(
+    _ text: String, holdsPresents: Bool = false, wraps: Bool = true, pointer: CGPoint? = nil
+  ) throws -> Opened {
     let opened = try open(
       text, size: CGSize(width: 800, height: 600), waitForColors: true, wraps: wraps)
+    if let pointer {
+      let window = PointerWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.borderless],
+        backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false
+      window.answersAsKey = true
+      window.contentView = opened.surface.view
+      window.pointer = opened.surface.textView.convert(pointer, to: nil)
+      pointerWindows.append(window)
+    }
     opened.surface.viewStateDidChange(
       size: CGSize(width: 800, height: 600), scale: 2, visible: true)
     driver.bind(opened.surface.id, holdsPresents: holdsPresents)
@@ -163,19 +187,23 @@ final class FramePerfTests: EngineTestCase {
     var dy: Double = 0
   }
 
-  /// 指を一定の速さ（pt/秒、下へ）で動かし続ける。出来事は別のスレッドが実機の刻みで main へ流す。
-  func runDrag(_ surfaces: [MetalTextSurface], seconds: Double, speed: Double) {
+  /// 指を一定の速さ（pt/秒、下へ）で動かし続ける。出来事は別のスレッドが実機の刻みで main へ流す。出来事 1 回ぶんの
+  /// main の仕事（秒。main のスレッドの CPU 時間）を昇順に返す。
+  @discardableResult
+  func runDrag(_ surfaces: [MetalTextSurface], seconds: Double, speed: Double) -> [Double] {
     let step = 0.0057
     var inputs = [Planned(at: 0, phase: .began)]
     for k in 1...Int(seconds / step) {
       inputs.append(Planned(at: Double(k) * step, phase: .changed, dy: -speed * step))
     }
     inputs.append(Planned(at: seconds + step, phase: .ended))
-    feed(surfaces, inputs)
+    return feed(surfaces, inputs)
   }
 
-  /// はじく: 80ms で速さを上げて離し、OS の momentum の出来事（1 回ごとに 0.95 倍で落ちる列）が続く。
-  func runFlick(_ surface: MetalTextSurface, peak: Double) {
+  /// はじく: 80ms で速さを上げて離し、OS の momentum の出来事（1 回ごとに 0.95 倍で落ちる列）が続く。出来事 1 回ぶんの
+  /// main の仕事（秒）を昇順に返す。
+  @discardableResult
+  func runFlick(_ surface: MetalTextSurface, peak: Double) -> [Double] {
     let step = 0.0057
     var inputs = [Planned(at: 0, phase: .began)]
     let ramp = Int(0.08 / step)
@@ -194,7 +222,7 @@ final class FramePerfTests: EngineTestCase {
       inputs.append(Planned(at: t, momentum: .changed, dy: d))
     }
     inputs.append(Planned(at: t + step, momentum: .ended))
-    feed([surface], inputs)
+    return feed([surface], inputs)
   }
 
   /// 先頭で指を下へ動かし続けて端の外へ引っ張り（見せるのは 1/20）、離す。戻りは描画スレッドだけが進める。
@@ -209,10 +237,12 @@ final class FramePerfTests: EngineTestCase {
   }
 
   /// 出来事を別のスレッドから実時間で main へ流し、流し終えるまで main を回す。時刻は流した時刻（実機の出来事の時刻に
-  /// 相当）。
-  func feed(_ surfaces: [MetalTextSurface], _ inputs: [Planned]) {
+  /// 相当）。出来事 1 回ぶんの main の仕事（秒。main のスレッドの CPU 時間）を昇順に返す。
+  @discardableResult
+  func feed(_ surfaces: [MetalTextSurface], _ inputs: [Planned]) -> [Double] {
     let done = DispatchSemaphore(value: 0)
     let targets = surfaces.map { Transfer(value: $0) }
+    let durations = OSAllocatedUnfairLock(initialState: [Double]())
     let thread = Thread {
       let start = CACurrentMediaTime()
       for input in inputs {
@@ -221,7 +251,12 @@ final class FramePerfTests: EngineTestCase {
           timestamp: CACurrentMediaTime(), delta: SIMD2(0, input.dy), precise: true,
           phase: input.phase, momentum: input.momentum)
         DispatchQueue.main.async {
-          MainActor.assumeIsolated { for target in targets { target.value.scroll(event) } }
+          MainActor.assumeIsolated {
+            let began = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+            for target in targets { target.value.scroll(event) }
+            let cpu = Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began) / 1e9
+            durations.withLock { $0.append(cpu) }
+          }
         }
       }
       done.signal()
@@ -232,6 +267,7 @@ final class FramePerfTests: EngineTestCase {
       RunLoop.main.run(until: Date().addingTimeInterval(0.002))
     }
     RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+    return durations.withLock { $0 }.sorted()
   }
 
   /// 描画スレッドが刻みを止め、つまみが消え終わるまで main を回す（スクロールで現れたつまみは、止まって 500ms 後に消え

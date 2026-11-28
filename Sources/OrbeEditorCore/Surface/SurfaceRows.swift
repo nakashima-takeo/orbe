@@ -10,29 +10,32 @@ public struct SurfaceRows {
   public var spans: [LineSpan]
   /// 差し込んだ行が指す行の出どころ（行を指す差し込んだ行が無ければ nil でよい）。
   public var source: (any SurfaceRowSource)?
-  /// 行の右端の印の押下を受けるもの（面は弱く持つ。並びを置き直せば、置き直した並びの受け手だけが受ける）。
-  public var trailingMarkTarget: (any SurfaceTrailingMarkTarget)?
+  /// 行の頭の印の知らせを受けるもの（面は弱く持つ。並びを置き直せば、置き直した並びの受け手だけが受ける）。
+  public var leadingMarkTarget: (any SurfaceLeadingMarkTarget)?
 
   public init(
     insertions: [RowInsertion] = [], spans: [LineSpan] = [], source: (any SurfaceRowSource)? = nil,
-    trailingMarkTarget: (any SurfaceTrailingMarkTarget)? = nil
+    leadingMarkTarget: (any SurfaceLeadingMarkTarget)? = nil
   ) {
     self.insertions = insertions
     self.spans = spans
     self.source = source
-    self.trailingMarkTarget = trailingMarkTarget
+    self.leadingMarkTarget = leadingMarkTarget
   }
 }
 
-/// 行の右端の印（→ `SurfacePresentation.trailingMark`）の押下を受けるもの。
+/// 行の頭の印（→ `SurfacePresentation.leadingMark`）の知らせを受けるもの。
 @MainActor
-public protocol SurfaceTrailingMarkTarget: AnyObject {
-  /// 行 `line` の印が押された（押して、同じ印の上で離した）。
-  func surface(_ surface: any TextSurface, didPressTrailingMarkOn line: TrailingMarkLine)
+public protocol SurfaceLeadingMarkTarget: AnyObject {
+  /// 印を押して離した——並びの順で最初の行 `first` から最後の行 `last` まで（押して離しただけなら、2 つは同じ行。引いた
+  /// なら、押した行と、最後にポインタの下に在った同じ組の行）。離した所が印の外でも知らせる。引いている間に並びを置き
+  /// 直されたら、知らせない。
+  func surface(
+    _ surface: any TextSurface, didMarkFrom first: LeadingMarkLine, to last: LeadingMarkLine)
 }
 
-/// 印を押した行——文書の行か、差し込んだ行が指す出どころの行（どちらも 0 始まり）。
-public enum TrailingMarkLine: Equatable, Sendable {
+/// 印の行——文書の行か、差し込んだ行が指す出どころの行（どちらも 0 始まり）。
+public enum LeadingMarkLine: Equatable, Sendable {
   case document(Int)
   case source(Int)
 }
@@ -54,16 +57,20 @@ public struct LineSpan: Equatable, Sendable {
   public var style: Int?
   /// 区間の始まりの行の「もう一方の番号」（2 列の面の左の列。区間の中の行 r は `otherNumber + (r − line)`。nil なら描かない）。
   public var otherNumber: Int?
-  /// 区間の行に、ポインタが乗ったとき行の右端の印を出すか。
-  public var allowsTrailingMark: Bool
+  /// 区間の行の、行の頭の印の組（nil なら印を出さない）。引いて作る範囲は、同じ組の行の中に収まる。
+  public var markGroup: Int?
+  /// 行の上書き（`SurfacePresentation.lineOverrides` の番号。nil なら上書きなし）。
+  public var override: Int?
 
   public init(
-    line: Int, style: Int? = nil, otherNumber: Int? = nil, allowsTrailingMark: Bool = false
+    line: Int, style: Int? = nil, otherNumber: Int? = nil, markGroup: Int? = nil,
+    override: Int? = nil
   ) {
     self.line = line
     self.style = style
     self.otherNumber = otherNumber
-    self.allowsTrailingMark = allowsTrailingMark
+    self.markGroup = markGroup
+    self.override = override
   }
 }
 
@@ -107,12 +114,15 @@ public struct InsertedLine: Equatable, Sendable {
   public var line: Int?
   /// 行の型（`SurfacePresentation.lineStyles` の番号。nil なら型なし）。
   public var style: Int?
-  /// ポインタが乗ったとき行の右端の印を出すか（出どころの行を指す行だけが出せる）。
-  public var allowsTrailingMark: Bool
+  /// 行の頭の印の組（nil なら印を出さない。出どころの行を指す行だけが出せる）。
+  public var markGroup: Int?
+  /// 行の上書き（`SurfacePresentation.lineOverrides` の番号。nil なら上書きなし）。
+  public var override: Int?
 
-  public init(line: Int? = nil, style: Int? = nil, allowsTrailingMark: Bool = false) {
+  public init(line: Int? = nil, style: Int? = nil, markGroup: Int? = nil, override: Int? = nil) {
     self.line = line
     self.style = style
-    self.allowsTrailingMark = allowsTrailingMark
+    self.markGroup = markGroup
+    self.override = override
   }
 }

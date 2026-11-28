@@ -1,9 +1,10 @@
 import Foundation
 import OrbeEditorCore
 
-/// 見えている縦の並び——文書の行（行の型の地・本文・装備・選択・強調・行番号・記号・印）と差し込んだ行（行の型の
-/// 地・出どころの行の字と空白の点・番号・記号）と絵の差し込み（→ `FrameBuilder+Zones`）。折り返した行では、行の型の地は
-/// 行の全部の段に、行番号と記号は 1 段目にだけ出し、字・装備・選択・強調は段ごとに描く。
+/// 見えている縦の並び——文書の行（行の型の地・本文・装備・選択・強調・行番号・記号・印・頭の線）と差し込んだ行（行の型の
+/// 地・出どころの行の字と空白の点・番号・記号・頭の線）と絵の差し込み（→ `FrameBuilder+Zones`）。行の上書きか、引いている
+/// 範囲の上書きのある行は、地と頭の線をその色で描く（記号は行の型のまま）。折り返した行では、行の地と頭の線は行の全部の
+/// 段に、行番号と記号は 1 段目にだけ出し、字・装備・選択・強調は段ごとに描く。
 extension FrameBuilder {
   /// 縦の並びで見えている項目を描く。
   func drawRows(_ source: Source, _ content: SurfaceContent, cache: LineLayoutCache, _ c: Context) {
@@ -11,7 +12,7 @@ extension FrameBuilder {
     let rows = g.rows
     let bottom = g.scrollY + g.height - g.top
     drawZones(source, c)
-    drawTrailingMark(source, c)
+    drawLeadingMark(source, c)
     drawInsertedLines(
       rows.blocks(from: g.scrollY, to: bottom, scale: g.scale), source, cache: cache, c)
     guard
@@ -23,11 +24,18 @@ extension FrameBuilder {
     let laid = layRows(visibleRows, source, text: content.text, cache: cache, c)
     var roles = content.roles.cursor(from: laid.first?.head ?? 0)
     var hovered: (row: Int, link: NSRange?)?
+    let range = source.material.leadingMark?.range
     for item in laid {
       let top = g.segmentTop(item.row, item.segment)
-      if let style = c.palette.lineStyle(rows.style(ofLine: item.row)) {
-        drawLineBackground(style, top: top, bottom: g.segmentTop(item.row, item.segment + 1), c)
-        if item.segment == 0 { drawSign(style, baseline: top + baseline, cache: cache, source, c) }
+      let bottom = g.segmentTop(item.row, item.segment + 1)
+      let span = rows.lineSpan(ofLine: item.row)
+      let style = c.palette.lineStyle(span?.style)
+      let override = lineOverride(
+        span?.override, row: .document(item.row), group: span?.markGroup, range: range, c)
+      drawLineBackground(override?.background ?? style?.background, top: top, bottom: bottom, c)
+      if span?.markGroup != nil { drawMarkLine(override?.mark, top: top, bottom: bottom, c) }
+      if let style, item.segment == 0 {
+        drawSign(style, baseline: top + baseline, cache: cache, source, c)
       }
       if c.linkPointer != nil, hovered?.row != item.row {
         hovered = (item.row, hoveredLink(in: laid, row: item.row, c))
@@ -63,13 +71,40 @@ extension FrameBuilder {
     if c.g.rows.wraps == nil { longestLine = max(longestLine, width) }
   }
 
-  /// 行の型の地を、行番号の列の左端から面の右端（縦スクロールバーの列の下）まで塗る（切り取りは上端の余白の下）。
-  func drawLineBackground(_ style: LineInk, top: Double, bottom: Double, _ c: Context) {
-    guard let color = style.background else { return }
+  /// 行の上書き——引いている範囲（`range`）の、組 `group` を持つ行なら引いている範囲の上書き、そうでなければ行の上書き
+  /// `override`（無ければ nil）。
+  private func lineOverride(
+    _ override: Int?, row: LeadingMarkRow, group: Int?,
+    range: (first: LeadingMarkRow, last: LeadingMarkRow)?, _ c: Context
+  ) -> OverrideInk? {
+    if let range, group != nil, let drag = c.arrangement.leadingMark?.dragOverride,
+      c.g.rows.contains(row, from: range.first, to: range.last)
+    {
+      return c.palette.lineOverride(drag)
+    }
+    return c.palette.lineOverride(override)
+  }
+
+  /// 行の地を、行番号の列の左端から面の右端（縦スクロールバーの列の下）まで塗る（切り取りは上端の余白の下）。
+  func drawLineBackground(_ color: FrameColor?, top: Double, bottom: Double, _ c: Context) {
+    guard let color else { return }
     lineBackgrounds.append(
       ShapeInstance(
         rect: SIMD4(0, Float(top), Float(c.g.width), Float(bottom - top)), color: color.packed,
         radius: 0, kind: 0))
+  }
+
+  /// 印を出せる行の頭の線を、頭の列の左端に行の上端から下端まで描く（色は `color`、無ければ頭の印の色。続く行の線は 1 本に
+  /// 繋がる）。構成が頭の印を持たなければ描かない。
+  func drawMarkLine(_ color: FrameColor?, top: Double, bottom: Double, _ c: Context) {
+    guard let mark = c.arrangement.leadingMark, let ink = color ?? c.palette.leadingMark else {
+      return
+    }
+    let width = (Double(mark.lineWidth) * c.g.scale).rounded()
+    shapes.append(
+      ShapeInstance(
+        rect: SIMD4(0, Float(top), Float(width), Float(bottom - top)), color: ink.packed, radius: 0,
+        kind: 0))
   }
 
   /// 行の型の記号を、記号の列の中央に置く（本文の字体）。
@@ -102,17 +137,21 @@ extension FrameBuilder {
     let baseline = (Double(c.config.baseline) * g.scale).rounded()
     let numberFont = c.fonts.id(c.config.gutterFont)
     let origin = source.material.rowSourceContent
+    let range = source.material.leadingMark?.range
     for index in blocks {
       guard case .lines(let lines) = g.rows.contents[index] else { continue }
       for (offset, line) in lines.enumerated() {
         let top = g.insertedTop(block: index, line: offset)
         if top >= g.height { break }
         guard top + g.lineHeight > g.top else { continue }
-        if let style = c.palette.lineStyle(line.style) {
-          drawLineBackground(
-            style, top: top, bottom: g.insertedTop(block: index, line: offset + 1), c)
-          drawSign(style, baseline: top + baseline, cache: cache, source, c)
-        }
+        let bottom = g.insertedTop(block: index, line: offset + 1)
+        let style = c.palette.lineStyle(line.style)
+        let group = line.line == nil ? nil : line.markGroup
+        let override = lineOverride(
+          line.override, row: .inserted(block: index, line: offset), group: group, range: range, c)
+        drawLineBackground(override?.background ?? style?.background, top: top, bottom: bottom, c)
+        if group != nil { drawMarkLine(override?.mark, top: top, bottom: bottom, c) }
+        if let style { drawSign(style, baseline: top + baseline, cache: cache, source, c) }
         guard let row = line.line, let origin, row < origin.text.lineCount else { continue }
         if c.gutter.other != nil {
           drawNumber(row + 1, rowTop: top, inset: c.gutter.otherInset, font: numberFont, c)

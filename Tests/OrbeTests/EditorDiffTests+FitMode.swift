@@ -51,7 +51,7 @@ extension EditorDiffTests {
     let remote = Remote()
     remote.threads = [
       GitHubPullRequestReview.Thread(
-        id: "T", path: "a.txt", side: .old, line: 3, isResolved: false, canReply: true,
+        id: "T", path: "a.txt", lines: .at(.old, 3), isResolved: false, canReply: true,
         canResolve: true, canUnresolve: false,
         comments: [.init(id: "C", author: "you", body: "本文", createdAt: Date(), isPending: false)])
     ]
@@ -82,11 +82,11 @@ extension EditorDiffTests {
     let window = try XCTUnwrap(right.textView.window)
     let layer = try XCTUnwrap(diff.comments)
     window.makeFirstResponder(right.textView)
-    layer.surface(right, didPressTrailingMarkOn: .source(2))
-    let draft = try XCTUnwrap(layer.draft(.old, line: 2))
+    layer.surface(right, didMarkFrom: .source(2), to: .source(2))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.old, 2)))
 
     resize(window, width: Self.sideWidth)
-    XCTAssertIdentical(layer.draft(.old, line: 2), draft, "欄は閉じない")
+    XCTAssertIdentical(layer.draft(at: .at(.old, 2)), draft, "欄は閉じない")
     XCTAssertEqual(try engine(diff.oldSurface).primary, .field(draft.field.id))
     XCTAssertEqual(right.primary, .body)
   }
@@ -97,15 +97,15 @@ extension EditorDiffTests {
     let window = try XCTUnwrap(right.textView.window)
     let layer = try XCTUnwrap(diff.comments)
     window.makeFirstResponder(right.textView)
-    layer.surface(right, didPressTrailingMarkOn: .document(1))
-    let draft = try XCTUnwrap(layer.draft(.new, line: 1))
+    layer.surface(right, didMarkFrom: .document(1), to: .document(1))
+    let draft = try XCTUnwrap(layer.draft(at: .at(.new, 1)))
 
     resize(window, width: Self.sideWidth)
     XCTAssertNotNil(diff.oldSurface, "前提: 並列")
     XCTAssertEqual(right.primary, .field(draft.field.id))
     XCTAssertTrue(window.firstResponder === right.textView)
     resize(window, width: 900)
-    XCTAssertIdentical(layer.draft(.new, line: 1), draft)
+    XCTAssertIdentical(layer.draft(at: .at(.new, 1)), draft)
     XCTAssertEqual(right.primary, .field(draft.field.id))
   }
 }

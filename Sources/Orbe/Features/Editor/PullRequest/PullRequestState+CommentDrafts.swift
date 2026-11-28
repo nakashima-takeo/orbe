@@ -14,10 +14,9 @@ protocol PullRequestCommentDraftsObserver: AnyObject {
 /// 作った後は書き換えない——push の後にどの行へ移るか・行が無くなったかは、各層が、この位置から自分が見せている両端へ
 /// その都度導く（古い両端を見せている層が、新しい両端で数えた位置を壊さない）。知らせるのは書きかけの追加と削除と本文の変化だけ。
 extension PullRequestState {
-  /// 書きかけの欄の位置——側と行（0 始まり）と、その行を数えた diff の両端と両側の本文（ほかの両端での行を導くのに使う）。
+  /// 書きかけの欄の位置——行の範囲（0 始まり）と、その行を数えた diff の両端と両側の本文（ほかの両端での行を導くのに使う）。
   struct CommentSpot: Equatable {
-    let side: GitHubDiffSide
-    let line: Int
+    let range: DiffLineRange
     let ends: DiffEnds
     let basis: EditorDiff.SideTexts
   }

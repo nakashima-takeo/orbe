@@ -93,14 +93,14 @@ extension SourceControlPaneTests {
   }
 
   /// esc を、窓のイベントの監視を通してから `responder` へ渡す（`isRepeat` は押し続けて届いた esc）——押し続けた esc を
-  /// 捨てるのは監視で、テストから窓へ送るキーはそこを通らないので、先に監視の判定（`escapeRepeatIsSwallowed`）を呼び、
+  /// 捨てるのは監視で、テストから窓へ送るキーはそこを通らないので、先に監視の判定（`keyRepeatIsSwallowed`）を呼び、
   /// 捨てなかったものだけを渡す。
   private func escapeThroughTheMonitor(_ hosted: Hosted, to responder: NSResponder) -> (Bool) ->
     Void
   {
     { isRepeat in
       let event = NSEvent.key("\u{1b}", [], isRepeat: isRepeat)
-      if !hosted.pane.escapeRepeatIsSwallowed(event) { responder.keyDown(with: event) }
+      if !hosted.pane.keyRepeatIsSwallowed(event) { responder.keyDown(with: event) }
     }
   }
 }

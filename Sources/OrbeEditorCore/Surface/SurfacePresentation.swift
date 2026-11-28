@@ -3,7 +3,8 @@ import AppKit
 /// 面の表示の構成（→ `TextSurface.setPresentation`）。面を作るときの見え方（字・行高・色・俯瞰の寸法）とは別に、面の
 /// 生涯の途中でも置き直せる。置かなければ `code`。
 ///
-/// 行番号の列は左から 番号の列（1 か 2）｜git の印の列｜記号の列 で、その右が本文。
+/// 行番号の列は左から 頭の列｜番号の列（1 か 2）｜git の印の列｜記号の列 で、その右が本文。頭の列は、行の頭の印
+/// （`leadingMark`）を持つ構成だけが持つ。
 public struct SurfacePresentation: Equatable {
   /// ミニマップを出すか。出さない面は、右列が縦スクロールバーだけになる。差し込み（`SurfaceRows`）を受け付けるのは、
   /// 出さない面だけ。
@@ -25,9 +26,11 @@ public struct SurfacePresentation: Equatable {
   public var showsMarks: Bool
   /// 行の型。文書の行の区間（`LineSpan.style`）と差し込んだ行（`InsertedLine.style`）が番号で指す。
   public var lineStyles: [LineStyle]
-  /// 行の右端の印の絵（nil なら印を出さない）。印を出せる行（`LineSpan`・`InsertedLine` の `allowsTrailingMark`）に
-  /// ポインタが乗ると、その行の右端に出る。
-  public var trailingMark: TrailingMark?
+  /// 行の上書き。文書の行の区間（`LineSpan.override`）と差し込んだ行（`InsertedLine.override`）と、行の頭の印を引いている
+  /// 範囲（`LeadingMark.dragOverride`）が番号で指す。
+  public var lineOverrides: [LineOverride]
+  /// 行の頭の印の見え方（nil なら頭の列を持たず、印を出さない）。
+  public var leadingMark: LeadingMark?
   /// 文書の行を本文の区画の幅で折り返すか。折り返す面は横の範囲を持たない。とても大きい文書は、折り返す構成でも
   /// 折り返さない（→ `TextSurface`）。
   public var wraps: Bool
@@ -36,7 +39,8 @@ public struct SurfacePresentation: Equatable {
     showsMinimap: Bool = true, numberColumns: Int = 1, numbersOwnLines: Bool = true,
     numberWidth: CGFloat? = nil,
     numberTrailing: CGFloat? = nil, signWidth: CGFloat = 0, showsMarks: Bool = true,
-    lineStyles: [LineStyle] = [], trailingMark: TrailingMark? = nil, wraps: Bool = false
+    lineStyles: [LineStyle] = [], lineOverrides: [LineOverride] = [],
+    leadingMark: LeadingMark? = nil, wraps: Bool = false
   ) {
     precondition(numberColumns == 1 || numberColumns == 2, "番号の列は 1 か 2")
     self.showsMinimap = showsMinimap
@@ -47,7 +51,8 @@ public struct SurfacePresentation: Equatable {
     self.signWidth = signWidth
     self.showsMarks = showsMarks
     self.lineStyles = lineStyles
-    self.trailingMark = trailingMark
+    self.lineOverrides = lineOverrides
+    self.leadingMark = leadingMark
     self.wraps = wraps
   }
 
@@ -71,19 +76,45 @@ public struct LineStyle: Equatable {
   }
 }
 
-/// 行の右端の印——大きさ（pt）・本文の区画の右端からの距離（pt）と、通常とポインタが印の上にあるときの絵。印は行の縦の
-/// 中央に置く。絵は面が外観と倍率で描くので、名前つき（dynamic）の色で描く。絵は同一性で比べるので、同じ見え方には同じ
-/// 参照を渡す。
-public struct TrailingMark: Equatable {
-  public var size: CGSize
-  public var inset: CGFloat
-  public var image: NSImage
-  public var hoveredImage: NSImage
+/// 行の上書き——行の型（地と記号）とは別に、行の地と頭の線の色だけを替える（記号は行の型のまま）。色は名前つき
+/// （dynamic）の NSColor を渡す。どちらも nil なら、その見え方は行の型と頭の印のまま。
+public struct LineOverride: Equatable {
+  /// 行の地（行の型の地の代わり）。
+  public var background: NSColor?
+  /// 頭の線の色（印を出せる行の線の、頭の印の色の代わり）。
+  public var markColor: NSColor?
 
-  public init(size: CGSize, inset: CGFloat, image: NSImage, hoveredImage: NSImage) {
+  public init(background: NSColor? = nil, markColor: NSColor? = nil) {
+    self.background = background
+    self.markColor = markColor
+  }
+}
+
+/// 行の頭の印——行番号の列の左端に足す頭の列に、印を出せる行（`LineSpan`・`InsertedLine` の `markGroup` を持つ行）の左端の
+/// 線をいつも描き、ポインタが乗った行に絵（＋）を出す。絵を押せば、その行を受け手（`SurfaceRows.leadingMarkTarget`）へ
+/// 知らせ、押したまま上下へ引けば、押した行と同じ組の行までを範囲にして、離したときに範囲を知らせる。絵は行の上端から行
+/// 1 つ分の高さの縦の中央・頭の列の左右の中央に置き、外観と倍率で面が描くので、名前つき（dynamic）の色で描く。絵は
+/// 同一性で比べるので、同じ見え方には同じ参照を渡す。
+public struct LeadingMark: Equatable {
+  /// 頭の列の幅と、線の幅（pt）と色。
+  public var width: CGFloat
+  public var lineWidth: CGFloat
+  public var lineColor: NSColor
+  /// 絵の大きさ（pt）と絵。
+  public var size: CGSize
+  public var image: NSImage
+  /// 引いている範囲の行に当てる行の上書き（`SurfacePresentation.lineOverrides` の番号）。
+  public var dragOverride: Int?
+
+  public init(
+    width: CGFloat, lineWidth: CGFloat, lineColor: NSColor, size: CGSize, image: NSImage,
+    dragOverride: Int?
+  ) {
+    self.width = width
+    self.lineWidth = lineWidth
+    self.lineColor = lineColor
     self.size = size
-    self.inset = inset
     self.image = image
-    self.hoveredImage = hoveredImage
+    self.dragOverride = dragOverride
   }
 }

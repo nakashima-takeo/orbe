@@ -2,8 +2,8 @@
   import Foundation
 
   /// PR のパネルと PR の diff の gallery / flow の、差し替えの GitHub のレビューのやりとり。StateHooks.swift の新しい側の行 12
-  /// （you の未送信のコメントと、もう 1 人の返信）のスレッドに、古い側の行の Markdown 入りのスレッド・解決済みのスレッド・
-  /// 今の diff に置けないスレッド・README.md のスレッドを足した姿を答える。書き込みは GitHub と同じく次の読みに出る
+  /// （you の未送信のコメントと、もう 1 人の返信）のスレッドに、新しい側の行 14〜16 の範囲のスレッド・古い側の行の Markdown
+  /// 入りのスレッド・解決済みのスレッド・今の diff に置けないスレッド・README.md のスレッドを足した姿を答える。書き込みは GitHub と同じく次の読みに出る
   /// （返信・解決・新しいスレッドは未送信のレビューに積み、送信で公開する）。`writes` で、書き込みの答えを返さない（書き込みの
   /// 最中を撮る）・失敗を返す、に替えられる。返さずにおいた答えは `release` でその時の答え方で返す。`viewerIsAuthor` で、自分の
   /// PR の答えに替えられる。
@@ -32,11 +32,30 @@
 
     init(head: @escaping () -> String) {
       self.head = head
-      let now = Date()
+      threads = Self.initialThreads(now: Date())
+    }
+
+    /// 古い側の行のスレッドの、Markdown 入りの本文。
+    private static let legacyBody = """
+      **旧い経路**では `append` の後に `notify` を *毎回* 呼んでいた。
+
+      - 呼ぶ回数: ~~イベントごと~~ → まとめて 1 回
+      - 経緯は [設計メモ](https://example.com/hooks) に
+
+      ```swift
+      buffer.append(event)
+      renderer.notify(.hooksDidEmit)
+      ```
+
+      > 描画は最新の状態だけを見せればよい
+      """
+
+    /// 最初に答えるスレッド（時刻は `now` からの経過で書く）。
+    private static func initialThreads(now: Date) -> [GitHubPullRequestReview.Thread] {
       let ago = { (minutes: Double) in now.addingTimeInterval(-minutes * 60) }
-      threads = [
+      return [
         Self.thread(
-          "T_coalesce", line: 12,
+          "T_coalesce", lines: Self.at(12),
           [
             .init(
               id: "C_1", author: "you",
@@ -49,41 +68,38 @@
               createdAt: ago(3), isPending: false),
           ]),
         Self.thread(
-          "T_legacy", side: .old, line: 10,
+          "T_branch",
+          lines: GitHubLineRange(
+            start: GitHubLine(side: .new, line: 14), end: GitHubLine(side: .new, line: 16)),
+          [
+            .init(
+              id: "C_7", author: "octocat", body: "else の側も tail を更新しなくてよいですか？",
+              createdAt: ago(20), isPending: false)
+          ]),
+        Self.thread(
+          "T_legacy", lines: Self.at(10, side: .old),
           [
             .init(
               id: "C_3", author: "octocat",
-              body: """
-                **旧い経路**では `append` の後に `notify` を *毎回* 呼んでいた。
-
-                - 呼ぶ回数: ~~イベントごと~~ → まとめて 1 回
-                - 経緯は [設計メモ](https://example.com/hooks) に
-
-                ```swift
-                buffer.append(event)
-                renderer.notify(.hooksDidEmit)
-                ```
-
-                > 描画は最新の状態だけを見せればよい
-                """,
+              body: legacyBody,
               createdAt: ago(180), isPending: false)
           ]),
         Self.thread(
-          "T_count", line: 22, resolved: true,
+          "T_count", lines: Self.at(22), resolved: true,
           [
             .init(
               id: "C_4", author: "claude", body: "数は描画の負荷の目安として残します。", createdAt: ago(60 * 26),
               isPending: false)
           ]),
         Self.thread(
-          "T_outdated", line: nil,
+          "T_outdated", lines: nil,
           [
             .init(
               id: "C_5", author: "octocat", body: "前の版の行のコメント", createdAt: ago(60 * 50),
               isPending: false)
           ]),
         Self.thread(
-          "T_readme", path: "README.md", line: 3,
+          "T_readme", path: "README.md", lines: Self.at(3),
           [
             .init(
               id: "C_6", author: "octocat", body: "「畳んでから」の意味を補ってください。", createdAt: ago(90),
@@ -93,12 +109,17 @@
     }
 
     private static func thread(
-      _ id: String, path: String = path, side: GitHubDiffSide = .new, line: Int?,
-      resolved: Bool = false, _ comments: [GitHubPullRequestReview.Comment]
+      _ id: String, path: String = path, lines: GitHubLineRange?, resolved: Bool = false,
+      _ comments: [GitHubPullRequestReview.Comment]
     ) -> GitHubPullRequestReview.Thread {
       GitHubPullRequestReview.Thread(
-        id: id, path: path, side: side, line: line, isResolved: resolved, canReply: true,
+        id: id, path: path, lines: lines, isResolved: resolved, canReply: true,
         canResolve: !resolved, canUnresolve: resolved, comments: comments)
+    }
+
+    /// 側 `side` の行 `line`（1 始まり）だけの範囲。
+    private static func at(_ line: Int, side: GitHubDiffSide = .new) -> GitHubLineRange {
+      GitHubLineRange(start: nil, end: GitHubLine(side: side, line: line))
     }
 
     func read() -> GitHubPullRequestReview {
@@ -132,30 +153,30 @@
     private func apply(_ write: GitHubReviewWrite) {
       serial += 1
       switch write {
-      case .addThread(let path, let side, let line, _, let body):
+      case .addThread(let path, let lines, _, let body):
         if pendingID == nil { pendingID = "PRR_\(serial)" }
         threads.append(
-          Self.thread("T_written_\(serial)", path: path, side: side, line: line, [comment(body)]))
+          Self.thread("T_written_\(serial)", path: path, lines: lines, [comment(body)]))
       case .reply(let id, let body, let resolve):
         if pendingID == nil { pendingID = "PRR_\(serial)" }
         update(id) { thread in
           var comments = thread.comments
           comments.append(comment(body))
           return Self.thread(
-            thread.id, path: thread.path, side: thread.side, line: thread.line,
+            thread.id, path: thread.path, lines: thread.lines,
             resolved: thread.isResolved || resolve, comments)
         }
       case .setResolved(let id, let resolved):
         update(id) { thread in
           Self.thread(
-            thread.id, path: thread.path, side: thread.side, line: thread.line, resolved: resolved,
+            thread.id, path: thread.path, lines: thread.lines, resolved: resolved,
             thread.comments)
         }
       case .submit:
         pendingID = nil
         threads = threads.map { thread in
           Self.thread(
-            thread.id, path: thread.path, side: thread.side, line: thread.line,
+            thread.id, path: thread.path, lines: thread.lines,
             resolved: thread.isResolved,
             thread.comments.map {
               .init(

@@ -175,7 +175,7 @@ extension PrPanelTests {
     side: GitHubDiffSide = .new, pending: Bool = false
   ) -> GitHubPullRequestReview.Thread {
     GitHubPullRequestReview.Thread(
-      id: id, path: path, side: side, line: line, isResolved: resolved, canReply: true,
+      id: id, path: path, lines: line.map { .at(side, $0) }, isResolved: resolved, canReply: true,
       canResolve: true, canUnresolve: false,
       comments: (0..<comments).map {
         .init(id: "\(id)-\($0)", author: "me", body: "本文", createdAt: Date(), isPending: pending)

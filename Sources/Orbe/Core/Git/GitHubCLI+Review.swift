@@ -48,10 +48,10 @@ extension GitHubCLI {
 
 /// レビューへの書き込み。どれも未送信のレビューに積む（解決と、その取り消しと、レビューの送信を除く）。
 enum GitHubReviewWrite: Equatable {
-  /// 行 `line` に新しいスレッドを付ける。`commit` は、行の番号を数えた diff の PR の先頭のコミット。未送信のレビューが
+  /// 行の範囲 `lines` に新しいスレッドを付ける。`commit` は、行の番号を数えた diff の PR の先頭のコミット。未送信のレビューが
   /// 無ければ、作るレビューをこのコミットに結ぶ。在れば使わない（足すスレッドの入力にコミットの欄が無く、行は GitHub が
   /// 決めるコミットの diff の行として読まれる）。
-  case addThread(path: String, side: GitHubDiffSide, line: Int, commit: String, body: String)
+  case addThread(path: String, lines: GitHubLineRange, commit: String, body: String)
   /// スレッドに返信する。`resolve` なら、返信が通った後にスレッドを解決する。
   case reply(thread: String, body: String, resolve: Bool)
   /// スレッドを解決する（偽なら解決を取り消す）。
@@ -90,8 +90,8 @@ struct GitHubReviewWriting {
 
   func write(_ write: GitHubReviewWrite) -> GitHubReviewWriteResult {
     switch write {
-    case .addThread(let path, let side, let line, let commit, let body):
-      let thread = GitHubReviewMutation.Thread(path: path, side: side, line: line, body: body)
+    case .addThread(let path, let lines, let commit, let body):
+      let thread = GitHubReviewMutation.Thread(path: path, lines: lines, body: body)
       guard let review = pendingReview else {
         return finish(
           send(.createReview(pullRequest: pullRequest, commit: commit, thread: thread)).map { $0 },
@@ -163,8 +163,7 @@ struct GitHubReviewWriting {
 enum GitHubReviewMutation {
   struct Thread {
     let path: String
-    let side: GitHubDiffSide
-    let line: Int
+    let lines: GitHubLineRange
     let body: String
   }
 
@@ -195,8 +194,11 @@ enum GitHubReviewMutation {
       var fields = ["pullRequestId:$pr", "commitOID:$commit"]
       var variables: [String: Value] = ["pr": .string(pullRequest), "commit": .string(commit)]
       if let thread {
-        declarations += ["$path:String!", "$line:Int!", "$side:DiffSide!", "$body:String!"]
-        fields.append("threads:[{path:$path,line:$line,side:$side,body:$body}]")
+        declarations +=
+          ["$path:String!", "$line:Int!", "$side:DiffSide!"]
+          + Self.startDeclarations(thread) + ["$body:String!"]
+        fields.append(
+          "threads:[{path:$path,line:$line,side:$side,\(Self.startFields(thread))body:$body}]")
         variables.merge(Self.variables(thread)) { $1 }
       }
       return (
@@ -204,10 +206,13 @@ enum GitHubReviewMutation {
           + "\(fields.joined(separator: ","))}){pullRequestReview{id}}}", variables
       )
     case .addThread(let review, let thread):
+      let declarations =
+        (["$review:ID!", "$path:String!", "$line:Int!", "$side:DiffSide!"]
+        + Self.startDeclarations(thread) + ["$body:String!"]).joined(separator: ",")
       return (
-        "mutation($review:ID!,$path:String!,$line:Int!,$side:DiffSide!,$body:String!)"
+        "mutation(\(declarations))"
           + "{m:addPullRequestReviewThread(input:{pullRequestReviewId:$review,path:$path,"
-          + "line:$line,side:$side,body:$body}){thread{id}}}",
+          + "line:$line,side:$side,\(Self.startFields(thread))body:$body}){thread{id}}}",
         Self.variables(thread).merging(["review": .string(review)]) { $1 }
       )
     case .reply(let thread, let review, let body):
@@ -258,12 +263,27 @@ enum GitHubReviewMutation {
       .compactMap { $0?.id }.first
   }
 
+  /// スレッドの変数（行は終わりの行。始まりの行は、範囲のスレッドだけが持つ）。
   private static func variables(_ thread: Thread) -> [String: Value] {
-    [
-      "path": .string(thread.path), "line": .int(thread.line),
-      "side": .string(thread.side.rawValue),
+    var variables: [String: Value] = [
+      "path": .string(thread.path), "line": .int(thread.lines.end.line),
+      "side": .string(thread.lines.end.side.rawValue),
       "body": .string(thread.body),
     ]
+    if let start = thread.lines.start {
+      variables["startLine"] = .int(start.line)
+      variables["startSide"] = .string(start.side.rawValue)
+    }
+    return variables
+  }
+
+  /// 範囲のスレッドの、始まりの行の変数の宣言と入力の欄（1 行のスレッドなら無い）。
+  private static func startDeclarations(_ thread: Thread) -> [String] {
+    thread.lines.start == nil ? [] : ["$startLine:Int!", "$startSide:DiffSide!"]
+  }
+
+  private static func startFields(_ thread: Thread) -> String {
+    thread.lines.start == nil ? "" : "startLine:$startLine,startSide:$startSide,"
   }
 
   /// mutation の入力の欄 1 つと、それに渡す変数。

@@ -205,7 +205,7 @@ extension EditorDiffTests {
     -> GitHubPullRequestReview.Thread
   {
     GitHubPullRequestReview.Thread(
-      id: id, path: "a.txt", side: side, line: line, isResolved: false, canReply: true,
+      id: id, path: "a.txt", lines: line.map { .at(side, $0) }, isResolved: false, canReply: true,
       canResolve: true, canUnresolve: false,
       comments: [.init(id: "\(id)-C", author: "me", body: "本文", createdAt: Date(), isPending: true)]
     )

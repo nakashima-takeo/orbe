@@ -132,19 +132,19 @@ extension EditorPaneView {
 
 extension EditorPaneView {
   /// 面の器（一覧の器・ポップアップの器・ポップアップの中のメニュー・面の中の確認）を閉じた。esc で閉じたなら、そのキーを
-  /// 押し続けて届く esc のキーリピートを捨て始める（→ `escapeRepeatIsSwallowed`）。
+  /// 押し続けて届く esc のキーリピートを捨て始める（→ `keyRepeatIsSwallowed`）。
   func containerDidClose(_ dismissal: EditorDismissal) {
-    if dismissal == .escape { swallowsEscapeRepeat = true }
+    if dismissal == .escape { swallowedRepeat = "\u{1b}" }
   }
 
-  /// 面の器を esc で閉じた後、そのキーを押し続けて届く esc のキーリピートを、どこにも届けずに捨てる——閉じた後にフォーカスが
-  /// 戻った所（一覧・本文・欄）で、押し続けただけの esc が選択を外す・検索バーを閉じる・カーソルを 1 本に戻す・ポップアップを
-  /// 閉じることのないように。キーリピートでない打鍵が届けば、捨てるのをやめる（次の esc は、戻った所のふつうの esc）。捨てたら
-  /// true。
-  func escapeRepeatIsSwallowed(_ event: NSEvent) -> Bool {
-    guard swallowsEscapeRepeat else { return false }
-    guard event.isARepeat, event.charactersIgnoringModifiers == "\u{1b}" else {
-      if !event.isARepeat { swallowsEscapeRepeat = false }
+  /// キー `characters` で焦点を移した後、そのキーを押し続けて届くキーリピートを、どこにも届けずに捨てる——esc で面の器を
+  /// 閉じた後にフォーカスが戻った所（一覧・本文・欄）で、押し続けただけの esc が選択を外す・検索バーを閉じる・カーソルを 1 本に
+  /// 戻す・ポップアップを閉じることのないように。キー c で開いた新しいコメントの欄に、押し続けただけの c が入らないように。
+  /// キーリピートでない打鍵が届けば、捨てるのをやめる（次のそのキーは、移った所のふつうの打鍵）。捨てたら true。
+  func keyRepeatIsSwallowed(_ event: NSEvent) -> Bool {
+    guard let swallowedRepeat else { return false }
+    guard event.isARepeat, event.charactersIgnoringModifiers == swallowedRepeat else {
+      if !event.isARepeat { self.swallowedRepeat = nil }
       return false
     }
     return true
