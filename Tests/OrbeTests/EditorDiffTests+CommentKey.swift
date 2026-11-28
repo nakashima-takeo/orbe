@@ -50,4 +50,21 @@ extension EditorDiffTests {
     XCTAssertNotNil(layer.draft(at: .at(.new, 1)), "前提: 欄にフォーカス")
     XCTAssertFalse(pane.handleCommentKey(.key("c", [])))
   }
+
+  /// 並列の左の面に焦点があれば、c は古い側の行に欄を開く。
+  func testCOnTheLeftSideOpensADraftOnTheOldSide() throws {
+    let (diff, tab) = try commentedTab(Remote())
+    let pane = tab.group.view.editor
+    let window = try XCTUnwrap(pane.window)
+    let layer = try XCTUnwrap(diff.comments)
+    resize(window, width: Self.sideWidth)
+    pumpMain(until: { diff.oldSurface != nil && layer.isSettled }, "並列の 2 面が揃う")
+    let surface = try engine(diff.oldSurface)
+    let text = try XCTUnwrap(diff.old?.text)
+    window.makeFirstResponder(surface.responder)
+    surface.selectedRange = NSRange(location: text.lineStart(2), length: 0)
+    XCTAssertTrue(pane.handleCommentKey(.key("c", [])))
+    XCTAssertNotNil(layer.draft(at: .at(.old, 2)), "左の面の行は古い側の行")
+    XCTAssertNil(layer.draft(at: .at(.new, 2)))
+  }
 }

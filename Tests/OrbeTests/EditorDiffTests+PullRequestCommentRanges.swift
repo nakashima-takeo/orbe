@@ -63,4 +63,26 @@ extension EditorDiffTests {
       surface.rows.boundaries[try XCTUnwrap(surface.rows.block(ofZone: ObjectIdentifier(zone)))], 3,
       "終わりの行の下")
   }
+
+  /// 欄は、両端がコメントできる行であり、かつ同じまとまりに入るときだけ開く——コメントできない行と、まとまりをまたぐ範囲には
+  /// 開かない（キー c は、選択の行の範囲をそのまま、欄を開くこの口へ渡す）。
+  func testADraftOpensOnlyOnARangeInsideOneHunk() throws {
+    let lines = (0..<20).map { "line \($0)" }
+    try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "twenty lines"]).isSuccess)
+    var edited = lines
+    edited[1] = "LINE 1"
+    edited[18] = "LINE 18"
+    let (diff, _) = try commentedDiff(Remote()) {
+      try self.repo.write("a.txt", edited.joined(separator: "\n") + "\n")
+    }
+    let layer = try XCTUnwrap(diff.comments)
+    let across = DiffLineRange(
+      start: DiffLine(version: .new, line: 2), end: DiffLine(version: .new, line: 16))
+    XCTAssertFalse(layer.openDraft(.at(.new, 9)), "コメントできない行")
+    XCTAssertFalse(layer.openDraft(across), "まとまりをまたぐ範囲")
+    XCTAssertNil(layer.draft(at: .at(.new, 9)))
+    XCTAssertNil(layer.draft(at: across))
+    XCTAssertTrue(layer.openDraft(.at(.new, 2)), "前提: まとまりの中の行には開く")
+  }
 }
