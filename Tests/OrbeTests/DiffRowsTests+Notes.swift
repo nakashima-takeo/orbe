@@ -118,13 +118,19 @@ extension DiffRowsTests {
       ])
   }
 
-  /// 範囲が覆う行——側をまたぐ範囲は、インラインの並びの順で間に出る行（削除行の後に追加の行）。同じ側の範囲は、その側の
-  /// 始まり〜終わりだけ。インラインで地を替える行は、同じ側の範囲でも、間に差し込まれた削除行を含む。
+  /// 範囲が覆う行は次のとおり。側をまたぐ範囲は、削除行から追加の行へも、文脈の行から後ろの削除行へも、インラインの並びの順で
+  /// 間に出る行を覆う（削除行の後に追加の行）。同じ側の範囲は、その側の始まり〜終わりだけ。インラインで地を替える行は、同じ側の
+  /// 範囲でも、間に差し込まれた削除行を含む。
   func testRangesCoverTheRowsBetweenTheirEnds() {
     let hunks = noted.hunks
     let across = DiffLineRange(
       start: DiffLine(version: .old, line: 3), end: DiffLine(version: .new, line: 4))
     XCTAssertTrue(DiffRows.coveredLines(of: across, hunks) == (3..<4, 2..<5))
+    let backward = DiffLineRange(
+      start: DiffLine(version: .new, line: 1), end: DiffLine(version: .old, line: 3))
+    XCTAssertTrue(
+      DiffRows.coveredLines(of: backward, hunks) == (1..<4, 1..<2),
+      "文脈の行から後ろの削除行まで——文脈の行は古い側の番号も持つ")
     let same = DiffLineRange(
       start: DiffLine(version: .new, line: 1), end: DiffLine(version: .new, line: 10))
     XCTAssertTrue(DiffRows.coveredLines(of: same, hunks) == (0..<0, 1..<11))

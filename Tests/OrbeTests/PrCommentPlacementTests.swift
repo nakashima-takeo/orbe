@@ -100,6 +100,29 @@ final class PrCommentPlacementTests: OrbeTestCase {
     XCTAssertTrue(Self.hunks(new: 0..<4).holds(range))
   }
 
+  /// 側をまたぐ範囲（削除行から追加の行まで）は、両端をそれぞれの側の変更の分だけずらす。範囲が覆う行のどれかが、どちらかの側で
+  /// 書き換えられれば、範囲の行が無くなった（欄から送れない）とする。
+  func testARangeAcrossSidesMovesEachSideOrIsGone() {
+    let changed = "one\ntwo\nTHREE\nfour\n"
+    let range = DiffLineRange(
+      start: DiffLine(version: .old, line: 2), end: DiffLine(version: .new, line: 2))
+    let spot = { (old: String, new: String) in
+      PrCommentPlacement.target(
+        of: range, from: EditorDiff.SideTexts(old: self.base, new: changed),
+        to: EditorDiff.SideTexts(old: old, new: new), limit: EditorDiff.hunkLimit)
+    }
+    let pushed = spot(base, "zero\n" + changed)
+    XCTAssertFalse(pushed.isGone)
+    XCTAssertEqual(pushed.range.start, DiffLine(version: .old, line: 2), "古い側は変わらない")
+    XCTAssertEqual(pushed.range.end, DiffLine(version: .new, line: 3))
+    let rebased = spot("zero\n" + base, changed)
+    XCTAssertFalse(rebased.isGone)
+    XCTAssertEqual(rebased.range.start, DiffLine(version: .old, line: 3), "古い側だけずれる")
+    XCTAssertEqual(rebased.range.end, DiffLine(version: .new, line: 2))
+    XCTAssertTrue(spot(base, "one\ntwo\nTHREE!\nfour\n").isGone, "書き換えられた新しい側の行")
+    XCTAssertTrue(spot("one\ntwo\nthree!\nfour\n", changed).isGone, "書き換えられた古い側の行")
+  }
+
   /// 新しい側の行 `new` だけのまとまり 1 つ。
   private static func hunks(new: Range<Int>) -> DiffRows.CommentHunks {
     DiffRows.CommentHunks(items: [.init(old: 0..<0, new: new)])
