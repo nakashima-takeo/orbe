@@ -324,7 +324,7 @@ final class MouseSelection: NSObject {
   /// 押している間に窓から外れた（mouse-up が届かない）。
   func cancel() {
     stopAutoscroll()
-    if case .leadingMark = drag { surface?.cancelLeadingMarkDrag() }
+    if case .leadingMark = drag { surface?.releaseLeadingMark() }
     drag = nil
     others = []
     moving = nil

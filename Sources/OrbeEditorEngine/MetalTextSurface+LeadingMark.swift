@@ -46,11 +46,11 @@ extension MetalTextSurface {
     return leadingMarkSpot(at: point)
   }
 
-  /// ポインタ（view の座標。view の外なら nil）の下の行へ絵を移す（変われば材料に書く）。引いている間は絵を出さず、
-  /// ポインタの下の行（上下の端に収めた所）まで範囲を伸ばす（引いている間のホイール）。
+  /// ポインタ（view の座標。view の外なら nil）の下の行へ絵を移す（変われば材料に書く）。印を押している間は絵を出さず、
+  /// 引いていればポインタの下の行（上下の端に収めた所）まで範囲を伸ばす（引いている間のホイール）。
   func hoverLeadingMark(at point: CGPoint?) {
-    if leadingMarkDrag != nil {
-      if let point { extendLeadingMarkDrag(to: point) }
+    if leadingMarkHeld {
+      if leadingMarkDrag != nil, let point { extendLeadingMarkDrag(to: point) }
       return
     }
     let next = point.flatMap { leadingMarkSpot(at: $0) }
@@ -61,6 +61,7 @@ extension MetalTextSurface {
 
   /// 印 `spot` を押した（引き始める）。絵を下ろし、押した行だけの範囲にする。
   func beginLeadingMarkDrag(_ spot: LeadingMarkSpot) {
+    leadingMarkHeld = true
     leadingMarkHover = nil
     leadingMarkDrag = LeadingMarkDrag(anchor: spot, end: spot, version: currentContent?.version)
     publishLeadingMark()
@@ -84,6 +85,7 @@ extension MetalTextSurface {
 
   /// 離した。範囲を下ろし、並びの順で最初と最後の行を並びの受け手へ知らせる（同じ取引で、受け手が並びを置き直せる）。
   func finishLeadingMarkDrag() {
+    leadingMarkHeld = false
     guard let drag = leadingMarkDrag else { return }
     transact {
       leadingMarkDrag = nil
@@ -94,7 +96,13 @@ extension MetalTextSurface {
     }
   }
 
-  /// 引く操作を、知らせずに終える（並びを置き直した・本文が変わった・押している間に窓から外れた）。
+  /// 押している間に窓から外れた（離すのが届かない）。引く操作を知らせずに終え、押している姿を下ろす。
+  func releaseLeadingMark() {
+    leadingMarkHeld = false
+    cancelLeadingMarkDrag()
+  }
+
+  /// 引く操作を、知らせずに終える（並びを置き直した・本文が変わった）。離すまでは絵を出さない。
   func cancelLeadingMarkDrag() {
     guard leadingMarkDrag != nil else { return }
     leadingMarkDrag = nil

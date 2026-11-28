@@ -67,6 +67,8 @@ final class MetalTextSurface: TextSurface {
   /// ポインタの下の、印を出せる行と、引いている範囲と、表示の構成の印の絵を描いた材料。
   var leadingMarkHover: LeadingMarkSpot?
   var leadingMarkDrag: LeadingMarkDrag?
+  /// 印を押してから離すまで（引く操作を知らせずに終えた後も、離すまでは絵を出さない）。
+  var leadingMarkHeld = false
   var leadingMarkLook: ZoneMaterial?
   /// 表示の構成と、そのうち配置と描き方に効くもの。
   var presentation = SurfacePresentation.code

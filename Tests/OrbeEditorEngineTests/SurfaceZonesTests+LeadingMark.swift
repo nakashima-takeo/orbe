@@ -183,7 +183,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(target.lines.last?.1, .document(7))
   }
 
-  /// 引いている間に並びを置き直すと、引く操作を終え、離しても知らせない。
+  /// 引いている間に並びを置き直すと、引く操作を終え、離すまでは ＋ も出さず、離しても知らせない。離した後は ＋ が出る。
   func testNewRowsWhileDraggingEndTheDrag() throws {
     let setup = try marked()
     let (opened, target) = (setup.opened, setup.target)
@@ -193,8 +193,12 @@ extension SurfaceZonesTests {
     surface.setRows(
       SurfaceRows(spans: [LineSpan(line: 0, markGroup: 0)], leadingMarkTarget: target))
     XCTAssertNil(surface.drawn.leadingMark?.range)
+    surface.hover(at: rowPoint(surface, row: 6))
+    XCTAssertNil(surface.drawn.leadingMark?.hover, "押している間は ＋ を出さない")
     try mouse(opened, .leftMouseUp, at: rowPoint(surface, row: 6))
     XCTAssertTrue(target.lines.isEmpty)
+    surface.hover(at: rowPoint(surface, row: 6))
+    XCTAssertEqual(surface.drawn.leadingMark?.hover, .document(6), "離した後は ＋ が出る")
   }
 
   /// スクロールの後と並びを置き直した後は、今のポインタの位置で絵を引き直す——ポインタの下へ来た行に移り、置き直した並びで
