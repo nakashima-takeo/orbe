@@ -203,6 +203,37 @@ extension SurfaceZonesTests {
     XCTAssertEqual(target.lines.last?.1, .document(7))
   }
 
+  /// 最終行の後の塊に組を持つ差し込んだ行がある面で、内容の下の空白へ引いても、範囲は下向きのまま——差し込んだ行から
+  /// 引けばその塊の最後の行まで、上の同じ組の文書の行から引けば、下の差し込んだ行まで入る。
+  func testDraggingIntoTheBlankBelowTheContentKeepsTheRangeDownward() throws {
+    let opened = try hostedRows(8)
+    let surface = opened.surface
+    surface.setPresentation(Self.presentation)
+    let source = InsertedText()
+    var inserted = source.lines(["- a", "- b"])
+    inserted[0].markGroup = 0
+    inserted[1].markGroup = 0
+    let lineCount = opened.document.text.lineCount
+    let target = MarkRecorder()
+    surface.setRows(
+      SurfaceRows(
+        insertions: [RowInsertion(line: lineCount, content: .lines(inserted))],
+        spans: [LineSpan(line: 0), LineSpan(line: lineCount - 2, markGroup: 0)], source: source,
+        leadingMarkTarget: target))
+    let blank = CGPoint(x: 200, y: surface.size.height - 10)
+    XCTAssertGreaterThan(
+      blank.y, insertedPoint(surface, line: 1).y + surface.config.lineHeight, "前提: 内容の下に空白がある")
+    for start in [
+      insertedPoint(surface, line: 0, x: 12), rowPoint(surface, row: lineCount - 2, x: 12),
+    ] {
+      try mouse(opened, .leftMouseDown, at: start)
+      try mouse(opened, .leftMouseDragged, at: blank)
+      try mouse(opened, .leftMouseUp, at: blank)
+    }
+    XCTAssertEqual(target.lines.map(\.0), [.source(0), .document(lineCount - 2)])
+    XCTAssertEqual(target.lines.map(\.1), [.source(1), .source(1)], "下の空白へ引けば、最後の差し込んだ行まで")
+  }
+
   /// 引いている間に並びを置き直すと、引く操作を終え、離すまでは ＋ も出さず、離しても知らせない。離した後は ＋ が出る。
   func testNewRowsWhileDraggingEndTheDrag() throws {
     let setup = try marked()

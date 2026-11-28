@@ -13,9 +13,9 @@ extension RowLayout {
       return spot(of: .document(line), lineCount: lineCount)
     case .block(let index):
       guard case .lines(let lines) = contents[index], !lines.isEmpty else { return nil }
-      let offset = min(
-        max(0, Int(((y - top(ofBlock: index)) / lineHeight).rounded(.down))), lines.count - 1)
-      return spot(of: .inserted(block: index, line: offset), lineCount: lineCount)
+      return spot(
+        of: .inserted(block: index, line: insertedLine(atY: y, block: index, count: lines.count)),
+        lineCount: lineCount)
     }
   }
 
@@ -64,7 +64,7 @@ extension RowLayout {
   /// 着いた行。組を持たない行と塊の絵の差し込み・空きは飛び越し、別の組の行の手前で止まる。y が組の外・絵の差し込み・
   /// 詰め物の上なら、そこより `anchor` の側の、同じ組の最後の行。
   func reach(from anchor: LeadingMarkSpot, towardY y: Double, lineCount: Int) -> LeadingMarkRow {
-    let target = order(atY: y, lineCount: lineCount)
+    let target = order(atY: y)
     let start = order(anchor.row)
     guard target != start else { return anchor.row }
     let down = start < target
@@ -103,19 +103,25 @@ extension RowLayout {
     }
   }
 
-  /// y にある所の並びの順の位置（文書の行は 0..<`lineCount` に収め、塊の中なら塊の行に収める）。
-  private func order(atY y: Double, lineCount: Int) -> MarkOrder {
+  /// y にある所の並びの順の位置。文書の行の番号は 0..<行数 に収めない——先頭より上の y は負の行、最後の項目より下の y は
+  /// 行数以上の行になり、並びの順で先頭の項目より前・最後の項目より後に来る（範囲の端は、辿ったまとまりの中に収める）。
+  /// 塊の中なら塊の行に収める。
+  private func order(atY y: Double) -> MarkOrder {
     switch item(atY: y) {
     case .line(let line, _):
-      return order(.document(min(max(0, line), max(0, lineCount - 1))))
+      return order(.document(line))
     case .block(let index):
       var offset = 0
       if case .lines(let lines) = contents[index], !lines.isEmpty {
-        offset = min(
-          max(0, Int(((y - top(ofBlock: index)) / lineHeight).rounded(.down))), lines.count - 1)
+        offset = insertedLine(atY: y, block: index, count: lines.count)
       }
       return MarkOrder(line: boundaries[index], kind: 0, block: index, row: offset)
     }
+  }
+
+  /// 差し込んだ行 `count` 行の塊 `index` の、y にある行（塊の行に収める）。
+  private func insertedLine(atY y: Double, block index: Int, count: Int) -> Int {
+    min(max(0, Int(((y - top(ofBlock: index)) / lineHeight).rounded(.down))), count - 1)
   }
 
   /// 並びの順で隣り合う、組の同じ行のまとまり——文書の行の区間（どの行も同じ区間の中で、間に塊が無い）か、差し込んだ行
