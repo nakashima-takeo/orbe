@@ -29,14 +29,13 @@ extension MetalTextSurface {
   /// 印を出しうるか（表示の構成が印の見え方を持ち、並びに印を出せる行がある）。
   var showsLeadingMarks: Bool { presentation.leadingMark != nil && rows.hasLeadingMarks }
 
-  /// 点（view の座標）の行の、印を出せる行。頭の列・行番号の列・本文の区画の上だけ（俯瞰の上は nil）。`position` は
-  /// スクロールの位置（省けば今の位置）。
-  func leadingMarkSpot(at point: CGPoint, position: SIMD2<Double>? = nil) -> LeadingMarkSpot? {
+  /// 点（view の座標）の行の、印を出せる行。頭の列・行番号の列・本文の区画の上だけ（俯瞰の上は nil）。
+  func leadingMarkSpot(at point: CGPoint) -> LeadingMarkSpot? {
     guard showsLeadingMarks, let text = currentContent?.text,
       textView.overview.area(at: point) == nil, point.x < surfaceLayout.text.maxX,
       point.y >= config.topInset
     else { return nil }
-    let y = Double(point.y - config.topInset) + (position ?? scrollPosition).y
+    let y = Double(point.y - config.topInset) + scrollPosition.y
     return rows.markSpot(atY: y, lineCount: text.lineCount)
   }
 
