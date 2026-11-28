@@ -52,14 +52,12 @@ extension DiffRows {
       var (low, high) = (0, items.count)
       while low < high {
         let mid = (low + high) / 2
-        let range = side(items[mid])
-        if range.isEmpty ? range.lowerBound <= line : range.upperBound <= line {
+        if side(items[mid]).upperBound <= line {
           low = mid + 1
         } else {
           high = mid
         }
       }
-      while low < items.count, side(items[low]).isEmpty { low += 1 }
       return low < items.count && side(items[low]).contains(line) ? low : nil
     }
 
@@ -216,7 +214,7 @@ extension DiffRows {
     let new = from.line..<max(from.line, to.kind == 1 ? to.line + 1 : to.line)
     // 最後の区間より後の古い側の行 o は、新しい側の行 o + shift の所に出る。だから、to より後に出る古い側の行は、二分探索の
     // 上限 bound より前に必ず在る。
-    let shift = hunks.reduce(0) { $0 + $1.newLines.count - $1.oldLines.count }
+    let shift = hunks.last.map { $0.newLines.upperBound - $0.oldLines.upperBound } ?? 0
     let bound = max(0, hunks.last?.oldLines.upperBound ?? 0, to.line - shift + 1)
     let old = { (line: Int) in order(of: DiffLine(version: .old, line: line), hunks) }
     let firstOld = searchOld(bound) { old($0) >= from }
