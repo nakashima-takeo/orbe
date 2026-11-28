@@ -106,13 +106,16 @@ extension MouseSelection {
     let y = edge.isAbove ? surface.config.topInset : view.bounds.height - 0.5
     let target = CGPoint(x: point.x, y: y)
     surface.inputScope {
-      surface.transact(scrollTo: p) {
-        if case .leadingMark = drag {
-          surface.extendLeadingMarkDrag(to: target, position: p)
-        } else {
-          surface.extendZoneSelection(to: target, position: p)
-        }
-      }
+      surface.transact(scrollTo: p) { extendVerticalDrag(to: target, position: p) }
+    }
+  }
+
+  /// 縦にだけ伸ばすドラッグを、点 `point`（view の座標）まで伸ばす。`position` はスクロールの位置（省けば今の位置）。
+  func extendVerticalDrag(to point: CGPoint, position: SIMD2<Double>? = nil) {
+    if case .leadingMark = drag {
+      surface?.extendLeadingMarkDrag(to: point, position: position)
+    } else {
+      surface?.extendZoneSelection(to: point, position: position)
     }
   }
 

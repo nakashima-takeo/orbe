@@ -55,18 +55,4 @@ extension MouseSelection {
       return false
     }
   }
-
-  /// 行の頭の印を引いている範囲を点まで伸ばす。上下の外では縦にだけ自動スクロールする。
-  func dragLeadingMark(_ event: NSEvent, in view: NSView) {
-    guard let surface else { return }
-    point = view.convert(event.locationInWindow, from: nil)
-    if point.y < surface.config.topInset {
-      autoscroll(.above(surface.config.topInset - point.y))
-    } else if point.y > view.bounds.height {
-      autoscroll(.below(point.y - view.bounds.height))
-    } else {
-      stopAutoscroll()
-      surface.extendLeadingMarkDrag(to: point)
-    }
-  }
 }

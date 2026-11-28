@@ -246,7 +246,7 @@ final class MouseSelection: NSObject {
     switch drag {
     case .link: return
     case .leadingMark:
-      return dragLeadingMark(event, in: view)
+      return dragVertically(event, in: view)
     case .candidate(_, _, let down):
       guard Self.moved(event, from: down) > Self.clickSlop else { return }
       self.drag = nil
@@ -258,9 +258,9 @@ final class MouseSelection: NSObject {
       else { return }
       self.drag = .zoneText
       surface.beginZoneSelection(entry, text: text, offset: offset, clicks: 1, extending: false)
-      return dragZoneText(event, in: view)
+      return dragVertically(event, in: view)
     case .zoneText:
-      return dragZoneText(event, in: view)
+      return dragVertically(event, in: view)
     case .text, .numbers:
       break
     }
@@ -288,8 +288,9 @@ final class MouseSelection: NSObject {
   /// 自動スクロールが回っているか。
   var isAutoscrolling: Bool { link != nil }
 
-  /// 絵の差し込みの文の選択を点まで伸ばす。上下の外では自動スクロールする（絵の差し込みは横に送らない）。
-  private func dragZoneText(_ event: NSEvent, in view: NSView) {
+  /// 縦にだけ伸ばすドラッグ（絵の差し込みの文の選択・行の頭の印の範囲）を点まで伸ばす。上下の外では縦にだけ自動スクロール
+  /// する（どちらのドラッグも横に送らない）。
+  private func dragVertically(_ event: NSEvent, in view: NSView) {
     guard let surface else { return }
     point = view.convert(event.locationInWindow, from: nil)
     if point.y < surface.config.topInset {
@@ -298,7 +299,7 @@ final class MouseSelection: NSObject {
       autoscroll(.below(point.y - view.bounds.height))
     } else {
       stopAutoscroll()
-      surface.extendZoneSelection(to: point)
+      extendVerticalDrag(to: point)
     }
   }
 
