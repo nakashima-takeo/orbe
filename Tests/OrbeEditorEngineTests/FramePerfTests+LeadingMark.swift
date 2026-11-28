@@ -26,9 +26,11 @@ extension FramePerfTests {
       Self.swiftSource(bytes: 1_000_000), wraps: wraps, pointer: Self.pointerSpot)
     let surface = opened.surface
     surface.setPresentation(Self.pullRequestPresentation(columns: 2, wraps: wraps))
-    surface.setRows(
-      Self.pullRequestInlineRows(
-        lineCount: opened.document.text.lineCount, source: source, oneHunk: true))
+    let recorder = SurfaceZonesTests.MarkRecorder()
+    var rows = Self.pullRequestInlineRows(
+      lineCount: opened.document.text.lineCount, source: source, oneHunk: true)
+    rows.leadingMarkTarget = recorder
+    surface.setRows(rows)
     surface.isEditable = false
     surface.scroll(to: RowPosition(line: opened.document.text.lineCount / 2))
     waitUntilIdle(surface)
@@ -44,8 +46,11 @@ extension FramePerfTests {
     let outside = points.count
     points += Array(repeating: CGPoint(x: 12, y: bottom), count: Int(1 / 0.0057))
     reset(surface)
+    let before = surface.scrollPosition.y
     let cpu = dragLeadingMark(surface, window, through: points, autoscrollFrom: outside)
     waitUntilIdle(surface)
+    XCTAssertEqual(recorder.lines.count, 1, "前提: 印を押して引き、離した")
+    XCTAssertGreaterThan(surface.scrollPosition.y, before, "前提: 引いている間に自動スクロールした")
     let scrolled = totals(surface)
     report("1MB pr mark drag", "drag", scrolled)
     print(
