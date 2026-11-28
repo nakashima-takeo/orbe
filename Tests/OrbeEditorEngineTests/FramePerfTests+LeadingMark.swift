@@ -17,7 +17,7 @@ extension FramePerfTests {
 
   /// 止まったインラインの PR の diff（全部の行が 1 つのハンク）で、先頭に見えている行の印を押し、1 回 3pt ずつ実機の刻みで
   /// 下へ引き、面の下端の外で 1 秒、自動スクロールの刻みを進めてから離す。引く 1 回（移動と自動スクロールの刻み）の main
-  /// の仕事・1 コマの CPU・描画スレッド自身が落とすコマを関門にかける（main の版に無い操作なので、main と比べない）。
+  /// の仕事・1 コマの CPU・描画スレッド自身が落とすコマを関門にかける。
   func measureLeadingMarkDrag(wraps: Bool) throws {
     let old = try open(
       Self.swiftSource(bytes: 1_000_000).replacingOccurrences(of: "Item", with: "Old"))
@@ -32,7 +32,7 @@ extension FramePerfTests {
     surface.isEditable = false
     surface.scroll(to: RowPosition(line: opened.document.text.lineCount / 2))
     waitUntilIdle(surface)
-    let window = try XCTUnwrap(pointerWindows.last)
+    let window = try XCTUnwrap(surface.view.window as? PointerWindow)
     let top = surface.config.topInset + surface.config.lineHeight / 2
     let bottom = surface.size.height + 40
     var points: [CGPoint] = []

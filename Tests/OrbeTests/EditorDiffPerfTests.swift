@@ -92,6 +92,7 @@ final class EditorDiffPerfTests: OrbeTestCase {
       return CACurrentMediaTime() - started
     }
     var notes = Self.pullRequestNotes(hunks, lines: (oldRope.lineCount, newRope.lineCount))
+    let threads = notes.zones.count
     let first = place(notes)
     var again: [Double] = []
     for k in 0..<5 {
@@ -104,8 +105,8 @@ final class EditorDiffPerfTests: OrbeTestCase {
       again.append(place(notes))
     }
     print(
-      "PERF diff pr rows place hunks", hunks.count, "threads", notes.zones.count - 5,
-      "first", ms(first), "again median", ms(again.sorted()[2]), "insertions",
+      "PERF diff pr rows place hunks", hunks.count, "threads", threads,
+      "first", ms(first), "again median", ms(again.sorted()[again.count / 2]), "insertions",
       surface.rows.count)
     withExtendedLifetime((document, revision)) {}
   }

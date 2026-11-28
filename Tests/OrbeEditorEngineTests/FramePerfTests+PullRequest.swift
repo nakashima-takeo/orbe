@@ -109,7 +109,7 @@ extension FramePerfTests {
     surface.isEditable = false
     surface.scroll(to: RowPosition(line: opened.document.text.lineCount / 2))
     waitUntilIdle(surface)
-    let window = try XCTUnwrap(pointerWindows.last)
+    let window = try XCTUnwrap(surface.view.window as? PointerWindow)
     var points: [CGPoint] = []
     var y: CGFloat = 40
     var step: CGFloat = 3
@@ -165,11 +165,11 @@ extension FramePerfTests {
                 timestamp: CACurrentMediaTime(), windowNumber: window.windowNumber, context: nil,
                 eventNumber: 0, clickCount: 0, pressure: 0)
             else { return }
-            let before = Self.hoveredMarkRow(surface)
+            let before = surface.leadingMarkHover?.row
             let began = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
             surface.textView.mouseMoved(with: event)
             let cpu = Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began) / 1e9
-            let changed = Self.hoveredMarkRow(surface) != before
+            let changed = surface.leadingMarkHover?.row != before
             moves.withLock { $0.append(PointerMove(cpu: cpu, changed: changed)) }
           }
         }
@@ -322,10 +322,5 @@ extension FramePerfTests {
       if period % 2 == 0 { right.insertions.append(pad) } else { left.insertions.append(pad) }
     }
     return (left, right)
-  }
-
-  /// ポインタの下で印を出している行（無ければ nil）。
-  static func hoveredMarkRow(_ surface: MetalTextSurface) -> LeadingMarkRow? {
-    surface.leadingMarkHover?.row
   }
 }
