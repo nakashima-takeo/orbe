@@ -34,7 +34,7 @@ final class PrCommentPlacementTests: OrbeTestCase {
   func testAMovedLineCannotBeSentUntilItIsChecked() {
     let kept = placement(line: 3)
     follow(kept, to: "H2", "zero\n" + base)
-    XCTAssertEqual(kept.range.end.line, 4)
+    XCTAssertEqual(kept.range, .at(.new, 4))
     XCTAssertFalse(kept.zone.canSend, "移し終えても、確かめるまでは送れない")
 
     let current = PullRequestState.DiffEnds(mergeBase: "B", head: "H2", renames: [:])
@@ -55,7 +55,7 @@ final class PrCommentPlacementTests: OrbeTestCase {
     follow(placement, to: "H2", "zero\n" + base)
     follow(placement, to: "H3", "zero\nzero\n" + base)
     XCTAssertEqual(placement.ends.head, "H3")
-    XCTAssertEqual(placement.range.end.line, 5)
+    XCTAssertEqual(placement.range, .at(.new, 5))
   }
 
   /// 書き換えられて行が無くなった欄も、後の版でその行が元に戻れば、欄を開いた行に戻って送れる（行は欄を開いた版から導き直し、
@@ -70,7 +70,7 @@ final class PrCommentPlacementTests: OrbeTestCase {
       PullRequestState.DiffEnds(mergeBase: "B", head: "H3", renames: [:]),
       shown: EditorDiff.SideTexts(old: base, new: base), commentable: Self.hunks(new: 0..<4)
     ) {}
-    XCTAssertEqual(placement.range.end.line, 2)
+    XCTAssertEqual(placement.range, .at(.new, 2))
     XCTAssertFalse(placement.isGone)
     XCTAssertTrue(placement.zone.canSend)
   }
