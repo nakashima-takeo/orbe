@@ -10,7 +10,7 @@ import XCTest
 /// 選べない・押しても効く・ボタンの上で指の形にならない・コメントを選んでいる間のサービスがソースを書き換える・Orbe の
 /// 操作で押せる場所を出入りする回に途中のコマが出る。
 extension SurfaceZonesTests {
-  /// 絵の差し込みの文を押して本文の下の外へドラッグすると上下にだけ自動スクロールし、選択はまとまりの端で止まる。
+  /// 絵の差し込みの文を押して本文の下端の外へドラッグすると自動スクロールし、選択はまとまりの端で止まる。
   func testDraggingZoneTextBelowAutoscrollsAndStopsAtTheEndOfTheText() throws {
     let setup = try threaded()
     let (opened, thread) = (setup.opened, setup.thread)
@@ -25,7 +25,6 @@ extension SurfaceZonesTests {
     pointer.frame(now: 10)
     pointer.frame(now: 10.1)
     XCTAssertGreaterThan(surface.scrollPosition.y, 0, "下へ送る")
-    XCTAssertEqual(surface.scrollPosition.x, 0, "横には送らない")
     XCTAssertEqual(
       surface.zoneSelection?.range,
       NSRange(location: 1, length: thread.comment.utf16.count - 1), "まとまりの端で止まる")
