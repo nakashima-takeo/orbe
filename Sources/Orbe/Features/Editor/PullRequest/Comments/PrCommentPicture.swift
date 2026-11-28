@@ -151,18 +151,19 @@ enum PrCommentPicture {
     guard state.lines.start != nil else {
       return L10n.format(.editorPrThreadLine, state.language, state.lines.end.line)
     }
-    let (start, end) = ends(state.lines)
+    let (start, end) = lineNumbers(state.lines)
     return L10n.format(.editorPrThreadLines, state.language, start, end)
   }
 
   /// 範囲の新しいコメントの欄の頭の「N〜M 行にコメント」（側をまたげば「−N〜+M 行にコメント」）。
   static func draftLabel(_ state: State) -> String {
-    let (start, end) = ends(state.lines)
+    let (start, end) = lineNumbers(state.lines)
     return L10n.format(.editorPrDraftLines, state.language, start, end)
   }
 
-  /// 範囲の両端の行の番号の文言（側をまたげば、差分の記号 − ＋ を付ける）。
-  private static func ends(_ lines: GitHubLineRange) -> (String, String) {
+  /// 範囲の両端の行の番号の文言（側をまたげば、差分の記号 − ＋ を付ける）。スレッドの頭・範囲の欄の頭・レビューの
+  /// ポップアップの札が、この同じ規則で番号を出す。
+  static func lineNumbers(_ lines: GitHubLineRange) -> (String, String) {
     let start = lines.start ?? lines.end
     guard start.side != lines.end.side else { return ("\(start.line)", "\(lines.end.line)") }
     let signed = { (line: GitHubLine) in (line.side == .old ? "−" : "+") + "\(line.line)" }
