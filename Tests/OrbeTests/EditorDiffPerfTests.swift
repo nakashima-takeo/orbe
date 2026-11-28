@@ -216,7 +216,7 @@ final class EditorDiffPerfTests: OrbeTestCase {
     }
     let old = merged(hunks.map { widen($0.oldLines, lines.old) })
     let new = merged(hunks.map { widen($0.newLines, lines.new) })
-    notes.hunks = DiffRows.CommentHunks(
+    notes.commentable = DiffRows.CommentHunks(
       items: zip(old, new).map { DiffRows.CommentHunk(old: $0, new: $1) })
     for (index, hunk) in hunks.enumerated() where index % 10 == 0 {
       let line = hunk.newLines.lowerBound

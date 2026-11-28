@@ -96,7 +96,7 @@ extension DiffRowsTests {
     XCTAssertEqual(empty.insertions, plain.insertions)
     XCTAssertEqual(empty.spans, plain.spans)
     var notes = DiffRows.Notes()
-    notes.hunks = DiffRows.CommentHunks(items: [.init(old: 3..<5, new: 0..<4)])
+    notes.commentable = DiffRows.CommentHunks(items: [.init(old: 3..<5, new: 0..<4)])
     let rows = DiffRows.inline(hunks, new: new, notes: notes)
     XCTAssertEqual(
       rows.spans,

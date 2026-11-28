@@ -49,7 +49,8 @@ enum DiffRows {
       if !block.old.isEmpty {
         runs[block.new.lowerBound] = block.old.map { line in
           InsertedLine(
-            line: line, style: DiffStyle.removed, markGroup: notes.hunks.index(of: line, .old),
+            line: line, style: DiffStyle.removed,
+            markGroup: notes.commentable.index(of: line, .old),
             override: override(of: line, in: removedOverrides))
         }
       }
@@ -76,7 +77,7 @@ enum DiffRows {
     return SurfaceRows(
       insertions: slots.insertions(runs: runs),
       spans: refine(
-        spans.items, lines: new.lines, hunks: notes.hunks.ranges(.new),
+        spans.items, lines: new.lines, commentable: notes.commentable.ranges(.new),
         overrides: resolve(notes.overrides, covered, side: .new)))
   }
 
@@ -122,12 +123,12 @@ enum DiffRows {
       SurfaceRows(
         insertions: slots.left.insertions(runs: left.runs),
         spans: refine(
-          left.spans.items, lines: old.lines, hunks: notes.hunks.ranges(.old),
+          left.spans.items, lines: old.lines, commentable: notes.commentable.ranges(.old),
           overrides: resolve(notes.overrides, covered, side: .old))),
       SurfaceRows(
         insertions: slots.right.insertions(runs: right.runs),
         spans: refine(
-          right.spans.items, lines: new.lines, hunks: notes.hunks.ranges(.new),
+          right.spans.items, lines: new.lines, commentable: notes.commentable.ranges(.new),
           overrides: resolve(notes.overrides, covered, side: .new)))
     )
   }

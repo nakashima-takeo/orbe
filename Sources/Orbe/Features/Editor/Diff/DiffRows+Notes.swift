@@ -14,7 +14,7 @@ extension DiffRows {
     /// 行の下に置く絵の差し込み。同じ行の差し込みは、列の順に上から並ぶ。
     var zones: [Zone] = []
     /// コメントできる行のまとまり。まとまりの行に行の頭の印を出し、まとまりの番号を印の組にする。
-    var hunks = CommentHunks()
+    var commentable = CommentHunks()
     /// 地を替える行の範囲（列の順に当て、同じ行に掛かれば後の範囲が勝つ）。
     var overrides: [Override] = []
   }
@@ -269,16 +269,16 @@ extension DiffRows {
     overrides.last { $0.range.contains(line) }?.style
   }
 
-  /// 文書の行の区間を、まとまりの区間 `hunks`（その側の区間とまとまりの番号）の端と地を替える範囲 `overrides`（その側の区間と
+  /// 文書の行の区間を、まとまりの区間 `commentable`（その側の区間とまとまりの番号）の端と地を替える範囲 `overrides`（その側の区間と
   /// 行の上書きの番号）の端で割る。割った区間は元の区間の型ともう一方の番号を引き継ぎ、まとまりの区間に入る区間はその番号を
   /// 印の組にし、地を替える範囲に入る区間はその上書きを持つ。どちらも無ければ元の列のまま。
   static func refine(
-    _ spans: [LineSpan], lines: Int, hunks: [(range: Range<Int>, index: Int)],
+    _ spans: [LineSpan], lines: Int, commentable: [(range: Range<Int>, index: Int)],
     overrides: [(range: Range<Int>, style: Int)]
   ) -> [LineSpan] {
-    guard !hunks.isEmpty || !overrides.isEmpty else { return spans }
+    guard !commentable.isEmpty || !overrides.isEmpty else { return spans }
     var cuts = Set(spans.map(\.line))
-    for hunk in hunks { cuts.formUnion([hunk.range.lowerBound, hunk.range.upperBound]) }
+    for group in commentable { cuts.formUnion([group.range.lowerBound, group.range.upperBound]) }
     for override in overrides {
       cuts.formUnion([override.range.lowerBound, override.range.upperBound])
     }
@@ -287,14 +287,14 @@ extension DiffRows {
     var next = 0
     for start in cuts.filter({ $0 >= 0 && $0 < lines }).sorted() {
       while owner + 1 < spans.count, spans[owner + 1].line <= start { owner += 1 }
-      while next < hunks.count, hunks[next].range.upperBound <= start { next += 1 }
+      while next < commentable.count, commentable[next].range.upperBound <= start { next += 1 }
       let base = owner >= 0 ? spans[owner] : LineSpan(line: start)
       result.append(
         LineSpan(
           line: start, style: base.style,
           otherNumber: base.otherNumber.map { $0 + start - base.line },
-          markGroup: next < hunks.count && hunks[next].range.contains(start)
-            ? hunks[next].index : nil,
+          markGroup: next < commentable.count && commentable[next].range.contains(start)
+            ? commentable[next].index : nil,
           override: override(of: start, in: overrides)))
     }
     return result

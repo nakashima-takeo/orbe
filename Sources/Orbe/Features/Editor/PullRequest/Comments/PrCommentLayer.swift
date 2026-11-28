@@ -126,7 +126,7 @@ final class PrCommentLayer {
     let language = language()
     var notes = DiffRows.Notes()
     let markable = commentableHunks(ends)
-    notes.hunks = markable ?? DiffRows.CommentHunks()
+    notes.commentable = markable ?? DiffRows.CommentHunks()
     adoptDrafts()
     // diff が見せている両端が PR の今の両端でない間（PR への push・ベースの付け替えを読んで、両端を求め直し、diff が
     // 新しい両端の本文を読み終えるまで）は、古い側の行のスレッドを前の並びに置かない（GitHub は古い側の行を今の
@@ -154,7 +154,7 @@ final class PrCommentLayer {
         zone.language = language
         zone.isWriting = state.isWritingReview(.thread(thread.id))
         let spot = PullRequestState.CommentSpot(
-          range: Self.shownRange(lines, notes.hunks), ends: ends, basis: shown)
+          range: Self.shownRange(lines, notes.commentable), ends: ends, basis: shown)
         lastPlaced[thread.id] = spot
         place(zone, at: spot, in: &notes)
       }
@@ -226,13 +226,13 @@ final class PrCommentLayer {
     notes.overrides.append(.init(range: spot.range, kind: .thread))
   }
 
-  /// GitHub の行の範囲 `lines` の、今の diff の行の範囲。始まりの行が、コメントできる行のまとまり `hunks` の行として引けなければ
+  /// GitHub の行の範囲 `lines` の、今の diff の行の範囲。始まりの行が、コメントできる行のまとまり `commentable` の行として引けなければ
   /// （まとまりをまだ求めていない間も）、終わりの行だけの範囲にする。
-  private static func shownRange(_ lines: GitHubLineRange, _ hunks: DiffRows.CommentHunks)
+  private static func shownRange(_ lines: GitHubLineRange, _ commentable: DiffRows.CommentHunks)
     -> DiffLineRange
   {
     let range = DiffLineRange(lines)
-    guard let start = range.start, hunks.index(of: start.line, start.version) == nil else {
+    guard let start = range.start, commentable.index(of: start.line, start.version) == nil else {
       return range
     }
     return DiffLineRange(start: nil, end: range.end)
